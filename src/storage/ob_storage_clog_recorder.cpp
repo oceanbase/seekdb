@@ -16,7 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_clog_recorder.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -34,6 +34,7 @@ int ObIStorageClogRecorder::ObStorageCLogCb::on_success()
   int64_t update_version = ATOMIC_LOAD(&update_version_);
   bool finish_flag = false;
 
+  LOG_DEBUG("clog succ callback", KPC(this));
 
   if (OB_UNLIKELY(OB_INVALID_VERSION == update_version)) {
     LOG_ERROR("table version is invalid", K(update_version));
@@ -99,6 +100,7 @@ int ObIStorageClogRecorder::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(max_saved_version < 0 || NULL == log_handler)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(max_saved_version), KP(log_handler));
   } else {
     max_saved_version_ = max_saved_version;
     log_handler_ = log_handler;
@@ -114,6 +116,7 @@ OB_INLINE void ObIStorageClogRecorder::wait_to_lock(const int64_t update_version
       usleep(100);
       if (ObTimeUtility::fast_current_time() + 100 * 1000 > last_time) {
         last_time = ObTimeUtility::fast_current_time();
+        LOG_DEBUG("waiting to lock", K(update_version), K(max_saved_version_), KPC(this));
       }
       WEAK_BARRIER();
     }
@@ -130,6 +133,7 @@ OB_INLINE void ObIStorageClogRecorder::wait_for_logcb(const int64_t update_versi
   while (false == ATOMIC_LOAD(&logcb_finish_flag_)) {
     if (ObTimeUtility::fast_current_time() + 100 * 1000 > last_time) {
       last_time = ObTimeUtility::fast_current_time();
+      LOG_DEBUG("waiting for clog callback", K(update_version), K(max_saved_version_), KPC(this));
     }
     usleep(100);
     WEAK_BARRIER();
@@ -151,10 +155,10 @@ int ObIStorageClogRecorder::try_update_with_lock(
       logcb_ptr_->set_update_version(update_version);
       if (OB_FAIL(submit_log(update_version, clog_buf, clog_len))) {
         if (OB_BLOCK_FROZEN != ret) {
-          LOG_ERROR("fail to submit log", K(ret), K(update_version), K(max_saved_version_));
+          LOG_WARN("fail to submit log", K(ret), K(update_version), K(max_saved_version_));
         } else if (ObTimeUtility::fast_current_time() >= expire_ts) {
           ret = OB_EAGAIN;
-          LOG_ERROR("failed to sync clog", K(ret), K(update_version),
+          LOG_WARN("failed to sync clog", K(ret), K(update_version),
               K(max_saved_version_), K(expire_ts));
         }
       } else {
@@ -167,7 +171,7 @@ int ObIStorageClogRecorder::try_update_with_lock(
   return ret;
 }
 
-int ObIStorageClogRecorder::try_update(
+int ObIStorageClogRecorder::try_update_for_leader(
     const int64_t update_version,
     ObIAllocator *allocator,
     const int64_t timeout_ts)
@@ -176,6 +180,7 @@ int ObIStorageClogRecorder::try_update(
 
   if (OB_UNLIKELY(update_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("input version is invalid", K(ret), KPC(this), K(update_version));
   } else if (update_version > ATOMIC_LOAD(&max_saved_version_)) {
 
     wait_to_lock(update_version); // lock
@@ -186,10 +191,14 @@ int ObIStorageClogRecorder::try_update(
     if (cur_update_version > ATOMIC_LOAD(&max_saved_version_)) {
       // may change cur_update_version in prepare_struct_in_lock
       if (OB_FAIL(prepare_struct_in_lock(cur_update_version, allocator, clog_buf, clog_len))) {
+        LOG_WARN("failed to get struct", K(ret), K(update_version));
       } else if (OB_UNLIKELY(cur_update_version < update_version)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("update version is smaller", K(ret), K(cur_update_version), K(update_version));
       } else if (OB_FAIL(try_update_with_lock(cur_update_version, clog_buf, clog_len, expire_ts))) {
+        LOG_WARN("retry failed", K(ret), KPC(this), K(cur_update_version));
       } else { // sync clog success
+        LOG_DEBUG("sync clog success", KPC(this), K(cur_update_version), K(max_saved_version_));
       }
     }
 
@@ -222,10 +231,11 @@ int ObIStorageClogRecorder::replay_clog(
       if (OB_NO_NEED_UPDATE == ret) { // not update max_saved_version_
         ret = OB_SUCCESS;
       } else {
-        LOG_ERROR("fail to replay clog", K(ret), KPC(this));
+        LOG_WARN("fail to replay clog", K(ret), KPC(this));
       }
     } else {
       ATOMIC_STORE(&max_saved_version_, update_version);
+      LOG_DEBUG("success to replay clog", K(ret), KPC(this), K(max_saved_version_));
     }
   }
 
@@ -234,7 +244,7 @@ int ObIStorageClogRecorder::replay_clog(
 
 void ObIStorageClogRecorder::clog_update_fail()
 {
-  on_sync_clog_failure();
+  sync_clog_failed_for_leader();
   WEAK_BARRIER();
   ATOMIC_STORE(&logcb_finish_flag_, true);
 }
@@ -253,10 +263,12 @@ void ObIStorageClogRecorder::clog_update_succ(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("clog ts is invalid", K(ret), K_(clog_scn));
   } else {
-    if (OB_FAIL(on_sync_clog_success(update_version))) {
+    if (OB_FAIL(sync_clog_succ_for_leader(update_version))) {
+      LOG_WARN("failed to save for leader", K(ret), KPC(this));
     } else {
       finish_flag = true;
       ATOMIC_STORE(&max_saved_version_, update_version);
+      LOG_DEBUG("update success", K(ret), KPC(this));
     }
   }
   ATOMIC_STORE(&logcb_finish_flag_, true);
@@ -268,48 +280,57 @@ int ObIStorageClogRecorder::write_clog(
 {
   int ret = OB_SUCCESS;
   const bool need_nonblock = false;
+  const bool allow_compression = false;
   palf::LSN lsn;
   clog_scn_.reset();
   if (OB_UNLIKELY(nullptr == buf || buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(buf), K(buf_len));
   } else if (OB_ISNULL(log_handler_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("palf handle is null", K(ret), KP(log_handler_));
   } else if (FALSE_IT(ATOMIC_STORE(&logcb_finish_flag_, false))) {
-  } else if (OB_FAIL(log_handler_->append(buf, buf_len, share::SCN::min_scn(), need_nonblock, logcb_ptr_, lsn, clog_scn_))) {
+  } else if (OB_FAIL(log_handler_->append(buf, buf_len, share::SCN::min_scn(), need_nonblock, allow_compression, logcb_ptr_, lsn, clog_scn_))) {
+    LOG_WARN("fail to submit log", K(ret), KPC(this));
   }
   return ret;
 }
 
 int ObIStorageClogRecorder::get_tablet_handle(
+    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  ObLS *tenant_ls = nullptr;
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
-  } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id, tablet_handle))) {
+  ObLSHandle ls_handle;
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
+  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet", K(ret), K(ls_id), K(tablet_id));
   }
   return ret;
 }
 
 int ObIStorageClogRecorder::replay_get_tablet_handle(
+    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const share::SCN &scn,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  ObLS *tenant_ls = nullptr;
+  ObLSHandle ls_handle;
   const bool is_update_mds_table = false;
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
-  } else if (OB_FAIL(tenant_ls->replay_get_tablet(tablet_id, scn, is_update_mds_table, tablet_handle))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
+  } else if (OB_FAIL(ls_handle.get_ls()->replay_get_tablet(tablet_id, scn, is_update_mds_table, tablet_handle))) {
     if (OB_OBSOLETE_CLOG_NEED_SKIP == ret) {
-      LOG_INFO("clog is obsolete, should skip replay", K(ret), K(tablet_id), K(scn));
+      LOG_INFO("clog is obsolete, should skip replay", K(ret), K(ls_id), K(tablet_id), K(scn));
       ret = OB_SUCCESS;
     } else if (OB_TIMEOUT == ret) {
       ret = OB_EAGAIN;
-      LOG_INFO("retry get tablet for timeout error", K(ret), K(tablet_id), K(scn));
+      LOG_INFO("retry get tablet for timeout error", K(ret), K(ls_id), K(tablet_id), K(scn));
     } else {
+      LOG_WARN("failed to get tablet", K(ret), K(ls_id), K(tablet_id), K(scn));
     }
   }
   return ret;

@@ -1,0 +1,67 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OMPK_ERROR_H_
+#define _OMPK_ERROR_H_
+
+#include "lib/string/ob_string.h"
+#include "rpc/obmysql/ob_mysql_packet.h"
+
+namespace oceanbase
+{
+namespace obmysql
+{
+
+class OMPKError : public ObMySQLPacket
+{
+public:
+  static const uint64_t SQLSTATE_SIZE = 5;
+  static const uint8_t MARKER = '#';
+
+public:
+  OMPKError();
+  virtual ~OMPKError();
+
+  virtual int serialize(char *buffer, int64_t len, int64_t &pos) const;
+  virtual int64_t get_serialize_size() const;
+  virtual int decode();
+
+  int set_message(const common::ObString &message);
+  inline void set_errcode(uint16_t code) { errcode_ = code; }
+  int set_sqlstate(const char *sqlstate);
+
+  inline uint8_t get_field_count() const { return field_count_; }
+  inline uint16_t get_err_code() const { return errcode_; }
+  inline common::ObString get_sql_state() const { return sqlstate_; }
+  inline common::ObString get_message() const { return message_; }
+  virtual int64_t to_string(char *buf, const int64_t buf_len) const;
+  inline ObMySQLPacketType get_mysql_packet_type() { return ObMySQLPacketType::PKT_ERR; }
+
+private:
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(OMPKError);
+  uint8_t field_count_;     // always 0xff
+  uint16_t errcode_;
+  common::ObString sqlstate_;
+  common::ObString message_;
+};
+
+} // end of namespace obmysql
+} // end of namespace oceanbase
+
+
+#endif /* _OMPK_ERROR_H_ */

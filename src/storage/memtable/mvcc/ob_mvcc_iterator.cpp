@@ -32,6 +32,7 @@ namespace memtable
 int ObMvccValueIterator::init(ObMvccAccessCtx &ctx,
                               const ObMemtableKey *key,
                               ObMvccRow *value,
+                              const share::ObLSID memtable_ls_id,
                               const ObQueryFlag &query_flag)
 {
   int ret = OB_SUCCESS;
@@ -44,7 +45,9 @@ int ObMvccValueIterator::init(ObMvccAccessCtx &ctx,
     is_inited_ = true;
   } else {
     value_ = value;
+    memtable_ls_id_ = memtable_ls_id;
     if (OB_FAIL(lock_for_read_(query_flag))) {
+      TRANS_LOG(WARN, "fail to find start pos for iterator", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -59,6 +62,7 @@ int ObMvccValueIterator::init(ObMvccAccessCtx &ctx,
             K(query_flag.is_read_latest()),
             KPC(key),
             K(ctx),
+            K(memtable_ls_id),
             K(lbt()));
   return ret;
 }
@@ -73,6 +77,7 @@ int ObMvccValueIterator::lock_for_read_(const ObQueryFlag &flag)
 
   while (OB_SUCC(ret) && NULL != iter && NULL == version_iter_) {
     if (OB_FAIL(lock_for_read_inner_(flag, iter))) {
+      TRANS_LOG(WARN, "lock for read failed", K(ret));
     }
   }
 
@@ -146,6 +151,12 @@ int ObMvccValueIterator::lock_for_read_inner_(const ObQueryFlag &flag,
   } else if ((is_committed || is_aborted || (read_elr && !is_delayed_cleanout))
       // Opt2: data is not decided while we donot need cleanout
       || (!is_delayed_cleanout
+          // read the memtable not during transfer-in
+          && (!ctx_->get_tx_table_guards().src_tx_table_guard_.is_valid() ||
+              // read the transfer dest's memtable
+              (memtable_ls_id_.is_valid() &&
+               ctx_->get_tx_table_guards().src_tx_table_guard_.get_tx_table()->
+               get_ls_id() != memtable_ls_id_))
           && (// Opt2.1: snapshot reads the data written by snapshot
             data_tx_id == snapshot_tx_id ||
             // Opt2.2: read reader's latest is matched
@@ -233,6 +244,7 @@ int ObMvccValueIterator::lock_for_read_inner_(const ObQueryFlag &flag,
                                                           data_version,
                                                           *cleanout_op,
                                                           *recheck_op))) {
+      TRANS_LOG(WARN, "lock for read failed", KPC(iter), K(lock_for_read_arg));
     } else if (can_read) {
       // Case 5.1: data is cleanout by lock for read and can be read by reader's
       //           snapshot
@@ -243,6 +255,7 @@ int ObMvccValueIterator::lock_for_read_inner_(const ObQueryFlag &flag,
              && transaction::is_effective_trans_version(data_version)
              && !(iter->is_committed() || iter->is_aborted() || iter->is_elr())) {
         if (OB_FAIL(try_cleanout_tx_node_(iter))) {
+          TRANS_LOG(WARN, "cleanout tx state failed", K(ret), KPC(value_), KPC(iter));
         }
         // Tip1: We rely on the row_scn and state on the tx node if we really
         // can read from the tx node. So if the tx node is not cleanout, we must
@@ -252,6 +265,12 @@ int ObMvccValueIterator::lock_for_read_inner_(const ObQueryFlag &flag,
           TRANS_LOG(WARN, "waiting for the iter to be cleanout", K(ret),
                     KPC(iter), K(lock_for_read_arg), KPC(value_), KPC(ctx_));
         }
+
+        // Tip2: In the transfer scenario, the tx_table and data at the src and
+        // dest are independent. Therefore, it is possible to use the src's data
+        // with the dest's tx_table. In the case, when reading from the standby,
+        // the tx_data may have already been updated while the data cannot be
+        // cleanout. Thus, it is necessary to detect and avoid such situations.
 
         usleep(10); // 10us
       }
@@ -307,7 +326,9 @@ int ObMvccValueIterator::get_next_node(const void *&tnode)
       if (NULL == version_iter_) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(try_cleanout_tx_node_(version_iter_))) {
+        TRANS_LOG(WARN, "fail to cleanout tnode", K(ret), K(*version_iter_));
       } else if (OB_FAIL(version_iter_->is_lock_node(is_lock_node))) {
+        TRANS_LOG(WARN, "fail to check is lock node", K(ret), K(*version_iter_));
       } else if (!(version_iter_->is_aborted()              // skip abort version
                    || is_lock_node)) {                      // skip lock node
         tnode = static_cast<const void *>(version_iter_);
@@ -336,6 +357,7 @@ void ObMvccValueIterator::move_to_next_node_()
 ObMvccRowIterator::ObMvccRowIterator()
     : is_inited_(false),
       ctx_(NULL),
+      memtable_ls_id_(),
       query_flag_(),
       value_iter_(),
       query_engine_(NULL),
@@ -352,6 +374,7 @@ int ObMvccRowIterator::init(
     ObQueryEngine &query_engine,
     ObMvccAccessCtx &ctx,
     const ObMvccScanRange &range,
+    const share::ObLSID memtable_ls_id,
     const ObQueryFlag &query_flag)
 {
   int ret = OB_SUCCESS;
@@ -362,10 +385,12 @@ int ObMvccRowIterator::init(
       range.start_key_,  !range.border_flag_.inclusive_start(),
       range.end_key_,    !range.border_flag_.inclusive_end(),
       query_engine_iter_))) {
+    TRANS_LOG(WARN, "query engine scan fail", K(ret));
   } else {
     ctx_ = &ctx;
     query_flag_ = query_flag;
     query_engine_ = &query_engine;
+    memtable_ls_id_ = memtable_ls_id;
     is_inited_ = true;
   }
   return ret;
@@ -395,7 +420,7 @@ int ObMvccRowIterator::get_next_row(
     } else if (NULL == (value = query_engine_iter_->get_value())) {
       TRANS_LOG(ERROR, "unexpected value null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
-    } else if (query_flag_.is_for_foreign_key_check() || query_flag_.is_snapshot_opt()) {
+    } else if (query_flag_.is_for_foreign_key_check() || query_flag_.is_plain_insert_gts_opt()) {
       if (OB_FAIL(ObRowConflictHandler::check_foreign_key_constraint_for_memtable(*ctx_, value, lock_state))) {
         // we will throw error code if it's failed here, but we need to
         // post lock with key outside, so we have to set it here.
@@ -404,7 +429,8 @@ int ObMvccRowIterator::get_next_row(
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(value_iter_.init(*ctx_, tmp_key, value, query_flag_))) {
+    } else if (OB_FAIL(value_iter_.init(*ctx_, tmp_key, value, memtable_ls_id_, query_flag_))) {
+      TRANS_LOG(WARN, "value iter init fail", K(ret), "ctx", *ctx_, KP(value), K(*value));
     } else if (!value_iter_.is_exist()) {
       // mvcc row is empty(no tnode), so we continue
     } else {
@@ -420,6 +446,7 @@ void ObMvccRowIterator::reset()
 {
   is_inited_ = false;
   ctx_ = NULL;
+  memtable_ls_id_.reset();
   query_flag_.reset();
   value_iter_.reset();
   if (NULL != query_engine_iter_) {

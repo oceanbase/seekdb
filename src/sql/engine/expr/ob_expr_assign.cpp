@@ -60,6 +60,7 @@ int ObExprAssign::calc_result_type2(ObExprResType &type,
     type.set_collation_type(value.get_collation_type());
   } else if (ob_is_collection_sql_type(value.get_type())) {
     ret = OB_NOT_SUPPORTED;
+    LOG_WARN("Variable value set to collection type is not supported", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Variable value set to collection type");
   } else {
     type.set_type(val_type);
@@ -91,8 +92,10 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, key_res)) ||
              OB_FAIL(expr.args_[1]->eval(ctx, val_res))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObObj obj;
     ObObjMeta obj_meta;
@@ -100,7 +103,7 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     if (val_res->is_null()) {
       obj.set_null();
       obj_meta.set_null();
-      // A NULL assignment keeps the default implicit collation metadata.
+      // same as old engine. but why...
       obj_meta.set_collation_level(CS_LEVEL_IMPLICIT);
       obj_meta.set_collation_type(ObCharset::get_default_collation(
                                   ObCharset::get_default_charset()));
@@ -114,6 +117,7 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         obj_meta.set_has_lob_header();
       }
       if (OB_FAIL(val_res->to_obj(obj, obj_meta))) {
+        LOG_WARN("to_obj failed", K(ret), K(expr), K(obj_meta));
       }
     }
     if (OB_SUCC(ret)) {
@@ -122,6 +126,7 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     }
     if (OB_SUCC(ret) && OB_FAIL(session->replace_user_variable(
             key_res->get_string(), sess_var))) {
+      LOG_WARN("replace user val failed", K(ret), K(key_res->get_string()));
     } else {
       res_datum.set_datum(*val_res);
     }

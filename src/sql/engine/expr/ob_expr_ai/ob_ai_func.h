@@ -23,7 +23,7 @@
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
-#include "share/ai_service/ob_ai_service_struct.h"
+#include "observer/ai_service/ob_ai_service_struct.h"
 
 namespace oceanbase 
 {

@@ -409,12 +409,6 @@ private:
   bool enable_trace_cost_model_;
 };
 
-template <>
-int ObOptimizerTraceImpl::append(const ObIArrayWrap<ObDSResultItem>& value);
-
-template <>
-int ObOptimizerTraceImpl::append(const ObIArrayWrap<ColumnItem>& value);
-
 //for class ObRawExpr
 template <typename T>
 typename std::enable_if<std::is_base_of<ObRawExpr, T>::value, int>::type
@@ -558,6 +552,7 @@ int ObOptimizerTraceImpl::append_format(const char *format, const ARGS&... args)
   int64_t print_len = snprintf(buf, BUF_LEN, format, args...);
   if (print_len > 0) {
     if (OB_FAIL(log_handle_.append(buf, std::min(print_len, BUF_LEN)))) {
+      COMMON_LOG(WARN, "failed to append value", K(ret));
     }
   }
   return ret;

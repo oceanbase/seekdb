@@ -20,7 +20,6 @@
 #include "sql/optimizer/stat/ob_stat_define.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
-#include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
 
 namespace oceanbase {
 namespace observer
@@ -30,6 +29,7 @@ class ObInnerSQLConnection;
 using namespace sql;
 namespace common {
 
+struct ObOptStatRunningMonitor;
 struct GatherHelper
 {
   explicit GatherHelper(ObOptStatRunningMonitor &running_monitor) :
@@ -39,6 +39,7 @@ struct GatherHelper
     is_approx_gather_(false),
     gather_vectorize_(DEFAULT_STAT_GATHER_VECTOR_BATCH_SIZE),
     running_monitor_(running_monitor),
+    use_column_store_(false),
     use_single_part_(false),
     is_split_column_(false),
     is_all_col_gathered_(false),
@@ -52,6 +53,7 @@ struct GatherHelper
   bool is_approx_gather_;
   int64_t gather_vectorize_;
   ObOptStatRunningMonitor &running_monitor_;
+  bool use_column_store_;
   bool use_single_part_;
 
   bool is_split_column_;
@@ -70,6 +72,7 @@ struct GatherHelper
                K(is_approx_gather_),
                K(gather_vectorize_),
                K(running_monitor_),
+               K(use_column_store_),
                K(use_single_part_),
                K(is_split_column_),
                K(is_all_col_gathered_),
@@ -121,8 +124,7 @@ public:
 
   static int gather_table_stats(ObExecContext &ctx,
                                 const ObTableStatParam &param,
-                                ObOptStatRunningMonitor &running_monitor,
-                                bool *need_refresh_schema = NULL);
+                                ObOptStatRunningMonitor &running_monitor);
 
   static int gather_index_stats(ObExecContext &ctx,
                                 const ObTableStatParam &param);
@@ -145,7 +147,8 @@ public:
                                 ObTableStatParam &param,
                                 share::schema::ObSchemaGetterGuard *schema_guard,
                                 const TabStatIndMap &online_table_stats,
-                                const ColStatIndMap &online_column_stats);
+                                const ColStatIndMap &online_column_stats,
+                                const ObIArray<ObOptDmlStat *> *dml_stats = nullptr /*for_direct_load*/);
 
   static int cancel_gather_stats(ObExecContext &ctx, ObString &task_id);
 
@@ -161,12 +164,14 @@ private:
   static int prepare_gather_stats(ObExecContext &ctx,
                                   const ObTableStatParam &param,
                                   PartitionIdBlockMap &partition_id_block_map,
+                                  PartitionIdSkipRateMap &partition_id_skip_rate_map,
                                   GatherHelper &gather_helper);
   static int do_gather_stats_with_retry(ObExecContext &ctx,
                                         ObMySQLTransaction &trans,
                                         StatLevel stat_level,
                                         const ObIArray<PartInfo> &gather_partition_infos,
                                         const PartitionIdBlockMap *partition_id_block_map,
+                                        const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                         GatherHelper &gather_helper,
                                         ObTableStatParam &derive_param,
                                         ObIArray<ObOptTableStat *> &all_tstats);
@@ -195,18 +200,18 @@ private:
                                       const ObIArray<int64_t> &no_stats_partition_ids,
                                       const ObIArray<uint64_t> &part_stattypes);
 
-  static int check_need_split_gather(ObExecContext &ctx,
-                                     const ObTableStatParam &param,
+  static int check_need_split_gather(const ObTableStatParam &param,
                                      GatherHelper &gather_helper);
 
   static int prepare_conn_and_store_session_for_online_stats(sql::ObSQLSessionInfo *session,
+                                                             common::ObMySQLProxy *sql_proxy,
                                                              share::schema::ObSchemaGetterGuard *schema_guard,
                                                              sql::ObSQLSessionInfo::StmtSavedValue &saved_value,
                                                              int64_t &nested_count,
                                                              int64_t &old_trx_lock_timeout,
                                                              bool &need_restore_session,
                                                              bool &need_reset_trx_lock_timeout,
-                                                             sqlclient::ObISQLConnectionGuard &conn);
+                                                             sqlclient::ObISQLConnection *&conn);
 
   static int restore_session_for_online_stat(sql::ObSQLSessionInfo *session,
                                              sql::ObSQLSessionInfo::StmtSavedValue &saved_value,
@@ -218,6 +223,12 @@ private:
 
   static int fetch_gather_table_snapshot_read(common::sqlclient::ObISQLConnection *conn,
                                               uint64_t &current_scn);
+
+ static int fetch_gather_task_addr(ObCommonSqlProxy *sql_proxy,
+                                    ObIAllocator &allcoator,
+                                    const ObString &task_id,
+                                    char *&svr_ip,
+                                    int32_t &svr_port);
 
   static int determine_auto_sample_table(ObExecContext &ctx, ObTableStatParam &param);
   
@@ -253,17 +264,20 @@ private:
                                    ObIArray<TaskColumnParam> &batch_task_col_infos,
                                    ObTableStatParam &derive_param,
                                    const PartitionIdBlockMap *partition_id_block_map,
+                                   const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                    GatherHelper &gather_helper);
 
   static int gather_partition_stats(ObExecContext &ctx,
                                     const ObTableStatParam &param,
                                     const PartitionIdBlockMap *partition_id_block_map,
+                                    const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                     GatherHelper &gather_helper,
                                     ObIArray<int64_t> &failed_part_ids);
 
   static int collect_last_part_and_global_if_timeout(ObExecContext &ctx,
                                                      const ObTableStatParam &origin_param,
                                                      const PartitionIdBlockMap *partition_id_block_map,
+                                                     const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                                      GatherHelper &gather_helper,
                                                      ObIArray<int64_t> &failed_part_ids);
 

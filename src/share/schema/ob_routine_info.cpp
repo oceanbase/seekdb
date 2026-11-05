@@ -79,6 +79,7 @@ int ObRoutineParam::serialize_extended_type_info(char *buf, const int64_t buf_le
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialize_string_array(buf, buf_len, pos, extended_type_info_))) {
+    LOG_WARN("fail to serialize extended type info", K(ret));
   }
   return ret;
 }
@@ -89,6 +90,7 @@ int ObRoutineParam::deserialize_extended_type_info(const char *buf,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
+    LOG_WARN("fail to deserialize extended type info", K(ret));
   }
   return ret;
 }
@@ -172,6 +174,7 @@ OB_DEF_SERIALIZE(ObRoutineParam)
               type_name_,
               type_subname_);
   if (OB_SUCC(ret) && OB_FAIL(serialize_string_array(buf, buf_len, pos, extended_type_info_))) {
+    LOG_WARN("serialize_string_array failed", K(ret));
   }
   return ret;
 }
@@ -194,6 +197,7 @@ OB_DEF_DESERIALIZE(ObRoutineParam)
               type_name_,
               type_subname_);
   if (OB_SUCC(ret) && OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
+    LOG_WARN("deserialize_string_array failed", K(ret));
   }
   return ret;
 }
@@ -255,20 +259,30 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
     schema_version_ = src_schema.schema_version_;
     routine_type_ = src_schema.routine_type_;
     flag_ = src_schema.flag_;
+    comp_flag_ = src_schema.comp_flag_;
     type_id_ = src_schema.type_id_;
     tg_timing_event_ = src_schema.tg_timing_event_;
     if (OB_FAIL(deep_copy_str(src_schema.routine_name_, routine_name_))) {
+      LOG_WARN("deep copy name failed", K(ret), K_(src_schema.routine_name));
     } else if (OB_FAIL(deep_copy_str(src_schema.priv_user_, priv_user_))) {
+      LOG_WARN("deep copy priv user failed", K(ret), K_(src_schema.priv_user));
     } else if (OB_FAIL(deep_copy_str(src_schema.exec_env_, exec_env_))) {
+      LOG_WARN("deep copy exec env failed", K(ret), K_(src_schema.exec_env));
     } else if (OB_FAIL(deep_copy_str(src_schema.routine_body_, routine_body_))) {
+      LOG_WARN("deep copy routine body failed", K(ret), K_(src_schema.routine_body));
     } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
+      LOG_WARN("deep copy comment failed", K(ret), K_(src_schema.comment));
     } else if (OB_FAIL(deep_copy_str(src_schema.route_sql_, route_sql_))) {
+      LOG_WARN("deep copy route sql failed", K(ret), K_(src_schema.route_sql));
     } else if (OB_FAIL(routine_params_.reserve(src_schema.routine_params_.count()))) {
+      LOG_WARN("failed to reserve routine params size", K(ret), K(src_schema));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < src_schema.routine_params_.count(); ++i) {
       if (OB_ISNULL(src_schema.routine_params_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("routine param is null", K(i));
       } else if (OB_FAIL(add_routine_param(*src_schema.routine_params_.at(i)))) {
+        LOG_WARN("add routine param to routine info failed", K(ret), K(i));
       }
     }
     error_ret_ = ret;
@@ -325,6 +339,7 @@ void ObRoutineInfo::reset()
   routine_type_ = INVALID_ROUTINE_TYPE;
   flag_ = 0;
   reset_string(priv_user_);
+  comp_flag_ = 0;
   reset_string(exec_env_);
   reset_string(routine_body_);
   reset_string(comment_);
@@ -362,13 +377,32 @@ int ObRoutineInfo::add_routine_param(const ObRoutineParam &routine_param)
   void *ptr = NULL;
   if (!is_user_field_valid()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("routine basic info invalid", K(ret));
   } else if (OB_ISNULL(ptr = alloc(sizeof(ObRoutineParam)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocated routine param memory failed", K(ret));
   } else {
     ObRoutineParam *local_param = NULL;
     local_param = new (ptr) ObRoutineParam(get_allocator());
     *local_param = routine_param;
     if (OB_FAIL(routine_params_.push_back(local_param))) {
+      LOG_WARN("push local param failed", K(ret));
+    } else if (local_param->is_self_param()) {
+      ObRoutineParam *first_param = is_procedure() ? routine_params_.at(0) : 1 < routine_params_.count() ? routine_params_.at(1) : NULL;
+      bool more_than_one = is_procedure() ? routine_params_.count() > 1 : routine_params_.count() > 2;
+      if (OB_NOT_NULL(first_param) && more_than_one && first_param->is_self_param()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected self param, duplicate", K(ret));
+      } else if (routine_params_.at(0)->is_ret_param() && 2 < routine_params_.count()) {
+        std::rotate(routine_params_.begin() + 1,
+                  routine_params_.begin() + routine_params_.count() - 1,
+                  routine_params_.end());
+      } else if (!routine_params_.at(0)->is_ret_param() && 1 < routine_params_.count()) {
+        std::rotate(routine_params_.begin(),
+                  routine_params_.begin() + routine_params_.count() - 1,
+                  routine_params_.end());
+      }
+    } else {
     }
   }
   return ret;
@@ -395,6 +429,7 @@ int ObRoutineInfo::get_routine_param(int64_t idx, ObIRoutineParam*& param) const
   }
   if (OB_ISNULL(param)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("idx is invalid", K(ret), K(idx), KPC(this));
   }
   return ret;
 }
@@ -436,6 +471,7 @@ int ObRoutineInfo::find_param_by_name(const ObString &name, int64_t &position) c
   position = -1;
   if (name.empty()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalue param name", K(ret), K(name));
   } else {
     for (int64_t i = 0; i < get_routine_params().count(); ++i) {
       if (get_routine_params().at(i)->is_ret_param()) {
@@ -447,6 +483,7 @@ int ObRoutineInfo::find_param_by_name(const ObString &name, int64_t &position) c
     if (-1 == position) {
       ret = OB_ERR_SP_UNDECLARED_VAR;
       LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR, name.length(), name.ptr());
+      LOG_WARN("param name is not found in param list", K(ret), K(name), KPC(this), K(position));
     }
   }
   return ret;
@@ -468,6 +505,7 @@ OB_DEF_SERIALIZE(ObRoutineInfo)
               routine_type_,
               flag_,
               priv_user_,
+              comp_flag_,
               exec_env_,
               routine_body_,
               comment_,
@@ -478,7 +516,9 @@ OB_DEF_SERIALIZE(ObRoutineInfo)
   for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
     if (OB_ISNULL(routine_params_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("routine_param is null", K(i));
     } else if (OB_FAIL(routine_params_.at(i)->serialize(buf, buf_len, pos))) {
+      LOG_WARN("serialize routine param failed", K(ret));
     }
   }
   return ret;
@@ -501,6 +541,7 @@ OB_DEF_DESERIALIZE(ObRoutineInfo)
               routine_type_,
               flag_,
               priv_user_,
+              comp_flag_,
               exec_env_,
               routine_body_,
               comment_,
@@ -511,7 +552,9 @@ OB_DEF_DESERIALIZE(ObRoutineInfo)
   for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
     routine_param.reset();
     if (OB_FAIL(routine_param.deserialize(buf, data_len, pos))) {
+      LOG_WARN("deserialize routine param failed", K(ret));
     } else if (OB_FAIL(add_routine_param(routine_param))) {
+      LOG_WARN("add routine param failed", K(ret));
     }
   }
   return ret;
@@ -532,6 +575,7 @@ OB_DEF_SERIALIZE_SIZE(ObRoutineInfo)
               routine_type_,
               flag_,
               priv_user_,
+              comp_flag_,
               exec_env_,
               routine_body_,
               comment_,

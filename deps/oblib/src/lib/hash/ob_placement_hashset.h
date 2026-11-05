@@ -1,0 +1,98 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_LIB_HASH_OB_PLACEMENT_HASH_SET_
+#define OCEANBASE_LIB_HASH_OB_PLACEMENT_HASH_SET_
+
+#include "lib/hash/ob_placement_hashutils.h"
+
+namespace oceanbase
+{
+namespace common
+{
+namespace hash
+{
+template <class K, uint64_t N = 1031, bool auto_free = false>
+class ObPlacementHashSet
+{
+public:
+  ObPlacementHashSet(): count_(0) {}
+  ~ObPlacementHashSet() {}
+  /**
+   * @retval OB_SUCCESS       success
+   * @retval OB_HASH_EXIST    key exist
+   * @retval other            errors
+   */
+  int set_refactored(const K &key);
+  /**
+   * @retval OB_HASH_EXIST     key exists
+   * @retval OB_HASH_NOT_EXIST key does not exist
+   * @retval other             errors
+   */
+  int  exist_refactored(const K &key) const;
+  void clear();
+  void reset();
+  int64_t count() const {return count_;};
+protected:
+  ObBitSet<N, ModulePageAllocator, auto_free> flags_;
+  K keys_[N];
+  int64_t count_;
+};
+
+template <class K, uint64_t N, bool auto_free>
+int ObPlacementHashSet<K, N, auto_free>::set_refactored(const K &key)
+{
+  int ret = OB_SUCCESS;
+  uint64_t pos = 0;
+  bool exist = false;
+  ret = placement_hash_find_set_pos<K, N, ModulePageAllocator, auto_free>(keys_, flags_, key, 0, pos, exist);
+  if (OB_SUCC(ret)) {
+    keys_[pos] = key;
+    ++count_;
+  }
+  return ret;
+}
+
+template <class K, uint64_t N, bool auto_free>
+int ObPlacementHashSet<K, N, auto_free>::exist_refactored(const K &key) const
+{
+  uint64_t pos = 0;
+  int ret = placement_hash_search<K, N, ModulePageAllocator, auto_free>(keys_, flags_, key, pos);
+  if (OB_SUCCESS == ret) {
+    ret = OB_HASH_EXIST;
+  }
+  return ret;
+}
+
+template <class K, uint64_t N, bool auto_free>
+void ObPlacementHashSet<K, N, auto_free>::clear()
+{
+  flags_.reuse();
+  count_ = 0;
+}
+
+template <class K, uint64_t N, bool auto_free>
+void ObPlacementHashSet<K, N, auto_free>::reset()
+{
+  flags_.reuse();
+  count_ = 0;
+}
+
+} // namespace hash
+} // namespace common
+} // namespace oceanbase
+
+#endif //OCEANBASE_LIB_HASH_OB_PLACEMENT_HASH_SET_

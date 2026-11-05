@@ -26,29 +26,12 @@
 #include "sql/engine/basic/ob_hash_partitioning_infrastructure_op.h"
 #include "sql/engine/aggregate/ob_aggregate_processor.h"
 #include "sql/engine/aggregate/ob_adaptive_bypass_ctrl.h"
+#include "sql/engine/aggregate/ob_hash_groupby_vec_op.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-
-struct LlcEstimate
-{
-public:
-  LlcEstimate()
-    : avg_group_mem_(0), llc_map_(), est_cnt_(0), last_est_cnt_(0), enabled_(false)
-  {}
-  int init_llc_map(common::ObArenaAllocator &allocator);
-  int reset();
-  double avg_group_mem_;
-  ObString llc_map_;
-  uint64_t est_cnt_;
-  uint64_t last_est_cnt_;
-  bool enabled_;
-  static constexpr const int64_t ESTIMATE_MOD_NUM_ = 4096;
-  static constexpr const double LLC_NDV_RATIO_ = 0.3;
-  static constexpr const double GLOBAL_BOUND_RATIO_ = 0.8;
-};
 
 struct ObGroupByDupColumnPair
 {
@@ -138,12 +121,7 @@ public:
 class ObGroupRowHashTable : public ObExtendHashTable<ObGroupRowItem>
 {
 public:
-  ObGroupRowHashTable()
-      : ObExtendHashTable(),
-        eval_ctx_(nullptr),
-        datum_access_ctx_(nullptr),
-        cmp_funcs_(nullptr)
-  {}
+  ObGroupRowHashTable() : ObExtendHashTable(), eval_ctx_(nullptr), cmp_funcs_(nullptr) {}
 
   OB_INLINE const ObGroupRowItem *get(const ObGroupRowItem &item);
   OB_INLINE void prefetch(const ObBatchRows &brs, uint64_t *hash_vals) const;
@@ -159,7 +137,6 @@ private:
 private:
   const common::ObIArray<ObExpr *> *gby_exprs_;
   ObEvalCtx *eval_ctx_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
   const common::ObIArray<ObCmpFunc> *cmp_funcs_;
   static const int64_t HASH_BUCKET_PREFETCH_MAGIC_NUM = 4 * 1024;
 };
@@ -177,6 +154,7 @@ OB_INLINE const ObGroupRowItem *ObGroupRowHashTable::get(const ObGroupRowItem &i
     ObGroupRowItem *it = locate_bucket(*buckets_, hash_val).item_;
     while (NULL != it && OB_SUCC(ret)) {
       if (OB_FAIL(likely_equal(*it, item, result))) {
+        LOG_WARN("failed to cmp", K(ret));
       } else if (result) {
         res = it;
         break;
@@ -256,7 +234,6 @@ public:
 public:
   ObHashGroupByOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
     : ObGroupByOp(exec_ctx, spec, input),
-      datum_access_ctx_(nullptr),
       curr_group_id_(common::OB_INVALID_INDEX),
       cur_group_item_idx_(0),
       cur_group_item_buf_(nullptr),
@@ -478,6 +455,7 @@ private:
     int ret = OB_SUCCESS;
     // set both hash table and array if array is valid.
     if (OB_FAIL(local_group_rows_.set(cur_item))) {
+      SQL_ENG_LOG(WARN, "hash table set failed", K(ret));
     } else if (group_rows_arr_.is_valid_) {
       group_rows_arr_.set(cur_item, batch_idx);
     }
@@ -585,7 +563,6 @@ private:
   static const int64_t BATCH_GROUP_ITEM_SIZE = 16;
   const int64_t EXTEND_BKT_NUM_PUSH_DOWN = INIT_L3_CACHE_SIZE / sizeof(ObGroupRowItem);
   ObGroupRowHashTable local_group_rows_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
   // Optimization for group by c1, c2. type of c1 and c2 are both char(1).
   // In this case, if all values of c1 and c2 are ascii character,
   // there are only 256 available values of c1 or c2,

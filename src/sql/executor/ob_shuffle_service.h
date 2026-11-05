@@ -1,0 +1,126 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_SHUFFLE_UTIL_H_
+#define OB_SHUFFLE_UTIL_H_
+#include "share/schema/ob_table_schema.h"
+#include "share/schema/ob_schema_struct.h"
+#include "sql/engine/px/ob_px_dtl_msg.h"
+#include "sql/executor/ob_slice_id.h"
+#include "sql/executor/ob_task_event.h"
+#include "sql/ob_sql_define.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+using namespace share::schema;
+
+typedef common::ObColumnInfo ObTransmitRepartColumn;
+class ObShuffleService
+{
+public:
+  typedef common::hash::ObHashMap<int64_t, int64_t,
+                  common::hash::NoPthreadDefendMode> PartIdx2PartIdMap;
+  typedef common::hash::ObHashMap<int64_t, int64_t,
+                  common::hash::NoPthreadDefendMode> SubPartIdx2SubPartIdMap;
+public:
+  ObShuffleService(ObIAllocator &allocator) :
+    allocator_(allocator),
+    row_cache_(),
+    current_cell_count_(-1)
+  {}
+
+  ~ObShuffleService() = default;
+  /*
+   * The interface for shuffle calculation does not currently compute partition expressions.
+   * For example, when the partition condition is (c1+1) of table A, the partition type is range
+   * [5,10),[10,20)
+   * The expected repartitioning could be c2 = c1+1, possibly c2+1 = c1+1.
+   * (The above two types of repartitioning are currently not supported by the optimizer)
+   * c2 = c1+1 will definitely send c2 to the corresponding partition.
+   * If it is c2+1 = c1+1, this interface is also valid if c2+1 has already been calculated
+   * before the transmit operator.
+   *
+   * */
+  // This interface is only used under the px framework, please use the above interface if not px.
+  int get_partition_ids(ObExecContext &exec_ctx,
+                        const share::schema::ObTableSchema &table_schema,
+                        const common::ObNewRow &row,
+                        const ObSqlExpression &part_partition_func,
+                        const ObSqlExpression &subpart_partition_func,
+                        const ObIArray<ObTransmitRepartColumn> &repart_columns,
+                        const ObIArray<ObTransmitRepartColumn> &repart_sub_columns,
+                        const ObPxPartChMap &ch_map,
+                        int64_t &part_id,
+                        int64_t &subpart_id,
+                        bool &no_match_partiton,
+                        ObRepartitionType part_type);
+private:
+  int init_expr_ctx(ObExecContext &exec_ctx);
+  int get_part_id(ObExecContext &exec_ctx,
+                  const share::schema::ObTableSchema &table_schema,
+                  const common::ObNewRow &row,
+                  const ObSqlExpression &part_func,
+                  const ObIArray<ObTransmitRepartColumn> &repart_columns,
+                  int64_t &part_id);
+  int get_key_part_id(ObExecContext &exec_ctx,
+                      const share::schema::ObTableSchema &table_schema,
+                      const common::ObNewRow &row,
+                      const ObSqlExpression &part_func,
+                      int64_t &part_id);
+  int get_non_key_partition_part_id(ObExecContext &exec_ctx,
+                                    const share::schema::ObTableSchema &table_schema,
+                                    const ObNewRow &row,
+                                    const ObIArray<ObTransmitRepartColumn> &repart_columns,
+                                    int64_t &part_id);
+  int get_subpart_id(ObExecContext &exec_ctx,
+                     const share::schema::ObTableSchema &table_schema,
+                     const common::ObNewRow &row,
+                     int64_t part_id,
+                     const ObSqlExpression &key_shuffle_func,
+                     const ObIArray<ObTransmitRepartColumn> &repart_sub_columns,
+                     int64_t &subpart_id);
+  int get_key_subpart_id(ObExecContext &exec_ctx,
+                         const share::schema::ObTableSchema &table_schema,
+                         const ObNewRow &row,
+                         int64_t part_id,
+                         const ObSqlExpression &subpart_partition_func,
+                         int64_t &subpart_id);
+  int get_non_key_subpart_id(ObExecContext &exec_ctx,
+                             const share::schema::ObTableSchema &table_schema,
+                             const common::ObNewRow &row,
+                             int64_t part_id,
+                             const ObIArray<ObTransmitRepartColumn> &repart_sub_columns,
+                             int64_t &subpart_id);
+
+public:
+  constexpr static int64_t NO_MATCH_PARTITION = -2;
+
+private:
+  common::ObIAllocator &allocator_;
+  common::ObNewRow row_cache_;
+  int64_t current_cell_count_;
+  // Expr calculation context
+  ObExprCtx expr_ctx_;
+
+};
+
+}
+
+}
+
+#endif

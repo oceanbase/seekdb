@@ -15,8 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_transaction_freeze_checkpoint.h"
-#include "share/rc/ob_server_runtime.h"
-#include "storage/ls/ob_ls.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -29,7 +28,8 @@ namespace observer
 
 ObAllVirtualFreezeCheckpointInfo::ObAllVirtualFreezeCheckpointInfo()
     : ObVirtualTableScannerIterator(),
-      ls_(nullptr)
+      addr_(),
+      ls_iter_guard_()
 {
 }
 
@@ -40,27 +40,49 @@ ObAllVirtualFreezeCheckpointInfo::~ObAllVirtualFreezeCheckpointInfo()
 
 void ObAllVirtualFreezeCheckpointInfo::reset()
 {
-  ls_ = nullptr;
+  ls_iter_guard_.reset();
   ob_freeze_checkpoint_iter_.reset();
+  addr_.reset();
   ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualFreezeCheckpointInfo::get_next_ls_(ObLS *&ls)
+{
+  int ret = OB_SUCCESS;
+
+  if (ls_iter_guard_.get_ptr() == nullptr
+      && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+    SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
+  } else if (OB_FAIL(ls_iter_guard_->get_next(ls))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "get_next_ls failed", K(ret));
+    }
+  }
+
+  return ret;
 }
 
 int ObAllVirtualFreezeCheckpointInfo::prepare_to_read_()
 {
   int ret = OB_SUCCESS;
+  ObLS *ls = nullptr;
   ObArray<ObFreezeCheckpointVTInfo> infos;
   ob_freeze_checkpoint_iter_.reset();
-  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
-  if (OB_ISNULL(ls_service)) {
+  if (OB_FAIL(get_next_ls_(ls))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "get_next_ls failed", K(ret));
+    }
+  } else if (NULL == ls) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "ls service is null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls_))) {
+    SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret), K(ls));
   } else if (FALSE_IT(infos.reset())) {
-  } else if (OB_FAIL(ls_->get_freezecheckpoint_info(infos))) {
+  } else if (OB_FAIL(ls->get_freezecheckpoint_info(infos))) {
+    SERVER_LOG(WARN, "get freezecheckpoint info failed", K(ret), KPC(ls));
   } else {
     int64_t idx = 0;
     for (; idx < infos.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ob_freeze_checkpoint_iter_.push(infos.at(idx)))) {
+        SERVER_LOG(ERROR, "ob_freeze_checkpoint_iter push failed", K(ret), KPC(ls));
       }
     }
   }
@@ -79,12 +101,25 @@ int ObAllVirtualFreezeCheckpointInfo::prepare_to_read_()
 int ObAllVirtualFreezeCheckpointInfo::get_next_(ObFreezeCheckpointVTInfo &freeze_checkpoint)
 {
   int ret = OB_SUCCESS;
-  if (!ob_freeze_checkpoint_iter_.is_ready() && OB_FAIL(prepare_to_read_())) {
-    SERVER_LOG(WARN, "prepare data failed", K(ret));
-  } else if (OB_FAIL(ob_freeze_checkpoint_iter_.get_next(freeze_checkpoint))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "get next freezecheckpoint info error.", K(ret));
+  // ensure inner_get_next_row can get new data
+  bool need_retry = true;
+  while (need_retry) {
+    if (!ob_freeze_checkpoint_iter_.is_ready() && OB_FAIL(prepare_to_read_())) {
+      if (OB_ITER_END == ret) {
+        SERVER_LOG(DEBUG, "iterate freezecheckpoint info iter end", K(ret));
+      } else {
+        SERVER_LOG(WARN, "prepare data failed", K(ret));
+      }
+    } else if (OB_FAIL(ob_freeze_checkpoint_iter_.get_next(freeze_checkpoint))) {
+      if (OB_ITER_END == ret) {
+        ob_freeze_checkpoint_iter_.reset();
+        SERVER_LOG(DEBUG, "iterate freezecheckpoint info iter in the ls end", K(ret));
+        continue;
+      } else {
+        SERVER_LOG(WARN, "get next freezecheckpoint info error.", K(ret));
+      }
     }
+    need_retry = false;
   }
   return ret;
 }
@@ -118,6 +153,7 @@ int ObAllVirtualFreezeCheckpointInfo::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(freeze_checkpoint_location_to_string(ObFreezeCheckpointLocation(freeze_checkpoint.location),
                                                            freeze_checkpoint_location_buf_,
                                                            sizeof(freeze_checkpoint_location_buf_)))) {
+            SERVER_LOG(WARN, "get freeze_checkpoint location buf failed", K(ret), K(freeze_checkpoint));
           } else {
             freeze_checkpoint_location_buf_[MAX_FREEZE_CHECKPOINT_LOCATION_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(freeze_checkpoint_location_buf_);

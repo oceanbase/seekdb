@@ -126,6 +126,8 @@ int ObGeoTopology::calculate_segment_intersect(const ObPoint2d &start0, const Ob
     PointPosition p1_end_pos = calculate_point_position(start0, end0, end1);
     if (p1_start_pos == PointPosition::UNKNOWN || p1_end_pos == PointPosition::UNKNOWN) {
       ret = OB_ERR_GIS_INVALID_DATA;
+      LOG_WARN("got a double precision problem", K(ret), K(start0), K(end0),
+                                                 K(start1), K(end1), K(p1_start_pos), K(p1_end_pos));
     } else if (p1_start_pos == p1_end_pos && p1_start_pos != PointPosition::ON) {
       // both points of line1 are on the same side of line0
       res = LineIntersect::NO_INTERSCT;
@@ -134,6 +136,8 @@ int ObGeoTopology::calculate_segment_intersect(const ObPoint2d &start0, const Ob
       PointPosition p0_end_pos = calculate_point_position(start1, end1, end0);
       if (p0_start_pos == PointPosition::UNKNOWN || p0_end_pos == PointPosition::UNKNOWN) {
         ret = OB_ERR_GIS_INVALID_DATA;
+        LOG_WARN("got a double precision problem", K(ret), K(start0), K(end0),
+                                                  K(start1), K(end1), K(p0_start_pos), K(p0_end_pos));
       } else if (p0_start_pos == p0_end_pos && p0_start_pos != PointPosition::ON) {
         // both points of line0 are on the same side of line1
         res = LineIntersect::NO_INTERSCT;
@@ -161,14 +165,17 @@ int ObGeoTopology::calculate_line_segments_intersect(const ObLineSegment& seg1, 
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
+    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (res == LineIntersect::LINE_INTERSECT || res == LineIntersect::POINT_INTERSECT || res == LineIntersect::END_POINT_INTERSECT) {
     // return res
   } else if (seg1.end - seg1.begin == 1 && seg2.end - seg2.begin == 1) {
     if (OB_FAIL(calculate_segment_intersect((*seg1.verts)[seg1.begin], (*seg1.verts)[seg1.end],
                                             (*seg2.verts)[seg2.begin], (*seg2.verts)[seg2.end],
                                             res))) {
+      LOG_WARN("get segment intersect result failed", K(ret));
     }
   } else {
     uint32_t middle1 = (seg1.begin + seg1.end) / 2;
@@ -180,12 +187,14 @@ int ObGeoTopology::calculate_line_segments_intersect(const ObLineSegment& seg1, 
         ObLineSegment forward_seg2 = seg2;
         forward_seg2.end = middle2;
         if (OB_FAIL(calculate_line_segments_intersect(forward_seg1, forward_seg2, res))) {
+          LOG_WARN("calculate_line_segments_intersect failed", K(ret));
         }
       }
       if (OB_SUCC(ret) && middle2 < seg2.end) {
         ObLineSegment back_seg2 = seg2;
         back_seg2.begin = middle2;
         if (OB_FAIL(calculate_line_segments_intersect(forward_seg1, back_seg2, res))) {
+          LOG_WARN("calculate_line_segments_intersect failed", K(ret));
         }
       }
     }
@@ -197,12 +206,14 @@ int ObGeoTopology::calculate_line_segments_intersect(const ObLineSegment& seg1, 
         ObLineSegment forward_seg2 = seg2;
         forward_seg2.end = middle2;
         if (OB_FAIL(calculate_line_segments_intersect(back_seg1, forward_seg2, res))) {
+          LOG_WARN("calculate_line_segments_intersect failed", K(ret));
         }
       }
       if (OB_SUCC(ret) && middle2 < seg2.end) {
         ObLineSegment back_seg2 = seg2;
         back_seg2.begin = middle2;
         if (OB_FAIL(calculate_line_segments_intersect(back_seg1, back_seg2, res))) {
+          LOG_WARN("calculate_line_segments_intersect failed", K(ret));
         }
       }
     }

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_table_store_stat_mgr.h"
+#include "share/ob_thread_mgr.h"
 
 namespace oceanbase
 {
@@ -33,8 +34,10 @@ int ObMergeIterStat::add(const ObMergeIterStat& other)
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("self is invalid", K(ret), K(*this));
   } else if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("other is invalid", K(ret), K(other));
   } else {
     call_cnt_ += other.call_cnt_;
     output_row_cnt_ += other.output_row_cnt_;
@@ -53,8 +56,10 @@ int ObBlockAccessStat::add(const ObBlockAccessStat& other)
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("self is invalid", K(ret), K(*this));
   } else if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("other is invalid", K(ret), K(other));
   } else {
     effect_read_cnt_ += other.effect_read_cnt_;
     empty_read_cnt_ += other.empty_read_cnt_;
@@ -78,6 +83,7 @@ bool ObTableStoreStat::is_valid() const
 {
   bool valid = true;
   if (row_cache_hit_cnt_ < 0 || row_cache_miss_cnt_ < 0 || row_cache_put_cnt_ < 0
+      || bf_filter_cnt_ < 0 || bf_empty_read_cnt_ < 0 || bf_access_cnt_ < 0
       || block_cache_hit_cnt_ < 0 || block_cache_miss_cnt_ < 0
       || access_row_cnt_ < 0 || output_row_cnt_ < 0 || fuse_row_cache_hit_cnt_ < 0
       || fuse_row_cache_miss_cnt_ < 0 || fuse_row_cache_put_cnt_ < 0
@@ -116,6 +122,7 @@ int ObTableStoreStatIterator::open()
   int ret = OB_SUCCESS;
   if (is_opened_) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("ObTableStoreStatIterator has been opened", K(ret));
   } else {
     cur_idx_ = 0;
     is_opened_ = true;

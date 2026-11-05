@@ -17,8 +17,7 @@
 #ifndef OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_COMMON_
 #define OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_COMMON_
 #include "common/ob_simple_iterator.h"
-#include "data_plane/tablelock/ob_table_lock_mode.h"
-#include "share/tablelock/ob_table_lock_priority.h"
+#include "storage/tablelock/ob_table_lock_priority.h"
 #include "storage/tablelock/ob_table_lock_owner_id.h"
 #include "lib/utility/ob_mod_define.h"
 #include "lib/list/ob_dlist.h"
@@ -56,6 +55,16 @@ const char *get_name(const ObTableLockPriority intype);
 // | SHARE ROW EXCLUSIVE | Y         | X             | X     | X                   | X         |
 // | EXCLUSIVE           | X         | X             | X     | X                   | X         |
 // +---------------------+-----------+---------------+-------+---------------------+-----------+
+
+typedef unsigned char ObTableLockMode;
+static const char TABLE_LOCK_MODE_COUNT = 5;
+
+#define DEF_LOCK_MODE(n, type, name)            \
+static const unsigned char type = n;
+#include "ob_table_lock_def.h"
+#undef DEF_LOCK_MODE
+
+static const unsigned char MAX_LOCK_MODE       = 0xf;
 
 // Each item occupies 4 bits, stand for ROW SHARE, ROW EXCLUSIVE, SHARE, EXCLUSIVE.
 static const unsigned char compatibility_matrix[] = { 0x0, /* EXCLUSIVE    : 0000 */
@@ -381,6 +390,43 @@ int get_lock_id(const common::ObTabletID &tablet,
                 ObLockID &lock_id);
 int get_lock_id(const ObIArray<ObTabletID> &tablets,
                 ObIArray<ObLockID> &lock_ids);
+// typedef share::ObCommonID ObTableLockOwnerID;
+
+
+class ObOldLockOwner
+{
+  friend class ObTableLockOwnerID;
+public:
+  static const int64_t INVALID_ID = -1;
+  ObOldLockOwner() : pack_(INVALID_ID) {}
+  ObOldLockOwner(const ObTableLockOwnerID &owner_id)
+  {
+    pack_ = 0;
+    id_ = owner_id.id();
+    type_ = owner_id.type();
+  }
+  ~ObOldLockOwner() { pack_ = INVALID_ID; }
+public:
+  int64_t raw_value() const { return pack_; }
+  // without check whether it is valid.
+  int convert_from_value(const int64_t packed_id);
+  int64_t id() const { return id_; }
+  int64_t type() const { return type_; }
+
+  NEED_SERIALIZE_AND_DESERIALIZE;
+  TO_STRING_KV(K_(pack), K_(type), K_(id), K_(reserved), K_(valid_flag));
+private:
+  union {
+    struct {
+      int64_t id_             : 54;
+      int64_t type_           : 8;
+      int64_t reserved_       : 1;
+      int64_t valid_flag_     : 1;
+    };
+    int64_t pack_;
+  };
+};
+
 struct ObTableLockOp
 {
 public:

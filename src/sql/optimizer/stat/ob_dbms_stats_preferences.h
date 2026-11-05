@@ -349,6 +349,19 @@ class ObGatherStatBatchSizePrefs : public ObStatPrefs
     virtual const char* get_stat_pref_default_value() const { return "16"; }
 };
 
+class ObSkipRateSamplePrefs : public ObStatPrefs
+{
+  public:
+    ObSkipRateSamplePrefs() : ObStatPrefs() {}
+    ObSkipRateSamplePrefs(ObIAllocator *alloc,
+                          ObSQLSessionInfo *session_info,
+                          const ObString &pvalue):
+      ObStatPrefs(alloc, session_info, pvalue) {}
+    virtual int check_pref_value_validity(ObTableStatParam *param = NULL) override;
+    virtual const char* get_stat_pref_name() const { return "SKIP_RATE_SAMPLE_COUNT"; }
+    virtual const char* get_stat_pref_default_value() const { return "0"; }
+};
+
 template <class T>
 static int new_stat_prefs(ObIAllocator &allocator, ObSQLSessionInfo *session_info,
                           const ObString &opt_value, T *&src)
@@ -393,6 +406,15 @@ public:
   static int gen_init_global_prefs_sql(ObSqlString &init_sql,
                                        bool is_reset_prefs = false,
                                        int64_t *expect_affected_rows = NULL);
+
+  static int get_online_estimate_percent_for_upgrade(ObSqlString &sql);
+
+  static int get_extra_stats_perfs_for_upgrade(ObSqlString &sql);
+
+  static int get_extra_stats_perfs_for_upgrade_425(ObSqlString &sql);
+
+  static int get_extra_stats_perfs_for_upgrade_4351(ObSqlString &sql);
+
 
 private:
   static int do_get_prefs(ObMySQLProxy *mysql_proxy,

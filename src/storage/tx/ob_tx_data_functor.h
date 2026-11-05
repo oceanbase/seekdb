@@ -28,9 +28,9 @@ namespace memtable
 struct ObMvccTransNode;
 struct ObMvccRow;
 };
-namespace data_plane
+namespace observer
 {
-struct ObVirtualTxDataRow;
+struct VirtualTxDataRow;
 }
 
 namespace storage
@@ -186,18 +186,21 @@ public:
   LockForReadFunctor(const transaction::ObLockForReadArg &lock_for_read_arg,
                      bool &can_read,
                      share::SCN &trans_version,
+                     const share::ObLSID ls_id,
                      ObCleanoutOp &cleanout_op,
                      ObReCheckOp &recheck_op)
     : lock_for_read_arg_(lock_for_read_arg),
       can_read_(can_read),
       trans_version_(trans_version),
+      ls_id_(ls_id),
       cleanout_op_(cleanout_op),
       recheck_op_(recheck_op) {}
   virtual ~LockForReadFunctor() {}
   virtual int operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx = nullptr) override;
   virtual bool recheck() override;
+  int check_for_standby(const transaction::ObTransID &tx_id);
   INHERIT_TO_STRING_KV("ObITxDataCheckFunctor", ObITxDataCheckFunctor, K(lock_for_read_arg_),
-                       K(can_read_), K(trans_version_));
+                       K(can_read_), K(trans_version_), K(ls_id_));
 private:
   int inner_lock_for_read(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx);
   int check_clog_disk_full_();
@@ -205,6 +208,7 @@ public:
   const transaction::ObLockForReadArg &lock_for_read_arg_;
   bool &can_read_;
   share::SCN &trans_version_;
+  share::ObLSID ls_id_;
   // Cleanout the tx node if necessary
   ObCleanoutOp &cleanout_op_;
   // ReCheck whether tx node is valid.
@@ -232,13 +236,12 @@ class GenerateVirtualTxDataRowFunctor : public ObITxDataCheckFunctor
 {
 public:
 
-  GenerateVirtualTxDataRowFunctor(data_plane::ObVirtualTxDataRow &row_data)
-    : row_data_(row_data) {}
+  GenerateVirtualTxDataRowFunctor(observer::VirtualTxDataRow &row_data) : row_data_(row_data) {}
 
   virtual int operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx = nullptr) override;
 
 public:
-  data_plane::ObVirtualTxDataRow &row_data_;
+  observer::VirtualTxDataRow &row_data_;
 };
 
 class LoadTxOpFunctor : public ObITxDataCheckFunctor

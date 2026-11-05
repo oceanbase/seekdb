@@ -17,13 +17,12 @@
 #define USING_LOG_PREFIX SQL_CG
 #include "ob_dml_cg_service.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
-#include "sql/engine/ob_physical_plan.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/optimizer/ob_log_for_update.h"
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_update.h"
 #include "sql/das/ob_domain_id.h"
-#include "query/vector/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -49,7 +48,9 @@ int ObDmlCgService::generate_insert_ctdef(ObLogDelUpd &op,
   ObDMLCtDefAllocator<ObInsCtDef> ins_ctdef_allocator(cg_.phy_plan_->get_allocator());
   if (OB_ISNULL(ins_ctdef = ins_ctdef_allocator.alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate ins ctdef failed", K(ret));
   } else if (OB_FAIL(generate_insert_ctdef(op, index_dml_info, *ins_ctdef))) {
+    LOG_WARN("generate insert ctdef failed", K(ret));
   }
   return ret;
 }
@@ -59,34 +60,47 @@ int ObDmlCgService::generate_insert_ctdef(ObLogDelUpd &op,
                                           ObInsCtDef &ins_ctdef)
 {
   int ret = OB_SUCCESS;
+  LOG_TRACE("begin to generate insert ctdef", K(index_dml_info));
   ObArray<ObRawExpr*> old_row;
   ObArray<ObRawExpr*> new_row;
   uint64_t dml_event = op.is_pdml_update_split() ?
        ObTriggerEvents::get_update_event() : ObTriggerEvents::get_insert_event();
   if (OB_ISNULL(op.get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(convert_insert_new_row_exprs(index_dml_info, new_row))) {
+    LOG_WARN("convert insert new row exprs failed", K(ret));
   } else if (OB_FAIL(generate_dml_base_ctdef(op, index_dml_info,
                                              ins_ctdef,
                                              dml_event,
                                              old_row,
                                              new_row))) {
+    LOG_WARN("generate dml base ctdef failed", K(ret), K(index_dml_info));
   } else if (index_dml_info.is_primary_index_ //generate column infos
       && OB_FAIL(add_all_column_infos(op,
                                       index_dml_info.column_exprs_,
                                       ins_ctdef.is_table_without_pk_,
                                       ins_ctdef.column_infos_))) {
+    LOG_WARN("add column info failed", K(ret), K(index_dml_info.column_exprs_));
   } else if (OB_FAIL(generate_das_ins_ctdef(op,
                                             index_dml_info.ref_table_id_,
                                             index_dml_info,
                                             ins_ctdef.das_ctdef_,
                                             new_row))) {
+    LOG_WARN("generate das insert ctdef failed", K(ret));
   } else if (OB_FAIL(generate_related_ins_ctdef(op,
                                                 index_dml_info.related_index_ids_,
                                                 index_dml_info,
                                                 new_row,
                                                 ins_ctdef.related_ctdefs_))) {
+    LOG_WARN("generate related ins ctdef failed", K(ret));
   }
+  if (OB_SUCC(ret) && index_dml_info.is_primary_index_ && op.get_err_log_define().is_err_log_) {
+    if (OB_FAIL(generate_err_log_ctdef(op.get_err_log_define(), ins_ctdef.error_logging_ctdef_))) {
+      LOG_WARN("generate error_logging ctdef failed", K(ret), K(index_dml_info));
+    }
+  }
+
   // generate for replace into and insert_up fetch conflict rowkey
   if (OB_SUCC(ret) && op.get_stmt()->is_insert_stmt() &&
       (static_cast<ObLogInsert&>(op).is_replace() || static_cast<ObLogInsert&>(op).get_insert_up())) {
@@ -94,6 +108,7 @@ int ObDmlCgService::generate_insert_ctdef(ObLogDelUpd &op,
     const ObIArray<IndexDMLInfo *> &insert_dml_infos = op.get_index_dml_infos();;
     const IndexDMLInfo *primary_dml_info = insert_dml_infos.at(0);
     if (OB_FAIL(convert_data_table_rowkey_info(op, primary_dml_info, ins_ctdef))) {
+      LOG_WARN("fail to convert table rowkey info", K(ret), K(rowkey_exprs));
     }
   }
 
@@ -102,13 +117,16 @@ int ObDmlCgService::generate_insert_ctdef(ObLogDelUpd &op,
     ObDMLCtDefAllocator<ObMultiInsCtDef> multi_ins_allocator(cg_.phy_plan_->get_allocator());
     if (OB_ISNULL(ins_ctdef.multi_ctdef_ = multi_ins_allocator.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate multi ins ctdef failed", K(ret));
     } else if (OB_FAIL(generate_multi_ins_ctdef(index_dml_info, *ins_ctdef.multi_ctdef_))) {
+      LOG_WARN("generate multi ins ctdef failed", K(ret), K(index_dml_info));
     }
   }
   if (OB_SUCC(ret) && op.is_single_value()) {
     ins_ctdef.is_single_value_ = true;
   }
 
+  LOG_TRACE("finish generate insert ctdef", K(ret), K(ins_ctdef));
   return ret;
 }
 
@@ -117,21 +135,27 @@ int ObDmlCgService::generate_lock_ctdef(ObLogForUpdate &op,
                                         ObLockCtDef *&lock_ctdef)
 {
   int ret = OB_SUCCESS;
+  LOG_TRACE("begin to generate lock ctdef", K(index_dml_info));
   ObDMLCtDefAllocator<ObLockCtDef> lock_ctdef_allocator(cg_.phy_plan_->get_allocator());
   ObArray<ObRawExpr*> old_row;
   ObArray<ObRawExpr*> new_row;
   if (OB_ISNULL(lock_ctdef = lock_ctdef_allocator.alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate lock ctdef failed", K(ret));
   } else if (OB_FAIL(old_row.assign(index_dml_info.column_old_values_exprs_))) {
+    LOG_WARN("fail to assign lock old row", K(ret));
   } else if (OB_FAIL(generate_dml_base_ctdef(op,
                                              index_dml_info,
                                              *lock_ctdef,
                                              old_row,
                                              new_row))) {
+    LOG_WARN("generate dml base ctdef failed", K(ret));
   } else if (OB_FAIL(cg_.generate_rt_exprs(old_row, lock_ctdef->old_row_))) {
+    LOG_WARN("generate lock old row exprs failed", K(ret), K(old_row));
   } else if (OB_FAIL(generate_das_lock_ctdef(op, index_dml_info,
                                              lock_ctdef->das_ctdef_,
                                              old_row))) {
+    LOG_WARN("generate das lock ctdef failed", K(ret));
   } else {
     lock_ctdef->need_check_filter_null_ = index_dml_info.need_filter_null_;
   }
@@ -140,7 +164,9 @@ int ObDmlCgService::generate_lock_ctdef(ObLogForUpdate &op,
     ObDMLCtDefAllocator<ObMultiLockCtDef> multi_del_allocator(cg_.phy_plan_->get_allocator());
     if (OB_ISNULL(lock_ctdef->multi_ctdef_ = multi_del_allocator.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate multi lock ctdef failed", K(ret));
     } else if (OB_FAIL(generate_multi_lock_ctdef(index_dml_info, *lock_ctdef->multi_ctdef_))) {
+      LOG_WARN("generate multi lock ctdef failed", K(ret), K(index_dml_info));
     }
   }
   return ret;
@@ -154,7 +180,9 @@ int ObDmlCgService::generate_delete_ctdef(ObLogDelUpd &op,
   ObDMLCtDefAllocator<ObDelCtDef> del_ctdef_allocator(cg_.phy_plan_->get_allocator());
   if (OB_ISNULL(del_ctdef = del_ctdef_allocator.alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate del ctdef failed", K(ret));
   } else if (OB_FAIL(generate_delete_ctdef(op, index_dml_info, *del_ctdef))) {
+    LOG_WARN("generate delete ctdef failed", K(ret));
   }
   return ret;
 }
@@ -169,22 +197,26 @@ int ObDmlCgService::generate_delete_ctdef(ObLogDelUpd &op,
   uint64_t dml_event = op.is_pdml_update_split() ?
       ObTriggerEvents::get_update_event() : ObTriggerEvents::get_delete_event();
   if (OB_FAIL(old_row.assign(index_dml_info.column_old_values_exprs_))) {
+    LOG_WARN("fail to assign delete old row", K(ret));
   } else if (OB_FAIL(generate_dml_base_ctdef(op,
                                              index_dml_info,
                                              del_ctdef,
                                              dml_event,
                                              old_row,
                                              new_row))) {
+    LOG_WARN("generate dml base ctdef failed", K(ret), K(index_dml_info));
   } else if (OB_FAIL(generate_das_del_ctdef(op,
                                             index_dml_info.ref_table_id_,
                                             index_dml_info,
                                             del_ctdef.das_ctdef_,
                                             old_row))) {
+    LOG_WARN("generate das delete ctdef failed", K(ret));
   } else if (OB_FAIL(generate_related_del_ctdef(op,
                                                 index_dml_info.related_index_ids_,
                                                 index_dml_info,
                                                 old_row,
                                                 del_ctdef.related_ctdefs_))) {
+    LOG_WARN("generate related del ctdef failed", K(ret));
   } else {
     del_ctdef.need_check_filter_null_ = index_dml_info.need_filter_null_;
     del_ctdef.distinct_algo_ = index_dml_info.distinct_algo_;
@@ -196,16 +228,21 @@ int ObDmlCgService::generate_delete_ctdef(ObLogDelUpd &op,
     ObDMLCtDefAllocator<ObMultiDelCtDef> multi_del_allocator(cg_.phy_plan_->get_allocator());
     if (OB_ISNULL(del_ctdef.multi_ctdef_ = multi_del_allocator.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate multi del ctdef failed", K(ret));
     } else if (OB_FAIL(generate_multi_del_ctdef(index_dml_info, *del_ctdef.multi_ctdef_))) {
+      LOG_WARN("generate multi delete ctdef failed", K(ret), K(index_dml_info));
     }
   }
 
   if (OB_SUCC(ret) && index_dml_info.is_primary_index_) {
     ObSEArray<ObRawExpr*, 16> distinct_exprs;
     if (OB_FAIL(get_table_unique_key_exprs(op, index_dml_info, distinct_exprs))) {
+      LOG_WARN("get table unique key exprs failed", K(ret), K(index_dml_info));
     } else if (OB_FAIL(cg_.generate_rt_exprs(distinct_exprs, del_ctdef.distinct_key_))) {
+      LOG_WARN("generate distinct_key exprs failed", K(ret), K(distinct_exprs));
     }
   }
+  LOG_TRACE("generate delete ctdef", K(ret), K(del_ctdef));
   return ret;
 }
 
@@ -217,7 +254,9 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
   ObDMLCtDefAllocator<ObUpdCtDef> upd_allocator(cg_.phy_plan_->get_allocator());
   if (OB_ISNULL(upd_ctdef = upd_allocator.alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate upd ctdef failed", K(ret));
   } else if (OB_FAIL(generate_update_ctdef(op, index_dml_info, *upd_ctdef))) {
+    LOG_WARN("generate update ctdef failed", K(ret));
   }
   return ret;
 }
@@ -237,16 +276,21 @@ int ObDmlCgService::check_is_update_uk(ObLogDelUpd &op,
   if (OB_ISNULL(log_plan) ||
       OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( index_dml_info.ref_table_id_, table_schema))) {
+    LOG_WARN("fail to get unique index schema", K(ret), K(index_dml_info));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
   } else if (index_dml_info.is_primary_index_) {
     // main table
     if (OB_FAIL(table_schema->get_rowkey_column_ids(rowkey_cids))) {
+      LOG_WARN("fail to get rowkey cids", K(ret));
     }
   } else if (!table_schema->is_global_unique_index_table()) {
     // Not a global unique index, no need to check
   } else if (OB_FAIL(table_schema->get_rowkey_column_ids(rowkey_cids))) {
+    LOG_WARN("fail to get rowkey cids", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -279,12 +323,16 @@ int ObDmlCgService::check_is_update_local_unique_index(ObLogDelUpd &op,
   if (OB_ISNULL(log_plan) ||
       OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( index_tid, unique_index_schema))) {
+    LOG_WARN("fail to get unique index schema", K(ret), K(index_tid));
   } else if (OB_ISNULL(unique_index_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
   } else if (!unique_index_schema->is_local_unique_index_table()) {
     // not need check it
   } else if (OB_FAIL(unique_index_schema->get_rowkey_column_ids(rowkey_cids))) {
+    LOG_WARN("fail to get rowkey column_ids", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !is_update_uk && i < update_cids.count(); i++) {
       if (has_exist_in_array(rowkey_cids, update_cids.at(i))) {
@@ -309,9 +357,13 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
   bool is_update_uk = false;
   const ObAssignments &assigns = index_dml_info.assignments_;
   bool gen_expand_ctdef = false;
+  LOG_TRACE("begin to generate update ctdef", K(index_dml_info));
   if (OB_FAIL(old_row.assign(index_dml_info.column_old_values_exprs_))) {
+    LOG_WARN("fail to assign update old row", K(ret));
   } else if (OB_FAIL(new_row.assign(old_row))) {
+    LOG_WARN("assign new row failed", K(ret));
   } else if (OB_FAIL(append(full_row, old_row))) {
+    LOG_WARN("append old row expr to full row failed", K(ret), K(old_row));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < assigns.count(); ++i) {
     const ObColumnRefRawExpr *col = assigns.at(i).column_expr_;
@@ -321,7 +373,9 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
                             const_cast<ObColumnRefRawExpr*>(col),
                             &assign_idx)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("update column not found in all columns", K(ret), KPC(col));
     } else if (OB_FAIL(full_row.push_back(assign_expr))) {
+      LOG_WARN("add assign expr to full row failed", K(ret), KPC(assign_expr));
     } else {
       new_row.at(assign_idx) = assign_expr;
     }
@@ -333,7 +387,9 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
                                              ObTriggerEvents::get_update_event(),
                                              old_row,
                                              new_row))) {
+    LOG_WARN("generate dml base ctdef failed", K(ret), K(index_dml_info));
   } else if (OB_FAIL(cg_.generate_rt_exprs(full_row, upd_ctdef.full_row_))) {
+    LOG_WARN("generate dml update full row exprs failed", K(ret), K(full_row));
   } else if (OB_FAIL(generate_das_upd_ctdef(op,
                                             index_dml_info.ref_table_id_,
                                             index_dml_info,
@@ -341,10 +397,12 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
                                             old_row,
                                             new_row,
                                             full_row))) {
+    LOG_WARN("generate das update ctdef failed", K(ret));
   } else if (OB_FAIL(check_is_update_uk(op,
                                         index_dml_info,
                                         upd_ctdef.dupd_ctdef_.updated_column_ids_,
                                         upd_ctdef.dupd_ctdef_))) {
+    LOG_WARN("fail to check is update uk", K(ret), K(upd_ctdef.dupd_ctdef_));
   } else if (OB_FAIL(generate_related_upd_ctdef(op,
                                                 index_dml_info.related_index_ids_,
                                                 index_dml_info,
@@ -352,9 +410,11 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
                                                 new_row,
                                                 full_row,
                                                 upd_ctdef.related_upd_ctdefs_))) {
+    LOG_WARN("generate related upd ctdef failed", K(ret));
   } else if (OB_FAIL(convert_upd_assign_infos(upd_ctdef.is_table_without_pk_,
                                               index_dml_info,
                                               upd_ctdef.assign_columns_))) {
+    LOG_WARN("convert upd assign infos failed", K(ret), K(index_dml_info));
   } else {
     upd_ctdef.need_check_filter_null_ = index_dml_info.need_filter_null_;
     upd_ctdef.distinct_algo_ = index_dml_info.distinct_algo_;
@@ -379,28 +439,34 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
     ObDMLCtDefAllocator<ObDASInsCtDef> dins_allocator(cg_.phy_plan_->get_allocator());
     if (OB_ISNULL(upd_ctdef.ddel_ctdef_ = ddel_allocator.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate das del ctdef failed", K(ret));
     } else if (OB_ISNULL(upd_ctdef.dins_ctdef_ = dins_allocator.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate das ins ctdef failed", K(ret));
     } else if (OB_FAIL(generate_das_del_ctdef(op,
                                               index_dml_info.ref_table_id_,
                                               index_dml_info,
                                               *upd_ctdef.ddel_ctdef_,
                                               old_row))) {
+      LOG_WARN("generate das delete ctdef for update failed", K(ret));
     } else if (OB_FAIL(generate_related_del_ctdef(op,
                                                   index_dml_info.related_index_ids_,
                                                   index_dml_info,
                                                   old_row,
                                                   upd_ctdef.related_del_ctdefs_))) {
+      LOG_WARN("generate related del ctdef failed", K(ret));
     } else if (OB_FAIL(generate_das_ins_ctdef(op,
                                               index_dml_info.ref_table_id_,
                                               index_dml_info,
                                               *upd_ctdef.dins_ctdef_,
                                               new_row))) {
+      LOG_WARN("generate das insert ctdef for update failed", K(ret));
     } else if (OB_FAIL(generate_related_ins_ctdef(op,
                                                   index_dml_info.related_index_ids_,
                                                   index_dml_info,
                                                   new_row,
                                                   upd_ctdef.related_ins_ctdefs_))) {
+      LOG_WARN("generate related ins ctdef failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -408,9 +474,11 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
     ObDMLCtDefAllocator<ObDASLockCtDef> dlock_allocator(cg_.phy_plan_->get_allocator());
     if (OB_ISNULL(upd_ctdef.dlock_ctdef_ = dlock_allocator.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate das lock ctdef failed", K(ret));
     } else if (OB_FAIL(generate_das_lock_ctdef(op, index_dml_info,
                                                *upd_ctdef.dlock_ctdef_,
                                                old_row))) {
+      LOG_WARN("generate das lock ctdef for update failed", K(ret));
     }
   }
 
@@ -422,16 +490,21 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
     ObDMLCtDefAllocator<ObMultiUpdCtDef> multi_upd_allocator(cg_.phy_plan_->get_allocator());
     if (OB_ISNULL(upd_ctdef.multi_ctdef_ = multi_upd_allocator.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate multi upd ctdef failed", K(ret));
     } else if (OB_FAIL(generate_multi_upd_ctdef(op, index_dml_info, *upd_ctdef.multi_ctdef_))) {
+      LOG_WARN("generate multi update ctdef failed", K(ret), K(index_dml_info));
     }
   }
 
   if (OB_SUCC(ret) && index_dml_info.is_primary_index_) {
     ObSEArray<ObRawExpr*, 16> distinct_exprs;
     if (OB_FAIL(get_table_unique_key_exprs(op, index_dml_info, distinct_exprs))) {
+      LOG_WARN("get table unique key exprs failed", K(ret), K(index_dml_info));
     } else if (OB_FAIL(cg_.generate_rt_exprs(distinct_exprs, upd_ctdef.distinct_key_))) {
+      LOG_WARN("generate distinct_key exprs failed", K(ret), K(distinct_exprs));
     }
   }
+  LOG_TRACE("finish generate update ctdef", K(ret), K(upd_ctdef));
   return ret;
 }
 
@@ -448,14 +521,17 @@ int ObDmlCgService::adjust_unique_key_exprs(ObIArray<ObRawExpr*> &unique_key_exp
       // do nothing.
       ObRawExpr *tmp_expr = static_cast<ObColumnRefRawExpr *>(expr)->get_dependant_expr();
       if (OB_FAIL(add_var_to_array_no_dup(tmp_exprs, tmp_expr))) {
+        LOG_WARN("failed to add param expr", K(ret));
       }
     } else {
       if (OB_FAIL(add_var_to_array_no_dup(tmp_exprs, expr))) {
+        LOG_WARN("failed to add param expr", K(ret));
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(unique_key_exprs.assign(tmp_exprs))) {
+    LOG_WARN("failed to remove generated column exprs", K(ret));
   }
   return ret;
 }
@@ -467,10 +543,14 @@ int ObDmlCgService::get_table_unique_key_exprs(ObLogDelUpd &op,
   int ret = OB_SUCCESS;
   bool is_heap_table = false;
   if (OB_FAIL(check_is_heap_table(op, index_dml_info.ref_table_id_, is_heap_table))) {
+    LOG_WARN("check is heap table failed", K(ret));
   } else if (OB_FAIL(index_dml_info.get_rowkey_exprs(unique_key_exprs))) {
+    LOG_WARN("get table rowkey failed", K(ret), K(index_dml_info));
   } else if (is_heap_table) {
     if (OB_FAIL(get_heap_table_part_exprs(op, index_dml_info, unique_key_exprs))) {
+      LOG_WARN("get heap table part exprs failed", K(ret), K(index_dml_info));
     } else if (OB_FAIL(adjust_unique_key_exprs(unique_key_exprs))){
+      LOG_WARN("fail to adjust unique key exprs", K(ret));
     }
   }
 
@@ -482,9 +562,11 @@ int ObDmlCgService::get_table_unique_key_exprs(ObLogDelUpd &op,
     ObRawExpr *stmt_id_expr = nullptr;
     if (op.get_stmt_id_expr() == nullptr) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("stmt_id_expr is nullptr", K(ret));
     } else if (FALSE_IT(stmt_id_expr = const_cast<ObRawExpr *>(op.get_stmt_id_expr()))) {
       // do nothing
     } else if (OB_FAIL(unique_key_exprs.push_back(stmt_id_expr))) {
+      LOG_WARN("fail to push_back stmt_id_expr", K(ret), KPC(stmt_id_expr));
     }
   }
   return ret;
@@ -507,9 +589,12 @@ int ObDmlCgService::table_unique_key_for_conflict_checker(ObLogDelUpd &op,
   int ret = OB_SUCCESS;
   bool is_heap_table = false;
   if (OB_FAIL(check_is_heap_table(op, index_dml_info.ref_table_id_, is_heap_table))) {
+    LOG_WARN("check is heap table failed", K(ret));
   } else if (OB_FAIL(index_dml_info.get_rowkey_exprs(rowkey_exprs))) {
+    LOG_WARN("get table rowkey failed", K(ret), K(index_dml_info));
   } else if (is_heap_table) {
     if (OB_FAIL(get_heap_table_part_exprs(op, index_dml_info, rowkey_exprs))) {
+      LOG_WARN("get heap table part exprs failed", K(ret), K(index_dml_info));
     }
   }
   return ret;
@@ -528,15 +613,20 @@ int ObDmlCgService::get_heap_table_part_exprs(const ObLogicalOperator &op,
   if (OB_ISNULL(log_plan) ||
       OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( index_dml_info.ref_table_id_, table_schema))) {
+    LOG_WARN("get table schema failed", K(index_dml_info.ref_table_id_), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ret), K(table_schema));
   } else if (!table_schema->is_partitioned_table()) {
     // do nothing
   } else if (table_schema->get_partition_key_info().get_size() > 0 &&
              OB_FAIL(table_schema->get_partition_key_info().get_column_ids(part_key_ids))) {
+    LOG_WARN("failed to get column ids", K(ret));
   } else if (table_schema->get_subpartition_key_info().get_size() > 0 &&
              OB_FAIL(table_schema->get_subpartition_key_info().get_column_ids(part_key_ids))) {
+    LOG_WARN("failed to get column ids", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < part_key_ids.count(); ++i) {
     bool is_founded = false;
@@ -546,10 +636,13 @@ int ObDmlCgService::get_heap_table_part_exprs(const ObLogicalOperator &op,
       uint64_t base_cid = OB_INVALID_ID;
       if (OB_ISNULL(col)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("column expr is null", K(ret));
       } else if (OB_FAIL(get_column_ref_base_cid(op, col, base_cid))) {
+        LOG_WARN("fail to get column base id", K(ret), KPC(col));
       } else if (part_col_id != base_cid) {
         // not match
       } else if (OB_FAIL(part_key_exprs.push_back(col))) {
+        LOG_WARN("fail to push column expr", K(ret), KPC(col));
       } else {
         is_founded = true;
       }
@@ -570,7 +663,9 @@ int ObDmlCgService::convert_data_table_rowkey_info(ObLogDelUpd &op,
   // the type of rowkey_exprs must be column_ref expression
   if (OB_ISNULL(primary_dml_info)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("primary_index_dml_info is null", K(ret));
   } else if (OB_FAIL(table_unique_key_for_conflict_checker(op, *primary_dml_info, rowkey_exprs))) {
+    LOG_WARN("get table unique key exprs failed", K(ret), KPC(primary_dml_info));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_exprs.count(); ++i) {
@@ -585,17 +680,24 @@ int ObDmlCgService::convert_data_table_rowkey_info(ObLogDelUpd &op,
       ObColumnRefRawExpr *col_expr = static_cast<ObColumnRefRawExpr *>(expr);
       uint64_t base_cid = OB_INVALID_ID;
       if (OB_FAIL(get_column_ref_base_cid(op, col_expr, base_cid))) {
+        LOG_WARN("get column base cid failed", K(ret), KPC(col_expr));
       } else if (OB_FAIL(rowkey_column_ids.push_back(base_cid))) {
+        LOG_WARN("push base cid failed", K(ret), K(base_cid));
       } else if (OB_FAIL(rowkey_column_types.push_back(col_expr->get_result_type()))) {
+        LOG_WARN("push column type failed", K(ret), KPC(col_expr));
       }
     }
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(das_ins_ctdef.table_rowkey_cids_.init(rowkey_column_ids.count()))) {
+    LOG_WARN("fail to generate rt exprs", K(ret), K(rowkey_exprs));
   } else if (OB_FAIL(append(das_ins_ctdef.table_rowkey_cids_, rowkey_column_ids))) {
+    LOG_WARN("append table rowkey column id failed", K(ret), K(rowkey_column_ids));
   } else if (OB_FAIL(das_ins_ctdef.table_rowkey_types_.init(rowkey_column_types.count()))) {
+    LOG_WARN("init table_rowkey_types failed", K(ret), K(rowkey_column_types.count()));
   } else if (OB_FAIL(append(das_ins_ctdef.table_rowkey_types_, rowkey_column_types))) {
+    LOG_WARN("append table rowkey column type failed", K(ret), K(rowkey_column_types));
   }
   return ret;
 }
@@ -612,8 +714,11 @@ int ObDmlCgService::generate_replace_ctdef(ObLogInsert &op,
 
   if (OB_ISNULL(replace_ctdef = replace_ctdef_allocator.alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate replace ctdef failed", K(ret));
   } else if (OB_FAIL(generate_insert_ctdef(op, ins_index_dml_info, ins_ctdef))) {
+    LOG_WARN("fail to generate insert ctdef", K(ret), "ins_index_dml_info", ins_index_dml_info);
   } else if (OB_FAIL(generate_delete_ctdef(op, del_index_dml_info, del_ctdef))) {
+    LOG_WARN("fail to generate delete ctdef", K(ret), "del_index_dml_info", del_index_dml_info);
   } else {
     replace_ctdef->ins_ctdef_ = ins_ctdef;
     replace_ctdef->del_ctdef_ = del_ctdef;
@@ -633,8 +738,11 @@ int ObDmlCgService::generate_insert_up_ctdef(ObLogInsert &op,
   ObDMLCtDefAllocator<ObInsertUpCtDef> insert_up_allocator(cg_.phy_plan_->get_allocator());
   if (OB_ISNULL(insert_up_ctdef = insert_up_allocator.alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate insert on duplicate key ctdef failed", K(ret));
   } else if (OB_FAIL(generate_insert_ctdef(op, ins_index_dml_info, ins_ctdef))) {
+    LOG_WARN("fail to generate insert ctdef", K(ret), "ins_index_dml_info", ins_index_dml_info);
   } else if (OB_FAIL(generate_update_ctdef(op, upd_index_dml_info, upd_ctdef))) {
+    LOG_WARN("fail to generate update ctdef", K(ret), "upd_index_dml_info", upd_index_dml_info);
   } else {
     insert_up_ctdef->ins_ctdef_ = ins_ctdef;
     insert_up_ctdef->upd_ctdef_ = upd_ctdef;
@@ -654,17 +762,25 @@ int ObDmlCgService::generate_conflict_checker_ctdef(ObLogInsert &op,
   // the table with the primary key needs to be replaced,
   // and the table without the primary key does not need to be replaced
   if (OB_FAIL(table_unique_key_for_conflict_checker(op, index_dml_info, rowkey_exprs))) {
+    LOG_WARN("get table unique key exprs failed", K(ret), K(index_dml_info));
   } else if (OB_FAIL(check_is_heap_table(op, index_dml_info.ref_table_id_, is_heap_table))) {
+    LOG_WARN("check is heap table failed", K(ret));
   } else if (!is_heap_table && OB_FAIL(adjust_unique_key_exprs(rowkey_exprs))) {
+    LOG_WARN("fail to replace generated column exprs", K(ret), K(rowkey_exprs));
   } else if (OB_FAIL(cg_.generate_rt_exprs(rowkey_exprs, conflict_checker_ctdef.data_table_rowkey_expr_))) {
+    LOG_WARN("fail to generate data_table rowkey_expr", K(ret), K(rowkey_exprs));
   } else if (OB_FAIL(generate_scan_ctdef(op, index_dml_info, conflict_checker_ctdef.das_scan_ctdef_))) {
+    LOG_WARN("fail to generate das_scan_ctdef", K(ret));
   } else if (OB_FAIL(generate_scan_with_domain_id_ctdef_if_need(op, index_dml_info,
           conflict_checker_ctdef.das_scan_ctdef_,conflict_checker_ctdef.attach_spec_))) {
+    LOG_WARN("fail to generate scan with doc id ctdef if need", K(ret));
   } else if (OB_FAIL(generate_constraint_infos(op,
                                                index_dml_info,
                                                conflict_checker_ctdef.cst_ctdefs_))) {
+    LOG_WARN("fail to generate constraint_infos", K(ret));
   }  else if (OB_FAIL(cg_.generate_rt_exprs(index_dml_info.column_old_values_exprs_,
                                            conflict_checker_ctdef.table_column_exprs_))) {
+    LOG_WARN("fail to generate table columns rt exprs ", K(ret));
   } else {
     conflict_checker_ctdef.use_dist_das_ = op.is_multi_part_dml();
     conflict_checker_ctdef.rowkey_count_ = index_dml_info.rowkey_cnt_;
@@ -677,19 +793,26 @@ int ObDmlCgService::generate_conflict_checker_ctdef(ObLogInsert &op,
     ObSEArray<ObRawExpr *, 4> constraint_raw_exprs;
     if (OB_ISNULL(part_id_expr_for_lookup = index_dml_info.lookup_part_id_expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("part_id_expr for lookup is null", K(ret), K(index_dml_info));
     } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*part_id_expr_for_lookup, nullptr, rt_part_id_expr))) {
+      LOG_WARN("generate rt part_id_expr failed", K(ret), KPC(part_id_expr_for_lookup));
     } else if (OB_ISNULL(rt_part_id_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("rt part_id_expr for lookup is null", K(ret));
     } else if (OB_FAIL(constraint_raw_exprs.push_back(part_id_expr_for_lookup))) {
+      LOG_WARN("fail to push part_id_expr to constraint_raw_exprs", K(ret));
     } else if (OB_FAIL(cg_.generate_calc_exprs(constraint_dep_exprs,
                                                constraint_raw_exprs,
                                                conflict_checker_ctdef.part_id_dep_exprs_,
                                                op.get_type(),
                                                false))) {
+      LOG_WARN("fail to generate part_id_expr depend calc_expr", K(constraint_dep_exprs),
+          K(constraint_raw_exprs), K(conflict_checker_ctdef.part_id_dep_exprs_));
     } else {
       conflict_checker_ctdef.calc_part_id_expr_ = rt_part_id_expr;
     }
   }
+  LOG_TRACE("print conflict checker", K(conflict_checker_ctdef));
   return ret;
 }
 
@@ -702,7 +825,9 @@ int ObDmlCgService::generate_constraint_infos(ObLogInsert &op,
   const ObIArray<ObUniqueConstraintInfo> *log_constraint_infos = op.get_constraint_infos();
   if (OB_ISNULL(log_constraint_infos)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("log_constraint_info is null", K(ret));
   } else if (OB_FAIL(cst_ctdefs.init(log_constraint_infos->count()))) {
+    LOG_WARN("allocate conflict checker spec array failed", K(ret), K(log_constraint_infos->count()));
   }
   for (int i = 0; OB_SUCC(ret) && i < log_constraint_infos->count(); i++) {
     ObRowkeyCstCtdef *rowkey_cst_ctdef = NULL;
@@ -712,11 +837,16 @@ int ObDmlCgService::generate_constraint_infos(ObLogInsert &op,
                                                log_constraint_infos->at(i).constraint_columns_;
     if (OB_ISNULL(rowkey_cst_ctdef = cst_ctdef_allocator.alloc())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("rowkey_cst_ctdef is null", K(ret));
     } else if (OB_FAIL(ob_write_string(cg_.phy_plan_->get_allocator(),
                                        log_constraint_infos->at(i).constraint_name_,
                                        rowkey_cst_ctdef->constraint_name_))) {
+      LOG_WARN("fail to write string", K(ret), K(i),
+               "name", log_constraint_infos->at(i).constraint_name_);
     } else if (OB_FAIL(rowkey_cst_ctdef->rowkey_expr_.init(constraint_columns.count()))) {
+      LOG_WARN("init rowkey failed", K(ret), K(constraint_columns.count()));
     } else if (OB_FAIL(rowkey_cst_ctdef->rowkey_accuracys_.init(constraint_columns.count()))) {
+      LOG_WARN("init rowkey accuracy failed", K(ret));
     }
 
     for (int64_t j = 0; OB_SUCC(ret) && j < constraint_columns.count(); ++j) {
@@ -724,6 +854,7 @@ int ObDmlCgService::generate_constraint_infos(ObLogInsert &op,
       ObColumnRefRawExpr *col_expr = constraint_columns.at(j);
       if (OB_ISNULL(col_expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("col_expr is null", K(ret));
       } else if (is_shadow_column(col_expr->get_column_id())
           || col_expr->is_virtual_generated_column()) {
         LOG_DEBUG("constraint exprs", K(is_shadow_column(col_expr->get_column_id())),
@@ -732,18 +863,25 @@ int ObDmlCgService::generate_constraint_infos(ObLogInsert &op,
         ObRawExpr *spk_expr = col_expr->get_dependant_expr();
         if (OB_ISNULL(spk_expr)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("col_expr is null", K(ret));
         } else if (OB_FAIL(cg_.generate_rt_expr(*spk_expr, expr))) {
+          LOG_WARN("generate rt expr failed", K(ret), KPC(spk_expr));
         } else if (OB_FAIL(constraint_raw_exprs.push_back(spk_expr))) {
+          LOG_WARN("push_back rt expr failed", K(ret), KPC(spk_expr));
         }
       } else {
         if (OB_FAIL(cg_.generate_rt_expr(*col_expr, expr))) {
+          LOG_WARN("generate rt expr failed", K(ret), KPC(col_expr));
         } else if (OB_FAIL(constraint_raw_exprs.push_back(col_expr))) {
+          LOG_WARN("push_back rt expr failed", K(ret), KPC(col_expr));
         }
       }
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(rowkey_cst_ctdef->rowkey_expr_.push_back(expr))) {
+          LOG_WARN("fail to push_back expr", K(ret));
         } else if (OB_FAIL(rowkey_cst_ctdef->rowkey_accuracys_.push_back(col_expr->get_accuracy()))) {
+          LOG_WARN("fail to store rowkey accuracy", K(ret));
         }
       }
     } // end constraint_columns
@@ -751,6 +889,7 @@ int ObDmlCgService::generate_constraint_infos(ObLogInsert &op,
     for (int64_t i = 0; OB_SUCC(ret) && i < index_dml_info.column_exprs_.count(); ++i) {
       ObRawExpr *expr = index_dml_info.column_exprs_.at(i);
       if (OB_FAIL(constraint_dep_exprs.push_back(expr))) {
+        LOG_WARN("fail to push_back", K(ret), KPC(expr));
       }
     }
     //Here we derive the calc exprs that constraint_info->rowkey_expr_ depends on
@@ -760,7 +899,10 @@ int ObDmlCgService::generate_constraint_infos(ObLogInsert &op,
                                           rowkey_cst_ctdef->calc_exprs_,
                                           op.get_type(),
                                           false))) {
+        LOG_WARN("fail to generate calc depend expr", K(ret),
+                 K(constraint_dep_exprs), K(constraint_raw_exprs));
       } else if (OB_FAIL(cst_ctdefs.push_back(rowkey_cst_ctdef))) {
+        LOG_WARN("fail to generate calc depend expr", K(ret), KPC(rowkey_cst_ctdef));
       }
     }
   } // end log_constraint_infos
@@ -780,9 +922,11 @@ int ObDmlCgService::generate_access_exprs(
     bool is_domain_id_col = false;
     ObRawExpr *expr = columns.at(i);
     if (OB_FAIL(get_column_ref_base_cid(op, columns.at(i), base_cid))) {
+      LOG_WARN("get base column id failed", K(ret), K(i), K(columns.at(i)));
     } else if (is_contain(domain_id_col_ids, base_cid)) {
       is_domain_id_col = true;
       if (OB_FAIL(add_var_to_array_no_dup(domain_id_raw_expr, expr))) {
+        LOG_WARN("failed to add param expr", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -792,6 +936,7 @@ int ObDmlCgService::generate_access_exprs(
       // nothing to do.
     } else {
       if (OB_FAIL(add_var_to_array_no_dup(access_exprs, expr))) {
+        LOG_WARN("failed to add param expr", K(ret));
       }
     }
   }
@@ -824,9 +969,12 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get unexpected null", K(schema_guard), K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_FAIL(check_need_domain_id_merge_iter(index_dml_info.column_exprs_, op, ref_table_id, domain_types, domain_tids))) {
+    LOG_WARN("fail to check need domain id merge iter", K(ret), K(ref_table_id));
   } else if (OB_FAIL(schema_guard->get_schema_guard()->get_schema_version(
       TABLE_SCHEMA, ref_table_id, scan_ctdef.schema_version_))) {
+    LOG_WARN("fail to get schema version", K(ret), K(ref_table_id));
   } else if (domain_types.count() > 0 &&
              OB_FAIL(get_domain_index_col_ids(domain_types,
                                               domain_tids,
@@ -834,22 +982,30 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
                                               schema_guard,
                                               domain_id_col_ids,
                                               flatten_domain_id_col_ids))) {
+    LOG_WARN("fail to get domain index col ids", K(ret), K(domain_types), KPC(table_schema));
   } else if (OB_FAIL(generate_access_exprs(index_dml_info.column_exprs_,
                                            op,
                                            flatten_domain_id_col_ids,
                                            access_exprs,
                                            domain_id_raw_expr))) {
+    LOG_WARN("fail to generate access exprs ", K(ret));
   } else if (OB_FAIL(cg_.generate_rt_exprs(access_exprs,
                                            scan_ctdef.pd_expr_spec_.access_exprs_))) {
+    LOG_WARN("fail to generate rt exprs ", K(ret));
   } else if (OB_FAIL(cg_.generate_rt_exprs(domain_id_raw_expr, domain_id_expr))) {
+    LOG_WARN("fail to generate domain id rt exprs", K(ret), K(domain_id_raw_expr));
   } else if (OB_FAIL(scan_ctdef.access_column_ids_.init(access_exprs.count()))) {
   } else if (OB_FAIL(scan_ctdef.domain_id_idxs_.prepare_allocate(domain_id_col_ids.count()))) {
+    LOG_WARN("fail to init domain id idx array ", K(ret));
   } else if (OB_FAIL(scan_ctdef.domain_types_.assign(domain_types))) {
+    LOG_WARN("fail to init domain type array ", K(ret));
   } else if (OB_FAIL(scan_ctdef.domain_tids_.assign(domain_tids))) {
+    LOG_WARN("fail to init domain tid array ", K(ret));
   } else {
     // prepare domain_id_idxs_
     ARRAY_FOREACH(scan_ctdef.domain_id_idxs_, i) {
       if (OB_FAIL(scan_ctdef.domain_id_idxs_.at(i).prepare_allocate(domain_id_col_ids.at(i).count()))) {
+        LOG_WARN("fail to prepare allocate domain id idxs", K(ret));
       }
     }
     ARRAY_FOREACH(index_dml_info.column_exprs_, i) {
@@ -867,7 +1023,9 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
         // do nothing during building fts index.
         need_push = false;
       } else if (OB_FAIL(get_column_ref_base_cid(op, item, base_cid))) {
+        LOG_WARN("get base column id failed", K(ret), K(item));
       } else if (OB_FAIL(tsc_col_ids.push_back(base_cid))) {
+        LOG_WARN("fail to push back column id", K(ret));
       } else {
         for (int64_t j = 0; OB_SUCC(ret) && j < domain_id_col_ids.count(); ++j) {
           if (has_exist_in_array(domain_id_col_ids.at(j), base_cid, &idx)) {
@@ -879,6 +1037,8 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
       if (OB_FAIL(ret)) {
       } else if (!need_push) {
       } else if (OB_FAIL(scan_ctdef.access_column_ids_.push_back(base_cid))) {
+        LOG_WARN("fail to add column id", K(ret), K(domain_types), K(scan_ctdef.access_column_ids_),
+          K(item->get_column_name()), K(item->get_alias_column_name()), K(item->get_column_id()));
       }
     }
   }
@@ -886,16 +1046,19 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
     scan_ctdef.table_param_.get_enable_lob_locator_v2() = true;
     if (OB_FAIL(scan_ctdef.table_param_.convert(*table_schema, scan_ctdef.access_column_ids_,
                                                 scan_ctdef.pd_expr_spec_.pd_storage_flag_))) {
+      LOG_WARN("convert table param failed", K(ret));
     } else if (OB_FAIL(cg_.generate_calc_exprs(dep_exprs,
                                                index_dml_info.column_old_values_exprs_,
                                                scan_ctdef.pd_expr_spec_.calc_exprs_,
                                                op.get_type(),
                                                false))) {
+      LOG_WARN("generate calc exprs failed", K(ret));
     } else if (OB_FAIL(cg_.tsc_cg_service_.generate_das_result_output(tsc_col_ids,
                                                                       domain_id_expr,
                                                                       flatten_domain_id_col_ids,
                                                                       scan_ctdef,
                                                                       nullptr))) {
+      LOG_WARN("generate das result output failed", K(ret));
     }
   }
 
@@ -911,6 +1074,7 @@ int ObDmlCgService::generate_dml_column_ids(const ObLogicalOperator &op,
   column_ids.reset();
   if (!columns_exprs.empty()) {
     if (OB_FAIL(column_ids.reserve(columns_exprs.count()))) {
+      LOG_WARN("init column ids array failed", K(ret), K(columns_exprs.count()));
     } else {
       ARRAY_FOREACH(columns_exprs, i) {
         ObColumnRefRawExpr *item = columns_exprs.at(i);
@@ -919,7 +1083,9 @@ int ObDmlCgService::generate_dml_column_ids(const ObLogicalOperator &op,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid column item", K(i), K(item));
         } else if (OB_FAIL(get_column_ref_base_cid(op, item, base_cid))) {
+          LOG_WARN("get base column id failed", K(ret), K(item));
         } else if (OB_FAIL(column_ids.push_back(base_cid))) {
+          LOG_WARN("add column id failed", K(ret));
         }
       }
     }
@@ -930,6 +1096,7 @@ int ObDmlCgService::generate_dml_column_ids(const ObLogicalOperator &op,
 int ObDmlCgService::generate_updated_column_ids(const ObLogDelUpd &log_op,
                                                 const ObAssignments &assigns,
                                                 const ObIArray<uint64_t> &column_ids,
+                                                const ObDASDMLBaseCtDef &das_ctdef,
                                                 ObIArray<uint64_t> &updated_column_ids)
 {
   int ret = OB_SUCCESS;
@@ -938,19 +1105,37 @@ int ObDmlCgService::generate_updated_column_ids(const ObLogDelUpd &log_op,
   if (!assigns.empty()) {
     if (OB_ISNULL(stmt)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get null stmt", K(ret));
     } else if (OB_FAIL(updated_column_ids.reserve(assigns.count()))) {
+      LOG_WARN("init updated column ids array failed", K(ret), K(assigns.count()));
     } else {
-      ARRAY_FOREACH(assigns, i) {
-        ObColumnRefRawExpr *column_expr = assigns.at(i).column_expr_;
-        ColumnItem *column_item = nullptr;
-        if (OB_ISNULL(column_expr) ||
-            OB_ISNULL(column_item = stmt->get_column_item_by_id(column_expr->get_table_id(),
-                                                                column_expr->get_column_id()))) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          if (!has_exist_in_array(column_ids, column_item->base_cid_)) {
-            //not found in column ids, ignore it
-          } else if (OB_FAIL(updated_column_ids.push_back(column_item->base_cid_))) {
+      ObArray<uint64_t> storage_column_ids;
+      if (OB_FAIL(storage_column_ids.assign(column_ids))) {
+        LOG_WARN("failed to assign column ids", KR(ret));
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && (i < storage_column_ids.count()); ++i) {
+          if (is_mlog_reference_column(storage_column_ids.at(i))
+              && !das_ctdef.is_access_mlog_as_master_table_) {
+            uint64_t ref_col_id = ObTableSchema::gen_ref_col_id_from_mlog_col_id(storage_column_ids.at(i));
+            storage_column_ids.at(i) = ref_col_id;
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ARRAY_FOREACH(assigns, i) {
+          ObColumnRefRawExpr *column_expr = assigns.at(i).column_expr_;
+          ColumnItem *column_item = nullptr;
+          if (OB_ISNULL(column_expr) ||
+              OB_ISNULL(column_item = stmt->get_column_item_by_id(column_expr->get_table_id(),
+                                                                  column_expr->get_column_id()))) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get unexpected null", K(ret), K(column_expr), K(column_item));
+          } else {
+            if (!has_exist_in_array(storage_column_ids, column_item->base_cid_)) {
+              //not found in column ids, ignore it
+            } else if (OB_FAIL(updated_column_ids.push_back(column_item->base_cid_))) {
+              LOG_WARN("add updated column id failed", K(ret));
+            }
           }
         }
       }
@@ -970,6 +1155,7 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
   int64_t column_count = 0;
   
   if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema( index_tid, index_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(index_tid));
   } else {
     column_count = only_rowkey ? index_schema->get_rowkey_info().get_size()
                                : index_schema->get_column_count();
@@ -990,8 +1176,11 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
       column_type.set_has_lob_header();
     }
     if (OB_FAIL(das_dml_info.column_ids_.push_back(column->get_column_id()))) {
+      LOG_WARN("store column id failed", K(ret));
     } else if (OB_FAIL(das_dml_info.column_types_.push_back(column_type))) {
+      LOG_WARN("store column meta type failed", K(ret));
     } else if (OB_FAIL(das_dml_info.column_accuracys_.push_back(column->get_accuracy()))) {
+      LOG_WARN("store column accuracy failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && !only_rowkey) {
@@ -1007,8 +1196,11 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
           column_type.set_has_lob_header();
         }
         if (OB_FAIL(das_dml_info.column_ids_.push_back(column->get_column_id()))) {
+          LOG_WARN("store column id failed", K(ret));
         } else if (OB_FAIL(das_dml_info.column_types_.push_back(column_type))) {
+          LOG_WARN("store column meta type failed", K(ret));
         } else if (OB_FAIL(das_dml_info.column_accuracys_.push_back(column->get_accuracy()))) {
+          LOG_WARN("store column accuracy failed", K(ret));
         }
       }
     }
@@ -1032,6 +1224,8 @@ int ObDmlCgService::add_geo_col_projector(const ObIArray<ExprType*> &cur_row,
     ObRawExpr *column_expr = cur_row.at(column_idx);
     if (!has_exist_in_array(full_row, column_expr, &projector_idx)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("row column not found in full row columns", K(ret),
+                K(column_idx), KPC(cur_row.at(column_idx)));
     } else {
       row_projector.at(proj_idx) = projector_idx;
     }
@@ -1065,11 +1259,15 @@ int ObDmlCgService::add_vec_idx_col_projector(const ObIArray<ExprType*> &cur_row
       ObRawExpr *column_expr = cur_row.at(column_idx);
       if (!has_exist_in_array(full_row, column_expr, &pre_projector_idx)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("row column not found in full row columns", K(ret),
+                  K(column_idx), KPC(cur_row.at(column_idx)));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < row_projector.count(); ++i) {
           if (row_projector.at(i) == pre_projector_idx) {
             // replace vid col ref to VEC_VID for new row
             row_projector.at(i) = projector_idx;
+            LOG_DEBUG("succeed do replace col ref to vec_vid expr for new row", K(i), K(pre_projector_idx),
+                      K(projector_idx), K(vid_cid), K(full_row));
             break;
           }
         }
@@ -1088,6 +1286,7 @@ int ObDmlCgService::append_all_pk_column_id(ObSchemaGetterGuard *schema_guard,
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_info.get_size(); ++i) {
     const ObRowkeyColumn *rowkey_column = rowkey_info.get_column(i);
     if (OB_FAIL(add_var_to_array_no_dup(minimal_column_ids, rowkey_column->column_id_))) {
+      LOG_WARN("store column id failed", K(ret), K(rowkey_column->column_id_));
     }
   }
   return ret;
@@ -1104,6 +1303,8 @@ int ObDmlCgService::append_shadow_pk_dependent_cid(const ObTableSchema *table_sc
       // do nothing
     } else if (OB_FAIL(add_var_to_array_no_dup(minimal_column_ids,
                                                rowkey_column->column_id_ - OB_MIN_SHADOW_COLUMN_ID))) {
+      LOG_WARN("store column id failed", K(ret),
+          "column_id", rowkey_column->column_id_ - OB_MIN_SHADOW_COLUMN_ID);
     }
   }
   return ret;
@@ -1116,7 +1317,9 @@ int ObDmlCgService::append_heap_table_part_id(const ObTableSchema *table_schema,
   const ObPartitionKeyInfo &partition_keys = table_schema->get_partition_key_info();
   const ObPartitionKeyInfo &subpartition_keys = table_schema->get_subpartition_key_info();
   if (partition_keys.is_valid() && OB_FAIL(partition_keys.get_column_ids(part_key_ids))) {
+    LOG_WARN("fail to get column ids from partition keys", K(ret));
   } else if (subpartition_keys.is_valid() && OB_FAIL(subpartition_keys.get_column_ids(part_key_ids))) {
+    LOG_WARN("fail to get column ids from subpartition keys", K(ret));
   }
   return ret;
 }
@@ -1127,20 +1330,26 @@ int ObDmlCgService::append_heap_table_part_key_dependcy_column(const ObTableSche
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 4> part_key_column_ids;
   if (OB_FAIL(append_heap_table_part_id(table_schema, part_key_column_ids))) {
+    LOG_WARN("fail to append heap table part_id", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < part_key_column_ids.count(); i++) {
       const ObColumnSchemaV2 *column_schema = nullptr;
       if (OB_ISNULL(column_schema = table_schema->get_column_schema(part_key_column_ids.at(i)))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null ptr", K(ret), K(part_key_column_ids.at(i)));
       } else if (column_schema->is_generated_column()) {
         ObArray<uint64_t> cascaded_columns;
         if (OB_FAIL(column_schema->get_cascaded_column_ids(cascaded_columns))) {
+          LOG_WARN("get cascaded column ids failed", K(ret));
         } else if (OB_FAIL(append_array_no_dup(minimal_column_ids, cascaded_columns))) {
+          LOG_WARN("fail to append cascaded_columns to minimal_column_ids", K(cascaded_columns), K(minimal_column_ids));
         } else if (column_schema->is_stored_generated_column()) {
           if (OB_FAIL(add_var_to_array_no_dup(minimal_column_ids, part_key_column_ids.at(i)))) {
+            LOG_WARN("fail to add part_key_id to minimal_column_ids", K(ret));
           }
         }
       } else if (OB_FAIL(add_var_to_array_no_dup(minimal_column_ids, part_key_column_ids.at(i)))) {
+        LOG_WARN("fail to add part_key_id to minimal_column_ids", K(ret));
       }
     }
   }
@@ -1158,6 +1367,7 @@ int ObDmlCgService::check_unique_key_is_updated(ObSchemaGetterGuard *schema_guar
     if (OB_FAIL(table_schema->is_real_unique_index_column(*schema_guard,
                                                           upd_cids.at(i),
                                                           is_updated))) {
+      LOG_WARN("is_unique_key_column failed", K(ret));
     }
   }
   return ret;
@@ -1172,6 +1382,7 @@ int ObDmlCgService::heap_table_has_not_null_uk(ObSchemaGetterGuard *schema_guard
   bool has_not_null_uk = false;
   if (table_schema->is_table_without_pk()) {
     if (OB_FAIL(table_schema->has_not_null_unique_key(*schema_guard, has_not_null_uk))) {
+      LOG_WARN("fail to check has not null UK", K(ret));
     } else if (!has_not_null_uk) {
       LOG_TRACE("this table don't has not null UK", K(table_schema->get_table_id()));
       need_all_columns = true;
@@ -1194,6 +1405,7 @@ int ObDmlCgService::append_lob_type_column_id(const ObTableSchema *table_schema,
       // The hidden column of xml type is of lob type, so when adding the lob column here,
       // the hidden column of xml type will be added naturally.
       if (OB_FAIL(add_var_to_array_no_dup(minimal_column_ids, column->get_column_id()))) {
+        LOG_WARN("add time type column_id failed", K(ret), K(column->get_column_id()));
       }
     }
   }
@@ -1216,6 +1428,7 @@ int ObDmlCgService::append_time_type_column_id(const ObTableSchema *table_schema
       column->get_meta_type().is_date()) {
       // date/datatime and time/timestamp column need to be added to old_row
       if (OB_FAIL(add_var_to_array_no_dup(minimal_column_ids, column->get_column_id()))) {
+        LOG_WARN("add time type column_id failed", K(ret), K(column->get_column_id()));
       }
     }
   }
@@ -1232,9 +1445,11 @@ int ObDmlCgService::append_udt_hidden_column_id(const ObTableSchema *table_schem
   if (OB_FAIL(table_schema->get_column_schema_in_same_col_group(column_id,
                                                                 udt_set_id,
                                                                 hidden_cols))) {
+    LOG_WARN("failed to get column schema", K(ret));
   } else {
     for (int j = 0; OB_SUCC(ret) && j < hidden_cols.count(); j++) {
       if (OB_FAIL(add_var_to_array_no_dup(minimal_column_ids, hidden_cols.at(j)->get_column_id()))) {
+        LOG_WARN("add column id failed", K(ret), K(minimal_column_ids), K(hidden_cols.at(j)->get_column_id()));
       }
     }
   }
@@ -1251,6 +1466,7 @@ int ObDmlCgService::check_has_upd_rowkey(ObLogicalOperator &op,
   upd_rowkey = false;
   ObSEArray<uint64_t, 8> pk_ids;
   if (OB_FAIL(table_schema->get_rowkey_info().get_column_ids(pk_ids))) {
+    LOG_WARN("failed to get rowkey column ids", K(ret));
   }
   for (int64_t i = 0; !upd_rowkey && OB_SUCC(ret) && i < pk_ids.count(); ++i) {
     uint64_t real_column_id = pk_ids.at(i);
@@ -1274,15 +1490,18 @@ int ObDmlCgService::append_udt_hidden_col_id(ObLogicalOperator &op,
   const ObAssignments &assignment = index_dml_info.assignments_;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr", K(ret), K(op));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < assignment.count(); ++i) {
     ColumnItem *column_item = nullptr;
     const ObColumnRefRawExpr *column_expr = assignment.at(i).column_expr_;
     if (OB_ISNULL(column_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get null column expr", K(ret));
     } else if (OB_ISNULL(column_item = stmt->get_column_item_by_id(column_expr->get_table_id(),
                                                                    column_expr->get_column_id()))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get null column item", K(ret), KPC(column_expr));
     }
   }
 
@@ -1295,6 +1514,8 @@ int ObDmlCgService::append_upd_assignment_column_id(const ObTableSchema *table_s
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append_array_no_dup(minimal_column_ids, das_upd_ctdef.updated_column_ids_))) {
+    LOG_WARN("fail to append update_column_id",
+        K(ret), K(minimal_column_ids), K(das_upd_ctdef.updated_column_ids_));
   }
   return ret;
 }
@@ -1310,14 +1531,18 @@ int ObDmlCgService::is_table_has_unique_key(ObSchemaGetterGuard *schema_guard,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid table schema", K(table_schema));
   } else if (OB_FAIL(table_schema->get_simple_index_infos(simple_index_infos))) {
+    LOG_WARN("get simple_index_infos failed", K(ret));
   } else {
     
     for (int64_t i = 0; OB_SUCC(ret) && !is_has_uk && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = NULL;
       if (OB_FAIL(schema_guard->get_table_schema(
           simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get table schema",
+                K(simple_index_infos.at(i).table_id_), K(ret));
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("index table schema must not be NULL", K(ret));
       } else if (index_table_schema->is_unique_index()) {
         is_has_uk = true;
       } else {
@@ -1344,27 +1569,45 @@ int ObDmlCgService::check_upd_need_all_columns(ObLogDelUpd &op,
   ObSQLSessionInfo *session = cg_.opt_ctx_->get_session_info();
   if (OB_ISNULL(session) || OB_ISNULL(schema_guard) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null ptr", K(ret), KP(session), KP(schema_guard), KP(table_schema));
   } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
-  } else if (binlog_row_image == ObBinlogRowImage::FULL) {
+    LOG_WARN("fail to get binlog image", K(ret));
+  } else if (binlog_row_image == ObBinlogRowImage::FULL || op.has_instead_of_trigger()) {
     // full mode
     need_all_columns = true;
+  } else if (table_schema->has_mlog_table()) {
+    need_all_columns = true;
+    LOG_TRACE("update table with materialized view log, need all columns", K(table_schema->has_mlog_table()));
+  } else if (table_schema->is_mlog_table()) {
+    need_all_columns = true;
+    LOG_TRACE("update materialized view log, need all columns", K(table_schema->is_mlog_table()));
+  } else if (table_schema->is_delete_insert_merge_engine()) {
+    need_all_columns = true;
+    LOG_TRACE("update delete insert table log, need all columns", K(table_schema->get_merge_engine_type()));
   } else if (!is_primary_index) {
     // index_table if update PK, also need record all_columns
     if (OB_FAIL(check_has_upd_rowkey(op, table_schema, upd_cids, is_update_pk))) {
+      LOG_WARN("fail to check has update UK", K(ret));
     } else if (is_update_pk) {
       need_all_columns = true;
       LOG_TRACE("is update pk, need all columns", K(table_schema->get_table_id()));
     }
   } else if (OB_FAIL(is_table_has_unique_key(schema_guard, table_schema, has_uk))) {
+    LOG_WARN("fail to check table has UK", K(ret));
   } else if (has_uk &&
       OB_FAIL(check_unique_key_is_updated(schema_guard, table_schema, upd_cids, is_uk_updated))) {
+    LOG_WARN("fail to check unique key is updated", K(ret), K(upd_cids));
   } else if (is_uk_updated) {
     // need all columns
     need_all_columns = true;
+    LOG_TRACE("update primary_table unique key, need all columns", K(need_all_columns));
   } else if (OB_FAIL(heap_table_has_not_null_uk(schema_guard, table_schema, need_all_columns))) {
+    LOG_WARN("fail to check table whether has not null UK", K(ret));
   } else if (need_all_columns) {
     // need all columns
+    LOG_TRACE("is heap table and don't has not_null UK, need all columns", K(need_all_columns));
   } else if (OB_FAIL(check_has_upd_rowkey(op, table_schema, upd_cids, is_update_pk))) {
+    LOG_TRACE("update primary_table primary key, need all columns", K(need_all_columns));
   } else if (is_update_pk) {
     // rowkey is changed, need all columns
     need_all_columns = true;
@@ -1385,6 +1628,8 @@ int ObDmlCgService::append_upd_old_row_cid(ObLogicalOperator &op,
   int ret = OB_SUCCESS;
   bool has_uk = false;
   if (OB_FAIL(append_all_pk_column_id(schema_guard, table_schema, minimal_column_ids))) {
+    // append all PK
+    LOG_WARN("fail to append all pk to column_id", K(ret), K(table_schema->get_table_name_str()));
   } else if (!is_primary_index) {
     // append update column and shadow_pk dependent column
     //
@@ -1393,20 +1638,31 @@ int ObDmlCgService::append_upd_old_row_cid(ObLogicalOperator &op,
     // in minimal mode, the columns that shadow_pk depends on will be cut out,
     // and the verification will fail, so shadow_pk dependency is needed here. The columns are also passed on
     if (OB_FAIL(append_upd_assignment_column_id(table_schema, das_upd_ctdef, minimal_column_ids))) {
+      LOG_WARN("fail to append upd assignment column_id", K(ret), K(index_dml_info));
     } else if (OB_FAIL(append_shadow_pk_dependent_cid(table_schema, minimal_column_ids))) {
+      LOG_WARN("fail to append shadow_pk dependent cid", K(ret), K(table_schema->get_table_name_str()));
     }
   } else if (OB_FAIL(is_table_has_unique_key(schema_guard, table_schema, has_uk))) {
+    LOG_WARN("fail to check table has UK", K(ret));
   } else if (has_uk &&
       OB_FAIL(append_all_uk_column_id(schema_guard, table_schema, minimal_column_ids))) {
     // append UK
+    LOG_WARN("fail to append all uk column_id", K(ret));
   } else if (OB_FAIL(append_udt_hidden_col_id(op, table_schema, index_dml_info, minimal_column_ids))) {
+    // append UDT hidden column
+    LOG_WARN("fail to append upd assignment column_id", K(ret), K(index_dml_info));
   } else if (OB_FAIL(append_upd_assignment_column_id(table_schema,
                                                      das_upd_ctdef,
                                                      minimal_column_ids))) {
+    // append update column
+    LOG_WARN("fail to append upd assignment column_id", K(ret), K(index_dml_info));
   } else if (OB_FAIL(append_time_type_column_id(table_schema, minimal_column_ids))) {
+    // append time_type column
+    LOG_WARN("fail to append time type column_id", K(ret));
   } else if (table_schema->is_table_without_pk() &&
       OB_FAIL(append_heap_table_part_key_dependcy_column(table_schema, minimal_column_ids))) {
     // append heap table part_key_column_id and dependency column
+    LOG_WARN("fail to append heap table part_id", K(ret));
   }
 
   return ret;
@@ -1431,17 +1687,22 @@ int ObDmlCgService::generate_minimal_upd_old_row_cid(ObLogDelUpd &op,
   bool is_update_pk = false;
   if (OB_ISNULL(schema_guard = cg_.opt_ctx_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("NULL schema guard", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( index_tid, table_schema))) {
+    LOG_WARN("get schema fail", KR(ret), K(index_tid));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("table not exist", KR(ret), K(index_tid));
   } else if (OB_FAIL(check_upd_need_all_columns(op,
                                                 schema_guard,
                                                 table_schema,
                                                 upd_cids,
                                                 is_primary_index,
                                                 need_all_columns))) {
+    LOG_WARN("fail to check whether update need all columns", K(ret), K(index_tid));
   } else if (need_all_columns) {
     if (OB_FAIL(minimal_column_ids.assign(das_upd_ctdef.column_ids_))) {
+      LOG_WARN("fail to assign column_id", K(ret), K(das_upd_ctdef.column_ids_));
     }
   } else if (OB_FAIL(append_upd_old_row_cid(op,
                                             schema_guard,
@@ -1450,7 +1711,9 @@ int ObDmlCgService::generate_minimal_upd_old_row_cid(ObLogDelUpd &op,
                                             das_upd_ctdef,
                                             index_dml_info,
                                             minimal_column_ids))) {
+    LOG_WARN("fail to append update old_row column_id", K(ret), K(index_tid));
   }
+  LOG_TRACE("print need_all_columns", K(ret), K(need_all_columns), K(minimal_column_ids));
   return ret;
 }
 
@@ -1466,10 +1729,21 @@ int ObDmlCgService::check_del_need_all_columns(ObLogDelUpd &op,
   ObSQLSessionInfo *session = cg_.opt_ctx_->get_session_info();
   if (OB_ISNULL(session) || OB_ISNULL(schema_guard) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null ptr", K(ret), KP(session), KP(schema_guard), KP(table_schema));
   } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
-  } else if (binlog_row_image == ObBinlogRowImage::FULL) {
+    LOG_WARN("fail to get binlog image", K(ret));
+  } else if (binlog_row_image == ObBinlogRowImage::FULL || op.has_instead_of_trigger()) {
     // full mode
     need_all_columns = true;
+  } else if (table_schema->has_mlog_table()) {
+    need_all_columns = true;
+    LOG_TRACE("delete from table with materialized view log, need all columns", K(table_schema->has_mlog_table()));
+  } else if (table_schema->is_mlog_table()) {
+    need_all_columns = true;
+    LOG_TRACE("delete from materialized view log, need all columns", K(table_schema->is_mlog_table()));
+  } else if (table_schema->is_delete_insert_merge_engine()) {
+    need_all_columns = true;
+    LOG_TRACE("delete from delete insert table log, need all columns", K(table_schema->get_merge_engine_type()));
   } else if (table_schema->is_multivalue_index_aux()) {
     // as multivalue need calc is need save rowkey, the save-rowkey policy is dynamic made, need project all columns
     need_all_columns = true;
@@ -1479,6 +1753,7 @@ int ObDmlCgService::check_del_need_all_columns(ObLogDelUpd &op,
     LOG_TRACE("delete from vector index table, need all columns", K(table_schema->get_index_type()));
   } else if (table_schema->is_table_without_pk()) {
     if (OB_FAIL(table_schema->has_not_null_unique_key(*schema_guard, has_not_null_uk))) {
+      LOG_WARN("fail to check whether has not null unique key", K(ret), K(table_schema->get_table_name_str()));
     } else if (!has_not_null_uk) {
       need_all_columns = true;
       LOG_TRACE("is heap_table and don't has not_null uk", K(table_schema->get_table_name_str()));
@@ -1505,15 +1780,23 @@ int ObDmlCgService::generate_minimal_delete_old_row_cid(ObLogDelUpd &op,
   const ObTableSchema *table_schema = NULL;
   if (OB_ISNULL(schema_guard = cg_.opt_ctx_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("NULL schema guard", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( index_tid, table_schema))) {
+    LOG_WARN("get schema fail", KR(ret), K(index_tid));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("table not exist", KR(ret), K(index_tid));
   } else if (OB_FAIL(check_del_need_all_columns(op, schema_guard, table_schema, need_all_columns))) {
+    LOG_WARN("fail to check del need all columns", K(ret), K(is_primary_index), K(index_tid));
   } else if (need_all_columns) {
     if (OB_FAIL(minimal_column_ids.assign(das_del_ctdef.column_ids_))) {
+      LOG_WARN("fail to assig delete column_id", K(ret));
     }
   } else if (OB_FAIL(append_all_pk_column_id(schema_guard, table_schema, minimal_column_ids))) {
+    // append PK
+    LOG_WARN("fail to append all pk to column_id", K(ret), K(index_tid));
   } else if (OB_FAIL(append_lob_type_column_id(table_schema, minimal_column_ids))) {
+    LOG_WARN("fail to append all lob_storage column_id", K(ret), K(index_tid));
   } else if (!is_primary_index) {
     // index_table record PK and the dependent columns of shadow_pk
     //
@@ -1522,10 +1805,15 @@ int ObDmlCgService::generate_minimal_delete_old_row_cid(ObLogDelUpd &op,
     // in minimal mode, the columns that shadow_pk depends on will be cut out,
     // and the verification will fail, so shadow_pk dependency is needed here. The columns are also passed on
     if (OB_FAIL(append_shadow_pk_dependent_cid(table_schema, minimal_column_ids))) {
+      LOG_WARN("fail to append shadow_pk dependent cid", K(ret), K(table_schema->get_table_name_str()));
     }
   } else if (OB_FAIL(append_all_uk_column_id(schema_guard, table_schema, minimal_column_ids))) {
+    // append unique key
+    LOG_WARN("fail to append all unique key column_id");
   } else if (table_schema->is_table_without_pk()) {
     if (OB_FAIL(append_heap_table_part_key_dependcy_column(table_schema, minimal_column_ids))) {
+      // append heap table part_key_column_id and dependcy column
+      LOG_WARN("fail to append heap table part_id", K(ret));
     }
   }
 
@@ -1540,12 +1828,15 @@ int ObDmlCgService::append_all_uk_column_id(ObSchemaGetterGuard *schema_guard,
   // extract all column_ids for unique key, and add them into stmt
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   if (OB_FAIL(table_schema->get_simple_index_infos(simple_index_infos))) {
+    LOG_WARN("get simple_index_infos failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     const ObTableSchema *index_table_schema = NULL;
     if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+      LOG_WARN("fail to get table schema", K(ret), K(simple_index_infos.at(i).table_id_));
     } else if (OB_ISNULL(index_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("index table schema must not be NULL", K(ret));
     } else if (!index_table_schema->is_unique_index()) {
       // not unique index, skip
     } else {
@@ -1554,10 +1845,13 @@ int ObDmlCgService::append_all_uk_column_id(ObSchemaGetterGuard *schema_guard,
         const ObColumnSchemaV2 *column_schema = *iter;
         if (OB_ISNULL(column_schema)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null", K(ret), KPC(column_schema));
         } else if (!column_schema->is_index_column()) {
           // ignore ret
           // skip non index column
         } else if (OB_FAIL(add_var_to_array_no_dup(minimal_column_ids, column_schema->get_column_id()))) {
+          LOG_WARN("add column_id to list failed",
+              K(ret), K(column_schema->get_column_id()), K(minimal_column_ids));
         }
       }
     }
@@ -1586,6 +1880,7 @@ int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_
   if (!old_row.empty()) {
     //generate storage row projector
     if (OB_FAIL(old_row_projector.prepare_allocate(storage_column_ids.count() + extra_geo))) {
+      LOG_WARN("init row projector array failed", K(ret), K(storage_column_ids.count()), K(extra_geo));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < storage_column_ids.count(); ++i) {
       uint64_t storage_cid = storage_column_ids.at(i);
@@ -1599,10 +1894,16 @@ int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_
         uint64_t ref_cid = is_shadow_column(storage_cid) ?
                                storage_cid - OB_MIN_SHADOW_COLUMN_ID :
                                storage_cid;
+        if (is_mlog_reference_column(storage_cid)
+              && !das_ctdef.is_access_mlog_as_master_table_) {
+          ref_cid = ObTableSchema::gen_ref_col_id_from_mlog_col_id(storage_cid);
+        }
         if (has_exist_in_array(dml_column_ids, ref_cid, &column_idx)) {
           ObRawExpr *column_expr = old_row.at(column_idx);
           if (!has_exist_in_array(full_row, column_expr, &projector_idx)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("row column not found in full row columns", K(ret),
+                     K(column_idx), KPC(old_row.at(column_idx)));
           } else {
             old_row_projector.at(i) = projector_idx;
           }
@@ -1613,12 +1914,14 @@ int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_
     if (OB_SUCC(ret) && is_spatial_index
         && OB_FAIL(add_geo_col_projector(old_row, full_row, dml_column_ids, storage_column_ids.count(),
                                          das_ctdef, old_row_projector))) {
+      LOG_WARN("add geo column projector failed", K(ret));
     }
   }
   //generate new row projector
   if (!new_row.empty()) {
     //generate storage row projector
     if (OB_FAIL(new_row_projector.prepare_allocate(storage_column_ids.count() + extra_geo))) {
+      LOG_WARN("init row projector array failed", K(ret), K(storage_column_ids.count()), K(extra_geo));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < storage_column_ids.count(); ++i) {
       uint64_t storage_cid = storage_column_ids.at(i);
@@ -1632,10 +1935,16 @@ int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_
         uint64_t ref_cid = is_shadow_column(storage_cid) ?
                                storage_cid - OB_MIN_SHADOW_COLUMN_ID :
                                storage_cid;
+        if (is_mlog_reference_column(storage_cid)
+            && !das_ctdef.is_access_mlog_as_master_table_) {
+          ref_cid = ObTableSchema::gen_ref_col_id_from_mlog_col_id(storage_cid);
+        }
         if (has_exist_in_array(dml_column_ids, ref_cid, &column_idx)) {
           ObRawExpr *column_expr = new_row.at(column_idx);
           if (!has_exist_in_array(full_row, column_expr, &projector_idx)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("row column not found in full row columns", K(ret),
+                     K(column_idx), KPC(new_row.at(column_idx)));
           } else {
             new_row_projector.at(i) = projector_idx;
           }
@@ -1645,12 +1954,16 @@ int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_
     if (OB_SUCC(ret) && is_spatial_index
         && OB_FAIL(add_geo_col_projector(new_row, full_row, dml_column_ids, storage_column_ids.count(),
                                          das_ctdef, new_row_projector))) {
+        LOG_WARN("add geo column projector failed", K(ret));
     }
     if (OB_SUCC(ret) && is_vec_vid_index &&
         OB_FAIL(add_vec_idx_col_projector(new_row, full_row, dml_column_ids, das_ctdef, new_row_projector))) {
+      LOG_WARN("add vec idx column for new projector failed", K(ret));
     }
   }
 
+  LOG_TRACE("print dml_column_ids", K(dml_column_ids), K(storage_column_ids),
+      K(written_column_ids), K(das_ctdef.old_row_projector_), K(das_ctdef.new_row_projector_));
   return ret;
 }
 
@@ -1662,6 +1975,7 @@ int ObDmlCgService::get_column_ref_base_cid(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op.get_stmt()) || OB_ISNULL(col)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else {
     const ColumnItem *item = op.get_stmt()->get_column_item_by_id(
         col->get_table_id(), col->get_column_id());
@@ -1686,6 +2000,7 @@ int ObDmlCgService::get_table_schema_version(const ObLogicalOperator &op,
   const ObDMLStmt *stmt = op.get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else {
     bool found = false;
     const ObIArray<ObSchemaObjVersion> *dependency_table = stmt->get_global_dependency_table();
@@ -1704,6 +2019,7 @@ int ObDmlCgService::get_table_schema_version(const ObLogicalOperator &op,
       ObSchemaGetterGuard *schema_guard = cg_.opt_ctx_->get_schema_guard();
       
       if (OB_FAIL(schema_guard->get_schema_version(TABLE_SCHEMA, table_id, schema_version))) {
+        LOG_WARN("get table schema version failed", K(ret));
       }
     }
   }
@@ -1725,15 +2041,21 @@ int ObDmlCgService::generate_das_dml_ctdef(ObLogDelUpd &op,
   bool is_update_uk_parallel = false;
   int64_t binlog_row_image = ObBinlogRowImage::FULL;
   if (OB_FAIL(convert_dml_column_info(index_tid, false, das_dml_ctdef))) {
+    LOG_WARN("add column ids to das_dml_ctdef failed", K(ret));
   } else if (OB_FAIL(get_table_schema_version(op, index_tid, das_dml_ctdef.schema_version_))) {
-  } else if (OB_FAIL(convert_table_dml_param(op, das_dml_ctdef))) {
+    LOG_WARN("get table schema version failed", K(ret), K(index_dml_info));
+  } else if (!op.has_instead_of_trigger() && (OB_FAIL(convert_table_dml_param(op, das_dml_ctdef)))) {
+    LOG_WARN("convert table dml param failed", K(ret));
   } else if (OB_ISNULL(op.get_plan())
       || OB_ISNULL(session = op.get_plan()->get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is invalid", K(op.get_plan()), K(session));
   } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
+    LOG_WARN("get binlog row image failed", K(ret));
   } else if (OB_FAIL(op.op_is_update_pk_with_dop(is_update_uk_parallel))) {
+    LOG_WARN("fail to check is update pk parallel", K(ret));
   } else if (OB_FAIL(check_is_main_table_in_fts_ddl(op, index_tid, index_dml_info, das_dml_ctdef))) {
+    LOG_WARN("fail to check is main table in fts ddl", K(ret), K(index_tid), K(index_dml_info));
   } else {
     das_dml_ctdef.tz_info_ = *session->get_tz_info_wrap().get_time_zone_info();
     das_dml_ctdef.is_total_quantity_log_ = (ObBinlogRowImage::FULL == binlog_row_image);
@@ -1741,6 +2063,23 @@ int ObDmlCgService::generate_das_dml_ctdef(ObLogDelUpd &op,
     das_dml_ctdef.is_update_pk_with_dop_ = is_update_uk_parallel;
     das_dml_ctdef.is_update_pk_ = index_dml_info.is_update_primary_key_;
     das_dml_ctdef.is_vec_hnsw_index_vid_opt_ = index_dml_info.is_vec_hnsw_index_vid_opt_;
+    if (op.get_plan()->get_optimizer_context().is_insert_stmt_in_online_ddl()) {
+      ObSchemaGetterGuard *schema_guard =
+          op.get_plan()->get_optimizer_context().get_schema_guard();
+      const ObTableSchema *index_schema = nullptr;
+      if (OB_ISNULL(schema_guard)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema guard is null for online ddl ctdef", K(ret), K(index_tid));
+      } else if (OB_FAIL(schema_guard->get_table_schema(index_tid, index_schema))) {
+        LOG_WARN("get online ddl index schema failed", K(ret), K(index_tid));
+      } else if (OB_ISNULL(index_schema)) {
+        ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("online ddl index schema does not exist", K(ret), K(index_tid));
+      } else {
+        das_dml_ctdef.is_access_vidx_as_master_table_ =
+            index_schema->is_fts_doc_word_aux();
+      }
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (das_dml_ctdef.table_param_.get_data_table().is_vector_index() &&
@@ -1760,12 +2099,15 @@ int ObDmlCgService::generate_das_ins_ctdef(ObLogDelUpd &op,
   ObArray<uint64_t> dml_column_ids;
   ObArray<ObRawExpr*> empty_old_row;
   if (OB_FAIL(generate_das_dml_ctdef(op, index_tid, index_dml_info, das_ins_ctdef))) {
+    LOG_WARN("generate das dml ctdef failed", K(ret));
   } else if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, dml_column_ids))) {
+    LOG_WARN("generate dml column ids failed", K(ret));
   } else if (OB_FAIL(generate_das_projector(dml_column_ids,
                                             das_ins_ctdef.column_ids_,
                                             das_ins_ctdef.column_ids_,
                                             empty_old_row, new_row, new_row,
                                             das_ins_ctdef))) {
+    LOG_WARN("add new row projector failed", K(ret), K(new_row));
   }
   return ret;
 }
@@ -1785,14 +2127,17 @@ int ObDmlCgService::generate_related_ins_ctdef(ObLogDelUpd &op,
     ObTableID related_tid = related_tids.at(i);
     if (OB_ISNULL(related_ctdef = das_alloc.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate insert related das ctdef failed", K(ret));
     } else if (OB_FAIL(generate_das_ins_ctdef(op, related_tid,
                                               index_dml_info,
                                               *related_ctdef,
                                               new_row))) {
+      LOG_WARN("generate das ins ctdef failed", K(ret));
     } else if (OB_FAIL(ins_ctdefs.push_back(related_ctdef))) {
+      LOG_WARN("store related ctdef failed", K(ret));
     } else {
-      // Mark the ctdef as a related-table operation.
-      related_ctdef->is_access_main_table_ = false;
+      // for materialized view log
+      related_ctdef->is_access_mlog_as_master_table_ = false;
     }
   }
   return ret;
@@ -1815,17 +2160,21 @@ int ObDmlCgService::generate_das_del_ctdef(ObLogDelUpd &op,
   }
 
   if (OB_FAIL(generate_das_dml_ctdef(op, index_tid, index_dml_info, das_del_ctdef))) {
+    LOG_WARN("generate das dml ctdef failed", K(ret));
   } else if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, dml_column_ids))) {
+    LOG_WARN("generate dml column ids failed", K(ret));
   } else if (OB_FAIL(generate_minimal_delete_old_row_cid(op,
                                                          index_tid,
                                                          is_primary_table,
                                                          das_del_ctdef,
                                                          minimal_column_ids))) {
+    LOG_WARN("generate dml column ids failed", K(ret), K(is_primary_table), K(index_tid));
   } else if (OB_FAIL(generate_das_projector(dml_column_ids,
                                             das_del_ctdef.column_ids_,
                                             minimal_column_ids,
                                             old_row, empty_new_row, old_row,
                                             das_del_ctdef))) {
+    LOG_WARN("add old row projector failed", K(ret), K(old_row));
   }
 
   return ret;
@@ -1846,15 +2195,18 @@ int ObDmlCgService::generate_related_del_ctdef(ObLogDelUpd &op,
     ObTableID related_tid = related_tids.at(i);
     if (OB_ISNULL(related_ctdef = das_alloc.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate insert related das ctdef failed", K(ret));
     } else if (OB_FAIL(generate_das_del_ctdef(op,
                                               related_tid,
                                               index_dml_info,
                                               *related_ctdef,
                                               old_row))) {
+      LOG_WARN("generate das ins ctdef failed", K(ret));
     } else if (OB_FAIL(del_ctdefs.push_back(related_ctdef))) {
+      LOG_WARN("store related ctdef failed", K(ret));
     } else {
-      // Mark the ctdef as a related-table operation.
-      related_ctdef->is_access_main_table_ = false;
+      // for materialized view log
+      related_ctdef->is_access_mlog_as_master_table_ = false;
     }
   }
   return ret;
@@ -1878,9 +2230,13 @@ int ObDmlCgService::generate_das_upd_ctdef(ObLogDelUpd &op,
     is_primary_table = true;
   }
   if (OB_FAIL(generate_das_dml_ctdef(op, index_tid, index_dml_info, das_upd_ctdef))) {
+    LOG_WARN("generate das dml base ctdef failed", K(ret), K(index_dml_info));
   } else if (OB_FAIL(generate_updated_column_ids(op, assigns, das_upd_ctdef.column_ids_,
+                                                 das_upd_ctdef,
                                                  das_upd_ctdef.updated_column_ids_))) {
+    LOG_WARN("add updated column ids failed", K(ret), K(assigns));
   } else if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, dml_column_ids))) {
+    LOG_WARN("generate dml column ids failed", K(ret));
   } else if (OB_FAIL(generate_minimal_upd_old_row_cid(op,
                                                       index_tid,
                                                       das_upd_ctdef,
@@ -1889,11 +2245,13 @@ int ObDmlCgService::generate_das_upd_ctdef(ObLogDelUpd &op,
                                                       is_primary_table,
                                                       need_all_columns,
                                                       minimal_column_ids))) {
+    LOG_WARN("fail to project update row column_id");
   } else if (OB_FAIL(generate_das_projector(dml_column_ids,
                                             das_upd_ctdef.column_ids_,
                                             minimal_column_ids,
                                             old_row, new_row, full_row,
                                             das_upd_ctdef))) {
+    LOG_WARN("add old row projector failed", K(ret), K(old_row), K(full_row));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < assigns.count(); ++i) {
     const ObColumnRefRawExpr *col = assigns.at(i).column_expr_;
@@ -1921,6 +2279,7 @@ int ObDmlCgService::generate_related_upd_ctdef(ObLogDelUpd &op,
     ObTableID related_tid = related_tids.at(i);
     if (OB_ISNULL(related_ctdef = das_alloc.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate insert related das ctdef failed", K(ret));
     } else if (OB_FAIL(generate_das_upd_ctdef(op,
                                               related_tid,
                                               index_dml_info,
@@ -1928,16 +2287,19 @@ int ObDmlCgService::generate_related_upd_ctdef(ObLogDelUpd &op,
                                               old_row,
                                               new_row,
                                               full_row))) {
+      LOG_WARN("generate das ins ctdef failed", K(ret));
     } else if (OB_FAIL(check_is_update_local_unique_index(op,
                                                           related_tid,
                                                           related_ctdef->updated_column_ids_,
                                                           *related_ctdef))) {
+      LOG_WARN("fail to check is update uk", K(ret), K(related_tid));
     } else if (related_ctdef->updated_column_ids_.empty()) {
       //ignore invalid update ctdef
     } else if (OB_FAIL(upd_ctdefs.push_back(related_ctdef))) {
+      LOG_WARN("store related ctdef failed", K(ret));
     } else {
-      // Mark the ctdef as a related-table operation.
-      related_ctdef->is_access_main_table_ = false;
+      // for materialized view log
+      related_ctdef->is_access_mlog_as_master_table_ = false;
     }
   }
   return ret;
@@ -1956,21 +2318,27 @@ int ObDmlCgService::generate_das_lock_ctdef(ObLogicalOperator &op,
   ObSQLSessionInfo *session = nullptr;
   int64_t binlog_row_image = ObBinlogRowImage::FULL;
   if (OB_FAIL(convert_dml_column_info(index_dml_info.ref_table_id_, true, das_lock_ctdef))) {
+    LOG_WARN("add column ids to das_lock_ctdef failed", K(ret));
   } else if (OB_FAIL(get_table_schema_version(op,
                                               index_dml_info.ref_table_id_,
                                               das_lock_ctdef.schema_version_))) {
+    LOG_WARN("get table schema version failed", K(ret), K(index_dml_info));
   } else if (OB_FAIL(convert_table_dml_param(op, das_lock_ctdef))) {
+    LOG_WARN("convert table dml param failed", K(ret));
   } else if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, dml_column_ids))) {
+    LOG_WARN("generate dml column ids failed", K(ret));
   } else if (OB_FAIL(generate_das_projector(dml_column_ids,
                                             das_lock_ctdef.column_ids_,
                                             das_lock_ctdef.column_ids_,
                                             old_row, empty_new_row, old_row,
                                             das_lock_ctdef))) {
+    LOG_WARN("add old row projector failed", K(ret), K(old_row), K(old_row));
   } else if (OB_ISNULL(op.get_plan())
       || OB_ISNULL(session = op.get_plan()->get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is invalid", K(op.get_plan()), K(session));
   } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
+    LOG_WARN("get binlog row image failed", K(ret));
   } else {
     das_lock_ctdef.tz_info_ = *session->get_tz_info_wrap().get_time_zone_info();
     das_lock_ctdef.is_total_quantity_log_ = (ObBinlogRowImage::FULL == binlog_row_image);
@@ -1986,12 +2354,15 @@ int ObDmlCgService::convert_table_dml_param(ObLogicalOperator &op, ObDASDMLBaseC
   ObSqlSchemaGuard *schema_guard = NULL;
   if (OB_INVALID_ID == table_id) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid table id ", K(ret), K(table_id));
   } else if (OB_ISNULL(schema_guard = cg_.opt_ctx_->get_sql_schema_guard()) ||
              OB_ISNULL(schema_guard->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("NULL schema guard", K(ret));
   } else if (cg_.opt_ctx_->get_session_info()->get_ddl_info().is_ddl()) {
     //ddl operator does not need table dml param, do nothing
   } else if (OB_FAIL(fill_table_dml_param(schema_guard->get_schema_guard(), table_id, das_dml_ctdef))) {
+    LOG_WARN("fail to fill table dml param", K(ret), K(table_id));
   }
   return ret;
 }
@@ -2007,12 +2378,23 @@ int ObDmlCgService::fill_multivalue_extra_info_on_table_param(
 
   if (OB_ISNULL(guard) || OB_ISNULL(index_schema)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(guard), K(index_schema->get_data_table_id()));
   } else if (OB_FAIL(guard->get_table_schema( index_schema->get_data_table_id(), table_schema))) {
+    LOG_WARN("fail to get schema", K(ret), K(index_schema->get_data_table_id()));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
+    LOG_WARN("table schema is NULL", K(ret));
   } else {
-    if (OB_FAIL(das_dml_ctdef.table_param_.configure_multivalue_index(
-            table_schema->get_rowkey_column_num()))) {
+    ObTableSchemaParam& table_param = das_dml_ctdef.table_param_.get_data_table_ref();
+    table_param.set_data_table_rowkey_column_num(table_schema->get_rowkey_column_num());
+    uint64_t max_idx = table_param.get_column_count();
+    for (int64_t i = max_idx - 2; i >= 0; --i) {
+      if (OB_ISNULL(table_param.get_column_by_idx(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table column is NULL", K(ret));
+      } else {
+        table_param.get_column_by_idx(i)->set_nullable_for_write(true);
+      }
     }
   }
 
@@ -2029,22 +2411,30 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
   
   if (OB_ISNULL(guard) || OB_INVALID_ID == table_id) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(guard), K(table_id));
   } else if (OB_FAIL(guard->get_table_schema( table_id, table_schema))) {
+    LOG_WARN("fail to get schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
+    LOG_WARN("table schema is NULL", K(ret));
   } else if (OB_FAIL(guard->get_schema_version(t_version))) {
-  } else if (OB_FAIL(das_dml_ctdef.table_param_.build(table_schema,
-                                                      t_version,
-                                                      das_dml_ctdef.column_ids_))) {
+    LOG_WARN("get tenant schema version fail", K(ret));
+  } else if (OB_FAIL(das_dml_ctdef.table_param_.convert(table_schema,
+                                                        t_version,
+                                                        das_dml_ctdef.column_ids_))) {
+    LOG_WARN("fail to convert table param", K(ret), K(das_dml_ctdef));
   } else if (OB_FAIL(das_dml_ctdef.table_param_.set_data_table_rowkey_tags(guard,
                                                                            table_schema))) {
+    LOG_WARN("fail to set data table rowkey info on table param", K(ret), K(das_dml_ctdef));
   } else if (table_schema->is_multivalue_index_aux() &&
             OB_FAIL(fill_multivalue_extra_info_on_table_param(guard, table_schema, das_dml_ctdef))) {
+    LOG_WARN("fail to set multivalue index extra info on table param", K(ret), K(das_dml_ctdef));
   } else if (table_schema->is_user_table() && !table_schema->is_index_table()) {
     const common::ObIArray<ObAuxTableMetaInfo> &index_infos = table_schema->get_simple_index_infos();
     for (int64_t i = 0; OB_SUCC(ret) && i < index_infos.count(); ++i) {
       const ObTableSchema *index_schema = nullptr;
       if (OB_FAIL(guard->get_table_schema( index_infos.at(i).table_id_, index_schema))) {
+        LOG_WARN("get index table schema failed", K(ret), K(1UL), K(index_infos.at(i).table_id_));
       } else if (OB_NOT_NULL(index_schema) && !index_schema->get_index_params().empty()
                  && (index_schema->is_vec_delta_buffer_type())) {
         share::ObVectorIndexParam vec_param;
@@ -2054,7 +2444,7 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
                 vec_param,
                 true))
             && vec_param.sync_mode_async_) {
-          das_dml_ctdef.table_param_.set_has_async_index(true);
+          das_dml_ctdef.table_param_.get_data_table_ref().set_has_async_index(true);
           break;
         }
       }
@@ -2075,9 +2465,12 @@ int ObDmlCgService::check_is_heap_table(ObLogicalOperator &op,
   if (OB_ISNULL(log_plan) ||
       OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( ref_table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ref_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ret), K(table_schema));
   } else if (table_schema->is_table_with_pk()) {
     is_heap_table = false;
   } else {
@@ -2097,11 +2490,15 @@ int ObDmlCgService::generate_dml_base_ctdef(ObLogicalOperator &op,
   dml_base_ctdef.is_vec_hnsw_index_vid_opt_ = index_dml_info.is_vec_hnsw_index_vid_opt_;
   dml_base_ctdef.column_ids_.set_capacity(index_dml_info.column_exprs_.count());
   if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, dml_base_ctdef.column_ids_))) {
+    LOG_WARN("generate dml column ids failed", K(ret));
   } else if (OB_FAIL(cg_.generate_rt_exprs(old_row, dml_base_ctdef.old_row_))) {
+    LOG_WARN("generate old row exprs failed", K(ret));
   } else if (OB_FAIL(cg_.generate_rt_exprs(new_row, dml_base_ctdef.new_row_))) {
+    LOG_WARN("generate new row exprs failed", K(ret));
   } else if (index_dml_info.is_primary_index_) {
     bool is_heap_table = false;
     if (OB_FAIL(check_is_heap_table(op, index_dml_info.ref_table_id_, is_heap_table))) {
+      LOG_WARN("convert foreign keys failed", K(ret));
     } else {
       dml_base_ctdef.is_table_without_pk_ = is_heap_table;
     }
@@ -2114,8 +2511,10 @@ int ObDmlCgService::generate_dml_base_ctdef(ObLogicalOperator &op,
       // Cg is only needed when the current trans_info_expr_ has a producer operator
     if (has_exist_in_array(dml_op.get_produced_trans_exprs(), index_dml_info.trans_info_expr_)) {
       if (OB_FAIL(cg_.generate_rt_expr(*index_dml_info.trans_info_expr_, dml_base_ctdef.trans_info_expr_))) {
+        LOG_WARN("fail to cg trans_info expr", K(ret), KPC(index_dml_info.trans_info_expr_));
       }
     } else {
+      LOG_TRACE("this trans_info_expr not produced", K(index_dml_info));
     }
   }
 
@@ -2128,8 +2527,8 @@ int ObDmlCgService::generate_dml_base_ctdef(ObLogicalOperator &op,
   }
 
   if (OB_SUCC(ret)) {
-    // Mark the ctdef as a main-table operation.
-    dml_base_ctdef.das_base_ctdef_.is_access_main_table_ = true;
+    // for materialized view log
+    dml_base_ctdef.das_base_ctdef_.is_access_mlog_as_master_table_ = true;
   }
   return ret;
 }
@@ -2143,22 +2542,26 @@ int ObDmlCgService::generate_dml_base_ctdef(ObLogDelUpd &op,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(generate_dml_base_ctdef(op, index_dml_info, dml_base_ctdef, old_row, new_row))) {
+    LOG_WARN("generate dml column ids failed", K(ret));
   }
   // only primary key need to apply constraint, fk and trigger
   //generate check cst info
   if (OB_SUCC(ret) && index_dml_info.is_primary_index_) {
     if (OB_FAIL(convert_check_constraint(op, index_dml_info.ref_table_id_, dml_base_ctdef, index_dml_info))) {
+      LOG_WARN("convert check constraint failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && index_dml_info.is_primary_index_) {
     //add foreign key
     if (OB_FAIL(convert_foreign_keys(op, index_dml_info, dml_base_ctdef))) {
+      LOG_WARN("convert foreign keys failed", K(ret));
     }
   }
   // Only enable when pl_static_engine is enabled that mysqltest will enable
   if (OB_SUCC(ret) && index_dml_info.is_primary_index_) {
     //add trigger
     if (OB_FAIL(convert_triggers(op, index_dml_info, dml_base_ctdef, dml_event))) {
+      LOG_WARN("convert foreign keys failed", K(ret));
     }
   }
   return ret;
@@ -2170,7 +2573,8 @@ int ObDmlCgService::convert_triggers(ObLogDelUpd &log_op,
                                      uint64_t dml_event)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(convert_normal_triggers(log_op, dml_info, dml_ctdef, dml_event))) {
+  if (OB_FAIL(convert_normal_triggers(log_op, dml_info, dml_ctdef, log_op.has_instead_of_trigger(), dml_event))) {
+    LOG_WARN("failed to convert normal triggers", K(ret));
   }
   return ret;
 }
@@ -2184,6 +2588,7 @@ int ObDmlCgService::add_trigger_arg(const ObTriggerInfo &trigger_info, ObDMLBase
   trigger_arg.set_timing_points(trigger_info.get_timing_points());
   trigger_arg.set_analyze_flag(trigger_info.get_analyze_flag());
   if (OB_FAIL(dml_ctdef.trig_ctdef_.tg_args_.push_back(trigger_arg))) {
+    LOG_WARN("failed to add trigger arg", K(ret));
   } else {
     dml_ctdef.trig_ctdef_.all_tm_points_.merge(trigger_arg.get_timing_points());
   }
@@ -2201,8 +2606,10 @@ int ObDmlCgService::convert_trigger_rowid(ObLogDelUpd &log_op,
       !is_merge_insert) {
     if (OB_ISNULL(dml_info.old_rowid_expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get old row rowid", K(ret));
     } else if (OB_FAIL(cg_.generate_rt_expr(*dml_info.old_rowid_expr_,
                                             dml_ctdef.trig_ctdef_.rowid_old_expr_))) {
+      LOG_WARN("failed to generate expr", K(ret));
     }
   }
   if (OB_SUCC(ret) &&
@@ -2210,8 +2617,77 @@ int ObDmlCgService::convert_trigger_rowid(ObLogDelUpd &log_op,
       !is_merge_delete) {
     if (OB_ISNULL(dml_info.new_rowid_expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get new row rowid", K(ret));
     } else if (OB_FAIL(cg_.generate_rt_expr(*dml_info.new_rowid_expr_,
                                             dml_ctdef.trig_ctdef_.rowid_new_expr_))) {
+      LOG_WARN("failed to generate expr", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObDmlCgService::need_fire_update_event(const ObTableSchema &table_schema,
+                                                const ObString &update_events,
+                                                const ObLogUpdate &log_op,
+                                                const ObSQLSessionInfo &session,
+                                                ObIAllocator &allocator,
+                                                bool &need_fire)
+{
+  int ret = OB_SUCCESS;
+  if (update_events.empty()) {
+    need_fire = true;
+  } else {
+    need_fire = false;
+    // session is just for passing sql mode? Then it should pass the information recorded in trigger info.
+    ObParser parser(allocator, session.get_sql_mode());
+    ParseResult parse_result;
+    const ParseNode *update_columns_node = NULL;
+    ObString column_name;
+    OV (log_op.get_primary_dml_info() != NULL);
+    OZ (parser.parse(update_events, parse_result));
+    OV (parse_result.result_tree_ != NULL);
+    OV (parse_result.result_tree_->children_ != NULL);
+    OX (update_columns_node = parse_result.result_tree_->children_[0]);
+    OV (update_columns_node != NULL);
+    OV (update_columns_node->type_ == T_TG_COLUMN_LIST, OB_ERR_UNEXPECTED, update_columns_node->type_);
+    OV (update_columns_node->num_child_ > 0, OB_ERR_UNEXPECTED, update_columns_node->num_child_);
+    OV (update_columns_node->children_ != NULL);
+    ObSEArray<uint64_t, 4> base_column_ids;
+    const ObAssignments &assignments = log_op.get_primary_dml_info()->assignments_;
+    const ObDMLStmt *stmt = log_op.get_stmt();
+    for (int64_t i = 0; OB_SUCC(ret) && i < assignments.count(); ++i) {
+      ObColumnRefRawExpr *column_expr = assignments.at(i).column_expr_;
+      const ColumnItem *column_item = nullptr;
+      if (OB_ISNULL(column_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get null column expr", K(ret));
+      } else if (OB_ISNULL(column_item = stmt->get_column_item_by_id(column_expr->get_table_id(),
+                                                                     column_expr->get_column_id()))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get null column item", K(ret), KPC(column_expr));
+      } else if (OB_FAIL(base_column_ids.push_back(column_item->base_cid_))) {
+        LOG_WARN("failed to push back base cid", K(ret));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && !need_fire && i < update_columns_node->num_child_; i++) {
+      const ParseNode *column_node = update_columns_node->children_[i];
+      const ObColumnSchemaV2 *column_schema = NULL;
+      OV (column_node != NULL);
+      OV (column_node->type_ == T_IDENT, OB_ERR_UNEXPECTED, column_node->type_);
+      OV (column_node->str_value_ != NULL && column_node->str_len_ > 0);
+      OX (column_name.assign_ptr(column_node->str_value_, static_cast<int32_t>(column_node->str_len_)));
+      OX (column_schema = table_schema.get_column_schema(column_name));
+      if (OB_SUCC(ret) && OB_ISNULL(column_schema)) {
+        ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
+        LOG_WARN("column not exist", K(ret), K(i), K(column_name));
+        LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && j < base_column_ids.count(); j++) {
+        if (column_schema->get_column_id() == base_column_ids.at(j)) {
+          OX (need_fire = !assignments.at(j).is_implicit_);
+          break;
+        }
+      }
     }
   }
   return ret;
@@ -2221,6 +2697,7 @@ int ObDmlCgService::convert_trigger_rowid(ObLogDelUpd &log_op,
 int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
                                             const IndexDMLInfo &dml_info,
                                             ObDMLBaseCtDef &dml_ctdef,
+                                            bool is_instead_of,
                                             uint64_t dml_event)
 {
   int ret = OB_SUCCESS;
@@ -2229,11 +2706,15 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
   const ObTableSchema *table_schema = NULL;
   ObDASDMLBaseCtDef &das_ctdef = dml_ctdef.das_base_ctdef_;
   ObTrigDMLCtDef &trig_ctdef = dml_ctdef.trig_ctdef_;
+  const ObDelUpdStmt *dml_stmt = NULL;
   if (OB_ISNULL(log_plan) ||
-      OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
+      OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard()) ||
+      OB_ISNULL(dml_stmt = static_cast<const ObDelUpdStmt*>(log_plan->get_stmt()))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( dml_info.ref_table_id_, table_schema))) {
-  } else if (table_schema->is_user_table() &&
+    LOG_WARN("failed to get table schema", K(ret));
+  } else if ((table_schema->is_user_table() || table_schema->is_user_view()) &&
       0 < table_schema->get_trigger_list().count()) {
     
     const ObIArray<uint64_t> &trigger_list = table_schema->get_trigger_list();
@@ -2241,32 +2722,53 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
     ObSEArray<const ObTriggerInfo *, 2> trigger_infos;
     uint64_t trigger_id = OB_INVALID_ID;
     bool need_fire = false;
-    if (NULL != dml_info.new_rowid_expr_ || NULL != dml_info.old_rowid_expr_) {
+    const ObSQLSessionInfo *session = NULL;
+    ObPhyOperatorType op_type = PHY_INVALID;
+    if (OB_ISNULL(session = log_plan->get_optimizer_context().get_session_info())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("session is null", K(ret));
+    } else if (OB_FAIL(cg_.get_phy_op_type(log_op, op_type, false))) {
+      LOG_WARN("get phy operator type failed", K(ret));
+    } else if (!is_instead_of &&
+        (NULL != dml_info.new_rowid_expr_ || NULL != dml_info.old_rowid_expr_)) {
       if (OB_FAIL(convert_trigger_rowid(log_op, dml_info, dml_ctdef))) {
+        LOG_WARN("failed to convert trigger rowid", K(ret));
       }
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
       trigger_id = trigger_list.at(i);
       if (OB_FAIL(schema_guard->get_trigger_info( trigger_id, trigger_info))) {
+        LOG_WARN("failed to get trigger info", K(ret));
       } else if (OB_ISNULL(trigger_info)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("trigger info is null", K(trigger_id), K(ret));
       } else {
         // if disable trigger, use the previous plan cache, whether trigger is enable ???
         need_fire = trigger_info->has_event(dml_event) && trigger_info->is_enable();
+        if (OB_SUCC(ret) && need_fire && !is_instead_of && op_type == PHY_UPDATE) {
+          OZ (need_fire_update_event(*table_schema, trigger_info->get_update_columns(),
+                                    static_cast<ObLogUpdate &>(log_op), *session,
+                                    log_plan->get_optimizer_context().get_allocator(),
+                                    need_fire));
+        }
         if (OB_SUCC(ret) && need_fire) {
           OZ (trigger_infos.push_back(trigger_info));
         }
-        OX (LOG_DEBUG("TRIGGER", K(trigger_info->get_trigger_name()), K(need_fire)));
+        OX (LOG_DEBUG("TRIGGER", K(trigger_info->get_trigger_name()), K(need_fire), K(is_instead_of)));
       }
     }
     if (OB_SUCC(ret) && trigger_infos.count() > 0) {
       int64_t expectd_col_cnt = table_schema->get_column_count();
+      if (is_instead_of) {
+        expectd_col_cnt = dml_stmt->get_instead_of_trigger_column_count();
+      }
       trig_ctdef.tg_event_ = dml_event;
       ObTriggerInfo::ActionOrderComparator action_order_com;
       lib::ob_sort(trigger_infos.begin(), trigger_infos.end(), action_order_com);
       if (OB_FAIL(action_order_com.get_ret())) {
         ret = common::OB_ERR_UNEXPECTED;
+        LOG_WARN("sort error", K(ret));
       }
       OZ (trig_ctdef.trig_col_info_.init(expectd_col_cnt));
       OZ (trig_ctdef.tg_args_.init(trigger_infos.count()));
@@ -2285,7 +2787,9 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
       ObSEArray<uint64_t, 64> updated_column_ids;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(generate_dml_column_ids(log_op, dml_info.column_exprs_, column_ids))) {
-      } else if (OB_FAIL(generate_updated_column_ids(log_op, assigns, column_ids, updated_column_ids))) {
+        LOG_WARN("add column ids failed", K(ret));
+      } else if (OB_FAIL(generate_updated_column_ids(log_op, assigns, column_ids, das_ctdef, updated_column_ids))) {
+        LOG_WARN("add updated column ids failed", K(ret), K(assigns));
       } else if (ObTriggerEvents::has_insert_event(dml_event)) {
         OZ(trig_ctdef.new_row_exprs_.init(expectd_col_cnt));
       } else if (ObTriggerEvents::has_delete_event(dml_event)) {
@@ -2293,41 +2797,58 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
       } else if (ObTriggerEvents::has_update_event(dml_event)) {
         OZ(trig_ctdef.old_row_exprs_.init(expectd_col_cnt));
         OZ(trig_ctdef.new_row_exprs_.init(expectd_col_cnt));
+        LOG_DEBUG("update columns", K(updated_column_ids));
       } else {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected status: not supported", K(ret), K(op_type));
       }
       if (OB_SUCC(ret) && OB_FAIL(trig_ctdef.trig_col_info_.init(expectd_col_cnt))) {
+        LOG_WARN("failed to init trigger column info", K(ret));
       }
       ObTableSchema::const_column_iterator cs_iter = table_schema->column_begin();
       ObTableSchema::const_column_iterator cs_iter_end = table_schema->column_end();
       int64_t i = 0;
       int64_t col_idx = INT64_MAX;
-      for (i = 0; OB_SUCC(ret) && i < table_schema->get_column_count(); i++) {
+      int64_t total_count = is_instead_of ? expectd_col_cnt : table_schema->get_column_count();
+      for (i = 0; OB_SUCC(ret) && i < total_count; i++) {
         // how to calc cell_idx and proj_idx ?
         // see
         ObExpr *new_expr = nullptr;
         ObExpr *old_expr = nullptr;
         bool need_add = false;
-        if (cs_iter == cs_iter_end) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_ISNULL(column_schema = *cs_iter)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          is_hidden = column_schema->is_hidden();
-          is_gen_col = column_schema->is_generated_column();
-          is_gen_col_dep = column_schema->has_generated_column_deps();
-          is_update = has_exist_in_array(updated_column_ids, column_schema->get_column_id());
-          if (!has_exist_in_array(column_ids, column_schema->get_column_id(), &col_idx)) {
+        if (!is_instead_of) {
+          if (cs_iter == cs_iter_end) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected status: column schema is null", K(ret), K(i));
+          } else if (OB_ISNULL(column_schema = *cs_iter)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected status: column schema is null", K(ret), K(i));
+          } else {
+            is_hidden = column_schema->is_hidden();
+            is_gen_col = column_schema->is_generated_column();
+            is_gen_col_dep = column_schema->has_generated_column_deps();
+            is_update = has_exist_in_array(updated_column_ids, column_schema->get_column_id());
+            if (!has_exist_in_array(column_ids, column_schema->get_column_id(), &col_idx)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("Can't found column idx", K(i), K(column_ids),
+                K(column_schema->get_column_id()), K(ret));
+            }
+            ++cs_iter;
           }
-          ++cs_iter;
+        } else {
+          // instead trigger based on view, view may be composed of multiple base tables, so each column_id may appear multiple times
+          // So here we cannot assume that column_id = OB_APP_MIN_COLUMN_ID + i, directly let col_idx = i,
+          // Because the column order and view_schema are guaranteed to be consistent before this point
+          col_idx = i;
         }
+        LOG_DEBUG("debug trigger column", K(ret), K(is_hidden), K(i),
+            K(col_idx), K(column_ids));
         if (is_hidden) {
           continue;
         }
 
         if (OB_SUCC(ret)) {
-          LOG_DEBUG("debug trigger normal column", K(ret),
+          LOG_DEBUG("debug trigger normal column", K(ret), K(is_instead_of),
               K(dml_ctdef.old_row_.count()), K(dml_ctdef.new_row_.count()));
           if (ObTriggerEvents::is_insert_event(dml_event)) {
             if (OB_UNLIKELY(col_idx < 0) ||
@@ -2357,27 +2878,44 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
             }
           } else {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected status: not supported dml type",
+              K(ret), K(dml_event), K(lbt()));
           }
         }
         if (OB_NOT_NULL(new_expr)) {
           need_add = true;
           if (OB_FAIL(trig_ctdef.new_row_exprs_.push_back(new_expr))) {
+            LOG_WARN("failed to push back new row expr", K(ret));
           }
         }
         if (OB_NOT_NULL(old_expr)) {
           need_add = true;
           if (OB_FAIL(trig_ctdef.old_row_exprs_.push_back(old_expr))) {
+            LOG_WARN("failed to push back old row expr", K(ret));
           }
         }
         if (need_add && OB_FAIL(trig_ctdef.trig_col_info_.set_trigger_column(
             is_hidden, is_update, is_gen_col, is_gen_col_dep, false))) {
+          LOG_WARN("failed to set trigger column", K(ret));
         } else {
+          LOG_DEBUG("trigger add trigger column", K(ret), K(need_add), K(i),
+            K(new_expr), K(old_expr), K(is_hidden), K(is_update), K(is_gen_col), K(is_gen_col_dep));
         }
       }
 
       if (OB_FAIL(ret)) {
+      } else if (!is_instead_of) {
+        OV (i == table_schema->get_column_count() && cs_iter == cs_iter_end, OB_ERR_UNEXPECTED, i, table_schema->get_column_count());
       } else {
-        OB_ASSERT(i == table_schema->get_column_count() && cs_iter == cs_iter_end);
+        OV (i == expectd_col_cnt, OB_ERR_UNEXPECTED, i, expectd_col_cnt);
+        if (dml_stmt->get_instead_of_trigger_column_count() != trig_ctdef.trig_col_info_.get_count()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected status: the column count of instead of trigger is not match",
+            K(ret),
+            K(dml_stmt->get_instead_of_trigger_column_count()),
+            K(trig_ctdef.trig_col_info_.get_count()),
+            K(expectd_col_cnt));
+        }
       }
       LOG_DEBUG("debug trigger", K(trig_ctdef.new_row_exprs_.count()),
         K(trig_ctdef.old_row_exprs_.count()));
@@ -2387,7 +2925,8 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
         trigger_info = trigger_infos.at(i);
         if (trigger_info->is_modifies_sql_data() ||
             trigger_info->is_wps() ||
-            trigger_info->is_rps()) {
+            trigger_info->is_rps() ||
+            trigger_info->is_has_sequence()) {
           is_forbid_parallel = true;
         } else if (trigger_info->is_reads_sql_data()) { // dml + trigger(select) serial execute
           is_forbid_parallel = true;
@@ -2415,12 +2954,15 @@ int ObDmlCgService::add_all_column_infos(ObLogDelUpd &op,
   const ObDMLStmt *stmt = op.get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(column_infos.init(columns.count()))) {
+    LOG_WARN("fail to init column infos count", K(ret));
   }
   ARRAY_FOREACH(columns, i) {
     const ObColumnRefRawExpr *column = columns.at(i);
     if (OB_ISNULL(column)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid column expr", K(ret), K(i));
     } else {
       const int64_t table_id = column->get_table_id();
       const TableItem *table_item = stmt->get_table_item_by_id(table_id);
@@ -2430,10 +2972,11 @@ int ObDmlCgService::add_all_column_infos(ObLogDelUpd &op,
       // e.g. create table t1 (c1 int default null);
       //      update (select c1 from t1 where c1 > 10) v set c1 = null;
       //   Here t1.c1 is NULLABLE, but the output of view v has v.c1 as NOT NULL (because there is a null rejection condition `c1 > 10` in the view)
-      if (OB_ISNULL(table_item)) {
+      if (OB_ISNULL(table_item) || op.has_instead_of_trigger()) {
         // Can't find it means column expr is shadow pk, directly get flag info from column
       } else if ((table_item->is_generated_table() || table_item->is_temp_table()) &&
                  OB_FAIL(cg_.recursive_get_column_expr(column, *table_item))) {
+        LOG_WARN("failed to recursive get column expr", K(ret));
       }
 
       if (OB_SUCC(ret)) {
@@ -2447,6 +2990,7 @@ int ObDmlCgService::add_all_column_infos(ObLogDelUpd &op,
         column_content.srs_id_ = column->get_srs_id();
         if (is_heap_table) {
           if (OB_FAIL(get_column_ref_base_cid(op, column, base_cid))) {
+            LOG_WARN("fail to get base_column_id", K(ret), KPC(column));
           } else if (base_cid == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
             skip_this_column = true;
           }
@@ -2457,11 +3001,15 @@ int ObDmlCgService::add_all_column_infos(ObLogDelUpd &op,
         } else if (skip_this_column) {
           // this column is hidden_pk of heap table，
           // skip not null check
+          LOG_TRACE("skip hidden_pk not check", KPC(column));
         } else if (OB_FAIL(ob_write_string(cg_.phy_plan_->get_allocator(),
                                            column->get_column_name(),
                                            column_content.column_name_))) {
+          LOG_WARN("failed to copy column name", K(ret), K(column->get_column_name()));
         } else if (OB_FAIL(column_infos.push_back(column_content))) {
+          LOG_WARN("failed to add column info", K(ret), K(column->get_column_name()));
         } else {
+          LOG_DEBUG("add column info", KPC(column), K(column_content));
         }
       }
     }
@@ -2476,6 +3024,7 @@ int ObDmlCgService::convert_upd_assign_infos(bool is_heap_table,
   int ret = OB_SUCCESS;
   const ObAssignments &assigns = index_dml_info.assignments_;
   if (OB_FAIL(assign_infos.init(assigns.count()))) {
+    LOG_WARN("init assign info array failed", K(ret), K(assigns.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < assigns.count(); ++i) {
     ColumnContent column_content;
@@ -2493,11 +3042,14 @@ int ObDmlCgService::convert_upd_assign_infos(bool is_heap_table,
     } else if (OB_FAIL(ob_write_string(cg_.phy_plan_->get_allocator(),
                                 col->get_column_name(),
                                 column_content.column_name_))) {
+      LOG_WARN("failed to copy column name", K(ret), K(col->get_column_name()));
     } else if (!has_exist_in_array(index_dml_info.column_exprs_, col, &idx)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("assign column not exists in index dml info", K(ret), KPC(col));
     } else if (FALSE_IT(column_content.projector_index_ = static_cast<uint64_t>(idx))) {
       //do nothing
     } else if (OB_FAIL(assign_infos.push_back(column_content))) {
+      LOG_WARN("store colum content to assign infos failed", K(ret), K(column_content));
     }
   }
   return ret;
@@ -2518,9 +3070,12 @@ int ObDmlCgService::convert_check_constraint(ObLogDelUpd &log_op,
   } else if (OB_ISNULL(log_plan = log_op.get_plan()) ||
              OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_sql_schema_guard())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(log_op), K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(ref_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ref_table_id), K(ret));
   } else if (!(table_schema->is_user_table() || table_schema->is_tmp_table())) {
     // do nothing, especially for global index.
     LOG_DEBUG("skip convert constraint",
@@ -2534,16 +3089,67 @@ int ObDmlCgService::convert_check_constraint(ObLogDelUpd &log_op,
   return ret;
 }
 
+int ObDmlCgService::generate_err_log_ctdef(const ObErrLogDefine &err_log_define,
+                                                ObErrLogCtDef &err_log_ins_ctdef)
+{
+  int ret = OB_SUCCESS;
+  err_log_ins_ctdef.is_error_logging_ = err_log_define.is_err_log_;
+  err_log_ins_ctdef.reject_limit_ = err_log_define.reject_limit_;
+  CK(err_log_define.err_log_column_names_.count() == err_log_define.err_log_value_exprs_.count());
+  if (OB_FAIL(ret)) {
+
+  } else if (OB_FAIL(deep_copy_ob_string(cg_.phy_plan_->get_allocator(),
+                                         err_log_define.err_log_database_name_,
+                                         err_log_ins_ctdef.err_log_database_name_))) {
+    LOG_WARN("fail to copy database name", K(ret), K(err_log_define.err_log_database_name_));
+  } else if (OB_FAIL(deep_copy_ob_string(cg_.phy_plan_->get_allocator(),
+                                         err_log_define.err_log_table_name_,
+                                         err_log_ins_ctdef.err_log_table_name_))) {
+    LOG_WARN("fail to copy table name", K(ret), K(err_log_define.err_log_table_name_));
+  } else if (OB_FAIL(err_log_ins_ctdef.err_log_column_names_.
+      prepare_allocate(err_log_define.err_log_column_names_.count()))) {
+    LOG_WARN("fail to prepare_allocate", K(ret), K(err_log_define.err_log_column_names_.count()));
+  } else if (OB_FAIL(err_log_ins_ctdef.err_log_values_.
+                     prepare_allocate(err_log_define.err_log_value_exprs_.count()))) {
+    LOG_WARN("fail to prepare_allocate", K(ret), K(err_log_define.err_log_value_exprs_.count()));
+  } else {
+    for (int i = 0; OB_SUCC(ret) && i < err_log_define.err_log_value_exprs_.count(); i++) {
+      ObRawExpr *raw_expr = err_log_define.err_log_value_exprs_.at(i);
+      ObExpr *expr = NULL;
+      if (OB_ISNULL(raw_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("raw_expr is null", K(ret), K(i), K(raw_expr));
+      } else if (OB_FAIL(deep_copy_ob_string(cg_.phy_plan_->get_allocator(),
+                                             err_log_define.err_log_column_names_.at(i),
+                                             err_log_ins_ctdef.err_log_column_names_.at(i)))) {
+        LOG_WARN("fail to deep copy string", K(ret), K(err_log_define.err_log_column_names_.at(i)));
+      } else if (OB_FAIL(cg_.generate_rt_expr(*raw_expr, expr))) {
+        LOG_WARN("fail to generate rt expr", K(ret), K(i), KPC(raw_expr));
+      } else if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("rt expr is null", K(ret), K(i), KPC(raw_expr));
+      } else {
+        err_log_ins_ctdef.err_log_values_.at(i) = expr;
+      }
+    }
+  }
+
+  return ret;
+}
+
 int ObDmlCgService::generate_multi_lock_ctdef(const IndexDMLInfo &index_dml_info,
                                               ObMultiLockCtDef &multi_lock_ctdef)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(index_dml_info.old_part_id_expr_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("old part id expr is null", K(ret));
   } else if (OB_FAIL(generate_table_loc_meta(index_dml_info, multi_lock_ctdef.loc_meta_))) {
+    LOG_WARN("generate table loc meta failed", K(ret));
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.old_part_id_expr_,
                                                     &multi_lock_ctdef.loc_meta_,
                                                     multi_lock_ctdef.calc_part_id_expr_))) {
+    LOG_WARN("generate rt expr failed", K(ret));
   }
   return ret;
 }
@@ -2553,12 +3159,20 @@ int ObDmlCgService::generate_multi_ins_ctdef(const IndexDMLInfo &index_dml_info,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(generate_table_loc_meta(index_dml_info, multi_ins_ctdef.loc_meta_))) {
+      LOG_WARN("generate table loc meta failed", K(ret));
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.new_part_id_expr_,
                                                     &multi_ins_ctdef.loc_meta_,
                                                     multi_ins_ctdef.calc_part_id_expr_))) {
+    LOG_WARN("generate rt expr failed", K(ret));
+  } else if (OB_FAIL(ObExprCalcPartitionBase::set_may_add_interval_part(
+                                                 multi_ins_ctdef.calc_part_id_expr_,
+                                                 MayAddIntervalPart::YES))) {
+      LOG_WARN("failed to set partition info", K(ret));
   } else if (!index_dml_info.part_ids_.empty() && index_dml_info.is_primary_index_) {
     if (OB_FAIL(multi_ins_ctdef.hint_part_ids_.assign(index_dml_info.part_ids_))) {
+      LOG_WARN("assign part ids failed", K(ret));
     } else {
+      LOG_DEBUG("print part ids", K(index_dml_info.part_ids_));
     }
   }
   return ret;
@@ -2569,9 +3183,11 @@ int ObDmlCgService::generate_multi_del_ctdef(const IndexDMLInfo &index_dml_info,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(generate_table_loc_meta(index_dml_info, multi_del_ctdef.loc_meta_))) {
+    LOG_WARN("generate table loc meta failed", K(ret));
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.old_part_id_expr_,
                                                     &multi_del_ctdef.loc_meta_,
                                                     multi_del_ctdef.calc_part_id_expr_))) {
+    LOG_WARN("generate rt expr failed", K(ret));
   }
   return ret;
 }
@@ -2584,23 +3200,42 @@ int ObDmlCgService::generate_multi_upd_ctdef(const ObLogDelUpd &op,
   if (OB_ISNULL(index_dml_info.old_part_id_expr_) ||
       OB_ISNULL(index_dml_info.new_part_id_expr_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("index dml info calc part id exprs is invalid", K(ret));
   } else if (OB_FAIL(generate_table_loc_meta(index_dml_info, multi_upd_ctdef.loc_meta_))) {
+    LOG_WARN("generate table loc meta failed", K(ret));
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.old_part_id_expr_,
                                                     &multi_upd_ctdef.loc_meta_,
                                                     multi_upd_ctdef.calc_part_id_old_))) {
+    LOG_WARN("generate old part id expr failed", K(ret));
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.new_part_id_expr_,
                                                     &multi_upd_ctdef.loc_meta_,
                                                     multi_upd_ctdef.calc_part_id_new_))) {
+    LOG_WARN("generate new part id expr failed", K(ret));
   } else {
     multi_upd_ctdef.is_enable_row_movement_ = true;
+    if (multi_upd_ctdef.is_enable_row_movement_) {
+      if (OB_FAIL(ObExprCalcPartitionBase::set_may_add_interval_part(
+                                                 multi_upd_ctdef.calc_part_id_new_,
+                                                 MayAddIntervalPart::YES))) {
+        LOG_WARN("failed to set partition info", K(ret));
+      }
+    } else {
+      if (OB_FAIL(ObExprCalcPartitionBase::set_may_add_interval_part(
+                                     multi_upd_ctdef.calc_part_id_new_,
+                                     MayAddIntervalPart::PART_CHANGE_ERR))) {
+        LOG_WARN("failed to set partition info", K(ret));
+      }
+    }
   }
   if (OB_SUCC(ret)) {
     const ObDMLStmt *stmt = op.get_stmt();
     const ObUpdateStmt *update_stmt = static_cast<const ObUpdateStmt *>(stmt);
     if (OB_ISNULL(update_stmt)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret));
     } else if (!index_dml_info.part_ids_.empty() &&
                OB_FAIL(multi_upd_ctdef.hint_part_ids_.assign(index_dml_info.part_ids_))) {
+      LOG_WARN("failed to assign part ids", K(ret));
     }
   }
   return ret;
@@ -2610,15 +3245,23 @@ int ObDmlCgService::generate_table_loc_meta(const IndexDMLInfo &index_dml_info,
                                             ObDASTableLocMeta &loc_meta)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(cg_.opt_ctx_)) {
+  const ObTableSchema *table_schema = nullptr;
+  ObSchemaGetterGuard *schema_guard = nullptr;
+  if (OB_ISNULL(cg_.opt_ctx_)
+      || OB_ISNULL(schema_guard = cg_.opt_ctx_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(ret), K(cg_.opt_ctx_), K(schema_guard));
+  } else if (OB_FAIL(schema_guard->get_table_schema( index_dml_info.ref_table_id_, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(index_dml_info.ref_table_id_));
   } else {
     loc_meta.table_loc_id_ = index_dml_info.loc_table_id_;
     loc_meta.ref_table_id_ = index_dml_info.ref_table_id_;
-    // Related local index tablet_id pruning can only be used in a local plan (all operators
+    loc_meta.select_leader_ = 1;
+    loc_meta.is_dup_table_ = table_schema->is_duplicate_table();
+    //related local index tablet_id pruning only can be used in local plan or remote plan(all operator
     //use the same das context),
-    //because the distributed plan will pass tablet_id through exchange operator,
-    //but the related tablet_id map can not be passed by exchange operator,
+    //because the distributed plan will transfer tablet_id through exchange operator,
+    //but the related tablet_id map can not be transfered by exchange operator,
     //unused related pruning in distributed plan's dml operator,
     //we will build the related tablet_id map when dml operator be opened in distributed plan
     loc_meta.unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
@@ -2636,6 +3279,7 @@ int ObDmlCgService::generate_table_loc_meta(const IndexDMLInfo &index_dml_info,
         if (rel_info->related_ids_.at(i) == loc_meta.ref_table_id_) {
           //filter itself, do nothing
         } else if (OB_FAIL(loc_meta.related_table_ids_.push_back(rel_info->related_ids_.at(i)))) {
+          LOG_WARN("store related table id failed", K(ret), KPC(rel_info), K(i));
         }
       }
     }
@@ -2649,10 +3293,12 @@ int ObDmlCgService::convert_insert_new_row_exprs(const IndexDMLInfo &index_dml_i
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(index_dml_info.column_exprs_.count() !=
       index_dml_info.column_convert_exprs_.count())) {
+    LOG_WARN("index dml info column exprs not matched", K(ret), K(index_dml_info));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < index_dml_info.column_convert_exprs_.count(); ++i) {
     const ObRawExpr *column_convert = index_dml_info.column_convert_exprs_.at(i);
     if (OB_FAIL(new_row.push_back(const_cast<ObRawExpr*>(column_convert)))) {
+      LOG_WARN("store new row expr failed", K(ret));
     }
   }
   return ret;
@@ -2712,27 +3358,40 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
   uint64_t name_table_id = check_parent_table ? fk_info.parent_table_id_ : fk_info.child_table_id_;
 
   if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, column_ids))) {
-  } else if (OB_FAIL(generate_updated_column_ids(op, index_dml_info.assignments_, column_ids, updated_column_ids))) {
+    LOG_WARN("add column ids failed", K(ret));
+  } else if (OB_FAIL(generate_updated_column_ids(op, index_dml_info.assignments_, column_ids, das_ctdef, updated_column_ids))) {
+    LOG_WARN("add updated column ids failed", K(ret), K(index_dml_info.assignments_));
   } else if (OB_FAIL(need_foreign_key_handle(fk_arg, updated_column_ids,
                                       value_column_ids, das_ctdef.op_type_,
                                       need_handle))) {
+    LOG_WARN("failed to check if need handle foreign key", K(ret));
   } else if (!need_handle) {
+    LOG_DEBUG("skip foreign key handle", K(fk_arg));
   } else if (OB_FAIL(schema_guard.get_table_schema( name_table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(fk_arg), K(name_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(name_table_id), K(ret));
   } else if (OB_FAIL(schema_guard.get_database_schema(
                                                       table_schema->get_database_id(),
                                                       database_schema))) {
+    LOG_WARN("failed to get database schema", K(table_schema->get_database_id()), K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("database schema is null", K(table_schema->get_database_id()), K(ret));
   } else if (OB_FAIL(deep_copy_ob_string(allocator,
                                          database_schema->get_database_name(),
                                          fk_arg.database_name_))) {
+    LOG_WARN("failed to deep copy ob string", K(fk_arg),
+             K(table_schema->get_table_name()), K(ret));
   } else if (OB_FAIL(deep_copy_ob_string(allocator,
                                          table_schema->get_table_name(),
                                          fk_arg.table_name_))) {
+    LOG_WARN("failed to deep copy ob string", K(fk_arg),
+             K(table_schema->get_table_name()), K(ret));
   } else if (FALSE_IT(fk_arg.columns_.reset())) {
   } else if (OB_FAIL(fk_arg.columns_.reserve(name_column_ids.count()))) {
+    LOG_WARN("failed to reserve foreign key columns", K(name_column_ids.count()), K(ret));
   }
   if ( OB_SUCC(ret) && need_handle) {
     fk_arg.table_id_ = name_table_id;
@@ -2741,9 +3400,12 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
     ObForeignKeyColumn fk_column;
     if (OB_ISNULL(column_schema = (table_schema->get_column_schema(name_column_ids.at(i))))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("column schema is null", K(fk_arg), K(name_column_ids.at(i)), K(ret));
     } else if (OB_FAIL(deep_copy_ob_string(allocator,
                                            column_schema->get_column_name_str(),
                                            fk_column.name_))) {
+      LOG_WARN("failed to deep copy ob string", K(fk_arg),
+               K(column_schema->get_column_name_str()), K(ret));
     } else if (fk_arg.is_self_ref_
         && !var_exist_in_array(column_ids, name_column_ids.at(i), fk_column.name_idx_)) {
       /**
@@ -2754,8 +3416,12 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
        * and spec is value table here.
        */
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("foreign key column id is not in colunm ids",
+                K(fk_arg), K(name_column_ids.at(i)), K(ret));
     } else if (!var_exist_in_array(column_ids, value_column_ids.at(i), fk_column.idx_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("foreign key column id is not in colunm ids",
+                K(fk_arg), K(value_column_ids.at(i)), K(ret));
     } else {
       fk_column.obj_meta_ = column_schema->get_meta_type();
       if (fk_column.obj_meta_.is_lob_storage()) {
@@ -2767,6 +3433,7 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
         fk_column.obj_meta_.set_scale(column_schema->get_accuracy().get_scale());
       }
       if (OB_FAIL(fk_arg.columns_.push_back(fk_column))) {
+        LOG_WARN("failed to push foreign key column", K(fk_arg), K(fk_column), K(ret));
       }
     }
   }
@@ -2784,17 +3451,21 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
       ObDMLCtDefAllocator<ObForeignKeyCheckerCtdef> fk_allocator(cg_.phy_plan_->get_allocator());
       if (OB_ISNULL(fk_arg.fk_ctdef_ = fk_allocator.alloc())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alocate foreign key ctdef", K(ret));
       } else if (OB_FAIL(generate_fk_check_ctdef(op, name_table_id,
                                                 fk_part_id_expr,
                                                 name_column_ids,
                                                 schema_guard,
                                                 *fk_arg.fk_ctdef_))) {
+        LOG_WARN("failed to check foreign key check ctdef", K(ret));
       } else if (OB_FAIL(dml_ctdef.fk_args_.push_back(fk_arg))) {
+        LOG_WARN("failed to add foreign key arg", K(fk_arg), K(ret));
       } else {
         cg_.phy_plan_->set_has_nested_sql(true);
       }
     } else {
       if (OB_FAIL(dml_ctdef.fk_args_.push_back(fk_arg))) {
+        LOG_WARN("failed to add foreign key arg", K(fk_arg), K(ret));
       } else {
         cg_.phy_plan_->set_has_nested_sql(true);
       }
@@ -2816,16 +3487,22 @@ int ObDmlCgService::generate_fk_check_ctdef(const ObLogDelUpd &op,
   uint64_t index_tid = OB_INVALID_ID;
   // check if need create check ctdef
   if (get_fk_check_scan_table_id(name_table_id, name_column_ids, schema_guard, index_tid)) {
+    LOG_WARN("failed to get foreign key check scan table id", K(name_table_id), K(ret));
   } else if (OB_INVALID_ID == index_tid) {
     ret = OB_ERR_CANNOT_ADD_FOREIGN;
+    LOG_WARN("invalid index table id to build das scan task for foreign key check", K(ret));
   } else if (OB_FAIL(generate_fk_scan_ctdef(schema_guard, index_tid, fk_ctdef.das_scan_ctdef_))) {
+    LOG_WARN("failed to generate das scan ctdef for foreign key check", K(ret));
   } else if (OB_FAIL(generate_fk_table_loc_info(index_tid, fk_ctdef.loc_meta_, fk_ctdef.tablet_id_, fk_ctdef.is_part_table_))) {
+    LOG_WARN("failed to generate table location meta for foreign key check", K(ret));
   } else {
     
     const ObTableSchema *table_schema = nullptr;
     fk_ctdef.rowkey_ids_.set_capacity(name_column_ids.count());
     if (OB_FAIL(schema_guard.get_table_schema( index_tid, table_schema))) {
+      LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_FAIL(generate_rowkey_idx_for_foreign_key(name_column_ids, table_schema, fk_ctdef.rowkey_ids_))) {
+      LOG_WARN("failed to generate rowkey ids for foreign key", K(ret));
     } else {
       fk_ctdef.rowkey_count_ = table_schema->get_rowkey_column_num();
     }
@@ -2839,14 +3516,19 @@ int ObDmlCgService::generate_fk_check_ctdef(const ObLogDelUpd &op,
     if (OB_ISNULL(part_id_expr_for_lookup = fk_part_id_expr)) {
       // check if table to perform das task is partition table
     } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*part_id_expr_for_lookup, nullptr, rt_part_id_expr))) {
+      LOG_WARN("generate rt part_id_expr failed", K(ret), KPC(part_id_expr_for_lookup));
     } else if (OB_ISNULL(rt_part_id_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("rt part_id_expr for lookup is null", K(ret));
     } else if (OB_FAIL(constraint_raw_exprs.push_back(part_id_expr_for_lookup))) {
+      LOG_WARN("fail to push part_id_expr to constraint_raw_exprs", K(ret));
     } else if (OB_FAIL(cg_.generate_calc_exprs(constraint_dep_exprs,
                                                constraint_raw_exprs,
                                                fk_ctdef.part_id_dep_exprs_,
                                                op.get_type(),
                                                false))) {
+      LOG_WARN("fail to generate part_id_expr depend calc_expr", K(constraint_dep_exprs),
+          K(constraint_raw_exprs), K(fk_ctdef.part_id_dep_exprs_));
     } else {
       fk_ctdef.calc_part_id_expr_ = rt_part_id_expr;
     }
@@ -2861,14 +3543,18 @@ int ObDmlCgService::generate_rowkey_idx_for_foreign_key(const ObIArray<uint64_t>
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parent_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema used for foreign key check is null", K(ret));
   } else if (OB_FAIL(rowkey_ids.reserve(name_column_ids.count()))) {
+    LOG_WARN("failed to reverse rowkey ids", K(ret));
   } else {
     const ObRowkeyInfo &rowkey_info = parent_table->get_rowkey_info();
     for (int64_t i = 0; OB_SUCC(ret) && i < name_column_ids.count(); ++i) {
       const uint64_t column_id = name_column_ids.at(i);
       int64_t index = -1;
       if (OB_FAIL(rowkey_info.get_index(column_id, index))) {
+        LOG_WARN("failed to get the index of parent column in primary key", K(ret));
       } else if (OB_FAIL(rowkey_ids.push_back(index))) {
+        LOG_WARN("failed to push back rowkey index", K(ret));
       }
     }
   }
@@ -2886,10 +3572,14 @@ int ObDmlCgService::generate_fk_table_loc_info(uint64_t index_table_id,
   if (OB_ISNULL(cg_.opt_ctx_)
       || OB_ISNULL(schema_guard = cg_.opt_ctx_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(ret), K(cg_.opt_ctx_), K(schema_guard));
   } else if (OB_FAIL(schema_guard->get_table_schema( index_table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(index_table_id));
   } else {
     loc_meta.table_loc_id_ = index_table_id;
     loc_meta.ref_table_id_ = index_table_id;
+    loc_meta.select_leader_ = 1;
+    loc_meta.is_dup_table_ = (table_schema->is_duplicate_table());
     if (PARTITION_LEVEL_ZERO == table_schema->get_part_level()) {
       tablet_id = table_schema->get_tablet_id();
     } else {
@@ -2909,7 +3599,9 @@ int ObDmlCgService::get_fk_check_scan_table_id(const uint64_t parent_table_id,
   
   const ObTableSchema *table_schema = nullptr;
   if (OB_FAIL(schema_guard.get_table_schema( parent_table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_FAIL(table_schema->get_fk_check_index_tid(schema_guard, name_column_ids, index_table_id))) {
+    LOG_WARN("failed to get scan table id for foreign key check", K(ret));
   }
   return ret;
 }
@@ -2923,12 +3615,15 @@ int ObDmlCgService::generate_fk_scan_ctdef(share::schema::ObSchemaGetterGuard &s
   
   const ObTableSchema *table_schema = nullptr;
   if (OB_FAIL(schema_guard.get_table_schema( index_tid, table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(
       TABLE_SCHEMA, index_tid, scan_ctdef.schema_version_))) {
+    LOG_WARN("fail to get schema version", K(ret), K(index_tid));
   } else {
     scan_ctdef.table_param_.get_enable_lob_locator_v2() = true;
     if (OB_FAIL(scan_ctdef.table_param_.convert(*table_schema, scan_ctdef.access_column_ids_,
                                                 scan_ctdef.pd_expr_spec_.pd_storage_flag_))) {
+      LOG_WARN("convert table param failed", K(ret));
     }
   }
   return ret;
@@ -2949,9 +3644,12 @@ int ObDmlCgService::convert_foreign_keys(ObLogDelUpd &op,
              OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_sql_schema_guard()) ||
              OB_ISNULL(schema_guard->get_schema_guard())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(op), K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(index_dml_info.ref_table_id_, table_schema))) {
+    LOG_WARN("failed to get table schema", K(index_dml_info.ref_table_id_), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(index_dml_info.ref_table_id_), K(ret));
   } else if (!table_schema->is_user_table()) {
     // do nothing, especially for global index.
     LOG_DEBUG("skip convert foreign key",
@@ -2959,13 +3657,17 @@ int ObDmlCgService::convert_foreign_keys(ObLogDelUpd &op,
               "table_type", table_schema->get_table_type());
   } else if (OB_ISNULL(fk_infos = &table_schema->get_foreign_key_infos())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("foreign key infos is null", K(ret));
   } else if (OB_FAIL(dml_ctdef.fk_args_.init(table_schema->get_foreign_key_real_count()))) {
+    LOG_WARN("failed to init foreign key stmts", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < fk_infos->count(); i++) {
       const ObForeignKeyInfo &fk_info = fk_infos->at(i);
       ObForeignKeyArg fk_arg(cg_.phy_plan_->get_allocator());
       if (fk_info.child_column_ids_.count() != fk_info.parent_column_ids_.count()) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("child column count and parent column count is not equal",
+                 K(ret), K(fk_info.child_column_ids_), K(fk_info.parent_column_ids_));
       }
       if (OB_SUCC(ret) && fk_info.parent_table_id_ == fk_info.child_table_id_) {
         fk_arg.is_self_ref_ = true;
@@ -2981,8 +3683,10 @@ int ObDmlCgService::convert_foreign_keys(ObLogDelUpd &op,
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("session is invalid", K(op.get_plan()), K(session));
             } else if (OB_FAIL(session->get_foreign_key_checks(foreign_key_checks))) {
+              LOG_WARN("get foreign_key_checks failed", K(ret));
             } else if (1 == foreign_key_checks) {
               ret = OB_ERR_NO_REFERENCED_ROW;
+              LOG_WARN("insert or update a child table with a mock parent table", K(ret));
             } else { // skip fk check while foreign_key_checks if off
               fk_arg.ref_action_ = ACTION_INVALID;
             }
@@ -2999,6 +3703,7 @@ int ObDmlCgService::convert_foreign_keys(ObLogDelUpd &op,
                                           index_dml_info.fk_lookup_part_id_expr_.at(i),
                                           *schema_guard->get_schema_guard(),
                                           dml_ctdef))) {
+          LOG_WARN("failed to add fk arg to dml ctdef", K(ret));
         }
       }
       if (OB_SUCC(ret) && fk_info.table_id_ == fk_info.parent_table_id_) {
@@ -3017,12 +3722,14 @@ int ObDmlCgService::convert_foreign_keys(ObLogDelUpd &op,
                                                             nullptr, // fk_lookup_part_id_expr_, for parent table, don't use scan task to perform foreign key check
                                                             *schema_guard->get_schema_guard(),
                                                             dml_ctdef))) {
+          LOG_WARN("failed to add fk arg to dml ctdef", K(ret));
         }
       }
     } // for
     if (OB_SUCC(ret) && fk_infos->count() > 0) {
       OX (cg_.phy_plan_->set_need_serial_exec(true));
     }
+    LOG_TRACE("convert foreign keys finish", K(ret), KPC(fk_infos), K(dml_ctdef.fk_args_));
   }
   return ret;
 }
@@ -3048,13 +3755,19 @@ int ObDmlCgService::check_need_domain_id_merge_iter(
       OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard()) ||
       OB_ISNULL(sql_schema_guard = log_plan->get_optimizer_context().get_sql_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status", K(ret), KP(log_plan), KP(schema_guard), KP(sql_schema_guard));
   } else if (OB_FAIL(schema_guard->get_table_schema( ref_table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ref_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ret), K(table_schema));
   } else if (OB_FAIL(ObDomainIdUtils::check_has_domain_index(table_schema, domain_types, domain_tids))) {
+    LOG_WARN("failed to check has domain index", K(ret));
   } else if (domain_types.count() != domain_tids.count()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected domain types and tids", K(ret), K(domain_types), K(domain_tids));
   } else if (domain_types.count() > 0) {
+    LOG_TRACE("has domain index, need domain id merge iter", K(ret), K(ref_table_id), K(domain_types), K(domain_tids));
     ObSEArray<uint64_t, 16> base_col_ids;
     ARRAY_FOREACH(columns, i) {
       ObColumnRefRawExpr *item = columns.at(i);
@@ -3063,12 +3776,18 @@ int ObDmlCgService::check_need_domain_id_merge_iter(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid column item", K(i), K(item));
       } else if (OB_FAIL(get_column_ref_base_cid(op, item, base_cid))) {
+        LOG_WARN("get base column id failed", K(ret), K(item));
       } else if (OB_FAIL(base_col_ids.push_back(base_cid))) {
+        LOG_WARN("fail to push back column id", K(ret));
       }
     }
     if (OB_SUCC(ret)
         && OB_FAIL(ObDomainIdUtils::resort_domain_info_by_base_cols(
             *sql_schema_guard, *table_schema, base_col_ids, domain_types, domain_tids))) {
+      LOG_WARN("fail to resort domain info by base cols",
+               K(ret),
+               KPC(table_schema),
+               K(base_col_ids));
     }
   }
   return ret;
@@ -3087,17 +3806,23 @@ int ObDmlCgService::generate_scan_with_doc_id_ctdef(
   ObArray<ObExpr*> result_outputs;
   if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_DOC_ID_MERGE, cg_.phy_plan_->get_allocator(),
           doc_id_merge_ctdef))) {
+    LOG_WARN("fail to allocate to doc id merge ctdef", K(ret));
   } else if (OB_ISNULL(doc_id_merge_ctdef->children_ = OB_NEW_ARRAY(ObDASBaseCtDef*, &cg_.phy_plan_->get_allocator(), 2))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate doc id merge ctdef child array memory", K(ret));
   } else if (OB_FAIL(generate_rowkey_domain_ctdef(op, index_dml_info, rowkey_domain_tid, attach_spec, rowkey_doc_scan_ctdef))) {
+    LOG_WARN("fail to generate rowkey doc ctdef", K(ret));
   } else if (OB_FAIL(result_outputs.assign(scan_ctdef.result_output_))) {
+    LOG_WARN("construct aux lookup ctdef failed", K(ret));
   } else if (OB_UNLIKELY(result_outputs.empty())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, result outputs is nullptr", K(ret));
   } else {
     doc_id_merge_ctdef->children_cnt_ = 2;
     doc_id_merge_ctdef->children_[0] = &scan_ctdef;
     doc_id_merge_ctdef->children_[1] = rowkey_doc_scan_ctdef;
     if (OB_FAIL(doc_id_merge_ctdef->result_output_.assign(result_outputs))) {
+      LOG_WARN("fail to assign result output", K(ret));
     } else {
       attach_spec.attach_ctdef_ = static_cast<ObDASBaseCtDef *>(doc_id_merge_ctdef);
     }
@@ -3118,17 +3843,23 @@ int ObDmlCgService::generate_scan_with_vec_vid_ctdef(
   ObArray<ObExpr*> result_outputs;
   if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_VID_MERGE, cg_.phy_plan_->get_allocator(),
           vec_vid_merge_ctdef))) {
+    LOG_WARN("fail to allocate to vec vid merge ctdef", K(ret));
   } else if (OB_ISNULL(vec_vid_merge_ctdef->children_ = OB_NEW_ARRAY(ObDASBaseCtDef*, &cg_.phy_plan_->get_allocator(), 2))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate vec vid merge ctdef child array memory", K(ret));
   } else if (OB_FAIL(generate_rowkey_domain_ctdef(op, index_dml_info, rowkey_domain_tid, attach_spec, rowkey_vid_scan_ctdef))) {
+    LOG_WARN("fail to generate rowkey vid ctdef", K(ret));
   } else if (OB_FAIL(result_outputs.assign(scan_ctdef.result_output_))) {
+    LOG_WARN("construct aux lookup ctdef failed", K(ret));
   } else if (OB_UNLIKELY(result_outputs.empty())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, result outputs is nullptr", K(ret));
   } else {
     vec_vid_merge_ctdef->children_cnt_ = 2;
     vec_vid_merge_ctdef->children_[0] = &scan_ctdef;
     vec_vid_merge_ctdef->children_[1] = rowkey_vid_scan_ctdef;
     if (OB_FAIL(vec_vid_merge_ctdef->result_output_.assign(result_outputs))) {
+      LOG_WARN("fail to assign result output", K(ret));
     } else {
       attach_spec.attach_ctdef_ = static_cast<ObDASBaseCtDef *>(vec_vid_merge_ctdef);
     }
@@ -3149,22 +3880,28 @@ int ObDmlCgService::generate_scan_with_domain_id_ctdef_if_need(
   ObDASDomainIdMergeCtDef *domain_id_merge_ctdef = nullptr;
   int64_t child_cnt = 0;
   if (OB_FAIL(check_need_domain_id_merge_iter(index_dml_info.column_exprs_, op, index_dml_info.ref_table_id_, domain_types, domain_tids))) {
+    LOG_WARN("fail to check need domain id merge iter", K(ret));
   } else if (domain_types.count() == 0) {
     // just skip, nothing to do
   } else if (FALSE_IT(child_cnt = domain_types.count() + 1)) {
   } else if (OB_ISNULL(cg_.opt_ctx_->get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get session info", K(ret));
   } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_DOMAIN_ID_MERGE, cg_.phy_plan_->get_allocator(),
           domain_id_merge_ctdef))) {
+    LOG_WARN("fail to allocate to domain id merge ctdef", K(ret));
   } else if (OB_ISNULL(domain_id_merge_ctdef->children_ = OB_NEW_ARRAY(ObDASBaseCtDef*, &cg_.phy_plan_->get_allocator(), child_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate domain id merge ctdef child array memory", K(ret));
   } else if (OB_FAIL(domain_id_merge_ctdef->domain_types_.prepare_allocate(domain_types.count()))) {
+    LOG_WARN("fail to allocate domain types array memory", K(ret));
   } else {
     domain_id_merge_ctdef->children_cnt_ = child_cnt;
     domain_id_merge_ctdef->children_[0] = &scan_ctdef;
     for (int64_t i = 0; OB_SUCC(ret) && i < domain_types.count(); i++) {
       ObDASScanCtDef *rowkey_domain_scan_ctdef = nullptr;
       if (OB_FAIL(generate_rowkey_domain_ctdef(op, index_dml_info, domain_tids.at(i), attach_spec, rowkey_domain_scan_ctdef))) {
+        LOG_WARN("fail to generate rowkey domain ctdef", K(ret));
       } else {
         domain_id_merge_ctdef->domain_types_.at(i) = domain_types.at(i);
         domain_id_merge_ctdef->children_[i + 1] = rowkey_domain_scan_ctdef;
@@ -3172,9 +3909,12 @@ int ObDmlCgService::generate_scan_with_domain_id_ctdef_if_need(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(result_outputs.assign(scan_ctdef.result_output_))) {
+      LOG_WARN("construct aux lookup ctdef failed", K(ret));
     } else if (OB_UNLIKELY(result_outputs.empty())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error, result outputs is nullptr", K(ret));
     } else if (OB_FAIL(domain_id_merge_ctdef->result_output_.assign(result_outputs))) {
+      LOG_WARN("fail to assign result output", K(ret));
     } else {
       attach_spec.attach_ctdef_ = static_cast<ObDASBaseCtDef *>(domain_id_merge_ctdef);
     }
@@ -3198,26 +3938,36 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
 
   if (OB_ISNULL(schema_guard) || OB_INVALID_ID == rowkey_domain_tid) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, schema guard is nullptr", K(ret), KP(cg_.opt_ctx_), K(rowkey_domain_tid));
   } else if (OB_FAIL(schema_guard->get_table_schema(index_dml_info.ref_table_id_, data_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(index_dml_info.ref_table_id_));
   } else if (OB_ISNULL(data_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to get data table schema", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(index_dml_info.ref_table_id_,
                                                     rowkey_domain_tid,
                                                     op.get_stmt(),
                                                     rowkey_domain_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(rowkey_domain_tid));
   } else if (OB_ISNULL(rowkey_domain_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to get rowkey domain schema", K(ret), K(rowkey_domain_tid));
   } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_TABLE_SCAN, cg_.phy_plan_->get_allocator(), scan_ctdef))) {
+    LOG_WARN("alloc das ctdef failed", K(ret));
   } else if (OB_FAIL(generate_rowkey_domain_access_expr(op,
                                                         index_dml_info.column_exprs_,
                                                         *rowkey_domain_schema,
                                                         scan_ctdef))) {
+    LOG_WARN("fail to generate rowkey domain access expr", K(ret), K(index_dml_info));
   } else if (OB_ISNULL(loc_meta = OB_NEWx(ObDASTableLocMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate rowkey domain scan location meta failed", K(ret));
   } else {
     scan_ctdef->ref_table_id_ = rowkey_domain_tid;
     loc_meta->table_loc_id_ = index_dml_info.loc_table_id_;
     loc_meta->ref_table_id_ = rowkey_domain_tid;
+    loc_meta->select_leader_ = 1;
+    loc_meta->is_dup_table_ = (ObDuplicateScope::DUPLICATE_SCOPE_NONE != rowkey_domain_schema->get_duplicate_scope());
     loc_meta->unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
     share::ObDasSemanticIndexInfo &semantic_index_info = scan_ctdef->semantic_index_info_;
@@ -3226,18 +3976,22 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
     ObSEArray<ObExpr *, 1> domain_id_expr;
     ObSEArray<uint64_t, 1> domain_id_col_ids;
     if (OB_FAIL(attach_spec.attach_loc_metas_.push_back(loc_meta))) {
+      LOG_WARN("store scan loc meta failed", K(ret));
     } else if (OB_FAIL(scan_ctdef->table_param_.convert(*rowkey_domain_schema, scan_ctdef->access_column_ids_,
             scan_ctdef->pd_expr_spec_.pd_storage_flag_))) {
+      LOG_WARN("fail to convert table param", K(ret));
     } else if (OB_FAIL(cg_.tsc_cg_service_.generate_das_result_output(scan_ctdef->access_column_ids_,
                                                                       domain_id_expr,
                                                                       domain_id_col_ids,
                                                                       *scan_ctdef,
                                                                       nullptr))) {
+      LOG_WARN("fail to generate das result output", K(ret));
     } else if (rowkey_domain_schema->is_hybrid_vec_index_embedded_type() &&
                OB_FAIL(semantic_index_info.generate(data_schema,
                                                     rowkey_domain_schema,
                                                     scan_ctdef->result_output_.count(),
                                                     OB_NOT_NULL(scan_ctdef->trans_info_expr_)))) {
+      LOG_WARN("fail to generate semantic index info", K(ret));
     } else {
       rowkey_domain_scan_ctdef = scan_ctdef;
     }
@@ -3257,10 +4011,14 @@ int ObDmlCgService::generate_rowkey_domain_access_expr(
   const ObDMLStmt *stmt = op.get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null stmt", K(ret));
   } else if (OB_ISNULL(ctdef) || OB_UNLIKELY(columns.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP(ctdef), K(columns));
   } else if (OB_FAIL(rowkey_domain.get_column_ids(rowkey_domain_column_ids))) {
+    LOG_WARN("fail to get column ids from rowkey doc", K(ret), K(rowkey_domain));
   } else if (OB_FAIL(ctdef->access_column_ids_.init(rowkey_domain_column_ids.count()))) {
+    LOG_WARN("fail to init output_column_ids_ ", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
       ObColumnRefRawExpr *expr = columns.at(i);
@@ -3268,12 +4026,14 @@ int ObDmlCgService::generate_rowkey_domain_access_expr(
       const TableItem *table_item = nullptr;
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error, expr is nullptr", K(ret), K(i), K(columns));
       } else if (OB_NOT_NULL(table_item = stmt->get_table_item_by_id(expr->get_table_id()))) {
         if (table_item->is_generated_table()) {
           // For situations such as updatable view, column_id from column expr is the offset of selected items
           // we need to use column id on base table to find corresponding rowkey and domain_id columns.
           const ObColumnRefRawExpr *column_expr = expr;
           if (OB_FAIL(cg_.recursive_get_column_expr(column_expr, *table_item))) {
+            LOG_WARN("failed to get column expr", K(ret));
           } else {
             base_column_id = column_expr->get_column_id();
           }
@@ -3284,14 +4044,18 @@ int ObDmlCgService::generate_rowkey_domain_access_expr(
         if (OB_FAIL(ret)) {
         } else if (has_exist_in_array(rowkey_domain_column_ids, base_column_id)) {
           if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr *>(expr)))) {
+            LOG_WARN("failed to add param expr", K(ret));
           } else if (OB_FAIL(ctdef->access_column_ids_.push_back(base_column_id))) {
+            LOG_WARN("fail to push back column id", K(ret));
           }
         }
       }
     }
     if (FAILEDx(cg_.generate_rt_exprs(access_exprs, ctdef->pd_expr_spec_.access_exprs_))) {
+      LOG_WARN("fail to generate rt exprs", K(ret));
     }
   }
+  LOG_TRACE("generate rowkey domain access expr", K(ret), K(access_exprs), K(rowkey_domain_column_ids), K(columns));
   return ret;
 }
 
@@ -3306,16 +4070,21 @@ int ObDmlCgService::get_domain_index_col_ids(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema) || OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr", K(ret), KP(table_schema), KP(schema_guard));
   } else {
     DomainIdxs col_ids;
     for (int64_t i = 0; OB_SUCC(ret) && i < domain_types.count(); i++) {
       col_ids.reuse();
       ObDomainIdUtils::ObDomainIDType type = static_cast<ObDomainIdUtils::ObDomainIDType>(domain_types.at(i));
       if (OB_FAIL(ObDomainIdUtils::get_domain_id_col_by_tid(type, table_schema, schema_guard, domain_tid.at(i), col_ids))) {
+        LOG_WARN("fail to get domain id col id", K(ret), K(type), KPC(table_schema));
       } else if (is_contain(col_ids, OB_INVALID_ID) || col_ids.count() == 0) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get invalid domain id col id", K(ret), K(type), KPC(table_schema));
       } else if (OB_FAIL(domain_id_col_ids.push_back(col_ids))) {
+        LOG_WARN("fail to push back domain id col id", K(ret), K(type), KPC(table_schema));
       } else if (OB_FAIL(append(flatten_domain_id_col_ids, col_ids))) {
+        LOG_WARN("fail to append domain id column id", K(ret), K(col_ids));
       }
     }
   }
@@ -3336,11 +4105,15 @@ int ObDmlCgService::check_is_main_table_in_fts_ddl(
   if (OB_ISNULL(log_plan) ||
       OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ret), K(table_schema));
   } else if (!table_schema->is_user_table() && !table_schema->is_fts_index()) {
     das_dml_ctdef.is_main_table_in_fts_ddl_ = false;
+    LOG_TRACE("neither user table nor fts index, nothing to do", K(ret), K(table_id));
   } else {
     bool has_fts_index = false;
     bool is_main_table_in_fts_ddl = false;
@@ -3349,8 +4122,10 @@ int ObDmlCgService::check_is_main_table_in_fts_ddl(
     for (int64_t i = 0; OB_SUCC(ret) && !is_main_table_in_fts_ddl && i < index_dml_info.related_index_ids_.count(); ++i) {
       const ObTableSchema *index_schema = nullptr;
       if (OB_FAIL(schema_guard->get_table_schema( index_dml_info.related_index_ids_.at(i), index_schema))) {
+        LOG_WARN("fail to get table schema", K(ret), K(i), K(index_dml_info.related_index_ids_));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error, index schema is nullptr", K(ret), K(i), K(index_dml_info.related_index_ids_));
       } else if (index_schema->is_fts_index()) {
         has_fts_index = true;
         if (index_schema->is_fts_index_aux()) {
@@ -3372,6 +4147,8 @@ int ObDmlCgService::check_is_main_table_in_fts_ddl(
         das_dml_ctdef.is_main_table_in_fts_ddl_ = false;
       }
     }
+    LOG_TRACE("check is main table in fts ddl", K(ret), K(has_fts_index), K(is_main_table_in_fts_ddl), K(fts_index_aux_count),
+        K(fts_doc_word_aux_count), K(table_id), K(das_dml_ctdef.is_main_table_in_fts_ddl_), K(index_dml_info.related_index_ids_));
   }
   return ret;
 }

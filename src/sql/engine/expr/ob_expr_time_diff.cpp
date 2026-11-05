@@ -89,9 +89,14 @@ int ObExprTimeDiff::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 2);
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+  if (rt_expr.arg_cnt_ != 2) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("timediff expr should have two params", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
+            || OB_ISNULL(rt_expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of timediff expr is null", K(ret), K(rt_expr.args_));
+  } else {
     rt_expr.eval_func_ = ObExprTimeDiff::calc_timediff;
   }
   return ret;
@@ -109,32 +114,40 @@ int ObExprTimeDiff::calc_timediff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum1))) {
     calc_param_failure = true;
+    LOG_WARN("eval param value failed", K(ret));
   } else if (OB_UNLIKELY(param_datum1->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
+    LOG_WARN("get tz info failed", K(ret));
   } else {
     int64_t int64_diff = 0;
     ObTime ot1(DT_TYPE_TIME);
     ObTime ot2(DT_TYPE_TIME);
-    if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
+    if (OB_FAIL(ob_datum_to_ob_time_without_date(
           *param_datum1, expr.args_[0]->datum_meta_.type_, expr.args_[0]->datum_meta_.scale_,
           tz_info, ot1, expr.args_[0]->obj_meta_.has_lob_header()))) {
+      LOG_WARN("cast the first param failed", K(ret));
       ret = OB_INVALID_DATE_VALUE;
       expr_datum.set_null();
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
       calc_param_failure = true;
+      LOG_WARN("eval param value failed", K(ret));
     } else if (param_datum2->is_null()) {
       expr_datum.set_null();
-    } else if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
+    } else if (OB_FAIL(ob_datum_to_ob_time_without_date(
                  *param_datum2, expr.args_[1]->datum_meta_.type_, expr.args_[1]->datum_meta_.scale_,
                  tz_info, ot2, expr.args_[1]->obj_meta_.has_lob_header()))) {
+      LOG_WARN("cast the second param failed", K(ret));
       ret = OB_INVALID_DATE_VALUE;
       expr_datum.set_null();
     } else if (OB_FAIL(
                  get_diff_value_with_ob_time(ot1, ot2, tz_info, int64_diff))) {
+      LOG_WARN("get diff value with ob time failed", K(ret));
       expr_datum.set_null();
     } else {
       int flag = int64_diff > 0 ? 1 : -1;

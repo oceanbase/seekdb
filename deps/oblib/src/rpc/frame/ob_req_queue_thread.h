@@ -1,0 +1,113 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OCEABASE_RPC_FRAME_OB_REQ_QUEUE_THREAD_H_
+#define _OCEABASE_RPC_FRAME_OB_REQ_QUEUE_THREAD_H_
+
+
+#include "lib/ob_define.h"
+#include "lib/queue/ob_priority_queue.h"
+#include "lib/profile/ob_trace_id.h"
+#include "lib/net/ob_addr.h"
+#include "rpc/frame/obi_req_qhandler.h"
+#include "lib/thread/thread_pool.h"
+
+namespace oceanbase
+{
+namespace rpc
+{
+class ObRequest;
+namespace frame
+{
+using common::ObAddr;
+
+class ObReqQueue
+{
+public:
+  static const int LIGHTY_QUEUE_SIZE = (1 << 18);
+  ObReqQueue(int queue_capacity = LIGHTY_QUEUE_SIZE);
+
+  virtual ~ObReqQueue();
+
+  int init();
+
+  void set_qhandler(ObiReqQHandler *handler);
+
+  bool push(ObRequest *req, int max_queue_len, bool block = true);
+  void loop();
+
+  int64_t size() const
+  {
+    return queue_.size();
+  }
+
+  void inc_push_worker_count()
+  {
+    ATOMIC_INC(&push_worker_count_);
+  }
+  void dec_push_worker_count()
+  {
+    ATOMIC_DEC(&push_worker_count_);
+  }
+  bool get_push_worker_count()
+  {
+    return ATOMIC_LOAD(&push_worker_count_);
+  }
+
+private:
+  int process_task(ObLink *task);
+
+  DISALLOW_COPY_AND_ASSIGN(ObReqQueue);
+
+protected:
+
+  bool wait_finish_;
+  int push_worker_count_;
+  common::ObPriorityQueue<1> queue_;
+  ObiReqQHandler *qhandler_;
+
+  static const int64_t MAX_PACKET_SIZE = 2 * 1024 * 1024L; // 2M
+
+  ObAddr host_;
+};
+
+class ObReqQueueThread
+    : public ObReqQueue
+{
+public:
+  ObReqQueueThread() : thread_(*this) {}
+  lib::ThreadPool &get_thread()
+  {
+    return thread_;
+  }
+
+private:
+  class Thread : public lib::ThreadPool
+  {
+  public:
+    Thread(ObReqQueue &queue)
+        : queue_(queue)
+    {}
+    void run1() { queue_.loop(); }
+    ObReqQueue &queue_;
+  } thread_;
+};
+
+} // end namespace frame
+} // end namespace rpc
+} // end namespace oceanbase
+
+#endif /* _OCEABASE_RPC_FRAME_OB_REQ_QUEUE_THREAD_H_ */

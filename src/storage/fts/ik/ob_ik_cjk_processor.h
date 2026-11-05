@@ -29,19 +29,29 @@ class ObFTDictHub;
 class ObIKCJKProcessor : public ObIIKProcessor
 {
 public:
-  ObIKCJKProcessor(const ObIFTDict &dict_main, ObIAllocator &alloc)
-      : hits_(alloc), dict_main_(dict_main), cjk_start_(-1), cjk_end_(-1)
+  ObIKCJKProcessor(const ObIFTDict &dict_main)
+      : hit_allocator_(lib::ObMemAttr("IKCJKHit")), hits_(hit_allocator_),
+        dict_main_(dict_main), cjk_start_(-1), cjk_end_(-1)
   {
   }
   ~ObIKCJKProcessor() override { hits_.reset(); }
 
 public:
+  void reuse() override
+  {
+    hits_.reset();
+    hit_allocator_.reuse();
+    cjk_start_ = -1;
+    cjk_end_ = -1;
+  }
+
   int do_process(TokenizeContext &ctx,
                  const char *ch,
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
 
 private:
+  ObArenaAllocator hit_allocator_;
   ObList<ObDATrieHit, ObIAllocator> hits_;
   const ObIFTDict &dict_main_;
   int64_t cjk_start_;

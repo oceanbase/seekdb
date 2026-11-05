@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_all_virtual_sql_workarea_history_stat.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -43,9 +43,9 @@ void ObSqlWorkareaHistoryStatIterator::reset()
 int ObSqlWorkareaHistoryStatIterator::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(
-          ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>())) {
+  if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null of omt", KR(ret));
   }
   return ret;
 }
@@ -59,10 +59,11 @@ int ObSqlWorkareaHistoryStatIterator::get_next_batch_wa_stats()
     ret = OB_ITER_END;
   } else {
     
-    ObSqlMemoryManager *sql_mem_mgr = nullptr;
-    SERVER_MODULE_SCOPE {
-      sql_mem_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();
+    ObTenantSqlMemoryManager *sql_mem_mgr = nullptr;
+    MOD_SCOPE {
+      sql_mem_mgr = share::g_mp->tenant_sql_memory_manager();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_workarea_stat(wa_stats_))) {
+        LOG_WARN("failed to get workarea stat", K(ret));
       }
     }
     done_ = true;
@@ -76,6 +77,7 @@ int ObSqlWorkareaHistoryStatIterator::get_next_wa_stat(
   int ret = OB_SUCCESS;
   if (0 > cur_nth_wa_ || cur_nth_wa_ > wa_stats_.count()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: current wa exceeds total wa stats", K(ret));
   } else {
     while (OB_SUCC(ret) && cur_nth_wa_ >= wa_stats_.count()) {
       if (OB_FAIL(get_next_batch_wa_stats())) {
@@ -119,6 +121,7 @@ int ObSqlWorkareaHistoryStat::get_server_ip_and_port()
   } else {
     ipstr_ = ObString::make_string(ipbuf);
     if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
+      LOG_WARN("failed to write string", K(ret));
     }
     port_ = addr.get_port();
   }
@@ -249,9 +252,11 @@ int ObSqlWorkareaHistoryStat::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(iter_.init())) {
+      LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
       if (OB_FAIL(get_server_ip_and_port())) {
+        LOG_WARN("failed to get server ip and port", K(ret));
       }
     }
   }
@@ -260,8 +265,10 @@ int ObSqlWorkareaHistoryStat::inner_get_next_row(common::ObNewRow *&row)
     // do nothing
   } else if (OB_FAIL(iter_.get_next_wa_stat(wa_stat))) {
     if (OB_ITER_END != ret) {
+      LOG_WARN("failed to get next channel", K(ret));
     }
   } else if (OB_FAIL(fill_row(*wa_stat, row))) {
+    LOG_WARN("failed to get row from channel info", K(ret));
   }
   return ret;
 }

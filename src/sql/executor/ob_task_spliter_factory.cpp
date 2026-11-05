@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_EXE
+
+#include "sql/executor/ob_task_spliter_factory.h"
+#include "sql/executor/ob_local_identity_task_spliter.h"
+#include "sql/executor/ob_remote_identity_task_spliter.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+ObTaskSpliterFactory::ObTaskSpliterFactory() : store_()
+{
+}
+
+ObTaskSpliterFactory::~ObTaskSpliterFactory()
+{
+  for (int64_t i = 0; i < store_.count(); ++i) {
+    ObTaskSpliter *ts = store_.at(i);
+    if (OB_LIKELY(NULL != ts)) {
+      ts->~ObTaskSpliter();
+    }
+  }
+}
+
+
+#define ALLOCATE_TASK_SPLITER(T) \
+      void *ptr = allocator.alloc(sizeof(T)); \
+      if (OB_ISNULL(ptr)) { \
+        ret = OB_ALLOCATE_MEMORY_FAILED; \
+      } else { \
+        T *s = new(ptr)T(); \
+        if (OB_FAIL(store_.push_back(s))) { \
+          s->~T();                          \
+          LOG_WARN("fail to store spliter", K(ret)); \
+        } else if (OB_FAIL(s->init(exec_ctx.get_physical_plan_ctx(), \
+                                   &exec_ctx, \
+                                   job, \
+                                   exec_ctx.get_sche_allocator()))) { \
+          LOG_WARN("fail to init spliter", K(ret)); \
+        } else { \
+          spliter = s; \
+        }\
+      }
+
+int ObTaskSpliterFactory::create(ObExecContext &exec_ctx,
+                                 ObJob &job,
+                                 int spliter_type,
+                                 ObTaskSpliter *&spliter)
+{
+  int ret = OB_SUCCESS;
+  ObIAllocator &allocator = exec_ctx.get_sche_allocator();
+  switch (spliter_type) {
+    case ObTaskSpliter::LOCAL_IDENTITY_SPLIT: {
+      ALLOCATE_TASK_SPLITER(ObLocalIdentityTaskSpliter);
+      break;
+    }
+    case ObTaskSpliter::REMOTE_IDENTITY_SPLIT: {
+      ALLOCATE_TASK_SPLITER(ObRemoteIdentityTaskSpliter);
+      break;
+    }
+    default: {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("unexpected spliter type", K(spliter_type));
+      break;
+    }
+  }
+  return ret;
+}
+

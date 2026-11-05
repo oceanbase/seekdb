@@ -48,6 +48,7 @@ int ObExprCharset::calc_result_type1(ObExprResType &type,
 
   int64_t mbmaxlen = 1;
   if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(type.get_collation_type(), mbmaxlen))) {
+    LOG_WARN("fail get mbmaxlen", K(mbmaxlen), K(ret));
   } else {
     type.set_length(static_cast<ObLength>(64 * mbmaxlen));
   }
@@ -61,11 +62,13 @@ int calc_charset_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   ObDatum *arg = NULL;
   ObString charset_str = ObString::make_string(ObCharset::collation_name(CS_TYPE_BINARY));
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else {
     const ObCollationType &cs_type = expr.args_[0]->datum_meta_.get_cs_type();
     ObCharsetType charset_type = ObCharset::charset_type_by_coll(cs_type);
     if (CHARSET_INVALID == charset_type) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid collation type", K(ret), K(cs_type));
     } else {
       charset_str = ObCharset::charset_name(charset_type);
       res_datum.set_string(charset_str);
@@ -120,6 +123,7 @@ int ObExprCollation::calc_result_type1(ObExprResType &type,
 
   int64_t mbmaxlen = 1;
   if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(type.get_collation_type(), mbmaxlen))) {
+    LOG_WARN("fail get mbmaxlen", K(mbmaxlen), K(ret));
   } else {
     type.set_length(static_cast<ObLength>(64 * mbmaxlen));
   }
@@ -132,6 +136,7 @@ int calc_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else {
     const ObCollationType &cs_type = expr.args_[0]->datum_meta_.get_cs_type();
     ObString collation = ObCharset::collation_name(cs_type);
@@ -235,7 +240,8 @@ ObExprSetCollation::ObExprSetCollation(ObIAllocator &alloc)
                     2,
                     VALID_FOR_GENERATED_COL,
                     NOT_ROW_DIMENSION,
-                    INTERNAL_IN_MYSQL_MODE)
+                    INTERNAL_IN_MYSQL_MODE,
+                    INTERNAL_IN_ORACLE_MODE)
 {}
 
 ObExprSetCollation::~ObExprSetCollation()
@@ -249,7 +255,7 @@ int ObExprSetCollation::calc_result_type2(ObExprResType &type,
   UNUSED(type_ctx);
   UNUSED(type1);
   const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-          ? type_ctx.get_session()->get_actual_length_semantics()
+          ? type_ctx.get_session()->get_actual_nls_length_semantics()
           : common::LS_BYTE);
   int ret = OB_SUCCESS;
   type.set_varchar();
@@ -292,10 +298,12 @@ int calc_set_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_dat
   ObDatum *cs_arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, dst_arg)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, cs_arg))) {
+    LOG_WARN("eval arg failed", K(ret), KP(dst_arg), KP(cs_arg));
   } else if (dst_arg->is_null()) {
     res_datum.set_null();
   } else if (cs_arg->is_null()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("cs_arg cannot be null", K(ret));
   } else {
     ObCollationType dst_coll = static_cast<ObCollationType>(cs_arg->get_int());
     ObCharsetType ori_charset_type =
@@ -379,7 +387,9 @@ int calc_cmp_meta_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   const char *ptr = helper.convert(expr.args_[0]->obj_meta_);
   if (OB_ISNULL(ptr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to convert obj_meta", K(ret));
   } else if (OB_FAIL(ob_alloc_printf(res_str, res_alloc, "%s", ptr))) {
+    LOG_WARN("failed to print", K(ret));
   } else {
     res_datum.set_string(res_str);
   }

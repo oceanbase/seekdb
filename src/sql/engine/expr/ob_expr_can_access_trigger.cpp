@@ -53,7 +53,9 @@ int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
                                            ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
+  bool need_check = false;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObDatum &database_name = expr.locate_param_datum(ctx, 0);
     ObDatum &table_name = expr.locate_param_datum(ctx, 1);
@@ -62,8 +64,13 @@ int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
     ObSessionPrivInfo session_priv;
     if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
-    } else {
+      LOG_WARN("session is NULL", K(ret));
+    } else if (OB_FAIL(session->check_feature_enable(
+              ObCompatFeatureType::MYSQL_TRIGGER_PRIV_CHECK, need_check))) {
+      LOG_WARN("failed to check feature enable", K(ret));
+    } else if (need_check) {
       if (OB_FAIL(session->get_session_priv_info(session_priv))) {
+        LOG_WARN("faile to get session priv info", K(ret));
       } else {
         ObNeedPriv need_priv;
         need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
@@ -74,6 +81,7 @@ int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
         ctx.exec_ctx_.get_sql_ctx()->schema_guard_;
         if (OB_ISNULL(schema_guard)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("schema guard is NULL", K(ret));
         } else {
           OZ (schema_guard->check_single_table_priv(session_priv, session->get_enable_role_array(), need_priv), K(need_priv), K(ret));
           if(OB_ERR_NO_TABLE_PRIVILEGE == ret) {

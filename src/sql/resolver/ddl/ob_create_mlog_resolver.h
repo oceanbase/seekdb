@@ -1,0 +1,78 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_CREATE_MLOG_RESOLVER_H_
+#define OB_CREATE_MLOG_RESOLVER_H_
+
+#include "sql/resolver/ddl/ob_ddl_resolver.h"
+#include "sql/resolver/ddl/ob_create_mlog_stmt.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObCreateMLogStmt;
+class ObCreateMLogResolver : public ObDDLResolver
+{
+public:
+  explicit ObCreateMLogResolver(ObResolverParams &params);
+  virtual ~ObCreateMLogResolver() {}
+  virtual int resolve(const ParseNode &parse_tree);
+
+protected:
+  int fill_session_info_into_arg(const sql::ObSQLSessionInfo &session,
+                                 ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_table_name_node(ParseNode *table_name_node,
+                              ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_table_option_node(ParseNode *table_option_node,
+                                ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_with_option_node(ParseNode *with_option_node,
+                               ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_special_columns_node(ParseNode *special_columns_node,
+                                   ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_special_column_node(ParseNode *special_column_node,
+                                  ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_reference_columns_node(ParseNode *ref_columns_node,
+                                  ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_reference_column_node(ParseNode *ref_column_node,
+                                ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_new_values_node(ParseNode *new_values_node,
+                              ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_purge_node(ParseNode *purge_node,
+                         ObCreateMLogStmt &create_mlog_stmt);
+  int resolve_purge_start_next_node(ParseNode *purge_start_node,
+                                    ParseNode *purge_next_node,
+                                    ObCreateMLogStmt &create_mlog_stmt);
+
+private:
+  bool is_column_exists(ObIArray<ObString> &column_name_array, const ObString &column_name);
+
+private:
+  enum ParameterEnum {
+    ENUM_TABLE_NAME = 0,
+    ENUM_OPT_TABLE_OPTIONS,
+    ENUM_OPT_WITH,
+    ENUM_OPT_NEW_VALUES,
+    ENUM_OPT_PURGE,
+    ENUM_TOTAL_COUNT
+  };
+  bool is_table_with_logic_pk_;
+  DISALLOW_COPY_AND_ASSIGN(ObCreateMLogResolver);
+};
+} // sql
+} // oceanbase
+
+#endif // OB_CREATE_MLOG_RESOLVER_H_

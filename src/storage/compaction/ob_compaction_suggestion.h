@@ -17,7 +17,7 @@
 #ifndef SRC_STORAGE_COMPACTION_OB_COMPACTION_SUGGESTION_H_
 #define SRC_STORAGE_COMPACTION_OB_COMPACTION_SUGGESTION_H_
 
-#include "data_plane/scheduler/ob_dag_scheduler_config.h"
+#include "observer/scheduler/ob_dag_scheduler_config.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/utility/ob_print_utils.h"
@@ -152,15 +152,17 @@ struct ObCompactionSuggestion
 {
   ObCompactionSuggestion()
     : merge_type_(compaction::INVALID_MERGE_TYPE),
+      ls_id_(0),
       tablet_id_(0),
       merge_start_time_(0),
       merge_finish_time_(0),
       suggestion_()
     {}
-  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(tablet_id), K_(merge_start_time),
+  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(ls_id), K_(tablet_id), K_(merge_start_time),
       K_(merge_finish_time), K_(suggestion));
 
   compaction::ObMergeType merge_type_;
+  int64_t ls_id_;
   int64_t tablet_id_;
   int64_t merge_start_time_;
   int64_t merge_finish_time_;
@@ -211,7 +213,7 @@ public:
     DAG_COST_LONGTIME,
     MAX_REASON
   };
-  static int server_module_init(ObCompactionSuggestionMgr *&compaction_suggestion_mgr);
+  static int mtl_init(ObCompactionSuggestionMgr *&compaction_suggestion_mgr);
   ObCompactionSuggestionMgr()
     : is_inited_(false),
       click_time_(ObTimeUtility::fast_current_time()),
@@ -393,6 +395,7 @@ int ObInfoRingArray<T>::get_list(ObIArray<T> &input_array)
   SpinRLockGuard guard(lock_);
   for (int i = 0; OB_SUCC(ret) && i < size(); ++i) {
     if (OB_FAIL(input_array.push_back(array_[i]))) {
+      STORAGE_LOG(WARN, "failed to push into input array", K(ret), K(i), K(array_[i]));
     }
   }
   return ret;

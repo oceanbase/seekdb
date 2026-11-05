@@ -15,8 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_data_table.h"
-#include "share/rc/ob_server_runtime.h"
-#include "storage/ls/ob_ls.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -27,10 +26,10 @@ namespace observer {
 
 ObAllVirtualTxDataTable::ObAllVirtualTxDataTable()
     : ObVirtualTableScannerIterator(),
+      addr_(),
       memtable_array_pos_(-1),
       sstable_array_pos_(-1),
-      ls_(nullptr),
-      tables_loaded_(false),
+      ls_iter_guard_(),
       tablet_handle_(),
       table_store_wrapper_(),
       mgr_handle_(),
@@ -46,10 +45,8 @@ ObAllVirtualTxDataTable::~ObAllVirtualTxDataTable()
 void ObAllVirtualTxDataTable::reset()
 {
   mgr_handle_.reset();
-  ls_ = nullptr;
-  tables_loaded_ = false;
-  memtable_array_pos_ = -1;
-  sstable_array_pos_ = -1;
+  ls_iter_guard_.reset();
+  addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -64,6 +61,9 @@ int ObAllVirtualTxDataTable::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be nullptr", K(allocator_), KR(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
+  } else if (ls_iter_guard_.get_ptr() == nullptr &&
+             OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+    SERVER_LOG(WARN, "get_ls_iter fail", KR(ret));
   } else if (OB_FAIL(get_next_tx_data_table_(tx_data_table))) {
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "get next tx data table failed", KR(ret));
@@ -72,6 +72,7 @@ int ObAllVirtualTxDataTable::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "tx_data_table shouldn't nullptr here", KR(ret), KP(tx_data_table));
   } else if (OB_FAIL(prepare_row_data_(tx_data_table, row_data))) {
+    SERVER_LOG(WARN, "prepare_row_data_ fail", KR(ret), KP(tx_data_table));
   } else {
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
@@ -118,7 +119,11 @@ int ObAllVirtualTxDataTable::get_next_tx_data_table_(ObITable *&tx_data_table)
 {
   int ret = OB_SUCCESS;
 
-  if (!tables_loaded_) {
+  // memtable_array_pos_ < 0 && sstable_array_pos_ < 0 means all the tx data memtables of this logstream have been
+  // disposed or the first time get_next_tx_data_memtable() is invoked,  when get_next_tx_data_table_ is invoked the
+  // first time, memtable_array_pos_ and memtable_array_.count() are both -1
+  while (OB_SUCC(ret) && memtable_array_pos_ < 0 && sstable_array_pos_ < 0) {
+    ObLS *ls = nullptr;
     ObTablet *tablet = nullptr;
     ObIMemtableMgr *memtable_mgr = nullptr;
     memtable_handles_.reset();
@@ -127,20 +132,20 @@ int ObAllVirtualTxDataTable::get_next_tx_data_table_(ObITable *&tx_data_table)
     mgr_handle_.reset();
     table_store_wrapper_.reset();
 
-    auto *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
-    if (OB_ISNULL(ls_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ls service is null", KR(ret));
-    } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ls_->get_tablet_svr()->get_tx_data_memtable_mgr(mgr_handle_))) {
+    if (OB_FAIL(ls_iter_guard_->get_next(ls))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "fail to get next logstream", KR(ret));
+      }
+    } else if (OB_FAIL(ls->get_tablet_svr()->get_tx_data_memtable_mgr(mgr_handle_))) {
+      SERVER_LOG(WARN, "fail to get tx data memtable mgr.", KR(ret));
     } else if (FALSE_IT(memtable_mgr = mgr_handle_.get_memtable_mgr())) {
     } else if (OB_FAIL(memtable_mgr->get_all_memtables(memtable_handles_))) {
-    } else if (OB_FAIL(ls_->get_tablet_svr()->get_tablet(LS_TX_DATA_TABLET, tablet_handle_))) {
+      SERVER_LOG(WARN, "fail to get all memtables for log stream", KR(ret));
+    } else if (OB_FAIL(ls->get_tablet_svr()->get_tablet(LS_TX_DATA_TABLET, tablet_handle_))) {
+      SERVER_LOG(WARN, "fail to get tx data tablet", KR(ret));
     } else if (FALSE_IT(tablet = tablet_handle_.get_obj())) {
     } else if (OB_FAIL(tablet->fetch_table_store(table_store_wrapper_))) {
+      SERVER_LOG(WARN, "fail to fetch table store", K(ret));
     } else {
       const ObSSTableArray &minor_tables = table_store_wrapper_.get_member()->get_minor_sstables();
       for (int64_t i = 0; OB_SUCC(ret) && i < minor_tables.count(); ++i) {
@@ -148,6 +153,7 @@ int ObAllVirtualTxDataTable::get_next_tx_data_table_(ObITable *&tx_data_table)
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "get unexpected null sstable", KR(ret));
         } else if (OB_FAIL(sstable_handles_.push_back(minor_tables[i]))) {
+          SERVER_LOG(WARN, "fail to add sstable", KR(ret));
         }
       }
     }
@@ -157,19 +163,15 @@ int ObAllVirtualTxDataTable::get_next_tx_data_table_(ObITable *&tx_data_table)
       memtable_array_pos_ = memtable_handles_.count() - 1;
       // iterate from the newest sstable in sstable handles
       sstable_array_pos_ = sstable_handles_.count() - 1;
-      tables_loaded_ = true;
       if (memtable_array_pos_ < 0 && sstable_array_pos_ < 0) {
         SERVER_LOG(INFO,
-                   "transaction data tables are empty",
+                   "empty logstream. may be offlined",
                    KR(ret),
+                   K(addr_),
                    K(memtable_array_pos_),
                    K(sstable_array_pos_));
       }
     }
-  }
-
-  if (OB_SUCC(ret) && memtable_array_pos_ < 0 && sstable_array_pos_ < 0) {
-    ret = OB_ITER_END;
   }
 
   if (OB_FAIL(ret)) {
@@ -197,6 +199,7 @@ int ObAllVirtualTxDataTable::prepare_row_data_(ObITable *tx_data_table, RowData 
     ObSSTable *tx_data_sstable = static_cast<ObSSTable *>(tx_data_table);
     ObSSTableMetaHandle sstable_meta_hdl;
     if (OB_FAIL(tx_data_sstable->get_meta(sstable_meta_hdl))) {
+      STORAGE_LOG(WARN, "fail to get sstable meta handle", K(ret), KPC(tx_data_sstable));
     } else {
       row_data.state_ = ObITable::get_table_type_name(tx_data_table->get_key().table_type_);
       row_data.tx_data_count_ = sstable_meta_hdl.get_sstable_meta().get_row_count();

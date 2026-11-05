@@ -1,0 +1,107 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#pragma once
+
+#include "common/ob_tablet_id.h"
+#include "storage/direct_load/ob_direct_load_i_table.h"
+#include "storage/direct_load/ob_direct_load_multiple_datum_row.h"
+#include "storage/direct_load/ob_direct_load_sstable_data_block_writer.h"
+#include "storage/direct_load/ob_direct_load_sstable_index_block_writer.h"
+#include "storage/direct_load/ob_direct_load_table_data_desc.h"
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObDirectLoadTmpFileManager;
+
+struct ObDirectLoadMultipleSSTableBuildParam
+{
+public:
+  ObDirectLoadMultipleSSTableBuildParam();
+  ~ObDirectLoadMultipleSSTableBuildParam();
+  bool is_valid() const;
+  TO_STRING_KV(K_(tablet_id), K_(table_data_desc), KP_(datum_utils), KP_(file_mgr));
+public:
+  common::ObTabletID tablet_id_;
+  ObDirectLoadTableDataDesc table_data_desc_;
+  const blocksstable::ObStorageDatumUtils *datum_utils_;
+  ObDirectLoadTmpFileManager *file_mgr_;
+  char *extra_buf_;
+  int64_t extra_buf_size_;
+};
+
+class ObDirectLoadMultipleSSTableBuilder : public ObIDirectLoadPartitionTableBuilder
+{
+  typedef ObDirectLoadMultipleDatumRowkey RowkeyType;
+  typedef ObDirectLoadMultipleDatumRow RowType;
+public:
+  ObDirectLoadMultipleSSTableBuilder();
+  virtual ~ObDirectLoadMultipleSSTableBuilder();
+  int init(const ObDirectLoadMultipleSSTableBuildParam &param);
+  int append_row(const common::ObTabletID &tablet_id,
+                 const ObDirectLoadDatumRow &datum_row) override;
+  int append_row(const RowType &row);
+  int close() override;
+  int64_t get_row_count() const override { return data_block_writer_.get_item_count(); }
+  int get_tables(ObDirectLoadTableHandleArray &table_array,
+                 ObDirectLoadTableManager *table_manager) override;
+private:
+  int check_rowkey_order(const RowkeyType &rowkey) const;
+  int save_rowkey(const RowkeyType &rowkey);
+private:
+  class DataBlockFlushCallback : public ObIDirectLoadDataBlockFlushCallback
+  {
+  public:
+    DataBlockFlushCallback();
+    virtual ~DataBlockFlushCallback();
+    int init(ObDirectLoadSSTableIndexBlockWriter *index_block_writer,
+             ObDirectLoadSSTableDataBlockWriter<RowType> *data_block_writer,
+             ObDirectLoadSSTableDataBlockWriter<RowkeyType> *rowkey_block_writer,
+             const int64_t data_block_count_per_rowkey,
+             const bool need_write_rowkey);
+    int write(char *buf, int64_t buf_size, int64_t offset) override;
+    void mark_close() { is_mark_close_ = true; }
+  private:
+    ObDirectLoadSSTableIndexBlockWriter *index_block_writer_;
+    ObDirectLoadSSTableDataBlockWriter<RowType> *data_block_writer_;
+    ObDirectLoadSSTableDataBlockWriter<RowkeyType> *rowkey_block_writer_;
+    int64_t data_block_count_per_rowkey_;
+    int64_t data_block_count_;
+    bool need_write_rowkey_;
+    bool is_mark_close_;
+    bool is_inited_;
+  };
+private:
+  common::ObArenaAllocator allocator_;
+  ObDirectLoadMultipleSSTableBuildParam param_;
+  RowType row_;
+  RowkeyType first_rowkey_;
+  RowkeyType last_rowkey_;
+  common::ObArenaAllocator last_rowkey_allocator_;
+  ObDirectLoadTmpFileHandle index_file_handle_;
+  ObDirectLoadTmpFileHandle data_file_handle_;
+  ObDirectLoadTmpFileHandle rowkey_file_handle_;
+  ObDirectLoadSSTableIndexBlockWriter index_block_writer_;
+  ObDirectLoadSSTableDataBlockWriter<RowType> data_block_writer_;
+  ObDirectLoadSSTableDataBlockWriter<RowkeyType> rowkey_block_writer_;
+  DataBlockFlushCallback callback_;
+  bool is_closed_;
+  bool is_inited_;
+};
+
+} // namespace storage
+} // namespace oceanbase

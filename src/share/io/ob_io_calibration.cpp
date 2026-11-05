@@ -18,8 +18,6 @@
 
 
 #include "ob_io_calibration.h"
-#include "lib/utility/ob_sort.h"
-#include "share/config/ob_config_helper.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -140,6 +138,7 @@ int ObIOAbility::assign(const ObIOAbility &other)
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < static_cast<int>(ObIOMode::MAX_MODE); ++i) {
     if (OB_FAIL(measure_items_[i].assign(other.measure_items_[i]))) {
+      LOG_WARN("assign measure items failed", K(ret), K(other));
     }
   }
   return ret;
@@ -173,7 +172,9 @@ int ObIOAbility::add_measure_item(const ObIOBenchResult &item)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!item.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(item));
   } else if (OB_FAIL(measure_items_[static_cast<int>(item.mode_)].push_back(item))) {
+    LOG_WARN("push back measure_items failed", K(ret), K(item));
   } else {
     lib::ob_sort(measure_items_[static_cast<int>(item.mode_)].begin(), measure_items_[static_cast<int>(item.mode_)].end(),
               sort_fn);
@@ -199,7 +200,9 @@ int ObIOAbility::get_iops(const ObIOMode mode, const int64_t size, double &iops)
   int64_t found_item_idx = -1;
   if (OB_UNLIKELY(mode < ObIOMode::READ || mode >= ObIOMode::MAX_MODE || size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(mode), K(size));
   } else if (OB_FAIL(find_item(mode, size, found_item_idx))) {
+    LOG_WARN("find measure item failed", K(ret), K(mode), K(size));
   } else if (OB_UNLIKELY(found_item_idx < 0)) {
     // there is no measure item of bigger size, assume fixed bandwith
     const ObIOBenchResult &tail_item = measure_items_[static_cast<int>(mode)].at(measure_items_[static_cast<int>(mode)].count() - 1);
@@ -215,8 +218,10 @@ int ObIOAbility::get_iops(const ObIOMode mode, const int64_t size, double &iops)
       const int64_t step_size = found_item.size_ - prev_item.size_;
       if (0 == step_size) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected io ability", K(ret), K(prev_item), K(found_item));
       } else {
         iops = prev_item.iops_ + step_iops * (((size - prev_item.size_) * 1.0) / step_size);
+        LOG_DEBUG("get iops", K(iops), K(prev_item), K(found_item));
       }
     }
   }
@@ -229,7 +234,9 @@ int ObIOAbility::get_rt(const ObIOMode mode, const int64_t size, double &rt_us) 
   int64_t found_item_idx = -1;
   if (OB_UNLIKELY(mode < ObIOMode::READ || mode >= ObIOMode::MAX_MODE || size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(mode), K(size));
   } else if (OB_FAIL(find_item(mode, size, found_item_idx))) {
+    LOG_WARN("find measure item failed", K(ret), K(mode), K(size));
   } else if (OB_UNLIKELY(found_item_idx < 0)) {
     // there is no measure item of bigger size, assume linear growth for rt
     const ObIOBenchResult &tail_item = measure_items_[static_cast<int>(mode)].at(measure_items_[static_cast<int>(mode)].count() - 1);
@@ -260,6 +267,7 @@ int ObIOAbility::find_item(const ObIOMode mode, const int64_t size, int64_t &ite
   const MeasureItemArray &item_array = measure_items_[static_cast<int>(mode)];
   if (OB_UNLIKELY(item_array.count() <= 0)) {
     ret = OB_ERR_SYS;
+    LOG_WARN("invalid measure_items", K(ret), K(mode), K(item_array.count()));
   } else {
     MeasureItemArray::const_iterator found_it = std::lower_bound(item_array.begin(), item_array.end(), size,
                                                                  bound_fn);
@@ -272,14 +280,175 @@ int ObIOAbility::find_item(const ObIOMode mode, const int64_t size, int64_t &ite
   return ret;
 }
 
+/******************             IOBenchRunner              **********************/
+
+ObIOBenchRunner::ObIOBenchRunner()
+  : is_inited_(false),
+    block_handles_(),
+    load_(),
+    tg_id_(-1),
+    io_count_(0),
+    rt_us_(0),
+    write_buf_(nullptr),
+    read_buf_(nullptr),
+    block_count_(0)
+{
+
+}
+
+ObIOBenchRunner::~ObIOBenchRunner()
+{
+  destroy();
+}
+
+// moved definition to storage/blocksstable/ob_block_manager.cpp(disk benchmark, block_mgr real user)
+
+int ObIOBenchRunner::do_benchmark(const ObIOBenchLoad &load, const int64_t thread_count, ObIOBenchResult &result)
+{
+  int ret = OB_SUCCESS;
+  result.reset();
+  const int64_t BENCHMARK_TIMEOUT_S = 5L; // 5s
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret), K(is_inited_));
+  } else if (OB_UNLIKELY(!load.is_valid() || thread_count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(load), K(thread_count));
+  } else {
+    load_ = load;
+    io_count_ = 0;
+    rt_us_ = 0;
+    if (OB_FAIL(TG_CREATE(TGDefIDs::IO_BENCHMARK, tg_id_))) {
+      LOG_WARN("create thread group failed", K(ret));
+    } else if (OB_FAIL(TG_SET_RUNNABLE(tg_id_, *this))) {
+      LOG_WARN("set tg_runnable failed", K(ret), K(tg_id_));
+    } else if (OB_FAIL(TG_SET_THREAD_CNT(tg_id_, thread_count))) {
+      LOG_WARN("set thread count failed", K(ret), K(thread_count));
+    } else if (OB_FAIL(TG_START(tg_id_))) {
+      LOG_WARN("start thread failed", K(ret));
+    } else {
+#ifdef _WIN32
+      Sleep(static_cast<DWORD>(BENCHMARK_TIMEOUT_S * 1000));
+#else
+      sleep(BENCHMARK_TIMEOUT_S);
+#endif
+      TG_STOP(tg_id_);
+      TG_WAIT(tg_id_);
+      TG_DESTROY(tg_id_);
+      tg_id_ = -1;
+      if (io_count_ <= 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid io count", K(ret), K(io_count_));
+      } else {
+        result.mode_ = load_.mode_;
+        result.size_ = load_.size_;
+        result.iops_ = io_count_ / BENCHMARK_TIMEOUT_S;
+        result.rt_us_ = rt_us_ / io_count_;
+
+      }
+      LOG_INFO("IO BENCHMARK finished", K(ret), K_(load), K(result));
+    }
+  }
+  return ret;
+}
+
+void ObIOBenchRunner::destroy()
+{
+  if (tg_id_ >= 0) {
+    TG_STOP(tg_id_);
+    TG_WAIT(tg_id_);
+    TG_DESTROY(tg_id_);
+    tg_id_ = -1;
+  }
+  if (nullptr != write_buf_) {
+    ob_free(write_buf_);
+    write_buf_ = nullptr;
+  }
+  if (nullptr != read_buf_) {
+    ob_free(read_buf_);
+    read_buf_ = nullptr;
+  }
+  is_inited_ = false;
+  block_handles_.reset();
+  load_.reset();
+  io_count_ = 0;
+  rt_us_ = 0;
+}
+
+// moved definition to storage/blocksstable/ob_block_manager.cpp(disk benchmark, block_mgr real user)
+
+/******************             IOBenchController              **********************/
+
+ObIOBenchController::ObIOBenchController()
+  : tg_id_(-1), running_mutex_(), start_ts_(0), finish_ts_(0), ret_code_(OB_SUCCESS)
+{
+
+}
+
+ObIOBenchController::~ObIOBenchController()
+{
+  if (tg_id_ >= 0) {
+    TG_STOP(tg_id_);
+    TG_WAIT(tg_id_);
+    TG_DESTROY(tg_id_);
+    tg_id_ = -1;
+  }
+}
+
+int ObIOBenchController::start_io_bench()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(running_mutex_.trylock())) {
+    if (OB_UNLIKELY(OB_EAGAIN != ret)) {
+      LOG_WARN("try lock failed", K(ret));
+    } else {
+      // benchmark is running, ignore this request
+      ret = OB_SUCCESS;
+    }
+  } else {
+    if (-1 != tg_id_) {
+      TG_STOP(tg_id_);
+      TG_WAIT(tg_id_);
+      TG_DESTROY(tg_id_);
+      tg_id_ = -1;
+    }
+    if (OB_FAIL(TG_CREATE(TGDefIDs::IO_BENCHMARK, tg_id_))) {
+      LOG_WARN("create tg failed", K(ret));
+    } else if (OB_FAIL(TG_SET_RUNNABLE_AND_START(tg_id_, *this))) {
+      LOG_WARN("start thread failed", K(ret), K(tg_id_));
+    }
+    int tmp_ret = running_mutex_.unlock();
+    if (OB_UNLIKELY(OB_SUCCESS != tmp_ret)) {
+      LOG_WARN("unlock running_mutex failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+// moved definition to storage/blocksstable/ob_block_manager.cpp(disk benchmark, block_mgr real user)
+
+int64_t ObIOBenchController::get_start_timestamp()
+{
+  return start_ts_;
+}
+
+int64_t ObIOBenchController::get_finish_timestamp()
+{
+  return finish_ts_;
+}
+
+int ObIOBenchController::get_ret_code()
+{
+  return ret_code_;
+}
+
 /******************             IOCalibration              **********************/
 
 ObIOCalibration::ObIOCalibration()
   : is_inited_(false),
     baseline_iops_(0),
     io_ability_(),
-    lock_(),
-    benchmark_controller_(nullptr)
+    lock_()
 {
 }
 
@@ -294,13 +463,13 @@ ObIOCalibration &ObIOCalibration::get_instance()
   return instance;
 }
 
-int ObIOCalibration::init(ObIIOBenchController &benchmark_controller)
+int ObIOCalibration::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("io calibration init twice", K(ret), K(is_inited_));
   } else {
-    benchmark_controller_ = &benchmark_controller;
     is_inited_ = true;
   }
   if (OB_UNLIKELY(!is_inited_)) {
@@ -314,7 +483,6 @@ void ObIOCalibration::destroy()
   is_inited_ = false;
   baseline_iops_ = 0;
   io_ability_.reset();
-  benchmark_controller_ = nullptr;
 }
 
 int ObIOCalibration::update_io_ability(const ObIOAbility &io_ability)
@@ -323,14 +491,19 @@ int ObIOCalibration::update_io_ability(const ObIOAbility &io_ability)
   double tmp_baseline_iops = baseline_iops_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("io calibration not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!io_ability.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(io_ability));
   } else if (OB_FAIL(io_ability.get_iops(BASELINE_IO_MODE, BASELINE_IO_SIZE, tmp_baseline_iops))) {
+    LOG_WARN("get baseline iops failed", K(ret));
   } else if (tmp_baseline_iops < std::numeric_limits<double>::epsilon()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid baseline iops", K(ret), K(tmp_baseline_iops));
   } else {
     DRWLock::WRLockGuard guard(lock_);
     if (OB_FAIL(io_ability_.assign(io_ability))) {
+      LOG_WARN("assign io ability failed", K(ret));
     } else {
       baseline_iops_ = tmp_baseline_iops;
     }
@@ -344,6 +517,7 @@ int ObIOCalibration::reset_io_ability()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("io calibration not init", K(ret), K(is_inited_));
   } else {
     DRWLock::WRLockGuard guard(lock_);
     io_ability_.reset();
@@ -356,9 +530,11 @@ int ObIOCalibration::get_io_ability(ObIOAbility &io_ability)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("io calibration not init", K(ret), K(is_inited_));
   } else {
     DRWLock::RDLockGuard guard(lock_);
     if (OB_FAIL(io_ability.assign(io_ability_))) {
+      LOG_WARN("assign io ability failed", K(ret), K(io_ability_));
     }
   }
   return ret;
@@ -383,6 +559,7 @@ void ObIOCalibration::get_iops_scale(const ObIOMode mode, const int64_t size, do
     } else {
       double iops = 0;
       if (OB_FAIL(io_ability_.get_iops(mode, size, iops))) {
+        LOG_WARN("get iops failed", K(ret), K(mode), K(size));
       } else {
         iops_scale = iops / baseline_iops_;
         is_io_ability_valid = true;
@@ -396,8 +573,10 @@ int ObIOCalibration::refresh(const bool only_refresh, const ObIArray<ObIOBenchRe
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("io calibration not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(only_refresh && items.count() > 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(only_refresh), K(items.count()));
   } else if (only_refresh) {
     // no-op: persistence path is removed.
   } else if (items.count() > 0) {
@@ -405,21 +584,26 @@ int ObIOCalibration::refresh(const bool only_refresh, const ObIArray<ObIOBenchRe
     for (int64_t i = 0; OB_SUCC(ret) && i < items.count(); ++i) {
       const ObIOBenchResult &item = items.at(i);
       if (OB_FAIL(io_ability.add_measure_item(item))) {
+        LOG_WARN("add item failed", K(ret), K(i), K(item));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(!io_ability.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid argument", K(ret), K(io_ability));
       } else if (OB_FAIL(update_io_ability(io_ability))) {
+        LOG_WARN("update io ability failed", K(ret), K(io_ability));
       }
     }
   } else {
     if (OB_FAIL(reset_io_ability())) {
+      LOG_WARN("reset io ability failed", K(ret));
     }
   }
   ObIOAbility io_ability;
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = ObIOCalibration::get_instance().get_io_ability(io_ability))) {
+    LOG_WARN("get io ability failed", KR(tmp_ret));
   }
   LOG_INFO("refresh io calibration", K(ret), K(only_refresh), K(items), K(io_ability));
   return ret;
@@ -428,9 +612,8 @@ int ObIOCalibration::refresh(const bool only_refresh, const ObIArray<ObIOBenchRe
 int ObIOCalibration::execute_benchmark()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(benchmark_controller_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(benchmark_controller_->start_io_bench())) {
+  if (OB_FAIL(benchmark_controller_.start_io_bench())) {
+    LOG_WARN("start io benchmark failed", K(ret));
   }
   return ret;
 }
@@ -438,11 +621,9 @@ int ObIOCalibration::execute_benchmark()
 int ObIOCalibration::get_benchmark_status(int64_t &start_ts, int64_t &finish_ts, int &ret_code)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(benchmark_controller_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(benchmark_controller_->get_benchmark_status(
-                 start_ts, finish_ts, ret_code))) {
-  }
+  start_ts = benchmark_controller_.get_start_timestamp();
+  finish_ts = benchmark_controller_.get_finish_timestamp();
+  ret_code = benchmark_controller_.get_ret_code();
   return ret;
 }
 
@@ -458,6 +639,7 @@ int ObIOCalibration::parse_calibration_string(const ObString &calibration_string
   if (OB_UNLIKELY(calibration_string.empty()
         || calibration_string.length() >= MAX_IO_CALIBRAITON_STRING_LENGTH)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("calibration string is empty", K(ret), K(calibration_string));
   } else {
     // duplicate and replace ':' with ' '
     char dup_str[MAX_IO_CALIBRAITON_STRING_LENGTH] = { 0 };
@@ -470,22 +652,28 @@ int ObIOCalibration::parse_calibration_string(const ObString &calibration_string
     int scan_ret = sscanf(dup_str, "%s %s %s %lf", mode_str, size_str, latency_str, &item.iops_);
     if (OB_UNLIKELY(4 != scan_ret)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(scan_ret), K(calibration_string));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (item.iops_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid iops string", K(ret), K(calibration_string), K(item.iops_));
   } else if (FALSE_IT(item.mode_ = get_io_mode_enum(mode_str))) {
   } else if (item.mode_ >= ObIOMode::MAX_MODE) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid mode name", K(ret), K(mode_str), K(item.mode_));
   } else if (FALSE_IT(item.size_ = ObConfigCapacityParser::get(size_str, is_valid))) {
   } else if (!is_valid) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid size string", K(ret), K(calibration_string), K(size_str));
   } else if (FALSE_IT(item.rt_us_ = ObConfigTimeParser::get(latency_str, is_valid))) {
   } else if (!is_valid) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid latency string", K(ret), K(calibration_string), K(latency_str));
   } else if (!item.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(calibration_string), K(item));
   }
   return ret;
 }

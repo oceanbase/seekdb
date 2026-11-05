@@ -16,16 +16,16 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "share/ob_server_struct.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_checkpoint_slog_handler.h"
-#include "lib/utility/ob_smart_var.h"
-#include "storage/api/storage/runtime/ob_i_server_runtime.h"
-#include "storage/blocksstable/ob_block_manager.h"
-#include "storage/slog/ob_storage_log.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
+#include "storage/blocksstable/ob_block_manager.h"  // OB_SERVER_BLOCK_MGR, previously hidden behind a transitive include
+#include "share/rc/ob_module_provider.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_reader.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_writer.h"
-#include "share/ob_structured_event_logger.h"
+#include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "observer/omt/ob_tenant.h"
+#include "observer/ob_server_event_history_table_operator.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 
 namespace oceanbase
@@ -39,9 +39,10 @@ using namespace oceanbase::blocksstable;
 void ObServerCheckpointSlogHandler::ObWriteCheckpointTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  ObCurTraceId::init(GCTX.self_addr());
+  ObCurTraceId::init(GCONF.self_addr_);
   if (SERVER_STORAGE_META_SERVICE.is_started()) {
     if (OB_FAIL(handler_->write_checkpoint(false/*is_force*/))) {
+      LOG_WARN("fail to write checkpoint", K(ret));
     }
   } else {
     // Must wait for all slog replays to complete before doing ckpt, otherwise some macro blocks may not be marked
@@ -53,31 +54,31 @@ ObServerCheckpointSlogHandler::ObServerCheckpointSlogHandler()
   : is_inited_(false),
     is_writing_checkpoint_(false),
     server_slogger_(nullptr),
-    server_runtime_(nullptr),
     lock_(common::ObLatchIds::SLOG_CKPT_LOCK),
     server_meta_block_handle_(),
     write_ckpt_task_(this),
     task_timer_(),
-    runtime_meta_for_replay_(),
-    runtime_meta_valid_for_replay_(false)
+    tenant_meta_for_replay_(),
+    tenant_meta_valid_for_replay_(false)
 {
 }
 
-int ObServerCheckpointSlogHandler::init(
-    ObStorageLogger *server_slogger, ObIServerRuntime &server_runtime)
+int ObServerCheckpointSlogHandler::init(ObStorageLogger *server_slogger)
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObServerCheckpointSlogHandler has inited", K(ret));
-  } else if (OB_FAIL(task_timer_.set_run_wrapper_with_ret(share::server_runtime()))) {
+  } else if (OB_FAIL(task_timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
+    LOG_WARN("fail to set timer's run wrapper", K(ret));
   } else if (OB_FAIL(task_timer_.init("ServerCkptSlogHandler"))) {
+    LOG_WARN("fail to init task timer", K(ret));
   } else if (OB_FAIL(task_timer_.schedule(write_ckpt_task_,
       ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true /*repeate*/))) {
+    LOG_WARN("fail to schedule write checkpoint task", K(ret));
   } else {
     server_slogger_ = server_slogger;
-    server_runtime_ = &server_runtime;
     is_inited_ = true;
   }
   return ret;
@@ -88,7 +89,9 @@ int ObServerCheckpointSlogHandler::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(task_timer_.start())) {
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(task_timer_.start())) { // start checkpoint task after finsh replay slog
+    LOG_WARN("fail to start task timer", K(ret));
   }
   return ret;
 }
@@ -101,44 +104,51 @@ int ObServerCheckpointSlogHandler::start_replay()
   ObLogCursor replay_finish_point;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!super_block.is_valid())) {
     ret = OB_ERR_SYS;
+    LOG_WARN("super block is invalid", K(ret), K(super_block));
   } else {
-    runtime_meta_for_replay_ = omt::ObServerRuntimeMeta();
-    runtime_meta_valid_for_replay_ = false;
+    tenant_meta_for_replay_ = omt::ObTenantMeta();
+    tenant_meta_valid_for_replay_ = false;
 
     if (OB_FAIL(read_checkpoint(super_block))) {
+      LOG_WARN("fail to read_checkpoint", K(ret));
     } else if (OB_FAIL(replay_server_slog(super_block.body_.replay_start_point_, replay_finish_point))) {
+      LOG_WARN("fail to replay_sever_slog", K(ret), K(super_block));
     } else if (OB_FAIL(server_slogger_->start_log(replay_finish_point))) {
+      LOG_WARN("fail to start slog", K(ret));
     }
   }
   return ret;
 }
 
 void ObServerCheckpointSlogHandler::get_replay_result(
-    omt::ObServerRuntimeMeta &runtime_meta, bool &is_valid) const
+    omt::ObTenantMeta &tenant_meta, bool &is_valid) const
 {
-  is_valid = runtime_meta_valid_for_replay_;
-  if (runtime_meta_valid_for_replay_) {
-    runtime_meta = runtime_meta_for_replay_;
+  is_valid = tenant_meta_valid_for_replay_;
+  if (tenant_meta_valid_for_replay_) {
+    tenant_meta = tenant_meta_for_replay_;
   }
 }
 
-int ObServerCheckpointSlogHandler::get_replay_runtime_meta_(omt::ObServerRuntimeMeta &meta) const
+// Single sys slot get, preserve map's OB_HASH_NOT_EXIST
+int ObServerCheckpointSlogHandler::get_replay_tenant_meta_(omt::ObTenantMeta &meta) const
 {
   int ret = OB_SUCCESS;
-  if (!runtime_meta_valid_for_replay_) {
+  if (!tenant_meta_valid_for_replay_) {
     ret = OB_HASH_NOT_EXIST;
   } else {
-    meta = runtime_meta_for_replay_;
+    meta = tenant_meta_for_replay_;
   }
   return ret;
 }
 
-int ObServerCheckpointSlogHandler::set_replay_runtime_meta_(const omt::ObServerRuntimeMeta &meta)
+// Single sys slot set (cover), valid becomes true
+int ObServerCheckpointSlogHandler::set_replay_tenant_meta_(const omt::ObTenantMeta &meta)
 {
-  runtime_meta_for_replay_ = meta;
-  runtime_meta_valid_for_replay_ = true;
+  tenant_meta_for_replay_ = meta;
+  tenant_meta_valid_for_replay_ = true;
   return OB_SUCCESS;
 }
 
@@ -147,9 +157,13 @@ int ObServerCheckpointSlogHandler::do_post_replay_work()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) {
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) { // mark must after finish replay slog
+    LOG_WARN("fail to first mark device", K(ret));
+  } else if (OB_FAIL(try_write_checkpoint_for_compat())) {
+    LOG_WARN("fail to try write checkpoint for compat", K(ret));
   } else {
-    runtime_meta_valid_for_replay_ = false;
+    tenant_meta_valid_for_replay_ = false;
   }
   return ret;
 }
@@ -170,15 +184,59 @@ void ObServerCheckpointSlogHandler::destroy()
   task_timer_.destroy();
 }
 
+int ObServerCheckpointSlogHandler::try_write_checkpoint_for_compat()
+{
+  int ret = OB_SUCCESS;
+  omt::ObTenantMeta meta;
+  bool exist = false;
+  omt::ObMultiTenant *omt = GCTX.omt_;
+  if (OB_ISNULL(omt)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, omt is nullptr", K(ret));
+  } else if (OB_FAIL(omt->get_tenant_meta_for_ckpt(meta, exist))) {
+    LOG_WARN("fail to get tenant meta", K(ret), KP(omt));
+  } else {
+    bool need_svr_ckpt = false;
+    if (exist && meta.super_block_.is_old_version()) {
+      ObTenantSuperBlock &super_block = meta.super_block_;
+      {
+        MOD_SCOPE {
+          if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->write_checkpoint(true/*is_force*/))) {
+            LOG_WARN("fail to write tenant slog checkpoint", K(ret));
+          } else {
+            // we don't write checkpoint or update super_block for hidden tenant
+            // so it is necessary to update version here
+            if (super_block.is_hidden_) {
+              super_block.version_ = ObTenantSuperBlock::TENANT_SUPER_BLOCK_VERSION;
+              omt::ObTenant *tenant = static_cast<omt::ObTenant*>(share::ObTenantEnv::get_tenant());
+              tenant->set_tenant_super_block(super_block);
+            }
+            need_svr_ckpt = true;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (need_svr_ckpt && OB_FAIL(write_checkpoint(true/*is_force*/))) {
+        LOG_WARN("fail to write server checkpoint", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObServerCheckpointSlogHandler::read_checkpoint(const ObServerSuperBlock &super_block)
 {
   int ret = OB_SUCCESS;
   ObServerCheckpointReader server_ckpt_reader;
 
   if (OB_FAIL(server_ckpt_reader.read_checkpoint(super_block))) {
+    LOG_WARN("fail to read checkpoint", K(ret), K(super_block));
   } else if (OB_FAIL(set_meta_block_list(server_ckpt_reader.get_meta_block_list()))) {
-  } else if (OB_FAIL(server_ckpt_reader.get_runtime_meta(
-                 runtime_meta_for_replay_, runtime_meta_valid_for_replay_))) {
+    LOG_WARN("fail to set meta block list", K(ret));
+  } else if (OB_FAIL(server_ckpt_reader.get_tenant_meta(
+                 tenant_meta_for_replay_, tenant_meta_valid_for_replay_))) {
+    LOG_WARN("fail to get tenant meta", K(ret));
   }
   return ret;
 }
@@ -188,6 +246,7 @@ int ObServerCheckpointSlogHandler::set_meta_block_list(ObIArray<MacroBlockId> &m
   int ret = OB_SUCCESS;
   TCWLockGuard guard(lock_);
   if (OB_FAIL(server_meta_block_handle_.add_macro_blocks(meta_block_list))) {
+    LOG_WARN("fail to add_macro_blocks", K(ret));
   }
   return ret;
 }
@@ -201,6 +260,7 @@ int ObServerCheckpointSlogHandler::get_meta_block_list(ObIArray<MacroBlockId> &m
 
   for (int64_t i = 0; OB_SUCC(ret) && i < block_list.count(); ++i) {
     if (OB_FAIL(meta_block_list.push_back(block_list.at(i)))) {
+      LOG_WARN("fail to push back meta block", K(ret));
     }
   }
   return ret;
@@ -217,10 +277,14 @@ int ObServerCheckpointSlogHandler::replay_server_slog(const ObLogCursor &replay_
   log_file_spec.log_write_policy_ = "truncate";
 
   if (OB_FAIL(replayer.init(server_slogger_->get_dir(), log_file_spec))) {
+    LOG_WARN("fail to init slog replayer", K(ret));
   } else if (OB_FAIL(replayer.register_redo_module(
-    ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME, this))) {
+    ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT, this))) {
+    LOG_WARN("fail to register redo module", K(ret));
   } else if (OB_FAIL(replayer.replay(replay_start_point, replay_finish_point))) {
+    LOG_WARN("fail to replay server slog", K(ret));
   } else if (OB_FAIL(replayer.replay_over())) {
+    LOG_WARN("fail to replay over server slog", K(ret));
   }
   return ret;
 }
@@ -236,20 +300,54 @@ int ObServerCheckpointSlogHandler::replay(const ObRedoModuleReplayParam &param)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME != main_type) {
+    LOG_WARN("invalid argument", K(ret), K(param));
+  } else if (ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT != main_type) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("wrong redo log type.", K(ret), K(main_type), K(sub_type));
   } else {
     switch (sub_type) {
-      case ObRedoLogSubType::OB_REDO_LOG_UPDATE_SERVER_RESOURCES: {
-        if (OB_FAIL(replay_update_server_resources(buf, len))) {
+      case ObRedoLogSubType::OB_REDO_LOG_CREATE_TENANT_PREPARE: {
+        if (OB_FAIL(replay_create_tenant_prepare(buf, len))) {
+          LOG_WARN("failed to replay put tenant", K(ret), K(param));
         }
         break;
       }
-      case ObRedoLogSubType::OB_REDO_LOG_UPDATE_RUNTIME_SUPER_BLOCK: {
-        if (OB_FAIL(replay_update_runtime_super_block(buf, len))) {
+      case ObRedoLogSubType::OB_REDO_LOG_CREATE_TENANT_COMMIT: {
+        if (OB_FAIL(replay_create_tenant_commit(buf, len))) {
+          LOG_WARN("failed to replay create tenant commit", K(ret), K(param));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_CREATE_TENANT_ABORT: {
+        if (OB_FAIL(replay_create_tenant_abort(buf, len))) {
+          LOG_WARN("failed to replay create tenant abort", K(ret), K(param));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_DELETE_TENANT_PREPARE: {
+        if (OB_FAIL(replay_delete_tenant_prepare(buf, len))) {
+          LOG_WARN("failed to replay delete tenant prepare", K(ret), K(param));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_DELETE_TENANT_COMMIT: {
+        if (OB_FAIL(replay_delete_tenant_commit(buf, len))) {
+          LOG_WARN("failed to replay delete tenant commit", K(ret), K(param));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_UPDATE_TENANT_UNIT: {
+        if (OB_FAIL(replay_update_tenant_unit(buf, len))) {
+          LOG_WARN("failed to replay update tenant unit", K(ret), K(param));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_UPDATE_TENANT_SUPER_BLOCK: {
+        if (OB_FAIL(replay_update_tenant_super_block(buf, len))) {
+          LOG_WARN("failed to replay update tenant super block", K(ret), K(param));
         }
         break;
       }
@@ -268,14 +366,15 @@ int ObServerCheckpointSlogHandler::parse(
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
-  ObRedoLogMainType main_type = ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME;
+  ObRedoLogMainType main_type = ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT;
   ObRedoLogSubType sub_type = ObRedoLogSubType::OB_REDO_LOG_INVALID;
   char slog_name[ObStorageLogReplayer::MAX_SLOG_NAME_LEN];
 
   ObIRedoModule::parse_cmd(cmd, main_type, sub_type);
   if (OB_ISNULL(buf) || OB_ISNULL(stream) || OB_UNLIKELY(len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME != main_type)) {
+    LOG_WARN("invalid arguments", K(ret), KP(buf), KP(stream), K(len));
+  } else if (OB_UNLIKELY(ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT != main_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("slog type does not match", K(ret), K(main_type), K(sub_type));
   } else if (OB_UNLIKELY(0 > fprintf(stream, "\nserver slog: "))) {
@@ -283,19 +382,62 @@ int ObServerCheckpointSlogHandler::parse(
     LOG_WARN("fail to write server slog to stream", K(ret));
   } else {
     switch (sub_type) {
-      case ObRedoLogSubType::OB_REDO_LOG_UPDATE_SERVER_RESOURCES: {
-        share::ObServerRuntimeConfig runtime_config;
-        ObUpdateServerResourcesLog slog_entry(runtime_config);
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "update server resources slog: ");
+      case ObRedoLogSubType::OB_REDO_LOG_CREATE_TENANT_PREPARE: {
+        omt::ObTenantMeta tenant_meta;
+        ObCreateTenantPrepareLog slog_entry(tenant_meta);
+        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create tenant prepare slog: ");
         if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
+          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
         }
         break;
       }
-      case ObRedoLogSubType::OB_REDO_LOG_UPDATE_RUNTIME_SUPER_BLOCK: {
-        ObServerRuntimeSuperBlock super_block(false /*is_hidden*/);
-        ObUpdateRuntimeSuperBlockLog slog_entry(super_block);
-        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "update runtime super block slog: ");
+      case ObRedoLogSubType::OB_REDO_LOG_CREATE_TENANT_COMMIT: {
+        ObCreateTenantCommitLog slog_entry;
+        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create tenant commit slog: ");
         if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
+          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_CREATE_TENANT_ABORT: {
+        ObCreateTenantAbortLog slog_entry;
+        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "create tenant abort slog: ");
+        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
+          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_DELETE_TENANT_PREPARE: {
+        ObDeleteTenantPrepareLog slog_entry;
+        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "delete tenant prepare slog: ");
+        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
+          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_DELETE_TENANT_COMMIT: {
+        ObDeleteTenantCommitLog slog_entry;
+        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "delete tenant commit slog: ");
+        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
+          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_UPDATE_TENANT_UNIT: {
+        share::ObUnitInfoGetter::ObTenantConfig tenant_unit;
+        ObUpdateTenantUnitLog slog_entry(tenant_unit);
+        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "update tenant unit slog: ");
+        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
+          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
+        }
+        break;
+      }
+      case ObRedoLogSubType::OB_REDO_LOG_UPDATE_TENANT_SUPER_BLOCK: {
+        ObTenantSuperBlock super_block(false /*is_hidden*/);
+        ObUpdateTenantSuperBlockLog slog_entry(super_block);
+        snprintf(slog_name, ObStorageLogReplayer::MAX_SLOG_NAME_LEN, "update tenant super block slog: ");
+        if (OB_FAIL(ObStorageLogReplayer::print_slog(buf, len, slog_name, slog_entry, stream))) {
+          LOG_WARN("fail to print slog", K(ret), KP(buf), K(len), K(slog_name), K(slog_entry));
         }
         break;
       }
@@ -309,45 +451,217 @@ int ObServerCheckpointSlogHandler::parse(
   return ret;
 }
 
-int ObServerCheckpointSlogHandler::replay_update_server_resources(const char *buf, const int64_t buf_len)
+int ObServerCheckpointSlogHandler::replay_create_tenant_prepare(const char *buf, const int64_t buf_len)
 {
   int ret = OB_SUCCESS;
+  omt::ObTenantMeta meta;
   int64_t pos = 0;
-  share::ObServerRuntimeConfig runtime_config;
-  ObUpdateServerResourcesLog log_entry(runtime_config);
-  SMART_VAR(omt::ObServerRuntimeMeta, runtime_meta) {
-    if (OB_UNLIKELY(!is_inited_)) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
-    } else if (OB_ISNULL(buf) || buf_len <= 0) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-    } else if (OB_FAIL(get_replay_runtime_meta_(runtime_meta))) {
-    } else if (FALSE_IT(runtime_meta.runtime_config_ = runtime_config)) {
-    } else if (OB_FAIL(set_replay_runtime_meta_(runtime_meta))) {
+  ObCreateTenantPrepareLog log_entry(meta);
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
+  } else if (OB_ISNULL(buf) || buf_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
+    LOG_WARN("failed to decode log entry", K(ret));
+  } else if (ObTenantCreateStatus::CREATING != meta.create_status_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("tenant create_status should be creating in prepare log", K(ret), K(meta));
+  } else {
+    // May already be in the snapshot, if prepare log is found later, use the later one, even if the snapshot indicates create commit
+    if (OB_FAIL(set_replay_tenant_meta_(meta))) {
+      LOG_WARN("failed to set tenant meta map", K(ret), K(meta));
     }
   }
 
   return ret;
 }
 
-int ObServerCheckpointSlogHandler::replay_update_runtime_super_block(const char *buf, const int64_t buf_len)
+int ObServerCheckpointSlogHandler::replay_create_tenant_commit(const char *buf, const int64_t buf_len)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
-  ObServerRuntimeSuperBlock super_block(false /*is_hidden*/);
-  ObUpdateRuntimeSuperBlockLog log_entry(super_block);
+  ObCreateTenantCommitLog log_entry;
+  omt::ObTenantMeta meta;
 
-  HEAP_VAR(omt::ObServerRuntimeMeta, runtime_meta) {
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
+  } else if (OB_ISNULL(buf) || buf_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
+    LOG_WARN("failed to decode log entry", K(ret));
+  } else if (OB_FAIL(get_replay_tenant_meta_(meta))) {
+    LOG_WARN("failed to get tenant meta", K(ret), K(meta));
+  } else if (ObTenantCreateStatus::CREATING != meta.create_status_ &&
+      ObTenantCreateStatus::CREATED != meta.create_status_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("tenant create_status mismatch", K(ret), K(meta));
+  } else if (FALSE_IT(meta.create_status_ = ObTenantCreateStatus::CREATED)) {
+  } else if (OB_FAIL(set_replay_tenant_meta_(meta))) {
+    LOG_ERROR("failed to set tenant meta map", K(ret), K(meta));
+  }
+
+  return ret;
+}
+
+int ObServerCheckpointSlogHandler::replay_create_tenant_abort(const char *buf, const int64_t buf_len)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  ObCreateTenantAbortLog log_entry;
+  omt::ObTenantMeta meta;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
+  } else if (OB_ISNULL(buf) || buf_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
+    LOG_WARN("failed to decode log entry", K(ret));
+  } else if (OB_FAIL(get_replay_tenant_meta_(meta))) {
+    if (OB_HASH_NOT_EXIST == ret) {
+      LOG_INFO("tenant not exist when replay create abort slog", K(ret));
+      ret = OB_SUCCESS;
+      // no nothing
+    } else {
+      LOG_WARN("failed to get tenant meta", K(ret), K(meta));
+    }
+  // meta.create_status_== CREATE_COMMIT may because the status in memory is set to commit
+  // and a checkpoint is created at this time,  but then the commit log fails to be written,
+  // so an abort log is written.
+  } else if (ObTenantCreateStatus::CREATING != meta.create_status_ &&
+      ObTenantCreateStatus::CREATED != meta.create_status_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("tenant create_status mismatch", K(ret), K(meta));
+  } else if (FALSE_IT(meta.create_status_ = ObTenantCreateStatus::CREATE_ABORT)) {
+  } else if (OB_FAIL(set_replay_tenant_meta_(meta))) {
+    LOG_ERROR("failed to set tenant meta map", K(ret), K(meta));
+  }
+
+  return ret;
+}
+
+int ObServerCheckpointSlogHandler::replay_delete_tenant_prepare(const char *buf, const int64_t buf_len)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  ObDeleteTenantPrepareLog log_entry;
+  omt::ObTenantMeta meta;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
+  } else if (OB_ISNULL(buf) || buf_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
+    LOG_WARN("failed to decode log entry", K(ret));
+  } else if (OB_FAIL(get_replay_tenant_meta_(meta))) {
+    if (OB_HASH_NOT_EXIST == ret) {
+      LOG_INFO("tenant not exist when replay delete prepare slog", K(ret));
+      ret = OB_SUCCESS;
+      // no nothing
+    } else {
+      LOG_WARN("failed to get tenant meta", K(ret));
+    }
+  // meta.create_status_== DELETING may because the status in memory is set to DELETING
+  // and a checkpoint is created when exit the lock for preventing to do ckpt.
+  } else if (ObTenantCreateStatus::CREATED != meta.create_status_ &&
+      ObTenantCreateStatus::DELETING != meta.create_status_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("tenant create_status mismatch", K(ret), K(meta));
+  } else if (FALSE_IT(meta.create_status_ = ObTenantCreateStatus::DELETING)) {
+  } else if (OB_FAIL(set_replay_tenant_meta_(meta))) {
+    LOG_ERROR("failed to set tenant meta map", K(ret), K(meta));
+  }
+  return ret;
+}
+
+int ObServerCheckpointSlogHandler::replay_delete_tenant_commit(const char *buf, const int64_t buf_len)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  ObDeleteTenantCommitLog log_entry;
+  omt::ObTenantMeta meta;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
+  } else if (OB_ISNULL(buf) || buf_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
+    LOG_WARN("failed to decode log entry", K(ret));
+  } else if (OB_FAIL(get_replay_tenant_meta_(meta))) {
+    if (OB_HASH_NOT_EXIST == ret) {
+      LOG_INFO("tenant not exist when replay delete commit slog", K(ret));
+      ret = OB_SUCCESS;
+      // no nothing
+    } else {
+      LOG_WARN("failed to get tenant meta", K(ret));
+    }
+  } else if (ObTenantCreateStatus::DELETING != meta.create_status_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("tenant create_status mismatch", K(ret), K(meta));
+  } else if (FALSE_IT(meta.create_status_ = ObTenantCreateStatus::DELETED)) {
+  } else if (OB_FAIL(set_replay_tenant_meta_(meta))) {
+    LOG_ERROR("failed to set tenant meta map", K(ret), K(meta));
+  }
+  return ret;
+}
+
+int ObServerCheckpointSlogHandler::replay_update_tenant_unit(const char *buf, const int64_t buf_len)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  share::ObUnitInfoGetter::ObTenantConfig unit;
+  ObUpdateTenantUnitLog log_entry(unit);
+  SMART_VAR(omt::ObTenantMeta, tenant_meta) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
     } else if (OB_ISNULL(buf) || buf_len <= 0) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
     } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
-    } else if (OB_FAIL(get_replay_runtime_meta_(runtime_meta))) {
-    } else if (FALSE_IT(runtime_meta.super_block_ = super_block)) {
-    } else if (OB_FAIL(set_replay_runtime_meta_(runtime_meta))) {
+      LOG_WARN("failed to decode log entry", K(ret));
+    } else if (OB_FAIL(get_replay_tenant_meta_(tenant_meta))) {
+      LOG_WARN("failed to get tenant meta", K(ret), K(unit));
+    } else if (FALSE_IT(tenant_meta.unit_ = unit)) {
+    } else if (OB_FAIL(set_replay_tenant_meta_(tenant_meta))) {
+      LOG_WARN("failed to set tenant meta map", K(ret), K(unit));
+    }
+  }
+
+  return ret;
+}
+
+int ObServerCheckpointSlogHandler::replay_update_tenant_super_block(const char *buf, const int64_t buf_len)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  ObTenantSuperBlock super_block(false /*is_hidden*/);
+  ObUpdateTenantSuperBlockLog log_entry(super_block);
+
+  HEAP_VAR(omt::ObTenantMeta, tenant_meta) {
+    if (OB_UNLIKELY(!is_inited_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("ObServerCheckpointSlogHandler is not initialized", K(ret));
+    } else if (OB_ISNULL(buf) || buf_len <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
+    } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
+      LOG_WARN("failed to decode log entry", K(ret));
+    } else if (OB_FAIL(get_replay_tenant_meta_(tenant_meta))) {
+      LOG_WARN("failed to get tenant meta", K(ret), K(super_block));
+    } else if (FALSE_IT(tenant_meta.super_block_ = super_block)) {
+    } else if (OB_FAIL(set_replay_tenant_meta_(tenant_meta))) {
+      LOG_WARN("failed to set tenant meta map", K(ret), K(super_block));
     }
   }
   return ret;
@@ -376,6 +690,7 @@ int ObServerCheckpointSlogHandler::write_checkpoint(bool is_force)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if(!ATOMIC_BCAS(&is_writing_checkpoint_, false, true)) {
     ret = OB_NEED_WAIT;
     LOG_WARN("is writing checkpoint, need wait", K(ret));
@@ -385,16 +700,21 @@ int ObServerCheckpointSlogHandler::write_checkpoint(bool is_force)
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(server_slogger_->get_active_cursor(cur_cursor))) {
+    LOG_WARN("get server slog current cursor fail", K(ret));
   } else if (OB_UNLIKELY(!cur_cursor.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("cur_cursor is invalid", K(ret));
   } else if (((start_time > last_write_time_ + min_interval) && cur_cursor.newer_than(last_slog_cursor_)
       && (cur_cursor.log_id_ - last_slog_cursor_.log_id_ >= ObWriteCheckpointTask::MIN_WRITE_CHECKPOINT_LOG_CNT))
       || is_force
       || (cur_cursor.file_id_ > last_slog_cursor_.file_id_)) {
     ObServerCheckpointWriter server_ckpt_writer;
-    if (OB_FAIL(server_ckpt_writer.init(server_slogger_, *server_runtime_))) {
+    if (OB_FAIL(server_ckpt_writer.init(server_slogger_))) {
+      LOG_WARN("fail to init ObServerCheckpointWriter", K(ret));
     } else if (OB_FAIL(server_ckpt_writer.write_checkpoint(cur_cursor))) {
+      LOG_WARN("failt to write server checkpoint", K(ret));
     } else if (OB_FAIL(set_meta_block_list(server_ckpt_writer.get_meta_block_list()))) {
+      LOG_WARN("fail to set meta block list", K(ret));
     } else {
       last_write_time_ = start_time;
       last_slog_cursor_ = cur_cursor;

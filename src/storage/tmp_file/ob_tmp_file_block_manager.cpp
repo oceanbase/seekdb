@@ -32,10 +32,12 @@ int ObTmpFileBlockPageBitmapIterator::init(const ObTmpFileBlockPageBitmap *bitma
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", KR(ret));
   } else if (OB_ISNULL(bitmap) ||
              OB_UNLIKELY(start_idx < 0 || end_idx < 0 || start_idx > end_idx ||
                          end_idx >= ObTmpFileBlockPageBitmap::get_capacity())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KPC(bitmap), K(start_idx), K(end_idx));
   } else {
     is_inited_ = true;
     bitmap_ = bitmap;
@@ -61,13 +63,16 @@ int ObTmpFileBlockPageBitmapIterator::next_range(bool &value, int64_t &start_pag
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret));
   } else if (has_next()) {
     start_page_id = cur_idx_;
     if (OB_FAIL(bitmap_->get_value(cur_idx_++, value))) {
+      LOG_WARN("fail to get value", KR(ret), K(cur_idx_));
     } else {
       while(cur_idx_ <= end_idx_ && OB_SUCC(ret)) {
         bool cur_value = false;
         if (OB_FAIL(bitmap_->get_value(cur_idx_, cur_value))) {
+          LOG_WARN("fail to get value", KR(ret), K(cur_idx_));
         } else if (cur_value != value) {
           break;
         } else {
@@ -78,6 +83,7 @@ int ObTmpFileBlockPageBitmapIterator::next_range(bool &value, int64_t &start_pag
     }
   } else {
     ret = OB_ITER_END;
+    LOG_WARN("iter end", KR(ret));
   }
   return ret;
 }
@@ -90,6 +96,7 @@ int ObTmpFileBlockPageBitmap::get_value(const int64_t offset, bool &value) const
 
   if (OB_UNLIKELY(capacity <= offset || offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", KR(ret), K(capacity), K(offset));
   } else {
     value = (bitmap_[offset / 8] & (1 << (offset % 8))) != 0;
   }
@@ -102,6 +109,7 @@ int ObTmpFileBlockPageBitmap::set_bitmap(const int64_t offset, const bool value)
   const int64_t capacity = PAGE_CAPACITY;
   if (OB_UNLIKELY(capacity <= offset || offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", KR(ret), K(capacity), K(offset));
   } else if (value) {
     bitmap_[offset / 8] |= (1 <<(offset % 8));
   } else {
@@ -120,6 +128,7 @@ int ObTmpFileBlockPageBitmap::set_bitmap_batch(const int64_t offset, const int64
   uint8_t end_bit_pos = (offset + count - 1) % 8;
   if (OB_UNLIKELY(capacity < (offset + count) || count <= 0 || offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", KR(ret), K(capacity), K(offset), K(count));
   } else if (start_byte_pos == end_byte_pos) {
     // only one byte
     uint8_t mask = ((1 << (end_bit_pos + 1)) - 1) & ~((1 << start_bit_pos) - 1);
@@ -158,6 +167,7 @@ int ObTmpFileBlockPageBitmap::is_all_true(const int64_t start, const int64_t end
 
   if (OB_UNLIKELY(start > end || start < 0 || end >= capacity)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", KR(ret), K(capacity), K(start), K(end));
   } else if (start_byte_pos == end_byte_pos) {
     // only one byte
     uint8_t mask = ((1 << (end_bit_pos + 1)) - 1) & ~((1 << start_bit_pos) - 1);
@@ -195,6 +205,7 @@ int ObTmpFileBlockPageBitmap::is_all_false(const int64_t start, const int64_t en
   if (OB_UNLIKELY(start > end || start < 0 || end >= capacity)) {
     is_all_false = false;
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", KR(ret), K(capacity), K(start), K(end));
   } else if (start_byte_pos == end_byte_pos) {
     // only one byte
     uint8_t mask = ((1 << (end_bit_pos + 1)) - 1) & ~((1 << start_bit_pos) - 1);
@@ -275,20 +286,29 @@ int ObTmpFileBlock::init_block(const int64_t block_index,
 
   if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_TMP_FILE_BLOCK_INDEX == block_index)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid block_index", KR(ret), K(block_index), K(begin_page_id), K(page_num));
   } else if (OB_UNLIKELY(page_num <= 0 || begin_page_id < 0 ||
              begin_page_id + page_num > ObTmpFileGlobal::BLOCK_PAGE_NUMS)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(block_index), K(begin_page_id), K(page_num));
   } else if (OB_UNLIKELY(block_index_ != ObTmpFileGlobal::INVALID_TMP_FILE_BLOCK_INDEX)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tmp file block has been inited", KR(ret), K(block_index_));
   } else if (block_state_ != BlockState::INVALID) {
     ret = OB_OP_NOT_ALLOW;
+    LOG_WARN("attempt to reinit a block not in invalid state", KR(ret), KPC(this));
   } else if (OB_FAIL(page_bitmap_.is_all_false(begin_page_id, begin_page_id + page_num - 1, use_released_pages))) {
+    LOG_WARN("fail to check whether the pages are all false", KR(ret), K(begin_page_id), K(page_num), K(page_bitmap_));
   } else if (OB_UNLIKELY(!use_released_pages)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("attempt to use a allocated page", KR(ret), K(block_index), K(begin_page_id), K(page_num),
+                                                K(page_bitmap_), K(use_released_pages));
   } else if (OB_FAIL(page_bitmap_.set_bitmap_batch(begin_page_id, page_num, true))) {
+    LOG_WARN("fail to set bitmap", KR(ret), K(begin_page_id), K(page_num), K(page_bitmap_));
   } else {
     block_index_ = block_index;
     block_state_ = BlockState::IN_MEMORY;
+    LOG_DEBUG("init block successfully", K(block_index), K(begin_page_id), K(page_num), KPC(this));
   }
   return ret;
 }
@@ -299,8 +319,11 @@ int ObTmpFileBlock::write_back_start()
   SpinWLockGuard guard(lock_);
   if (block_state_ != BlockState::IN_MEMORY && block_state_ != BlockState::WRITE_BACK) {
     ret = OB_OP_NOT_ALLOW;
+    LOG_WARN("write back a block not in in_memory state and not in write back state",
+        KR(ret), KPC(this));
   } else {
     block_state_ = BlockState::WRITE_BACK;
+    LOG_DEBUG("switch tmp file block to write back state", KPC(this));
   }
   return ret;
 }
@@ -311,8 +334,11 @@ int ObTmpFileBlock::write_back_failed()
   SpinWLockGuard guard(lock_);
   if (block_state_ != BlockState::WRITE_BACK) {
     ret = OB_OP_NOT_ALLOW;
+    LOG_WARN("notify a block write_back_failed, but the block not in write back state",
+        KR(ret), KPC(this));
   } else {
     block_state_ = BlockState::IN_MEMORY;
+    LOG_DEBUG("switch tmp file block to in memory state", KPC(this));
   }
   return ret;
 }
@@ -323,12 +349,16 @@ int ObTmpFileBlock::write_back_succ(blocksstable::MacroBlockId macro_block_id)
   SpinWLockGuard guard(lock_);
   if (OB_UNLIKELY(!macro_block_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(macro_block_id));
   } else if (block_state_ != BlockState::WRITE_BACK) {
     ret = OB_OP_NOT_ALLOW;
+    LOG_WARN("attempt to set macro_block_id for a block not in write_back state", KR(ret), KPC(this));
   } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.inc_ref(macro_block_id))) {
+    LOG_ERROR("failed to inc macro block ref cnt", KR(ret), K(macro_block_id), KPC(this));
   } else {
     macro_block_id_ = macro_block_id;
     block_state_ = BlockState::ON_DISK;
+    LOG_DEBUG("switch tmp file block to on disk state", KPC(this));
   }
   return ret;
 }
@@ -340,13 +370,21 @@ int ObTmpFileBlock::release_pages(const int64_t begin_page_id, const int64_t pag
   bool release_allocated_page = false;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tmp file block is invalid", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(page_num <= 0 || begin_page_id < 0 ||
              begin_page_id + page_num > ObTmpFileGlobal::BLOCK_PAGE_NUMS)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(block_index_), K(begin_page_id), K(page_num));
   } else if (OB_FAIL(page_bitmap_.is_all_true(begin_page_id, begin_page_id + page_num - 1, release_allocated_page))) {
+    LOG_WARN("fail to check whether the pages are all true", KR(ret), K(block_index_), K(macro_block_id_),
+                                                             K(begin_page_id), K(page_num), K(page_bitmap_));
   } else if (OB_UNLIKELY(!release_allocated_page)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("attempt to release a released page", KR(ret), K(block_index_), K(macro_block_id_),
+                                                   K(begin_page_id), K(page_num),
+                                                   K(page_bitmap_), K(release_allocated_page));
   } else if (OB_FAIL(page_bitmap_.set_bitmap_batch(begin_page_id, page_num, false))) {
+    LOG_WARN("fail to set bitmap", KR(ret), K(begin_page_id), K(page_num), K(page_bitmap_));
   }
   return ret;
 }
@@ -358,10 +396,12 @@ int ObTmpFileBlock::get_page_usage(int64_t &page_num) const
   page_num = 0;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tmp file block is invalid", KR(ret), KPC(this));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < ObTmpFileBlockPageBitmap::get_capacity(); ++i) {
       bool value = false;
       if (OB_FAIL(page_bitmap_.get_value(i, value))) {
+        LOG_WARN("fail to get value from bitmap", KR(ret), K(i), KPC(this));
       } else if (value) {
         page_num++;
       }
@@ -377,6 +417,7 @@ int ObTmpFileBlock::inc_ref_cnt()
 
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tmp file block is invalid", KR(ret), KPC(this));
   } else {
     ref_cnt_++;
   }
@@ -391,8 +432,10 @@ int ObTmpFileBlock::dec_ref_cnt(int64_t &ref_cnt)
 
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tmp file block is invalid", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(ref_cnt_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid ref cnt", KR(ret), KPC(this));
   } else {
     ref_cnt_ -= 1;
     ref_cnt = ref_cnt_;
@@ -415,6 +458,7 @@ int ObTmpFileBlock::can_remove(bool &can_remove) const
   can_remove = false;
   bool is_all_page_released = false;
   if (OB_FAIL(page_bitmap_.is_all_false(is_all_page_released))) {
+    LOG_WARN("fail to check whether the pages are all false", KR(ret), KPC(this));
   } else {
     can_remove = is_all_page_released && BlockState::WRITE_BACK != block_state_;
   }
@@ -470,6 +514,7 @@ void ObTmpFileBlockHandle::reset()
     int64_t cur_ref_cnt = -1;
     int64_t block_index = ptr_->get_block_index();
     if (OB_FAIL(ptr_->dec_ref_cnt(cur_ref_cnt))) {
+      LOG_ERROR("fail to dec block ref cnt", KR(ret), KPC(ptr_));
     } else if (0 == cur_ref_cnt) {
       ptr_->reset();
       tmp_file_blk_mgr_->get_block_allocator().free(ptr_);
@@ -484,9 +529,12 @@ int ObTmpFileBlockHandle::init(ObTmpFileBlock *block, ObTmpFileBlockManager *tmp
 
   if (is_inited()) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", KR(ret), KP(ptr_));
   } else if (OB_ISNULL(block) || OB_ISNULL(tmp_file_blk_mgr)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(block), KP(tmp_file_blk_mgr));
   } else if (OB_FAIL(block->inc_ref_cnt())) {
+    LOG_WARN("fail to inc block ref cnt", KR(ret), KPC(block));
   } else {
     ptr_ = block;
     tmp_file_blk_mgr_ = tmp_file_blk_mgr;
@@ -527,9 +575,15 @@ int ObTmpFileBlockManager::init()
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("ObTmpFileBlockManager init twice", KR(ret), K(is_inited_));
+  } else if (OB_UNLIKELY(!true)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", KR(ret));
   } else if (OB_FAIL(block_map_.init("TmpFileBlkMgr"))) {
+    LOG_WARN("fail to init tenant temporary file block manager", KR(ret));
   } else if (OB_FAIL(block_allocator_.init(common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                            ObModIds::OB_TMP_BLOCK_MANAGER, INT64_MAX))) {
+    LOG_WARN("fail to init temporary file block allocator", KR(ret));
   } else {
     block_allocator_.set_attr(ObMemAttr("TmpFileBlk"));
     is_inited_ = true;
@@ -549,15 +603,21 @@ int ObTmpFileBlockManager::create_tmp_file_block(const int64_t begin_page_id, co
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_ISNULL(buf = block_allocator_.alloc(blk_size, lib::ObMemAttr("TmpFileBlk")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate memory for tmp file block", KR(ret), K(blk_size));
   } else if (FALSE_IT(blk = new (buf) ObTmpFileBlock())) {
   } else if (FALSE_IT(block_index = ATOMIC_AAF(&block_index_generator_, 1))) {
   } else if (OB_FAIL(blk->init_block(block_index, begin_page_id, page_num))) {
+    LOG_WARN("fail to init tmp file block", KR(ret), K(block_index));
   } else if (OB_FAIL(handle.init(blk, this))) {
+    LOG_WARN("fail to init tmp file block handle", KR(ret), K(block_index));
   } else {
     if (OB_FAIL(block_map_.insert(ObTmpFileBlockKey(block_index), handle))) {
+      LOG_WARN("fail to insert tmp file block into map", KR(ret), K(block_index));
     }
+    LOG_DEBUG("create tmp file block succ", KR(ret), K(block_index));
   }
 
   if (OB_FAIL(ret) && OB_NOT_NULL(blk)) {
@@ -577,10 +637,14 @@ int ObTmpFileBlockManager::write_back_start(const int64_t block_index)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
+    LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(blk = handle.get())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tmp file block is null", KR(ret), K(block_index));
   } else if (OB_FAIL(blk->write_back_start())) {
+    LOG_WARN("fail to write back start", KR(ret), K(block_index));
   }
 
   return ret;
@@ -595,15 +659,21 @@ int ObTmpFileBlockManager::write_back_failed(const int64_t block_index)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
+    LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(blk = handle.get())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tmp file block is null", KR(ret), K(block_index));
   } else if (OB_FAIL(blk->write_back_failed())) {
+    LOG_WARN("fail to notify block write_back_failed", KR(ret), K(handle));
   }
 
   if (FAILEDx(handle.get()->can_remove(can_remove))) {
+    LOG_WARN("check block can remove failed", KR(ret), K(handle));
   } else if (can_remove) {
     if (OB_FAIL(remove_tmp_file_block_(block_index))) {
+      LOG_ERROR("fail to remove tmp file block", KR(ret), K(handle));
     }
   }
   return ret;
@@ -618,14 +688,19 @@ int ObTmpFileBlockManager::write_back_succ(const int64_t block_index, const bloc
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
+    LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(blk = handle.get())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tmp file block is null", KR(ret), K(block_index));
   } else {
     SpinWLockGuard guard(stat_lock_);
     int64_t used_page_num = 0;
     if (OB_FAIL(blk->write_back_succ(macro_block_id))) {
+      LOG_WARN("fail to notify write_back_succ", KR(ret), K(block_index), K(macro_block_id), K(handle));
     } else if (OB_FAIL(blk->get_page_usage(used_page_num))) {
+      LOG_WARN("fail to get page usage", KR(ret), K(handle));
     } else {
       used_page_num_ += used_page_num;
       physical_block_num_ += 1;
@@ -633,8 +708,10 @@ int ObTmpFileBlockManager::write_back_succ(const int64_t block_index, const bloc
   }
 
   if (FAILEDx(handle.get()->can_remove(can_remove))) {
+    LOG_WARN("check block can remove failed", KR(ret), K(handle));
   } else if (can_remove) {
     if (OB_FAIL(remove_tmp_file_block_(block_index))) {
+      LOG_ERROR("fail to remove tmp file block", KR(ret), K(handle));
     }
   }
   return ret;
@@ -651,12 +728,16 @@ int ObTmpFileBlockManager::release_tmp_file_page(const int64_t block_index,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
+    LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(handle.get())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, block should not be null", KR(ret), K(block_index));
   } else{
     SpinWLockGuard guard(stat_lock_);
     if (OB_FAIL(handle.get()->release_pages(begin_page_id, page_num))) {
+      LOG_WARN("fail to release pages", KR(ret), K(begin_page_id), K(page_num), K(handle));
     } else if (handle.get()->on_disk()) {
       used_page_num_ -= page_num;
       if (used_page_num_ < 0) {
@@ -665,10 +746,13 @@ int ObTmpFileBlockManager::release_tmp_file_page(const int64_t block_index,
     }
   }
 
+  LOG_DEBUG("release_tmp_file_page", KR(ret), K(block_index), K(begin_page_id), K(page_num), K(handle));
 
   if (FAILEDx(handle.get()->can_remove(can_remove))) {
+    LOG_WARN("check block can remove failed", KR(ret), K(handle));
   } else if (can_remove) {
     if (OB_FAIL(remove_tmp_file_block_(block_index))) {
+      LOG_ERROR("fail to remove tmp file block", KR(ret), K(handle));
     }
   }
 
@@ -683,16 +767,21 @@ int ObTmpFileBlockManager::remove_tmp_file_block_(const int64_t block_index)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(block_map_.erase(ObTmpFileBlockKey(block_index), handle))) {
       if (ret != OB_ENTRY_NOT_EXIST) {
+        LOG_WARN("fail to erase tmp file block", KR(ret), K(block_index));
       } else {
+        LOG_DEBUG("erase tmp file block succ", KR(ret), K(block_index));
         ret = OB_SUCCESS;
       }
     } else if (OB_UNLIKELY(nullptr == (blk = handle.get()))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", KR(ret), K(block_index));
     } else {
       ObTmpBlockCache::get_instance().erase(ObTmpBlockCacheKey(block_index));
+      LOG_DEBUG("erase tmp file block from map succ", KR(ret), K(handle));
     }
   }
 
@@ -700,6 +789,7 @@ int ObTmpFileBlockManager::remove_tmp_file_block_(const int64_t block_index)
     SpinWLockGuard guard(stat_lock_);
     int64_t used_page_num = 0;
     if (OB_FAIL(blk->get_page_usage(used_page_num))) {
+      LOG_WARN("fail to get page usage", KR(ret), K(block_index), K(handle));
     } else {
       used_page_num_ -= used_page_num;
       if (used_page_num != 0 || used_page_num_ < 0) {
@@ -717,6 +807,7 @@ int ObTmpFileBlockManager::get_block_usage_stat(int64_t &used_page_num, int64_t 
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else {
     SpinRLockGuard guard(stat_lock_);
     used_page_num = used_page_num_;
@@ -734,7 +825,9 @@ void ObTmpFileBlockManager::print_block_usage()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(get_block_usage_stat(used_page_num, block_num))) {
+    LOG_WARN("fail to get block usage stat", KR(ret));
   } else if (OB_UNLIKELY(0 == block_num)) {
     LOG_INFO("temporary file module use no blocks");
   } else {
@@ -750,6 +843,7 @@ int ObTmpFileBlockManager::get_macro_block_count(int64_t &macro_block_count)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else {
     SpinRLockGuard guard(stat_lock_);
     macro_block_count = physical_block_num_;
@@ -763,7 +857,9 @@ int ObTmpFileBlockManager::get_macro_block_list(common::ObIArray<blocksstable::M
   CollectMacroBlockIdFunctor func(macro_id_list);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.for_each(func))) {
+    LOG_WARN("fail to collect macro block ids", KR(ret));
   }
 
   return ret;
@@ -775,11 +871,14 @@ bool ObTmpFileBlockManager::CollectMacroBlockIdFunctor::operator()(const ObTmpFi
 
   if (OB_ISNULL(handle.get())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("handle should not be null", KR(ret), K(block_index));
   } else if (!handle.get()->is_valid()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("handle should not be invalid", KR(ret), K(block_index), K(handle));
   } else if (!handle.get()->on_disk()) {
     // do nothing
   } else if (OB_FAIL(macro_id_list_.push_back(handle.get()->get_macro_block_id()))) {
+    LOG_WARN("failed to push back", KR(ret), K(block_index), K(handle));
   }
   return OB_SUCCESS == ret;
 }
@@ -790,11 +889,15 @@ int ObTmpFileBlockManager::get_macro_block_id(const int64_t block_index, blockss
   ObTmpFileBlockHandle handle;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
+    LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(handle.get())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, block should not be null", KR(ret), K(block_index));
   } else if (OB_UNLIKELY(!handle.get()->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, block should not be invalid", KR(ret), K(block_index), K(handle));
   } else {
     macro_block_id = handle.get()->get_macro_block_id();
   }
@@ -807,11 +910,15 @@ int ObTmpFileBlockManager::get_tmp_file_block_handle(const int64_t block_index, 
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("ObTmpFileBlockManager has not been inited", KR(ret));
   } else if (OB_FAIL(block_map_.get(ObTmpFileBlockKey(block_index), handle))) {
+    LOG_WARN("fail to get tmp file block", KR(ret), K(block_index));
   } else if (OB_ISNULL(handle.get())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, block should not be null", KR(ret), K(block_index));
   } else if (OB_UNLIKELY(!handle.get()->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, block should not be invalid", KR(ret), K(block_index), K(handle));
   }
 
   return ret;

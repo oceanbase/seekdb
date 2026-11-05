@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SQL_PC
 
 #include "ob_cache_object_factory.h"
-#include "sql/plan_cache/ob_plan_cache.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/ob_sql.h"
 
 namespace oceanbase
 {
@@ -27,39 +28,44 @@ using namespace lib;
 namespace sql
 {
 
-int ObCacheObjectFactory::alloc(ObPlanCache &plan_cache,
-                                ObCacheObjGuard& guard,
-                                ObLibCacheNameSpace ns)
+int ObCacheObjectFactory::alloc(ObCacheObjGuard& guard, ObLibCacheNameSpace ns)
 {
   int ret = OB_SUCCESS;
-  SERVER_MODULE_SCOPE {
-    if (OB_FAIL(plan_cache.alloc_cache_obj(guard, ns))) {
+  MOD_SCOPE {
+    ObPlanCache *lib_cache = share::g_mp->plan_cache();
+    if (OB_ISNULL(lib_cache)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid null plan cache", K(ret));
+    } else if (OB_FAIL(lib_cache->alloc_cache_obj(guard, ns))) {
+      LOG_WARN("failed to alloc cache obj", K(ret), K(ns));
     }
   }
   return ret;
 }
 
-void ObCacheObjectFactory::inner_free(ObILibCacheObject *&cache_obj)
+void ObCacheObjectFactory::inner_free(ObILibCacheObject *&cache_obj,
+                                      const CacheRefHandleID ref_handle)
 {
   int ret = OB_SUCCESS;
-
-  SERVER_MODULE_SCOPE {
-    ObPlanCache *lib_cache = OB_ISNULL(cache_obj) ? nullptr : cache_obj->get_plan_cache();
+  
+  MOD_SCOPE {
+    ObPlanCache *lib_cache = share::g_mp->plan_cache();
     if (OB_ISNULL(lib_cache)) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid null plan cache");
     } else {
-      lib_cache->free_cache_obj(cache_obj);
+      lib_cache->free_cache_obj(cache_obj, ref_handle);
     }
   }
 }
 
 void ObCacheObjectFactory::inner_free(ObPlanCache *pc,
-                                      ObILibCacheObject *&cache_obj)
+                                      ObILibCacheObject *&cache_obj,
+                                      const CacheRefHandleID ref_handle)
 {
   if (OB_ISNULL(pc)) {
     LOG_WARN_RET(OB_INVALID_ARGUMENT, "invalid null plan cache");
   } else {
-    pc->free_cache_obj(cache_obj);
+    pc->free_cache_obj(cache_obj, ref_handle);
   }
 }
 
@@ -70,7 +76,9 @@ int ObCacheObjectFactory::destroy_cache_obj(const bool is_leaked,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lib_cache)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null plan cache", K(ret));
   } else if (OB_FAIL(lib_cache->destroy_cache_obj(is_leaked, obj_id))) {
+    LOG_WARN("failed to destory cache obj", K(ret), K(is_leaked), K(obj_id));
   }
   return ret;
 }
@@ -82,8 +90,9 @@ int ObCacheObjGuard::force_early_release(ObPlanCache *plan_cache)
     // do nothing
   } else if (OB_ISNULL(plan_cache)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("is null", K(ret));
   } else {
-    ObCacheObjectFactory::free(plan_cache, cache_obj_);
+    ObCacheObjectFactory::free(plan_cache, cache_obj_, ref_handle_);
     cache_obj_ = NULL;
   }
   return ret;

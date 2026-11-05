@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_macro_meta_temp_store.h"
-#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -55,6 +54,8 @@ int ObMacroMetaTempStore::StoreItem::serialize(char *buf, const int64_t buf_len,
   StoreItemHeader *item_header = nullptr;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected invalid store item", K(ret), KP_(index_block_buf),
+        K_(index_block_buf_size), KP_(macro_meta_block_buf), K_(macro_meta_block_size));
   } else {
     item_header = reinterpret_cast<StoreItemHeader *>(buf + pos);
     *item_header = header_;
@@ -89,7 +90,7 @@ int ObMacroMetaTempStore::StoreItem::deserialize(const char *buf, const int64_t 
       = ob_crc64_sse42(0, buf + init_pos + sizeof(StoreItemHeader), header_.total_length_ - sizeof(StoreItemHeader));
   if (OB_UNLIKELY(new_checksum != header_.checksum_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("fail to deserialize store item, un-expected checksum", K(ret), K(new_checksum), K(header_.checksum_));
+    LOG_WARN("fail to deserialize store item, un-expected checksum", K(ret), K(new_checksum), K(header_.checksum_));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE,
                 index_block_buf_size_,
@@ -101,6 +102,8 @@ int ObMacroMetaTempStore::StoreItem::deserialize(const char *buf, const int64_t 
       pos += macro_meta_block_size_;
       if (OB_UNLIKELY(!is_valid() || pos > data_len)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected invalid store item", K(ret), KP_(index_block_buf),
+            K_(index_block_buf_size), KP_(macro_meta_block_buf), K_(macro_meta_block_size), K(data_len));
       }
     }
   }
@@ -139,7 +142,9 @@ int ObMacroMetaTempStore::init(const int64_t dir_id)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->open(io_.fd_, io_.dir_id_))) {
+    LOG_WARN("double initialization", K(ret));
+  } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(io_.fd_, io_.dir_id_))) {
+    LOG_WARN("open tmp file failed", K(ret));
   } else {
     
     
@@ -155,7 +160,8 @@ void ObMacroMetaTempStore::reset()
   int ret = OB_SUCCESS;
   if (io_.fd_ > 0) {
     io_handle_.reset();
-    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->remove(io_.fd_))) {
+    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(io_.fd_))) {
+      LOG_WARN("remove tmp file failed", K(ret), K_(io));
     } else {
       LOG_INFO("remove tmp file success", K(ret), K_(io));
     }
@@ -187,19 +193,25 @@ int ObMacroMetaTempStore::append(const char *block_buf, const int64_t block_size
   ObDataMacroBlockMeta macro_meta;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not inited", K(ret));
   } else if (OB_ISNULL(block_buf) || OB_UNLIKELY(block_size < 0 || !macro_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(block_size), KP(block_buf), K(macro_id));
   } else if (OB_FAIL(get_macro_block_header(block_buf, block_size, macro_header))) {
+    LOG_WARN("failed to get macro block header", K(ret));
   } else if (OB_FAIL(get_macro_meta_from_block_buf(macro_header,
                                                    macro_id,
                                                    block_buf + macro_header.fixed_header_.meta_block_offset_,
                                                    macro_header.fixed_header_.meta_block_size_,
                                                    macro_meta))) {
+    LOG_WARN("fail to get macro meta from block buf", K(ret), K(macro_header), K(block_size), K(macro_id));
   } else {
     ObMicroBlockData leaf_index_block;
     leaf_index_block.buf_ = block_buf + macro_header.fixed_header_.idx_block_offset_;
     leaf_index_block.size_ = macro_header.fixed_header_.idx_block_size_;
     if (OB_FAIL(inner_append(macro_meta, &leaf_index_block))) {
+      LOG_WARN("fail to inner append macro meta and leaf index block to temp store",
+               K(ret), K(macro_meta), K(leaf_index_block));
     } else {
       is_empty_ = false;
     }
@@ -212,7 +224,10 @@ int ObMacroMetaTempStore::append(const ObDataMacroBlockMeta &macro_meta, const O
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(inner_append(macro_meta, leaf_index_block))) {
+    LOG_WARN("fail to inner append macro meta and leaf index block to temp store",
+             K(ret), K(macro_meta), K(leaf_index_block));
   } else {
     is_empty_ = false;
   }
@@ -226,17 +241,22 @@ int ObMacroMetaTempStore::inner_append(const ObDataMacroBlockMeta &macro_meta, c
   int64_t macro_meta_serialize_size = 0;
   char *macro_meta_buf = nullptr;
   int64_t pos = 0;
-  const uint64_t data_version = DATA_CURRENT_VERSION;
+  const uint64_t data_version = CLUSTER_CURRENT_VERSION;
   if (OB_UNLIKELY(!macro_meta.is_valid() || !macro_meta.get_macro_id().is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument, un-expected macro meta", K(ret), K(macro_meta));
   } else if (OB_UNLIKELY(leaf_index_block != nullptr && !leaf_index_block->is_valid())) {
     /* leaf index block can be a nullptr, otherwise it should pointer to a valid index block */
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguemnt, un-expected leaf index block", K(ret), KPC(leaf_index_block));
   } else if (io_handle_.is_valid() && OB_FAIL(io_handle_.wait())) {
+    LOG_WARN("failed to wait previous write", K(ret));
   } else if (FALSE_IT(macro_meta_serialize_size = macro_meta.get_serialize_size(data_version))) {
   } else if (OB_ISNULL(macro_meta_buf = static_cast<char *>(datum_allocator_.alloc(macro_meta_serialize_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory for macro meta buffer", K(ret));
   } else if (OB_FAIL(macro_meta.serialize(macro_meta_buf, macro_meta_serialize_size, pos, data_version))) {
+    LOG_WARN("fail to serialize macro meta", K(ret), K(macro_meta_serialize_size), K(macro_meta));
   } else {
     // leaf index block might be nullptr (compaction reuse macro block without clustered index block).
     item.index_block_buf_ = (leaf_index_block == nullptr ? nullptr : leaf_index_block->buf_);
@@ -246,15 +266,18 @@ int ObMacroMetaTempStore::inner_append(const ObDataMacroBlockMeta &macro_meta, c
     int64_t serialize_size = item.get_serialize_size();
     buffer_.reuse();
     if (OB_FAIL(buffer_.write_serialize(item))) {
+      LOG_WARN("failed to serialize item to buffer", K(ret));
     } else if (OB_UNLIKELY(buffer_.pos() != serialize_size)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected serialize size", K(ret), K(serialize_size), K_(buffer));
     } else {
       io_.buf_ = buffer_.data();
       io_.size_ = buffer_.pos();
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       io_.io_timeout_ms_ = timeout_us <= 0 ? 0 : timeout_us / 1000;
       io_.io_desc_.set_wait_event(ObWaitEventIds::INTERM_RESULT_DISK_WRITE);
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_write(io_, io_handle_))) {
+      if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_write(io_, io_handle_))) {
+        LOG_WARN("failed to write store item to tmp file", K(ret), K_(io));
       }
     }
   }
@@ -267,6 +290,7 @@ int ObMacroMetaTempStore::wait()
 {
   int ret = OB_SUCCESS;
   if (io_handle_.is_valid() && OB_FAIL(io_handle_.wait())) {
+    LOG_WARN("failed to wait write io finish", K(ret), K_(io));
   } else {
     // free buffer memory after caller actively wait previous io finished
     buffer_.reset();
@@ -281,9 +305,13 @@ int ObMacroMetaTempStore::get_macro_block_header(
   int64_t pos = 0;
   ObMacroBlockCommonHeader common_header;
   if (OB_FAIL(common_header.deserialize(buf, buf_size, pos))) {
+    LOG_WARN("failed to deserialize common header", K(ret));
   } else if (OB_FAIL(common_header.check_integrity())) {
+    LOG_WARN("macro common header invalid", K(ret), K(common_header));
   } else if (OB_FAIL(macro_header.deserialize(buf, buf_size, pos))) {
+    LOG_WARN("failed to deserialize sstable macro header", K(ret));
   } else if (OB_UNLIKELY(macro_header.is_valid())) {
+    LOG_WARN("invalid sstable macro header", K(ret), K(macro_header));
   }
   return ret;
 }
@@ -303,23 +331,31 @@ int ObMacroMetaTempStore::get_macro_meta_from_block_buf(const ObSSTableMacroBloc
   allocator_.reuse();
   if (OB_UNLIKELY(buf == nullptr || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(macro_reader_.decompress_data(macro_header,
+    LOG_WARN("invalid argument for macro meta buffer and size", K(ret), KP(buf), K(buf_size));
+  } else if (OB_FAIL(macro_reader_.decrypt_and_decompress_data(macro_header,
                                                               buf,
                                                               buf_size,
                                                               false,
                                                               meta_block.get_buf(),
                                                               meta_block.get_buf_size(),
                                                               is_compressed))) {
+    LOG_WARN("failed to decrypt and decompress meta block", K(ret));
   } else if (OB_UNLIKELY(!meta_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("meta block invalid", K(ret), K(meta_block));
   } else if (OB_FAIL(micro_reader_helper.init(allocator_))) {
+    LOG_WARN("fail to init micro reader helper", K(ret));
   } else if (OB_FAIL(micro_reader_helper.get_reader(meta_block.get_store_type(), micro_reader))) {
+    LOG_WARN("failed to get micro reader", K(ret));
   } else if (OB_FAIL(micro_reader->init(meta_block, nullptr))) {
+    LOG_WARN("failed to init micro reader", K(ret));
   } else if (OB_FAIL(tmp_datum_row.init(allocator_, meta_block.get_micro_header()->column_count_))) {
+      LOG_WARN("failed to init temp datum row", K(ret));
   } else if (datum_row_.get_column_count() != meta_block.get_micro_header()->column_count_) {
     datum_row_.reset();
     macro_meta_allocator_.reuse();
     if (OB_FAIL(datum_row_.init(macro_meta_allocator_, meta_block.get_micro_header()->column_count_))) {
+      LOG_WARN("failed to init datum row", K(ret));
     }
   } else {
     datum_row_.reuse();
@@ -327,8 +363,11 @@ int ObMacroMetaTempStore::get_macro_meta_from_block_buf(const ObSSTableMacroBloc
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(micro_reader->get_row(0, tmp_datum_row))) {
+    LOG_WARN("failed to get row from micro reader", K(ret));
   } else if (OB_FAIL(datum_row_.deep_copy(tmp_datum_row, macro_meta_allocator_))) {
+    LOG_WARN("failed to deep copy datum row", K(ret), K(tmp_datum_row));
   } else if (OB_FAIL(macro_meta.parse_row(datum_row_))) {
+    LOG_WARN("failed to parse macro meta from datum row", K(ret));
   } else {
     macro_meta.val_.macro_id_ = macro_id;
   }
@@ -367,13 +406,17 @@ int ObMacroMetaTempStoreIter::init(ObMacroMetaTempStore &temp_meta_store)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(io_info_.is_valid())) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("double initializetion", K(ret));
   } else if (temp_meta_store.is_empty()) {
     is_iter_end_ = true;
   } else if (OB_UNLIKELY(!temp_meta_store.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fail to init macro meta temp store iter, invalid argument", K(ret), K(temp_meta_store));
   } else if (OB_FAIL(temp_meta_store.wait())) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->get_tmp_file_size(temp_meta_store.io_.fd_,
+    LOG_WARN("fail to wait temp meta store write finish", K(ret), K(temp_meta_store));
+  } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.get_tmp_file_size(temp_meta_store.io_.fd_,
                                                                              meta_store_file_length_))) {
+    LOG_WARN("fail to get temp file length", K(ret), K(temp_meta_store), K(temp_meta_store.io_.fd_));
   } else {
     io_info_ = temp_meta_store.io_;
   }
@@ -391,17 +434,22 @@ int ObMacroMetaTempStoreIter::get_next(ObDataMacroBlockMeta &macro_meta, ObMicro
     ret = OB_ITER_END;
   } else if (OB_UNLIKELY(!io_info_.is_valid())) {
     ret = OB_NOT_INIT;
+    LOG_WARN("temp store iter not inited", K(ret), K(io_info_));
   } else if (meta_store_read_offset_ >= meta_store_file_length_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(try_submit_io())) {
+    LOG_WARN("fail to try submit io", K(ret));
   } else if (FALSE_IT(pos = meta_store_read_offset_ - fragment_offset_)) {
   } else if (OB_FAIL(curr_read_item_.deserialize(meta_store_fragment_, fragment_size_, pos))) {
+    LOG_WARN("fail to deserialize macro meta from store item",
+             K(ret), KP(meta_store_fragment_), K(fragment_size_), K(pos));
   } else {
     int64_t macro_meta_pos = 0;
     if (OB_FAIL(macro_meta.deserialize(curr_read_item_.macro_meta_block_buf_,
                                        curr_read_item_.macro_meta_block_size_,
                                        io_allocator_,
                                        macro_meta_pos))) {
+      LOG_WARN("fail to deserialize macro meta", K(ret), K(curr_read_item_.macro_meta_block_size_));
     } else {
       micro_block_data.buf_ = curr_read_item_.index_block_buf_;
       micro_block_data.size_ = curr_read_item_.index_block_buf_size_;
@@ -432,6 +480,7 @@ int ObMacroMetaTempStoreIter::try_submit_io()
         = MIN(meta_store_file_length_ - meta_store_read_offset_, submit_io_size_);
     if (OB_ISNULL(meta_store_fragment_ = static_cast<char *>(io_allocator_.alloc(curr_read_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate memory for new fragment", K(ret), K(curr_read_size));
     } else {
       // submit io and update fragment info.
       tmp_file::ObTmpFileIOHandle read_handle;
@@ -444,13 +493,16 @@ int ObMacroMetaTempStoreIter::try_submit_io()
       int64_t deserialize_pos = 0;
       if (timeout_us <= 0) {
         ret = OB_TIMEOUT;
+        LOG_WARN("already timeout", KR(ret), K(timeout_us));
       } else {
         io_info.io_timeout_ms_ = timeout_us / 1000;
       }
       if (OB_FAIL(ret)) {
         // pass
-      } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->pread(io_info, meta_store_read_offset_, read_handle))) {
+      } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.pread(io_info, meta_store_read_offset_, read_handle))) {
+        LOG_WARN("failed to do tmp file pread", K(ret));
       } else if (OB_FAIL(read_handle.wait())) {
+        LOG_WARN("failed to wait read io finish", K(ret));
       } else {
         fragment_offset_ = meta_store_read_offset_;
         fragment_size_ = curr_read_size;
@@ -459,6 +511,7 @@ int ObMacroMetaTempStoreIter::try_submit_io()
     // double check because data may not in current fragment.
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(try_submit_io())) {
+      LOG_WARN("fail to try submit io");
     }
   }
   return ret;

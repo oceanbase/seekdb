@@ -41,7 +41,8 @@ public:
       const ObVecIndexDDLChildTaskInfo &vec_index_snapshot_data,
       const ObVecIndexDDLChildTaskInfo &hybrid_embedded_vec,
       const int64_t schema_version,
-      const uint64_t data_format_version,
+      const int64_t consumer_group_id,
+      const uint64_t tenant_data_version,
       const obcall::ObDropIndexArg &drop_index_arg);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
@@ -56,6 +57,7 @@ public:
   virtual int64_t get_serialize_param_size() const override;
   virtual int on_child_task_finish(const uint64_t child_task_key, const int ret_code) override { return OB_SUCCESS; }
   int update_drop_lob_meta_row_job_status(const common::ObTabletID &tablet_id,
+                                        const ObAddr &addr,
                                         const int64_t snapshot_version,
                                         const int64_t execution_id,
                                         const int ret_code,
@@ -96,8 +98,8 @@ private:
   int create_drop_share_index_task();
   int update_task_message();
   int succ();
-  int send_local_build_request();
-  int check_local_build(bool &is_end);
+  int send_build_single_replica_request();
+  int check_build_single_replica(bool &is_end);
   int check_snapshot_table_exist(bool &is_exist);
   virtual int cleanup_impl() override;
   virtual bool is_error_need_retry(const int ret_code) override
@@ -107,7 +109,7 @@ private:
     return task_status_ < share::ObDDLTaskStatus::DROP_AUX_INDEX_TABLE;
   }
 private:
-  ObLocalManagementService *local_management_service_;
+  ObRootService *root_service_;
   ObVecIndexDDLChildTaskInfo rowkey_vid_;
   ObVecIndexDDLChildTaskInfo vid_rowkey_;
   ObVecIndexDDLChildTaskInfo domain_index_;
@@ -115,7 +117,7 @@ private:
   ObVecIndexDDLChildTaskInfo vec_index_snapshot_data_;
   ObVecIndexDDLChildTaskInfo hybrid_embedded_vec_;
   obcall::ObDropIndexArg drop_index_arg_;
-  ObDDLLocalBuildExecutor local_builder_;
+  ObDDLReplicaBuildExecutor replica_builder_;
   common::hash::ObHashMap<common::ObTabletID, common::ObTabletID> check_dag_exit_tablets_map_; // for delete lob meta row data ddl only.
   ObDDLWaitTransEndCtx wait_trans_ctx_;
   int64_t delte_lob_meta_request_time_;

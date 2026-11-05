@@ -1,0 +1,64 @@
+drop materialized view log on t1;
+drop materialized view log on t2;
+DROP TABLE IF EXISTS t1;
+DROP TABLE IF EXISTS t2;
+CREATE TABLE t1 (
+id int primary key,
+name varchar(10),
+age int
+);
+create materialized view log on t1 with primary key (name, age) including new values;
+replace into t1 values (1, 'jack', 20), (2, 'rose', 25);
+select * from t1;
+id	name	age
+1	jack	20
+2	rose	25
+select sequence$$, id, name, age from mlog$_t1;
+sequence$$	id	name	age
+1	1	jack	20
+2	2	rose	25
+replace into t1 values (1, 'jack', 23), (2, 'lucy', 30);
+select * from t1;
+id	name	age
+1	jack	23
+2	lucy	30
+select sequence$$, id, name, age from mlog$_t1;
+sequence$$	id	name	age
+1	1	jack	20
+2	2	rose	25
+3	1	jack	20
+4	2	rose	25
+5	1	jack	23
+6	2	lucy	30
+CREATE TABLE t2 (
+id int primary key,
+name varchar(10),
+age int
+);
+create materialized view log on t2 with primary key (name, age) including new values;
+insert into t2 values (1, 'jack', 20), (2, 'rose', 25) on duplicate key update name = values(name), age = values(age);
+select * from t2;
+id	name	age
+1	jack	20
+2	rose	25
+select sequence$$, id, name, age from mlog$_t2;
+sequence$$	id	name	age
+1	1	jack	20
+2	2	rose	25
+insert into t2 values (1, 'jack', 23), (2, 'lucy', 30) on duplicate key update name = values(name), age = values(age);
+select * from t2;
+id	name	age
+1	jack	23
+2	lucy	30
+select sequence$$, id, name, age from mlog$_t2;
+sequence$$	id	name	age
+1	1	jack	20
+2	2	rose	25
+3	1	jack	20
+4	2	rose	25
+5	1	jack	23
+6	2	lucy	30
+drop materialized view log on t1;
+drop materialized view log on t2;
+drop table t1;
+drop table t2;

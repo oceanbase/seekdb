@@ -26,7 +26,7 @@
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
 #include "sql/ob_scanner.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 #include "sql/dtl/ob_dtl_basic_channel.h"
 #include "sql/dtl/ob_dtl.h"
 #include "ob_dtl_interm_result_manager.h"
@@ -38,11 +38,13 @@ namespace dtl {
 class ObDtlLocalChannel : public ObDtlBasicChannel
 {
 public:
-  explicit ObDtlLocalChannel(const uint64_t id);
-  explicit ObDtlLocalChannel(const uint64_t id, const int64_t hash_val);
+  explicit ObDtlLocalChannel(const uint64_t id, const common::ObAddr &peer, DtlChannelType type);
+  explicit ObDtlLocalChannel(const uint64_t id, const common::ObAddr &peer, const int64_t hash_val, DtlChannelType type);
   virtual ~ObDtlLocalChannel();
 
   virtual int init() override;
+  virtual void destroy();
+  
   virtual int feedup(ObDtlLinkedBuffer *&buffer) override;
   virtual int send_message(ObDtlLinkedBuffer *&buf);
 private:

@@ -14,7 +14,27 @@ set global ob_query_timeout = DEFAULT;
 set global ob_trx_idle_timeout = DEFAULT;
 set global ob_trx_timeout = DEFAULT;
 connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
-connect (conn1,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+#connection obsys;
+#--error 0,5157
+#drop tenant tenant force;
+#--error 0,4650
+#drop resource pool new_pool1;
+#--error 0,4648
+#drop resource unit new_box1;
+
+#--disable_query_log
+#eval create resource unit new_box1 max_cpu 1, memory_size '2G';
+#let $zone_name=query_get_value(select zone from oceanbase.__all_zone where zone != '' limit 1, zone, 1);
+
+#let $obs_num = query_get_value(select count(1) as cnt from oceanbase.__all_server group by zone limit 1,cnt, 1);
+#eval create resource pool new_pool1 unit = 'new_box1', unit_num = $obs_num;
+#eval create tenant tenant primary_zone='$zone_name', resource_pool_list('new_pool1') set ob_tcp_invited_nodes='%';
+#--enable_result_log
+#--enable_query_log
+#--source mysql_test/include/check_tenant_sync.inc
+#disconnect obsys;
+
+connect (conn1,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 --disable_info
 --disable_metadata
 
@@ -162,11 +182,11 @@ select * from t1 full join t2 on t1.c1 = t2.c2;
 set global max_allowed_packet=default;
 show tables like 't1';
 show tables like '%c%';
-show variables where Variable_name like 'ob%';
+show variables where Variable_name like 'ob%' and Variable_name != 'ob_proxy_partition_hit' and Variable_name != 'ob_last_schema_version' and Variable_name != 'ob_compatibility_version'  and Variable_name != 'ob_security_version';
 show variables like 'ob_trx_timeout';
 set ob_trx_timeout = 200000000;
 show variables like 'ob_trx_timeout';
-show global variables where Variable_name like 'ob%';
+show global variables where Variable_name like 'ob%' and Variable_name != 'ob_compatibility_version'  and Variable_name != 'ob_security_version';
 show global variables like 'max_allowed_packet';
 set global max_allowed_packet=8388608;
 show global variables like 'max_allowed_packet';
@@ -337,5 +357,9 @@ drop table if exists t0, t1, t2, t_part, t3, t4, t5, t6, t7, t8;
 --enable_warnings
 --disable_query_log
 --disable_result_log
+#connect (conn_admin,$OBMYSQL_MS0,root@sys,admin,*NO-ONE*,$OBMYSQL_PORT);
+#drop tenant tenant force;
+#drop resource pool new_pool1;
+#drop resource unit new_box1;
 #--enable_result_log
 #--enable_query_log

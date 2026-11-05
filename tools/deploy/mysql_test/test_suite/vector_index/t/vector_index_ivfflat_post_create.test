@@ -5,7 +5,7 @@
 connect (conn_user,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
 connection conn_user;
 
-alter system set vector_memory_limit = 0;
+alter system set ob_vector_memory_limit_percentage = 34;
 sleep 3;
 
 --echo # 单分区
@@ -189,6 +189,7 @@ create vector index idx2 on t1 (iris_data) with (distance=l2, type=ivf_flat, nli
 create vector index idx3 on t1 (data) with (distance=l2, type=hnsw, lib=vsag, m=10, ef_construction=11, ef_search=40);
 
 create view vec_view as select * from t1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t1;
 
 select count(*) from t1;
@@ -306,7 +307,7 @@ create vector index vector_idx1 on hhst1(c3) with (distance=l2, lib=vsag, type=h
 create vector index vector_idx2 on hhst1(c4) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
 
 
-insert /*+ enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
+insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
 select count(*) from hhst2;
 
 insert ignore into hhst1 select * from hhst2;
@@ -385,6 +386,19 @@ LOB_INROW_THRESHOLD=16;
 alter table t1 set lob_inrow_threshold = 1024;
 create vector index idx1 on t1 (wine_data) with (distance=l2, type=ivf_flat, nlist=3, sample_per_nlist=50);
 
+# col
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1 (id int primary key, wine_type int, wine_data vector(13), iris_type varchar(20), iris_data vector(4), data vector(3))
+LOB_INROW_THRESHOLD=16 WITH COLUMN GROUP(all columns, each column);
+
+--source mysql_test/test_suite/vector_index/include/wine_dataset.inc
+
+alter table t1 set lob_inrow_threshold = 1024;
+--error 1235
+create vector index idx1 on t1 (wine_data) with (distance=l2, type=ivf_flat, nlist=3, sample_per_nlist=50);
+
 drop table t1;
 
-alter system set vector_memory_limit = 0;
+alter system set ob_vector_memory_limit_percentage = 0;

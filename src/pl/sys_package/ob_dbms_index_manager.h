@@ -14,7 +14,31 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_INDEX_MANAGER_H_
+#define OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_INDEX_MANAGER_H_
 
-// Compatibility path during the SQL/PL ownership migration.
-#include "sql/pl/sys_package/ob_dbms_index_manager.h"
+#include "pl/ob_pl.h"
+
+namespace oceanbase 
+{
+namespace pl
+{
+
+class ObDBMSIndexManager
+{
+public:
+  ObDBMSIndexManager() {}
+  virtual ~ObDBMSIndexManager() {}
+public:
+  static int refresh(
+          ObPLExecCtx &ctx,
+          sql::ParamStore &params,
+          common::ObObj &result);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDBMSIndexManager);
+};
+
+}
+}
+
+#endif

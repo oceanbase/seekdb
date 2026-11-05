@@ -27,7 +27,7 @@ namespace sql
 ObExprInnerDecimalToYear::ObExprInnerDecimalToYear(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_INNER_DECIMAL_TO_YEAR, N_INNER_DECIMAL_TO_YEAR, 1, 
                          NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE)
+                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
 const int64_t YEAR_MIN = 1901; 
@@ -45,6 +45,7 @@ int ObExprInnerDecimalToYear::eval_inner_decimal_to_year(const ObExpr &expr, ObE
   bool is_start = (expr.extra_ & 1) == 1;
   bool is_equal = (expr.extra_ & 2) == 2;
   if (OB_FAIL(expr.args_[0]->eval(ctx, val_datum))) {
+    LOG_WARN("fail to eval conv", K(ret), K(expr));
   } else if (val_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -56,6 +57,7 @@ int ObExprInnerDecimalToYear::eval_inner_decimal_to_year(const ObExpr &expr, ObE
         expr_datum.set_year((int8_t)OBJ_YEAR_LOW);
       }
     } else if (OB_FAIL(val.extract_valid_int64_with_trunc(year_int))) {
+      LOG_WARN("extract_valid_int64_with_trunc fail.", K(ret), K(year_int));
     } else if (val.is_valid_int()) {
       if (year_int > YEAR_BASE && year_int <= YEAR_MAX) {
         expr_datum.set_year((int8_t)(year_int - YEAR_BASE));
@@ -105,8 +107,11 @@ int ObExprInnerDecimalToYear::cg_expr(ObExprCGCtx &expr_cg_ctx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
+  } else if (OB_ISNULL(rt_expr.args_[0])) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the arg of inner double to int is null.", K(ret), K(rt_expr));
   } else {
-    OB_ASSERT(rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprInnerDecimalToYear::eval_inner_decimal_to_year;
     rt_expr.extra_ = raw_expr.get_range_flag();
   }

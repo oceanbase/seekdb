@@ -16,9 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_lock_op.h"
-#include "data_plane/ob_i_dml_service.h"
-#include "data_plane/ob_i_write_context_service.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/dml/ob_dml_service.h"
 namespace oceanbase
 {
@@ -27,12 +25,12 @@ namespace common
 namespace serialization
 {
 template <>
-struct EnumEncoder<false, const sql::ObDASLockCtDef *> : sql::DASCtRefEncoder<sql::ObDASLockCtDef>
+struct EnumEncoder<false, const sql::ObDASLockCtDef *> : sql::DASCtEncoder<sql::ObDASLockCtDef>
 {
 };
 
 template <>
-struct EnumEncoder<false, sql::ObDASLockRtDef *> : sql::DASRtRefEncoder<sql::ObDASLockRtDef>
+struct EnumEncoder<false, sql::ObDASLockRtDef *> : sql::DASRtEncoder<sql::ObDASLockRtDef>
 {
 };
 } // end namespace serialization
@@ -54,44 +52,41 @@ ObDASLockOp::ObDASLockOp(ObIAllocator &op_alloc)
 int ObDASLockOp::open_op()
 {
   int ret = OB_SUCCESS;
-  data_plane::ObDmlExecution execution;
+  ObDMLBaseParam dml_param;
   int64_t affected_rows;
-  concurrent_control::ObWriteFlag write_flag;
 
-  ObDASDMLIterator dml_iter(
-      lock_ctdef_, lock_buffer_, op_alloc_, srs_provider_,
-      lob_read_options_);
-  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
-  data_plane::ObWriteContext write_context;
+  ObDASDMLIterator dml_iter(lock_ctdef_, lock_buffer_, op_alloc_);
+  ObAccessService *as = share::g_mp->access_service();
+  storage::ObStoreCtxGuard store_ctx_guard;
 
-  (void)ObDMLService::init_dml_write_flag(
-      *lock_ctdef_, *lock_rtdef_, write_flag,
-      das_snapshot_opt_info_.use_specify_snapshot_);
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>()->acquire_write_context(
-          lock_rtdef_->timeout_ts_,
-          *trans_desc_,
-          *snapshot_,
-          write_branch_id_,
-          write_flag,
-          write_context))) {
-  } else if (OB_FAIL(ObDMLService::prepare_dml_execution(
+  if (OB_FAIL(as->get_write_store_ctx_guard(ls_id_,
+                                            lock_rtdef_->timeout_ts_,
+                                            *trans_desc_,
+                                            *snapshot_,
+                                            write_branch_id_,
+                                            dml_param.write_flag_,
+                                            store_ctx_guard))) {
+    LOG_WARN("fail to get_write_access_tx_ctx_guard", K(ret), K(ls_id_));
+  } else if (OB_FAIL(ObDMLService::init_dml_param(
       *lock_ctdef_,
       *lock_rtdef_,
       *snapshot_,
       write_branch_id_,
       op_alloc_,
-      write_context,
-      execution,
-      das_snapshot_opt_info_.use_specify_snapshot_))) {
-  } else if (OB_FAIL(as->lock_rows(tablet_id_,
+      store_ctx_guard,
+      dml_param,
+      das_gts_opt_info_.use_specify_snapshot_))) {
+    LOG_WARN("init dml param failed", K(ret));
+  } else if (OB_FAIL(as->lock_rows(ls_id_,
+                                   tablet_id_,
                                    *trans_desc_,
-                                   execution,
+                                   dml_param,
                                    lock_rtdef_->for_upd_wait_time_,
-                                   static_cast<data_plane::ObRowLockMode>(
-                                       lock_ctdef_->lock_flag_),
+                                   lock_ctdef_->lock_flag_,
                                    &dml_iter,
                                    affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
+      LOG_WARN("lock row to partition storage failed", K(ret));
     }
   } else {
     affected_rows_ = affected_rows;
@@ -117,9 +112,39 @@ int ObDASLockOp::assign_task_result(ObIDASTaskOp *other)
   int ret = OB_SUCCESS;
   if (other->get_type() != get_type()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected task type", K(ret), KPC(other));
   } else {
     ObDASLockOp *lock_op = static_cast<ObDASLockOp *>(other);
     affected_rows_ = lock_op->get_affected_rows();
+  }
+  return ret;
+}
+
+int ObDASLockOp::decode_task_result(ObIDASTaskResult *task_result)
+{
+  int ret = OB_SUCCESS;
+#if !defined(NDEBUG)
+  CK(typeid(*task_result) == typeid(ObDASLockResult));
+  CK(task_id_ == task_result->get_task_id());
+#endif
+  if (OB_SUCC(ret)) {
+    ObDASLockResult *lock_result = static_cast<ObDASLockResult*>(task_result);
+    affected_rows_ = lock_result->get_affected_rows();
+  }
+  return ret;
+}
+
+int ObDASLockOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(memory_limit);
+#if !defined(NDEBUG)
+  CK(typeid(task_result) == typeid(ObDASLockResult));
+#endif
+  if (OB_SUCC(ret)) {
+    ObDASLockResult &lock_result = static_cast<ObDASLockResult&>(task_result);
+    lock_result.set_affected_rows(affected_rows_);
+    has_more = false;
   }
   return ret;
 }
@@ -131,6 +156,19 @@ int ObDASLockOp::init_task_info(uint32_t row_extend_size)
       && OB_FAIL(lock_buffer_.init(CURRENT_CONTEXT->get_allocator(),
                                    row_extend_size,
                                    "DASLockBuffer"))) {
+    LOG_WARN("init lock buffer failed", K(ret));
+  }
+  return ret;
+}
+
+int ObDASLockOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObIDASTaskOp::swizzling_remote_task(remote_info))) {
+    LOG_WARN("fail to swizzling remote task", K(ret));
+  } else if (remote_info != nullptr) {
+    //DAS lock is executed remotely
+    trans_desc_ = remote_info->trans_desc_;
   }
   return ret;
 }
@@ -142,7 +180,9 @@ int ObDASLockOp::write_row(const ExprFixedArray &row,
   int ret = OB_SUCCESS;
   if (!lock_buffer_.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(lock_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
+    LOG_WARN("add row to lock buffer failed", K(ret), K(row), K(lock_buffer_));
   }
   return ret;
 }
@@ -152,5 +192,31 @@ OB_SERIALIZE_MEMBER((ObDASLockOp, ObIDASTaskOp),
                     lock_rtdef_,
                     lock_buffer_);
 
+ObDASLockResult::ObDASLockResult()
+  : ObIDASTaskResult(),
+    affected_rows_(0)
+{
+}
+
+ObDASLockResult::~ObDASLockResult()
+{
+}
+
+int ObDASLockResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
+{
+  UNUSED(op);
+  UNUSED(alloc);
+  return OB_SUCCESS;
+}
+
+int ObDASLockResult::reuse()
+{
+  int ret = OB_SUCCESS;
+  affected_rows_ = 0;
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER((ObDASLockResult, ObIDASTaskResult),
+                    affected_rows_);
 }  // namespace sql
 }  // namespace oceanbase

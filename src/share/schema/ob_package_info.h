@@ -39,6 +39,10 @@ enum ObPackageFlag
   PKG_FLAG_ACCESSIBLE_BY = 8,
 };
 
+#define COMPATIBLE_MODE_BIT     0x3
+#define COMPATIBLE_ORACLE_MODE  0x0
+#define COMPATIBLE_MYSQL_MODE   0x1
+
 class ObPackageInfo: public ObSchema, public IObErrorInfo
 {
   OB_UNIS_VERSION(1);
@@ -79,6 +83,21 @@ public:
   void set_flag(int64_t flag) { flag_ = flag; }
   uint64_t get_owner_id() const { return owner_id_; }
   void set_owner_id(int64_t owner_id) { owner_id_ = owner_id; }
+  int64_t get_comp_flag() const { return comp_flag_; }
+  void set_comp_flag(int64_t comp_flag) { comp_flag_ = comp_flag; }
+  void set_compatibility_mode(const common::ObCompatibilityMode compa_mode)
+  {
+    /* The current comp_flag column defaults to 0, to maintain consistency, we perform an inversion operation here based on the mode, ensuring that in mysql mode comp_flag&0x3 is 1, and in oracle mode comp_flag&0x3 is 0*/
+    if(common::MYSQL_MODE == compa_mode) {
+      comp_flag_ |= COMPATIBLE_MYSQL_MODE;
+    } else {
+      /*do nothing*/
+    }
+  }
+  int64_t get_compatibility_mode() const
+  {
+    return comp_flag_ & COMPATIBLE_MODE_BIT;
+  }
   const common::ObString &get_source() const { return source_; }
   int set_source(const common::ObString &source) { return deep_copy_str(source, source_); }
   void assign_source(const common::ObString &source) { source_ = source; }
@@ -116,6 +135,7 @@ public:
                K_(schema_version),
                K_(type),
                K_(flag),
+               K_(comp_flag),
                K_(exec_env),
                K_(source),
                K_(comment),
@@ -128,6 +148,7 @@ private:
   int64_t schema_version_;
   ObPackageType type_;
   int64_t flag_;
+  int64_t comp_flag_; /* bit0~1: 00->oracle mode, 01->mysql mode, reserve 10, 11 */
   common::ObString exec_env_;
   common::ObString source_;
   common::ObString comment_;

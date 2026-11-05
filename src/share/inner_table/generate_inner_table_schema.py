@@ -11,7 +11,6 @@ import argparse
 import copy
 from collections import OrderedDict
 from ob_inner_table_init_data import *
-import difflib
 import io
 import re
 import os
@@ -54,11 +53,11 @@ def is_mysql_virtual_table(table_id):
   table_id = int(table_id)
   return table_id > max_sys_table_id and table_id < max_ob_virtual_table_id
 
-def is_extended_virtual_table(table_id):
+def is_ora_virtual_table(table_id):
   table_id = int(table_id)
   return table_id > max_ob_virtual_table_id and table_id < max_ora_virtual_table_id
 
-def is_extended_sys_view(table_id):
+def is_ora_sys_view(table_id):
   table_id = int(table_id)
   return table_id > max_mysql_sys_view_id and table_id < max_sys_view_id
 
@@ -93,23 +92,29 @@ table_name_postfix_table_names = []
 index_name_ids = []
 table_index=[]
 lob_aux_ids = []
-runtime_space_tables = []
-runtime_space_table_names = []
+tenant_space_tables = []
+tenant_space_table_names = []
+only_rs_vtables = []
 cluster_distributed_vtables = []
+tenant_distributed_vtables = []
 column_def_enum_array = []
 all_def_keywords = OrderedDict()
 all_agent_virtual_tables = []
 all_iterate_virtual_tables = []
 all_iterate_private_virtual_tables = []
-all_local_virtual_tables = []
+all_sqlite_tables = []
+all_sqlite_virtual_tables = []
+all_ora_mapping_virtual_table_org_tables = []
+all_ora_mapping_virtual_tables = []
+real_table_virtual_table_names = []
 cluster_private_tables = []
 core_related_tables = []
 all_only_sys_table_name = {}
 mysql_compat_agent_tables = {}
 column_collation = 'CS_TYPE_INVALID'
-# Virtual tables accessible only from the system runtime or through system views.
+# virtual tables only accessible by sys tenant or sys views.
 restrict_access_virtual_tables = []
-is_extended_sys_table = False
+is_oracle_sys_table = False
 sys_index_tables = []
 copyright = """/*
  * Copyright (c) 2025 OceanBase.
@@ -147,16 +152,6 @@ def parse_args(argv):
   parser.add_argument('--def-file',
                       default=os.path.join(script_dir, 'ob_inner_table_schema_def.py'),
                       help='Path to the schema definition Python file')
-  parser.add_argument('--share-output-dir',
-                      default=share_output_dir,
-                      help='Directory for generated share/inner_table files')
-  parser.add_argument('--observer-output-dir',
-                      default=observer_output_dir,
-                      help='Directory for generated observer/virtual_table files')
-  parser.add_argument('--expected-output',
-                      action='append',
-                      default=[],
-                      help='Expected generated path, prefixed with share/ or observer/')
   parser.add_argument('--quiet',
                       action='store_true',
                       help='Suppress non-error output')
@@ -166,40 +161,12 @@ def parse_args(argv):
   return parser.parse_args(argv)
 
 def configure_paths(args):
-  global share_output_dir
-  global observer_output_dir
   global quiet_mode
   global verbose_mode
-  share_output_dir = os.path.abspath(args.share_output_dir)
-  observer_output_dir = os.path.abspath(args.observer_output_dir)
   quiet_mode = args.quiet
   verbose_mode = args.verbose
   os.makedirs(share_output_dir, exist_ok=True)
   os.makedirs(observer_output_dir, exist_ok=True)
-
-def validate_expected_outputs(expected_outputs):
-  if not expected_outputs:
-    return
-  actual_outputs = []
-  for output_dir, prefix in (
-      (share_output_dir, 'share'),
-      (observer_output_dir, 'observer')):
-    for filename in os.listdir(output_dir):
-      path = os.path.join(output_dir, filename)
-      if os.path.isfile(path):
-        actual_outputs.append('{0}/{1}'.format(prefix, filename))
-  expected_outputs = sorted(expected_outputs)
-  actual_outputs = sorted(actual_outputs)
-  if expected_outputs != actual_outputs:
-    diff = difflib.unified_diff(
-        expected_outputs,
-        actual_outputs,
-        fromfile='expected outputs',
-        tofile='actual outputs',
-        lineterm='')
-    raise RuntimeError(
-        'inner-table generator output set changed; update the Bazel declaration:\n'
-        + '\n'.join(diff))
   
 def print_method_start(table_name):
   global cpp_f
@@ -709,7 +676,7 @@ def add_gm_columns(columns):
 
 def add_column(column, rowkey_id, index_id, part_key_pos, column_id=0, is_hidden='false', is_storing_column='false'):
   global column_collation
-  global is_extended_sys_table
+  global is_oracle_sys_table
   column_name = None
   column_type = None
   column_collation_type = 'CS_TYPE_INVALID';
@@ -764,7 +731,7 @@ def add_column(column, rowkey_id, index_id, part_key_pos, column_id=0, is_hidden
       s = column_type.split(':')
       column_type = 'ObVarcharType'
       column_length = s[1]
-      if True == is_extended_sys_table:
+      if True == is_oracle_sys_table:
         column_precision = 2
       column_collation_type = column_collation;
     elif column_type[:9]  == 'varbinary':
@@ -971,7 +938,11 @@ def add_list_partition_expr_field(value):
     cpp_f.write(line)
     line = "    if (OB_FAIL(table_schema.get_part_option().set_part_expr(%s))) {\n" % expr_str
     cpp_f.write(line)
+    line = "      LOG_WARN(\"set_part_expr failed\", K(ret));\n";
+    cpp_f.write(line)
     line = "    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {\n"
+    cpp_f.write(line)
+    line = "      LOG_WARN(\"mock list partition array failed\", K(ret));\n";
     cpp_f.write(line)
     cpp_f.write("    }\n")
     cpp_f.write("  }\n")
@@ -996,6 +967,8 @@ def add_partition_expr_field(value, table_id):
     line = "    table_schema.get_part_option().set_part_func_type(%s);\n" % type_str
     cpp_f.write(line)
     line = "    if (OB_FAIL(table_schema.get_part_option().set_part_expr(%s))) {\n" % expr_str
+    cpp_f.write(line)
+    line = "      LOG_WARN(\"set_part_expr failed\", K(ret));\n";
     cpp_f.write(line)
     cpp_f.write("    }\n")
     line = "    table_schema.get_part_option().set_part_num(%s);\n" % value[2]
@@ -1059,6 +1032,10 @@ def copy_keywords(keywords):
   log_debug("copy_keywords in: table_id=", tid, ",  table_name=" + tname, ", base_table_name=" + base_tname, ", base_table_name1=" + base_tname1, ", base_table_name2=" + base_tname2)
   # Default base_table_name equals its table name
   # base_table_name[1,2] records the original base table name in the scenario of multi-layer schema nested definitions
+  # For example: schema of table number 15118, which nestedly defines two layers of base tables:
+  # Real table name: ALL_VIRTUAL_GLOBAL_TRANSACTION
+  # First layer base table: __all_tenant_global_transaction
+  # Second layer base table: __all_virtual_global_transaction
   if base_tname == '':
     base_tname = tname;
     keywords["base_table_name"] = tname;
@@ -1128,7 +1105,7 @@ def def_all_lob_aux_table():
     if line[3] == "AUX_LOB_PIECE":
       def_table_schema(**gen_inner_lob_aux_table_def(line[1], line[2], line[3], line[4], line[5], line[6]))
 
-def gen_inner_lob_aux_table_def(data_table_name, table_id, table_type, keywords, is_in_runtime_space = False, cluster_private = False):
+def gen_inner_lob_aux_table_def(data_table_name, table_id, table_type, keywords, is_in_tenant_space = False, cluster_private = False):
   keywords["table_id"] = table_id
   keywords["table_name"] = data_table_name
   keywords["base_table_name"] = data_table_name
@@ -1141,8 +1118,8 @@ def gen_inner_lob_aux_table_def(data_table_name, table_id, table_type, keywords,
   new_keywords["table_type"] = table_type
   dtid = table_name2tid(data_table_name)
   new_keywords["data_table_id"] = dtid
-  if is_in_runtime_space:
-    new_keywords["in_runtime_space"] = is_in_runtime_space
+  if is_in_tenant_space:
+    new_keywords["in_tenant_space"] = is_in_tenant_space
 
   if cluster_private:
     new_keywords["is_cluster_private"] = cluster_private
@@ -1169,7 +1146,7 @@ def gen_iterate_core_inner_table_def(table_id, table_name, table_type, keywords)
     del new_keywords["index"]
 
   new_keywords["vtable_route_policy"] = 'local'
-  new_keywords["in_runtime_space"] = True
+  new_keywords["in_tenant_space"] = True
   return new_keywords
 
 def replace_agent_table_columns_def(columns):
@@ -1195,21 +1172,23 @@ def replace_agent_table_columns_def(columns):
     column[1] = t
     columns[i] = column[0:3] # ignore default value
 
-def __gen_agent_vt_base_on_mysql(table_id, keywords, table_name_suffix):
-  in_runtime_space = 'in_runtime_space' in keywords and keywords['in_runtime_space']
+def __gen_oracle_vt_base_on_mysql(table_id, keywords, table_name_suffix):
+  in_tenant_space = 'in_tenant_space' in keywords and keywords['in_tenant_space']
   is_cluster_private = 'is_cluster_private' in keywords and keywords['is_cluster_private']
-  if in_runtime_space and is_cluster_private:
+  if in_tenant_space and is_cluster_private:
     raise Exception("real table must be not cluster_private")
   new_keywords = copy_keywords(keywords)
 
   new_keywords["table_type"] = 'VIRTUAL_TABLE'
-  new_keywords["in_runtime_space"] = True
+  new_keywords["in_tenant_space"] = True
   new_keywords["table_id"] = table_id
-  new_keywords["database_id"] = "OB_EXTENDED_SYS_DATABASE_ID"
+  new_keywords["database_id"] = "OB_ORA_SYS_DATABASE_ID"
   new_keywords["collation_type"] = "ObCollationType::CS_TYPE_UTF8MB4_BIN"
   name = keywords["table_name"]
-  if name.startswith("__all_virtual_"):
+  if name.startswith("__all_virtual_") or name.startswith("__all_tenant_virtual"):
     new_keywords["table_name"] = name.replace("__all_", "all_").upper() + table_name_suffix
+  elif name.startswith("__tenant_virtual"):
+    new_keywords["table_name"] = name.replace("__tenant_", "tenant_").upper() + table_name_suffix
   else:
     new_keywords["table_name"] = name.replace("__all_", "all_virtual_").upper() + table_name_suffix
   replace_agent_table_columns_def(new_keywords["rowkey_columns"])
@@ -1231,7 +1210,7 @@ def __gen_agent_vt_base_on_mysql(table_id, keywords, table_name_suffix):
 
 def gen_sys_agent_virtual_table_def(table_id, keywords):
   global all_agent_virtual_tables
-  new_keywords = __gen_agent_vt_base_on_mysql(table_id, keywords, "_SYS_AGENT")
+  new_keywords = __gen_oracle_vt_base_on_mysql(table_id, keywords, "_SYS_AGENT")
   new_keywords["partition_expr"] = []
   new_keywords["partition_columns"] = []
   new_keywords["vtable_route_policy"] = "local"
@@ -1240,14 +1219,14 @@ def gen_sys_agent_virtual_table_def(table_id, keywords):
   return new_keywords
 
 def __gen_mysql_vt(table_id, keywords, table_name_suffix):
-  if 'in_runtime_space' in keywords and keywords['in_runtime_space']:
-    raise Exception("base table must not be in runtime space")
+  if 'in_tenant_space' in keywords and keywords['in_tenant_space']:
+    raise Exception("base table should not in_tenant_space")
   elif 'SYSTEM_TABLE' != keywords['table_type'] and 'VIRTUAL_TABLE' != keywords['table_type']:
     raise Exception("unsupported table type", keywords['table_type'])
   new_keywords = copy_keywords(keywords)
 
   new_keywords["table_type"] = 'VIRTUAL_TABLE'
-  new_keywords["in_runtime_space"] = True
+  new_keywords["in_tenant_space"] = True
   new_keywords["table_id"] = table_id
   new_keywords["database_id"] = "OB_SYS_DATABASE_ID"
   name = keywords["table_name"]
@@ -1259,15 +1238,52 @@ def __gen_mysql_vt(table_id, keywords, table_name_suffix):
   new_keywords["base_def_keywords"] = keywords
   return new_keywords
 
+# def gen_mysql_sys_agent_virtual_table_def(...) removed (single-tenant: iterate VT mechanism deleted)
 
 def gen_agent_virtual_table_def(table_id, keywords):
   global all_agent_virtual_tables
-  new_keywords = __gen_agent_vt_base_on_mysql(table_id, keywords, "_AGENT")
+  new_keywords = __gen_oracle_vt_base_on_mysql(table_id, keywords, "_AGENT")
   new_keywords["partition_expr"] = []
   new_keywords["partition_columns"] = []
   if 'vtable_route_policy' in new_keywords:
     del(new_keywords["vtable_route_policy"])
   all_agent_virtual_tables.append(new_keywords)
+  return new_keywords
+
+def gen_oracle_mapping_virtual_table_base_def(table_id, keywords, real_table):
+  if True == real_table:
+    new_keywords = __gen_oracle_vt_base_on_mysql(table_id, keywords, "_REAL_AGENT")
+    new_keywords["is_real_virtual_table"] = True
+  else :
+    new_keywords = __gen_oracle_vt_base_on_mysql(table_id, keywords, "")
+
+  new_keywords["name_postfix"] = "_ORA"
+  new_keywords["partition_expr"] = []
+  if "partition_columns" in new_keywords:
+    new_keywords["partition_columns"] = [ c.upper() for c in new_keywords["partition_columns"] ]
+
+  if True == real_table :
+    new_keywords["mapping_tid"] = table_name2tid(keywords['table_name'])
+    new_keywords["self_tid"] = table_name2tid(new_keywords['table_name'] + new_keywords['name_postfix'])
+    new_keywords["real_vt"] = True
+    real_table_virtual_table_names.append(new_keywords)
+  else :
+    all_ora_mapping_virtual_table_org_tables.append(table_name2tid(keywords['table_name']))
+    all_ora_mapping_virtual_tables.append(table_name2tid(new_keywords['table_name'] + new_keywords['name_postfix']))
+  return new_keywords
+
+def gen_oracle_mapping_virtual_table_def(table_id, keywords):
+  return gen_oracle_mapping_virtual_table_base_def(table_id, keywords, False)
+
+def gen_oracle_mapping_real_virtual_table_def(table_id, keywords):
+  in_tenant_space = 'in_tenant_space' in keywords and keywords['in_tenant_space']
+  if False == in_tenant_space:
+    raise Exception("real table must be tenant space", keywords['rowkey_columns'])
+  is_cluster_private = 'is_cluster_private' in keywords and keywords['is_cluster_private']
+  if True == is_cluster_private:
+    raise Exception("real table must be not cluster_private")
+  new_keywords = gen_oracle_mapping_virtual_table_base_def(table_id, keywords, True)
+
   return new_keywords
 
 def gen_cluster_config_def(table_id, table_name, keywords):
@@ -1289,31 +1305,94 @@ def generate_cluster_private_table(f):
       cluster_private_switch += 'case ' + table_name2tid(kw['table_name'] + kw['name_postfix']) + ':\n'
   f.write('\n\n#ifdef CLUSTER_PRIVATE_TABLE_SWITCH\n' + cluster_private_switch + '\n#endif\n')
 
-def generate_local_virtual_table_registration(f):
+def generate_sqlite_create_table_statements(f):
   """
-  Generate local virtual table registration code snippets
+  Generate SQLite CREATE TABLE statement string constants
+  These strings can be used in corresponding .cpp files
+  """
+  global all_sqlite_tables
+  
+  if not all_sqlite_tables:
+    return
+  
+  f.write('\n\n#ifdef SQLITE_CREATE_TABLE_STATEMENTS\n')
+  f.write('#ifndef SQLITE_CREATE_TABLE_STATEMENTS_DEFINED\n')
+  f.write('#define SQLITE_CREATE_TABLE_STATEMENTS_DEFINED\n')
+  f.write('// Auto-generated SQLite CREATE TABLE statements\n')
+  f.write('// DO NOT EDIT THIS FILE MANUALLY\n')
+  f.write('// Usage: Include this file and use the constant strings in your .cpp file\n\n')
+  
+  for table_def in all_sqlite_tables:
+    table_name = table_def['table_name']
+    columns = table_def['columns']
+    primary_key = table_def['primary_key']
+    
+    # Generate CREATE TABLE statement string
+    create_sql_lines = []
+    create_sql_lines.append("CREATE TABLE IF NOT EXISTS {0} (".format(table_name))
+    
+    column_defs = []
+    for i, col in enumerate(columns):
+      col_name, col_type, nullable, default_val = col
+      col_def = "  {0} {1} {2}".format(col_name, col_type, nullable)
+      if default_val is not None:
+        col_def += " DEFAULT {0}".format(default_val)
+      # Add comma after all columns except the last one
+      if i < len(columns) - 1 or primary_key:
+        col_def += ","
+      column_defs.append(col_def)
+    
+    create_sql_lines.extend(column_defs)
+    
+    if primary_key:
+      pk_cols = ", ".join(primary_key)
+      create_sql_lines.append("  PRIMARY KEY ({0})".format(pk_cols))
+    
+    create_sql_lines.append(");")
+    
+    # Generate constant name (converted from table name)
+    # __all_merge_info -> SQLITE_CREATE_TABLE_ALL_MERGE_INFO
+    const_name = 'SQLITE_CREATE_TABLE_' + table_name.replace('__all_', '').upper().replace('_', '_')
+    
+    # Generate C++ string constant (using inline to avoid duplicate definitions)
+    f.write('// {0}\n'.format(table_name))
+    f.write('inline const char *{0} = \n'.format(const_name))
+    for i, line in enumerate(create_sql_lines):
+      if i == 0:
+        f.write('  "{0}\\n"\n'.format(line))
+      elif i == len(create_sql_lines) - 1:
+        f.write('  "{0}";\n\n'.format(line))
+      else:
+        f.write('  "{0}\\n"\n'.format(line))
+  
+  f.write('#endif // SQLITE_CREATE_TABLE_STATEMENTS_DEFINED\n')
+  f.write('#endif // SQLITE_CREATE_TABLE_STATEMENTS\n')
+
+def generate_sqlite_virtual_table_registration(f):
+  """
+  Generate SQLite virtual table registration code snippets
   These code snippets will be included in ob_virtual_table_iterator_factory.cpp
-  Note: All local virtual tables are now defined in ob_all_virtual_local_tables.h
+  Note: All SQLite virtual tables are now defined in ob_all_virtual_sqlite_tables.h
   """
-  global all_local_virtual_tables
+  global all_sqlite_virtual_tables
   
   # Generate #ifdef even if empty, for clearer code structure
-  f.write('\n\n#ifdef LOCAL_VIRTUAL_TABLE_CREATE_ITER\n')
+  f.write('\n\n#ifdef SQLITE_VIRTUAL_TABLE_CREATE_ITER\n')
   
-  if not all_local_virtual_tables:
-    f.write('\n  // No local virtual tables defined\n')
-    f.write('#endif // LOCAL_VIRTUAL_TABLE_CREATE_ITER\n')
+  if not all_sqlite_virtual_tables:
+    f.write('\n  // No SQLite virtual tables defined\n')
+    f.write('#endif // SQLITE_VIRTUAL_TABLE_CREATE_ITER\n')
     return
   
   # Add unified header file inclusion hint
-  f.write('\n  // All local virtual tables are defined in ob_all_virtual_local_tables.h\n')
+  f.write('\n  // All SQLite virtual tables are defined in ob_all_virtual_sqlite_tables.h\n')
   f.write('  // Include it in ob_virtual_table_iterator_factory.cpp:\n')
-  f.write('  // (local virtual tables header is pulled in by the factory cpp, not here)\n\n')
+  f.write('  // (sqlite virtual tables header is pulled in by the factory cpp, not here)\n\n')
   
   # Use BEGIN_CREATE_VT_ITER_SWITCH_LAMBDA and END_CREATE_VT_ITER_SWITCH_LAMBDA macros
   f.write('  BEGIN_CREATE_VT_ITER_SWITCH_LAMBDA\n')
   
-  for kw in all_local_virtual_tables:
+  for kw in all_sqlite_virtual_tables:
     table_name = kw['table_name']
     table_id = kw['table_id']
     
@@ -1335,42 +1414,43 @@ def generate_local_virtual_table_registration(f):
     f.write('    }\n')
   
   f.write('  END_CREATE_VT_ITER_SWITCH_LAMBDA\n\n')
-  f.write('#endif // LOCAL_VIRTUAL_TABLE_CREATE_ITER\n')
+  f.write('#endif // SQLITE_VIRTUAL_TABLE_CREATE_ITER\n')
 
-def generate_local_virtual_table_cpp_files():
+def generate_sqlite_virtual_table_cpp_files():
   """
-  Generate unified .h and .cpp files for all local virtual tables
-  All local virtual tables are placed in ob_all_virtual_local_tables.cpp/h
+  Generate unified .h and .cpp files for all SQLite virtual tables
+  All SQLite virtual tables are placed in ob_all_virtual_sqlite_tables.cpp/h
   """
-  global all_local_virtual_tables
+  global all_sqlite_virtual_tables
   
-  if not all_local_virtual_tables:
+  if not all_sqlite_virtual_tables:
     return
   
   # Generate unified header file
-  generate_unified_local_virtual_table_h()
+  generate_unified_sqlite_virtual_table_h()
   
   # Generate unified implementation file
-  generate_unified_local_virtual_table_cpp()
+  generate_unified_sqlite_virtual_table_cpp()
 
-def generate_unified_local_virtual_table_h():
+def generate_unified_sqlite_virtual_table_h():
   """
-  Generate unified local virtual table header file
-  All local virtual table class definitions are in this file
+  Generate unified SQLite virtual table header file
+  All SQLite virtual table class definitions are in this file
   """
-  global all_local_virtual_tables
-  h_file = observer_out_path('ob_all_virtual_local_tables.h')
+  global all_sqlite_virtual_tables
+  h_file = observer_out_path('ob_all_virtual_sqlite_tables.h')
   h_dir = os.path.dirname(h_file)
   if not os.path.exists(h_dir):
     os.makedirs(h_dir)
   
   with open(h_file, 'w') as f:
     f.write(copyright)
-    f.write('\n#pragma once\n\n')
-    f.write('// Auto-generated unified header for all local virtual tables\n')
+    f.write('\n#ifndef OB_ALL_VIRTUAL_SQLITE_TABLES_H_\n')
+    f.write('#define OB_ALL_VIRTUAL_SQLITE_TABLES_H_\n\n')
+    f.write('// Auto-generated unified header for all SQLite virtual tables\n')
     f.write('// DO NOT EDIT THIS FILE MANUALLY\n\n')
     f.write('#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"\n')
-    f.write('#include "share/storage/local_store.h"\n')
+    f.write('#include "share/storage/ob_sqlite_connection_pool.h"\n')
     f.write('#include "lib/container/ob_se_array.h"\n\n')
     f.write('namespace oceanbase\n')
     f.write('{\n')
@@ -1378,13 +1458,16 @@ def generate_unified_local_virtual_table_h():
     f.write('{\n\n')
     
     # Generate class definition for each virtual table
-    for kw in all_local_virtual_tables:
+    for kw in all_sqlite_virtual_tables:
       table_name = kw['table_name']
       class_name_parts = table_name.replace('__all_virtual_', '').split('_')
       class_name = 'ObAllVirtual' + ''.join([x.capitalize() for x in class_name_parts])
       
       columns = kw.get('normal_columns', [])
       rowkey_columns = kw.get('rowkey_columns', [])
+      # SQLite virtual table columns should match the base table exactly, no additional columns (e.g., gm_columns)
+      all_columns = [col[0] for col in rowkey_columns] + [col[0] for col in columns]
+      
       f.write('class {0} : public common::ObVirtualTableScannerIterator\n'.format(class_name))
       f.write('{\n')
       f.write('public:\n')
@@ -1395,32 +1478,66 @@ def generate_unified_local_virtual_table_h():
       f.write('  virtual void reset() override;\n\n')
       f.write('private:\n')
       f.write('  int fill_cells();\n')
-      f.write('  int get_next_row_from_local();\n\n')
+      f.write('  int get_next_row_from_sqlite();\n\n')
       f.write('private:\n')
       f.write('  bool is_inited_;\n')
-      f.write('  share::LocalCursor cursor_;\n')
+      f.write('  share::ObSQLiteConnectionGuard guard_;\n')
+      f.write('  share::ObSQLiteStmt *stmt_;\n')
       f.write('  int64_t row_idx_;\n')
       
-      for column in rowkey_columns + columns:
-        sql_type = column[1]
-        col_type = 'common::ObString'
-        if local_column_kind(sql_type) == 'Integer':
-          col_type = 'uint64_t' if sql_type == 'uint' else 'int64_t'
-        f.write('  {0} {1}_;\n'.format(col_type, column[0]))
+      for col_name in all_columns:
+        col_type = 'int64_t'
+        # First check the original SQLite type (from base table's _sqlite_columns)
+        base_kw_check = kw.get('base_def_keywords', {})
+        base_sqlite_cols_check = base_kw_check.get('_sqlite_columns', [])
+        sqlite_type_check = None
+        for sqlite_col in base_sqlite_cols_check:
+          if sqlite_col[0] == col_name:
+            sqlite_type_check = sqlite_col[1]
+            break
+        
+        # Determine C++ type based on SQLite type
+        # All columns of SQLite virtual table should be in base table's _sqlite_columns
+        if sqlite_type_check == 'BLOB':
+          col_type = 'common::ObString'
+        elif sqlite_type_check == 'TEXT':
+          col_type = 'common::ObString'
+        elif sqlite_type_check == 'INTEGER':
+          # INTEGER type needs further determination of int or uint (from OceanBase type)
+          col_type = 'int64_t'  # Default, may be overridden to uint64_t later
+          for col in rowkey_columns:
+            if col[0] == col_name and 'uint' in col[1]:
+              col_type = 'uint64_t'
+              break
+          if col_type == 'int64_t':
+            for col in columns:
+              if col[0] == col_name and 'uint' in col[1]:
+                col_type = 'uint64_t'
+                break
+        elif sqlite_type_check is None:
+          # Column not in _sqlite_columns, this is an error condition
+          raise Exception("Column {0} not found in base table {1} _sqlite_columns".format(col_name, base_table_name_check))
+        else:
+          # Unknown SQLite type
+          raise Exception("Unknown SQLite type {0} for column {1} in table {2}".format(sqlite_type_check, col_name, base_table_name_check))
+      
+        var_name = col_name + '_'
+        f.write('  {0} {1};\n'.format(col_type, var_name))
       
       f.write('\n  DISALLOW_COPY_AND_ASSIGN({0});\n'.format(class_name))
       f.write('};\n\n')
     
     f.write('} // namespace observer\n')
     f.write('} // namespace oceanbase\n\n')
+    f.write('#endif /* OB_ALL_VIRTUAL_SQLITE_TABLES_H_ */\n')
 
-def generate_unified_local_virtual_table_cpp():
+def generate_unified_sqlite_virtual_table_cpp():
   """
-  Generate unified local virtual table implementation file
-  All local virtual table implementations are in this file
+  Generate unified SQLite virtual table implementation file
+  All SQLite virtual table implementations are in this file
   """
-  global all_local_virtual_tables
-  cpp_file = observer_out_path('ob_all_virtual_local_tables.cpp')
+  global all_sqlite_virtual_tables
+  cpp_file = observer_out_path('ob_all_virtual_sqlite_tables.cpp')
   cpp_dir = os.path.dirname(cpp_file)
   if not os.path.exists(cpp_dir):
     os.makedirs(cpp_dir)
@@ -1428,15 +1545,13 @@ def generate_unified_local_virtual_table_cpp():
   with open(cpp_file, 'w') as f:
     f.write(copyright)
     f.write('\n#define USING_LOG_PREFIX SERVER\n\n')
-    f.write('#include "observer/virtual_table/ob_all_virtual_local_tables.h"\n')
+    f.write('#include "observer/virtual_table/ob_all_virtual_sqlite_tables.h"\n')
     f.write('#include "share/ob_server_struct.h"\n')
-    f.write('#include "share/storage/local_store.h"\n')
+    f.write('#include "share/storage/ob_sqlite_connection.h"\n')
     f.write('#include "lib/oblog/ob_log.h"\n')
     f.write('#include "lib/time/ob_time_utility.h"\n')
     f.write('#include "lib/utility/ob_print_utils.h"\n')
-    f.write('#include \"config_bridge.h\"\n\n')
-    f.write('#include <string_view>\n')
-    f.write('#include "share/inner_table/local_table_schema.h"\n')
+    f.write('#include <sqlite/sqlite3.h>\n\n')
     f.write('namespace oceanbase\n')
     f.write('{\n')
     f.write('using namespace common;\n')
@@ -1445,40 +1560,88 @@ def generate_unified_local_virtual_table_cpp():
     f.write('{\n\n')
     
     # Generate implementation for each virtual table
-    for kw in all_local_virtual_tables:
+    for kw in all_sqlite_virtual_tables:
       table_name = kw['table_name']
+      base_table_name = kw['base_def_keywords']['table_name']
+      sqlite_db_pool = kw.get('sqlite_db_pool', 'GCTX.meta_db_pool_')
       
       class_name_parts = table_name.replace('__all_virtual_', '').split('_')
       class_name = 'ObAllVirtual' + ''.join([x.capitalize() for x in class_name_parts])
       
       columns = kw.get('normal_columns', [])
       rowkey_columns = kw.get('rowkey_columns', [])
-      # local virtual table columns should match the base table exactly, no additional columns (e.g., gm_columns)
+      # SQLite virtual table columns should match the base table exactly, no additional columns (e.g., gm_columns)
       all_columns = [col[0] for col in rowkey_columns] + [col[0] for col in columns]
+      select_columns = ', '.join(all_columns)
       
       # Generate implementation for a single class (reuse original logic)
-      generate_single_local_virtual_table_impl(f, class_name, kw, all_columns)
+      generate_single_sqlite_virtual_table_impl(f, table_name, class_name, base_table_name, sqlite_db_pool, kw, all_columns, select_columns)
     
     f.write('} // namespace observer\n')
     f.write('} // namespace oceanbase\n')
 
-def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
+def generate_single_sqlite_virtual_table_impl(f, table_name, class_name, base_table_name, sqlite_db_pool, kw, all_columns, select_columns):
   """
-  Generate implementation code for a single local virtual table
+  Generate implementation code for a single SQLite virtual table
   """
+  global all_def_keywords
   # Constructor
   f.write('{0}::{0}()\n'.format(class_name))
   f.write('  : is_inited_(false),\n')
-  f.write('    cursor_(),\n')
+  f.write('    guard_(),\n')
+  f.write('    stmt_(nullptr),\n')
   f.write('    row_idx_(0)')
   
   columns = kw.get('normal_columns', [])
   rowkey_columns = kw.get('rowkey_columns', [])
-  # local virtual table doesn't need gm_columns, columns should match base table exactly
+  # SQLite virtual table doesn't need gm_columns, columns should match base table exactly
   
-  for column in rowkey_columns + columns:
-    default_val = '0' if local_column_kind(column[1]) == 'Integer' else ''
-    f.write(',\n    {0}_({1})'.format(column[0], default_val))
+  for col_name in all_columns:
+    var_name = col_name + '_'
+    # Check original SQLite type to determine default value
+    base_table_name_check = base_table_name.replace('__all_virtual_', '__all_')
+    base_kw_check = all_def_keywords.get(base_table_name_check, {})
+    base_sqlite_cols_check = base_kw_check.get('_sqlite_columns', [])
+    sqlite_type_check = None
+    for sqlite_col in base_sqlite_cols_check:
+      if sqlite_col[0] == col_name:
+        sqlite_type_check = sqlite_col[1]
+        break
+    
+    # Determine default value based on SQLite type
+    # All columns of SQLite virtual table should be in base table's _sqlite_columns
+    if sqlite_type_check == 'BLOB' or sqlite_type_check == 'TEXT':
+      # BLOB and TEXT types use empty string, generate name_() instead of name_(ObString())
+      default_val = ''
+    elif sqlite_type_check == 'INTEGER':
+      default_val = '0'
+      for col in columns:
+        if col[0] == col_name:
+          if len(col) > 3:
+            default_val = col[3]
+          break
+      # Check if default_val is a large integer that needs ULL suffix
+      # Values >= 2^63 (9223372036854775808) need ULL suffix for uint64_t
+      # Also check for OB_MAX_SCN_TS_NS equivalent value (18446744073709551615)
+      try:
+        if default_val and default_val.isdigit():
+          # In Python 2, int() can handle arbitrary size, in Python 3 use int()
+          # Compare as string length first for efficiency
+          if len(default_val) > 18:  # 2^63 has 19 digits
+            default_val = default_val + 'ULL'
+          elif len(default_val) == 19:
+            # Check if >= 9223372036854775808 (2^63)
+            if default_val >= '9223372036854775808':
+              default_val = default_val + 'ULL'
+      except (ValueError, OverflowError):
+        pass  # Not a number, use as-is
+    elif sqlite_type_check is None:
+      # Column not in _sqlite_columns, this is an error condition
+      raise Exception("Column {0} not found in base table {1} _sqlite_columns".format(col_name, base_table_name_check))
+    else:
+      # Unknown SQLite type
+      raise Exception("Unknown SQLite type {0} for column {1} in table {2}".format(sqlite_type_check, col_name, base_table_name_check))
+    f.write(',\n    {0}({1})'.format(var_name, default_val))
   
   f.write('\n{\n')
   f.write('}\n\n')
@@ -1488,41 +1651,42 @@ def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
   f.write('{\n')
   f.write('  reset();\n')
   f.write('}\n\n')
-
+  
   # reset
   f.write('void {0}::reset()\n'.format(class_name))
   f.write('{\n')
-  f.write('  cursor_.reset();\n')
+  f.write('  if (stmt_) {\n')
+  f.write('    guard_->finalize_query(stmt_);\n')
+  f.write('    stmt_ = nullptr;\n')
+  f.write('  }\n')
   f.write('  is_inited_ = false;\n')
   f.write('  row_idx_ = 0;\n')
   f.write('  ObVirtualTableScannerIterator::reset();\n')
   f.write('}\n\n')
-
-  # Open a snapshot cursor, or enumerate the Rust configuration catalog.
-  if kw['storage'] is None:
-    f.write('int {0}::inner_open() {{ is_inited_ = true; row_idx_ = 0; return OB_SUCCESS; }}\n\n'.format(class_name))
-  else:
-    # inner_open
-    f.write('int {0}::inner_open()\n'.format(class_name))
-    f.write('{\n')
-    f.write('  int ret = OB_SUCCESS;\n\n')
-    f.write('  if (nullptr == GCTX.local_store_) {\n')
-    f.write('    ret = OB_ERR_UNEXPECTED;\n')
-    f.write('    SERVER_LOG(WARN, "local store is not initialized", K(ret));\n')
-    f.write('  } else {\n')
-    schema = kw['storage']['namespace']
-    selected_columns = ', '.join(schema + '::' + local_column_enum(col) for col in all_columns)
-    f.write('    const auto select_request = LocalRequest::select({0}::schema(), {{{1}}});\n'.format(schema, selected_columns))
-    f.write('    if (OB_FAIL(GCTX.local_store_->open_cursor(select_request, cursor_))) {\n')
-    f.write('      SERVER_LOG(WARN, "failed to open local cursor", K(ret));\n')
-    f.write('    } else {\n')
-    f.write('      is_inited_ = true;\n')
-    f.write('      row_idx_ = 0;\n')
-    f.write('    }\n')
-    f.write('  }\n\n')
-    f.write('  return ret;\n')
-    f.write('}\n\n')
-
+  
+  # inner_open
+  f.write('int {0}::inner_open()\n'.format(class_name))
+  f.write('{\n')
+  f.write('  int ret = OB_SUCCESS;\n\n')
+  f.write('  ObSQLiteConnectionGuard guard({0});\n'.format(sqlite_db_pool))
+  f.write('  if (!guard) {\n')
+  f.write('    ret = OB_ERR_UNEXPECTED;\n')
+  f.write('    SERVER_LOG(WARN, "failed to acquire connection", K(ret));\n')
+  f.write('  } else {\n')
+  f.write('    guard_ = std::move(guard);\n')
+  f.write('    const char *select_sql =\n')
+  f.write('      "SELECT {0} "\n'.format(select_columns))
+  f.write('      "FROM {0};";\n\n'.format(base_table_name))
+  f.write('    if (OB_FAIL(guard_->prepare_query(select_sql, nullptr, stmt_))) {\n')
+  f.write('      SERVER_LOG(WARN, "failed to prepare query", K(ret));\n')
+  f.write('    } else {\n')
+  f.write('      is_inited_ = true;\n')
+  f.write('      row_idx_ = 0;\n')
+  f.write('    }\n')
+  f.write('  }\n\n')
+  f.write('  return ret;\n')
+  f.write('}\n\n')
+  
   # inner_get_next_row
   f.write('int {0}::inner_get_next_row(common::ObNewRow *&row)\n'.format(class_name))
   f.write('{\n')
@@ -1531,11 +1695,11 @@ def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
   f.write('    ret = OB_NOT_INIT;\n')
   f.write('    SERVER_LOG(WARN, "not initialized", K(ret));\n')
   f.write('  } else {\n')
-  f.write('    ret = get_next_row_from_local();\n')
+  f.write('    ret = get_next_row_from_sqlite();\n')
   f.write('    if (OB_ITER_END == ret) {\n')
   f.write('      // End of result set\n')
   f.write('    } else if (OB_FAIL(ret)) {\n')
-  f.write('      SERVER_LOG(WARN, "failed to get next row from local", K(ret));\n')
+  f.write('      SERVER_LOG(WARN, "failed to get next row from sqlite", K(ret));\n')
   f.write('    } else if (OB_FAIL(fill_cells())) {\n')
   f.write('      SERVER_LOG(WARN, "failed to fill cells", K(ret));\n')
   f.write('    } else {\n')
@@ -1544,74 +1708,76 @@ def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
   f.write('  }\n\n')
   f.write('  return ret;\n')
   f.write('}\n\n')
-
-  if kw['storage'] is None:
-    f.write('int {0}::get_next_row_from_local()\n{{\n'.format(class_name))
-    f.write('  if (row_idx_ >= config::parameter_count()) { return OB_ITER_END; }\n')
-    f.write('  const auto parameter = config::parameter_row(row_idx_++);\n')
-    f.write('  int ret = OB_SUCCESS;\n')
-    metadata = {'value_strict': 'value'}
-    for definition in rowkey_columns + columns:
-      column = definition[0]
-      kind = local_column_kind(definition[1])
-      if column == 'visible_level':
-        f.write('  visible_level_.reset();\n')
-      elif kind == 'Text':
-        field = metadata.get(column, column)
-        f.write('  if (OB_SUCC(ret)) {{ ret = ob_write_string(*allocator_, ObString(parameter.{0}.size(), parameter.{0}.data()), {1}_); }}\n'.format(field, column))
-      elif column == 'need_reboot':
-        f.write('  need_reboot_ = (std::string_view(parameter.edit_level.data(), parameter.edit_level.size()) == "STATIC_EFFECTIVE");\n')
-      elif column == 'config_version':
-        f.write('  config_version_ = config::generation();\n')
+  
+  # get_next_row_from_sqlite
+  f.write('int {0}::get_next_row_from_sqlite()\n'.format(class_name))
+  f.write('{\n')
+  f.write('  int ret = OB_SUCCESS;\n\n')
+  f.write('  if (OB_ISNULL(stmt_)) {\n')
+  f.write('    ret = OB_ERR_UNEXPECTED;\n')
+  f.write('    SERVER_LOG(WARN, "statement is null", K(ret), KP(stmt_));\n')
+  f.write('  } else {\n')
+  f.write('    ObSQLiteRowReader reader;\n')
+  f.write('    ret = guard_->step_query(stmt_, reader);\n')
+  f.write('    if (OB_SUCC(ret)) {\n')
+  
+  # Read data
+  for col_name in all_columns:
+      var_name = col_name + '_'
+      read_method = 'get_int64'
+      # First check the original SQLite type (from base table's _sqlite_columns)
+      base_table_name = base_table_name.replace('__all_virtual_', '__all_')
+      base_kw = all_def_keywords.get(base_table_name, {})
+      base_sqlite_cols = base_kw.get('_sqlite_columns', [])
+      sqlite_type = None
+      for sqlite_col in base_sqlite_cols:
+        if sqlite_col[0] == col_name:
+          sqlite_type = sqlite_col[1]
+          break
+      
+      # Determine read method based on SQLite type
+      # All columns of SQLite virtual table should be in base table's _sqlite_columns
+      if sqlite_type == 'BLOB':
+        read_method = 'get_blob'
+      elif sqlite_type == 'TEXT':
+        read_method = 'get_text'
+      elif sqlite_type == 'INTEGER':
+        read_method = 'get_int64'
+      elif sqlite_type is None:
+        # Column not in _sqlite_columns, this is an error condition
+        raise Exception("Column {0} not found in base table {1} _sqlite_columns".format(col_name, base_table_name))
       else:
-        f.write('  {0}_ = 0;\n'.format(column))
-    f.write('  return ret;\n}\n\n')
-  else:
-    # get_next_row_from_local
-    f.write('int {0}::get_next_row_from_local()\n'.format(class_name))
-    f.write('{\n')
-    f.write('  int ret = OB_SUCCESS;\n\n')
-    f.write('  if (!is_inited_) {\n')
-    f.write('    ret = OB_ERR_UNEXPECTED;\n')
-    f.write('    SERVER_LOG(WARN, "local cursor is not open", K(ret));\n')
-    f.write('  } else {\n')
-    f.write('    LocalRowReader reader;\n')
-    f.write('    ret = cursor_.next(reader);\n')
-    f.write('    if (OB_SUCC(ret)) {\n')
-
-    for column in rowkey_columns + columns:
-        col_name = column[0]
-        var_name = col_name + '_'
-        read_method = {'Integer': 'get_int64', 'Text': 'get_text', 'Blob': 'get_blob'}[local_column_kind(column[1])]
-
-        if read_method == 'get_blob':
-          f.write('      int {0}_len = 0;\n'.format(col_name))
-          f.write('      const void *{0}_ptr = reader.get_blob(&{1}_len);\n'.format(col_name, col_name))
-          f.write('      if (OB_ISNULL({0}_ptr)) {{\n'.format(col_name))
-          f.write('        {0}.reset();\n'.format(var_name))
-          f.write('      } else {\n')
-          f.write('        {0}.assign_ptr(static_cast<const char *>({1}_ptr), {1}_len);\n'.format(var_name, col_name))
-          f.write('      }\n')
-        elif read_method == 'get_text':
-          f.write('      int {0}_len = 0;\n'.format(col_name))
-          f.write('      const char *{0}_str = reader.get_text(&{1}_len);\n'.format(col_name, col_name))
-          f.write('      if (OB_ISNULL({0}_str)) {{\n'.format(col_name))
-          f.write('        {0}.reset();\n'.format(var_name))
-          f.write('      } else {\n')
-          f.write('        {0}.assign_ptr({1}_str, {1}_len);\n'.format(var_name, col_name))
-          f.write('      }\n')
-        else:
-          f.write('      {0} = reader.{1}();\n'.format(var_name, read_method))
-
-    f.write('    } else if (OB_ITER_END == ret) {\n')
-    f.write('      // End of result set\n')
-    f.write('    } else {\n')
-    f.write('      SERVER_LOG(WARN, "failed to step query", K(ret));\n')
-    f.write('    }\n')
-    f.write('  }\n\n')
-    f.write('  return ret;\n')
-    f.write('}\n\n')
-
+        # Unknown SQLite type
+        raise Exception("Unknown SQLite type {0} for column {1} in table {2}".format(sqlite_type, col_name, base_table_name))
+      
+      if read_method == 'get_blob':
+        f.write('      int {0}_len = 0;\n'.format(col_name))
+        f.write('      const void *{0}_ptr = reader.get_blob(&{1}_len);\n'.format(col_name, col_name))
+        f.write('      if (OB_ISNULL({0}_ptr)) {{\n'.format(col_name))
+        f.write('        {0}.reset();\n'.format(var_name))
+        f.write('      } else {\n')
+        f.write('        {0}.assign_ptr(static_cast<const char *>({1}_ptr), {1}_len);\n'.format(var_name, col_name))
+        f.write('      }\n')
+      elif read_method == 'get_text':
+        f.write('      int {0}_len = 0;\n'.format(col_name))
+        f.write('      const char *{0}_str = reader.get_text(&{1}_len);\n'.format(col_name, col_name))
+        f.write('      if (OB_ISNULL({0}_str)) {{\n'.format(col_name))
+        f.write('        {0}.reset();\n'.format(var_name))
+        f.write('      } else {\n')
+        f.write('        {0}.assign_ptr({1}_str, {1}_len);\n'.format(var_name, col_name))
+        f.write('      }\n')
+      else:
+        f.write('      {0} = reader.{1}();\n'.format(var_name, read_method))
+  
+  f.write('    } else if (OB_ITER_END == ret) {\n')
+  f.write('      // End of result set\n')
+  f.write('    } else {\n')
+  f.write('      SERVER_LOG(WARN, "failed to step query", K(ret));\n')
+  f.write('    }\n')
+  f.write('  }\n\n')
+  f.write('  return ret;\n')
+  f.write('}\n\n')
+  
   # fill_cells
   f.write('int {0}::fill_cells()\n'.format(class_name))
   f.write('{\n')
@@ -1626,15 +1792,48 @@ def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
   f.write('      uint64_t col_id = output_column_ids_.at(i);\n')
   f.write('      switch (col_id) {\n')
   
-  for col_idx, column in enumerate(rowkey_columns + columns):
-    col_name = column[0]
+  col_idx = 0
+  for col_name in all_columns:
     var_name = col_name + '_'
     f.write('        case OB_APP_MIN_COLUMN_ID + {0}: {{\n'.format(col_idx))
     f.write('          // {0}\n'.format(col_name))
-    set_method = {'Integer': 'set_int', 'Text': 'set_varchar', 'Blob': 'set_varbinary'}[local_column_kind(column[1])]
-    if column[1] == 'uint':
-      set_method = 'set_uint64'
-
+    
+    set_method = 'set_int'
+    # First check the original SQLite type (from base table's _sqlite_columns)
+    base_table_name_check = base_table_name.replace('__all_virtual_', '__all_')
+    base_kw_check = all_def_keywords.get(base_table_name_check, {})
+    base_sqlite_cols_check = base_kw_check.get('_sqlite_columns', [])
+    sqlite_type_check = None
+    for sqlite_col in base_sqlite_cols_check:
+      if sqlite_col[0] == col_name:
+        sqlite_type_check = sqlite_col[1]
+        break
+    
+    # Determine set method based on SQLite type
+    # All columns of SQLite virtual table should be in base table's _sqlite_columns
+    if sqlite_type_check == 'BLOB':
+      set_method = 'set_varbinary'
+    elif sqlite_type_check == 'TEXT':
+      set_method = 'set_varchar'
+    elif sqlite_type_check == 'INTEGER':
+      # INTEGER type needs further determination of int or uint (from OceanBase type)
+      set_method = 'set_int'  # Default, may be overridden to set_uint64
+      for col in rowkey_columns:
+        if col[0] == col_name and 'uint' in col[1]:
+          set_method = 'set_uint64'
+          break
+      if set_method == 'set_int':
+        for col in columns:
+          if col[0] == col_name and 'uint' in col[1]:
+            set_method = 'set_uint64'
+            break
+    elif sqlite_type_check is None:
+      # Column not in _sqlite_columns, this is an error condition
+      raise Exception("Column {0} not found in base table {1} _sqlite_columns".format(col_name, base_table_name_check))
+    else:
+      # Unknown SQLite type
+      raise Exception("Unknown SQLite type {0} for column {1} in table {2}".format(sqlite_type_check, col_name, base_table_name_check))
+    
     if set_method == 'set_varbinary':
       f.write('          cells[i].set_varbinary({0});\n'.format(var_name))
     elif set_method == 'set_varchar':
@@ -1645,6 +1844,7 @@ def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
     
     f.write('          break;\n')
     f.write('        }\n')
+    col_idx += 1
   
   f.write('        default: {\n')
   f.write('          ret = OB_ERR_UNEXPECTED;\n')
@@ -1656,6 +1856,460 @@ def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
   f.write('  }\n\n')
   f.write('  return ret;\n')
   f.write('}\n\n')
+
+def generate_sqlite_virtual_table_h(table_name, class_name, kw):
+  """
+  Generate virtual table .h file
+  """
+  import os
+  # Script is in src/share/inner_table/ directory, need to go up two levels to project root
+  script_dir = os.path.dirname(os.path.abspath(__file__))
+  project_root = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+  h_file = os.path.join(project_root, 'src/observer/virtual_table/ob_all_virtual_' + table_name.replace('__all_virtual_', '') + '.h')
+  
+  # Ensure directory exists
+  h_dir = os.path.dirname(h_file)
+  if not os.path.exists(h_dir):
+    os.makedirs(h_dir)
+  
+  columns = kw.get('normal_columns', [])
+  rowkey_columns = kw.get('rowkey_columns', [])
+  # SQLite virtual table columns should match the base table exactly, no additional columns (e.g., gm_columns)
+  all_columns = [col[0] for col in rowkey_columns] + [col[0] for col in columns]
+  
+  with open(h_file, 'w') as f:
+    f.write(copyright)
+    f.write('\n#ifndef OB_ALL_VIRTUAL_{0}_H_\n'.format(table_name.upper().replace('__', '_').replace('_', '_')))
+    f.write('#define OB_ALL_VIRTUAL_{0}_H_\n\n'.format(table_name.upper().replace('__', '_').replace('_', '_')))
+    f.write('#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"\n')
+    f.write('#include "share/storage/ob_sqlite_connection_pool.h"\n')
+    f.write('#include "lib/container/ob_se_array.h"\n\n')
+    f.write('namespace oceanbase\n')
+    f.write('{\n')
+    f.write('namespace observer\n')
+    f.write('{\n\n')
+    f.write('class {0} : public common::ObVirtualTableScannerIterator\n'.format(class_name))
+    f.write('{\n')
+    f.write('public:\n')
+    f.write('  {0}();\n'.format(class_name))
+    f.write('  virtual ~{0}();\n\n'.format(class_name))
+    f.write('  virtual int inner_open() override;\n')
+    f.write('  virtual int inner_get_next_row(common::ObNewRow *&row) override;\n')
+    f.write('  virtual void reset() override;\n\n')
+    f.write('private:\n')
+    f.write('  int fill_cells();\n')
+    f.write('  int get_next_row_from_sqlite();\n\n')
+    f.write('private:\n')
+    f.write('  bool is_inited_;\n')
+    f.write('  share::ObSQLiteConnectionGuard guard_;\n')
+    f.write('  share::ObSQLiteStmt *stmt_;\n')
+    f.write('  int64_t row_idx_;\n')
+    
+    # Generate member variables
+    for col_name in all_columns:
+        # Determine C++ type based on column type
+        col_type = 'int64_t'  # Default
+        # First check the original SQLite type (from base table's _sqlite_columns)
+        base_table_name_check = base_table_name.replace('__all_virtual_', '__all_')
+        base_kw_check = all_def_keywords.get(base_table_name_check, {})
+        base_sqlite_cols_check = base_kw_check.get('_sqlite_columns', [])
+        sqlite_type_check = None
+        for sqlite_col in base_sqlite_cols_check:
+          if sqlite_col[0] == col_name:
+            sqlite_type_check = sqlite_col[1]
+            break
+        
+        # Determine C++ type based on SQLite type
+        # All columns of SQLite virtual table should be in base table's _sqlite_columns
+        if sqlite_type_check == 'BLOB':
+          col_type = 'common::ObString'
+        elif sqlite_type_check == 'TEXT':
+          col_type = 'common::ObString'
+        elif sqlite_type_check == 'INTEGER':
+          # INTEGER type needs further determination of int or uint (from OceanBase type)
+          col_type = 'int64_t'  # Default, may be overridden to uint64_t later
+          for col in rowkey_columns:
+            if col[0] == col_name and 'uint' in col[1]:
+              col_type = 'uint64_t'
+              break
+          if col_type == 'int64_t':
+            for col in columns:
+              if col[0] == col_name and 'uint' in col[1]:
+                col_type = 'uint64_t'
+                break
+        elif sqlite_type_check is None:
+          # Column not in _sqlite_columns, this is an error condition
+          raise Exception("Column {0} not found in base table {1} _sqlite_columns".format(col_name, base_table_name_check))
+        else:
+          # Unknown SQLite type
+          raise Exception("Unknown SQLite type {0} for column {1} in table {2}".format(sqlite_type_check, col_name, base_table_name_check))
+        
+        var_name = col_name + '_'
+        f.write('  {0} {1};\n'.format(col_type, var_name))
+    
+    f.write('\n  DISALLOW_COPY_AND_ASSIGN({0});\n'.format(class_name))
+    f.write('};\n\n')
+    f.write('} // namespace observer\n')
+    f.write('} // namespace oceanbase\n\n')
+    f.write('#endif /* OB_ALL_VIRTUAL_{0}_H_ */\n'.format(table_name.upper().replace('__', '_').replace('_', '_')))
+
+def generate_sqlite_virtual_table_cpp(table_name, class_name, base_table_name, sqlite_db_pool, kw):
+  """
+  Generate virtual table .cpp file
+  """
+  import os
+  # Script is in src/share/inner_table/ directory, need to go up two levels to project root
+  script_dir = os.path.dirname(os.path.abspath(__file__))
+  project_root = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+  cpp_file = os.path.join(project_root, 'src/observer/virtual_table/ob_all_virtual_' + table_name.replace('__all_virtual_', '') + '.cpp')
+  
+  # Ensure directory exists
+  cpp_dir = os.path.dirname(cpp_file)
+  if not os.path.exists(cpp_dir):
+    os.makedirs(cpp_dir)
+  
+  columns = kw.get('normal_columns', [])
+  rowkey_columns = kw.get('rowkey_columns', [])
+  # SQLite virtual table columns should match the base table exactly, no additional columns (e.g., gm_columns)
+  all_columns = [col[0] for col in rowkey_columns] + [col[0] for col in columns]
+  
+  # Generate SELECT SQL (in column order)
+  select_columns = ', '.join(all_columns)
+  
+  with open(cpp_file, 'w') as f:
+    f.write(copyright)
+    f.write('\n#define USING_LOG_PREFIX SERVER\n\n')
+    f.write('#include "observer/virtual_table/ob_all_virtual_{0}.h"\n'.format(table_name.replace('__all_virtual_', '')))
+    f.write('#include "share/ob_server_struct.h"\n')
+    f.write('#include "share/storage/ob_sqlite_connection.h"\n')
+    f.write('#include "lib/oblog/ob_log.h"\n')
+    f.write('#include "lib/time/ob_time_utility.h"\n')
+    f.write('#include "lib/utility/ob_print_utils.h"\n')
+    f.write('#include <sqlite/sqlite3.h>\n\n')
+    f.write('namespace oceanbase\n')
+    f.write('{\n')
+    f.write('using namespace common;\n')
+    f.write('using namespace share;\n\n')
+    f.write('namespace observer\n')
+    f.write('{\n\n')
+    
+    # Constructor
+    f.write('{0}::{0}()\n'.format(class_name))
+    f.write('  : is_inited_(false),\n')
+    f.write('    guard_(),\n')
+    f.write('    stmt_(nullptr),\n')
+    f.write('    row_idx_(0)')
+    
+    for col_name in all_columns:
+        var_name = col_name + '_'
+        # choose the default value by SQLite type
+        # First check the original SQLite type (from base table's _sqlite_columns)
+        base_table_name_check = base_table_name.replace('__all_virtual_', '__all_')
+        base_kw_check = all_def_keywords.get(base_table_name_check, {})
+        base_sqlite_cols_check = base_kw_check.get('_sqlite_columns', [])
+        sqlite_type_check = None
+        for sqlite_col in base_sqlite_cols_check:
+          if sqlite_col[0] == col_name:
+            sqlite_type_check = sqlite_col[1]
+            break
+        
+        if sqlite_type_check == 'BLOB' or sqlite_type_check == 'TEXT':
+          # BLOB and TEXT types use empty string, generate name_() instead of name_(ObString())
+          default_val = ''
+        elif sqlite_type_check == 'INTEGER':
+          default_val = '0'
+          for col in columns:
+            if col[0] == col_name:
+              if len(col) > 3:
+                default_val = col[3]
+              break
+          # Check if default_val is a large integer that needs ULL suffix
+          try:
+            if default_val and default_val.isdigit():
+              if len(default_val) > 18:  # 2^63 has 19 digits
+                default_val = default_val + 'ULL'
+              elif len(default_val) == 19:
+                if default_val >= '9223372036854775808':
+                  default_val = default_val + 'ULL'
+          except (ValueError, OverflowError):
+            pass  # Not a number, use as-is
+        elif sqlite_type_check is None:
+          # Column not in _sqlite_columns, this is an error condition
+          raise Exception("Column {0} not found in base table {1} _sqlite_columns".format(col_name, base_table_name_check))
+        else:
+          # Unknown SQLite type
+          raise Exception("Unknown SQLite type {0} for column {1} in table {2}".format(sqlite_type_check, col_name, base_table_name_check))
+        f.write(',\n    {0}({1})'.format(var_name, default_val))
+    
+    f.write('\n{\n')
+    f.write('}\n\n')
+    
+    # Destructor
+    f.write('{0}::~{0}()\n'.format(class_name))
+    f.write('{\n')
+    f.write('  reset();\n')
+    f.write('}\n\n')
+    
+    # reset
+    f.write('void {0}::reset()\n'.format(class_name))
+    f.write('{\n')
+    f.write('  if (stmt_) {\n')
+    f.write('    guard_->finalize_query(stmt_);\n')
+    f.write('    stmt_ = nullptr;\n')
+    f.write('  }\n')
+    f.write('  is_inited_ = false;\n')
+    f.write('  row_idx_ = 0;\n')
+    f.write('  ObVirtualTableScannerIterator::reset();\n')
+    f.write('}\n\n')
+    
+    # inner_open
+    f.write('int {0}::inner_open()\n'.format(class_name))
+    f.write('{\n')
+    f.write('  int ret = OB_SUCCESS;\n\n')
+    f.write('  ObSQLiteConnectionGuard guard({0});\n'.format(sqlite_db_pool))
+    f.write('  if (!guard) {\n')
+    f.write('    ret = OB_ERR_UNEXPECTED;\n')
+    f.write('    SERVER_LOG(WARN, "failed to acquire connection", K(ret));\n')
+    f.write('  } else {\n')
+    f.write('    guard_ = std::move(guard);\n')
+    f.write('    const char *select_sql =\n')
+    f.write('      "SELECT {0} "\n'.format(select_columns))
+    f.write('      "FROM {0};";\n\n'.format(base_table_name))
+    f.write('    if (OB_FAIL(guard_->prepare_query(select_sql, nullptr, stmt_))) {\n')
+    f.write('      SERVER_LOG(WARN, "failed to prepare query", K(ret));\n')
+    f.write('    } else {\n')
+    f.write('      is_inited_ = true;\n')
+    f.write('      row_idx_ = 0;\n')
+    f.write('    }\n')
+    f.write('  }\n\n')
+    f.write('  return ret;\n')
+    f.write('}\n\n')
+    
+    # inner_get_next_row
+    f.write('int {0}::inner_get_next_row(common::ObNewRow *&row)\n'.format(class_name))
+    f.write('{\n')
+    f.write('  int ret = OB_SUCCESS;\n\n')
+    f.write('  if (!is_inited_) {\n')
+    f.write('    ret = OB_NOT_INIT;\n')
+    f.write('    SERVER_LOG(WARN, "not initialized", K(ret));\n')
+    f.write('  } else {\n')
+    f.write('    ret = get_next_row_from_sqlite();\n')
+    f.write('    if (OB_ITER_END == ret) {\n')
+    f.write('      // End of result set\n')
+    f.write('    } else if (OB_FAIL(ret)) {\n')
+    f.write('      SERVER_LOG(WARN, "failed to get next row from sqlite", K(ret));\n')
+    f.write('    } else if (OB_FAIL(fill_cells())) {\n')
+    f.write('      SERVER_LOG(WARN, "failed to fill cells", K(ret));\n')
+    f.write('    } else {\n')
+    f.write('      row = &cur_row_;\n')
+    f.write('    }\n')
+    f.write('  }\n\n')
+    f.write('  return ret;\n')
+    f.write('}\n\n')
+    
+    # get_next_row_from_sqlite
+    f.write('int {0}::get_next_row_from_sqlite()\n'.format(class_name))
+    f.write('{\n')
+    f.write('  int ret = OB_SUCCESS;\n\n')
+    f.write('  if (OB_ISNULL(stmt_)) {\n')
+    f.write('    ret = OB_ERR_UNEXPECTED;\n')
+    f.write('    SERVER_LOG(WARN, "statement is null", K(ret), KP(stmt_));\n')
+    f.write('  } else {\n')
+    f.write('    ObSQLiteRowReader reader;\n')
+    f.write('    ret = guard_->step_query(stmt_, reader);\n')
+    f.write('    if (OB_SUCC(ret)) {\n')
+    
+    # Read data
+    for col_name in all_columns:
+      var_name = col_name + '_'
+      read_method = 'get_int64'
+      # First check the original SQLite type (from base table's _sqlite_columns)
+      base_table_name_check = base_table_name.replace('__all_virtual_', '__all_')
+      base_kw_check = all_def_keywords.get(base_table_name_check, {})
+      base_sqlite_cols_check = base_kw_check.get('_sqlite_columns', [])
+      sqlite_type = None
+      for sqlite_col in base_sqlite_cols_check:
+        if sqlite_col[0] == col_name:
+          sqlite_type = sqlite_col[1]
+          break
+      
+      # Determine read method based on SQLite type
+      # All columns of SQLite virtual table should be in base table's _sqlite_columns
+      if sqlite_type == 'BLOB':
+        read_method = 'get_blob'
+      elif sqlite_type == 'TEXT':
+        read_method = 'get_text'
+      elif sqlite_type == 'INTEGER':
+        read_method = 'get_int64'
+      elif sqlite_type is None:
+        # Column not in _sqlite_columns, this is an error condition
+        raise Exception("Column {0} not found in base table {1} _sqlite_columns".format(col_name, base_table_name_check))
+      else:
+        # Unknown SQLite type
+        raise Exception("Unknown SQLite type {0} for column {1} in table {2}".format(sqlite_type, col_name, base_table_name_check))
+      
+      if read_method == 'get_blob':
+        f.write('      int {0}_len = 0;\n'.format(col_name))
+        f.write('      const void *{0}_ptr = reader.get_blob(&{1}_len);\n'.format(col_name, col_name))
+        f.write('      if (OB_ISNULL({0}_ptr)) {{\n'.format(col_name))
+        f.write('        {0}.reset();\n'.format(var_name))
+        f.write('      } else {\n')
+        f.write('        {0}.assign_ptr(static_cast<const char *>({1}_ptr), {1}_len);\n'.format(var_name, col_name))
+        f.write('      }\n')
+      elif read_method == 'get_text':
+        f.write('      int {0}_len = 0;\n'.format(col_name))
+        f.write('      const char *{0}_str = reader.get_text(&{1}_len);\n'.format(col_name, col_name))
+        f.write('      if (OB_ISNULL({0}_str)) {{\n'.format(col_name))
+        f.write('        {0}.reset();\n'.format(var_name))
+        f.write('      } else {\n')
+        f.write('        {0}.assign_ptr({1}_str, {1}_len);\n'.format(var_name, col_name))
+        f.write('      }\n')
+      else:
+        f.write('      {0} = reader.{1}();\n'.format(var_name, read_method))
+    
+    f.write('    } else if (OB_ITER_END == ret) {\n')
+    f.write('      // End of result set\n')
+    f.write('    } else {\n')
+    f.write('      SERVER_LOG(WARN, "failed to step query", K(ret));\n')
+    f.write('    }\n')
+    f.write('  }\n\n')
+    f.write('  return ret;\n')
+    f.write('}\n\n')
+    
+    # fill_cells
+    f.write('int {0}::fill_cells()\n'.format(class_name))
+    f.write('{\n')
+    f.write('  int ret = OB_SUCCESS;\n')
+    f.write('  const int64_t col_count = output_column_ids_.count();\n')
+    f.write('  ObObj *cells = cur_row_.cells_;\n\n')
+    f.write('  if (OB_ISNULL(cells)) {\n')
+    f.write('    ret = OB_ERR_UNEXPECTED;\n')
+    f.write('    SERVER_LOG(WARN, "cells is null", K(ret));\n')
+    f.write('  } else {\n')
+    f.write('    for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {\n')
+    f.write('      uint64_t col_id = output_column_ids_.at(i);\n')
+    f.write('      switch (col_id) {\n')
+    
+    col_idx = 0
+    for col_name in all_columns:
+      var_name = col_name + '_'
+      f.write('        case OB_APP_MIN_COLUMN_ID + {0}: {{\n'.format(col_idx))
+    f.write('          // {0}\n'.format(col_name))
+    
+    set_method = 'set_int'
+    # First check the original SQLite type (from base table's _sqlite_columns)
+    base_table_name_check = base_table_name.replace('__all_virtual_', '__all_')
+    base_kw_check = all_def_keywords.get(base_table_name_check, {})
+    base_sqlite_cols_check = base_kw_check.get('_sqlite_columns', [])
+    sqlite_type_check = None
+    for sqlite_col in base_sqlite_cols_check:
+      if sqlite_col[0] == col_name:
+        sqlite_type_check = sqlite_col[1]
+        break
+    
+    # Determine set method based on SQLite type
+    # All columns of SQLite virtual table should be in base table's _sqlite_columns
+    if sqlite_type_check == 'BLOB':
+      set_method = 'set_varbinary'
+    elif sqlite_type_check == 'TEXT':
+      set_method = 'set_varchar'
+    elif sqlite_type_check == 'INTEGER':
+      # INTEGER type needs further determination of int or uint (from OceanBase type)
+      set_method = 'set_int'  # Default, may be overridden to set_uint64
+      for col in rowkey_columns:
+        if col[0] == col_name and 'uint' in col[1]:
+          set_method = 'set_uint64'
+          break
+      if set_method == 'set_int':
+        for col in columns:
+          if col[0] == col_name and 'uint' in col[1]:
+            set_method = 'set_uint64'
+            break
+    elif sqlite_type_check is None:
+      # Column not in _sqlite_columns, this is an error condition
+      raise Exception("Column {0} not found in base table {1} _sqlite_columns".format(col_name, base_table_name_check))
+    else:
+      # Unknown SQLite type
+      raise Exception("Unknown SQLite type {0} for column {1} in table {2}".format(sqlite_type_check, col_name, base_table_name_check))
+    
+    if set_method == 'set_varchar':
+      f.write('          cells[i].set_varchar({0});\n'.format(var_name))
+      f.write('          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));\n')
+    else:
+      f.write('          cells[i].{0}({1});\n'.format(set_method, var_name))
+      
+      f.write('          break;\n')
+      f.write('        }\n')
+      col_idx += 1
+    
+    f.write('        default: {\n')
+    f.write('          ret = OB_ERR_UNEXPECTED;\n')
+    f.write('          SERVER_LOG(WARN, "invalid column id", K(ret), K(col_id));\n')
+    f.write('          break;\n')
+    f.write('        }\n')
+    f.write('      }\n')
+    f.write('    }\n')
+    f.write('  }\n\n')
+    f.write('  return ret;\n')
+    f.write('}\n\n')
+    
+    f.write('} // namespace observer\n')
+    f.write('} // namespace oceanbase\n')
+
+def generate_sys_index_table_misc_data(f):
+  global sys_index_tables
+
+  data_table_dict = {}
+  for kw in sys_index_tables:
+    if kw['table_name'] not in data_table_dict:
+      data_table_dict[kw['table_name']] = []
+    data_table_dict[kw['table_name']].append(kw)
+
+  sys_index_table_id_switch = '\n'
+  for kw in sys_index_tables:
+    sys_index_table_id_switch += 'case ' + table_name2index_tid(kw['table_name'], kw['index_name']) + ':\n'
+  f.write('\n\n#ifdef SYS_INDEX_TABLE_ID_SWITCH\n' + sys_index_table_id_switch + '\n#endif\n')
+
+  sys_index_data_table_id_switch = '\n'
+  for data_table_name in list(data_table_dict.keys()):
+    sys_index_data_table_id_switch += 'case ' + table_name2tid(data_table_name) + ':\n'
+  f.write('\n\n#ifdef SYS_INDEX_DATA_TABLE_ID_SWITCH\n' + sys_index_data_table_id_switch + '\n#endif\n')
+
+  sys_index_data_table_id_to_index_ids_switch = '\n'
+  for data_table_name, sys_indexs in list(data_table_dict.items()):
+    sys_index_data_table_id_to_index_ids_switch += 'case ' + table_name2tid(data_table_name) + ': {\n'
+    for kw in sys_indexs:
+      sys_index_data_table_id_to_index_ids_switch += '  if (FAILEDx(index_tids.push_back(' + table_name2index_tid(kw['table_name'], kw['index_name']) +  '))) {\n'
+      sys_index_data_table_id_to_index_ids_switch += '    LOG_WARN(\"fail to push back index tid\", KR(ret));\n'
+      sys_index_data_table_id_to_index_ids_switch += '  }\n'
+    sys_index_data_table_id_to_index_ids_switch += '  break;\n'
+    sys_index_data_table_id_to_index_ids_switch += '}\n'
+  f.write('\n\n#ifdef SYS_INDEX_DATA_TABLE_ID_TO_INDEX_IDS_SWITCH\n' + sys_index_data_table_id_to_index_ids_switch + '\n#endif\n')
+
+  sys_index_data_table_id_to_index_schema_switch = '\n'
+  for data_table_name, sys_indexs in list(data_table_dict.items()):
+    sys_index_data_table_id_to_index_schema_switch += 'case ' + table_name2tid(data_table_name) + ': {\n'
+    for kw in sys_indexs:
+      method_name = kw['table_name'].replace('$', '_').strip('_').lower() + '_' + kw['index_name'].lower() + '_schema'
+      sys_index_data_table_id_to_index_schema_switch += '  index_schema.reset();\n'
+      sys_index_data_table_id_to_index_schema_switch += '  if (FAILEDx(ObInnerTableSchema::' + method_name +'(index_schema))) {\n'
+      sys_index_data_table_id_to_index_schema_switch += '    LOG_WARN(\"fail to create index schema\", KR(ret), K(data_table_id));\n'
+      sys_index_data_table_id_to_index_schema_switch += '  } else if (OB_FAIL(append_table_(index_schema, tables))) {\n'
+      sys_index_data_table_id_to_index_schema_switch += '    LOG_WARN(\"fail to append\", KR(ret), K(data_table_id));\n'
+      sys_index_data_table_id_to_index_schema_switch += '  }\n'
+    sys_index_data_table_id_to_index_schema_switch += '  break;\n'
+    sys_index_data_table_id_to_index_schema_switch += '}\n'
+
+  f.write('\n\n#ifdef SYS_INDEX_DATA_TABLE_ID_TO_INDEX_SCHEMAS_SWITCH\n' + sys_index_data_table_id_to_index_schema_switch + '\n#endif\n')
+
+  add_sys_index_id = '\n'
+  for kw in sys_index_tables:
+    index_id = table_name2index_tid(kw['table_name'], kw['index_name'])
+    add_sys_index_id += '  } else if (OB_FAIL(table_ids.push_back(' + index_id +'))) {\n'
+    add_sys_index_id += '    LOG_WARN(\"add index id failed\", KR(ret));\n'
+  f.write('\n\n#ifdef ADD_SYS_INDEX_ID\n' + add_sys_index_id + '\n#endif\n')
+
+# def generate_virtual_agent_misc_data(...) removed (single-tenant: iterate VT mechanism deleted)
 
 def def_sys_index_table(index_name, index_table_id, index_columns, index_using_type, index_type, keywords):
   global cpp_f
@@ -1695,146 +2349,223 @@ def def_sys_index_table(index_name, index_table_id, index_columns, index_using_t
   cpp_f = cpp_f_tmp
   cpp_f.write(index_def)
 
-
-def generate_sys_index_table_misc_data(f):
+def def_agent_index_table(index_name, index_table_id, index_columns, index_using_type, index_type,
+  real_table_name, real_index_name, keywords):
+  global cpp_f
+  global cpp_f_tmp
+  global StringIO
   global sys_index_tables
+  kw = copy_keywords(keywords)
 
-  data_table_dict = {}
-  for kw in sys_index_tables:
-    if kw['table_name'] not in data_table_dict:
-      data_table_dict[kw['table_name']] = []
-    data_table_dict[kw['table_name']].append(kw)
+  index_kw = copy_keywords(all_def_keywords[real_table_name + '_' + real_index_name])
+  if 'index' in kw:
+    raise Exception("should not have index", kw['table_name'])
+  if not kw['real_vt']:
+    raise Exception("only support oracle mapping table", kw['table_name'])
+  if not index_name.endswith('_real_agent'):
+    raise Exception("wrong index name", index_name)
+  if not index_name.startswith(real_index_name):
+    raise Exception("wrong index name", index_name, real_index_name)
+  if not is_ora_virtual_table(index_table_id):
+    raise Exception("index table id is invalid", index_table_id)
+  if not kw['base_def_keywords']['table_name'] == real_table_name:
+    raise Exception("table name mismatch", kw['base_def_keywords']['table_name'], real_table_name)
+  if not index_kw['index_name'] == real_index_name:
+    raise Exception("index name mismatch", index_kw['index_name'], real_index_name)
+  if not index_kw['index_columns'] == index_columns:
+    raise Exception("index column mismatch", index_kw['index_columns'], index_columns)
+  
 
-  sys_index_table_id_switch = '\n'
-  for kw in sys_index_tables:
-    sys_index_table_id_switch += 'case ' + table_name2index_tid(kw['table_name'], kw['index_name']) + ':\n'
-  f.write('\n\n#ifdef SYS_INDEX_TABLE_ID_SWITCH\n' + sys_index_table_id_switch + '\n#endif\n')
+  index_def = ''
+  cpp_f_tmp = cpp_f
+  cpp_f = io.StringIO()
+  kw['index_name'] = index_name
+  kw['index_columns'] = index_columns
+  kw['index_table_id'] = index_table_id
+  kw['index_using_type'] = index_using_type
+  kw['index_type'] = index_type
+  kw['table_type'] = 'USER_INDEX'
+  kw['index_status'] = 'INDEX_STATUS_AVAILABLE'
+  kw['name_postfix'] = '_ORA'
+  dtid = table_name2tid(kw['table_name'] + kw['name_postfix'])
+  kw['data_table_id'] = dtid
+  kw['partition_columns'] = []
+  kw['partition_expr'] = []
+  kw['storing_columns'] =[]
+  kw["mapping_tid"] = table_name2tid(real_table_name + '_' + real_index_name)
+  kw["self_tid"] = table_name2index_tid(kw['table_name'] + kw['name_postfix'], kw['index_name'])
+  kw["real_vt"] = True
+  real_table_virtual_table_names.append(kw)
 
-  sys_index_data_table_id_switch = '\n'
-  for data_table_name in list(data_table_dict.keys()):
-    sys_index_data_table_id_switch += 'case ' + table_name2tid(data_table_name) + ':\n'
-  f.write('\n\n#ifdef SYS_INDEX_DATA_TABLE_ID_SWITCH\n' + sys_index_data_table_id_switch + '\n#endif\n')
+  #In order to upgrade compatibility, 
+  #the oracle inner table index cannot be added to the schema of the main table following the path of the main table. 
+  #Only the schema refresh triggered by the creation of the index table can add simple index info, 
+  #so the agent table index is not added to the sys index here
 
-  sys_index_data_table_id_to_index_ids_switch = '\n'
-  for data_table_name, sys_indexs in list(data_table_dict.items()):
-    sys_index_data_table_id_to_index_ids_switch += 'case ' + table_name2tid(data_table_name) + ': {\n'
-    for kw in sys_indexs:
-      sys_index_data_table_id_to_index_ids_switch += '  if (FAILEDx(index_tids.push_back(' + table_name2index_tid(kw['table_name'], kw['index_name']) +  '))) {\n'
-      sys_index_data_table_id_to_index_ids_switch += '  }\n'
-    sys_index_data_table_id_to_index_ids_switch += '  break;\n'
-    sys_index_data_table_id_to_index_ids_switch += '}\n'
-  f.write('\n\n#ifdef SYS_INDEX_DATA_TABLE_ID_TO_INDEX_IDS_SWITCH\n' + sys_index_data_table_id_to_index_ids_switch + '\n#endif\n')
-
-  sys_index_data_table_id_to_index_schema_switch = '\n'
-  for data_table_name, sys_indexs in list(data_table_dict.items()):
-    sys_index_data_table_id_to_index_schema_switch += 'case ' + table_name2tid(data_table_name) + ': {\n'
-    for kw in sys_indexs:
-      method_name = kw['table_name'].replace('$', '_').strip('_').lower() + '_' + kw['index_name'].lower() + '_schema'
-      sys_index_data_table_id_to_index_schema_switch += '  index_schema.reset();\n'
-      sys_index_data_table_id_to_index_schema_switch += '  if (FAILEDx(ObInnerTableSchema::' + method_name +'(index_schema))) {\n'
-      sys_index_data_table_id_to_index_schema_switch += '  } else if (OB_FAIL(append_table_(index_schema, tables))) {\n'
-      sys_index_data_table_id_to_index_schema_switch += '  }\n'
-    sys_index_data_table_id_to_index_schema_switch += '  break;\n'
-    sys_index_data_table_id_to_index_schema_switch += '}\n'
-
-  f.write('\n\n#ifdef SYS_INDEX_DATA_TABLE_ID_TO_INDEX_SCHEMAS_SWITCH\n' + sys_index_data_table_id_to_index_schema_switch + '\n#endif\n')
-
-  add_sys_index_id = '\n'
-  for kw in sys_index_tables:
-    index_id = table_name2index_tid(kw['table_name'], kw['index_name'])
-    add_sys_index_id += '  } else if (OB_FAIL(table_ids.push_back(' + index_id +'))) {\n'
-  f.write('\n\n#ifdef ADD_SYS_INDEX_ID\n' + add_sys_index_id + '\n#endif\n')
-
-
-def local_column_kind(sql_type):
-  """Map an explicit SQL type to the local storage representation."""
-  return {'int': 'Integer', 'uint': 'Integer', 'varchar': 'Text',
-          'varbinary': 'Blob'}[sql_type.split(':')[0]]
-
-
-def local_column_enum(name):
-  return ''.join(part.capitalize() for part in name.split('_'))
-
-
-def def_local_table(table_name, table_id, namespace, namespace_id, columns,
-                    primary_key, indexes=()):
-  """Define storage and its read-only virtual table from the same columns.
-
-  Column tuples use the regular inner-table format: name, SQL type, nullable,
-  optional SQL default. Their order is the stored row layout.
-  """
-  names = [column[0] for column in columns]
-  if len(names) != len(set(names)) or not primary_key:
-    raise ValueError('Invalid local columns or primary key: ' + table_name)
-  if not set(primary_key).issubset(names) or not set(indexes).issubset(names):
-    raise ValueError('Unknown local key or index column: ' + table_name)
-  if not 0 <= namespace_id <= 255:
-    raise ValueError('Local namespace ID is out of range: ' + table_name)
-  for kw in all_local_virtual_tables:
-    storage = kw['storage']
-    if storage and (storage['namespace_id'] == namespace_id or storage['namespace'] == namespace):
-      raise ValueError('Duplicate local namespace: ' + namespace)
-  for column in columns:
-    local_column_kind(column[1])
-    if column[2] not in ('true', 'false'):
-      raise ValueError('Invalid local column nullability: ' + column[0])
-  storage = dict(namespace=namespace, namespace_id=namespace_id,
-                 columns=columns, primary_key=primary_key, indexes=indexes)
-  _def_local_virtual_table(table_id, table_name.replace('__all_', '__all_virtual_', 1),
-                           columns, primary_key, storage)
-
-
-def def_config_virtual_table(table_id, table_name, columns, primary_key):
-  """The configuration view reads the in-memory catalog, without a local table."""
-  _def_local_virtual_table(table_id, table_name, columns, primary_key, None)
-
-
-def _def_local_virtual_table(table_id, table_name, columns, primary_key, storage):
-  by_name = {column[0]: column for column in columns}
-  # SQL column IDs start with the primary key; storage keeps declaration order.
-  rowkey_columns = [by_name[name][:2] for name in primary_key]
-  normal_columns = [column for column in columns if column[0] not in primary_key]
-  kw = dict(owner='nijia.nj', table_id=table_id, table_name=table_name,
-            base_table_name=table_name,
-            table_type='VIRTUAL_TABLE', index_using_type='USING_BTREE',
-            rowkey_columns=rowkey_columns, normal_columns=normal_columns,
-            gm_columns=[], partition_columns=[], partition_expr=[],
-            vtable_route_policy='local', in_runtime_space=False,
-            is_cluster_private=True)
+  #sys_index_tables.append(kw)
   def_table_schema(**kw)
-  kw['storage'] = storage
-  all_local_virtual_tables.append(kw)
+  index_def = cpp_f.getvalue()
+  cpp_f = cpp_f_tmp
+  cpp_f.write(index_def)
 
+# def gen_iterate_private_virtual_table_def(...) removed (single-tenant: iterate VT mechanism deleted)
 
-def generate_local_table_schema():
-  """Business schemas stay on the C++ side of the generic Rust local API."""
-  with open(share_out_path('local_table_schema.h'), 'w') as f:
-    f.write(copyright)
-    f.write('\n#pragma once\n\n')
-    f.write('// Generated from ob_inner_table_schema_def.py. Do not edit.\n')
-    f.write('#include "share/storage/local_store.h"\n\n')
-    f.write('namespace oceanbase { namespace share {\n\n')
-    for kw in all_local_virtual_tables:
-      storage = kw['storage']
-      if storage is None:
-        continue
-      namespace = storage['namespace']
-      f.write('namespace {0}\n{{\n'.format(namespace))
-      f.write('enum Column : uint32_t {{ {0} }};\n'.format(', '.join(
-          local_column_enum(column[0]) for column in storage['columns'])))
-      f.write('inline const local::Schema &schema()\n{\n')
-      f.write('  static const auto schema = local_schema({0}, {{\n'.format(storage['namespace_id']))
-      for column in storage['columns']:
-        name, sql_type, nullable = column[:3]
-        f.write('    {{local::Kind::{0}, {1}}}, // {2}\n'.format(
-            local_column_kind(sql_type), nullable, name))
-      f.write('  }}, {{{0}}}, {{{1}}});\n'.format(
-          ', '.join(local_column_enum(name) for name in storage['primary_key']),
-          ', '.join(local_column_enum(name) for name in storage['indexes'])))
-      f.write('  return schema;\n}\n')
-      f.write('}} // namespace {0}\n\n'.format(namespace))
-    f.write('} } // namespace oceanbase::share\n')
+def gen_sqlite_table_def(table_name, columns, primary_key):
+  """
+  Define SQLite table structure and register to all_def_keywords
+  
+  Parameters:
+  - table_name: SQLite table name (e.g., '__all_merge_info')
+  - columns: Column definition list, format: [('col_name', 'sqlite_type', 'nullable', 'default'), ...]
+  - primary_key: Primary key column list, e.g., ['zone']
+  
+  Returns:
+  - SQLite table definition keywords (registered to all_def_keywords)
+  """
+  global all_sqlite_tables
+  global all_def_keywords
+  
+  # Convert column definitions: SQLite type → OceanBase type
+  ob_columns = []
+  rowkey_columns = []
+  
+  for col in columns:
+    col_name, sqlite_type, nullable, default_val = col
+    
+    # SQLite type → OceanBase type mapping
+    if sqlite_type == 'INTEGER':
+      # Determine int or uint based on column name
+      if 'scn' in col_name.lower() or 'version' in col_name.lower():
+        ob_type = 'uint'  # SCN/version numbers are usually unsigned
+      else:
+        ob_type = 'int'
+    elif sqlite_type == 'TEXT':
+      ob_type = 'varchar:MAX_IP_ADDR_LENGTH' if 'ip' in col_name.lower() else 'varchar:256'
+    elif sqlite_type == 'BLOB':
+      ob_type = 'varbinary:OB_MAX_VARBINARY_LENGTH'  # BLOB maps to varbinary
+    else:
+      ob_type = 'int'  # Default
+    
+    # Build OceanBase column definition
+    ob_col = [col_name, ob_type]
+    if nullable == 'NOT NULL':
+      ob_col.append('false')
+    else:
+      ob_col.append('true')
+    
+    if default_val is not None:
+      ob_col.append(default_val)
+    
+    ob_columns.append(tuple(ob_col))
+    
+    # Build rowkey_columns
+    if col_name in primary_key:
+      rowkey_columns.append((col_name, ob_type))
+  
+  # Build keywords
+  kw = {
+    'table_name': table_name,
+    'table_id': '0',  # SQLite table doesn't need real table_id, use '0' as placeholder
+    'table_type': 'SYSTEM_TABLE',  # SQLite table as system table
+    'rowkey_columns': rowkey_columns,
+    'normal_columns': ob_columns,
+    'gm_columns': [],  # SQLite tables usually don't have gmt_create/gmt_modified
+    'in_tenant_space': False,  # SQLite table is in sys tenant
+    'is_cluster_private': True,  # SQLite table is cluster private
+    # Save original SQLite definition for generating CREATE TABLE
+    '_sqlite_columns': columns,
+    '_sqlite_primary_key': primary_key,
+  }
+  
+  # Register to all_def_keywords
+  all_def_keywords[table_name] = copy_keywords(kw)
+  
+  # Save to all_sqlite_tables for generating CREATE TABLE
+  all_sqlite_tables.append({
+    'table_name': table_name,
+    'columns': columns,
+    'primary_key': primary_key,
+  })
+  
+  return kw
 
+def gen_sqlite_virtual_table_def(table_id, table_name, keywords):
+  """
+  Generate virtual table definition for SQLite table (refer to gen_iterate_private_virtual_table_def)
+  
+  Parameters:
+  - table_id: Virtual table's table_id
+  - table_name: Virtual table name (e.g., '__all_virtual_merge_info')
+  - keywords: Base table's keywords (obtained from all_def_keywords[base_table_name])
+  
+  Returns:
+  - Virtual table definition keywords
+  
+  Notes:
+  - SQLite virtual table is fixed in sys tenant (in_tenant_space = False)
+  """
+  global all_sqlite_virtual_tables
+  
+  kw = copy_keywords(keywords)
+  kw['table_id'] = table_id
+  kw['table_name'] = table_name
+  
+  # Remove internal fields, these should not be passed to def_table_schema()
+  if '_sqlite_columns' in kw:
+    del kw['_sqlite_columns']
+  if '_sqlite_primary_key' in kw:
+    del kw['_sqlite_primary_key']
+  if 'sqlite_db_pool' in kw:
+    del kw['sqlite_db_pool']
+  
+  # Convert to virtual table type
+  kw['table_type'] = 'VIRTUAL_TABLE'
+  kw['index_using_type'] = 'USING_BTREE'
+  kw['partition_columns'] = []
+  kw['partition_expr'] = []
+  
+  # SQLite virtual table doesn't need additional columns (e.g., gm_columns), columns should match base table exactly
+  # Ensure gm_columns is empty
+  kw['gm_columns'] = []
+  
+  # For virtual tables, columns in rowkey_columns should not be duplicated in normal_columns
+  # because def_table_schema handles rowkey_columns and normal_columns separately
+  # If columns in rowkey_columns are already in normal_columns, remove them from normal_columns to avoid duplication
+  # Refer to gen_iterate_virtual_table_def approach
+  if 'rowkey_columns' in kw and kw['rowkey_columns']:
+    rowkey_column_names = [col[0] for col in kw['rowkey_columns']]
+    # Remove columns in rowkey_columns from normal_columns to avoid duplication
+    kw['normal_columns'] = [col for col in kw.get('normal_columns', []) if col[0] not in rowkey_column_names]
+  
+  # All virtual tables use local routing (svr_ip/svr_port removed)
+  kw['partition_columns'] = []
+  kw['vtable_route_policy'] = 'local'
+  
+  # Save base table information
+  kw['base_def_keywords'] = keywords
+  # SQLite virtual table is fixed in sys tenant
+  kw['in_tenant_space'] = False
+  
+  # Set owner
+  kw['owner'] = 'nijia.nj'
+  
+  # Save SQLite related information (for subsequent code generation, but not passed to def_table_schema)
+  sqlite_db_pool = 'GCTX.meta_db_pool_'
+  
+  # Save to all_sqlite_virtual_tables (includes sqlite_db_pool for code generation)
+  save_kw = copy.deepcopy(kw)
+  save_kw['sqlite_db_pool'] = sqlite_db_pool
+  all_sqlite_virtual_tables.append(save_kw)
+  
+  # Returned kw does not include sqlite_db_pool, as def_table_schema doesn't need this field
+  return kw
+
+# def generate_iterate_private_virtual_table_misc_data(...) removed (single-tenant: iterate VT mechanism deleted)
+
+# Define virtual table to iterate one tenant space table's data of all tenant.
+# def gen_iterate_virtual_table_def(...) removed (single-tenant: iterate VT mechanism deleted)
+
+# def generate_iterate_virtual_table_misc_data(...) removed (single-tenant: iterate VT mechanism deleted)
 
 def get_column_def_enum(**keywords):
   global column_def_enum_array
@@ -1860,7 +2591,7 @@ struct %s {
 
 def kw2schema_version(kw):
   tid = kw['table_id']
-  name_postfix = "_EXTENDED" if (is_extended_sys_view(tid) or is_extended_virtual_table(tid)) else ""
+  name_postfix = "_ORACLE" if (is_ora_sys_view(tid) or is_ora_virtual_table(tid)) else ""
   if 'index_columns' in kw:
     return "OB_IDX_" + str(kw['table_id']) + '_' + kw['index_name'].upper() + name_postfix + "_SCHEMA_VERSION"
   else:
@@ -1922,9 +2653,13 @@ def def_table_schema(**keywords):
   global table_name_postfix_ids
   global table_name_postfix_table_names
   global index_name_ids
-  global runtime_space_tables
-  global runtime_space_table_names
+  global tenant_space_tables
+  global all_ora_mapping_virtual_table_org_tables
+  global all_ora_mapping_virtual_tables
+  global tenant_space_table_names
+  global only_rs_vtables
   global cluster_distributed_vtables
+  global tenant_distributed_vtables
   global StringIO
   global ob_virtual_index_table_id
   global ora_virtual_index_table_id
@@ -1934,7 +2669,7 @@ def def_table_schema(**keywords):
   global cpp_f_tmp
   global all_def_keywords
   global column_collation
-  global is_extended_sys_table
+  global is_oracle_sys_table
   global cluster_private_tables
   global core_related_tables
   global lob_aux_data_def
@@ -1955,7 +2690,7 @@ def def_table_schema(**keywords):
   index_defs = []
   index_def = ''
   calculate_rowkey_column_num(keywords)
-  is_extended_sys_table = False
+  is_oracle_sys_table = False
   column_collation = 'CS_TYPE_INVALID'
 
   ##virtual table will set index_using_type to USING_HASH by default
@@ -1963,13 +2698,13 @@ def def_table_schema(**keywords):
     if 'index_using_type' not in keywords:
       keywords['index_using_type'] = 'USING_HASH'
 
-  if not is_mysql_virtual_table(tid) and not is_extended_virtual_table(tid):
+  if not is_mysql_virtual_table(tid) and not is_ora_virtual_table(tid):
     if 'partition_expr' in keywords and 0 != len(keywords['partition_expr']):
       raise Exception("partition_expr only works for virtual table after 4.0", tid)
     elif 'partition_columns' in keywords and 0 != len(keywords['partition_columns']):
       raise Exception("partition_columns only works for virtual table after 4.0", tid)
 
-  if not is_mysql_virtual_table(tid) and not is_extended_virtual_table(tid):
+  if not is_mysql_virtual_table(tid) and not is_ora_virtual_table(tid):
     if 'partition_expr' in keywords and 0 != len(keywords['partition_expr']):
       raise Exception("partition_expr only works for virtual table after 4.0", tid)
     elif 'partition_columns' in keywords and 0 != len(keywords['partition_columns']):
@@ -1987,7 +2722,7 @@ def def_table_schema(**keywords):
 
   if 'index_name' in keywords:
     print_method_start(keywords['table_name'] + keywords['name_postfix'] + '_' + keywords['index_name'])
-    if True == is_extended_virtual_table(int(keywords['table_id'])):
+    if True == is_ora_virtual_table(int(keywords['table_id'])):
       if 'real_vt' in keywords and True == keywords['real_vt']:
         index_name_ids.append([keywords['index_name'], int(keywords['index_table_id']), keywords['table_name'] + keywords['name_postfix'], keywords['table_id'], keywords['base_table_name'], keywords['base_table_name1']])
       else:
@@ -2013,9 +2748,9 @@ def def_table_schema(**keywords):
   log_debug("\table_id=",  keywords['table_id'], ", table_name=" + keywords['table_name'], ", base_table_name=", keywords['base_table_name'], ", base_table_name1=" + keywords['base_table_name1'], ", base_table_name2=" + keywords['base_table_name2'])
 
   log_debug("\nSTART TO GENERATE: " + keywords['table_name']+ keywords['name_postfix'])
-  if True == is_extended_virtual_table(int(keywords['table_id'])):
+  if True == is_ora_virtual_table(int(keywords['table_id'])):
     column_collation = 'CS_TYPE_UTF8MB4_BIN'
-    is_extended_sys_table = True
+    is_oracle_sys_table = True
   if 'index_name' in keywords:
     local_fields = fields + index_only_fields
   elif is_lob_table(keywords['table_id']):
@@ -2024,10 +2759,10 @@ def def_table_schema(**keywords):
     local_fields = fields
 
   # Generate partition expr for virtual table.
-  # We support addr_to_partition_id(ip, port) for MySQL virtual tables,
-  # and hash(ip, port) for extended virtual tables.
+  # We only support 'partition by hash(addr_to_partition_id(ip, port)) partitions 65536' in mysql mode,
+  # and 'partition by hash(ip, port) partitions 65536' in oracle mode for virtual table.
   table_id = int(keywords['table_id']);
-  if keywords['partition_columns'] and (is_mysql_virtual_table(table_id) or is_extended_virtual_table(table_id)) and False == keywords['is_real_virtual_table']:
+  if keywords['partition_columns'] and (is_mysql_virtual_table(table_id) or is_ora_virtual_table(table_id)) and False == keywords['is_real_virtual_table']:
     cols = keywords['partition_columns']
 
     # vtable with definition of partition_colums must be distributed
@@ -2063,24 +2798,31 @@ def def_table_schema(**keywords):
     else:
       tid_str = table_name2tid(keywords['table_name']+ keywords['name_postfix'])
 
-    if 'local' != route_policy and 'distributed' != route_policy:
+    if 'local' != route_policy and 'distributed' != route_policy and 'only_rs' != route_policy:
       raise Exception("vtable route policy is invalid", route_policy)
-    elif not is_mysql_virtual_table(tid) and not is_extended_virtual_table(tid) and 'local' != route_policy:
+    elif not is_mysql_virtual_table(tid) and not is_ora_virtual_table(tid) and 'local' != route_policy:
       raise Exception("vtabl route policy is only work for virtual table", tid)
     else:
-      if 'local' == route_policy:
+      if 'local' == route_policy or 'only_rs' == route_policy:
         if 'partition_columns' in keywords and 0 != len(keywords['partition_columns']):
-          raise Exception("partition columns is not valid for local virtual table", keywords.get('partition_columns', []))
+          raise Exception("partition columns is not valid for local/only_rs virtual table", keywords.get('partition_columns', []))
+        if 'only_rs' == route_policy:
+          only_rs_vtables.append(tid_str)
       else:
         # distributed
         if 'partition_columns' not in keywords or 2 != len(keywords['partition_columns']):
           raise Exception("partition columns is not valid for distributed virtual table", keywords.get('partition_columns', []))
-        if not ('in_runtime_space' in keywords and keywords['in_runtime_space']):
+        if 'in_tenant_space' in keywords and keywords['in_tenant_space']:
+          tenant_distributed_vtables.append(tid_str)
+        else:
           cluster_distributed_vtables.append(tid_str)
 
-  ## Set sys table's (including index and lob tables) tablet_id.
+  ## 1. reset non-sys table's tablegroup_id
+  ## 2. set sys table's(includes index、lob) tablet_id
   if is_sys_table(tid) or is_lob_table(tid) or is_sys_index_table(tid):
     keywords['tablet_id'] = tid_str
+  else:
+    keywords['tablegroup_id'] = 'OB_INVALID_ID'
 
   for field in local_fields :
     value = keywords[field]
@@ -2126,14 +2868,14 @@ def def_table_schema(**keywords):
       add_char_field(field, '{0}'.format(value))
     elif field in ('comment_str', 'part_func_expr', 'sub_part_func_expr'):
       add_char_field(field, '"{0}"'.format(value))
-    elif field == 'in_runtime_space':
+    elif field == 'in_tenant_space':
       if keywords[field]:
         if 'index_name' in keywords :
-          runtime_space_tables.append(table_name2index_tid(keywords['table_name']+ keywords['name_postfix'], keywords['index_name']))
-          runtime_space_table_names.append(table_name2index_tname(keywords['table_name'] + keywords['name_postfix'], keywords['index_name']))
+          tenant_space_tables.append(table_name2index_tid(keywords['table_name']+ keywords['name_postfix'], keywords['index_name']))
+          tenant_space_table_names.append(table_name2index_tname(keywords['table_name'] + keywords['name_postfix'], keywords['index_name']))
         else:
-          runtime_space_tables.append(table_name2tid(keywords['table_name']+ keywords['name_postfix']))
-          runtime_space_table_names.append(table_name2tname(keywords['table_name'] + keywords['name_postfix']))
+          tenant_space_tables.append(table_name2tid(keywords['table_name']+ keywords['name_postfix']))
+          tenant_space_table_names.append(table_name2tname(keywords['table_name'] + keywords['name_postfix']))
     elif field == 'view_definition':
       if keywords[field]:
         add_char_field(field, 'R"__({0})__"'.format(value))
@@ -2190,18 +2932,18 @@ def def_table_schema(**keywords):
 
   ## add lob aux table except for __all_core_table
   if keywords['table_type'] == 'SYSTEM_TABLE' and int(keywords['table_id']) > 1:
-    is_in_runtime_space = False
+    is_in_tenant_space = False
     cluster_private = False
-    if 'in_runtime_space' in keywords:
-      is_in_runtime_space = keywords['in_runtime_space']
+    if 'in_tenant_space' in keywords:
+      is_in_tenant_space = keywords['in_tenant_space']
     if 'is_cluster_private' in keywords:
       cluster_private = keywords['is_cluster_private']
     meta_tid = int(keywords['table_id']) + base_lob_meta_table_id
-    lob_aux_ids.append([keywords['table_id'], keywords['table_name'], meta_tid, 'AUX_LOB_META', lob_aux_meta_def, is_in_runtime_space, cluster_private])
+    lob_aux_ids.append([keywords['table_id'], keywords['table_name'], meta_tid, 'AUX_LOB_META', lob_aux_meta_def, is_in_tenant_space, cluster_private])
     mtid = table_name2tid(keywords['table_name'] + '_aux_lob_meta')
     add_field('aux_lob_meta_tid', mtid)
     piece_tid = int(keywords['table_id']) + base_lob_piece_table_id
-    lob_aux_ids.append([keywords['table_id'], keywords['table_name'], piece_tid, 'AUX_LOB_PIECE', lob_aux_data_def, is_in_runtime_space, cluster_private])
+    lob_aux_ids.append([keywords['table_id'], keywords['table_name'], piece_tid, 'AUX_LOB_PIECE', lob_aux_data_def, is_in_tenant_space, cluster_private])
     ptid = table_name2tid(keywords['table_name'] + '_aux_lob_piece')
     add_field('aux_lob_piece_tid', ptid)
   
@@ -2211,7 +2953,7 @@ def def_table_schema(**keywords):
     add_method_end()
 
   if 'is_cluster_private' in keywords and keywords['is_cluster_private'] \
-     and 'in_runtime_space' in keywords and keywords['in_runtime_space'] \
+     and 'in_tenant_space' in keywords and keywords['in_tenant_space'] \
      and (is_sys_table(table_id) or is_sys_index_table(table_id) or is_lob_table(table_id)):
     if is_sys_table(table_id) and 'meta_record_in_sys' not in keywords:
       raise Exception("meta_record_in_sys must be defined when is_cluster_private = true")
@@ -2274,7 +3016,7 @@ def start_generate_h(h_file_name):
 
 #include "share/ob_define.h"
 #include "ob_inner_table_schema_constants.h"
-#include "share/ob_version_parser.h"
+#include "share/ob_cluster_version.h"
 
 namespace oceanbase
 {
@@ -2473,11 +3215,11 @@ private:
       h_f.write(method_name.format(index_l[2].replace('$', '_').strip('_').lower()+'_'+index_l[0].lower(), index_l[2]))
       virtual_table_count = virtual_table_count + 1
   for (table_name, table_id) in new_table_name_postfix_ids:
-    if is_extended_virtual_table(table_id):
+    if is_ora_virtual_table(table_id):
       h_f.write(method_name.format(table_name.replace('$', '_').lower().strip('_'), table_name))
       virtual_table_count = virtual_table_count + 1
   for index_l in new_index_name_ids:
-    if is_extended_virtual_table(index_l[1]):
+    if is_ora_virtual_table(index_l[1]):
       h_f.write(method_name.format(index_l[2].replace('$', '_').strip('_').lower()+'_'+index_l[0].lower(), index_l[2]))
       virtual_table_count = virtual_table_count + 1
   h_f.write("  NULL,};\n\n")
@@ -2508,18 +3250,58 @@ private:
   h_f.write("  NULL,};\n\n")
 
 
-  h_f.write("const uint64_t runtime_space_tables [] = {")
-  for name in runtime_space_tables:
+  h_f.write("const uint64_t tenant_space_tables [] = {")
+  for name in tenant_space_tables:
     h_f.write("\n  {0},".format(name))
   h_f.write("  };\n\n")
 
-  h_f.write("const char* const runtime_space_table_names [] = {")
-  for name in runtime_space_table_names:
+  # define oracle virtual table mapping oceanbase virtual table, the schema must be same
+  h_f.write("const uint64_t all_ora_mapping_virtual_table_org_tables [] = {")
+  for name in all_ora_mapping_virtual_table_org_tables:
+    h_f.write("\n  {0},".format(name))
+  h_f.write("  };\n\n")
+
+  h_f.write("const uint64_t all_ora_mapping_virtual_tables [] = {")
+  for name in all_ora_mapping_virtual_tables:
+    h_f.write("  {0}\n,".format(name))
+  h_f.write("  };\n\n")
+
+  # define oracle virtual table mapping oceanbase real table, the schema must be same
+  h_f.write("/* start/end_pos is start/end postition for column with tenant id */\n")
+  h_f.write("struct VTMapping\n")
+  h_f.write("{\n")
+  h_f.write("   uint32_t mapping_tid_;\n")
+  h_f.write("   bool is_real_vt_;\n")
+  h_f.write("};\n\n")
+  #h_f.write("// define all columns with tenant id\n")
+  #tmp_vt_tables = [x for x in real_table_virtual_table_names]
+  #tmp_vt_tables.sort(key = lambda x: x['table_name'])
+  #total_columns_with_id = 0
+  #for tmp_kw in tmp_vt_tables:
+  #  if tmp_kw.has_key("columns_with_id") and tmp_kw["columns_with_id"]:
+  #    for column_name in tmp_kw["columns_with_id"]:
+  #      h_f.write("\n  \"{0}\",".format(column_name.upper()))
+  #      total_columns_with_id = total_columns_with_id + 1
+  #h_f.write("\n};\n\n")
+  h_f.write("extern VTMapping vt_mappings[5000];\n\n")
+
+  h_f.write("const char* const tenant_space_table_names [] = {")
+  for name in tenant_space_table_names:
+    h_f.write("\n  {0},".format(name))
+  h_f.write("  };\n\n")
+
+  h_f.write("const uint64_t only_rs_vtables [] = {")
+  for name in only_rs_vtables:
     h_f.write("\n  {0},".format(name))
   h_f.write("  };\n\n")
 
   h_f.write("const uint64_t cluster_distributed_vtables [] = {")
   for name in cluster_distributed_vtables:
+    h_f.write("\n  {0},".format(name))
+  h_f.write("  };\n\n")
+
+  h_f.write("const uint64_t tenant_distributed_vtables [] = {")
+  for name in tenant_distributed_vtables:
     h_f.write("\n  {0},".format(name))
   h_f.write("  };\n\n")
 
@@ -2540,38 +3322,110 @@ static inline bool is_restrict_access_virtual_table(const uint64_t tid)
 
 """)
 
-  h_f.write("static inline bool is_runtime_table(const uint64_t tid)\n");
+  h_f.write("static inline bool is_tenant_table(const uint64_t tid)\n");
   h_f.write("{\n");
-  h_f.write("  bool in_runtime_space = false;\n");
-  h_f.write("  for (int64_t i = 0; i < ARRAYSIZEOF(runtime_space_tables); ++i) {\n");
-  h_f.write("    if (tid == runtime_space_tables[i]) {\n");
-  h_f.write("      in_runtime_space = true;\n");
+  h_f.write("  bool in_tenant_space = false;\n");
+  h_f.write("  for (int64_t i = 0; i < ARRAYSIZEOF(tenant_space_tables); ++i) {\n");
+  h_f.write("    if (tid == tenant_space_tables[i]) {\n");
+  h_f.write("      in_tenant_space = true;\n");
   h_f.write("      break;\n");
   h_f.write("    }\n");
   h_f.write("  }\n");
-  h_f.write("  return in_runtime_space;\n");
+  h_f.write("  return in_tenant_space;\n");
   h_f.write("}\n\n");
 
-  h_f.write("static inline bool is_runtime_table_name(const common::ObString &tname)\n");
+  h_f.write("static inline bool is_tenant_table_name(const common::ObString &tname)\n");
   h_f.write("{\n");
-  h_f.write("  bool in_runtime_space = false;\n");
-  h_f.write("  for (int64_t i = 0; i < ARRAYSIZEOF(runtime_space_table_names); ++i) {\n");
-  h_f.write("    if (0 == tname.case_compare(runtime_space_table_names[i])) {\n");
-  h_f.write("      in_runtime_space = true;\n");
+  h_f.write("  bool in_tenant_space = false;\n");
+  h_f.write("  for (int64_t i = 0; i < ARRAYSIZEOF(tenant_space_table_names); ++i) {\n");
+  h_f.write("    if (0 == tname.case_compare(tenant_space_table_names[i])) {\n");
+  h_f.write("      in_tenant_space = true;\n");
   h_f.write("      break;\n");
   h_f.write("    }\n");
   h_f.write("  }\n");
-  h_f.write("  return in_runtime_space;\n");
+  h_f.write("  return in_tenant_space;\n");
   h_f.write("}\n\n");
 
-  h_f.write("static inline bool is_system_virtual_table(const uint64_t tid)\n");
+  h_f.write("static inline bool is_global_virtual_table(const uint64_t tid)\n");
   h_f.write("{\n");
-  h_f.write("  return common::is_virtual_table(tid) && !is_runtime_table(tid);\n");
+  h_f.write("  return common::is_virtual_table(tid) && !is_tenant_table(tid);\n");
   h_f.write("}\n\n");
 
-  h_f.write("static inline bool is_runtime_virtual_table(const uint64_t tid)\n");
+  h_f.write("static inline bool is_tenant_virtual_table(const uint64_t tid)\n");
   h_f.write("{\n");
-  h_f.write("  return common::is_virtual_table(tid) && is_runtime_table(tid);\n");
+  h_f.write("  return common::is_virtual_table(tid) && is_tenant_table(tid);\n");
+  h_f.write("}\n\n");
+
+  # oracle virtual table get origin table id in oceanbase database
+  h_f.write("static inline uint64_t get_origin_tid_by_oracle_mapping_tid(const uint64_t tid)\n");
+  h_f.write("{\n")
+  h_f.write("  uint64_t org_tid = common::OB_INVALID_ID;\n")
+  h_f.write("  uint64_t idx = common::OB_INVALID_ID;\n")
+  h_f.write("  for (uint64_t i = 0; common::OB_INVALID_ID == idx && i < ARRAYSIZEOF(all_ora_mapping_virtual_tables); ++i) {\n")
+  h_f.write("    if (tid == all_ora_mapping_virtual_tables[i]) {\n")
+  h_f.write("      idx = i;\n")
+  h_f.write("    }\n")
+  h_f.write("  }\n")
+  h_f.write("  if (common::OB_INVALID_ID != idx) {\n")
+  h_f.write("     org_tid = all_ora_mapping_virtual_table_org_tables[idx];\n")
+  h_f.write("  }\n")
+  h_f.write("  return org_tid;\n")
+  h_f.write("}\n\n")
+
+  ## it's oracle virtual table, it's not agent table!!!
+  h_f.write("static inline bool is_oracle_mapping_virtual_table(const uint64_t tid)\n")
+  h_f.write("{\n")
+  h_f.write("  bool is_ora_vt = false;\n")
+  h_f.write("  for (uint64_t i = 0; i < ARRAYSIZEOF(all_ora_mapping_virtual_tables); ++i) {\n")
+  h_f.write("    if (tid == all_ora_mapping_virtual_tables[i]) {\n")
+  h_f.write("      is_ora_vt = true;\n")
+  h_f.write("    }\n")
+  h_f.write("  }\n")
+  h_f.write("  return is_ora_vt;\n")
+  h_f.write("}\n\n")
+
+  ## Mappping oceanbase real table to virtual table in Oracle mode
+  # oracle virtual table get origin table id in oceanbase database
+  ## it's oracle virtual table, it's not agent table!!!
+  h_f.write("static inline uint64_t get_real_table_mappings_tid(const uint64_t tid)\n");
+  h_f.write("{\n")
+  h_f.write("  uint64_t org_tid = common::OB_INVALID_ID;\n")
+  h_f.write("  uint64_t pure_id = tid;\n")
+  h_f.write("  if (pure_id > common::OB_MAX_MYSQL_VIRTUAL_TABLE_ID && pure_id < common::OB_MAX_VIRTUAL_TABLE_ID) {\n")
+  h_f.write("    int64_t idx = pure_id - common::OB_MAX_MYSQL_VIRTUAL_TABLE_ID - 1;\n")
+  h_f.write("    VTMapping &tmp_vt_mapping = vt_mappings[idx];\n")
+  h_f.write("    if (tmp_vt_mapping.is_real_vt_) {\n")
+  h_f.write("      org_tid = tmp_vt_mapping.mapping_tid_;\n")
+  h_f.write("    }\n")
+  h_f.write("  }\n")
+  h_f.write("  return org_tid;\n")
+  h_f.write("}\n\n")
+
+  h_f.write("static inline bool is_oracle_mapping_real_virtual_table(const uint64_t tid)\n")
+  h_f.write("{\n")
+  h_f.write("  return common::OB_INVALID_ID != get_real_table_mappings_tid(tid);\n")
+  h_f.write("}\n\n")
+  ## end Mapping oceanbase real table to virtual table in Oracle mode
+
+  h_f.write("static inline void get_real_table_vt_mapping(const uint64_t tid, VTMapping *&vt_mapping)\n");
+  h_f.write("{\n")
+  h_f.write("  uint64_t pure_id = tid;\n")
+  h_f.write("  vt_mapping = nullptr;\n")
+  h_f.write("  if (pure_id > common::OB_MAX_MYSQL_VIRTUAL_TABLE_ID && pure_id < common::OB_MAX_VIRTUAL_TABLE_ID) {\n")
+  h_f.write("    int64_t idx = pure_id - common::OB_MAX_MYSQL_VIRTUAL_TABLE_ID - 1;\n")
+  h_f.write("    vt_mapping = &vt_mappings[idx];\n")
+  h_f.write("  }\n")
+  h_f.write("}\n\n")
+
+  h_f.write("static inline bool is_only_rs_virtual_table(const uint64_t tid)\n");
+  h_f.write("{\n");
+  h_f.write("  bool bret = false;\n");
+  h_f.write("  for (int64_t i = 0; !bret && i < ARRAYSIZEOF(only_rs_vtables); ++i) {\n");
+  h_f.write("    if (tid == only_rs_vtables[i]) {\n");
+  h_f.write("      bret = true;\n");
+  h_f.write("    }\n");
+  h_f.write("  }\n");
+  h_f.write("  return bret;\n");
   h_f.write("}\n\n");
 
   h_f.write("static inline bool is_cluster_distributed_vtables(const uint64_t tid)\n");
@@ -2579,6 +3433,17 @@ static inline bool is_restrict_access_virtual_table(const uint64_t tid)
   h_f.write("  bool bret = false;\n");
   h_f.write("  for (int64_t i = 0; !bret && i < ARRAYSIZEOF(cluster_distributed_vtables); ++i) {\n");
   h_f.write("    if (tid == cluster_distributed_vtables[i]) {\n");
+  h_f.write("      bret = true;\n");
+  h_f.write("    }\n");
+  h_f.write("  }\n");
+  h_f.write("  return bret;\n");
+  h_f.write("}\n\n");
+
+  h_f.write("static inline bool is_tenant_distributed_vtables(const uint64_t tid)\n");
+  h_f.write("{\n");
+  h_f.write("  bool bret = false;\n");
+  h_f.write("  for (int64_t i = 0; !bret && i < ARRAYSIZEOF(tenant_distributed_vtables); ++i) {\n");
+  h_f.write("    if (tid == tenant_distributed_vtables[i]) {\n");
   h_f.write("      bret = true;\n");
   h_f.write("    }\n");
   h_f.write("  }\n");
@@ -2646,14 +3511,14 @@ static inline bool is_restrict_access_virtual_table(const uint64_t tid)
   h_f.write("  return ret;\n");
   h_f.write("}\n\n");
 
-  runtime_table_count = 1 + core_table_count + sys_table_count + virtual_table_count + sys_view_count
+  sys_tenant_table_count = 1 + core_table_count + sys_table_count + virtual_table_count + sys_view_count
   core_schema_version = 1
-  bootstrap_version = core_schema_version + runtime_table_count + 2
+  bootstrap_version = core_schema_version + sys_tenant_table_count + 2
   h_f.write("const int64_t OB_CORE_TABLE_COUNT = %d;\n" % core_table_count)
   h_f.write("const int64_t OB_SYS_TABLE_COUNT = %d;\n" % sys_table_count)
   h_f.write("const int64_t OB_VIRTUAL_TABLE_COUNT = %d;\n" % virtual_table_count)
   h_f.write("const int64_t OB_SYS_VIEW_COUNT = %d;\n" % sys_view_count)
-  h_f.write("const int64_t OB_RUNTIME_TABLE_COUNT = %d;\n" % runtime_table_count)
+  h_f.write("const int64_t OB_SYS_TENANT_TABLE_COUNT = %d;\n" % sys_tenant_table_count)
   h_f.write("const int64_t OB_CORE_SCHEMA_VERSION = %d;\n" % core_schema_version)
   h_f.write("const int64_t OB_BOOTSTRAP_SCHEMA_VERSION = %d;\n" % bootstrap_version)
 
@@ -2682,6 +3547,65 @@ def end_generate_constants_h():
   constants_h_f.write(end)
   constants_h_f.close()
   id_to_name_f.close()
+
+def write_vt_mapping_cpp(h_file_name):
+  global cpp_f
+  cpp_f = open(share_out_path(h_file_name), 'w')
+  head = copyright + """
+#define USING_LOG_PREFIX SHARE_SCHEMA
+#include "ob_inner_table_schema.h"
+
+namespace oceanbase
+{
+namespace share
+{
+"""
+  cpp_f.write(head)
+
+  tmp_vt_tables = [x for x in real_table_virtual_table_names]
+  tmp_vt_tables.sort(key = lambda x: x['table_name'])
+  #total_columns_with_id = 0
+  #for tmp_kw in tmp_vt_tables:
+  #  if tmp_kw.has_key("columns_with_id") and tmp_kw["columns_with_id"]:
+  #    for column_name in tmp_kw["columns_with_id"]:
+  #      total_columns_with_id = total_columns_with_id + 1
+  cpp_f.write("VTMapping vt_mappings[5000];\n")
+  cpp_f.write("bool vt_mapping_init()\n")
+  cpp_f.write("{\n")
+  tmp_start_pos = 0
+  tmp_end_pos = 0
+  cpp_f.write("   int64_t start_idx = common::OB_MAX_MYSQL_VIRTUAL_TABLE_ID + 1;\n")
+  for tmp_kw in tmp_vt_tables:
+    cpp_f.write("   {\n")
+    cpp_f.write("   int64_t idx = {0} - start_idx;\n".format(tmp_kw["self_tid"]))
+    cpp_f.write("   VTMapping &tmp_vt_mapping = vt_mappings[idx];\n")
+    if "mapping_tid" in tmp_kw and tmp_kw["mapping_tid"]:
+      cpp_f.write("   tmp_vt_mapping.mapping_tid_ = {0};\n".format(tmp_kw["mapping_tid"]))
+    if "real_vt" in tmp_kw and tmp_kw["real_vt"]:
+      is_real_vt = "true"
+      cpp_f.write("   tmp_vt_mapping.is_real_vt_ = {0};\n".format(is_real_vt))
+    #if tmp_kw.has_key("columns_with_id") and tmp_kw["columns_with_id"]:
+    #  for column_name in tmp_kw["columns_with_id"]:
+    #    tmp_end_pos = tmp_end_pos + 1
+    #  cpp_f.write("   tmp_vt_mapping.start_pos_ = {0};\n".format(tmp_start_pos))
+    #  cpp_f.write("   tmp_vt_mapping.end_pos_ = {0};\n".format(tmp_end_pos))
+    cpp_f.write("   }\n\n")
+    tmp_start_pos = tmp_end_pos
+    tmp_end_pos = tmp_start_pos
+  cpp_f.write("   return true;\n")
+  cpp_f.write("} // end define vt_mappings\n\n")
+
+  cpp_f.write("bool inited_vt = vt_mapping_init();\n")
+  #if total_columns_with_id != tmp_end_pos:
+  #  raise Exception("columns with tenant id {0} is not match with {1}".format(total_columns_with_tenant_, tmp_end_pos))
+
+
+  end = """
+} // end namespace share
+} // end namespace oceanbase
+"""
+  cpp_f.write(end)
+  cpp_f.close()
 
 def write_lob_mapping_cpp(h_file_name):
   global cpp_f
@@ -2739,10 +3663,8 @@ if __name__ == "__main__":
   ob_virtual_index_table_id = max_ob_virtual_table_id - 1
   ora_virtual_index_table_id = max_ora_virtual_table_id - 1
 
-  with open(args.def_file, "rb") as def_file:
-    schema_definition = compile(def_file.read(), args.def_file, 'exec')
   clean_files("ob_inner_table_schema.*")
-  exec(schema_definition)
+  exec(compile(open("ob_inner_table_schema_def.py", "rb").read(), "ob_inner_table_schema_def.py", 'exec'))
   def_all_lob_aux_table()
   end_generate_cpp()
 
@@ -2755,16 +3677,17 @@ if __name__ == "__main__":
   end_generate_constants_h()
 
   ## write virtual table for init virtual table information
+  write_vt_mapping_cpp("ob_inner_table_schema.vt.cpp")
   write_lob_mapping_cpp("ob_inner_table_schema.lob.cpp")
   f = start_generate_misc_data("ob_inner_table_schema_misc.ipp")
+  # iterate / agent virtual table dispatch removed (single-tenant: iterate VT mechanism deleted)
   generate_cluster_private_table(f)
   generate_sys_index_table_misc_data(f)
-  generate_local_virtual_table_registration(f)
+  generate_sqlite_create_table_statements(f)
+  generate_sqlite_virtual_table_registration(f)
 
   f.close()
 
-  # Generate local virtual table C++ files
-  generate_local_table_schema()
-  generate_local_virtual_table_cpp_files()
-  validate_expected_outputs(args.expected_output)
-  log_info("Successfully generate C++ files for local virtual tables.")
+  # Generate SQLite virtual table C++ files
+  generate_sqlite_virtual_table_cpp_files()
+  log_info("Successfully generate C++ files for SQLite virtual tables.")

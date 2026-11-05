@@ -17,9 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_global_merge_table_operator.h"
-#include "lib/utility/ob_smart_var.h"
 #include "share/inner_table/ob_inner_table_schema.h"
-#include "share/ob_merge_info.h"
+#include "share/ob_zone_merge_info.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/storage/ob_merge_info_table_storage.h"
 #include "share/ob_server_struct.h"
@@ -34,10 +33,14 @@ using namespace oceanbase::common::sqlclient;
 // Static storage instance
 ObMergeInfoTableStorage ObGlobalMergeTableOperator::storage_;
 
-int ObGlobalMergeTableOperator::init(LocalStore &store)
+int ObGlobalMergeTableOperator::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(storage_.init(&store))) {
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("meta_db_pool_ not initialized", K(ret));
+  } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+    LOG_WARN("failed to init storage", K(ret));
   }
   return ret;
 }
@@ -50,9 +53,11 @@ int ObGlobalMergeTableOperator::load_global_merge_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
+    LOG_WARN("storage not initialized", K(ret));
   } else {
     ret = storage_.get(info);
     if (OB_FAIL(ret) && OB_ENTRY_NOT_EXIST != ret) {
+      LOG_WARN("failed to get global merge info from storage", K(ret));
     } else if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS; // Return empty info
     }
@@ -67,11 +72,14 @@ int ObGlobalMergeTableOperator::insert_global_merge_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
+    LOG_WARN("storage not initialized", K(ret));
   } else if (!info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(info));
   } else {
     ret = storage_.insert_or_update(info);
     if (OB_FAIL(ret)) {
+      LOG_WARN("failed to insert or update global merge info", K(ret), K(info));
     }
   }
   return ret;
@@ -84,10 +92,12 @@ int ObGlobalMergeTableOperator::update_partial_global_merge_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
+    LOG_WARN("storage not initialized", K(ret));
   } else {
-    // Use local storage - partial update is same as full update for local storage
+    // Use SQLite storage - partial update is same as full update for SQLite
     ret = storage_.insert_or_update(info);
     if (OB_FAIL(ret)) {
+      LOG_WARN("failed to insert or update global merge info", K(ret), K(info));
     }
   }
   return ret;
@@ -100,15 +110,18 @@ int ObGlobalMergeTableOperator::check_scn_revert(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(info));
   } else {
     HEAP_VAR(ObGlobalMergeInfo, global_merge_info) {
       if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(sql_client,
                                                                      global_merge_info))) {
+        LOG_WARN("fail to load global merge info", KR(ret));
       } else {
         const ObMergeInfoItem *it = info.list_.get_first();
         while (OB_SUCC(ret) && (it != info.list_.get_header())) {
           if (NULL == it) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("null item", KR(ret), KP(it), K(info));
           } else {
             if (it->need_update_ && it->is_scn_) {
               if (0 == STRCMP(it->name_, "frozen_scn")) {

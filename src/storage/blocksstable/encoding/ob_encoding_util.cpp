@@ -121,6 +121,10 @@ int ObEncodingRowBufHolder::init(const int64_t macro_block_size)
   }
   if (OB_UNLIKELY(macro_block_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid block size", K(ret), K(macro_block_size));
+  } else if (!true){
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", K(ret));
   } else {
     
     buf_size_limit_ = macro_block_size * 3;
@@ -143,8 +147,10 @@ int ObEncodingRowBufHolder::try_alloc(const int64_t required_size)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("Not inited", K(ret));
   } else if (OB_UNLIKELY(required_size < 0 || required_size > buf_size_limit_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid required size for micro block", K(ret), K(required_size));
   } else if (required_size <= alloc_size_) {
     // Reuse allocated buffer
   } else {
@@ -154,6 +160,7 @@ int ObEncodingRowBufHolder::try_alloc(const int64_t required_size)
     const int64_t alloc_size = expand_size > buf_size_limit_ ? buf_size_limit_ : expand_size;
     if (OB_ISNULL(alloc_buf_ = reinterpret_cast<char *>(allocator_.alloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Fail to allocate memory", K(ret), K(required_size), K_(alloc_size));
     } else {
       alloc_size_ = alloc_size;
     }

@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_alter_routine_resolver.h"
 #include "ob_alter_routine_stmt.h"
-#include "sql/pl/ob_pl_package.h"
-#include "sql/pl/parser/parse_stmt_item_type.h"
+#include "pl/ob_pl_package.h"
+#include "pl/parser/parse_stmt_item_type.h"
 
 namespace oceanbase
 {
@@ -51,6 +51,7 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
     //Step2: create alter stmt
     if (OB_SUCC(ret) && OB_ISNULL(alter_routine_stmt = create_stmt<ObAlterRoutineStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc memory for ObAlterRoutineStmt", K(ret));
     }
     //Step3: got standalone routine info 
     if (OB_FAIL(ret)) {
@@ -144,12 +145,14 @@ int ObAlterRoutineResolver::resolve_impl(
   int ret = OB_SUCCESS;
   if (T_SP_EDITIONABLE_CLAUSE == alter_clause_node.type_) {
     ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not supported yet!", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter editionable");
   } else if (T_SP_CLAUSE_LIST == alter_clause_node.type_) {
     OX (crt_routine_arg.routine_info_ = routine_info);
     OZ (resolve_clause_list(&alter_clause_node, crt_routine_arg));
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unknow alter clause node type", K(ret), K(alter_clause_node.type_));
   }
   return ret;
 }

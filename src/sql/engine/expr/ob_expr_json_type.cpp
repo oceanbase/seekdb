@@ -117,6 +117,7 @@ int ObExprJsonType::calc_result_type1(ObExprResType &type,
   type.set_collation_level(CS_LEVEL_IMPLICIT);
 
   if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(type1, 1, N_JSON_TYPE))) {
+    LOG_WARN("wrong type for json doc.", K(ret), K(type1.get_type()));
   }
   
   return ret;
@@ -144,13 +145,16 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
         ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type);
         ObIJsonBase *j_base = NULL;
         if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
+          LOG_WARN("fail to ensure collation", K(ret), K(type), K(cs_type));
         } else if (j_str.length() == 0) {
           ret = OB_ERR_INVALID_JSON_TEXT;
           LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
-        } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, *allocator, data, meta, has_lob_header, j_str))) {
+        } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, data, meta, has_lob_header, j_str))) {
+          LOG_WARN("fail to get real data.", K(ret), K(j_str));
         } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type,
                                                             j_in_type, j_base, 0,
                                                             ObJsonExprHelper::get_json_max_depth_config()))) {
+          LOG_WARN("fail to get json base", K(ret), K(type), K(j_str), K(j_in_type));
           if (ret == OB_ERR_INVALID_JSON_TEXT_IN_PARAM) {
             ret = OB_ERR_INVALID_JSON_TEXT;
             LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
@@ -177,6 +181,7 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
       
       default: {
         ret = OB_ERR_INVALID_JSON_TEXT;
+        LOG_WARN("Incorrect type for function json_type", K(ret), K(type));
         break;
       }
     }
@@ -193,13 +198,17 @@ int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObExpr *arg = expr.args_[0];
 
   if (OB_FAIL(arg->eval(ctx, datum))) {
+    LOG_WARN("eval json arg failed", K(ret));
   } else {
     uint32_t type_idx = 0;
     bool is_null = false;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
-    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-    if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, type_idx, is_null))) {
+    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    if (OB_FAIL(tmp_allocator.add_baseline_size(datum, arg->obj_meta_.has_lob_header()))) {
+      LOG_WARN("failed to add baseline size.", K(ret));
+    } else if (OB_FAIL(calc(ctx, *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, type_idx, is_null))) {
+      LOG_WARN("fail to calc json type result", K(ret), K(arg->datum_meta_));
     } else if (is_null) {
       res.set_null();
     } else {
@@ -208,6 +217,7 @@ int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       char *buf = expr.get_str_res_mem(ctx, j_type_str_len + 1);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc memory for result buf", K(ret), K(j_type_str), K(j_type_str_len));
       } else {
         MEMMOVE(buf, j_type_str, j_type_str_len);
         res.set_string(buf, j_type_str_len);

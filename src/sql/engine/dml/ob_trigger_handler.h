@@ -19,7 +19,7 @@
 
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
-#include "sql/pl/parser/parse_stmt_item_type.h"
+#include "pl/parser/parse_stmt_item_type.h"
 
 namespace oceanbase
 {
@@ -51,6 +51,14 @@ public:
                                   const ObTrigDMLCtDef &trig_ctdef,
                                   ObTrigDMLRtDef &trig_rtdef,
                                   uint64_t tg_event);
+  static int do_handle_before_stmt(ObTableModifyOp &dml_op,
+                                    const ObTrigDMLCtDef &trig_ctdef,
+                                    ObTrigDMLRtDef &trig_rtdef,
+                                    uint64_t tg_event);
+  static int do_handle_after_stmt(ObTableModifyOp &dml_op,
+                                  const ObTrigDMLCtDef &trig_ctdef,
+                                  ObTrigDMLRtDef &trig_rtdef,
+                                  uint64_t tg_event);
   static int init_trigger_params(ObDMLRtCtx &das_ctx,
                                 uint64_t trigger_event,
                                 const ObTrigDMLCtDef &trig_ctdef,
@@ -61,7 +69,7 @@ public:
                                              pl::ObProcType type)
   {
     bool is_trg_routine = false;
-    if (share::schema::ObTriggerInfo::is_trigger_body_package_id(package_id)
+    if (schema::ObTriggerInfo::is_trigger_body_package_id(package_id)
         && (pl::ObProcType::PACKAGE_PROCEDURE == type || pl::ObProcType::PACKAGE_FUNCTION == type)) {
       is_trg_routine = (routine_id >= ROUTINE_IDX_BEFORE_ROW && routine_id <= ROUTINE_IDX_AFTER_ROW);
     }
@@ -77,6 +85,10 @@ private:
                                   bool &need_fire);
   static int calc_before_row(ObTableModifyOp &dml_op, ObTrigDMLRtDef &trig_rtdef, uint64_t trigger_id);
   static int calc_after_row(ObTableModifyOp &dml_op, ObTrigDMLRtDef &trig_rtdef, uint64_t trigger_id);
+  static int calc_before_stmt(ObTableModifyOp &dml_op,
+                              ObTrigDMLRtDef &trig_rtdef,
+                              uint64_t trigger_id);
+  static int calc_after_stmt(ObTableModifyOp &dml_op, ObTrigDMLRtDef &trig_rtdef, uint64_t trigger_id);
   static int calc_trigger_routine(ObExecContext &exec_ctx,
                                   uint64_t trigger_id,
                                   uint64_t routine_id,
@@ -100,6 +112,7 @@ private:
                                         const ObTrigDMLCtDef &trig_ctdef,
                                         ObTrigDMLRtDef &trig_rtdef,
                                         uint64_t tg_event);
+  static inline int destroy_compound_trigger_state(ObExecContext &exec_ctx, const ObTrigDMLCtDef &trig_ctdef);
   static int convert_sql_type_to_pl_type(ObSQLSessionInfo *session,
                                          ObExecContext &exec_ctx,
                                          ObSchemaGetterGuard *schema_guard,

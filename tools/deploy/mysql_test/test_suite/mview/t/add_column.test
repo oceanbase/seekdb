@@ -1,0 +1,39 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner: lana.lgx
+
+--disable_warnings
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv;
+drop table if exists t1;
+
+create table t1 (a int primary key, b int, c int);
+create materialized view log on t1 parallel 10 with primary key, rowid, sequence(c);
+insert into t1 values(1,2,3);
+
+alter table t1 add column d int;
+--error 1235
+alter table t1 drop column d;
+--error 1235
+alter table t1 drop column d, parallel 10;
+
+select*from mlog$_t1;
+select*from mlog$_t1 where ORA_ROWSCN > 1836492048875290000;
+--error 1210
+select*from mlog$_t1 where ORA_ROWSCN > 1636492048875290000;
+
+create materialized view mv refresh fast enable on query computation as select count(*) from t1;
+select*from mv;
+drop materialized view log on t1;
+create materialized view log on t1 parallel 10 with primary key, rowid, sequence(c);
+--error 1210
+select*from mv;
+
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv;
+drop table if exists t1;

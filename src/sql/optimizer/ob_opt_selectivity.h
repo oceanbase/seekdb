@@ -41,7 +41,6 @@ namespace common
 class ObOptStatManager;
 class ObHistogram;
 class ObOptColumnStatHandle;
-struct ObDatumAccessContext;
 }
 namespace sql
 {
@@ -218,6 +217,18 @@ class OptSelectivityCtx
     return ObEstCorrelationModel::get_correlation_model(opt_ctx_.get_correlation_type()); 
   }
 
+  uint64_t get_compat_version() const { 
+    return OB_ISNULL(opt_ctx_.get_query_ctx()) ? 0 :
+           opt_ctx_.get_query_ctx()->optimizer_features_enable_version_;
+  }
+
+  template<typename... Args>
+  bool check_opt_compat_version(Args... args) const
+  {
+    return OB_ISNULL(get_opt_ctx().get_query_ctx()) ? false :
+           get_opt_ctx().get_query_ctx()->check_opt_compat_version(args...);
+  }
+
   void set_ambient_card(const ObIArray<double> *ambient_card) { ambient_card_ = ambient_card; }
   const ObIArray<double> *get_ambient_card() const { return ambient_card_; }
   int get_ambient_card(const uint64_t table_id, double &table_ambient_card) const;
@@ -323,6 +334,9 @@ public:
     avg_len_(0),
     hist_scale_(-1),
     min_max_inited_(false),
+    cg_macro_blk_cnt_(0),
+    cg_micro_blk_cnt_(0),
+    cg_skip_rate_(0.0),
     base_ndv_(-1.0)
   {
     min_val_.set_min_value();
@@ -332,7 +346,10 @@ public:
   void init(const uint64_t column_id,
             const double ndv,
             const double num_null,
-            const double avg_len);
+            const double avg_len,
+            const int64_t cg_macro_blk_cnt = 0,
+            const int64_t cg_micro_blk_cnt = 0,
+            const double cg_skip_rate = 0.0);
 
   uint64_t get_column_id() const { return column_id_; }
   void set_column_id(const uint64_t column_id) { column_id_ = column_id; }
@@ -352,6 +369,14 @@ public:
   void set_max_value(const ObObj& max_val) { max_val_ = max_val; }
   bool get_min_max_inited() const { return min_max_inited_; }
   void set_min_max_inited(const bool inited) { min_max_inited_ = inited; }
+  int64_t get_cg_macro_blk_cnt() const { return cg_macro_blk_cnt_; }
+  void set_cg_macro_blk_cnt(const int64_t cnt) { cg_macro_blk_cnt_ = cnt; }
+  int64_t get_cg_micro_blk_cnt() const { return cg_micro_blk_cnt_; }
+  void set_cg_micro_blk_cnt(const int64_t cnt) { cg_micro_blk_cnt_ = cnt; }
+  double get_cg_skip_rate() const { return cg_skip_rate_; }
+  void set_cg_skip_rate(const double skip_rate) { cg_skip_rate_ = skip_rate; }
+
+
   void set_default_meta(double rows)
   {
     ndv_ = std::min(rows, std::max(100.0, rows / 100.0));
@@ -362,7 +387,8 @@ public:
   void set_base_ndv(double ndv) { base_ndv_ = ndv; } 
 
   TO_STRING_KV(K_(column_id), K_(ndv), K_(num_null), K_(avg_len), K_(hist_scale),
-               K_(min_val), K_(max_val) , K_(min_max_inited), K_(base_ndv));
+               K_(min_val), K_(max_val) , K_(min_max_inited), K_(cg_macro_blk_cnt),
+               K_(cg_micro_blk_cnt), K_(cg_skip_rate), K_(base_ndv));
 private:
   uint64_t column_id_;
   double ndv_;
@@ -374,6 +400,9 @@ private:
   ObObj min_val_;
   ObObj max_val_;
   bool min_max_inited_;
+  int64_t cg_macro_blk_cnt_;
+  int64_t cg_micro_blk_cnt_;
+  double cg_skip_rate_;
   double base_ndv_;
 };
 
@@ -862,7 +891,6 @@ public:
                                                 const ObObj &max_val,
                                                 const ObObj &start_val,
                                                 const ObObj &end_val,
-                                                const common::ObDatumAccessContext *datum_access_ctx,
                                                 double &selectivity);
 
   static int check_column_in_current_level_stmt(const ObDMLStmt *stmt,
@@ -1015,6 +1043,11 @@ public:
   static int extract_column_ids(const ObIArray<ObRawExpr *> &col_exprs,
                                 ObIArray<uint64_t> &col_ids,
                                 uint64_t &table_id);
+
+  static int classify_quals_deprecated(const OptSelectivityCtx &ctx,
+                            const ObIArray<ObRawExpr*> &quals,
+                            ObIArray<ObExprSelPair> &all_predicate_sel,
+                            ObIArray<OptSelInfo> &column_sel_infos);
 
   static int classify_quals(const OptTableMetas &table_metas,
                             const OptSelectivityCtx &ctx,

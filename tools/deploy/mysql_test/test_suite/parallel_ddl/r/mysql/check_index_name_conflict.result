@@ -1,0 +1,6 @@
+create table t1 (col1 int, col2 int);
+create table t2 (col1 int, col2 int);
+create index i1 on t1(col1);
+create index i1 on t2(col1);
+create index I1 on t1 (col2);
+ERROR 42000: Duplicate key name 'I1'

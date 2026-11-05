@@ -1,0 +1,80 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_RPC_OBMYSQL_OMPK_PREPARE_H_
+#define OCEANBASE_RPC_OBMYSQL_OMPK_PREPARE_H_
+
+#include "ompk_prepare.h"
+#include "rpc/obmysql/ob_mysql_packet.h"
+#include "lib/utility/ob_macro_utils.h"
+
+namespace oceanbase
+{
+namespace obmysql
+{
+
+/**
+ * This packet is response to COM_STMT_PREPARE
+ * following with param desc && column desc packets
+ *
+ *  status (1) -- [00] OK
+ *  statement_id (4) -- statement-id
+ *  num_columns (2) -- number of columns
+ *  num_params (2) -- number of params
+ *  reserved_ (1) -- [00] filler
+ *  warning_count (2) -- number of warnings
+ */
+
+class OMPKPrepare: public ObMySQLPacket
+{
+public:
+  OMPKPrepare() :
+    status_(0),
+    statement_id_(0),
+    column_num_(0),
+    param_num_(0),
+    reserved_(0),
+    warning_count_(0)
+  {}
+  virtual ~OMPKPrepare() {}
+
+  virtual int serialize(char* buffer, int64_t length, int64_t& pos) const;
+  virtual int64_t get_serialize_size() const;
+
+  inline void set_statement_id(const uint32_t id) { statement_id_ = id; }
+
+  inline void set_column_num(const uint16_t num) { column_num_ = num;}
+
+  inline void set_param_num(const uint16_t num) { param_num_ = num; }
+
+  inline void set_warning_count(const uint16_t count) { warning_count_ = count; }
+  inline ObMySQLPacketType get_mysql_packet_type() { return ObMySQLPacketType::PKT_PREPARE; }
+
+private:
+  uint8_t  status_;
+  uint32_t statement_id_;
+  uint16_t column_num_;
+  uint16_t param_num_;
+  uint8_t  reserved_;
+  uint16_t warning_count_;
+  DISALLOW_COPY_AND_ASSIGN(OMPKPrepare);
+};
+
+} //end of obmysql
+} //end of oceanbase
+
+
+#endif //OCEANBASE_RPC_OBMYSQL_OMPK_PREPARE_H_

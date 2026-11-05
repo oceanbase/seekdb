@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX PL
 
-#include <cstddef>
 #include "pl/ob_pl_interface_pragma.h"
 
 namespace oceanbase
@@ -33,9 +32,12 @@ struct ObPLInterface {
 
 template <typename U, U func>
 struct interface_checker {
-  // These are the two supported PL C interface signatures. Any other
-  // signature yields a compile-time error.
+  // only these types are allowed for PL C interfaces.
+  // T3, T4 is for compatibility and deprecated.
+  // using T_INTERFACE as interface signature is encouraged.
+  // any other signature will yield a compile-time error.
   using T3 = int(&)(ObExecContext &, ParamStore &, ObObj &);
+  using T4 = int(&)(ObExecContext &, ParamStore &, ObObj &, ObPLExecCtx &);
   using T_INTERFACE = int(&)(ObPLExecCtx &, ParamStore &, ObObj&);
 
   template <typename T, T v>
@@ -48,6 +50,10 @@ struct interface_checker {
     }
   };
 
+  template <T4 v>
+  struct interface_checker_helper<T4, v> {
+  };
+
   template <T_INTERFACE v>
   struct interface_checker_helper<T_INTERFACE, v>{
     static_assert(std::is_same<decltype(&v),PL_C_INTERFACE_t>::value, "T_INTERFACE and PL_C_INTERFACE_t do not match");
@@ -57,23 +63,20 @@ struct interface_checker {
   };
 
   // for nullptr interface compatibility
-  template <std::nullptr_t v>
-  struct interface_checker_helper<std::nullptr_t, v> {
+  template <nullptr_t v>
+  struct interface_checker_helper<nullptr_t, v> {
     static constexpr PL_C_INTERFACE_t value = nullptr;
   };
 
   static constexpr PL_C_INTERFACE_t value = interface_checker_helper<U, func>::value;
 };
 
-static const ObPLInterface OB_PL_INTERFACE[] =
+static const ObPLInterface OB_PL_INTERFACE[INTERFACE_END +1] =
 {
 #define INTERFACE_DEF(type, name, entry) {name, interface_checker<decltype(entry), entry>::value},
 #include "pl/ob_pl_interface_pragma.h"
 #undef INTERFACE_DEF
 };
-static_assert(
-    sizeof(OB_PL_INTERFACE) / sizeof(OB_PL_INTERFACE[0]) == INTERFACE_END + 1,
-    "PL interface table must define every ObPLInterfaceType");
 
 PL_C_INTERFACE_t ObPLInterfaceService::get_entry(ObString &name) const
 {
@@ -91,10 +94,12 @@ int ObPLInterfaceService::init()
   if (!interface_map_.created() &&
              OB_FAIL(interface_map_.create(hash::cal_next_prime(32),
                                            ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {
+    LOG_WARN("create interface map failed", K(ret));
   } else {
     for (int64_t i = INTERFACE_START; OB_SUCC(ret) && i < INTERFACE_END; ++i) {
       ObPLInterfaceType type = static_cast<ObPLInterfaceType>(i);
       if (OB_FAIL(interface_map_.set_refactored(ObString(OB_PL_INTERFACE[i].name), type))) {
+        LOG_WARN("fail insert ps id to hash map", K(i), K(OB_PL_INTERFACE[i].name), K(type),K(ret));
       }
     }
   }
@@ -124,3 +129,4 @@ int ObPLInterfaceImpl::call(sql::ObExecContext &ctx, sql::ParamStore &params, Ob
 
 }
 }
+

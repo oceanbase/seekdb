@@ -61,7 +61,8 @@ private:
 inline bool ObMockFKParentTableHashWrapper::operator == (
     const ObMockFKParentTableHashWrapper &rv) const
 {
-  return (database_id_ == rv.get_database_id())
+  return (true)
+      && (database_id_ == rv.get_database_id())
       && (mock_table_name_ == rv.get_mock_table_name());
 }
 
@@ -126,7 +127,7 @@ public:
   int get_mock_fk_parent_table_schema(
       const uint64_t mock_fk_parent_table_id,
       const ObSimpleMockFKParentTableSchema *&schema) const;
-  int get_mock_fk_parent_table_schemas_in_runtime(
+  int get_mock_fk_parent_table_schemas_in_tenant(
       common::ObIArray<const ObSimpleMockFKParentTableSchema *> &schemas) const;
   int get_mock_fk_parent_table_schemas_in_database(
       const uint64_t database_id,

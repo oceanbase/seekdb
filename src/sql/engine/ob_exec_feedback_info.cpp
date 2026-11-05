@@ -40,6 +40,7 @@ int ObExecFeedbackInfo::merge_feedback_info(const ObExecFeedbackInfo &feedback_i
 {
   int ret = OB_SUCCESS;
   if (!is_valid() || !feedback_info.is_valid()) {
+    LOG_TRACE("feedback info is not valid", K(ret), K(is_valid_), K(feedback_info.is_valid_));
   } else if (nodes_.count() < feedback_info.get_feedback_nodes().count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the count of feedback info is unexpected", K(nodes_.count()), K(feedback_info.get_feedback_nodes().count()));
@@ -71,12 +72,14 @@ int ObExecFeedbackInfo::merge_feedback_info(const ObExecFeedbackInfo &feedback_i
       } else if (nodes_.at(left).op_id_ > fb_nodes.at(right).op_id_) {
         is_valid_ = false;
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected id node", K(ret));
         break;
       }
     }
   }
   if (OB_FAIL(ret)) {
     is_valid_ = false;
+    LOG_WARN("mark the feedback info is invalid", K(ret));
   } else {
     total_db_time_ += feedback_info.get_total_db_time();
   }

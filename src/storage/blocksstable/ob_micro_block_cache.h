@@ -24,6 +24,8 @@
 #include "storage/ob_i_table.h"
 #include "storage/blocksstable/ob_micro_block_info.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
+#include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/blocksstable/ob_block_manager.h"
 
 
@@ -302,6 +304,7 @@ protected:
   int64_t data_checksum_;
   ObMicroBlockDesMeta block_des_meta_;
   bool use_block_cache_;
+  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
   const ObITableReadInfo *table_read_info_;
   DISALLOW_COPY_AND_ASSIGN(ObIMicroBlockIOCallback);
 };
@@ -383,11 +386,13 @@ class ObMicroBlockBufTransformer final
 
  private:
    bool is_inited_;
+   bool is_cs_full_transfrom_;
    const ObMicroBlockDesMeta &block_des_meta_;
    ObMacroBlockReader *reader_;
    ObMicroBlockHeader &header_;
    const char *payload_buf_;
    int64_t payload_size_;
+   ObCSMicroBlockTransformer transformer_;
 };
 
 
@@ -405,7 +410,8 @@ public:
       const ObMicroIndexInfo& idx_row,
       const bool use_cache,
       ObStorageObjectHandle &macro_handle,
-      ObIAllocator *allocator);
+      ObIAllocator *allocator,
+      const bool is_major_macro_preread = false);
   virtual int load_block(
       const ObMicroBlockId &micro_block_id,
       const ObMicroBlockDesMeta &des_meta,
@@ -444,13 +450,16 @@ protected:
       const MacroBlockId &macro_id,
       const ObMicroIndexInfo& idx_row,
       ObStorageObjectHandle &macro_handle,
-      ObIMicroBlockIOCallback &callback);
+      ObIMicroBlockIOCallback &callback,
+      const bool is_major_macro_preread = false);
   int prefetch(
       const MacroBlockId &macro_id,
       const ObMultiBlockIOParam &io_param,
       const bool use_cache,
       ObStorageObjectHandle &macro_handle,
       ObIMicroBlockIOCallback &callback);
+private:
+  OB_INLINE virtual void inc_cache_miss() = 0;
 };
 
 class ObDataMicroBlockCache
@@ -505,6 +514,7 @@ private:
       const int64_t block_size,
       char *extra_buf,
       ObMicroBlockData &micro_data);
+  OB_INLINE void inc_cache_miss() override { EVENT_INC(ObStatEventIds::DATA_BLOCK_CACHE_MISS); }
 private:
   common::ObConcurrentFIFOAllocator allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObDataMicroBlockCache);
@@ -548,6 +558,8 @@ public:
   virtual void cache_bypass();
   virtual void cache_hit(int64_t &hit_cnt);
   virtual void cache_miss(int64_t &miss_cnt);
+private:
+  OB_INLINE void inc_cache_miss() override { EVENT_INC(ObStatEventIds::INDEX_BLOCK_CACHE_MISS); }
 };
 
 

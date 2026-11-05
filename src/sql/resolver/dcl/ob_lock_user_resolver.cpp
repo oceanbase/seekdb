@@ -80,6 +80,7 @@ int ObLockUserResolver::resolve(const ParseNode &parse_tree)
               SQL_RESV_LOG(ERROR, "name node is null", K(ret));
             } else if (2 != name_nodes[i]->num_child_) {
               ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("sql_parser parse user error", K(ret));
             } else if (OB_ISNULL(name_nodes[i]->children_[0])) {
               ret = OB_INVALID_ARGUMENT;
               SQL_RESV_LOG(ERROR, "name invalid", KP(name_nodes[i]->children_[0]), K(ret));
@@ -98,7 +99,10 @@ int ObLockUserResolver::resolve(const ParseNode &parse_tree)
                                                   session_info_->get_priv_user_id(),
                                                   user_name,
                                                   host_name))) {
+                LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user",
+                          K(ret), K(params_.session_info_->get_user_name()), K(user_name));
               } else if (OB_FAIL(lock_user_stmt->add_user(user_name, host_name))) {
+                SQL_RESV_LOG(WARN, "Add user error", K(user_name), K(host_name), K(ret));
               }
             }
           }

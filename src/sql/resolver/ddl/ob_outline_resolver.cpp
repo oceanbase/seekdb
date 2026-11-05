@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_outline_resolver.h"
 
+#include "share/catalog/ob_catalog_utils.h"
 #include "sql/resolver/ob_resolver.h"
 
 namespace oceanbase
@@ -35,24 +36,43 @@ int ObOutlineResolver::resolve_outline_name(const ParseNode *node, ObString &db_
       || OB_UNLIKELY(RELATION_FACTOR_CHILD_COUNT > node->num_child_)
       || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid parse tree", K(ret));
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid node children is NULL", K(node), K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is NULL", K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
+    LOG_WARN("fail to get name case mode", K(mode), K(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt_ is NULL", K(ret));
   } else {
+    ObString catalog_name;
+    uint64_t catalog_id = OB_INVALID_ID;
+    UNUSED(catalog_id);
+    const ParseNode *catalog_node = NULL;
     const ParseNode *db_name_node = node->children_[0];
     const ParseNode *outline_name_node = node->children_[1];
+    if (node->num_child_ >= 4) {
+      catalog_node = node->children_[3];
+    }
 
     //get outline name, TODO(tingshuai.yts):check outline_name length
     outline_name.assign_ptr(outline_name_node->str_value_, static_cast<ObString::obstr_size_t>(outline_name_node->str_len_));
 
     //get database name
     bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
-    if (NULL == db_name_node) {
+    if (OB_FAIL(resolve_catalog_node(catalog_node, catalog_id, catalog_name))) {
+      LOG_WARN("fail to resolve catalog node", K(ret));
+    } else if (!ObCatalogUtils::is_internal_catalog_name(catalog_name)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not support in internal catalog", K(ret));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "This operation in catalog is");
+    } else if (NULL == db_name_node) {
       if (session_info_->get_database_name().empty()) {
         db_name = OB_MOCK_DEFAULT_DATABASE_NAME;
       } else {
@@ -61,6 +81,7 @@ int ObOutlineResolver::resolve_outline_name(const ParseNode *node, ObString &db_
     } else {
       db_name.assign_ptr(db_name_node->str_value_, static_cast<int32_t>(db_name_node->str_len_));
       if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
+        LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
       } else {
         CK (OB_NOT_NULL(schema_checker_));
         CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
@@ -79,6 +100,7 @@ int ObOutlineResolver::resolve_outline_stmt(const ParseNode *node, ObStmt *&out_
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node) || OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid parameter", K(ret), K(node), K(stmt_));
   } else {
     ObStmt *outline_stmt = NULL;
     ObResolver resolver(params_);
@@ -88,14 +110,18 @@ int ObOutlineResolver::resolve_outline_stmt(const ParseNode *node, ObStmt *&out_
         && node->type_ != T_DELETE
         && node->type_ != T_UPDATE) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected node type", K(node->type_), K(ret));
     } else if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, *node, outline_stmt))) {
+      LOG_WARN("fail to resolve", K(ret));
     } else if (OB_ISNULL(outline_stmt)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid outline_stmt is NULL", K(ret));
     } else {
       out_stmt = outline_stmt;
       out_sql.assign_ptr(node->str_value_, static_cast<int32_t>(node->str_len_));
       if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
               *allocator_, session_info_->get_dtc_params(), out_sql))) {
+        LOG_WARN("fail to convert sql text", K(ret));
       }
     }
   }
@@ -112,6 +138,7 @@ int ObOutlineResolver::resolve_outline_target(const ParseNode *target_node, ObSt
     outline_target.assign_ptr(target_node->str_value_, static_cast<int32_t>(target_node->str_len_));
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
             *allocator_, session_info_->get_dtc_params(), outline_target))) {
+      LOG_WARN("fail to convert sql text", K(ret));
     }
   }
   return ret;

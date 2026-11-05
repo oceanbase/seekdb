@@ -15,12 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "config_bridge.h"
 #include "sql/das/iter/ob_das_functional_lookup_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "sql/das/iter/ob_das_func_data_iter.h"
 #include "sql/das/ob_das_scan_op.h"
 #include "sql/das/ob_das_ir_define.h"
+#include "storage/concurrency_control/ob_data_validation_service.h"
 #include "sql/das/iter/ob_das_text_retrieval_iter.h"
 
 namespace oceanbase
@@ -34,6 +34,7 @@ int ObDASFuncLookupIter::inner_init(ObDASIterParam &param)
   int ret = OB_SUCCESS;
   if (param.type_ != ObDASIterType::DAS_ITER_FUNC_LOOKUP) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner init das iter with bad param type", K(param), K(ret));
   } else {
     ObDASFuncLookupIterParam &lookup_param = static_cast<ObDASFuncLookupIterParam&>(param);    
     state_ = LookupState::INDEX_SCAN;
@@ -54,9 +55,12 @@ int ObDASFuncLookupIter::inner_init(ObDASIterParam &param)
     param.set_mem_attr(ObModIds::OB_SQL_TABLE_LOOKUP, ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(lookup_memctx_, param))) {
+      LOG_WARN("failed to create lookup memctx", K(ret));
     } else if (OB_FAIL(rowkey_exprs_.push_back(lookup_param.doc_id_expr_))) {
+      LOG_WARN("failed to assign rowkey exprs", K(ret));
     } else if (rowkey_exprs_.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected rowkey exprs count", K(rowkey_exprs_.count()), K(ret));
     }
   }
   return ret;
@@ -87,8 +91,11 @@ int ObDASFuncLookupIter::inner_reuse()
   }
   if (start_table_scan_) {
     if (OB_FAIL(index_table_iter_->reuse())) {
+      LOG_WARN("failed to reuse index table iter", K(ret));
     } else if (is_first_lookup_ && OB_FAIL(data_table_iter_->reuse())) {
+      LOG_WARN("failed to reuse data table iter", K(ret));
     } else if (OB_FAIL(ObDASLookupIter::inner_reuse())) {
+      LOG_WARN("failed to reuse das lookup iter", K(ret));
     } else {
       trans_info_array_.reuse();
     }
@@ -102,6 +109,7 @@ int ObDASFuncLookupIter::inner_release()
   int ret = OB_SUCCESS;
   start_table_scan_ = false;
   if (OB_FAIL(ObDASLocalLookupIter::inner_release())) {
+    LOG_WARN("failed to release lookup iter", K(ret));
   }
   data_scan_read_rowsize_ = 0;
   return ret;
@@ -118,10 +126,12 @@ int ObDASFuncLookupIter::do_table_scan()
   ObDASScanRtDef *index_rtdef = static_cast<ObDASScanRtDef *>(index_rtdef_);
   if (OB_UNLIKELY(index_scan_param.key_ranges_.empty())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected key ranges count", K(index_scan_param.key_ranges_.count()), K(ret));
   } else if (OB_FAIL(index_table_iter_->do_table_scan())) {
     if (OB_SNAPSHOT_DISCARDED == ret && index_scan_param.fb_snapshot_.is_valid()) {
       ret = OB_INVALID_QUERY_TIMESTAMP;
     } else if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
+      LOG_WARN("failed to do partition scan", K(index_scan_param), K(ret));
     }
   }
   return ret;
@@ -135,9 +145,12 @@ int ObDASFuncLookupIter::rescan()
   storage::ObTableScanParam &index_scan_param = index_table_iter->get_scan_param();
   if (OB_UNLIKELY(!start_table_scan_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected rescan, should do table scan first", K(ret));
   } else if (OB_UNLIKELY(index_scan_param.key_ranges_.empty())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected key ranges count", K(index_scan_param.key_ranges_.count()), K(ret));
   } else if (OB_FAIL(index_table_iter_->rescan())) {
+    LOG_WARN("failed to rescan index table iter", K(ret));
   }
   return ret;
 }
@@ -151,11 +164,13 @@ int ObDASFuncLookupIter::inner_get_next_row()
   int64_t simulate_batch_row_cnt = - EVENT_CALL(EventTable::EN_TABLE_LOOKUP_BATCH_ROW_COUNT);
   const bool use_simulate_batch_row_cnt = simulate_batch_row_cnt > 0 && simulate_batch_row_cnt < default_batch_row_count_;
   int64_t default_row_batch_cnt  = use_simulate_batch_row_cnt ? simulate_batch_row_cnt : default_batch_row_count_;
+  LOG_DEBUG("simulate lookup row batch count", K(simulate_batch_row_cnt), K(default_row_batch_cnt));
   index_scan_rowsize_ = index_scan_param.key_ranges_.count();
   if (index_scan_param.key_ranges_.empty()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(ObDASLocalLookupIter::inner_get_next_row())) {
     if (OB_ITER_END != ret) {
+      LOG_WARN("failed to get next row from function lookup iter", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -178,10 +193,12 @@ int ObDASFuncLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   int64_t simulate_batch_row_cnt = - EVENT_CALL(EventTable::EN_TABLE_LOOKUP_BATCH_ROW_COUNT);
   const bool use_simulate_batch_row_cnt = simulate_batch_row_cnt > 0 && simulate_batch_row_cnt < default_batch_row_count_;
   int64_t default_row_batch_cnt  = use_simulate_batch_row_cnt ? simulate_batch_row_cnt : default_batch_row_count_;
+  LOG_DEBUG("simulate lookup row batch count", K(simulate_batch_row_cnt), K(default_row_batch_cnt));
   if (index_scan_param.key_ranges_.empty()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(ObDASLookupIter::inner_get_next_rows(count, capacity))) {
     if (OB_ITER_END != ret) {
+      LOG_WARN("failed to get next row from function lookup iter", K(ret));
     }
   }
   if (OB_SUCC(ret) || OB_ITER_END == ret) {
@@ -199,6 +216,7 @@ int ObDASFuncLookupIter::add_rowkey()
   int ret = OB_SUCCESS;
   OB_ASSERT(data_table_iter_->get_type() == DAS_ITER_FUNC_DATA);
   if (OB_FAIL(data_table_iter_->set_scan_rowkey(eval_ctx_, rowkey_exprs_, nullptr, nullptr, 0))) {
+    LOG_WARN("failed to set scan rowkey of data table iter", K(ret));
   }
   return ret;
 }
@@ -210,6 +228,7 @@ int ObDASFuncLookupIter::add_rowkeys(int64_t storage_count)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count", K(storage_count), K(index_scan_rowsize_));
   } else if (OB_FAIL(ObDASLocalLookupIter::add_rowkeys(storage_count))) {
+    LOG_WARN("failed to add rowkeys", K(ret));
   }
   return ret;
 }
@@ -226,8 +245,10 @@ int ObDASFuncLookupIter::do_index_lookup()
     int64 group_id = 0;
     if (OB_UNLIKELY(!main_lookup_param.key_ranges_.empty())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected key ranges count", K(main_lookup_param.key_ranges_.count()), K(ret));
     } else if (DAS_OP_TABLE_SCAN != index_ctdef_->op_type_) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected index op type", K(index_ctdef_->op_type_), K(ret));
     } else {
       const ObDASScanCtDef *index_ctdef = static_cast<const ObDASScanCtDef*>(index_ctdef_);
       if (nullptr != index_ctdef->group_id_expr_) {
@@ -241,6 +262,7 @@ int ObDASFuncLookupIter::do_index_lookup()
       // do nothing
     } else if (index_scan_param.key_ranges_.count() < end_pos) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected count", K(index_scan_param.key_ranges_.count()), K(end_pos), K(ret));
     }
     for (int64_t cur_pos = start_pos; OB_SUCC(ret) && cur_pos < end_pos; cur_pos++) {
       ObRowkey row_key = index_scan_param.key_ranges_.at(cur_pos).start_key_;
@@ -261,9 +283,11 @@ int ObDASFuncLookupIter::do_index_lookup()
       if (OB_SNAPSHOT_DISCARDED == ret && lookup_param_.fb_snapshot_.is_valid()) {
         ret = OB_INVALID_QUERY_TIMESTAMP;
       } else if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
+        LOG_WARN("failed to do partition scan", K(lookup_param_), K(ret));
       }
     }
   } else if (OB_FAIL(data_table_iter_->rescan())) {
+    LOG_WARN("failed to rescan data table", K(ret));
   }
   return ret;
 }
@@ -272,7 +296,7 @@ int ObDASFuncLookupIter::check_index_lookup()
 {
   int ret = OB_SUCCESS;
   OB_ASSERT(data_table_iter_->get_type() == DAS_ITER_FUNC_DATA);
-  if ((config::_enable_defensive_check() > 0)) {
+  if (GCONF.enable_defensive_check()) {
     if (OB_UNLIKELY(lookup_rowkey_cnt_ != lookup_row_cnt_)) {
       ret = OB_ERR_DEFENSIVE_CHECK;
       ObString func_name = ObString::make_string("check_lookup_row_cnt");
@@ -298,6 +322,7 @@ int ObDASFuncLookupIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(index_table_iter_->set_scan_rowkey(eval_ctx, rowkey_exprs, lookup_ctdef, alloc, group_id))) {
+    LOG_WARN("failed to set scan rowkey of index table iter", K(ret));
   }
   return ret;
 }

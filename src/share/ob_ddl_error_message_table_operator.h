@@ -25,6 +25,8 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_ddl_common.h"
 #include "share/schema/ob_table_schema.h"
+namespace oceanbase { namespace blocksstable { class ObDatumRowkey; } }
+
 namespace oceanbase
 {
 namespace share
@@ -37,13 +39,13 @@ public:
   public:
     ObBuildDDLErrorMessage()
       : ret_code_(common::OB_NOT_INIT), ddl_type_(ObDDLType::DDL_INVALID), affected_rows_(0),
-        user_message_(nullptr), dba_message_("\0"), allocator_(), published_schema_version_(OB_INVALID_VERSION)
+        user_message_(nullptr), dba_message_("\0"), allocator_(), consensus_schema_version_(OB_INVALID_VERSION)
     {}
     virtual ~ObBuildDDLErrorMessage();
     int prepare_user_message_buf(const int64_t len);
     bool operator==(const ObBuildDDLErrorMessage &other) const;
     bool operator!=(const ObBuildDDLErrorMessage &other) const;
-    TO_STRING_KV(K_(ret_code), K_(ddl_type), K_(affected_rows), K_(user_message), K_(dba_message), K_(published_schema_version));
+    TO_STRING_KV(K_(ret_code), K_(ddl_type), K_(affected_rows), K_(user_message), K_(dba_message), K_(consensus_schema_version));
   public:
     int ret_code_;
     ObDDLType ddl_type_;
@@ -51,7 +53,7 @@ public:
     char *user_message_;
     char dba_message_[common::OB_MAX_ERROR_MSG_LEN];
     common::ObArenaAllocator allocator_;
-    int64_t published_schema_version_;
+    int64_t consensus_schema_version_;
   };
 
   //for add_column in ddl_error_message
@@ -91,6 +93,8 @@ public:
   ObDDLErrorMessageTableOperator();
   virtual ~ObDDLErrorMessageTableOperator();
   static int get_index_task_info(ObMySQLProxy &sql_proxy, const share::schema::ObTableSchema &index_schema, ObDDLErrorInfo &info);
+  static int extract_index_key(const share::schema::ObTableSchema &index_schema, const blocksstable::ObDatumRowkey &index_key,
+    char *buffer, const int64_t buffer_len);
   static int load_ddl_user_error(const int64_t task_id, const uint64_t table_id, 
       common::ObMySQLProxy &sql_proxy, ObBuildDDLErrorMessage &error_message);
   static int get_ddl_error_message(const int64_t task_id, const int64_t target_object_id,

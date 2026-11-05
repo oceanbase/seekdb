@@ -47,6 +47,7 @@ public:
 
   static int estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
                                                 obcall::ObEstBlockRes &res);
+  static int estimate_skip_rate(const obcall::ObEstSkipRateArg &arg, obcall::ObEstSkipRateRes &res);
 private:
 
   // compute memtable whole range row counts
@@ -80,6 +81,8 @@ private:
   */
   static int storage_estimate_block_count_and_row_count(const obcall::ObEstBlockArgElement &arg,
                                                         obcall::ObEstBlockResElement &res);
+  static int storage_estimate_skip_rate(const obcall::ObEstSkipRateArgElement &arg,
+                                        obcall::ObEstSkipRateResElement &res);                                          
 };
 
 }

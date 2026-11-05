@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_CALC_PARTITION_ID_
 #define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_CALC_PARTITION_ID_
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "share/statement/ob_stmt_type.h"
+#include "sql/resolver/ob_stmt_type.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 #include "sql/ob_sql_define.h"
 #include "share/schema/ob_schema_struct.h"
@@ -59,34 +59,23 @@ public:
 
 struct RangePartCmp {
 public:
-  RangePartCmp()
-      : cmp_func_(nullptr),
-        datum_access_ctx_(nullptr),
-        ret_(OB_SUCCESS)
-  {}
+  RangePartCmp() : row_cmp_func_(nullptr), ret_(OB_SUCCESS),
+      part_expr_obj_meta_(), part_array_obj_meta_() {}
   ~RangePartCmp() = default;
   bool operator()(const ObDatum &l, const RangePartition &r);
 
-  ObExprCmpFuncType cmp_func_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
+  sql::RowCmpFunc row_cmp_func_;
   int ret_;
+  common::ObObjMeta part_expr_obj_meta_;
+  common::ObObjMeta part_array_obj_meta_;
 };
 
 struct PartValKey
 {
 public:
-  PartValKey()
-      : datum_(), hash_func_(nullptr), cmp_func_(nullptr), datum_access_ctx_(nullptr)
-  {}
-  PartValKey(const ObDatum &datum,
-             ObExprHashFuncType hash_func,
-             ObExprCmpFuncType cmp_func,
-             const common::ObDatumAccessContext *datum_access_ctx)
-      : datum_(datum),
-        hash_func_(hash_func),
-        cmp_func_(cmp_func),
-        datum_access_ctx_(datum_access_ctx)
-  {}
+  PartValKey() : datum_(), hash_func_(nullptr), cmp_func_(nullptr)  {}
+  PartValKey(const ObDatum &datum, ObExprHashFuncType hash_func, ObExprCmpFuncType cmp_func) : 
+        datum_(datum), hash_func_(hash_func), cmp_func_(cmp_func)  {}
   ~PartValKey() {}
   bool operator==(const PartValKey &other) const;
   int hash(uint64_t &hash_val, uint64_t seed = 0) const;
@@ -95,7 +84,6 @@ public:
   ObDatum datum_;
   ObExprHashFuncType hash_func_;
   ObExprCmpFuncType cmp_func_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
 };
 
 struct CalcPartitionBaseInfo : public ObIExprExtraInfo
@@ -112,7 +100,9 @@ public:
       part_num_(common::OB_INVALID_COUNT),
       subpart_num_(common::OB_INVALID_COUNT),
       partition_id_calc_type_(CALC_NORMAL),
-      calc_id_type_(CALC_TABLET_ID)
+      may_add_interval_part_(MayAddIntervalPart::NO),
+      calc_id_type_(CALC_TABLET_ID),
+      first_part_id_(OB_INVALID_ID)
   {}
   virtual ~CalcPartitionBaseInfo() {
     related_table_ids_.reset();
@@ -130,12 +120,14 @@ public:
   int64_t part_num_;
   int64_t subpart_num_;
   PartitionIdCalcType partition_id_calc_type_; //used to mark expr set partition id calc type.
+  MayAddIntervalPart may_add_interval_part_; // a further action if cann't found interval partition
   CalcPartIdType calc_id_type_; // mark calc tablet_id or partition_id
+  int64_t first_part_id_; // for pkey enchance, no need serialize
   TO_STRING_KV(K_(ref_table_id), K_(related_table_ids),
                K_(part_level), K_(part_type),
                K_(subpart_type), K_(part_num), K_(subpart_num),
                K_(partition_id_calc_type),
-               K_(calc_id_type));
+               K_(may_add_interval_part), K_(calc_id_type));
 };
 //calc partition base
 // Calculate the partition id corresponding to a row of data, if no corresponding partition id is found,
@@ -144,6 +136,16 @@ class ObExprCalcPartitionBase : public ObFuncExprOperator
 {
 public:
   static const ObObjectID NONE_PARTITION_ID = OB_INVALID_ID;
+  enum OptRouteType {
+    OPT_ROUTE_NONE,
+    OPT_ROUTE_HASH_ONE
+  };
+  enum class PartType {
+    HASH,
+    KEY,
+    RANGE,
+    LIST
+  };
 
   class ObExprCalcPartCtx : public ObExprOperatorCtx
   {
@@ -154,7 +156,6 @@ public:
           part_cmp_(),
           default_list_part_idx_(OB_INVALID_INDEX),
           list_part_map_(),
-          datum_access_ctx_(nullptr),
           inited_(false),
           first_part_id_(OB_INVALID_ID)
     {}
@@ -177,7 +178,6 @@ public:
     int64_t default_list_part_idx_; // Used to calc list part
     common::hash::ObHashMap<PartValKey, int64_t,
                             common::hash::NoPthreadDefendMode> list_part_map_; // Used to calc list part
-    const common::ObDatumAccessContext *datum_access_ctx_;
     // whether above info for calculating range/list partition has been inited.
     bool inited_;
     int64_t first_part_id_;
@@ -185,8 +185,7 @@ public:
 
   explicit ObExprCalcPartitionBase(common::ObIAllocator &alloc, ObExprOperatorType type,
                                    const char *name, int32_t param_num, int32_t dimension)
-    : ObFuncExprOperator(alloc, type, name, param_num, NOT_VALID_FOR_GENERATED_COL,
-                         dimension, true /* is_internal_for_mysql */)
+    : ObFuncExprOperator(alloc, type, name, param_num, NOT_VALID_FOR_GENERATED_COL, dimension)
   {};
   virtual ~ObExprCalcPartitionBase() {}
   virtual int calc_result_typeN(ObExprResType &type,
@@ -199,6 +198,8 @@ public:
 
   virtual CalcPartIdType get_calc_id_type() const = 0;
 
+  static int set_may_add_interval_part(ObExpr *expr,
+                                       const MayAddIntervalPart info);
 
   static int calc_no_partition_location(const ObExpr &expr,
                                         ObEvalCtx &ctx,
@@ -206,6 +207,12 @@ public:
   static int calc_partition_level_one(const ObExpr &expr,
                                       ObEvalCtx &ctx,
                                       ObDatum &res_datum);
+  static int calc_partition_level_one_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                                             const ObBitVector &skip, const EvalBound &bound);
+  static int fast_calc_partition_level_one_vector(const ObExpr &expr,
+                                                  ObEvalCtx &ctx,
+                                                  const ObBitVector &skip,
+                                                  const EvalBound &bound);
   static int calc_partition_level_two(const ObExpr &expr,
                                       ObEvalCtx &ctx,
                                       ObDatum &res_datum);
@@ -219,6 +226,8 @@ public:
   virtual bool need_rt_ctx() const override { return true; }
   static int get_first_part_id(ObExecContext &ctx, const ObExpr &expr, int64_t &first_part_id);
   static int set_first_part_id(ObExecContext &ctx, const ObExpr &expr, const int64_t first_part_id);
+  static int update_part_id_calc_type_for_upgrade(ObExecContext &ctx, const ObExpr &expr,
+                                            PartitionIdCalcType calc_type);
   static int calc_part_and_subpart_and_tablet_id(const ObExpr *calc_part_id,
                                                 ObEvalCtx &eval_ctx,
                                                 ObObjectID &partition_id,
@@ -228,6 +237,7 @@ private:
  int init_calc_part_info(common::ObIAllocator *allocator,
                          const share::schema::ObTableSchema &table_schema,
                          PartitionIdCalcType calc_type,
+                         MayAddIntervalPart add_part,
                          CalcPartitionBaseInfo *&calc_part_info) const;
   static int concat_part_and_tablet_id(const ObExpr &expr,
                                        ObEvalCtx &ctx,
@@ -244,6 +254,9 @@ private:
                                common::ObObjectID first_part_id,
                                common::ObTabletID &tablet_id,
                                common::ObObjectID &partition_id);
+  static int add_interval_part(ObExecContext &exec_ctx,
+                const CalcPartitionBaseInfo &calc_part_info,
+                ObIAllocator &allocator, ObNewRow &row);
 };
 
 //calc partition id

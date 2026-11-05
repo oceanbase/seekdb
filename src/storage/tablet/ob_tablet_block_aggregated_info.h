@@ -23,7 +23,6 @@
 #include "lib/utility/ob_unify_serialize.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
 #include "lib/container/ob_array_serialization.h"
-#include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
@@ -38,31 +37,35 @@ enum class ObTabletMacroType : int16_t
   INVALID_TYPE = 0,
   META_BLOCK = 1,
   DATA_BLOCK = 2,
-  SHARED_DATA_BLOCK = 3,
-  LINKED_BLOCK = 4,
+  SHARED_META_BLOCK = 3,
+  SHARED_DATA_BLOCK = 4,
+  LINKED_BLOCK = 5,
   MAX
 
 };
-
 struct ObSharedBlockInfo final
 {
 public:
   ObSharedBlockInfo()
-    : shared_macro_id_(), occupy_size_(0)
+    : shared_macro_id_(), occupy_size_()
   {
   }
   ObSharedBlockInfo(const blocksstable::MacroBlockId &shared_macro_id, const int64_t occupy_size)
     : shared_macro_id_(shared_macro_id), occupy_size_(occupy_size)
   {
   }
+  ~ObSharedBlockInfo()
+  {
+    reset();
+  }
   void reset()
   {
     shared_macro_id_.reset();
     occupy_size_ = 0;
   }
-  OB_INLINE bool is_valid() const
+  OB_INLINE bool is_valid()
   {
-    return shared_macro_id_.is_valid() && occupy_size_ > 0;
+    return shared_macro_id_.is_valid() && occupy_size_ >= 0;
   }
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
@@ -101,24 +104,33 @@ public:
   typedef typename TabletMacroMap::const_iterator MapIterator;
 public:
   ObBlockInfoSet()
-    : meta_block_info_set_(), data_block_info_set_(), shared_data_block_info_map_()
+    : meta_block_info_set_(), data_block_info_set_(), backup_block_info_set_(),
+    shared_meta_block_info_set_(), clustered_data_block_info_map_()
   {
   }
   ~ObBlockInfoSet()
   {
     meta_block_info_set_.reuse();
     data_block_info_set_.reuse();
-    shared_data_block_info_map_.reuse();
+    backup_block_info_set_.reuse();
+    shared_meta_block_info_set_.reuse();
+    clustered_data_block_info_map_.reuse();
   }
   int init(
       const int64_t meta_bucket_num = EXCLUSIVE_BLOCK_BUCKET_NUM,
       const int64_t data_bucket_num = EXCLUSIVE_BLOCK_BUCKET_NUM,
+      const int64_t shared_meta_bucket_num = SHARED_BLOCK_BUCKET_NUM,
       const int64_t shared_data_bucket_num = SHARED_BLOCK_BUCKET_NUM);
 
 public:
-  TabletMacroSet meta_block_info_set_;
-  TabletMacroSet data_block_info_set_;
-  TabletMacroMap shared_data_block_info_map_;
+  TabletMacroSet meta_block_info_set_; // MacroBlockID of small_sstable->addr, other_block & linked_block in normal sstable
+  TabletMacroSet data_block_info_set_; // only data block of sstable, not include index_block and meta_block
+  TabletMacroSet backup_block_info_set_;
+  TabletMacroSet shared_meta_block_info_set_; // MacroBlockID of 
+                                              // (sstable [stable.serialize], sstable->addr[->block_id()], 
+                                              //  table_store, auto_inc_seq, storage_schema, dump_kvs, medium_info_list)
+  TabletMacroMap clustered_data_block_info_map_; // map<macro_id, used_size (sum of nest_size, less than 2MB)>
+                                                 // small_sstable->meta->macro_info_->nested_size
 };
 
 class ObTabletMacroInfo final
@@ -169,31 +181,30 @@ public:
       K_(entry_block),
       K_(meta_block_info_arr),
       K_(data_block_info_arr),
+      K_(shared_meta_block_info_arr),
       K_(shared_data_block_info_arr),
       K_(is_inited));
 private:
   int construct_block_id_arr(const ObBlockInfoSet::TabletMacroSet &id_set, ObBlockInfoArray<blocksstable::MacroBlockId> &block_id_arr);
-  int construct_block_info_arr(
-      const ObBlockInfoSet::TabletMacroMap &block_info_map,
-      ObBlockInfoArray<ObSharedBlockInfo> &block_info_arr);
+  int construct_block_info_arr(const ObBlockInfoSet::TabletMacroMap &block_info_map, ObBlockInfoArray<ObSharedBlockInfo> &block_info_arr);
   int persist_macro_ids(ObArenaAllocator &allocator, ObLinkedMacroBlockItemWriter &linked_writer);
   int do_flush_ids(
       const ObTabletMacroType macro_type,
       ObBlockInfoArray<blocksstable::MacroBlockId> &block_id_arr,
       ObArenaAllocator &allocator,
       ObLinkedMacroBlockItemWriter &linked_writer);
-  int do_flush_shared_data(
+  int do_flush_ids(
       ObBlockInfoArray<ObSharedBlockInfo> &block_info_arr,
       ObArenaAllocator &allocator,
       ObLinkedMacroBlockItemWriter &linked_writer);
 private:
   static const int64_t ID_COUNT_THRESHOLD = 50000; // occupy almost 1.2MB disk space
-  static const int32_t TABLET_MACRO_INFO_VERSION_V1 = 1;
-  static const int32_t TABLET_MACRO_INFO_VERSION = 2;
+  static const int32_t TABLET_MACRO_INFO_VERSION = 1;
 public:
   blocksstable::MacroBlockId entry_block_;
   ObBlockInfoArray<blocksstable::MacroBlockId> meta_block_info_arr_;
   ObBlockInfoArray<blocksstable::MacroBlockId> data_block_info_arr_;
+  ObBlockInfoArray<blocksstable::MacroBlockId> shared_meta_block_info_arr_;
   ObBlockInfoArray<ObSharedBlockInfo> shared_data_block_info_arr_;
   bool is_inited_;
 };
@@ -247,12 +258,14 @@ int ObTabletMacroInfo::ObBlockInfoArray<T>::serialize(char *buf, const int64_t b
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, cnt_))) {
+    STORAGE_LOG(WARN, "fail to encode count", K(ret), K_(cnt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
     if (OB_UNLIKELY(!arr_[i].is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "macro block id is invalid", K(ret), K(i), K(arr_[i]));
     } else if (OB_FAIL(arr_[i].serialize(buf, buf_len, pos))) {
+      STORAGE_LOG(WARN, "fail to serialize macro block id", K(ret), K(i), KP(buf), K(buf_len), K(pos));
     }
   }
   return ret;
@@ -266,6 +279,7 @@ int ObTabletMacroInfo::ObBlockInfoArray<T>::deserialize(ObArenaAllocator &alloca
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &cnt_))) {
+    STORAGE_LOG(WARN, "fail to decode count", K(ret), K(data_len), K(pos));
   } else if (0 == cnt_) {
     // no macro id
     arr_ = nullptr;
@@ -279,6 +293,7 @@ int ObTabletMacroInfo::ObBlockInfoArray<T>::deserialize(ObArenaAllocator &alloca
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
       if (OB_FAIL(arr_[i].deserialize(buf, data_len, pos))) {
+        STORAGE_LOG(WARN, "fail to deserialize macro block id", K(ret), K(data_len), K(pos));
       } else if (OB_UNLIKELY(!arr_[i].is_valid())) {
         STORAGE_LOG(WARN, "deserialized macro id is invalid", K(ret), K(arr_[i]));
       }

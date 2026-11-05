@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX SQL_CG
 
 #include "ob_static_engine_expr_cg.h"
-#include "lib/container/ob_fixed_array_iterator.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
+#include "sql/engine/expr/ob_expr_get_path.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
 namespace oceanbase
@@ -64,12 +64,17 @@ int ObStaticEngineExprCG::generate(const ObRawExprUniqueSet &all_raw_exprs,
   if (all_raw_exprs.count() <= 0) {
     // do nothing
   } else if (OB_FAIL(flattened_raw_exprs.flatten_and_add_raw_exprs(all_raw_exprs))) {
+    LOG_WARN("failed to flatten raw exprs", K(ret));
   } else if (OB_FAIL(generate_extra_questionmarks(flattened_raw_exprs, expr_factory))) {
+    LOG_WARN("generate extra question marks failed", K(ret));
   } else if (OB_FAIL(divide_probably_local_exprs(
                      const_cast<ObIArray<ObRawExpr *> &>(flattened_raw_exprs.get_expr_array())))) {
+    LOG_WARN("divided probably local exprs failed", K(ret));
   } else if (OB_FAIL(construct_exprs(flattened_raw_exprs.get_expr_array(),
                                      expr_info.rt_exprs_))) {
+    LOG_WARN("failed to construct rt exprs", K(ret));
   } else if (OB_FAIL(cg_exprs(flattened_raw_exprs.get_expr_array(), expr_info))) {
+    LOG_WARN("failed to cg exprs", K(ret));
   }
   return ret;
 }
@@ -84,10 +89,14 @@ int ObStaticEngineExprCG::generate(ObRawExpr *expr,
   flattened_raw_exprs.set_expr_factory(&expr_factory);
   flattened_raw_exprs.set_session_info(op_cg_ctx_.session_);
   if (OB_FAIL(flattened_raw_exprs.flatten_temp_expr(expr))) {
+    LOG_WARN("failed to flatten raw exprs", K(ret));
   } else if (OB_FAIL(generate_extra_questionmarks(flattened_raw_exprs, expr_factory))) {
+    LOG_WARN("generate extra questionmarks failed", K(ret));
   } else if (OB_FAIL(construct_exprs(flattened_raw_exprs.get_expr_array(),
                                      expr_info.rt_exprs_))) {
+    LOG_WARN("failed to construct rt exprs", K(ret));
   } else if (OB_FAIL(cg_exprs(flattened_raw_exprs.get_expr_array(), expr_info))) {
+    LOG_WARN("failed to cg exprs", K(ret));
   }
   return ret;
 }
@@ -120,11 +129,13 @@ int ObStaticEngineExprCG::detect_batch_size(const ObRawExprUniqueSet &exprs,
       }
       if (OB_UNLIKELY(batch_size != config_maxrows)) {
         batch_size = is2n(batch_size) ? batch_size : next_pow2(batch_size) >> 1;
+        LOG_TRACE("After adjust batch_size adaptively", K(config_maxrows), K(batch_size));
       }
     } else {
       uint32_t row_size = 1;
       ObSEArray<ObRawExpr *, 64> vectorized_exprs;
       if (OB_FAIL(get_vectorized_exprs(raw_exprs, vectorized_exprs))) {
+        LOG_WARN("failed to flatten raw exprs", K(ret));
       } else {
         auto expr_cnt = vectorized_exprs.count();
         bool has_large_data = false;
@@ -136,6 +147,7 @@ int ObStaticEngineExprCG::detect_batch_size(const ObRawExprUniqueSet &exprs,
           has_large_data = is_large_data(vectorized_exprs.at(i)->get_data_type());
         }
         batch_size = config_target_maxsize / row_size;
+        LOG_TRACE("detect_batch_size", K(row_size), K(batch_size), K(expr_cnt), K(has_large_data), K(lob_rowsets_max_rows));
         // recalculate batch_size: count 2 additional bitmaps: skip + eval_flags
         batch_size = (config_target_maxsize -
                       expr_cnt * 2 * ObBitVector::memory_size(batch_size)) /
@@ -158,9 +170,10 @@ int ObStaticEngineExprCG::detect_batch_size(const ObRawExprUniqueSet &exprs,
     batch_size = static_cast<int64_t>(ObExprBatchSize::one);
   }
 
-  if (is_small_scan(scan_cardinality)) {
-    // Keep the batch small when the scan itself is small.
-    batch_size = min(SMALL_SCAN_CARDINALITY, batch_size);
+  if (is_oltp_workload(scan_cardinality)) {
+    // downgrade batchsize to a smaller value to minimize rowsets cost for TP
+    // workload
+    batch_size = min(OLTP_WORKLOAD_CARDINALITY, batch_size);
   }
   return ret;
 }
@@ -181,7 +194,9 @@ int ObStaticEngineExprCG::generate_rt_expr(const ObRawExpr &raw_expr,
   rt_expr = get_rt_expr(raw_expr);
   if (OB_ISNULL(rt_expr)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("rt expr is null", K(ret), K(raw_expr));
   } else if (OB_FAIL(exprs.push_back(const_cast<ObRawExpr *>(&raw_expr)))) {
+    LOG_WARN("fail to push rt expr", K(ret));
   }
 
   return ret;
@@ -198,6 +213,7 @@ int ObStaticEngineExprCG::construct_exprs(const ObIArray<ObRawExpr *> &raw_exprs
   int ret = OB_SUCCESS;
   int64_t rt_expr_cnt = raw_exprs.count();
   if (OB_FAIL(rt_exprs.prepare_allocate(rt_expr_cnt))) {
+    LOG_WARN("fail to reserve frame infos", K(ret), K(rt_expr_cnt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < rt_expr_cnt; i++) {
     raw_exprs.at(i)->set_rt_expr(&rt_exprs.at(i));
@@ -217,20 +233,65 @@ int ObStaticEngineExprCG::cg_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
     if (OB_ISNULL(raw_exprs.at(i))
         || OB_ISNULL(rt_expr = get_rt_expr(*raw_exprs.at(i)))) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(raw_exprs.at(i)), K(rt_expr));
     }
   }
   if (OB_SUCC(ret)) {
     // init type_, datum_meta_, obj_meta_, obj_datum_map_, args_, arg_cnt_
     // row_dimension_, op_
     if (OB_FAIL(cg_expr_basic(raw_exprs))) {
+      LOG_WARN("fail to init expr", K(ret), K(raw_exprs));
     } else if (OB_FAIL(cg_expr_basic_funcs(raw_exprs))) {
+      LOG_WARN("fail to init basic funcs", K(ret));
+      // init eval_func_, inner_eval_func_, expr_ctx_id_, extra_
     } else if (OB_FAIL(cg_expr_by_operator(raw_exprs, expr_info.need_ctx_cnt_))) {
+      LOG_WARN("fail to init expr special", K(ret), K(raw_exprs));
+    // init parent_cnt_, parents_
+    // cg_expr_parents must be after cg_expr_by_operator,
+    // because cg_expr_by_operator may replace rt_expr.args_
     } else if (OB_FAIL(cg_expr_parents(raw_exprs))) {
+      LOG_WARN("fail to init expr parents", K(ret), K(raw_exprs));
+      // init res_buf_len_, frame_idx_, datum_off_, res_buf_off_
     } else if (OB_FAIL(cg_all_frame_layout(raw_exprs, expr_info))) {
+      LOG_WARN("fail to init expr data layout", K(ret), K(raw_exprs));
     } else if (OB_FAIL(alloc_so_check_exprs(raw_exprs, expr_info))) {
+      LOG_WARN("alloc stack overflow check exprs failed", K(ret));
     }
   }
 
+  return ret;
+}
+
+int ObStaticEngineExprCG::init_attr_expr(ObExpr *rt_expr, ObRawExpr *raw_expr)
+{
+  int ret = OB_SUCCESS;
+  // init attrs_;
+  int64_t attr_cnt = 0;
+  if (OB_ISNULL(op_cg_ctx_.session_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
+  } else if (OB_FAIL(ObRawExprUtils::get_expr_attr_cnt(raw_expr,
+                                          op_cg_ctx_.session_->get_cur_exec_ctx(), attr_cnt))) {
+    LOG_WARN("failed to get expr attr cnt", K(ret), KPC(raw_expr));
+  } else if (attr_cnt> 0) {
+    int64_t alloc_size = attr_cnt * sizeof(ObExpr *);
+    ObExpr **buf = static_cast<ObExpr **>(allocator_.alloc(alloc_size));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc memory", K(ret));
+    } else {
+      memset(buf, 0, alloc_size);
+      rt_expr->attrs_cnt_ = attr_cnt;
+      rt_expr->attrs_ = buf;
+      // ATTENTION: very tricky, raw attr exprs are created when flatten raw exprs
+      // they are right after the target collection expr and attr expr does not have child attr expr
+      // flatten_exprs [..., raw_expr, attr1, attr2, attr3, param1, ...]
+      // rt_exprs      [..., rt_expr , attr1, attr2, attr3, param1, ...]
+      for (int64_t i = 0; OB_SUCC(ret) && i < rt_expr->attrs_cnt_; ++i) {
+        rt_expr->attrs_[i] = rt_expr + i + 1;
+      }
+    }
+  }
   return ret;
 }
 
@@ -241,10 +302,16 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
   for (int64_t i = 0; OB_SUCC(ret) && i < raw_exprs.count(); i++) {
     ObRawExpr *raw_expr = raw_exprs.at(i);
     ObExpr *rt_expr = get_rt_expr(*raw_expr);
+    LOG_DEBUG("cg expr basic", K(raw_expr), K(rt_expr), KPC(raw_expr));
     const ObObjMeta &result_meta = raw_expr->get_result_meta();
     // init type_
     rt_expr->type_ = raw_expr->get_expr_type();
-    rt_expr->batch_result_ = batch_size_ > 0 && raw_expr->is_vectorize_result();
+    const bool is_fts_generated_column = T_FUN_SYS_WORD_SEGMENT == rt_expr->type_
+        || T_FUN_SYS_DOC_ID == rt_expr->type_
+        || T_FUN_SYS_WORD_COUNT == rt_expr->type_
+        || T_FUN_SYS_DOC_LENGTH == rt_expr->type_;
+    rt_expr->batch_result_ = batch_size_ > 0
+        && (raw_expr->is_vectorize_result() || is_fts_generated_column);
     rt_expr->batch_idx_mask_ = rt_expr->batch_result_ ? UINT64_MAX : 0;
     rt_expr->is_called_in_sql_ = raw_expr->is_called_in_sql();
     rt_expr->is_static_const_ = raw_expr->is_static_const_expr();
@@ -282,6 +349,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(raw_expr->get_result_type(),
                                                                op_cg_ctx_.session_,
                                                                org_obj_meta))) {
+          LOG_WARN("fail to extract enum set cs type", K(ret), KPC(raw_expr));
         } else {
           rt_expr->datum_meta_.cs_type_ = org_obj_meta.get_collation_type();
         }
@@ -290,14 +358,20 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
       rt_expr->max_length_ = raw_expr->get_result_type().get_length();
       // init obj_datum_map_
       rt_expr->obj_datum_map_ = ObDatum::get_obj_datum_map_type(result_meta.get_type());
+      rt_expr->vec_value_tc_ = get_vec_value_tc(rt_expr->datum_meta_.type_,
+                                                rt_expr->datum_meta_.scale_,
+                                                rt_expr->datum_meta_.precision_);
+      rt_expr->is_fixed_length_data_ = common::is_fixed_length_vec(rt_expr->vec_value_tc_);
       if (ob_is_decimal_int(rt_expr->datum_meta_.type_)) {
         const int16_t precision = rt_expr->datum_meta_.precision_;
         const int16_t scale = rt_expr->datum_meta_.scale_;
         if (precision < 0 || precision > OB_MAX_DECIMAL_POSSIBLE_PRECISION
             || scale < 0 || scale > precision) {
           ret = OB_ERR_UNEXPECTED;
-        } else {
-          OB_ASSERT(rt_expr->obj_datum_map_ == OBJ_DATUM_DECIMALINT);
+          LOG_WARN("Unexpected ps meta for decimal int type", K(ret), K(precision), K(scale));
+        } else if (rt_expr->obj_datum_map_ != OBJ_DATUM_DECIMALINT) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Unexpected obj datum map", K(ret), K(rt_expr->obj_datum_map_));
         }
       }
     }
@@ -318,6 +392,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         ObExpr **buf = static_cast<ObExpr **>(allocator_.alloc(alloc_size));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("fail to alloc memory", K(ret));
         } else {
           memset(buf, 0, alloc_size);
           rt_expr->args_ = buf;
@@ -326,8 +401,10 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
             ObRawExpr *child_expr = NULL;
             if (OB_ISNULL(child_expr = raw_expr->get_param_expr(i))) {
               ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("invalid argument", K(ret));
             } else if (OB_ISNULL(get_rt_expr(*child_expr))) {
               ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("expr is null", K(ret));
             } else {
               rt_expr->args_[i] = get_rt_expr(*child_expr);
             }
@@ -337,14 +414,19 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
             ret = static_cast<ObConstRawExpr *>(raw_expr)->get_value().get_unknown(param_idx);
             LOG_DEBUG("generate rt expr basic", K(param_idx), K(*gen_questionmarks_.at(param_idx)));
             if (OB_FAIL(ret)) {
+              LOG_WARN("get param idx failed", K(ret));
             } else if (OB_ISNULL(gen_questionmarks_.at(param_idx))) {
               ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected null questionmark", K(ret), K(param_idx));
             } else {
               rt_expr->args_[0] = get_rt_expr(*gen_questionmarks_.at(param_idx));
             }
           }
         }
       }
+    }
+    if (result_meta.is_collection_sql_type() && OB_FAIL(init_attr_expr(rt_expr, raw_expr))) {
+      LOG_WARN("failed to init attr expr", K(ret), K(raw_expr), K(rt_expr));
     }
     if (OB_SUCC(ret)) {
       rt_expr->local_session_var_id_ = raw_expr->get_local_session_var_id();
@@ -363,12 +445,14 @@ int ObStaticEngineExprCG::cg_expr_parents(const ObIArray<ObRawExpr *> &raw_exprs
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(i));
     if (rt_expr->arg_cnt_ > 0 && OB_ISNULL(rt_expr->args_)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(rt_expr->arg_cnt_), KP(rt_expr->args_));
     }
     for (int64_t child_idx = 0;
          OB_SUCC(ret) && child_idx < rt_expr->arg_cnt_;
          child_idx++) {
       if (OB_ISNULL(rt_expr->args_[child_idx])) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid argument", K(ret), K(rt_expr->args_[child_idx]));
       } else {
         rt_expr->args_[child_idx]->parent_cnt_ += 1;
       }
@@ -383,6 +467,7 @@ int ObStaticEngineExprCG::cg_expr_parents(const ObIArray<ObRawExpr *> &raw_exprs
       if (OB_ISNULL(rt_expr->parents_ =
                     static_cast<ObExpr **>(allocator_.alloc(alloc_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc memory", K(ret), K(alloc_size));
       }
     }
   }
@@ -399,6 +484,7 @@ int ObStaticEngineExprCG::cg_expr_parents(const ObIArray<ObRawExpr *> &raw_exprs
          arg_idx++) {
       if (OB_ISNULL(rt_expr->args_[arg_idx])) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("child expr is null", K(ret), K(arg_idx));
       } else {
         uint32_t &parent_cnt = rt_expr->args_[arg_idx]->parent_cnt_;
         rt_expr->args_[arg_idx]->parents_[parent_cnt] = rt_expr;
@@ -432,6 +518,7 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
     if (OB_ISNULL(raw_expr = raw_exprs.at(i))
         || OB_ISNULL(rt_expr = get_rt_expr(*raw_expr))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("arg is null", K(raw_expr), K(rt_expr), K(ret));
     } else if (T_QUESTIONMARK == rt_expr->type_ &&
               (raw_expr->has_flag(IS_TABLE_ASSIGN) ||
                (rt_question_mark_eval_ && (!is_dynamic_eval_qm(*raw_expr) || !contain_dynamic_eval_rt_qm_)))) {
@@ -454,13 +541,34 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
         rt_expr->extra_ = param_idx;
         if (OB_UNLIKELY(!ob_is_decimal_int(rt_expr->datum_meta_.type_))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unpexected dynamic eval qm", K(ret), KPC(c_expr));
         } else {
           rt_expr->eval_func_ = eval_questionmark_nmb2decint_eqcast;
+        }
+      }
+    } else if (T_PSEUDO_EXTERNAL_FILE_COL == raw_expr->get_expr_type()) {
+      ObIExprExtraInfo *extra_info = nullptr;
+      ObPseudoColumnRawExpr *column_expr = static_cast<ObPseudoColumnRawExpr*>(raw_expr);
+      if (OB_FAIL(ObExprExtraInfoFactory::alloc(*op_cg_ctx_.allocator_, rt_expr->type_, extra_info))) {
+        LOG_WARN("Failed to allocate memory for ObExprOracleLRpadInfo", K(ret));
+      } else if (OB_ISNULL(extra_info)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("extra_info should not be nullptr", K(ret));
+      } else {
+        ObDataAccessPathExtraInfo *data_access_info = static_cast<ObDataAccessPathExtraInfo *>(extra_info);
+        if (OB_FAIL(ob_write_string(*op_cg_ctx_.allocator_,
+                                    column_expr->get_data_access_path(),
+                                    data_access_info->data_access_path_))) {
+          LOG_WARN("fail to write string", K(ret));
+        } else {
+          rt_expr->extra_info_ = extra_info;
+          LOG_DEBUG("external file col expr", K(ret), "path", data_access_info->data_access_path_);
         }
       }
     } else if (!IS_EXPR_OP(rt_expr->type_) || IS_AGGR_FUN(rt_expr->type_)) {
       // do nothing
     } else if (OB_FAIL(expr_cg_impl.generate_expr_operator(*raw_expr, expr_op_fetcher))) {
+      LOG_WARN("generate expr operator failed", K(ret));
     } else if (NULL == expr_op_fetcher.op_) {
       // do nothing, some raw do not generate expr operator. e.g: T_OP_ROW
     } else {
@@ -469,18 +577,19 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
         rt_expr->expr_ctx_id_ = total_ctx_cnt;
         total_ctx_cnt += 1;
       }
-      // Built-in arity constraints declared by the operator are checked by
-      // ObSysFunRawExpr::check_param_num before codegen. cg_expr_basic has also
-      // prepared the runtime arguments; stricter, undeclared checks still return errors.
       if (OB_FAIL(op->cg_expr(op_cg_ctx_, *raw_expr, *rt_expr))) {
+        LOG_WARN("fail to init expr inner", K(ret));
       } else if (OB_NOT_NULL(rt_expr->extra_info_)
                 && !ObExprExtraInfoFactory::is_registered(rt_expr->type_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unregistered type, extra_info_ is not null", K(ret));
       } else if (OB_ISNULL(rt_expr->eval_func_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("null evaluate function returned", K(ret));
       } else if (rt_expr->inner_func_cnt_ > 0) {
         if (OB_ISNULL(rt_expr->inner_functions_)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("NULL inner functions", K(ret), K(*raw_expr), K(rt_expr->inner_func_cnt_));
         }
       }
     }
@@ -490,6 +599,9 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
         && NULL != rt_expr->eval_func_) {
       if (NULL == rt_expr->eval_batch_func_) {
         rt_expr->eval_batch_func_ = &expr_default_eval_batch_func;
+      }
+      if (NULL == rt_expr->eval_vector_func_) {
+        rt_expr->eval_vector_func_ = &expr_default_eval_vector_func;
       }
     }
   }
@@ -513,21 +625,27 @@ int ObStaticEngineExprCG::cg_all_frame_layout(const ObIArray<ObRawExpr *> &raw_e
                              param_exprs,
                              dynamic_param_exprs,
                              no_const_param_exprs))) {
+    LOG_WARN("fail to classify exprs", K(raw_exprs), K(ret));
   } else if (OB_FAIL(cg_const_frame_layout(const_exprs,
                                            frame_idx_pos,
                                            expr_info.const_frame_))) {
+    LOG_WARN("fail to init const expr datum layout", K(ret), K(const_exprs));
   } else if (OB_FAIL(cg_param_frame_layout(param_exprs,
                                            frame_idx_pos,
                                            expr_info.param_frame_))) {
+    LOG_WARN("fail to init param frame layout", K(ret), K(param_exprs));
   } else if (OB_FAIL(cg_dynamic_frame_layout(dynamic_param_exprs,
                                              frame_idx_pos,
                                              expr_info.dynamic_frame_))) {
+    LOG_WARN("fail to init const", K(ret), K(dynamic_param_exprs));
   } else if (OB_FAIL(cg_datum_frame_layouts(no_const_param_exprs,
                                            frame_idx_pos,
                                            expr_info.datum_frame_))) {
+    LOG_WARN("fail to init datum frame", K(ret), K(no_const_param_exprs));
   } else if (OB_FAIL(alloc_const_frame(const_exprs,
                                        expr_info.const_frame_,
                                        expr_info.const_frame_ptrs_))) {
+    LOG_WARN("fail to build const frame", K(ret), K(const_exprs), K(expr_info));
   }
 
   return ret;
@@ -548,16 +666,20 @@ int ObStaticEngineExprCG::classify_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
       if (raw_exprs.at(i)->has_flag(IS_DYNAMIC_PARAM)) {
         // if questionmark is dynamic evaluated, e.g. decint->nmb, use dynamic_param_frame as its memory
         if (OB_FAIL(dynamic_param_exprs.push_back(raw_exprs.at(i)))) {
+          LOG_WARN("fail to push expr", K(ret), K(i), K(raw_exprs));
         }
       } else {
         if (OB_FAIL(param_exprs.push_back(raw_exprs.at(i)))) {
+          LOG_WARN("fail to push expr", K(ret), K(i), K(raw_exprs));
         }
       }
     } else if (IS_CONST_LITERAL(type)) {
       if (OB_FAIL(const_exprs.push_back(raw_exprs.at(i)))) {
+        LOG_WARN("fail to push expr", K(ret), K(i), K(raw_exprs));
       }
     } else {
       if (OB_FAIL(no_const_param_exprs.push_back(raw_exprs.at(i)))) {
+        LOG_WARN("fail to push expr", K(ret), K(i), K(raw_exprs));
       }
     }
   }
@@ -581,7 +703,12 @@ void ObStaticEngineExprCG::get_param_frame_idx(const int64_t idx,
                                                int64_t &frame_idx,
                                                int64_t &datum_idx)
 {
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  int64_t item_size = 0;
+  if (use_rich_format()) {
+    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
+  } else {
+    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  }
   int64_t cnt_per_frame = common::MAX_FRAME_SIZE / item_size;
 
   if (idx < original_param_cnt_) {
@@ -607,25 +734,42 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
   int ret = OB_SUCCESS;
   if (!param_exprs.empty() && param_cnt_ + flying_param_cnt_ == 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   }
   int64_t frame_idx = 0;
   int64_t datum_idx = 0;
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  int64_t item_size = 0;
+  if (use_rich_format()) {
+    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
+  } else {
+    item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  }
   for (int64_t i = 0; OB_SUCC(ret) && i < param_exprs.count(); i++) {
     ObExpr *rt_expr = get_rt_expr(*param_exprs.at(i));
     if (T_QUESTIONMARK != rt_expr->type_) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(ret), K(rt_expr));
     } else {
       ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(param_exprs.at(i));
       int64_t param_idx = 0;
       if (OB_FAIL(c_expr->get_value().get_unknown(param_idx))) {
+        SQL_LOG(WARN, "get question mark value failed", K(ret), K(*c_expr));
       } else if (param_idx < 0 || param_idx >= param_cnt_ + flying_param_cnt_) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid param idx",
+                 K(ret), K(param_idx), K(param_cnt_), K(flying_param_cnt_));
       } else {
         get_param_frame_idx(param_idx, frame_idx, datum_idx);
         rt_expr->frame_idx_ = frame_index_pos + frame_idx;
         rt_expr->datum_off_ = datum_idx * item_size;
         rt_expr->eval_info_off_ = rt_expr->datum_off_ + sizeof(ObDatum);
+        if (use_rich_format()) {
+          rt_expr->vector_header_off_ = rt_expr->eval_info_off_ + sizeof(ObEvalInfo);
+          if (rt_expr->is_fixed_length_data_) {
+            rt_expr->len_ = ObDatum::get_reserved_size(rt_expr->obj_datum_map_,
+                                                       rt_expr->datum_meta_.precision_);
+          }
+        }
         rt_expr->res_buf_off_ = 0;
         rt_expr->res_buf_len_ = 0;
         // For the param expression of T_QUESTIONMARK, use extra_ to record its actual value in
@@ -650,6 +794,7 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
       frame_cnt = frame_idx + 1;
     }
     if (OB_FAIL(frame_info_arr.prepare_allocate(frame_cnt))) {
+      LOG_WARN("fail to reserve frame infos", K(frame_cnt), K(ret));
     }
     for (int64_t i = frame_cnt - 1; OB_SUCC(ret) && i >= 0; i--) {
       get_param_frame_idx(total - 1, frame_idx, datum_idx);
@@ -660,6 +805,7 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
         frame_info.frame_size_ = (datum_idx + 1) * item_size;
         frame_info.frame_idx_ = frame_index_pos + i;
         total -= frame_info.expr_cnt_;
+        frame_info.use_rich_format_ = use_rich_format();
       }
     }
     CK(0 == total);
@@ -712,7 +858,9 @@ int ObStaticEngineExprCG::cg_frame_layout_vector_version(const ObIArray<ObRawExp
   int ret = OB_SUCCESS;
   ObSEArray<TmpFrameInfo, 4> tmp_frame_infos;
   if (OB_FAIL(calc_exprs_res_buf_len(exprs))) {
+    LOG_WARN("Failed to calc expr res buf len", K(ret));
   } else if (OB_FAIL(create_tmp_frameinfo(exprs, tmp_frame_infos, frame_index_pos))) {
+    LOG_WARN("Failed to create tmp frame info", K(ret));
   }
 
   // caculate the datums layout in each frame
@@ -729,9 +877,11 @@ int ObStaticEngineExprCG::cg_frame_layout_vector_version(const ObIArray<ObRawExp
   if (OB_SUCC(ret)) {
     frame_index_pos += tmp_frame_infos.count();
     if (OB_FAIL(frame_info_arr.reserve(tmp_frame_infos.count()))) {
+      LOG_WARN("fail to reserve frame infos", K(ret), K(tmp_frame_infos.count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tmp_frame_infos.count(); i++) {
         if (OB_FAIL((frame_info_arr.push_back(tmp_frame_infos.at(i).frame_info_)))) {
+          LOG_WARN("fail to push frame info", K(ret), K(tmp_frame_infos), K(i));
         }
       } // for end
     }
@@ -768,11 +918,17 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
         } else {
           rt_expr->res_buf_len_ = def_res_len;
         }
+        if (use_rich_format() && rt_expr->is_fixed_length_data_) {
+          rt_expr->len_ = rt_expr->res_buf_len_;
+        }
       } else {
         rt_expr->res_buf_len_ = 0;
       }
     } else {
       rt_expr->res_buf_len_ = def_res_len;
+    }
+    if (use_rich_format() && rt_expr->is_fixed_length_data_) {
+      rt_expr->len_ = rt_expr->res_buf_len_;
     }
   }
   for (int64_t expr_idx = 0;
@@ -781,6 +937,9 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
     ObExpr *rt_expr = get_rt_expr(*exprs.at(expr_idx));
     int64_t datum_size = DATUM_EVAL_INFO_SIZE
                          + reserve_data_consume(*rt_expr);
+    if (use_rich_format()) {
+      datum_size += sizeof(VectorHeader);
+    }
     if (frame_size + datum_size <= MAX_FRAME_SIZE) {
       frame_size += datum_size;
       frame_expr_cnt++;
@@ -790,7 +949,9 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
                                                          frame_index_pos + frame_idx,
                                                          frame_size,
                                                          0, /*zero_init_pos*/
-                                                         frame_size/*zero_init_size*/)))) {
+                                                         frame_size/*zero_init_size*/,
+                                                         use_rich_format())))) {
+        LOG_WARN("fail to push frame_size", K(ret));
       } else {
         ++frame_idx;
         frame_size = datum_size;
@@ -806,7 +967,9 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
                                                        frame_index_pos + frame_idx,
                                                        frame_size,
                                                        0, /*zero_init_pos*/
-                                                       frame_size/*zero_init_size*/)))) {
+                                                       frame_size/*zero_init_size*/,
+                                                       use_rich_format())))) {
+      LOG_WARN("fail to push frame_size", K(ret), K(frame_size));
     }
   }
   // Initialize each ObExpr's frame_idx, datum_off_, res_buf_off_
@@ -823,9 +986,11 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
   if (OB_SUCC(ret)) {
     frame_index_pos += tmp_frame_infos.count();
     if (OB_FAIL(frame_info_arr.reserve(tmp_frame_infos.count()))) {
+      LOG_WARN("fail to reserve frame infos", K(ret), K(tmp_frame_infos.count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tmp_frame_infos.count(); i++) {
         if (OB_FAIL((frame_info_arr.push_back(tmp_frame_infos.at(i).frame_info_)))) {
+          LOG_WARN("fail to push frame info", K(ret), K(tmp_frame_infos), K(i));
         }
       } // for end
     }
@@ -840,13 +1005,21 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
 {
   int ret = OB_SUCCESS;
   if (continuous_datum) {
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    int64_t item_size = 0;
+    if (use_rich_format()) {
+      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
+    } else {
+      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    }
     int64_t data_off = frame.expr_cnt_ * item_size;
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *e = get_rt_expr(*exprs.at(i));
       e->frame_idx_ = frame.frame_idx_;
       e->datum_off_ = i * item_size;
       e->eval_info_off_ = e->datum_off_ + sizeof(ObDatum);
+      if (use_rich_format()) {
+        e->vector_header_off_ = e->eval_info_off_ + sizeof(ObEvalInfo);
+      }
       const int64_t consume_size = reserve_data_consume(*e);
       if (consume_size > 0) {
         data_off += consume_size;
@@ -856,11 +1029,10 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
         e->res_buf_off_ = 0;
       }
     }
-    if (OB_SUCC(ret)) {
-      OB_ASSERT(data_off == frame.frame_size_);
-    }
+    CK(data_off == frame.frame_size_);
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("not support non-continuous datum", K(ret));
     // // FIXME bin.lb: ALIGN_SIZE may affect the performance, set to 1 if no affect
     // // make sure all ObDatum is aligned with %ALIGN_SIZE
     // const static int64_t ALIGN_SIZE = 8;
@@ -931,12 +1103,18 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
     // +--------------------------------+
     // |      Ptrs/Offsets              |
     // +--------------------------------+
-    // | EvalInfo in Expr1              |
-    // +--------------------------------+
-    // | EvalInfo in Expr2              |
-    // +--------------------------------+
-    // |      ......                    |
-    // +--------------------------------+
+    // |      VectorHeader              |-----|
+    // +--------------------------------+     |
+    // |      Null Bitmap               |     |
+    // +--------------------------------+     |
+    // | vector dynamic buf header      |     |
+    // |--------------------------------+     |
+    // | EvalInfo in Expr1              |     |
+    // +--------------------------------+     |
+    // | EvalInfo in Expr2              |     |
+    // +--------------------------------+     |
+    // |      ......                    |     |
+    // +--------------------------------+     |
     // | EvalFlag in Expr1              |
     // +--------------------------------+ need memset
     // | EvalFlag in Expr2              |     |
@@ -947,7 +1125,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
     // +--------------------------------+     |
     // | Dynamic buf header in expr2    |     |
     // |--------------------------------+     |
-    // |      ......                    |
+    // |      ......                    |-----|
     // +--------------------------------+
     // | Reserved datum data in expr1   |
     // +--------------------------------+
@@ -956,7 +1134,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
     // |      ......                    |
     // +--------------------------------+
     int64_t cur_total_size = 0;
-    // datums and private skip bitmap
+    //datums , private skip bitmap, vector_header
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *e = get_rt_expr(*exprs.at(i));
       e->datum_off_ = cur_total_size;
@@ -964,6 +1142,61 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
                           + get_datums_header_size(*e) /* datums */;
     }
 
+    LOG_TRACE("arrange datums data", K(cur_total_size), K(use_rich_format()));
+    if (use_rich_format()) {
+      // lens/offsets
+      uint32_t len_arr_total = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
+        ObExpr *e = get_rt_expr(*exprs.at(i));
+        if (!e->is_fixed_length_data_) {
+          e->len_arr_off_ = cur_total_size + len_arr_total;
+          len_arr_total += get_offsets_size(*e);
+        } else {
+          e->len_ = e->res_buf_len_;
+        }
+      }
+      cur_total_size += len_arr_total;
+
+      // ptrs
+      uint32_t ptr_arr_total = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
+        ObExpr *e = get_rt_expr(*exprs.at(i));
+        if (!e->is_fixed_length_data_) {
+          e->offset_off_ = cur_total_size + ptr_arr_total;
+          ptr_arr_total += get_ptrs_size(*e);
+        }
+      }
+      cur_total_size += ptr_arr_total;
+
+      // vector header
+      uint32_t vector_header_total = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
+        ObExpr *e = get_rt_expr(*exprs.at(i));
+        e->vector_header_off_ = cur_total_size + vector_header_total;
+        vector_header_total += get_vector_header_size();
+      }
+      cur_total_size += vector_header_total;
+
+      // nulls
+      uint32_t null_bitmap_total = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
+        ObExpr *e = get_rt_expr(*exprs.at(i));
+        e->null_bitmap_off_ = cur_total_size + null_bitmap_total;
+        null_bitmap_total += get_expr_bitmap_vector_size(*e);
+      }
+      cur_total_size += null_bitmap_total;
+
+      // cont_buf
+      uint32_t cont_buf_total = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
+        ObExpr *e = get_rt_expr(*exprs.at(i));
+        if (!e->is_fixed_length_data_) {
+          e->cont_buf_off_ = cur_total_size + cont_buf_total;
+          cont_buf_total += sizeof(ObDynReserveBuf);
+        }
+      }
+      cur_total_size += cont_buf_total;
+    }
 
     uint32_t eval_info_total = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
@@ -1003,11 +1236,10 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
       LOG_TRACE("expression details during CG", K(e->is_batch_result()), KPC(e),
                 K(expr_data_offset));
     }
-    if (OB_SUCC(ret)) {
-      OB_ASSERT((cur_total_size + expr_data_offset) == frame.frame_size_);
-    }
+    CK((cur_total_size + expr_data_offset) == frame.frame_size_);
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("not support non-continuous datum", K(ret));
     // Layout2: Frame is separated by exprs
     // All data(metas + reserved data/buf) within one expr are allocated continuously
     // Frame layouts:
@@ -1066,12 +1298,14 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(frame_ptrs.reserve(const_frames.count()))) {
+    LOG_WARN("fail to init frame ptr", K(ret), K(const_frames));
   }
   int64_t expr_idx = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < const_frames.count(); i++) {
     char *frame_mem = static_cast<char *>(allocator_.alloc(const_frames.at(i).frame_size_));
     if (OB_ISNULL(frame_mem)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc memory failed", K(ret), K(const_frames.at(i).frame_size_));
     } else {
       memset(frame_mem, 0, const_frames.at(i).frame_size_);
     }
@@ -1081,11 +1315,16 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
       ObObj tmp_obj;
       if (!IS_CONST_LITERAL(raw_expr->get_expr_type())) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("not const expr", K(ret));
       } else if (OB_FAIL(ob_write_obj(allocator_,
                                       static_cast<ObConstRawExpr *>(raw_expr)->get_value(),
                                       tmp_obj))) {
+        LOG_WARN("fail to deep copy obj", K(ret));
       } else {
-        const int64_t item_size = DATUM_EVAL_INFO_SIZE;
+        int64_t item_size = DATUM_EVAL_INFO_SIZE;
+        if (use_rich_format()) {
+          item_size += sizeof(VectorHeader);
+        }
         ObDatum *datum = reinterpret_cast<ObDatum *>(frame_mem + j * item_size);
         datum->ptr_ = frame_mem + rt_expr->res_buf_off_;
         datum->from_obj(tmp_obj);
@@ -1093,14 +1332,22 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
           datum->ptr_ = NULL;
         } else {
           if (is_lob_storage(tmp_obj.get_type())) {
-            if (OB_FAIL(ob_adjust_in_memory_lob_datum(
-                    tmp_obj, rt_expr->obj_meta_, allocator_, datum))) {
+            if (OB_FAIL(ob_adjust_lob_datum(tmp_obj, rt_expr->obj_meta_, allocator_, datum))) {
+              LOG_WARN("fail to adjust lob datum", K(ret), K(tmp_obj), K(rt_expr->obj_meta_), K(datum));
             }
           }
+        }
+        if (use_rich_format()) {
+          ObEvalInfo *eval_info = reinterpret_cast<ObEvalInfo *>(
+                                  frame_mem + rt_expr->eval_info_off_);
+          VectorHeader *vec_header = reinterpret_cast<VectorHeader *>(
+                                        frame_mem + rt_expr->vector_header_off_);
+          vec_header->init_uniform_const_vector(rt_expr->get_vec_value_tc(), datum, eval_info);
         }
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(frame_ptrs.push_back(frame_mem))) {
+      LOG_WARN("fail to push const frame", K(ret));
     }
   } // for end
 
@@ -1114,6 +1361,7 @@ int ObStaticEngineExprCG::cg_expr_basic_funcs(const ObIArray<ObRawExpr *> &raw_e
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(i));
     if (OB_ISNULL(rt_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("rt expr is null", K(ret), K(*raw_exprs.at(i)));
     } else {
       rt_expr->basic_funcs_ = ObDatumFuncs::get_basic_func(rt_expr->datum_meta_.type_,
                                                         rt_expr->datum_meta_.cs_type_,
@@ -1134,13 +1382,16 @@ int ObStaticEngineExprCG::generate_calculable_exprs(
   flying_param_cnt_ = calculable_exprs.count();
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(inner_generate_calculable_exprs(calculable_exprs, pre_calc_frame))) {
+    LOG_WARN("failed to generate calculate exprs", K(ret));
   } else if (OB_FAIL(pre_calc_frame.pre_calc_rt_exprs_.prepare_allocate(
                        calculable_exprs.count()))) {
+    LOG_WARN("failed to prepare allocate", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < calculable_exprs.count(); i++) {
       ObExpr *rt_expr = get_rt_expr(*calculable_exprs.at(i).expr_);
       if (OB_ISNULL(rt_expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null rt expr", K(ret));
       } else {
         pre_calc_frame.pre_calc_rt_exprs_.at(i) = rt_expr;
       }
@@ -1154,8 +1405,8 @@ int ObStaticEngineExprCG::generate_calculable_exprs(
       // %extra_ is the array index of param store
       if (T_QUESTIONMARK == e->type_ && e->extra_ >= param_cnt_) {
         int64_t idx = e->extra_ - param_cnt_;
+        CK(idx < flying_param_cnt_);
         if (OB_SUCC(ret)) {
-          OB_ASSERT(idx < flying_param_cnt_);
           ObExpr **parents = e->parents_;
           uint32_t parent_cnt = e->parent_cnt_;
           *e = *pre_calc_frame.pre_calc_rt_exprs_.at(idx);
@@ -1176,14 +1427,17 @@ int ObStaticEngineExprCG::generate_calculable_expr(ObRawExpr *raw_expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(raw_expr)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid null raw expr", K(ret), K(raw_expr));
   } else {
     ObSEArray<ObHiddenColumnItem, 1> calculable_exprs;
     if (OB_FAIL(calculable_exprs.prepare_allocate(1))) {
+      LOG_WARN("failed to prepare allocate raw expr", K(ret));
     } else {
       calculable_exprs.at(0).hidden_idx_ = 0;
       calculable_exprs.at(0).expr_ = raw_expr;
 
       if (OB_FAIL(generate_calculable_exprs(calculable_exprs, pre_calc_frame))) {
+        LOG_WARN("failed to generate pre calculate exprs", K(ret));
       } else {
         rt_expr = get_rt_expr(*raw_expr);
       }
@@ -1205,12 +1459,15 @@ int ObStaticEngineExprCG::inner_generate_calculable_exprs(
       const ObHiddenColumnItem &hidden_item = calculable_exprs.at(i);
       if (OB_ISNULL(hidden_item.expr_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null raw expr", K(ret));
       } else if (OB_FAIL(raw_exprs.append(hidden_item.expr_))) {
+        LOG_WARN("failed to push back element", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(generate(raw_exprs, expr_info))) {
+      LOG_WARN("failed to flatten and cg exprs", K(ret));
     } else {
       // do nothing
     }
@@ -1284,6 +1541,7 @@ int ObStaticEngineExprCG::alloc_so_check_exprs(const ObIArray<ObRawExpr *> &raw_
               e = e->parents_[0];
               if (T_OP_ROW == e->type_) {
                 ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("T_OP_ROW can not be nested twice", K(ret));
               }
             }
           }
@@ -1339,11 +1597,29 @@ int ObStaticEngineExprCG::create_tmp_frameinfo(const common::ObIArray<ObRawExpr 
   for (int64_t expr_idx = 0; OB_SUCC(ret) && expr_idx < raw_exprs.count(); expr_idx++) {
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(expr_idx));
     const int64_t expr_datums_size = get_expr_datums_size(*rt_expr);
-    const int64_t expr_zero_init_pos = get_datums_header_size(*rt_expr)
-                                       + get_expr_skip_vector_size(*rt_expr);
-    const int64_t expr_zero_init_size = dynamic_buf_header_size(*rt_expr)
-                                        + sizeof(ObEvalInfo)
-                                        + get_expr_bitmap_vector_size(*rt_expr);
+    int64_t expr_zero_init_pos = 0;
+    int64_t expr_zero_init_size = 0;
+    if (use_rich_format()) {
+       expr_zero_init_pos = get_datums_header_size(*rt_expr)
+                            // skip bitmap
+                            + get_expr_skip_vector_size(*rt_expr)
+                            + get_offsets_size(*rt_expr)
+                            + get_ptrs_size(*rt_expr);
+
+      expr_zero_init_size = sizeof(VectorHeader)
+                            + get_expr_bitmap_vector_size(*rt_expr) /*nulls*/
+                            + cont_dynamic_buf_header_size(*rt_expr)
+                            + dynamic_buf_header_size(*rt_expr)
+                            + sizeof(ObEvalInfo)
+                            + get_expr_bitmap_vector_size(*rt_expr);/*evalflags*/
+    } else {
+      expr_zero_init_pos = get_datums_header_size(*rt_expr)
+                           + get_expr_skip_vector_size(*rt_expr);
+
+      expr_zero_init_size = dynamic_buf_header_size(*rt_expr)
+                            + sizeof(ObEvalInfo)
+                            + get_expr_bitmap_vector_size(*rt_expr); /*evalflags*/
+    }
 
     if (expr_datums_size > MAX_FRAME_SIZE) {
       // FIXME: should never hit this block.
@@ -1369,7 +1645,9 @@ int ObStaticEngineExprCG::create_tmp_frameinfo(const common::ObIArray<ObRawExpr 
                                                            frame_index_pos + frame_idx,
                                                            frame_size,
                                                            zero_init_pos,
-                                                           zero_init_size)))) {
+                                                           zero_init_size,
+                                                           use_rich_format())))) {
+          LOG_WARN("fail to push frame_size", K(ret));
         } else {
           ++frame_idx;
           zero_init_pos = expr_zero_init_pos;
@@ -1389,7 +1667,9 @@ int ObStaticEngineExprCG::create_tmp_frameinfo(const common::ObIArray<ObRawExpr 
                                                        frame_index_pos + frame_idx,
                                                        frame_size,
                                                        zero_init_pos,
-                                                       zero_init_size)))) {
+                                                       zero_init_size,
+                                                       use_rich_format())))) {
+      LOG_WARN("fail to push frame_size", K(ret), K(frame_size));
     }
   }
   return ret;
@@ -1403,6 +1683,7 @@ int ObStaticEngineExprCG::get_vectorized_exprs(
   for (int64_t i = 0; OB_SUCC(ret) && i < raw_exprs.count(); i++) {
     if (is_vectorized_expr(raw_exprs.at(i))) {
       if (OB_FAIL(no_const_param_exprs.push_back(raw_exprs.at(i)))) {
+        LOG_WARN("fail to push expr", K(ret), K(i), K(raw_exprs));
       }
     }
   }
@@ -1431,6 +1712,11 @@ ObStaticEngineExprCG::ObExprBatchSize ObStaticEngineExprCG::get_expr_execute_siz
     } else if (T_FUN_SYS_WRAPPER_INNER == type) {
       size = ObExprBatchSize::one;
       break;
+    } else if (T_REF_QUERY == type) {
+      if (static_cast<ObQueryRefRawExpr*>(raw_exprs.at(i))->is_cursor()) {
+        size = ObExprBatchSize::one;
+        break;
+      }
     }
     LOG_DEBUG("check expr type", K(type), KPC(raw_exprs.at(i)));
     // There are certain cases: that a SQL could not be executed vectorizely
@@ -1461,6 +1747,7 @@ ObStaticEngineExprCG::ObExprBatchSize ObStaticEngineExprCG::get_expr_execute_siz
       size = ObExprBatchSize::full;
     }
   }
+  LOG_TRACE("can_execute_vectorizely", K(size));
   return size;
 }
 int ObStaticEngineExprCG::divide_probably_local_exprs(common::ObIArray<ObRawExpr *> &exprs)
@@ -1488,6 +1775,10 @@ int ObStaticEngineExprCG::divide_probably_local_exprs(common::ObIArray<ObRawExpr
   return ret;
 }
 
+bool ObStaticEngineExprCG::use_rich_format() const {
+  return op_cg_ctx_.session_->use_rich_format();
+}
+
 int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
                                                  const RowDesc &row_desc,
                                                  ObIAllocator &allocator,
@@ -1505,10 +1796,12 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
   }
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory for temp expr", K(ret));
   }
 
   CK(OB_NOT_NULL(expr));
   if (OB_SUCC(ret)) {
+    LOG_TRACE("generate temp expr", K(*expr), K(row_desc));
     int64_t param_cnt =
       (session->get_cur_exec_ctx() != NULL
        && session->get_cur_exec_ctx()->get_physical_plan_ctx() != NULL) ?
@@ -1519,7 +1812,8 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
                                  session,
                                  schema_guard,
                                  0,
-                                 param_cnt);
+                                 param_cnt,
+                                 GET_MIN_CLUSTER_VERSION()); // ?
     expr_cg.set_rt_question_mark_eval(true);
     expr_cg.set_need_flatten_gen_col(false);
     expr_cg.set_contain_dynamic_eval_rt_qm(contain_dynamic_eval_rt_qm_);
@@ -1538,9 +1832,7 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
     } // for end
     OZ(temp_expr->idx_col_arr_.assign(idx_col_arr));
     OX(temp_expr->expr_idx_ = get_rt_expr(*expr) - &(temp_expr->rt_exprs_.at(0)));
-    if (OB_SUCC(ret)) {
-      OB_ASSERT(temp_expr->expr_idx_ >= 0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
-    }
+    CK(temp_expr->expr_idx_ >=0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
   }
 
   return ret;
@@ -1568,7 +1860,7 @@ static inline bool expr_is_added(ObExpr &e)
 
 #define CALC_MAX_FRAME_SIZE(offset, length)  \
   (offset > 0 && offset < UINT32_MAX) ? std::max<int64_t>(size, offset + length) : size
-int64_t ObStaticEngineExprCG::frame_max_offset(const ObExpr &e, const int64_t batch_size)
+int64_t ObStaticEngineExprCG::frame_max_offset(const ObExpr &e, const int64_t batch_size, const bool use_rich_format)
 {
   int64_t size = 0;
   size = std::max<int64_t>(size, e.datum_off_ + sizeof(ObDatum));
@@ -1577,13 +1869,23 @@ int64_t ObStaticEngineExprCG::frame_max_offset(const ObExpr &e, const int64_t ba
   size = CALC_MAX_FRAME_SIZE(e.res_buf_off_, get_expr_datums_count(e, batch_size) * e.res_buf_len_);
   size = CALC_MAX_FRAME_SIZE(e.eval_flags_off_, get_expr_bitmap_vector_size(e, batch_size));
   size = CALC_MAX_FRAME_SIZE(e.pvt_skip_off_, get_expr_skip_vector_size(e, batch_size));
+  if (use_rich_format) {
+    if (!e.is_fixed_length_data_) {
+      size = CALC_MAX_FRAME_SIZE(e.len_arr_off_, get_offsets_size(e, batch_size));
+      size = CALC_MAX_FRAME_SIZE(e.offset_off_, get_ptrs_size(e, batch_size));
+      size = CALC_MAX_FRAME_SIZE(e.cont_buf_off_, sizeof(ObDynReserveBuf));
+    }
+    size = CALC_MAX_FRAME_SIZE(e.vector_header_off_, get_vector_header_size());
+    size = CALC_MAX_FRAME_SIZE(e.null_bitmap_off_, get_expr_bitmap_vector_size(e, batch_size));
+  }
   return size;
 };
 
 int ObStaticEngineExprCG::generate_partial_expr_frame(
     const ObPhysicalPlan &plan,
     ObExprFrameInfo &partial_expr_frame_info,
-    ObIArray<ObRawExpr *> &raw_exprs)
+    ObIArray<ObRawExpr *> &raw_exprs,
+    const bool use_rich_format)
 {
   int ret = OB_SUCCESS;
   const ObExprFrameInfo &global = plan.get_expr_frame_info();
@@ -1631,6 +1933,20 @@ int ObStaticEngineExprCG::generate_partial_expr_frame(
     } while (OB_SUCC(ret) && inc > 0);
   }
 
+  // flatten attr_exprs
+  if (OB_SUCC(ret)) {
+    const int64_t cnt = exprs.count();
+    for (int64_t idx = 0; OB_SUCC(ret) && idx < cnt; idx++) {
+      ObExpr *expr = exprs.at(idx);
+      for (int64_t i = 0 ; OB_SUCC(ret) && i < expr->attrs_cnt_; i++) {
+        ObExpr *e = expr->attrs_[i];
+        if (!expr_is_added(*e)) {
+          OZ(exprs.push_back(e));
+          mark_expr_is_added(*e);
+        }
+      }
+    }
+  }
   // always clear expr is added flag
   FOREACH_CNT(e, exprs) {
     clear_expr_is_added(**e);
@@ -1676,7 +1992,7 @@ int ObStaticEngineExprCG::generate_partial_expr_frame(
           p = *e;
         }
       } else {
-        if (frame_max_offset(*p, batch_size) < frame_max_offset(**e, batch_size)) {
+        if (frame_max_offset(*p, batch_size, use_rich_format) < frame_max_offset(**e, batch_size, use_rich_format)) {
           p = *e;
         }
       }
@@ -1703,7 +2019,12 @@ int ObStaticEngineExprCG::generate_partial_expr_frame(
     OZ(partial.param_frame_.assign(global.param_frame_));
     OZ(partial.dynamic_frame_.assign(global.dynamic_frame_));
     OZ(partial.datum_frame_.assign(global.datum_frame_));
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    int64_t item_size = 0;
+    if (use_rich_format) {
+      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo) + sizeof(VectorHeader);
+    } else {
+      item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    }
     FOREACH_CNT_X(f, partial.param_frame_, OB_SUCC(ret)) {
       ObExpr *e = farthest_exprs.at(f->frame_idx_);
       int cnt = NULL == e
@@ -1711,6 +2032,7 @@ int ObStaticEngineExprCG::generate_partial_expr_frame(
           : (e->datum_off_ / item_size) + 1;
       f->expr_cnt_ = std::min<int64_t>(f->expr_cnt_, cnt);
       f->frame_size_ = std::min<int64_t>(f->frame_size_, cnt * item_size);
+      f->use_rich_format_ = plan.get_use_rich_format();
     }
     FOREACH_CNT_X(f, partial.dynamic_frame_, OB_SUCC(ret)) {
       ObExpr *e = farthest_exprs.at(f->frame_idx_);
@@ -1720,21 +2042,23 @@ int ObStaticEngineExprCG::generate_partial_expr_frame(
       f->expr_cnt_ = std::min<int64_t>(f->expr_cnt_, cnt);
       int64_t size = item_size; // avoid zero frame size
       if (NULL != e) {
-        size = std::max(size, frame_max_offset(*e, batch_size));
+        size = std::max(size, frame_max_offset(*e, batch_size, use_rich_format));
       }
       f->frame_size_ = std::min<int64_t>(size, f->frame_size_);
+      f->use_rich_format_ = plan.get_use_rich_format();
     }
     FOREACH_CNT_X(f, partial.datum_frame_, OB_SUCC(ret)) {
       ObExpr *e = farthest_exprs.at(f->frame_idx_);
       int64_t size = item_size; // avoid zero frame size
       if (NULL != e) {
-        size = std::max(size, frame_max_offset(*e, batch_size));
+        size = std::max(size, frame_max_offset(*e, batch_size, use_rich_format));
       }
       f->frame_size_ = std::min<int64_t>(size, f->frame_size_);
     }
   }
 
   if (OB_SUCC(ret)) {
+    LOG_TRACE("generate partial expr frame", K(partial), K(global));
   }
 
   return ret;
@@ -1755,16 +2079,25 @@ int ObStaticEngineExprCG::compute_max_batch_size(const ObRawExpr *raw_expr)
 {
   // expr_datums_header_size
   int64_t irrelevant = sizeof(ObEvalInfo) + 1 + 1;
-  // Per-row datum storage and bitmap contribution.
+  // 1 refer to three bitmap (2 in expr_datums_header_size, 1 in rich_format_size)
   int64_t relevant = sizeof(ObDatum) + 1;
   // reserve_datums_buf_len
   const ObRawExprResType &result_type = raw_expr->get_result_type();
   relevant += reserve_data_consume(result_type.get_type(), result_type.get_precision());
+  // rich_format_size
+  if (use_rich_format()) {
+    ObExpr *rt_expr = get_rt_expr(*raw_expr);
+    if (OB_ISNULL(rt_expr) || !rt_expr->is_fixed_length_data_) {
+      irrelevant += sizeof(uint32_t) + sizeof(ObDynReserveBuf);
+      relevant += sizeof(uint32_t) + sizeof(char *);
+    }
+    irrelevant += sizeof(VectorHeader) + 1;
+  }
   return (MAX_FRAME_SIZE - irrelevant) / relevant;
 }
 
 // this is used for dynamic evaluated questionmark exprs
-// consider the following query:
+// consider following query in oracle mode:
 // ```SQL
 // create table t (a int);
 // select * from t where a in (1, 2); # item count in row maybe very large!
@@ -1789,46 +2122,41 @@ int ObStaticEngineExprCG::generate_extra_questionmarks(ObRawExprUniqueSet &flatt
                                                        ObRawExprFactory &expr_factory)
 {
   int ret = OB_SUCCESS;
-  const ObIArray<ObRawExpr *> &all_exprs = flattened_raw_exprs.get_expr_array();
-  bool has_dynamic_eval_qm = false;
-  for (int64_t i = 0; OB_SUCC(ret) && param_cnt_ > 0 &&
-                      !has_dynamic_eval_qm && i < all_exprs.count(); i++) {
-    if (OB_ISNULL(all_exprs.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      has_dynamic_eval_qm = is_dynamic_eval_qm(*all_exprs.at(i));
-    }
-  }
   if (OB_UNLIKELY(param_cnt_ <= 0)) {
     // do nothing
-  } else if (OB_FAIL(ret) || !has_dynamic_eval_qm) {
-    // Range estimation generates small temporary expressions repeatedly. Only
-    // initialize the statement-wide parameter array when one needs an extra QM.
   } else if (OB_FAIL(gen_questionmarks_.prepare_allocate(param_cnt_))) {
+    LOG_WARN("prepare allocate elements failed", K(ret));
   } else {
     for (int i = 0; i < param_cnt_; i++) {
       gen_questionmarks_.at(i) = nullptr;
     }
+    const ObIArray<ObRawExpr *> &all_exprs = flattened_raw_exprs.get_expr_array();
     for (int i = 0; OB_SUCC(ret) && i < all_exprs.count(); i++) {
       if (OB_ISNULL(all_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null raw expr", K(ret), K(i));
       } else if (is_dynamic_eval_qm(*all_exprs.at(i))) {
         ObRawExpr *gen_questionmark = all_exprs.at(i);
         int64_t param_idx = 0;
         ObRawExprResType orig_qm_type = static_cast<const ObConstRawExpr *>(all_exprs.at(i))->get_orig_qm_type();
         ret = static_cast<ObConstRawExpr *>(all_exprs.at(i))->get_value().get_unknown(param_idx);
         if (OB_FAIL(ret)) {
+          LOG_WARN("get param index failed", K(ret));
         } else if (OB_FAIL(ObRawExprUtils::create_param_expr(expr_factory, param_idx, gen_questionmark))) {
+          LOG_WARN("create param expr failed", K(ret));
         } else if (OB_UNLIKELY(param_idx >= param_cnt_)) {
+          LOG_WARN("unexpected param idx", K(ret), K(param_idx), K(param_cnt_));
         } else {
           gen_questionmark->set_result_type(orig_qm_type);
           gen_questionmarks_.at(param_idx) = gen_questionmark;
         }
       }
     }
+    LOG_DEBUG("extra question marks", K(gen_questionmarks_));
     for (int i = 0; OB_SUCC(ret) && i < gen_questionmarks_.count(); i++) {
       if (OB_NOT_NULL(gen_questionmarks_.at(i))) {
         if (OB_FAIL(flattened_raw_exprs.append(gen_questionmarks_.at(i)))) {
+          LOG_WARN("append raw expr failed", K(ret));
         }
       }
     }

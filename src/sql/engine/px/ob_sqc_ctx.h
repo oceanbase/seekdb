@@ -28,6 +28,7 @@
 #include "sql/engine/px/datahub/ob_dh_msg_provider.h"
 #include "sql/engine/px/datahub/components/ob_dh_barrier.h"
 #include "sql/engine/px/datahub/components/ob_dh_winbuf.h"
+#include "sql/engine/px/datahub/components/ob_dh_rollup_key.h"
 #include "sql/engine/px/datahub/components/ob_dh_sample.h"
 #include "sql/engine/px/datahub/components/ob_dh_range_dist_wf.h"
 #include "sql/engine/px/datahub/components/ob_dh_init_channel.h"
@@ -38,13 +39,17 @@
 
 namespace oceanbase
 {
+namespace storage
+{
+  class ObTabletDirectLoadMgrHandle;
+}
 namespace sql
 {
 // SQC status
 class ObSqcCtx
 {
 public:
-  ObSqcCtx(ObPxInitSqcArgs &sqc_arg);
+  ObSqcCtx(ObPxRpcInitSqcArgs &sqc_arg);
   ~ObSqcCtx() {  reset(); }
   common::ObIArray<ObPxTask> &get_tasks() { return tasks_; }
   // To ensure that add_task does not fail due to memory issues. Because once it fails, it may result in the launched task not being recorded
@@ -78,6 +83,13 @@ public:
       }
     }
 
+    if (nullptr != direct_load_mgr_handles_) {
+      direct_load_mgr_handles_->reset();
+      direct_load_mgr_handles_ = nullptr;
+      lob_direct_load_mgr_handles_->reset();
+      lob_direct_load_mgr_handles_ = nullptr;
+    }
+    arena_allocator_.reset();
   }
 
 public:
@@ -96,6 +108,7 @@ public:
   ObBarrierWholeMsgP barrier_whole_msg_proc_;
   ObWinbufWholeMsgP winbuf_whole_msg_proc_;
   ObDynamicSampleWholeMsgP sample_whole_msg_proc_;
+  ObRollupKeyWholeMsgP rollup_key_whole_msg_proc_;
   ObRDWFWholeMsgP rd_wf_whole_msg_proc_;
   ObInitChannelWholeMsgP init_channel_whole_msg_proc_;
   ObReportingWFWholeMsgP reporting_wf_piece_msg_proc_;
@@ -111,7 +124,13 @@ public:
   // More than one operator will use datahub, so the size can default to 1
   common::ObSEArray<ObPxDatahubDataProvider *, 1> whole_msg_provider_list_;
   common::ObSEArray<std::pair<int64_t, int64_t>, 1> init_channel_msg_cnts_; // <op_id, piece_cnt>
+  ObSPWinFuncPXWholeMsgP sp_winfunc_whole_msg_proc_;
+  ObRDWinFuncPXWholeMsgP rd_winfunc_whole_msg_proc_;
   ObJoinFilterCountRowWholeMsgP join_filter_count_row_whole_msg_proc_;
+  /* for ddl */
+  ObArenaAllocator arena_allocator_;
+  ObIArray<ObTabletDirectLoadMgrHandle>* direct_load_mgr_handles_;
+  ObIArray<ObTabletDirectLoadMgrHandle>* lob_direct_load_mgr_handles_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqcCtx);
 };
@@ -120,3 +139,5 @@ private:
 }
 #endif /* __OB_SQL_PX_SQC_CTX_H__ */
 //// end of header file
+
+

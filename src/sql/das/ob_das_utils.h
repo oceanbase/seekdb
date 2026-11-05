@@ -17,10 +17,12 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #include "share/ob_define.h"
+#include "share/ob_ls_id.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/dtl/ob_dtl_task.h"
 #include "sql/ob_phy_table_location.h"
+#include "rpc/frame/ob_result_code.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "sql/das/ob_das_def_reg.h"
@@ -32,6 +34,7 @@ namespace sql
 class ObDASUtils
 {
 public:
+  static void log_user_error_and_warn(const rpc::frame::ObResultCode &rcode);
   static int get_tablet_loc_by_id(const ObTabletID &tablet_id,
                                   ObDASTableLoc &table_loc,
                                   ObDASTabletLoc *&tablet_loc);
@@ -61,6 +64,7 @@ public:
                                    common::ObObj &value);
   static int reshape_datum_value(const ObObjMeta &col_type,
                                  const ObAccuracy &col_accuracy,
+                                 const bool enable_oracle_empty_char_reshape_to_null,
                                  ObIAllocator &allocator,
                                  blocksstable::ObStorageDatum &datum_value);
   static int reshape_datum_vector_value(const ObObjMeta &col_type,
@@ -68,6 +72,12 @@ public:
                                         ObIAllocator &allocator,
                                         const common::ObDatumVector &datum_vector,
                                         share::ObBatchSelector &selector);
+  static int reshape_vector_value(const ObObjMeta &col_type,
+                                  const ObAccuracy &col_accuracy,
+                                  const bool enable_oracle_empty_char_reshape_to_null,
+                                  ObIAllocator &allocator,
+                                  common::ObIVector *&vector,
+                                  share::ObBatchSelector &selector);
   static int padding_fixed_string_value(int64_t max_len, ObIAllocator &alloc, ObObj &value);
   static int wait_das_retry(int64_t retry_cnt);
   static int find_child_das_def(const ObDASBaseCtDef *root_ctdef,
@@ -86,6 +96,7 @@ public:
     const ObDASBaseCtDef *base_ctdef = nullptr;
     ObDASBaseRtDef *base_rtdef = nullptr;
     if (OB_FAIL(find_child_das_def(root_ctdef, root_rtdef, op_type, base_ctdef, base_rtdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else if (OB_ISNULL(base_ctdef) || OB_ISNULL(base_rtdef)) {
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "can not find the target op def", K(ret), K(op_type), KP(base_ctdef), KP(base_rtdef));
@@ -114,6 +125,7 @@ public:
     int ret = common::OB_SUCCESS;
     const ObDASBaseCtDef *base_ctdef = nullptr;
     if (OB_FAIL(find_child_das_ctdef(root_ctdef, op_type, base_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else if (OB_ISNULL(base_ctdef)) {
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "can not find the target op def", K(ret), K(op_type), KP(base_ctdef));
@@ -122,6 +134,12 @@ public:
     }
     return ret;
   }
+  static int generate_mlog_row(const share::ObLSID &ls_id,
+                               const common::ObTabletID &tablet_id,
+                               const storage::ObDMLBaseParam &dml_param,
+                               blocksstable::ObDatumRow &row,
+                               ObDASOpType op_type,
+                               bool is_old_row);
 };
 }  // namespace sql
 }  // namespace oceanbase

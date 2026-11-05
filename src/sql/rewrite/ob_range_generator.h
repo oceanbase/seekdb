@@ -155,6 +155,7 @@ public:
       all_tmp_node_caches_(allocator),
       always_false_tmp_range_(nullptr),
       mbr_filters_(mbr_filters),
+      is_generate_ss_range_(false),
       cur_datetime_(0) 
   {
     if (OB_NOT_NULL(exec_ctx_.get_physical_plan_ctx())) {
@@ -163,6 +164,7 @@ public:
   }
 
   int generate_ranges();
+  int generate_ss_ranges();
   static int generate_fast_nlj_range(const ObPreRangeGraph &pre_range_graph,
                                      const ParamStore &param_store,
                                      ObIAllocator &allocator,
@@ -183,9 +185,6 @@ public:
   static int fill_general_nlj_range(ObFastFinalNLJRangeCtx &ctx,
                                     const ObPreRangeGraph &pre_range_graph,
                                     ObIArray<ObObj> &params,
-                                    common::ObIAllocator &allocator,
-                                    ObExecContext &exec_ctx,
-                                    const common::ObDataTypeCastParams &dtc_params,
                                     int64_t range_buffer_idx,
                                     bool &always_false,
                                     ObIArray<ObNewRange*> &out_ranges);
@@ -298,6 +297,7 @@ private:
   ObFixedArray<void*, ObIAllocator> all_tmp_node_caches_;
   ObTmpRange *always_false_tmp_range_;
   ObIArray<common::ObSpatialMBR> &mbr_filters_;
+  bool is_generate_ss_range_;
   int64_t cur_datetime_;
 };
 

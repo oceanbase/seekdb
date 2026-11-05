@@ -53,6 +53,7 @@ ObDASFuncDataIter::ObDASFuncDataIter()
     main_lookup_rtdef_(nullptr),
     main_lookup_iter_(nullptr),
     main_lookup_tablet_id_(0),
+    main_lookup_ls_id_(0),
     main_lookup_param_(),
     merge_memctx_(),
     doc_ids_(),
@@ -70,19 +71,25 @@ int ObDASFuncDataIter::do_table_scan()
   start_table_scan_ = true;
   if (OB_ISNULL(tr_merge_iters_) || OB_UNLIKELY(iter_count_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpeted error, tr merge iter is nullptr", K(ret));
   } else if (OB_FAIL(build_tr_merge_iters_rangekey())) {
+    LOG_WARN("fail to build rowkey doc range", K(ret));
   } else {
     if (nullptr != main_lookup_iter_) {
-      if (OB_UNLIKELY(!main_lookup_tablet_id_.is_valid())) {
+      if (OB_UNLIKELY(!main_lookup_tablet_id_.is_valid() || !main_lookup_ls_id_.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error, main lookup tablet id or ls id is invalid", K(ret), K(main_lookup_tablet_id_), K(main_lookup_ls_id_));
       } else {
         main_lookup_param_.tablet_id_ = main_lookup_tablet_id_;
+        main_lookup_param_.ls_id_ = main_lookup_ls_id_;
         if (OB_FAIL(main_lookup_iter_->do_table_scan())) {
+          LOG_WARN("fail to do table scan for main lookup table", K(ret), KPC(main_lookup_iter_));
         }
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < iter_count_; i++) {
       if (OB_FAIL(tr_merge_iters_[i]->do_table_scan())) {
+        LOG_WARN("fail to do table scan for tr merge iter", K(ret), K(i), KPC(tr_merge_iters_[i]));
       }
     }
   }
@@ -94,13 +101,18 @@ int ObDASFuncDataIter::rescan()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tr_merge_iters_) || OB_UNLIKELY(iter_count_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpeted error, tr merge iter is nullptr", K(ret));
   } else if (OB_FAIL(build_tr_merge_iters_rangekey())) {
+    LOG_WARN("fail to build rowkey doc range", K(ret));
   } else if (!start_table_scan_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table scan is not started", K(ret));
   } else if (nullptr != main_lookup_iter_ && OB_FAIL(main_lookup_iter_->rescan())) {
+    LOG_WARN("fail to do table scan for main lookup table", K(ret), KPC(main_lookup_iter_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < iter_count_; i++) {
       if (OB_FAIL(tr_merge_iters_[i]->rescan())) {
+        LOG_WARN("fail to do table scan for tr merge iter", K(ret), K(i), KPC(tr_merge_iters_[i]));
       }
     }
   }
@@ -128,16 +140,21 @@ int ObDASFuncDataIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(eval_ctx) || OB_UNLIKELY(1 != rowkey_exprs.count())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid eval ctx or rowkey exprs", K(eval_ctx), K(rowkey_exprs), K(ret));
   } else {
     ObDocIdExt doc_id;
     const ObExpr *expr = rowkey_exprs.at(0);
     ObDatum &col_datum = expr->locate_expr_datum(*eval_ctx);
     if (OB_FAIL(doc_id.from_datum(col_datum))) {
+      LOG_WARN("failed to get doc id", K(ret), K(doc_id));
     } else if (OB_FAIL(add_doc_id(doc_id))) {
+      LOG_WARN("failed to add doc id", K(ret));
     }
+    LOG_DEBUG("set func data iter scan rowkey", K(doc_id), K(ret));
   }
   if (OB_SUCC(ret) && has_main_lookup_iter() && nullptr != lookup_ctdef
       && OB_FAIL(main_lookup_iter_->set_scan_rowkey(eval_ctx, rowkey_exprs, lookup_ctdef, alloc, group_id))) {
+    LOG_WARN("failed to set scan rowkey of main lookup iter", K(ret));
   }
   return ret;
 }
@@ -147,13 +164,16 @@ int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDASIterType::DAS_ITER_FUNC_DATA != param.type_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner init das iter with bad param type", K(ret), K(param));
   } else {
     ObDASFuncDataIterParam &merge_param = static_cast<ObDASFuncDataIterParam &>(param);
     lib::ContextParam param;
     param.set_mem_attr("FTSMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
+      LOG_WARN("failed to create merge memctx", K(ret));
     } else if (OB_ISNULL(merge_param.doc_id_expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nullptr", K(ret), KP(merge_param.doc_id_expr_));
     } else {
       tr_merge_iters_ = merge_param.tr_merge_iters_;
       iter_count_ = merge_param.iter_count_;
@@ -161,7 +181,7 @@ int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
       main_lookup_rtdef_ = merge_param.main_lookup_rtdef_;
       main_lookup_iter_ = merge_param.main_lookup_iter_;
       read_count_ = 0;
-      common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(merge_param.doc_id_expr_->datum_meta_.type_,
+      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(merge_param.doc_id_expr_->datum_meta_.type_,
                                                                         merge_param.doc_id_expr_->datum_meta_.cs_type_);
       cmp_func_ = basic_funcs->null_first_cmp_;
       if (main_lookup_iter_ && OB_FAIL(init_main_lookup_scan_param(main_lookup_param_,
@@ -169,6 +189,7 @@ int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
                                                                    main_lookup_rtdef_,
                                                                    merge_param.trans_desc_,
                                                                    merge_param.snapshot_))) {
+        LOG_WARN("fail to init rowkey doc scan param", K(ret), K(merge_param));
       }
     }
   }
@@ -186,15 +207,18 @@ int ObDASFuncDataIter::inner_reuse()
     storage::ObTableScanParam &main_lookup_scan_param = main_lookup_iter->get_scan_param();
     if (OB_UNLIKELY(&main_lookup_param_ != &main_lookup_iter->get_scan_param())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error, main lookup param is nullptr", K(ret));
     } else {
       const ObTabletID &old_tablet_id = main_lookup_param_.tablet_id_;
       main_lookup_param_.need_switch_param_ = main_lookup_param_.need_switch_param_ ||
           ((old_tablet_id.is_valid() && old_tablet_id != main_lookup_tablet_id_) ? true : false);
       main_lookup_param_.tablet_id_ = main_lookup_tablet_id_;
+      main_lookup_param_.ls_id_ = main_lookup_ls_id_;
       if (!main_lookup_param_.key_ranges_.empty()) {
         main_lookup_param_.key_ranges_.reuse();
       }
       if (OB_FAIL(main_lookup_iter_->reuse())) {
+        LOG_WARN("fail to reuse data table iter", K(ret));
       }
     }
   }
@@ -203,12 +227,14 @@ int ObDASFuncDataIter::inner_reuse()
   } else if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(merge_memctx_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("merge_memctx_ is nullptr", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < iter_count_; i++) {
       if (OB_NOT_NULL(tr_merge_iters_[i])) {
         tr_merge_iters_[i]->reuse();
       } else {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("tr merge iter is nullptr", K(ret), K(i));
       }
     }
     merge_memctx_->reset_remain_one_page();
@@ -247,10 +273,13 @@ int ObDASFuncDataIter::inner_get_next_row()
   bool iter_end = false;
   if (OB_ISNULL(tr_merge_iters_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, tr merge iter is nullptr", K(ret));
   } else if (OB_UNLIKELY(1 != default_size)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, default size is not 1", K(ret), K(default_size));
   } else if (main_lookup_iter_ && OB_FAIL(main_lookup_iter_->get_next_row())) {
     if (OB_ITER_END != ret) {
+      LOG_WARN("fail to get next row for main lookup table", K(ret), KPC(main_lookup_iter_));
     } else {
       ret = OB_SUCCESS;
     }
@@ -259,6 +288,7 @@ int ObDASFuncDataIter::inner_get_next_row()
   for (int64_t i = 0; OB_SUCC(ret) && i < iter_count_; i++) {
     if (OB_FAIL(tr_merge_iters_[i]->get_next_row())) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("fail to get next row for tr merge iter", K(ret), K(i), KPC(tr_merge_iters_[i]));
       } else {
         ret = OB_SUCCESS;
         iter_end = true;
@@ -280,10 +310,12 @@ int ObDASFuncDataIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 
   if (OB_ISNULL(tr_merge_iters_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, tr merge iter is nullptr", K(ret));
   } else if (OB_NOT_NULL(main_lookup_iter_)) {
     while (OB_SUCC(ret) && main_lookup_count == 0) {
       if (OB_FAIL(main_lookup_iter_->get_next_rows(main_lookup_count, capacity))) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("fail to get next row for main lookup table", K(ret), KPC(main_lookup_iter_));
         }
       }
     }
@@ -293,6 +325,7 @@ int ObDASFuncDataIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(main_lookup_iter_ && default_size < main_lookup_count + read_count_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, main lookup count is not equal to capacity", K(ret), K(default_size), K(main_lookup_count), K_(read_count));
   }
 
   int tmp_count = 0;
@@ -301,6 +334,7 @@ int ObDASFuncDataIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     tr_merge_count = 0;
     if (OB_FAIL(tr_merge_iters_[i]->get_next_rows(tr_merge_count, tr_merge_capacity))) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("fail to get next rows for tr merge iter", K(ret), K(i), KPC(tr_merge_iters_[i]));
       } else {
         ret = OB_SUCCESS;
       }
@@ -308,16 +342,20 @@ int ObDASFuncDataIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(tmp_count != 0 && tmp_count != tr_merge_count)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error, tr merge count is not equal to tmp count", K(ret), K(tr_merge_count), K(tmp_count), K(i));
     } else if (OB_UNLIKELY(0 != tr_merge_count &&
                            tr_merge_count != tr_merge_capacity &&
                            tr_merge_count + read_count_ != default_size)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error, tr merge count is not equal to capacity",
+        K(ret), K(tr_merge_count), K(capacity), K(i), K_(read_count), K(default_size));
     } else {
       tmp_count = tr_merge_count;
     }
   }
   if (OB_SUCC(ret) && main_lookup_iter_ && tr_merge_count != main_lookup_count) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, tr merge count is not equal to main lookup count", K(ret), K(tr_merge_count), K(main_lookup_count));
   }
   if (OB_SUCC(ret)) {
     count = tr_merge_count;
@@ -333,20 +371,18 @@ int ObDASFuncDataIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 int ObDASFuncDataIter::build_tr_merge_iters_rangekey()
 {
   int ret = OB_SUCCESS;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_ISNULL(tr_merge_iters_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(eval_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(eval_ctx_->get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("unexpected error, tr merge iters is nullptr", K(ret));
   } else {
-    lib::ob_sort(doc_ids_.begin(), doc_ids_.end(),
-                 FtsDocIdCmp(cmp_func_, datum_access_ctx, &ret));
+    lib::ob_sort(doc_ids_.begin(), doc_ids_.end(), FtsDocIdCmp(cmp_func_, &ret));
     if (OB_FAIL(ret)) {
+      LOG_WARN("fail to sort doc id", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < iter_count_; i++) {
       ObDASTRMergeIter *tr_merge_iter = static_cast<ObDASTRMergeIter *>(tr_merge_iters_[i]);
       if (OB_FAIL(tr_merge_iter->set_children_iter_rangekey(doc_ids_, doc_ids_.count()))) {
+        LOG_WARN("fail to add doc id", K(ret));
       }
     }
   }
@@ -364,8 +400,10 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
   
   
   param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
+  param.ss_key_ranges_.set_attr(ObMemAttr("SParamSSKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr ctdef or rtdef", K(ret), KPC(ctdef), KPC(rtdef));
   } else {
     param.scan_allocator_ = &get_arena_allocator();
     param.allocator_ = &rtdef->stmt_allocator_;
@@ -378,6 +416,7 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.reserved_cell_count_ = ctdef->access_column_ids_.count();
     param.sql_mode_ = rtdef->sql_mode_;
     param.frozen_version_ = rtdef->frozen_version_;
+    param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
     param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
@@ -385,22 +424,25 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.op_ = rtdef->p_pd_expr_op_;
     param.row2exprs_projector_ = rtdef->p_row2exprs_projector_;
     param.schema_version_ = ctdef->schema_version_;
-    param.runtime_schema_version_ = rtdef->runtime_schema_version_;
+    param.tenant_schema_version_ = rtdef->tenant_schema_version_;
     param.limit_param_ = rtdef->limit_param_;
     param.need_scn_ = rtdef->need_scn_;
     param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     param.fb_snapshot_ = rtdef->fb_snapshot_;
+    param.fb_read_tx_uncommitted_ = rtdef->fb_read_tx_uncommitted_;
     if (rtdef->is_for_foreign_check_) {
       param.trans_desc_ = trans_desc;
     }
     if (OB_NOT_NULL(snapshot)) {
       if (OB_FAIL(param.snapshot_.assign(*snapshot))) {
+        LOG_WARN("assign snapshot fail", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null snapshot", K(ret), KPC(ctdef), KPC(rtdef));
     }
     if (OB_NOT_NULL(trans_desc)) {
-      param.tx_id_ = data_plane::tx_desc_id(trans_desc);
+      param.tx_id_ = trans_desc->get_tx_id();
     } else {
       param.tx_id_.reset();
     }
@@ -409,12 +451,14 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     }
     param.pd_storage_filters_ = rtdef->p_pd_expr_op_->pd_storage_filters_;
     if (OB_FAIL(param.column_ids_.assign(ctdef->access_column_ids_))) {
+      LOG_WARN("failed to assign column ids", K(ret));
     }
     if (rtdef->sample_info_ != nullptr) {
       param.sample_info_ = *rtdef->sample_info_;
     }
   }
 
+  LOG_DEBUG("init rowkey doc table scan param finished", K(param), K(ret));
   return ret;
 }
 

@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
 #include "sql/engine/aggregate/ob_hash_distinct_op.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -53,7 +52,7 @@ ObHashDistinctOp::ObHashDistinctOp(ObExecContext &exec_ctx, const ObOpSpec &spec
     bypass_ctrl_(),
     mem_context_(NULL)
 {
-  enable_sql_dumped_ = config::enable_sql_operator_dump();
+  enable_sql_dumped_ = GCONF.is_sql_operator_dump_enabled();
 }
 
 int ObHashDistinctOp::inner_open()
@@ -61,11 +60,18 @@ int ObHashDistinctOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == left_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: left is null", K(ret));
   } else if (OB_FAIL(ObOperator::inner_open())) {
+    LOG_WARN("failed to inner open", K(ret));
+  } else if (MY_SPEC.is_push_down_
+            && OB_FAIL(ctx_.get_my_session()
+                            ->get_sys_variable(share::SYS_VAR__GROUPBY_NOPUSHDOWN_CUT_RATIO,
+                                                                            bypass_ctrl_.cut_ratio_))) {
+    LOG_WARN("failed to get no pushdown cut ratio", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
+    LOG_WARN("failed to init mem context", K(ret));
   } else {
     first_got_row_ = true;
-    bypass_ctrl_.cut_ratio_ = ObAdaptiveByPassCtrl::INIT_CUT_RATIO;
     
     if (MY_SPEC.is_block_mode_) {
       get_next_row_func_ = &ObHashDistinctOp::do_block_distinct;
@@ -76,10 +82,14 @@ int ObHashDistinctOp::inner_open()
     }
     if (MY_SPEC.by_pass_enabled_) {
       CK (!MY_SPEC.is_block_mode_);
-      bypass_ctrl_.cut_ratio_ = ObAdaptiveByPassCtrl::INIT_CUT_RATIO;
+      // to avoid performance decrease, at least deduplicate 2/3
+      bypass_ctrl_.cut_ratio_ = (bypass_ctrl_.cut_ratio_ <= ObAdaptiveByPassCtrl::INIT_CUT_RATIO
+                                  ? ObAdaptiveByPassCtrl::INIT_CUT_RATIO : bypass_ctrl_.cut_ratio_);
       build_distinct_data_func_ = &ObHashDistinctOp::build_distinct_data_by_pass;
       build_distinct_data_batch_func_ = &ObHashDistinctOp::build_distinct_data_for_batch_by_pass;
     }
+    LOG_TRACE("trace block mode", K(MY_SPEC.is_block_mode_),
+                                  K(spec_.id_), K(MY_SPEC.is_push_down_));
   }
   return ret;
 }
@@ -88,6 +98,7 @@ int ObHashDistinctOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_close())) {
+    LOG_WARN("failed to inner close", K(ret));
   } else {
     reset();
   }
@@ -109,12 +120,14 @@ void ObHashDistinctOp::reset()
     get_next_row_func_ = &ObHashDistinctOp::do_unblock_distinct;
     get_next_batch_func_ = &ObHashDistinctOp::do_unblock_distinct_for_batch;
   }
+  LOG_TRACE("trace block mode", K(MY_SPEC.is_block_mode_), K(spec_.id_));
 }
 
 int ObHashDistinctOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
+    LOG_WARN("failed to rescan child operator", K(ret));
   } else {
     reset();
     iter_end_ = false;
@@ -139,15 +152,18 @@ int ObHashDistinctOp::init_hash_partition_infras()
   int64_t est_rows = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, est_rows, est_rows))) {
+    LOG_WARN("failed to get px size", K(ret));
   } else if (OB_FAIL(sql_mem_processor_.init(
                   &mem_context_->get_malloc_allocator(),
                   est_rows * MY_SPEC.width_,
                   MY_SPEC.type_,
                   MY_SPEC.id_,
                   &ctx_))) {
+    LOG_WARN("failed to init sql mem processor", K(ret));
   } else if (OB_FAIL(hp_infras_.init(
       enable_sql_dumped_,
       true, true, 2, &sql_mem_processor_))) {
+    LOG_WARN("failed to init hash partition infrastructure", K(ret));
   } else {
     hp_infras_.set_io_event_observer(&io_event_observer_);
     if (MY_SPEC.by_pass_enabled_) {
@@ -157,9 +173,12 @@ int ObHashDistinctOp::init_hash_partition_infras()
                                 MIN_BUCKET_COUNT, MAX_BUCKET_COUNT);
     if (OB_FAIL(hp_infras_.set_funcs(&MY_SPEC.hash_funcs_, &MY_SPEC.sort_collations_,
         &MY_SPEC.cmp_funcs_, &eval_ctx_))) {
+      LOG_WARN("failed to set funcs", K(ret));
     } else if (OB_FAIL(hp_infras_.start_round())) {
+      LOG_WARN("failed to start round", K(ret));
     } else if (OB_FAIL(hp_infras_.init_hash_table(est_bucket_num,
         MIN_BUCKET_COUNT, MAX_BUCKET_COUNT))) {
+      LOG_WARN("failed to init hash table", K(ret));
     } else {
       op_monitor_info_.otherstat_1_value_ = est_bucket_num;
       op_monitor_info_.otherstat_1_id_ = ObSqlMonitorStatIds::HASH_INIT_BUCKET_COUNT;
@@ -174,9 +193,13 @@ int ObHashDistinctOp::init_hash_partition_infras_for_batch()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_hash_partition_infras())) {
+    LOG_WARN("failed to get next row", K(ret));
   } else if (need_init_ && OB_FAIL(hp_infras_.init_my_skip(MY_SPEC.max_batch_size_))) {
+    LOG_WARN("failed to init hp skip", K(ret));
   } else if (need_init_ && OB_FAIL(hp_infras_.init_items(MY_SPEC.max_batch_size_))) {
+    LOG_WARN("failed to init items", K(ret));
   } else if (need_init_ && OB_FAIL(hp_infras_.init_distinct_map(MY_SPEC.max_batch_size_))) {
+    LOG_WARN("failed to init distinct map", K(ret));
   }
   return ret;
 }
@@ -199,28 +222,38 @@ int ObHashDistinctOp::build_distinct_data(bool is_block)
       ret = OB_SUCCESS;
       // get dumped partition
       if (OB_FAIL(hp_infras_.finish_insert_row())) {
+        LOG_WARN("failed to finish to insert row", K(ret));
       } else if (!has_got_part_) {
         has_got_part_ = true;
       } else {
         if (OB_FAIL(hp_infras_.close_cur_part(InputSide::LEFT))) {
+          LOG_WARN("failed to close cur part", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (is_block) {
         // If it is block mode, then after processing a batch of data (which may come from child or dump partition), start returning the data
+        LOG_TRACE("trace block", K(is_block));
         break;
       } else if (OB_FAIL(hp_infras_.end_round())) {
+        LOG_WARN("failed to end round", K(ret));
       } else if (OB_FAIL(hp_infras_.start_round())) {
+        LOG_WARN("failed to open round", K(ret));
       } else if (OB_FAIL(hp_infras_.get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("failed to create dumped partitions", K(ret));
         }
       } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::LEFT))) {
+        LOG_WARN("failed to open cur part");
       } else if (OB_FAIL(hp_infras_.resize(
           hp_infras_.get_cur_part_row_cnt(InputSide::LEFT)))) {
+        LOG_WARN("failed to init hash table", K(ret));
       }
     } else if (OB_FAIL(ret)) {
     } else if (OB_FAIL(try_check_status())) {
+      LOG_WARN("failed to check status", K(ret));
     } else if (OB_FAIL(hp_infras_.insert_row(MY_SPEC.distinct_exprs_, has_exists, inserted))) {
+      LOG_WARN("failed to insert row", K(ret));
     } else if (has_exists) {
       //Already in hash map, do nothing
     } else if (inserted && !is_block) {
@@ -247,20 +280,24 @@ int ObHashDistinctOp::build_distinct_data_by_pass(bool is_block)
     }
     if (OB_FAIL(child_->get_next_row())) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("failed to get next row", K(ret));
       }
     } else if (bypass_ctrl_.by_pass_) {
       break;
     } else {
       ++bypass_ctrl_.processed_cnt_;
       if (OB_FAIL(process_state(batch_size, can_insert))) {
+        LOG_WARN("failed to process state", K(ret));
       }
     }
     // in block mode, we put rows into preprocess store and do not need to open part
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(try_check_status())) {
+      LOG_WARN("failed to check status", K(ret));
     } else if (OB_FAIL(hp_infras_.
         do_insert_row_with_unique_hash_table_by_pass(MY_SPEC.distinct_exprs_, is_block, can_insert,
                                                               has_exists, inserted, bypass_ctrl_.by_pass_))) {
+      LOG_WARN("failed to insert row", K(ret));
     } else if (has_exists) {
       ++bypass_ctrl_.exists_cnt_;
     } else if (inserted) {
@@ -285,10 +322,12 @@ int ObHashDistinctOp::build_distinct_data_for_batch(const int64_t batch_size, bo
       if (child_op_is_end_) {
         finish_turn = true;
       } else if (OB_FAIL(child_->get_next_batch(batch_size, child_brs))) {
+        LOG_WARN("failed to get next batch from child op", K(ret), K(is_block));
       } else if (OB_FAIL(hp_infras_.calc_hash_value_for_batch(MY_SPEC.distinct_exprs_,
                                                               child_brs->size_,
                                                               child_brs->skip_,
                                                               hash_values_for_batch_))) {
+        LOG_WARN("failed to calc hash values batch for child", K(ret));
       } else {
         //child_op_is_end_ means last batch data is return, finish_turn means no data to process
         child_op_is_end_ = child_brs->end_ && (child_brs->size_ != 0);
@@ -304,6 +343,7 @@ int ObHashDistinctOp::build_distinct_data_for_batch(const int64_t batch_size, bo
         finish_turn = true;
         ret = OB_SUCCESS;
       } else {
+        LOG_WARN("failed to get next batch from hp infra", K(ret));
       }
     }
     if (OB_SUCC(ret) && finish_turn) {
@@ -311,40 +351,53 @@ int ObHashDistinctOp::build_distinct_data_for_batch(const int64_t batch_size, bo
       finish_turn = false;
       //get dump partition
       if (OB_FAIL(hp_infras_.finish_insert_row())) {
+        LOG_WARN("failed to finish insert row", K(ret));
       } else if (!has_got_part_) {
         has_got_part_ = true;
+        LOG_DEBUG("start get dumped partition", K(group_cnt_));
       } else {
         if (OB_FAIL(hp_infras_.close_cur_part(InputSide::LEFT))) {
+          LOG_WARN("failed to close curr part", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (is_block) {
         //if true, means we have process a full partition, then break the loop and return rows
         break;
+        LOG_TRACE("trace block", K(is_block));
       } else if (OB_FAIL(hp_infras_.end_round())) {
+        LOG_WARN("failed to end round", K(ret));
       } else if (OB_FAIL(hp_infras_.start_round())) {
+        LOG_WARN("failed to start round", K(ret));
       } else if (OB_FAIL(hp_infras_.get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("failed to get next dump partition", K(ret));
         }
       } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::LEFT))) {
+        LOG_WARN("failed to open curr part", K(ret));
       } else if (OB_FAIL(hp_infras_.resize(hp_infras_.get_cur_part_row_cnt(InputSide::LEFT)))) {
+        LOG_WARN("failed to init hash table", K(ret));
       }
     } else if (OB_FAIL(ret)) {
     } else if (OB_FAIL(try_check_status())) {
+      LOG_WARN("failed to check status", K(ret));
     } else if (!has_got_part_
                && OB_FAIL(hp_infras_.insert_row_for_batch(MY_SPEC.distinct_exprs_,
                                                           hash_values_for_batch_,
                                                           read_rows,
                                                           child_brs->skip_,
                                                           output_vec))) {
+      LOG_WARN("failed to insert batch rows, no dump", K(ret));
     } else if (has_got_part_
                && OB_FAIL(hp_infras_.insert_row_for_batch(MY_SPEC.distinct_exprs_,
                                                           hash_values_for_batch_,
                                                           read_rows,
                                                           nullptr,
                                                           output_vec))) {
+      LOG_WARN("failed to insert batch rows, dump", K(ret));
     } else if (OB_ISNULL(output_vec)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get output vector", K(ret));
     } else if (!is_block) {
       brs_.size_ = read_rows;
       brs_.skip_->deep_copy(*output_vec, read_rows);
@@ -379,6 +432,7 @@ int ObHashDistinctOp::build_distinct_data_for_batch_by_pass(const int64_t batch_
     clear_evaluated_flag();
     if (bypass_ctrl_.by_pass_) {
       if (OB_FAIL(by_pass_get_next_batch(batch_size))) {
+        LOG_WARN("failed to get next batch", K(ret));
       }
       break;
     }
@@ -386,10 +440,12 @@ int ObHashDistinctOp::build_distinct_data_for_batch_by_pass(const int64_t batch_
     } else if (child_op_is_end_) {
       finish_turn = true;
     } else if (OB_FAIL(child_->get_next_batch(batch_size, child_brs))) {
+      LOG_WARN("failed to get next batch from child op", K(ret));
     } else if (OB_FAIL(hp_infras_.calc_hash_value_for_batch(MY_SPEC.distinct_exprs_,
                                                             child_brs->size_,
                                                             child_brs->skip_,
                                                             hash_values_for_batch_))) {
+      LOG_WARN("failed to calc hash values batch for child", K(ret));
     } else {
       int64_t add_cnt = (child_brs->size_
                             - (child_brs->skip_->accumulate_bit_cnt(child_brs->size_)));
@@ -399,12 +455,14 @@ int ObHashDistinctOp::build_distinct_data_for_batch_by_pass(const int64_t batch_
       finish_turn = child_brs->end_ && (0 == child_brs->size_);
       read_rows = child_brs->size_;
       if (OB_FAIL(process_state(add_cnt, can_insert))) {
+        LOG_WARN("failed to process state ", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (finish_turn) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(try_check_status())) {
+      LOG_WARN("failed to check status", K(ret));
     } else if (OB_FAIL(hp_infras_.
                          do_insert_batch_with_unique_hash_table_by_pass(MY_SPEC.distinct_exprs_,
                                                                         hash_values_for_batch_,
@@ -415,8 +473,10 @@ int ObHashDistinctOp::build_distinct_data_for_batch_by_pass(const int64_t batch_
                                                                         exists_count,
                                                                         bypass_ctrl_.by_pass_,
                                                                         output_vec))) {
+      LOG_WARN("failed to insert batch rows, no dump", K(ret));
     } else if (OB_ISNULL(output_vec)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get output vector", K(ret));
     } else {
       bypass_ctrl_.exists_cnt_ += exists_count;
       brs_.size_ = read_rows;
@@ -440,13 +500,16 @@ int ObHashDistinctOp::do_unblock_distinct()
   int ret = OB_SUCCESS;
   if (first_got_row_) {
     if (OB_FAIL(init_hash_partition_infras())) {
+      LOG_WARN("failed to get next row", K(ret));
     }
     first_got_row_ = false;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(((this->*build_distinct_data_func_)(false)))) {
     if (OB_ITER_END != ret) {
+      LOG_WARN("failed to build distinct data", K(ret));
     } else {
+      LOG_TRACE("trace iter end", K(ret));
     }
   }
   return ret;
@@ -454,14 +517,17 @@ int ObHashDistinctOp::do_unblock_distinct()
 
 int ObHashDistinctOp::do_unblock_distinct_for_batch(const int64_t batch_size)
 {
+  LOG_DEBUG("calc unblock hash distinct batch mode", K(batch_size));
   int ret = OB_SUCCESS;
   if (first_got_row_) {
     if (OB_FAIL(init_hash_partition_infras_for_batch())) {
+      LOG_WARN("failed to init hash infra for batch", K(ret));
     }
     first_got_row_ = false;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(((this->*build_distinct_data_batch_func_)(batch_size, false)))) {
+    LOG_WARN("failed to build distinct data for batch", K(ret));
   }
   return ret;
 }
@@ -472,11 +538,14 @@ int ObHashDistinctOp::do_block_distinct()
   const ObChunkDatumStore::StoredRow *store_row = nullptr;
   if (first_got_row_) {
     if (OB_FAIL(init_hash_partition_infras())) {
+      LOG_WARN("failed to get next row", K(ret));
     } else if (OB_FAIL((this->*build_distinct_data_func_)(true))) {
       if (OB_ITER_END == ret) {
         ret = OB_ERR_UNEXPECTED;
       }
+      LOG_WARN("failed to build distinct data", K(ret));
     } else if (OB_FAIL(hp_infras_.open_hash_table_part())) {
+      LOG_WARN("failed to open hash table part", K(ret));
     }
     // Here we perform clear mainly to ensure that if distinct_exprs has been assigned a value during dump, not cleaning it could lead to calculated values not being overwritten
     clear_evaluated_flag();
@@ -486,21 +555,30 @@ int ObHashDistinctOp::do_block_distinct()
   } else if (OB_FAIL(hp_infras_.get_next_hash_table_row(store_row, &MY_SPEC.distinct_exprs_))) {
     if (OB_ITER_END == ret) {
       if (OB_FAIL(hp_infras_.end_round())) {
+        LOG_WARN("failed to end round", K(ret));
       } else if (OB_FAIL(hp_infras_.start_round())) {
+        LOG_WARN("failed to open round", K(ret));
       } else if (OB_FAIL(hp_infras_.get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("failed to create dumped partitions", K(ret));
         }
       } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::LEFT))) {
+        LOG_WARN("failed to open cur part");
       } else if (OB_FAIL(hp_infras_.resize(
           hp_infras_.get_cur_part_row_cnt(InputSide::LEFT)))) {
+        LOG_WARN("failed to init hash table", K(ret));
       } else if (OB_FAIL((this->*build_distinct_data_func_)(true))) {
         if (OB_ITER_END == ret) {
           ret = OB_ERR_UNEXPECTED;
         }
+        LOG_WARN("failed to build distinct data", K(ret));
       } else if (OB_FAIL(hp_infras_.open_hash_table_part())) {
+        LOG_WARN("failed to open hash table part", K(ret));
       } else if (OB_FAIL(hp_infras_.get_next_hash_table_row(store_row, &MY_SPEC.distinct_exprs_))) {
+        LOG_WARN("failed to get next row in hash table", K(ret));
       }
     } else {
+      LOG_WARN("failed to get next row in hash table", K(ret));
     }
   } else {
     ++group_cnt_;
@@ -509,11 +587,15 @@ int ObHashDistinctOp::do_block_distinct()
 }
 
 int ObHashDistinctOp::do_block_distinct_for_batch(const int64_t batch_size) {
+  LOG_DEBUG("calc block hash distinct batch mode", K(batch_size));
   int ret = OB_SUCCESS;
   if (first_got_row_) {
     if (OB_FAIL(init_hash_partition_infras_for_batch())) {
+      LOG_WARN("failed to init hash infra for batch", K(ret));
     } else if (OB_FAIL(((this->*build_distinct_data_batch_func_)(batch_size, true)))) {
+      LOG_WARN("failed to build distinct data", K(ret));
     } else if (OB_FAIL(hp_infras_.open_hash_table_part())) {
+      LOG_WARN("failed to open hash table part", K(ret));
     }
     clear_evaluated_flag();
     first_got_row_ = false;
@@ -528,23 +610,32 @@ int ObHashDistinctOp::do_block_distinct_for_batch(const int64_t batch_size) {
       //partition in infra is run out， read_size <= batch_size
       if (OB_ITER_END == ret) {
         if (OB_FAIL(hp_infras_.end_round())) {
+          LOG_WARN("failed to end round", K(ret));
         } else if (OB_FAIL(hp_infras_.start_round())) {
+          LOG_WARN("failed to start round", K(ret));
         } else if (OB_FAIL(hp_infras_.get_next_partition(InputSide::LEFT))) {
           if (OB_ITER_END != ret) {
+            LOG_WARN("failed to get dumped partitions", K(ret));
           }
         } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::LEFT))) {
+          LOG_WARN("failed to open cur part", K(ret));
         } else if (OB_FAIL(hp_infras_.resize(hp_infras_.get_cur_part_row_cnt(InputSide::LEFT)))) {
+          LOG_WARN("failed to init hashtable", K(ret));
         } else if (OB_FAIL(((this->*build_distinct_data_batch_func_)(batch_size, true)))) {
+          LOG_WARN("failed to build distinct data for batch", K(ret));
         } else if (OB_FAIL(hp_infras_.open_hash_table_part())) {
+          LOG_WARN("failed to open hash table part", K(ret));
         } else if (OB_FAIL(hp_infras_.get_next_hash_table_batch(MY_SPEC.distinct_exprs_,
                                                                 batch_size,
                                                                 read_rows,
                                                                 nullptr))) {
+          LOG_WARN("failed to get next row in hash table", K(ret));
         } else {
           group_cnt_ += read_rows;
           brs_.size_ = read_rows;
         }
       } else {
+        LOG_WARN("failed to get next batch in hash table", K(ret));
       }
     } else {
       group_cnt_ += read_rows;
@@ -569,8 +660,10 @@ int ObHashDistinctOp::inner_get_next_row()
     ret = OB_ITER_END;
   } else if (OB_UNLIKELY(nullptr == get_next_row_func_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get next row func is null", K(ret));
   } else if (OB_FAIL((this->*get_next_row_func_)())) {
     if (OB_ITER_END != ret) {
+      LOG_WARN("failed to get next row", K(ret));
     } else {
       op_monitor_info_.otherstat_2_value_ = group_cnt_;
       op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::HASH_ROW_COUNT;
@@ -595,14 +688,17 @@ int ObHashDistinctOp::inner_get_next_batch(const int64_t max_row_cnt)
     brs_.end_ = true;
   } else if (OB_UNLIKELY(OB_ISNULL(get_next_batch_func_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get next batch func is nullptr", K(ret));
   } else if (need_init_) {
     if (OB_ISNULL(hash_values_for_batch_
                   = static_cast<uint64_t *> (ctx_.get_allocator().alloc(MY_SPEC.max_batch_size_ * sizeof(uint64_t))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to init hash values for batch", K(ret), K(MY_SPEC.max_batch_size_));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL((this->*get_next_batch_func_)(batch_size))) {
+    LOG_WARN("failed to get next batch", K(ret));
   } else if (brs_.end_) {
     op_monitor_info_.otherstat_2_value_ = group_cnt_;
     op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::HASH_ROW_COUNT;
@@ -621,6 +717,7 @@ int ObHashDistinctOp::by_pass_get_next_batch(const int64_t batch_size)
   int ret = OB_SUCCESS;
   const ObBatchRows *child_brs = nullptr;
   if (OB_FAIL(child_->get_next_batch(batch_size, child_brs))) {
+    LOG_WARN("failed to get next batcn", K(ret));
   } else {
     brs_.size_ = child_brs->size_;
     group_cnt_ += (child_brs->size_ - child_brs->skip_->accumulate_bit_cnt(batch_size));
@@ -671,6 +768,7 @@ int ObHashDistinctOp::process_state(int64_t probe_cnt, bool &can_insert)
       if (hp_infras_.hash_table_full()) {
         bypass_ctrl_.state_ = ObAdaptiveByPassCtrl::STATE_L3_INSERT;
         if (OB_FAIL(hp_infras_.extend_hash_table_l3())) {
+          LOG_WARN("failed to extend hash table", K(ret));
         }
       } else {
         bypass_ctrl_.state_ = ObAdaptiveByPassCtrl::STATE_PROBE;
@@ -700,6 +798,7 @@ int ObHashDistinctOp::init_mem_context()
     param.set_mem_attr("ObHashDistRows",
         ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
+      LOG_WARN("memory entity create failed", K(ret));
     }
   }
   return ret;

@@ -1,0 +1,81 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef CORO_TESTING_H
+#define CORO_TESTING_H
+
+#include <functional>
+#include <thread>
+#include <vector>
+
+#include "lib/thread/thread_pool.h"
+
+namespace cotesting {
+//// Flexible worker pool
+//
+class FlexPool
+{
+public:
+  FlexPool() {}
+
+  FlexPool(std::function<void ()> func, int thes) : func_(func), thes_(thes)
+  {
+  }
+
+  void start(bool wait = true)
+  {
+    for (auto i = 0; i < thes_ ; ++i) {
+      th_pools_.push_back(std::thread(func_));
+    }
+    if (wait) {
+      this->wait();
+    }
+  }
+
+  void wait()
+  {
+    for (auto& th : th_pools_) {
+      th.join();
+    }
+  }
+
+private:
+  std::function<void ()> func_;
+  int thes_;
+  std::vector<std::thread> th_pools_;
+};
+
+// Mock lib::ThreadPool
+using DefaultRunnable = oceanbase::lib::ThreadPool;
+
+// Give an assurance that executing time of the given function must
+// less than specific time.
+//
+// Use macro instead of function because error message in function can
+// only contain the most inner function location and outsider location
+// would been ignored. It's not acceptable when many TIME_LESS
+// functions exist outside.
+#define TIME_LESS(time, func)                                                 \
+  ({                                                                          \
+    const auto start_ts = ::oceanbase::common::ObTimeUtility::current_time(); \
+    {func();}                                                                 \
+    const auto end_ts = ::oceanbase::common::ObTimeUtility::current_time();   \
+    EXPECT_LT(end_ts - start_ts, (time));                                     \
+  })
+
+}  // cotesting
+
+#endif /* CORO_TESTING_H */

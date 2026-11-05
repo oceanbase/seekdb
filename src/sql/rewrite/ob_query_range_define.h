@@ -311,6 +311,7 @@ struct ObQueryRangeCtx
       geo_column_id_map_(nullptr),
       max_mem_size_(128*1024*1024),
       enable_not_in_range_(true),
+      optimizer_features_enable_version_(0),
       index_prefix_(-1),
       is_geo_range_(false),
       can_range_get_(true),
@@ -351,6 +352,7 @@ struct ObQueryRangeCtx
   const ColumnIdInfoMap *geo_column_id_map_;
   int64_t max_mem_size_;
   bool enable_not_in_range_;
+  uint64_t optimizer_features_enable_version_;
   int64_t index_prefix_;
   bool is_geo_range_;
   bool can_range_get_;
@@ -377,7 +379,9 @@ public:
     contain_exec_param_(false),
     column_metas_(alloc),
     range_map_(alloc),
+    skip_scan_offset_(-1),
     range_exprs_(alloc),
+    ss_range_exprs_(alloc),
     unprecise_range_exprs_(alloc),
     total_range_sizes_(alloc),
     range_expr_max_offsets_(alloc),
@@ -387,6 +391,7 @@ public:
   virtual ~ObPreRangeGraph() { reset(); }
 
   void reset();
+  virtual inline bool is_new_query_range() const { return true; }
   virtual int deep_copy(const ObPreRangeGraph &other);
 
   int deep_copy_range_graph(ObRangeNode *src_node);
@@ -428,6 +433,10 @@ public:
                                          ObQueryRangeArray &ranges,
                                          const common::ObDataTypeCastParams &dtc_params) const;
   int fill_column_metas(const ObIArray<ColumnItem> &range_columns);
+  virtual int get_ss_tablet_ranges(common::ObIAllocator &allocator,
+                                   ObExecContext &exec_ctx,
+                                   ObQueryRangeArray &ss_ranges,
+                                   const common::ObDataTypeCastParams &dtc_params) const;
   virtual bool is_precise_whole_range() const { return (nullptr == node_head_) || (node_head_->always_true_); }
   virtual int is_get(bool &is_get) const
   {
@@ -439,10 +448,18 @@ public:
   bool is_equal_range() const override { return is_equal_range_; }
   virtual int64_t get_column_count() const { return column_count_; }
   virtual bool has_exec_param() const { return contain_exec_param_; }
+  virtual bool is_ss_range() const { return skip_scan_offset_ > -1; }
+  virtual int64_t get_skip_scan_offset() const { return skip_scan_offset_; }
+  virtual int reset_skip_scan_range()
+  {
+    skip_scan_offset_ = -1;
+    return common::OB_SUCCESS;
+  }
   virtual inline bool has_range() const { return column_count_ > 0; }
   virtual bool is_contain_geo_filters() const { return contain_geo_filters_; }
   inline void reset_range_exprs() { range_exprs_.reset(); }
   virtual const common::ObIArray<ObRawExpr*> &get_range_exprs() const { return range_exprs_; }
+  virtual const common::ObIArray<ObRawExpr*> &get_ss_range_exprs() const { return ss_range_exprs_; }
   virtual const common::ObIArray<ObRawExpr*> &get_unprecise_range_exprs() const { return unprecise_range_exprs_; }
   virtual int get_prefix_info(int64_t &equal_prefix_count,
                               int64_t &range_prefix_count,
@@ -483,7 +500,9 @@ public:
   void set_is_equal_range(const bool v) { is_equal_range_ = v; }
   void set_is_get(const bool v) { is_get_ = v; }
   void set_contain_exec_param(const bool v) { contain_exec_param_ = v; }
+  void set_skip_scan_offset(int64_t v) { skip_scan_offset_ = v; }
   int set_range_exprs(ObIArray<ObRawExpr*> &range_exprs) { return range_exprs_.assign(range_exprs); }
+  int set_ss_range_exprs(ObIArray<ObRawExpr*> &range_exprs) { return ss_range_exprs_.assign(range_exprs); }
   int set_unprecise_range_exprs(ObIArray<ObRawExpr*> &range_exprs) { return unprecise_range_exprs_.assign(range_exprs); }
   void set_fast_nlj_range(bool v) { fast_nlj_range_ = v; }
   
@@ -565,8 +584,10 @@ private:
   bool contain_exec_param_;
   common::ObFixedArray<ObRangeColumnMeta*, common::ObIAllocator> column_metas_;
   ObRangeMap range_map_;
+  int64_t skip_scan_offset_;
   // only used by optimizer, don't need to serialize it
   common::ObFixedArray<ObRawExpr*, common::ObIAllocator> range_exprs_;
+  common::ObFixedArray<ObRawExpr*, common::ObIAllocator> ss_range_exprs_;
   common::ObFixedArray<ObRawExpr*, common::ObIAllocator> unprecise_range_exprs_;
   common::ObFixedArray<uint64_t, common::ObIAllocator> total_range_sizes_;
   common::ObFixedArray<int64_t, common::ObIAllocator> range_expr_max_offsets_;

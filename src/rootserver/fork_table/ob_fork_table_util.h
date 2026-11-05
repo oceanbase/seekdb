@@ -44,15 +44,12 @@ namespace schema
 class ObSchemaGetterGuard;
 class ObTableSchema;
 }
-}
 
-namespace rootserver
-{
 class ObForkTableUtil final
 {
 public:
   static int collect_tablet_ids_from_table(
-      share::schema::ObSchemaGetterGuard &schema_guard,
+      schema::ObSchemaGetterGuard &schema_guard,
       const uint64_t table_id,
       common::ObIArray<common::ObTabletID> &tablet_ids);
 
@@ -90,19 +87,20 @@ public:
   // Obtain snapshot for multiple tables at once to ensure consistency
   static int obtain_snapshot(
       common::ObMySQLTransaction &trans,
-      share::schema::ObSchemaGetterGuard &schema_guard,
+      schema::ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<const share::schema::ObTableSchema*> &data_table_schemas,
       int64_t &new_fetched_snapshot);
 
   // Release snapshot for multiple tables at once
   static int release_snapshot(
       rootserver::ObDDLTask* task,
-      share::schema::ObSchemaGetterGuard &schema_guard,
+      schema::ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<uint64_t> &table_ids,
       const int64_t snapshot_version);
 };
 
-} // namespace rootserver
+} // namespace share
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_OB_FORK_TABLE_UTIL_H
+

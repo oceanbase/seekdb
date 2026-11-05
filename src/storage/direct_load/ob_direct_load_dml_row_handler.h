@@ -1,0 +1,90 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#pragma once
+
+#include "lib/container/ob_array.h"
+#include "lib/utility/ob_print_utils.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObTabletID;
+} // namespace common
+namespace blocksstable
+{
+class ObDatumRow;
+class ObBatchDatumRows;
+} // namespace blocksstable
+namespace storage
+{
+class ObDirectLoadDatumRow;
+class ObDirectLoadExternalRow;
+class ObDirectLoadMultipleDatumRow;
+
+class ObDirectLoadDMLRowHandler
+{
+public:
+  ObDirectLoadDMLRowHandler() = default;
+  virtual ~ObDirectLoadDMLRowHandler() = default;
+
+  /**
+   * handle rows direct insert into sstable
+   */
+  // ObDirectLoadDatumRow without multi version cols
+  virtual int handle_insert_row(const ObTabletID &tablet_id,
+                                const ObDirectLoadDatumRow &datum_row) = 0;
+  virtual int handle_delete_row(const ObTabletID &tablet_id,
+                                const ObDirectLoadDatumRow &datum_row) = 0;
+  // ObDatumRow with multi version cols
+  // Heap table import insert non-vectorized interface usage
+  virtual int handle_insert_row(const ObTabletID &tablet_id,
+                                const blocksstable::ObDatumRow &datum_row) = 0;
+  // ObBatchDatumRows with multi version cols
+  // Heap table import insert vectorized interface usage
+  virtual int handle_insert_batch(const ObTabletID &tablet_id,
+                                  const blocksstable::ObBatchDatumRows &datum_rows) = 0;
+
+  /**
+   * handle rows with the same primary key in the imported data
+   */
+  virtual int handle_update_row(const ObTabletID &tablet_id,
+                                const ObDirectLoadDatumRow &row) = 0;
+  virtual int handle_update_row(const ObTabletID &tablet_id,
+                                common::ObArray<const ObDirectLoadExternalRow *> &rows,
+                                const ObDirectLoadExternalRow *&row) = 0;
+  virtual int handle_update_row(common::ObArray<const ObDirectLoadMultipleDatumRow *> &rows,
+                                const ObDirectLoadMultipleDatumRow *&row) = 0;
+
+  /**
+   * handle rows with the same primary key between the imported data and the original data
+   */
+  virtual int handle_update_row(const ObTabletID &tablet_id,
+                                const ObDirectLoadDatumRow &old_row,
+                                const ObDirectLoadDatumRow &new_row,
+                                const ObDirectLoadDatumRow *&result_row) = 0;
+
+  /**
+   * handle insert row conflict with delete row
+   */
+  virtual int handle_insert_delete_conflict(const ObTabletID &tablet_id,
+                                         const ObDirectLoadDatumRow &datum_row) = 0;
+
+  DECLARE_PURE_VIRTUAL_TO_STRING;
+};
+
+} // namespace storage
+} // namespace oceanbase

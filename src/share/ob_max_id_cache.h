@@ -54,6 +54,7 @@ public:
 private:
   ObMaxIdCacheItem object_id_cache_;
   ObMaxIdCacheItem normal_rowid_table_tablet_id_cache_;
+  ObMaxIdCacheItem extended_rowid_table_tablet_id_cache_;
 };
 
 class ObMaxIdCacheMgr
@@ -63,14 +64,15 @@ public:
   void reset();
   // return [id, id + size - 1)
   int fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
-      const uint64_t size, bool init_runtime_if_not_exist = true);
+      const uint64_t size, bool init_tenant_if_not_exist = true);
   ObMaxIdCacheMgr();
   ~ObMaxIdCacheMgr();
 private:
-  int add_runtime_cache_();
+  int add_tenant_();
+  // switch rs will clean redundant tenant
   int remove_cache_(ObMaxIdCache *cache);
 private:
-  ObMaxIdCache *runtime_cache_ = nullptr;
+  ObMaxIdCache *tenant_cache_ = nullptr; // single-tenant
   ObMemAttr attr_;
   ObArenaAllocator allocator_;
   bool inited_;

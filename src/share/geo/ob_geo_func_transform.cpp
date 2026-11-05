@@ -44,7 +44,7 @@ private:
   {
     int ret = OB_SUCCESS;
     lib::ObMemAttr last_mem_attr = lib::ObMallocHookAttrGuard::get_tl_mem_attr();
-    lib::ObMallocHookAttrGuard boost_cache_guard(lib::ObMemAttr("BoostCache"));
+    lib::ObMallocHookAttrGuard tmp_500(lib::ObMemAttr("BoostCache"));
     boost::geometry::srs::proj4 src_proj4(context.get_val_arg(0)->string_->ptr());
     boost::geometry::srs::proj4 dest_proj4(context.get_val_arg(1)->string_->ptr());
     boost::geometry::srs::transformation<> transformer(src_proj4, dest_proj4);
@@ -53,12 +53,14 @@ private:
     PtResType *dest_geo = NULL;
     if (OB_ISNULL(dest_geo = OB_NEWx(PtResType, (context.get_allocator()), g->get_srid(), context.get_allocator()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       transformer.forward(*src_geo, *dest_geo);
       double x = fabs((reinterpret_cast<ObPoint*>(dest_geo))->x());
       double y = fabs((reinterpret_cast<ObPoint*>(dest_geo))->y());
       if (isnan(x) || x == INFINITY || isnan(y) || y == INFINITY) {
         ret = OB_ERROR_OUT_OF_RANGE;
+        LOG_WARN("target geometry out of range", K(ret));
       } else {
         result = dest_geo;
       }
@@ -74,11 +76,13 @@ private:
     common::ObIAllocator *alloc = context.get_allocator();
     if (OB_ISNULL(alloc)) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("unexpected null allocator for transform functor", K(ret));
     } else if (OB_ISNULL(dest_geo = OB_NEWx(GeometryResType, alloc, g->get_srid(), *alloc))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to create geo by type", K(ret));
     } else {
       lib::ObMemAttr last_mem_attr = lib::ObMallocHookAttrGuard::get_tl_mem_attr();
-      lib::ObMallocHookAttrGuard boost_cache_guard(lib::ObMemAttr("BoostCache"));
+      lib::ObMallocHookAttrGuard tmp_500(lib::ObMemAttr("BoostCache"));
       boost::geometry::srs::proj4 src_proj4(context.get_val_arg(0)->string_->ptr());
       boost::geometry::srs::proj4 dest_proj4(context.get_val_arg(1)->string_->ptr());
       boost::geometry::srs::transformation<> transformer(src_proj4, dest_proj4);
@@ -100,8 +104,10 @@ private:
     common::ObIAllocator *alloc = context.get_allocator();
     if (OB_ISNULL(alloc)) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("unexpected null allocator for transform functor", K(ret));
     } else if (OB_ISNULL(dest_geo = OB_NEWx(GCOutType, alloc, 0, *alloc))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to create geometry collection", K(ret));
     } else {
       typename GCInType::iterator iter = src_geo->begin();
       typename GCInType::const_pointer sub_ptr;
@@ -114,46 +120,55 @@ private:
         switch (sub_type) {
           case ObGeoType::POINT : {
             if (OB_FAIL(Eval<PtInType>::eval(&sub_geo, context, sub_res))) {
+              LOG_WARN("failed to eval point for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::LINESTRING : {
             if (OB_FAIL(Eval<LineInType>::eval(&sub_geo, context, sub_res))) {
+              LOG_WARN("failed to eval linestring for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::POLYGON : {
             if (OB_FAIL(Eval<PolyInType>::eval(&sub_geo, context, sub_res))) {
+              LOG_WARN("failed to eval polygon for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::MULTIPOINT : {
             if (OB_FAIL(Eval<MPtInType>::eval(&sub_geo, context, sub_res))) {
+              LOG_WARN("failed to eval multipoint for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::MULTILINESTRING : {
             if (OB_FAIL(Eval<MLineInType>::eval(&sub_geo, context, sub_res))) {
+              LOG_WARN("failed to eval multilinestring for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::MULTIPOLYGON : {
             if (OB_FAIL(Eval<MPolyInType>::eval(&sub_geo, context, sub_res))) {
+              LOG_WARN("failed to eval multipolygon for geometry collection", K(ret));
             }
             break;
           }
           case ObGeoType::GEOMETRYCOLLECTION : {
             if (OB_FAIL(Eval<GCInType>::eval(&sub_geo, context, sub_res))) {
+              LOG_WARN("failed to eval geometrycollection for geometry collection", K(ret));
             }
             break;
           }
           default : {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected geometry type", K(ret));
           }
 
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(dest_geo->push_back(*sub_res))) {
+            LOG_WARN("failed to push back to geo", K(ret));
           }
         }
       }

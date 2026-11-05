@@ -26,10 +26,13 @@
 
 namespace oceanbase
 {
+namespace blocksstable
+{
+class ObMicroBlockCacheKey;
+}
 namespace common
 {
 class ObKVCacheIterator;
-class ObKVCacheInstMap;
 class HazptrHolder;
 class ObKVCacheMap
 {
@@ -43,10 +46,11 @@ class ObKVCacheMap
 public:
   ObKVCacheMap();
   virtual ~ObKVCacheMap();
-  int init(const int64_t bucket_num, ObKVCacheStore *store, ObKVCacheInstMap *inst_map);
+  int init(const int64_t bucket_num, ObKVCacheStore *store);
   void destroy();
   int erase_all();
   int erase_all(const int64_t cache_id);
+  int erase_tenant(const bool force_erase = false);
   int clean_garbage_node(int64_t &start_pos, const int64_t clean_num);
   int replace_fragment_node(int64_t &start_pos, int64_t &replace_node_count, const int64_t replace_num);
   int put(
@@ -61,16 +65,9 @@ public:
     const ObIKVCacheValue *&pvalue,
     HazptrHolder &hazptr_holder);
   int erase(const int64_t cache_id, const ObIKVCacheKey &key);
+  int get_batch_data_block_cache_key(const int bucket_count, ObIArray<blocksstable::ObMicroBlockCacheKey> &keys);
   OB_INLINE int64_t get_bucket_num() const { return bucket_num_; }
   OB_INLINE ObLfFIFOAllocator *get_node_allocator() { return &node_allocator_; }
-  int64_t get_managed_used() const
-  {
-    const int64_t bucket_group_count =
-        bucket_size_ > 0 ? (bucket_num_ + bucket_size_ - 1) / bucket_size_ : 0;
-    return node_allocator_.allocated()
-        + bucket_num_ * static_cast<int64_t>(sizeof(Node *))
-        + bucket_group_count * static_cast<int64_t>(sizeof(Bucket));
-  }
   void print_hazard_version_info();
 private:
   friend class ObKVCacheIterator;
@@ -133,7 +130,6 @@ private:
   Bucket *buckets_;
   ObBucketLock bucket_lock_;
   ObKVCacheStore *store_;
-  ObKVCacheInstMap *inst_map_;
   ObKVCacheHazardStation global_hazard_station_;
 };
 

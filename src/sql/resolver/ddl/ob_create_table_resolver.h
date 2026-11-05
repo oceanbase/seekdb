@@ -114,17 +114,23 @@ private:
   int get_resolve_stats_from_table_schema(const share::schema::ObTableSchema &table_schema,
                                           ObArray<ObColumnResolveStat> &stats);
   virtual int get_table_schema_for_check(const share::schema::ObTableSchema *&table_schema) override;
-  // Temporary table helper functions.
+  int add_new_column_for_oracle_temp_table(share::schema::ObTableSchema &table_schema, ObArray<ObColumnResolveStat> &stats);
+  int add_new_indexkey_for_oracle_temp_table(const int32_t org_key_len);
+  int add_pk_key_for_oracle_temp_table(ObArray<ObColumnResolveStat> &stats, int64_t &pk_data_length);
+  int set_partition_info_for_oracle_temp_table(share::schema::ObTableSchema &table_schema);
+  // following four functions should be used only in oracle mode
 
   typedef common::hash::ObPlacementHashSet<uint64_t, common::OB_MAX_USER_DEFINED_COLUMNS_COUNT> VPColumnIdHashSet;
+  uint64_t gen_column_group_id();
   int add_inner_index_for_heap_gtt();
   int check_max_row_data_length(const ObTableSchema &table_schema);  
   int set_default_micro_index_clustered_(share::schema::ObTableSchema &table_schema);
   int resolve_primary_key_node_in_heap_table(const ParseNode *element, common::ObArray<ObColumnResolveStat> &stats,
                                              ObSEArray<ObColumnSchemaV2, SEARRAY_INIT_NUM> &resolved_cols);
   int resolve_single_column_primary_key_node(const ParseNode *column_list_node, ObTableSchema &tbl_schema, bool &process_heap_table_primary_key, ObString &first_column_name);
-  int uk_or_heap_table_pk_add_to_index_list(ObArray<int> &index_node_position_list, const int32_t node_index);
+  int uk_or_heap_table_pk_add_to_index_list(ObArray<int> &index_node_position_list, const int32_t node_index);  int set_default_enable_macro_block_bloom_filter_(share::schema::ObTableSchema &table_schema);
   int check_building_domain_index_legal();
+  int set_default_merge_engine_type_(share::schema::ObTableSchema &table_schema);
 
 private:
   // data members

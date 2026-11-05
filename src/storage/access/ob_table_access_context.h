@@ -23,6 +23,7 @@
 #include "storage/tx/ob_defensive_check_mgr.h"
 #include "share/scn.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
+#include "storage/column_store/ob_i_cg_iterator.h"
 #include "share/ob_fork_table_info.h"
 
 namespace oceanbase
@@ -40,6 +41,7 @@ namespace storage
 template<typename T>
 class ObStoreRowIterPool;
 class ObBlockRowStore;
+class ObCGIterParamPool;
 struct ObTableScanRange;
 class ObTruncatePartitionFilter;
 
@@ -79,7 +81,7 @@ struct ObTableScanStoreStat
   {
     MEMSET(this, 0, sizeof(ObTableScanStoreStat));
   }
-  // for rescan query, keep row cache and bloom filter stats unchanged
+  // for rescan query, keep row cache and bf releated stats unchanged
   OB_INLINE void reuse()
   {
     block_cache_hit_cnt_ = 0;
@@ -113,8 +115,8 @@ public:
   }
   OB_INLINE bool enable_bf_cache() const
   {
-    return bf_access_cnt_ < common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM
-           || bf_filter_cnt_ > bf_access_cnt_ / 8;
+    return (bf_access_cnt_ < common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM
+           || bf_filter_cnt_ > (bf_access_cnt_ / 8));
   }
   TO_STRING_KV(K_(row_cache_hit_cnt), K_(row_cache_miss_cnt), K_(row_cache_put_cnt),
                K_(bf_filter_cnt), K_(bf_access_cnt),
@@ -161,10 +163,7 @@ struct ObTableAccessContext
     return query_flag_.is_use_row_cache() && !use_fuse_row_cache_ && table_store_stat_.enable_put_row_cache() && !need_scn_ && !tablet_id_.is_ls_inner_tablet() && !has_truncate_filter();
   }
   inline bool enable_bf_cache() const {
-    return query_flag_.is_use_bloomfilter_cache()
-        && table_store_stat_.enable_bf_cache()
-        && !need_scn_
-        && !tablet_id_.is_ls_inner_tablet();
+    return query_flag_.is_use_bloomfilter_cache() && table_store_stat_.enable_bf_cache() && !need_scn_ && !tablet_id_.is_ls_inner_tablet();
   }
   inline bool is_multi_version_read(const int64_t snapshot_version) {
     return trans_version_range_.snapshot_version_ < snapshot_version;
@@ -172,8 +171,8 @@ struct ObTableAccessContext
   inline bool enable_get_fuse_row_cache(const int64_t threshold) const {
     return query_flag_.is_use_fuse_row_cache() && table_store_stat_.enable_get_fuse_row_cache(threshold) && !need_scn_ && !tablet_id_.is_ls_inner_tablet() && !has_truncate_filter();
   }
-  inline bool enable_put_fuse_row_cache(const int64_t threshold) const {
-    return query_flag_.is_use_fuse_row_cache() && table_store_stat_.enable_put_fuse_row_cache(threshold) && !need_scn_ && !tablet_id_.is_ls_inner_tablet() && !has_truncate_filter();
+  inline bool enable_put_fuse_row_cache(const int64_t threshold, const bool is_mview_table_scan) const {
+    return query_flag_.is_use_fuse_row_cache() && table_store_stat_.enable_put_fuse_row_cache(threshold) && (!need_scn_ || is_mview_table_scan) && !tablet_id_.is_ls_inner_tablet() && !has_truncate_filter();
   }
   inline bool is_limit_end() const {
     return (nullptr != limit_param_ && limit_param_->limit_ >= 0 && (out_cnt_ - limit_param_->offset_ >= limit_param_->limit_));
@@ -224,13 +223,26 @@ struct ObTableAccessContext
            const common::ObVersionRange &trans_version_range,
            memtable::ObMvccMdsFilter *mds_filter = nullptr,
            CachedIteratorNode *cached_iter_node = nullptr);
+  // used for mview table scan
+  int init_for_mview(common::ObIAllocator *allocator,
+                     const ObTableAccessContext &access_ctx,
+                     ObStoreCtx &store_ctx);
   // used for fork table scan
   int init_for_fork(ObTableAccessContext &other,
                     ObStoreCtx *store_ctx,
                     const ObForkTabletInfo &fork_info);
-  int alloc_iter_pool();
+  OB_INLINE bool is_mview_query() const
+  {
+    return nullptr != mview_scan_info_;
+  }
+  OB_INLINE StorageScanType get_scan_type() const
+  {
+    return is_mview_query() ?  mview_scan_info_->scan_type_ : StorageScanType::NORMAL;
+  }
+  int alloc_iter_pool(const bool use_column_store);
   void inc_micro_access_cnt();
   int init_scan_allocator(ObTableScanParam &scan_param);
+  int init_mview_scan_info(const int64_t multi_version_start, const sql::ObExprPtrIArray *op_filters, sql::ObEvalCtx &eval_ctx);
   int check_filtered_by_base_version(ObDatumRow &row);
   OB_INLINE bool has_truncate_filter() const
   {
@@ -276,8 +288,10 @@ struct ObTableAccessContext
     K_(is_inited),
     K_(use_fuse_row_cache),
     K_(need_scn),
+    K_(need_release_mview_scan_info),
     K_(need_release_truncate_part_filter),
     K_(timeout),
+    K_(ls_id),
     K_(tablet_id),
     K_(query_flag),
     K_(sql_mode),
@@ -294,8 +308,11 @@ struct ObTableAccessContext
     K_(lob_locator_helper),
     KP_(cached_iter_node),
     KP_(stmt_iter_pool),
+    KP_(cg_iter_pool),
+    KP_(cg_param_pool),
     KP_(block_row_store),
     KP_(sample_filter),
+    KPC_(mview_scan_info),
     K_(table_store_stat),
     KP_(truncate_part_filter),
     KP_(mds_collector),
@@ -333,8 +350,10 @@ public:
   bool is_fork_ctx_;
   bool use_fuse_row_cache_; // temporary code
   bool need_scn_;
+  bool need_release_mview_scan_info_;
   bool need_release_truncate_part_filter_;
   int64_t timeout_;
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   common::ObQueryFlag query_flag_;
   ObSQLMode sql_mode_;
@@ -359,9 +378,12 @@ public:
   ObLobLocatorHelper *lob_locator_helper_;
   CachedIteratorNode *cached_iter_node_;
   ObStoreRowIterPool<ObStoreRowIterator> *stmt_iter_pool_;
+  ObStoreRowIterPool<ObICGIterator> *cg_iter_pool_;
+  ObCGIterParamPool *cg_param_pool_;
   ObBlockRowStore *block_row_store_;
   ObRowSampleFilter *sample_filter_;
   compaction::ObCachedTransStateMgr *trans_state_mgr_;
+  ObMviewScanInfo *mview_scan_info_;
   ScanResumePoint *scan_resume_point_; // for scan pause
   ObTruncatePartitionFilter *truncate_part_filter_;
   ObMdsReadInfoCollector *mds_collector_; // used for collect mds info when query mds sstable

@@ -35,6 +35,7 @@ int ObMemCtxLockOpLinkNode::init(const ObTableLockOp &op_info)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!op_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument ", K(ret), K(op_info));
   } else {
     lock_op_ = op_info;
   }
@@ -49,6 +50,7 @@ int ObMemCtxLockPrioOpLinkNode::init(
   if (OB_UNLIKELY(!op_info.is_valid())
       || OB_UNLIKELY(ObTableLockPriority::INVALID == priority)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument ", K(ret), K(priority), K(op_info));
   } else {
     prio_op_.lock_op_ = op_info;
     prio_op_.priority_ = priority;
@@ -61,7 +63,9 @@ int ObLockMemCtx::init(ObLSTxCtxMgr *ls_tx_ctx_mgr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ls_tx_ctx_mgr)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KP(ls_tx_ctx_mgr));
   } else if (OB_FAIL(ls_tx_ctx_mgr->get_lock_memtable(memtable_handle_))) {
+    TRANS_LOG(WARN, "get lock_memtable fail", KR(ret));
   } else {
     // do nothing
   }
@@ -69,11 +73,12 @@ int ObLockMemCtx::init(ObLSTxCtxMgr *ls_tx_ctx_mgr)
 }
 
 // for mintest
-int ObLockMemCtx::init(storage::ObTableHandleV2 &handle)
+int ObLockMemCtx::init(ObTableHandleV2 &handle)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(handle));
   } else {
     memtable_handle_ = handle;
   }
@@ -87,6 +92,7 @@ int ObLockMemCtx::get_lock_memtable(ObLockMemtable *&memtable)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("memtable handle is empty", K(memtable_handle_));
   } else if (OB_FAIL(memtable_handle_.get_lock_memtable(memtable))) {
+    LOG_ERROR("get lock memtable failed", K(ret));
   }
   return ret;
 }
@@ -112,7 +118,9 @@ int ObLockMemCtx::rollback_table_lock_(const ObTxSEQ to_seq_no, const ObTxSEQ fr
 {
   int ret = OB_SUCCESS;
   ObLockMemtable *memtable = nullptr;
+  LOG_DEBUG("ObLockMemCtx::rollback_table_lock_", K(to_seq_no), K(from_seq_no));
   if (OB_FAIL(memtable_handle_.get_lock_memtable(memtable))) {
+    LOG_ERROR("get lock memtable failed", K(ret));
   } else {
     DLIST_FOREACH_REMOVESAFE_NORET(curr, lock_list_) {
       if (curr->lock_op_.lock_seq_no_ <= to_seq_no ||
@@ -143,6 +151,7 @@ int ObLockMemCtx::rollback_table_lock_(const ObTxSEQ to_seq_no, const ObTxSEQ fr
                    curr->prio_op_.lock_op_.lock_seq_no_.get_branch() != to_seq_no.get_branch()) {
           // branch missmatch
         } else {
+          LOG_DEBUG("remove from priority_list_", KPC(curr));
           const ObTableLockPrioArg arg(curr->prio_op_.priority_);
           memtable->remove_priority_task(arg, curr->prio_op_.lock_op_);
           (void)priority_list_.remove(curr);
@@ -160,6 +169,7 @@ void ObLockMemCtx::abort_table_lock_()
   int ret = OB_SUCCESS;
   ObLockMemtable *memtable = nullptr;
   if (OB_FAIL(memtable_handle_.get_lock_memtable(memtable))) {
+    LOG_ERROR("get lock memtable failed", K(ret));
   } else {
     DLIST_FOREACH_REMOVESAFE_NORET(curr, lock_list_) {
       memtable->remove_lock_record(curr->lock_op_);
@@ -175,6 +185,7 @@ int ObLockMemCtx::commit_table_lock_(const SCN &commit_version, const SCN &commi
   int ret = OB_SUCCESS;
   ObLockMemtable *memtable = nullptr;
   if (OB_FAIL(memtable_handle_.get_lock_memtable(memtable))) {
+    LOG_ERROR("get lock memtable failed", K(ret));
   } else {
     DLIST_FOREACH_REMOVESAFE(curr, lock_list_) {
       switch (curr->lock_op_.op_type_) {
@@ -192,6 +203,8 @@ int ObLockMemCtx::commit_table_lock_(const SCN &commit_version, const SCN &commi
                                        commit_version,
                                        commit_scn,
                                        LOCK_OP_COMPLETE))) {
+          LOG_WARN("update lock record status failed.", K(ret),
+                   K(curr->lock_op_));
         }
         break;
       }
@@ -213,11 +226,14 @@ int ObLockMemCtx::rollback_table_lock(const ObTxSEQ to_seq_no, const ObTxSEQ fro
     // there is no table lock left, do nothing
   } else if (OB_UNLIKELY(!memtable_handle_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("memtable should not be null", K(ret), K(memtable_handle_));
   } else {
     WRLockGuard guard(list_rwlock_);
     if (OB_FAIL(rollback_table_lock_(to_seq_no, from_seq_no))) {
+      LOG_WARN("rollback table lock failed", K(ret), K(to_seq_no), K(from_seq_no));
     }
   }
+  LOG_DEBUG("ObLockMemCtx::rollback_table_lock ", K(ret), K(to_seq_no), K(from_seq_no));
   return ret;
 }
 
@@ -243,7 +259,36 @@ int ObLockMemCtx::get_table_lock_store_info(ObTableLockInfo &table_lock_info)
       // no need dump to avoid been restored even if rollback
       LOG_WARN("the table lock op no should not dump", K(curr->lock_op_));
     } else if (OB_FAIL(table_lock_info.table_lock_ops_.push_back(curr->lock_op_))) {
+      LOG_WARN("fail to push back table_lock store info", K(ret));
       break;
+    }
+  }
+  table_lock_info.max_durable_scn_ = max_durable_scn_;
+  return ret;
+}
+
+int ObLockMemCtx::get_table_lock_for_transfer(ObTableLockInfo &table_lock_info, const ObIArray<ObTabletID> &tablet_list)
+{
+  int ret = OB_SUCCESS;
+  RDLockGuard guard(list_rwlock_);
+  DLIST_FOREACH(curr, lock_list_) {
+    if (OB_UNLIKELY(!curr->is_valid())) {
+      // no need dump to avoid been restored even if rollback
+      LOG_WARN("the table lock op no should not dump", K(curr->lock_op_));
+    } else {
+      bool is_hit = false;
+      for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_list.count(); idx++) {
+        if (curr->lock_op_.is_tablet_lock(tablet_list.at(idx))) {
+          is_hit = true;
+          break;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (!is_hit) {
+      } else if (OB_FAIL(table_lock_info.table_lock_ops_.push_back(curr->lock_op_))) {
+        LOG_WARN("fail to push back table_lock store info", K(ret));
+        break;
+      }
     }
   }
   table_lock_info.max_durable_scn_ = max_durable_scn_;
@@ -260,9 +305,11 @@ int ObLockMemCtx::clear_table_lock(
     // there is no table lock left, do nothing
   } else if (OB_UNLIKELY(!memtable_handle_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("memtable should not be null", K(ret), K(memtable_handle_));
   } else if (is_committed) {
     WRLockGuard guard(list_rwlock_);
     if (OB_FAIL(commit_table_lock_(commit_version, commit_scn))) {
+      LOG_WARN("commit table lock failed.", K(ret));
     }
   } else {
     WRLockGuard guard(list_rwlock_);
@@ -276,12 +323,14 @@ int ObLockMemCtx::clear_table_lock(
     WRLockGuard guard(list_rwlock_);
     ObLockMemtable *memtable = nullptr;
     if (OB_FAIL(memtable_handle_.get_lock_memtable(memtable))) {
+      LOG_ERROR("get lock memtable failed", K(ret));
     } else {
       DLIST_FOREACH_REMOVESAFE_NORET(curr, priority_list_) {
         if (NULL != curr) {
           const ObTableLockPrioArg arg(curr->prio_op_.priority_);
           if (OB_TMP_FAIL(memtable->remove_priority_task(
                                                          arg, curr->prio_op_.lock_op_))) {
+            LOG_WARN("remove priority task failed", K(tmp_ret), KPC(curr));
           }
           (void)priority_list_.remove(curr);
           curr->~ObMemCtxLockPrioOpLinkNode();
@@ -290,6 +339,7 @@ int ObLockMemCtx::clear_table_lock(
       }
     }
   }
+  LOG_DEBUG("ObLockMemCtx::clear_table_lock ", K(ret), K(is_committed), K(commit_scn));
   return ret;
 }
 
@@ -302,15 +352,19 @@ int ObLockMemCtx::add_lock_record(
   lock_op_node = NULL;
   if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument.", K(ret), K(lock_op));
   } else if (OB_ISNULL(ptr = alloc_lock_link_node_())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alllocate ObTableLockOp ", K(ret));
   } else if (FALSE_IT(lock_op_node = new(ptr) ObMemCtxLockOpLinkNode())) {
     // do nothing
   } else if (OB_FAIL(lock_op_node->init(lock_op))) {
+    LOG_WARN("set lock op info failed.", K(ret), K(lock_op));
   } else {
     WRLockGuard guard(list_rwlock_);
     if (!lock_list_.add_last(lock_op_node)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("add lock op info failed.", K(ret), K(lock_op));
     }
   }
   if (OB_FAIL(ret) && NULL != lock_op_node) {
@@ -318,6 +372,7 @@ int ObLockMemCtx::add_lock_record(
     free_lock_link_node_(lock_op_node);
     lock_op_node = NULL;
   }
+  LOG_DEBUG("ObLockMemCtx::add_lock_record", K(ret), K(lock_op));
   return ret;
 }
 
@@ -354,6 +409,7 @@ void ObLockMemCtx::remove_lock_record(
       }
     }
   }
+  LOG_DEBUG("ObLockMemCtx::remove_lock_record ", K(lock_op));
 }
 
 int ObLockMemCtx::check_lock_exist( //TODO(lihongqin):check it
@@ -370,6 +426,7 @@ int ObLockMemCtx::check_lock_exist( //TODO(lihongqin):check it
   if (OB_UNLIKELY(!lock_id.is_valid()) ||
       OB_UNLIKELY(!is_lock_mode_valid(mode))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument.", K(ret), K(lock_id), K(owner_id), K(mode));
   } else {
     RDLockGuard guard(list_rwlock_);
     int64_t lock_mode_cnt[TABLE_LOCK_MODE_COUNT] = {0};
@@ -416,6 +473,7 @@ int ObLockMemCtx::check_modify_schema_elapsed(
 
   if (OB_UNLIKELY(!lock_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument.", K(ret), K(lock_id));
   } else {
     RDLockGuard guard(list_rwlock_);
     DLIST_FOREACH(curr, lock_list_) {
@@ -425,6 +483,8 @@ int ObLockMemCtx::check_modify_schema_elapsed(
         // running.
         ret = OB_EAGAIN;
         if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
+          LOG_WARN("there is some trans with smaller modify schema version not finished",
+                   K(ret), K(curr->lock_op_));
         }
       }
     }
@@ -439,6 +499,7 @@ int ObLockMemCtx::check_modify_time_elapsed(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!lock_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument.", K(ret), K(lock_id));
   } else {
     RDLockGuard guard(list_rwlock_);
     DLIST_FOREACH(curr, lock_list_) {
@@ -448,6 +509,8 @@ int ObLockMemCtx::check_modify_time_elapsed(
         // running.
         ret = OB_EAGAIN;
         if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
+          LOG_WARN("there is some trans with smaller modify time not finished",
+                   K(ret), K(curr->lock_op_));
         }
       }
     }
@@ -462,6 +525,7 @@ int ObLockMemCtx::iterate_tx_obj_lock_op(ObLockOpIterator &iter) const
   DLIST_FOREACH_X(curr, lock_list_, OB_SUCC(ret)) {
     if (NULL != curr &&
         OB_FAIL(iter.push(curr->lock_op_))) {
+      LOG_WARN("push lock op into iterator failed", K(ret), K(curr->lock_op_));
     }
   }
   return ret;
@@ -474,6 +538,7 @@ int ObLockMemCtx::iterate_tx_lock_priority_list(ObPrioOpIterator &iter) const
   DLIST_FOREACH_X(curr, priority_list_, OB_SUCC(ret)) {
     if (NULL != curr &&
         OB_FAIL(iter.push(curr->prio_op_))) {
+      LOG_WARN("push lock op into iterator failed", K(ret), KPC(curr));
     }
   }
   return ret;
@@ -492,6 +557,7 @@ int ObLockMemCtx::check_lock_need_replay(
     need_replay = false;
   } else if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument.", K(ret), K(lock_op));
   } else {
     RDLockGuard guard(list_rwlock_);
     DLIST_FOREACH(curr, lock_list_) {
@@ -515,15 +581,19 @@ int ObLockMemCtx::add_priority_record(
   if (OB_UNLIKELY(!lock_op.is_valid())
       || OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument.", K(ret), K(arg), K(lock_op));
   } else if (OB_ISNULL(ptr = alloc_prio_link_node_())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alllocate ObTableLockOp ", K(ret));
   } else if (FALSE_IT(prio_op_node = new(ptr) ObMemCtxLockPrioOpLinkNode())) {
     // do nothing
   } else if (OB_FAIL(prio_op_node->init(lock_op, arg.priority_))) {
+    LOG_WARN("set lock op info failed.", K(ret), K(arg), K(lock_op));
   } else {
     WRLockGuard guard(list_rwlock_);
     if (!priority_list_.add_last(prio_op_node)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("add lock op info failed.", K(ret), K(lock_op));
     }
   }
   if (OB_FAIL(ret) && NULL != prio_op_node) {
@@ -546,19 +616,25 @@ int ObLockMemCtx::prepare_priority_task(
   if (OB_UNLIKELY(!lock_op.is_valid())
       || OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument.", K(ret), K(arg), K(lock_op));
   } else if (OB_ISNULL(ptr = alloc_prio_link_node_())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alllocate ObTableLockOp ", K(ret));
   } else if (FALSE_IT(prio_op_node = new(ptr) ObMemCtxLockPrioOpLinkNode())) {
     // do nothing
   } else if (OB_FAIL(prio_op_node->init(lock_op, arg.priority_))) {
+    LOG_WARN("set lock op info failed.", K(ret), K(lock_op));
   } else {
     WRLockGuard guard(list_rwlock_);
     if (!priority_list_.add_last(prio_op_node)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("add lock op info failed.", K(ret), K(lock_op));
     } else {
       ObLockMemtable *memtable = nullptr;
       if (OB_FAIL(memtable_handle_.get_lock_memtable(memtable))) {
+        LOG_ERROR("get lock memtable failed", K(ret));
       } else if (OB_FAIL(memtable->prepare_priority_task(arg, lock_op))) {
+        LOG_WARN("prepare priority task failed", K(ret));
       }
     }
   }
@@ -604,6 +680,7 @@ void ObLockMemCtx::remove_priority_record(
       }
     }
   }
+  LOG_DEBUG("ObLockMemCtx::remove_priority_record ", K(lock_op));
 }
 
 // get priority op array
@@ -616,18 +693,22 @@ int ObLockMemCtx::get_priority_array(ObTableLockPrioOpArray &prio_op_array)
   const static int64_t MAX_SERIALIZE_SIZE = 768 * 1024;  // 768KB
   if (0 != prio_op_array.count()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(prio_op_array));
   } else {
     WRLockGuard guard(list_rwlock_);
     const int64_t record_count = priority_list_.get_size();
     if (MAX_RECORD_COUNT < record_count) {
       ret = OB_SIZE_OVERFLOW;
+      LOG_WARN("too many priority record", K(ret), K(record_count));
     } else if (0 != record_count) {
       int64_t total_size = 0;
       DLIST_FOREACH_X(curr, priority_list_, OB_SUCC(ret)) {
         total_size += curr->prio_op_.get_serialize_size();
         if (MAX_SERIALIZE_SIZE < total_size) {
           ret = OB_SIZE_OVERFLOW;
+          LOG_WARN("too many priority record", K(ret), K(total_size), K(record_count));
         } else if (OB_FAIL(prio_op_array.push_back(curr->prio_op_))) {
+          LOG_WARN("push back failed", K(ret), K(prio_op_array));
         }
       }
       LOG_INFO("get priority array", K(ret), K(prio_op_array), K(total_size),
@@ -650,12 +731,14 @@ int ObLockMemCtx::clear_priority_list()
   if (0 == record_count) {
     // do nothing
   } else if (OB_FAIL(memtable_handle_.get_lock_memtable(memtable))) {
+    LOG_ERROR("get lock memtable failed", K(ret));
   } else {
     DLIST_FOREACH_REMOVESAFE_NORET(curr, priority_list_) {
       if (NULL != curr) {
         const ObTableLockPrioArg arg(curr->prio_op_.priority_);
         if (OB_TMP_FAIL(memtable->remove_priority_task(
                 arg, curr->prio_op_.lock_op_))) {
+          LOG_WARN("remove priority task failed", K(tmp_ret), KPC(curr));
         }
         (void)priority_list_.remove(curr);
         curr->~ObMemCtxLockPrioOpLinkNode();

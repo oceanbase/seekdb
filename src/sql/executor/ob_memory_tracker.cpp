@@ -15,11 +15,10 @@
  */
 
 #define USING_LOG_PREFIX LIB
-#include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
 #include "sql/executor/ob_memory_tracker.h"
-#include "share/ob_errno.h"
 #include "lib/rc/context.h"
+#include "share/config/ob_tenant_config_mgr.h"
+#include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::lib;
 
@@ -29,10 +28,13 @@ thread_local ObMemTracker ObMemTrackerGuard::mem_tracker_;
 
 void ObMemTrackerGuard::update_mem_limit()
 {
-  const int64_t mem_quota_pct = config::query_memory_limit_percentage();
-  mem_tracker_.cache_mem_limit_ = mem_quota_pct > 0
-      ? lib::get_memory_budget() / 100 * mem_quota_pct
-      : 0;
+  int ret = common::OB_SUCCESS;
+  int64_t hard_memory_limit = lib::get_hard_memory_limit();
+  int64_t mem_quota_pct = 100;
+  if (OB_UNLIKELY(true)) {
+    mem_quota_pct = GCONF.query_memory_limit_percentage;
+  }
+  mem_tracker_.cache_mem_limit_ = hard_memory_limit / 100 * mem_quota_pct;
 }
 int ObMemTrackerGuard::check_status()
 {
@@ -44,8 +46,7 @@ int ObMemTrackerGuard::check_status()
       || (mem_tracker_.check_status_times_ % UPDATE_MEM_LIMIT_THRESHOLD == 0)) {
       update_mem_limit();
     }
-    if (mem_tracker_.cache_mem_limit_ > 0
-        && tree_mem_hold >= mem_tracker_.cache_mem_limit_) {
+    if (tree_mem_hold >= mem_tracker_.cache_mem_limit_) {
       ret = OB_EXCEED_QUERY_MEM_LIMIT;
       SQL_LOG(WARN, "Exceeded memory usage limit", K(ret), K(tree_mem_hold),
               K(mem_tracker_.cache_mem_limit_));
@@ -63,3 +64,4 @@ int ObMemTrackerGuard::try_check_status(int64_t check_try_times)
   }
   return ret;
 }
+

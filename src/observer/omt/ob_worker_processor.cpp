@@ -18,15 +18,18 @@
 
 #include "ob_worker_processor.h"
 #include "lib/oblog/ob_warning_buffer.h"
+#include "sql/ob_sql_context.h"
+#include "rpc/obmysql/ob_mysql_packet.h"
 #include "rpc/frame/ob_req_translator.h"
 #include "rpc/frame/ob_req_processor.h"
-#include "rpc/ob_sql_request_operator.h"
 #include "observer/omt/ob_th_worker.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::omt;
 using namespace oceanbase::rpc;
 using namespace oceanbase::rpc::frame;
+using namespace oceanbase::obcall;
+using oceanbase::sql::ObQueryRetryAshGuard;
 
 ObWorkerProcessor::ObWorkerProcessor(
     ObReqTranslator &xlator,
@@ -58,6 +61,7 @@ OB_NOINLINE int ObWorkerProcessor::process_err_test()
 
   if(OB_FAIL(ret))
   {
+    LOG_WARN("process err_test", K(ret));
   }
   return ret;
 }
@@ -68,7 +72,9 @@ inline int ObWorkerProcessor::process_one(rpc::ObRequest &req)
   ObReqProcessor *processor = NULL;
 
   if (OB_FAIL(process_err_test())) {
+    LOG_WARN("ignore request with err_test", K(ret));
   } else if (OB_FAIL(translator_.translate(req, processor))) {
+    LOG_WARN("translate request fail", K(ret));
     on_translate_fail(&req, ret);
   } else if (OB_ISNULL(processor)) {
     ret = OB_ERR_UNEXPECTED;
@@ -76,10 +82,14 @@ inline int ObWorkerProcessor::process_one(rpc::ObRequest &req)
   } else {
     NG_TRACE(before_processor_run);
     req.on_process_begin();
-    req.set_trace_point(ObRequest::OB_REQUEST_WORKER_PROCESSOR_RUN);
+    req.set_trace_point(ObRequest::OB_EASY_REQUEST_WORKER_PROCESSOR_RUN);
     if (OB_FAIL(processor->run())) {
+      LOG_WARN("process request fail", K(ret));
     }
     translator_.release(processor);
+    if (ObQueryRetryAshGuard::get_info_ptr() != nullptr) {
+      LOG_ERROR_RET(OB_ERR_UNEXPECTED, "retry info ptr is not null, maybe crash");
+    }
   }
 
   return ret;
@@ -97,8 +107,17 @@ int ObWorkerProcessor::process(rpc::ObRequest &req)
                OB_ID(in_queue_time), q_time,
                OB_ID(receive_ts), req.get_receive_timestamp(),
                OB_ID(enqueue_ts), req.get_enqueue_timestamp());
-  if (ObRequest::OB_MYSQL == req.get_type()) {
+  ObRequest::Type req_type = req.get_type(); // bugfix note: must be obtained in advance
+  if (ObRequest::OB_RPC == req_type) {
+    // obcall RPC transport removed (single-replica): OB_RPC requests are never
+    // delivered. Keep the branch as a dead no-op for type completeness.
+    NG_TRACE_EXT(start_rpc, OB_ID(addr), RPC_REQ_OP.get_peer(&req));
+    ObCurTraceId::set(req.generate_trace_id(myaddr_));
+  } else if (ObRequest::OB_MYSQL == req_type) {
     NG_TRACE_EXT(start_sql, OB_ID(addr), SQL_REQ_OP.get_peer(&req));
+    // mysql command request
+      const obmysql::ObMySQLRawPacket &pkt
+          = static_cast<const obmysql::ObMySQLRawPacket &>(req.get_packet());
     ObCurTraceId::set(req.generate_trace_id(myaddr_));
   }
   // record trace id
@@ -107,13 +126,27 @@ int ObWorkerProcessor::process(rpc::ObRequest &req)
   NG_TRACE_EXT(query_begin, OB_ID(trace_id), trace_id_adaptor);
   //NG_TRACE(query_begin);
 
+  // setup and init warning buffer
+  // For general SQL processing, the rpc processing function entry uses set_tsi_warning_buffer to set the session
+  // The warning buffer is set to the thread part; but for the handler of the task remote execution, because
+  // The error message needs to be used when serializing result_code until after the process() function
+  // Therefore, the warning buffer member of the session cannot be used. Therefore, one is set by default.
   ob_setup_default_tsi_warning_buffer();
   ob_reset_tsi_warning_buffer();
+
+  //Set the chid of the source package to the thread
+  // int64_t st = ::oceanbase::common::ObTimeUtility::current_time();
+  // PROFILE_LOG(DEBUG, HANDLE_PACKET_START_TIME PCODE, st, packet->get_pcode());
+  // go!
   try {
+    in_try_stmt = true;
     if (OB_FAIL(process_one(req))) {
+      LOG_WARN("process request fail", K(ret));
     }
+    in_try_stmt = false;
   } catch (OB_BASE_EXCEPTION &except) {
     _LOG_ERROR("Exception caught!!! errno = %d, exception info = %s", except.get_errno(), except.what());
+    in_try_stmt = false;
   }
 
   // cleanup

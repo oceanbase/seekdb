@@ -30,7 +30,8 @@ enum class ObTaskType {
   GENERIC,
   USER_REQUEST,
   DATA_MAINTAIN,
-  SCHEMA = 4,
+  ROOT_SERVICE,
+  SCHEMA,
   MAX
 };
 

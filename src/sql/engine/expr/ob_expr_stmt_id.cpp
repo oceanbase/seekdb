@@ -25,7 +25,7 @@ namespace sql
 {
 ObExprStmtId::ObExprStmtId(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_STMT_ID, "stmt_id", 0, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE)
+                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
 
@@ -45,6 +45,7 @@ int ObExprStmtId::eval_stmt_id(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("plan_ctx is null", K(ret));
   } else {
     res.set_int(plan_ctx->get_cur_stmt_id());
   }

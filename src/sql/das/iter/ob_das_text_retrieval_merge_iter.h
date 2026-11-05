@@ -52,15 +52,12 @@ struct ObIRIterLoserTreeCmp
   ObIRIterLoserTreeCmp();
   virtual ~ObIRIterLoserTreeCmp();
 
-  int init(
-      ObDatumMeta doc_id_meta,
-      const ObIArray<ObDocIdExt> *iter_doc_ids,
-      const common::ObDatumAccessContext *datum_access_ctx);
+  int init(ObDatumMeta doc_id_meta, const ObIArray<ObDocIdExt> *iter_doc_ids);
   int cmp(const ObIRIterLoserTreeItem &l, const ObIRIterLoserTreeItem &r, int64_t &cmp_ret);
+  int compare_doc_ids(const ObDocIdExt &left, const ObDocIdExt &right, int64_t &cmp_ret) const;
 private:
   common::ObDatumCmpFuncType cmp_func_;
   const ObIArray<ObDocIdExt> *iter_doc_ids_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
   bool is_inited_;
 };
 typedef common::ObLoserTree<ObIRIterLoserTreeItem, ObIRIterLoserTreeCmp> ObIRIterLoserTree;
@@ -119,8 +116,9 @@ public:
   virtual int do_table_scan() override;
   virtual int rescan() override;
   void set_domain_id_idx_tablet_id(const ObTabletID &tablet_id) { domain_id_idx_tablet_id_ = tablet_id; }
+  void set_ls_id(const share::ObLSID &ls_id) { ls_id_ = ls_id; }
   storage::ObTableScanParam &get_doc_agg_param() { return whole_doc_agg_param_; }
-  int set_related_tablet_ids(const ObDASFTSTabletID &related_tablet_ids);
+  int set_related_tablet_ids(const share::ObLSID &ls_id, const ObDASFTSTabletID &related_tablet_ids);
   virtual int set_merge_iters(const ObIArray<ObDASIter *> &retrieval_iters);
   const ObIArray<ObString> &get_query_tokens() { return query_tokens_; }
   bool is_taat_mode() { return RetrievalProcType::TAAT == processing_type_; }
@@ -166,6 +164,7 @@ protected:
   ObDASIRScanRtDef *ir_rtdef_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
+  share::ObLSID ls_id_;
   common::ObTabletID domain_id_idx_tablet_id_;
   ObArray<ObString> query_tokens_;
   ObDASTokenRetrievalIterArray token_iters_;
@@ -251,6 +250,12 @@ public:
   virtual int do_table_scan() override;
   virtual int set_merge_iters(const ObIArray<ObDASIter *> &retrieval_iters) override;
 protected:
+  enum CacheIterState : uint8_t
+  {
+    CACHE_ITER_NOT_STARTED = 0,
+    CACHE_ITER_ACTIVE = 1,
+    CACHE_ITER_END = 2
+  };
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_reuse() override;
   virtual int inner_release() override;
@@ -263,12 +268,22 @@ protected:
               const int64_t iter_idx,
               ObIRIterLoserTreeItem &item);
   int next_disjunctive_document(const bool is_batch, bool &doc_valid);
+  bool can_use_docid_batch_merge() const;
+  int advance_cache_iter(const int64_t iter_idx);
+  int find_min_cache_iter(int64_t &min_iter_idx) const;
+  int get_next_docid_batch(int64_t &count, const int64_t capacity);
+  int get_next_count_row();
+  int get_next_count_batch(int64_t &count);
+  int project_count_result();
 protected:
   ObIRIterLoserTreeCmp loser_tree_cmp_;
   ObIRIterLoserTree *iter_row_heap_;
   ObFixedArray<ObDocIdExt, ObIAllocator> iter_doc_ids_;
   ObFixedArray<int64_t, ObIAllocator> next_batch_iter_idxes_;
+  ObFixedArray<uint8_t, ObIAllocator> cache_iter_states_;
   int64_t next_batch_cnt_;
+  int64_t matched_doc_count_;
+  bool count_result_output_;
 };
 
 class ObDASTRDaatLookupIter : public ObDASTRDaatIter

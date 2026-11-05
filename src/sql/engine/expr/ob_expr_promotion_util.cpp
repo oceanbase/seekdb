@@ -51,6 +51,7 @@ int ObExprPromotionUtil::get_nvl_type(ObExprResType &type, const ObExprResType &
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_calc_type(type, type1, type2, NVL_TYPE_PROMOTION))) {
+    LOG_WARN("failed to get calc type", K(ret), K(type1), K(type2), K(type));
   }
   return ret;
 }
@@ -66,6 +67,7 @@ int ObExprPromotionUtil::get_calc_type(ObExprResType &type,
   if (OB_UNLIKELY(l_tc < ObNullTC || l_tc >= ObMaxTC || r_tc < ObNullTC || r_tc >= ObMaxTC
                   || OB_ISNULL(map))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("left / right tc out of range, or map array is null", K(ret), K(l_tc), K(r_tc));
   } else {
     type.set_type(map[l_tc][r_tc]);
   }

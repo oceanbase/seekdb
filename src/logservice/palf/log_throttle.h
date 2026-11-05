@@ -22,8 +22,8 @@
 #include "lib/lock/ob_spin_lock.h"                  // SpinLock
 #include "lib/time/ob_clock_generator.h"              // ObClockGenerator
 #include "lib/function/ob_function.h"               // ObFunction
-#include "share/log/palf/log_define.h"                             // MAX_LOG_BUFFER_SIZE
-#include "share/log/palf/palf_options.h"                           // PalfThrottleOptions
+#include "log_define.h"                             // MAX_LOG_BUFFER_SIZE
+#include "palf_options.h"                           // PalfThrottleOptions
 
 namespace oceanbase
 {
@@ -156,7 +156,7 @@ inline bool LogWritingThrottle::need_throttling_not_guarded_by_lock_(
   const NeedPurgingThrottlingFunc &need_purge_throttling) const
 {
   // Only need throttle under following conditions:
-  // 1. when log writing throttling has been enabled and triggered;
+  // 1. when the tenant writing throttling has been enabled and has been triggered;
   // 2. when there is no need to purge throttle.
   return need_throttling_with_options_not_guarded_by_lock_() && !need_purge_throttling();
 }

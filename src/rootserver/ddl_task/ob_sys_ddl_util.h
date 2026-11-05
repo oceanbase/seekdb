@@ -17,7 +17,8 @@
 #ifndef __OB_RS_SYS_DDL_SCHEDULER_UTIL_H__
 #define __OB_RS_SYS_DDL_SCHEDULER_UTIL_H__
 
-#include "share/rc/ob_server_runtime.h"
+#include "observer/omt/ob_multi_tenant.h" // for ObMultiTenant
+#include "share/rc/ob_module_provider.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // for ObDDLScheduler
 
 namespace oceanbase
@@ -25,18 +26,20 @@ namespace oceanbase
 namespace rootserver
 {
 
-int check_local_is_sys_leader();
-
 #define SYS_DDL_SCHEDULER_FUNC(func_name)                                                 \
   template <typename... Args> static int func_name(Args &&...args) {                      \
     int ret = OB_SUCCESS;                                                                 \
-    if (OB_FAIL(share::check_server_runtime_ready())) {                                  \
-      LOG_WARN("local runtime is unavailable", KR(ret));                                 \
-    } else if (OB_FAIL(check_local_is_sys_leader())) {                                    \
-      LOG_WARN("local runtime is not ready", KR(ret));                                \
+    if (OB_ISNULL(GCTX.omt_)) {                                                           \
+      ret = OB_INVALID_ARGUMENT;                                                          \
+      LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));                               \
+    } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {                   \
+      ret = OB_TENANT_NOT_EXIST;                                                          \
+      LOG_WARN("local server does not have SYS tenant resource", KR(ret));                \
+    } else if (OB_FAIL(ObDDLUtil::check_local_is_sys_leader())) {                         \
+      LOG_WARN("local is not sys tenant leader", KR(ret));                                \
     } else {                                                                              \
-      SERVER_MODULE_SCOPE {                                                      \
-        rootserver::ObDDLScheduler* sys_ddl_scheduler = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDDLScheduler>(); \
+      MOD_SCOPE {                                                      \
+        rootserver::ObDDLScheduler* sys_ddl_scheduler = share::g_mp->ddl_scheduler(); \
         if (OB_ISNULL(sys_ddl_scheduler)) {                                               \
           ret = OB_ERR_UNEXPECTED;                                                        \
           LOG_WARN("sys ddl scheduler service is null", KR(ret));                         \
@@ -52,6 +55,7 @@ class ObSysDDLSchedulerUtil
 {
 public:
   SYS_DDL_SCHEDULER_FUNC(abort_redef_table);
+  SYS_DDL_SCHEDULER_FUNC(cache_auto_split_task);
   SYS_DDL_SCHEDULER_FUNC(copy_table_dependents);
   SYS_DDL_SCHEDULER_FUNC(create_ddl_task);
   SYS_DDL_SCHEDULER_FUNC(destroy_task);
@@ -61,10 +65,12 @@ public:
   SYS_DDL_SCHEDULER_FUNC(modify_redef_task);
   SYS_DDL_SCHEDULER_FUNC(on_column_checksum_calc_reply);
   SYS_DDL_SCHEDULER_FUNC(on_ddl_task_finish);
+  SYS_DDL_SCHEDULER_FUNC(on_ddl_task_prepare);
   SYS_DDL_SCHEDULER_FUNC(on_sstable_complement_job_reply);
   SYS_DDL_SCHEDULER_FUNC(prepare_alter_table_arg);
   SYS_DDL_SCHEDULER_FUNC(recover_task);
   SYS_DDL_SCHEDULER_FUNC(remove_inactive_ddl_task);
+  SYS_DDL_SCHEDULER_FUNC(schedule_auto_split_task);
   SYS_DDL_SCHEDULER_FUNC(schedule_ddl_task);
   SYS_DDL_SCHEDULER_FUNC(start_redef_table);
   SYS_DDL_SCHEDULER_FUNC(update_ddl_task_active_time);
@@ -72,13 +78,13 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSysDDLSchedulerUtil);
 };// end ObSysDDLSchedulerUtil
 
-class ObSysDDLLocalBuilderUtil
+class ObSysDDLReplicaBuilderUtil
 {
 public:
   static int push_task(ObAsyncTask &task);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObSysDDLLocalBuilderUtil);
-};// end ObSysDDLLocalBuilderUtil
+  DISALLOW_COPY_AND_ASSIGN(ObSysDDLReplicaBuilderUtil);
+};// end ObSysDDLReplicaBuilderUtil
 
 }
 }

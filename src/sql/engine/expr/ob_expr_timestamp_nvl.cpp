@@ -58,9 +58,14 @@ int ObExprTimestampNvl::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 2);
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+  if (rt_expr.arg_cnt_ != 2) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("timestampnvl expr should have two params", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
+            || OB_ISNULL(rt_expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of timestampnvl expr is null", K(ret), K(rt_expr.args_));
+  } else {
     rt_expr.eval_func_ = ObExprTimestampNvl::calc_timestampnvl;
   }
   return ret;
@@ -73,6 +78,7 @@ int ObExprTimestampNvl::calc_timestampnvl(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *param_datum1 = NULL;
   ObDatum *param_datum2 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param_datum1, param_datum2))) {
+    LOG_WARN("eval param value failed", K(ret));
   } else if (param_datum1->is_null()) {
     if (param_datum2->is_null()) {
       expr_datum.set_null();

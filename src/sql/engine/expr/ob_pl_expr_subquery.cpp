@@ -17,8 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_pl_expr_subquery.h"
-#include "sql/ob_query_retry_ctrl.h"
-#include "sql/pl/ob_pl_resolver.h"
+#include "pl/ob_pl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
@@ -30,13 +29,14 @@ namespace sql
 
 OB_SERIALIZE_MEMBER(
     (ObExprOpSubQueryInPl, ObFuncExprOperator),
-    type_, route_sql_, result_type_, is_ignore_fail_, ps_sql_, type_info_);
+    id_, type_, route_sql_, result_type_, is_ignore_fail_, ps_sql_, type_info_);
 
 
 ObExprOpSubQueryInPl::ObExprOpSubQueryInPl(common::ObIAllocator &alloc)
     : ObFuncExprOperator(
         alloc, T_FUN_SUBQUERY, N_PL_SUBQUERY_CONSTRUCT,
         PARAM_NUM_UNKNOWN, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, INTERNAL_IN_MYSQL_MODE),
+      id_(common::OB_INVALID_ID),
       ps_sql_(ObString()),
       type_(stmt::T_NONE),
       route_sql_(ObString()),
@@ -58,13 +58,16 @@ int ObExprOpSubQueryInPl::deep_copy_type_info(common::ObIArray<common::ObString>
       const ObString &info = type_info.at(i);
       if (OB_UNLIKELY(0 == info.length())) {
         if (OB_FAIL(dst_type_info.push_back(ObString(0, NULL)))) {
+          LOG_WARN("fail to push back info", K(i), K(info), K(ret));
         }
       } else {
         char *buf = NULL;
         if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(info.length())))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("fail to allocate memory", K(i), K(info), K(ret));
         } else if (FALSE_IT(MEMCPY(buf, info.ptr(), info.length()))) {
         } else if (OB_FAIL(dst_type_info.push_back(ObString(info.length(), buf)))) {
+          LOG_WARN("fail to push back info", K(i), K(info), K(ret));
         }
       }
     }
@@ -78,8 +81,10 @@ int ObExprOpSubQueryInPl::assign(const ObExprOperator &other)
   const ObExprOpSubQueryInPl *tmp_other = dynamic_cast<const ObExprOpSubQueryInPl*>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp_other))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("cast failed, type of argument is wrong", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
+      LOG_WARN("copy in Base class ObExprOperator failed", K(other), K(ret));
     } else {
       OZ (deep_copy_ps_sql(tmp_other->ps_sql_));
       OX (this->type_ = tmp_other->type_);
@@ -120,6 +125,7 @@ int ObExprOpSubQueryInPl::cg_expr(ObExprCGCtx &op_cg_ctx,
   ObExprPlSubQueryInfo *info = OB_NEWx(ObExprPlSubQueryInfo, (&alloc), alloc, T_FUN_SUBQUERY);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory failed", K(ret));
   } else {
     OZ(info->from_raw_expr(fun_sys, op_cg_ctx.session_, alloc));
     rt_expr.extra_info_ = info;
@@ -148,31 +154,40 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   CK(OB_NOT_NULL(info));
   CK(OB_NOT_NULL(session = ctx.exec_ctx_.get_my_session()));
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
-  CK (OB_NOT_NULL(ctx.exec_ctx_.get_plan_cache_access_service()));
 
-  ObQueryRetryCtrl retry_ctrl;
-  int64_t database_schema_version = 0;
+  observer::ObQueryRetryCtrl retry_ctrl;
+  int64_t tenant_version = 0;
+  int64_t sys_version = 0;
   bool is_stack_overflow = false;
+
+  if (info->id_ != common::OB_INVALID_ID) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "observer version need upate to 4.1 ver");
+  }
 
   OZ(check_stack_overflow(is_stack_overflow));
   if (OB_SUCC(ret) && is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive",
+             K(ret), K(is_stack_overflow), K(info->ps_sql_), K(info->type_));
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("failed eval param value", K(ret));
   } else if (OB_ISNULL(param_buf = alloc.alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory", K(ret));
   } else if (FALSE_IT(params = new(param_buf)ParamStore(ObWrapperAllocator(alloc)))) {
   } else if (OB_FAIL(fill_obj_stack(expr, ctx, objs))) {
+    LOG_WARN("failed to fill objs", K(ret));
   } else if (OB_FAIL(fill_param_store(objs, expr.arg_cnt_, *params))) {
+    LOG_WARN("failed to process in params", K(ret));
   } else {
     pl::ObPLExecCtx pl_exec_ctx(&alloc, &ctx.exec_ctx_, params, nullptr, &ret, nullptr);
 
     SMART_VAR(ObSPIResultSet, spi_result) {
-      OZ (spi_result.init(
-          *session,
-          *ctx.exec_ctx_.get_plan_cache_access_service()));
+      OZ (spi_result.init(*session));
       OZ (spi_result.start_nested_stmt_if_need(&pl_exec_ctx, info->route_sql_, static_cast<stmt::StmtType>(info->type_), false));
 
       if (OB_SUCC(ret)) {
@@ -186,10 +201,15 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
             spi_result.reset_member_for_retry(*session);
           }
           retry_ctrl.clear_state_before_each_retry(session->get_retry_info_for_update());
-          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result.get_scheme_guard()))) {
-          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(database_schema_version))) {
+          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(spi_result.get_scheme_guard()))) {
+            LOG_WARN("get schema guard failed", K(ret));
+          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(tenant_version))) {
+            LOG_WARN("fail get schema version", K(ret));
+          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(sys_version))) {
+            LOG_WARN("fail get sys schema version", K(ret));
           } else {
-            retry_ctrl.set_current_local_schema_version(database_schema_version);
+            retry_ctrl.set_tenant_local_schema_version(tenant_version);
+            retry_ctrl.set_sys_local_schema_version(sys_version);
             spi_result.get_sql_ctx().schema_guard_ = &spi_result.get_scheme_guard();
             OZ (ObSPIService::inner_open(&pl_exec_ctx,
                                         expr.arg_cnt_ == 0 ? info->route_sql_.ptr() : nullptr,
@@ -201,6 +221,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
 
 
             if (OB_FAIL(ret)) {
+              LOG_WARN("inner open error", K(ret));
             } else if (OB_FAIL(get_result(spi_result.get_result_set(), result, alloc))) {
               if (OB_ERR_TOO_MANY_ROWS != ret) {
                 int cli_ret = OB_SUCCESS;
@@ -215,17 +236,19 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
 
             int64_t close_ret = spi_result.get_result_set()->close();
             if (OB_SUCCESS != close_ret) {
+              LOG_WARN("close spi result failed", K(ret), K(close_ret));
             }
             ret = OB_SUCCESS == ret ? close_ret : ret;
           }
           is_retry = true;
-        } while (RETRY_TYPE_NONE != retry_ctrl.get_retry_type());
+        } while (observer::RETRY_TYPE_NONE != retry_ctrl.get_retry_type());
         session->get_retry_info_for_update().clear();
         session->set_query_start_time(old_query_start_time);
       }
       spi_result.end_nested_stmt_if_need(&pl_exec_ctx, ret);
 
       if (OB_FAIL(ret)) {
+        LOG_WARN("get result obj failed", K(ret));
       } else if (!info->result_type_.is_ext()) {
         const ColumnsFieldIArray *fields = nullptr;
         CK (OB_NOT_NULL(spi_result.get_result_set()));
@@ -240,8 +263,6 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
                                              result,
                                              info->result_type_,
                                              conv_res,
-                                             ctx.exec_ctx_.get_srs_provider(),
-                                             ctx.exec_ctx_.get_lob_read_service(),
                                              info->is_ignore_fail_,
                                              &info->type_info_));
           OX (result = conv_res);
@@ -253,8 +274,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   if (OB_SUCC(ret)) {
     OZ(res.from_obj(result));
     if (is_lob_storage(result.get_type())) {
-      OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
-                             ctx.exec_ctx_.get_allocator(), res));
+      OZ(ob_adjust_lob_datum(result, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), res));
     }
     OZ(expr.deep_copy_datum(ctx, res));
   }
@@ -271,6 +291,7 @@ int ObExprOpSubQueryInPl::get_result(void *result_set,
   int64_t row_count = 0;
 
   if (OB_FAIL(fetch_row(result_set, row_count, current_row))) {
+      LOG_WARN("read result error", K(ret), K(row_count));
   } else {
     OZ (deep_copy_obj(alloc, current_row.get_cell(0), result));
   }
@@ -280,6 +301,7 @@ int ObExprOpSubQueryInPl::get_result(void *result_set,
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
     } else {
+      LOG_WARN("read result error", K(ret));
     }
   } else {
     ret = OB_ERR_TOO_MANY_ROWS;
@@ -293,6 +315,7 @@ int ObExprOpSubQueryInPl::fetch_row(void *result_set, int64_t &row_count, ObNewR
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_set)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Argument passed in is NULL", K(result_set), K(ret));
   } else {
     ObResultSet *ob_result_set = static_cast<ObResultSet*>(result_set);
     const ObNewRow *row = NULL;
@@ -304,6 +327,7 @@ int ObExprOpSubQueryInPl::fetch_row(void *result_set, int64_t &row_count, ObNewR
     }
   }
 
+  LOG_DEBUG("spi fetch row", K(cur_row), K(row_count), K(ret));
   return ret;
 }
 
@@ -332,6 +356,7 @@ int ObExprOpSubQueryInPl::fill_obj_stack(const ObExpr &expr,
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
     ObDatum &param = expr.args_[i]->locate_expr_datum(ctx);
     if (OB_FAIL(param.to_obj(objs[i], expr.args_[i]->obj_meta_))) {
+      LOG_WARN("failed to convert obj", K(ret), K(i));
     }
   }
   return ret;
@@ -341,6 +366,7 @@ OB_DEF_SERIALIZE(ObExprPlSubQueryInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
+              id_,
               type_,
               route_sql_,
               result_type_,
@@ -354,6 +380,7 @@ OB_DEF_DESERIALIZE(ObExprPlSubQueryInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
+              id_,
               type_,
               route_sql_,
               result_type_,
@@ -367,6 +394,7 @@ OB_DEF_SERIALIZE_SIZE(ObExprPlSubQueryInfo)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
+              id_,
               type_,
               route_sql_,
               result_type_,
@@ -403,6 +431,7 @@ int ObExprPlSubQueryInfo::from_raw_expr(RE &raw_expr, const ObSQLSessionInfo *se
     const_cast<ObPlQueryRefRawExpr &> (static_cast<const ObPlQueryRefRawExpr&>(raw_expr));
   const ObEnumSetMeta *enum_set_meta = NULL;
 
+  id_ = common::OB_INVALID_ID;
   type_ = subquery_expr.get_stmt_type();
   result_type_ = subquery_expr.get_result_type();
   is_ignore_fail_ = subquery_expr.is_ignore_fail();

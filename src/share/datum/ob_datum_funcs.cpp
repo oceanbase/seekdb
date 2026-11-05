@@ -19,6 +19,9 @@
 #include "ob_datum_funcs.h"
 #include "ob_datum_cmp_func_def.h"
 #include "common/object/ob_obj_funcs.h"
+#include "share/ob_cluster_version.h"
+#include "sql/engine/expr/ob_expr_basic_funcs.h"
+#include "share/vector/ob_vector_cmp_func_basic.h"
 
 namespace oceanbase {
 namespace common {
@@ -50,6 +53,7 @@ inline int decode(const char *buf, const int64_t data_len, int64_t &pos,
 } // end namespace serialization
 } // end namespace common
 
+using namespace sql;
 namespace common {
 
 ObDatumCmpFuncType NULLSAFE_TYPE_CMP_FUNCS[ObMaxType][ObMaxType][2];
@@ -75,7 +79,7 @@ static int64_t fill_type_with_tc_cmp_func()
   return cnt;
 }
 
-// cs_type, compatibility mode, calc_with_end_space
+// cs_type, tenant_mode, calc_with_end_space
 // now only RawTC, StringTC, TextTC defined str cmp funcs
 ObDatumCmpFuncType NULLSAFE_STR_CMP_FUNCS[CS_TYPE_MAX][2][2];
 ObDatumCmpFuncType NULLSAFE_TEXT_CMP_FUNCS[CS_TYPE_MAX][2][2];
@@ -87,6 +91,8 @@ ObDatumCmpFuncType NULLSAFE_JSON_CMP_FUNCS[2][2];
 ObDatumCmpFuncType NULLSAFE_GEO_CMP_FUNCS[2][2];
 
 ObDatumCmpFuncType NULLSAFE_COLLECTION_CMP_FUNCS[2][2];
+
+ObDatumCmpFuncType NULLSAFE_ROARINGBITMAP_CMP_FUNCS[2][2];
 
 ObDatumCmpFuncType FIXED_DOUBLE_CMP_FUNCS[OB_NOT_FIXED_SCALE][2];
 
@@ -124,6 +130,8 @@ ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
     func_ptr = NULLSAFE_GEO_CMP_FUNCS[null_pos_idx][has_lob_header];
   } else if (is_collection(type1) && is_collection(type2)) {
     func_ptr = NULLSAFE_COLLECTION_CMP_FUNCS[null_pos_idx][has_lob_header];
+  } else if (is_roaringbitmap(type1) && is_roaringbitmap(type2)) {
+    func_ptr = NULLSAFE_ROARINGBITMAP_CMP_FUNCS[null_pos_idx][has_lob_header];
   } else if (ob_is_decimal_int(type1) && ob_is_decimal_int(type2) && prec1 != PRECISION_UNKNOWN_YET
              && prec2 != PRECISION_UNKNOWN_YET) {
     ObDecimalIntWideType lw = get_decimalint_type(prec1);
@@ -144,21 +152,23 @@ bool ObDatumFuncs::is_collection(const ObObjType type)
 }
 
 
-ObDatumBasicFuncs EXPR_BASIC_FUNCS[ObMaxType];
+ObExprBasicFuncs EXPR_BASIC_FUNCS[ObMaxType];
 
 // [CS_TYPE][CALC_END_SPACE][IS_LOB_LOCATOR]
-ObDatumBasicFuncs EXPR_BASIC_STR_FUNCS[CS_TYPE_MAX][2][2];
+ObExprBasicFuncs EXPR_BASIC_STR_FUNCS[CS_TYPE_MAX][2][2];
 
-ObDatumBasicFuncs EXPR_BASIC_JSON_FUNCS[2];
+ObExprBasicFuncs EXPR_BASIC_JSON_FUNCS[2];
 
-ObDatumBasicFuncs EXPR_BASIC_GEO_FUNCS[2];
-ObDatumBasicFuncs EXPR_BASIC_COLLECTION_FUNCS[2];
-ObDatumBasicFuncs FIXED_DOUBLE_BASIC_FUNCS[OB_NOT_FIXED_SCALE];
-ObDatumBasicFuncs EXPR_BASIC_UDT_FUNCS[1];
+ObExprBasicFuncs EXPR_BASIC_GEO_FUNCS[2];
+ObExprBasicFuncs EXPR_BASIC_COLLECTION_FUNCS[2];
+ObExprBasicFuncs EXPR_BASIC_ROARINGBITMAP_FUNCS[2];
+
+ObExprBasicFuncs FIXED_DOUBLE_BASIC_FUNCS[OB_NOT_FIXED_SCALE];
+ObExprBasicFuncs EXPR_BASIC_UDT_FUNCS[1];
 
 
 
-ObDatumBasicFuncs DECINT_BASIC_FUNCS[DECIMAL_INT_MAX];
+ObExprBasicFuncs DECINT_BASIC_FUNCS[DECIMAL_INT_MAX];
 
 extern void __init_datum_funcs_all();
 extern void __init_all_str_funcs();
@@ -173,13 +183,16 @@ static bool init_all_str_funcs()
 
 bool g_all_str_funcs_intied = init_all_str_funcs();
 
-ObDatumBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
-                                                const ObCollationType cs_type,
-                                                const ObScale scale,
-                                                const bool has_lob_locator,
-                                                const ObPrecision precision)
+// for observer 4.0 text tc compare always use ObNullSafeDatumStrCmp
+// for observer 4.1 text tc compare use ObNullSafeDatumTextCmp
+// Maybe error when cluster version is 4.1 but sqlplan generated in 4.0 ?
+ObExprBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
+                                               const ObCollationType cs_type,
+                                               const ObScale scale,
+                                               const bool has_lob_locator,
+                                               const ObPrecision precision)
 {
-  ObDatumBasicFuncs *res = NULL;
+  ObExprBasicFuncs *res = NULL;
   if ((type >= ObNullType && type < ObMaxType)) {
     if (is_string_type(type)) {
       OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
@@ -196,6 +209,8 @@ ObDatumBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
       res = &EXPR_BASIC_GEO_FUNCS[has_lob_locator];
     } else if (ob_is_collection_sql_type(type)) {
       res = &EXPR_BASIC_COLLECTION_FUNCS[has_lob_locator];
+    } else if (ob_is_roaringbitmap(type)) {
+      res = &EXPR_BASIC_ROARINGBITMAP_FUNCS[has_lob_locator];
     } else if (ob_is_double_type(type) &&
                 scale > SCALE_UNKNOWN_YET && scale < OB_NOT_FIXED_SCALE) {
       res = &FIXED_DOUBLE_BASIC_FUNCS[scale];
@@ -205,7 +220,14 @@ ObDatumBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
       res = &DECINT_BASIC_FUNCS[width];
     } else {
       res = &EXPR_BASIC_FUNCS[type];
+      // set row cmp funcs
+      // FIXME: add precision here
     }
+    NullSafeRowCmpFunc null_first_cmp = nullptr, null_last_cmp = nullptr;
+    // for inner enum, cmp function is null(through pure forwarding,avoids depending on sql headers)
+    common::ob_vector_cmp_get_cmp_set(type, cs_type, scale, precision, null_first_cmp, null_last_cmp);
+    res->row_null_first_cmp_ = null_first_cmp;
+    res->row_null_last_cmp_ = null_last_cmp;
   } else {
     LOG_WARN_RET(common::OB_INVALID_ARGUMENT, "invalid obj type", K(type));
   }
@@ -230,6 +252,12 @@ bool ObDatumFuncs::is_geometry(const ObObjType type)
   return (tc == ObGeometryTC);
 }
 
+bool ObDatumFuncs::is_roaringbitmap(const ObObjType type)
+{
+  const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
+  return (tc == ObRoaringBitmapTC);
+}
+
 /**
  * This function is primarily responsible for handling inconsistent hash computations
  * for null types and the null values of those types, such as string, float, double, etc.
@@ -239,7 +267,7 @@ bool ObDatumFuncs::is_geometry(const ObObjType type)
 bool ObDatumFuncs::is_null_aware_hash_type(const ObObjType type)
 {
   const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
-  return is_string_type(type) || is_json(type) || is_geometry(type) ||
+  return is_string_type(type) || is_json(type) || is_geometry(type) || is_roaringbitmap(type) ||
             (tc == ObUserDefinedSQLTC) || (tc == ObFloatTC) || (tc == ObDoubleTC);
 }
 

@@ -31,7 +31,7 @@ class ObMPInitDB: public ObMPBase
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_INIT_DB;
 public:
-  explicit ObMPInitDB(const share::ObGlobalContext &gctx)
+  explicit ObMPInitDB(const ObGlobalContext &gctx)
       :ObMPBase(gctx),
        db_name_()
   {}
@@ -42,6 +42,8 @@ protected:
 private:
   int do_process(sql::ObSQLSessionInfo *session);
 private:
+  int get_catalog_id_(sql::ObSQLSessionInfo &session, ObSchemaGetterGuard &schema_guard, uint64_t &catalog_id);
+  common::ObString catalog_name_;
   common::ObString db_name_;
   char db_name_conv_buf[common::OB_MAX_DATABASE_NAME_BUF_LENGTH];
 };

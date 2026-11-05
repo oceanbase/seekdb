@@ -50,8 +50,8 @@ ObKVCacheStatus::ObKVCacheStatus()
 double ObKVCacheStatus::get_hit_ratio() const
 {
   double hit_ratio = 0;
-  const int64_t total_hit_cnt = total_hit_cnt_.value();
-  const int64_t get_cnt = total_hit_cnt + total_miss_cnt_.value();
+  int64_t total_hit_cnt = total_hit_cnt_.value();
+  int64_t get_cnt = total_hit_cnt + total_miss_cnt_;
   if (get_cnt > 0) {
     hit_ratio = double(total_hit_cnt) / double(get_cnt);
   }
@@ -68,9 +68,10 @@ void ObKVCacheStatus::reset()
   lfu_mb_cnt_ = 0;
   total_put_cnt_.reset();
   total_hit_cnt_.reset();
-  total_miss_cnt_.reset();
+  total_miss_cnt_ = 0;
   last_hit_cnt_ = 0;
   base_mb_score_ = 0;
+  total_miss_cnt_ = 0;
 }
 
 /*
@@ -160,11 +161,13 @@ int ObKVStoreMemBlock::store(
     if (OB_FAIL(key.deep_copy(&(buffer_[old_atomic_pos.buffer + sizeof(ObKVCachePair)]),
             key.size(),
             store_pair.key_))) {
+      COMMON_LOG(WARN, "Fail to deep copy key, ", K(ret));
     } else if (OB_FAIL(value.deep_copy(&buffer_[old_atomic_pos.buffer
             + sizeof(ObKVCachePair)
             + key.size()],
             value.size(),
             store_pair.value_))) {
+      COMMON_LOG(WARN, "Fail to deep copy value, ", K(ret));
     } else {
       MEMCPY(&(buffer_[old_atomic_pos.buffer]), &store_pair, sizeof(ObKVCachePair));
       kvpair = reinterpret_cast<ObKVCachePair*>(&(buffer_[old_atomic_pos.buffer]));
@@ -252,6 +255,7 @@ ObKVMemBlockHandle::ObKVMemBlockHandle()
       recent_get_cnt_(0),
       score_(0),
       kv_cnt_(0),
+      ref_cnt_(0),
       seq_num_(0),
       status_(FREE)
 {
@@ -318,3 +322,4 @@ bool ObKVMemBlockHandle::retire()
 
 }//end namespace common
 }//end namespace oceanbase
+

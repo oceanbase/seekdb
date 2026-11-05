@@ -1,0 +1,190 @@
+# owner: liquanhong.lqh
+# owner group: storage
+# description: test refresh table using table with auto_increment int primary key and table with string primary key
+# notice: run this mysqltest using observer compiled with errsim
+
+--disable_query_log
+connect (conn1,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (syscon, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection syscon;
+set @@session.explicit_defaults_for_timestamp=off;
+set session ob_trx_timeout=100000000000;
+alter system set_tp tp_name = "EN_COMPACTION_DISABLE_ROW_COL_SWITCH", error_code = 4016, frequency = 1;
+set @@recyclebin = off;
+--enable_query_log
+
+connection conn1;
+--disable_warnings
+drop table if exists t1, t2;
+
+--enable_warnings
+create table t1(id int primary key auto_increment, a int DEFAULT NULL, b int DEFAULT NULL) merge_engine = delete_insert with column group(each column);
+create table t2(id varchar(20) primary key, c1 int(11) DEFAULT NULL) merge_engine = delete_insert with column group(each column);
+--disable_query_log
+
+let $cnt = 1;
+while($cnt <= 10)
+{
+    eval insert into t1(a, b) values ($cnt * 100, $cnt * 100);
+    eval insert into t2 values (concat("abcdefgabcdefg", $cnt), $cnt * 10);
+    inc $cnt;
+}
+
+--enable_query_log
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+--disable_query_log
+
+# update t1
+
+update t1 set b = 101 where a = 100;
+
+update t1 set b = 201 where a = 200;
+update t1 set b = 202 where a = 200;
+
+delete from t1 where a = 300;
+
+delete from t1 where a = 400;
+insert t1(a, b) values(400, 401);
+
+delete from t1 where a = 500;
+insert t1(a, b) values(500, 501);
+update t1 set b = 502 where a = 500;
+
+delete from t1 where a = 600;
+insert t1(a, b) values(600, 601);
+update t1 set b = 602 where a = 600;
+update t1 set b = 603 where a = 600;
+
+update t1 set b = 701 where a = 700;
+delete from t1 where a = 700;
+
+update t1 set b = 801 where a = 800;
+delete from t1 where a = 800;
+insert into t1(a, b) values(800, 802);
+
+update t1 set b = 901 where a = 900;
+delete from t1 where a = 900;
+insert into t1(a, b) values(900, 902);
+update t1 set b = 903 where a = 900;
+
+update t1 set b = 1001 where a = 1000;
+delete from t1 where a = 1000;
+insert into t1(a, b) values(1000, 1002);
+update t1 set b = 1003 where a = 1000;
+update t1 set b = 1004 where a = 1000;
+
+# update t2
+
+update t2 set c1 = 11 where id = "abcdefgabcdefg1";
+
+update t2 set c1 = 21 where id = "abcdefgabcdefg2";
+update t2 set c1 = 22 where id = "abcdefgabcdefg2";
+
+delete from t2 where id = "abcdefgabcdefg3";
+
+delete from t2 where id = "abcdefgabcdefg4";
+insert t2 values("abcdefgabcdefg4", 41);
+
+delete from t2 where id = "abcdefgabcdefg5";
+insert t2 values("abcdefgabcdefg5", 51);
+update t2 set c1 = 52 where id = "abcdefgabcdefg5";
+
+delete from t2 where id = "abcdefgabcdefg6";
+insert t2 values("abcdefgabcdefg6", 61);
+update t2 set c1 = 62 where id = "abcdefgabcdefg6";
+update t2 set c1 = 63 where id = "abcdefgabcdefg6";
+
+update t2 set c1 = 71 where id = "abcdefgabcdefg7";
+delete from t2 where id = "abcdefgabcdefg7";
+
+update t2 set c1 = 81 where id = "abcdefgabcdefg8";
+delete from t2 where id = "abcdefgabcdefg8";
+insert into t2 values("abcdefgabcdefg8", 82);
+
+update t2 set c1 = 91 where id = "abcdefgabcdefg9";
+delete from t2 where id = "abcdefgabcdefg9";
+insert into t2 values("abcdefgabcdefg9", 92);
+update t2 set c1 = 93 where id = "abcdefgabcdefg9";
+
+update t2 set c1 = 101 where id = "abcdefgabcdefg10";
+delete from t2 where id = "abcdefgabcdefg10";
+insert into t2 values("abcdefgabcdefg10", 102);
+update t2 set c1 = 103 where id = "abcdefgabcdefg10";
+update t2 set c1 = 104 where id = "abcdefgabcdefg10";
+
+connection syscon;
+--error 0, 1210
+alter system set_tp tp_name = "ERRSIM_SET_NEED_REFRESH", error_code = 4016, frequency = 1;
+--enable_query_log
+
+connection conn1;
+
+# select t1
+select * from t1 order by a;
+select * from t1 where id < 2 or id > 6 order by a;
+select * from t1 where (id > 1 and id < 4) or (id > 6 and id < 9) order by a;
+select min(a), max(b) from t1;
+select min(a), max(b) from t1 where id < 2 or id > 6;
+select max(id), min(b) from t1;
+select max(id), min(b) from t1 where (id > 2 and id < 4) or (id > 6 and id < 9);
+
+# select t2
+select * from t2 order by c1;
+select * from t2 where id < 'abcdefgabcdefg2' or id > 'abcdefgabcdefg6' order by c1;
+select * from t2 where (id > 'abcdefgabcdefg1' and id < 'abcdefgabcdefg4') or (id > 'abcdefgabcdefg6' and id < 'abcdefgabcdefg9') order by c1;
+select min(c1) from t2;
+select min(c1) from t2 where id < 'abcdefgabcdefg2' or id > 'abcdefgabcdefg6';
+select min(id), max(c1) from t2;
+select min(id), max(c1) from t2 where (id > 'abcdefgabcdefg1' and id < 'abcdefgabcdefg4') or (id > 'abcdefgabcdefg6' and id < 'abcdefgabcdefg9');
+
+--disable_query_log
+connection syscon;
+--error 0, 1210
+alter system set_tp tp_name = "ERRSIM_SET_NEED_REFRESH", error_code = 4016, frequency = 0;
+--enable_query_log
+
+# minor freeze
+connection conn1;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+
+--disable_query_log
+connection syscon;
+--error 0, 1210
+alter system set_tp tp_name = "ERRSIM_SET_NEED_REFRESH", error_code = 4016, frequency = 1;
+--enable_query_log
+
+connection conn1;
+
+# select t1
+select * from t1 order by a;
+select * from t1 where id < 2 or id > 6 order by a;
+select * from t1 where (id > 1 and id < 4) or (id > 6 and id < 9) order by a;
+select min(a), max(b) from t1;
+select min(a), max(b) from t1 where id < 2 or id > 6;
+select max(id), min(b) from t1;
+select max(id), min(b) from t1 where (id > 2 and id < 4) or (id > 6 and id < 9);
+
+# select t2
+select * from t2 order by c1;
+select * from t2 where id < 'abcdefgabcdefg2' or id > 'abcdefgabcdefg6' order by c1;
+select * from t2 where (id > 'abcdefgabcdefg1' and id < 'abcdefgabcdefg4') or (id > 'abcdefgabcdefg6' and id < 'abcdefgabcdefg9') order by c1;
+select min(c1) from t2;
+select min(c1) from t2 where id < 'abcdefgabcdefg2' or id > 'abcdefgabcdefg6';
+select min(id), max(c1) from t2;
+select min(id), max(c1) from t2 where (id > 'abcdefgabcdefg1' and id < 'abcdefgabcdefg4') or (id > 'abcdefgabcdefg6' and id < 'abcdefgabcdefg9');
+
+--disable_query_log
+connection syscon;
+--error 0, 1210
+alter system set_tp tp_name = "ERRSIM_SET_NEED_REFRESH", error_code = 4016, frequency = 0;
+--enable_query_log
+
+connection conn1;
+drop table t1, t2;
+--disable_query_log
+connection syscon;
+alter system set_tp tp_name = "EN_COMPACTION_DISABLE_ROW_COL_SWITCH", error_code = 4016, frequency = 0;
+set @@recyclebin = on;
+--enable_query_log

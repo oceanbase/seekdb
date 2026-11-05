@@ -1,0 +1,18 @@
+# ==== ai_parse_doc(model_name, context [, params_json]) -> LONGTEXT ====
+# Vision/OCR document parsing: rasterize a PDF in-process with pdfium and send it
+# to a vision model, returning its text. This test runs a real end-to-end parse of
+# the committed ai_parse_sample.pdf fixture and REQUIRES a live vision endpoint:
+# API_KEY, MODEL_NAME and API_ENDPOINT must all be set (hardcoded in vldb.yml for
+# CI) or the test fails. The parsed text is non-deterministic, so it is not
+# recorded; the test just asserts a document actually parses.
+DROP DATABASE IF EXISTS ai_parse_test;
+CREATE DATABASE ai_parse_test;
+USE ai_parse_test;
+# ==== live end-to-end parse of the committed PDF fixture ====
+# Required env (set in vldb.yml for CI, or export locally):
+#   API_KEY       vision endpoint key
+#   MODEL_NAME    e.g. gpt-4o-mini
+#   API_ENDPOINT  e.g. https://api.openai.com/v1/chat/completions
+#   AI_FIXTURE_DIR  abs path to test_suite/ai_funcs (holds ai_parse_sample.pdf)
+# cleanup
+DROP DATABASE ai_parse_test;

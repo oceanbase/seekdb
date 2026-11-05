@@ -16,11 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
-#include "share/rc/ob_server_runtime.h"
 #include "share/ob_scheduled_job_utils.h"
-#include "share/ob_timezone_mgr.h"
-#include "query/scheduler/ob_scheduler_job.h"
-#include "query/scheduler/ob_scheduler_service.h"
+#include "share/ob_tenant_timezone_mgr.h"
+#include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
+#include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -50,12 +49,10 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
   int64_t job_id = 1;
   int64_t pos = 0;
   int32_t offset_sec = 0;
-  query::ObISchedulerService *scheduler =
-      ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
-  if (OB_ISNULL(scheduler)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+  if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+    LOG_WARN("failed to gen exec env", K(ret));
   } else if (OB_FAIL(get_time_zone_offset(sys_variable, offset_sec))) {
+    LOG_WARN("failed to get time zone offset", K(ret));
   } else {
     ObString exec_env(pos, buf);
     HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
@@ -64,8 +61,10 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
         int64_t start_usec = -1;
         ObSqlString job_action;
         if (OB_FAIL(get_window_job_info(current_time, i + 1, offset_sec, start_usec, job_action))) {
+          LOG_WARN("failed to get window job info", K(ret));
         } else if (OB_UNLIKELY(start_usec == -1 || job_action.empty())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected error", K(ret), K(start_usec), K(job_action));
         } else {
           if (OB_FAIL(get_stat_window_job_info(
                                                     job_id,
@@ -74,7 +73,9 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
                                                     start_usec,
                                                     job_action,
                                                     job_info))) {
-          } else if (OB_FAIL(scheduler->create_job(sql_client, job_id, job_info))) {
+            LOG_WARN("failed to get stat window job info", K(ret));
+          } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
+            LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
           } else {
             ++ job_id;
           }
@@ -84,7 +85,9 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
         //set stats history manager job
         if (OB_FAIL(get_stats_history_manager_job_info(
                                                       job_id, exec_env, job_info))) {
-        } else if (OB_FAIL(scheduler->create_job(sql_client, job_id, job_info))) {
+          LOG_WARN("failed to get stats history manager job sql", K(ret));
+        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
+          LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
         } else {
           ++ job_id;
         }
@@ -93,7 +96,9 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(get_async_gather_stats_job_info(
                                                   job_id, exec_env, job_info))) {
-        } else if (OB_FAIL(scheduler->create_job(sql_client, job_id, job_info))) {
+          LOG_WARN("failed to get async gather stats job sql", K(ret));
+        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
+          LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
         } else {
           ++ job_id;
         }
@@ -199,7 +204,7 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(
   return ret;
 }
 
-/* Default statistics maintenance windows:
+/* like Oracle, we set 7 windows:
    *  WINDOW_NAME                   REPEAT_INTERVAL                       DURATION
    * MONDAY_WINDOW                freq=daily;byday=MON;byhour=22;          4 hours
    * TUESDAY_WINDOW               freq=daily;byday=TUE;byhour=22;          4 hours
@@ -220,11 +225,14 @@ int ObDbmsStatsMaintenanceWindow::get_window_job_info(const int64_t current_time
   ObTime ob_time;
   if (OB_UNLIKELY(nth_window < 1 || nth_window > DAYS_PER_WEEK || current_time <= 0)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(nth_window), K(current_time));
   } else if (OB_FAIL(ObTimeConverter::usec_to_ob_time(current_time + offset_sec * 1000000,
                                                       ob_time))) {
+    LOG_WARN("failed to usec to ob time", K(ret), K(current_time), K(offset_sec));
   } else if (OB_UNLIKELY(ob_time.parts_[DT_WDAY] < 1 ||
                          ob_time.parts_[DT_WDAY] > DAYS_PER_WEEK)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(ob_time.parts_[DT_WDAY]));
   } else {
     //work day set default start time is 22:00 and non-work day set default start time is 6:00
     int64_t default_start_hour = DEFAULT_WORKING_DAY_START_HOHR;
@@ -238,6 +246,7 @@ int ObDbmsStatsMaintenanceWindow::get_window_job_info(const int64_t current_time
                                              K(default_start_hour), K(default_duration_usec));
     if (OB_FAIL(job_action.append_fmt("DBMS_STATS.GATHER_DATABASE_STATS_JOB_PROC(%ld)",
                                       default_duration_usec))) {
+      LOG_WARN("failed to append", K(ret));
     } else {
       int64_t offset_day = nth_window - current_wday;
       if (offset_day < 0) {
@@ -269,6 +278,7 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
   sql::ObSQLSessionInfo *session = ctx.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(session));
   } else if (is_stats_job(job_name)) {
     //now we just support modify job_action、start_date
     if (0 == attr_name.case_compare("job_action")) {
@@ -286,12 +296,15 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
            !val_name.empty() &&
            0 == strncasecmp(val_name.ptr(), maintenance_window_job, strlen(maintenance_window_job)))) {
         if (OB_FAIL(dml.add_column("job_action", ObHexEscapeSqlStr(val_name)))) {
+          LOG_WARN("failed to add column", K(ret));
         } else if (OB_FAIL(dml.add_column("what", ObHexEscapeSqlStr(val_name)))) {
+          LOG_WARN("failed to add column", K(ret));
         } else {
           is_window_attr = true;
         }
       } else {
         ret = OB_ERR_DBMS_STATS_PL;
+        LOG_WARN("the hour of interval must be between 0 and 24", K(ret));
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "the hour of interval must be between 0 and 24");
       }
     } else if (0 == attr_name.case_compare("next_date")) {
@@ -307,10 +320,12 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
       const ObTimeZoneInfo* tz_info = get_timezone_info(session);
       if (NULL != tz_info) {
         if (OB_FAIL(tz_info->get_timezone_offset(ObTimeUtility::current_time(), offset_sec))) {
+          LOG_WARN("failed to get timezone offset", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(ObObjCaster::to_type(ObDateTimeType, cast_ctx, src_obj, time_obj))) {
+          LOG_WARN("failed to ObTimestampType type", K(ret));
         } else {
           specify_time = time_obj.get_datetime() - SEC_TO_USEC(offset_sec);
         }
@@ -319,14 +334,19 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
         bool is_valid = false;
         if (OB_FAIL(check_date_validate(job_name, specify_time + SEC_TO_USEC(offset_sec),
                                         current_time + SEC_TO_USEC(offset_sec), is_valid))) {
+          LOG_WARN("failed to check date valid", K(ret));
         } else if (!is_valid) {
           ret = OB_ERR_DBMS_STATS_PL;
+          LOG_WARN("Invalid date", K(ret));
           LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,
                          "The date is invalid. Please check wether they are the same day in a week, or the day is passed.");
         } else if (OB_FAIL(dml.add_time_column("next_date", specify_time))) {
+          LOG_WARN("failed to add column", K(ret));
         } else if (OB_FAIL(dml.add_time_column("start_date", specify_time))) {
+          LOG_WARN("failed to add column", K(ret));
         } else {
           is_window_attr = true;
+          LOG_TRACE("succeed to set next date", K(specify_time));
         }
       }
     } else if (0 == attr_name.case_compare("duration")) {
@@ -334,13 +354,18 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
       char* cname = NULL;
       int64_t specify_time = -1;
       if (OB_FAIL(ob_dup_cstring(ctx.get_allocator(), val_name, cname))) {
+        LOG_WARN("failed to dup cstring", K(ret));
       } else if (OB_FAIL(common::ob_atoll(cname, specify_time))) {
+        LOG_WARN("fail to parse from string", "string", val_name, K(ret));
       } else if (specify_time < 0 || specify_time > DEFAULT_DAY_INTERVAL_USEC) {
         ret = OB_ERR_DBMS_STATS_PL;
+        LOG_WARN("the hour of interval must be between 0 and 24", K(ret));
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "the hour of interval must be between 0 and 24");
       } else if (OB_FAIL(dml.add_column("max_run_duration", specify_time))) {
+        LOG_WARN("fail to add column", K(ret));
       } else {
         is_window_attr = true;
+        LOG_TRACE("succeed to set max_run_duration", K(val_name));
       }
     } else {/*do nothing*/
       ret = OB_ERR_DBMS_STATS_PL;
@@ -385,21 +410,123 @@ int ObDbmsStatsMaintenanceWindow::check_date_validate(const ObString &job_name,
   ObTime ob_time;
   if (specify_time <= 0) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(specify_time));
   } else if (current_time > specify_time) {
     is_valid = false;
   } else if (0 == job_name.case_compare(opt_stats_history_manager) ||
              0 == job_name.case_compare(async_gather_stats_job_proc)) {
     is_valid = true;
   } else if (OB_FAIL(ObTimeConverter::usec_to_ob_time(specify_time, ob_time))) {
+    LOG_WARN("failed to usec to ob time", K(ret), K(specify_time));
   } else if (OB_UNLIKELY(ob_time.parts_[DT_WDAY] < 1 ||
                          ob_time.parts_[DT_WDAY] > DAYS_PER_WEEK)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(ob_time.parts_[DT_WDAY]));
   } else  {
     if (0 == job_name.case_compare(windows_name[ob_time.parts_[DT_WDAY]-1])) {
       is_valid = true;
     }
   }
 
+  return ret;
+}
+
+int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common::ObMySQLProxy *sql_proxy)
+{
+  int ret = OB_SUCCESS;
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+  int64_t job_id = 0;
+  ObString exec_env;
+  ObSqlString values_list;
+  bool is_join_exists = false;
+  //bug:
+  ObArenaAllocator allocator("AsyncStatsJob");
+  if (OB_FAIL(check_job_exists(sql_proxy, async_gather_stats_job_proc, is_join_exists))) {
+    LOG_WARN("failed to check async gather job exists", K(ret));
+  } else if (is_join_exists) {
+    //do nothing
+  } else if (OB_FAIL(get_next_job_id_and_exec_env(sql_proxy, allocator, job_id, exec_env))) {
+    LOG_WARN("failed to get async gather stats job id and exec env", K(ret));
+  } else if (OB_UNLIKELY(job_id > dbms_scheduler::ObDBMSSchedTableOperator::JOB_ID_OFFSET ||
+                         exec_env.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(job_id), K(exec_env));
+  } else {
+    compat_mode = lib::Worker::CompatMode::MYSQL;
+    HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
+      if (OB_FAIL(get_async_gather_stats_job_info(job_id, exec_env, job_info))) {
+        LOG_WARN("failed to get async gather stats job info", K(ret), K(job_info));
+      } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(*sql_proxy, job_id, job_info))) {
+        LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDbmsStatsMaintenanceWindow::get_next_job_id_and_exec_env(common::ObMySQLProxy *sql_proxy,
+                                                               ObIAllocator &allocator,
+                                                               int64_t &job_id,
+                                                               ObString &exec_env)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString select_sql;
+  if (OB_FAIL(select_sql.append_fmt("SELECT tt.job, t.exec_env FROM"\
+                                    " %s t, (SELECT max(job) + 1 AS job FROM %s"\
+                                             " WHERE job <= %ld AND job > 0) tt"\
+                                    " WHERE t.job_name = '%s' AND t.job = %ld;",
+                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
+                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
+                                    dbms_scheduler::ObDBMSSchedTableOperator::JOB_ID_OFFSET,
+                                    opt_stats_history_manager,
+                                    OPT_STATS_HISTORY_MANAGER_JOB_ID))) {
+    LOG_WARN("failed to append fmt", K(ret));
+  } else {
+    SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
+      sqlclient::ObMySQLResult *client_result = NULL;
+      ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
+        LOG_WARN("failed to execute sql", K(ret), K(select_sql));
+      } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to execute sql", K(ret));
+      } else {
+        int64_t get_rows = 0;
+        //expected only get one row.
+        while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
+          int64_t fisrt_col = 0;
+          int64_t second_col = 1;
+          ObObj obj;
+          ObString tmp_exec_env;
+          if (get_rows > 0) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get unexpected error, expected only one row", K(ret));
+          } else if (OB_FAIL(client_result->get_obj(fisrt_col, obj))) {
+            LOG_WARN("failed to get object", K(ret));
+          } else if (OB_FAIL(obj.get_int(job_id))) {
+            LOG_WARN("failed to get int", K(ret), K(obj));
+          } else if (OB_FAIL(client_result->get_obj(second_col, obj))) {
+            LOG_WARN("failed to get object", K(ret));
+          } else if (OB_FAIL(obj.get_varchar(tmp_exec_env))) {
+            LOG_WARN("failed to get int", K(ret), K(obj));
+          } else if (OB_FAIL(ob_write_string(allocator, tmp_exec_env, exec_env))) {
+            LOG_WARN("failed to ob write string", K(ret));
+          } else {
+            ++ get_rows;
+          }
+        }
+        ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
+      }
+      int tmp_ret = OB_SUCCESS;
+      if (NULL != client_result) {
+        if (OB_SUCCESS != (tmp_ret = client_result->close())) {
+          LOG_WARN("close result set failed", K(ret), K(tmp_ret));
+          ret = COVER_SUCC(tmp_ret);
+        }
+      }
+    }
+    LOG_INFO("succeed to get next job id and exec env", K(ret), K(select_sql), K(job_id), K(exec_env));
+  }
   return ret;
 }
 

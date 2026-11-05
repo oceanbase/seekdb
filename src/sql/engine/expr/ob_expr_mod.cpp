@@ -19,7 +19,6 @@
 #include "sql/engine/expr/ob_expr_mod.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -56,7 +55,7 @@ int ObExprMod::calc_result_type2(ObExprResType &type,
       type.set_scale(MAX(scale1, scale2));
       type.set_precision(MAX(type1.get_precision(), type2.get_precision()));
       if (type.is_double()) {
-        type.set_precision(obmysql::ObMySQLUtil::float_length(type.get_scale()));
+        type.set_precision(ObMySQLUtil::float_length(type.get_scale()));
       } else if (type.is_decimal_int()) {
         // In mysql mode, precision of int(255) is 255, more than OB_MAX_DECIMAL_POSSIBLE_PRECISION
         // So precision deduced just now may be larger than 81 while res type is decimal_int
@@ -114,6 +113,7 @@ int ObExprMod::mod_int(ObObj &res,
     }
   } else if (OB_UNLIKELY(ObUIntTC != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     if (left_i < 0) {
       res.set_int(-static_cast<int64_t>(-left_i % static_cast<uint64_t>(right_i)));
@@ -141,6 +141,7 @@ int ObExprMod::mod_uint(ObObj &res,
     res.set_uint64(left_ui % right_ui);
   } else if (OB_UNLIKELY(ObIntTC != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     if (static_cast<int64_t>(right_ui) < 0) {
       res.set_uint64(left_ui % -static_cast<int64_t>(right_ui));
@@ -164,10 +165,12 @@ int ObExprMod::mod_double(ObObj &res,
   const double EPSILON = 1e-14;
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else if (fabs(right.get_double()) < EPSILON) {
     res.set_null();
   } else {
     res.set_double(fmod(left.get_double(), right.get_double()));
+    LOG_DEBUG("succ to mod double", K(res), K(left), K(right));
   }
   UNUSED(allocator);
   UNUSED(scale);
@@ -188,6 +191,7 @@ int ObExprMod::mod_number(ObObj &res,
   } else if (OB_UNLIKELY(right.is_zero())) {
     res.set_null();
   } else if (OB_FAIL(left.get_number().rem_v3(right.get_number(), res_nmb, *allocator))) {
+    LOG_WARN("failed to rem numbers", K(ret), K(left), K(right));
   } else {
     res.set_number(res_nmb);
   }
@@ -202,6 +206,7 @@ int ObExprMod::mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -231,6 +236,7 @@ int ObExprMod::mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -260,6 +266,7 @@ int ObExprMod::mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -285,6 +292,7 @@ int ObExprMod::mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -308,6 +316,7 @@ int ObExprMod::mod_float(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
 {
   int ret = OB_SUCCESS;
   ret = OB_ERR_UNEXPECTED;
+  LOG_WARN("only oracle mode arrive here", K(ret));
   return ret;
 }
 
@@ -318,6 +327,7 @@ int ObExprMod::mod_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -331,6 +341,7 @@ int ObExprMod::mod_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
       }
     } else {
       datum.set_double(fmod(left_d, right_d));
+      LOG_DEBUG("succ to mod double", K(datum), K(left_d), K(right_d));
     }
   }
   return ret;
@@ -343,6 +354,7 @@ int ObExprMod::mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -359,6 +371,7 @@ int ObExprMod::mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
       ObDataBuffer local_alloc(local_buff, number::ObNumber::MAX_BYTE_LEN);
       number::ObNumber result;
       if (OB_FAIL(lnum.rem_v3(rnum, result, local_alloc))) {
+        LOG_WARN("failed to rem numbers", K(lnum), K(rnum), K(ret));
       } else {
         datum.set_number(result);
       }
@@ -382,6 +395,7 @@ int ObExprMod::mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
+    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -413,6 +427,7 @@ int ObExprMod::mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum
         CALC_DECIMAL_INT_MOD(int512)
         default: {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("int_bytes is unexpected", K(ret), K(int_bytes));
           break;
         }
       }
@@ -439,6 +454,7 @@ int ObExprMod::cg_expr(ObExprCGCtx &op_cg_ctx,
   const ObObjTypeClass right_tc = ob_obj_type_class(right);
 
   rt_expr.inner_functions_ = NULL;
+  LOG_DEBUG("arrive here cg_expr", K(ret), K(rt_expr));
   switch (rt_expr.datum_meta_.type_) {
     case ObTinyIntType:
     case ObSmallIntType:
@@ -490,8 +506,10 @@ int ObExprMod::cg_expr(ObExprCGCtx &op_cg_ctx,
 
   if (OB_ISNULL(rt_expr.eval_func_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected result type", K(ret), K(rt_expr.datum_meta_.type_), K(left), K(right));
   } else if (OB_ISNULL(op_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected session is null", K(ret));
   } else {
     stmt::StmtType stmt_type = op_cg_ctx.session_->get_stmt_type();
     if (is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())

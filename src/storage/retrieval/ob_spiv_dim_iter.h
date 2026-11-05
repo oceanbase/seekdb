@@ -17,18 +17,15 @@
 #ifndef OB_SPIV_DIM_ITER_H_
 #define OB_SPIV_DIM_ITER_H_
 
+#include "sql/das/iter/ob_das_scan_iter.h"
 #include "ob_i_sparse_retrieval_iter.h"
-#include "query/engine/expr/ob_expr.h"
+#include "sql/engine/expr/ob_expr.h"
+#include "sql/das/ob_das_ir_define.h"
+#include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "ob_block_max_iter.h"
 
 namespace oceanbase
 {
-namespace sql
-{
-class ObDASScanIter;
-class ObDASScanCtDef;
-class ObDASScanRtDef;
-}
 namespace storage
 {
 class ObTableScanParam;
@@ -59,9 +56,10 @@ struct ObSPIVDimIterParam
   sql::ObExpr *inv_idx_agg_expr_;
   sql::ObExpr *inv_scan_domain_id_expr_;
   sql::ObExpr *inv_scan_score_expr_;
-  const sql::ObDASScanCtDef *inv_idx_scan_ctdef_;
-  sql::ObDASScanRtDef *inv_idx_scan_rtdef_;
+  const ObDASScanCtDef *inv_idx_scan_ctdef_;
+  ObDASScanRtDef *inv_idx_scan_rtdef_;
   sql::ObEvalCtx *eval_ctx_;
+  share::ObLSID ls_id_;
   ObTabletID dim_docid_value_tablet_id_;
   double query_value_;
   uint32_t dim_;
@@ -81,6 +79,7 @@ public:
         inv_scan_domain_id_expr_(nullptr),
         inv_scan_score_expr_(nullptr),
         eval_ctx_(nullptr),
+        ls_id_(),
         dim_docid_value_tablet_id_(),
         is_inited_(false),
         max_batch_size_(1),
@@ -130,9 +129,10 @@ private:
   sql::ObExpr *inv_idx_agg_expr_;
   sql::ObExpr *inv_scan_domain_id_expr_;
   sql::ObExpr *inv_scan_score_expr_;
-  const sql::ObDASScanCtDef *inv_idx_scan_ctdef_;
-  sql::ObDASScanRtDef *inv_idx_scan_rtdef_;
+  const ObDASScanCtDef *inv_idx_scan_ctdef_;
+  ObDASScanRtDef *inv_idx_scan_rtdef_;
   sql::ObEvalCtx *eval_ctx_;
+  share::ObLSID ls_id_;
   ObTabletID dim_docid_value_tablet_id_;
   bool is_inited_;
   int64_t max_batch_size_;

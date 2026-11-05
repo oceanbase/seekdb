@@ -21,7 +21,6 @@
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_fast_array.h"
-#include "lib/container/ob_tuple.h"
 #include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/charset/ob_charset.h"
@@ -34,14 +33,8 @@
 
 namespace oceanbase
 {
-namespace query
-{
-class ObIRootCommandService;
-}
 namespace sql
 {
-class ObIPLSqlRuntime;
-class ObMaintainDepInfoTaskQueue;
 enum ObStmtScope
 {
   /*
@@ -60,6 +53,7 @@ enum ObStmtScope
   T_VARIABLE_SCOPE,
   T_WHEN_SCOPE,
   T_ORDER_SCOPE,
+  T_EXPIRE_SCOPE,
   T_PARTITION_SCOPE,
   T_FROM_SCOPE,
   T_LIMIT_SCOPE,
@@ -70,7 +64,8 @@ enum ObStmtScope
   T_WITH_CLAUSE_CYCLE_SCOPE,
   T_NAMED_WINDOWS_SCOPE,
   T_PL_SCOPE,
-  T_LOAD_DATA_SCOPE
+  T_LOAD_DATA_SCOPE,
+  T_CURRENT_OF_SCOPE
 };
 
 inline const char *get_scope_name(const ObStmtScope &scope)
@@ -109,6 +104,9 @@ inline const char *get_scope_name(const ObStmtScope &scope)
     break;
   case T_ORDER_SCOPE:
     str = "order clause";
+    break;
+  case T_EXPIRE_SCOPE:
+    str = "expire expression";
     break;
   case T_PARTITION_SCOPE:
     str = "partition function";
@@ -183,7 +181,6 @@ namespace common
 {
 class ObMySQLProxy;
 class ObOptStatManager;
-class ObISrsProvider;
 const char *get_stmt_scope_str(const sql::ObStmtScope &scope);
 
 inline const char *get_stmt_scope_str(const sql::ObStmtScope &scope)
@@ -223,6 +220,9 @@ inline const char *get_stmt_scope_str(const sql::ObStmtScope &scope)
     case sql::T_ORDER_SCOPE:
       str = "ORDER";
       break;
+    case sql::T_EXPIRE_SCOPE:
+      str = "EXPIRE";
+      break;
     case sql::T_PARTITION_SCOPE:
       str = "PARTITION";
       break;
@@ -250,7 +250,6 @@ inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos
 
 namespace pl
 {
-class ObPL;
 class ObPLBlockNS;
 class ObPLPackageGuard;
 }
@@ -322,13 +321,6 @@ struct ObResolverParams
        schema_checker_(NULL),
        secondary_namespace_(NULL),
        session_info_(NULL),
-       plan_cache_(NULL),
-       pl_sql_runtime_(NULL),
-       pl_engine_(NULL),
-       dependency_info_queue_(NULL),
-       root_command_service_(NULL),
-       srs_provider_(NULL),
-       lob_read_service_(NULL),
        query_ctx_(NULL),
        param_list_(NULL),
        select_item_param_infos_(NULL),
@@ -340,14 +332,17 @@ struct ObResolverParams
        force_trace_log_(false),
        expr_factory_(NULL),
        stmt_factory_(NULL),
+       show_seed_(false),
        is_from_show_resolver_(false),
        is_restore_(false),
        is_from_create_view_(false),
+       is_from_create_mview_(false),
        is_from_create_table_(false),
        is_prepare_protocol_(false),
-       is_mock_prepare_(false),
+       is_pre_execute_(false),
        is_prepare_stage_(false),
        is_dynamic_sql_(false),
+       is_dbms_sql_(false),
        statement_id_(common::OB_INVALID_ID),
        resolver_scope_stmt_type_(ObItemType::T_INVALID),
        cur_sql_(),
@@ -378,7 +373,9 @@ struct ObResolverParams
        is_resolve_lateral_derived_table_(false),
        package_guard_(NULL),
        star_expansion_infos_(),
+       is_for_rt_mv_(false),
        is_resolve_fake_cte_table_(false),
+       is_returning_(false),
        is_in_view_(false)
   {}
   bool is_force_trace_log() { return force_trace_log_; }
@@ -388,13 +385,6 @@ public:
   ObSchemaChecker *schema_checker_;
   pl::ObPLBlockNS *secondary_namespace_;
   ObSQLSessionInfo *session_info_;
-  ObPlanCache *plan_cache_;
-  ObIPLSqlRuntime *pl_sql_runtime_;
-  pl::ObPL *pl_engine_;
-  ObMaintainDepInfoTaskQueue *dependency_info_queue_;
-  query::ObIRootCommandService *root_command_service_;
-  common::ObISrsProvider *srs_provider_;
-  common::ObILobReadService *lob_read_service_;
   ObQueryCtx *query_ctx_;
   const ParamStore *param_list_;
   const SelectItemParamInfoArray *select_item_param_infos_;
@@ -408,16 +398,19 @@ public:
   ObRawExprFactory *expr_factory_;
   ObStmtFactory *stmt_factory_;
   
+  bool show_seed_;
   bool is_from_show_resolver_;
   bool is_restore_;
   // Query table creation, creating views cannot include temporary tables;
   // The former is an implementation issue, the latter is for MySQL compatibility;
   bool is_from_create_view_;
+  bool is_from_create_mview_;
   bool is_from_create_table_;
   bool is_prepare_protocol_;
-  bool is_mock_prepare_;
+  bool is_pre_execute_;
   bool is_prepare_stage_;
   bool is_dynamic_sql_;
+  bool is_dbms_sql_;
   uint64_t statement_id_;
   // Record the type of top-level stmt. If it is prepare or outline,
   // Then record the type of stmt to be executed (such as select, insert, etc.)
@@ -453,7 +446,9 @@ public:
   bool is_resolve_lateral_derived_table_; // used to mark resolve lateral derived table.
   pl::ObPLPackageGuard *package_guard_;
   common::ObArray<ObStarExpansionInfo> star_expansion_infos_;
+  bool is_for_rt_mv_; // call resolve in transformation for expanding inline real-time materialized view
   bool is_resolve_fake_cte_table_;
+  bool is_returning_;
   bool is_in_view_;
 };
 } // end namespace sql

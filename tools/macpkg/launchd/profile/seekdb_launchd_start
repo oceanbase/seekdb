@@ -47,6 +47,9 @@ read_config() {
         PORT="$value"
         ADDITIONAL_ARGS+=("--port=$value")
         ;;
+      plugin-dir)
+        ADDITIONAL_ARGS+=("--variable" "plugin_dir=$value")
+        ;;
       *)
         ADDITIONAL_ARGS+=("--parameter" "$key=$value")
         ;;

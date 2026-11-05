@@ -43,12 +43,14 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
          iter++) {
       ObDATrieHit &hit = *iter;
       if (OB_FAIL(dict_main_.match_with_hit({char_len, ch}, hit, hit))) {
+        LOG_WARN("fail to match with hit", K(ret));
       } else if (hit.is_match()) {
         if (OB_FAIL(ctx.add_token(ctx.fulltext(),
                                   hit.start_pos_,
                                   hit.end_pos_ - hit.start_pos_,
                                   hit.char_cnt_,
                                   ObIKTokenType::IK_CHINESE_TOKEN))) {
+          LOG_WARN("Fail to add chinese token");
         } else if (hit.is_prefix()) {
           // match will record the start_cursor
         }
@@ -58,6 +60,7 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
         hits_.erase(hit);
       } else {
         ret = OB_UNEXPECT_INTERNAL_ERROR;
+        LOG_WARN("Match dict reach impossible path.", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -65,6 +68,7 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
       // find range of dict
       ObDATrieHit hit(&dict_main_, ctx.get_cursor());
       if (OB_FAIL(dict_main_.match({char_len, ch}, hit))) {
+        LOG_WARN("Fail to match", K(ret));
       } else if (hit.is_match()) {
         // output token
         hits_.push_back(hit);

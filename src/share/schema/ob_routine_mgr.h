@@ -28,29 +28,30 @@ namespace share
 {
 namespace schema
 {
-struct ObRoutineId
+struct ObTenantRoutineId
 {
 public:
-  ObRoutineId()
+  ObTenantRoutineId()
       : routine_id_(common::OB_INVALID_ID) {}
-  ObRoutineId(uint64_t routine_id)
+  ObTenantRoutineId(uint64_t routine_id)
       : routine_id_(routine_id) {}
-  ObRoutineId(const ObRoutineId &other)
+  ObTenantRoutineId(const ObTenantRoutineId &other)
       : routine_id_(other.routine_id_) {}
-  ObRoutineId &operator =(const ObRoutineId &other)
+  ObTenantRoutineId &operator =(const ObTenantRoutineId &other)
   {
     routine_id_ = other.routine_id_;
     return *this;
   }
-  bool operator ==(const ObRoutineId &rhs) const
+  bool operator ==(const ObTenantRoutineId &rhs) const
   {
-    return (routine_id_ == rhs.routine_id_);
+    return (true)
+           && (routine_id_ == rhs.routine_id_);
   }
-  bool operator !=(const ObRoutineId &rhs) const
+  bool operator !=(const ObTenantRoutineId &rhs) const
   {
     return !(*this == rhs);
   }
-  bool operator <(const ObRoutineId &rhs) const
+  bool operator <(const ObTenantRoutineId &rhs) const
   {
     return routine_id_ < rhs.routine_id_;
   }
@@ -62,7 +63,8 @@ public:
   }
   bool is_valid() const
   {
-    return (routine_id_ != common::OB_INVALID_ID);
+    return (true)
+        && (routine_id_ != common::OB_INVALID_ID);
   }
   
   inline uint64_t get_routine_id() const { return routine_id_; }
@@ -116,8 +118,8 @@ public:
   inline int set_routine_name(const common::ObString &routine_name)
   { return deep_copy_str(routine_name, routine_name_); }
   inline const common::ObString &get_routine_name() const { return routine_name_; }
-  inline ObRoutineId get_routine_key() const
-  { return ObRoutineId(routine_id_); }
+  inline ObTenantRoutineId get_routine_key() const
+  { return ObTenantRoutineId(routine_id_); }
   ObRoutineType get_routine_type() const { return routine_type_; }
   void set_routine_type(ObRoutineType routine_type) { routine_type_ = routine_type; }
   inline int set_priv_user(const common::ObString &priv_user)
@@ -186,8 +188,9 @@ private:
 
 inline bool ObRoutineNameHashWrapper::operator ==(const ObRoutineNameHashWrapper &rv) const
 {
-  ObSchemaNameComparator name_cmp;
-  return (database_id_ == rv.database_id_)
+  ObCompareNameWithTenantID name_cmp;
+  return (true)
+      && (database_id_ == rv.database_id_)
       && (package_id_ == rv.package_id_)
       && (0 == name_cmp.compare(routine_name_, rv.routine_name_))
       && (overload_ == rv.overload_)
@@ -265,16 +268,18 @@ public:
 
   int add_routines(const common::ObIArray<ObSimpleRoutineSchema> &routine_schemas);
   int add_routine(const ObSimpleRoutineSchema &routine_schema);
-  int del_routine(const ObRoutineId &routine_id);
+  int del_routine(const ObTenantRoutineId &routine_id);
   int get_routine_schema( uint64_t database_id,
                          uint64_t package_id, const common::ObString &routine_name,
                          uint64_t overload, ObRoutineType routine_type,
                          const ObSimpleRoutineSchema *&routine_schema) const;
   int get_routine_schema(uint64_t routine_id, const ObSimpleRoutineSchema *&routine_schema) const;
-  int get_routine_schemas_in_runtime(common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
+  int get_routine_schemas_in_tenant(common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
   int get_routine_schemas_in_database(
               uint64_t database_id,
               common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
+  int get_routine_schemas_in_udt(uint64_t udt_id,
+                                 common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
   int get_routine_schemas_in_package(uint64_t package_id,
                                      common::ObIArray<const ObSimpleRoutineSchema *> &routine_schemas) const;
   int get_routine_schema_count(int64_t &routine_schema_count) const;
@@ -286,10 +291,10 @@ private:
                                      const ObSimpleRoutineSchema *rhs);
   inline static bool equal_routine(const ObSimpleRoutineSchema *lhs,
                                    const ObSimpleRoutineSchema *rhs);
-  inline static bool compare_with_routine_id(const ObSimpleRoutineSchema *lhs,
-                                                    const ObRoutineId &routine_id);
-  inline static bool equal_with_routine_id(const ObSimpleRoutineSchema *lhs,
-                                                  const ObRoutineId &routine_id);
+  inline static bool compare_with_tenant_routine_id(const ObSimpleRoutineSchema *lhs,
+                                                    const ObTenantRoutineId &tenant_routine_id);
+  inline static bool equal_with_tenant_routine_id(const ObSimpleRoutineSchema *lhs,
+                                                  const ObTenantRoutineId &tenant_routine_id);
   int rebuild_routine_hashmap();
 private:
   common::ObArenaAllocator local_allocator_;

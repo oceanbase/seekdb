@@ -15,8 +15,8 @@
  */
 
 #include "ob_trans_submit_log_cb.h"
-#include "share/rc/ob_server_runtime.h"
-#include "ob_tx_ctx.h"
+#include "share/rc/ob_module_provider.h"
+#include "ob_trans_part_ctx.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 namespace oceanbase
@@ -76,18 +76,18 @@ int ObTxBaseLogCb::set_lsn(const LSN &lsn)
   return ret;
 }
 
-int ObTxLogCb::init(ObTxCtx *tx_ctx)
+int ObTxLogCb::init(ObTxLogCbGroup *group_ptr)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(tx_ctx)) {
+  if (OB_ISNULL(group_ptr)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid arguments", K(ret), KPC(tx_ctx));
-  } else if (OB_NOT_NULL(tx_ctx_)) {
+    TRANS_LOG(WARN, "invalid arguments", K(ret), KPC(group_ptr));
+  } else if (OB_NOT_NULL(group_ptr_)) {
     ret = OB_INIT_TWICE;
-    TRANS_LOG(WARN, "init ObTxLogCb twice", K(ret), KPC(tx_ctx), KPC(tx_ctx_));
+    TRANS_LOG(WARN, "init ObTxLogCb twice", K(ret), KPC(group_ptr), KPC(group_ptr_));
   } else {
-    tx_ctx_ = tx_ctx;
+    group_ptr_ = group_ptr;
   }
 
   return ret;
@@ -100,7 +100,7 @@ void ObTxLogCb::reset_tx_op_array()
       tx_op_array_->at(idx).release();
     }
     tx_op_array_->~ObTxOpArray();
-    server_free(tx_op_array_);
+    mtl_free(tx_op_array_);
     tx_op_array_ = nullptr;
   }
 }
@@ -108,7 +108,7 @@ void ObTxLogCb::reset_tx_op_array()
 void ObTxLogCb::reset_undo_node()
 {
   if (OB_NOT_NULL(undo_node_)) {
-    ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_allocator().free(undo_node_);
+    share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator().free(undo_node_);
     undo_node_ = NULL;
   }
 }
@@ -117,13 +117,18 @@ void ObTxLogCb::reset()
 {
   ObTxBaseLogCb::reset();
   ObDLinkBase<ObTxLogCb>::reset();
-  tx_ctx_ = nullptr;
+  group_ptr_ = nullptr;
   tx_data_guard_.reset();
   callbacks_.reset();
   is_callbacked_ = false;
   is_busy_ = false;
   cb_arg_array_.reset();
   mds_range_.reset();
+
+  if (OB_NOT_NULL(extra_cb_) && need_free_extra_cb_) {
+    mtl_free(extra_cb_);
+  }
+  need_free_extra_cb_ = false;
 
   // is_callbacking_ = false;
   first_part_scn_.invalid_scn();
@@ -140,6 +145,11 @@ void ObTxLogCb::reuse()
   is_busy_ = false;
   cb_arg_array_.reset();
   mds_range_.reset();
+
+  if (OB_NOT_NULL(extra_cb_) && need_free_extra_cb_) {
+    mtl_free(extra_cb_);
+  }
+  need_free_extra_cb_ = false;
 
   first_part_scn_.invalid_scn();
   reset_tx_op_array();
@@ -164,16 +174,24 @@ int ObTxLogCb::on_success()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(tx_ctx_)) {
+  if (OB_ISNULL(group_ptr_)) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObTxLogCb not inited", K(ret));
   } else {
-    ObTxCtx *part_ctx = tx_ctx_;
+    const int64_t bk_submit_ts = submit_ts_;
+    const int64_t bk_log_size = log_size_;
+    const bool bk_is_reserved = group_ptr_->is_reserved();
+    ObTxLogCbGroup *bk_group_ptr = group_ptr_;
+    ObPartTransCtx *part_ctx = group_ptr_->get_tx_ctx();
+    const ObTransID tx_id = part_ctx->get_trans_id();  
+    const ObLSID ls_id = part_ctx->get_ls_id();
+    const share::SCN log_ts = log_ts_;  
     if (NULL == part_ctx) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "ctx is null", K(ret), KPC(part_ctx));
     } else {
       if (OB_FAIL(part_ctx->on_success(this))) {
+        TRANS_LOG(WARN, "sync log success callback error", K(ret), K(tx_id), K(ls_id), K(log_ts));
       }
     }
   }
@@ -184,22 +202,27 @@ int ObTxLogCb::on_success()
 int ObTxLogCb::on_failure()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(tx_ctx_)) {
+  if (OB_ISNULL(group_ptr_)) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObTxLogCb not inited", K(*this));
   } else {
-    ObTxCtx *part_ctx = tx_ctx_;
-    ObTransID tx_id;
-    const share::SCN log_ts = log_ts_;
+    const int64_t bk_submit_ts = submit_ts_;
+    const int64_t bk_log_size = log_size_;
+    const bool bk_is_reserved = group_ptr_->is_reserved();
+    ObTxLogCbGroup *bk_group_ptr = group_ptr_;
+    ObPartTransCtx *part_ctx = group_ptr_->get_tx_ctx();
+    const ObTransID tx_id = part_ctx->get_trans_id();  
+    const ObLSID ls_id = part_ctx->get_ls_id();
+    const share::SCN log_ts = log_ts_;  
     if (NULL == part_ctx) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "ctx is null", KR(ret), K(*this));
     } else {
-      tx_id = part_ctx->get_trans_id();
       if (OB_FAIL(part_ctx->on_failure(this))) {
+        TRANS_LOG(WARN, "sync log success callback error", KR(ret), K(tx_id), K(ls_id), K(log_ts));
       }
     }
-    TRANS_LOG(INFO, "ObTxLogCb::on_failure end", KR(ret), K(tx_id), K(log_ts));
+    TRANS_LOG(INFO, "ObTxLogCb::on_failure end", KR(ret), K(tx_id), K(ls_id), K(log_ts));
   }
   return ret;
 }
@@ -211,10 +234,13 @@ int ObTxLogCb::copy(const ObTxLogCb &other)
   lsn_ = other.lsn_;
   submit_ts_ = other.submit_ts_;
   if (OB_FAIL(callbacks_.assign(other.callbacks_))) {
+    TRANS_LOG(WARN, "assign callbacks failed", K(ret), KPC(this));
   } else if (FALSE_IT(is_callbacked_ = other.is_callbacked_)) {
   // without txdata
   } else if (OB_FAIL(mds_range_.assign(other.mds_range_))) {
+    TRANS_LOG(WARN, "assign mds range failed", K(ret), KPC(this));
   } else if (OB_FAIL(cb_arg_array_.assign(other.cb_arg_array_))) {
+    TRANS_LOG(WARN, "assign cb_arg_array_ failed", K(ret), KPC(this));
   }
   first_part_scn_ = other.first_part_scn_;
 

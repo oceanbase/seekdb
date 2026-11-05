@@ -28,7 +28,7 @@ namespace sql
 
 ObExprHash::ObExprHash(ObIAllocator &alloc)
   : ObExprOperator(alloc, T_FUN_SYS_HASH, N_HASH, MORE_THAN_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                   INTERNAL_IN_MYSQL_MODE)
+                   INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
 
@@ -53,16 +53,14 @@ int ObExprHash::calc_hash_value_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
 {
   int ret = OB_SUCCESS;
   uint64_t hash_value = HASH_SEED;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-  }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     ObDatum *datum = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
+      LOG_WARN("failed to eval datum", K(ret));
     } else {
       ObExprHashFuncType hash_func = expr.args_[i]->basic_funcs_->murmur_hash_v2_;
-      if (OB_FAIL(hash_func(
-              *datum, hash_value, hash_value, datum_access_ctx))) {
+      if (OB_FAIL(hash_func(*datum, hash_value, hash_value))) {
+        LOG_WARN("failed to do hash", K(ret));
       }
     }
   }
@@ -77,19 +75,18 @@ int ObExprHash::calc_hash_value_expr_batch(
   uint64_t hash_seed = HASH_SEED;
   uint64_t *batch_hash_vals = reinterpret_cast<uint64_t *>(
                               ctx.frames_[expr.frame_idx_] + expr.res_buf_off_);
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-  }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     if (OB_FAIL(expr.args_[i]->eval_batch(ctx, skip, batch_size))) {
+      LOG_WARN("failed to eval batch datum", K(ret));
     } else {
       ObDatum *datums = expr.args_[i]->locate_batch_datums(ctx);
       if (OB_ISNULL(datums)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to locate batch datums", K(ret));
       } else {
         ObBatchDatumHashFunc hash_func = expr.args_[i]->basic_funcs_->murmur_hash_v2_batch_;
         hash_func(batch_hash_vals, datums, expr.args_[i]->is_batch_result(), skip, batch_size,
-                  i > 0 ? batch_hash_vals: &hash_seed, i > 0, datum_access_ctx);
+                  i > 0 ? batch_hash_vals: &hash_seed, i > 0);
       }
     }
   }
@@ -118,6 +115,7 @@ int ObExprHash::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(expr_cg_ctx);
   if (0 == rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument number, param should be more than one", K(ret));
   } else {
     rt_expr.eval_func_ = &calc_hash_value_expr;
     rt_expr.eval_batch_func_ = &calc_hash_value_expr_batch;

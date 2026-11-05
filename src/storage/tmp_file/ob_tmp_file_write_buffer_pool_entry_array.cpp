@@ -17,7 +17,7 @@
 
 #include "storage/tmp_file/ob_tmp_file_write_buffer_pool_entry_array.h"
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
@@ -69,9 +69,11 @@ int ObTmpWriteBufferPoolEntryArray::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("tmp file entry array init twice", KR(ret));
   } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(),
                                      OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                      ObMemAttr("TmpFileEntArPt")))) {
+    LOG_WARN("fail to init allocator", KR(ret), K(OB_MALLOC_NORMAL_BLOCK_SIZE));
   } else {
     extend_allocator_.set_attr(ObMemAttr("TmpFileEntBkt"));
     buckets_.set_attr(ObMemAttr("TmpFileEntBktAr"));
@@ -104,13 +106,16 @@ int ObTmpWriteBufferPoolEntryArray::add_new_bucket_()
   ObArray<ObPageEntry> *bucket = nullptr;
   if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObArray<ObPageEntry>)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory for new bucket", KR(ret), K(buckets_.size()), K(size_));
   } else if (FALSE_IT(bucket = new (buf) ObArray<ObPageEntry>())) {
   } else if (OB_FAIL(buckets_.push_back(bucket))) {
+    LOG_WARN("fail to push back new bucket", KR(ret), K(buckets_.size()), K(size_));
   } else {
     int64_t bucket_idx = buckets_.size() - 1;
     buckets_[bucket_idx]->set_block_allocator(extend_allocator_);
 
     if (OB_FAIL(buckets_[bucket_idx]->reserve(MAX_BUCKET_CAPACITY))) {
+      LOG_WARN("fail to do reserve for new bucket", KR(ret), K(buckets_.size()), K(size_));
     }
   }
   return ret;
@@ -123,9 +128,11 @@ int ObTmpWriteBufferPoolEntryArray::push_back(const ObPageEntry &entry)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("tmp file entry array not init", KR(ret));
   } else {
     if (bucket_idx >= buckets_.size()) {
       if (OB_FAIL(add_new_bucket_())) {
+        LOG_WARN("fail to add new bucket", KR(ret), K(size_));
       }
     }
 
@@ -134,6 +141,7 @@ int ObTmpWriteBufferPoolEntryArray::push_back(const ObPageEntry &entry)
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid bucket index", KR(ret), K(bucket_idx), K(buckets_.size()), K(size_));
     } else if (OB_FAIL(buckets_[bucket_idx]->push_back(entry))) {
+      LOG_WARN("fail to push back entry", KR(ret), K(bucket_idx), K(entry), K(size_));
     }
   }
 

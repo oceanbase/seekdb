@@ -29,6 +29,7 @@ int ObMinMaxValEval::get_obj(ObObj &obj) const
   if (datum_ == NULL) {
     obj.set_null();
   } else if (OB_FAIL(datum_->to_obj(obj, meta_))) {
+    LOG_WARN("failed to to obj");
   }
   return ret;
 }
@@ -41,6 +42,7 @@ int ObMinMaxValEval::deep_copy(const ObMinMaxValEval &other, ObIAllocator &alloc
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to allocate memory");
   } else if (OB_FAIL(datum_->deep_copy(*other.datum_, alloc))) {
+    LOG_WARN("failed to deep copy datum");
   } else {
     meta_ = other.meta_;
     cmp_func_ = other.cmp_func_;
@@ -62,15 +64,12 @@ void ObOptOSGColumnStat::reset()
   inner_max_allocator_.reset();
 }
 
-ObOptOSGColumnStat* ObOptOSGColumnStat::create_new_osg_col_stat(
-    common::ObIAllocator &allocator,
-    const ObDatumAccessContext *datum_access_ctx)
+ObOptOSGColumnStat* ObOptOSGColumnStat::create_new_osg_col_stat(common::ObIAllocator &allocator)
 {
   ObOptOSGColumnStat *new_osg_col_stat = OB_NEWx(ObOptOSGColumnStat, (&allocator), allocator);
   ObOptColumnStat *new_col_stat = ObOptColumnStat::malloc_new_column_stat(allocator);
   if (OB_NOT_NULL(new_osg_col_stat) && OB_NOT_NULL(new_col_stat)) {
     new_osg_col_stat->col_stat_ = new_col_stat;
-    new_osg_col_stat->datum_access_ctx_ = datum_access_ctx;
   } else {
     if (new_osg_col_stat != NULL) {
       new_osg_col_stat->~ObOptOSGColumnStat();
@@ -91,7 +90,9 @@ int ObOptOSGColumnStat::deep_copy(const ObOptOSGColumnStat &other)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null");
   } else if (OB_FAIL(col_stat_->deep_copy(*other.col_stat_))) {
+    LOG_WARN("failed to deep copy col stat");
   } else if (other.min_val_.is_valid() && OB_FAIL(min_val_.deep_copy(other.min_val_, allocator_))) {
     LOG_WARN("failed to deep copy min val");
   } else if (other.max_val_.is_valid() && OB_FAIL(max_val_.deep_copy(other.max_val_, allocator_))) {
@@ -107,19 +108,23 @@ int ObOptOSGColumnStat::set_min_max_datum_to_obj()
   ObObj *max_obj = NULL;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null");
   } else if (OB_ISNULL(min_obj = OB_NEWx(ObObj, (&allocator_))) ||
              OB_ISNULL(max_obj = OB_NEWx(ObObj, (&allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory");
   } else if (OB_FAIL(min_val_.get_obj(*min_obj))) {
+    LOG_WARN("failed to get min obj");
   } else if (OB_FAIL(max_val_.get_obj(*max_obj))) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
-                 *min_obj, allocator_, datum_access_ctx_))) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
-                 *max_obj, allocator_, datum_access_ctx_))) {
+    LOG_WARN("failed to get max obj");
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(*min_obj, allocator_))) {
+    LOG_WARN("fail to truncate string", K(ret));
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(*max_obj, allocator_))) {
+    LOG_WARN("fail to truncate string", K(ret));
   } else {
     const ObObj &min_val = col_stat_->get_min_value();
     const ObObj &max_val = col_stat_->get_max_value();
+    LOG_TRACE("set min/max val", KPC(min_obj), KPC(max_obj), K(min_val), K(max_val));
     if (min_val.is_null() || (!min_obj->is_null() && *min_obj < min_val)) {
       col_stat_->set_min_value(*min_obj);
     }
@@ -135,6 +140,7 @@ int ObOptOSGColumnStat::merge_column_stat(const ObOptOSGColumnStat &other)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_) || OB_ISNULL(other.col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(col_stat_));
   } else if (OB_UNLIKELY(col_stat_->get_table_id() != other.col_stat_->get_table_id() ||
                          col_stat_->get_partition_id() != other.col_stat_->get_partition_id() ||
                          col_stat_->get_column_id() != other.col_stat_->get_column_id())) {
@@ -171,7 +177,9 @@ int ObOptOSGColumnStat::update_column_stat_info(const ObDatum *datum,
   int64_t col_len = 0;
   if (OB_ISNULL(datum) || OB_ISNULL(col_stat_) || datum->is_nop()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KPC(datum), KP(col_stat_));
   } else if (OB_FAIL(calc_col_len(*datum, meta, col_len))) {
+    LOG_WARN("failed to calc col len", K(datum), K(meta));
   } else if (OB_FALSE_IT(col_stat_->add_col_len(col_len))) {
     // do nothing
   } else if (datum->is_null()) {
@@ -181,13 +189,18 @@ int ObOptOSGColumnStat::update_column_stat_info(const ObDatum *datum,
     uint64_t hash_value = 0;
     ObObj tmp_obj;
     if (OB_FAIL(datum->to_obj(tmp_obj, meta))) {
+      LOG_WARN("failed to to obj");
     } else if (OB_FAIL(tmp_obj.hash_murmur(hash_value, hash_value))) {
+      LOG_WARN("fail to do hash", K(ret), K(tmp_obj));
     } else if (OB_UNLIKELY(col_stat_->get_llc_bitmap() == NULL || col_stat_->get_llc_bitmap_size() == 0)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("get invalid llc_bitmap", K(ret));
     } else if (OB_FAIL(ObAggregateProcessor::llc_add_value(hash_value,
                                                            col_stat_->get_llc_bitmap(),
                                                            col_stat_->get_llc_bitmap_size()))) {
+      LOG_WARN("fail to calc llc", K(ret));
     } else if (OB_FAIL(inner_merge_min_max(*datum, meta, cmp_func))) {
+      LOG_WARN("failed to inner merge min and max val", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -205,6 +218,7 @@ int ObOptOSGColumnStat::calc_col_len(const ObDatum &datum, const ObObjMeta &meta
     ObLobLocatorV2 locator(datum.get_string(), meta.has_lob_header());
     int64_t lob_data_byte_len = 0;
     if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
+      LOG_WARN("get lob data byte length failed", K(ret), K(locator));
     } else {
       col_len = sizeof(datum) + static_cast<int64_t>(lob_data_byte_len);
     }
@@ -223,6 +237,7 @@ int ObOptOSGColumnStat::inner_merge_min(const ObDatum &datum, const ObObjMeta &m
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory");
     } else if (OB_FAIL(min_val_.datum_->deep_copy(datum, inner_min_allocator_))) {
+      LOG_WARN("failed to deep copy datum");
     } else {
       min_val_.meta_ = meta;
       min_val_.cmp_func_ = cmp_func;
@@ -230,14 +245,16 @@ int ObOptOSGColumnStat::inner_merge_min(const ObDatum &datum, const ObObjMeta &m
   } else if (min_val_.datum_->is_null()) {
     inner_min_allocator_.reuse();
     if (OB_FAIL(min_val_.datum_->deep_copy(datum, inner_min_allocator_))) {
+      LOG_WARN("failed to deep copy datum");
     }
   } else {
     int cmp_ret = 0;
-    if (OB_FAIL(min_val_.cmp_func_(
-            *min_val_.datum_, datum, cmp_ret, datum_access_ctx_))) {
+    if (OB_FAIL(min_val_.cmp_func_(*min_val_.datum_, datum, cmp_ret))) {
+      LOG_WARN("failed to perform compare");
     } else if (cmp_ret > 0) {
       inner_min_allocator_.reuse();
       if (OB_FAIL(min_val_.datum_->deep_copy(datum, inner_min_allocator_))) {
+        LOG_WARN("failed to deep copy datum");
       }
     }
   }
@@ -255,6 +272,7 @@ int ObOptOSGColumnStat::inner_merge_max(const ObDatum &datum, const ObObjMeta &m
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory");
     } else if (OB_FAIL(max_val_.datum_->deep_copy(datum, inner_max_allocator_))) {
+      LOG_WARN("failed to deep copy datum");
     } else {
       max_val_.meta_ = meta;
       max_val_.cmp_func_ = cmp_func;
@@ -262,16 +280,19 @@ int ObOptOSGColumnStat::inner_merge_max(const ObDatum &datum, const ObObjMeta &m
   } else if (max_val_.datum_->is_null()) {
     inner_max_allocator_.reuse();
     if (OB_FAIL(max_val_.datum_->deep_copy(datum, inner_max_allocator_))) {
+      LOG_WARN("failed to deep copy datum");
     }
   } else {
     int cmp_ret = 0;
-    if (OB_FAIL(max_val_.cmp_func_(
-            *max_val_.datum_, datum, cmp_ret, datum_access_ctx_))) {
+    if (OB_FAIL(max_val_.cmp_func_(*max_val_.datum_, datum, cmp_ret))) {
+      LOG_WARN("failed to perform compare");
     } else if (cmp_ret < 0) {
       inner_max_allocator_.reuse();
       if (OB_FAIL(max_val_.datum_->deep_copy(datum, inner_max_allocator_))) {
+        LOG_WARN("failed to deep copy datum");
       }
     }
+    LOG_TRACE("succeed to merge max datum", K(cmp_ret), K(*max_val_.datum_), K(datum), K(meta));
   }
   return ret;
 }
@@ -291,6 +312,7 @@ int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMet
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory");
       } else if (OB_FAIL(max_val_.datum_->deep_copy(datum, inner_max_allocator_))) {
+        LOG_WARN("failed to deep copy datum");
       } else {
         max_val_.meta_ = meta;
         max_val_.cmp_func_ = cmp_func;
@@ -299,6 +321,7 @@ int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMet
     } else if (max_val_.datum_->is_null()) {
       inner_max_allocator_.reuse();
       if (OB_FAIL(max_val_.datum_->deep_copy(datum, inner_max_allocator_))) {
+        LOG_WARN("failed to deep copy datum");
       } else {
         cmp_max = false;
       }
@@ -311,6 +334,7 @@ int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMet
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory");
       } else if (OB_FAIL(min_val_.datum_->deep_copy(datum, inner_min_allocator_))) {
+        LOG_WARN("failed to deep copy datum");
       } else {
         min_val_.meta_ = meta;
         min_val_.cmp_func_ = cmp_func;
@@ -319,17 +343,19 @@ int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMet
     } else if (min_val_.datum_->is_null()) {
       inner_min_allocator_.reuse();
       if (OB_FAIL(min_val_.datum_->deep_copy(datum, inner_min_allocator_))) {
+        LOG_WARN("failed to deep copy datum");
       } else {
         cmp_min = false;
       }
     }
 
     if (OB_SUCC(ret) && cmp_max) {
-      if (OB_FAIL(max_val_.cmp_func_(
-              *max_val_.datum_, datum, cmp_ret, datum_access_ctx_))) {
+      if (OB_FAIL(max_val_.cmp_func_(*max_val_.datum_, datum, cmp_ret))) {
+        LOG_WARN("failed to perform compare");
       } else if (cmp_ret < 0) {
         inner_max_allocator_.reuse();
         if (OB_FAIL(max_val_.datum_->deep_copy(datum, inner_max_allocator_))) {
+          LOG_WARN("failed to deep copy datum");
         } else {
           cmp_min = false;
         }
@@ -337,11 +363,12 @@ int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMet
     }
 
     if (OB_SUCC(ret) && cmp_min) {
-      if (OB_FAIL(min_val_.cmp_func_(
-              *min_val_.datum_, datum, cmp_ret, datum_access_ctx_))) {
+      if (OB_FAIL(min_val_.cmp_func_(*min_val_.datum_, datum, cmp_ret))) {
+        LOG_WARN("failed to perform compare");
       } else if (cmp_ret > 0) {
         inner_min_allocator_.reuse();
         if (OB_FAIL(min_val_.datum_->deep_copy(datum, inner_min_allocator_))) {
+          LOG_WARN("failed to deep copy datum");
         }
       }
     }

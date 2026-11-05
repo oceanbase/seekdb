@@ -31,11 +31,12 @@ public:
   ObGVSql();
   virtual ~ObGVSql();
   void reset();
-  int inner_get_next_row() { return get_row(); }
+  virtual int inner_open();
+  int inner_get_next_row() { return get_row_from_tenants(); }
 protected:
-  int get_row();
+  int get_row_from_tenants();
   int fill_cells(const sql::ObILibCacheObject *cache_obj, const sql::ObPlanCache &plan_cache);
-  int get_next_plan_row(bool &is_end);
+  int get_row_from_specified_tenant(bool &is_end);
 private:
   common::ObSEArray<uint64_t, 1024> plan_id_array_;
   int64_t plan_id_array_idx_;
@@ -47,4 +48,5 @@ private:
 }
 
 #endif /* _OB_GV_SQL_H */
+
 

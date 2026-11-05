@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "config_bridge.h"
 #include "ob_physical_plan.h"
 #include "lib/utility/ob_smart_call.h"
 #include "sql/engine/ob_operator_factory.h"
@@ -40,6 +39,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     signature_(0),
     field_columns_(mem_context->get_arena_allocator()),
     param_columns_(mem_context->get_arena_allocator()),
+    returning_param_columns_(mem_context->get_arena_allocator()),
     autoinc_params_(allocator_),
     stmt_need_privs_(allocator_),
     vars_(allocator_),
@@ -66,6 +66,8 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     contain_table_scan_(false),
     has_nested_sql_(false),
     session_id_(0),
+    concurrent_num_(0),
+    max_concurrent_num_(ObMaxConcurrentParam::UNLIMITED),
     table_locations_(allocator_),
     das_table_locations_(allocator_),
     row_param_map_(allocator_),
@@ -79,9 +81,14 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     op_stats_(),
     need_drive_dml_query_(false),
     var_init_exprs_(allocator_),
+    is_returning_(false),
     is_late_materialized_(false),
+    is_dep_base_table_(false),
+    is_insert_select_(false),
     is_plain_insert_(false),
+    flashback_query_items_(allocator_),
     contain_paramed_column_field_(false),
+    first_array_index_(OB_INVALID_INDEX),
     need_consistent_snapshot_(true),
     is_batched_multi_stmt_(false),
     is_new_engine_(false),
@@ -89,6 +96,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     use_temp_table_(false),
     has_link_sfd_(false),
     need_serial_exec_(false),
+    temp_sql_can_prepare_(false),
     is_need_trans_(false),
     batch_size_(0),
     contain_pl_udf_or_trigger_(false),
@@ -97,9 +105,13 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     ddl_execution_id_(-1),
     ddl_task_id_(0),
     is_packed_(false),
-    reserved_advanced_trigger_(false),
+    has_instead_of_trigger_(false),
+    min_cluster_version_(GET_MIN_CLUSTER_VERSION()),
     need_record_plan_info_(false),
+    enable_append_(false),
+    append_table_id_(0),
     logical_plan_(),
+    use_rich_format_(false),
     subschema_ctx_(allocator_),
     das_dop_(0),
     disable_auto_memory_mgr_(false),
@@ -107,10 +119,20 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     is_batch_params_execute_(false),
     all_local_session_vars_(&allocator_),
     udf_has_dml_stmt_(false),
+    mview_ids_(&allocator_),
+    enable_inc_direct_load_(false),
+    enable_replace_(false),
+    insert_overwrite_(false),
+    online_sample_percent_(1.),
     can_set_feedback_info_(true),
     need_switch_to_table_lock_worker_(false),
     data_complement_gen_doc_id_(false),
+    dml_table_ids_(&allocator_),
+    direct_load_need_sort_(false),
     insertup_can_do_gts_opt_(false),
+    px_node_policy_(ObPxNodePolicy::INVALID),
+    px_node_addrs_(&allocator_),
+    px_node_count_(ObPxNodeHint::UNSET_PX_NODE_COUNT),
     px_worker_share_plan_enabled_(false)
 {
 }
@@ -129,6 +151,7 @@ void ObPhysicalPlan::reset()
   signature_ = 0;
   field_columns_.reset();
   param_columns_.reset();
+  returning_param_columns_.reset();
   autoinc_params_.reset();
   stmt_need_privs_.reset();
   vars_.reset();
@@ -156,17 +179,25 @@ void ObPhysicalPlan::reset()
   contain_table_scan_ = false;
   has_nested_sql_ = false;
   session_id_ = 0;
+  concurrent_num_ = 0;
+  max_concurrent_num_ = ObMaxConcurrentParam::UNLIMITED;
   is_update_uniq_index_ = false;
   contain_index_location_ = false;
   ObPlanCacheObject::reset();
+  is_returning_ = false;
   is_late_materialized_ = false;
+  is_dep_base_table_ = false;
+  is_insert_select_ = false;
   is_plain_insert_ = false;
   base_constraints_.reset();
   strict_constrinats_.reset();
   non_strict_constrinats_.reset();
+  flashback_query_items_.reset();
   contain_paramed_column_field_ = false;
+  first_array_index_ = OB_INVALID_INDEX;
   need_consistent_snapshot_ = true;
   is_batched_multi_stmt_ = false;
+  temp_sql_can_prepare_ = false;
   is_new_engine_ = false;
 #ifndef NDEBUG
   bit_set_.reset();
@@ -178,7 +209,12 @@ void ObPhysicalPlan::reset()
   batch_size_ = 0;
   contain_pl_udf_or_trigger_ = false;
   is_packed_ = false;
-  reserved_advanced_trigger_ = false;
+  has_instead_of_trigger_ = false;
+  enable_append_ = false;
+  use_rich_format_ = false;
+  append_table_id_ = 0;
+  stat_.expected_worker_map_.destroy();
+  stat_.minimal_worker_map_.destroy();
   need_record_plan_info_ = false;
   logical_plan_.reset();
   subschema_ctx_.reset();
@@ -188,10 +224,20 @@ void ObPhysicalPlan::reset()
   udf_has_dml_stmt_ = false;
   is_inner_sql_ = false;
   is_batch_params_execute_ = false;
+  mview_ids_.reset();
+  enable_inc_direct_load_ = false;
+  enable_replace_ = false;
+  insert_overwrite_ = false;
+  online_sample_percent_ = 1.;
   can_set_feedback_info_.store(true);
   need_switch_to_table_lock_worker_ = false;
   data_complement_gen_doc_id_ = false;
+  dml_table_ids_.reset();
+  direct_load_need_sort_ = false;
   insertup_can_do_gts_opt_ = false;
+  px_node_policy_ = ObPxNodePolicy::INVALID;
+  px_node_count_ = ObPxNodeHint::UNSET_PX_NODE_COUNT;
+  px_node_addrs_.reset();
   px_worker_share_plan_enabled_ = false;
 }
 void ObPhysicalPlan::destroy()
@@ -201,6 +247,8 @@ void ObPhysicalPlan::destroy()
 #endif
   sql_expression_factory_.destroy();
   expr_op_factory_.destroy();
+  stat_.expected_worker_map_.destroy();
+  stat_.minimal_worker_map_.destroy();
   subschema_ctx_.destroy();
 }
 
@@ -216,7 +264,10 @@ int ObPhysicalPlan::set_vars(const common::ObIArray<ObVarInfo> &vars)
     const ObVarInfo &var_info = vars.at(i);
     ObVarInfo clone_var_info;
     if (OB_FAIL(var_info.deep_copy(allocator_, clone_var_info))) {
+      LOG_WARN("fail to deep copy var info", K(ret), K(var_info));
     } else if (OB_FAIL(vars_.push_back(clone_var_info))) {
+      // deep_copy when only ObString objects were written, ObString objects can be completely released when allocator_ is destructed, therefore there is no need to call the destructor of ObString here
+      LOG_WARN("fail to push back vars", K(ret), K(clone_var_info));
     }
   }
   return ret;
@@ -241,6 +292,7 @@ int ObPhysicalPlan::init_params_info_str()
                                     params_info_.at(i).flag_.expected_bool_value_,
                                     params_info_.at(i).scale_,
                                     params_info_.at(i).type_))) {
+          SQL_PC_LOG(WARN, "fail to buff_print param info", K(ret));
         }
       } else {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "{%d,%d,%d,%d,%d}",
@@ -249,12 +301,14 @@ int ObPhysicalPlan::init_params_info_str()
                                     params_info_.at(i).flag_.expected_bool_value_,
                                     params_info_.at(i).scale_,
                                     params_info_.at(i).type_))) {
+          SQL_PC_LOG(WARN, "fail to buff_print param info", K(ret));
         }
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ob_write_string(allocator_, ObString(pos, buf), stat_.param_infos_))) {
+      SQL_PC_LOG(WARN, "fail to deep copy param infos", K(ret));
     }
   }
 
@@ -272,6 +326,7 @@ int ObPhysicalPlan::set_field_columns(const ColumnsFieldArray &fields)
     }
     for (int i = 0; OB_SUCC(ret) && i < N; ++i) {
       const ObField &ofield = fields.at(i);
+      LOG_DEBUG("ofield info", K(ofield));
       if (!contain_paramed_column_field_ && ofield.is_paramed_select_item_) {
         if (OB_ISNULL(ofield.paramed_ctx_)) {
           ret = OB_INVALID_ARGUMENT;
@@ -283,8 +338,11 @@ int ObPhysicalPlan::set_field_columns(const ColumnsFieldArray &fields)
       if (OB_FAIL(ret)) {
         // do nothing
       } else if (OB_FAIL(field.deep_copy(ofield, &allocator_))) {
+        LOG_WARN("deep copy field failed", K(ret));
       } else if (OB_FAIL(field_columns_.push_back(field))) {
+        LOG_WARN("push back field columns failed", K(ret));
       } else {
+        LOG_DEBUG("succ to push back field columns", K(field));
       }
     }
   }
@@ -297,12 +355,36 @@ int ObPhysicalPlan::set_param_fields(const common::ParamsFieldArray &params)
   int64_t N = params.count();
   WITH_CONTEXT(mem_context_) {
     if(N > 0 && OB_FAIL(param_columns_.reserve(N))) {
+      LOG_WARN("failed to reserved param field", K(ret));
     }
     ObField tmp_field;
     for (int i = 0; OB_SUCC(ret) && i < N; ++i) {
       const ObField &param_field = params.at(i);
       if (OB_FAIL(tmp_field.deep_copy(param_field, &allocator_))) {
+        LOG_WARN("deep copy field failed", K(ret));
       } else if (OB_FAIL(param_columns_.push_back(tmp_field))) {
+        LOG_WARN("push back field columns failed", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPhysicalPlan::set_returning_param_fields(const common::ParamsFieldArray &params)
+{
+  int ret = OB_SUCCESS;
+  int64_t N = params.count();
+  WITH_CONTEXT(mem_context_) {
+    if(N > 0 && OB_FAIL(returning_param_columns_.reserve(N))) {
+      LOG_WARN("failed to reserved returning param field", K(ret));
+    }
+    ObField tmp_field;
+    for (int i = 0; OB_SUCC(ret) && i < N; ++i) {
+      const ObField &param_field = params.at(i);
+      if (OB_FAIL(tmp_field.deep_copy(param_field, &allocator_))) {
+        LOG_WARN("deep copy field failed", K(ret));
+      } else if (OB_FAIL(returning_param_columns_.push_back(tmp_field))) {
+        LOG_WARN("push back field columns failed", K(ret));
       }
     }
   }
@@ -319,8 +401,19 @@ int ObPhysicalPlan::set_stmt_need_privs(const ObStmtNeedPrivs& stmt_need_privs)
   int ret = OB_SUCCESS;
   stmt_need_privs_.reset();
   if (OB_FAIL(stmt_need_privs_.deep_copy(stmt_need_privs, allocator_))) {
+    LOG_WARN("Failed to deep copy ObStmtNeedPrivs", K_(stmt_need_privs));
   }
   return ret;
+}
+
+void ObPhysicalPlan::inc_large_querys()
+{
+  ATOMIC_INC(&(stat_.large_querys_));
+}
+
+void ObPhysicalPlan::inc_delayed_large_querys()
+{
+  ATOMIC_INC(&(stat_.delayed_large_querys_));
 }
 
 void ObPhysicalPlan::inc_delayed_px_querys()
@@ -337,13 +430,15 @@ int ObPhysicalPlan::init_operator_stats()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(op_stats_.init(&allocator_, next_phy_operator_id_))) {
+    LOG_WARN("fail to init op_stats", K(ret));
   }
   return ret;
 }
 
 void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
                                       const bool is_first,
-                                      const ObIArray<ObTableRowCount> *table_row_count_list)
+                                      const ObIArray<ObTableRowCount> *table_row_count_list,
+                                      const AdaptivePCConf *adpt_pc_conf)
 {
   const int64_t current_time = ObClockGenerator::getClock();
   int64_t execute_count = 0;
@@ -351,7 +446,10 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
     ATOMIC_INC(&(stat_.timeout_count_));
     ATOMIC_AAF(&(stat_.total_process_time_), record.get_process_time());
   }
-  if (!config::enable_perf_event()) { // short route
+  if (!GCONF.enable_perf_event) { // short route
+    if (nullptr != adpt_pc_conf) {
+      update_adaptive_pc_info(record, adpt_pc_conf);
+    }
     ATOMIC_AAF(&(stat_.elapsed_time_), record.get_elapsed_time());
     ATOMIC_AAF(&(stat_.cpu_time_), record.get_elapsed_time() - record.exec_record_.wait_time_end_
                                    - (record.exec_timestamp_.run_ts_ - record.exec_timestamp_.receive_ts_));
@@ -362,6 +460,9 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
       ATOMIC_INC(&(stat_.hit_count_));
     }
   } else { // long route stat begin
+    if (nullptr != adpt_pc_conf) {
+      update_adaptive_pc_info(record, adpt_pc_conf);
+    }
     execute_count = ATOMIC_AAF(&stat_.execute_times_, 1);
     ATOMIC_AAF(&(stat_.total_process_time_), record.get_process_time());
     ATOMIC_AAF(&(stat_.disk_reads_), record.exec_record_.get_io_read_count());
@@ -386,7 +487,7 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
       ATOMIC_INC(&(stat_.hit_count_));
     }
 
-    if (record.get_elapsed_time() > config::trace_log_slow_query_watermark()) {
+    if (record.get_elapsed_time() > GCONF.trace_log_slow_query_watermark) {
       ATOMIC_INC(&(stat_.slow_count_));
     }
     int64_t slowest_usec = ATOMIC_LOAD(&stat_.slowest_exec_usec_);
@@ -438,7 +539,7 @@ void ObPhysicalPlan::update_plan_expired_info(const ObAuditRecordData &record,
       fill_row_count_info(true, stat_.access_table_num_, stat_.table_row_count_first_exec_, *table_row_count_list);
     }
   } else if (!info_inited) {
-    /* Initialize the plan-expiration reference statistics from concurrent samples. */
+    /* finish evolution, init use sampling infos */
     int64_t first_exec_row_count = 0;
     do {
       first_exec_row_count = ATOMIC_LOAD(&(stat_.first_exec_row_count_));
@@ -459,8 +560,10 @@ void ObPhysicalPlan::update_plan_expired_info(const ObAuditRecordData &record,
           if (stat_.table_row_count_first_exec_[i].row_count_ >= 0) {
             stat_.table_row_count_first_exec_[i].row_count_ /= sample_count;
           }
+          LOG_DEBUG("init first row stat for spm plan", K(i), K(stat_.table_row_count_first_exec_[i]));
         }
       }
+      LOG_DEBUG("init first exec info for spm plan", K(sample_count), K(stat_.first_exec_row_count_), K(stat_.first_exec_usec_));
     }
   } else if (stat_.table_row_count_first_exec_ != NULL && table_row_count_list != NULL
              && record.get_elapsed_time() > SLOW_QUERY_TIME_FOR_PLAN_EXPIRE
@@ -601,9 +704,58 @@ inline bool ObPhysicalPlan::inner_check_if_is_expired(const int64_t first_exec_r
   return ret_bool;
 }
 
-// force_trace_log is coordinator-local and is not serialized with the plan.
+int ObPhysicalPlan::inc_concurrent_num()
+{
+  int ret = OB_SUCCESS;
+  int64_t concurrent_num = 0;
+  int64_t new_num = 0;
+  bool is_succ = false;
+  if (max_concurrent_num_ == ObMaxConcurrentParam::UNLIMITED) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("current physical plan is unlimit", K(ret), K(max_concurrent_num_));
+  } else {
+    while(OB_SUCC(ret) && false == is_succ) {
+      concurrent_num = ATOMIC_LOAD(&concurrent_num_);
+      if (0 == max_concurrent_num_) {
+        ret = OB_REACH_MAX_CONCURRENT_NUM;
+      } else if (concurrent_num >= max_concurrent_num_) {
+        ret = OB_REACH_MAX_CONCURRENT_NUM;
+      } else {
+        new_num = concurrent_num + 1;
+        is_succ = ATOMIC_BCAS(&concurrent_num_, concurrent_num, new_num);
+      }
+    }
+  }
+  return ret;
+}
+void ObPhysicalPlan::dec_concurrent_num()
+{
+  ATOMIC_DEC(&concurrent_num_);
+}
+
+int ObPhysicalPlan::set_max_concurrent_num(int64_t max_concurrent_num)
+{
+  int ret = OB_SUCCESS;
+  if (max_concurrent_num < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid max_concurrent_num", K(ret), K(max_concurrent_num));
+  } else {
+    ATOMIC_STORE(&max_concurrent_num_, max_concurrent_num);
+  }
+  return ret;
+}
+
+int64_t ObPhysicalPlan::get_max_concurrent_num()
+{
+  return ATOMIC_LOAD(&max_concurrent_num_);
+}
+
+OB_SERIALIZE_MEMBER(FlashBackQueryItem,
+                    table_id_,
+                    time_val_);
+// Because we haven't seen the handling of force_trace_log for remote execution yet, so we will not serialize it temporarily
 OB_SERIALIZE_MEMBER(ObPhysicalPlan,
-                    runtime_schema_version_, // this field is not used at runtime
+                    tenant_schema_version_, // this field is not used at runtime
                     phy_hint_.query_timeout_,
                     phy_hint_.read_consistency_,
                     is_sfu_,
@@ -620,11 +772,15 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     stat_.sql_id_,
                     is_contain_inner_table_,
                     is_update_uniq_index_,
+                    dummy_string_,
+                    is_returning_,
                     location_type_,
                     use_px_,
                     vars_,
                     px_dop_,
                     has_nested_sql_,
+                    flashback_query_items_,
+                    stat_.enable_early_lock_release_,
                     use_pdml_,
                     is_new_engine_,
                     use_temp_table_,
@@ -633,22 +789,36 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     is_need_trans_,
                     ddl_schema_version_,
                     ddl_table_id_,
+                    phy_hint_.monitor_,
                     need_serial_exec_,
                     contain_pl_udf_or_trigger_,
                     is_packed_,
-                    reserved_advanced_trigger_,
+                    has_instead_of_trigger_,
                     is_plain_insert_,
                     ddl_execution_id_,
                     ddl_task_id_,
                     stat_.plan_id_,
+                    min_cluster_version_,
                     need_record_plan_info_,
+                    enable_append_,
+                    append_table_id_,
                     subschema_ctx_,
+                    use_rich_format_,
                     disable_auto_memory_mgr_,
                     udf_has_dml_stmt_,
                     stat_.format_sql_id_,
+                    mview_ids_,
+                    enable_inc_direct_load_,
+                    enable_replace_,
+                    insert_overwrite_,
+                    online_sample_percent_,
                     need_switch_to_table_lock_worker_,
                     data_complement_gen_doc_id_,
+                    direct_load_need_sort_,
                     px_parallel_rule_,
+                    px_node_policy_,
+                    px_node_addrs_,
+                    px_node_count_,
                     px_worker_share_plan_enabled_);
 
 int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
@@ -659,19 +829,26 @@ int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
   das_table_locations_.reset();
   if (OB_FAIL(table_locations_.prepare_allocate_and_keep_count(infos.count(),
                                                  allocator_))) {
+    LOG_WARN("fail to init table location count", K(ret));
   } else if (OB_FAIL(das_table_locations_.prepare_allocate_and_keep_count(infos.count(),
                                                             allocator_))) {
+    LOG_WARN("fail to init das table location count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
     ObTableLocation &tl = infos.at(i)->get_table_location();
     const ObTableSchema *table_schema = nullptr;
     if (tl.use_das()) {
       if (OB_FAIL(das_table_locations_.push_back(tl))) {
+        LOG_WARN("fail to push das table location", K(ret), K(i));
       }
     } else if (OB_FAIL(table_locations_.push_back(tl))) {
-    } else if (OB_FAIL(schema_guard.get_table_schema( tl.get_ref_table_id(), table_schema))) {
-    } else {
-      contain_index_location_ |= table_schema->is_index_table();
+      LOG_WARN("fail to push table location", K(ret), K(i));
+    } else if (!is_external_object_id(tl.get_ref_table_id())) {
+      if (OB_FAIL(schema_guard.get_table_schema( tl.get_ref_table_id(), table_schema))) {
+        LOG_WARN("get table schema failed", K(ret), K(tl.get_ref_table_id()));
+      } else {
+        contain_index_location_ |= table_schema->is_index_table();
+      }
     }
     LOG_DEBUG("set table location", K(tl), K(tl.use_das()));
   }
@@ -681,7 +858,8 @@ int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
 
 int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> &base_constraints,
                                              const ObIArray<ObPwjConstraint *> &strict_constraints,
-                                             const ObIArray<ObPwjConstraint *> &non_strict_constraints)
+                                             const ObIArray<ObPwjConstraint *> &non_strict_constraints,
+                                             const ObIArray<ObDupTabConstraint> &dup_table_replica_cons)
 {
   // deep copy location constraints
   int ret = OB_SUCCESS;
@@ -689,9 +867,11 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     base_constraints_.reset();
     base_constraints_.set_allocator(&allocator_);
     if (OB_FAIL(base_constraints_.init(base_constraints.count()))) {
+      LOG_WARN("failed to init base constraints", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < base_constraints.count(); ++i) {
       if (OB_FAIL(base_constraints_.push_back(base_constraints.at(i)))) {
+        LOG_WARN("failed to push back element", K(ret), K(base_constraints.at(i)));
       } else { /*do nothing*/ }
     }
   }
@@ -700,21 +880,27 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     strict_constrinats_.reset();
     strict_constrinats_.set_allocator(&allocator_);
     if (OB_FAIL(strict_constrinats_.init(strict_constraints.count()))) {
+      LOG_WARN("failed to init strict constraints", K(ret));
     } else if (OB_FAIL(strict_constrinats_.prepare_allocate(strict_constraints.count()))) {
+      LOG_WARN("failed to prepare allocate location constraints", K(ret));
     } else {
       ObPwjConstraint *cur_cons;
       for (int64_t i = 0; OB_SUCC(ret) && i < strict_constraints.count(); ++i) {
         if (OB_ISNULL(cur_cons = strict_constraints.at(i))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret), K(i));
         } else if (cur_cons->count() <= 0) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected empty array", K(ret));
         } else {
           strict_constrinats_.at(i).reset();
           strict_constrinats_.at(i).set_allocator(&allocator_);
           if (OB_FAIL(strict_constrinats_.at(i).init(cur_cons->count()))) {
+            LOG_WARN("failed to init fixed array", K(ret));
           }
           for (int64_t j = 0; OB_SUCC(ret) && j < cur_cons->count(); ++j) {
             if (OB_FAIL(strict_constrinats_.at(i).push_back(cur_cons->at(j)))) {
+              LOG_WARN("failed to push back element", K(ret), K(cur_cons->at(j)));
             } else { /*do nothing*/ }
           }
         }
@@ -726,24 +912,44 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     non_strict_constrinats_.reset();
     non_strict_constrinats_.set_allocator(&allocator_);
     if (OB_FAIL(non_strict_constrinats_.init(non_strict_constraints.count()))) {
+      LOG_WARN("failed to init strict constraints", K(ret));
     } else if (OB_FAIL(non_strict_constrinats_.prepare_allocate(non_strict_constraints.count()))) {
+      LOG_WARN("failed to prepare allocate location constraints", K(ret));
     } else {
       ObPwjConstraint *cur_cons;
       for (int64_t i = 0; OB_SUCC(ret) && i < non_strict_constraints.count(); ++i) {
         if (OB_ISNULL(cur_cons = non_strict_constraints.at(i))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret), K(i));
         } else if (cur_cons->count() <= 0) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected empty array", K(ret));
         } else {
           non_strict_constrinats_.at(i).reset();
           non_strict_constrinats_.at(i).set_allocator(&allocator_);
           if (OB_FAIL(non_strict_constrinats_.at(i).init(cur_cons->count()))) {
+            LOG_WARN("failed to init fixed array", K(ret));
           }
           for (int64_t j = 0; OB_SUCC(ret) && j < cur_cons->count(); ++j) {
             if (OB_FAIL(non_strict_constrinats_.at(i).push_back(cur_cons->at(j)))) {
+              LOG_WARN("failed to push back element", K(ret), K(cur_cons->at(j)));
             } else { /*do nothing*/ }
           }
         }
+      }
+    }
+  }
+
+  if (OB_SUCC(ret) && dup_table_replica_cons.count() > 0) {
+    dup_table_replica_cons_.reset();
+    dup_table_replica_cons_.set_allocator(&allocator_);
+    if (OB_FAIL(dup_table_replica_cons_.init(dup_table_replica_cons.count()))) {
+      LOG_WARN("failed to init duplicate table constraints", K(ret));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < dup_table_replica_cons.count(); ++i) {
+        if(OB_FAIL(dup_table_replica_cons_.push_back(dup_table_replica_cons.at(i)))) {
+          LOG_WARN("failed to assign element", K(ret), K(dup_table_replica_cons.at(i)));
+        } else { /*do nothing*/ }
       }
     }
   }
@@ -752,7 +958,10 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     base_constraints_.reset();
     strict_constrinats_.reset();
     non_strict_constrinats_.reset();
+    dup_table_replica_cons_.reset();
   } else {
+    LOG_TRACE("deep copied location constraints", K(base_constraints_), K(strict_constrinats_),
+                            K(non_strict_constrinats_), K(dup_table_replica_cons_));
   }
 
   return ret;
@@ -767,9 +976,12 @@ bool ObPhysicalPlan::has_same_location_constraints(const ObPhysicalPlan &r) cons
   const ObIArray<ObPlanPwjConstraint>& r_non_strict_cons = r.get_non_strict_constraints();
   const ObIArray<ObPlanPwjConstraint>& l_strict_cons = get_strict_constraints();
   const ObIArray<ObPlanPwjConstraint>& r_strict_cons = r.get_strict_constraints();
+  const ObIArray<ObDupTabConstraint>& l_dup_rep_cons = get_dup_table_replica_constraints();
+  const ObIArray<ObDupTabConstraint>& r_dup_rep_cons = r.get_dup_table_replica_constraints();
   if (l_base_cons.count() != r_base_cons.count() ||
       l_strict_cons.count() != r_strict_cons.count() ||
-      l_non_strict_cons.count() != r_non_strict_cons.count()) {
+      l_non_strict_cons.count() != r_non_strict_cons.count()||
+      l_dup_rep_cons.count() != r_dup_rep_cons.count()) {
     is_same = false;
   } else {
     for (int64_t i = 0; is_same && i < l_base_cons.count(); i++) {
@@ -793,9 +1005,23 @@ bool ObPhysicalPlan::has_same_location_constraints(const ObPhysicalPlan &r) cons
         }
       }
     }
+    for(int64_t i = 0; is_same && i < l_dup_rep_cons.count(); i++) {
+      is_same = is_same && (l_dup_rep_cons.at(i) == r_dup_rep_cons.at(i));
+    }
   }
   return is_same;
 }
+
+DEF_TO_STRING(FlashBackQueryItem)
+{
+  int64_t pos = 0;
+  J_OBJ_START();
+  J_KV(K_(table_id));
+  J_KV(K_(time_val));
+  J_OBJ_END();
+  return pos;
+}
+
 
 int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
                                   const int64_t child_cnt,
@@ -806,10 +1032,13 @@ int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
   UNUSED(op_id);
   if (type >= PHY_END || child_cnt < 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(type), K(child_cnt));
   } else if (OB_FAIL(ObOperatorFactory::alloc_op_spec(
               allocator_, type, child_cnt, op))) {
+    LOG_WARN("allocate operator spec failed", K(ret));
   } else if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("NULL operator spec returned", K(ret));
   } else {
     // Here is directly assigning log operator id to spec
     uint32_t tmp_op_id = UINT32_MAX;
@@ -821,6 +1050,10 @@ int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
     op->id_ = tmp_op_id;
     op->plan_ = this;
     op->max_batch_size_ = (ObOperatorFactory::is_vectorized(type)) ? batch_size_ : 0;
+    op->use_rich_format_ = use_rich_format_
+                           && op->is_vectorized()
+                           && ObOperatorFactory::support_rich_format(type);
+    LOG_TRACE("alloc op spec", K(use_rich_format_), K(op->max_batch_size_), K(op->use_rich_format_), K(*op));
   }
   return ret;
 }
@@ -832,11 +1065,16 @@ int ObPhysicalPlan::alloc_op_spec_for_cg(ObLogicalOperator *op, ObSqlSchemaGuard
   int ret = OB_SUCCESS;
   bool disable_vectorize = false;
   if (OB_FAIL(alloc_op_spec(type, child_cnt, spec, op_id))) {
+    LOG_WARN("alloc op spec failed", K(ret));
   } else if (OB_FAIL(ObStaticEngineCG::check_op_vectorization(op, schema_guard, type, disable_vectorize))) {
+    LOG_WARN("check op vectorization failed", K(ret));
   } else if (disable_vectorize) {
     spec->max_batch_size_ = 0;
+    spec->use_rich_format_ = false;
   }
   if (OB_SUCC(ret)) {
+    LOG_TRACE("alloc op spec for cg", K(disable_vectorize), K(spec->max_batch_size_),
+              K(spec->use_rich_format_), K(*spec));
   }
   return ret;
 }
@@ -920,6 +1158,49 @@ void ObPhysicalPlan::calc_whether_need_trans()
   is_need_trans_ = bool_ret;
 }
 
+int ObPhysicalPlan::set_expected_worker_map(const common::hash::ObHashMap<ObAddr, int64_t> &c)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(assign_worker_map(stat_.expected_worker_map_, c))) {
+    LOG_WARN("set expected worker map failed", K(ret));
+  }
+  return ret;
+}
+const ObPlanStat::AddrMap& ObPhysicalPlan:: get_expected_worker_map() const
+{
+  return stat_.expected_worker_map_;
+}
+
+int ObPhysicalPlan::set_minimal_worker_map(const common::hash::ObHashMap<ObAddr, int64_t> &c)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(assign_worker_map(stat_.minimal_worker_map_, c))) {
+    LOG_WARN("set minimal worker map failed", K(ret));
+  }
+  return ret;
+}
+
+int ObPhysicalPlan::assign_worker_map(ObPlanStat::AddrMap &worker_map, const common::hash::ObHashMap<ObAddr, int64_t> &c)
+{
+  int ret = OB_SUCCESS;
+  ObMemAttr attr("WorkerMap");
+  ObMemAttr node_attr("WorkerMapNode");
+  if (worker_map.created()) {
+    worker_map.clear();
+  } else if (OB_FAIL(worker_map.create(common::hash::cal_next_prime(100), attr, node_attr))){
+    LOG_WARN("create hash map failed", K(ret));
+  }
+  if (OB_SUCC(ret)) {
+    for (common::hash::ObHashMap<ObAddr, int64_t>::const_iterator it = c.begin();
+        OB_SUCC(ret) && it != c.end(); ++it) {
+      if (OB_FAIL(worker_map.set_refactored(it->first, it->second))){
+        SQL_PC_LOG(WARN, "set refactored failed", K(ret), K(it->first), K(it->second));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
 {
   int ret = OB_SUCCESS;
@@ -930,27 +1211,31 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
   } else  {
     stat_.plan_hash_value_ = get_signature();
     stat_.gen_time_ = ObTimeUtility::current_time();
-    stat_.schema_version_ = get_runtime_schema_version();
+    stat_.schema_version_ = get_tenant_schema_version();
     stat_.hit_count_ = 0;
     stat_.mem_used_ = get_mem_size();
     stat_.slow_count_ = 0;
     stat_.slowest_exec_time_ = 0;
     stat_.slowest_exec_usec_ = 0;
-    int64_t sql_length = pc_ctx.sql_ctx_.session_info_->get_query_record_size_limit();
+    int64_t sql_length = pc_ctx.sql_ctx_.session_info_->get_tenant_query_record_size_limit();
     if (PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_) {
       ObTruncatedString trunc_stmt(pc_ctx.raw_sql_, sql_length);
       if (OB_FAIL(ob_write_string(get_allocator(),
                                   trunc_stmt.string(),
                                   stat_.stmt_))) {
+        SQL_PC_LOG(WARN, "fail to set truncate string", K(ret));
       }
       stat_.ps_stmt_id_ = pc_ctx.sql_ctx_.statement_id_;
     } else {
-      ObTruncatedString trunc_stmt(pc_ctx.sql_ctx_.plan_key_.constructed_sql_, sql_length);
+      ObTruncatedString trunc_stmt(pc_ctx.sql_ctx_.bl_key_.constructed_sql_, sql_length);
       if (OB_FAIL(ob_write_string(get_allocator(),
                                   trunc_stmt.string(),
                                   stat_.stmt_))) {
+        SQL_PC_LOG(WARN, "fail to set truncate string", K(ret));
       }
     }
+    stat_.large_querys_= 0;
+    stat_.delayed_large_querys_= 0;
     stat_.delayed_px_querys_= 0;
     stat_.outline_version_ = get_outline_state().outline_version_.version_;
     stat_.outline_id_ = get_outline_state().outline_version_.object_id_;
@@ -958,16 +1243,21 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
     ObTruncatedString trunc_raw_sql(pc_ctx.raw_sql_, sql_length);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(pc_ctx.get_not_param_info_str(get_allocator(), stat_.sp_info_str_))) {
+      SQL_PC_LOG(WARN, "fail to get special param info string", K(ret));
     } else if (OB_FAIL(ob_write_string(get_allocator(),
                                        pc_ctx.fp_result_.pc_key_.sys_vars_str_,
                                        stat_.sys_vars_str_))) {
+      SQL_PC_LOG(DEBUG, "succeed to add plan statistic", "plan_id", get_plan_id(), K(ret));
     } else if (OB_FAIL(ob_write_string(get_allocator(),
                                        pc_ctx.fp_result_.pc_key_.config_str_,
                                        stat_.config_str_))) {
+      SQL_PC_LOG(DEBUG, "failed to add plan statistic", "plan_id", get_plan_id(), K(ret));
     } else if (OB_FAIL(init_params_info_str())) {
+      SQL_PC_LOG(DEBUG, "fail to gen param info str", K(ret));
     } else if (OB_FAIL(ob_write_string(get_allocator(),
                                        trunc_raw_sql.string(),
                                        stat_.raw_sql_))) {
+      SQL_PC_LOG(DEBUG, "fail to copy raw sql", "plan_id", get_plan_id(), K(ret));
     } else {
       stat_.sql_cs_type_ = pc_ctx.sql_ctx_.session_info_->get_local_collation_connection();
     }
@@ -992,12 +1282,14 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (pc_ctx.tmp_table_names_.count() > 0) {
+      LOG_DEBUG("set tmp table name str", K(pc_ctx.tmp_table_names_));
       stat_.sessid_ = pc_ctx.sql_ctx_.session_info_->get_sid();\
       int64_t pos = 0;
       // fill temporary table name
       for (int64_t i = 0; OB_SUCC(ret) && i < pc_ctx.tmp_table_names_.count(); i++) {
         if (OB_ISNULL(stat_.plan_tmp_tbl_name_str_)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_DEBUG("null plan tmp tbl id str", K(ret));
         } else if (OB_FAIL(databuff_printf(stat_.plan_tmp_tbl_name_str_,
                                            ObPlanStat::STMT_MAX_LEN,
                                            pos,
@@ -1009,6 +1301,8 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
             ret = OB_SUCCESS;
             break;
           } else {
+            LOG_WARN("failed to write plan tmp tbl name info",
+                     K(pc_ctx.tmp_table_names_.at(i)), K(i), K(ret));
           }
         }
       }
@@ -1033,6 +1327,7 @@ int ObPhysicalPlan::set_logical_plan(ObLogicalPlanRawData &logical_plan)
   char *buf = NULL;
   if (OB_ISNULL(buf = (char*)allocator_.alloc(logical_plan.logical_plan_len_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc memory", K(ret));
   } else {
     if (NULL != logical_plan_.logical_plan_) {
       allocator_.free(logical_plan_.logical_plan_);
@@ -1048,12 +1343,15 @@ int ObPhysicalPlan::get_all_spec_op(ObIArray<const ObOpSpec *> &simple_op_infos,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(simple_op_infos.push_back(&op))) {
+    LOG_WARN("fail to push back spec_op", K(ret), K(op.get_id()));
   }
   for (int32_t i = 0; OB_SUCC(ret) && i < op.get_child_num(); ++i) {
     const ObOpSpec *child_op = op.get_child(i);
     if (OB_ISNULL(child_op)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(SMART_CALL(get_all_spec_op(simple_op_infos, *child_op)))) {
+      LOG_WARN("fail to find child ops",
+               K(ret), K(i), "op_id", op.get_id(), "child_id", child_op->get_id());
     }
   }
   return ret;
@@ -1070,11 +1368,14 @@ int ObPhysicalPlan::print_this_plan_info(ObExecContext &ctx)
   ExplainType type = EXPLAIN_EXTENDED;
   ObSEArray<ObSqlPlanItem*, 4> plan_items;
   if (OB_FAIL(logical_plan_.uncompress_logical_plan(ctx.get_allocator(), plan_items))) {
+    LOG_WARN("failed to uncompress logical plan", K(ret));
   } else if (OB_FAIL(sql_plan.format_sql_plan(plan_items,
                                               type,
                                               option,
                                               out_plan_text))) {
+    LOG_WARN("failed to format sql plan", K(ret));
   } else if (OB_FAIL(sql_plan.plan_text_to_strings(out_plan_text, plan_strs))) {
+    LOG_WARN("failed to convert plan text to strings", K(ret));
   } else {
     LOG_INFO("print plan info:");
   }
@@ -1094,6 +1395,7 @@ int ObPhysicalPlan::check_pdml_affected_rows(ObExecContext &ctx)
   if (!is_use_pdml()) {
     // do nothing
   } else if (OB_FAIL(get_all_spec_op(all_ops, *root_op_spec_))) {
+    LOG_WARN("fail to get all spec", K(ret));
   } else if (!fb_info.is_valid()) {
     // do nothing
   } else if (all_ops.count() != feedback_nodes.count()) {
@@ -1106,6 +1408,7 @@ int ObPhysicalPlan::check_pdml_affected_rows(ObExecContext &ctx)
       const ObOpSpec *op = all_ops.at(i);
       if (OB_ISNULL(op)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null ptr", K(ret));
       } else if (op->id_ != feedback_node.op_id_) {
         // do nothing
       } else if (op->is_pdml_operator()) {
@@ -1123,6 +1426,7 @@ int ObPhysicalPlan::check_pdml_affected_rows(ObExecContext &ctx)
                     K(feedback_nodes));
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = print_this_plan_info(ctx))) {
+            LOG_WARN("failed to uncompress logical plan", K(tmp_ret));
           }
         }
       }
@@ -1140,8 +1444,10 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
   ObExecFeedbackInfo &feedback_info = ctx.get_feedback_info();
   const common::ObIArray<ObExecFeedbackNode> &feedback_nodes = feedback_info.get_feedback_nodes();
   if (OB_FAIL(logical_plan_.uncompress_logical_plan(ctx.get_allocator(), plan_items))) {
+    LOG_WARN("failed to uncompress logical plan", K(ret));
   } else if (feedback_nodes.count() != plan_items.count()) {
     //ignore error code
+    LOG_WARN("unexpect feedback node count", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < plan_items.count(); ++i) {
       const ObExecFeedbackNode &feedback_node = feedback_nodes.at(i);
@@ -1151,8 +1457,10 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
       }
       if (OB_ISNULL(plan_item)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpect null plan item", K(ret));
       } else if (feedback_node.op_id_ != plan_item->id_) {
         ret = OB_SUCCESS;
+        LOG_WARN("unexpect feedback node info", K(ret));
       } else {
         int64_t real_cost = 0;
         if (0 != feedback_node.output_row_count_ &&
@@ -1171,7 +1479,9 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
     if (OB_SUCC(ret)) {
       ObLogicalPlanRawData new_logical_plan;
       if (OB_FAIL(new_logical_plan.compress_logical_plan(ctx.get_allocator(), plan_items))) {
+        LOG_WARN("failed to compress logical plan", K(ret));
       } else if (OB_FAIL(set_logical_plan(new_logical_plan))) {
+        LOG_WARN("failed to set logical plan", K(ret));
       }
     }
   }
@@ -1186,13 +1496,17 @@ int ObPhysicalPlan::set_all_local_session_vars(ObIArray<ObLocalSessionVar> *all_
   }
   if (OB_ISNULL(all_local_session_vars)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(all_local_session_vars));
   } else if (OB_FAIL(all_local_session_vars_.reserve(all_local_session_vars->count()))) {
+    LOG_WARN("reserve for local_session_vars failed", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_local_session_vars->count(); ++i) {
       if (OB_FAIL(all_local_session_vars_.push_back(ObLocalSessionVar()))) {
+        LOG_WARN("push back local session var failed", K(ret));
       } else {
         all_local_session_vars_.at(i).set_allocator(&allocator_);
         if (OB_FAIL(all_local_session_vars_.at(i).deep_copy(all_local_session_vars->at(i)))) {
+          LOG_WARN("deep copy local session vars failed", K(ret));
         }
       }
     }
@@ -1205,6 +1519,67 @@ bool ObPhysicalPlan::try_record_plan_info()
   bool expected = true;
   bool b_ret = can_set_feedback_info_.compare_exchange_strong(expected, false);
   return b_ret;
+}
+
+int ObPhysicalPlan::set_px_node_addrs(
+          const common::ObIArray<common::ObAddr> &px_node_addrs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(px_node_addrs_.assign(px_node_addrs))) {
+    LOG_WARN("failed to assign px_node_addrs", K(ret));
+  }
+  return ret;
+}
+
+int64_t ObPhysicalPlan::get_adaptive_feedback_times() const
+{
+  int64_t feedback_times = 0;
+  if (ObPlanStat::ACTIVE ==  ATOMIC_LOAD(&stat_.adaptive_pc_info_.status_)) {
+    feedback_times = ATOMIC_LOAD(&stat_.adaptive_pc_info_.positive_feedback_times_);
+  } else {
+    feedback_times = ATOMIC_LOAD(&stat_.adaptive_pc_info_.negative_feedback_times_);
+  }
+  return feedback_times;
+}
+
+void ObPhysicalPlan::update_adaptive_pc_info(const ObAuditRecordData &record,
+                                             const AdaptivePCConf *adpt_pc_conf)
+{
+  int ret = OB_SUCCESS;
+  bool is_outline_plan = get_outline_state().outline_version_.is_valid();
+  if (!is_inner_sql_ && (nullptr != adpt_pc_conf) && adpt_pc_conf->enable_adaptive_plan_cache_
+      && !is_outline_plan) {
+    static uint32_t MAX_FEEDBACK_TIMES = 5;
+    int64_t get_plan_t = record.exec_timestamp_.get_plan_t_;
+    int64_t executor_t = record.exec_timestamp_.executor_t_;
+    bool is_positive_feedback =
+      (executor_t >= adpt_pc_conf->pc_adaptive_min_exec_time_threshold_
+       && (get_plan_t > 0
+           && (executor_t / get_plan_t)
+                >= adpt_pc_conf->pc_adaptive_effectiveness_ratio_threshold_));
+    if (ObPlanStat::ACTIVE ==  ATOMIC_LOAD(&stat_.adaptive_pc_info_.status_)) {
+      if (is_positive_feedback) {
+        ATOMIC_STORE(&(stat_.adaptive_pc_info_.negative_feedback_times_), 0);
+        if (ATOMIC_AAF(&stat_.adaptive_pc_info_.positive_feedback_times_, 1) >= MAX_FEEDBACK_TIMES) {
+          ATOMIC_STORE(&(stat_.adaptive_pc_info_.status_), ObPlanStat::INACTIVE);
+          LOG_TRACE("set inactive state", K(object_id_), K(stat_.adaptive_pc_info_));
+          ATOMIC_STORE(&(stat_.adaptive_pc_info_.positive_feedback_times_), 0);
+        }
+      } else {
+        ATOMIC_STORE(&(stat_.adaptive_pc_info_.positive_feedback_times_), 0);
+      }
+    } else {
+      if (is_positive_feedback) {
+        ATOMIC_STORE(&(stat_.adaptive_pc_info_.negative_feedback_times_), 0);
+      } else {
+        if (ATOMIC_AAF(&stat_.adaptive_pc_info_.negative_feedback_times_, 1) >= MAX_FEEDBACK_TIMES) {
+          ATOMIC_STORE(&(stat_.adaptive_pc_info_.status_), ObPlanStat::ACTIVE);
+          LOG_TRACE("set active state", K(object_id_), K(stat_.adaptive_pc_info_));
+          ATOMIC_STORE(&(stat_.adaptive_pc_info_.negative_feedback_times_), 0);
+        }
+      }
+    }
+  }
 }
 
 } //namespace sql

@@ -17,7 +17,6 @@
 
 #include "share/object/ob_array_cast.h"
 #include "common/json_type/ob_json_parse.h"
-#include "share/ob_lob_access_utils.h"
 #include <fast_float/fast_float.h>
 #include "share/object/ob_obj_cast_util.h"
 #include <string>
@@ -34,31 +33,39 @@ int ObVectorDataCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, const
   const ObCollectionBasicType *dst_type  = dynamic_cast<const ObCollectionBasicType *>(static_cast<const ObCollectionArrayType *>(dst_coll_type)->element_type_);
   if (OB_UNLIKELY(!src_type || !dst_type)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+    LOG_WARN("unexpected status: invalid argument", K(ret), KP(src_type), KP(dst_type));
   } else if (dim_cnt_ != src->size()) {
     ret = OB_ERR_INVALID_VECTOR_DIM;
+    LOG_WARN("invalid array size", K(ret), K(dim_cnt_), K(src->size()));
     LOG_USER_ERROR(OB_ERR_INVALID_VECTOR_DIM, dim_cnt_, src->size());
   }
   for (int64_t i = 0; i < src->size() && OB_SUCC(ret); i++) {
     ObObj src_elem;
     if (src->is_null(i)) {
       if (OB_FAIL(dst->push_null())) {
+        LOG_WARN("failed to add null to array", K(ret), K(i));
       }
     } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem))) {
+      LOG_WARN("failed to get cast element", K(ret), K(i));
     } else {
       ObObjType dst_obj_type = dst_type->basic_meta_.get_obj_type();
       ObObj res;
       ObCastCtx cast_ctx(&alloc, NULL, mode, ObCharset::get_system_collation());
       if (OB_FAIL(ObObjCaster::to_type(dst_obj_type, cast_ctx, src_elem, res))) {
+        LOG_WARN("failed to cast number to double type", K(ret));
       } else if (dst_obj_type == ObFloatType) {
         ObVectorF32Data *dst_arr = static_cast<ObVectorF32Data *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_float()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
       } else if (dst_obj_type == ObUTinyIntType) {
         ObVectorU8Data *dst_arr = static_cast<ObVectorU8Data *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_utinyint()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
       } else {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("dest obj type of vector is not supported", K(ret), K(dst_obj_type));
       }
     }
   }
@@ -73,14 +80,18 @@ int ObArrayFixedSizeCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, c
   const ObCollectionBasicType *dst_type  = dynamic_cast<const ObCollectionBasicType *>(static_cast<const ObCollectionArrayType *>(dst_coll_type)->element_type_);
   if (OB_UNLIKELY(!src_type || !dst_type)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+    LOG_WARN("unexpected status: invalid argument", K(ret), KP(src_type), KP(dst_type));
   }
   for (int64_t i = 0; i < src->size() && OB_SUCC(ret); i++) {
     ObObj src_elem;
     if (src->is_null(i)) {
       if (OB_FAIL(dst->push_null())) {
+        LOG_WARN("failed to add null to array", K(ret), K(i));
       }
     } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem))) {
+      LOG_WARN("failed to get cast element", K(ret), K(i));
     } else if (OB_FAIL(ObArrayCastUtils::cast_add_element(alloc, src_elem, dst, dst_type, mode))) {
+      LOG_WARN("failed to cast and add element", K(ret));
     }
   }
   return ret;
@@ -192,55 +203,65 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_e
   const ObObj *res_obj = &src_elem;
 
   if (OB_FAIL(ObObjCaster::to_type(dst_obj_type, cast_ctx, src_elem, res))) {
+    LOG_WARN("failed to cast obj", K(ret));
   } else if (dst_obj_type == ObVarcharType &&
       OB_FAIL(obj_accuracy_check(cast_ctx, out_acc, cs_type, res, buf_obj, res_obj))) {
+    LOG_WARN("varchar type length is too long", K(ret), K(res.get_string_len()));
   } else {
     switch (dst_obj_type) {
       case ObTinyIntType : {
         ObArrayFixedSize<int8_t> *dst_arr = static_cast<ObArrayFixedSize<int8_t> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_tinyint()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
       case ObSmallIntType : {
         ObArrayFixedSize<int16_t> *dst_arr = static_cast<ObArrayFixedSize<int16_t> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_smallint()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
       case ObIntType : {
         ObArrayFixedSize<int64_t> *dst_arr = static_cast<ObArrayFixedSize<int64_t> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_int()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
       case ObInt32Type: {
         ObArrayFixedSize<int32_t> *dst_arr = static_cast<ObArrayFixedSize<int32_t> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_int32()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
       case ObUTinyIntType : {
         ObArrayFixedSize<uint8_t> *dst_arr = static_cast<ObArrayFixedSize<uint8_t> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_utinyint()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
       case ObUSmallIntType : {
         ObArrayFixedSize<uint16_t> *dst_arr = static_cast<ObArrayFixedSize<uint16_t> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_usmallint()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
       case ObUInt64Type : {
         ObArrayFixedSize<uint64_t> *dst_arr = static_cast<ObArrayFixedSize<uint64_t> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_uint64()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
       case ObUInt32Type: {
         ObArrayFixedSize<uint32_t> *dst_arr = static_cast<ObArrayFixedSize<uint32_t> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_uint32()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
@@ -253,6 +274,7 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_e
       case ObFloatType: {
         ObArrayFixedSize<float> *dst_arr = static_cast<ObArrayFixedSize<float> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_float()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
@@ -260,12 +282,14 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_e
       case ObDoubleType: {
         ObArrayFixedSize<double> *dst_arr = static_cast<ObArrayFixedSize<double> *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_double()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
       case ObVarcharType: {
         ObArrayBinary *dst_arr = static_cast<ObArrayBinary *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_varchar()))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
@@ -305,6 +329,7 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
   int ret = OB_SUCCESS;
   if (j_node.json_type() == ObJsonNodeType::J_NULL) {
     if (OB_FAIL(dst->push_null())) {
+      LOG_WARN("failed to push null array value", K(ret));
     }
   } else if (j_node.json_type() == ObJsonNodeType::J_ARRAY) {
     const ObCollectionArrayType *array_type = dynamic_cast<const ObCollectionArrayType *>(elem_type);
@@ -312,18 +337,24 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
     ObJsonArray *json_arr = static_cast<ObJsonArray *>(&j_node);
     if (OB_ISNULL(array_type)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+      LOG_WARN("unexpected element type", K(ret), K(elem_type->type_id_));
     } else if (OB_FAIL(ObArrayTypeObjFactory::construct(alloc, *array_type, child_array))) {
+      LOG_WARN("failed to add null to array", K(ret));
     } else if (json_arr->element_count() == 0 && array_type->element_type_->type_id_ != OB_BASIC_TYPE) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+      LOG_WARN("array dimension dismatch", K(ret), K(array_type->element_type_));
     }
     for (int i = 0; i < json_arr->element_count() && OB_SUCC(ret); i++) {
       if (OB_FAIL(add_json_node_to_array(alloc, *(*json_arr)[i], array_type->element_type_, child_array))) {
+        LOG_WARN("failed to add json node to array", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret)) {
       ObArrayNested *nested_arr = static_cast<ObArrayNested *>(dst);
       if (OB_FAIL(child_array->init())) {
+        LOG_WARN("child array init failed", K(ret));
       } else if (OB_FAIL(nested_arr->push_back(*child_array))) {
+        LOG_WARN("failed to push back array value", K(ret));
       }
     }
   } else {
@@ -331,6 +362,7 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
     const ObCollectionBasicType *basic_type = dynamic_cast<const ObCollectionBasicType *>(elem_type);
     if (OB_ISNULL(basic_type)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+      LOG_WARN("unexpected element type", K(ret), K(elem_type->type_id_));
     } else {
       ObObjType dst_obj_type = basic_type->basic_meta_.get_obj_type();
       switch (dst_obj_type) {
@@ -368,6 +400,7 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
         }
         case ObDecimalIntType: {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("not supported", K(ret));
           break;
         }
         case ObUFloatType:
@@ -375,8 +408,11 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
           double val;
           ObArrayFixedSize<float> *dst_arr = static_cast<ObArrayFixedSize<float> *>(dst);
           if (OB_FAIL(j_node.to_double(val))) {
+            LOG_WARN("failed to push back array value", K(ret));
           } else if (OB_FAIL(real_range_check(dst_obj_type, val, val))) {
+            LOG_WARN("failed to check value range", K(ret)); 
           } else if (OB_FAIL(dst_arr->push_back(static_cast<float>(val)))) {
+            LOG_WARN("failed to push back array value", K(ret));
           }
           break;
         }
@@ -385,8 +421,11 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
           double val;
           ObArrayFixedSize<double> *dst_arr = static_cast<ObArrayFixedSize<double> *>(dst);
           if (OB_FAIL(j_node.to_double(val))) {
+            LOG_WARN("failed to push back array value", K(ret));
           } else if (OB_FAIL(real_range_check(dst_obj_type, val, val))) {
+            LOG_WARN("failed to check value range", K(ret)); 
           } else if (OB_FAIL(dst_arr->push_back(val))) {
+            LOG_WARN("failed to push back array value", K(ret));
           }
           break;
         }
@@ -394,7 +433,9 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
           ObArrayBinary *dst_arr = static_cast<ObArrayBinary *>(dst);
           ObStringBuffer str_buf(&alloc);
           if (OB_FAIL(j_node.print(str_buf, false))) {
+            LOG_WARN("failed to push back array value", K(ret));
           } else if (OB_FAIL(dst_arr->push_back(str_buf.string()))) {
+            LOG_WARN("failed to push back array value", K(ret));
           }
           break;
         }
@@ -467,6 +508,7 @@ int ObArrayCastUtils::add_vector_element(const double value, const ObCollectionT
   const ObCollectionBasicType *basic_type = dynamic_cast<const ObCollectionBasicType *>(elem_type);
   if (OB_ISNULL(basic_type)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+    LOG_WARN("unexpected element type", K(ret), K(elem_type->type_id_));
   } else {
     ObObjType dst_obj_type = basic_type->basic_meta_.get_obj_type();
     switch (dst_obj_type) {
@@ -504,12 +546,14 @@ int ObArrayCastUtils::add_vector_element(const double value, const ObCollectionT
       }
       case ObDecimalIntType: {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("not supported", K(ret));
         break;
       }
       case ObFloatType: {
         double val = value;
         ObArrayFixedSize<float> *dst_arr = static_cast<ObArrayFixedSize<float> *>(dst);
         if (OB_FAIL(dst_arr->push_back(static_cast<float>(val)))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
@@ -517,6 +561,7 @@ int ObArrayCastUtils::add_vector_element(const double value, const ObCollectionT
         double val = value;
         ObArrayFixedSize<double> *dst_arr = static_cast<ObArrayFixedSize<double> *>(dst);
         if (OB_FAIL(dst_arr->push_back(val))) {
+          LOG_WARN("failed to push back array value", K(ret));
         }
         break;
       }
@@ -565,8 +610,10 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
   ObJsonNode *j_node = NULL;
   uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
   if (OB_FAIL(ObJsonParser::parse_json_text(&alloc, src_text.data(), src_text.length(), syntaxerr, &err_offset, j_node, parse_flag))) {
+    LOG_WARN("failed to parse array text", K(ret), K(arr_text), KCSTRING(syntaxerr), K(err_offset));
   } else if (j_node->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid text not object type", K(ret), K(arr_text), K(j_node->json_type()));
   } else {
     // add json object node to map
     ObJsonObjectArray *json_obj_array;
@@ -580,8 +627,10 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
 
     if (OB_ISNULL(dst_map= dynamic_cast<ObMapType *>(dst))) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("invalid dst type", K(ret));
     } else if (OB_ISNULL(key_basic_type)) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("invalid dst key element type", K(ret));
     } else {
       key_arr = dst_map->get_key_array();
       value_arr = dst_map->get_value_array();
@@ -595,8 +644,11 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
         // do nothing
       } else if (is_sparse_vector) {
         ret = OB_ERR_NULL_VALUE;
+        LOG_WARN("sparse vector not support NULL key", K(ret));
       } else if (OB_FAIL(key_arr->push_null())) {
+        LOG_WARN("failed to push null to key value", K(ret));
       } else if (OB_FAIL(add_json_node_to_array(alloc, *null_key_value, dst_value_elem_type, value_arr))) {
+        LOG_WARN("failed to add json node to array", K(ret));
       }
     }
 
@@ -607,25 +659,30 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
         // do nothing
       } else if (is_sparse_vector && OB_FAIL(key_value.get_value()->json_type() == ObJsonNodeType::J_NULL)) {
         ret = OB_ERR_NULL_VALUE;
+        LOG_WARN("sparse vector not support NULL value", K(ret));
       } else {
         // append key
         ObObj key_elem;
         key_elem.set_varchar(key_str);
         key_elem.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
         if (OB_FAIL(cast_add_element(alloc, key_elem, key_arr, key_basic_type, cast_mode))) {
+          LOG_WARN("failed to cast and add element", K(ret));
         }
         // append value
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(add_json_node_to_array(alloc, *key_value.get_value(), dst_value_elem_type, value_arr))) {
+          LOG_WARN("failed to add json node to array", K(ret), K(i));
         }
       }
     } // end for
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(dst_map->init())) {
+      LOG_WARN("failed to init map", K(ret));
     } else if (ob_obj_type_class(static_cast<ObObjType>(key_arr->get_element_type())) != ObStringTC) {
       ObIArrayType *dst_distinct = NULL;
       if (OB_FAIL(dst->distinct(alloc, dst_distinct))) {
+        LOG_WARN("get distinct failed", K(ret));
       } else {
         dst = dst_distinct;
       }
@@ -644,6 +701,7 @@ static int check_null_key_for_sparse_vector(const char*& ptr, const char* end, c
     if (null_check_ptr + ObArrayCastUtils::NULL_STR_LEN <= end &&
         is_null_const_string(null_check_ptr, end)) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("sparse vector not support NULL key", K(ret), K(ptr - text_start));
     }
   }
   return ret;
@@ -661,6 +719,7 @@ static int check_null_value_for_sparse_vector(const char*& ptr, const char* end,
       const char *after_null = null_check_ptr + ObArrayCastUtils::NULL_STR_LEN;
       if (after_null >= end || *after_null == ',' || *after_null == '}' || is_whitespace(*after_null)) {
         ret = OB_ERR_NULL_VALUE;
+        LOG_WARN("sparse vector not support NULL value", K(ret), K(ptr - text_start));
       }
     }
   }
@@ -679,18 +738,21 @@ static int parse_uint32_key(const char*& ptr, const char* end, const char* text_
     ++ptr;
     if (ptr >= end) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("unexpected end after quote", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_null_key_for_sparse_vector(ptr, end, text_start))) {
   } else if (*ptr == '-') {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid key format, uint32 cannot be negative", K(ret), K(text_start));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sparse vector dimension, must be an unsigned integer");
   } else {
     const char *key_start = ptr;
     while (ptr < end && ((has_quote && *ptr != '"') || (!has_quote && *ptr != ':' && *ptr != ' ' && *ptr != '\t'))) {
       if (!('0' <= *ptr && *ptr <= '9')) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid key format, expect digit", K(ret), K(text_start));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sparse vector dimension, must be an unsigned integer");
         break;
       }
@@ -701,14 +763,21 @@ static int parse_uint32_key(const char*& ptr, const char* end, const char* text_
       int64_t key_len = ptr - key_start;
       if (key_len <= 0) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid key length", K(ret));
       } else {
         fast_float::from_chars_result result = fast_float::from_chars(key_start, ptr, dim);
         if (result.ec == std::errc::invalid_argument) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid key format, not a valid number", K(ret), K(text_start));
         } else if (result.ec == std::errc::result_out_of_range) {
           ret = OB_DATA_OUT_OF_RANGE;
+          LOG_WARN("key value out of range for uint32", K(ret), K(text_start));
         } else if (result.ptr != ptr) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("key parsing did not consume all characters",
+              K(ret),
+              K(text_start),
+              K(key_len));
         }
       }
       if (OB_FAIL(ret)) {
@@ -730,6 +799,7 @@ static int parse_float_value(const char*& ptr, const char* end, const char* text
   
   if (ptr >= end) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("unexpected end when parsing value", K(ret));
   } else if (OB_FAIL(check_null_value_for_sparse_vector(ptr, end, text_start))) {
   } else {
     const char *value_start = ptr;
@@ -741,6 +811,7 @@ static int parse_float_value(const char*& ptr, const char* end, const char* text
       if (*ptr == '.') {
         if (has_dot) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid float format, multiple dots", K(ret));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sparse vector value, must be a float");
           break;
         }
@@ -748,6 +819,7 @@ static int parse_float_value(const char*& ptr, const char* end, const char* text
       } else if (*ptr == 'e' || *ptr == 'E') {
         if (has_exp) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid float format, multiple exp", K(ret));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sparse vector value, must be a float");
           break;
         }
@@ -757,6 +829,7 @@ static int parse_float_value(const char*& ptr, const char* end, const char* text
         }
       } else if (*ptr != '+' && *ptr != '-' && (*ptr < '0' || *ptr > '9')) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid float character", K(ret), K(*ptr));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sparse vector value, must be a float");
         break;
       }
@@ -767,12 +840,14 @@ static int parse_float_value(const char*& ptr, const char* end, const char* text
       int64_t value_len = ptr - value_start;
       if (value_len <= 0) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid value length", K(ret));
       } else {
         // Parse float value using fast_float
         const char *value_end = value_start + value_len;
         fast_float::from_chars_result result = fast_float::from_chars(value_start, value_end, value);
         if (result.ec != std::errc()) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("failed to parse float value", K(ret), K(ObString(value_len, value_start)));
         }
       }
     }
@@ -798,6 +873,7 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
   if (OB_ISNULL(ptr) || arr_text.length() == 0) {
   } else if (OB_ISNULL(dst_map)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid dst type", K(ret));
   } else {
     ObIArrayType *key_arr = dst_map->get_key_array();
     ObIArrayType *value_arr = dst_map->get_value_array();
@@ -806,10 +882,12 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
 
     if (OB_ISNULL(key_array) || OB_ISNULL(value_array)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid key or value array type", K(ret));
     } else if (FALSE_IT(skip_whitespace(ptr, end))) {
     } else if (ptr >= end) {
     } else if (*ptr != '{') {  // Expect '{'
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid sparse vector format, expect '{'", K(ret), K(arr_text));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sparse vector, expect '{'");
     } else {
       ++ptr;
@@ -827,6 +905,7 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
         skip_whitespace(ptr, end);
         if (ptr >= end) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("unexpected end of string when parsing key", K(ret));
           break;
         }
         uint32_t dim = 0;
@@ -837,6 +916,7 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
         skip_whitespace(ptr, end);
         if (ptr >= end || *ptr != ':') {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid format, expect ':'", K(ret), K(arr_text));
           break;
         }
         ++ptr;
@@ -850,8 +930,10 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
 
         // 4. Add to arrays
         if (OB_FAIL(key_array->push_back(dim))) {
+          LOG_WARN("failed to push back dim", K(ret), K(dim));
           break;
         } else if (OB_FAIL(value_array->push_back(value))) {
+          LOG_WARN("failed to push back value", K(ret), K(value));
           break;
         }
 
@@ -859,6 +941,7 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
         skip_whitespace(ptr, end);
         if (ptr >= end) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("unexpected end", K(ret));
           break;
         } else if (*ptr == '}') {
           ++ptr;
@@ -869,6 +952,7 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
           skip_whitespace(ptr, end);
         } else {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid format, expect ',' or '}'", K(ret), K(*ptr), K(ptr - arr_text.ptr()));
           break;
         }
       }
@@ -877,10 +961,13 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
     if (OB_FAIL(ret)) {
     } else if (ptr < end) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("unexpected trailing characters", K(ret), K(ptr - arr_text.ptr()));
     } else if (OB_FAIL(dst_map->init())) {
+      LOG_WARN("failed to init map", K(ret));
     } else if (ob_obj_type_class(static_cast<ObObjType>(key_arr->get_element_type())) != ObStringTC) {
       ObIArrayType *dst_distinct = NULL;
       if (OB_FAIL(dst->distinct(alloc, dst_distinct))) {
+        LOG_WARN("get distinct failed", K(ret));
       } else {
         dst = dst_distinct;
       }
@@ -900,6 +987,7 @@ int ObArrayCastUtils::string_cast_array( ObString &arr_text, ObIArrayType *&dst,
 
   if (dst_elem_type->type_id_ != ObNestedType::OB_BASIC_TYPE) {
     ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not support binary cast to nested array", K(dst_elem_type->type_id_), K(ret));
   } else {
     const ObCollectionBasicType *basic_type = dynamic_cast<const ObCollectionBasicType *>(dst_elem_type);
     ObObjType elem_type = basic_type->basic_meta_.get_obj_type();
@@ -907,12 +995,14 @@ int ObArrayCastUtils::string_cast_array( ObString &arr_text, ObIArrayType *&dst,
       case ObFloatType: {
         if ((len & 0x03) != 0) {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("length not sopported", K(len), K(ret));
         } else {
           while (ptr < end && OB_SUCC(ret)) {
             const float *val_ptr = reinterpret_cast<const float *>(ptr);
             float val = *val_ptr;
             ObArrayFixedSize<float> *dst_arr = static_cast<ObArrayFixedSize<float> *>(dst);
             if (OB_FAIL(dst_arr->push_back(static_cast<float>(val)))) {
+              LOG_WARN("failed to push back array value", K(ret));
             } 
             ptr += sizeof(float);        
           }
@@ -921,6 +1011,7 @@ int ObArrayCastUtils::string_cast_array( ObString &arr_text, ObIArrayType *&dst,
       }
       default: {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("type not supported", K(elem_type), K(ret));
       }
     }
   }
@@ -956,11 +1047,13 @@ int ObArrayCastUtils::string_cast_vector(common::ObIAllocator &alloc, ObString &
         }
         default: {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("type not supported", K(elem_type), K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (len != dim_cnt * elem_size) {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("length not correct", K(ret), K(len));
         } else {
           ObVectorF32Data *dst_arr = static_cast<ObVectorF32Data *>(dst);
           float *data = static_cast<float *>(alloc.alloc(len));
@@ -974,6 +1067,7 @@ int ObArrayCastUtils::string_cast_vector(common::ObIAllocator &alloc, ObString &
       if (ptr >= end) {
       } else if (!is_vector_start(*ptr)) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("failed to parse array text, No begin char found", K(ret), K(arr_text), K(ptr - begin));
       } else {
         ++ptr;
         skip_whitespace(ptr, end);
@@ -991,13 +1085,16 @@ int ObArrayCastUtils::string_cast_vector(common::ObIAllocator &alloc, ObString &
             if (ptr < end && is_null_string_start(*ptr)) {
               if (!is_null_const_string(ptr, end)) {
                 ret = OB_INVALID_ARGUMENT;
+                LOG_WARN("failed to parse array", K(ret), K(arr_text), K(ptr - begin));
               } else {
                 ptr += NULL_STR_LEN;
                 if (OB_FAIL(dst->push_null())) {
+                  LOG_WARN("failed to push null array value", K(ret));
                 }
               }
             } else {
               ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("failed to parse array", K(ret), K(arr_text), K(ptr - begin));
             }
           } else {
             ptr = parse_ret.ptr;
@@ -1006,6 +1103,7 @@ int ObArrayCastUtils::string_cast_vector(common::ObIAllocator &alloc, ObString &
             }
             
             if (OB_FAIL(add_vector_element(res, dst_elem_type, dst))) {
+              LOG_WARN("failed to push store array", K(ret));
             }
           }
           
@@ -1031,9 +1129,11 @@ int ObArrayCastUtils::string_cast_vector(common::ObIAllocator &alloc, ObString &
             skip_whitespace(ptr, end);
             if (ptr < end && *ptr != 0) {
               ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("failed to parse array", K(ret), K(arr_text), K(ptr - begin));
             }
           } else {
             ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("failed to parse array", K(ret), K(arr_text), K(ptr - begin));
           }
         }
       }
@@ -1053,14 +1153,18 @@ int ObArrayCastUtils::string_cast(common::ObIAllocator &alloc, ObString &arr_tex
   uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
   if (OB_FAIL(
           ObJsonParser::parse_json_text(&alloc, arr_text.ptr(), arr_text.length(), syntaxerr, &err_offset, j_node, parse_flag))) {
+    LOG_WARN("failed to parse array text", K(ret), K(arr_text), KCSTRING(syntaxerr), K(err_offset));
   } else if (j_node->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid text. not json type", K(ret), K(arr_text), K(j_node->json_type()));
   } else if (j_node->element_count() == 0 && dst_elem_type->type_id_ != OB_BASIC_TYPE) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+    LOG_WARN("array dimension dismatch", K(ret), K(dst_elem_type->type_id_));
   } else {
     for (int i = 0; i < j_node->element_count() && OB_SUCC(ret); i++) {
       ObJsonArray *json_arr = static_cast<ObJsonArray *>(j_node);
       if (OB_FAIL(add_json_node_to_array(alloc, *(*json_arr)[i], dst_elem_type, dst))) {
+        LOG_WARN("failed to add json node to array", K(ret), K(i));
       }
     }
   }
@@ -1076,6 +1180,7 @@ int ObArrayBinaryCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, cons
   const ObCollectionBasicType *dst_type  = dynamic_cast<const ObCollectionBasicType *>(static_cast<const ObCollectionArrayType *>(dst_coll_type)->element_type_);
    if (OB_UNLIKELY(!src_type || !dst_type)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+    LOG_WARN("unexpected status: invalid argument", K(ret), KP(src_type), KP(dst_type));
   } else {
     ObLength elem_len_max = dst_type->basic_meta_.get_length();
     ObCollationType elem_cs_type = src_type->basic_meta_.get_collation_type();
@@ -1084,11 +1189,14 @@ int ObArrayBinaryCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, cons
       ObObj src_elem;
       if (src->is_null(i)) {
         if (OB_FAIL(dst->push_null())) {
+          LOG_WARN("failed to add null to array", K(ret), K(i));
         }
       } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem))) {
+        LOG_WARN("failed to get cast element", K(ret), K(i));
       } else if (FALSE_IT(src_elem.set_collation_type(elem_cs_type))) {
       } else if (FALSE_IT(src_elem.set_collation_level(elem_ncl_type))) {
       } else if (OB_FAIL(ObArrayCastUtils::cast_add_element(alloc, src_elem, dst, dst_type, mode))) {
+        LOG_WARN("failed to cast and add element", K(ret));
       }
     }
   }
@@ -1104,22 +1212,31 @@ int ObArrayNestedCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, cons
   ObArrayNested *dst_arr = dynamic_cast<ObArrayNested *>(dst);
    if (OB_UNLIKELY(!src_type || !dst_type || !dst_arr)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
+    LOG_WARN("unexpected status: invalid argument", K(ret), KP(src_type), KP(dst_type), KP(dst_arr));
   } else {
     ObIArrayType *src_elem = nullptr;
     ObIArrayType *dst_elem = nullptr;
     ObArrayTypeCast *arr_cast = nullptr;
     if (OB_FAIL(ObArrayTypeObjFactory::construct(alloc, *src_type, src_elem))) {
+      LOG_WARN("failed to add null to array", K(ret));
     } else if (OB_FAIL(ObArrayTypeObjFactory::construct(alloc, *dst_type, dst_elem))) {
+      LOG_WARN("failed to add null to array", K(ret));
     } else if (OB_FAIL(ObArrayTypeCastFactory::alloc(alloc, *src_type, *dst_type, arr_cast))) {
+      LOG_WARN("alloc array cast failed", K(ret));
     }
     for (int64_t i = 0; i < src->size() && OB_SUCC(ret); i++) {
       if (src->is_null(i)) {
         if (OB_FAIL(dst->push_null())) {
+          LOG_WARN("failed to add null to array", K(ret), K(i));
         }
       } else if (OB_FAIL(src->at(i, *src_elem))) {
+        LOG_WARN("failed to get elem", K(ret), K(i));
       } else if (OB_FAIL(arr_cast->cast(alloc, src_elem, src_type, dst_elem, dst_type))) {
+        LOG_WARN("array element cast failed", K(ret));
       } else if (OB_FAIL(dst_elem->init())) {
+        LOG_WARN("array init failed", K(ret));
       } else if (OB_FAIL(dst_arr->push_back(*dst_elem))) {
+        LOG_WARN("array push back failed", K(ret));
       } else {
         src_elem->clear();
         dst_elem->clear();
@@ -1148,22 +1265,29 @@ int ObMapCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObColl
   if (dst_coll_type->is_sparse_vector_type()) {
     if (src_key->contain_null() || src_value->contain_null()) {
       ret = OB_ERR_NULL_VALUE;
+      LOG_WARN("sparse vector not support NULL key or value", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObArrayTypeCastFactory::alloc(alloc, *src_key_type, *dst_key_type, key_cast))) {
+    LOG_WARN("alloc key array cast failed", K(ret), K(src_key_type));
   } else if (OB_FAIL(key_cast->cast(alloc, src_key, src_key_type, 
                                                            dst_key, dst_key_type, mode))) {
+    LOG_WARN("array element cast failed", K(ret), K(src_key_type), K(dst_key_type));
   } else if (OB_FAIL(ObArrayTypeCastFactory::alloc(alloc, *src_value_type, *dst_value_type, value_cast))) {
+    LOG_WARN("alloc value array cast failed", K(ret), K(src_value_type));
   } else if (OB_FAIL(value_cast->cast(alloc, src_value, src_value_type, 
                                                                dst_value, dst_value_type, mode))) {
+    LOG_WARN("array element cast failed", K(ret), K(src_value_type), K(dst_value_type));
   } else if (OB_FAIL(dst->init())) {
+    LOG_WARN("destination map init failed", K(ret));
   } else if (ob_obj_type_class(static_cast<ObObjType>(dst_key->get_element_type())) != ObStringTC
              && ob_obj_type_class(static_cast<ObObjType>(src_key->get_element_type()))
                != ob_obj_type_class(static_cast<ObObjType>(dst_key->get_element_type()))) {
     ObIArrayType *dst_distinct = NULL;
     if (OB_FAIL(dst->distinct(alloc, dst_distinct))) {
+      LOG_WARN("get distinct failed", K(ret));
     } else {
       dst = dst_distinct;
     }
@@ -1198,12 +1322,14 @@ int ObArrayTypeCastFactory::alloc(ObIAllocator &alloc, const ObCollectionTypeBas
     } else {
       // to do
       ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not supported cast type", K(ret), K(arr_type->element_type_->type_id_));
     }
   } else if (dst_array_meta.type_id_ == ObNestedType::OB_MAP_TYPE
              || dst_array_meta.type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE) {
     arr_cast = OB_NEWx(ObMapCast, &alloc);
   } else {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid array type", K(ret), K(dst_array_meta.type_id_));
   }
   if (OB_SUCC(ret) && OB_ISNULL(arr_cast)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1221,13 +1347,18 @@ int ObArrayCastUtils::set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *
   int32_t res_size = arr_obj->get_raw_binary_len();
   char *res_buf = nullptr;
   int64_t res_buf_len = 0;
-  common::ObTextStringObObjResult text_result(ObCollectionSQLType, params, obj, has_lob_header);
+  sql::ObTextStringObObjResult text_result(ObCollectionSQLType, params, obj, has_lob_header);
   if (OB_FAIL(text_result.init(res_size, params->allocator_v2_))) {
+    LOG_WARN("init lob result failed");
   } else if (OB_FAIL(text_result.get_reserved_buffer(res_buf, res_buf_len))) {
+    LOG_WARN("fail to get reserver buffer", K(ret));
   } else if (res_buf_len < res_size) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
   } else if (OB_FAIL(arr_obj->get_raw_binary(res_buf, res_buf_len))) {
+    LOG_WARN("get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
   } else if (OB_FAIL(text_result.lseek(res_size, 0))) {
+    LOG_WARN("failed to lseek res.", K(ret), K(text_result), K(res_size));
   } else {
     text_result.set_result();
   }

@@ -168,7 +168,7 @@ void CtxLock::unlock_ctx()
     const int64_t lock_ts = ObClockGenerator::getClock() - lock_start_ts;
     if (lock_ts > WARN_LOCK_TS) {
       TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "ctx lock too much time", K(arg.trans_id_),
-                    K(lock_ts), K(lbt()));
+                    K(arg.ls_id_), K(lock_ts), K(lbt()));
     }
   }
   after_unlock(arg);
@@ -219,17 +219,14 @@ void CtxLockGuard::set(CtxLock &lock, uint8_t mode)
 void CtxLockGuard::reset()
 {
   if (NULL != lock_) {
-    // Like CtxLock::unlock(), release the outer latches before unlock_ctx()
-    // invokes commit callbacks. A callback can take the transaction descriptor
-    // lock while a commit retry holds that lock and waits for these latches.
-    if (mode_ & MODE::ACCESS) {
-      lock_->unlock_access();
+    if (mode_ & MODE::CTX) {
+      lock_->unlock_ctx();
     }
     if ((mode_ & MODE::REDO_FLUSH_X) || (mode_ & MODE::REDO_FLUSH_R)) {
       lock_->unlock_flush_redo();
     }
-    if (mode_ & MODE::CTX) {
-      lock_->unlock_ctx();
+    if (mode_ & MODE::ACCESS) {
+      lock_->unlock_access();
     }
 
     lock_ = NULL;

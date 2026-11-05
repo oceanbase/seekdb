@@ -19,8 +19,11 @@
 
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "common/udt/ob_array_type.h"
-#include "data_plane/vector/ob_vector_metric.h"
-#include "data_plane/vector/ob_sparse_vector_ip_distance.h"
+#include "storage/vector_type/ob_vector_l2_distance.h"
+#include "storage/vector_type/ob_vector_cosine_distance.h"
+#include "storage/vector_type/ob_vector_ip_distance.h"
+#include "storage/vector_type/ob_vector_l1_distance.h"
+#include "storage/vector_type/ob_sparse_vector_ip_distance.h"
 
 
 namespace oceanbase
@@ -65,9 +68,21 @@ private:
 class ObExprVectorDistance : public ObExprVector
 {
 public:
-  using ObVecDisType = share::ObVectorDistanceType;
+  enum ObVecDisType
+  {
+    COSINE = 0,
+    DOT, // inner product
+    EUCLIDEAN, // L2
+    MANHATTAN, // L1
+    EUCLIDEAN_SQUARED, // L2_SQUARED
+    HAMMING,
+    MAX_TYPE,
+  };
   template <typename T = float>
-  using DisFunc = share::ObVectorDistanceDispatch<T>;
+  struct DisFunc {
+    using FuncPtrType = int (*)(const T* a, const T* b, const int64_t len, double& distance);
+    static FuncPtrType distance_funcs[];
+  };
   struct SparseVectorDisFunc {
     using FuncPtrType = int (*)(const ObMapType* a, const ObMapType* b, double& distance);
     static FuncPtrType spiv_distance_funcs[];
@@ -90,6 +105,17 @@ public:
   
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorDistance);
+};
+
+template <typename T>
+typename ObExprVectorDistance::DisFunc<T>::FuncPtrType ObExprVectorDistance::DisFunc<T>::distance_funcs[] = 
+{
+  ObVectorCosineDistance<T>::cosine_distance_func,
+  ObVectorIpDistance<T>::ip_distance_func,
+  ObVectorL2Distance<T>::l2_distance_func,
+  ObVectorL1Distance<T>::l1_distance_func,
+  ObVectorL2Distance<T>::l2_square_func,
+  nullptr,
 };
 
 class ObExprVectorL1Distance : public ObExprVectorDistance

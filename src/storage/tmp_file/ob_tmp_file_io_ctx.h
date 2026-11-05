@@ -171,6 +171,7 @@ public:
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(this->block_handle_.assign(other.block_handle_))) {
+        COMMON_LOG(WARN, "fail to assign page_handle", K(ret));
       } else {
         ObIReadHandle::operator=(other);
       }
@@ -193,6 +194,7 @@ public:
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(this->page_handle_.assign(other.page_handle_))) {
+        COMMON_LOG(WARN, "fail to assign page_handle", K(ret));
       } else {
         ObIReadHandle::operator=(other);
       }

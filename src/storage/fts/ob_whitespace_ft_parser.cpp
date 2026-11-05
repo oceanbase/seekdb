@@ -18,13 +18,14 @@
 
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
-#include "data_plane/fts/ob_fts_struct.h"
+#include "storage/fts/ob_fts_struct.h"
 #include "storage/fts/ob_whitespace_ft_parser.h"
 #include "storage/fts/utils/ob_ft_char_utils.h"
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
 using namespace oceanbase::common;
+using namespace oceanbase::plugin;
 
 namespace oceanbase
 {
@@ -58,11 +59,13 @@ int ObSpaceFTParser::init(ObFTParserParam *param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret), KPC(param), KPC(this));
   } else if (OB_ISNULL(param)
       || OB_ISNULL(param->cs_)
       || OB_ISNULL(param->fulltext_)
       || OB_UNLIKELY(0 >= param->ft_length_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(param));
   } else {
     cs_ = param->cs_;
     start_ = param->fulltext_;
@@ -74,6 +77,12 @@ int ObSpaceFTParser::init(ObFTParserParam *param)
     reset();
   }
   return ret;
+}
+
+int ObSpaceFTParser::reuse(ObFTParserParam *param)
+{
+  reset();
+  return init(param);
 }
 
 int ObSpaceFTParser::get_next_token(const char *&word,
@@ -89,6 +98,7 @@ int ObSpaceFTParser::get_next_token(const char *&word,
   word_freq = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("space ft parser isn't initialized", K(ret), K(is_inited_));
   } else {
     const char *start = start_;
     const char *next = next_;
@@ -139,41 +149,76 @@ int ObSpaceFTParser::get_next_token(const char *&word,
   return ret;
 }
 
-ObWhiteSpaceFTParserDesc::ObWhiteSpaceFTParserDesc() {}
+ObWhiteSpaceFTParserDesc::ObWhiteSpaceFTParserDesc()
+  : is_inited_(false)
+{
+}
 
-int ObWhiteSpaceFTParserDesc::segment(
+int ObWhiteSpaceFTParserDesc::init(ObPluginParam *param)
+{
+  is_inited_ = true;
+  return OB_SUCCESS;
+}
+
+int ObWhiteSpaceFTParserDesc::deinit(ObPluginParam *param)
+{
+  reset();
+  return OB_SUCCESS;
+}
+
+int ObWhiteSpaceFTParserDesc::create_token_iter(
     ObFTParserParam *param,
     ObITokenIterator *&iter) const
 {
   int ret = OB_SUCCESS;
   ObSpaceFTParser *parser = nullptr;
-  if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("default ft parser desc hasn't be initialized", K(ret), K(is_inited_));
+  } else if (OB_ISNULL(param) || OB_ISNULL(param->parser_allocator_)
+             || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(parser = OB_NEWx(ObSpaceFTParser, param->allocator_))) {
+    LOG_WARN("invalid argument", K(ret), KPC(param));
+  } else if (OB_ISNULL(parser = OB_NEWx(ObSpaceFTParser, param->parser_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate space ft parser", K(ret));
   } else {
     if (OB_FAIL(parser->init(param))) {
+      LOG_WARN("fail to init whitespace fulltext parser", K(ret), KPC(param));
     } else {
       iter = parser;
     }
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObSpaceFTParser, param->allocator_, parser);
+    OB_DELETEx(ObSpaceFTParser, param->parser_allocator_, parser);
   }
 
   return ret;
 }
 
-void ObWhiteSpaceFTParserDesc::free_token_iter(
+int ObWhiteSpaceFTParserDesc::reuse_token_iter(ObFTParserParam *param, ObITokenIterator *iter) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(param) || OB_ISNULL(iter)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KPC(param), KP(iter));
+  } else if (OB_FAIL(static_cast<ObSpaceFTParser *>(iter)->reuse(param))) {
+    LOG_WARN("fail to reuse whitespace fulltext parser", K(ret), KPC(param));
+  }
+  return ret;
+}
+
+void ObWhiteSpaceFTParserDesc::destroy_token_iter(
     ObFTParserParam *param,
     ObITokenIterator *&iter) const
 {
   if (OB_NOT_NULL(iter)) {
     abort_unless(nullptr != param);
-    abort_unless(nullptr != param->allocator_);
+    abort_unless(nullptr != param->parser_allocator_);
     iter->~ObITokenIterator();
-    param->allocator_->free(iter);
+    param->parser_allocator_->free(iter);
+    iter = nullptr;
   }
 }
 

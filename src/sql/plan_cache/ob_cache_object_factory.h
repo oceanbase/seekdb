@@ -40,24 +40,25 @@ class ObCacheObjectFactory
 friend class ObPlanCacheObject;
 friend class ObPlanCache;
 public:
-  static int alloc(ObPlanCache &plan_cache,
-                   ObCacheObjGuard& guard,
+  static int alloc(ObCacheObjGuard& guard,
                    ObLibCacheNameSpace ns);
-  static void inner_free(ObILibCacheObject *&cache_obj);
+  static void inner_free(ObILibCacheObject *&cache_obj,
+                         const CacheRefHandleID ref_handle);
   static void inner_free(ObPlanCache *pc,
-                         ObILibCacheObject *&cache_obj);
+                         ObILibCacheObject *&cache_obj,
+                         const CacheRefHandleID ref_handle);
   template<typename ClassT>
-  static void free(ClassT *&cache_obj)
+  static void free(ClassT *&cache_obj, const CacheRefHandleID ref_handle)
   {
     ObILibCacheObject *tmp_obj = (ObILibCacheObject *)cache_obj;
-    inner_free(tmp_obj);
+    inner_free(tmp_obj, ref_handle);
     cache_obj = NULL;
   }
   template<typename ClassT>
-  static void free(ObPlanCache *pc, ClassT *&cache_obj)
+  static void free(ObPlanCache *pc, ClassT *&cache_obj, const CacheRefHandleID ref_handle)
   {
     ObILibCacheObject *tmp_obj = (ObILibCacheObject *)cache_obj;
-    inner_free(pc, tmp_obj);
+    inner_free(pc, tmp_obj, ref_handle);
     cache_obj = NULL;
   }
 
@@ -74,10 +75,18 @@ friend class ObLCObjectManager;
 private:
   // access only
   ObILibCacheObject* cache_obj_;
+  // readable and writable
+  CacheRefHandleID ref_handle_;
 
 public:
   ObCacheObjGuard()
-    : cache_obj_(NULL)
+    : cache_obj_(NULL),
+    ref_handle_(MAX_HANDLE)
+  {
+  }
+  ObCacheObjGuard(CacheRefHandleID ref_handle)
+    : cache_obj_(NULL),
+    ref_handle_(ref_handle)
   {
   }
 
@@ -86,14 +95,24 @@ public:
     if (OB_ISNULL(cache_obj_)) {
       // do nothing
     } else {
-      ObCacheObjectFactory::free(cache_obj_);
+      ObCacheObjectFactory::free(cache_obj_, ref_handle_);
       cache_obj_ = NULL;
     }
+  }
+
+  void init(CacheRefHandleID ref_handle)
+  {
+    ref_handle_ = ref_handle;
   }
 
   ObILibCacheObject* get_cache_obj() const
   {
     return cache_obj_;
+  }
+
+  CacheRefHandleID get_ref_handle() const
+  {
+    return ref_handle_;
   }
 
   int force_early_release(ObPlanCache *pc);
@@ -110,13 +129,16 @@ public:
   // Change life cycle of current guard.
   void swap(ObCacheObjGuard& other)
   {
-    ObCacheObjGuard tmp;
+    ObCacheObjGuard tmp(MAX_HANDLE);
 
     tmp.cache_obj_ = this->cache_obj_;
+    tmp.ref_handle_ = this->ref_handle_;
 
     this->cache_obj_ = other.cache_obj_;
+    this->ref_handle_ = other.ref_handle_;
 
     other.cache_obj_ = tmp.cache_obj_;
+    other.ref_handle_ = tmp.ref_handle_;
 
     // If not reset tmp in this line, the reference count of current cache_obj_
     //  will be mistakenly decrease.
@@ -126,6 +148,7 @@ public:
 private:
   void reset(){
     cache_obj_ = NULL;
+    ref_handle_ = MAX_HANDLE;
   }
 };
 

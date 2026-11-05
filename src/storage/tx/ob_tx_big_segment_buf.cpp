@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "storage/tx/ob_tx_big_segment_buf.h"
 
 namespace oceanbase
@@ -28,7 +28,7 @@ OB_SERIALIZE_MEMBER(BigSegmentPartHeader, prev_part_id_, remain_length_, part_le
 void ObTxBigSegmentBuf::reset()
 {
   if (OB_NOT_NULL(segment_buf_)) {
-    share::server_free(segment_buf_);
+    share::mtl_free(segment_buf_);
   }
   segment_buf_ = nullptr;
   segment_buf_len_ = 0;
@@ -44,6 +44,7 @@ int ObTxBigSegmentBuf::init_for_serialize(int64_t segment_len)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(basic_init_(segment_len, true))) {
+    TRANS_LOG(WARN, "init big segment buf failed", K(ret), KPC(this));
   }
 
   return ret;
@@ -112,10 +113,13 @@ int ObTxBigSegmentBuf::split_one_part(char *part_buf,
       }
     }
 
+    TRANS_LOG(DEBUG, "init part header for split_one_part", K(ret), K(part_header), KPC(this));
 
     tmp_pos = part_buf_pos;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(part_header.serialize(part_buf, part_buf_len, tmp_pos))) {
+      TRANS_LOG(WARN, "serialize part header failed", K(ret), KP(part_buf), K(part_buf_len),
+                K(tmp_pos), KPC(this));
     } else if (tmp_pos + part_header.part_length_ > part_buf_len
                || segment_pos_ + part_header.part_length_ > segment_data_len_) {
       ret = OB_ERR_UNEXPECTED;
@@ -157,6 +161,12 @@ int ObTxBigSegmentBuf::collect_one_part(const char *part_buf,
   } else if (is_active() && is_completed()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(part_header.deserialize(part_buf, part_buf_len, tmp_pos))) {
+    TRANS_LOG(WARN, "deserialize part_header failed", K(ret), K(part_buf_len), K(tmp_pos),
+              K(part_header));
+  // } else if (INVALID_SEGMENT_PART_ID != prev_part_id_
+  //            && prev_part_id_ != part_header.prev_part_id_) {
+  //   ret = OB_ERR_UNEXPECTED;
+  //   TRANS_LOG(WARN, "collect a discontiguous part", K(ret), K(part_header), KPC(this));
   } else {
     if (OB_ISNULL(segment_buf_) || segment_data_len_ <= 0) {
       // is not inited
@@ -164,6 +174,7 @@ int ObTxBigSegmentBuf::collect_one_part(const char *part_buf,
         ret = OB_START_LOG_CURSOR_INVALID;
         TRANS_LOG(WARN, "We need merge from the first part", K(ret), K(part_header), KPC(this));
       } else if (OB_FAIL(basic_init_(part_header.remain_length_, false))) {
+        TRANS_LOG(WARN, "init for replay failed", K(ret), K(part_header), KPC(this));
       }
     } else {
       // is inited
@@ -175,6 +186,7 @@ int ObTxBigSegmentBuf::collect_one_part(const char *part_buf,
     }
   }
 
+  TRANS_LOG(DEBUG, "try to init big segment for deserialize", K(ret), K(part_header), KPC(this));
 
   if (OB_FAIL(ret)) {
     // do nothing
@@ -239,7 +251,7 @@ int ObTxBigSegmentBuf::basic_init_(const int64_t segment_len, bool for_serialize
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid serialize size", K(ret), KPC(this), K(segment_len));
   } else if (OB_ISNULL(segment_buf_ =
-                           static_cast<char *>(share::server_malloc(segment_len, "BigSegment")))) {
+                           static_cast<char *>(share::mtl_malloc(segment_len, "BigSegment")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc memory for big segment", K(ret), KPC(this), K(segment_len));
   } else {

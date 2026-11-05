@@ -37,7 +37,9 @@ const char *VALID_PROVIDERS[] = {
   "SILICONFLOW",
   "COHERE",
   "HUNYUAN-OPENAI",
-  "OPENAI"
+  "OPENAI",
+  // Ollama runs locally and needs no credential.
+  "OLLAMA"
 };
 
 #define EXTRACT_JSON_ELEM_STR(json_key, member) \
@@ -61,6 +63,23 @@ const char *VALID_PROVIDERS[] = {
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_INVALID, elem.first.length(), elem.first.ptr()); \
     LOG_WARN("unknown json key param", K(ret), K(elem.first)); \
   }
+
+// Integer options are accepted only as a JSON integer inside [min_value,
+// max_value]. A string spelling of the same number is rejected so that a quoted
+// value cannot silently bypass the range check.
+#define EXTRACT_JSON_ELEM_INT(json_key, member, min_value, max_value) \
+      if (elem.first.case_compare(json_key) == 0) { \
+        if (elem.second->json_type() != ObJsonNodeType::J_INT \
+            || elem.second->get_int() < (min_value) \
+            || elem.second->get_int() > (max_value)) { \
+          ret = OB_AI_FUNC_PARAM_VALUE_INVALID; \
+          LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, elem.first.length(), elem.first.ptr()); \
+          LOG_WARN("invalid json int param", K(ret), K(elem.first), \
+                   K(elem.second->json_type()), K(elem.second->get_int())); \
+        } else { \
+          member = elem.second->get_int(); \
+        } \
+      } else
 
 int ObAiModelEndpointInfo::parse_from_json_base(common::ObArenaAllocator &allocator, const ObString &name, const ObIJsonBase &params_jbase)
 {
@@ -90,6 +109,8 @@ int ObAiModelEndpointInfo::deep_copy(
   } else if (OB_FAIL(ob_write_string(allocator, other.parameters_, parameters_))) {
   } else if (OB_FAIL(ob_write_string(allocator, other.request_transform_fn_, request_transform_fn_))) {
   } else if (OB_FAIL(ob_write_string(allocator, other.response_transform_fn_, response_transform_fn_))) {
+  } else {
+    max_concurrency_ = other.max_concurrency_;
   }
   return ret;
 }
@@ -112,7 +133,9 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (url_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("url"), "url");
-  } else if (access_key_.empty()) {
+  } else if (access_key_.empty() && provider_.case_compare("OLLAMA") != 0) {
+    // Ollama exposes a local endpoint without credentials; every other provider
+    // must present an access key.
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
     LOG_WARN("access_key is empty", K(ret), K(*this));
@@ -131,6 +154,10 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (!response_transform_fn_.empty()) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("response_transform_fn"), "response_transform_fn");
+  } else if (max_concurrency_ < DEFAULT_MAX_CONCURRENCY
+             || max_concurrency_ > MAX_CONCURRENCY_LIMIT) {
+    ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
+    LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("max_concurrency"), "max_concurrency");
   }
   return ret;
 }
@@ -165,6 +192,8 @@ int ObAiModelEndpointInfo::merge_delta_endpoint(common::ObArenaAllocator &alloca
       EXTRACT_JSON_ELEM_STR("parameters", parameters_)
       EXTRACT_JSON_ELEM_STR("request_transform_fn", request_transform_fn_)
       EXTRACT_JSON_ELEM_STR("response_transform_fn", response_transform_fn_)
+      EXTRACT_JSON_ELEM_INT("max_concurrency", max_concurrency_,
+                            DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY_LIMIT)
       EXTRACT_JSON_ELEM_END()
     }
     iter.next();

@@ -19,7 +19,7 @@
 
 #include "common/object/ob_object.h"
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "sql/pl/ob_pl_type.h"
+#include "pl/ob_pl_type.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 
 namespace oceanbase
@@ -33,6 +33,7 @@ struct ObExprPlSubQueryInfo : public ObIExprExtraInfo
 public:
   ObExprPlSubQueryInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
       : ObIExprExtraInfo(alloc, type),
+      id_(common::OB_INVALID_ID),
       ps_sql_(ObString()),
       type_(stmt::T_NONE),
       route_sql_(ObString()),
@@ -47,6 +48,7 @@ public:
   template <typename RE>
   int from_raw_expr(RE &expr, const ObSQLSessionInfo *session, ObIAllocator &alloc);
 
+  ObPsStmtId id_; //prepare statement id, retain id, compatible with old version
   common::ObString ps_sql_;
   stmt::StmtType type_; // statement type for prepare
 
@@ -110,6 +112,7 @@ private:
   static int fetch_row(void *result_ret, int64_t &row_count, ObNewRow &cur_row);
   static int get_result(void *result_set, ObObj &result, ObIAllocator &alloc);
 
+  ObPsStmtId id_; //prepared statement id
   common::ObString ps_sql_;
   stmt::StmtType type_; // statement type for prepare
 

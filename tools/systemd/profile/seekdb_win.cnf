@@ -1,0 +1,10 @@
+# SeekDB Configuration File for Windows
+# These parameters are permanently valid
+base-dir=C:/ProgramData/seekdb
+data-dir=C:/ProgramData/seekdb/store
+redo-dir=C:/ProgramData/seekdb/store/redo
+
+# These parameters are valid only during initialization
+port=2881
+cpu_count=4
+memory_limit=2G

@@ -19,6 +19,7 @@
 
 namespace oceanbase
 {
+using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 namespace sql
 {
@@ -48,6 +49,7 @@ int ObCreateIndexStmt::add_sort_column(const ObColumnSortItem &sort_column)
     ret = OB_ERR_TOO_MANY_ROWKEY_COLUMNS;
     LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
   } else if (OB_FAIL(create_index_arg_.index_columns_.push_back(sort_column))) {
+    LOG_WARN("add index column failed", K(ret));
   } else {}
   return ret;
 }
@@ -66,6 +68,11 @@ int ObCreateIndexStmt::add_hidden_storing_column(const ObString &column_name)
 void ObCreateIndexStmt::set_comment(const ObString &comment)
 {
   create_index_arg_.index_option_.comment_ = comment;
+}
+
+void ObCreateIndexStmt::set_storage_cache_policy(const ObString &storage_cache_policy)
+{
+  create_index_arg_.index_option_.storage_cache_policy_ = storage_cache_policy;
 }
 
 void ObCreateIndexStmt::set_index_name(const ObString &index_name)

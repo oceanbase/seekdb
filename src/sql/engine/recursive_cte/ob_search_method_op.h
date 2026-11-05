@@ -69,8 +69,7 @@ public:
 public:
   explicit ObSearchMethodOp(common::ObIAllocator &allocator, const ExprFixedArray &left_output)
     : allocator_(allocator), input_rows_(),
-  left_output_(left_output), last_node_level_(UINT64_MAX),
-  datum_access_ctx_(nullptr) {};
+  left_output_(left_output), last_node_level_(UINT64_MAX) {};
   virtual ~ObSearchMethodOp() = default;
 
   virtual int empty() = 0;
@@ -92,7 +91,6 @@ protected:
   const ExprFixedArray &left_output_;
   // Record the current query row's level in the tree
   uint64_t last_node_level_;
-  const common::ObDatumAccessContext *datum_access_ctx_;
 };
 
 /**

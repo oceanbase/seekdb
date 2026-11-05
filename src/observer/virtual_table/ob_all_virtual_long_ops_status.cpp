@@ -24,7 +24,7 @@ using namespace oceanbase::share;
 
 ObAllVirtualLongOpsStatus::ObAllVirtualLongOpsStatus()
   : ObVirtualTableScannerIterator(),
-    longops_value_(), longops_iter_()
+    addr_(), longops_value_(), longops_iter_()
 {
 }
 
@@ -35,6 +35,7 @@ ObAllVirtualLongOpsStatus::~ObAllVirtualLongOpsStatus()
 
 void ObAllVirtualLongOpsStatus::reset()
 {
+  addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -44,9 +45,12 @@ int ObAllVirtualLongOpsStatus::inner_get_next_row(ObNewRow *&row)
   const int64_t col_count = output_column_ids_.count();
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (!longops_iter_.is_inited() && OB_FAIL(ObLongopsMgr::get_instance().begin_iter(longops_iter_))) {
+    LOG_WARN("fail to begin longops iter", K(ret));
   } else if (OB_FAIL(longops_iter_.get_next(longops_value_))) {
+    LOG_WARN("fail to get next longops value", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
@@ -103,6 +107,7 @@ int ObAllVirtualLongOpsStatus::inner_get_next_row(ObNewRow *&row)
         }
         default:
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid col_id", K(ret), K(col_id));
           break;
       }
     }

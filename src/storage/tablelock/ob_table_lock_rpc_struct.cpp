@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "ob_table_lock_rpc_struct.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 
 namespace oceanbase
@@ -85,7 +85,8 @@ OB_SERIALIZE_MEMBER_INHERIT(ObLockTabletRequest, ObLockTableRequest,
 OB_SERIALIZE_MEMBER_INHERIT(ObLockTabletsRequest, ObLockTableRequest,
                             tablet_ids_);
 
-OB_SERIALIZE_MEMBER_INHERIT(ObLockAloneTabletRequest, ObLockTabletsRequest);
+OB_SERIALIZE_MEMBER_INHERIT(ObLockAloneTabletRequest, ObLockTabletsRequest,
+                            ls_id_);
 
 OB_SERIALIZE_MEMBER(ObReplaceLockRequest,
                     new_lock_mode_,
@@ -105,9 +106,11 @@ OB_DEF_SERIALIZE_SIZE(ObTableLockTaskRequest)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tx_desc_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tx_desc should not be null", K(ret), KP(tx_desc_));
   } else {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
                 task_type_,
+                lsid_,
                 param_,
                 *tx_desc_);
   }
@@ -119,9 +122,11 @@ OB_DEF_SERIALIZE(ObTableLockTaskRequest)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tx_desc_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tx_desc should not be null", K(ret), KP(tx_desc_));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 task_type_,
+                lsid_,
                 param_,
                 *tx_desc_);
   }
@@ -133,12 +138,15 @@ OB_DEF_DESERIALIZE(ObTableLockTaskRequest)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
               task_type_,
+              lsid_,
               param_);
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(TxDescHelper::deserialize_tx_desc(buf, data_len, pos, tx_desc_))) {
+    LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), K(ret));
   } else {
     need_release_tx_ = true;
+    LOG_TRACE("deserialize txDesc", KPC_(tx_desc));
   }
   return ret;
 }
@@ -150,6 +158,7 @@ OB_DEF_SERIALIZE_SIZE(ObReplaceAllLocksRequest)
   int64_t count = 0;
   if (OB_ISNULL(lock_req_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("lock_req should not be null", K(ret), KP(lock_req_));
   } else {
     OB_UNIS_ADD_LEN(*lock_req_);
     count = unlock_req_list_.count();
@@ -157,6 +166,7 @@ OB_DEF_SERIALIZE_SIZE(ObReplaceAllLocksRequest)
     for (int64_t i = 0; i < count && OB_SUCC(ret); i++) {
       if (OB_ISNULL(unlock_req_list_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unlock_req should not be null", K(ret));
       } else {
         OB_UNIS_ADD_LEN(*unlock_req_list_.at(i));
       }
@@ -171,6 +181,7 @@ OB_DEF_SERIALIZE(ObReplaceAllLocksRequest)
   int64_t count = 0;
   if (OB_ISNULL(lock_req_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("lock_req should not be null", K(ret), KP(lock_req_));
   } else {
     OB_UNIS_ENCODE(*lock_req_);
     count = unlock_req_list_.count();
@@ -178,6 +189,7 @@ OB_DEF_SERIALIZE(ObReplaceAllLocksRequest)
     for (int64_t i = 0; i < count && OB_SUCC(ret); i++) {
       if (OB_ISNULL(unlock_req_list_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unlock_req should not be null", K(ret));
       } else {
         OB_UNIS_ENCODE(*unlock_req_list_.at(i));
       }
@@ -196,6 +208,7 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
   ObUnLockRequest unlock_req;
 
   if (OB_FAIL(common::serialization::decode(buf, data_len, tmp_pos, lock_req))) {
+    LOG_WARN("deserialize lock_req failed", K(ret), K(data_len), K(tmp_pos), KPHEX(buf, data_len));
   } else {
     switch(lock_req.type_) {
     case ObLockRequest::ObLockMsgType::LOCK_OBJ_REQ: {
@@ -227,6 +240,7 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(lock_req_->deserialize(buf, data_len, pos))) {
+    LOG_WARN("deserialize for lock_req failed", K(ret));
     allocator_.free(lock_req_);
     lock_req_ = nullptr;
   } else {
@@ -236,6 +250,7 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
       tmp_pos = pos;
       ObLockRequest *unlock_req_ptr = nullptr;
       if (OB_FAIL(common::serialization::decode(buf, data_len, tmp_pos, unlock_req))) {
+        LOG_WARN("deserialize lock_req failed", K(ret));
       } else {
         switch (unlock_req.type_) {
         case ObLockRequest::ObLockMsgType::UNLOCK_OBJ_REQ: {
@@ -266,8 +281,10 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(unlock_req_ptr->deserialize(buf, data_len, pos))) {
+        LOG_WARN("deserialize for unlock_req failed", K(ret));
         allocator_.free(unlock_req_ptr);
       } else if (OB_FAIL(unlock_req_list_.push_back(unlock_req_ptr))) {
+        LOG_WARN("push unlock_req into list failed", K(ret));
         allocator_.free(unlock_req_ptr);
       }
     }
@@ -281,11 +298,12 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
 int TxDescHelper::deserialize_tx_desc(DESERIAL_PARAMS, ObTxDesc *&tx_desc)
 {
   int ret = OB_SUCCESS;
-  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+  ObTransService *txs = share::g_mp->trans_service();
   if (OB_ISNULL(txs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ObTransService is null");
   } else if (OB_FAIL(txs->acquire_tx(buf, data_len, pos, tx_desc))) {
+    LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), K(ret));
   }
   return ret;
 }
@@ -293,11 +311,12 @@ int TxDescHelper::deserialize_tx_desc(DESERIAL_PARAMS, ObTxDesc *&tx_desc)
 int TxDescHelper::release_tx_desc(ObTxDesc &tx_desc)
 {
   int ret = OB_SUCCESS;
-  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+  ObTransService *txs = share::g_mp->trans_service();
   if (OB_ISNULL(txs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ObTransService is null");
   } else if (OB_FAIL(txs->release_tx(tx_desc))) {
+    LOG_WARN("acquire tx by deserialize fail", K(ret));
   }
   return ret;
 }
@@ -333,6 +352,8 @@ int ObLockParam::set(
       OB_UNLIKELY(!is_lock_mode_valid(lock_mode)) ||
       OB_UNLIKELY(!is_op_type_valid(type))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(lock_id), K(lock_mode), K(owner_id),
+             K(type), K(is_try_lock), K(expired_time));
   } else {
     lock_id_ = lock_id;
     lock_mode_ = lock_mode;
@@ -355,13 +376,15 @@ bool ObLockParam::is_valid() const
           !(ObTableLockPriority::NORMAL != lock_priority_ && !is_two_phase_lock_) &&
           (schema_version_ >= 0 ||
            (ObLockOBJType::OBJ_TYPE_COMMON_OBJ == lock_id_.obj_type_
-            || ObLockOBJType::OBJ_TYPE_RUNTIME == lock_id_.obj_type_
+            || ObLockOBJType::OBJ_TYPE_TENANT == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_LS == lock_id_.obj_type_
+            || ObLockOBJType::OBJ_TYPE_EXTERNAL_TABLE_REFRESH == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLE == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLET == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_DATABASE_NAME == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_OBJECT_NAME == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_DBMS_LOCK == lock_id_.obj_type_
+            || ObLockOBJType::OBJ_TYPE_MATERIALIZED_VIEW == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_REFRESH_VECTOR_INDEX == lock_id_.obj_type_)));
 }
@@ -491,7 +514,9 @@ int ObLockObjsRequest::assign(const ObLockObjRequest &arg)
   timeout_us_ = arg.timeout_us_;
   is_from_sql_ = arg.is_from_sql_;
   if (OB_FAIL(lock_id.set(arg.obj_type_, arg.obj_id_))) {
+    LOG_WARN("set lock_id failed", K(ret), K(arg));
   } else if (OB_FAIL(objs_.push_back(lock_id))) {
+    LOG_WARN("append lock_id into array failed", K(ret), K(arg));
   }
   return ret;
 }
@@ -628,6 +653,7 @@ int ObLockTabletsRequest::assign(const ObLockTabletRequest &arg)
   timeout_us_ = arg.timeout_us_;
   is_from_sql_ = arg.is_from_sql_;
   if (OB_FAIL(tablet_ids_.push_back(arg.tablet_id_))) {
+    LOG_WARN("append tablet_id into array failed", K(arg), K(ret));
   }
   return ret;
 }
@@ -653,13 +679,15 @@ bool ObUnLockTabletsRequest::is_valid() const
 void ObLockAloneTabletRequest::reset()
 {
   ObLockTabletsRequest::reset();
+  ls_id_.reset();
 }
 
 bool ObLockAloneTabletRequest::is_valid() const
 {
   bool is_valid = true;
   is_valid = (ObLockMsgType::LOCK_ALONE_TABLET_REQ == type_ &&
-              ObLockRequest::is_valid());
+              ObLockRequest::is_valid() &&
+              ls_id_.is_valid());
   for (int64_t i = 0; i < tablet_ids_.count() && is_valid; i++) {
     is_valid = is_valid && tablet_ids_.at(i).is_valid();
   }
@@ -676,7 +704,8 @@ bool ObUnLockAloneTabletRequest::is_valid() const
   bool is_valid = true;
   is_valid = ((ObLockMsgType::LOCK_ALONE_TABLET_REQ == type_ ||
                ObLockMsgType::UNLOCK_ALONE_TABLET_REQ == type_) &&
-              ObLockRequest::is_valid());
+              ObLockRequest::is_valid() &&
+              ls_id_.is_valid());
   for (int64_t i = 0; i < tablet_ids_.count() && is_valid; i++) {
     is_valid = is_valid && tablet_ids_.at(i).is_valid();
   }
@@ -755,16 +784,20 @@ bool ObReplaceAllLocksRequest::is_valid() const
 
 int ObTableLockTaskRequest::set(
   const ObTableLockTaskType task_type,
+  const share::ObLSID &lsid,
   const ObLockParam &param,
   transaction::ObTxDesc *tx_desc)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!(task_type < MAX_TASK_TYPE)) ||
+      OB_UNLIKELY(!lsid.is_valid()) ||
       OB_UNLIKELY(!param.is_valid()) ||
       OB_ISNULL(tx_desc)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(task_type), K(lsid), K(param), KP(tx_desc));
   } else {
     task_type_ = task_type;
+    lsid_ = lsid;
     param_ = param;
     tx_desc_ = tx_desc;
   }
@@ -781,10 +814,12 @@ void ObTableLockTaskRequest::reset()
 {
   if (OB_NOT_NULL(tx_desc_)) {
     if (need_release_tx_) {
+      LOG_TRACE("free txDesc", KPC_(tx_desc));
       TxDescHelper::release_tx_desc(*tx_desc_);
     }
   }
   task_type_ = INVALID_LOCK_TASK_TYPE;
+  lsid_.reset();
   param_.reset();
   tx_desc_ = nullptr;
   need_release_tx_ = false;
@@ -816,14 +851,19 @@ int ObInTransLockTableRequest::assign(const ObInTransLockTableRequest &arg)
 OB_SERIALIZE_MEMBER_INHERIT(ObInTransLockTabletRequest, ObInTransLockTableRequest, tablet_id_);
 
 
-OB_SERIALIZE_MEMBER(ObAdminRemoveLockOpArg, lock_op_);
+OB_SERIALIZE_MEMBER(ObAdminRemoveLockOpArg, ls_id_, lock_op_);
 
-int ObAdminRemoveLockOpArg::set(const ObTableLockOp &lock_op)
+int ObAdminRemoveLockOpArg::set(const share::ObLSID &ls_id,
+                                const ObTableLockOp &lock_op)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!lock_op.is_valid())) {
+  if (OB_UNLIKELY(false ||
+                  !ls_id.is_valid() ||
+                  !lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(lock_op));
   } else {
+    ls_id_ = ls_id;
     lock_op_ = lock_op;
   }
   return ret;
@@ -831,19 +871,25 @@ int ObAdminRemoveLockOpArg::set(const ObTableLockOp &lock_op)
 
 
 
-OB_SERIALIZE_MEMBER(ObAdminUpdateLockOpArg, lock_op_,
+OB_SERIALIZE_MEMBER(ObAdminUpdateLockOpArg, ls_id_, lock_op_,
                     commit_version_, commit_scn_);
 
-int ObAdminUpdateLockOpArg::set(const ObTableLockOp &lock_op,
+int ObAdminUpdateLockOpArg::set(const share::ObLSID &ls_id,
+                                const ObTableLockOp &lock_op,
                                 const share::SCN &commit_version,
                                 const share::SCN &commit_scn)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!lock_op.is_valid() ||
+  if (OB_UNLIKELY(false ||
+                  !ls_id.is_valid() ||
+                  !lock_op.is_valid() ||
                   !commit_version.is_valid() ||
                   !commit_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(lock_op),
+             K(commit_version), K(commit_scn));
   } else {
+    ls_id_ = ls_id;
     lock_op_ = lock_op;
     commit_version_ = commit_version;
     commit_scn_ = commit_scn;

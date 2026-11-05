@@ -29,22 +29,23 @@ struct ObSqlCtx;
 class ObSQLSessionInfo;
 class ObPhysicalPlan;
 class ObExecContext;
-class ObQueryRetryCtrl;
 }
 
 namespace observer
 {
 
-class ObMPPacketSender;
+class ObIMPPacketSender;
 class ObMySQLResultSet;
+class ObQueryRetryCtrl;
 class ObSyncPlanDriver : public ObQueryDriver
 {
 public:
-  ObSyncPlanDriver(const share::ObGlobalContext &gctx,
+  ObSyncPlanDriver(const ObGlobalContext &gctx,
                    const sql::ObSqlCtx &ctx,
                    sql::ObSQLSessionInfo &session,
-                   sql::ObQueryRetryCtrl &retry_ctrl,
-                   ObMPPacketSender &sender,
+                   ObQueryRetryCtrl &retry_ctrl,
+                   ObIMPPacketSender &sender,
+                   bool is_prexecute = false,
                    int32_t iteration_count = common::OB_INVALID_COUNT);
   virtual ~ObSyncPlanDriver();
 

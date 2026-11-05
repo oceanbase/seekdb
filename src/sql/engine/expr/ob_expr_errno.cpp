@@ -68,6 +68,7 @@ int ObExprErrno::get_value(const number::ObNumber &nmb, int64_t &value)
   int64_t tmp = 0;
   if (!nmb.is_valid_int64(tmp)) { //based on the behaviour of mysql.
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("out of range", K(ret), K(nmb));
   } else {
     value = tmp;
   }
@@ -88,6 +89,7 @@ int ObExprErrno::eval_errno(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("evaluate parameters failed", K(ret));
   } else {
     int64_t value = 0;
     res.set_null();

@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_tablet_compaction_history.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -52,14 +52,15 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
   int64_t compression_ratio = 0;
   int n = 0;
   if (!major_merge_info_iter_.is_opened() && !minor_merge_info_iter_.is_opened()) {
-    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObSSTableMergeInfoMgr>()->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
+    if (OB_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
+      STORAGE_LOG(WARN, "fail to open ObTenantSSTableMergeInfoMgr::Iterator", K(ret));
     }
   }
-
+  
   if (OB_SUCC(ret)) {
     if (FALSE_IT(MEMSET(comment_, '\0', sizeof(comment_)))) {
     } else if (FALSE_IT(MEMSET(other_info_, '\0', sizeof(other_info_)))) {
-    } else if (OB_FAIL(ObSSTableMergeInfoMgr::get_next_info(major_merge_info_iter_,
+    } else if (OB_FAIL(ObTenantSSTableMergeInfoMgr::get_next_info(major_merge_info_iter_, 
                 minor_merge_info_iter_,
                 merge_history_, other_info_, sizeof(other_info_)))) {
       if (OB_ITER_END != ret) {
@@ -76,6 +77,13 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
     switch (col_id) {
     case TABLET_ID:
       cells[i].set_int(static_info.tablet_id_.id());
+      break;
+    case START_CG_ID:
+      cells[i].set_int(running_info.start_cg_idx_);
+      break;
+    case END_CG_ID:
+      // start_cg_id == end_cg_id == 0 means row store merge
+      cells[i].set_int(running_info.end_cg_idx_);
       break;
     case MERGE_TYPE: {
       cells[i].set_varchar(merge_type_to_str(static_info.merge_type_));
@@ -197,6 +205,14 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
       }
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
+    case EXEC_MODE:
+      if (is_valid_exec_mode(static_info.exec_mode_)) {
+        cells[i].set_varchar(exec_mode_to_str(static_info.exec_mode_));
+      } else {
+        cells[i].set_varchar("");
+      }
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
     case IS_FULL_MERGE:
       cells[i].set_bool(static_info.is_full_merge_);
       break;
@@ -212,7 +228,19 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case BASE_MAJOR_STATUS:
-      cells[i].set_varchar("");
+      if (is_valid_co_major_sstable_status(static_info.base_major_status_)) {
+        cells[i].set_varchar(co_major_sstable_status_to_str(static_info.base_major_status_));
+      } else {
+        cells[i].set_varchar("");
+      }
+      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      break;
+    case CO_MERGE_TYPE:
+      if (ObCOMajorMergePolicy::is_valid_major_merge_type(static_info.co_major_merge_type_)) {
+        cells[i].set_varchar(ObCOMajorMergePolicy::co_major_merge_type_to_str(static_info.co_major_merge_type_));
+      } else {
+        cells[i].set_varchar("");
+      }
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case MDS_FILTER_INFO:

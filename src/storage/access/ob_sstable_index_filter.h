@@ -17,7 +17,7 @@
 #ifndef OB_STORAGE_SSTABLE_INDEX_FILTER_H
 #define OB_STORAGE_SSTABLE_INDEX_FILTER_H
 
-#include "query/engine/basic/ob_pushdown_filter.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
 #include "storage/blocksstable/index_block/ob_agg_row_struct.h"
 #include "storage/blocksstable/index_block/ob_skip_index_filter_executor.h"
 
@@ -59,6 +59,7 @@ public:
   using IndexList = common::ObSEArray<blocksstable::ObSkipIndexType, 4>;
   ObSSTableIndexFilter()
       : is_inited_(false),
+      is_cg_(false),
       pushdown_filter_(nullptr),
       allocator_(nullptr),
       skipping_filter_nodes_(),
@@ -68,6 +69,7 @@ public:
   }
   ~ObSSTableIndexFilter() = default;
   int init(
+      const bool is_cg,
       const ObITableReadInfo* read_info,
       sql::ObPushdownFilterExecutor &pushdown_filter,
       common::ObIAllocator *allocator);
@@ -111,6 +113,7 @@ private:
       sql::ObPhysicalFilterExecutor &filter);
 private:
   bool is_inited_;
+  bool is_cg_;
   sql::ObPushdownFilterExecutor *pushdown_filter_;
   common::ObIAllocator *allocator_;
   ObSkippingFilterNodes skipping_filter_nodes_;
@@ -120,6 +123,7 @@ private:
 class ObSSTableIndexFilterFactory {
 public:
   static int build_sstable_index_filter(
+      const bool is_cg,
       const ObITableReadInfo* read_info,
       sql::ObPushdownFilterExecutor &pushdown_filter,
       common::ObIAllocator *allocator,

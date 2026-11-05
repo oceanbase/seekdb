@@ -21,6 +21,7 @@
 #include "share/cache/ob_kvcache_hazard_pointer.h"
 #include "share/cache/ob_kvcache_struct.h"
 #include "share/cache/ob_kv_storecache.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase {
 namespace common {
@@ -38,6 +39,7 @@ int HazptrTLCache::acquire_hazptr(HazardPointer*& hazptr)
   int ret = OB_SUCCESS;
   if (OB_LIKELY(get_size() > 0)) {
   } else if (OB_FAIL(HazardDomain::get_instance().acquire_hazptrs(*this, CACHE_ALLOC_BATCH_SIZE))) {
+    COMMON_LOG(WARN, "failed to acquire hazard pointer", K(ret));
   }
   if (OB_SUCC(ret)) {
     hazptr = pop();
@@ -75,6 +77,8 @@ HazardDomain::HazardDomain()
       retire_list_(nullptr),
       retired_memory_size_(0)
 {
+  lib::DoNotUseMe(bit_set_attr_);
+  lib::DoNotUseMe(hazptr_attr_);
   bit_set_.set_attr(bit_set_attr_);
   bit_set_mu_.enable_record_stat(false);
 }
@@ -82,7 +86,9 @@ HazardDomain::HazardDomain()
 int HazardDomain::init(int64_t mb_handle_num)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(bit_set_.reserve(mb_handle_num))) {
+  if (!GCONF._enable_kvcache_hazard_pointer) {
+  } else if (OB_FAIL(bit_set_.reserve(mb_handle_num))) {
+    COMMON_LOG(WARN, "failed to reserve bits in bit_set_");
   }
   return ret;
 }
@@ -148,7 +154,53 @@ HazptrHolder::~HazptrHolder()
   reset();
 }
 
+#define DISPATCH_HAZPTR_REFCNT(func, ...)                \
+  if (OB_LIKELY(GCONF._enable_kvcache_hazard_pointer)) { \
+    return hazptr_##func(__VA_ARGS__);                   \
+  } else {                                               \
+    return refcnt_##func(__VA_ARGS__);                   \
+  }
+
 int HazptrHolder::protect(bool& success, ObKVMemBlockHandle* mb_handle, int32_t seq_num)
+{
+  DISPATCH_HAZPTR_REFCNT(protect, success, mb_handle, seq_num);
+}
+
+int HazptrHolder::protect(bool& success, ObKVMemBlockHandle* mb_handle)
+{
+  DISPATCH_HAZPTR_REFCNT(protect, success, mb_handle);
+}
+
+void HazptrHolder::release() {
+  DISPATCH_HAZPTR_REFCNT(release);
+}
+
+ObKVMemBlockHandle* HazptrHolder::get_mb_handle() const
+{
+  DISPATCH_HAZPTR_REFCNT(get_mb_handle);
+}
+
+bool HazptrHolder::is_valid() const
+{
+  return get_mb_handle() != nullptr;
+}
+
+void HazptrHolder::reset()
+{
+  DISPATCH_HAZPTR_REFCNT(reset);
+}
+
+void HazptrHolder::move_from(HazptrHolder& other)
+{
+  DISPATCH_HAZPTR_REFCNT(move_from, other);
+}
+
+int HazptrHolder::assign(const HazptrHolder& other)
+{
+  DISPATCH_HAZPTR_REFCNT(assign, other);
+}
+
+int HazptrHolder::hazptr_protect(bool& success, ObKVMemBlockHandle* mb_handle, int32_t seq_num)
 {
   int ret = OB_SUCCESS;
   success = false;
@@ -167,7 +219,7 @@ int HazptrHolder::protect(bool& success, ObKVMemBlockHandle* mb_handle, int32_t 
   return ret;
 }
 
-int HazptrHolder::protect(bool& success, ObKVMemBlockHandle* mb_handle)
+int HazptrHolder::hazptr_protect(bool& success, ObKVMemBlockHandle* mb_handle)
 {
   int ret = OB_SUCCESS;
   success = false;
@@ -186,7 +238,7 @@ int HazptrHolder::protect(bool& success, ObKVMemBlockHandle* mb_handle)
   return ret;
 }
 
-void HazptrHolder::release()
+void HazptrHolder::hazptr_release()
 {
   if (OB_LIKELY(!is_shared_)) {
     if (OB_NOT_NULL(hazptr_)) {
@@ -194,11 +246,11 @@ void HazptrHolder::release()
     }
     // do not free hazard pointer to avoid allocation
   } else {
-    reset();
+    hazptr_reset();
   }
 }
 
-void HazptrHolder::reset()
+void HazptrHolder::hazptr_reset()
 {
   if (OB_LIKELY(!is_shared_)) {
     if (OB_NOT_NULL(hazptr_)) {
@@ -213,7 +265,7 @@ void HazptrHolder::reset()
   }
 }
 
-ObKVMemBlockHandle* HazptrHolder::get_mb_handle() const
+ObKVMemBlockHandle* HazptrHolder::hazptr_get_mb_handle() const
 {
   ObKVMemBlockHandle* mb_handle = nullptr;
   if (OB_LIKELY(!is_shared_)) {
@@ -226,25 +278,20 @@ ObKVMemBlockHandle* HazptrHolder::get_mb_handle() const
   return mb_handle;
 }
 
-bool HazptrHolder::is_valid() const
-{
-  return get_mb_handle() != nullptr;
-}
-
-int HazptrHolder::assign(const HazptrHolder& other)
+int HazptrHolder::hazptr_assign(const HazptrHolder& other)
 {
   int ret = OB_SUCCESS;
   bool protect_success = false;
-  release();
+  hazptr_release();
   if (!other.is_valid()) {
-  } else if (OB_FAIL(protect(protect_success, other.get_mb_handle()))) {
+  } else if (OB_FAIL(hazptr_protect(protect_success, other.hazptr_get_mb_handle()))) {
   } else if (!protect_success) {
-    reset();
+    hazptr_reset();
     if (other.is_shared_) {
       is_shared_ = true;
       shared_hazptr_ = other.shared_hazptr_;
     } else if (OB_FAIL(SharedHazptr::make(*other.hazptr_, this->shared_hazptr_))) {
-      reset();
+      hazptr_reset();
       COMMON_LOG(WARN, "failed to make new shared hazptr");
     } else {
       is_shared_ = true;
@@ -256,9 +303,9 @@ int HazptrHolder::assign(const HazptrHolder& other)
   return ret;
 }
 
-void HazptrHolder::move_from(HazptrHolder& other)
+void HazptrHolder::hazptr_move_from(HazptrHolder& other)
 {
-  reset();
+  hazptr_reset();
   if (OB_UNLIKELY(other.is_shared_)) {
     shared_hazptr_.move_from(other.shared_hazptr_) ;
     is_shared_ = true;
@@ -267,6 +314,78 @@ void HazptrHolder::move_from(HazptrHolder& other)
     hazptr_ = other.hazptr_;
     other.hazptr_ = nullptr;
   }
+}
+
+int HazptrHolder::refcnt_protect(bool& success, ObKVMemBlockHandle* mb_handle, int32_t seq_num)
+{
+  int ret = OB_SUCCESS;
+  success = false;
+  if (OB_ISNULL(mb_handle)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "mb_handle is null", KP(mb_handle));
+  } else if (OB_UNLIKELY(mb_handle_)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "release is not called!");
+  } else {
+    if ((success = ObKVGlobalCache::get_instance().store_.add_handle_ref(mb_handle, seq_num))) {
+      this->mb_handle_ = mb_handle;
+    }
+  }
+  return ret;
+}
+
+int HazptrHolder::refcnt_protect(bool& success, ObKVMemBlockHandle* mb_handle)
+{
+  int ret = OB_SUCCESS;
+  success = false;
+  if (OB_ISNULL(mb_handle)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "mb_handle is null", KP(mb_handle));
+  } else if (OB_UNLIKELY(mb_handle_)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "release is not called!");
+  } else {
+    refcnt_reset();
+    if ((success = ObKVGlobalCache::get_instance().store_.add_handle_ref(mb_handle))) {
+      this->mb_handle_ = mb_handle;
+    }
+  }
+  return ret;
+}
+
+void HazptrHolder::refcnt_release()
+{
+  if (OB_NOT_NULL(mb_handle_)) {
+    ObKVGlobalCache::get_instance().store_.de_handle_ref(mb_handle_);
+    mb_handle_ = nullptr;
+  }
+}
+
+void HazptrHolder::refcnt_reset()
+{
+  refcnt_release();
+}
+
+ObKVMemBlockHandle* HazptrHolder::refcnt_get_mb_handle() const
+{
+  return mb_handle_;
+}
+
+int HazptrHolder::refcnt_assign(const HazptrHolder& other)
+{
+  refcnt_reset();
+  if (OB_LIKELY(this != &other) && OB_NOT_NULL(other.mb_handle_)) {
+    ATOMIC_INC(&other.mb_handle_->ref_cnt_);
+    mb_handle_ = other.mb_handle_;
+  }
+  return OB_SUCCESS;
+}
+
+void HazptrHolder::refcnt_move_from(HazptrHolder& other)
+{
+  refcnt_reset();
+  mb_handle_ = other.mb_handle_;
+  other.mb_handle_ = nullptr;
 }
 
 };  // namespace common

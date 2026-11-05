@@ -36,6 +36,7 @@ int ObWkbToS2Visitor::add_cell_from_point(S2Point point)
   int ret = OB_SUCCESS;
   S2CellId cell_id = S2CellId(point).parent(options_.max_level());
   if (OB_FAIL(vector_push_back<S2CellId>(S2cells_, cell_id))) {
+    LOG_WARN("failed to add cell id", K(ret));
   }
   return ret;
 }
@@ -45,6 +46,7 @@ int ObWkbToS2Visitor::add_cell_from_point(S2LatLng point)
   int ret = OB_SUCCESS;
   S2CellId cell_id = S2CellId(point).parent(options_.max_level());
   if (OB_FAIL(vector_push_back<S2CellId>(S2cells_, cell_id))) {
+    LOG_WARN("failed to add cell id", K(ret));
   }
   return ret;
 }
@@ -55,11 +57,13 @@ int ObWkbToS2Visitor::MakeS2Point(T_IBIN *geo, S2Cell *&res)
   int ret = OB_SUCCESS;
   S2LatLng latlng = S2LatLng::FromDegrees(geo->y(), geo->x());
   if (OB_FAIL(add_cell_from_point(latlng))) {
+    LOG_WARN("failed to add cell from point", K(ret));
   } else {
     mbr_ = mbr_.is_empty() ? S2LatLngRect(latlng, latlng) : mbr_.Union(S2LatLngRect(latlng, latlng));
     S2Cell* p = new S2Cell(latlng);
     if (OB_ISNULL(p)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to alloc s2cell", K(ret));
     } else {
       res = p;
       bounder_.AddPoint(S2Point(latlng));
@@ -121,10 +125,12 @@ int ObWkbToS2Visitor::MakeProjS2Point(T_IBIN *geo, S2Cell *&res)
   S2Cell* p = NULL;
   if (!invalid_) {
     if (OB_FAIL(add_cell_from_point(point))) {
+      LOG_WARN("failed to add cell from point", K(ret));
     } else {
       p = new S2Cell(point);
       if (OB_ISNULL(p)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         res = p;
         bounder_.AddPoint(point);
@@ -145,7 +151,9 @@ int ObWkbToS2Visitor::MakeS2Polyline(T_IBIN *geo, S2Polyline *&res)
     S2LatLng latlng = S2LatLng::FromDegrees(iter->template get<1>(),
                                             iter->template get<0>());
     if (OB_FAIL(add_cell_from_point(latlng))) {
+      LOG_WARN("failed to add cell from point", K(ret));
     } else if (OB_FAIL(vector_push_back<S2LatLng>(vertices, latlng))) {
+      LOG_WARN("failed to add vertice", K(ret));
     } else {
       bounder_.AddPoint(S2Point(latlng));
     }
@@ -154,6 +162,7 @@ int ObWkbToS2Visitor::MakeS2Polyline(T_IBIN *geo, S2Polyline *&res)
     S2Polyline* ptr = new S2Polyline(vertices);
     if (OB_ISNULL(ptr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to alloc s2cell", K(ret));
     } else {
       res = ptr;
     }
@@ -173,7 +182,9 @@ int ObWkbToS2Visitor::MakeProjS2Polyline(T_IBIN *geo, S2Polyline *&res)
     S2Point p = MakeS2PointFromXy(iter->template get<0>(),
                                   iter->template get<1>());
     if (OB_FAIL(add_cell_from_point(p))) {
+      LOG_WARN("failed to add cell from point", K(ret));
     } else if (OB_FAIL(vector_push_back<S2Point>(vertices, p))) {
+      LOG_WARN("failed to add vertice", K(ret));
     } else {
       bounder_.AddPoint(p);
     }
@@ -183,6 +194,7 @@ int ObWkbToS2Visitor::MakeProjS2Polyline(T_IBIN *geo, S2Polyline *&res)
     S2Polyline* ptr = new S2Polyline(vertices);
     if (OB_ISNULL(ptr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to alloc s2cell", K(ret));
     } else {
       res = ptr;
     }
@@ -206,7 +218,9 @@ int ObWkbToS2Visitor::MakeS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2LatLng latlng = S2LatLng::FromDegrees(iter->template get<1>(), iter->template get<0>());
       S2Point tmp = S2Point(latlng);
       if (OB_FAIL(add_cell_from_point(latlng))) {
+        LOG_WARN("failed to add cell from point", K(ret));
       } else if (OB_FAIL(vector_push_back<S2Point>(vertices, tmp))) {
+        LOG_WARN("failed to add vertice", K(ret));
       } else {
         bounder_.AddPoint(tmp);
       }
@@ -215,10 +229,12 @@ int ObWkbToS2Visitor::MakeS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2Loop *loop = new S2Loop(vertices);
       if (OB_ISNULL(loop)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         loop->Normalize();
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(vector_emplace_back(s2poly, loop))) {
+          LOG_WARN("failed to add loop", K(ret));
         }
       }      
     }
@@ -232,7 +248,9 @@ int ObWkbToS2Visitor::MakeS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2LatLng latlng = S2LatLng::FromDegrees(iter->template get<1>(), iter->template get<0>());
       S2Point tmp = S2Point(latlng);
       if (OB_FAIL(add_cell_from_point(latlng))) {
+        LOG_WARN("failed to add cell from point", K(ret));
       } else if (OB_FAIL(vector_push_back<S2Point>(vertices, tmp))) {
+        LOG_WARN("failed to add vertice", K(ret));
       } else {
         bounder_.AddPoint(tmp);
       }
@@ -241,10 +259,12 @@ int ObWkbToS2Visitor::MakeS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2Loop *loop = new S2Loop(vertices);
       if (OB_ISNULL(loop)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         loop->Normalize();
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(vector_emplace_back(s2poly, loop))) {
+          LOG_WARN("failed to add loop", K(ret));
         }
       }      
     }
@@ -254,6 +274,7 @@ int ObWkbToS2Visitor::MakeS2Polygon(T_IBIN *geo, S2Polygon *&res)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(py)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to alloc s2cell", K(ret));
   } else {
     res = py;
   }
@@ -275,7 +296,9 @@ int ObWkbToS2Visitor::MakeProjS2Polygon(T_IBIN *geo, S2Polygon *&res)
     for (; iter != exterior.end() && OB_SUCC(ret); ++iter) {
       S2Point tmp = MakeS2PointFromXy(iter->template get<0>(), iter->template get<1>());
       if (OB_FAIL(add_cell_from_point(tmp))) {
+        LOG_WARN("failed to add cell from point", K(ret));
       } else if (OB_FAIL(vector_push_back<S2Point>(vertices, tmp))) {
+        LOG_WARN("failed to add vertice", K(ret));
       } else {
         bounder_.AddPoint(tmp);
       }
@@ -284,10 +307,12 @@ int ObWkbToS2Visitor::MakeProjS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2Loop *loop = new S2Loop(vertices);
       if (OB_ISNULL(loop)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         loop->Normalize();
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(vector_emplace_back(s2poly, loop))) {
+          LOG_WARN("failed to add loop", K(ret));
         }
       }      
     }
@@ -300,7 +325,9 @@ int ObWkbToS2Visitor::MakeProjS2Polygon(T_IBIN *geo, S2Polygon *&res)
     for (; iter != (*iterInnerRing).end() && OB_SUCC(ret); ++iter) {
       S2Point tmp = MakeS2PointFromXy(iter->template get<0>(), iter->template get<1>());
       if (OB_FAIL(add_cell_from_point(tmp))) {
+        LOG_WARN("failed to add cell from point", K(ret));
       } else if (OB_FAIL(vector_push_back<S2Point>(vertices, tmp))) {
+        LOG_WARN("failed to add vertice", K(ret));
       } else {
         bounder_.AddPoint(tmp);
       }
@@ -309,10 +336,12 @@ int ObWkbToS2Visitor::MakeProjS2Polygon(T_IBIN *geo, S2Polygon *&res)
       S2Loop *loop = new S2Loop(vertices);
       if (OB_ISNULL(loop)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to alloc s2cell", K(ret));
       } else {
         loop->Normalize();
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(vector_emplace_back(s2poly, loop))) {
+          LOG_WARN("failed to add loop", K(ret));
         }
       }
     }
@@ -322,6 +351,7 @@ int ObWkbToS2Visitor::MakeProjS2Polygon(T_IBIN *geo, S2Polygon *&res)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(py)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to alloc s2cell", K(ret));
   } else {
     res = py;
   }
@@ -335,8 +365,11 @@ int ObWkbToS2Visitor::visit(ObIWkbGeogPoint *geo)
   S2Cell *res = NULL;
   if (geo->length() < (WKB_GEO_BO_SIZE + WKB_GEO_TYPE_SIZE)) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid swkb length", K(ret), K(geo->length()));
   } else if (OB_FAIL(MakeS2Point<ObIWkbGeogPoint>(geo, res))) {
+    LOG_WARN("failed to make s2 point", K(ret));
   } else if (OB_FAIL(vector_emplace_back<S2Cell>(s2v_, res))) {
+    LOG_WARN("failed to add s2 cell", K(ret));
   }
   return ret;
 }
@@ -347,7 +380,9 @@ int ObWkbToS2Visitor::visit(ObIWkbGeomPoint *geo)
   S2Cell *cell = nullptr;
   if (!invalid_) {
     if (OB_FAIL(MakeProjS2Point(geo, cell))) {
+      LOG_WARN("failed to make s2 point", K(ret));
     } else if (OB_FAIL(vector_emplace_back<S2Cell>(s2v_, cell))) {
+      LOG_WARN("failed to add s2 cell", K(ret));
     }
   }
   return ret;
@@ -359,8 +394,11 @@ int ObWkbToS2Visitor::visit(ObIWkbGeogLineString *geo)
   S2Polyline *polyline = nullptr;
   if (geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid swkb length", K(ret), K(geo->length()));
   } else if (OB_FAIL(MakeS2Polyline<ObIWkbGeogLineString>(geo, polyline))) {
+    LOG_WARN("failed to make s2 poly line", K(ret), K(geo->length()));
   } else if (OB_FAIL(vector_emplace_back<S2Polyline>(s2v_, polyline))) {
+    LOG_WARN("failed to add s2 cell", K(ret));
   } else {
     mbr_ = mbr_.is_empty() ? polyline->GetRectBound() : mbr_.Union(polyline->GetRectBound());
   }
@@ -373,7 +411,9 @@ int ObWkbToS2Visitor::visit(ObIWkbGeomLineString *geo)
   if (!invalid_) {
     S2Polyline *line = nullptr;
     if (OB_FAIL(MakeProjS2Polyline<ObIWkbGeomLineString>(geo, line))) {
+      LOG_WARN("failed to make s2 poly line", K(ret));
     } else if (OB_FAIL(vector_emplace_back<S2Polyline>(s2v_, line))) {
+      LOG_WARN("failed to add s2 cell", K(ret));
     }
   }
   return ret;
@@ -385,9 +425,12 @@ int ObWkbToS2Visitor::visit(ObIWkbGeogPolygon *geo)
   S2Polygon *polygon = nullptr;
   if (geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid swkb length", K(ret), K(geo->length()));
   } else if ((ret = MakeS2Polygon<ObIWkbGeogPolygon, ObWkbGeogPolygon,
                                   ObWkbGeogLinearRing, ObWkbGeogPolygonInnerRings>(geo, polygon)) != OB_SUCCESS) {
+    LOG_WARN("failed to make s2 poly", K(ret), K(geo->length()));
   } else if (OB_FAIL(vector_emplace_back<S2Polygon>(s2v_, polygon))) {
+    LOG_WARN("failed to add s2 polygon", K(ret));
   } else {
     mbr_ = mbr_.is_empty() ? polygon->GetRectBound() : mbr_.Union(polygon->GetRectBound());
   }
@@ -402,9 +445,12 @@ int ObWkbToS2Visitor::visit(ObIWkbGeomPolygon *geo)
     S2Polygon *poly = nullptr;
     if (geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
       ret = OB_ERR_GIS_INVALID_DATA;
+      LOG_WARN("invalid swkb length", K(ret), K(geo->length()));
     } else if ((ret = MakeProjS2Polygon<ObIWkbGeomPolygon, ObWkbGeomPolygon,
                                         ObWkbGeomLinearRing, ObWkbGeomPolygonInnerRings>(geo, poly)) != OB_SUCCESS) {
+      LOG_WARN("failed to make s2 poly", K(ret), K(geo->length()));
     } else if (OB_FAIL(vector_emplace_back<S2Polygon>(s2v_, poly))) {
+      LOG_WARN("failed to add s2 polygon", K(ret));
     }
   }
   return ret;
@@ -416,6 +462,7 @@ int64_t ObWkbToS2Visitor::get_cellids(ObS2Cellids &cells, bool is_query, bool ne
   INIT_SUCC(ret);
   if (invalid_) {
     if (OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
+      LOG_WARN("fail to push_back cellid", K(ret));
     }
   } else {
     uint32_t s2v_size = s2v_.size();
@@ -429,6 +476,7 @@ int64_t ObWkbToS2Visitor::get_cellids(ObS2Cellids &cells, bool is_query, bool ne
     S2CellId prev_id = S2CellId::None();
     for (int i = 0; OB_SUCC(ret) && i < cell_union_.size(); i++) {
       if (OB_FAIL(cells.push_back(cell_union_[i].id()))) {
+        LOG_WARN("fail to push_back cellid", K(ret));
       }
       if (OB_SUCC(ret) && is_query) {
         int level = cell_union_[i].level();
@@ -439,12 +487,14 @@ int64_t ObWkbToS2Visitor::get_cellids(ObS2Cellids &cells, bool is_query, bool ne
             break;
           }
           if (OB_FAIL(cells.push_back(ancestor_id.id()))) {
+            LOG_WARN("fail to push_back cellid", K(ret));
           }
         }
       }
       prev_id = cell_union_[i];
     }
     if (OB_SUCC(ret) && has_reset_ && OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
+      LOG_WARN("fail to push_back cellid", K(ret));
     }
   }
   return ret;
@@ -499,6 +549,7 @@ int ObWkbToS2Visitor::get_s2_cell_union()
       S2cells_.clear();
       for (uint8_t i = 0; i < 4 && OB_SUCC(ret); i++) {
         if (OB_FAIL(add_cell_from_point(rect.GetVertex(i)))) {
+          LOG_WARN("fail to push_back cellid", K(ret));
         }
       }
     }
@@ -514,13 +565,16 @@ int64_t ObWkbToS2Visitor::get_cellids_and_unrepeated_ancestors(ObS2Cellids &cell
   INIT_SUCC(ret);
   if (invalid_) {
     if (OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
+      LOG_WARN("fail to push_back cellid", K(ret));
     }
   } else {
     uint32_t s2v_size = s2v_.size();
     hash::ObHashSet<uint64_t> cellid_set;
     if (OB_FAIL(cellid_set.create(128, "CellidSet", "HashNode"))) {
+      LOG_WARN("failed to create cellid set", K(ret));
     } else if (!cellid_set.created()) {
       ret = OB_NOT_INIT;
+      LOG_WARN("fail to init cellid set", K(ret));
     } else {
       if (need_buffer) {
         const int max_level_diff = 2;
@@ -534,7 +588,9 @@ int64_t ObWkbToS2Visitor::get_cellids_and_unrepeated_ancestors(ObS2Cellids &cell
         int hash_ret = cellid_set.exist_refactored(cell_union_[i].id());
         if (OB_HASH_NOT_EXIST == hash_ret) {
           if (OB_FAIL(cellid_set.set_refactored(cell_union_[i].id()))) {
+            LOG_WARN("failed to add cellid into set", K(ret));
           } else if (OB_FAIL(cells.push_back(cell_union_[i].id()))) {
+            LOG_WARN("fail to push_back cellid", K(ret));
           }
           if (OB_SUCC(ret)) {
             int level = cell_union_[i].level();
@@ -547,19 +603,24 @@ int64_t ObWkbToS2Visitor::get_cellids_and_unrepeated_ancestors(ObS2Cellids &cell
               int ancestor_hash_ret = cellid_set.exist_refactored(ancestor_id.id());
               if (OB_HASH_NOT_EXIST == ancestor_hash_ret) {
                 if (OB_FAIL(cellid_set.set_refactored(ancestor_id.id()))) {
+                  LOG_WARN("failed to add cellid into set", K(ret));
                 } else if (OB_FAIL(ancestors.push_back(ancestor_id.id()))) {
+                  LOG_WARN("fail to push_back cellid", K(ret));
                 }
               } else if (OB_HASH_EXIST != ancestor_hash_ret) {
                 ret = ancestor_hash_ret;
+                LOG_WARN("fail to check if key exist", K(ret), K(i));
               }
             }
           }
         } else if (OB_HASH_EXIST != hash_ret) {
           ret = hash_ret;
+          LOG_WARN("fail to check if key exist", K(ret), K(i));
         }
         prev_id = cell_union_[i];
       }
       if (OB_SUCC(ret) && has_reset_ && OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
+        LOG_WARN("fail to push_back cellid", K(ret));
       }
     }
   }
@@ -571,12 +632,14 @@ int64_t ObWkbToS2Visitor::get_inner_cover_cellids(ObS2Cellids &cells)
   INIT_SUCC(ret);
   if (invalid_) {
     if (OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
+      LOG_WARN("fail to push_back cellid", K(ret));
     }
   } else {
     S2CellUnion cellids(S2cells_);
     cellids.Normalize();
     for (int i = 0; OB_SUCC(ret) && i < cellids.size(); i++) {
       if (OB_FAIL(cells.push_back(cellids[i].id()))) {
+        LOG_WARN("fail to push_back cellid", K(ret));
       }
     }
   }

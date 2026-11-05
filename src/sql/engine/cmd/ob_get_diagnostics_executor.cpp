@@ -16,9 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/cmd/ob_get_diagnostics_executor.h"
-#include "query/session/ob_inner_sql_connection_access.h"
-#include "sql/session/ob_inner_sql_connection.h"
-#include "share/ob_lob_access_utils.h"
+#include "observer/ob_inner_sql_connection_pool.h"
 #include "sql/session/ob_basic_session_info.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -128,9 +126,11 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
       const ObSysFunRawExpr *func_expr = static_cast<const ObSysFunRawExpr*>(var_expr);
       if (OB_ISNULL(func_expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("sys var is NULL", K(*func_expr), K(ret));
       } else if (OB_UNLIKELY(!func_expr->get_param_expr(0)->is_const_raw_expr()
         || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().is_varchar())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid sys var", K(*func_expr->get_param_expr(0)), K(ret));
       } else {
         var = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().get_varchar();
       }
@@ -168,6 +168,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
             break;
           default:
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected type", K(ret), K(info_type));
             break;
         }
       }
@@ -175,6 +176,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
       CK (OB_NOT_NULL(conn));
       if (OB_SUCC(ret) && set_sql.length() != 0) {
         if (OB_FAIL(conn->execute_write(set_sql.ptr(), affected_rows))) {
+          LOG_WARN("execute write failed", K(ret), K(set_sql), K(affected_rows));
         }
       }
     } else if (OB_LIKELY(var_expr->is_const_raw_expr())) {
@@ -241,6 +243,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
                 break;
               default:
                 ret = OB_NOT_SUPPORTED;
+                LOG_WARN("not support diag info type", K(ret), K(info_type));
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "diag info type");
                 break;
             }
@@ -252,9 +255,11 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected expr type", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected expr type", K(ret));
     }
   }
   return ret;
@@ -311,24 +316,29 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("condition argument is invalid", K(ret));
         }
       } else if (T_OP_GET_USER_VAR == cond_argument->get_expr_type()) {
         const ObSysFunRawExpr *func_expr = static_cast<const ObSysFunRawExpr*>(cond_argument);
         if (OB_ISNULL(func_expr->get_param_expr(0))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("sys var is NULL", K(*func_expr), K(ret));
         } else if (OB_UNLIKELY(!func_expr->get_param_expr(0)->is_const_raw_expr()
           || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().is_varchar())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid sys var", K(*func_expr->get_param_expr(0)), K(ret));
         } else {
           const ObString var_name = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().get_varchar();
           ObObj value;
           int64_t number = 0;
           if (OB_FAIL(session_info->get_user_variable_value(var_name, value))) {
+            LOG_WARN("get user variable failed", K(var_name), K(ret));
           } else if (value.is_integer_type()) {
             OZ (value.get_int(num));
           } else if (value.is_string_type()) {
             ObString str;
             if (OB_FAIL(value.get_varchar(str))) {
+              LOG_WARN("get varchar failed", K(ret));
             } else if (FALSE_IT(number = strtoll(str.ptr(), NULL, 10))) {
             } else if (INT64_MAX == number || number <= 0 || number >= MAX_BUFFER_SIZE) {
               ret = OB_ERR_INVALID_CONDITION_NUMBER;
@@ -348,32 +358,46 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
  
 int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &stmt) {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   sqlclient::ObISQLConnection *conn = NULL;
-  sqlclient::ObISQLConnectionGuard conn_guard;
+  observer::ObInnerSQLConnectionPool *pool = NULL;
+  ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
    
   int64_t warning_count = 0;
   ObSqlString query_virtual;
+  ObSwitchCatalogHelper switch_catalog_helper;
+  int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), KP(session_info));
+  } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_) || OB_ISNULL(sql_proxy->get_pool())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy must not null", K(ret), KP(GCTX.sql_proxy_));
+  } else if (OB_UNLIKELY(sqlclient::INNER_POOL != sql_proxy->get_pool()->get_type())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("pool type must be inner", K(ret), "type", sql_proxy->get_pool()->get_type());
+  } else if (OB_ISNULL(pool = static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("pool must not null", K(ret));
+  } else if (session_info->is_in_external_catalog()
+             && OB_FAIL(session_info->set_internal_catalog_db(&switch_catalog_helper))) {
+    LOG_WARN("failed to set catalog", K(ret));
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(
-                 query::ObInnerSQLConnectionAccess::
-                     create_connection_with_external_session(
-                         session_info, conn_guard))) {
-  } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
-    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(pool->acquire(session_info, conn))) {
+    LOG_WARN("failed to get conn", K(ret));
   } else if (OB_FAIL(query_virtual.assign_fmt("select count(*) from %s.%s", 
                       OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
+    LOG_WARN("assign format failed", K(ret));
   } else {
     SMART_VAR(ObISQLClient::ReadResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(conn->execute_read(query_virtual.ptr(), res))) {
+        LOG_WARN("Failed to spi_query", K(query_virtual), K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to get result", K(ret));
       } else if (OB_SUCC(result->next())) {
         EXTRACT_INT_FIELD_MYSQL(*result, "count(*)", warning_count, int64_t);
       }
@@ -388,6 +412,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
       LOG_USER_WARN(OB_ERR_INVALID_CONDITION_NUMBER);
     } else if (OB_ERR_USER_VARIABLE_UNKNOWN == ret || OB_OBJ_TYPE_ERROR == ret) {
       ret = OB_SUCCESS;
+      LOG_TRACE("condition num is invalid");
       LOG_USER_WARN(OB_ERR_INVALID_CONDITION_NUMBER);
     } else if (OB_ERR_BAD_FIELD_ERROR == ret) {
       ret = OB_SUCCESS;
@@ -397,7 +422,9 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
                     invalid_condition_name.length(), invalid_condition_name.ptr(),
                     static_cast<int32_t>(scope_name.length()), scope_name.ptr());
     } else if (OB_FAIL(ret)) {
+      LOG_WARN("unexpected error", K(ret));
     } else if (warning_count < restored_arg || restored_arg < 1) {
+      LOG_TRACE("condition num is invalid");
       LOG_USER_WARN(OB_ERR_INVALID_CONDITION_NUMBER);
     } else {
       int err_ret;
@@ -406,19 +433,26 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
       if (OB_FAIL(query_virtual.assign_fmt(
         "select message, ori_code, sql_state from %s.%s limit %ld, 1", 
         OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME, restored_arg - 1))) {
+        LOG_WARN("assign fmt failed", K(ret));
       } else {
         SMART_VAR(ObISQLClient::ReadResult, res) {
           common::sqlclient::ObMySQLResult *result = NULL;
           if (OB_FAIL(conn->execute_read(query_virtual.ptr(), res))) {
+            LOG_WARN("Failed to spi_query", K(query_virtual), K(ret));
           } else if (OB_ISNULL(result = res.get_result())) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("failed to get result", K(ret));
           } else if (OB_SUCC(result->next())) {
             EXTRACT_VARCHAR_FIELD_MYSQL(*result, "message", err_msg);
             EXTRACT_INT_FIELD_MYSQL(*result, "ori_code", err_ret, int);
             EXTRACT_VARCHAR_FIELD_MYSQL(*result, "sql_state", sqlstate);
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), err_msg, err_msg_c, true))) {
-            } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), sqlstate, sqlstate_c, true))) {
+              //when using ptr(), char *'s end should be '\0'
+              LOG_WARN("ob write string failed", K(ret));
+            } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), sqlstate, sqlstate_c, true))) { 
+              //when using ptr(), char *'s end should be '\0'
+              LOG_WARN("ob write string failed", K(ret));
             }
           }
         }
@@ -433,6 +467,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
       LOG_USER_WARN(OB_ERR_INVALID_CONDITION_NUMBER);
     } else if (OB_ERR_USER_VARIABLE_UNKNOWN == ret || OB_OBJ_TYPE_ERROR == ret) {
       ret = OB_SUCCESS;
+      LOG_TRACE("condition num is invalid");
       LOG_USER_WARN(OB_ERR_INVALID_CONDITION_NUMBER);
     } else if (OB_ERR_BAD_FIELD_ERROR == ret) {
       ret = OB_SUCCESS;
@@ -442,7 +477,9 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
                     invalid_condition_name.length(), invalid_condition_name.ptr(),
                     static_cast<int32_t>(scope_name.length()), scope_name.ptr());
     } else if (OB_FAIL(ret)) {
+      LOG_WARN("unexpected error", K(ret));
     } else if (restored_arg > 1) { /* todo:hr-the current stack diagnostic area only supports storing one piece of information */
+      LOG_TRACE("type ok but out of range", K(restored_arg));
       LOG_USER_WARN(OB_ERR_INVALID_CONDITION_NUMBER);
     } else {
       int err_ret;
@@ -489,22 +526,27 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
         const ObSysFunRawExpr *func_expr = static_cast<const ObSysFunRawExpr*>(var_expr);
         if (OB_ISNULL(func_expr->get_param_expr(0))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("sys var is NULL", K(*func_expr), K(ret));
         } else if (OB_UNLIKELY(!func_expr->get_param_expr(0)->is_const_raw_expr()
           || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().is_varchar())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid sys var", K(*func_expr->get_param_expr(0)), K(ret));
         } else {
           var = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().get_varchar();
         }
         if (OB_FAIL(ret)) {
         } else if (val == "NUMBER") {
           if (OB_FAIL(set_sql.assign_fmt("set %s%s=%ld;", "@", var.ptr(), number))) {
+            LOG_WARN("assign fmt failed", K(ret));
           }
         } else if (val == "ROW_COUNT") {
           if (OB_FAIL(set_sql.assign_fmt("set %s%s=%ld;", "@", var.ptr(), old_affected_rows))) {
+            LOG_WARN("assign fmt failed", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(conn->execute_write(set_sql.ptr(), affected_rows))) {
+            LOG_WARN("execute write failed", K(ret), K(set_sql), K(affected_rows));
           }
         }
       } else if (OB_LIKELY(var_expr->is_const_raw_expr())) {
@@ -538,6 +580,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
                 SET_OBJ_VAR(expect_type, old_affected_rows, ObString(str), has_lob_header);
               } else {
                 ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("unexpected", K(val), K(ret));
               }
             }
           }
@@ -547,11 +590,23 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected expr type", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected expr type", K(ret));
       }
     }
+  }
+  if (OB_NOT_NULL(session_info) && switch_catalog_helper.is_set()) {
+    if (OB_SUCCESS != (tmp_ret = switch_catalog_helper.restore())) {
+      ret = OB_SUCCESS == ret ? tmp_ret : ret;
+      LOG_WARN("failed to reset catalog", K(ret), K(tmp_ret));
+    }
+  }
+  if (OB_SUCCESS != (tmp_ret = pool->release(conn, true))) {
+    ret = OB_SUCCESS == ret ? tmp_ret : ret;
+    LOG_WARN("release failed", K(ret), K(tmp_ret));
   }
   return ret;
 }

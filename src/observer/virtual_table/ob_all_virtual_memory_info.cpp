@@ -16,7 +16,6 @@
 
 #include "ob_all_virtual_memory_info.h"
 #include "lib/alloc/memory_dump.h"
-#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -39,7 +38,7 @@ ObAllVirtualMemoryInfo::~ObAllVirtualMemoryInfo()
 int ObAllVirtualMemoryInfo::inner_open()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(GCTX.self_addr().ip_to_string(ip_buf_, sizeof(ip_buf_))
+  if (OB_UNLIKELY(ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))
               == false)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ip_to_string() fail", K(ret));
@@ -140,12 +139,15 @@ int ObAllVirtualMemoryInfo::inner_get_next_row(ObNewRow *&row)
       };
       {
         for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-          auto ctx_allocator = ObMallocAllocator::get_instance()->get_ctx_allocator(ctx_id);
-          if (nullptr == ctx_allocator) {
+          auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
+          if (nullptr == ta) {
+            ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(ctx_id);
+          }
+          if (nullptr == ta) {
             continue;
           }
           if (OB_SUCC(ret)) {
-            ret = ctx_allocator->iter_label([&](lib::ObLabel &label, LabelItem *l_item)
+            ret = ta->iter_label([&](lib::ObLabel &label, LabelItem *l_item)
               {
                 return add_row(ctx_id, label.str_, l_item->hold_, l_item->used_, l_item->count_);
               });

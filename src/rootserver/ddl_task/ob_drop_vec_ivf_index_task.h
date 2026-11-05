@@ -41,7 +41,8 @@ public:
       const ObVecIndexDDLChildTaskInfo &pq_centroid,    // pq
       const ObVecIndexDDLChildTaskInfo &pq_code,        // pq
       const int64_t schema_version,
-      const uint64_t data_format_version,
+      const int64_t consumer_group_id,
+      const uint64_t tenant_data_version,
       const obcall::ObDropIndexArg &drop_index_arg);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
@@ -92,7 +93,7 @@ private:
     return task_status_ < share::ObDDLTaskStatus::DROP_AUX_INDEX_TABLE;
   }
 private:
-  ObLocalManagementService *local_management_service_;
+  ObRootService *root_service_;
   ObVecIndexDDLChildTaskInfo centroid_;
   ObVecIndexDDLChildTaskInfo cid_vector_;
   ObVecIndexDDLChildTaskInfo rowkey_cid_;

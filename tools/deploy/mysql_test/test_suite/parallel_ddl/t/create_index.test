@@ -1,0 +1,65 @@
+# owner: wenyu.ffz
+# owner group: RS
+# tags: rs
+# description:
+# test parallel create index
+
+connect (mysql,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+
+--disable_query_log
+--disable_warnings
+--disable_result_log
+--disable_abort_on_error
+drop table t4;
+drop table t3;
+drop table t2;
+drop table t1;
+drop index i1;
+drop index i2;
+drop index i3;
+drop index i4
+drop index i5;
+drop index i6;
+drop index i7;
+drop index i8;
+drop index i9;
+--enable_query_log
+--enable_warnings
+--enable_result_log
+--enable_abort_on_error
+
+# 简单表索引
+create table t1(col0 int, col1 int, col2 int, col3 int generated always as (col1+1) virtual, primary key (col0),col4 int, col5 int);
+# normal
+create index i1 on t1(col1);
+# unique
+create unique index i2 on t1(col2);
+# generated column
+create index i3 on t1(col3);
+# function
+create index i4 on t1((col4+col5<1));
+# global
+create index i5 on t1(col5) global;
+
+# 分区表
+create table t2(col0 int, col1 int)
+                partition by hash(col1) partitions 2;
+create index i6 on t2(col0);
+create index i7 on t2(col1) global;
+#外键表
+create table t3(col0 int, col1 int, foreign key(col0) references t1(col0));
+create index i8 on t3(col1);
+
+create table t4(col0 int, col1 int generated always as (col0-1) virtual, foreign key(col0) references t1(col0));
+create index i9 on t4(col1);
+
+--disable_query_log
+--disable_warnings
+--disable_result_log
+drop table t4;
+drop table t3;
+drop table t2;
+drop table t1;
+--enable_query_log
+--enable_warnings
+--enable_result_log

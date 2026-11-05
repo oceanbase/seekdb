@@ -32,29 +32,29 @@ namespace sql
 class ObPxWorkerRunnable
 {
 public:
-  virtual int run(ObPxInitTaskArgs &arg) = 0;
+  virtual int run(ObPxRpcInitTaskArgs &arg) = 0;
 };
 
 // Use coroutine as Px Worker execution container
 class ObPxCoroWorker : public ObPxWorkerRunnable
 {
 public:
-  ObPxCoroWorker(const share::ObGlobalContext &gctx,
+  ObPxCoroWorker(const observer::ObGlobalContext &gctx,
                  common::ObIAllocator &alloc);
   virtual ~ObPxCoroWorker() = default;
-  int run(ObPxInitTaskArgs &arg);
+  int run(ObPxRpcInitTaskArgs &arg);
   int exit();
   uint64_t get_task_co_id() { return task_co_id_; }
   TO_STRING_KV(K_(task_co_id));
 private:
-  int deep_copy_assign(const ObPxInitTaskArgs &src,
-                       ObPxInitTaskArgs &dest);
+  int deep_copy_assign(const ObPxRpcInitTaskArgs &src,
+                       ObPxRpcInitTaskArgs &dest);
   /* variables */
-  const share::ObGlobalContext &gctx_;
+  const observer::ObGlobalContext &gctx_;
   common::ObIAllocator &alloc_;
   sql::ObDesExecContext exec_ctx_;
   sql::ObPhysicalPlan phy_plan_;
-  ObPxInitTaskArgs task_arg_;
+  ObPxRpcInitTaskArgs task_arg_;
   ObPxTaskProcess task_proc_;
   uint64_t task_co_id_;
   DISALLOW_COPY_AND_ASSIGN(ObPxCoroWorker);
@@ -63,19 +63,19 @@ private:
 class ObPxThreadWorker : public ObPxWorkerRunnable
 {
 public:
-  ObPxThreadWorker(const share::ObGlobalContext &gctx);
+  ObPxThreadWorker(const observer::ObGlobalContext &gctx);
   virtual ~ObPxThreadWorker();
 
-  virtual int run(ObPxInitTaskArgs &arg) override;
+  virtual int run(ObPxRpcInitTaskArgs &arg) override;
   int exit();
   uint64_t get_task_co_id() { return task_co_id_; }
 
   TO_STRING_KV(K_(task_co_id));
 private:
-  int run_at(ObPxInitTaskArgs &task_arg, omt::ObPxPool &px_pool);
+  int run_at(ObPxRpcInitTaskArgs &task_arg, omt::ObPxPool &px_pool);
 private:
   /* variables */
-  const share::ObGlobalContext &gctx_;
+  const observer::ObGlobalContext &gctx_;
   uint64_t task_co_id_;
   DISALLOW_COPY_AND_ASSIGN(ObPxThreadWorker);
 };
@@ -83,18 +83,18 @@ private:
 class ObPxLocalWorker : public ObPxWorkerRunnable
 {
 public:
-  ObPxLocalWorker(const share::ObGlobalContext &gctx) : gctx_(gctx) {}
+  ObPxLocalWorker(const observer::ObGlobalContext &gctx) : gctx_(gctx) {}
   virtual ~ObPxLocalWorker() = default;
-  virtual int run(ObPxInitTaskArgs &arg) override;
+  virtual int run(ObPxRpcInitTaskArgs &arg) override;
 private:
-  const share::ObGlobalContext &gctx_;
+  const observer::ObGlobalContext &gctx_;
 };
 
 
 class ObPxThreadWorkerFactory
 {
 public:
-  ObPxThreadWorkerFactory(const share::ObGlobalContext &gctx,
+  ObPxThreadWorkerFactory(const observer::ObGlobalContext &gctx,
                        common::ObIAllocator &alloc)
       : gctx_(gctx), alloc_(alloc)
   {}
@@ -104,7 +104,7 @@ public:
 private:
   void destroy();
 private:
-  const share::ObGlobalContext &gctx_;
+  const observer::ObGlobalContext &gctx_;
   common::ObIAllocator &alloc_;
   common::ObSEArray<ObPxThreadWorker *, 64> workers_;
 };
@@ -112,25 +112,23 @@ private:
 class ObPxCoroWorkerFactory
 {
 public:
-  ObPxCoroWorkerFactory(const share::ObGlobalContext &gctx,
-                        common::ObIAllocator &alloc,
-                        ObSQLSessionMgr *session_mgr)
-      : gctx_(gctx), alloc_(alloc), session_mgr_(session_mgr)
+  ObPxCoroWorkerFactory(const observer::ObGlobalContext &gctx,
+                       common::ObIAllocator &alloc)
+      : gctx_(gctx), alloc_(alloc)
   {}
   virtual ~ObPxCoroWorkerFactory();
 private:
   void destroy();
 private:
-  const share::ObGlobalContext &gctx_;
+  const observer::ObGlobalContext &gctx_;
   common::ObIAllocator &alloc_;
-  ObSQLSessionMgr *session_mgr_;
   common::ObSEArray<ObPxCoroWorker *, 64> workers_;
 };
 
 class ObPxLocalWorkerFactory
 {
 public:
-  ObPxLocalWorkerFactory(const share::ObGlobalContext &gctx,
+  ObPxLocalWorkerFactory(const observer::ObGlobalContext &gctx,
                        common::ObIAllocator &alloc)
       : gctx_(gctx), alloc_(alloc), worker_(gctx)
   {}
@@ -141,7 +139,7 @@ private:
 private:
   DISABLE_WARNING_GCC_PUSH
   DISABLE_WARNING_GCC_ATTRIBUTES
-  const share::ObGlobalContext &gctx_ __maybe_unused;
+  const observer::ObGlobalContext &gctx_ __maybe_unused;
   common::ObIAllocator &alloc_ __maybe_unused;
   DISABLE_WARNING_GCC_POP
   ObPxLocalWorker worker_;
@@ -150,7 +148,7 @@ private:
 
 class PxWorkerFunctor {
 public:
-  explicit PxWorkerFunctor(ObPxWorkerEnvArgs &env_arg, ObPxInitTaskArgs &task_arg) {
+  explicit PxWorkerFunctor(ObPxWorkerEnvArgs &env_arg, ObPxRpcInitTaskArgs &task_arg) {
     env_arg_ = env_arg;
     task_arg_ = task_arg;
   }
@@ -167,7 +165,7 @@ public:
     return *this;
   }
   ObPxWorkerEnvArgs env_arg_;
-  ObPxInitTaskArgs task_arg_;
+  ObPxRpcInitTaskArgs task_arg_;
 };
 
 class PxWorkerFinishFunctor {

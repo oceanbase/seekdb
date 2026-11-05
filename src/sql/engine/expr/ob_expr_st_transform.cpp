@@ -72,11 +72,11 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
   ObDatum *datum2 = NULL;
   ObGeometry *src_geo = NULL;
   ObGeometry *dest_geo = NULL;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *src_srs_item = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_TRANSFORM);
   ObString src_proj4_param;
   ObString dest_proj4_param;
   bool need_eval = true;
@@ -88,7 +88,9 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
   if (is_null_result) {
     res.set_null();
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[0], ctx, gis_datum))) {
+    LOG_WARN("eval geo arg failed", K(ret));
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, datum2))) {
+    LOG_WARN("eval sird arg failed", K(ret));
   } else if (gis_datum->is_null() || datum2->is_null()) {
     res.set_null();
   } else {
@@ -96,15 +98,20 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
     uint32_t dest_srid = 0;
     ObString wkb = gis_datum->get_string();
     const ObSrsItem *dest_srs_item = NULL;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
+      LOG_WARN("fail to get real string data", K(ret), K(wkb));
+    } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, src_srs_item, true, N_ST_TRANSFORM))) {
+      LOG_WARN("fail to get srs item", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, src_srid))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_TRANSFORM);
+      LOG_WARN("get srid from wkb failed", K(wkb), K(ret));
     } else {
       if (datum2->get_int() < 0 || datum2->get_int() > UINT_MAX32) {
         ret = OB_OPERATE_OVERFLOW;
+        LOG_WARN("srid input value out of range", K(ret), K(datum2->get_int()));
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", N_ST_TRANSFORM);
       }
       dest_srid = datum2->get_int();
@@ -113,7 +120,9 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
           ObString res_wkb;
           if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, src_geo, src_srs_item, N_ST_TRANSFORM, 
                                                       ObGeoBuildFlag::GEO_ALLOW_3D | GEO_NOT_COPY_WKB))) {
+            LOG_WARN("fail to create geo", K(ret), K(wkb));
           } else if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*src_geo, expr, ctx, src_srs_item, res_wkb))) {
+            LOG_WARN("failed to write geometry to wkb", K(ret));
           } else {
             res.set_string(res_wkb);
             need_eval = false;
@@ -124,32 +133,39 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
         } else if (dest_srid == 0) { // valid only when src srid is also 0
           ret = OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
-        } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
-                       ctx, srs_guard, dest_srid, dest_srs_item))) {
+        } else if (OB_FAIL(srs_guard.get_srs_item(dest_srid, dest_srs_item))) {
+          LOG_WARN("failed to get dest srs", K(ret), K(dest_srid));
         } else if (OB_FAIL(dest_srs_item->get_proj4_param(&temp_allocator, dest_proj4_param))) {
+          LOG_WARN("failed to get proj4 prams from dest srs", K(ret), K(dest_srid));
         }
       }
       if (OB_SUCC(ret) && need_eval) {
         if (src_srs_item->missing_towgs84()) {
           ret = OB_ERR_TRANSFORM_SOURCE_SRS_MISSING_TOWGS84;
           LOG_USER_ERROR(OB_ERR_TRANSFORM_SOURCE_SRS_MISSING_TOWGS84, src_srid);
+          LOG_WARN("source srs is not WGS 84 and has no TOWGS84 clause", K(ret), K(src_srid));
         } else if (OB_ISNULL(dest_srs_item)) {
           ret = OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
+          LOG_WARN("dest srs is null", K(ret), K(dest_srid));
         } else if(dest_srs_item->missing_towgs84()) {
           ret = OB_ERR_TRANSFORM_TARGET_SRS_MISSING_TOWGS84;
           LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_MISSING_TOWGS84, dest_srid);
+          LOG_WARN("dest srs is not WGS 84 and has no TOWGS84 clause", K(ret), K(dest_srid));
         } else if (!src_srs_item->is_geographical_srs()) {
           ret = OB_ERR_TRANSFORM_SOURCE_SRS_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_ERR_TRANSFORM_SOURCE_SRS_NOT_SUPPORTED, src_srid);
+          LOG_WARN("src srs is not geog", K(ret), K(src_srid));
         } else if (!dest_srs_item->is_geographical_srs()) {
           ret = OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
+          LOG_WARN("dest srs is not geog", K(ret), K(dest_srid));
         }
       }
 
       if (OB_SUCC(ret) && need_eval && src_srid != 0) {
         if (OB_FAIL(src_srs_item->get_proj4_param(&temp_allocator, src_proj4_param))) {
+          LOG_WARN("failed to get proj4 prams from srs", K(ret), K(src_srid));
         }
       }
       
@@ -158,8 +174,10 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
       lib::MemoryContext *mem_ctx = nullptr;
       if (OB_FAIL(ret) || !need_eval) {
       } else if (OB_FAIL(guard.init())) {
+        LOG_WARN("fail to init geo allocator guard", K(ret));
       } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
         ret = OB_ERR_NULL_VALUE;
+        LOG_WARN("fail to get mem ctx", K(ret));
       } else {
         int correct_result;
         ObGeoEvalCtx correct_context(*mem_ctx, src_srs_item);
@@ -172,24 +190,37 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
           LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
         } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, src_geo,
                                                   src_srs_item, N_ST_TRANSFORM, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT))) {
+          LOG_WARN("failed to parse wkb", K(ret));
         } else if (OB_FAIL(correct_context.append_geo_arg(src_geo))) {
+          LOG_WARN("failed to append geo arg to gis context", K(ret), K(correct_context.get_geo_count()));
         } else if (OB_FAIL(transform_context.append_geo_arg(src_geo))) {
+          LOG_WARN("failed to append geo arg to gis context", K(ret), K(transform_context.get_geo_count()));
         } else if (OB_FAIL(transform_context.append_val_arg(&src_proj4_param))) {
+          LOG_WARN("failed to append src_proj4_param to gis context", K(ret), K(transform_context.get_geo_count()));
         } else if (OB_FAIL(transform_context.append_val_arg(&dest_proj4_param))) {
+          LOG_WARN("failed to append dest_proj4_param to gis context", K(ret), K(transform_context.get_geo_count()));
         } else if (OB_NOT_NULL(src_srs_item) && OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(correct_context, correct_result))) {
+          LOG_WARN("eval boost correct failed", K(ret));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Transform>::geo_func::eval(transform_context, dest_geo))) {
+          LOG_WARN("eval boost transform failed", K(ret), K(src_proj4_param), K(dest_proj4_param));
           ObGeoExprUtils::geo_func_error_handle(ret, N_ST_TRANSFORM);
         } else if (dest_srs_item == NULL && OB_FAIL(ObGeoExprUtils::denormalize_wkb(dest_proj4_param, dest_geo))) {
+          LOG_WARN("failed to do denormalize wkb", K(ret), K(dest_proj4_param));
         } else if ((OB_ISNULL(dest_srs_item) && dest_srid != 0) || OB_ISNULL(dest_geo)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("expected null srs_item or res_geo", K(ret), K(dest_srid), KP(dest_srs_item), KP(dest_geo));
         } else {
           ObString res_wkb;
           if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*dest_geo, expr, ctx, dest_srs_item, res_wkb, dest_srid))){
+            LOG_WARN("failed to write geometry to wkb", K(ret));
           } else {
             res.set_string(res_wkb);
           }
         } 
       } 
+      if (mem_ctx != nullptr) {
+        temp_allocator.add_ext_used((*mem_ctx)->arena_used());
+      }
     }
   }
 

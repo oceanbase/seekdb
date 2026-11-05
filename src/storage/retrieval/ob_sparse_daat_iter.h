@@ -19,8 +19,8 @@
 
 #include "ob_i_sparse_retrieval_iter.h"
 #include "ob_sparse_utils.h"
-#include "storage/access/ob_scan_merge_loser_tree.h"
-#include "storage/access/ob_simple_rows_merger.h"
+#include "lib/container/ob_loser_tree.h"
+#include "sql/das/ob_das_ir_define.h"
 
 namespace oceanbase
 {
@@ -43,7 +43,7 @@ struct ObSRMergeCmp
   ObSRMergeCmp();
   virtual ~ObSRMergeCmp() {}
 
-  int init(sql::ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids);
+  int init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids);
   int cmp(const ObSRMergeItem &l, const ObSRMergeItem &r, int64_t &cmp_ret);
 private:
   inline const ObDatum &get_id_datum(const int64_t iter_idx)
@@ -72,6 +72,7 @@ public:
   virtual ~ObSRDaaTIterImpl() {}
   virtual int get_next_row() override;
   virtual int get_next_rows(const int64_t capacity, int64_t &count) override;
+  virtual int get_total_count(int64_t &count) override;
   int init(
       ObSparseRetrievalMergeParam &iter_param,
       ObIArray<ObISRDaaTDimIter *> &dim_iters,

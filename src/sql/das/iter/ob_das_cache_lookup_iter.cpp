@@ -18,6 +18,7 @@
 #include "sql/das/iter/ob_das_cache_lookup_iter.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/das/ob_das_ir_define.h"
+#include "storage/concurrency_control/ob_data_validation_service.h"
 
 namespace oceanbase
 {
@@ -33,11 +34,14 @@ int ObDASCacheLookupIter::IndexProjRowStore::init(common::ObIAllocator &allocato
   int ret = OB_SUCCESS;
   if (OB_ISNULL(eval_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr for init index proj row store", K(ret));
   } else if (OB_ISNULL(store_rows_ =
       static_cast<ObChunkDatumStore::LastStoredRow*>(allocator.alloc(max_size * sizeof(ObChunkDatumStore::LastStoredRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory", K(max_size), K(ret));
   } else if (FALSE_IT(index_scan_proj_exprs_.set_allocator(&allocator))) {
   } else if (OB_FAIL(index_scan_proj_exprs_.assign(exprs))) {
+    LOG_WARN("failed to assign index scan proj exprs", K(max_size), K(ret));
   } else {
     eval_ctx_ = eval_ctx;
     max_size_ = max_size;
@@ -58,6 +62,7 @@ int ObDASCacheLookupIter::IndexProjRowStore::save(bool is_vectorized, int64_t si
   } else if (OB_UNLIKELY(size + saved_size_ > max_size_) ||
              OB_ISNULL(store_rows_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error for save store rows", K(size), K(max_size_), K(store_rows_), K(ret));
   } else {
     if (is_vectorized) {
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(*eval_ctx_);
@@ -65,9 +70,11 @@ int ObDASCacheLookupIter::IndexProjRowStore::save(bool is_vectorized, int64_t si
       for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
         batch_info_guard.set_batch_idx(i);
         if (OB_FAIL(store_rows_[i + saved_size_].save_store_row(index_scan_proj_exprs_, *eval_ctx_))) {
+          LOG_WARN("cache lookup iter failed to store rows", K(ret));
         }
       }
     } else if (OB_FAIL(store_rows_[saved_size_].save_store_row(index_scan_proj_exprs_, *eval_ctx_))) {
+      LOG_WARN("cache lookup iter failed to store rows", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -87,12 +94,14 @@ int ObDASCacheLookupIter::IndexProjRowStore::to_expr(int64_t size)
              OB_UNLIKELY(size + cur_idx_ > saved_size_) ||
              OB_ISNULL(store_rows_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error for convert store rows", K(size), K(max_size_), K(store_rows_), K(ret));  
   } else {
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(*eval_ctx_);
     batch_info_guard.set_batch_size(size);
     for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
       batch_info_guard.set_batch_idx(i);
       if (OB_FAIL(store_rows_[cur_idx_].store_row_->to_expr<true>(index_scan_proj_exprs_, *eval_ctx_))) {
+        LOG_WARN("cache lookup iter failed to convert store row to expr", K(ret));
       } else {
         cur_idx_++;
       }
@@ -133,13 +142,16 @@ int ObDASCacheLookupIter::inner_init(ObDASIterParam &param)
   const bool use_simulate_batch_row_cnt = simulate_batch_row_cnt > 0 && simulate_batch_row_cnt < default_batch_row_count;
 
   lookup_param.default_batch_row_count_  = use_simulate_batch_row_cnt ? simulate_batch_row_cnt : default_batch_row_count;
+  LOG_DEBUG("simulate lookup row batch count", K(simulate_batch_row_cnt), K(default_batch_row_count));
 
   if (OB_FAIL(ObDASLocalLookupIter::inner_init(param))) {
+    LOG_WARN("failed to init das lookup iter", K(ret));
   } else if (lookup_param.index_scan_proj_exprs_.count() > 0 &&
              OB_FAIL(index_proj_rows_.init(store_allocator_,
                                            lookup_param.index_scan_proj_exprs_, 
                                            lookup_param.eval_ctx_,
                                            lookup_param.default_batch_row_count_))) {
+    LOG_WARN("failed to init index proj rows", K(ret));
   }
 
   return ret;
@@ -149,6 +161,7 @@ int ObDASCacheLookupIter::inner_reuse()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASLocalLookupIter::inner_reuse())) {
+    LOG_WARN("failed to reuse das lookup iter", K(ret));
   } else {
     index_proj_rows_.reuse();
   }
@@ -159,6 +172,7 @@ int ObDASCacheLookupIter::inner_release()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASLocalLookupIter::inner_release())) {
+    LOG_WARN("failed to release das lookup iter", K(ret));
   } else {
     index_proj_rows_.reset();
     store_allocator_.reset();
@@ -187,12 +201,15 @@ int ObDASCacheLookupIter::inner_get_next_row()
           index_table_iter_->clear_evaluated_flag();
           if (OB_FAIL(index_table_iter_->get_next_row())) {
             if (OB_UNLIKELY(OB_ITER_END != ret)) {
+              LOG_WARN("failed to get next row from index table", K(ret));
             } else {
               index_end_ = true;
               ret = OB_SUCCESS;
             }
           } else if (OB_FAIL(add_rowkey())) {
+            LOG_WARN("failed to add row key", K(ret));
           } else if (need_index_proj && OB_FAIL(index_proj_rows_.save(false, 1))) { // if need to project, save it
+              LOG_WARN("save index proj rows failed", K(ret));
           } else {
             ++lookup_rowkey_cnt_;
           }
@@ -210,6 +227,7 @@ int ObDASCacheLookupIter::inner_get_next_row()
 
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
+          LOG_WARN("failed to do index lookup", K(ret));
         } else {
           state_ = OUTPUT_ROWS;
         }
@@ -222,16 +240,19 @@ int ObDASCacheLookupIter::inner_get_next_row()
           if (OB_LIKELY(OB_ITER_END == ret)) {
             ret = OB_SUCCESS;
             if (OB_FAIL(check_index_lookup())) {
+              LOG_WARN("failed to check table lookup", K(ret));
             } else {
               state_ = INDEX_SCAN;
             }
           } else {
+            LOG_WARN("failed to get next row from data table", K(ret));
           }
         } else {
           got_next_row = true;
           ++lookup_row_cnt_;
           if (got_next_row && index_proj_rows_.have_data() &&
               OB_FAIL(index_proj_rows_.to_expr(1))) {
+            LOG_WARN("failed to convert store row to expr", K(ret));
           }
         }
         break;
@@ -269,6 +290,7 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           index_table_iter_->clear_evaluated_flag();
           if (OB_FAIL(index_table_iter_->get_next_rows(storage_count, index_capacity))) {
             if (OB_UNLIKELY(OB_ITER_END != ret)) {
+              LOG_WARN("failed to get next rows from index table", K(ret));
             } else {
               if (storage_count == 0) {
                 index_end_ = true;
@@ -278,7 +300,9 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           }
           if (OB_SUCC(ret) && storage_count > 0) {
             if (OB_FAIL(add_rowkeys(storage_count))) {
+              LOG_WARN("failed to add row keys", K(ret));
             } else if (need_index_proj && OB_FAIL(index_proj_rows_.save(true, storage_count))) { // if need to project, save it
+              LOG_WARN("save index proj rows failed", K(ret));
             } else {
               lookup_rowkey_cnt_ += storage_count;
             } 
@@ -297,6 +321,7 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
+          LOG_WARN("failed to do index lookup", K(ret));
         } else {
           state_ = OUTPUT_ROWS;
         }
@@ -314,11 +339,13 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
               get_next_rows = true;
             } else {
               if (OB_FAIL(check_index_lookup())) {
+                LOG_WARN("failed to check table lookup", K(ret));
               } else {
                 state_ = INDEX_SCAN;
               }
             }
           } else {
+            LOG_WARN("failed to get next rows from data table", K(ret));
           }
         } else {
           lookup_row_cnt_ += count;
@@ -328,6 +355,7 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
         if (OB_FAIL(ret)) {
         } else if (get_next_rows && index_proj_rows_.have_data() &&
                    OB_FAIL(index_proj_rows_.to_expr(count))) {
+          LOG_WARN("failed to convert store row to expr", K(ret));
         }
         break;
       }

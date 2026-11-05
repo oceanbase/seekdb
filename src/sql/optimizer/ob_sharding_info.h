@@ -21,6 +21,7 @@
 #include "lib/container/ob_fixed_array.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
+#include "share/partition_table/ob_partition_location.h"
 #include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/optimizer/ob_phy_table_location_info.h"
@@ -54,7 +55,8 @@ public:
       all_partition_indexes_(),
       all_subpartition_indexes_(),
       is_partition_single_(false),
-      is_subpartition_sinlge_(false)
+      is_subpartition_sinlge_(false),
+      can_reselect_replica_(false)
   {}
   ObShardingInfo(ObTableLocationType type)
   : part_level_(share::schema::PARTITION_LEVEL_MAX),
@@ -70,7 +72,8 @@ public:
     all_partition_indexes_(),
     all_subpartition_indexes_(),
     is_partition_single_(false),
-    is_subpartition_sinlge_(false)
+    is_subpartition_sinlge_(false),
+    can_reselect_replica_(false)
   {}
 
   virtual ~ObShardingInfo()
@@ -146,6 +149,8 @@ public:
                                            bool &is_partition_wise);
 
   static int check_if_match_extended_partition_wise(const EqualSets &equal_sets,
+                                                    ObIArray<ObAddr> &left_server_list,
+                                                    ObIArray<ObAddr> &right_server_list,
                                                     const common::ObIArray<ObRawExpr*> &left_keys,
                                                     const common::ObIArray<ObRawExpr*> &right_keys,
                                                     const common::ObIArray<ObShardingInfo *> &left_sharding,
@@ -153,6 +158,8 @@ public:
                                                     bool &is_ext_partition_wise);
 
   static int check_if_match_extended_partition_wise(const EqualSets &equal_sets,
+                                                    ObIArray<ObAddr> &left_server_list,
+                                                    ObIArray<ObAddr> &right_server_list,
                                                     const common::ObIArray<ObRawExpr*> &left_keys,
                                                     const common::ObIArray<ObRawExpr*> &right_keys,
                                                     const common::ObIArray<bool> &null_safe_info,
@@ -163,6 +170,8 @@ public:
                                                     bool &is_ext_partition_wise);
 
   static int check_if_match_extended_partition_wise(const EqualSets &equal_sets,
+                                                    ObIArray<ObAddr> &left_server_list,
+                                                    ObIArray<ObAddr> &right_server_list,
                                                     const common::ObIArray<ObRawExpr*> &left_keys,
                                                     const common::ObIArray<ObRawExpr*> &right_keys,
                                                     ObShardingInfo *left_strong_sharding,
@@ -174,6 +183,16 @@ public:
                                              const common::ObIArray<ObRawExpr *> &target_join_keys,
                                              const common::ObIArray<ObRawExpr *> &target_part_keys,
                                              bool &is_match_join_keys);
+
+  static int is_physically_both_shuffled_serverlist(ObIArray<ObAddr> &left_server_list,
+                                                    ObIArray<ObAddr> &right_server_list,
+                                                    bool &is_both_shuffled_serverlist);
+
+  static int is_physically_equal_serverlist(ObIArray<ObAddr> &left_server_list,
+                                            ObIArray<ObAddr> &right_server_list,
+                                            bool &is_equal_serverlist);
+
+  static bool is_shuffled_server_list(const ObIArray<ObAddr> &server_list);
 
   static int is_sharding_equal(const ObShardingInfo *left_strong_sharding,
                                const ObIArray<ObShardingInfo*> &left_weak_shardings,
@@ -200,6 +219,9 @@ public:
   static int extract_partition_key(const common::ObIArray<ObShardingInfo *> &input_shardings,
                                    ObIArray<ObSEArray<ObRawExpr*, 8>> &partition_key_list);
 
+  static int get_serverlist_from_sharding(const ObShardingInfo &sharding,
+                                          ObIArray<common::ObAddr> &server_list);
+
   inline void set_location_type(ObTableLocationType location_type)
   {
     location_type_ = location_type;
@@ -210,7 +232,8 @@ public:
   }
   inline bool is_sharding() const
   {
-    return OB_TBL_LOCATION_DISTRIBUTED == location_type_;
+    return (OB_TBL_LOCATION_REMOTE == location_type_ ||
+            OB_TBL_LOCATION_DISTRIBUTED == location_type_);
   }
   inline bool is_distributed() const
   {
@@ -228,6 +251,14 @@ public:
   {
     location_type_ = OB_TBL_LOCATION_ALL;
   }
+  inline bool is_remote() const
+  {
+    return (OB_TBL_LOCATION_REMOTE == location_type_);
+  }
+  inline void set_remote()
+  {
+    location_type_ = OB_TBL_LOCATION_REMOTE;
+  }
   bool is_local() const
   {
     return OB_TBL_LOCATION_LOCAL == location_type_;
@@ -239,11 +270,29 @@ public:
   bool is_single() const
   {
     return (OB_TBL_LOCATION_LOCAL == location_type_ ||
-            OB_TBL_LOCATION_ALL == location_type_);
+            OB_TBL_LOCATION_ALL == location_type_ ||
+            OB_TBL_LOCATION_REMOTE == location_type_);
   }
   bool is_uninitial() const {
     return OB_TBL_LOCATION_UNINITIALIZED == location_type_;
   }
+  void set_can_reselect_replica(const bool b) { can_reselect_replica_ = b; }
+  inline bool get_can_reselect_replica() const 
+  { 
+    bool ret = false;
+    if (!can_reselect_replica_) {
+      ret = false;
+    } else if (NULL == phy_table_location_info_ ||
+        (1 != phy_table_location_info_->get_partition_cnt())) {
+      ret = false;
+    } else {
+      ret = phy_table_location_info_->get_phy_part_loc_info_list().at(0)
+                                      .get_partition_location()
+                                      .get_replica_locations().count() > 0;
+    }
+    return ret;
+  }
+
   inline bool is_distributed_without_table_location() const {
     return is_distributed() && NULL == phy_table_location_info_;
   }
@@ -273,6 +322,7 @@ public:
 
   int copy_with_part_keys(const ObShardingInfo &other);
   int copy_without_part_keys(const ObShardingInfo &other);
+  int get_remote_addr(ObAddr &remote) const;
   int get_total_part_cnt(int64_t &total_part_cnt) const;
   static int get_all_partition_key(ObOptimizerContext &ctx,
                                    const ObDMLStmt &stmt,
@@ -284,6 +334,7 @@ public:
                K_(subpart_func_type),
                K_(part_num),
                K_(location_type),
+               K_(can_reselect_replica),
                K_(phy_table_location_info));
 
 private:
@@ -321,6 +372,8 @@ private:
   static bool is_part_func_scale_sensitive(const sql::ObShardingInfo &sharding_info,
                                            const common::ObObjType obj_type);
 
+  static inline bool is_shuffled_addr(ObAddr addr) { return UINT32_MAX == addr.get_port(); }
+
 private:
   // Partition level
   share::schema::ObPartitionLevel part_level_;
@@ -350,6 +403,7 @@ private:
   bool is_partition_single_;
   // In the phy_table_location_info_ of the secondary partition table, does each primary partition involve only one secondary partition
   bool is_subpartition_sinlge_;
+  bool can_reselect_replica_; // Can reselect partition's leader, only the lowest level replication table is allowed, not allowed after inheritance
   DISALLOW_COPY_AND_ASSIGN(ObShardingInfo);
 };
 }

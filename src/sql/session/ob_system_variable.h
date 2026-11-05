@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #include "common/timezone/ob_time_convert.h"
 #include "share/system_variable/ob_system_variable_init.h"
+#include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {
@@ -77,9 +78,10 @@ public:
      *    all exist sessions unchanged.
      * 2. SESSION scope
      *    with 'SET [SESSION] xxx=xxx' in mysql mode, SESSION is optional.
+     *      or 'ALTER SESSION SET xxx=xxx' in oracle mode,
      *    set with session scope will affect all following operations in current session.
      * 3. NONE scope
-     *    with 'SET xxx=xxx' in mysql mode.
+     *    with 'SET xxx=xxx' in both mysql and oracle mode.
      *    besides GLOBAL and SESSION scopes, a few variables can be set with NONE scope,
      *    which only affect the NEXT ONE transaction in current session, like tx_isolation.
      *    so I think 'SET_SCOPE_NEXT_TRANS' is better than 'SET_SCOPE_NONE'.
@@ -244,8 +246,10 @@ public:
   inline bool is_session_scope() const { return 0 != (flags_ & share::ObSysVarFlag::SESSION_SCOPE); }
   inline bool is_influence_plan() const { return 0 != (flags_ & share::ObSysVarFlag::INFLUENCE_PLAN); }
   inline bool is_influence_pl() const { return 0 != (flags_ & share::ObSysVarFlag::INFLUENCE_PL); }
+  inline bool is_oracle_only() const { return 0 != (flags_ & share::ObSysVarFlag::ORACLE_ONLY); }
   inline bool is_enum_type() const { return is_enum_type_; }
   inline bool is_mysql_only() const { return 0 != (flags_ & share::ObSysVarFlag::MYSQL_ONLY); }
+  inline bool is_with_upgrade() const { return 0 != (flags_ & share::ObSysVarFlag::WITH_UPGRADE); }
   inline bool is_need_serialize() const { return 0 != (flags_ & share::ObSysVarFlag::NEED_SERIALIZE); }
   const common::ObString get_name() const;
   static int get_charset_var_and_val_by_collation(const common::ObString &coll_var_name,
@@ -487,6 +491,31 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObCharsetSysVar);
 };
 
+class ObVersionSysVar : public ObBasicSysVar
+{
+public:
+  ObVersionSysVar(OnCheckAndConvertFunc on_check_and_convert = NULL,
+                  OnUpdateFunc on_update = NULL,
+                  ToObjFunc to_select_obj = NULL,
+                  ToStrFunc to_show_str = NULL,
+                  GetMetaTypeFunc get_meta_type = NULL)
+      : ObBasicSysVar(on_check_and_convert,
+                      on_update,
+                      to_select_obj,
+                      to_show_str,
+                      get_meta_type)
+  {
+  }
+  virtual ~ObVersionSysVar() {}
+private:
+  virtual int do_check_and_convert(sql::ObExecContext &ctx,
+                                   const ObSetVar &set_var,
+                                   const common::ObObj &in_val,
+                                   common::ObObj &out_val);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObVersionSysVar);
+};
+
 /////////////////////////////
 class ObTinyintSysVar : public ObBasicSysVar
 {
@@ -648,7 +677,7 @@ private:
                                    const ObSetVar &set_var,
                                    const common::ObObj &in_val,
                                    common::ObObj &out_val);
-  int find_pos_time_zone(sql::ObExecContext &ctx, const common::ObString &str_val);
+  int find_pos_time_zone(sql::ObExecContext &ctx, const common::ObString &str_val, const bool is_oracle_compatible);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTimeZoneSysVar);
 };
@@ -682,6 +711,7 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
+      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }
@@ -722,6 +752,7 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
+      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }
@@ -762,6 +793,7 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       SQL_SESSION_LOG(ERROR, "function ptr session_special_update_ is NULL", K(ret));
     } else if (OB_FAIL(session_special_update_(ctx, set_var, val))) {
+      SQL_SESSION_LOG(WARN, "fail to call session_special_update_", K(ret));
     }
     return ret;
   }
@@ -844,6 +876,46 @@ public:
                                                  const ObBasicSysVar &sys_var,
                                                  const common::ObObj &in_val,
                                                  common::ObObj &out_val);
+  static int check_and_convert_ob_org_cluster_id(sql::ObExecContext &ctx,
+                                                 const ObSetVar &set_var,
+                                                 const ObBasicSysVar &sys_var,
+                                                 const common::ObObj &in_val,
+                                                 common::ObObj &out_val);
+  static int check_and_convert_plsql_warnings(sql::ObExecContext &ctx,
+                                                 const ObSetVar &set_var,
+                                                 const ObBasicSysVar &sys_var,
+                                                 const common::ObObj &in_val,
+                                                 common::ObObj &out_val);
+  static int check_and_convert_plsql_ccflags(sql::ObExecContext &ctx,
+                                             const ObSetVar &set_var,
+                                             const ObBasicSysVar &sys_var,
+                                             const common::ObObj &in_val,
+                                             common::ObObj &out_val);
+  static int check_and_convert_sql_throttle_queue_time(sql::ObExecContext &ctx,
+                                                       const ObSetVar &set_var,
+                                                       const ObBasicSysVar &sys_var,
+                                                       const common::ObObj &in_val,
+                                                       common::ObObj &out_val);
+  static int check_and_convert_nls_currency_too_long(sql::ObExecContext &ctx,
+                                                     const ObSetVar &set_var,
+                                                     const ObBasicSysVar &sys_var,
+                                                     const common::ObObj &in_val,
+                                                     common::ObObj &out_val);
+  static int check_and_convert_nls_iso_currency_is_valid(sql::ObExecContext &ctx,
+                                                         const ObSetVar &set_var,
+                                                         const ObBasicSysVar &sys_var,
+                                                         const common::ObObj &in_val,
+                                                         common::ObObj &out_val);
+  static int check_and_convert_nls_length_semantics_is_valid(sql::ObExecContext &ctx,
+                                                             const ObSetVar &set_var,
+                                                             const ObBasicSysVar &sys_var,
+                                                             const common::ObObj &in_val,
+                                                             common::ObObj &out_val);
+  static int check_update_resource_manager_plan(sql::ObExecContext &ctx,
+                                                const ObSetVar &set_var,
+                                                const ObBasicSysVar &sys_var,
+                                                const common::ObObj &val,
+                                                common::ObObj &out_val);
   static int check_log_row_value_option_is_valid(sql::ObExecContext &ctx,
                                                   const ObSetVar &set_var,
                                                   const ObBasicSysVar &sys_var,
@@ -866,16 +938,25 @@ public:
                                         const ObBasicSysVar &sys_var,
                                         const common::ObObj &in_val,
                                         common::ObObj &out_val);
+  static int check_and_convert_compat_version(sql::ObExecContext &ctx,
+                                              const ObSetVar &set_var,
+                                              const ObBasicSysVar &sys_var,
+                                              const common::ObObj &in_val,
+                                              common::ObObj &out_val);
+  static int check_and_convert_security_version(sql::ObExecContext &ctx,
+                                                const ObSetVar &set_var,
+                                                const ObBasicSysVar &sys_var,
+                                                const common::ObObj &in_val,
+                                                common::ObObj &out_val);
+  static int check_and_convert_version(sql::ObExecContext &ctx,
+                                       const ObBasicSysVar &sys_var,
+                                       const common::ObObj &in_val,
+                                       uint64_t &version);
   static int check_and_convert_block_encryption_mode(sql::ObExecContext &ctx,
                                                      const ObSetVar &set_var,
                                                      const ObBasicSysVar &sys_var,
                                                      const common::ObObj &in_val,
                                                      common::ObObj &out_val);
-  static int check_and_convert_default_storage_engine(sql::ObExecContext &ctx,
-                                                      const ObSetVar &set_var,
-                                                      const ObBasicSysVar &sys_var,
-                                                      const common::ObObj &in_val,
-                                                      common::ObObj &out_val);
 private:
   static int check_session_readonly(sql::ObExecContext &ctx,
                                     const ObSetVar &set_var,
@@ -906,6 +987,10 @@ public:
                              const ObSetVar &set_var,
                              const ObBasicSysVar &sys_var,
                              const common::ObObj &val);
+  static int update_safe_weak_read_snapshot(sql::ObExecContext &ctx,
+                             const ObSetVar &set_var,
+                             const ObBasicSysVar &sys_var,
+                             const common::ObObj &val);
 private:
   // start trans helper use by set transaction charactors
   static int start_trans_by_set_trans_char_(
@@ -925,10 +1010,8 @@ public:
                               const ObBasicSysVar &sys_var, common::ObObj &result_obj);
   static int to_obj_sql_mode(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
                              const ObBasicSysVar &sys_var, common::ObObj &result_obj);
-  static int to_obj_default_storage_engine(common::ObIAllocator &allocator,
-                                           const sql::ObBasicSessionInfo &session,
-                                           const ObBasicSysVar &sys_var,
-                                           common::ObObj &result_obj);
+  static int to_obj_version(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
+                            const ObBasicSysVar &sys_var, common::ObObj &result_obj);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarToObjFuncs);
 };
@@ -945,10 +1028,8 @@ public:
                               const ObBasicSysVar &sys_var, common::ObString &result_str);
   static int to_str_sql_mode(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
                              const ObBasicSysVar &sys_var, common::ObString &result_str);
-  static int to_str_default_storage_engine(common::ObIAllocator &allocator,
-                                           const sql::ObBasicSessionInfo &session,
-                                           const ObBasicSysVar &sys_var,
-                                           common::ObString &result_str);
+  static int to_str_version(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
+                            const ObBasicSysVar &sys_var, common::ObString &result_str);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarToStrFuncs);
 };

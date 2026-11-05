@@ -16,14 +16,11 @@
 
 #ifndef DEV_SRC_SQL_CODE_GENERATOR_OB_TSC_CG_SERVICE_H_
 #define DEV_SRC_SQL_CODE_GENERATOR_OB_TSC_CG_SERVICE_H_
-#include "data_plane/blocksstable/ob_index_block_util.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 namespace oceanbase
 {
 namespace sql
 {
-using blocksstable::ObSkipIndexColType;
-
 class ObStaticEngineCG;
 class ObTableScanSpec;
 class ObPushdownExprSpec;
@@ -50,6 +47,7 @@ public:
                                const ObIArray<ObRawExpr *> &access_exprs,
                                const log_op_def::ObLogOpType op_type,
                                const bool is_global_index_lookup,
+                               const bool use_column_store,
                                ObPushdownExprSpec &pd_spec);
   int generate_table_loc_meta(uint64_t table_loc_id,
                               const ObDMLStmt &stmt,
@@ -330,6 +328,7 @@ private:
   int generate_das_sort_ctdef(const ObIArray<ObExpr *> &sort_keys,
                               ObDASBaseCtDef *child_ctdef,
                               ObDASSortCtDef *&sort_ctdef);
+  int generate_mr_mv_scan_flag(const ObLogTableScan &op, ObQueryFlag &query_flag) const;
   int generate_index_merge_ctdef(const ObLogTableScan &op, ObTableScanCtDef &tsc_ctdef, ObDASIndexMergeCtDef *&root_ctdef);
   int generate_index_merge_node_ctdef(const ObLogTableScan &op,
                                       ObTableScanCtDef &tsc_ctdef,

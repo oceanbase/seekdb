@@ -75,11 +75,14 @@ int ObGeoToWktVisitor::append_double_with_prec(char *buff,
   // round decimal part to assigned precision
   if (expr_len > expr_max_size) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("error expr length", K(ret), K(out_len), K(expr_pos), K(expr_len), K(decimal_len));
   } else if (OB_FAIL(number_value.from(number_str, decimal_len, tmp_allocator))) {
+    LOG_WARN("number from str failed", K(ret));
   } else if (OB_FAIL(number_value.format(number_str, 
                                          number_str_size,
                                          new_decimal_len,
                                          scale))) {
+    LOG_WARN("failed to format number to string", K(ret));
   } else if (new_decimal_len == 1 && number_str[0] == '0' && number_value.is_negative()) {
     // -0.4 round to 0 => -0
     number_str[0] = '-';
@@ -105,6 +108,7 @@ int ObGeoToWktVisitor::append_double_with_prec(char *buff,
     out_len = new_decimal_len + expr_len;
     if (out_len > buff_size) {
       ret = OB_SIZE_OVERFLOW;
+       LOG_WARN("string size overflow", K(ret), K(value), K(out_len), K(expr_len), K(new_decimal_len));
     } else {
       MEMCPY(buff, number_str, new_decimal_len);
       if (expr_len > 0) {
@@ -123,15 +127,19 @@ int ObGeoToWktVisitor::convert_double_to_str(char* buff, uint64_t buff_size, dou
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buff)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("buffer ptr is NULL", K(ret));
   } else if (buff_size < MAX_DIGITS_IN_DOUBLE) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("buffer size is not enough", K(ret), K(buff_size));
   } else if (has_scale) {
     if (OB_FAIL(append_double_with_prec(buff, MAX_DIGITS_IN_DOUBLE, out_len, val, scale))) {
+      LOG_WARN("fail to append double to buffer with precsion", K(ret), K(val));
     }
   } else {
     out_len = ob_gcvt(val, ob_gcvt_arg_type::OB_GCVT_ARG_DOUBLE, buff_size, buff, NULL);
     if (out_len == 0) {
       ret = OB_SIZE_OVERFLOW;
+      LOG_WARN("fail to convert double to string", K(ret), K(val), K(buff_size));
     }
   }
   return ret;
@@ -147,13 +155,19 @@ int ObGeoToWktVisitor::appendInnerPoint(double x, double y)
   char *buf_ptr = nullptr;
   uint64_t  reserve_len = MAX_DIGITS_IN_DOUBLE * 2;
   if (buffer_.remain() < reserve_len && OB_FAIL(buffer_.reserve(reserve_len))) {
+    LOG_WARN("fail to reserve memory for buffer_", K(ret), K(reserve_len));
   } else if (FALSE_IT(buf_ptr = buffer_.ptr() + buffer_.length())) {
   } else if (OB_FAIL(convert_double_to_str(buf_ptr, buffer_.remain(), x, has_scale_, scale, len_x))) {
+    LOG_WARN("fail to append x to buffer", K(ret), K(x));
   } else if (OB_FAIL(buffer_.set_length(buffer_.length() + len_x))) {
+    LOG_WARN("fail to set buffer len", K(ret), K(buffer_.length()), K(len_x));
   } else if (OB_FAIL(buffer_.append(" "))) {
+    LOG_WARN("fail to append space", K(ret));
   } else if (FALSE_IT(buf_ptr = buffer_.ptr() + buffer_.length())) {
   } else if (OB_FAIL(convert_double_to_str(buf_ptr, buffer_.remain(), y ,has_scale_, scale, len_y))) {
+    LOG_WARN("fail to append y to buffer", K(ret), K(y));
   } else if (OB_FAIL(buffer_.set_length(buffer_.length() + len_y))) {
+    LOG_WARN("fail to set buffer y len", K(ret), K(buffer_.length()), K(len_y));
   }
   return ret;
 }
@@ -168,11 +182,17 @@ int ObGeoToWktVisitor::appendPoint(T_IBIN *geo)
   }
   // [type_name][(][x][ ][y][)]
   if (OB_FAIL(buffer_.reserve(reserve_len))) {
+    LOG_WARN("fail to reserve memory for buffer_", K(ret), K(reserve_len));
   } else if (!in_multi_visit_ && OB_FAIL(appendTypeNameWithMode(geo))) {
+    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_));
   } else if (OB_FAIL(buffer_.append("("))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   } else if (OB_FAIL(appendInnerPoint(geo->x(), geo->y()))) {
+    LOG_WARN("fail to appendInnerPoint", K(ret), K(geo->x()), K(geo->y()));
   } else if (OB_FAIL(buffer_.append(")"))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   } else if ((in_multi_visit_ || in_colloction_visit())  && OB_FAIL(appendCommaWithMode())) {
+    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -188,20 +208,28 @@ int ObGeoToWktVisitor::appendLine(T_IBIN *geo)
   }
   // [type_name][(][x1][ ][y1][,][x2][ ][y2][)]
   if (OB_FAIL(buffer_.reserve(reserve_len))) {
+    LOG_WARN("fail to reserve memory for buffer_", K(ret), K(reserve_len));
   } else if (!in_multi_visit_ && OB_FAIL(appendTypeNameWithMode(geo))) {
+    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_));
   } else if (OB_FAIL(buffer_.append("("))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   } else {
     const T_BIN *line = reinterpret_cast<const T_BIN *>(geo->val());
     typename T_BIN::iterator iter = line->begin();
     for ( ; OB_SUCC(ret) && iter != line->end(); iter++) {
       if (OB_FAIL(appendInnerPoint(iter->template get<0>(), iter->template get<1>()))) {
+        LOG_WARN("fail to appendInnerPoint", K(ret), K(iter->template get<0>()), K(iter->template get<1>()));
       } else if (OB_FAIL(appendCommaWithMode())) {
+        LOG_WARN("fail to append buffer_", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(buffer_.set_length(buffer_.length() - comma_length_))) {
+      LOG_WARN("fail to set buffer_ len", K(ret), K(buffer_.length()));
     } else if (OB_FAIL(buffer_.append(")"))) {
+      LOG_WARN("fail to append buffer_", K(ret));
     } else if ((in_multi_visit_ || in_colloction_visit()) && OB_FAIL(appendCommaWithMode())) {
+      LOG_WARN("fail to append buffer_", K(ret));
     }
   }
   return ret;
@@ -243,9 +271,13 @@ int ObGeoToWktVisitor::appendPolygon(T_IBIN *geo)
   // [type_name][(][(][x1][ ][y1][,][x2][ ][y2][,][x3][ ][y3][)][)]
   if (geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
+    LOG_WARN("invalid wkb length", K(ret), K(geo->length()));
   } else if (OB_FAIL(buffer_.reserve(reserve_len))) {
+    LOG_WARN("fail to reserve memory for buffer_", K(ret), K(reserve_len));
   } else if (!in_multi_visit_ && OB_FAIL(appendTypeNameWithMode(geo))) {
+    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_), K(type_name));
   } else if (OB_FAIL(buffer_.append("("))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   } else {
     T_BIN& poly = *(T_BIN *)(geo->val());
     T_BIN_RING& exterior = poly.exterior_ring();
@@ -254,16 +286,22 @@ int ObGeoToWktVisitor::appendPolygon(T_IBIN *geo)
       typename T_BIN_RING::iterator iter = exterior.begin();
       // [(][x1][ ][y1][,][x2][ ][y2][,][x3][ ][y3][)]
       if (OB_FAIL(buffer_.append("("))) {
+        LOG_WARN("fail to append buffer_", K(ret));
       }
       for (; OB_SUCC(ret) && iter != exterior.end(); ++iter) {
         if (OB_FAIL(appendInnerPoint(iter->template get<0>(), iter->template get<1>()))) {
+          LOG_WARN("fail to appendInnerPoint", K(ret), K(iter->template get<0>()), K(iter->template get<1>()));
         } else if (OB_FAIL(appendCommaWithMode())) {
+          LOG_WARN("fail to append buffer_", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(buffer_.set_length(buffer_.length() - comma_length_))) {
+        LOG_WARN("fail to set buffer_ len", K(ret), K(buffer_.length()));
       } else if (OB_FAIL(buffer_.append(")"))) {
+        LOG_WARN("fail to append buffer_", K(ret));
       } else if (OB_FAIL(appendCommaWithMode())) {
+        LOG_WARN("fail to append buffer_", K(ret));
       }
     }
 
@@ -272,22 +310,31 @@ int ObGeoToWktVisitor::appendPolygon(T_IBIN *geo)
       uint32_t size = iterInnerRing->size();
       typename T_BIN_RING::iterator iter = (*iterInnerRing).begin();
       if (OB_FAIL(buffer_.append("("))) {
+        LOG_WARN("fail to append buffer_", K(ret));
       }
       for (; OB_SUCC(ret) && iter != (*iterInnerRing).end(); ++iter) {
         if (OB_FAIL(appendInnerPoint(iter->template get<0>(), iter->template get<1>()))) {
+          LOG_WARN("fail to appendInnerPoint", K(ret), K(iter->template get<0>()), K(iter->template get<1>()));
         } else if (OB_FAIL(appendCommaWithMode())) {
+          LOG_WARN("fail to append buffer_", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(buffer_.set_length(buffer_.length() - comma_length_))) {
+        LOG_WARN("fail to set buffer_ len", K(ret), K(buffer_.length()));
       } else if (OB_FAIL(buffer_.append(")"))) {
+        LOG_WARN("fail to append buffer_", K(ret));
       } else if (OB_FAIL(appendCommaWithMode())) {
+        LOG_WARN("fail to append buffer_", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(buffer_.set_length(buffer_.length() - comma_length_))) {
+      LOG_WARN("fail to set buffer_ len", K(ret), K(buffer_.length()));
     } else if (OB_FAIL(buffer_.append(")"))) {
+      LOG_WARN("fail to append buffer_", K(ret));
     } else if ((in_multi_visit_ || in_colloction_visit()) && OB_FAIL(appendCommaWithMode())) {
+      LOG_WARN("fail to append buffer_", K(ret));
     }
   }
   return ret;
@@ -302,8 +349,11 @@ int ObGeoToWktVisitor::appendMultiPrefix(T_IBIN *geo)
   uint64_t reserve_len = 2 + strlen(type_name);
   // [type_name][(][x][ ][y][)]
   if (OB_FAIL(buffer_.reserve(reserve_len))) {
+    LOG_WARN("fail to reserve memory for buffer_", K(ret), K(reserve_len));
   } else if (OB_FAIL(appendTypeNameWithMode(geo))) {
+    LOG_WARN("fail to append buffer_", K(ret), K(type_name));
   } else if (OB_FAIL(buffer_.append("("))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -312,8 +362,11 @@ int ObGeoToWktVisitor::appendMultiSuffix()
 {
   INIT_SUCC(ret);
   if (OB_FAIL(buffer_.set_length(buffer_.length() - comma_length_))) {
+      LOG_WARN("fail to set buffer_ len", K(ret), K(buffer_.length()));
   } else if (OB_FAIL(buffer_.append(")"))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   } else if ((in_colloction_visit()) && OB_FAIL(appendCommaWithMode())) {
+    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -328,9 +381,13 @@ int ObGeoToWktVisitor::appendCollectionPrefix(T_IBIN *geo)
   uint64_t reserve_len = 2;
   // [type_name][(][x][ ][y][)]
   if (OB_FAIL(buffer_.reserve(reserve_len))) {
+    LOG_WARN("fail to reserve memory for buffer_", K(ret), K(reserve_len));
   } else if (OB_FAIL(appendTypeNameWithMode(geo))) {
+    LOG_WARN("fail to append buffer_", K(ret), K(type_name));
   } else if (is_empty && OB_FAIL(buffer_.append(" EMPTY"))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   } else if (!is_empty && OB_FAIL(buffer_.append("("))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -342,12 +399,15 @@ int ObGeoToWktVisitor::appendCollectionSuffix(T_IBIN *geo)
   bool is_empty = (geo->size() == 0);
   if (!is_empty) {
     if (buffer_.ptr()[buffer_.length() - comma_length_] == ',' && OB_FAIL(buffer_.set_length(buffer_.length() - comma_length_))) {
+        LOG_WARN("fail to set buffer_ len", K(ret), K(buffer_.length()));
     } else if (OB_FAIL(buffer_.append(")"))) {
+      LOG_WARN("fail to append buffer_", K(ret));
     }
   }
   colloction_level_--;
   if (OB_FAIL(ret)) {
   } else if ((in_colloction_visit()) && OB_FAIL(appendCommaWithMode())) {
+    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -412,6 +472,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeogPoint *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendPoint<ObIWkbGeogPoint>(geo))) {
+    LOG_WARN("fail to append point", K(ret));
   }
   return ret;
 }
@@ -420,6 +481,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeomPoint *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendPoint<ObIWkbGeomPoint>(geo))) {
+    LOG_WARN("fail to append point", K(ret));
   }
   return ret;
 }
@@ -428,6 +490,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeogLineString *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL((appendLine<ObIWkbGeogLineString, ObWkbGeogLineString>(geo)))) {
+    LOG_WARN("fail to append line", K(ret));
   }
   return ret;
 }
@@ -436,6 +499,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeomLineString *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL((appendLine<ObIWkbGeomLineString, ObWkbGeomLineString>(geo)))) {
+    LOG_WARN("fail to append line", K(ret));
   }
   return ret;
 }
@@ -444,6 +508,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeogMultiPoint *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendMultiPrefix(geo))) {
+    LOG_WARN("fail to append Multi-Prefix", K(ret));
   }
   return ret;
 }
@@ -452,6 +517,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeomMultiPoint *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendMultiPrefix(geo))) {
+    LOG_WARN("fail to append Multi-Prefix", K(ret));
   }
   return ret;
 }
@@ -460,6 +526,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeogMultiLineString *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendMultiPrefix(geo))) {
+    LOG_WARN("fail to append Multi-Prefix", K(ret));
   }
   return ret;
 }
@@ -468,6 +535,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeomMultiLineString *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendMultiPrefix(geo))) {
+    LOG_WARN("fail to append Multi-Prefix", K(ret));
   }
   return ret;
 }
@@ -477,6 +545,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeogPolygon *geo)
   INIT_SUCC(ret);
   if (OB_FAIL((appendPolygon<ObIWkbGeogPolygon, ObWkbGeogPolygon,
                              ObWkbGeogLinearRing, ObWkbGeogPolygonInnerRings>(geo)))) {
+    LOG_WARN("fail to append polygon", K(ret));
   }
   return ret;
 }
@@ -486,6 +555,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeomPolygon *geo)
   INIT_SUCC(ret);
   if (OB_FAIL((appendPolygon<ObIWkbGeomPolygon, ObWkbGeomPolygon,
                              ObWkbGeomLinearRing, ObWkbGeomPolygonInnerRings>(geo)))) {
+    LOG_WARN("fail to append polygon", K(ret));
   }
   return ret;
 }
@@ -494,6 +564,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeogMultiPolygon *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendMultiPrefix(geo))) {
+    LOG_WARN("fail to append Multi-Prefix", K(ret));
   }
   return ret;
 }
@@ -502,6 +573,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeomMultiPolygon *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendMultiPrefix(geo))) {
+    LOG_WARN("fail to append Multi-Prefix", K(ret));
   }
   return ret;
 }
@@ -510,6 +582,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeogCollection *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendCollectionPrefix(geo))) {
+    LOG_WARN("fail to append Collection-Prefix", K(ret));
   }
   return ret;
 }
@@ -518,6 +591,7 @@ int ObGeoToWktVisitor::visit(ObIWkbGeomCollection *geo)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(appendCollectionPrefix(geo))) {
+    LOG_WARN("fail to append Collection-Prefix", K(ret));
   }
   return ret;
 }
@@ -589,10 +663,15 @@ int ObGeoToWktVisitor::init(uint32_t srid, int64_t maxdecimaldigits, bool output
     uint64_t reserve_len = strlen("srid") + 1 + ffi.length() + 1;
     // [srid][=][1][2][3][4][;]
     if (OB_FAIL(buffer_.reserve(reserve_len))) {
+      LOG_WARN("fail to reserve memory for buffer_", K(ret), K(reserve_len));
     } else if (OB_FAIL(buffer_.append("SRID="))) {
+      LOG_WARN("fail to append buffer_", K(ret));
     } else if (srid == UINT32_MAX && OB_FAIL(buffer_.append("NULL"))) {
+      LOG_WARN("fail to append buffer_", K(ret));
     } else if (srid != UINT32_MAX && OB_FAIL(buffer_.append(ffi.ptr(), ffi.length(), 0))) {
+      LOG_WARN("fail to append buffer_", K(ret), K(ffi.length()));
     } else if (OB_FAIL(buffer_.append(";"))) {
+      LOG_WARN("fail to append buffer_", K(ret));
     }
   }
 
@@ -610,6 +689,7 @@ int ObGeoToWktVisitor::appendCommaWithMode() {
   // mysql [,]
   uint64_t reserve_len = 1;
   if (OB_FAIL(buffer_.append(","))) {
+    LOG_WARN("fail to append buffer_", K(ret));
   }
 
   return ret;
@@ -618,10 +698,30 @@ int ObGeoToWktVisitor::appendCommaWithMode() {
 template<typename T_IBIN>
 int ObGeoToWktVisitor::appendTypeNameWithMode(T_IBIN *geo) {
   int ret = OB_SUCCESS;
+  // oracle [typename][ ]
   // mysql [typename]
   const char *type_name = ObGeoTypeUtil::get_geo_name_by_type(geo->type());
 
   if (OB_FAIL(buffer_.append(type_name))) {
+    LOG_WARN("fail to append buffer_", K(ret), K(type_name));
+  }
+  return ret;
+}
+
+int ObGeoToWktVisitor::append_double_oracle(char *buff, 
+                                            const int32_t buff_size,
+                                            uint64_t &out_len,
+                                            double value)
+{
+  int ret = OB_SUCCESS;
+  char number_buf[256] = {0};
+  double abs_value = fabs(value);
+  out_len = snprintf(number_buf, 256, "%.15g", value);
+  if (out_len < 0 || out_len > buff_size) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_WARN("fail to val to string", K(ret), K(value));
+  } else {
+    MEMCPY(buff, number_buf, out_len);
   }
   return ret;
 }

@@ -1,0 +1,24 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner: link.zt
+#owner group: sql1
+# tags: optimizer
+#description: optimizer misc bug validation
+
+#bug 19634818
+#expect : correctly set the distinct exprs
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+--result_format 4
+
+create table t1(a int, b int) partition by hash(b) partitions 5;
+create index i1 on t1(a) local;
+--source mysql_test/include/check_all_idx_ok.inc
+insert into t1 values(1, 2);
+explain select /*+ index(t1 I1) */ distinct sum(b) a from t1 group by a;
+select /*+ index(t1 I1) */ distinct sum(b) a from t1 group by a;
+
+drop table t1;

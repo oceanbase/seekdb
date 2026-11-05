@@ -40,6 +40,7 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
   ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(raw_expr);
   if (OB_ISNULL(op_expr) || OB_UNLIKELY(op_expr->get_param_count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("op raw expr is null", K(ret), K(op_expr));
   } else {
     // always allow NULL value
     type.set_result_flag(NOT_NULL_FLAG);
@@ -50,6 +51,7 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
     ObConstRawExpr *const_param2 = static_cast<ObConstRawExpr *>(param2);
     if (OB_ISNULL(const_param2)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("second child of is expr is null", K(ret), K(const_param2));
     } else if (ObDoubleType == const_param2->get_value().get_type()) {
         type1.set_calc_type(ObDoubleType);
         type1.set_calc_accuracy(type1.get_accuracy());
@@ -62,7 +64,7 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
         type1.set_calc_accuracy(type1.get_accuracy());
       } else {
         type1.set_calc_type(ObNumberType);
-        const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[ObNumberType];
+        const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType];
         type1.set_calc_accuracy(calc_acc);
       }
     } else {
@@ -120,12 +122,15 @@ int ObExprIsBase::cg_expr_internal(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_
   const ObRawExpr *child = NULL;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("isnot expr should have 2 params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
             || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of isnot expr is null", K(ret), K(rt_expr.args_));
   } else if (OB_ISNULL(child = op_raw_expr->get_param_expr(1))
              || OB_UNLIKELY(!child->is_const_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("child is null", K(ret), KPC(child));
   } else {
     const_param2 = static_cast<const ObConstRawExpr *>(child);
   }
@@ -181,6 +186,7 @@ int ObExprIsBase::cg_result_type_class(ObObjType type, ObExpr::EvalFunc &eval_fu
     }
     case ObMaxType: {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("is expr got unexpected type param", K(ret), K(type));
         break;
     }
     default: {
@@ -198,17 +204,24 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
   const ObConstRawExpr *param3 = NULL;
   ObObjType param1_type = ObMaxType;
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
+    LOG_WARN("cg_expr_inner failed", K(ret));
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("const raw expr param is null", K(param2));
   } else if(FALSE_IT(param1_type = rt_expr.args_[0]->datum_meta_.type_)) {
   } else if (param2->get_value().is_null()) {  // c1 is null
     rt_expr.eval_func_ = ObExprIs::calc_is_null;
+    rt_expr.eval_vector_func_ = ObExprIs::calc_vector_is_null;
   } else if (param2->get_value().is_true()) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, false, true))) {
+      LOG_WARN("is expr got unexpected type param", K(ret));
     }
+    rt_expr.eval_vector_func_ = ObExprIs::calc_vector_is_true;
   } else if (param2->get_value().is_false()) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, false, false))) {
+      LOG_WARN("is expr got unexpected type param", K(ret));
     }
+    rt_expr.eval_vector_func_ = ObExprIs::calc_vector_is_false;
   } else if (ObDoubleType == param2->get_value().get_type()) {
     if (isnan(param2->get_value().get_double())) {
       rt_expr.eval_func_ = ObExprIs::calc_is_nan;
@@ -217,6 +230,8 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("second param of is expr is not null, true, false or infinite or nan",
+              K(ret), K(param2->get_value()));
   }
   return ret;
 }
@@ -228,18 +243,25 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   const ObConstRawExpr *param3 = NULL;
   ObObjType param1_type = ObMaxType;
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
+    LOG_WARN("cg_expr_inner failed", K(ret));
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("const raw expr param is null", K(param2));
   } else if(FALSE_IT(param1_type = rt_expr.args_[0]->datum_meta_.type_)) {
   } else if (param2->get_value().is_null()) {  // c1 is null
     rt_expr.eval_func_ = ObExprIsNot::calc_is_not_null;
     rt_expr.eval_batch_func_ = ObExprIsNot::calc_batch_is_not_null;
+    rt_expr.eval_vector_func_ = ObExprIsNot::calc_vector_is_not_null;
   } else if (param2->get_value().is_true()) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, true, true))) {
+      LOG_WARN("is expr got unexpected type param", K(ret));
     }
+    rt_expr.eval_vector_func_ = ObExprIsNot::calc_vector_is_not_true;
   } else if (param2->get_value().is_false()) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, true, false))) {
+      LOG_WARN("is expr got unexpected type param", K(ret));
     }
+    rt_expr.eval_vector_func_ = ObExprIsNot::calc_vector_is_not_false;
   } else if (ObDoubleType == param2->get_value().get_type()) {
     if (isnan(param2->get_value().get_double())) {
       rt_expr.eval_func_ = ObExprIsNot::calc_is_not_nan;
@@ -248,6 +270,22 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("second param of is expr is not null, true, false or infinite or nan",
+                K(ret), K(param2->get_value()));
+  }
+  return ret;
+}
+
+// keep this function for compatibility with server before 4.1
+int ObExprIs::calc_is_date_int_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  ObDatum *param1 = NULL;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("eval first param failed", K(ret));
+  } else {
+    bool ret_bool = param1->is_null() || param1->get_int() == 0;
+    expr_datum.set_int32(static_cast<int32_t>(ret_bool));
   }
   return ret;
 }
@@ -257,11 +295,267 @@ int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
   int ret = OB_SUCCESS;
   ObDatum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("eval first param failed", K(ret));
   } else {
     bool ret_bool = param1->is_null();
     expr_datum.set_int32(static_cast<int32_t>(ret_bool));
   }
   return ret;
+}
+
+template <typename ArgVec, typename ResVec, bool ExprIs>
+static int eval_vector_is_null(const ObExpr &expr,
+                               ObEvalCtx &ctx,
+                               const ObBitVector &skip,
+                               const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[0]->get_vector(ctx));
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  constexpr bool isFixedLenRes = std::is_same<ResVec, IntegerFixedVec>::value;
+  int64_t *data_ptr = isFixedLenRes ?
+                      const_cast<int64_t*>(reinterpret_cast<const int64_t *>(res_vec->get_payload(0))) :
+                      nullptr;
+  if (isFixedLenRes && !arg_vec->has_null()) {
+    for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
+      data_ptr[idx] = static_cast<int64_t>(!ExprIs);
+    }
+  } else if (bound.get_all_rows_active()) {
+    for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
+      bool arg_null = arg_vec->is_null(idx);
+      arg_null = ExprIs ? arg_null : !arg_null;
+      if (isFixedLenRes) {
+        data_ptr[idx] = static_cast<int64_t>(arg_null);
+      } else {
+        res_vec->set_int(idx, static_cast<int64_t>(arg_null));
+      }
+    }
+    eval_flags.set_all(bound.start(), bound.end());
+  } else {
+    for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
+      if (skip.at(idx) || eval_flags.at(idx)) {
+        continue;
+      }
+      bool arg_null = arg_vec->is_null(idx);
+      arg_null = ExprIs ? arg_null : !arg_null;
+      if (isFixedLenRes) {
+        data_ptr[idx] = static_cast<int64_t>(arg_null);
+      } else {
+        res_vec->set_int(idx, static_cast<int64_t>(arg_null));
+      }
+      eval_flags.set(idx);
+    }
+  }
+  return ret;
+}
+
+template <bool ExprIs>
+static inline int def_calc_vector_is_null(const ObExpr &expr,
+                                          ObEvalCtx &ctx,
+                                          const ObBitVector &skip,
+                                          const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("fail to eval is/is_not null param", K(ret));
+  } else {
+    VectorFormat res_format = expr.get_format(ctx);
+    // The 'res_format' is expected to be Type 'IntegerFixedVec' under the regular circumstances. 
+    // So a condition is added to optimize performance accordingly.
+    if (VEC_FIXED == res_format) {
+      VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+      if (VEC_FIXED == arg_format || VEC_DISCRETE == arg_format || VEC_CONTINUOUS == arg_format) {
+        ret = eval_vector_is_null<ObBitmapNullVectorBase, IntegerFixedVec, ExprIs>(expr, ctx, skip, bound);
+      } else if (VEC_UNIFORM == arg_format) {
+        ret = eval_vector_is_null<ObUniformBase, IntegerFixedVec, ExprIs>(expr, ctx, skip, bound);
+      } else {
+        ret = eval_vector_is_null<ObVectorBase, IntegerFixedVec, ExprIs>(expr, ctx, skip, bound);
+      }
+    } else {
+      ret = eval_vector_is_null<ObVectorBase, ObVectorBase, ExprIs>(expr, ctx, skip, bound);
+    }
+  }
+  return ret;
+}
+
+int ObExprIs::calc_vector_is_null(const ObExpr &expr,
+                                  ObEvalCtx &ctx,
+                                  const ObBitVector &skip,
+                                  const EvalBound &bound)
+{
+  return def_calc_vector_is_null<true>(expr, ctx, skip, bound);
+}   
+
+template <typename ArgVec, typename ResVec, typename DataType, bool ExprIs, bool IsTrue>
+static int eval_vector_is_true(const ObExpr &expr,
+                               ObEvalCtx &ctx,
+                               const ObBitVector &skip,
+                               const EvalBound &bound,
+                               DataType (ArgVec::*get_data)(int64_t) const)
+{
+  int ret = OB_SUCCESS;
+  ArgVec *arg_vec = static_cast<ArgVec *>(expr.args_[0]->get_vector(ctx));
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  constexpr bool isFixedLenRes = std::is_same<ResVec, IntegerFixedVec>::value;
+  int64_t *data_ptr = isFixedLenRes ?
+                      const_cast<int64_t*>(reinterpret_cast<const int64_t *>(res_vec->get_payload(0))) :
+                      nullptr;
+  if (bound.get_all_rows_active()) {
+    for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
+      bool arg_is_true = false;
+      if (arg_vec->is_null(idx)) {
+        arg_is_true = !ExprIs;
+      } else {
+        arg_is_true = !ObExprIsBase::is_zero((arg_vec->*get_data)(idx), arg_vec->get_length(idx));
+        arg_is_true = ExprIs ? arg_is_true : !arg_is_true;
+        arg_is_true = IsTrue ? arg_is_true : !arg_is_true;
+      }
+      if (isFixedLenRes) {
+        data_ptr[idx] = static_cast<int64_t>(arg_is_true);
+      } else {
+        res_vec->set_int(idx, static_cast<int64_t>(arg_is_true));
+      }
+    }
+    eval_flags.set_all(bound.start(), bound.end());
+  } else {
+    for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
+      if (skip.at(idx) || eval_flags.at(idx)) {
+        continue;
+      }
+      bool arg_is_true = false;
+      if (arg_vec->is_null(idx)) {
+        arg_is_true = !ExprIs;
+      } else {
+        arg_is_true = !ObExprIsBase::is_zero((arg_vec->*get_data)(idx), arg_vec->get_length(idx));
+        arg_is_true = ExprIs ? arg_is_true : !arg_is_true;
+        arg_is_true = IsTrue ? arg_is_true : !arg_is_true;
+      }
+      if (isFixedLenRes) {
+        data_ptr[idx] = static_cast<int64_t>(arg_is_true);
+      } else {
+        res_vec->set_int(idx, static_cast<int64_t>(arg_is_true));
+      }
+      eval_flags.set(idx);
+    }
+  }
+  return ret;
+}
+
+template <typename ArgVec, typename DataType, bool ExprIs, bool IsTrue>
+static inline int def_eval_vector_is_true(const ObExpr &expr,
+                                          ObEvalCtx &ctx,
+                                          const ObBitVector &skip,
+                                          const EvalBound &bound,
+                                          DataType (ObVectorBase::*get_data)(int64_t) const)
+{
+  int ret = OB_SUCCESS;
+  VectorFormat res_format = expr.get_format(ctx);
+  // The 'res_format' is expected to be Type 'IntegerFixedVec' under the regular circumstances. 
+  // So a condition is added to optimize performance accordingly.
+  if (VEC_FIXED == res_format) {
+    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+    if (VEC_FIXED == arg_format || VEC_DISCRETE == arg_format || VEC_CONTINUOUS == arg_format) {
+      ret = eval_vector_is_true<ArgVec, IntegerFixedVec, DataType, ExprIs, IsTrue>
+                                (expr, ctx, skip, bound, get_data);
+    } else if (VEC_UNIFORM == arg_format) {
+      ret = eval_vector_is_true<ObUniformBase, IntegerFixedVec, DataType, ExprIs, IsTrue>
+                                (expr, ctx, skip, bound, get_data);
+    } else {
+      ret = eval_vector_is_true<ObVectorBase, IntegerFixedVec, DataType, ExprIs, IsTrue>
+                                (expr, ctx, skip, bound, get_data);
+    }
+  } else {
+    ret = eval_vector_is_true<ObVectorBase, ObVectorBase, DataType, ExprIs, IsTrue>
+                                (expr, ctx, skip, bound, get_data);
+  }
+  return ret;
+}
+
+template <bool ExprIs, bool IsTrue>
+static inline int def_calc_vector_is_true(const ObExpr &expr,
+                                          ObEvalCtx &ctx,
+                                          const ObBitVector &skip,
+                                          const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("fail to eval is/isnot true/false param", K(ret));
+  } else {
+    ObObjType data_type = expr.args_[0]->datum_meta_.type_;
+    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+    switch (data_type) {
+      case ObTinyIntType:
+      case ObSmallIntType:
+      case ObMediumIntType:
+      case ObInt32Type:
+      case ObIntType:
+      case ObUTinyIntType:
+      case ObUSmallIntType:
+      case ObUMediumIntType:
+      case ObUInt32Type:
+      case ObUInt64Type:
+      case ObBitType: {
+        ret = def_eval_vector_is_true<IntegerFixedVec, int64_t, ExprIs, IsTrue>
+                                      (expr, ctx, skip, bound, &ObVectorBase::get_int);
+        break;
+      }
+      case ObFloatType:
+      case ObUFloatType: {
+        ret = def_eval_vector_is_true<FloatFixedVec, float, ExprIs, IsTrue>
+                                      (expr, ctx, skip, bound, &ObVectorBase::get_float);
+        break;
+      }
+      case ObDoubleType:
+      case ObUDoubleType: {
+        ret = def_eval_vector_is_true<DoubleFixedVec, double, ExprIs, IsTrue>
+                                      (expr, ctx, skip, bound, &ObVectorBase::get_double);
+        break;
+      }
+      case ObDecimalIntType: {
+        ret = def_eval_vector_is_true<ObFixedLengthBase, const ObDecimalInt*, ExprIs, IsTrue>
+                                      (expr, ctx, skip, bound, &ObVectorBase::get_decimal_int);
+        break;
+      }
+      case ObJsonType: {
+        if (VEC_DISCRETE == arg_format) {
+          ret = def_eval_vector_is_true<JsonDiscVec, ObString, ExprIs, IsTrue>
+                                        (expr, ctx, skip, bound, &ObVectorBase::get_string);
+        } else {
+          ret = def_eval_vector_is_true<JsonContVec, ObString, ExprIs, IsTrue>
+                                        (expr, ctx, skip, bound, &ObVectorBase::get_string);
+        }
+        break;
+      }
+      default:
+        if (VEC_DISCRETE == arg_format) {
+          ret = def_eval_vector_is_true<NumberDiscVec, const number::ObCompactNumber &, ExprIs, IsTrue>
+                                        (expr, ctx, skip, bound, &ObVectorBase::get_number);
+        } else {
+          ret = def_eval_vector_is_true<NumberContVec, const number::ObCompactNumber &, ExprIs, IsTrue>
+                                        (expr, ctx, skip, bound, &ObVectorBase::get_number);
+        }
+        break;
+    } //switch
+  }
+  return ret;
+}
+
+int ObExprIs::calc_vector_is_true(const ObExpr &expr,
+                                  ObEvalCtx &ctx,
+                                  const ObBitVector &skip,
+                                  const EvalBound &bound)
+{
+  return def_calc_vector_is_true<true, true>(expr, ctx, skip, bound);
+}
+
+int ObExprIs::calc_vector_is_false(const ObExpr &expr,
+                                   ObEvalCtx &ctx,
+                                   const ObBitVector &skip,
+                                   const EvalBound &bound)
+{
+  return def_calc_vector_is_true<true, false>(expr, ctx, skip, bound);
 }
 
 int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
@@ -270,11 +564,13 @@ int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
   ObDatum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("eval first param failed", K(ret));
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else {
     if (OB_FAIL(is_infinite_nan(expr.args_[0]->datum_meta_.type_, param1,
                                 ret_bool, Ieee754::INFINITE_VALUE))) {
+      LOG_WARN("calc_is_infinite unexpect error", K(ret));
     } else {
       expr_datum.set_int32(static_cast<int32_t>(ret_bool));
     }
@@ -288,11 +584,13 @@ int ObExprIs::calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   ObDatum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("eval first param failed", K(ret));
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else {
     if (OB_FAIL(is_infinite_nan(expr.args_[0]->datum_meta_.type_, param1,
                                 ret_bool, Ieee754::NAN_VALUE))) {
+      LOG_WARN("calc_is_nan unexpect error", K(ret));
     } else {
       expr_datum.set_int32(static_cast<int32_t>(ret_bool));
     }
@@ -305,6 +603,7 @@ int ObExprIsNot::calc_is_not_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   int ret = OB_SUCCESS;
   ObDatum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("eval first param failed", K(ret));
   } else {
     bool ret_bool = !param1->is_null();
     expr_datum.set_int32(static_cast<int32_t>(ret_bool));
@@ -316,9 +615,11 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
                                         const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("calculate batch is not null", K(batch_size));
   ObDatum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("failed to eval batch args", K(ret), K(batch_size));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
       if (skip.at(i) || eval_flags.at(i)) {
@@ -333,17 +634,43 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
+int ObExprIsNot::calc_vector_is_not_null(const ObExpr &expr,
+                                         ObEvalCtx &ctx,
+                                         const ObBitVector &skip,
+                                         const EvalBound &bound)
+{
+  return def_calc_vector_is_null<false>(expr, ctx, skip, bound);
+}                       
+
+int ObExprIsNot::calc_vector_is_not_true(const ObExpr &expr,
+                                         ObEvalCtx &ctx,
+                                         const ObBitVector &skip,
+                                         const EvalBound &bound)
+{
+  return def_calc_vector_is_true<false, true>(expr, ctx, skip, bound);
+}
+
+int ObExprIsNot::calc_vector_is_not_false(const ObExpr &expr,
+                                          ObEvalCtx &ctx,
+                                          const ObBitVector &skip,
+                                          const EvalBound &bound)
+{
+  return def_calc_vector_is_true<false, false>(expr, ctx, skip, bound);
+}
+
 int ObExprIsNot::calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObDatum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("eval first param failed", K(ret));
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else {
     if (OB_FAIL(is_infinite_nan(expr.args_[0]->datum_meta_.type_, param1,
                                 ret_bool, Ieee754::INFINITE_VALUE))) {
+      LOG_WARN("calc_is_not_infinite unexpect error", K(ret));
     } else {
       expr_datum.set_int32(static_cast<int32_t>(!ret_bool));
     }
@@ -356,12 +683,14 @@ int ObExprIsNot::calc_is_not_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
   int ret = OB_SUCCESS;
   ObDatum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
+    LOG_WARN("eval first param failed", K(ret));
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else {
     bool ret_bool = false;
     if (OB_FAIL(is_infinite_nan(expr.args_[0]->datum_meta_.type_, param1,
                                 ret_bool, Ieee754::NAN_VALUE))) {
+      LOG_WARN("calc_is_not_nan unexpect error", K(ret));
     } else {
       expr_datum.set_int32(static_cast<int32_t>(!ret_bool));
     }
@@ -378,6 +707,7 @@ int ObExprInnerIsTrue::calc_result_type2(ObExprResType &type,
   ObRawExpr *raw_expr = get_raw_expr();
   if (OB_ISNULL(raw_expr) || OB_UNLIKELY(raw_expr->get_param_count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("op raw expr is null", K(ret), K(raw_expr));
   } else if (OB_UNLIKELY(type1.is_ext())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected type", K(type1));
@@ -395,7 +725,7 @@ int ObExprInnerIsTrue::calc_result_type2(ObExprResType &type,
       type1.set_calc_accuracy(type1.get_accuracy());
     } else {
       type1.set_calc_type(ObNumberType);
-      const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[ObNumberType];
+      const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType];
       type1.set_calc_accuracy(calc_acc);
     }
   }
@@ -411,17 +741,20 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
   ObObjType param1_type = ObMaxType;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("inner is true expr should have 2 params", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of inner is true expr is null", K(ret), K(rt_expr.args_));
+  } else if (OB_ISNULL(param2 = static_cast<const ObConstRawExpr *>(raw_expr.get_param_expr(1)))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("const raw expr param is null", K(param2));
+  } else if (OB_UNLIKELY(!param2->get_value().is_int())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("const value is not int type", KPC(param2));
   } else {
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
-    if (OB_ISNULL(param2 = static_cast<const ObConstRawExpr *>(raw_expr.get_param_expr(1)))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(!param2->get_value().is_int())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("const value is not int type", KPC(param2));
-    } else {
-      param1_type = rt_expr.args_[0]->datum_meta_.type_;
-      bool is_start = param2->get_value().get_int() > 0;
-      switch (param1_type) {
+    param1_type = rt_expr.args_[0]->datum_meta_.type_;
+    bool is_start = param2->get_value().get_int() > 0;
+    switch (param1_type) {
       case ObTinyIntType:
       case ObSmallIntType:
       case ObMediumIntType:
@@ -461,6 +794,7 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
       }
       case ObMaxType: {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("is expr got unexpected type param", K(ret), K(param1_type));
           break;
       }
       default: {
@@ -468,7 +802,6 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
                                         : ObExprInnerIsTrue::number_is_true_end;
           break;
       }
-    }
     }
   }
   return ret;

@@ -19,15 +19,13 @@
 
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
-#include "sql/das/ob_das_define.h"
-#include "sql/ob_sql_utils.h"
+#include "sql/engine/ob_physical_plan.h"
 
 namespace oceanbase
 {
 namespace common
 {
 class ObIAllocator;
-struct ObSimpleBatch;
 }
 
 namespace sql
@@ -35,9 +33,6 @@ namespace sql
 class ObBatchEstTasks;
 class ObCostTableScanSimpleInfo;
 class ObDASTabletLoc;
-class ObOpSpec;
-class ObPhysicalPlan;
-class ObTableScanSpec;
 typedef common::hash::ObHashMap<int64_t, int64_t,
         common::hash::NoPthreadDefendMode> AutoDopHashMap;
 
@@ -74,6 +69,7 @@ private:
   int calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> &tasks,
                              const ObCostTableScanSimpleInfo &cost_tsc_info, int64_t part_cnt,
                              int64_t &table_dop);
+  int get_task(ObIArray<ObBatchEstTasks *> &tasks, const ObAddr &addr, ObBatchEstTasks *&task);
   int choose_storage_estimation_partitions(const int64_t partition_limit,
                                            const DASTabletLocSEArray &tablet_locs,
                                            DASTabletLocSEArray &chosen_tablet_locs);

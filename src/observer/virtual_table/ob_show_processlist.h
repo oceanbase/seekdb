@@ -37,13 +37,14 @@ class ObShowProcesslist : public common::ObVirtualTableScannerIterator
 public:
   ObShowProcesslist();
   virtual ~ObShowProcesslist();
-  inline void sesession_pool(sql::ObSQLSessionMgr *session_mgr) { session_mgr_ = session_mgr; }
+  inline void set_session_mgr(sql::ObSQLSessionMgr *session_mgr) { session_mgr_ = session_mgr; }
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
   enum SESSION_INFO_COLUMN {
     ID = OB_APP_MIN_COLUMN_ID,
     USER,
+    TENANT,
     HOST,
     DB_NAME,
     COMMAND,
@@ -70,9 +71,13 @@ private:
     LEVEL,
     SAMPLE_PERCENTAGE,
     RECORD_POLICY,
+    VID,
+    VIP,
+    VPORT,
     IN_BYTES,
     OUT_BYTES,
     USER_CLIENT_PORT,
+    SERVICE_NAME,
     TOTAL_CPU_TIME,
     TOP_INFO,
     MEMORY_USAGE
@@ -101,6 +106,8 @@ private:
              share::schema::ObSchemaGetterGuard* schema_guard,
              const share::schema::ObTableSchema *table_schema);
     inline void reset();
+  public:
+    bool has_process_privilege();
   private:
       ObIAllocator *allocator_;
       common::ObScanner *scanner_;

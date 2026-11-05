@@ -15,11 +15,14 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#if defined(OB_USE_ASAN) || defined(_WIN32)
 #include "ob_fifo_arena.h"
-#include "lib/alloc/ob_ctx_allocator.h"
+#include <malloc.h>
+#endif
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 using namespace oceanbase::lib;
+using namespace oceanbase::omt;
 using namespace oceanbase::share;
 namespace oceanbase
 {
@@ -28,10 +31,20 @@ namespace common
 #define myassert(x) if (!x) { ob_abort(); }
 int64_t ObFifoArena::total_hold_ = 0;
 
+int64_t ObFifoArena::Page::get_actual_hold_size()
+{
+#ifdef OB_USE_ASAN
+  return malloc_usable_size(this);
+#else
+  return ObTenantCtxAllocator::get_obj_hold(this);
+#endif
+}
+
 int ObFifoArena::init()
 {
   int ret = OB_SUCCESS;
   lib::ObMallocAllocator *allocator = lib::ObMallocAllocator::get_instance();
+  uint64_t ctx_id = ObCtxIds::MEMSTORE_CTX_ID;
 
   if (OB_ISNULL(allocator)) {
     ret = OB_INIT_FAIL;
@@ -41,8 +54,9 @@ int ObFifoArena::init()
   }
 
   if (OB_SUCC(ret)) {
+    
     attr_.label_ = ObNewModIds::OB_MEMSTORE;
-    attr_.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
+    attr_.ctx_id_ = ctx_id;
   }
   return ret;
 }
@@ -81,7 +95,7 @@ void ObFifoArena::shrink_cached_page(int64_t nway)
         if (NULL != ref) {
           // There may be concurrent removal, no need to pay attention to the return value
           UNUSED(ATOMIC_BCAS(paddr, page, NULL));
-          IGNORE_RETURN ATOMIC_FAA(&retired_, page->hold());
+          IGNORE_RETURN ATOMIC_FAA(&retired_, page->get_actual_hold_size());
           release_ref(ref);
         }
       }
@@ -108,7 +122,7 @@ void* ObFifoArena::alloc(int64_t adv_idx, Handle& handle, int64_t size)
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       bool need_switch = false;
-      handle.add_allocated(page->hold());
+      handle.add_allocated(page->get_actual_hold_size());
       ptr = handle.ref_and_alloc(way_id, need_switch, page, size);
       page->frozen();
       retire_page(way_id, handle, page);
@@ -139,7 +153,7 @@ void* ObFifoArena::alloc(int64_t adv_idx, Handle& handle, int64_t size)
           UNUSED(ATOMIC_BCAS(paddr, page, NULL));
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else if (ATOMIC_BCAS(paddr, page, new_page)) {
-          handle.add_allocated(new_page->hold());
+          handle.add_allocated(new_page->get_actual_hold_size());
         } else {
           destroy_page(new_page);
         }
@@ -178,11 +192,10 @@ ObFifoArena::Page* ObFifoArena::alloc_page(int64_t size)
 {
   Page* page = (Page*)allocator_->alloc(size, attr_);
   if (NULL != page) {
+    ATOMIC_FAA(&allocated_, page->get_actual_hold_size());
+    ATOMIC_FAA(&total_hold_, page->get_actual_hold_size());
+    ATOMIC_AAF(&hold_, page->get_actual_hold_size());
     page->set(size);
-    const int64_t page_hold = page->hold();
-    ATOMIC_FAA(&allocated_, page_hold);
-    ATOMIC_FAA(&total_hold_, page_hold);
-    ATOMIC_AAF(&hold_, page_hold);
   }
   return page;
 }
@@ -190,10 +203,9 @@ ObFifoArena::Page* ObFifoArena::alloc_page(int64_t size)
 void ObFifoArena::free_page(Page* page)
 {
   if (NULL != page && NULL != allocator_) {
-    const int64_t page_hold = page->hold();
-    ATOMIC_FAA(&reclaimed_, page_hold);
-    ATOMIC_FAA(&total_hold_, -page_hold);
-    ATOMIC_FAA(&hold_, -page_hold);
+    ATOMIC_FAA(&reclaimed_, page->get_actual_hold_size());
+    ATOMIC_FAA(&total_hold_, -page->get_actual_hold_size());
+    ATOMIC_FAA(&hold_, -page->get_actual_hold_size());
     allocator_->free(page);
   }
 }
@@ -201,7 +213,7 @@ void ObFifoArena::free_page(Page* page)
 void ObFifoArena::retire_page(int64_t idx, Handle& handle, Page* page)
 {
   if (NULL != page) {
-    ATOMIC_FAA(&retired_, page->hold());
+    ATOMIC_FAA(&retired_, page->get_actual_hold_size());
     handle.add_ref(idx, &page->self_ref_);
   }
 }
@@ -209,10 +221,9 @@ void ObFifoArena::retire_page(int64_t idx, Handle& handle, Page* page)
 void ObFifoArena::destroy_page(Page* page)
 {
   if (NULL != page && NULL != allocator_) {
-    const int64_t page_hold = page->hold();
-    ATOMIC_FAA(&allocated_, -page_hold);
-    ATOMIC_FAA(&total_hold_, -page_hold);
-    ATOMIC_FAA(&hold_, -page_hold);
+    ATOMIC_FAA(&allocated_, -page->get_actual_hold_size());
+    ATOMIC_FAA(&total_hold_, -page->get_actual_hold_size());
+    ATOMIC_FAA(&hold_, -page->get_actual_hold_size());
     allocator_->free(page);
   }
 }

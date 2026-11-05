@@ -15,8 +15,6 @@
  */
 
 #include "observer/virtual_table/ob_session_variables.h"
-#include "observer/ob_server_runtime_access.h"
-#include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -71,6 +69,8 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
           SERVER_LOG(WARN, "sys var is NULL", K(ret), K(i));
         } else if (sys_var->is_invisible()) {
           // invisible, skip
+        } else if (sys_var->is_oracle_only()) {
+          //skip oracle variable in MySQL-only mode
         } else {
           uint64_t cell_idx = 0;
           for (int64_t j = 0; OB_SUCC(ret) && j < output_column_ids_.count(); ++j) {
@@ -84,6 +84,7 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
               case OB_APP_MIN_COLUMN_ID + 1: {
                 //deal with read_only
                 if (share::SYS_VAR_READ_ONLY == sys_var->get_type()) {
+                  //replace with tenant schema
                   if (sys_variable_schema_->is_read_only()) {
                     cells[cell_idx].set_varchar("ON");
                   } else {
@@ -93,10 +94,12 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
                            || share::SYS_VAR_OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE == sys_var->get_type()
                            || share::SYS_VAR_OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE == sys_var->get_type()) {
                   if (OB_FAIL(set_pc_conf(sys_var, cells[cell_idx]))) {
+                    SERVER_LOG(WARN, "fail to set plan cache conf", K(ret), K(*sys_var));
                   }
                 } else {
                   sys_var_show_str.reset();
                   if (OB_FAIL(sys_var->to_show_str(*allocator_, *session_, sys_var_show_str))) {
+                    SERVER_LOG(WARN, "fail to convert to show string", K(ret), K(*sys_var));
                   } else {
                     cells[cell_idx].set_varchar(sys_var_show_str);
                   }
@@ -148,8 +151,7 @@ int ObSessionVariables::set_pc_conf(const ObBasicSysVar *sys_var, ObObj &cell)
   } else {
     char *buff = NULL;
     int64_t pos = 0;
-    ObPlanCache *pc = OB_ISNULL(get_observer_sql_engine())
-        ? nullptr : &get_observer_sql_engine()->get_plan_cache();
+    ObPlanCache *pc = session_->get_plan_cache();
     if (OB_ISNULL(pc)) {
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "invalid argument", K(pc), K(ret));

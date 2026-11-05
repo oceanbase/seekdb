@@ -1,0 +1,134 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "lib/ob_define.h"
+#include "lib/task/ob_timer.h"
+#include "lib/hash/ob_hashmap.h"
+#include "lib/lock/ob_mutex.h"
+#include "observer/table_load/ob_table_load_utils.h"
+#include "observer/table_load/ob_table_load_service.h"
+#include "observer/table_load/resource/ob_table_load_resource_rpc_struct.h"
+#include "observer/table_load/resource/ob_table_load_resource_rpc.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+class ObTableLoadService;
+
+class ObTableLoadResourceManager
+{
+public:
+	static const int64_t MAX_INIT_RETRY_TIMES = 3;
+	ObTableLoadResourceManager();
+	~ObTableLoadResourceManager();
+	int init();
+	int start();
+	void stop();
+	int wait();
+	void destroy();
+	int resume();
+	void pause();
+	int apply_resource(ObDirectLoadResourceApplyArg &arg, ObDirectLoadResourceOpRes &res);
+	int release_resource(ObDirectLoadResourceReleaseArg &arg);
+	int update_resource(ObDirectLoadResourceUpdateArg &arg);
+	void check_resource();
+	int refresh_and_check(bool first_check = false);
+	int release_all_resource();
+private:
+	class ObResourceCtx 
+	{
+	public:
+		ObResourceCtx() 
+			: thread_remain_(0), memory_remain_(0), thread_total_(0), memory_total_(0)
+		{
+		}
+		ObResourceCtx(int64_t thread_remain, int64_t memory_remain, 
+									int64_t thread_total, int64_t memory_total) 
+			: thread_remain_(thread_remain), memory_remain_(memory_remain), thread_total_(thread_total), memory_total_(memory_total)
+		{
+		}
+		TO_STRING_KV(K_(thread_remain), K_(memory_remain), K_(thread_total), K_(memory_total));
+	public:
+		int64_t thread_remain_;
+		int64_t memory_remain_;
+		int64_t thread_total_;
+		int64_t memory_total_;
+	};
+	class ObResourceAssigned 
+	{
+	public:
+		ObResourceAssigned() 
+			: miss_counts_(0) 
+		{
+		}
+		ObResourceAssigned(const ObDirectLoadResourceApplyArg &arg)
+			: apply_arg_(arg), miss_counts_(0)
+		{
+		}
+		ObDirectLoadResourceApplyArg apply_arg_;
+		uint64_t miss_counts_;
+	};
+	class ObInitResourceTask : public common::ObTimerTask 
+	{
+	public:
+		ObInitResourceTask(ObTableLoadResourceManager &manager) 
+			: manager_(manager) 
+		{
+		}
+		virtual ~ObInitResourceTask() = default;
+		void runTimerTask() override;
+	public:
+		ObTableLoadResourceManager &manager_;
+	};
+	class ObRefreshAndCheckTask : public common::ObTimerTask 
+	{
+  public:
+    ObRefreshAndCheckTask(ObTableLoadResourceManager &manager) 
+			: manager_(manager) 
+		{
+		}
+    virtual ~ObRefreshAndCheckTask() = default;
+    void runTimerTask() override;
+  public:
+		ObTableLoadResourceManager &manager_;
+  };
+	int gen_update_arg(ObDirectLoadResourceUpdateArg &update_arg);
+	int gen_check_res(bool first_check, 
+										ObDirectLoadResourceUpdateArg &update_arg, 
+										common::ObArray<ObDirectLoadResourceOpRes> &check_res);
+	void check_assigned_task(common::ObArray<ObDirectLoadResourceOpRes> &check_res);
+	int init_resource();
+private:
+  typedef common::hash::ObHashMap<ObAddr, ObResourceCtx, common::hash::NoPthreadDefendMode> ResourceCtxMap;
+  typedef common::hash::ObHashMap<ObTableLoadUniqueKey, ObResourceAssigned, common::hash::NoPthreadDefendMode> ResourceAssignedMap;
+  ObInitResourceTask init_resource_task_;
+  ObRefreshAndCheckTask refresh_and_check_task_;
+	static const int64_t MAX_MISS_COUNT = 3;
+	static const int64_t REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL = 1LL * 1000LL * 1000LL; // 1s
+	static const int64_t REFRESH_AND_CHECK_TASK_INTERVAL = 3LL * 1000LL * 1000LL; // 3s
+	ResourceCtxMap resource_pool_;
+	ResourceAssignedMap assigned_tasks_;
+  mutable lib::ObMutex mutex_;
+	volatile bool is_stop_;
+	bool resource_inited_;
+	bool is_inited_;
+};
+
+} // namespace observer
+} // namespace oceanbase

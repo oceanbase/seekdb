@@ -36,6 +36,7 @@ namespace share
 enum CS_PLUGIN_TYPE
 {
   CS_PLUGIN_ASYNC_INDEX = 0,
+  CS_PLUGIN_DEBUG = 1,
   CS_PLUGIN_MAX_TYPE           // Must equal CS_MAX_PLUGIN_COUNT in ob_change_stream_dispatcher.h
 };
 
@@ -62,6 +63,21 @@ private:
 };
 
 typedef ObCSPlugin *(*ObCSPluginFactoryFunc)();
+
+// ---------------------------------------------------------------------------
+// Debug plugin: logs every row via LOG_INFO for end-to-end testing.
+// ---------------------------------------------------------------------------
+class ObCSDebugPlugin : public ObCSPlugin
+{
+public:
+  ObCSDebugPlugin() = default;
+  ~ObCSDebugPlugin() override = default;
+
+  int process(common::ObIArray<ObCSRow> &rows, ObCSExecCtx &ctx) override;
+  int commit() override;
+
+  static ObCSPlugin *create();
+};
 
 /// Plugin factory registration and creation.
 class ObCSPluginRegistry

@@ -29,6 +29,7 @@
 #include "lib/lock/ob_drw_lock.h"
 #include "share/cache/ob_cache_utils.h"
 #include "share/cache/ob_kvcache_struct.h"
+#include "share/ob_i_tenant_mem_limit_getter.h"
 
 namespace oceanbase
 {
@@ -36,10 +37,10 @@ namespace common
 {
 class ObKVCacheInstMap;
 class HazardDomain;
-struct ObKVMemBlockList
+struct ObTenantMBList
 {
-  ObKVMemBlockList() { reset(); }
-  ~ObKVMemBlockList() { reset(); }
+  ObTenantMBList() { reset(); }
+  ~ObTenantMBList() { reset(); }
 
   int init();
   void reset() {
@@ -56,7 +57,7 @@ struct ObKVMemBlockList
   int64_t get_ref() const { return ATOMIC_LOAD(&ref_cnt_); }
 
   ObKVMemBlockHandle head_;
-  lib::ObResourceMgrHandle resource_mgr_;
+  lib::ObTenantResourceMgrHandle resource_mgr_;
   int64_t ref_cnt_;
   bool inited_;
 };
@@ -115,13 +116,14 @@ public:
   ObKVCacheInstMap();
   virtual ~ObKVCacheInstMap();
   int init(const int64_t max_entry_cnt, const ObKVCacheConfig *configs,
+           const ObITenantMemLimitGetter &mem_limit_getter,
            ObLfFIFOAllocator *node_allocator);
   void destroy();
   int get_cache_inst(
       const ObKVCacheInstKey &inst_key,
       ObKVCacheInstHandle &inst_handle);
-  int mark_all_delete();
-  int erase_all();
+  int mark_tenant_delete();
+  int erase_tenant();
   int refresh_score();
   int get_cache_info(ObIArray<ObKVCacheInstHandle> &inst_handles);
   void print_all_cache_info();
@@ -137,8 +139,10 @@ private:
   KVCacheInstMap  inst_map_;
   const ObKVCacheConfig *configs_;
 
+  const ObITenantMemLimitGetter *mem_limit_getter_;
   ObLfFIFOAllocator *node_allocator_;
 
+  // used by erase tenant cache inst
   bool is_inited_;
 };
 

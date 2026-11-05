@@ -1,0 +1,140 @@
+drop table if exists t1, t2;
+create table t1(id int primary key auto_increment, a int DEFAULT NULL, b int DEFAULT NULL) merge_engine = delete_insert with column group(each column);
+create table t2(id varchar(20) primary key, c1 int(11) DEFAULT NULL) merge_engine = delete_insert with column group(each column);
+alter system major freeze;
+select * from t1 order by a;
+id	a	b
+1	100	101
+2	200	202
+11	400	401
+12	500	502
+13	600	603
+14	800	802
+15	900	903
+16	1000	1004
+select * from t1 where id < 2 or id > 6 order by a;
+id	a	b
+1	100	101
+11	400	401
+12	500	502
+13	600	603
+14	800	802
+15	900	903
+16	1000	1004
+select * from t1 where (id > 1 and id < 4) or (id > 6 and id < 9) order by a;
+id	a	b
+2	200	202
+select min(a), max(b) from t1;
+min(a)	max(b)
+100	1004
+select min(a), max(b) from t1 where id < 2 or id > 6;
+min(a)	max(b)
+100	1004
+select max(id), min(b) from t1;
+max(id)	min(b)
+16	101
+select max(id), min(b) from t1 where (id > 2 and id < 4) or (id > 6 and id < 9);
+max(id)	min(b)
+NULL	NULL
+select * from t2 order by c1;
+id	c1
+abcdefgabcdefg1	11
+abcdefgabcdefg2	22
+abcdefgabcdefg4	41
+abcdefgabcdefg5	52
+abcdefgabcdefg6	63
+abcdefgabcdefg8	82
+abcdefgabcdefg9	93
+abcdefgabcdefg10	104
+select * from t2 where id < 'abcdefgabcdefg2' or id > 'abcdefgabcdefg6' order by c1;
+id	c1
+abcdefgabcdefg1	11
+abcdefgabcdefg8	82
+abcdefgabcdefg9	93
+abcdefgabcdefg10	104
+select * from t2 where (id > 'abcdefgabcdefg1' and id < 'abcdefgabcdefg4') or (id > 'abcdefgabcdefg6' and id < 'abcdefgabcdefg9') order by c1;
+id	c1
+abcdefgabcdefg2	22
+abcdefgabcdefg8	82
+abcdefgabcdefg10	104
+select min(c1) from t2;
+min(c1)
+11
+select min(c1) from t2 where id < 'abcdefgabcdefg2' or id > 'abcdefgabcdefg6';
+min(c1)
+11
+select min(id), max(c1) from t2;
+min(id)	max(c1)
+abcdefgabcdefg1	104
+select min(id), max(c1) from t2 where (id > 'abcdefgabcdefg1' and id < 'abcdefgabcdefg4') or (id > 'abcdefgabcdefg6' and id < 'abcdefgabcdefg9');
+min(id)	max(c1)
+abcdefgabcdefg10	104
+alter system minor freeze;
+select * from t1 order by a;
+id	a	b
+1	100	101
+2	200	202
+11	400	401
+12	500	502
+13	600	603
+14	800	802
+15	900	903
+16	1000	1004
+select * from t1 where id < 2 or id > 6 order by a;
+id	a	b
+1	100	101
+11	400	401
+12	500	502
+13	600	603
+14	800	802
+15	900	903
+16	1000	1004
+select * from t1 where (id > 1 and id < 4) or (id > 6 and id < 9) order by a;
+id	a	b
+2	200	202
+select min(a), max(b) from t1;
+min(a)	max(b)
+100	1004
+select min(a), max(b) from t1 where id < 2 or id > 6;
+min(a)	max(b)
+100	1004
+select max(id), min(b) from t1;
+max(id)	min(b)
+16	101
+select max(id), min(b) from t1 where (id > 2 and id < 4) or (id > 6 and id < 9);
+max(id)	min(b)
+NULL	NULL
+select * from t2 order by c1;
+id	c1
+abcdefgabcdefg1	11
+abcdefgabcdefg2	22
+abcdefgabcdefg4	41
+abcdefgabcdefg5	52
+abcdefgabcdefg6	63
+abcdefgabcdefg8	82
+abcdefgabcdefg9	93
+abcdefgabcdefg10	104
+select * from t2 where id < 'abcdefgabcdefg2' or id > 'abcdefgabcdefg6' order by c1;
+id	c1
+abcdefgabcdefg1	11
+abcdefgabcdefg8	82
+abcdefgabcdefg9	93
+abcdefgabcdefg10	104
+select * from t2 where (id > 'abcdefgabcdefg1' and id < 'abcdefgabcdefg4') or (id > 'abcdefgabcdefg6' and id < 'abcdefgabcdefg9') order by c1;
+id	c1
+abcdefgabcdefg2	22
+abcdefgabcdefg8	82
+abcdefgabcdefg10	104
+select min(c1) from t2;
+min(c1)
+11
+select min(c1) from t2 where id < 'abcdefgabcdefg2' or id > 'abcdefgabcdefg6';
+min(c1)
+11
+select min(id), max(c1) from t2;
+min(id)	max(c1)
+abcdefgabcdefg1	104
+select min(id), max(c1) from t2 where (id > 'abcdefgabcdefg1' and id < 'abcdefgabcdefg4') or (id > 'abcdefgabcdefg6' and id < 'abcdefgabcdefg9');
+min(id)	max(c1)
+abcdefgabcdefg10	104
+drop table t1, t2;

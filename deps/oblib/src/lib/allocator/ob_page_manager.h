@@ -1,0 +1,171 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef  OCEANBASE_COMMON_PAGE_MANAGER_H_
+#define  OCEANBASE_COMMON_PAGE_MANAGER_H_
+
+#include "lib/ob_define.h"
+#include "lib/alloc/alloc_struct.h"
+#include "lib/alloc/object_set.h"
+#include "lib/alloc/ob_malloc_allocator.h"
+#include "lib/alloc/alloc_interface.h"
+#include "lib/lock/ob_mutex.h"
+#include "lib/resource/ob_affinity_ctrl.h"
+
+namespace oceanbase
+{
+#ifdef _WIN32
+namespace lib { class Thread; }
+#endif
+namespace common
+{
+using lib::BlockSet;
+using lib::AChunk;
+using lib::ABlock;
+using lib::ObMemAttr;
+using lib::ObMallocAllocator;
+using lib::ObTenantCtxAllocator;
+
+class ObPageManager : public lib::IBlockMgr
+{
+#ifdef _WIN32
+  friend class ::oceanbase::lib::Thread;
+#else
+  friend class Thread;
+#endif
+public:
+  ObPageManager();
+  ~ObPageManager() {}
+  static ObPageManager *thread_local_instance() { return tl_instance_; }
+  int set_tenant_ctx(const int64_t ctx_id);
+  int64_t get_hold() const;
+  int64_t get_tid() const { return tid_; }
+  // IBlockMgr interface
+  virtual ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) override;
+  virtual void free_block(ABlock *block) override;
+  virtual int64_t sync_wash(int64_t wash_size) override
+  {
+    UNUSED(wash_size);
+    return 0;
+  }
+  int64_t get_used() const { return used_; }
+  static void set_thread_local_instance(ObPageManager &instance) { tl_instance_ = &instance; }
+private:
+  int init();
+  RLOCAL_STATIC(ObPageManager *,tl_instance_);
+private:
+  lib::ObTenantCtxAllocatorGuard ta_;
+  lib::BlockSet bs_;
+  int64_t used_;
+  const int64_t tid_;
+  const int64_t itid_;
+  bool has_register_;
+  bool is_inited_;
+};
+
+inline ObPageManager::ObPageManager()
+  : bs_(),
+    used_(0),
+    tid_(GETTID()),
+    itid_(get_itid()),
+    has_register_(false),
+    is_inited_(false)
+{
+}
+
+inline int ObPageManager::set_tenant_ctx(const int64_t ctx_id)
+{
+  int ret = OB_SUCCESS;
+  
+  ctx_id_ = ctx_id;
+  is_inited_ = false;
+  if (OB_FAIL(init())) {
+  }
+  return ret;
+}
+
+inline int ObPageManager::init()
+{
+  int ret = OB_SUCCESS;
+  ObMallocAllocator *ma = ObMallocAllocator::get_instance();
+  if (is_inited_) {
+    ret = OB_INIT_TWICE;
+    OB_LOG(ERROR, "init twice", K(ret));
+  } else if (OB_ISNULL(ma)) {
+    ret = OB_ERR_UNEXPECTED;
+    OB_LOG(ERROR, "null ptr", K(ret));
+  } else if (OB_ISNULL(ta_ = ma->get_tenant_ctx_allocator(ctx_id_))) {
+    ret = OB_ERR_UNEXPECTED;
+    OB_LOG(ERROR, "null ptr", K(ret));
+  } else {
+    bs_.set_tenant_ctx_allocator(*ta_.ref_allocator());
+    bs_.set_chunk_mgr(&ta_->get_req_chunk_mgr());
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+inline int64_t ObPageManager::get_hold() const
+{
+  return bs_.get_total_hold();
+}
+
+inline ABlock *ObPageManager::alloc_block(uint64_t size, const ObMemAttr &attr)
+{
+  ABlock *block = nullptr;
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(get_itid() != itid_)) {
+    _OB_LOG(ERROR, "cross thread not supported, pm_tid: %ld, cur_tid: %ld", itid_, get_itid());
+  } else if (OB_UNLIKELY(!is_inited_)) {
+    ret = init();
+  }
+  if (OB_SUCC(ret)) {
+    ObMemAttr inner_attr = attr;
+    
+    inner_attr.ctx_id_ = ctx_id_;
+    block = bs_.alloc_block(size, inner_attr);
+    if (OB_UNLIKELY(nullptr == block)) {
+      _OB_LOG(WARN, "oops, alloc failed, ctx_id=%ld hold=%ld limit=%ld",
+              ctx_id_,
+              ta_->get_hold(),
+              ta_->get_limit());
+    } else {
+      used_ += size;
+    }
+  }
+  return block;
+}
+
+inline void ObPageManager::free_block(ABlock *block)
+{
+  if (OB_UNLIKELY(get_itid() != itid_)) {
+    _OB_LOG_RET(ERROR, OB_ERROR, "cross thread not supported, pm_tid: %ld, cur_tid: %ld", itid_, get_itid());
+  } else if (OB_LIKELY(block != nullptr)) {
+    abort_unless(block);
+    abort_unless(block->is_valid());
+    AChunk *chunk = block->chunk();
+    abort_unless(chunk);
+    abort_unless(chunk->is_valid());
+    abort_unless(&bs_ == chunk->block_set_);
+    used_ -= block->alloc_bytes_;
+    bs_.free_block(block);
+  }
+}
+
+} // end of namespace common
+} // end of namespace oceanbase
+
+#endif //OCEANBASE_COMMON_PAGE_MANAGER_H_

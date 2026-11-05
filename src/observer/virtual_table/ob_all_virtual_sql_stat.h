@@ -17,6 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_SQL_STAT_H
 #define OB_ALL_VIRTUAL_SQL_STAT_H
 
+#include "sql/engine/ob_tenant_sql_memory_manager.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/row/ob_row.h"
@@ -128,6 +129,8 @@ private:
     NESTED_SQL_DELTA,
     SOURCE_IP,
     SOURCE_PORT,
+    ROUTE_MISS_TOTAL,
+    ROUTE_MISS_DELTA,
     FIRST_LOAD_TIME,
     PLAN_CACHE_HIT_TOTAL,
     PLAN_CACHE_HIT_DELTA

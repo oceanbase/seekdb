@@ -85,6 +85,7 @@ int ObJoinOp::calc_other_conds(bool &is_match)
   ObDatum *cmp_res = NULL;
   ARRAY_FOREACH(conds, i) {
     if (OB_FAIL(conds.at(i)->eval(eval_ctx_, cmp_res))) {
+      LOG_WARN("fail to calc other join condition", K(ret), K(*conds.at(i)));
     } else if (cmp_res->is_null() || 0 == cmp_res->get_int()) {
       is_match = false;
       break;
@@ -99,6 +100,7 @@ int ObJoinOp::get_next_left_row()
   int ret = common::OB_SUCCESS;
   left_row_joined_ = false;
   if (OB_FAIL(left_->get_next_row()) && OB_ITER_END != ret) {
+    LOG_WARN("fail to get next left row", K(ret));
   }
   return ret;
 }
@@ -107,6 +109,7 @@ int ObJoinOp::get_next_right_row()
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(right_->get_next_row()) && OB_ITER_END != ret) {
+    LOG_WARN("fail to get next right row", K(ret));
   }
 
   return ret;

@@ -46,14 +46,17 @@ int ObExprAlignDate4Cmp::calc_result_type3(ObExprResType &type,
   ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(raw_expr);
   if (OB_ISNULL(op_expr) || OB_UNLIKELY(op_expr->get_param_count() != 3)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("op raw expr is null or param_count error", K(ret), K(op_expr));
   } else {
     ObRawExpr *param3 = op_expr->get_param_expr(2);
     if (!param3->is_const_expr()) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("raw expr is not const expr", K(ret), KPC(param3));
     } else {
       ObConstRawExpr *const_param = static_cast<ObConstRawExpr *>(param3);
       if (OB_ISNULL(const_param)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("third child of the expr is null", K(ret), K(const_param));
       } else {
         if (const_param->get_value().is_null()) {
           type.set_null();
@@ -74,6 +77,7 @@ int ObExprAlignDate4Cmp::calc_result_type3(ObExprResType &type,
             }
             default: {
               ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("unexpected res type.", K(ret), K(res_type));
               break;
             }
           }
@@ -90,9 +94,15 @@ int ObExprAlignDate4Cmp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 3);
-    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
+  if (rt_expr.arg_cnt_ != 3) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the arg_cnt of expr_align_date4cmp error.", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_[0]) ||
+             OB_ISNULL(rt_expr.args_[1]) ||
+             OB_ISNULL(rt_expr.args_[2])) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("the arg of expr_align_date4cmp is null.", K(ret), K(rt_expr));
+  } else {
     rt_expr.eval_func_ = eval_align_date4cmp;
     rt_expr.extra_ = raw_expr.get_cast_mode();
   }
@@ -111,13 +121,16 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
   ObObjType date_arg_obj_type = ObMaxType;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, date_datum))) {
+    LOG_WARN("expr_align_date4cmp eval arg[0] date fail.", K(ret), K(expr));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, cmp_type_datum))) {
+    LOG_WARN("expr_align_date4cmp eval arg[1] cmp_type fail.", K(ret), K(expr));
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, res_type_datum))) {
+    LOG_WARN("expr_align_date4cmp eval arg[2] res_type fail.", K(ret), K(expr));
   } else {
     date_arg_obj_type = expr.args_[0]->datum_meta_.type_;
     res_type = ObObjType(res_type_datum->get_int());
-    if (OB_FAIL(datum_to_ob_time(ctx.exec_ctx_, expr, date_datum, date_arg_obj_type,
-                                date_arg_type, ob_time))) {
+    if(OB_FAIL(datum_to_ob_time(expr, date_datum, date_arg_obj_type, date_arg_type, ob_time))) {
+      LOG_WARN("datum_to_ob_time fail.", K(ret), K(date_datum), K(date_arg_obj_type));
     }
   }
 
@@ -132,6 +145,8 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
         const bool is_valid_time = true;
         if (OB_FAIL(set_res(res, ob_time, res_type, is_valid_time, offset,
                             is_zero_on_warn, is_no_zero_date, is_warn_on_fail))) {
+          LOG_WARN("set_res fail.", K(ret), K(ob_time), K(res_type),
+                                    K(date_arg_type), K(is_valid_time));
         }
         break;
       }
@@ -139,7 +154,7 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
         bool is_valid_time = false;
         int cmp_type = cmp_type_datum->get_int();
         if (cmp_type == T_OP_EQ || cmp_type == T_OP_NSEQ || cmp_type == T_OP_NE) {
-          // Equality comparisons normalize allowed out-of-range days.
+          // Compatible with previous versions of ob, not with mysql
           if (is_allow_invalid_dates) {
             int32_t offset = get_day_over_limit(ob_time);
             if (offset > 0) {
@@ -148,7 +163,7 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
             }
           }
         } else {  // cmp_type is: >, >=, <, <=
-          // Ordering comparisons follow MySQL boundary semantics.
+          // Compatible with mysql, not with previous versions of ob
           if (is_day_over_limit(ob_time)) {
             offset = (cmp_type == T_OP_GT || cmp_type == T_OP_LE) ? false : true;
             set_valid_time_floor(ob_time);
@@ -157,6 +172,8 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
         }
         if (OB_FAIL(set_res(res, ob_time, res_type, is_valid_time, offset,
                             is_zero_on_warn, is_no_zero_date, is_warn_on_fail))) {
+          LOG_WARN("set_res fail.", K(ret), K(ob_time), K(res_type),
+                                    K(date_arg_type), K(is_valid_time));
         }
         break;
       }
@@ -164,6 +181,8 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
         const bool is_valid_time = false;
         if (OB_FAIL(set_res(res, ob_time, res_type, is_valid_time, offset,
                             is_zero_on_warn, is_no_zero_date, is_warn_on_fail))) {
+          LOG_WARN("set_res fail.", K(ret), K(ob_time), K(res_type),
+                                        K(date_arg_type), K(is_valid_time));
         }
         break;
       }
@@ -173,6 +192,7 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
       }
       case ZERO_DATE: {
         if (OB_FAIL(set_zero_res(res, ob_time, res_type, is_no_zero_date))) {
+          LOG_WARN("set_zero_res fail.", K(ret), K(ob_time), K(res_type));
         }
       }
     }
@@ -238,13 +258,13 @@ ObExprAlignDate4Cmp::DateArgType ObExprAlignDate4Cmp::validate_time(ObTime &ob_t
 {
   DateArgType date_arg_type = VALID_DATE;
   const int32_t *parts = ob_time.parts_;
-  if (!HAS_TYPE_NANOSECOND(ob_time.mode_)
+  if (!HAS_TYPE_ORACLE(ob_time.mode_)
       && 0 == parts[DT_YEAR] && 0 == parts[DT_MON] && 0 == parts[DT_MDAY] && 0 == parts[DT_HOUR]
       && 0 == parts[DT_MIN] && 0 == parts[DT_SEC] && 0 == parts[DT_USEC]) {
     date_arg_type = ZERO_DATE;
   } else {
-    const int64_t *part_min = (HAS_TYPE_NANOSECOND(ob_time.mode_) ? TZ_PART_MIN : DT_PART_MIN);
-    const int64_t *part_max = (HAS_TYPE_NANOSECOND(ob_time.mode_) ? TZ_PART_MAX : DT_PART_MAX);
+    const int64_t *part_min = (HAS_TYPE_ORACLE(ob_time.mode_) ? TZ_PART_MIN : DT_PART_MIN);
+    const int64_t *part_max = (HAS_TYPE_ORACLE(ob_time.mode_) ? TZ_PART_MAX : DT_PART_MAX);
     for (int i = 0; i < DATETIME_PART_CNT; ++i) {
       if (!(part_min[i] <= parts[i] && parts[i] <= part_max[i])) {
         date_arg_type = INVALID_DATE;
@@ -318,6 +338,7 @@ int ObExprAlignDate4Cmp::double_to_ob_time(const double &date, DateArgType &date
     ret = OB_SUCCESS;
     date_arg_type = NON_DATE;
   } else if (OB_FAIL(number_to_ob_time(number, date_arg_type, ob_time))) {
+    LOG_WARN("number to ob_time failed", K(ret), K(number));
   }
   return ret;
 }
@@ -329,6 +350,7 @@ int ObExprAlignDate4Cmp::number_to_ob_time(const number::ObNumber &date, DateArg
   if (!date.is_int_parts_valid_int64(int_part, dec_part)) {
     date_arg_type = NON_DATE;
   } else if (OB_FAIL(integer_to_ob_time(int_part, date_arg_type, ob_time))) {
+    LOG_WARN("cast integer to ob_time fail.", K(ret), K(int_part));
   } else {
     ob_time.parts_[DT_USEC] = (dec_part + 500) / 1000;
   }
@@ -350,8 +372,7 @@ int ObExprAlignDate4Cmp::str_to_ob_time(const ObString &date, DateArgType &date_
   return ret;
 }
 
-int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
-                                          const ObExpr &expr,
+int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
                                           const ObDatum* date_datum,
                                           const ObObjType& date_arg_obj_type,
                                           DateArgType &date_arg_type,
@@ -363,9 +384,11 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
   } else if (ob_is_string_type(date_arg_obj_type)) {
     ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObString str = date_datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(exec_ctx, &lob_allocator, date_arg_obj_type,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&lob_allocator, date_arg_obj_type,
                               CS_TYPE_BINARY, expr.args_[0]->obj_meta_.has_lob_header(), str))) {
+      LOG_WARN("fail to get real string data", K(ret), K(date_datum));
     } else if (OB_FAIL(str_to_ob_time(str, date_arg_type, ob_time))) {
+      LOG_WARN("str_to_ob_time fail.", K(ret), K(date_datum));
     }
   } else {  // numeric
     switch(date_arg_obj_type) {
@@ -379,6 +402,7 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
       case ObInt32Type:
       case ObIntType: {
         if (OB_FAIL(integer_to_ob_time(date_datum->get_int(), date_arg_type, ob_time))) {
+          LOG_WARN("integer_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
@@ -389,6 +413,7 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
       case ObUInt64Type: {
         if (OB_FAIL(integer_to_ob_time(static_cast<int64_t>(date_datum->get_uint()),
                                        date_arg_type, ob_time))) {
+          LOG_WARN("integer_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
@@ -396,18 +421,21 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
       case ObUFloatType: {
         if (OB_FAIL(double_to_ob_time(static_cast<double>(date_datum->get_float()),
                                       date_arg_type, ob_time))) {
+          LOG_WARN("integer_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
       case ObDoubleType:
       case ObUDoubleType: {
         if (OB_FAIL(double_to_ob_time(date_datum->get_double(), date_arg_type, ob_time))) {
+          LOG_WARN("double_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
       case ObNumberType:
       case ObUNumberType: {
         if (OB_FAIL(number_to_ob_time(date_datum->get_number(), date_arg_type, ob_time))) {
+          LOG_WARN("number_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
@@ -416,12 +444,15 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
         number::ObNumber nmb;
         if (OB_FAIL(wide::to_number(date_datum->get_decimal_int(), date_datum->get_int_bytes(),
                                     expr.args_[0]->datum_meta_.scale_, tmp_alloc, nmb))) {
+          LOG_WARN("to_number failed", K(ret), K(date_datum));
         } else if (OB_FAIL(number_to_ob_time(nmb, date_arg_type, ob_time))) {
+          LOG_WARN("number_to_ob_time fail.", K(ret), K(nmb));
         }
         break;
       }
       default: {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("date_arg_obj_type error: ", K(ret), K(date_arg_obj_type));
         break;
       }
     }
@@ -456,6 +487,7 @@ int ObExprAlignDate4Cmp::set_res(ObDatum &res, ObTime &ob_time,
         int64_t datetime_value = 0;
         ObTimeConvertCtx cvrt_ctx(NULL, false);
         if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx, datetime_value))) {
+          LOG_WARN("ob_time convert to datetime fail.", K(ret), K(ob_time));
         } else {
           res.set_datetime(datetime_value + offset);
         }
@@ -479,6 +511,7 @@ int ObExprAlignDate4Cmp::set_res(ObDatum &res, ObTime &ob_time,
     }
     default: {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("unexpected res type.", K(ret), K(res_type));
       break;
     }
   }
@@ -513,6 +546,7 @@ int ObExprAlignDate4Cmp::set_zero_res(ObDatum &res, ObTime &ob_time,
     }
     default: {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("unexpected res type.", K(ret), K(res_type));
       break;
     }
   }

@@ -54,10 +54,13 @@ int ObExprArrayRange::calc_result_typeN(ObExprResType& type,
 
   if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session()))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ObSQLSessionInfo is null", K(ret));
   } else if (OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ObExecContext is null", K(ret));
   } else if (param_num > 3) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("param num is not correct", K(ret), K(param_num));
   }
 
   for (int64_t i = 0; i < param_num && OB_SUCC(ret) && !is_null_res; i++) {
@@ -70,6 +73,7 @@ int ObExprArrayRange::calc_result_typeN(ObExprResType& type,
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(res_type_info, subschema_id))) {
+    LOG_WARN("failed get subschema id", K(ret), K(res_type_info));
   } else {
     type.set_collection(subschema_id);
     type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObCollectionSQLType]).get_length());
@@ -97,12 +101,14 @@ int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret) && !is_null_res; i++) {
     datum = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
+      LOG_WARN("failed to eval args", K(ret));
     } else if (datum->is_null()) {
       is_null_res = true;
     } else if (expr.arg_cnt_ == 1) {
       param_end = datum->get_int();
       if (param_end < 0) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("param_end less than 0", K(ret), K(param_end));
       }
     } else if (i == 0) {
       param_start = datum->get_int();
@@ -112,6 +118,7 @@ int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       param_step = datum->get_int();
       if (param_step == 0) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("step can not be 0", K(ret), K(param_step));
       }
     }
   } // end for
@@ -141,6 +148,7 @@ int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     arr_size = (interval - 1) / abs(param_step) + 1;
     if (arr_size > MAX_ARRAY_ELEMENT_SIZE) {
       ret = OB_SIZE_OVERFLOW;
+      LOG_WARN("array element size exceed max", K(ret), K(arr_size), K(MAX_ARRAY_ELEMENT_SIZE));
     } else {
       arr_buf_len = sizeof(uint32_t) + arr_size * (sizeof(uint8_t) + sizeof(int64_t));
     }
@@ -150,6 +158,7 @@ int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   if (OB_FAIL(ret) || is_null_res) {
   } else if (OB_ISNULL(arr_buf = static_cast<char *>(tmp_allocator.alloc(arr_buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory", K(ret), K(arr_buf_len));
   } else if (arr_size == 0) {
     *(reinterpret_cast<uint32_t *>(arr_buf)) = 0;
   } else {
@@ -169,6 +178,7 @@ int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   } else {
     ObString res_str;
     if (OB_FAIL(ObArrayExprUtils::set_array_res(NULL, arr_buf_len, expr, ctx, res_str, arr_buf))) {
+      LOG_WARN("get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }

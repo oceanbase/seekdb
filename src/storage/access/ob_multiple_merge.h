@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_MULTIPLE_MERGE_
 #define OCEANBASE_STORAGE_OB_MULTIPLE_MERGE_
 
+#include "lib/statistic_event/ob_stat_event.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/container/ob_se_array.h"
@@ -45,6 +46,7 @@ protected:
     NONE,
     SINGLE_ROW,
     BATCH,
+    DI_BASE,
   };
 public:
 
@@ -68,6 +70,7 @@ public:
   virtual void reuse();
   // used for global cached query iterator
   virtual void reclaim();
+  // used for mview table scan
   virtual int open(ObTableScanRange &table_scan_range) { return OB_NOT_SUPPORTED; }
 
   void disable_padding() { need_padding_ = false; }
@@ -78,8 +81,9 @@ public:
   OB_INLINE bool is_read_memtable_only() const { return read_memtable_only_; }
   OB_INLINE const common::ObIArray<share::schema::ObColDesc> &get_out_project_cells() { return out_project_cols_; }
   OB_INLINE ObNopPos &get_nop_pos() { return nop_pos_; }
+  OB_INLINE bool use_di_merge_scan() const { return di_base_iters_.count() > 0; }
   OB_INLINE void set_iter_del_row(const bool iter_del_row) { iter_del_row_ = iter_del_row; }
-  OB_INLINE bool need_iter_del_row() const { return iter_del_row_; }
+  OB_INLINE bool need_iter_del_row() const { return iter_del_row_ || use_di_merge_scan(); }
   OB_INLINE blocksstable::ObDatumRow &get_unprojected_row() { return unprojected_row_; }
 protected:
   int open();
@@ -105,10 +109,12 @@ protected:
   void dump_tx_statistic_for_4377(ObStoreCtx *store_ctx);
   void dump_table_statistic_for_4377();
   void set_base_version() const;
+  ObStoreRowIterator *get_di_base_iter() { return di_base_iters_.count() > 0 ? di_base_iters_[0] : nullptr; }
   int is_paused(bool& do_pause) const;
   virtual int pause(bool& do_pause) = 0;
   ScanState get_scan_state() const { return scan_state_; }
   int save_curr_rowkey();
+  int prepare_di_base_blockscan(bool di_base_only, ObDatumRow *row = nullptr);
   virtual int get_range_count() const { return 1; }
   int build_extra_access_ctx();
   int get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *&access_ctx);
@@ -126,13 +132,12 @@ private:
   int project2output_exprs(blocksstable::ObDatumRow &unprojected_row, blocksstable::ObDatumRow &cur_row);
   int prepare_read_tables(bool refresh = false);
   int prepare_mds_tables(bool refresh);
-  int prepare_tables_from_iterator(
-      ObTableStoreIterator &table_iter,
-      const common::SampleInfo *sample_info = nullptr);
+  int prepare_tables_from_iterator(ObTableStoreIterator &table_iter, const bool has_split_extra_tables, const common::SampleInfo *sample_info = nullptr);
   int refresh_table_on_demand();
   int refresh_tablet_iter();
   OB_INLINE int check_need_refresh_table(bool &need_refresh);
   int reset_tables();
+  int check_base_version(const bool is_di_merge_scan) const;
   int check_filtered(const blocksstable::ObDatumRow &row, bool &filtered);
   int process_fuse_row(const bool not_using_static_engine,
                        blocksstable::ObDatumRow &in_row,
@@ -147,12 +152,14 @@ private:
   void report_tablet_stat();
   int update_and_report_tablet_stat();
   void inner_reset();
+  int refresh_filter_params_on_demand(const bool is_open);
   int prepare_truncate_filter();
   void reset_extra_access_ctx();
 
 protected:
   common::ObArenaAllocator padding_allocator_;
   MergeIterators iters_;
+  MergeIterators di_base_iters_;
   ObTableAccessParam *access_param_;
   ObTableAccessContext *access_ctx_;
   hash::ObHashMap<ObTabletID, ObTableAccessContext*> extra_access_ctx_;
@@ -160,14 +167,16 @@ protected:
   blocksstable::ObDatumRow cur_row_;
   blocksstable::ObDatumRow unprojected_row_;
   blocksstable::ObDatumRowkey curr_rowkey_;
+  blocksstable::ObDatumRowkey di_base_curr_rowkey_;
   ObNopPos nop_pos_;
   int64_t scan_cnt_;
   int64_t range_idx_delta_;
   int64_t curr_scan_index_;
+  int64_t di_base_curr_scan_index_;
   int64_t major_table_version_;
   bool need_padding_;
-  bool need_fill_default_;
-  bool need_fill_virtual_columns_;
+  bool need_fill_default_; // disabled by join mv scan
+  bool need_fill_virtual_columns_; // disabled by join mv scan
   bool need_output_row_with_nop_; // for sampling increment data
   bool inited_;
   bool iter_del_row_;

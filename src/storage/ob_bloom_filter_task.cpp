@@ -15,8 +15,6 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
-#include <algorithm>
 #include "storage/ob_bloom_filter_task.h"
 #include "storage/blocksstable/ob_macro_block_bare_iterator.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
@@ -72,7 +70,7 @@ bool ObBloomFilterBuildTask::operator ==(const IObDedupTask &other) const
     if (get_type() == other.get_type()) {
       // it's safe to do this transformation, we have checked the task's type
       const ObBloomFilterBuildTask &o = static_cast<const ObBloomFilterBuildTask &>(other);
-      is_equal = o.table_id_ == table_id_
+      is_equal = true && o.table_id_ == table_id_
                  && o.macro_id_ == macro_id_ && o.prefix_len_ == prefix_len_;
     }
   }
@@ -101,10 +99,14 @@ int ObBloomFilterBuildTask::process()
   int ret = OB_SUCCESS;
   ObBloomFilterCacheValue bfcache_value;
 
-  if (OB_UNLIKELY(!macro_id_.is_valid())
+  if (OB_UNLIKELY(false)
+      || OB_UNLIKELY(!macro_id_.is_valid())
       || OB_UNLIKELY(prefix_len_ <= 0)) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("The bloom filter build task is not valid, ",
+      K_(macro_id), K_(prefix_len), K(ret));
   } else if (OB_FAIL(build_bloom_filter())) {
+    LOG_WARN("Fail to build bloom filter, ", K(ret));
   } else {
     LOG_INFO("Success to build bloom filter, ", K_(table_id), K_(macro_id), K_(prefix_len));
   }
@@ -116,7 +118,7 @@ int ObBloomFilterBuildTask::build_bloom_filter()
 {
   int ret = OB_SUCCESS;
 
-  SERVER_MODULE_SCOPE {
+  MOD_SCOPE {
     void *buf = nullptr;
     ObStoreCtx store_ctx;
     bool need_build = false;
@@ -127,9 +129,14 @@ int ObBloomFilterBuildTask::build_bloom_filter()
     ObMacroBlockRowBareIterator *macro_bare_iter = nullptr;
     ObSSTableMacroBlockHeader macro_header;
     const ObDatumRow *row = nullptr;
+    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
+    {
+      THIS_WORKER.set_compatibility_mode(compat_mode);
+    }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().check_need_build(ObBloomFilterCacheKey(
         macro_id_, prefix_len_), need_build))) {
+      STORAGE_LOG(WARN, "Fail to check need build, ", K(ret));
     } else if (!need_build) {
       //already in cache,do nothing
     } else if (OB_ISNULL(buf = ob_malloc(sizeof(ObMacroBlockRowBareIterator), ObModIds::OB_BLOOM_FILTER))) {
@@ -144,7 +151,9 @@ int ObBloomFilterBuildTask::build_bloom_filter()
       read_info.io_desc_.set_mode(ObIOMode::READ);
       read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::BLOOM_FILTER_IO);
-      read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      
+
 
       if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
           reinterpret_cast<char*>(allocator_.alloc(OB_DEFAULT_MACRO_BLOCK_SIZE)))) {
@@ -155,28 +164,39 @@ int ObBloomFilterBuildTask::build_bloom_filter()
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::read_object(read_info, macro_handle))) {
+        LOG_WARN("Fail to read macro block", K(ret), K(read_info));
       } else if (OB_FAIL(macro_bare_iter->open(
           read_info.buf_, macro_handle.get_data_size(), true /*check*/))) {
+        LOG_WARN("Fail to open bare macro block iterator", K(ret), K(macro_handle));
       } else if (OB_FAIL(macro_bare_iter->get_macro_block_header(macro_header))) {
-      } else if (OB_UNLIKELY(!macro_header.is_valid())) {
+        LOG_WARN("Fail to get macro block header", K(ret));
+      } else if (OB_UNLIKELY(!macro_header.is_valid() || macro_header.is_normal_cg_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Invalid macro block header", K(ret), K(macro_header));
       } else if (OB_FAIL(bfcache_value.init(prefix_len_, macro_header.fixed_header_.row_count_))) {
+        LOG_WARN("Fail to init bloom filter", K(ret));
       } else {
         ObStorageDatumUtils datum_utils;
         ObDatumRowkey rowkey;
         if (OB_FAIL(datum_utils.init(macro_bare_iter->get_rowkey_column_descs(),
                                      macro_header.fixed_header_.rowkey_column_count_,
                                      allocator_))) {
+          STORAGE_LOG(WARN, "Failed to init datum utils", K(ret), K(macro_header));
         }
         while (OB_SUCC(ret) && OB_SUCC(macro_bare_iter->get_next_row(row))) {
           uint64_t key_hash = 0;
           if (OB_FAIL(rowkey.assign(row->storage_datums_, prefix_len_))) {
+            STORAGE_LOG(WARN, "Failed to assign rowkey", K(ret), KPC(row), K(prefix_len_));
           } else if (OB_FAIL(rowkey.murmurhash(0, datum_utils, key_hash))) {
+            STORAGE_LOG(WARN, "Failed to calc rowkey hash", K(ret), K(rowkey), K(datum_utils));
           } else if (OB_FAIL(bfcache_value.insert(static_cast<uint32_t>(key_hash)))) {
+            LOG_WARN("Fail to insert rowkey to bfcache", K(ret));
           }
         }
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        } else if (OB_FAIL(ObStorageCacheSuite::get_instance().get_bf_cache().put_bloom_filter(macro_id_, bfcache_value))) {
+          LOG_WARN("Fail to iterate macro block", K(ret));
+        } else if (OB_FAIL(ObStorageCacheSuite::get_instance().get_bf_cache().put_bloom_filter(macro_id_, bfcache_value, true/* adaptive */))) {
+          LOG_WARN("Fail to put value to bloom filter cache", K(ret), K_(macro_id));
         }
       }
 
@@ -193,3 +213,4 @@ int ObBloomFilterBuildTask::build_bloom_filter()
 
 } // namespace storage
 } // namespace oceanbase
+

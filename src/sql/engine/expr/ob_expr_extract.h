@@ -35,8 +35,7 @@ public:
                                 ObExprResType &date,
                                 common::ObExprTypeCtx &type_ctx) const;
 
-  static int calc(ObExecContext &exec_ctx,
-      ObObjType date_type,
+  static int calc(ObObjType date_type,
       const ObDatum &date,
       const ObDateUnitType extract_field,
       const ObScale scale,
@@ -54,6 +53,13 @@ public:
   // for static engine batch
   static int calc_extract_mysql_batch(
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
+  static int calc_extract_mysql_vector(
+      const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
+
+private:
+  int set_result_type_oracle(common::ObExprTypeCtx &type_ctx,
+                             const ObExprResType &date_unit, 
+                             ObExprResType &res_type) const;
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprExtract);
 

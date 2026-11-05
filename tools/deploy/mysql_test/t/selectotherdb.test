@@ -1,0 +1,12 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: peihan.dph
+# owner group: SQL2
+# description:
+#
+--disable_warnings
+drop catalog if exists master;
+--enable_warnings
+--error 11080
+SELECT name FROM master.dbo.sysdatabases WHERE status <> 512;

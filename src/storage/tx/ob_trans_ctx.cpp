@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX TRANS
-#include "config_bridge.h"
 #include "ob_trans_ctx.h"
 #include "ob_trans_service.h"
 
@@ -46,6 +45,7 @@ void ObTransCtx::print_trace_log_()
 void ObTransCtx::before_unlock(CtxLockArg &arg)
 {
   arg.trans_id_ = trans_id_;
+  arg.ls_id_ = ls_id_;
   opid_++;
   if (has_pending_callback_) {
     arg.commit_cb_ = commit_cb_;
@@ -73,6 +73,7 @@ void ObTransCtx::after_unlock(CtxLockArg &arg)
     int64_t remaining_wait_interval_us = get_remaining_wait_interval_us_();
     if (0 == remaining_wait_interval_us) {
       if (OB_FAIL(arg.commit_cb_.callback())) {
+        TRANS_LOG(WARN, "end transaction callback failed", KR(ret), "context", *this);
       }
       REC_TRANS_TRACE_EXT2(tlog_, end_trans_cb, OB_Y(ret),
                            OB_ID(arg1), arg.commit_cb_.ret_,
@@ -88,10 +89,12 @@ void ObTransCtx::after_unlock(CtxLockArg &arg)
                                     arg.commit_cb_,
                                     trans_need_wait_wrap_.get_receive_gts_ts(),
                                     trans_need_wait_wrap_.get_need_wait_interval_us()))) {
+        TRANS_LOG(WARN, "make ObEndTransCallbackTask error", KR(ret), K(*task), K(*this));
       } else if (OB_ISNULL(trans_service_)) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "trans service is NULL", K(ret));
       } else if (OB_FAIL(trans_service_->push(task))) {
+        TRANS_LOG(WARN, "push task error", KR(ret), K(*task), K(*this));
       } else {
         // do nothing
       }
@@ -104,6 +107,7 @@ void ObTransCtx::after_unlock(CtxLockArg &arg)
           ob_usleep(get_remaining_wait_interval_us_());
         }
         if (OB_FAIL(arg.commit_cb_.callback())) {
+          TRANS_LOG(WARN, "end transaction callback failed", KR(ret), "context", *this);
         }
       }
       REC_TRANS_TRACE_EXT2(tlog_, end_trans_cb, OB_Y(ret),
@@ -119,7 +123,7 @@ void ObTransCtx::print_trace_log_if_necessary_()
   static const int64_t SAMPLING_SEED = 128 * 64;
   // freectx
   if (!is_exiting_) {
-    TRANS_LOG_RET(WARN, OB_ERROR, "ObTxCtx not exiting", "context", *this, K(lbt()));
+    TRANS_LOG_RET(WARN, OB_ERROR, "ObPartTransCtx not exiting", "context", *this, K(lbt()));
     FORCE_PRINT_TRACE(tlog_, "[trans debug] ");
   }
 
@@ -157,7 +161,7 @@ void ObTransCtx::set_exiting_()
 bool ObTransCtx::is_slow_query_() const
 {
   return ObClockGenerator::getClock() >=
-      (ctx_create_time_ + ::oceanbase::config::trace_log_slow_query_watermark());
+      (ctx_create_time_ + ObServerConfig::get_instance().trace_log_slow_query_watermark);
 }
 
 void ObTransCtx::set_stc_(const MonotonicTs stc)
@@ -187,13 +191,14 @@ MonotonicTs ObTransCtx::get_stc_()
 
 
 
-bool ObTransCtx::has_commit_callback_()
+bool ObTransCtx::has_callback_scheduler_()
 {
   return !commit_cb_.is_enabled() // callback scheduler has accomplished by others
     || commit_cb_.is_inited();    // callback has been defered
 }
 
-int ObTransCtx::defer_commit_callback_(const int retcode, const SCN &commit_version)
+// callback scheduler commit result
+int ObTransCtx::defer_callback_scheduler_(const int retcode, const SCN &commit_version)
 {
   int ret = OB_SUCCESS;
   if (!commit_cb_.is_enabled()) {
@@ -212,7 +217,9 @@ int ObTransCtx::prepare_commit_cb_for_role_change_(const int cb_ret, ObTxCommitC
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(commit_cb_.init(trans_service_, trans_id_, cb_ret, share::SCN()))) {
+    TRANS_LOG(WARN, "init commit cb fail", K(ret), KPC(this));
   } else if (OB_FAIL(commit_cb_.link(this, cb_list))) {
+    TRANS_LOG(WARN, "link commit cb fail", K(ret), KPC(this));
   } else {
     cb_list = &commit_cb_;
   }
@@ -244,6 +251,7 @@ int ObTransCtx::register_timeout_task_(const int64_t interval_us)
     TRANS_LOG(ERROR, "ls_tx_ctx_mgr_ is null, unexpected error", KP(ls_tx_ctx_mgr_), K_(trans_id));
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(acquire_ctx_ref_())) {
+    TRANS_LOG(WARN, "get transaction ctx for inc ref error", KR(ret), K_(trans_id));
   } else {
     if (OB_FAIL(timer_->register_timeout_task(timeout_task_, interval_us))) {
       TRANS_LOG(WARN, "register timeout task error", KR(ret), K(interval_us), K_(trans_id));
@@ -286,21 +294,38 @@ int ObTransCtx::unregister_timeout_task_()
   return ret;
 }
 
-void ObTransCtx::update_commit_retry_timeout_()
+void ObTransCtx::update_trans_2pc_timeout_()
 {
-  const int64_t timeout_new = 2 * commit_retry_timeout_;
+  const int64_t timeout_new = 2 * trans_2pc_timeout_;
 
-  if (MAX_TRANS_COMMIT_RETRY_TIMEOUT_US > timeout_new) {
-    commit_retry_timeout_ = timeout_new;
+  if (MAX_TRANS_2PC_TIMEOUT_US > timeout_new) {
+    trans_2pc_timeout_ = timeout_new;
   } else {
-    commit_retry_timeout_ = MAX_TRANS_COMMIT_RETRY_TIMEOUT_US;
+    trans_2pc_timeout_ = MAX_TRANS_2PC_TIMEOUT_US;
   }
 }
 
-int64_t ObTransCtx::get_commit_retry_interval_us_()
+int ObTransCtx::set_app_trace_info_(const ObString &app_trace_info)
 {
-  return ::oceanbase::config::trx_commit_retry_interval();
-}
+  int ret = OB_SUCCESS;
+  const int64_t len = app_trace_info.length();
+
+  if (OB_UNLIKELY(len < 0) || OB_UNLIKELY(len > OB_MAX_TRACE_ID_BUFFER_SIZE)) {
+    TRANS_LOG(WARN, "invalid argument", "context", *this);
+    ret = OB_INVALID_ARGUMENT;
+  } else if (0 == trace_info_.get_app_trace_info().length()) {
+    // set for the first time
+    if (OB_FAIL(trace_info_.set_app_trace_info(app_trace_info))) {
+      TRANS_LOG(WARN, "set app trace info error", K(ret), K(app_trace_info), K(*this));
+    }
+  } else if (trace_info_.get_app_trace_info().length() != app_trace_info.length()) {
+    // in big trans case, leader may change if redo log is not persisted successfully
+    TRANS_LOG(WARN, "different app trace info", K(ret), K(app_trace_info), "context", *this, K(lbt()));
+  } else {
+    // do nothing
+  }
+  return ret;
+} 
 
 int ObTransCtx::set_app_trace_id_(const ObString &app_trace_id)
 {
@@ -313,6 +338,7 @@ int ObTransCtx::set_app_trace_id_(const ObString &app_trace_id)
   } else if (0 == trace_info_.get_app_trace_id().length()) {
     // set for the first time
     if (OB_FAIL(trace_info_.set_app_trace_id(app_trace_id))) {
+      TRANS_LOG(WARN, "set app trace id error", K(ret), K(app_trace_id), K(*this));
     }
   } else if (trace_info_.get_app_trace_id().length() != app_trace_id.length()) {
     // in big trans case, leader may change if redo log is not persisted successfully

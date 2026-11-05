@@ -51,7 +51,9 @@ int ObPartitionCreator::init(ObBootstrap* bootstrap, common::ObIArray<share::sch
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("bootstrap or table_schemas is null", K(ret), KP(bootstrap), KP(table_schemas));
   } else if (OB_FAIL(set_thread_count(get_thread_count()))) {
+    LOG_WARN("failed to set thread count", K(ret));
   } else if (OB_FAIL(start())) {
+    LOG_WARN("failed to start partition creator", K(ret));
   } else {
     bootstrap_ = bootstrap;
     table_schemas_ = table_schemas;
@@ -83,6 +85,7 @@ int ObPartitionCreator::submit_create_partitions_task()
     LOG_WARN("bootstrap or table_schemas is null", K(ret), KP(bootstrap_), KP(table_schemas_));
   } else if (task_submitted_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("task already submitted", K(ret));
   } else {
     task_submitted_ = true;
     task_completed_ = false;
@@ -130,6 +133,7 @@ void ObPartitionCreator::run(int64_t idx)
   while (!has_set_stop()) {
     if (task_submitted_ && !task_completed_) {
       if (OB_FAIL(process_create_partitions_task())) {
+        LOG_WARN("failed to process create partitions task", K(ret));
         task_result_ = ret;
       } else {
         LOG_INFO("create partitions task executed successfully");
@@ -151,6 +155,7 @@ int ObPartitionCreator::process_create_partitions_task()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("bootstrap or table_schemas is null", K(ret), KP(bootstrap_), KP(table_schemas_));
   } else if (OB_FAIL(bootstrap_->create_sys_table_partitions(*table_schemas_))) {
+    LOG_WARN("create partitions failed", K(ret));
   } else {
     LOG_INFO("create partitions successfully");
   }

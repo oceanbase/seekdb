@@ -87,6 +87,7 @@ int ObLogValuesTableAccess::est_cost()
   EstimateCostInfo param;
   param.need_parallel_ = get_parallel();
   if (OB_FAIL(do_re_est_cost(param, card, op_cost, cost))) {
+    LOG_WARN("failed to get re est cost infos", K(ret));
   } else {
     set_card(card);
     set_op_cost(op_cost);
@@ -100,6 +101,7 @@ int ObLogValuesTableAccess::do_re_est_cost(EstimateCostInfo &param, double &card
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(get_values_path()) || OB_ISNULL(table_def_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     double read_rows = table_def_->row_cnt_;
@@ -119,9 +121,13 @@ int ObLogValuesTableAccess::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_def_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
+    LOG_WARN("failed to get op exprs", K(ret));
   } else if (OB_FAIL(append(all_exprs, table_def_->access_exprs_))) {
+    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(append(all_exprs, column_exprs_))) {
+    LOG_WARN("failed to append exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -132,13 +138,18 @@ int ObLogValuesTableAccess::allocate_expr_post(ObAllocExprContext &ctx)
   for (int64_t i = 0; OB_SUCC(ret) && i < column_exprs_.count(); ++i) {
     ObColumnRefRawExpr *value_col = column_exprs_.at(i);
     if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
+      LOG_WARN("makr expr produced failed", K(ret));
     } else if (!is_plan_root() && OB_FAIL(output_exprs_.push_back(value_col))) {
+      LOG_WARN("failed to push back exprs", K(ret));
     } else { /*do nothing*/ }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
+    LOG_WARN("failed to allocate expr post", K(ret));
   } else if (get_output_exprs().empty() && OB_FAIL(allocate_dummy_output())) {
+    LOG_WARN("failed to allocate dummy output", K(ret));
   } else if (OB_FAIL(mark_probably_local_exprs())) {
+    LOG_WARN("failed to mark local exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -148,6 +159,7 @@ int ObLogValuesTableAccess::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
+    LOG_WARN("failed to get plan item info", K(ret));
   } else {
     const ObIArray<ObColumnRefRawExpr*> &access = get_column_exprs();
     BEGIN_BUF_PRINT;
@@ -183,16 +195,22 @@ int ObLogValuesTableAccess::allocate_dummy_output()
   ObConstRawExpr *dummy_expr = NULL;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
                                              get_plan()->get_optimizer_context().get_expr_factory(),
                                              ObIntType,
                                              1,
                                              dummy_expr))) {
+    LOG_WARN("failed to build const expr", K(ret));
   } else if (OB_ISNULL(dummy_expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(dummy_expr->extract_info())) {
+    LOG_WARN("failed to extract info for dummy expr", K(ret));
   } else if (OB_FAIL(output_exprs_.push_back(dummy_expr))) {
+    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(dummy_expr))) {
+    LOG_WARN("failed to append exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -202,7 +220,9 @@ int ObLogValuesTableAccess::inner_replace_op_exprs(ObRawExprReplacer &replacer)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_def_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, table_def_->access_exprs_))) {
+    LOG_WARN("failed to replace exprs", K(ret));
   }
   return ret;
 }

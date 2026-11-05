@@ -34,8 +34,7 @@ class ObExprUniform : public ObFuncExprOperator
     int initialize(ObEvalCtx &ctx, const ObExpr &expr);
     int generate_next_value(int64_t sample, int64_t &res);
   private:
-    int64_t min_ = 0;
-    int64_t max_ = 0;
+    std::uniform_int_distribution<int64_t> int_dist_;
     std::mt19937_64 gen_; // map continuous small number to large sparse space
   };
 	class ObExprUniformRealCtx: public ObExprOperatorCtx
@@ -46,8 +45,7 @@ class ObExprUniform : public ObFuncExprOperator
     int initialize(ObEvalCtx &ctx, const ObExpr &expr);
     int generate_next_value(int64_t sample, double &res);
   private:
-    double min_ = 0.0;
-    double max_ = 0.0;
+    std::uniform_real_distribution<double> real_dist_;
     std::mt19937_64 gen_; // map continuous small number to large sparse space
   };
 public:

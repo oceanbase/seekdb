@@ -38,6 +38,8 @@ int check_skip_index_valid(const share::schema::ObTableSchema &table_schema);
 enum ObSkipIndexType : uint8_t
 {
   MIN_MAX,
+  BLOOM_FILTER,
+  NGRAM_BLOOM_FILTER,
   MAX_TYPE
 };
 
@@ -172,7 +174,7 @@ OB_INLINE static int get_skip_index_store_upper_size(
 OB_INLINE static bool is_skip_index_black_list_type(const ObObjType &obj_type)
 {
   return ObNullType == obj_type || ob_is_json_tc(obj_type) || ob_is_geometry_tc(obj_type)
-      || ob_is_collection_sql_type(obj_type);
+      || ob_is_roaringbitmap_tc(obj_type) || ob_is_collection_sql_type(obj_type);
 }
 
 OB_INLINE static bool is_skip_index_while_list_type(const ObObjType &obj_type)

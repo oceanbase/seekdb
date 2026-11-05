@@ -51,7 +51,11 @@
     malloc_terminal_node(display_node, result->malloc_pool_, display_type); \
   } \
   malloc_non_terminal_node(explain_stmt, result->malloc_pool_, T_EXPLAIN, 5, \
-                           type_node, display_node, into_table, set_statement_id, stmt);
+                           type_node, display_node, into_table, set_statement_id, stmt); \
+  if (NULL != no_use && T_INT == (no_use)->type_) { \
+    /* param_num_ is unused for EXPLAIN; it carries the DESCRIBE keyword. */ \
+    explain_stmt->param_num_ = 1; \
+  }
 %}
 
 %destructor {destroy_tree($$);}<node>
@@ -289,7 +293,8 @@ END_P SET_VAR DELIMITER
         FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
-        GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GROUP_CONCAT GROUPING
+        GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GROUP_CONCAT GROUPING GLOB
+        READ_CSV READ_JSON READ_PARQUET
         GLOBAL_ALIAS
 
         HASH HEAP HELP HISTOGRAM HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH
@@ -333,7 +338,7 @@ END_P SET_VAR DELIMITER
         QUANTIFIER_TABLE QUARTER QUERY QUEUE_TIME QUICK
 
         RECOVER REDUNDANT REFRESH RELAY RELAYLOG RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMOVE
-        REPEATABLE RESET RESPECT RESTART RESTORE RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE
+        REPEATABLE RESET RESPECT RESTART RESTORE RESUME RETRY RETURNED_SQLSTATE RETURNS RETURNING REVERSE
         REWRITE ROLLBACK ROLLUP ROUTINE ROW ROWID ROW_COUNT ROW_FORMAT ROWS RTREE
         RUN RECYCLEBIN REPLICATION ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS
         RANK READ_ONLY RECOVERY REJECT ROLE
@@ -498,6 +503,9 @@ END_P SET_VAR DELIMITER
 %type <node> skip_index_type opt_skip_index_type_list
 %type <node> vec_index_params vec_index_param vec_index_param_value opt_with_vector_index_parameters
 %type <node> json_table_expr unnest_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def
+%type <node> file_table_expr file_table_arg_list file_table_arg
+%type <node> copy_to_stmt copy_option_list copy_option
+%type <node> ai_column_attribute ai_column_with_option_list ai_column_with_option
 %type <node> json_table_ordinality_column_def json_table_exists_column_def json_table_value_column_def json_table_nested_column_def
 %type <node> opt_value_on_empty_or_error_or_mismatch opt_on_mismatch
 %type <node> table_values_clause table_values_clause_with_order_by_and_limit values_row_list row_value
@@ -647,6 +655,7 @@ stmt:
   | purge_stmt              { $$ = $1; check_question_mark($$, result); }
   | analyze_stmt            { $$ = $1; check_question_mark($$, result); }
   | load_data_stmt          { $$ = $1; check_question_mark($$, result); }
+  | copy_to_stmt            { $$ = $1; check_question_mark($$, result); }
   | optimize_stmt     { $$ = $1; check_question_mark($$, result); }
   | flush_privileges_stmt { $$ = $1; check_question_mark($$, result); }
   | dump_memory_stmt  { $$ = $1; check_question_mark($$, result); }
@@ -4147,6 +4156,48 @@ opt_field_or_var_spec opt_load_set_spec opt_load_data_extended_option_list
 }
 ;
 
+copy_to_stmt:
+COPY select_with_parens TO STRING_VALUE '(' copy_option_list ')'
+{
+  (void)($3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COPY_TABLE_STMT, 3, $2, $4, $6);
+}
+| COPY select_with_parens TO STRING_VALUE
+{
+  (void)($3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COPY_TABLE_STMT, 3, $2, $4, NULL);
+}
+;
+
+copy_option_list:
+copy_option
+{
+  $$ = $1;
+}
+| copy_option_list ',' copy_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+// Option names are plain identifiers rather than keywords, so COPY gains no new
+// reserved words; the resolver matches them case-insensitively. An option takes
+// either no value (`header`), a string, or a bare word (`format csv`).
+copy_option:
+relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COPY_OPTION, 2, $1, NULL);
+}
+| relation_name STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COPY_OPTION, 2, $1, $2);
+}
+| relation_name relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COPY_OPTION, 2, $1, $2);
+}
+;
+
 infile_string:
 STRING_VALUE
 {
@@ -6238,6 +6289,51 @@ not NULLX
 | INVISIBLE
 {
   malloc_terminal_node($$, result->malloc_pool_, T_INVISIBLE);
+}
+| ai_column_attribute
+{
+  $$ = $1;
+}
+;
+
+ai_column_attribute:
+AI COLUMN '(' expr ')'
+{
+  // $4 is the AI function call that produces the column value.
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_ATTRIBUTE, 2, $4, NULL);
+}
+| AI COLUMN '(' expr ')' WITH '(' ai_column_with_option_list ')'
+{
+  // The WITH clause carries sync_mode and max_retries. It is a separate
+  // alternative rather than an optional tail: an empty tail production is
+  // reduced before WITH can be shifted, so `WITH (` would never be parsed.
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_ATTRIBUTE, 2, $4, $8);
+}
+;
+
+ai_column_with_option_list:
+ai_column_with_option
+{
+  $$ = $1;
+}
+| ai_column_with_option_list ',' ai_column_with_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+ai_column_with_option:
+relation_name COMP_EQ expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_WITH_OPTION, 2, $1, $3);
+}
+| relation_name STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_WITH_OPTION, 2, $1, $2);
+}
+| relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_WITH_OPTION, 2, $1, NULL);
 }
 ;
 
@@ -11258,6 +11354,99 @@ relation_factor %prec LOWER_PARENS
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, $3, $6);
 }
+| file_table_expr
+{
+  $$ = $1;
+}
+;
+
+file_table_expr:
+READ_CSV '(' file_table_arg_list ')' relation_name
+{
+  // relation_name already yields an identifier node; reuse it as the alias.
+  ParseNode *alias_node = $5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, alias_node, NULL);
+  $$->value_ = 0; // read_csv
+}
+| READ_CSV '(' file_table_arg_list ')' AS relation_name
+{
+  // AS is optional in MySQL, so both spellings have to reach the same node.
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $6, NULL);
+  $$->value_ = 0; // read_csv
+}
+| READ_CSV '(' file_table_arg_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, NULL);
+  $$->value_ = 0; // read_csv
+}
+| READ_JSON '(' file_table_arg_list ')' relation_name
+{
+  ParseNode *alias_node = $5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, alias_node, NULL);
+  $$->value_ = 1; // read_json
+}
+| READ_JSON '(' file_table_arg_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $6, NULL);
+  $$->value_ = 1; // read_json
+}
+| READ_JSON '(' file_table_arg_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, NULL);
+  $$->value_ = 1; // read_json
+}
+| READ_PARQUET '(' file_table_arg_list ')' relation_name
+{
+  ParseNode *alias_node = $5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, alias_node, NULL);
+  $$->value_ = 2; // read_parquet
+}
+| READ_PARQUET '(' file_table_arg_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $6, NULL);
+  $$->value_ = 2; // read_parquet
+}
+| READ_PARQUET '(' file_table_arg_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, NULL);
+  $$->value_ = 2; // read_parquet
+}
+| GLOB '(' file_table_arg_list ')' relation_name
+{
+  ParseNode *alias_node = $5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, alias_node, NULL);
+  $$->value_ = 3; // glob
+}
+| GLOB '(' file_table_arg_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $6, NULL);
+  $$->value_ = 3; // glob
+}
+| GLOB '(' file_table_arg_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, NULL);
+  $$->value_ = 3; // glob
+}
+;
+
+file_table_arg_list:
+file_table_arg
+{
+  $$ = $1;
+}
+| file_table_arg_list ',' file_table_arg
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+// `expr` rather than `simple_expr` so that named options such as
+// `header = true` parse as a comparison instead of a bare expression.
+file_table_arg:
+expr
+{
+  $$ = $1;
+}
 ;
 
 dml_table_name:
@@ -12306,8 +12495,20 @@ explain_or_desc relation_factor opt_desc_column_option
 
 explain_or_desc:
 EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+| DESCRIBE
+{
+  // DESCRIBE over a query lists that query's columns instead of its plan, so
+  // the resolver has to know which keyword introduced the statement.
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1;
+  $$->is_hidden_const_ = 1;
+}
+| DESC
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1;
+  $$->is_hidden_const_ = 1;
+}
 ;
 
 explainable_stmt:
@@ -14740,6 +14941,10 @@ DROP CONSTRAINT constraint_name
   (void)($2);
   (void)($3);
   $$ = NULL;
+}
+| RETRY AI COLUMN relation_name opt_where
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_RETRY_STMT, 2, $4, $5);
 }
 ;
 

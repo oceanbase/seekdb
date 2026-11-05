@@ -59,6 +59,7 @@ int ObExprXor::cg_expr(ObExprCGCtx &op_cg_ctx,
 
   if (OB_UNLIKELY(rt_expr.arg_cnt_ < 2 || rt_expr.type_ != T_OP_XOR)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else {
     rt_expr.eval_func_ = &eval_xor;
   }
@@ -73,6 +74,7 @@ int ObExprXor::eval_xor(const ObExpr &expr,
   if (OB_ISNULL(expr.args_)
       || OB_UNLIKELY(expr.arg_cnt_ < 2)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else {
     // xor supports short-circuit, if there is null, directly return null
     ObDatum *param = NULL;
@@ -80,9 +82,12 @@ int ObExprXor::eval_xor(const ObExpr &expr,
     bool cur_bool_v = false;
     if (OB_ISNULL(expr.args_[0])) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid arg", K(ret), K(expr.args_[0]));
     } else if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
+      LOG_WARN("failed to eval", K(ret));
     } else if (OB_ISNULL(param)) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid param", K(ret), K(param));
     } else if (param->is_null()) {
       expr_datum.set_null();
       found_null = true;
@@ -93,9 +98,12 @@ int ObExprXor::eval_xor(const ObExpr &expr,
     for (int i = 1; OB_SUCC(ret) && !found_null && i < expr.arg_cnt_; i++) {
       if (OB_ISNULL(expr.args_[i])) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid argument", K(ret), K(i));
       } else if (OB_FAIL(expr.args_[i]->eval(ctx, param))) {
+        LOG_WARN("failed to eval param", K(ret));
       } else if (OB_ISNULL(param)) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid param", K(ret), K(param));
       } else if (param->is_null()) {
         expr_datum.set_null();
         found_null = true;

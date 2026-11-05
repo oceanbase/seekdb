@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_block_sstable_struct.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 using namespace oceanbase;
 using namespace common;
@@ -57,7 +57,8 @@ bool ObMicroBlockEncodingCtx::is_valid() const
 {
   return macro_block_size_ > 0 && micro_block_size_ > 0 && rowkey_column_cnt_ >= 0
       && column_cnt_ >= rowkey_column_cnt_ && NULL != col_descs_
-      && encoder_opt_.is_valid()
+      && !(CS_ENCODING_ROW_STORE != row_store_type_ && !encoder_opt_.is_valid())
+      && major_working_cluster_version_ >= 0
       && (FLAT_ROW_STORE != row_store_type_ &&  MAX_ROW_STORE != row_store_type_)
       && compressor_type_ != ObCompressorType::INVALID_COMPRESSOR
       && compressor_type_ != ObCompressorType::MAX_COMPRESSOR;
@@ -180,12 +181,15 @@ ObMacroBlockMarkerStatus::ObMacroBlockMarkerStatus()
     linked_block_count_(0),
     tmp_file_count_(0),
     data_block_count_(0),
+    shared_data_block_count_(0),
     index_block_count_(0),
     ids_block_count_(0),
     disk_block_count_(0),
+    bloomfiter_count_(0),
     hold_count_(0),
     pending_free_count_(0),
     free_count_(0),
+    shared_meta_block_count_(0),
     mark_cost_time_(0),
     sweep_cost_time_(0),
     start_time_(0),
@@ -224,12 +228,15 @@ void ObMacroBlockMarkerStatus::reuse()
   linked_block_count_ = 0;
   tmp_file_count_ = 0;
   data_block_count_ = 0;
+  shared_data_block_count_ = 0;
   index_block_count_ = 0;
   ids_block_count_ = 0;
   disk_block_count_ = 0;
+  bloomfiter_count_ = 0;
   hold_count_ = 0;
   pending_free_count_ = 0;
   free_count_ = 0;
+  shared_meta_block_count_ = 0;
   mark_cost_time_ = 0;
   sweep_cost_time_ = 0;
   start_time_ = 0;
@@ -260,8 +267,10 @@ void ObRecordHeaderV3::set_header_checksum()
   format_i64(data_encoding_length_, checksum);
   format_i64(row_count_, checksum);
   format_i64(column_cnt_, checksum);
-  for (int64_t i = 0; i < column_cnt_; ++i) {
-    format_i64(column_checksums_[i], checksum);
+  if (RECORD_HEADER_VERSION_V3 == version_) {
+    for (int64_t i = 0; i < column_cnt_; ++i) {
+      format_i64(column_checksums_[i], checksum);
+    }
   }
   header_checksum_ = checksum;
 }
@@ -282,8 +291,10 @@ int ObRecordHeaderV3::check_header_checksum() const
   format_i64(data_encoding_length_, checksum);
   format_i64(row_count_, checksum);
   format_i64(column_cnt_, checksum);
-  for (int64_t i = 0; i < column_cnt_; ++i) {
-    format_i64(column_checksums_[i], checksum);
+  if (RECORD_HEADER_VERSION_V3 == version_) {
+    for (int64_t i = 0; i < column_cnt_; ++i) {
+      format_i64(column_checksums_[i], checksum);
+    }
   }
 
   if (0 != checksum) {
@@ -299,6 +310,8 @@ int ObRecordHeaderV3::check_payload_checksum(const char *buf, const int64_t len)
   if (NULL == buf || len < 0 || data_zlength_ != len
       || (0 == len && (0 != data_zlength_ || 0 != data_length_ || 0 != data_checksum_))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP(buf), K(len), K(data_zlength_),
+        K(data_length_), K(data_checksum_));
   } else {
     const int64_t data_checksum = ob_crc64_sse42(buf, len);
     if (data_checksum != data_checksum_) {
@@ -318,8 +331,11 @@ int ObRecordHeaderV3::deserialize_and_check_record(
   int64_t pos = 0;
   if (NULL == ptr || size < 0 || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP(ptr), K(size), K(magic));
   } else if (OB_FAIL(header.deserialize(ptr, size, pos))) {
+    LOG_WARN("fail to deserialize header", K(ret));
   } else if (OB_FAIL(header.check_and_get_record(ptr, size, magic, payload_ptr, payload_size))) {
+    LOG_WARN("fail to check and get record", K(ret));
   }
 
   return ret;
@@ -331,18 +347,22 @@ int ObRecordHeaderV3::check_and_get_record(const char *ptr, const int64_t size, 
   int ret = OB_SUCCESS;
   if (nullptr == ptr || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP(ptr));
   } else if (magic != magic_) {
     ret = OB_INVALID_DATA;
     LOG_WARN("record header magic is not match", K(ret), K(magic), K(magic_));
   } else if (OB_FAIL(check_header_checksum())) {
+    LOG_WARN("fail to check header checksum", K(ret));
   } else {
     const int64_t header_size = get_serialize_size();
     if (size < header_size) {
       ret = OB_BUF_NOT_ENOUGH;
+      LOG_WARN("buffer not enough", K(ret), K(size), K(header_size));
     } else {
       payload_ptr = ptr + header_size;
       payload_size = size - header_size;
       if (OB_FAIL(check_payload_checksum(payload_ptr, payload_size))) {
+        LOG_WARN("fail to check payload checksum", K(ret));
       }
     }
   }
@@ -357,21 +377,27 @@ int ObRecordHeaderV3::deserialize_and_check_record(const char *ptr, const int64_
   int64_t payload_size = 0;
   if (nullptr == ptr || magic < 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP(ptr), K(magic));
   } else if (OB_FAIL(deserialize_and_check_record(ptr, size, magic, payload_buf, payload_size))) {
+    LOG_WARN("fail to check record", K(ret));
   }
   return ret;
 }
 
 int64_t ObRecordHeaderV3::get_serialize_size() const
 {
-  return sizeof(ObRecordCommonHeader) + column_cnt_ * sizeof(int64_t);
+  int64_t size = 0;
+  size += sizeof(ObRecordCommonHeader);
+  if (RECORD_HEADER_VERSION_V3 == version_) {
+    size += column_cnt_ * sizeof(int64_t);
+  }
+  return size;
 }
 
 int ObRecordHeaderV3::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-  if (nullptr == buf || buf_len <= 0 || RECORD_HEADER_VERSION_V3 != version_
-      || (column_cnt_ > 0 && nullptr == column_checksums_)) {
+  if (nullptr == buf || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(buf_len));
   } else {
@@ -396,8 +422,10 @@ int ObRecordHeaderV3::serialize(char *buf, const int64_t buf_len, int64_t &pos) 
       common_header->row_count_ = row_count_;
       common_header->column_cnt_ = column_cnt_;
       pos += sizeof(ObRecordCommonHeader);
-      MEMCPY(buf + pos, column_checksums_, column_cnt_ * sizeof(int64_t));
-      pos += column_cnt_ * sizeof(int64_t);
+      if (RECORD_HEADER_VERSION_V3 == version_) {
+        MEMCPY(buf + pos, column_checksums_, column_cnt_ * sizeof(int64_t));
+        pos += column_cnt_ * sizeof(int64_t);
+      }
     }
     pos += pos_orig;
   }
@@ -427,14 +455,7 @@ int ObRecordHeaderV3::deserialize(const char *buf, int64_t buf_len, int64_t &pos
     row_count_ = common_header->row_count_;
     column_cnt_ = common_header->column_cnt_;
     pos += sizeof(ObRecordCommonHeader);
-    if (RECORD_HEADER_VERSION_V3 != version_) {
-      ret = OB_NOT_SUPPORTED;
-      STORAGE_LOG(WARN, "record header version mismatch", K(ret), K(version_));
-    } else if (buf_len < pos_orig + static_cast<int64_t>(sizeof(ObRecordCommonHeader))
-                             + column_cnt_ * static_cast<int64_t>(sizeof(int64_t))) {
-      ret = OB_BUF_NOT_ENOUGH;
-      STORAGE_LOG(WARN, "record header buffer not enough", K(ret), K(buf_len), K(pos_orig), K(column_cnt_));
-    } else {
+    if (RECORD_HEADER_VERSION_V3 == version_) {
       const int64_t *column_checksums = nullptr;
       column_checksums = reinterpret_cast<const int64_t *>(buf + pos);
       column_checksums_ = const_cast<int64_t *>(column_checksums);

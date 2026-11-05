@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_get_mysql_routine_parameter_type_str.h"
-#include "sql/pl/ob_pl_stmt.h"
+#include "pl/ob_pl_stmt.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -56,6 +56,7 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else {
     const share::schema::ObRoutineInfo *routine_info = NULL;
     ObDatum &first_param = expr.locate_param_datum(ctx, 0);
@@ -69,6 +70,7 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(routine_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
+      LOG_WARN("routine info is NULL", K(ret), K(routine_id));
     } else {
       share::schema::ObRoutineParam *param = NULL;
       OZ (routine_info->get_routine_param(param_pos, param));
@@ -79,11 +81,12 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
         type_str = static_cast<char *>(ctx.get_expr_res_alloc().alloc(OB_MAX_SYS_PARAM_NAME_LENGTH));
         if (OB_ISNULL(type_str)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("allocate memory for type str failed", K(ret));
         } else {
           memset(type_str, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
           OZ (ob_sql_type_str(param->get_param_type().get_meta_type(),
                               param->get_param_type().get_accuracy(),
-                              param->get_extended_type_info(), ctx.exec_ctx_.get_my_session()->get_default_length_semantics(),
+                              param->get_extended_type_info(), ctx.exec_ctx_.get_my_session()->get_local_nls_length_semantics(),
                               type_str, OB_MAX_SYS_PARAM_NAME_LENGTH, type_pos));
           OX (res_datum.set_string(type_str, type_pos));
         }

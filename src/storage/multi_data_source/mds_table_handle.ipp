@@ -56,7 +56,7 @@ struct MdsTableHandleHelper {
       return ret;
     }
     template <>
-    int get_unit_id<MdsTableType::get_element_size()>(uint8_t &mds_unit_id) {
+    static int get_unit_id<MdsTableType::get_element_size()>(uint8_t &mds_unit_id) {
       int ret = OB_OBJ_TYPE_ERROR;
       MDS_LOG(ERROR, "type error, no this KV unit in this MdsTable", KR(ret),
                       K(typeid(MdsTableType).name()), K(typeid(K).name()), K(typeid(V).name()),
@@ -68,7 +68,7 @@ struct MdsTableHandleHelper {
   template <int IDX>
   static int get_unit_id(const uint8_t mds_table_id, uint8_t &mds_unit_id) {
     int ret = OB_SUCCESS;
-    if (IDX + MDS_TABLE_ID_OFFSET == mds_table_id) {
+    if (IDX == mds_table_id) {
       ret = InnerInnerHelper<typename TupleIdxType<MdsTableTypeTuple, IDX>::type>::
             template get_unit_id<0>(mds_unit_id);
     } else {
@@ -77,7 +77,7 @@ struct MdsTableHandleHelper {
     return ret;
   }
   template <>
-  int get_unit_id<MdsTableTypeTuple::get_element_size()>(const uint8_t mds_table_id,
+  static int get_unit_id<MdsTableTypeTuple::get_element_size()>(const uint8_t mds_table_id,
                                                                 uint8_t &mds_unit_id) {
     int ret = OB_OBJ_TYPE_ERROR;
     MDS_LOG(ERROR, "type error, no this MdsTable", KR(ret), K(mds_table_id),
@@ -94,6 +94,7 @@ inline bool MdsTableHandle::operator==(const MdsTableHandle &rhs) const
 
 inline MdsTableHandle::~MdsTableHandle()
 {
+  MDS_LOG(DEBUG, "MdsTableHandle destructed", K_(mds_table_id), KPC_(p_mds_table_base_.ctrl_ptr));
   mds_table_id_ = UINT8_MAX;
 }
 
@@ -110,9 +111,23 @@ inline int MdsTableHandle::get_tablet_id(common::ObTabletID &tablet_id) const
   return ret;
 }
 
+inline int MdsTableHandle::get_ls_id(share::ObLSID &ls_id) const
+{
+  int ret = OB_SUCCESS;
+  CHECK_MDS_TABLE_INIT();
+  if (!p_mds_table_base_.is_valid()) {
+    ret = OB_BAD_NULL_ERROR;
+    MDS_LOG(WARN, "p_mds_table_base_ is invalid", K(*this));
+  } else {
+    ls_id = p_mds_table_base_->get_ls_id();
+  }
+  return ret;
+}
+
 template <typename MdsTableType>
 int MdsTableHandle::init(ObIAllocator &allocator,
                          const ObTabletID tablet_id,
+                         const share::ObLSID ls_id,
                          const share::SCN mds_ckpt_scn_from_tablet,// this is used to filter replayed nodes after removed action
                          ObTabletPointer *pointer,
                          ObMdsTableMgr *p_mgr)
@@ -130,10 +145,14 @@ int MdsTableHandle::init(ObIAllocator &allocator,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(p_mds_table.construct(allocator))) {
-    } else if (OB_FAIL(p_mds_table->init(tablet_id, mds_ckpt_scn_from_tablet, pointer, p_mgr))) {
+      MDS_LOG(WARN, "construct mds table impl failed", KP(this), K(lbt()));
+    } else if (OB_FAIL(p_mds_table->init(tablet_id, ls_id, mds_ckpt_scn_from_tablet, pointer, p_mgr))) {
+      MDS_LOG(WARN, "init mds table failed", KR(ret), K(mds_table_id_),
+                    K(typeid(MdsTableType).name()));
     } else {
       p_mds_table_base_ = p_mds_table;
-      ATOMIC_STORE(&mds_table_id_, GET_MDS_TABLE_ID<MdsTableType>::value);
+      uint8_t tablet_id = TupleTypeIdx<MdsTableTypeTuple, MdsTableType>::value;
+      ATOMIC_STORE(&mds_table_id_, tablet_id);
     }
   }
   return ret;
@@ -173,6 +192,7 @@ int MdsTableHandle::set(T &&data, MdsCtx &ctx, const int64_t lock_timeout_us)
                                         std::is_rvalue_reference<decltype(data)>::value,
                                         ctx,
                                         converted_timeout))) {
+        MDS_LOG(WARN, "fail to call set", KR(ret), K(unit_id), K(data), K(ctx), K(lock_timeout_us), K(converted_timeout));
       }
     }
   }
@@ -194,6 +214,7 @@ int MdsTableHandle::replay(T &&data, MdsCtx &ctx, const share::SCN &scn)
                                           std::is_rvalue_reference<T>::value,
                                           ctx,
                                           scn))) {
+      MDS_LOG(WARN, "fail to call replay", KR(ret), K(unit_id), K(data), K(ctx), K(scn));
     }
   }
   return ret;
@@ -393,6 +414,8 @@ int MdsTableHandle::is_locked_by_others(bool &is_locked, const MdsWriter &self) 
                                                        (void*)&dummy_key,
                                                        is_locked,
                                                        self))) {
+      MDS_LOG(WARN, "fail to call is_locked_by_others", KR(ret), K(unit_id), K(is_locked),
+              K(self));
     }
   }
   return ret;
@@ -433,6 +456,8 @@ int MdsTableHandle::set(const Key &key, Value &&data, MdsCtx &ctx, const int64_t
                                         std::is_rvalue_reference<Value>::value,
                                         ctx,
                                         converted_timeout))) {
+        MDS_LOG(WARN, "fail to call set", KR(ret), K(unit_id), K(key), K(data), K(ctx),
+                      K(lock_timeout_us), K(converted_timeout));
       }
     }
   }
@@ -453,6 +478,7 @@ int MdsTableHandle::replay(const Key &key, Value &&data, MdsCtx &ctx, const shar
                                           std::is_rvalue_reference<Value>::value,
                                           ctx,
                                           scn))) {
+      MDS_LOG(WARN, "fail to call replay", KR(ret), K(unit_id), K(key), K(data), K(ctx), K(scn));
     }
   }
   return ret;
@@ -489,6 +515,8 @@ int MdsTableHandle::remove(const Key &key, MdsCtx &ctx, const int64_t lock_timeo
                                             (void*)&key,
                                             ctx,
                                             converted_timeout))) {
+        MDS_LOG(WARN, "fail to call remove", KR(ret), K(unit_id), K(key), K(ctx),
+                      K(lock_timeout_us), K(converted_timeout));
       }
     }
   }
@@ -507,6 +535,7 @@ int MdsTableHandle::replay_remove(const Key &key, MdsCtx &ctx, share::SCN &scn)
                                                  (void*)&key,
                                                  ctx,
                                                  scn))) {
+      MDS_LOG(WARN, "fail to call replay_remove", KR(ret), K(unit_id), K(key), K(ctx), K(scn));
     }
   }
   return ret;
@@ -679,6 +708,8 @@ int MdsTableHandle::is_locked_by_others(const Key &key,
                                                        (void*)&key,
                                                        is_locked,
                                                        self))) {
+      MDS_LOG(WARN, "fail to call is_locked_by_others", KR(ret), K(unit_id), K(key), K(is_locked),
+              K(self));
     }
   }
   return ret;
@@ -703,6 +734,7 @@ int MdsTableHandle::scan_all_nodes_to_dump(DUMP_OP &&for_each_op,
                                                         for_flush,
                                                         SCAN_ROW_ORDER,
                                                         SCAN_NODE_ORDER))) {
+    MDS_LOG(WARN, "fail to do for_each dump op", KR(ret), K(*this));
   }
   return ret;
 }
@@ -710,8 +742,11 @@ int MdsTableHandle::scan_all_nodes_to_dump(DUMP_OP &&for_each_op,
 inline int MdsTableHandle::flush(share::SCN need_advanced_rec_scn_lower_limit, share::SCN max_decided_scn)
 {
   int ret = OB_SUCCESS;
+  // return ret;// FIXME: for lixia test, will block CLOG recycle
+#ifndef TEST_MDS_TRANSACTION
   CHECK_MDS_TABLE_INIT();
   ret = p_mds_table_base_->flush(need_advanced_rec_scn_lower_limit, max_decided_scn);
+#endif
   return ret;
 }
 
@@ -751,8 +786,7 @@ inline int MdsTableHandle::get_node_cnt(int64_t &valid_cnt) const
 inline bool MdsTableHandle::is_valid() const
 {
   uint8_t mds_table_id = ATOMIC_LOAD(&mds_table_id_);
-  return mds_table_id >= MDS_TABLE_ID_OFFSET
-      && mds_table_id < MDS_TABLE_ID_OFFSET + MdsTableTypeTuple::get_element_size();
+  return mds_table_id >= 0 && mds_table_id < MdsTableTypeTuple::get_element_size();
 }
 
 inline void MdsTableHandle::reset()
@@ -814,7 +848,7 @@ struct MdsTableUnitConvertHelper {
       return ret;
     }
     template <>
-    int get_unit<MdsTableType::get_element_size()>(MdsTableBase *p_mds_table,
+    static int get_unit<MdsTableType::get_element_size()>(MdsTableBase *p_mds_table,
                                                           MdsUnit<K, V> *&p_mds_unit) {
       int ret = OB_OBJ_TYPE_ERROR;
       MDS_LOG(ERROR, "type error, no this KV unit in this MdsTable", KR(ret),
@@ -829,7 +863,7 @@ struct MdsTableUnitConvertHelper {
                       MdsTableBase *p_mds_table,
                       MdsUnit<K, V> *&p_mds_unit) {
     int ret = OB_SUCCESS;
-    if (IDX + MDS_TABLE_ID_OFFSET == mds_table_id) {
+    if (IDX == mds_table_id) {
       ret = InnerInnerHelper<typename TupleIdxType<MdsTableTypeTuple, IDX>::type>::
             template get_unit<0>(p_mds_table, p_mds_unit);
     } else {
@@ -838,7 +872,7 @@ struct MdsTableUnitConvertHelper {
     return ret;
   }
   template <>
-  int get_unit<MdsTableTypeTuple::get_element_size()>(const uint8_t mds_table_id,
+  static int get_unit<MdsTableTypeTuple::get_element_size()>(const uint8_t mds_table_id,
                                                              MdsTableBase *p_mds_table,
                                                              MdsUnit<K, V> *&p_mds_unit) {
     int ret = OB_OBJ_TYPE_ERROR;
@@ -859,6 +893,7 @@ int MdsTableHandle::get_mds_unit(MdsUnit<UnitKey, UnitValue> *&p_mds_unit)
                                    template get_unit<0>(mds_table_id_,
                                                         get_mds_table_ptr(),
                                                         p_mds_unit)))) {
+    MDS_LOG(WARN, "fail to get mds unit", K(*this));
   }
   return ret;
 }
@@ -871,6 +906,7 @@ inline int MdsTableHandle::fill_virtual_info(ObIArray<MdsNodeInfoForVirtualTable
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(WARN, "p_mds_table_base_ is invalid", K(*this));
   } else if (OB_FAIL(p_mds_table_base_->fill_virtual_info(mds_node_info_array))) {
+    MDS_LOG(WARN, "fail to fill virtual info", K(*this));
   }
   return ret;
 }

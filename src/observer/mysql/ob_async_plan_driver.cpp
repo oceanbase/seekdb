@@ -18,9 +18,7 @@
 
 #include "ob_async_plan_driver.h"
 
-#include "query/protocol/ob_mysql_packet_sender.h"
 #include "observer/mysql/obmp_query.h"
-#include "sql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -30,12 +28,13 @@ using namespace obmysql;
 namespace observer
 {
 
-ObAsyncPlanDriver::ObAsyncPlanDriver(const share::ObGlobalContext &gctx,
+ObAsyncPlanDriver::ObAsyncPlanDriver(const ObGlobalContext &gctx,
                                      const ObSqlCtx &ctx,
                                      sql::ObSQLSessionInfo &session,
                                      ObQueryRetryCtrl &retry_ctrl,
-                                     ObMPPacketSender &sender)
-    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender)
+                                     ObIMPPacketSender &sender,
+                                     bool is_prexecute)
+    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender, is_prexecute)
 {
 }
 
@@ -45,6 +44,7 @@ ObAsyncPlanDriver::~ObAsyncPlanDriver()
 
 int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
 {
+  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_execution);
   int ret = OB_SUCCESS;
   // After result.open, all required parameters such as last insert id for pkt_param have been calculated
   // For asynchronous add, delete, and modify operations, it is necessary to update the last insert id in advance to ensure the pkt_param parameter is correct in the callback
@@ -54,7 +54,9 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("current trace id is NULL", K(ret));
   } else if (OB_FAIL(result.open())) {
+    LOG_WARN("failed to do result set open", K(ret));
   } else if (OB_FAIL(result.update_last_insert_id_to_client())) {
+    LOG_WARN("failed to update last insert id after open", K(ret));
   } else {
     // open success, allow asynchronous response
     result.set_end_trans_async(true);
@@ -77,14 +79,52 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     // }
     int cret = result.close();
     if (retry_ctrl_.need_retry()) {
+      LOG_WARN("result set open failed, will retry",
+               K(ret), K(cli_ret), K(cret), K(retry_ctrl_.need_retry()));
     } else {
+      LOG_WARN("result set open failed, let's leave process(). EndTransCb will clean this mess",
+               K(ret), K(cli_ret), K(cret), K(retry_ctrl_.need_retry()));
     }
     ret = cli_ret;
+  } else if (is_prexecute_ && OB_FAIL(response_query_header(result, false, false, true))) {
+    /*
+    * prexecute only sends the header packet when execution is successful
+    * There are two manifestations when execution fails
+    *  1. Only an error packet is returned, at which point attention should be paid to the leakage of ps stmt
+    *  2. Retry, local retries are directly handed over to the upper layer, package retries need to pay attention to the leakage of ps stmt
+    *  3. response_query_header & flush_buffer will not produce errors that require retry, this position is one step before ObAsyncPlanDriver retries, with no other possible retry operations in between
+    *  4. Cleaning up ps stmt needs to consider the situation of asynchronous responses, and cleanup may need to be done within the asynchronous packets
+    */ 
+    // need close result set
+    int close_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (close_ret = result.close())) {
+      LOG_WARN("close result failed", K(close_ret));
+    }
+    LOG_WARN("prexecute response query head fail. ", K(ret));
   } else if (result.is_with_rows()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("SELECT should not use async method. wrong code!!!", K(ret));
   } else if (OB_FAIL(result.close())) {
+    LOG_WARN("result close failed, let's leave process(). EndTransCb will clean this mess", K(ret));
   } else {
+    // async did not call ObSqlEndTransCb to reply OK package
+    // So the OK packet of the combined protocol should also be handled here
+    if (is_prexecute_) {
+      if (stmt::T_SELECT == result.get_stmt_type()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("select stmt do not use async plan in prexecute.", K(ret));
+      } else if (!result.is_async_end_trans_submitted()) {
+        // is_async_end_trans_submitted indicates that the asynchronous response is ready
+        ObOKPParam ok_param;
+        ok_param.affected_rows_ = result.get_affected_rows();
+        ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
+        ok_param.has_more_result_ = result.has_more_result();
+        ok_param.send_last_row_ = true;
+        if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
+          LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
+        }
+      }
+    }
   }
   // Only set after end_trans is executed (regardless of success or failure), meaning a callback will definitely occur
   // The reason for designing this value is that open/close might "fall short" and never actually reach the end
@@ -103,9 +143,11 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
   // Error handling, responsible for returning error packets when not going asynchronous
   if (!OB_SUCC(ret) && !async_resp_used && !retry_ctrl_.need_retry()) {
     int sret = OB_SUCCESS;
-    if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL))) {
+    bool is_partition_hit = session_.get_err_final_partition_hit(ret);
+    if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit))) {
+      LOG_WARN("send error packet fail", K(sret), K(ret));
     }
-    //According to the agreement with the transaction layer, regardless of whether end_stmt succeeds or not,
+    //According to the agreement with the transaction layer, regardless of whether end_participant and end_stmt succeed or not,
     //Determine whether the transaction commit or rollback is successful by only checking if the final end_trans is successful,
     // and SQL must ensure that end_trans is called, when calling end_trans it checks if the connection needs to be terminated,
     //So here there is no need to check if the connection needs to be terminated
@@ -116,3 +158,5 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
 
 }/* ns observer*/
 }/* ns oceanbase */
+
+

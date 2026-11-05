@@ -18,25 +18,26 @@
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 
 #include "common/mysqlclient/ob_isql_connection.h"
-#include "lib/guard/ob_weak_guard.h"
 #include "storage/tx/ob_multi_data_source.h"  // ObRegisterMdsFlag complete type(previously hidden behind the rpc_struct include chain)
+#include "lib/list/ob_dlist.h"
 #include "lib/container/ob_2d_array.h"
-#include "sql/session/ob_inner_sql_connection.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "share/statement/ob_stmt_type.h"
+#include "sql/resolver/ob_stmt_type.h"
 #include "sql/monitor/ob_exec_stat.h"
 #include "observer/ob_restore_sql_modifier.h"
-#include "sql/ob_query_retry_ctrl.h"
+#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "observer/ob_inner_sql_transmit_struct.h"
 #include "common/mysqlclient/ob_isql_client.h"
+#include "share/location_cache/ob_location_service.h"
 #include "storage/tablelock/ob_table_lock_common.h"   //ObTableLockMode
 #include "sql/session/ob_sql_session_mgr.h"
-#include "lib/stat/ob_diagnose_info.h"
 
 namespace oceanbase
 {
 namespace common
 {
 class ObString;
+class ObServerConfig;
 namespace sqlclient
 {
 class ObISQLResultHandler;
@@ -75,6 +76,7 @@ class ObUnLockTabletRequest;
 namespace observer
 {
 class ObInnerSQLResult;
+class ObInnerSQLConnectionPool;
 class ObVTIterCreator;
 class ObVirtualTableIteratorFactory;
 class ObInnerSQLReadContext;
@@ -92,11 +94,29 @@ public:
 };
 
 class ObInnerSQLConnection
-    : public sql::ObIInnerSQLConnection
+    : public common::sqlclient::ObISQLConnection,
+      public common::ObDLinkBase<ObInnerSQLConnection>
 {
 public:
   static constexpr const char LABEL[] = "RPInnerSqlConn";
-  using SavedValue = sql::ObIInnerSQLConnection::SavedValue;
+  class SavedValue
+  {
+  public:
+    SavedValue()
+    {
+      reset();
+    }
+    inline void reset()
+    {
+      ref_ctx_ = NULL;
+      execute_start_timestamp_ = 0;
+      execute_end_timestamp_ = 0;
+    }
+  public:
+    ObInnerSQLReadContext *ref_ctx_;
+    int64_t execute_start_timestamp_;
+    int64_t execute_end_timestamp_;
+  };
 
   // Worker and session timeout may be altered in sql execution, restore to origin value after execution.
   class TimeoutGuard
@@ -117,34 +137,36 @@ public:
   ObInnerSQLConnection();
   virtual ~ObInnerSQLConnection();
 
-  static int create_connection_with_owned_session(
-      const bool use_static_engine,
-      const int32_t group_id,
-      common::sqlclient::ObISQLConnectionGuard &conn);
-  static int create_connection_with_external_session(
-      sql::ObSQLSessionInfo *session_info,
-      common::sqlclient::ObISQLConnectionGuard &conn);
-  static int create_spi_connection_with_external_session(
-      sql::ObSQLSessionInfo *session_info,
-      common::sqlclient::ObISQLConnectionGuard &conn);
-
-  int init(sql::ObSql *ob_sql,
+  int init(ObInnerSQLConnectionPool *pool,
+           share::schema::ObMultiVersionSchemaService *schema_service,
+           sql::ObSql *ob_sql,
            ObVTIterCreator *vt_iter_creator,
+           common::ObServerConfig *config,
            sql::ObSQLSessionInfo *extern_session = NULL,
+           ObISQLClient *client_addr = NULL,
            ObRestoreSQLModifier *sql_modifer = NULL,
            const bool use_static_engine = false,
-           const int32_t group_id = 0);
+           const int32_t group_id = 0,
+           const bool is_resource_conn = false);
   int destroy(void);
-  inline void reset()
-  {
-    destroy();
-    // rp_free() calls reset() instead of the destructor.
-    self_weak_guard_.reset();
-  }
+  inline void reset() { destroy(); }
   virtual int execute_read(const ObString &sql,
-                           common::ObISQLClient::ReadResult &res, bool is_user_sql = false) override;
+                           common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
+                           const common::ObAddr *sql_exec_addr = nullptr/* ddl inner sql execution addr */) override;
+  virtual int execute_read(const int64_t cluster_id, const ObString &sql,
+                           common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
+                           const common::ObAddr *sql_exec_addr = nullptr/* ddl inner sql execution addr */) override;
   virtual int execute_write(const ObString &sql,
-                            int64_t &affected_rows, bool is_user_sql = false) override;
+                            int64_t &affected_rows, bool is_user_sql = false,
+                            const common::ObAddr *sql_exec_addr = nullptr) override;
+
+  // Prepared Statement API for embedded mode
+  int stmt_prepare(const ObString &sql,
+                   uint64_t &stmt_id, int64_t &param_count);
+  int stmt_execute(const uint64_t stmt_id,
+                   const ParamStore &params, int64_t &affected_rows);
+  int stmt_close(const uint64_t stmt_id);
+
   virtual int execute_proc(ObIAllocator &allocator,
                           ParamStore &params,
                           ObString &sql,
@@ -154,6 +176,7 @@ public:
                           ObObj *result,
                           bool is_sql) override;
   virtual int start_transaction(bool with_snap_shot = false) override;
+  virtual sqlclient::ObCommonServerConnectionPool *get_common_server_pool() override;
   virtual int rollback() override;
   virtual int commit() override;
   sql::ObSQLSessionInfo &get_session() { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
@@ -168,21 +191,40 @@ public:
 
   virtual int set_ddl_info(const void *ddl_info);
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap);
+  virtual void set_nls_formats(const ObString *nls_formats);
   virtual void set_is_load_data_exec(bool v);
+  virtual void set_force_remote_exec(bool v) { force_remote_execute_ = v; }
+  virtual void set_use_external_session(bool v) { use_external_session_ = v; }
   virtual void set_ob_enable_pl_cache(bool v) override;
   bool is_nested_conn();
   virtual void set_user_timeout(int64_t timeout) { user_timeout_ = timeout; }
   virtual int64_t get_user_timeout() const { return user_timeout_; }
   int try_acquire_query_lock();
   void try_release_query_lock();
+  void ref();
+  // when ref count decrease to zero, revert connection to connection pool.
+  void unref();
+  int64_t get_ref() const { return ref_cnt_; }
 
   ObVTIterCreator *get_vt_iter_creator() const { return vt_iter_creator_; }
   ObInnerSQLReadContext *&get_prev_read_ctx() { return ref_ctx_; }
-  common::sqlclient::ObISQLConnectionGuard get_shared_guard() const
-  {
-    return self_weak_guard_.upgrade();
-  }
   void dump_conn_bt_info();
+  class RefGuard {
+  public:
+    explicit RefGuard(ObInnerSQLConnection &conn)
+      : conn_(conn)
+    {
+      conn_.ref();
+    }
+    ~RefGuard()
+    {
+      conn_.unref();
+    }
+    ObInnerSQLConnection &get_conn() { return conn_; }
+
+  private:
+    ObInnerSQLConnection &conn_;
+  };
 public:
   int64_t get_send_timestamp() const { return get_session().get_query_start_time(); }
   int64_t get_receive_timestamp() const { return get_session().get_query_start_time(); }
@@ -192,8 +234,24 @@ public:
   int64_t get_single_process_timestamp() const { return get_session().get_query_start_time(); }
   int64_t get_exec_start_timestamp() const { return execute_start_timestamp_; }
   int64_t get_exec_end_timestamp() const { return execute_end_timestamp_; }
+  common::ObISQLClient *get_associated_client() const { return associated_client_; }
   bool is_in_trans() const { return is_in_trans_; }
   void set_is_in_trans(const bool is_in_trans) { is_in_trans_ = is_in_trans; }
+  bool is_resource_conn() const { return is_resource_conn_; }
+  void set_resource_conn_id(uint64_t resource_conn_id) { resource_conn_id_ = resource_conn_id; }
+  uint64_t get_resource_conn_id() const { return resource_conn_id_; }
+  const common::ObAddr &get_resource_svr() const { return resource_svr_; }
+  void set_resource_svr(const common::ObAddr &resource_svr) { resource_svr_ = resource_svr; }
+  void set_is_idle(bool is_idle) { is_idle_ = is_idle; }
+  bool is_idle() const { return is_idle_; }
+  void set_force_no_reuse(bool force_no_reuse) { force_no_reuse_ = force_no_reuse; }
+  bool is_force_no_reuse() const { return force_no_reuse_; }
+
+  void set_last_query_timestamp(int64_t last_query_timestamp)
+  { last_query_timestamp_ = last_query_timestamp; }
+  int64_t get_last_query_timestamp() const { return last_query_timestamp_; }
+  void reset_resource_conn_info()
+  { resource_conn_id_ = OB_INVALID_ID; last_query_timestamp_ = 0; resource_svr_.reset(); }
 
 public:
 
@@ -201,13 +259,17 @@ public:
 
   virtual int execute(sqlclient::ObIExecutor &executor) override;
 
+  int forward_request(const int64_t op_type,
+                      const ObString &sql,
+                      ObInnerSQLResult &res,
+                      const int32_t group_id = 0);
 
 public:
   // nested session and sql execute for foreign key.
   int begin_nested_session(sql::ObSQLSessionInfo::StmtSavedValue &saved_session,
-                           SavedValue &saved_conn, bool skip_cur_stmt_tables) override;
+                           SavedValue &saved_conn, bool skip_cur_stmt_tables);
   int end_nested_session(sql::ObSQLSessionInfo::StmtSavedValue &saved_session,
-                         SavedValue &saved_conn) override;
+                         SavedValue &saved_conn);
   bool is_extern_session() const { return NULL != extern_session_; }
   bool is_inner_session() const { return NULL == extern_session_; }
   bool is_spi_conn() const { return is_spi_conn_; }
@@ -216,6 +278,7 @@ public:
 
 public:// for mds
   int register_multi_data_source(
+                                 const share::ObLSID ls_id,
                                  const transaction::ObTxDataSourceType type,
                                  const char *buf,
                                  const int64_t buf_len,
@@ -233,6 +296,7 @@ public:
                             ObWaitEventStat &total_wait_desc,
                             sql::ObExecRecord &exec_record,
                             sql::ObExecTimestamp &exec_timestamp,
+                            bool has_tenant_resource,
                             const ObString &ps_sql,
                             bool is_from_pl = false,
                             ObString *pl_exec_params = NULL);
@@ -242,6 +306,7 @@ public:
                                   int last_ret,
                                   int64_t execution_id,
                                   int64_t ps_stmt_id,
+                                  bool has_tenant_resource,
                                   const ObString &ps_sql,
                                   bool is_from_pl = false);
   static void record_stat(sql::ObSQLSessionInfo &session,
@@ -254,8 +319,11 @@ public:
                                const bool is_ddl);
 
   int64_t get_init_timestamp() const { return init_timestamp_; }
+  int switch_tenant();
+  bool is_local_execute(const int64_t cluster_id);
 public:
   static const int64_t LOCK_RETRY_TIME = 1L * 1000 * 1000;
+  static const int64_t TOO_MANY_REF_ALERT = 1024;
   static const uint32_t INNER_SQL_SESS_ID = 1;
   static const int64_t MAX_BT_SIZE = 20;
   static const int64_t EXTRA_REFRESH_LOCATION_TIME = 1L * 1000 * 1000;
@@ -269,6 +337,7 @@ private:
                   bool is_prepare_protocol = false,
                   bool is_prepare_stage = false,
                   bool is_dynamic_sql = false,
+                  bool is_dbms_sql = false,
                   bool is_cursor = false);
   int process_retry(ObInnerSQLResult &res,
                     int do_ret,
@@ -288,32 +357,40 @@ private:
   // set timeout to session variable
   int set_timeout(int64_t &abs_timeout_us);
 
-  int execute_read_inner(const ObString &sql,
-                         common::ObISQLClient::ReadResult &res, bool is_user_sql = false);
+  lib::Worker::CompatMode get_compat_mode() const;
+
+  int nonblock_get_leader(
+      const int64_t cluster_id,
+      const share::ObLSID ls_id,
+      common::ObAddr &leader);
+
+  int execute_read_inner(const int64_t cluster_id, const ObString &sql,
+                         common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
+                         const common::ObAddr *sql_exec_addr = nullptr);
   int execute_write_inner(const ObString &sql, int64_t &affected_rows,
-      bool is_user_sql = false);
+      bool is_user_sql = false, const common::ObAddr *sql_exec_addr = nullptr);
   int start_transaction_inner(bool with_snap_shot = false);
   template <typename T>
-  int execute_with_timeout(T function);
+  int retry_while_no_tenant_resource(const int64_t cluster_id, T function);
 
+  int forward_request_(const int64_t op_type,
+                       const ObString &sql,
+                       ObInnerSQLResult &res,
+                       const int32_t group_id = 0);
+  int get_session_timeout_for_rpc(int64_t &query_timeout, int64_t &trx_timeout);
   int create_session_by_mgr();
   int create_default_session();
   bool is_inner_session_mgr_enable();
   int destroy_inner_session();
-  static int create_impl(
-                    sql::ObSQLSessionInfo *extern_session,
-                    const bool use_static_engine,
-                    const int32_t group_id,
-                    const bool use_spi_allocator,
-                    common::sqlclient::ObISQLConnectionGuard &conn);
-  void free_self();
 private:
   bool inited_;
-  sql::ObQueryRetryCtrl retry_ctrl_;
+  observer::ObQueryRetryCtrl retry_ctrl_;
   sql::ObSQLSessionInfo *extern_session_;   // nested sql and spi both use it, rename to extern.
   sql::ObSQLSessionInfo *inner_session_;
-  common::ObWeakGuard<common::sqlclient::ObISQLConnection> self_weak_guard_;
   bool is_spi_conn_;
+  int64_t ref_cnt_;
+  ObInnerSQLConnectionPool *pool_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   sql::ObSql *ob_sql_;
   ObVTIterCreator *vt_iter_creator_;
   ObInnerSQLReadContext *ref_ctx_;
@@ -324,13 +401,36 @@ private:
   void *bt_addrs_[MAX_BT_SIZE];
   int64_t execute_start_timestamp_;
   int64_t execute_end_timestamp_;
+  common::ObServerConfig *config_;
+  common::ObISQLClient *associated_client_;
 
-  // The inner SQL connection always executes in the local server runtime.
+  // for using rpc to send sql to the server which has tenant resource
   bool is_in_trans_;
+  bool is_resource_conn_;
+  bool is_idle_; // for resource_conn_
+  common::ObAddr resource_svr_; // server of destination in local rpc call
+  uint64_t resource_conn_id_; // resource conn_id of dst srv
+  int64_t last_query_timestamp_;
+  /*
+   This flag is used by ddl to force this inner sql bypass the local-optimized path, always execute it through rpc
+
+   Why do we need this? 
+   DDL needs to issue an "insert into select" sql to build the single replica, which will deal with user data.
+   However, in the local-optimized path, the sql will be executed using a "fake user tenant session", whose 
+   login identity is actually the sys identity. This leads to unexpected privilege check result since privilege
+   check always uses the login identity due to security. To solve this problem, we add this flag to force all
+   "insert into select" inner sqls issued by DDL to use remote execution, where observer will create a real
+   user session to execute the sql.
+
+   What do I mean by saying "fake user tenant session"?
+   a session created by sys tenant then uses tenant switch to behave like user tenant.
+  */
+  bool force_remote_execute_;
+  bool force_no_reuse_;
 
   // ask the inner sql connection to use external session instead of internal one
   // this enables show session / kill session using sql query command
-  bool use_external_session_;
+  bool use_external_session_; 
   int32_t group_id_;
   //support set user timeout of stream rpc but not depend on internal_sql_execute_timeout
   int64_t user_timeout_;
@@ -342,11 +442,17 @@ private:
 class ObInnerSqlWaitGuard
 {
 public:
-  explicit ObInnerSqlWaitGuard(const bool is_inner_session,
-      sql::ObSQLSessionInfo *inner_session);
-  ~ObInnerSqlWaitGuard() = default;
+  explicit ObInnerSqlWaitGuard(const bool is_inner_session, common::ObDiagnosticInfo *di, sql::ObSQLSessionInfo *inner_session);
+  ~ObInnerSqlWaitGuard();
 private:
-  common::ObWaitEventGuard wait_guard_;
+  bool is_inner_session_;
+  int64_t inner_session_id_;
+  ObDiagnosticInfo *inner_sql_di_;
+  ObDiagnosticInfo *prev_di_;
+  bool need_record_;
+  bool has_finish_switch_di_;
+  int64_t prev_block_sessid_;
+  sql::ObQueryRetryAshInfo *prev_info_;
 };
 
 class ObInnerSQLSessionGuard

@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_compaction_schedule_util.h"
-#include "share/rc/ob_server_runtime.h"
-#include "storage/compaction/ob_tablet_scheduler.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "storage/compaction/ob_compaction_progress.h"
+#include "storage/compaction/ob_tenant_compaction_progress.h"
 
 namespace oceanbase
 {
@@ -34,7 +34,7 @@ ObBasicMergeScheduler::ObBasicMergeScheduler()
     frozen_version_(INIT_COMPACTION_SCN),
     inner_table_merged_scn_(INIT_COMPACTION_SCN),
     merged_version_(INIT_COMPACTION_SCN),
-    runtime_status_(),
+    tenant_status_(),
     major_merge_status_(false),
     is_stop_(false)
   {}
@@ -50,14 +50,14 @@ void ObBasicMergeScheduler::reset()
   frozen_version_ = 0;
   inner_table_merged_scn_ = 0;
   merged_version_ = 0;
-  runtime_status_.reset();
+  tenant_status_.reset();
   major_merge_status_ = false;
 }
 
 ObBasicMergeScheduler* ObBasicMergeScheduler::get_merge_scheduler()
 {
   ObBasicMergeScheduler *scheduler = nullptr;
-  scheduler = ::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>();
+  scheduler = share::g_mp->tenant_tablet_scheduler();
 
   return scheduler;
 }
@@ -108,7 +108,7 @@ void ObBasicMergeScheduler::update_frozen_version_and_merge_progress(const int64
       frozen_version_ = broadcast_version;
     }
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionProgressMgr>()->init_progress(broadcast_version))) {
+    if (OB_TMP_FAIL(share::g_mp->tenant_compaction_progress_mgr()->init_progress(broadcast_version))) {
       LOG_WARN_RET(tmp_ret, "failed to init progress", K(broadcast_version));
     }
   }
@@ -129,7 +129,8 @@ void ObBasicMergeScheduler::try_finish_merge_progress(const int64_t merge_versio
     merged_version_ = merged_scn;
   }
 
-  if (merged_version_ >= merge_version && OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionProgressMgr>()->finish_progress(merged_version_))) {
+  if (merged_version_ >= merge_version && OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->finish_progress(merged_version_))) {
+    LOG_WARN("failed to finish progress", KR(ret), K(merge_version), K(merged_version_));
   }
 }
 

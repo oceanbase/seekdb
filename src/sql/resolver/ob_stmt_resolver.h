@@ -53,18 +53,31 @@ public:
   virtual int resolve(const ParseNode &parse_tree) = 0;
   inline ObStmt *get_basic_stmt() { return stmt_; }
   inline void set_basic_stmt(ObStmt *stmt) { stmt_ = stmt; }
+  int resolve_table_relation_factor(const ParseNode *node, uint64_t &database_id,
+                                    common::ObString &table_name, common::ObString &synonym_name, common::ObString &db_name);
+
   /// @param org If org is true, means get original db name.
   /// Else, when db node is NULL, get session db name.
   int resolve_table_relation_node_v2(const ParseNode *node,
                                      common::ObString &table_name,
                                      common::ObString &db_name,
+                                     common::ObString &catalog_name,
                                      bool &is_db_explicit,
-                                     bool org = false);
+                                     bool org = false,
+                                     bool is_oracle_sys_view = false);
+
+  int resolve_table_relation_node(const ParseNode *node,
+                                common::ObString &table_name,
+                                common::ObString &db_name,
+                                common::ObString &catalog_name,
+                                bool org = false,
+                                bool is_oracle_sys_view = false);
 
   int resolve_table_relation_node(const ParseNode *node,
                                   common::ObString &table_name,
                                   common::ObString &db_name,
-                                  bool org = false);
+                                  bool org = false,
+                                  bool is_oracle_sys_view = false);
   /**
    * @brief  Parse a T_REF_FACTOR node to get database name and table name
    * @param [in] node  - syntax node
@@ -77,6 +90,7 @@ public:
    */
   static int resolve_ref_factor(const ParseNode *node, ObSQLSessionInfo *session_info, common::ObString &table_name, common::ObString &db_name);
   int resolve_database_factor(const ParseNode *node,
+                              const uint64_t catalog_id,
                               uint64_t &database_id,
                               common::ObString &db_name);
 
@@ -144,9 +158,12 @@ public:
   int check_table_name_equal(const ObString &name1, const ObString &name2, bool &equal);
 protected:
   int normalize_table_or_database_names(common::ObString &name);
+  int resolve_catalog_node(const ParseNode *catalog_node, uint64_t &catalog_id, common::ObString &catalog_name);
+
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObStmtResolver);
+  bool is_catalog_supported_stmt_();
 public:
   // data members
   common::ObIAllocator *allocator_;

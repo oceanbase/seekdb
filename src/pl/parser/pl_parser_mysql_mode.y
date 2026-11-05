@@ -128,7 +128,7 @@ int obpl_mysql_wrap_node_into_subquery(ObParseCtx *_parse_ctx, ParseNode *node) 
       parse_result.is_for_trigger_ = (1 == _parse_ctx->is_for_trigger_);
       parse_result.question_mark_ctx_ = _parse_ctx->question_mark_ctx_;
       parse_result.charset_info_ = _parse_ctx->charset_info_;
-      parse_result.charset_info_nls_db_ = _parse_ctx->charset_info_nls_db_;
+      parse_result.charset_info_oracle_db_ = _parse_ctx->charset_info_oracle_db_;
       parse_result.is_not_utf8_connection_ = _parse_ctx->is_not_utf8_connection_;
       parse_result.connection_collation_ = _parse_ctx->connection_collation_;
       parse_result.sql_mode_ = _parse_ctx->scanner_ctx_.sql_mode_;
@@ -222,14 +222,14 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 /* non reserved key words */
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-      AFTER AT AUTHID BEGIN_KEY BINARY_INTEGER BODY C CATALOG_NAME CLASS_ORIGIN CLOSE COLUMN_NAME COMMENT
+      AFTER AT AUTHID BEGIN_KEY BINARY_INTEGER BODY C CATALOG_NAME CLASS_ORIGIN CLOSE COLUMN_NAME COMMENT COMPLETION
       CONSTRAINT_CATALOG CONSTRAINT_NAME CONSTRAINT_ORIGIN CONSTRAINT_SCHEMA CONTAINS COUNT CURSOR_NAME
-      DATA DAY DEFINER DISABLE ENABLE END_KEY EXTEND FOLLOWS FOUND FUNCTION HANDLER HOUR INTERFACE INTERVAL INVOKER JSON LANGUAGE
-      MESSAGE_TEXT MINUTE MONTH MYSQL_ERRNO NATIONAL NEXT NO OF OPEN PACKAGE PRAGMA PRECEDES RECORD RETURNS ROW ROWTYPE
-      SCHEMA_NAME SECOND SECURITY SUBCLASS_ORIGIN TABLE_NAME TO USER TYPE VALUE DATETIME TIMESTAMP TIME DATE YEAR
-      TEXT NCHAR NVARCHAR BOOL BOOLEAN ENUM BIT FIXED SIGNED STARTS ROLE SUBMIT CANCEL JOB RECOVER
+      DATA DAY DEFINER DISABLE ENABLE ENDS END_KEY EVENT EVERY EXTEND FOLLOWS FOUND FUNCTION HANDLER HOUR INTERFACE INTERVAL INVOKER JSON LANGUAGE
+      MESSAGE_TEXT MINUTE MONTH MYSQL_ERRNO NATIONAL NEXT NO OF OPEN PACKAGE PRAGMA PRECEDES PRESERVE RECORD RETURNS ROW ROWTYPE
+      SCHEDULE SCHEMA_NAME SECOND SECURITY SUBCLASS_ORIGIN TABLE_NAME TO USER TYPE VALUE DATETIME TIMESTAMP TIME DATE YEAR
+      TEXT NCHAR NVARCHAR BOOL BOOLEAN ENUM BIT FIXED SIGNED STARTS ROLE SUBMIT CANCEL JOB XA RECOVER COMPILE REUSE SETTINGS
       GEOMETRY POINT LINESTRING POLYGON MULTIPOINT MULTILINESTRING MULTIPOLYGON GEOMETRYCOLLECTION GEOMCOLLECTION
-      SERIAL
+      ROARINGBITMAP SERIAL
 //-----------------------------non_reserved keyword end---------------------------------------------
 %right END_KEY
 %left ELSE IF ELSEIF
@@ -241,7 +241,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 %nonassoc AUTHID INTERFACE
 %nonassoc DECLARATION
 
-%type <node> sql_keyword
+%type <node> sql_keyword xa_keyword
 %type <non_reserved_keyword> unreserved_keyword
 %type <node> stmt_block stmt_list stmt outer_stmt sp_proc_outer_statement sp_proc_inner_statement sp_proc_independent_statement
 %type <node> create_procedure_stmt sp_proc_stmt expr expr_list procedure_body default_expr
@@ -282,6 +282,10 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 %type <node> create_trigger_stmt drop_trigger_stmt plsql_trigger_source
 %type <node> trigger_definition trigger_event trigger_body pl_obj_access_ref
 %type <ival> trigger_time
+%type <node> submit_job_stmt cancel_job_stmt
+%type <node> create_event_stmt event_schedule event_time_expr opt_event_time_range event_start_time event_end_time event_on_completion opt_event_on_completion opt_event_status opt_event_comment event_body_stmts event_body
+%type <node> alter_event_stmt opt_event_alter_on_schedule_completion opt_event_rename opt_event_body
+%type <node> drop_event_stmt
 /*SQL data type*/
 %type <node> scalar_data_type opt_charset collation opt_collation charset_name collation_name
 %type <node> number_literal literal charset_key opt_float_precision opt_number_precision opt_binary
@@ -290,7 +294,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 %type <ival> opt_bit_length_i opt_datetime_fsp_i opt_year_i
 %type <ival> int_type_i float_type_i datetime_type_i date_year_type_i text_type_i blob_type_i
 %type <ival> nchar_type_i nvarchar_type_i
-%type <node> variable number_type
+%type <node> variable number_type date_unit
 %type <node> geometry_collection
 %%
 /*****************************************************************************
@@ -366,6 +370,11 @@ outer_stmt:
   | create_package_stmt { $$ = $1; }
   | create_package_body_stmt { $$ = $1; }
   | drop_package_stmt { $$ = $1; }
+  | submit_job_stmt { $$ = $1; }
+  | cancel_job_stmt { $$ = $1; }
+  | create_event_stmt { $$ = $1; }  
+  | alter_event_stmt { $$ = $1; }
+  | drop_event_stmt { $$ = $1; }
   | sql_stmt { $$ = $1; }
   | call_sp_stmt { $$ = $1; }
   | do_sp_stmt { $$ = $1; }
@@ -405,6 +414,13 @@ sql_stmt_prefix:
   | LOAD { $$ = NULL; }
 ;
 
+xa_keyword:
+  BEGIN_KEY { $$ = NULL; }
+  | SQL_KEYWORD { $$ = NULL; }
+  | END_KEY { $$ = NULL; }
+  | RECOVER { $$ = NULL; }
+;
+
 sql_stmt:
     sql_stmt_prefix /*sql stmt tail*/
     {
@@ -414,6 +430,13 @@ sql_stmt:
       malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SQL_STMT, 1, sql_stmt);
     }
   | REPLACE /*sql stmt tail*/
+    {
+      //read sql query string直到读到token';'或者END_P
+      ParseNode *sql_stmt = NULL;
+      do_parse_sql_stmt(sql_stmt, parse_ctx, @1.first_column, @1.last_column, 2, ';', END_P);
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SQL_STMT, 1, sql_stmt);
+    }
+  | XA xa_keyword /*sql stmt tail*/
     {
       //read sql query string直到读到token';'或者END_P
       ParseNode *sql_stmt = NULL;
@@ -598,6 +621,19 @@ call_sp_stmt:
     {
       malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_CALL_STMT, 2, $2, $3);
     }
+  | CALL sp_call_name opt_sp_cparam_list IDENT '=' STRING
+    {
+      if (!nodename_equal($4, "TENANT", 6)) {
+        obpl_mysql_yyerror(&@4, parse_ctx, "Syntax Error\n");
+        YYERROR;
+      }
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_SYS_DISPATCH_CALL, 3, $2, $3, $6);
+      check_ptr($$);
+      const char *stmt_str = parse_ctx->stmt_str_ + @1.first_column;
+      int32_t str_len = @3.last_column - @1.first_column + 1;
+      $$->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
+      check_ptr($$->str_value_);
+    }
   | '^' sp_proc_stmt
     {
       if (!parse_ctx->is_inner_parse_) {
@@ -755,10 +791,12 @@ unreserved_keyword:
   | BODY %prec LOWER_PARENS
   | C
   | CATALOG_NAME
+  | CANCEL
   | CLASS_ORIGIN
   | CLOSE
   | COLUMN_NAME
   | COMMENT
+  | COMPLETION
   | CONSTRAINT_CATALOG
   | CONSTRAINT_NAME
   | CONSTRAINT_ORIGIN
@@ -770,6 +808,9 @@ unreserved_keyword:
   | DEFINER
   | DISABLE
   | ENABLE
+  | ENDS
+  | EVENT
+  | EVERY
   | END_KEY %prec LOWER_PARENS
   | EXTEND
   | FOUND
@@ -777,6 +818,7 @@ unreserved_keyword:
   | HANDLER
   | INTERFACE 
   | INVOKER
+  | JOB
   | JSON
   | LANGUAGE
   | MESSAGE_TEXT
@@ -793,16 +835,19 @@ unreserved_keyword:
   | ROW
   | ROWTYPE
   | ROLE
+  | SCHEDULE
   | SCHEMA_NAME
   | SECURITY
   | STARTS
   | SUBCLASS_ORIGIN
+  | SUBMIT
   | TABLE_NAME
   | TO
   | TYPE
   | VALUE
   | FOLLOWS
   | PRECEDES
+  | PRESERVE
   | NATIONAL
   | DATETIME
   | TIMESTAMP
@@ -818,6 +863,7 @@ unreserved_keyword:
   | BIT
   | FIXED
   | SIGNED
+  | XA
   | RECOVER
   | GEOMETRY
   | POINT
@@ -828,6 +874,10 @@ unreserved_keyword:
   | MULTIPOLYGON
   | GEOMETRYCOLLECTION
   | GEOMCOLLECTION
+  | ROARINGBITMAP
+  | COMPILE
+  | REUSE
+  | SETTINGS
   | MONTH
   | DAY
   | HOUR
@@ -1795,7 +1845,7 @@ sp_decl:
       $5->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
       check_ptr($5->str_value_);
       $5->str_len_ = str_len;
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_DECL_CURSOR, 4, $2, NULL, NULL, $5); // keep four-argument cursor layout
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_DECL_CURSOR, 4, $2, NULL, NULL, $5); //4参数和Oracle模式保持一致
       copy_node_abs_location($$->stmt_loc_, @1);
     }
 ;
@@ -1843,7 +1893,7 @@ sqlstate:
 sp_proc_stmt_open:
     OPEN ident
     {
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PROC_OPEN, 3, $2, NULL, NULL, NULL); // keep cursor open placeholders
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PROC_OPEN, 3, $2, NULL, NULL, NULL); //4参数和Oracle模式保持一致
     }
 ;
 
@@ -2039,6 +2089,238 @@ geometry_collection:
 GEOMETRYCOLLECTION { $$ = NULL; }
 | GEOMCOLLECTION { $$ = NULL; }
 ;
+
+/*****************************************************************************
+ *
+ *	EVENT grammar
+ *
+ *****************************************************************************/
+create_event_stmt:
+CREATE opt_sp_definer EVENT opt_if_not_exists sp_name ON SCHEDULE event_schedule opt_event_on_completion opt_event_status opt_event_comment DO event_body
+{
+  ParseNode *if_not_exists = NULL;
+  if ($4 == 1) {
+    malloc_terminal_node(if_not_exists, parse_ctx->mem_pool_, T_IF_NOT_EXISTS);
+  }
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_EVENT_JOB_CREATE, 8, $2, if_not_exists, $5, $8, $9, $10, $11, $13);
+}
+;
+
+event_schedule:
+AT event_time_expr
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_EVENT_JOB_WITH_ON, 1, $2);
+  $$->value_ = 1;
+}
+| EVERY INTNUM date_unit opt_event_time_range
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_EVENT_JOB_WITH_ON, 3, $2, $3, $4);
+  $$->value_ = 2;
+}
+;
+
+event_time_expr:
+{
+  do_parse_sql_expr_rule($$, parse_ctx, 9, ',', ';', ON, ENABLE, DISABLE, COMMENT, DO, ENDS, RENAME);
+}
+
+opt_event_time_range:
+{
+  $$ = NULL;
+}
+| event_start_time
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_IDENT, 2, $1, NULL);
+}
+| event_end_time
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_IDENT, 2, NULL, $1);
+}
+| event_start_time event_end_time
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_IDENT, 2, $1, $2);
+}
+;
+
+event_start_time:
+STARTS event_time_expr
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_IDENT, 1, $2);
+}
+;
+
+event_end_time:
+ENDS event_time_expr
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_IDENT, 1, $2);
+}
+;
+
+opt_event_on_completion:
+/*Empty*/
+{
+  $$ = NULL;
+}
+| event_on_completion
+{
+  $$ = $1;
+}
+
+event_on_completion:
+ON COMPLETION NOT PRESERVE
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_IDENT);
+  $$->value_ = 0;
+}
+| ON COMPLETION PRESERVE
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_IDENT);
+  $$->value_ = 1;
+}
+;
+
+opt_event_status:
+/*Empty*/
+{
+  $$ = NULL;
+}
+| ENABLE
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_IDENT);
+  $$->value_ = 1;
+}
+| DISABLE
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_IDENT);
+  $$->value_ = 0;
+}
+/*
+| DISABLE ON SLAVE
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_IDENT);
+  $$->value_ = 0;
+}
+*/
+;
+
+opt_event_comment:
+/*Empty*/
+{
+  $$ = NULL;
+}
+| COMMENT STRING
+{
+  $$ = $2;
+}
+;
+
+event_body_stmts:
+sql_stmt ';'
+{
+  $$ = $1;
+  check_ptr($$);
+  const char *stmt_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $$->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
+  check_ptr($$->str_value_);
+  $$->str_len_ = str_len;
+}
+| event_body_stmts sql_stmt ';'
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_LINK_NODE, 2, $1, $2);
+  check_ptr($2);
+  const char *stmt_str = parse_ctx->stmt_str_ + @2.first_column;
+  int32_t str_len = @2.last_column - @2.first_column + 1;
+  $2->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
+  check_ptr($2->str_value_);
+  $2->str_len_ = str_len;
+}
+
+event_body:
+sql_stmt
+{
+  check_ptr($1);
+  const char *stmt_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $1->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
+  check_ptr($1->str_value_);
+  $1->str_len_ = str_len;
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_STMT_LIST, 1, $1);
+}
+| call_sp_stmt
+{
+  check_ptr($1);
+  const char *stmt_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $1->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
+  check_ptr($1->str_value_);
+  $1->str_len_ = str_len;
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_STMT_LIST, 1, $1);
+}
+| BEGIN_KEY event_body_stmts END_KEY
+{
+  ParseNode *event_job_stmts = NULL;
+  merge_nodes(event_job_stmts, parse_ctx->mem_pool_, T_STMT_LIST, $2);
+  $$ = event_job_stmts;
+}
+;
+
+alter_event_stmt:
+ALTER opt_sp_definer EVENT sp_name opt_event_alter_on_schedule_completion opt_event_rename opt_event_status opt_event_comment opt_event_body
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_EVENT_JOB_ALTER, 7, $2, $4, $5, $6, $7, $8, $9);
+}
+;
+
+opt_event_alter_on_schedule_completion:
+{
+  $$ = NULL;
+}
+| ON SCHEDULE event_schedule
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_IDENT, 2, $3, NULL);
+}
+| event_on_completion
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_IDENT, 2, NULL, $1);
+}
+| ON SCHEDULE event_schedule event_on_completion
+{
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_IDENT, 2, $3, $4);
+}
+;
+
+opt_event_rename:
+{
+  $$ = NULL;
+}
+| RENAME TO sp_name
+{
+  $$ = $3;
+}
+;
+
+opt_event_body:
+{
+  $$ = NULL;
+}
+| DO event_body
+{
+  $$ = $2;
+}
+;
+
+drop_event_stmt:
+DROP EVENT opt_if_exists sp_name
+{
+  ParseNode *if_exists = NULL;
+  if ($3 == 1) {
+    malloc_terminal_node(if_exists, parse_ctx->mem_pool_, T_IF_EXISTS);
+  }
+  malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_EVENT_JOB_DROP, 2, if_exists, $4);
+}
+;
+
 
 scalar_data_type:
     int_type_i opt_int_length_i %prec LOWER_PARENS
@@ -2419,6 +2701,11 @@ scalar_data_type:
     malloc_terminal_node($$, parse_ctx->mem_pool_, T_GEOMETRY);
     $$->int32_values_[0] = 0; /* length */
     $$->int32_values_[1] = 7; /* geometrycollection, geometry uses collation type value convey sub geometry type. */
+  }
+  | ROARINGBITMAP
+  {
+    malloc_terminal_node($$, parse_ctx->mem_pool_, T_ROARINGBITMAP);
+    $$->int32_values_[0] = 0; /* length */
   }
   | SERIAL
     {
@@ -2848,6 +3135,99 @@ scond_info_item_name:
   | MYSQL_ERRNO { $$ = DIAG_MYSQL_ERRNO; }
 ;
 
+/*****************************************************************************
+ *
+ *	OLAP ASYNC JOB grammar
+ *
+ *****************************************************************************/
+submit_job_stmt:
+    SUBMIT JOB sql_stmt
+    {
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_OLAP_ASYNC_JOB_SUBMIT, 1, $3);  
+      const char *stmt_str = parse_ctx->stmt_str_ + @3.first_column;
+      int32_t str_len = @3.last_column - @3.first_column + 1;
+      $$->str_value_ = parse_strndup(stmt_str, str_len, parse_ctx->mem_pool_);
+      check_ptr($$->str_value_);
+      $$->str_len_ = str_len;
+    }
+;
+
+cancel_job_stmt:
+    CANCEL JOB STRING
+    {
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_OLAP_ASYNC_JOB_CANCEL, 1, $3); 
+    }
+;
+
+date_unit:
+YEAR
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_INT);
+  $$->value_ = DATE_UNIT_YEAR;
+  $$->is_hidden_const_ = 1;
+  $$->is_date_unit_ = 1;
+  const char *time_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $$->str_value_ = parse_strndup(time_str, str_len, parse_ctx->mem_pool_);
+  $$->str_len_ = str_len;
+}
+| MONTH
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_INT);
+  $$->value_ = DATE_UNIT_MONTH;
+  $$->is_hidden_const_ = 1;
+  $$->is_date_unit_ = 1;
+  const char *time_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $$->str_value_ = parse_strndup(time_str, str_len, parse_ctx->mem_pool_);
+  $$->str_len_ = str_len;
+}
+| DAY
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_INT);
+  $$->value_ = DATE_UNIT_DAY;
+  $$->is_hidden_const_ = 1;
+  $$->is_date_unit_ = 1;
+  const char *time_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $$->str_value_ = parse_strndup(time_str, str_len, parse_ctx->mem_pool_);
+  $$->str_len_ = str_len;
+}
+| HOUR
+{
+ malloc_terminal_node($$, parse_ctx->mem_pool_, T_INT);
+  $$->value_ = DATE_UNIT_HOUR;
+  $$->is_hidden_const_ = 1;
+  $$->is_date_unit_ = 1;
+  const char *time_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $$->str_value_ = parse_strndup(time_str, str_len, parse_ctx->mem_pool_);
+  $$->str_len_ = str_len;
+}
+| MINUTE
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_INT);
+  $$->value_ = DATE_UNIT_MINUTE;
+  $$->is_hidden_const_ = 1;
+  $$->is_date_unit_ = 1;
+  const char *time_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $$->str_value_ = parse_strndup(time_str, str_len, parse_ctx->mem_pool_);
+  $$->str_len_ = str_len;
+}
+| SECOND
+{
+  malloc_terminal_node($$, parse_ctx->mem_pool_, T_INT);
+  $$->value_ = DATE_UNIT_SECOND;
+  $$->is_hidden_const_ = 1;
+  $$->is_date_unit_ = 1;
+  const char *time_str = parse_ctx->stmt_str_ + @1.first_column;
+  int32_t str_len = @1.last_column - @1.first_column + 1;
+  $$->str_value_ = parse_strndup(time_str, str_len, parse_ctx->mem_pool_);
+  $$->str_len_ = str_len;
+}
+;
+
 %%
 /**
  * parser function
@@ -2925,7 +3305,7 @@ ParseNode *obpl_mysql_read_sql_construct(ObParseCtx *parse_ctx, const char *pref
     //将pl_parser的question_mark_size赋值给sql_parser，使得parser sql的question mark能够接着pl_parser的index
     parse_result.question_mark_ctx_ = parse_ctx->question_mark_ctx_;
     parse_result.charset_info_ = parse_ctx->charset_info_;
-    parse_result.charset_info_nls_db_ = parse_ctx->charset_info_nls_db_;
+    parse_result.charset_info_oracle_db_ = parse_ctx->charset_info_oracle_db_;
     parse_result.is_not_utf8_connection_ = parse_ctx->is_not_utf8_connection_;
     parse_result.connection_collation_ = parse_ctx->connection_collation_;
     parse_result.sql_mode_ = parse_ctx->scanner_ctx_.sql_mode_;

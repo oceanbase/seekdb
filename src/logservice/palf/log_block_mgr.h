@@ -19,10 +19,10 @@
 
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
-#include "share/log/palf/log_define.h"
+#include "log_define.h"
 #include "log_reader.h"                   // LogReader
 #include "log_block_handler.h"            // LogBlockHandler
-#include "share/log/palf/lsn.h"                          // LSN
+#include "lsn.h"                          // LSN
 #include "log_block_pool_interface.h"     // ILogBlocKMgr
 
 namespace oceanbase
@@ -77,13 +77,19 @@ public:
   int load_block_handler(const block_id_t block_id,
                          const offset_t offset);
 
+	int create_tmp_block_handler(const block_id_t block_id);
+
+  // ======================= flashback =====================
+  int delete_block_from_back_to_front_until(const block_id_t block_id);
+  int rename_tmp_block_handler_to_normal(const block_id_t block_id);
+  // =======================================================
   TO_STRING_KV(K_(log_dir), K_(dir_fd), K_(min_block_id), K_(max_block_id), K_(curr_writable_block_id));
 private:
-  // @brief this function used to reconstruct 'blocks_'
+  // @brief this function used to rebuild 'blocks_'
   // Firstly, scan the directory, get the name of all blocks;
   // Secondly, construct virtual blocks array;
   // Thirdly, according to virtual blocks array, read the header of each
-  // physical block, reconstruct 'blocks_';
+  // physical block, rebuild 'blocks_';
   // Finally, reopen the last virtual block.
   // int reload_(const block_id_t block_id, const offset_t offset);
   int do_delete_block_(const block_id_t block_id);

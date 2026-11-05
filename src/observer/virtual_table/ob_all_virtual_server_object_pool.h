@@ -20,6 +20,7 @@
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
+#include <lib/objectpool/ob_server_object_pool.h>
 
 namespace oceanbase
 {
@@ -33,8 +34,11 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
+  void set_addr(common::ObAddr &addr) { addr_ = &addr; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualServerObjectPool);
+private:
+  common::ObAddr *addr_;
 };
 
 }

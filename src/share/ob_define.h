@@ -24,6 +24,7 @@
 #include "common/ob_tablet_id.h"
 #include "share/ob_errno.h"
 #include "lib/worker.h"
+#include "share/ob_ls_id.h"
 #include "cmath"
 #ifdef __linux__
 #include <features.h>
@@ -45,7 +46,7 @@ namespace common {
 
 // iternal recyclebin object prefix
 const char *const OB_MYSQL_RECYCLE_PREFIX = "__recycle_$_";
-const char *const OB_RECYCLE_PREFIX = "RECYCLE_$_";
+const char *const OB_ORACLE_RECYCLE_PREFIX = "RECYCLE_$_";
 
 OB_INLINE bool is_valid_log_compressor_type(common::ObCompressorType compressor_type)
 {
@@ -62,18 +63,38 @@ OB_INLINE bool is_valid_trans_version(const int64_t trans_version)
   return trans_version >= 0;
 }
 
+OB_INLINE bool is_valid_membership_version(const int64_t membership_version)
+{
+  // When the observer does not perform any member changes, membership_version is 0
+  return membership_version >= 0;
+}
+
 OB_INLINE bool is_valid_read_snapshot_version(const int64_t read_snapshot_version)
 {
   // read snapshot version should be greater than 0 and should not be INT64_MAX
   return read_snapshot_version > 0 && INT64_MAX != read_snapshot_version;
 }
 
+inline bool is_need_retry_interval_part_error(int code)
+{
+  bool ret = false;
+  if (OB_ERR_INTERVAL_PARTITION_EXIST == code
+     || OB_ERR_INTERVAL_PARTITION_ERROR == code) {
+    ret = true;
+  }
+  return ret;
+}
+
 inline bool is_schema_error(int err)
 {
   bool ret = false;
   switch(err) {
+    case OB_TENANT_EXIST:
+    case OB_TENANT_NOT_EXIST:
     case OB_ERR_BAD_DATABASE:
     case OB_DATABASE_EXIST:
+    case OB_TABLEGROUP_NOT_EXIST:
+    case OB_TABLEGROUP_EXIST:
     case OB_TABLE_NOT_EXIST:
     case OB_ERR_TABLE_EXIST:
     case OB_ERR_BAD_FIELD_ERROR:
@@ -84,6 +105,8 @@ inline bool is_schema_error(int err)
     case OB_ERR_NO_DB_PRIVILEGE:
     case OB_ERR_NO_TABLE_PRIVILEGE:
     case OB_SCHEMA_ERROR:
+    case OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH:
+    case OB_ERR_REMOTE_SCHEMA_NOT_FULL:
     case OB_ERR_SP_ALREADY_EXISTS:
     case OB_ERR_SP_DOES_NOT_EXIST:
     case OB_OBJECT_NAME_NOT_EXIST:
@@ -92,11 +115,35 @@ inline bool is_schema_error(int err)
     case OB_SCHEMA_NOT_UPTODATE:
     case OB_ERR_PARALLEL_DDL_CONFLICT:
     case OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR:
-    case OB_DDL_RESOURCE_NOT_ENOUGH:
+    case OB_ERR_DDL_RESOURCE_NOT_ENOUGH:
       ret = true;
       break;
     default:
       break;
+  }
+  return ret;
+}
+
+// this function only used for error logging
+// expr eval error range (-5000, -6000]
+inline bool should_catch_err(int err)
+{
+  bool ret = false;
+  // think that expr_eval err only in (-5000, -6000] should catch
+  if (err > -6000 && err < -5000) {
+    ret = true;
+  } else {
+    switch (err) {
+    case OB_ERR_DIVISOR_IS_ZERO:
+    case OB_INVALID_DATE_VALUE:
+    case OB_INVALID_DATE_FORMAT:
+    case OB_BAD_NULL_ERROR:
+    case OB_ERR_VALUE_LARGER_THAN_ALLOWED:
+      ret = true;
+      break;
+    default:
+      break;
+    }
   }
   return ret;
 }
@@ -156,9 +203,9 @@ inline bool is_server_status_error(int err)
   return ret;
 }
 
-inline bool is_runtime_not_ready(int err)
+inline bool is_unit_migrate(int err)
 {
-  return OB_SERVER_RUNTIME_NOT_READY == err;
+  return OB_TENANT_NOT_IN_SERVER == err;
 }
 
 inline bool is_process_timeout_error(int err)
@@ -242,6 +289,11 @@ inline bool is_has_no_readable_replica_err(int err)
   return OB_NO_READABLE_REPLICA == err;
 }
 
+inline bool is_partition_splitting(const int err)
+{
+  return OB_PARTITION_IS_SPLITTING == err;
+}
+
 inline bool is_id_not_ready_err(const int err)
 {
   return OB_GTS_NOT_READY == err || OB_GTI_NOT_READY == err;
@@ -252,9 +304,23 @@ inline bool is_weak_read_service_ready_err(const int err)
   return OB_TRANS_WEAK_READ_VERSION_NOT_READY == err;
 }
 
+inline bool is_select_dup_follow_replic_err(const int err)
+{
+  return OB_USE_DUP_FOLLOW_AFTER_DML == err;
+}
+
 inline bool is_static_engine_retry(const int err)
 {
   return STATIC_ENG_NOT_IMPLEMENT == err;
+}
+
+inline void set_interval_partition_insert_error(int &ret)
+{
+  ret = OB_NO_PARTITION_FOR_INTERVAL_PART;
+}
+inline bool is_interval_partition_insert_error(const int err)
+{
+  return OB_NO_PARTITION_FOR_INTERVAL_PART == err;
 }
 
 inline bool is_query_killed_return(const int ret)
@@ -278,6 +344,14 @@ static const bool CAN_ELR = false;
 const int64_t OB_WRS_LEVEL_VALUE_LENGTH = 128; // Maximum length of the level_value field of the __all_weak_read_service internal table
 const int64_t OB_WRS_LEVEL_NAME_LENGTH = 128; // Maximum length of the level_name field of the __all_weak_read_service internal table
 
+//Encryption related macros
+const int64_t OB_MAX_ENCRYPTION_NAME_LENGTH = 128;
+const int64_t OB_MAX_ENCRYPTION_KEY_NAME_LENGTH = 256;
+const char *const OB_MYSQL_ENCRYPTION_DEFAULT_MODE = "aes-128";
+const char *const OB_MYSQL_ENCRYPTION_NONE_MODE = "none";
+//--end---Encryption related macros
+const int64_t OB_MAX_ENCRYPTION_MODE_LENGTH = 64;
+
 /**
  * Review found that in the definitions of internal tables and internal views, OB_MAX_TABLE_NAME_LENGTH is used in many places to limit the field length to 128 bytes,
  * but the semantics of the corresponding fields are not table_name.
@@ -292,6 +366,7 @@ const int64_t OB_MAX_ROUTINE_NAME_BINARY_LENGTH = 2048; // Should be OB_MAX_ROUT
                                                          // it is defined in primary key, and can not change randomly.
 const int64_t OB_MAX_PACKAGE_NAME_LENGTH = 128;
 const int64_t OB_MAX_KVCACHE_NAME_LENGTH = 128;
+const int64_t OB_MAX_SYNONYM_NAME_LENGTH = 128;
 const int64_t OB_MAX_PARAMETERS_NAME_LENGTH = 128;
 const int64_t OB_MAX_RESOURCE_PLAN_NAME_LENGTH = 128;
 // end for const define replace OB_MAX_TABLE_NAME_LENGTH
@@ -299,6 +374,8 @@ const int64_t OB_MAX_RESOURCE_PLAN_NAME_LENGTH = 128;
 ///////////////////////////////////////////////////////
 //          Schema defination                        //
 
+// internal aux-vertical partition table name prefix
+const char *const OB_AUX_VP_PREFIX = "__AUX_VP_";
 
 //          End of Schema defination                 //
 ///////////////////////////////////////////////////////
@@ -341,6 +418,10 @@ enum ObDmlEventType
   DE_DELETING = (1 << 2)
 };
 
+const char *const NORMAL_MODE_STR = "normal";
+const char *const FLASHBACK_MODE_STR = "physical_flashback";
+const char *const ARBITRATION_MODE_STR = "arbitration";
+const char *const FLASHBACK_VERIFY_MODE_STR = "physical_flashback_verify";
 const char *const DISABLED_CLUSTER_MODE_STR = "disabled_cluster";
 const char *const DISABLED_WITH_READONLY_CLUSTER_MODE_STR = "disabled_with_readonly_cluster";
 static const int64_t MODIFY_GC_SNAPSHOT_INTERVAL = 2 * 1000 * 1000; //2s

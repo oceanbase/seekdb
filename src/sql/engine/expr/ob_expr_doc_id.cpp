@@ -18,9 +18,8 @@
 
 #include "sql/engine/expr/ob_expr_doc_id.h"
 #include "sql/engine/ob_exec_context.h"
-#include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "share/ob_ddl_common.h"
-#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -62,11 +61,14 @@ int ObExprDocID::cg_expr(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObVarcharType != rt_expr.datum_meta_.type_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, expr type isn't varchar", K(ret), K(rt_expr.datum_meta_.type_));
   } else if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param count", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
+  } else if (OB_UNLIKELY(rt_expr.arg_cnt_ == 1) && OB_ISNULL(rt_expr.args_) ) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected error, rt_expr.args_ is nullptr", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else {
-    OB_ASSERT(rt_expr.arg_cnt_ != 1 || rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = generate_doc_id;
   }
   return ret;
@@ -85,25 +87,26 @@ int ObExprDocID::cg_expr(
     LOG_TRACE("succeed to genearte empty document id", KP(&raw_ctx), K(raw_ctx), K(expr_datum), K(eval_ctx), K(lbt()));
   } else if (OB_UNLIKELY(1 != raw_ctx.arg_cnt_) || OB_ISNULL(raw_ctx.args_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), K(raw_ctx), KP(raw_ctx.args_));
   } else if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(raw_ctx.args_[0], eval_ctx, partition_id, tablet_id))) {
+    LOG_WARN("fail to calc part and tablet id by expr", K(ret));
   } else {
     uint64_t seq_id = 0;
     uint64_t buf_len = sizeof(ObDocId);
     uint64_t *buf = reinterpret_cast<uint64_t *>(raw_ctx.get_str_res_mem(eval_ctx, buf_len));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate memory", K(ret), KP(buf));
     } else {
       if (eval_ctx.exec_ctx_.is_ddl_idempotent_autoinc()) {
-        seq_id = share::ObDDLUtil::generate_idempotent_value(eval_ctx.exec_ctx_.get_slice_count(), // tablet slice count
-                                                             eval_ctx.exec_ctx_.get_slice_idx(), // tablet slice idx
-                                                             eval_ctx.exec_ctx_.get_autoinc_range_interval(),
-                                                             eval_ctx.exec_ctx_.get_slice_row_idx());
+        seq_id = ObDDLUtil::generate_idempotent_value(eval_ctx.exec_ctx_.get_slice_count(), // tablet slice count
+                                                      eval_ctx.exec_ctx_.get_slice_idx(), // tablet slice idx
+                                                      eval_ctx.exec_ctx_.get_autoinc_range_interval(),
+                                                      eval_ctx.exec_ctx_.get_slice_row_idx());
       } else {
-        share::ObITabletAutoincrementService *auto_inc =
-            ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementService>();
-        if (OB_ISNULL(auto_inc)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(auto_inc->next_value(tablet_id, seq_id))) {
+        share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
+        if (OB_FAIL(auto_inc.get_autoinc_seq(tablet_id, seq_id))) {
+          LOG_WARN("fail to get tablet autoinc seq", K(ret), K(tablet_id));
         }
       }
       if (OB_SUCC(ret)) {

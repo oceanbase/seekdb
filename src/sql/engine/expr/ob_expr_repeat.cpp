@@ -67,6 +67,7 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
       int64_t cur_time = 0;
       ObCastMode cast_mode = CM_NONE;
       if (FALSE_IT(ObSQLUtils::get_default_cast_mode(type_ctx.get_sql_mode(), cast_mode))) {
+        LOG_WARN("failed to get default cast mode", K(ret));
       } else {
         cast_mode |= CM_WARN_ON_FAIL;
         ObCastCtx cast_ctx(
@@ -100,6 +101,7 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(aggregate_charsets_for_string_result(type, &text, 1, type_ctx))) {
+      LOG_WARN("failed to aggregate charsets for string result", K(ret));
     } else {
       text.set_calc_collation_level(type.get_collation_level());
       text.set_calc_collation_type(type.get_collation_type());
@@ -125,6 +127,8 @@ int ObExprRepeat::repeat(ObString &output,
 
     // Safe length check
     if ((length > max_result_size / count) || (length > INT_MAX / count)) {
+      LOG_WARN("Result of repeat was larger than max_allow_packet_size",
+          K(ret), K(length), K(count), K(max_result_size));
       ret = OB_ERR_FUNC_RESULT_TOO_LARGE;
       LOG_USER_ERROR(OB_ERR_FUNC_RESULT_TOO_LARGE, "repeat", static_cast<int>(max_result_size));
     } else {
@@ -167,6 +171,7 @@ int ObExprRepeat::repeat_text(ObObjType res_type,
   if (count <= 0 || text.length() <= 0 || max_result_size <= 0) { // Notice: result is "", not null.
     ObTextStringResult result_buffer(res_type, has_lob_header, &allocator);
     if (OB_FAIL(result_buffer.init(0))) {
+      LOG_WARN("init stringtextbuffer failed", K(ret));
     } else {
       result_buffer.get_result_buffer(output);
     }
@@ -174,6 +179,8 @@ int ObExprRepeat::repeat_text(ObObjType res_type,
     int64_t length = static_cast<int64_t>(text.length());
     // Safe length check
     if ((length > max_result_size / count) || (length > INT_MAX / count)) {
+      LOG_WARN("Result of repeat was larger than max_allow_packet_size",
+          K(ret), K(length), K(count), K(max_result_size));
       ret = OB_ERR_FUNC_RESULT_TOO_LARGE;
       LOG_USER_ERROR(OB_ERR_FUNC_RESULT_TOO_LARGE, "repeat", static_cast<int>(max_result_size));
     } else {
@@ -185,10 +192,12 @@ int ObExprRepeat::repeat_text(ObObjType res_type,
       }
       ObTextStringResult result_buffer(res_type, has_lob_header, &allocator);
       if (OB_FAIL(result_buffer.init(tot_length))) {
+        LOG_WARN("init result failed", K(ret), K(tot_length));
       } else {
         int64_t tmp_count = count;
         while (tmp_count-- && (OB_SUCC(ret))) {
           if (OB_FAIL(result_buffer.append(text))) {
+            LOG_WARN("append result failed", K(ret), K(result_buffer), K(text));
           }
         }
         if (OB_SUCC(ret)) {
@@ -213,16 +222,19 @@ int ObExprRepeat::calc(ObObj &result,
   bool has_lob_header = (res_type != ObTinyTextType);
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null allocator", K(ret), K(allocator));
   } else if (false == ob_is_string_type(res_type)) {
     ret = OB_INVALID_ARGUMENT;
     // ObExprRepeat::calc_result_type2() method specifies that the return result type must belong to some string type
+    LOG_WARN("make sure res_type is string type", K(ret), K(res_type));
   } else if (!ob_is_text_tc(res_type)) {
     ret = repeat(output, is_null, text, count, *allocator, max_result_size);
   } else {
-    ret = repeat_text(res_type, has_lob_header, output, is_null,
+    ret = repeat_text(res_type, has_lob_header, output, is_null, 
                       text, count, *allocator, max_result_size);
   }
   if (OB_FAIL(ret)) {
+    LOG_WARN("do repeat failed", K(ret));
   } else {
     if (is_null) {
       result.set_null();
@@ -241,6 +253,7 @@ int ObExprRepeat::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) con
   int ret = OB_SUCCESS;
   CK(2 == rt_expr.arg_cnt_);
   rt_expr.eval_func_ = eval_repeat;
+  rt_expr.eval_vector_func_ = eval_repeat_vector;
   return ret;
 }
 
@@ -255,11 +268,14 @@ int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
   ObString text_str;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text))
       || OB_FAIL(expr.args_[1]->eval(ctx, count))) {
+    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (text->is_null() || count->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator, *text,
+    LOG_WARN("get max length failed", K(ret));
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *text,
                      expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_str))) {
+    LOG_WARN("fail to get real data.", K(ret), K(text_str));
   } else {
     ObExprStrResAlloc expr_res_alloc(expr, ctx);
     bool is_null = false;
@@ -269,16 +285,128 @@ int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       ret = repeat(output, is_null,
                    text_str, count->get_int(), expr_res_alloc, max_size);
     } else { // text tc
-      ret = repeat_text(expr.datum_meta_.type_, has_lob_header, output, is_null,
+      ret = repeat_text(expr.datum_meta_.type_, has_lob_header, output, is_null, 
                         text_str, count->get_int(), expr_res_alloc, max_size);
     }
     if (OB_FAIL(ret)) {
+      LOG_WARN("do repeat failed", K(ret));
     } else {
       if (is_null) {
         expr_datum.set_null();
       } else {
         expr_datum.set_string(output);
       }
+    }
+  }
+  return ret;
+}
+
+template <typename Arg0Vec, typename Arg1Vec, typename ResVec>
+int ObExprRepeat::repeat_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+
+  int64_t max_size = 0; // used for limit size of result
+
+  if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
+    LOG_WARN("get max size failed", K(ret));
+  } else {
+    const Arg0Vec *arg0_vec = static_cast<const Arg0Vec *>(expr.args_[0]->get_vector(ctx));
+    const Arg1Vec *arg1_vec = static_cast<const Arg1Vec *>(expr.args_[1]->get_vector(ctx));
+
+    // the count may be a variable number, repeat expr support the 
+    ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
+    batch_info_guard.set_batch_size(bound.batch_size());
+    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
+      if (skip.at(idx) || eval_flags.at(idx)) {
+        continue;
+      } 
+
+      batch_info_guard.set_batch_idx(idx);
+      if (arg0_vec->is_null(idx) || arg1_vec->is_null(idx)) {
+        res_vec->set_null(idx);
+        eval_flags.set(idx);
+      } else {
+        // prepare & init needed params
+        ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+        common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+
+        int64_t count = arg1_vec->get_int(idx);
+        bool is_null = false;
+        ObString text;
+        ObString output;
+
+        ObExprStrResAlloc calc_alloc(expr, ctx);
+
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                tmp_allocator, arg0_vec, expr.args_[0]->datum_meta_,
+                expr.args_[0]->obj_meta_.has_lob_header(), text, idx))) {
+          LOG_WARN("failed to read text", K(ret), K(text));
+        } else if (!ob_is_text_tc(expr.datum_meta_.type_)) {
+          // 2.1 deal with string tc
+          ret = repeat(output, is_null, text, count, calc_alloc, max_size);
+        } else {
+          // 2.2 deal with text tc
+          ret = repeat_text(expr.datum_meta_.type_,
+                            expr.obj_meta_.has_lob_header(), output, is_null,
+                            text, count, calc_alloc, max_size);
+        }
+        if (OB_FAIL(ret)) {
+          LOG_WARN("do repeat in vector failed", K(ret));
+        } else {
+          if (is_null) {
+            res_vec->set_null(idx);
+          } else {
+            res_vec->set_string(idx, output);
+          }
+        }
+        eval_flags.set(idx);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprRepeat::eval_repeat_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  // make sure that `repeat` operand should have 2 params.
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound)) ||
+      OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("failed to evaluate `repeat` parameters", K(ret));
+  } else {
+    VectorFormat arg0_format = expr.args_[0]->get_format(ctx);
+    VectorFormat arg1_format = expr.args_[1]->get_format(ctx);
+    VectorFormat res_format = expr.get_format(ctx);
+    if (VEC_DISCRETE == arg0_format && VEC_UNIFORM_CONST == arg1_format &&
+        VEC_DISCRETE == res_format) {
+      ret = repeat_vector<StrDiscVec, IntegerUniCVec, StrDiscVec>(
+          VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg0_format && VEC_UNIFORM_CONST == arg1_format &&
+               VEC_DISCRETE == res_format) {
+      ret = repeat_vector<StrUniVec, IntegerUniCVec, StrDiscVec>(
+          VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg0_format &&
+               VEC_UNIFORM_CONST == arg1_format && VEC_DISCRETE == res_format) {
+      ret = repeat_vector<StrContVec, IntegerUniCVec, StrDiscVec>(
+          VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg0_format &&
+               VEC_UNIFORM_CONST == arg1_format && VEC_UNIFORM == res_format) {
+      ret = repeat_vector<StrDiscVec, IntegerUniCVec, StrUniVec>(
+          VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg0_format && VEC_UNIFORM_CONST == arg1_format &&
+               VEC_UNIFORM == res_format) {
+      ret = repeat_vector<StrUniVec, IntegerUniCVec, StrUniVec>(
+          VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg0_format &&
+               VEC_UNIFORM_CONST == arg1_format && VEC_UNIFORM == res_format) {
+      ret = repeat_vector<StrContVec, IntegerUniCVec, StrUniVec>(
+          VECTOR_EVAL_FUNC_ARG_LIST);
+    } else {
+      ret = repeat_vector<ObVectorBase, ObVectorBase, ObVectorBase>(
+          VECTOR_EVAL_FUNC_ARG_LIST);
     }
   }
   return ret;

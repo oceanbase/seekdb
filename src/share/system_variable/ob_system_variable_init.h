@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace share
 {
-// ObSysVarFlag values are persistent and must not be changed arbitrarily.
+// The value of ObSysVarFlag cannot be added, deleted or modified arbitrarily. Any addition, deletion or modification must be synchronized to the flag_value_dict variable in sql/session/gen_ob_sys_variables.py
 struct ObSysVarFlag
 {
   const static int64_t NONE = 0LL;
@@ -36,7 +36,9 @@ struct ObSysVarFlag
   const static int64_t INFLUENCE_PLAN = (1LL << 6);
   const static int64_t NEED_SERIALIZE = (1LL << 7);
   const static int64_t QUERY_SENSITIVE = (1LL << 8);
+  const static int64_t ORACLE_ONLY = (1LL << 9);
   const static int64_t WITH_CREATE = (1LL << 10);
+  const static int64_t WITH_UPGRADE = (1LL << 11);
   const static int64_t MYSQL_ONLY = (1LL << 12);
   const static int64_t INFLUENCE_PL = (1LL << 13);
 };
@@ -44,7 +46,7 @@ struct ObSysVarFromJson{
   ObSysVarClassType id_;
   common::ObString name_;
   common::ObObjType data_type_;
-  common::ObString default_value_; // used for runtime initialization
+  common::ObString default_value_; // used for init tenant
   common::ObString base_value_; // used for session sync
   common::ObString min_val_;
   common::ObString max_val_;
@@ -77,6 +79,7 @@ public:
   static common::ObString get_info(int64_t i);
   static int64_t get_flags(int64_t i);
   static bool need_serialize(int64_t i);
+  static bool is_oracle_only(int64_t i);
   static bool is_mysql_only(int64_t i);
   static common::ObString get_alias(int64_t i);
   static const common::ObObj &get_default_value(int64_t i);
@@ -98,7 +101,7 @@ public:
 };
 
 // Auto-generated ESSENTIAL_SYS_VARS array for inner session initialization
-// These variables are frequently used in session initialization, runtime processing, schema setting and other critical processes
+// These variables are frequently used in session initialization, tenant processing, schema setting and other critical processes
 extern const ObSysVarClassType ESSENTIAL_SYS_VARS[];
 extern const int64_t ESSENTIAL_SYS_VARS_COUNT;
 

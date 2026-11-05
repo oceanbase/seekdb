@@ -54,15 +54,17 @@ int ObExprTransactionId::eval_transaction_id(const ObExpr &expr, ObEvalCtx &ctx,
   const ObSQLSessionInfo *session_info = NULL;
   if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is null", K(ret));
   } else {
     const transaction::ObTxDesc *txdesc = session_info->get_tx_desc();
-    const int64_t tx_id = data_plane::tx_desc_id(txdesc).get_id();
-    if (ObUInt64Type == expr.datum_meta_.type_) { // unsigned integer result
+    const int64_t tx_id = txdesc ? txdesc->get_tx_id().get_id() : 0;
+    if (ObUInt64Type == expr.datum_meta_.type_) { // mysql mode
       expr_datum.set_uint(tx_id);
-    } else { // numeric result
+    } else { // oracle mode
       ObNumStackOnceAlloc tmp_alloc;
       number::ObNumber num;
       if (OB_FAIL(num.from(tx_id, tmp_alloc))) {
+        LOG_WARN("copy number fail", K(ret));
       } else {
         expr_datum.set_number(num);
       }

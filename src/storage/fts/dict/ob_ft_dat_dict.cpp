@@ -25,7 +25,7 @@
 #include "lib/list/ob_list.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "storage/fts/dict/ob_ft_trie.h"
 namespace oceanbase
 {
@@ -37,6 +37,7 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("Builder has already inited", K(ret));
   } else {
     size_t map_size = ObArrayHashMap::estimate_size(trie.node_num());
     size_t array_size = trie.node_num() * 6; // by experience.
@@ -46,6 +47,7 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
 
     if (OB_ISNULL(dat_ = static_cast<ObFTDAT *>(alloc_.alloc(total_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to alloc dat mem block", K(ret));
     } else {
       memset(dat_, 0, total_size);
       dat_->mem_block_size_ = total_size;
@@ -54,6 +56,7 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
       dat_->check_offset_ = dat_->base_offset_ + base_size;
       map_ = dat_->get_map();
       if (OB_FAIL(map_->init(trie.node_num()))) {
+        LOG_WARN("fail to init map", K(ret));
       }
     }
   }
@@ -68,6 +71,7 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(dat_) || OB_ISNULL(dat_->buff)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("dat_ is null", K(ret));
   } else {
     int32_t *base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
     int32_t *check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
@@ -182,7 +186,9 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
     if (OB_FAIL(ret)) {
       // already logged
     } else if (OB_FAIL(trie.get_start_word(dat_->start_word_))) {
+      LOG_WARN("fail to get start word", K(ret));
     } else if (OB_FAIL(trie.get_end_word(dat_->end_word_))) {
+      LOG_WARN("fail to get end word", K(ret));
     }
     LOG_INFO("build dat finished", K(dat_->start_word_.get_word()), K(dat_->end_word_.get_word()));
 
@@ -236,6 +242,7 @@ int ObFTDATBuilder<DATA_TYPE>::encode(const ObString &word, ObFTWordCode &code, 
       code = next_code_++;
       ret = map_->insert(word, code);
       if (OB_SUCCESS != ret) {
+        LOG_WARN("fail to insert word code", K(ret));
       }
     } else {
       // do nothing
@@ -261,6 +268,7 @@ int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
   ObFTSingleWord word;
   word.set_word(ft_char.ptr(), ft_char.length());
   if (OB_FAIL(dat_->get_map()->find(word, code)) && OB_ENTRY_NOT_EXIST != ret) {
+    LOG_WARN("fail to find word code", K(ret));
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     hit.set_unmatch();

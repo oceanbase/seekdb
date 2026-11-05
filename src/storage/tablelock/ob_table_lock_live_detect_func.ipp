@@ -49,6 +49,7 @@ int ObTableLockDetectFunc<Args...>::call_function_directly(Args &...args)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(func_(args...))) {
+    TABLELOCK_LOG(WARN, "execute detect function failed", K(ret), K(func_no_));
   }
 
   return ret;

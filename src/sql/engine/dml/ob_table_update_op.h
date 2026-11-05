@@ -18,6 +18,7 @@
 #define OCEANBASE_DML_OB_TABLE_UPDATE_OP_H_
 
 #include "sql/engine/dml/ob_table_modify_op.h"
+#include "sql/engine/dml/ob_err_log_service.h"
 
 namespace oceanbase
 {
@@ -31,6 +32,10 @@ public:
   ObTableUpdateOpInput(ObExecContext &ctx, const ObOpSpec &spec)
       : ObTableModifyOpInput(ctx, spec)
   {
+  }
+  virtual int init(ObTaskInfo &task_info) override
+  {
+    return ObTableModifyOpInput::init(task_info);
   }
 };
 
@@ -112,6 +117,7 @@ protected:
 protected:
   UpdRtDef2DArray upd_rtdefs_;  //see the comment of UpdCtDef2DArray
   common::ObArrayWrap<ObInsRtDef> ins_rtdefs_;
+  ObErrLogService err_log_service_;
 };
 
 } // end namespace sql

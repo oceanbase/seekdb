@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/optimizer/ob_sharding_info.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -29,10 +30,14 @@ struct ObTempTableResultInfo
 {
   OB_UNIS_VERSION(1);
 public:
-  ObTempTableResultInfo() : interm_result_ids_() {}
+  ObTempTableResultInfo() : addr_(),
+                         interm_result_ids_() {}
   virtual ~ObTempTableResultInfo() {}
 
-  TO_STRING_KV(K_(interm_result_ids));
+  TO_STRING_KV(K_(addr),
+               K_(interm_result_ids));
+  // Server where data is located
+  ObAddr addr_;
   // Dataset key
   ObSEArray<uint64_t, 2> interm_result_ids_;
 };
@@ -49,7 +54,7 @@ public:
   TO_STRING_KV(K_(interm_result_infos),
                K_(temp_table_id),
                K_(is_local_interm_result));
-  // Local intermediate-result IDs.
+  // Distribution information of the result set: machine and KEY
   ObSEArray<ObTempTableResultInfo, 2> interm_result_infos_;
   // Result set belonging to the temp table
   uint64_t temp_table_id_;

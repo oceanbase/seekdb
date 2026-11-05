@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_IO_UTILS_
 #define OCEANBASE_LOGSERVICE_LOG_IO_UTILS_
 #include <dirent.h>                                      // dirent
-#include "share/log/palf/log_define.h"
+#include "log_define.h"
 namespace oceanbase
 {
 namespace palf
@@ -81,6 +81,8 @@ public:
   block_id_t get_min_block_id() const { return min_block_id_; }
   block_id_t get_max_block_id() const { return max_block_id_; }
 private:
+	int rename_flashback_to_normal_(const char *file_name);
+  int try_to_remove_block_(const int dir_fd, const char *file_name);
   const char *dir_;
   block_id_t min_block_id_;
   block_id_t max_block_id_;

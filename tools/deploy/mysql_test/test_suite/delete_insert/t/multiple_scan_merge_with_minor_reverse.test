@@ -1,0 +1,43 @@
+# owner: zhanghuidong.zhd
+# owner group: storage
+# description: test no order scan mode for delete insert
+
+--disable_query_log
+connect (conn1,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (syscon, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection syscon;
+set @@session.explicit_defaults_for_timestamp=off;
+set session ob_trx_timeout=100000000000;
+set @@recyclebin = off;
+--enable_query_log
+
+connection conn1;
+--enable_warnings
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int primary key, c2 int) merge_engine = delete_insert;
+
+--disable_query_log
+let $cnt = 1;
+while($cnt <= 10)
+{
+  eval insert into t1 values ($cnt, $cnt * 10);
+  inc $cnt;
+}
+--enable_query_log
+
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+select * from t1;
+update t1 set c2 = 71 where c1 = 7;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+select * from t1 order by c2;
+select * from t1 order by c1 desc limit 2;
+select c1 + c2 from t1 order by c2 limit 2;
+drop table t1;
+--disable_query_log
+connection syscon;
+set @@recyclebin = on;
+--enable_query_log

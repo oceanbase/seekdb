@@ -21,7 +21,7 @@
 #include "common/ob_field.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "query/protocol/ob_mysql_protocol_util.h"
+#include "observer/mysql/obsm_utils.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "lib/charset/ob_charset.h"
 
@@ -30,7 +30,6 @@ namespace oceanbase
 namespace sql
 {
 class ObOutputPackInfo;
-
 class ObExprOutputPack: public ObExprOperator
 {
 public:
@@ -49,13 +48,20 @@ public:
                                     const ObBitVector &skip, const int64_t batch_size);
 private:
   static const int64_t MAX_PACK_LEN = 2 * 128 * 1024 * 1024;
-  static int
-  build_row_values(const ObExpr &expr, ObEvalCtx &ctx,
-                   ObSQLSessionInfo *session, common::ObIAllocator &alloc,
-                   ObOutputPackInfo *extra_info,
-                   share::schema::ObSchemaGetterGuard *schema_guard,
-                   obmysql::MYSQL_PROTOCOL_TYPE encode_type,
-                   common::ObIArray<obmysql::ObMySQLCellValue> &values);
+  static int encode_cell(const common::ObObj &cell,
+                         const common::ObIArray<common::ObField> &param_fields,
+                         char *buf, int64_t len, int64_t &pos, char *bitmap, int64_t column_num,
+                         ObSQLSessionInfo *session,
+                         share::schema::ObSchemaGetterGuard *schema_guard,
+                         obmysql::MYSQL_PROTOCOL_TYPE encode_type);
+  static int try_encode_row(const ObExpr &expr, ObEvalCtx &ctx, ObSQLSessionInfo *session,
+                            common::ObIAllocator &alloc, ObOutputPackInfo *extra_info,
+                            char *buffer, char *bitmap,
+                            share::schema::ObSchemaGetterGuard *schema_guard,
+                            obmysql::MYSQL_PROTOCOL_TYPE encode_type,
+                            const int64_t len, int64_t &pos);
+  static int reset_bitmap(char *result_buffer, const int64_t len,
+                          const int64_t column_num, int64_t &pos, char *&bitmap);
   static int convert_string_value_charset(common::ObObj &value,
                                           common::ObIAllocator &alloc,
                                           const ObSQLSessionInfo &my_session);

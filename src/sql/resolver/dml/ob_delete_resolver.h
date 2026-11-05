@@ -34,6 +34,8 @@ public:
   static const int64_t LIMIT = 4;            /* limit */
   static const int64_t WHEN = 5;              /* when */
   static const int64_t HINT = 6;              /* hint */
+  static const int64_t RETURNING = 7;       /* returning */
+  static const int64_t ERRORLOGGING = 8;     /* ERROR LOGGING*/
   static const int64_t IGNORE = 9;           /* ignore */
 
 public:
@@ -45,7 +47,7 @@ private:
   int resolve_table_list(const ParseNode &table_node, bool &is_multi_table_delete);
   int generate_delete_table_info(const TableItem &table_item);
   int check_multi_delete_table_conflict();
-  // MySQL multi-table DELETE target table search rule.
+  //@TODO: This is the mysql delete table search rule, still need to add oracle's rule
   int find_delete_table_with_mysql_rule(const common::ObString &db_name,
                                         const common::ObString &table_name,
                                         TableItem *&table_item);

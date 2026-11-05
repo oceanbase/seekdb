@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_dml_param.h"
+#include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
 {
@@ -35,11 +36,13 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
     if (op.is_vectorized()) {
       if (has_virtual_) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table scan with virtual column is not supported right now", K(ret));
       } else {
         // reset datum pointers to reserved buffer.
         FOREACH_CNT_X(e, exprs, OB_SUCC(ret)) {
           if (!(*e)->is_batch_result()) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("table scan output is not batch result", K(ret));
           } else {
             (*e)->locate_datums_for_update(op.get_eval_ctx(), op.get_batch_size());
           }
@@ -50,6 +53,7 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(outputs_.prepare_allocate(exprs.count()))) {
+      LOG_WARN("array prepare allocate failed", K(ret));
     } else {
       for (int64_t i = 0; i < exprs.count(); i++) {
         sql::ObExpr *e = exprs.at(i);
@@ -186,6 +190,7 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
           item.datum_->ptr_ = item.data_;
         }
         if (OB_FAIL(item.datum_->from_storage_datum(*datum, exprs.at(item.expr_idx_)->obj_datum_map_))) {
+          LOG_WARN("convert obj to datum failed", K(ret), K(i), K(item), KPC(datum));
         } else {
           // the other items may contain virtual columns, set evaluated flag.
           item.eval_info_->evaluated_ = true;
@@ -213,6 +218,7 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
       } else {
         if (OB_FAIL(item.datum_[idx].from_storage_datum(
                     *datum, exprs.at(item.expr_idx_)->obj_datum_map_))) {
+          LOG_WARN("convert obj to datum failed", K(ret), K(i), K(item), KPC(datum));
         } else {
           // the other items may contain virtual columns, set evaluated flag.
           item.eval_flags_->set(idx);
@@ -233,7 +239,7 @@ DEF_TO_STRING(ObDMLBaseParam)
        N_SQL_MODE, sql_mode_,
        N_IS_TOTAL_QUANTITY_LOG, is_total_quantity_log_,
        KPC_(table_param),
-       K_(runtime_schema_version),
+       K_(tenant_schema_version),
        K_(is_ignore),
        K_(prelock),
        K_(is_batch_stmt),
@@ -241,8 +247,10 @@ DEF_TO_STRING(ObDMLBaseParam)
        K_(spec_seq_no),
        K_(snapshot),
        K_(branch_id),
+       K_(direct_insert_task_id),
        K_(check_schema_version),
        K_(ddl_task_id),
+       KPC_(data_row_for_lob),
        K_(is_main_table_in_fts_ddl),
        K_(has_async_index));
   J_OBJ_END();
@@ -263,6 +271,7 @@ int ScanResumePoint::init(bool *is_paused)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(is_paused)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null ptr");
   } else {
     is_paused_ = is_paused;
     ATOMIC_STORE(is_paused_, false);
@@ -277,16 +286,18 @@ DEF_TO_STRING(ObTableScanParam)
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(tablet_id),
+       K_(ls_id),
        N_COLUMN_IDS, column_ids_,
        N_INDEX_ID, index_id_,
        N_KEY_RANGES, key_ranges_,
+       K_(ss_key_ranges),
        K_(range_array_pos),
        N_TIMEOUT, timeout_,
        N_SCAN_FLAG, scan_flag_,
        N_SQL_MODE, sql_mode_,
        N_RESERVED_CELL_COUNT, reserved_cell_count_,
        N_SCHEMA_VERSION, schema_version_,
-       N_QUERY_BEGIN_SCHEMA_VERSION, runtime_schema_version_,
+       N_QUERY_BEGIN_SCHEMA_VERSION, tenant_schema_version_,
        N_LIMIT_OFFSET, limit_param_,
        N_FOR_UPDATE, for_update_,
        N_WAIT, for_update_wait_timeout_,
@@ -301,7 +312,10 @@ DEF_TO_STRING(ObTableScanParam)
        K_(need_scn),
        K_(need_switch_param),
        K_(is_mds_query),
+       K_(fb_read_tx_uncommitted),
        K_(tx_seq_base),
+       K_(auto_split_filter_type),
+       K_(is_tablet_spliting),
        K_(need_update_tablet_param),
        KPC_(mds_collector));
   J_OBJ_END();
@@ -328,8 +342,11 @@ int ScanResumePoint::add_range(const ObITableReadInfo& read_info, const blocksst
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tmp_range.deep_copy(datum_range, allocator_))) {
+    LOG_WARN("failed to deep copy range");
   } else if (OB_FAIL(tmp_range.to_new_range(new_range, obj_metas, allocator_))) {
+    LOG_WARN("Fail to convert datum range to new range");
   } else if (OB_FAIL(ranges_.push_back(new_range))) {
+    LOG_WARN("failed to push back remain range");
   }
 
   return ret;

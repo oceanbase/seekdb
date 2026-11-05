@@ -33,7 +33,7 @@ ObBasicScheduleTabletFunc::ObBasicScheduleTabletFunc(
     freeze_param_(),
     ls_could_schedule_new_round_(false),
     ls_could_schedule_merge_(false),
-    should_skip_merge_(false),
+    is_skip_merge_tenant_(false),
     loop_cnt_(loop_cnt)
 {
 }
@@ -43,35 +43,42 @@ void ObBasicScheduleTabletFunc::destroy()
   schedule_freeze_dag(true/*force*/); // schedule dag before destroy
 }
 
-int ObBasicScheduleTabletFunc::init(ObLS *ls)
+int ObBasicScheduleTabletFunc::switch_ls(ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls))) {
+  const ObLSID &ls_id = ls_handle.get_ls()->get_ls_id();
+  schedule_freeze_dag(true/*force*/); // schedule dag before switch to next ls
+
+  if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls_handle))) {
     if (OB_LS_NOT_EXIST != ret) {
+      LOG_WARN("failed to init ls status", KR(ret), K_(merge_version), K(ls_id));
     }
   } else if (OB_UNLIKELY(merge_version_ > ObBasicMergeScheduler::INIT_COMPACTION_SCN
       && !ls_status_.can_merge())) {
     ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("could not to merge now", K(ret), K(ls_id), K(ls_status_));
   } else {
+    freeze_param_.ls_id_ = ls_id;
     freeze_param_.compaction_scn_ = merge_version_;
   }
   if (OB_SUCC(ret)) {
-    update_runtime_cached_status();
+    update_tenant_cached_status();
   }
   return ret;
 }
 
-void ObBasicScheduleTabletFunc::update_runtime_cached_status()
+void ObBasicScheduleTabletFunc::update_tenant_cached_status()
 {
   const ObBasicMergeScheduler * scheduler = ObBasicMergeScheduler::get_merge_scheduler();
   if (OB_NOT_NULL(scheduler)) {
-    should_skip_merge_ = scheduler->get_runtime_status().should_skip_merge();
+    is_skip_merge_tenant_ = scheduler->get_tenant_status().is_skip_merge_tenant();
     ls_could_schedule_merge_ = scheduler->could_major_merge_start() && ls_status_.can_merge();
-    ls_could_schedule_new_round_ = ls_could_schedule_merge_;
+    // can only schedule new round on ls leader
+    ls_could_schedule_new_round_ = ls_could_schedule_merge_ && ls_status_.is_leader_;
 
     if (!ls_status_.can_merge() && REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
       LOG_INFO("should not schedule major merge for ls", K_(ls_status),
-        "runtime_status", scheduler->get_runtime_status());
+        "tenant_status", scheduler->get_tenant_status());
       ADD_COMMON_SUSPECT_INFO(
                   MEDIUM_MERGE, share::ObDiagnoseTabletType::TYPE_MEDIUM_MERGE,
                   ObSuspectInfoType::SUSPECT_SUSPEND_MERGE,
@@ -89,7 +96,7 @@ void ObBasicScheduleTabletFunc::schedule_freeze_dag(const bool force)
     freeze_param_.loop_cnt_ = get_loop_cnt();
     if (OB_TMP_FAIL(ObScheduleDagFunc::schedule_batch_freeze_dag(freeze_param_))) {
       LOG_WARN_RET(tmp_ret, "failed to schedule batch force freeze tablets dag", K(freeze_param_));
-      // most tablets will clear failed since the capacity of ObTabletStatMgr is limited
+      // most tablets will clear failed since the capacity of ObTenantTabletStatMgr is limited
     } else {
       LOG_INFO("success to schedule batch freeze dag", KR(tmp_ret), K_(freeze_param));
     }
@@ -100,15 +107,16 @@ void ObBasicScheduleTabletFunc::schedule_freeze_dag(const bool force)
 /*
  * diagnose section
  */
-int ObBasicScheduleTabletFunc::diagnose_init(
-  ObLS *ls)
+int ObBasicScheduleTabletFunc::diagnose_switch_ls(
+  ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls))) {
+  if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls_handle))) {
     if (OB_LS_NOT_EXIST != ret) {
+      LOG_WARN("failed to init ls status", KR(ret), K_(merge_version), K(ls_handle));
     }
   } else {
-    update_runtime_cached_status();
+    update_tenant_cached_status();
   }
   return ret;
 }
@@ -120,8 +128,10 @@ int ObBasicScheduleTabletFunc::check_with_schedule_scn(
   const ObTablet &tablet,
   const int64_t schedule_scn,
   const ObTabletStatusCache &tablet_status,
-  bool &can_merge)
+  bool &can_merge,
+  const ObCOMajorMergePolicy::ObCOMajorMergeType co_major_merge_type)
 {
+  const ObLSID &ls_id = ls_status_.ls_id_;
   can_merge = false;
   int ret = OB_SUCCESS;
   bool need_force_freeze = false;
@@ -134,11 +144,12 @@ int ObBasicScheduleTabletFunc::check_with_schedule_scn(
                 weak_read_ts_ready &&
                 tablet.get_snapshot_version() >= schedule_scn);
     if (!can_merge && OB_FAIL(check_need_force_freeze(tablet, schedule_scn, need_force_freeze))) {
-      LOG_ERROR("failed to check need force freeze", KR(ret), K(tablet_id), K(schedule_scn));
+      LOG_WARN("failed to check need force freeze", KR(ret), K(tablet_id), K(schedule_scn));
     } else if (need_force_freeze) {
       tablet_cnt_.force_freeze_cnt_++;
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(freeze_param_.tablet_info_array_.push_back(ObTabletSchedulePair(tablet_id, schedule_scn)))) {
+      if (OB_TMP_FAIL(freeze_param_.tablet_info_array_.push_back(ObTabletSchedulePair(tablet_id, schedule_scn, co_major_merge_type)))) {
+        LOG_WARN("failed to push back tablet_id for batch_freeze", KR(tmp_ret), K(tablet_id));
       }
     }
   }
@@ -157,6 +168,7 @@ int ObBasicScheduleTabletFunc::check_with_schedule_scn(
              K(need_merge), K(can_merge), K(schedule_scn), K(need_force_freeze),
              K(weak_read_ts_ready), K_(ls_status), K(tablet_status));
     ADD_SUSPECT_INFO(MEDIUM_MERGE, ObDiagnoseTabletType::TYPE_MEDIUM_MERGE,
+                    ls_id,
                     tablet_id,
                     ObSuspectInfoType::SUSPECT_CANT_MAJOR_MERGE,
                     schedule_scn,
@@ -182,13 +194,16 @@ int ObBasicScheduleTabletFunc::check_need_force_freeze(
   ObITabletMemtable *last_frozen_memtable = nullptr;
 
   if (OB_FAIL(tablet.get_protected_memtable_mgr_handle(protected_handle))) {
+    LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), K(tablet));
   } else if (OB_FAIL(protected_handle->get_last_frozen_memtable(memtable_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) { // no frozen memtable, need force freeze
       need_force_freeze = true;
       ret = OB_SUCCESS;
     } else {
+      LOG_WARN("failed to get last frozen memtable", K(ret), K(tablet));
     }
   } else if (OB_FAIL(memtable_handle.get_tablet_memtable(last_frozen_memtable))) {
+    LOG_WARN("failed to get last frozen memtable", K(ret));
   } else {
     need_force_freeze = last_frozen_memtable->get_snapshot_version() < schedule_scn;
     if (!need_force_freeze) {

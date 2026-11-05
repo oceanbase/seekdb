@@ -1,0 +1,97 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX COMMON
+
+#include "common/ob_role.h"
+#include "lib/string/ob_string.h" // ObString
+
+namespace oceanbase
+{
+namespace common
+{
+
+bool is_strong_leader(const ObRole role)
+{
+  return LEADER == role;
+}
+
+bool is_standby_leader(const ObRole role)
+{
+  // leader of standby cluster or physical restore partition
+  return STANDBY_LEADER == role;
+}
+
+bool is_follower(const ObRole role)
+{
+  return FOLLOWER == role;
+}
+
+bool is_leader_by_election(const ObRole role)
+{
+  return is_strong_leader(role) || is_standby_leader(role);
+}
+
+bool is_leader_like(const ObRole role)
+{
+  return is_leader_by_election(role);
+}
+
+int role_to_string(const ObRole &role, char *role_str, const int64_t str_len)
+{
+  int ret = OB_SUCCESS;
+  if (LEADER == role) {
+    strncpy(role_str ,"LEADER", str_len);
+  } else if (FOLLOWER == role) {
+    strncpy(role_str ,"FOLLOWER", str_len);
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
+
+
+const char *role_to_string(const ObRole &role)
+{
+  #define CHECK_OB_ROLE_STR(x) case(ObRole::x): return #x
+  switch(role)
+  {
+    CHECK_OB_ROLE_STR(LEADER);
+    CHECK_OB_ROLE_STR(FOLLOWER);
+    CHECK_OB_ROLE_STR(STANDBY_LEADER);
+    default:
+      return "INVALID_ROLE";
+  }
+  #undef CHECK_OB_ROLE_STR
+}
+
+int string_to_role(const ObString &role_str, ObRole &role)
+{
+  int ret = OB_SUCCESS;
+  if (0 == role_str.compare("LEADER")) {
+    role = LEADER;
+  } else if (0 == role_str.compare("FOLLOWER")) {
+    role = FOLLOWER;
+  } else {
+    role = INVALID_ROLE;
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
+
+}//end namespace common
+}//end namespace oceanbase
+

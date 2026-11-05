@@ -19,10 +19,10 @@
 
 #include "lib/allocator/page_arena.h"
 #include "common/datum/ob_datum.h"
-#include "data_plane/fts/ob_doc_id.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "storage/access/ob_table_param.h"
+#include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/access/ob_dml_param.h"
-#include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {
@@ -37,6 +37,7 @@ public:
 
   int init(
       const uint64_t table_id,
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const transaction::ObTxReadSnapshot *snapshot,
       const int64_t schema_version);
@@ -49,6 +50,7 @@ public:
 private:
   int init_scan_param(
       const uint64_t table_id,
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const transaction::ObTxReadSnapshot *snapshot,
       const int64_t schema_version);

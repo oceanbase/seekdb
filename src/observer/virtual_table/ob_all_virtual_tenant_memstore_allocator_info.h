@@ -1,0 +1,80 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_ALL_VIRTUAL_TENANT_MEMSOTRE_ALLOCATOR_INFO_H_
+#define OB_ALL_VIRTUAL_TENANT_MEMSOTRE_ALLOCATOR_INFO_H_
+
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "share/ob_table_range.h"
+#include "src/storage/memtable/ob_memtable.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+struct ObMemstoreAllocatorInfo
+{
+  ObMemstoreAllocatorInfo()
+      : protection_clock_(INT64_MAX),
+        is_active_(false),
+        tablet_id_(OB_INVALID_ID),
+        scn_range_(),
+        mt_addr_(NULL),
+        ref_cnt_(0) {}
+  ~ObMemstoreAllocatorInfo() {}
+  TO_STRING_KV(K_(protection_clock), K_(is_active),
+               K_(tablet_id), K_(scn_range), K_(mt_addr), K_(ref_cnt));
+  int64_t protection_clock_;
+  bool is_active_;
+  uint64_t tablet_id_;
+  share::ObScnRange scn_range_;
+  memtable::ObMemtable *mt_addr_;
+  int64_t ref_cnt_;
+};
+class ObAllVirtualTenantMemstoreAllocatorInfo : public common::ObVirtualTableIterator
+{
+public:
+  typedef ObMemstoreAllocatorInfo MemstoreInfo;
+  ObAllVirtualTenantMemstoreAllocatorInfo();
+  virtual ~ObAllVirtualTenantMemstoreAllocatorInfo();
+  virtual int inner_open();
+  virtual void reset();
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+private:
+  enum COLUMNS
+  {
+        TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
+    START_TS,
+    END_TS,
+    IS_ACTIVE,
+    RETIRE_CLOCK,
+    PROTECTION_CLOCK,
+    ADDRESS,
+    REF_COUNT
+  };
+  int fill_memstore_infos();
+  common::ObArray<MemstoreInfo> memstore_infos_;
+  int64_t memstore_infos_idx_;
+  int64_t col_count_;
+  int64_t retire_clock_;
+  char mt_addr_[32];
+  DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTenantMemstoreAllocatorInfo);
+};
+
+}
+}
+
+#endif // OB_ALL_VIRTUAL_TENANT_MEMSOTRE_ALLOCATOR_INFO_H_

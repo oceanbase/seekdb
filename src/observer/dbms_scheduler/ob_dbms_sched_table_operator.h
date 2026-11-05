@@ -64,41 +64,54 @@ public:
   int update_for_start_execute(
     ObDBMSSchedJobInfo &job_info);
 
+  int update_for_missed(ObDBMSSchedJobInfo &job_info);
+  int update_for_zone_not_exist(ObDBMSSchedJobInfo &job_info);
   int update_for_enddate(ObDBMSSchedJobInfo &job_info);
   int update_for_rollback(ObDBMSSchedJobInfo &job_info);
   int update_for_timeout(ObDBMSSchedJobInfo &job_info);
+  int update_for_mysql_event_database_not_exist(ObDBMSSchedJobInfo &job_info);
   int update_for_end(ObDBMSSchedJobInfo &job_info, int err, const common::ObString &errmsg);
   int update_for_kill(ObDBMSSchedJobInfo &job_info);
   int get_dbms_sched_job_is_killed(const ObDBMSSchedJobInfo &job_info, bool &is_killed);
   int get_dbms_sched_job_info(
-    uint64_t job_id, const common::ObString &job_name,
+    bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name,
     common::ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info);
-  int get_dbms_sched_job_infos_in_runtime(
+  int get_dbms_sched_job_infos_in_tenant(
+    bool is_oracle_tenant,
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSSchedJobInfo> &job_infos);
 
   int get_dbms_sched_job_class_info(
-    const common::ObString job_class_name,
+    bool is_oracle_tenant, const common::ObString job_class_name,
     common::ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info);
 
-  int get_dbms_sched_job_class_infos_in_runtime(
+  int get_dbms_sched_job_class_infos_in_tenant(
+    bool is_oracle_tenant,
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSSchedJobClassInfo> &job_class_infos);
 
   int extract_info(
-    common::sqlclient::ObMySQLResult &result,
+    common::sqlclient::ObMySQLResult &result, bool is_oracle_tenant,
     common::ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info);
   int extract_job_class_info(
-    sqlclient::ObMySQLResult &result,
+    sqlclient::ObMySQLResult &result, bool is_oracle_tenant,
     ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info);
 
   int check_job_can_running(int64_t alive_job_count, bool &can_running);
 
+  int purge_run_detail();
+
 private:
+  int _purge(const ObString &job_class_name, int64_t log_history);
+  int _purge_fallback(int64_t log_history);
+  int _purge_old();
   int _build_job_drop_dml(int64_t now, ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
   int _build_job_finished_dml(int64_t now, ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
   int _build_job_rollback_start_dml(ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
+  int _build_job_log_dml(int64_t now, ObDBMSSchedJobInfo &job_info, int err, const ObString &errmsg, ObSqlString &sql);
+  int _check_need_record(ObDBMSSchedJobInfo &job_info, bool &need_record, bool err_state = true);
   DISALLOW_COPY_AND_ASSIGN(ObDBMSSchedTableOperator);
 
 private:
+  static const int64_t PURGE_LOG_BATCH_COUNT = 1024;
   common::ObISQLClient *sql_proxy_;
 };
 

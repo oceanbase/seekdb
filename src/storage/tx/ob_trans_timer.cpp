@@ -165,7 +165,14 @@ void ObTxTimeoutTask::runTimerTask()
     ObTransService *txs = txs_;
     ObTxDesc *tx_desc = tx_desc_;
     DEFER({ txs->release_tx_ref(*tx_desc); });
-    if (OB_FAIL(txs_->handle_tx_commit_timeout(*tx_desc_, delay_))) {
+    if (tx_desc_->is_xa_trans() && tx_desc_->is_sub2pc()) {
+      if (OB_FAIL(txs_->handle_timeout_for_xa(*tx_desc_, delay_))) {
+        TRANS_LOG(WARN, "fail to handle timeout", K(ret), KPC_(tx_desc));
+      }
+    } else {
+      if (OB_FAIL(txs_->handle_tx_commit_timeout(*tx_desc_, delay_))) {
+        TRANS_LOG(WARN, "handle timeout fail", K(ret), KPC_(tx_desc));
+      }
     }
   }
 }
@@ -181,6 +188,7 @@ int ObTransTimer::init(const char *timer_name)
     TRANS_LOG(WARN, "ObTransTimer inited twice");
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(tw_.init(TRANS_TIMEOUT_TASK_PRECISION_US, get_thread_num_(), timer_name))) {
+    TRANS_LOG(ERROR, "transaction timer init error", KR(ret));
   } else {
     TRANS_LOG(INFO, "transaction timer inited success");
     is_inited_ = true;
@@ -200,6 +208,7 @@ int ObTransTimer::start()
     TRANS_LOG(WARN, "ObTransTimer is already running");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(tw_.start())) {
+    TRANS_LOG(WARN, "ObTimeWheel start error", KR(ret));
   } else {
     is_running_ = true;
     TRANS_LOG(INFO, "ObTransTimer start success");
@@ -219,6 +228,7 @@ int ObTransTimer::stop()
     TRANS_LOG(WARN, "ObTransTimer already has stopped");
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tw_.stop())) {
+    TRANS_LOG(WARN, "ObTimeWheel stop error", KR(ret));
   } else {
     is_running_ = false;
     TRANS_LOG(INFO, "ObTransTimer stop success");
@@ -238,6 +248,7 @@ int ObTransTimer::wait()
     TRANS_LOG(WARN, "ObTransTimer is already running");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(tw_.wait())) {
+    TRANS_LOG(WARN, "ObTimeWheel wait error", KR(ret));
   } else {
     TRANS_LOG(INFO, "ObTransTimer wait success");
   }
@@ -283,6 +294,7 @@ int ObTransTimer::register_timeout_task(ObITimeoutTask &task,
   } else if (task.is_registered()) {
     ret = OB_TIMER_TASK_HAS_SCHEDULED;
   } else if (OB_FAIL(tw_.schedule(&task, delay))) {
+    TRANS_LOG(WARN, "register timeout task error", KR(ret), K(task));
   } else {
     task.set_registered(true);
     task.set_delay(delay);
@@ -303,6 +315,7 @@ int ObTransTimer::unregister_timeout_task(ObITimeoutTask &task)
   } else if (!task.is_registered()) {
     ret = OB_TIMER_TASK_HAS_NOT_SCHEDULED;
   } else if (OB_FAIL(tw_.cancel(&task))) {
+    TRANS_LOG(DEBUG, "timewheel cancel task error", KR(ret), K(task));
     if (OB_TIMER_TASK_HAS_NOT_SCHEDULED == ret) {
       // task has picked out from timeWheel and begin to run or has ran completed
       task.set_registered(false);

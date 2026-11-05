@@ -19,8 +19,9 @@
 
 #include "sql/ob_sql_context.h"
 #include "observer/mysql/obmp_base.h"
-#include "sql/ob_query_retry_ctrl.h"
+#include "observer/mysql/ob_query_retry_ctrl.h"
 #include "lib/rc/context.h"
+#include "observer/mysql/obmp_stmt_execute.h"
 
 namespace oceanbase
 {
@@ -31,24 +32,43 @@ class ObMultiStmtItem;
 namespace observer
 {
 
+
 class ObMPStmtSendLongData : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STMT_SEND_LONG_DATA;
 
-  explicit ObMPStmtSendLongData(const share::ObGlobalContext &gctx);
+  explicit ObMPStmtSendLongData(const ObGlobalContext &gctx);
   virtual ~ObMPStmtSendLongData() {}
   int64_t get_single_process_timestamp() const { return single_process_timestamp_; }
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
   int64_t get_exec_end_timestamp() const { return exec_end_timestamp_; }
   int64_t get_send_timestamp() const { return get_receive_timestamp(); }
+  virtual int flush_buffer(const bool is_last) override
+  {
+    return ObMPBase::flush_buffer(is_last);
+  }
 protected:
   virtual int deserialize() { return common::OB_SUCCESS; }
   virtual int before_process() override;
   virtual int process();
-
+  virtual int send_error_packet(int err,
+                                const char* errmsg,
+                                bool is_partition_hit = true,
+                                void *extra_err_info = NULL)
+  { return ObMPBase::send_error_packet(err, errmsg, is_partition_hit, extra_err_info); }
+  virtual int send_ok_packet(sql::ObSQLSessionInfo &session, ObOKPParam &ok_param)
+  { return ObMPBase::send_ok_packet(session, ok_param); }
+  virtual int send_eof_packet(const sql::ObSQLSessionInfo &session, const ObMySQLResultSet &result)
+  { return ObMPBase::send_eof_packet(session, result); }
+  virtual int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session)
+  { return ObMPBase::response_packet(pkt, session); }
+  virtual bool need_send_extra_ok_packet()
+  { return OB_NOT_NULL(get_conn()) && get_conn()->need_send_extra_ok_packet(); }
 private:
   int do_process(sql::ObSQLSessionInfo &session);
+  int response_result(sql::ObSQLSessionInfo &session);
+
   int process_send_long_data_stmt(sql::ObSQLSessionInfo &session);
   int store_piece(sql::ObSQLSessionInfo &session);
 

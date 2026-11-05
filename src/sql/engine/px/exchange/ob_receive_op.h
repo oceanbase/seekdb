@@ -18,6 +18,10 @@
 #define OCEANBASE_ENGINE_PX_EXCHANGE_OB_RECEIVE_OP_H_
 
 #include "sql/engine/ob_operator.h"
+#include "sql/executor/ob_task_location.h"
+#include "sql/executor/ob_slice_id.h"
+#include "sql/ob_scanner.h"
+#include "lib/container/ob_array_serialization.h"
 
 namespace oceanbase
 {
@@ -29,18 +33,42 @@ namespace sql
  ((type) == PHY_FIFO_RECEIVE_V2) || \
  ((type) == PHY_PX_FIFO_RECEIVE) || \
  ((type) == PHY_PX_MERGE_SORT_RECEIVE) || \
+ ((type) == PHY_VEC_PX_MERGE_SORT_RECEIVE) || \
  ((type) == PHY_PX_FIFO_COORD) || \
  ((type) == PHY_PX_ORDERED_COORD) || \
  ((type) == PHY_PX_MERGE_SORT_COORD) || \
+ ((type) == PHY_VEC_PX_MERGE_SORT_COORD) || \
  ((type) == PHY_TASK_ORDER_RECEIVE) || \
- ((type) == PHY_MERGE_SORT_RECEIVE))
+ ((type) == PHY_MERGE_SORT_RECEIVE) || \
+ ((type) == PHY_DIRECT_RECEIVE))
 
 #define IS_TABLE_INSERT(type) \
 (((type) == PHY_INSERT) || \
  ((type) == PHY_REPLACE) || \
- ((type) == PHY_INSERT_ON_DUP))
+ ((type) == PHY_INSERT_ON_DUP) || \
+ ((type) == PHY_INSERT_RETURNING))
 
 
+
+class ObReceiveOpInput : public ObOpInput
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObReceiveOpInput(ObExecContext &ctx, const ObOpSpec &spec);
+  virtual ~ObReceiveOpInput();
+  virtual void reset() override;
+  // Setup
+  virtual int init(ObTaskInfo &task_info);
+  // Use
+  inline uint64_t get_pull_slice_id() { return pull_slice_id_; }
+  inline int64_t get_child_job_id() { return child_job_id_; }
+  inline uint64_t get_child_op_id() { return child_op_id_; };
+protected:
+  uint64_t pull_slice_id_;
+  int64_t child_job_id_;
+  uint64_t child_op_id_;
+  common::ObSArray<ObTaskLocation> task_locs_;
+};
 
 class ObReceiveSpec : public ObOpSpec
 {
@@ -79,7 +107,8 @@ public:
 
   virtual int inner_drain_exch() override
   {
-    // The base receive operator has no additional drain work.
+    // Drain exchange is used in parallelism execution,
+    // do nothing for old fashion distributed execution.
     return common::OB_SUCCESS;
   }
 };

@@ -30,10 +30,6 @@ struct ObLockUserArg;
 struct ObRenameUserArg;
 struct ObDropUserArg;
 }
-namespace query
-{
-class ObIRootCommandService;
-}
 namespace sql
 {
 class ObExecContext;
@@ -61,8 +57,7 @@ public:
                               const common::ObString &host_name,
                               const common::ObString &opreation_name);
 private:
-  int create_user(const obcall::ObCreateUserArg &arg,
-                  query::ObIRootCommandService &root_commands) const;
+  int create_user(const obcall::ObCreateUserArg &arg) const;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateUserExecutor);
 };
@@ -86,8 +81,7 @@ public:
                                     const ObString &host, 
                                     common::ObSqlString &msg);
   static int drop_user(const obcall::ObDropUserArg &arg,
-                       bool if_exists,
-                       query::ObIRootCommandService &root_commands);
+                       bool if_exists);
   int execute(ObExecContext &ctx, ObDropUserStmt &stmt);
 
 private:
@@ -103,22 +97,21 @@ public:
   int execute(ObExecContext &ctx, ObLockUserStmt &stmt);
 
 private:
-  int lock_user(const obcall::ObLockUserArg &arg,
-                query::ObIRootCommandService &root_commands);
+  int lock_user(const obcall::ObLockUserArg &arg);
   DISALLOW_COPY_AND_ASSIGN(ObLockUserExecutor);
 };
 
-class ObAlterUserRoleStmt;
-class ObAlterUserRoleExecutor
+class ObAlterUserProfileStmt;
+class ObAlterUserProfileExecutor
 {
 private:
-  int set_role_exec(ObExecContext &ctx, ObAlterUserRoleStmt &stmt);
+  int set_role_exec(ObExecContext &ctx, ObAlterUserProfileStmt &stmt);  
 public:
-  ObAlterUserRoleExecutor() {}
-  virtual ~ObAlterUserRoleExecutor() {}
-  int execute(ObExecContext &ctx, ObAlterUserRoleStmt &stmt);
+  ObAlterUserProfileExecutor() {}
+  virtual ~ObAlterUserProfileExecutor() {}
+  int execute(ObExecContext &ctx, ObAlterUserProfileStmt &stmt);
 
-  DISALLOW_COPY_AND_ASSIGN(ObAlterUserRoleExecutor);
+  DISALLOW_COPY_AND_ASSIGN(ObAlterUserProfileExecutor);
 };
 
 class ObRenameUserStmt;
@@ -130,8 +123,7 @@ public:
   int execute(ObExecContext &ctx, ObRenameUserStmt &stmt);
 
 private:
-  int rename_user(const obcall::ObRenameUserArg &arg,
-                  query::ObIRootCommandService &root_commands);
+  int rename_user(const obcall::ObRenameUserArg &arg);
   DISALLOW_COPY_AND_ASSIGN(ObRenameUserExecutor);
 };
 

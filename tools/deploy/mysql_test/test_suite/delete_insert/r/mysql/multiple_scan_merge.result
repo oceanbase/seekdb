@@ -1,0 +1,26 @@
+drop table if exists t1;
+create table t1(id int(11) DEFAULT NULL, c1 int(11) DEFAULT NULL) merge_engine = delete_insert;
+alter system major freeze;
+select * from t1 order by c1;
+id	c1
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+7	70
+8	80
+9	90
+10	100
+select * from t1 order by c1;
+id	c1
+1	11
+2	22
+4	41
+5	52
+6	63
+8	82
+9	93
+10	104
+drop table t1;

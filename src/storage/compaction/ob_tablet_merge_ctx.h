@@ -19,8 +19,10 @@
 
 #include "lib/utility/ob_print_utils.h"
 #include "storage/compaction/ob_partition_merge_progress.h"
+#include "storage/tx_storage/ob_ls_map.h"
+#include "storage/tx_storage/ob_ls_handle.h"
 #include "share/scn.h"
-#include "storage/ob_tablet_stat_mgr.h"
+#include "storage/ob_tenant_tablet_stat_mgr.h"
 #include "storage/compaction/ob_tablet_merge_info.h"
 #include "storage/compaction/ob_basic_tablet_merge_ctx.h"
 
@@ -39,6 +41,7 @@ ObBasicTabletMergeCtx
       - ObTabletMiniMergeCtx
       - ObTabletExeMergeCtx (For minor/meta_major)
       - ObTabletMajorMergeCtx
+  - ObCOTabletMergeCtx (For columnar store)
 */
 
 #define DEFAULT_CONSTRUCTOR(DagName, ParentDag)                                \
@@ -75,7 +78,6 @@ private:
   int pre_process_tx_data_table_merge();
   virtual int update_tablet(
     ObTabletHandle &new_tablet_handle) override;
-  void try_update_snapshot_gc_renew_target();
   void try_schedule_compaction_after_mini(storage::ObTabletHandle &tablet_handle);
   int try_report_tablet_stat_after_mini();
 };

@@ -95,6 +95,7 @@ int ObUUIDNode::init()
   addresses = (IP_ADAPTER_ADDRESSES *)malloc(buf_len);
   if (OB_ISNULL(addresses)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory for adapter addresses failed", K(ret));
   } else if (GetAdaptersAddresses(AF_UNSPEC, 0, NULL, addresses, &buf_len) == NO_ERROR) {
     for (PIP_ADAPTER_ADDRESSES addr = addresses; addr && !mac_addr_found; addr = addr->Next) {
       if (addr->PhysicalAddressLength == 6 && addr->IfType != IF_TYPE_SOFTWARE_LOOPBACK) {
@@ -104,11 +105,13 @@ int ObUUIDNode::init()
     }
     if (!mac_addr_found) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error. can not get mac address", K(ret));
     } else {
       is_inited_ = true;
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("GetAdaptersAddresses failed", K(ret));
   }
   if (addresses) { free(addresses); }
 #elif defined(__APPLE__)
@@ -119,6 +122,7 @@ int ObUUIDNode::init()
   
   if (getifaddrs(&ifaddrs_list) != 0) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("getifaddrs failed", K(ret), K(errno));
   } else {
     for (ifa = ifaddrs_list; ifa != nullptr && OB_SUCC(ret) && !mac_addr_found; ifa = ifa->ifa_next) {
       if (ifa->ifa_addr == nullptr) {
@@ -142,6 +146,7 @@ int ObUUIDNode::init()
       // Error already logged
     } else if (!mac_addr_found) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error. can not get mac address", K(ret), K(errno));
     } else {
       is_inited_ = true;
     }
@@ -153,6 +158,7 @@ int ObUUIDNode::init()
     bool mac_addr_found = false;
     if (getifaddrs(&ifaddr) == -1) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("getifaddrs failed", K(ret), K(errno));
     } else {
       for (struct ifaddrs *ifa = ifaddr; ifa != NULL && !mac_addr_found; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL) continue;
@@ -176,6 +182,7 @@ int ObUUIDNode::init()
         LOG_INFO("using random UUID node ID (no MAC available on Android)");
       } else {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to generate random UUID node ID", K(ret), K(errno));
       }
       if (fd >= 0) {
         close(fd);
@@ -199,6 +206,7 @@ int ObUUIDNode::init()
     ifc.ifc_buf = buf;
     if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error. ioctl failed", K(ret), K(errno));
     } else {
       ifreq *it = ifc.ifc_req;
       ifreq *end = it + (ifc.ifc_len / sizeof(ifreq));
@@ -226,6 +234,7 @@ int ObUUIDNode::init()
       if (OB_FAIL(ret)) {
       } else if (!mac_addr_found) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error. can not get mac address", K(ret), K(errno));
       } else {
         is_inited_ = true;
       }
@@ -243,6 +252,7 @@ int ObUUIDTime::get_time(uint64_t &time, uint16_t &seq)
   ObLatchWGuard guard(lock_, ObLatchIds::DEFAULT_MUTEX);
   uint64_t now = 0;
   if (OB_FAIL(time_now(now))) {
+    LOG_WARN("get time failed", K(ret));
   } else {
     if (clock_seq_ == 0) {
       reset_clock_seq();
@@ -268,6 +278,7 @@ int ObUUIDTime::time_now(uint64_t &now)
   int tmpret = clock_gettime(CLOCK_REALTIME, &ts);
   if (tmpret != 0) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get clock time failed", K(ret), K(errno));
   } else {
     now = uint64_t(ts.tv_sec) * uint64_t(1000000000) + uint64_t(ts.tv_nsec);
   }
@@ -295,6 +306,7 @@ int UuidCommon::bin2uuid(char *result, const uchar *src) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result) || OB_ISNULL(src)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(src), K(result));
   } else {
     int64_t pos = 0;
     const char *HEXCHARS = "0123456789abcdef";
@@ -313,6 +325,7 @@ int UuidCommon::read_section(char *res, bool &is_valid, const char *src, int64_t
   int ret = OB_SUCCESS;
   if (OB_ISNULL(res) || OB_ISNULL(src)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(res), K(src));
   } else {
     int cnt = 0;
     is_valid = true;
@@ -336,6 +349,7 @@ int UuidCommon::uuid2bin(char *result, bool &is_valid, const char *src, int64_t 
   is_valid = true;
   if (OB_ISNULL(result)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(src), K(result));
   } else if (OB_ISNULL(src)) {
     is_valid = false;
   } else {
@@ -343,6 +357,7 @@ int UuidCommon::uuid2bin(char *result, bool &is_valid, const char *src, int64_t 
     switch (len) {
       case UuidCommon::LENGTH_UUID - 4:{
         if (OB_FAIL(UuidCommon::read_section(result, is_valid, src, UuidCommon::BYTE_LENGTH))) {
+          LOG_WARN("fail to read section", K(ret));
         }
       }
       break;
@@ -357,6 +372,7 @@ int UuidCommon::uuid2bin(char *result, bool &is_valid, const char *src, int64_t 
         int cnt = 0;
         for (int i = 0; OB_SUCC(ret) && i < 5 && is_valid; ++i) {
           if (OB_FAIL(UuidCommon::read_section(result + cnt, is_valid, src + cnt * 2 + i, UuidCommon::bytes_per_section[i]))) {
+            LOG_WARN("fail to read section", K(ret), K(i));
           } else {
             cnt += UuidCommon::bytes_per_section[i];
           }
@@ -405,6 +421,7 @@ int ObExprUuid::init()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory failed", K(ret));
   } else if (OB_FAIL(uuid_node->init())) {
+    LOG_WARN("init uuid node failed", K(ret));
     ob_free(uuid_node);//very important ! do not forget this !
     uuid_node = NULL;//very important ! do not forget this !
   }
@@ -425,6 +442,7 @@ int ObExprUuid::calc(unsigned char *scratch)
     uint64_t time = 0;
     uint16_t seq = 0;
     if (OB_FAIL(ObUUIDTime::get_time(time, seq))) {
+      LOG_WARN("get time failed", K(ret));
     } else {
       uint32_t time_low = static_cast<uint32_t>(time);
       uint16_t time_mid = static_cast<uint16_t>(time >> 32);
@@ -433,9 +451,13 @@ int ObExprUuid::calc(unsigned char *scratch)
       /*faint. really ugly. 4 if(ob_fail)s here, not efficient at all*/
       /*may I omit the tests for NULL on scratch ? */
       if (OB_FAIL(ObBigEndian::put_uint32(scratch, time_low))) {
+        LOG_WARN("put uint32 failed", K(ret));
       } else if (OB_FAIL(ObBigEndian::put_uint16(scratch + 4, time_mid))) {
+        LOG_WARN("put uint16 failed", K(ret));
       } else if (OB_FAIL(ObBigEndian::put_uint16(scratch + 6, time_hi))) {
+        LOG_WARN("put uint16 failed", K(ret));
       } else if (OB_FAIL(ObBigEndian::put_uint16(scratch + 8, seq))) {
+        LOG_WARN("put uint16 failed", K(ret));
       } else {
         MEMCPY(scratch + 10, mac_addr, 6);
       }
@@ -457,6 +479,7 @@ int ObExprUuid::eval_uuid(const ObExpr &expr, ObEvalCtx &ctx,
   UNUSED(expr);
   unsigned char scratch[UuidCommon::LENGTH_UUID] = {0};
   if (OB_FAIL(calc(scratch))) {
+    LOG_WARN("calc failed", K(ret));
   } else {
     char *buf = expr.get_str_res_mem(ctx, UuidCommon::LENGTH_UUID);
     int64_t pos = 0;
@@ -464,6 +487,7 @@ int ObExprUuid::eval_uuid(const ObExpr &expr, ObEvalCtx &ctx,
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "buff is null", K(ret));
     } else if (OB_FAIL(UuidCommon::bin2uuid(buf, scratch))) {
+      LOG_WARN("fail to convert strach to uuid", K(ret), K(buf), K(scratch));
     } else {
       expr_datum.set_string(buf, UuidCommon::LENGTH_UUID);
     }
@@ -490,15 +514,20 @@ int ObExprUuid::gen_server_uuid(char *server_uuid, const int64_t uuid_len)
     need_reset = true;
     if (OB_ISNULL(uuid_node = static_cast<ObUUIDNode*>(calc_buf.alloc(sizeof(ObUUIDNode))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(uuid_node->init())) {
+      LOG_WARN("failed to init", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
     //do nothing
   } else if (OB_ISNULL(server_uuid) || OB_UNLIKELY(uuid_len != UuidCommon::LENGTH_UUID)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret), K(server_uuid), K(uuid_len));
   } else if (OB_FAIL(calc(scratch))) {
+    LOG_WARN("failed to calc", K(ret));
   } else if (OB_FAIL(UuidCommon::bin2uuid(server_uuid, scratch))) {
+    LOG_WARN("fail to convert strach to server_uuid", K(ret), K(server_uuid), K(scratch));
   } else {/*do nothing*/}
 
   if (need_reset) {
@@ -526,6 +555,7 @@ int ObExprUuid2bin::calc_result_typeN(ObExprResType &type,
   UNUSED(type_ctx);
   if (OB_UNLIKELY(NULL == types || type_num <= 0 || type_num > 2)) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("Invalid argument.", K(ret), K(types), K(type_num));
   } else {
     types[0].set_calc_type(common::ObVarcharType);
     if (2 == type_num) {
@@ -546,15 +576,18 @@ int ObExprUuid2bin::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else if (raw_expr.get_param_count() == 2) {
     const ObRawExpr *flag_expr = raw_expr.get_param_expr(1);
     if (OB_ISNULL(flag_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(rt_expr.args_[1]));
     } else {
       ObObjType flag_expr_type = flag_expr->get_result_type().get_type();
       if (OB_UNLIKELY(ObNullType != flag_expr_type &&
                   !ob_is_integer_type(flag_expr_type))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("swap flag expr must return integer", K(ret), K(flag_expr_type));
       }
     }
   }
@@ -562,16 +595,14 @@ int ObExprUuid2bin::cg_expr(ObExprCGCtx &op_cg_ctx,
   if (OB_SUCC(ret)) {
     rt_expr.eval_func_ = ObExprUuid2bin::uuid2bin;
     // Only implement vectorization when parameter 0 is batch and parameter 1 is constant or null
-    {
-      OB_ASSERT(rt_expr.args_[0] != nullptr);
-      if (rt_expr.args_[0]->is_batch_result()) {
-        if (rt_expr.arg_cnt_ != 2 || !rt_expr.args_[1]->is_batch_result()) {
-          rt_expr.eval_batch_func_ = ObExprUuid2bin::uuid2bin_batch;
-        } else {
-        }
-      } else {
-      }
-    }
+    if (OB_ISNULL(rt_expr.args_[0])) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(rt_expr.args_[0]));
+    } else if (rt_expr.args_[0]->is_batch_result()) {
+      if (rt_expr.arg_cnt_ != 2 || !rt_expr.args_[1]->is_batch_result()) {
+        rt_expr.eval_batch_func_ = ObExprUuid2bin::uuid2bin_batch;
+      } else {}
+    } else {}
   }
   return ret;
 }
@@ -584,17 +615,22 @@ int ObExprUuid2bin::uuid2bin(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_d
   bool need_swap = false;
   bool is_null = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text))) {
+    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (OB_ISNULL(text)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(text));
   } else if (text->is_null()) {
     expr_datum.set_null();
     is_null = true;
   } else if (expr.arg_cnt_ == 2) {
     if (OB_ISNULL(expr.args_[1])) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(expr.args_[1]));
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, swap_flag))) {
+      LOG_WARN("eval arg 1 failed", K(ret));
     } else if (OB_ISNULL(swap_flag)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(swap_flag));
     } else if (swap_flag->is_null()) {
       need_swap = false;
     } else {
@@ -612,7 +648,9 @@ int ObExprUuid2bin::uuid2bin(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_d
     
     if (OB_ISNULL(res_buf)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(res_buf));
     } else if (OB_FAIL(UuidCommon::uuid2bin(res_buf, is_valid, text_ptr, uuid_text.length()))) {
+      LOG_WARN("fail to parse uuid to bin", K(ret));
     } else if (!is_valid) {
       ret = OB_ERR_INCORRECT_VALUE_FOR_FUNCTION;
       ObString string_type_str("string");
@@ -621,6 +659,7 @@ int ObExprUuid2bin::uuid2bin(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_d
                       string_type_str.length(), string_type_str.ptr(),
                       uuid_text.length(), uuid_text.ptr(),
                       func_str.length(), func_str.ptr());
+      LOG_WARN("incorrect string value for function uuid_to_bin", K(ret), K(uuid_text));
     } else if (need_swap) { //check if need swap
       char swap_buf[8];
       MEMCPY(swap_buf, res_buf + 6, 2);
@@ -646,14 +685,19 @@ int ObExprUuid2bin::uuid2bin_batch(const ObExpr &expr,
   bool need_swap = false;
   if (OB_ISNULL(expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(expr.args_[0]));
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (expr.arg_cnt_ == 2) {
     ObDatum *swap_flag = nullptr;
     if (OB_ISNULL(expr.args_[1])) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(expr.args_[1]));
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, swap_flag))) {
+      LOG_WARN("eval arg 1 failed", K(ret));
     } else if (OB_ISNULL(swap_flag)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(swap_flag));
     } else if (swap_flag->is_null()) {
       need_swap = false;
     } else {
@@ -680,7 +724,9 @@ int ObExprUuid2bin::uuid2bin_batch(const ObExpr &expr,
         bool is_valid = true;
         if (OB_ISNULL(res_buf)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null", K(ret), K(res_buf));
         } else if (OB_FAIL(UuidCommon::uuid2bin(res_buf, is_valid, text_ptr, uuid_text.length()))) {
+          LOG_WARN("fail to parse uuid to bin", K(ret));
         } else if (!is_valid) {
           ret = OB_ERR_INCORRECT_VALUE_FOR_FUNCTION;
           ObString string_type_str("string");
@@ -689,6 +735,7 @@ int ObExprUuid2bin::uuid2bin_batch(const ObExpr &expr,
                         string_type_str.length(), string_type_str.ptr(),
                         uuid_text.length(), uuid_text.ptr(),
                         func_str.length(), func_str.ptr());
+          LOG_WARN("incorrect string value for function uuid_to_bin", K(ret), K(uuid_text));
         } else if (need_swap) {
           char swap_buf[8];
           MEMCPY(swap_buf, res_buf + 6, 2);
@@ -724,6 +771,7 @@ int ObExprIsUuid::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = ObExprIsUuid::is_uuid;
     rt_expr.eval_batch_func_ = ObExprIsUuid::is_uuid_batch;
@@ -738,9 +786,12 @@ int ObExprIsUuid::is_uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   ObDatum *text = nullptr;
   if (OB_ISNULL(expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(expr.args_[0]));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, text))) {
+    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (OB_ISNULL(text)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(text));
   } else if (text->is_null()) {
     expr_datum.set_null();
   } else {
@@ -751,6 +802,7 @@ int ObExprIsUuid::is_uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
     if (OB_ISNULL(text_ptr)) {
       expr_datum.set_bool(false);
     } else if (OB_FAIL(UuidCommon::uuid2bin(result_buf, is_valid, text_ptr, uuid_text.length()))) {
+      LOG_WARN("fail to parse uuid to bin", K(ret));
     } else {
       expr_datum.set_bool(is_valid);
     }
@@ -765,7 +817,9 @@ int ObExprIsUuid::is_uuid_batch(const ObExpr &expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(expr.args_[0]));
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("eval arg 0 failed", K(ret));
   } else {
     ObDatum *res_datum = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -782,6 +836,7 @@ int ObExprIsUuid::is_uuid_batch(const ObExpr &expr,
         char result_buf[UuidCommon::BYTE_LENGTH];
         bool is_valid = true;
         if (OB_FAIL(UuidCommon::uuid2bin(result_buf, is_valid, text_ptr, uuid_text.length()))) {
+          LOG_WARN("fail to parse uuid to bin", K(ret));
         } else {
           res_datum[i].set_bool(is_valid);
         }
@@ -810,6 +865,7 @@ int ObExprBin2uuid::calc_result_typeN(ObExprResType &type,
   UNUSED(type_ctx);
   if (OB_UNLIKELY(NULL == types || type_num <= 0 || type_num > 2)) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("Invalid argument.", K(ret), K(types), K(type_num));
   } else {
     types[0].set_calc_type(common::ObVarcharType);
     types[0].set_calc_collation_type(CS_TYPE_BINARY);
@@ -832,15 +888,18 @@ int ObExprBin2uuid::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else if (raw_expr.get_param_count() == 2) {
     const ObRawExpr *flag_expr = raw_expr.get_param_expr(1);
     if (OB_ISNULL(flag_expr)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(rt_expr.args_[1]));
     } else {
       ObObjType flag_expr_type = flag_expr->get_result_type().get_type();
       if (OB_UNLIKELY(ObNullType != flag_expr_type &&
                   !ob_is_integer_type(flag_expr_type))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("swap flag expr must return integer", K(ret), K(flag_expr_type));
       }
     }
   }
@@ -848,21 +907,21 @@ int ObExprBin2uuid::cg_expr(ObExprCGCtx &op_cg_ctx,
   if (OB_SUCC(ret)) {
     rt_expr.eval_func_ = ObExprBin2uuid::bin2uuid;
     // Only implement vectorization when parameter 0 is batch and parameter 1 is constant or null
-    {
-      OB_ASSERT(rt_expr.args_[0] != nullptr);
-      if (rt_expr.args_[0]->is_batch_result()) {
-        if (rt_expr.arg_cnt_ == 2) {
-          {
-            OB_ASSERT(rt_expr.args_[1] != nullptr);
-            if (!rt_expr.args_[1]->is_batch_result()) {
-              rt_expr.eval_batch_func_ = ObExprBin2uuid::bin2uuid_batch;
-            }
-          }
-        } else {
+    if (OB_ISNULL(rt_expr.args_[0])) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(rt_expr.args_[0]));
+    } else if (rt_expr.args_[0]->is_batch_result()) {
+      if (rt_expr.arg_cnt_ == 2) {
+        if (OB_ISNULL(rt_expr.args_[1])) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null", K(rt_expr.args_[0]));
+        } else if (!rt_expr.args_[1]->is_batch_result()) {
           rt_expr.eval_batch_func_ = ObExprBin2uuid::bin2uuid_batch;
         }
       } else {
+        rt_expr.eval_batch_func_ = ObExprBin2uuid::bin2uuid_batch;
       }
+    } else {
     }
   }
   return ret;
@@ -877,18 +936,24 @@ int ObExprBin2uuid::bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_d
   bool is_null = false;
   if (OB_ISNULL(expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(expr.args_[0]));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, text))) {
+    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (OB_ISNULL(text)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(text));
   } else if (text->is_null()) {
     expr_datum.set_null();
     is_null = true;
   } else if (expr.arg_cnt_ == 2) {
     if (OB_ISNULL(expr.args_[1])) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(expr.args_[0]));
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, swap_flag))) {
+      LOG_WARN("eval arg 1 failed", K(ret));
     } else if (OB_ISNULL(swap_flag)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(swap_flag));
     } else if (swap_flag->is_null()) {
       need_swap = false;
     } else {
@@ -905,6 +970,7 @@ int ObExprBin2uuid::bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_d
     uchar new_bin_text[UuidCommon::BYTE_LENGTH];
     if (OB_ISNULL(res_buf)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(res_buf));
     } else if (OB_ISNULL(bin_text_ptr) || UuidCommon::BYTE_LENGTH != bin_text.length()) {
       ObString string_type_str("binary");
       ObString func_str(N_BIN_TO_UUID);
@@ -917,7 +983,9 @@ int ObExprBin2uuid::bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_d
                         string_type_str.length(), string_type_str.ptr(),
                         text_len*2, hex_buf,
                         func_str.length(), func_str.ptr());
+          LOG_WARN("incorrect string value for function bin_to_uuid", K(ret), K(bin_text));
         } else {
+          LOG_WARN("fail to print incorrect hex string value", K(ret), K(bin_text));
         }
       }
     } else  if (need_swap) {
@@ -934,6 +1002,7 @@ int ObExprBin2uuid::bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_d
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(UuidCommon::bin2uuid(res_buf, new_bin_text))) {
+        LOG_WARN("fail to parse uuid to bin", K(ret));
       } else {
         expr_datum.set_string(res_buf, UuidCommon::LENGTH_UUID);
       }
@@ -951,14 +1020,19 @@ int ObExprBin2uuid::bin2uuid_batch(const ObExpr &expr,
   bool need_swap = false;
   if (OB_ISNULL(expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpect null", K(expr.args_[0]));
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (expr.arg_cnt_ == 2) {
     ObDatum *swap_flag = nullptr;
     if (OB_ISNULL(expr.args_[1])) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpect null", K(expr.args_[1]));
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, swap_flag))) {
+      LOG_WARN("eval arg 1 failed", K(ret));
     } else if (OB_ISNULL(swap_flag)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpect null", K(swap_flag));
     } else if (swap_flag->is_null()) {
       need_swap = false;
     } else {
@@ -985,6 +1059,7 @@ int ObExprBin2uuid::bin2uuid_batch(const ObExpr &expr,
         uchar new_bin_text[UuidCommon::BYTE_LENGTH];
         if (OB_ISNULL(res_buf)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null", K(bin_text_ptr), K(res_buf));
         } else if (OB_ISNULL(bin_text_ptr) || UuidCommon::BYTE_LENGTH != bin_text.length()) {
           ObString string_type_str("binary");
           ObString func_str(N_BIN_TO_UUID);
@@ -997,7 +1072,9 @@ int ObExprBin2uuid::bin2uuid_batch(const ObExpr &expr,
                             string_type_str.length(), string_type_str.ptr(),
                             text_len*2, hex_buf,
                             func_str.length(), func_str.ptr());
+              LOG_WARN("incorrect string value for function bin_to_uuid", K(ret), K(bin_text));
             } else {
+              LOG_WARN("fail to print incorrect hex string value", K(ret), K(bin_text));
             }
           }
         } else  if (need_swap) {
@@ -1014,6 +1091,7 @@ int ObExprBin2uuid::bin2uuid_batch(const ObExpr &expr,
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(UuidCommon::bin2uuid(res_buf, new_bin_text))) {
+            LOG_WARN("fail to parse uuid to bin", K(ret));
           } else {
             res_datum[i].set_string(res_buf, UuidCommon::LENGTH_UUID);
           }

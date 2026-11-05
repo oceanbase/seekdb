@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_LS_DDL_LOG_HANDLER_
 #define OCEANBASE_STORAGE_LS_DDL_LOG_HANDLER_
 
-#include "share/log/ob_log_base_type.h"
+#include "logservice/ob_log_base_type.h"
 #include "storage/ddl/ob_ddl_redo_log_replayer.h"
 
 namespace oceanbase
@@ -60,7 +60,7 @@ private:
 };
 
 class ObLSDDLLogHandler : public logservice::ObIReplaySubHandler,
-                          public logservice::ObILocalLogHandler,
+                          public logservice::ObIRoleChangeSubHandler,
                           public logservice::ObICheckpointSubHandler
 {
 public:
@@ -71,6 +71,7 @@ public:
   int init(ObLS *ls);
   void reset();
 
+  // for migrate and rebuild
   int offline();
   int online();
 
@@ -80,9 +81,11 @@ public:
              const palf::LSN &lsn,
              const share::SCN &log_ts) override final;
 
-  // local lifecycle
-  void deactivate() override final;
-  int activate() override final;
+  // for role change
+  void switch_to_follower_forcedly() override final;
+  int switch_to_leader() override final;
+  int switch_to_follower_gracefully() override final;
+  int resume_leader() override final;
 
   // for checkpoint
   int flush(share::SCN &rec_scn) override final;
@@ -96,7 +99,12 @@ public:
 
 private:
   int replay_ddl_redo_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
+  int replay_ddl_commit_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_ddl_tablet_schema_version_change_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
+  int replay_ddl_start_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
+  int replay_tablet_split_start_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
+  int replay_tablet_split_finish_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
+  int replay_tablet_freeze_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_table_fork_freeze_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_table_fork_start_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_table_fork_finish_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);

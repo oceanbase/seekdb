@@ -16,14 +16,10 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "observer/ob_server_runtime_access.h"
-#include "share/rc/ob_server_runtime.h"
-#include "observer/ob_server.h"
 #include "ob_dbms_sched_job_utils.h"
 #include "ob_dbms_sched_table_operator.h"
 #include "ob_dbms_sched_service.h"
 #include "ob_dbms_sched_job_executor.h"
-#include "query/scheduler/ob_scheduler_job.h"
 
 #include "lib/oblog/ob_log.h"
 #include "common/mysqlclient/ob_isql_connection.h"
@@ -31,8 +27,8 @@
 #include "share/ob_errno.h"
 #include "share/schema/ob_schema_getter_guard.h"
 
-#include "observer/ob_inner_sql_connection.h"
-#include "sql/executor/ob_worker_session_guard.h"
+#include "observer/ob_inner_sql_connection_pool.h"
+#include "sql/executor/ob_executor_rpc_processor.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/ob_sql.h"
 
@@ -54,10 +50,13 @@ int ObDBMSSchedJobExecutor::init(
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("job scheduler executor already init", K(inited_), K(ret));
   } else if (OB_ISNULL(sql_proxy_ = sql_proxy)
           || OB_ISNULL(schema_service_ = schema_service)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("sql proxy or schema service is null", K(sql_proxy), K(ret));
   } else if (OB_FAIL(table_operator_.init(sql_proxy_))) {
+    LOG_WARN("fail to init action record", K(ret));
   } else {
     inited_ = true;
   }
@@ -67,33 +66,45 @@ int ObDBMSSchedJobExecutor::init(
 int ObDBMSSchedJobExecutor::init_session(
   sql::ObSQLSessionInfo &session,
   ObSchemaGetterGuard &schema_guard,
+  const ObString &tenant_name,
   const ObString &database_name, uint64_t database_id,
   const ObUserInfo* user_info,
   ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
   ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
+  ObArenaAllocator *allocator = NULL;
   const bool print_info_log = true;
-  const bool use_server_defaults = true;
+  const bool is_sys_tenant = true;
   ObPCMemPctConf pc_mem_conf;
+  ObObj compatibility_mode;
   ObObj sql_mode;
   {
+    compatibility_mode.set_int(0);
     sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
   }
   OX (session.set_inner_session());
-  OZ (session.load_default_sys_variable(print_info_log, use_server_defaults));
+  OZ (session.load_default_sys_variable(print_info_log, is_sys_tenant));
   OZ (session.update_max_packet_size());
-  OZ (session.init_runtime(OB_SERVER_RUNTIME_NAME));
+  OZ (session.init_tenant(tenant_name.ptr()));
   OZ (session.load_all_sys_vars(schema_guard));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
+  OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, compatibility_mode));
+  OZ (session.update_sys_variable(share::SYS_VAR_NLS_DATE_FORMAT,
+                                  ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT));
+  OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_FORMAT,
+                                  ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT));
+  OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT,
+                                  ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT));
   OZ (session.set_default_database(database_name));
   OZ (session.get_pc_mem_conf(pc_mem_conf));
-  CK (OB_NOT_NULL(::oceanbase::observer::get_observer_sql_engine()));
+  CK (OB_NOT_NULL(GCTX.sql_engine_));
   OX (session.set_database_id(database_id));
   OZ (session.set_user(
     user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
   OX (session.set_priv_user_id(user_info->get_user_id()));
   OX (session.set_user_priv_set(user_info->get_priv_set()));
+  OX (session.init_use_rich_format());
   OZ (schema_guard.get_db_priv_set(user_info->get_user_id(), database_name, db_priv_set));
   OX (session.set_db_priv_set(db_priv_set));
   OX (session.get_enable_role_array().reuse());
@@ -107,6 +118,29 @@ int ObDBMSSchedJobExecutor::init_session(
   } else {
     OX (session.set_shadow(false));
   }
+  if (OB_SUCC(ret)) {
+    if (job_info.is_mview_job()) {
+      // set larger timeout for mview scheduler jobs
+      const int64_t QUERY_TIMEOUT_US = (24 * 60 * 60 * 1000000L); // 24hours
+      const int64_t TRX_TIMEOUT_US = (24 * 60 * 60 * 1000000L); // 24hours
+      ObObj query_timeout_obj;
+      ObObj trx_timeout_obj;
+      query_timeout_obj.set_int(QUERY_TIMEOUT_US);
+      trx_timeout_obj.set_int(TRX_TIMEOUT_US);
+      OZ (session.update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, query_timeout_obj));
+      OZ (session.update_sys_variable(SYS_VAR_OB_TRX_TIMEOUT, trx_timeout_obj));
+    } else if (job_info.is_olap_async_job()) {
+      const int64_t QUERY_TIMEOUT_US = ((job_info.get_max_run_duration() - OLAP_ASYNC_JOB_DEVIATION_SECOND) * 1000000L);
+      const int64_t TRX_TIMEOUT_US = ((job_info.get_max_run_duration() - OLAP_ASYNC_JOB_DEVIATION_SECOND) * 1000000L);
+      ObObj query_timeout_obj;
+      ObObj trx_timeout_obj;
+      query_timeout_obj.set_int(QUERY_TIMEOUT_US);
+      trx_timeout_obj.set_int(TRX_TIMEOUT_US);
+      OZ (session.update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, query_timeout_obj));
+      OZ (session.update_sys_variable(SYS_VAR_OB_TRX_TIMEOUT, trx_timeout_obj));
+    }
+  }
+
   return ret;
 }
 
@@ -114,17 +148,24 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
+  const ObTenantSchema *tenant_info = NULL;
   const ObSysVariableSchema *sys_variable_schema = NULL;
   ObSEArray<const ObUserInfo *, 1> user_infos;
   const ObUserInfo* user_info = NULL;
   const ObDatabaseSchema *database_schema = NULL;
+  share::schema::ObUserLoginInfo login_info;
   ObExecEnv exec_env;
   CK (OB_NOT_NULL(schema_service_));
   CK (job_info.valid());
-  OZ (schema_service_->get_runtime_schema_guard(schema_guard));
+  OZ (schema_service_->get_tenant_schema_guard(schema_guard));
+  OZ (schema_guard.get_tenant_info(tenant_info));
   OZ (schema_guard.get_database_schema( job_info.get_cowner(), database_schema));
   if (OB_SUCC(ret)) {
-    if (job_info.get_user_id() != OB_INVALID_ID) {
+    if (job_info.is_oracle_tenant()) {
+      OZ (schema_guard.get_user_info(job_info.get_powner(), user_infos));
+      OV (1 == user_infos.count(), OB_ERR_UNEXPECTED, K(job_info), K(user_infos));
+      CK (OB_NOT_NULL(user_info = user_infos.at(0)));
+    } else if (job_info.get_user_id() != OB_INVALID_ID) {
       OZ (schema_guard.get_user_info(job_info.get_user_id(), user_info));      
     } else {
       ObString user = job_info.get_powner();
@@ -147,10 +188,12 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
       }
     }
     CK (OB_NOT_NULL(user_info));
+    CK (OB_NOT_NULL(tenant_info));
     CK (OB_NOT_NULL(database_schema));
     OZ (exec_env.init(job_info.get_exec_env()));
     OZ (init_session(session,
                     schema_guard,
+                    tenant_info->get_tenant_name(),
                     database_schema->get_database_name(),
                     database_schema->get_database_id(),
                     user_info,
@@ -166,12 +209,18 @@ int ObDBMSSchedJobExecutor::create_session(
 {
   int ret = OB_SUCCESS;
   uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
-  ObSQLSessionMgr &session_mgr = OBSERVER.get_sql_session_mgr();
-  if (OB_FAIL(session_mgr.create_sessid(sid))) {
-  } else if (OB_FAIL(session_mgr.create_session(sid, session_info))) {
+  if (OB_ISNULL(GCTX.session_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session_mgr_ is null", KR(ret));
+  } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
+    LOG_WARN("alloc session id failed", KR(ret));
+  } else if (OB_FAIL(GCTX.session_mgr_->create_session(
+                sid, ObTimeUtility::current_time(), session_info))) {
+    LOG_WARN("create session failed", K(ret), K(sid));
     session_info = NULL;
   } else if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected session info is null", K(ret));
   } else {
     free_session_ctx.sessid_ = sid;
   }
@@ -183,12 +232,16 @@ int ObDBMSSchedJobExecutor::destroy_session(
     ObSQLSessionInfo *session_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(session_info)) {
+  if (OB_ISNULL(GCTX.session_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session_mgr_ is null", KR(ret));
+  } else if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("session_info is null", KR(ret));
   } else {
     session_info->set_session_sleep();
-    ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->revert_session(session_info);
-    ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->free_session(free_session_ctx);
+    GCTX.session_mgr_->revert_session(session_info);
+    GCTX.session_mgr_->free_session(free_session_ctx);
   }
   return ret;
 }
@@ -198,8 +251,8 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
 {
   int ret = OB_SUCCESS;
   ObSqlString what;
+  ObInnerSQLConnectionPool *pool = NULL;
   ObInnerSQLConnection *conn = NULL;
-  sqlclient::ObISQLConnectionGuard conn_guard;
   ObSQLSessionInfo *session_info = NULL;
   ObFreeSessionCtx free_session_ctx;
   int64_t affected_rows = 0;
@@ -211,11 +264,23 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(ObDBMSSchedJobExecutor::create_session(free_session_ctx, session_info))) {
+    LOG_WARN("failed to create session", KR(ret));
   } else {
     if (job_info.get_what().length() != 0) { // action
-      //mysql mode not support anonymous block
-      OZ (what.append_fmt("CALL %.*s;",
-          job_info.get_what().length(), job_info.get_what().ptr()));
+      if (job_info.is_oracle_tenant_) {
+        OZ (what.append_fmt("BEGIN %.*s; END;",
+            job_info.get_what().length(), job_info.get_what().ptr()));
+      } else if (job_info.is_olap_async_job()){
+        OZ (what.append_fmt("%.*s",
+            job_info.get_what().length(), job_info.get_what().ptr()));        
+      } else if (job_info.is_mysql_event_job()) { //mysql event
+        OZ (what.append_fmt("%.*s",
+              job_info.get_what().length(), job_info.get_what().ptr()));          
+      } else {
+        //mysql mode not support anonymous block
+        OZ (what.append_fmt("CALL %.*s;",
+            job_info.get_what().length(), job_info.get_what().ptr()));
+      }
     } else { // program
       ObSqlString sql;
       ObString program_action;
@@ -226,6 +291,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
         job_info.get_program_name().ptr()));
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
         if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+          LOG_WARN("execute query failed", K(ret), K(sql), K(job_info.get_program_name().ptr()), K(job_info.get_job_name().ptr()));
         } else if (OB_NOT_NULL(result.get_result())) {
           if (OB_SUCCESS == (ret = result.get_result()->next())) {
             EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*(result.get_result()), "program_action", program_action);
@@ -238,6 +304,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
             LOG_INFO("program not exists, may delete alreay!", K(ret), K(job_info.get_program_name().ptr()), K(job_info.get_program_name().ptr()));
             ret = OB_SUCCESS;
           } else {
+            LOG_WARN("failed to get next", K(ret), K(job_info.get_job_name().ptr()), K(job_info.get_program_name().ptr()));
           }
         }
       }
@@ -256,6 +323,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
             i));
           SMART_VAR(ObMySQLProxy::MySQLResult, result) {
             if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+              LOG_WARN("execute query failed", K(ret), K(sql), K(result.get_result()), K(job_info.get_job_name().ptr()));
             } else if (OB_NOT_NULL(result.get_result())) {
               if (OB_SUCCESS == (ret = result.get_result()->next())) {
                 EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*(result.get_result()), "default_value", argument_value);
@@ -274,6 +342,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
                   i));
                 SMART_VAR(ObMySQLProxy::MySQLResult, tmp_result) {
                   if (OB_FAIL(sql_proxy_->read(tmp_result, sql.ptr()))) {
+                    LOG_WARN("execute query failed", K(ret), K(sql), K(job_info.get_job_name().ptr()));
                   } else if (OB_NOT_NULL(tmp_result.get_result())) {
                     if (OB_SUCCESS == (ret = tmp_result.get_result()->next())) {
                       EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*(tmp_result.get_result()), "default_value", argument_value);
@@ -284,11 +353,13 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
                     } else if (OB_ITER_END == ret) {
                       LOG_ERROR("program default argument not exists", K(sql.ptr()), K(job_info.get_program_name().ptr()));
                     } else {
+                      LOG_WARN("failed to get next", K(ret), K(job_info.get_job_name().ptr()));
                     }
                   }
                 }
                 ret = OB_SUCCESS;
               } else {
+                LOG_WARN("failed to get next", K(ret), K(job_info.get_job_name().ptr()));
               }
             }
           }
@@ -306,23 +377,40 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
     if (OB_SUCC(ret)) {
       ObWorkerSessionGuard worker_session_guard(session_info);
       OZ (ObDBMSSchedJobExecutor::init_env(job_info, *session_info));
+      CK (OB_NOT_NULL(pool = static_cast<ObInnerSQLConnectionPool *>(sql_proxy_->get_pool())));
       OX (session_info->set_job_info(&job_info));
       OZ (table_operator_.update_for_start_execute(job_info));
       rootserver::ObDBMSSchedService::wakeup_scheduler();
-      OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
-          session_info, conn_guard));
-      OX (conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr()));
-      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
+      OZ (pool->acquire_spi_conn(session_info, conn));
+      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_ora_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(true);
       }
-      OZ (conn->execute_write(what.string().ptr(), affected_rows));
-      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
+      if (OB_SUCC(ret) && job_info.is_mysql_event_job()) {
+        ObArenaAllocator allocator("MYSQL_EVENT_TMP");
+        ObParser parser(allocator, session_info->get_sql_mode(), session_info->get_charsets4parser());
+        ObSEArray<ObString, 1> queries;
+        ObMPParseStat parse_stat;
+        if (OB_FAIL(parser.split_multiple_stmt(what.string().ptr(), queries, parse_stat))) {
+          LOG_WARN("failed to split multiple stmt", K(ret));
+        } else if (parse_stat.parse_fail_) {
+          ret = parse_stat.fail_ret_;
+          LOG_WARN("failed to split multiple stmt", K(ret));
+        } else {
+          for (int i = 0; i < queries.count() && OB_SUCC(ret); i++) {
+            OZ (conn->execute_write(queries[i].ptr(), affected_rows));
+          }
+        }
+      } else {
+        OZ (conn->execute_write(what.string().ptr(), affected_rows));
+      }
+      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_ora_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(false);
+      }
+      if (OB_NOT_NULL(conn)) {
+        sql_proxy_->close(conn, ret);
       }
     }
   }
-  conn = NULL;
-  conn_guard.reset();
   if (NULL != session_info) {
     int tmp_ret = OB_SUCCESS;
     {
@@ -339,7 +427,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
   return ret;
 }
 
-int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &job_name)
+int ObDBMSSchedJobExecutor::run_dbms_sched_job(bool is_oracle_tenant, uint64_t job_id, const ObString &job_name)
 {
   int ret = OB_SUCCESS;
   ObDBMSSchedJobInfo job_info;
@@ -347,7 +435,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
 
   THIS_WORKER.set_timeout_ts(INT64_MAX);
 
-  OZ (table_operator_.get_dbms_sched_job_info(job_id, job_name, allocator, job_info));
+  OZ (table_operator_.get_dbms_sched_job_info(is_oracle_tenant, job_id, job_name, allocator, job_info));
 
   if (OB_SUCC(ret)) {
     if (job_info.is_killed()) { //Intercept user cancellation requests before the actual execution of the job
@@ -360,6 +448,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
         int tmp_user_stop_ret = OB_SUCCESS;
         bool job_is_killed = false;
         if ((tmp_user_stop_ret = table_operator_.get_dbms_sched_job_is_killed(job_info, job_is_killed)) != OB_SUCCESS) {
+          LOG_WARN("double check get dbms sched job failed", K(tmp_user_stop_ret), K(ret));
         } else if (job_is_killed) {
           job_is_user_stop = true;
         }
@@ -367,6 +456,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
       int tmp_ret = OB_SUCCESS;
       if (job_is_user_stop) {
         if ((OB_TMP_FAIL(table_operator_.update_for_kill(job_info)))) {
+          LOG_WARN("update user stop dbms sched job failed", K(tmp_ret), K(ret));
         }
         rootserver::ObDBMSSchedService::wakeup_scheduler();
       } else {
@@ -376,6 +466,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
                             ob_errpkt_strerror(ret));
         }
         if ((OB_TMP_FAIL(table_operator_.update_for_end(job_info, ret, errmsg)))) {
+          LOG_WARN("update dbms sched job failed", K(tmp_ret), K(ret));
         }
         rootserver::ObDBMSSchedService::wakeup_scheduler();
       }

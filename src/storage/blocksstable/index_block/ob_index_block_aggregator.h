@@ -72,6 +72,7 @@ public:
     : col_desc_(),
       result_(nullptr),
       result_attr_(nullptr),
+      major_working_cluster_version_(0),
       is_major_(true),
       can_aggregate_(true) {}
   virtual ~ObIColAggregator() {}
@@ -79,6 +80,7 @@ public:
   virtual int init(
       const bool is_major,
       const ObColDesc &col_desc,
+      const int64_t major_working_cluster_version,
       ObStorageDatum &result,
       ObSkipIndexDatumAttr &result_attr);
   virtual void reset() = 0;
@@ -90,6 +92,7 @@ public:
       K_(col_desc),
       KPC_(result),
       KPC_(result_attr),
+      K_(major_working_cluster_version),
       K_(is_major),
       K_(can_aggregate));
 
@@ -111,6 +114,7 @@ protected:
   ObColDesc col_desc_;
   ObStorageDatum *result_;
   ObSkipIndexDatumAttr *result_attr_;
+  int64_t major_working_cluster_version_;
   bool is_major_;
   bool can_aggregate_;
 };
@@ -124,6 +128,7 @@ public:
   int init(
       const bool is_major,
       const ObColDesc &col_desc,
+      const int64_t major_working_cluster_version,
       ObStorageDatum &result,
       ObSkipIndexDatumAttr &result_attr) override;
   void reset() override { new (this) ObColNullCountAggregator(); }
@@ -145,6 +150,7 @@ public:
   int init(
       const bool is_major,
       const ObColDesc &col_desc,
+      const int64_t major_working_cluster_version,
       ObStorageDatum &result,
       ObSkipIndexDatumAttr &result_attr) override;
   void reset() override { new (this) ObColMaxAggregator(); }
@@ -174,6 +180,7 @@ public:
   int init(
       const bool is_major,
       const ObColDesc &col_desc,
+      const int64_t major_working_cluster_version,
       ObStorageDatum &result,
       ObSkipIndexDatumAttr &result_attr) override;
   void reset() override { new (this) ObColMinAggregator(); }
@@ -203,6 +210,7 @@ public:
   int init(
       const bool is_major,
       const ObColDesc &col_desc,
+      const int64_t major_working_cluster_version,
       ObStorageDatum &result,
       ObSkipIndexDatumAttr &result_attr) override;
   void reset() override { new (this) ObColSumAggregator(); }
@@ -231,22 +239,28 @@ private:
 template <typename T, int64_t MAX_COUNT, int64_t BLOCK_SIZE>
 class ObPodFix2dArray;
 class ObEncodingHashTable;
+class ObDictEncodingHashTable;
 
 struct ObMicroDataPreAggParam
 {
   ObMicroDataPreAggParam() { reset(); }
   void reset() { memset(this, 0, sizeof(*this)); }
   bool use_encoding_ht() const { return is_pax_encoding_ && nullptr != encoding_ht_; }
+  bool use_cs_encoding_ht() const { return is_cs_encoding_ && nullptr != cs_encoding_ht_; }
   bool is_all_null_column() const { OB_ASSERT(nullptr != col_datums_); return null_cnt_ == col_datums_->count(); }
   TO_STRING_KV(KP_(col_datums), KP_(encoding_ht), K_(null_cnt), K_(min_integer), K_(max_integer),
-      K_(is_integer_aggregated), K_(is_pax_encoding));
+      K_(is_integer_aggregated), K_(is_cs_encoding), K_(is_pax_encoding));
 
   const ObPodFix2dArray<ObDatum, 1 << 20, common::OB_MALLOC_NORMAL_BLOCK_SIZE> *col_datums_;
-  const ObEncodingHashTable *encoding_ht_;
+  union {
+    const ObEncodingHashTable *encoding_ht_;
+    const ObDictEncodingHashTable *cs_encoding_ht_;
+  };
   uint64_t null_cnt_;
   uint64_t min_integer_;
   uint64_t max_integer_;
   bool is_integer_aggregated_;
+  bool is_cs_encoding_;
   bool is_pax_encoding_;
 };
 
@@ -325,6 +339,7 @@ public:
       const bool is_major,
       const ObIArray<ObSkipIndexColMeta> &full_agg_metas,
       const ObIArray<ObColDesc> &full_col_descs,
+      const int64_t major_working_cluster_version,
       ObIAllocator &allocator);
 
   // Aggregate with serialized agg row
@@ -341,11 +356,13 @@ private:
       const bool is_major,
       const ObIArray<ObSkipIndexColMeta> &full_agg_metas,
       const ObIArray<ObColDesc> &full_col_descs,
+      const int64_t major_working_cluster_version,
       ObIAllocator &allocator);
   template<typename T>
   int init_col_aggregator(
       const bool is_major,
       const ObColDesc &col_desc,
+      const int64_t major_working_cluster_version,
       ObStorageDatum &result_datum,
       ObSkipIndexDatumAttr &result_attr,
       ObIAllocator &allocator);
@@ -365,6 +382,7 @@ protected:
   const ObIArray<ObColDesc> *full_col_descs_;
   ObAggRowReader agg_row_reader_;
   int64_t max_agg_size_;
+  int64_t major_working_cluster_version_;
   bool need_aggregate_;
   bool evaluated_;
   bool is_inited_;

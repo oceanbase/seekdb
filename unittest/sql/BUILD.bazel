@@ -1,0 +1,7 @@
+# Pretest entry for the sql module. The inventory generator requires exactly one
+# seekdb_module_cc_test call whose name is "<module>_tests".
+seekdb_module_cc_test(
+    name = "sql_tests",
+    unity_size = 8,
+    shard_count = 1,
+)

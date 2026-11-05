@@ -24,8 +24,8 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_fixed_array.h"
 #include "share/schema/ob_schema_struct.h"
-#include "share/statement/ob_stmt_type.h"
-#include "sql/plan_cache/ob_pre_calc_expr_handler.h"
+#include "sql/resolver/ob_stmt_type.h"
+#include "sql/plan_cache/ob_pc_ref_handle.h"
 #include "sql/plan_cache/ob_i_lib_cache_object.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
 
@@ -108,7 +108,7 @@ struct ObParamInfo
   : scale_(0),
     type_(common::ObNullType),
     ext_real_type_(common::ObNullType),
-    is_typed_null_value_(false),
+    is_oracle_null_value_(false),
     col_type_(common::CS_TYPE_INVALID),
     precision_(PRECISION_UNKNOWN_YET)
   {}
@@ -119,7 +119,7 @@ struct ObParamInfo
                K_(scale),
                K_(type),
                K_(ext_real_type),
-               K_(is_typed_null_value),
+               K_(is_oracle_null_value),
                K_(col_type),
                K_(precision));
 
@@ -129,8 +129,8 @@ struct ObParamInfo
   common::ObScale scale_;
   common::ObObjType type_;
   common::ObObjType ext_real_type_; // use as high 4 bytes of udt id if type is sql udt
-  // Process typed null value matching in plan cache.
-  bool is_typed_null_value_;
+  // Process Oracle mode type null value matching in plan_cache
+  bool is_oracle_null_value_;
   common::ObCollationType col_type_;
   common::ObPrecision precision_;
 
@@ -147,8 +147,8 @@ public:
   inline int64_t get_dependency_table_size() const { return dependency_tables_.count(); }
   inline const DependenyTableStore &get_dependency_table() const { return dependency_tables_; }
   inline void set_sys_schema_version(int64_t schema_version) { sys_schema_version_ = schema_version; }
-  inline void set_runtime_schema_version(int64_t schema_version) { runtime_schema_version_ = schema_version; }
-  inline int64_t get_runtime_schema_version() const { return runtime_schema_version_; }
+  inline void set_tenant_schema_version(int64_t schema_version) { tenant_schema_version_ = schema_version; }
+  inline int64_t get_tenant_schema_version() const { return tenant_schema_version_; }
   inline int64_t get_sys_schema_version() const { return sys_schema_version_; }
   int init_dependency_table_store(int64_t dependency_table_cnt) { return dependency_tables_.init(dependency_table_cnt); }
   inline DependenyTableStore &get_dependency_table() { return dependency_tables_; }
@@ -164,11 +164,11 @@ public:
   inline void set_is_contain_inner_table(bool is_contain_inner_table) { is_contain_inner_table_ = is_contain_inner_table; }
   inline bool is_contain_virtual_table() const { return is_contain_virtual_table_; }
   inline bool is_contain_inner_table() const { return is_contain_inner_table_; }
-  virtual void inc_pre_expr_ref_count() = 0;
-  virtual void dec_pre_expr_ref_count() = 0;
-  virtual int64_t get_pre_expr_ref_count() const = 0;
-  virtual void set_pre_calc_expr_handler(PreCalcExprHandler* handler) = 0;
-  virtual PreCalcExprHandler* get_pre_calc_expr_handler() = 0;
+  virtual void inc_pre_expr_ref_count() {}
+  virtual void dec_pre_expr_ref_count() {}
+  virtual int64_t get_pre_expr_ref_count() const {return -1;}
+  virtual void set_pre_calc_expr_handler(PreCalcExprHandler* handler) {UNUSED(handler);}
+  virtual PreCalcExprHandler* get_pre_calc_expr_handler(){return NULL;}
   inline const common::ObDList<ObPreCalcExprFrameInfo> &get_pre_calc_frames() const
   {
     return pre_calc_frames_;
@@ -211,7 +211,7 @@ public:
   static int type_to_name(const ObLibCacheNameSpace ns,
                           common::ObIAllocator &allocator,
                           common::ObString &type_name);
-  VIRTUAL_TO_STRING_KV(K_(runtime_schema_version),
+  VIRTUAL_TO_STRING_KV(K_(tenant_schema_version),
                        K_(sys_schema_version),
                        K_(dependency_tables),
                        K_(outline_state),
@@ -222,7 +222,7 @@ public:
 protected:
 
 protected:
-  int64_t runtime_schema_version_;
+  int64_t tenant_schema_version_;
   int64_t sys_schema_version_;
   DependenyTableStore dependency_tables_;
   //for outline use

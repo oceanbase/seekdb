@@ -34,7 +34,7 @@ struct ObObjMysqlPrivSortKey
   {}
   bool operator==(const ObObjMysqlPrivSortKey &rhs) const
   {
-    return (user_id_ == rhs.user_id_)
+    return (true) && (user_id_ == rhs.user_id_)
            && (object_name_ == rhs.object_name_) && (object_type_ == rhs.object_type_);
   }
   bool operator!=(const ObObjMysqlPrivSortKey &rhs) const
@@ -43,9 +43,9 @@ struct ObObjMysqlPrivSortKey
   }
   bool operator<(const ObObjMysqlPrivSortKey &rhs) const
   {
-    ObSchemaNameComparator name_cmp;
+    ObCompareNameWithTenantID name_cmp;
     bool bret = false;
-    if (false == bret) {
+    if (false == bret && true) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = object_type_ < rhs.object_type_;
@@ -72,7 +72,7 @@ struct ObObjMysqlPrivSortKey
   }
   bool is_valid() const
   {
-    return user_id_ != common::OB_INVALID_ID;
+    return (true) && (user_id_ != common::OB_INVALID_ID);
   }
 
   int deep_copy(const ObObjMysqlPrivSortKey &src, common::ObIAllocator &allocator)
@@ -82,6 +82,7 @@ struct ObObjMysqlPrivSortKey
     user_id_ = src.user_id_;
     object_type_ = src.object_type_;
     if (OB_FAIL(common::ob_write_string(allocator, src.object_name_, object_name_))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to deep copy object_name_", KR(ret), K(src.object_name_));
     }
     return ret;
   }

@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_SCHEDULED_MANAGE_DYNAMIC_PARTITION_H_
+#define OCEANBASE_SHARE_OB_SCHEDULED_MANAGE_DYNAMIC_PARTITION_H_
+
+#include "share/ob_dml_sql_splicer.h"
+#include "lib/ob_define.h"
+#include "lib/string/ob_string.h"
+namespace oceanbase { namespace common { class ObMySQLProxy; class ObMySQLTransaction; } namespace sql { class ObSQLSessionInfo; } namespace share { namespace schema { class ObSysVariableSchema; } } }
+
+
+namespace oceanbase
+{
+namespace share
+{
+static const char *SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY_JOB_NAME = "SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY";
+static const char *SCHEDULED_MANAGE_DYNAMIC_PARTITION_HOURLY_JOB_NAME = "SCHEDULED_MANAGE_DYNAMIC_PARTITION_HOURLY";
+
+class ObScheduledManageDynamicPartition
+{
+public:
+  // create scheduled manage dynamic partition daily and hourly jobs
+  static int create_jobs(
+    const schema::ObSysVariableSchema &sys_variable,
+    ObMySQLTransaction &trans);
+
+  // create scheduled manage dynamic partition daily and hourly jobs
+  // if jobs already exist, skip
+  static int create_jobs_for_upgrade(
+    common::ObMySQLProxy *sql_proxy,
+    const schema::ObSysVariableSchema &sys_variable,
+    ObMySQLTransaction &trans);
+
+  static int set_attribute(
+    const sql::ObSQLSessionInfo *session,
+    const common::ObString &job_name,
+    const common::ObString &attr_name,
+    const common::ObString &attr_val_str,
+    bool &is_scheduled_manage_dynamic_partition_daily_attr,
+    share::ObDMLSqlSplicer &dml);
+
+private:
+  static int create_daily_job_(
+    const schema::ObSysVariableSchema &sys_variable,
+    ObMySQLTransaction &trans);
+
+  static int create_hourly_job_(
+    const schema::ObSysVariableSchema &sys_variable,
+    ObMySQLTransaction &trans);
+
+  static int create_job_(
+    const schema::ObSysVariableSchema &sys_variable,
+    const int64_t start_usec,
+    const ObString &job_name,
+    const ObString &repeat_interval,
+    const ObString &job_action,
+    common::ObMySQLTransaction &trans);
+  static int parse_next_date_(
+    const sql::ObSQLSessionInfo *session,
+    const common::ObString &next_date_str,
+    int64_t &next_date_ts);
+  static int get_today_zero_hour_timestamp_(const int32_t offset_sec, int64_t &timestamp);
+  static bool is_daily_job_(const common::ObString &job_name);
+};
+
+} // end of share
+} // end of oceanbase
+
+#endif // OCEANBASE_SHARE_OB_SCHEDULED_MANAGE_DYNAMIC_PARTITION_H_

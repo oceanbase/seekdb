@@ -26,20 +26,29 @@ namespace observer
 {
 
 ObAllVirtualPxTargetMonitor::ObAllVirtualPxTargetMonitor()
-    : row_emitted_(false)
-{}
+    : target_info_array_(),
+      target_usage_idx_(0)
+{
+  svr_ip_buff_[0] = '\0';
+  peer_ip_buff_[0] = '\0';
+}
 
 int ObAllVirtualPxTargetMonitor::init()
 {
   int ret = OB_SUCCESS;
-  row_emitted_ = false;
+  target_info_array_.reset();
+  target_usage_idx_ = 0;
   return ret;
 }
 
 int ObAllVirtualPxTargetMonitor::inner_open()
 {
-  row_emitted_ = false;
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  // single server: one row set, no per-server iteration
+  if (OB_FAIL(OB_PX_TARGET_MONITOR.get_all_target_info(target_info_array_))) {
+    LOG_WARN("get all target_info failed", K(ret));
+  }
+  return ret;
 }
 
 int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
@@ -47,23 +56,57 @@ int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   ObObj *cells = NULL;
   ObPxTargetInfo target_info;
-  if (row_emitted_) {
-    ret = OB_ITER_END;
+  if (!start_to_read_ && OB_FAIL(prepare_start_to_read())) {
+    LOG_WARN("prepare_get_px_target fail", K(ret));
+  } else if (OB_FAIL(get_next_target_info(target_info))) {
+    if (ret == OB_ITER_END) {
+      LOG_INFO("get_px_target finish", K(ret));
+    } else {
+      LOG_WARN("get_px_target failed", K(ret));
+    }
   } else if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("cur row cell is NULL", K(ret));
   } else {
-    OB_PX_TARGET_MONITOR.get_target_info(target_info);
     const int64_t col_count = output_column_ids_.count();
     for (uint64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
 
-        case LOCAL_TARGET: {
-          cur_row_.cells_[i].set_int(target_info.local_target_);
+        case IS_LEADER: {
+          cur_row_.cells_[i].set_bool(target_info.is_leader_);
+          break;
+        }
+        case VERSION: {
+          cur_row_.cells_[i].set_uint64(0);
+          break;
+        }
+        case PEER_IP: {
+          memset(peer_ip_buff_, 0, common::OB_IP_STR_BUFF);
+          if (!target_info.peer_server_.ip_to_string(peer_ip_buff_, common::OB_IP_PORT_STR_BUFF)) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("get server_ip failed", K(ret), K(target_info));
+          } else {
+            cur_row_.cells_[i].set_varchar(ObString::make_string(peer_ip_buff_));
+            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
+                                                      ObCharset::get_default_charset()));
+          }
+          break;
+        }
+        case PEER_PORT: {
+          cur_row_.cells_[i].set_int(static_cast<int64_t>(target_info.peer_server_.get_port()));
+          break;
+        }
+        case PEER_TARGET: {
+          cur_row_.cells_[i].set_int(target_info.parallel_servers_target_);
+          break;
+        }
+        case PEER_TARGET_USED: {
+          cur_row_.cells_[i].set_int(target_info.peer_target_used_);
           break;
         }
         case LOCAL_TARGET_USED: {
-          cur_row_.cells_[i].set_int(target_info.target_used_);
+          cur_row_.cells_[i].set_int(target_info.local_target_used_);
           break;
         }
         case LOCAL_PARALLEL_SESSION_COUNT: {
@@ -72,20 +115,40 @@ int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid column_id", K(ret), K(col_id));
         }
       }
     }
     if (OB_SUCC(ret)) {
-      row_emitted_ = true;
       row = &cur_row_;
     }
   }
   return ret;
 }
 
+int ObAllVirtualPxTargetMonitor::get_next_target_info(ObPxTargetInfo &target_info)
+{
+  int ret = OB_SUCCESS;
+  if (target_usage_idx_ >= target_info_array_.count()) {
+    ret = OB_ITER_END;
+  } else {
+    target_info = target_info_array_.at(target_usage_idx_++);
+  }
+  return ret;
+}
+
 int ObAllVirtualPxTargetMonitor::inner_close()
 {
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  target_info_array_.destroy();
+  return ret;
+}
+
+int ObAllVirtualPxTargetMonitor::prepare_start_to_read()
+{
+  int ret = OB_SUCCESS;
+  start_to_read_ = true;
+  return ret;
 }
 
 }//namespace observer

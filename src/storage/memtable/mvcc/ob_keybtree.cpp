@@ -237,7 +237,7 @@ int BaseHandle<BtreeKey, BtreeVal>::acquire_ref()
 }
 
 template<typename BtreeKey, typename BtreeVal>
-int GetHandle<BtreeKey, BtreeVal>::get(BtreeNode *root, BtreeKey key, BtreeVal &val, BtreeKey **copy_inner_key)
+int GetHandle<BtreeKey, BtreeVal>::get(BtreeNode *root, BtreeKey key, BtreeVal &val)
 {
   int ret = OB_SUCCESS;
   BtreeNode *leaf = nullptr;
@@ -269,9 +269,6 @@ int GetHandle<BtreeKey, BtreeVal>::get(BtreeNode *root, BtreeKey key, BtreeVal &
       index->load(leaf->get_index());
     }
     val = leaf->get_val(pos, index);
-    if (OB_NOT_NULL(copy_inner_key)) {
-      *copy_inner_key = &leaf->get_key(pos, index);
-    }
   } else {
     ret = OB_ENTRY_NOT_EXIST;
   }
@@ -607,77 +604,6 @@ int WriteHandle<BtreeKey, BtreeVal>::insert_and_split_upward(BtreeKey key, Btree
 }
 
 template<typename BtreeKey, typename BtreeVal>
-int WriteHandle<BtreeKey, BtreeVal>::insert_or_get_and_split_upward(
-    BtreeKey key, const BtreeKvCreator &creator, BtreeVal &val, BtreeNode *&new_root, bool &inserted)
-{
-  int ret = OB_SUCCESS;
-  int pos = -1;
-  BtreeNode *old_node = nullptr;
-  BtreeNode *new_node_1 = nullptr;
-  BtreeNode *new_node_2 = nullptr;
-  MultibitSet *index = &this->index_;
-  BtreeKey new_insert_key;
-  inserted = false;
-  UNUSED(this->path_.pop(old_node, pos)); // pop may failed, old_node is allowd to be NULL
-
-  if (OB_ISNULL(old_node)) {
-    if (OB_ISNULL(new_node_1 = alloc_node())) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(creator(false/*is_exist_key*/, new_insert_key, val))) {
-    } else {
-      new_node_1->insert_into_node(0, new_insert_key, val);
-      inserted = true;
-    }
-  } else if (this->path_.get_is_found()) {
-    val = old_node->get_val(pos, index);
-    BtreeKey &exist_key = old_node->get_key(pos, index);
-    if (OB_FAIL(creator(true/*is_exist_key*/, exist_key, val))) {
-    }
-  } else {
-    if (OB_FAIL(creator(false/*is_exist_key*/, new_insert_key, val))) {
-    } else if (OB_FAIL(insert_into_node(old_node, pos, new_insert_key, val, new_node_1, new_node_2))) {
-      // do nothing
-    } else {
-      inserted = true;
-    }
-  }
-  while (OB_SUCCESS == ret && OB_NOT_NULL(new_node_1)) {
-    if (OB_ISNULL(new_node_2)) {
-      if (OB_SUCCESS != this->path_.pop(old_node, pos)) {
-        new_root = new_node_1;
-        new_node_1 = nullptr;
-      } else if (pos < 0) {
-        ret = replace_child_and_key(old_node, 0, new_node_1->get_key(0, index), new_node_1, new_node_1);
-      } else {
-        ret = replace_child(old_node, pos, (BtreeVal)new_node_1);
-        new_node_1 = nullptr;
-      }
-    } else {
-      if (OB_SUCCESS != this->path_.pop(old_node, pos)) {
-        ret = this->make_new_root(new_root,
-                                  new_node_1->get_key(0, index),
-                                  new_node_1,
-                                  new_node_2->get_key(0),
-                                  new_node_2,
-                                  (int16_t)(new_node_1->get_level() + 1));
-        new_node_1 = nullptr;
-        new_node_2 = nullptr;
-      } else {
-        ret = split_child(old_node,
-                          std::max(0, pos),
-                          new_node_1->get_key(0, index),
-                          (BtreeVal)new_node_1,
-                          new_node_2->get_key(0, index),
-                          (BtreeVal)new_node_2,
-                          new_node_1,
-                          new_node_2);
-      }
-    }
-  }
-  return ret;
-}
-
-template<typename BtreeKey, typename BtreeVal>
 int WriteHandle<BtreeKey, BtreeVal>::insert_into_node(BtreeNode *old_node, int pos, BtreeKey key, BtreeVal val, BtreeNode *&new_node_1, BtreeNode *&new_node_2)
 {
   int ret = OB_SUCCESS;
@@ -851,6 +777,7 @@ int Iterator<BtreeKey, BtreeVal>::set_key_range(const BtreeKey min_key,
   int ret = OB_SUCCESS;
   int cmp = 0;
   if (OB_FAIL(scan_handle_.acquire_ref())) {
+    OB_LOG(ERROR, "acquire_ref fail", K(ret));
   } else if (OB_FAIL(scan_handle_.find_path(ATOMIC_LOAD(&btree_.root_), min_key))) {
     // do nothing
   } else {
@@ -941,6 +868,9 @@ int Iterator<BtreeKey, BtreeVal>::estimate_one_level(const int64_t level,
                                             batch_count,
                                             level,
                                             batch_element_count))) {
+    STORAGE_LOG(TRACE, "iter one batch", K(batch_physical_row_count), K(batch_count), K(level),
+                K(batch_element_count), K(level_physical_row_count), K(level_element_count),
+                K(node_count));
     level_physical_row_count += batch_physical_row_count;
     level_element_count += batch_element_count;
     node_count += batch_count;
@@ -973,6 +903,7 @@ int Iterator<BtreeKey, BtreeVal>::estimate_element_count(int64_t &physical_row_c
   }
   physical_row_count += level_physical_row_count;
   element_count += level_element_count;
+  STORAGE_LOG(TRACE, "finish sample leaf level", K(physical_row_count), K(element_count), K(node_count));
   if (OB_SUCCESS == ret && node_count >= MAX_SAMPLE_LEAF_COUNT) {
     avg_element_count_per_leaf = MAX(std::lround(static_cast<double>(level_element_count) / static_cast<double>(node_count)), 1);
     if (OB_FAIL(estimate_one_level(1,         /*level*/
@@ -989,6 +920,7 @@ int Iterator<BtreeKey, BtreeVal>::estimate_element_count(int64_t &physical_row_c
     physical_row_count += level_physical_row_count * avg_element_count_per_leaf;
     element_count += level_element_count * avg_element_count_per_leaf;
   }
+  STORAGE_LOG(TRACE, "finish sample second level", K(physical_row_count), K(element_count), K(node_count));
   if (OB_SUCCESS != ret) {
     scan_handle_.release_ref();
   }
@@ -1563,11 +1495,13 @@ int ObKeyBtree<BtreeKey, BtreeVal>::insert(const BtreeKey key, BtreeVal &value)
   BTREE_ASSERT(((uint64_t)value & 7ULL) == 0);
   handle.get_is_in_delete() = false;
   if (OB_FAIL(handle.acquire_ref())) {
+    OB_LOG(ERROR, "acquire_ref fail", K(ret));
   } else {
     ret = OB_EAGAIN;
   }
   while (OB_EAGAIN == ret) {
     if (OB_FAIL(handle.find_path(old_root = ATOMIC_LOAD(&root_), key))) {
+      OB_LOG(ERROR, "path.search error", K(root_), K(ret));
     } else if (OB_FAIL(handle.insert_and_split_upward(key, value, new_root = old_root))) {
       // do nothing
     } else if (old_root != new_root) {
@@ -1591,77 +1525,16 @@ int ObKeyBtree<BtreeKey, BtreeVal>::insert(const BtreeKey key, BtreeVal &value)
 }
 
 template<typename BtreeKey, typename BtreeVal>
-int ObKeyBtree<BtreeKey, BtreeVal>::insert_or_get(const BtreeKey key,
-                                                  const BtreeKvCreator &creator,
-                                                  BtreeVal &val)
-{
-  int ret = OB_SUCCESS;
-  BtreeNode *old_root = nullptr;
-  BtreeNode *new_root = nullptr;
-  bool inserted = false;
-  WriteHandle handle(*this);
-  handle.get_is_in_delete() = false;
-  if (OB_FAIL(handle.acquire_ref())) {
-  } else {
-    ret = OB_EAGAIN;
-  }
-  while (OB_EAGAIN == ret) {
-    inserted = false;
-    if (OB_FAIL(handle.find_path(old_root = ATOMIC_LOAD(&root_), key))) {
-    } else if (OB_FAIL(handle.insert_or_get_and_split_upward(key, creator, val, new_root = old_root, inserted))) {
-      // do nothing
-    } else if (old_root != new_root) {
-      if (!ATOMIC_BCAS(&root_, old_root, new_root)) {
-        ret = OB_EAGAIN;
-      }
-    }
-    if (OB_EAGAIN == ret) {
-      inserted = false;
-      handle.free_list();
-    }
-  }
-  handle.release_ref();
-  handle.retire(ret);
-  if (OB_SUCC(ret)) {
-    if (inserted) {
-      size_.inc(1);
-    }
-  } else if (OB_ALLOCATE_MEMORY_FAILED == ret) {
-    OB_LOG(WARN, "btree.insert_or_get(key) error", KR(ret), K(key), K(val));
-  } else {
-    OB_LOG(ERROR, "btree.insert_or_get(key) error", KR(ret), K(key), K(val));
-  }
-  return ret;
-}
-
-template<typename BtreeKey, typename BtreeVal>
 int ObKeyBtree<BtreeKey, BtreeVal>::get(const BtreeKey key, BtreeVal &value)
 {
   int ret = OB_SUCCESS;
   GetHandle handle(*this);
   if (OB_FAIL(handle.acquire_ref())) {
+    OB_LOG(ERROR, "acquire_ref fail", K(ret));
   } else if (OB_FAIL(handle.get(ATOMIC_LOAD(&root_), key, value))) {
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       OB_LOG(ERROR, "btree.get(key) fail", KR(ret), K(key), K(value));
     }
-  }
-  return ret;
-}
-
-template<typename BtreeKey, typename BtreeVal>
-int ObKeyBtree<BtreeKey, BtreeVal>::get(const BtreeKey key, BtreeVal &value, BtreeKey &copy_inner_key)
-{
-  int ret = OB_SUCCESS;
-  BtreeKey *inner_key_ptr = nullptr;
-  GetHandle handle(*this);
-  if (OB_FAIL(handle.acquire_ref())) {
-    OB_LOG(ERROR, "acquire_ref fail", K(ret));
-  } else if (OB_FAIL(handle.get(ATOMIC_LOAD(&root_), key, value, &inner_key_ptr))) {
-    if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-      OB_LOG(ERROR, "btree.get(key) fail", KR(ret), K(key), K(value));
-    }
-  } else if (OB_NOT_NULL(inner_key_ptr)) {
-    copy_inner_key = *inner_key_ptr;
   }
   return ret;
 }

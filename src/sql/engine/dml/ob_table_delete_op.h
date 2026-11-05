@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_ENGINE_DML_OB_TABLE_DELETE_OP_
 
 #include "sql/engine/dml/ob_table_modify_op.h"
+#include "sql/engine/dml/ob_err_log_service.h"
 
 namespace oceanbase
 {
@@ -76,7 +77,8 @@ class ObTableDeleteOp : public ObTableModifyOp
 public:
   ObTableDeleteOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
     : ObTableModifyOp(exec_ctx, spec, input),
-      del_rtdefs_()
+      del_rtdefs_(),
+      err_log_service_(get_eval_ctx())
   { }
 
   virtual ~ObTableDeleteOp() {}
@@ -98,6 +100,7 @@ protected:
   virtual int check_need_exec_single_row() override;
 protected:
   DelRtDef2DArray del_rtdefs_;  //see the comment of DelCtDef2DArray
+  ObErrLogService err_log_service_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableDeleteOp);
 };
@@ -109,6 +112,10 @@ public:
   ObTableDeleteOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     : ObTableModifyOpInput(ctx, spec)
   {}
+  int init(ObTaskInfo &task_info) override
+  {
+    return ObTableModifyOpInput::init(task_info);
+  }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableDeleteOpInput);
 };

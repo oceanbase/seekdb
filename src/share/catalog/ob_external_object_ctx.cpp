@@ -1,0 +1,137 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL
+#include "share/catalog/ob_external_object_ctx.h"
+
+#include "share/ob_define.h"
+#include "share/schema/ob_schema_getter_guard.h"
+
+namespace oceanbase
+{
+namespace share
+{
+
+OB_DEF_SERIALIZE(ObExternalObject)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE, type, catalog_id, database_id, database_name, table_id, table_name);
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObExternalObject)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE, type, catalog_id, database_id, database_name, table_id, table_name);
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObExternalObject)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN, type, catalog_id, database_id, database_name, table_id, table_name);
+  return len;
+}
+
+int ObExternalObjectCtx::init(int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  OZ(external_objects_.init(capacity));
+  return ret;
+}
+
+int ObExternalObjectCtx::add_table_schema(const uint64_t catalog_id,
+                                          const uint64_t database_id,
+                                          const uint64_t table_id,
+                                          const common::ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  ObExternalObject object;
+  object.type = ObExternalObjectType::TABLE_SCHEMA;
+  
+  object.catalog_id = catalog_id;
+  object.database_id = database_id;
+  object.table_id = table_id;
+  OZ(ob_write_string(allocator_, table_name, object.table_name));
+  OZ(external_objects_.push_back(object));
+  return ret;
+}
+
+int ObExternalObjectCtx::add_database_schema(const uint64_t catalog_id,
+                                             const uint64_t database_id,
+                                             const common::ObString &database_name)
+{
+  int ret = OB_SUCCESS;
+  ObExternalObject object;
+  object.type = ObExternalObjectType::DATABASE_SCHEMA;
+  
+  object.catalog_id = catalog_id;
+  object.database_id = database_id;
+  OZ(ob_write_string(allocator_, database_name, object.database_name));
+  OZ(external_objects_.push_back(object));
+  return ret;
+}
+
+
+int ObExternalObjectCtx::get_database_schema(const uint64_t database_id, const ObExternalObject *&obj) const
+{
+  int ret = OB_SUCCESS;
+  obj = NULL;
+  for (int64_t i = 0; OB_SUCC(ret) && i < external_objects_.count(); i++) {
+    const ObExternalObject &cur_obj = external_objects_.at(i);
+    if (cur_obj.type == ObExternalObjectType::DATABASE_SCHEMA && cur_obj.database_id == database_id) {
+      obj = &cur_obj;
+      break;
+    }
+  }
+  if (OB_SUCC(ret) && OB_ISNULL(obj)) {
+    ret = OB_ENTRY_NOT_EXIST;
+  }
+  return ret;
+}
+
+const common::ObIArray<ObExternalObject> &ObExternalObjectCtx::get_external_objects() const { return external_objects_; }
+
+OB_DEF_SERIALIZE(ObExternalObjectCtx)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE, external_objects_);
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObExternalObjectCtx)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE, external_objects_);
+
+  // hold ObString's memory
+  for (int64_t i = 0; OB_SUCC(ret) && i < external_objects_.count(); i++) {
+    ObExternalObject &object = external_objects_.at(i);
+    OZ(ob_write_string(allocator_, object.database_name, object.database_name));
+    OZ(ob_write_string(allocator_, object.table_name, object.table_name));
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObExternalObjectCtx)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN, external_objects_);
+  return len;
+}
+
+} // namespace share
+} // namespace oceanbase

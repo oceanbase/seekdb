@@ -20,10 +20,10 @@
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "common/ob_tablet_id.h"
-#include "data_plane/access/ob_table_scan_param.h"
+#include "share/ob_ls_id.h"
+#include "storage/access/ob_dml_param.h"
 #include "sql/das/ob_domain_id.h"
-#include "data_plane/transaction/ob_tx_desc_access.h"
-#include "query/vector/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -43,6 +43,7 @@ public:
 
   virtual bool is_valid() const override;
   INHERIT_TO_STRING_KV("ObDASIterParam", ObDASIterParam,
+                     K(rowkey_domain_ls_id_),
                      K(rowkey_domain_tablet_ids_),
                      KP(data_table_iter_),
                      KP(data_table_ctdef_),
@@ -50,9 +51,10 @@ public:
                      K(rowkey_domain_table_iters_),
                      K(rowkey_domain_ctdefs_),
                      K(rowkey_domain_rtdefs_),
-                     "trans_desc", data_plane::ObTxDescLogView(trans_desc_),
+                     KPC(trans_desc_),
                      KPC(snapshot_));
 public:
+  share::ObLSID rowkey_domain_ls_id_; // all domain index should be in one ls (local index)
   common::ObArray<common::ObTabletID> rowkey_domain_tablet_ids_;
   ObDASScanIter* data_table_iter_;
   ObDASScanCtDef* data_table_ctdef_;
@@ -93,7 +95,7 @@ public:
                               ObIAllocator *alloc,
                               int64_t group_id) override;
   ObDASScanIter *get_data_table_iter() { return data_table_iter_; }
-  int set_domain_id_merge_related_ids(const ObDASRelatedTabletID &tablet_ids);
+  int set_domain_id_merge_related_ids(const ObDASRelatedTabletID &tablet_ids, const share::ObLSID &ls_id);
 
   INHERIT_TO_STRING_KV("ObDASIter", ObDASIter,
                      K(rowkey_domain_scan_params_),
@@ -108,6 +110,7 @@ protected:
   common::ObArenaAllocator &get_arena_allocator() { return merge_memctx_->get_arena_allocator(); }
   int init_rowkey_domain_scan_param(
       const common::ObTabletID &tablet_id,
+      const share::ObLSID &ls_id,
       const ObDASScanCtDef *ctdef,
       ObDASScanRtDef *rtdef,
       transaction::ObTxDesc *trans_desc,
@@ -174,6 +177,7 @@ private:
   ObArray<ObDASScanRtDef *> rowkey_domain_rtdefs_;
   ObDASScanRtDef *data_table_rtdef_;
   ObArray<ObTabletID> rowkey_domain_tablet_ids_;
+  share::ObLSID rowkey_domain_ls_id_;
   lib::MemoryContext merge_memctx_;
   bool is_need_multi_get_;
 };

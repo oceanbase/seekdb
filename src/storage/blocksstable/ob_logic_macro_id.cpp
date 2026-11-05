@@ -39,7 +39,9 @@ int ObMacroDataSeq::serialize(
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), K(buf_len));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, macro_data_seq_))) {
+    LOG_WARN("failed to serialize data seq", K(ret));
   }
   return ret;
 }
@@ -53,7 +55,9 @@ int ObMacroDataSeq::deserialize(
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(data_len < 0 || data_len < pos)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &macro_data_seq_))) {
+    LOG_WARN("failed to deserialize data seq", K(ret));
   }
   return ret;
 }
@@ -98,6 +102,10 @@ bool ObLogicMacroBlockId::operator<(const ObLogicMacroBlockId &other) const
     bool_ret = true;
   } else if (data_seq_.macro_data_seq_ > other.data_seq_.macro_data_seq_) {
     bool_ret = false;
+  } else if (column_group_idx_ < other.column_group_idx_) {
+    bool_ret = true;
+  } else if (column_group_idx_ > other.column_group_idx_) {
+    bool_ret = false;
   } else if (!is_mds_ && other.is_mds_) {
     bool_ret = true;
   } else if (is_mds_ && !other.is_mds_) {
@@ -120,6 +128,10 @@ bool ObLogicMacroBlockId::operator>(const ObLogicMacroBlockId &other) const
   } else if (data_seq_.macro_data_seq_ < other.data_seq_.macro_data_seq_) {
     bool_ret = false;
   } else if (data_seq_.macro_data_seq_ > other.data_seq_.macro_data_seq_) {
+    bool_ret = true;
+  } else if (column_group_idx_ < other.column_group_idx_) {
+    bool_ret = false;
+  } else if (column_group_idx_ > other.column_group_idx_) {
     bool_ret = true;
   } else if (!is_mds_ && other.is_mds_) {
     bool_ret = false;

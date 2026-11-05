@@ -41,12 +41,14 @@ int ObExprPrivSTMakeEnvelope::calc_result_typeN(
 
   if (param_num != 4 && param_num != 5) {
     ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("invalid param number, should be four or five", K(ret), K(param_num));
   } else {
     ObObjType cur_type = ObObjType::ObMaxType;
     for (int i = 0; OB_SUCC(ret) && i < 4; ++i) {
       cur_type = types_stack[i].get_type();
       if (!ob_is_numeric_type(cur_type) && !ob_is_string_type(cur_type) && !ob_is_null(cur_type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+        LOG_WARN("invalid input type x", K(ret), K(i), K(cur_type));
       } else if ((ob_is_numeric_type(cur_type) && !ob_is_double_type(cur_type)
                      && ObTinyIntType != cur_type)) {  // pass string type and boolean type
         types_stack[i].set_calc_type(ObDoubleType);
@@ -57,6 +59,7 @@ int ObExprPrivSTMakeEnvelope::calc_result_typeN(
       cur_type = types_stack[4].get_type();
       if (!ob_is_integer_type(cur_type) && !ob_is_string_type(cur_type) && !ob_is_null(cur_type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+        LOG_WARN("invalid input type srid", K(ret), K(cur_type));
       } else if (ob_is_string_type(cur_type)) {
         types_stack[4].set_calc_type(ObIntType);
       }
@@ -75,7 +78,7 @@ int ObExprPrivSTMakeEnvelope::calc_result_typeN(
   return ret;
 }
 
-int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, ObSEArray<double, 4> &coords,
+int ObExprPrivSTMakeEnvelope::read_args(omt::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, ObSEArray<double, 4> &coords,
     ObGeoSrid &srid, bool &is_null_result, const ObSrsItem *&srs_item)
 {
   int ret = OB_SUCCESS;
@@ -90,18 +93,22 @@ int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, cons
     type = arg->datum_meta_.type_;
     if (arg->is_boolean_) {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+      LOG_WARN("invalid type", K(ret), K(arg->is_boolean_));
     } else if (ob_is_null(type)) {
       is_null_result = true;
     } else if (OB_FAIL(arg->eval(ctx, datum))) {
+      LOG_WARN("fail to eval arg", K(ret), K(i), K(type));
     } else if (datum->is_null()) {
       is_null_result = true;
     } else if (!ob_is_string_type(type)) {
       coord = type == ObTinyIntType ? datum->get_tinyint() : datum->get_double();
     } else if (OB_FAIL(ObGeoExprUtils::string_to_double(datum->get_string(), arg->datum_meta_.cs_type_, coord))) {
+      LOG_WARN("fail to get x", K(ret), K(datum->get_string()), K(arg->datum_meta_.cs_type_));
     }
 
     if (OB_SUCC(ret) && !is_null_result) {
       if (OB_FAIL(coords.push_back(coord))) {
+        LOG_WARN("failed to read point params", K(ret), K(i), K(coord));
       }
     }
   }
@@ -110,17 +117,23 @@ int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, cons
   if (expr.arg_cnt_ == 5 && !is_null_result && OB_SUCC(ret)) {
     if (expr.args_[4]->is_boolean_) {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+      LOG_WARN("invalid type", K(ret));
     } else if (OB_FAIL(expr.args_[4]->eval(ctx, datum))) {
+      LOG_WARN("fail to eval second argument", K(ret));
     } else if (datum->is_null()) {
       is_null_result = true;
     } else if (datum->get_int() < 0 || datum->get_int() > INT_MAX32) {
       ret = OB_OPERATE_OVERFLOW;
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", N_PRIV_ST_MAKEENVELOPE);
+      LOG_WARN("srid input value out of range", K(ret), K(srid));
     } else if (0 != (srid = datum->get_uint32())) {
-      if (OB_FAIL(ObGeoExprUtils::get_srs_item(
-              ctx, srs_guard, srid, srs_item))) {
+      if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
+        LOG_WARN("fail to get srs guard", K(ret));
+      } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
+        LOG_WARN("fail to get srs item", K(ret));
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null srs item", K(ret));
       }
     }
   }
@@ -138,15 +151,18 @@ int ObExprPrivSTMakeEnvelope::eval_priv_st_makeenvelope(const ObExpr &expr, ObEv
   ObWkbBuffer wkb_buf(tmp_allocator);
   ObWkbBuffer res_wkb_buf(tmp_allocator);
   ObGeometry *geo = NULL;
-  common::ObSrsCacheGuard srs_guard;
+  omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs_item = NULL;
   // rectangle point -> polygon ewkb
   if (OB_FAIL(read_args(srs_guard, expr, ctx, coords, srid, is_null_result, srs_item))) {
+    LOG_WARN("fail to read args", K(ret));
   } else if (is_null_result) {
     res.set_null();
   } else {
     if (OB_FAIL(ObGeoTypeUtil::rectangle_to_swkb(coords[0], coords[1], coords[2], coords[3], srid, true, res_wkb_buf))) {
+      LOG_WARN("fail to transform rectangle point to ewkb", K(ret), K(srid));
     } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkb_buf.string()))) {
+      LOG_WARN("fail to pack geo res", K(ret));
     }
   }
 

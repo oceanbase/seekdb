@@ -1,0 +1,76 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_rb_build_empty.h"
+#include "sql/engine/expr/ob_expr_rb_func_helper.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
+
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+namespace oceanbase
+{
+namespace sql
+{
+ObExprRbBuildEmpty::ObExprRbBuildEmpty(common::ObIAllocator &alloc)
+    : ObFuncExprOperator(alloc, T_FUN_SYS_RB_BUILD_EMPTY, N_RB_BUILD_EMPTY, 0, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{
+}
+
+ObExprRbBuildEmpty::~ObExprRbBuildEmpty()
+{
+}
+
+
+int ObExprRbBuildEmpty::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx);
+  type.set_roaringbitmap();
+  type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObRoaringBitmapType]).get_length());
+  return OB_SUCCESS;
+}
+
+int ObExprRbBuildEmpty::eval_rb_build_empty(const ObExpr &expr,
+                                          ObEvalCtx &ctx,
+                                          ObDatum &res)
+{
+  int ret = OB_SUCCESS;
+
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
+  ObString rb_bin;
+  if (OB_FAIL(ObRbUtils::build_empty_binary(tmp_allocator, rb_bin))) {
+    LOG_WARN("fail to build empty rb binary", K(ret));
+  } else if (OB_FAIL(ObRbExprHelper::pack_rb_res(expr, ctx, res, rb_bin))) {
+    LOG_WARN("fail to pack roaringbitmap res", K(ret));
+  }
+  return ret;
+}
+
+int ObExprRbBuildEmpty::cg_expr(ObExprCGCtx &expr_cg_ctx,
+                              const ObRawExpr &raw_expr,
+                              ObExpr &rt_expr) const
+{
+  UNUSED(expr_cg_ctx);
+  UNUSED(raw_expr);
+  rt_expr.eval_func_ = ObExprRbBuildEmpty::eval_rb_build_empty;
+  return OB_SUCCESS;
+}
+
+} // namespace sql
+} // namespace oceanbase

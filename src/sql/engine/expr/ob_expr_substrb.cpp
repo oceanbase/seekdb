@@ -43,6 +43,7 @@ int ObExprSubstrb::calc_result_typeN(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   ret = OB_ERR_FUNCTION_UNKNOWN;
+  LOG_WARN("substrb is only for oracle mode", K(ret));
   return ret;
 }
 
@@ -59,6 +60,7 @@ int ObExprSubstrb::calc(ObString &res_str, const ObString &text,
     res_str.reset();
   } else if (OB_ISNULL(text.ptr())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("text.ptr() is null", K(ret));
   } else {
     if (0 == start) {
       start = 1;// 
@@ -70,17 +72,20 @@ int ObExprSubstrb::calc(ObString &res_str, const ObString &text,
       char* buf = static_cast<char *>(alloc.alloc(text_len));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc memory failed", K(text_len), K(ret));
       } else {
         MEMCPY(buf, text.ptr(), text_len);
         res_len = min(length, text_len - start);
-        // Replace illegal bytes in the selected range with spaces.
+        // Standard Oracle will set illegal byte to space
         if (OB_FAIL(handle_invalid_byte(buf, text_len, start, res_len, ' ', cs_type, false))) {
+          LOG_WARN("handle invalid byte failed", K(start), K(res_len), K(cs_type));
         } else {
           res_str.assign_ptr(buf + start, static_cast<int32_t>(res_len));
         }
       }
     }
   }
+  LOG_DEBUG("calc substrb done", K(ret), K(res_str));
   return ret;
 }
 
@@ -95,12 +100,15 @@ int ObExprSubstrb::handle_invalid_byte(char* ptr,
   int ret = OB_SUCCESS;
   int64_t mbminlen = 0;
   if (OB_FAIL(ObCharset::get_mbminlen_by_coll(cs_type, mbminlen))) {
+    LOG_WARN("get mbminlen failed", K(cs_type), K(ret));
   } else {
     if (force_ignore_invalid_byte || mbminlen > 1) { // utf16: mbminlen is 2
       if (OB_FAIL(ignore_invalid_byte(ptr, text_len, start, len, cs_type))) {
+        LOG_WARN("ignore_invalid_byte failed", K(ret));
       }
     } else { // utf8/gbk/gb18030: mbminlen is 1
       if (OB_FAIL(reset_invalid_byte(ptr, text_len, start, len, reset_char, cs_type))) {
+        LOG_WARN("reset_invalid_byte failed", K(ret));
       }
     }
 
@@ -134,8 +142,10 @@ int ObExprSubstrb::ignore_invalid_byte(char* ptr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ptr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ptr is null", K(ret), K(len));
   } else if (0 > len) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("len should be greater than zero", K(len), K(ret));
   } else if (len == 0) {
     // do nothing
   } else {
@@ -183,12 +193,15 @@ int ObExprSubstrb::reset_invalid_byte(char* ptr,
   int64_t well_formatted_len = len;
   if (OB_ISNULL(ptr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ptr is null", K(ret), K(len));
   } else if (0 > len) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("len should be greater than zero", K(len), K(ret));
   } else if (0 == len) {
     // do nothing
   } else if (OB_FAIL(ignore_invalid_byte(
               ptr, text_len, well_formatted_start, well_formatted_len, cs_type))) {
+    LOG_WARN("ignore invalid byte failed", K(ret));
   } else {
     for (int64_t i = start; i < well_formatted_start; i++) {
       ptr[i] = reset_char;
@@ -211,6 +224,7 @@ int ObExprSubstrb::get_well_formatted_boundary(ObCollationType cs_type,
   int ret = OB_SUCCESS;
   if (pos < 0 || pos > len) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid position", K(ret), K(pos), K(len));
   } else if (NULL == ptr || len == 0) {
     boundary_pos = 0;
     boundary_len = 0;
@@ -245,7 +259,9 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObDatum *len = NULL;
   if (OB_UNLIKELY(2 != expr.arg_cnt_ && 3 != expr.arg_cnt_)) {
     ret = OB_INVALID_ARGUMENT_NUM;
+    LOG_WARN("arg_cnt must be 2 or 3", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, start, len))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (src->is_null() || start->is_null() || (3 == expr.arg_cnt_ && len->is_null())) {
     res.set_null();
   } else {
@@ -258,11 +274,14 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     if (expr.is_called_in_sql_ 
          && (OB_FAIL(ObExprUtil::trunc_num2int64(*start, start_int)) ||
         (3 == expr.arg_cnt_ && OB_FAIL(ObExprUtil::trunc_num2int64(*len, len_int))))) {
+      LOG_WARN("trunc_num2int64 failed", K(ret));
     } else if (!expr.is_called_in_sql_  
                 && (OB_FAIL(ObExprUtil::round_num2int64(*start, start_int))
                 || (3 == expr.arg_cnt_ && OB_FAIL(ObExprUtil::round_num2int64(*len, len_int))))) {
+      LOG_WARN("round_num2int64 failed", K(ret));
     } else if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
       if (OB_FAIL(calc(res_str, src_str, start_int, len_int, cs_type, res_alloc))) {
+        LOG_WARN("calc substrb failed", K(ret), K(src_str), K(start_int), K(len_int), K(cs_type));
       } else if (res_str.empty() && !expr.args_[0]->datum_meta_.is_clob()) {
         res.set_null();
       } else {
@@ -280,9 +299,10 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
       // read as binary
       const bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
       ObTextStringIter input_iter(expr.args_[0]->datum_meta_.type_, CS_TYPE_BINARY, src->get_string(), has_lob_header);
-      if (OB_FAIL(ObTextStringHelper::build_text_iter(
-              input_iter, ctx.exec_ctx_, &calc_alloc))) {
+      if (OB_FAIL(input_iter.init(0, NULL, &calc_alloc))) {
+        LOG_WARN("Lob: init input_iter failed ", K(ret), K(input_iter));
       } else if (OB_FAIL(input_iter.get_byte_len(total_byte_len))) {
+        LOG_WARN("Lob: get input byte len failed", K(ret));
       } else {
         len_int = len == NULL ? total_byte_len : len_int;
       }
@@ -296,12 +316,15 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
       int64_t buf_size = 0;
       if (OB_FAIL(ret)) {
       } else if (len_int < 0 || start_int > total_byte_len) {
-        if (OB_FAIL(output_result.init(0))) {
+        if (OB_FAIL(output_result.init(0))) { // fill empty lob result
+          LOG_WARN("Lob: init stringtext result failed", K(ret));
         } else {
           output_result.set_result();
         }
       } else if (OB_FAIL(output_result.init(result_byte_len))) {
+        LOG_WARN("Lob: init stringtext result failed", K(ret));
       } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
+        LOG_WARN("Lob: stringtext result reserve buffer failed", K(ret));
       } else {
         input_iter.set_start_offset((start_int >= 0 ? (start_int - 1) : total_byte_len + start_int));
         input_iter.set_access_len(len_int);
@@ -314,13 +337,17 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
           if (!input_iter.is_outrow_lob()) {
             ObString inrow_result;
             if (OB_FAIL(calc(inrow_result, src_block_data, start_int, len_int, cs_type, data_buf))) {
+              LOG_WARN("get substr failed", K(ret));
             } else if (FALSE_IT(MEMMOVE(buf, inrow_result.ptr(), inrow_result.length()))) {
             } else if (OB_FAIL(output_result.lseek(inrow_result.length(), 0))) {
+              LOG_WARN("Lob: append result failed", K(ret), K(output_result), K(src_block_data));
             }
           // outrow lobs, only use calc for handle invalid bytes
           } else {
             if (OB_FAIL(calc(res_str, src_block_data, 0, src_block_data.length(), cs_type, data_buf))) {
+              LOG_WARN("calc substrb failed", K(ret), K(src_str), K(start_int), K(len_int), K(cs_type));
             } else if (OB_FAIL(output_result.lseek(res_str.length(), 0))) {
+              LOG_WARN("result lseek failed", K(ret));
             } else {
               buf += res_str.length();
               buf_size -= res_str.length();
@@ -331,6 +358,7 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
         } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
           ret = (input_iter.get_inner_ret() != OB_SUCCESS) ? 
                 input_iter.get_inner_ret() : OB_INVALID_DATA;
+          LOG_WARN("iter state invalid", K(ret), K(state), K(input_iter)); 
         } else {
           output_result.set_result();
         }

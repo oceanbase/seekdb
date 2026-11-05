@@ -44,8 +44,12 @@ int ObRLEEncoder::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
+    LOG_WARN("init base column encoder failed", K(ret), K(ctx),
+        K(column_index), "row count", rows.count());
   } else if (OB_FAIL(dict_encoder_.init(ctx, column_index, rows))) {
+    LOG_WARN("failed to init dict encoder", K(ret), K(ctx), K(column_index));
   } else {
     column_header_.type_ = type_;
     ht_ = ctx.ht_;
@@ -69,7 +73,9 @@ int ObRLEEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(dict_encoder_.traverse(suitable))) {
+    LOG_WARN("failed to traverse dict", K(ret));
   } else {
     // FIXME: maybe we can decide whether RLE is
     // sutiable by max_ref and max_rle_row_id
@@ -102,6 +108,8 @@ int ObRLEEncoder::traverse(bool &suitable)
       suitable = false;
     } else if (OB_UNLIKELY(max_rle_row_id > UINT32_MAX || max_ref > UINT32_MAX)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("row_id_byte and ref_byte should be less than or equal to 2",
+          K(ret), K(max_rle_row_id), K(max_ref));
     } else {
       row_id_byte_ = get_byte_packed_int_size(max_rle_row_id);
       ref_byte_ = get_byte_packed_int_size(max_ref);
@@ -121,6 +129,7 @@ int ObRLEEncoder::get_encoding_store_meta_need_space(int64_t &need_size) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dict_encoder_.get_encoding_store_meta_need_space(need_size))) {
+    STORAGE_LOG(WARN, "fail to get_encoding_store_meta_need_space", K(ret), K(dict_encoder_));
   } else {
     need_size = need_size + sizeof(ObRLEMetaHeader) + count_ * (row_id_byte_ + ref_byte_);
   }
@@ -132,11 +141,13 @@ int ObRLEEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     char *buf = buf_writer.current();
     rle_meta_header_ = reinterpret_cast<ObRLEMetaHeader *>(buf);
     int64_t size = sizeof(ObRLEMetaHeader) + count_ * (row_id_byte_ + ref_byte_);
     if (OB_FAIL(buf_writer.advance_zero(size))) {
+      LOG_WARN("failed to advance buf_writer", K(ret));
     } else {
       rle_meta_header_->reset();
       rle_meta_header_->count_ = static_cast<uint32_t>(count_);
@@ -144,6 +155,7 @@ int ObRLEEncoder::store_meta(ObBufferWriter &buf_writer)
       rle_meta_header_->row_id_byte_ = row_id_byte_ & 0x7;
       rle_meta_header_->ref_byte_ = ref_byte_ & 0x7;
       if (OB_FAIL(dict_encoder_.store_meta(buf_writer))) {
+        LOG_WARN("failed to store dict meta", K(ret));
       } else {
         // store_meta might recalculates dict_ref for all nodes in ht,
         // if dict needs to be sorted
@@ -151,7 +163,9 @@ int ObRLEEncoder::store_meta(ObBufferWriter &buf_writer)
         ObIntegerArrayGenerator row_id_gen;
         ObIntegerArrayGenerator dict_ref_gen;
         if (OB_FAIL(row_id_gen.init(buf, row_id_byte_))) {
+          LOG_WARN("failed to init row_id_gen", K(ret));
         } else if (OB_FAIL(dict_ref_gen.init(buf + count_ * row_id_byte_, ref_byte_))) {
+          LOG_WARN("failed to init dict_ref_gen", K(ret));
         } else {
           const ObEncodingHashNode *pre = NULL;
           const ObEncodingHashNode *node_list = ht_->get_node_list();
@@ -168,6 +182,7 @@ int ObRLEEncoder::store_meta(ObBufferWriter &buf_writer)
         }
       }
     }
+    LOG_DEBUG("test rle meta header", K_(column_index), K_(*rle_meta_header));
   }
   return ret;
 }
@@ -178,6 +193,7 @@ int ObRLEEncoder::store_data(const int64_t row_id, ObBitStream &bs,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     UNUSED(row_id);
     UNUSED(bs);
@@ -192,6 +208,7 @@ int ObRLEEncoder::get_row_checksum(int64_t &checksum) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     checksum = 0;
     FOREACH(l, *ht_) {

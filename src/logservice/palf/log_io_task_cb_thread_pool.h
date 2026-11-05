@@ -17,14 +17,14 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_IO_TASK_CB_THREAD_POOL_
 #define OCEANBASE_LOGSERVICE_LOG_IO_TASK_CB_THREAD_POOL_
 
-#include "lib/thread/ob_simple_thread_pool.h"
+#include "lib/thread/thread_mgr_interface.h"
 
 namespace oceanbase
 {
 namespace palf
 {
 class IPalfEnvImpl;
-class LogIOTaskCbThreadPool : public common::ObLinkQueueThreadPool
+class LogIOTaskCbThreadPool : public lib::TGLinkTaskHandler
 {
 public:
   LogIOTaskCbThreadPool();
@@ -37,17 +37,19 @@ public:
   int stop();
   int wait();
   void destroy();
-  void handle(common::LinkTask *task) override;
+  virtual void handle(common::LinkTask *task);
+  int get_tg_id() const;
 
 public:
   static constexpr int64_t THREAD_NUM = 1;
+  static constexpr int64_t MINI_MODE_THREAD_NUM = 1;
   static constexpr int64_t MAX_LOG_IO_CB_TASK_NUM = 100 * 10000;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(LogIOTaskCbThreadPool);
 
 private:
-  int64_t thread_num_;
+  int tg_id_;
   IPalfEnvImpl *palf_env_impl_;
   bool is_inited_;
 };

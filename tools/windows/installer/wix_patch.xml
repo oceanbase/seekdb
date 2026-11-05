@@ -1,5 +1,8 @@
 <CPackWiXPatch>
-  <!-- Pull the custom-action/PATH fragment into the server feature. -->
+  <!-- Patch the server feature to add a ComponentRef that links in
+       the Fragment from wix_launch_configurator.wxs.  This causes
+       the WiX linker to pull in the whole Fragment, including the
+       LaunchApplication CustomAction and the PATH Environment. -->
   <CPackWiXFragment Id="CM_C_server">
     <ComponentRef Id="SeekDBPathEnv" />
   </CPackWiXFragment>

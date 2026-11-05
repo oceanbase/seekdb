@@ -45,9 +45,11 @@ int ObExprSysOpOpnsize::calc_sys_op_opnsize_expr(const ObExpr &expr, ObEvalCtx &
 	int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
+    LOG_WARN("eval param failed", K(ret));
   } else {
     int64_t size = 0;
     if (OB_FAIL(calc_sys_op_opnsize(expr.args_[0], arg, size))) {
+      LOG_WARN("fail to cal sys_op_opnsize", K(ret));
     } else {
       res.set_int(size);
     }
@@ -69,12 +71,14 @@ int ObExprSysOpOpnsize::calc_sys_op_opnsize(const ObExpr *expr,const ObDatum *ar
   int ret = OB_SUCCESS;
   if (OB_ISNULL(arg) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null pointer", K(ret));
   } else if (!is_lob_storage(expr->datum_meta_.type_) || arg->is_null()) {
     size = sizeof(*arg) + (arg->is_null() ? 0 : arg->len_);
   } else { // (texts except tiny, json, gis)
     ObLobLocatorV2 locator(arg->get_string(), expr->obj_meta_.has_lob_header());
     int64_t lob_data_byte_len = 0;
     if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
+      LOG_WARN("get lob data byte length failed", K(ret), K(locator));
     } else {
       size = sizeof(*arg) + static_cast<int64_t>(lob_data_byte_len);
     }

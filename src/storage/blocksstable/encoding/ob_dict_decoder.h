@@ -21,7 +21,7 @@
 #include "ob_encoding_query_util.h"
 #include "ob_integer_array.h"
 #include "ob_dict_encoder.h"
-#include "share/vector/ob_bit_vector.h"
+#include "sql/engine/ob_bit_vector.h"
 
 namespace oceanbase
 {
@@ -80,6 +80,10 @@ public:
       const int64_t row_cap,
       common::ObDatum *datums) const override;
 
+  virtual int decode_vector(
+      const ObColumnDecoderCtx &ctx,
+      const ObIRowIndex* row_index,
+      ObVectorDecodeCtx &vector_ctx) const override;
 
   virtual int get_null_count(
       const ObColumnDecoderCtx &ctx,
@@ -98,6 +102,13 @@ public:
       const int64_t row_cap,
       const int64_t meta_length,
       common::ObDatum *datums) const;
+  template<bool HAS_NULL>
+  int batch_decode_dict(
+      const common::ObObjMeta &schema_obj_meta,
+      const common::ObObjType &stored_obj_type,
+      const int64_t meta_length,
+      ObVectorDecodeCtx &vector_ctx) const;
+
   void reset() { this->~ObDictDecoder(); new (this) ObDictDecoder(); }
   OB_INLINE void reuse();
   virtual ObColumnHeader::Type get_type() const override { return type_; }
@@ -433,6 +444,8 @@ OB_INLINE int ObDictDecoder::read_ref(
   if (is_bit_packing) {
     if (OB_FAIL(ObBitStream::get(col_data, row_id * meta_header_->row_ref_size_,
           meta_header_->row_ref_size_, ref))) {
+      STORAGE_LOG(WARN, "Failed to get bit packing value",
+          K(ret), K(row_id), K_(*meta_header), K(ref));
     }
   } else {
     MEMCPY(&ref, col_data + row_id * meta_header_->row_ref_size_,

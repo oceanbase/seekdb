@@ -18,6 +18,11 @@
 #define OCEANBASE_SQL_ENGINE_CMD_OB_KILL_EXECUTOR_H__
 namespace oceanbase
 {
+namespace common
+{
+class ObSqlString;
+class ObAddr;
+}
 namespace sql
 {
 class ObExecContext;
@@ -44,6 +49,17 @@ public:
   virtual ~ObKillExecutor() {}
   int execute(ObExecContext &ctx, ObKillStmt &stmt);
 private:
+  int kill_client_session(const ObKillSessionArg &arg, ObSQLSessionMgr &sess_mgr,
+                          ObExecContext &ctx);
+  int get_client_session_create_time_and_auth(const ObKillSessionArg &arg, ObExecContext &ctx,
+                          common::ObAddr &cs_addr, int64_t &create_time);
+  int get_remote_session_location(const ObKillSessionArg &arg, ObExecContext &ctx, common::ObAddr &addr, bool is_client_session = false);
+  int generate_read_sql(uint32_t sess_id, common::ObSqlString &sql);
+  int generate_read_sql_from_session_info(uint32_t sess_id, common::ObSqlString &sql);
+  int kill_remote_session(ObExecContext &ctx, const common::ObAddr &addr, const ObKillSessionArg &arg);
+  int kill_query_cs_id(const ObKillSessionArg &arg, ObSQLSessionMgr &sess_mgr,
+                        ObExecContext &ctx);
+
   DISALLOW_COPY_AND_ASSIGN(ObKillExecutor);
 };
 }

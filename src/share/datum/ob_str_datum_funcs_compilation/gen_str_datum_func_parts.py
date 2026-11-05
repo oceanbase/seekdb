@@ -7,7 +7,6 @@ DEFINED_COLLS = [
     "CS_TYPE_BINARY",
     "CS_TYPE_UTF8MB4_GENERAL_CI",
     "CS_TYPE_UTF8MB4_BIN",
-    "CS_TYPE_UTF8MB4_UNICODE_CI",
     ]
 
 compile_template = '''/*
@@ -60,8 +59,8 @@ common_template = '''
 #include "share/datum/ob_datum_funcs.h"
 #include "share/datum/ob_datum_cmp_func_def.h"
 #include "common/object/ob_obj_funcs.h"
-#include "share/vector/ob_bit_vector.h"
-#include "share/ob_version_parser.h"
+#include "sql/engine/ob_bit_vector.h"
+#include "share/ob_cluster_version.h"
 #include "share/datum/ob_datum_funcs_impl.h"
 
 namespace oceanbase

@@ -16,9 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_PC
 #include "ob_cache_object.h"
-#include "sql/engine/ob_physical_plan.h"
 #include "share/ob_truncated_string.h"
-#include "sql/pl/ob_pl.h"
+#include "pl/ob_pl.h"
 
 
 namespace oceanbase
@@ -34,7 +33,7 @@ void ObParamInfo::reset()
   scale_ = 0;
   type_ = common::ObNullType;
   ext_real_type_ = common::ObNullType;
-  is_typed_null_value_ = false;
+  is_oracle_null_value_ = false;
   col_type_ = common::CS_TYPE_INVALID;
   precision_ = PRECISION_UNKNOWN_YET;
 }
@@ -44,13 +43,13 @@ OB_SERIALIZE_MEMBER(ObParamInfo,
                     scale_,
                     type_,
                     ext_real_type_,
-                    is_typed_null_value_,  // FARM COMPAT WHITELIST
+                    is_oracle_null_value_,  // FARM COMPAT WHITELIST
                     col_type_,
                     precision_);
 
 ObPlanCacheObject::ObPlanCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext &mem_context)
   : ObILibCacheObject(ns, mem_context),
-    runtime_schema_version_(OB_INVALID_VERSION),
+    tenant_schema_version_(OB_INVALID_VERSION),
     sys_schema_version_(OB_INVALID_VERSION),
     dependency_tables_(allocator_),
     outline_state_(),
@@ -77,8 +76,8 @@ int ObPlanCacheObject::set_params_info(const ParamStore &params)
     param_info.flag_ = params.at(i).get_param_flag();
     param_info.type_ = params.at(i).get_param_meta().get_type();
     param_info.col_type_ = params.at(i).get_collation_type();
-    if (ObSQLUtils::is_typed_null_with_normal_type(params.at(i))) {
-      param_info.is_typed_null_value_ = true;
+    if (ObSQLUtils::is_oracle_null_with_normal_type(params.at(i))) {
+      param_info.is_oracle_null_value_ = true;
     }
     if (params.at(i).get_param_meta().get_type() != params.at(i).get_type()) {
       LOG_TRACE("differ in set_params_info",
@@ -89,6 +88,7 @@ int ObPlanCacheObject::set_params_info(const ParamStore &params)
     if (params.at(i).is_ext_sql_array()) {
       ObDataType data_type;
       if (OB_FAIL(ObSQLUtils::get_ext_obj_data_type(params.at(i), data_type))) {
+        LOG_WARN("fail to get ext obj data type", K(ret));
       } else {
         param_info.ext_real_type_ = data_type.get_obj_type();
         param_info.scale_ = data_type.get_scale();
@@ -106,6 +106,7 @@ int ObPlanCacheObject::set_params_info(const ParamStore &params)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(params_info_.push_back(param_info))) {
+        LOG_WARN("failed to push back param info", K(ret));
       }
     }
     param_info.reset();
@@ -135,7 +136,7 @@ int ObPlanCacheObject::get_base_table_version(const uint64_t table_id, int64_t &
 void ObPlanCacheObject::reset()
 {
   ObILibCacheObject::reset();
-  runtime_schema_version_ = OB_INVALID_VERSION;
+  tenant_schema_version_ = OB_INVALID_VERSION;
   sys_schema_version_ = OB_INVALID_VERSION;
   dependency_tables_.reset();
   outline_state_.reset();
@@ -162,16 +163,20 @@ int ObPlanCacheObject::check_pre_calc_cons(const bool is_ignore_stmt,
   ObSEArray<ObDatumObjParam, 4> datum_params;
   if (OB_ISNULL(phy_plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid physical plan ctx", K(ret), K(phy_plan_ctx));
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {
   } else if (PRE_CALC_ERROR == expect_res) {
     if (OB_FAIL(pre_calc_frame.eval_expect_err(exec_ctx, is_match))) {
+      LOG_WARN("failed to eval pre calc expr frame info expect error", K(ret));
     }
   } else if (OB_FAIL(pre_calc_frame.eval(exec_ctx, datum_params))) {
+    LOG_TRACE("failed to eval pre calc expr frame info", K(ret));
     is_match = false;
     ret = OB_SUCCESS;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_match && i < datum_params.count(); ++i) {
       if (OB_FAIL(pre_calc_con.check_is_match(datum_params.at(i), exec_ctx, is_match))) {
+        LOG_WARN("failed to check is match", K(ret));
       } // else end
     } // for end
   }
@@ -189,6 +194,7 @@ int ObPlanCacheObject::match_pre_calc_cons(common::ObDList<ObPreCalcExprConstrai
   const ObDList<ObPreCalcExprConstraint> *cur_cons = pc_ctx.sql_ctx_.all_pre_calc_constraints_;
   if (OB_ISNULL(cur_cons)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(pc_ctx.sql_ctx_.all_pre_calc_constraints_));
   } else if (cached_cons.get_size() != cur_cons->get_size()) {
     is_matched = false;
   } else {
@@ -203,8 +209,10 @@ int ObPlanCacheObject::match_pre_calc_cons(common::ObDList<ObPreCalcExprConstrai
       } else if (OB_ISNULL(cached_con) || OB_ISNULL(cur_con)) {
         is_matched = false;
       } else if (OB_FAIL(check_pre_calc_cons(is_ignore_stmt, is_matched, *cached_con, pc_ctx.exec_ctx_))) {
+        LOG_WARN("failed to pre calculate expression and match constraint", K(ret));
       } else if (!is_matched) {
       } else if (OB_FAIL(is_same_pre_calc_cons(*cached_con, *cur_con, is_matched))) {
+        LOG_WARN("failed to check is same pre calc cons", K(ret));
       } else if (!is_matched) {
       } else {
         cached_con = cached_con->get_next();
@@ -231,6 +239,7 @@ int ObPlanCacheObject::is_same_pre_calc_cons(const ObPreCalcExprConstraint &cons
     is_same = true;
     for (int64_t i = 0; is_same && OB_SUCC(ret) && i < rt_exprs1.count(); ++i) {
       if (OB_FAIL(is_same_expr(rt_exprs1.at(i), rt_exprs2.at(i), is_same))) {
+        LOG_WARN("failed to check is is_same_expr", K(ret));
       }
     }
   }
@@ -256,6 +265,7 @@ int ObPlanCacheObject::is_same_expr(const ObExpr *expr1,
     is_same = true;
     for (int64_t i = 0; is_same && OB_SUCC(ret) && i < expr1->arg_cnt_; ++i) {
       if (OB_FAIL(SMART_CALL(is_same_expr(expr1->args_[i], expr2->args_[i], is_same)))) {
+        LOG_WARN("failed to smart call check is is_same_expr", K(ret));
       }
     }
   }
@@ -271,12 +281,20 @@ int ObPlanCacheObject::pre_calculation(const bool is_ignore_stmt,
   ObPhysicalPlanCtx *phy_plan_ctx = exec_ctx.get_physical_plan_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
   ObSEArray<ObDatumObjParam, 4> datum_params;
+  // TODO [zongmei.zzm]
+  // create table t (a int primary key) partition by hash(a) partitions 2;
+  // select * from t where a = '1' + 1
+  // New engine type inference will add implicit cast: select * from t where cast (a as double) = ?
+  // The result is that the query range of this sql cannot be extracted under the new engine, while the old engine can extract the query range
   if (OB_ISNULL(phy_plan_ctx) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid session or phy plan ctx", K(ret), K(phy_plan_ctx), K(session));
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {
   } else if (pre_calc_frame.pre_calc_rt_exprs_.count() <= 0) {
     /* do nothing */
   } else if (OB_FAIL(pre_calc_frame.eval(exec_ctx, datum_params))) {
+    LOG_WARN("failed to eval pre calc expr frame info", K(ret),
+             K(calc_types));
   } else { /* do nothing */
   }
 
@@ -302,10 +320,12 @@ int ObPlanCacheObject::type_to_name(const ObLibCacheNameSpace ns,
   char *buf = NULL;
   if (ns <= NS_INVALID || ns >= NS_MAX) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid cache obj type", K(ret), K(ns));
   } else {
     int32_t str_len = (int32_t)std::strlen(type_strs[static_cast<int64_t>(ns)]);
     if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(str_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory", K(ret), K(str_len));
     } else {
       MEMCPY(buf, type_strs[static_cast<int64_t>(ns)], str_len);
       type_name.assign(buf, str_len);

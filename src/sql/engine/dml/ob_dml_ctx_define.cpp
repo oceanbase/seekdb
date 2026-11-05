@@ -34,6 +34,15 @@ OB_SERIALIZE_MEMBER(ObTrigDMLCtDef,
                     rowid_old_expr_,
                     rowid_new_expr_);
 
+OB_SERIALIZE_MEMBER(ObErrLogCtDef,
+                    is_error_logging_,
+                    err_log_database_name_,
+                    err_log_table_name_,
+                    reject_limit_,
+                    err_log_values_,
+                    err_log_column_names_);
+
+
 OB_SERIALIZE_MEMBER(ObTriggerColumnsInfo::Flags, flags_);
 
 OB_DEF_SERIALIZE(ObTriggerColumnsInfo)
@@ -50,6 +59,7 @@ OB_DEF_DESERIALIZE(ObTriggerColumnsInfo)
   OB_UNIS_DECODE(flags_count);
   if (flags_count > 0) {
     if (OB_FAIL(init(flags_count))) {
+      LOG_WARN("failed to init trigger column infos", K(ret));
     } else {
       OB_UNIS_DECODE_ARRAY(flags_, flags_count);
       count_ = flags_count;
@@ -72,8 +82,10 @@ int ObTriggerColumnsInfo::init(int64_t count)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_) || 0 == count) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: allocator is null", K(ret), K(count));
   } else if (OB_ISNULL(flags_ = static_cast<Flags *>(allocator_->alloc(sizeof(Flags) * count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory", K(ret));
   } else {
     capacity_ = count;
   }
@@ -90,6 +102,7 @@ int ObTriggerColumnsInfo::set_trigger_column(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(flags_) || 0 == capacity_ || count_ >= capacity_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected status: flags_ is null", K(ret), K(count_), KP(flags_));
   } else {
     flags_[count_].is_hidden_ = is_hidden;
     flags_[count_].is_update_ = is_update;
@@ -196,10 +209,11 @@ OB_SERIALIZE_MEMBER(ObDMLBaseCtDef,
                     column_ids_,
                     old_row_,
                     new_row_,
+                    error_logging_ctdef_,
                     view_check_exprs_,
                     is_primary_index_,
                     is_table_without_pk_, // FARM COMPAT WHITELIST, renamed
-                    reserved_advanced_trigger_,
+                    has_instead_of_trigger_,
                     trans_info_expr_,
                     is_vec_hnsw_index_vid_opt_);
 
@@ -239,6 +253,7 @@ OB_DEF_DESERIALIZE(ObInsCtDef)
     multi_ctdef_ = multi_ctdef_allocator.alloc();
     if (OB_ISNULL(multi_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc multi_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*multi_ctdef_);
   }
@@ -303,6 +318,7 @@ OB_DEF_DESERIALIZE(ObDelCtDef)
     multi_ctdef_ = multi_ctdef_allocator.alloc();
     if (OB_ISNULL(multi_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc multi_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*multi_ctdef_);
   }
@@ -367,6 +383,7 @@ OB_DEF_DESERIALIZE(ObLockCtDef)
     multi_ctdef_ = multi_ctdef_allocator.alloc();
     if (OB_ISNULL(multi_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc multi_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*multi_ctdef_);
   }
@@ -452,6 +469,7 @@ OB_DEF_DESERIALIZE(ObUpdCtDef)
     dins_ctdef_ = dins_allocator.alloc();
     if (OB_ISNULL(ddel_ctdef_) || OB_ISNULL(dins_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc das ctdef failed", K(ret), K(ddel_ctdef_), K(dins_ctdef_));
     }
     OB_UNIS_DECODE(*ddel_ctdef_);
     OB_UNIS_DECODE(*dins_ctdef_);
@@ -461,6 +479,7 @@ OB_DEF_DESERIALIZE(ObUpdCtDef)
     dlock_ctdef_ = dlock_allocator.alloc();
     if (OB_ISNULL(dlock_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc das lock ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*dlock_ctdef_);
   }
@@ -469,6 +488,7 @@ OB_DEF_DESERIALIZE(ObUpdCtDef)
     multi_ctdef_ = mctdef_allocator.alloc();
     if (OB_ISNULL(multi_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc multi_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*multi_ctdef_);
   }
@@ -556,6 +576,7 @@ OB_DEF_DESERIALIZE(ObMergeCtDef)
     ins_ctdef_ = ins_ctdef_allocator.alloc();
     if (OB_ISNULL(ins_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc ins_ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*ins_ctdef_);
   }
@@ -565,6 +586,7 @@ OB_DEF_DESERIALIZE(ObMergeCtDef)
     upd_ctdef_ = upd_ctdef_allocator.alloc();
     if (OB_ISNULL(upd_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc upd_ctdef_ failed", K(ret));
     }
     OB_UNIS_DECODE(*upd_ctdef_);
   }
@@ -574,6 +596,7 @@ OB_DEF_DESERIALIZE(ObMergeCtDef)
     del_ctdef_ = ins_ctdef_allocator.alloc();
     if (OB_ISNULL(del_ctdef_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc del_ctdef_ failed", K(ret));
     }
     OB_UNIS_DECODE(*del_ctdef_);
   }
@@ -619,8 +642,10 @@ OB_DEF_DESERIALIZE(ObReplaceCtDef)
   del_ctdef_ = del_ctdef_allocator.alloc();
   if (OB_ISNULL(del_ctdef_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc del_ctdef_ failed", K(ret));
   } else if (OB_ISNULL(ins_ctdef_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc ins_ctdef failed", K(ret));
   }
   OB_UNIS_DECODE(*ins_ctdef_);
   OB_UNIS_DECODE(*del_ctdef_);
@@ -652,8 +677,10 @@ OB_DEF_DESERIALIZE(ObInsertUpCtDef)
   upd_ctdef_ = upd_ctdef_allocator.alloc();
   if (OB_ISNULL(upd_ctdef_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc upd_ctdef failed", K(ret));
   } else if (OB_ISNULL(ins_ctdef_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc ins_ctdef failed", K(ret));
   }
   OB_UNIS_DECODE(*ins_ctdef_);
   OB_UNIS_DECODE(*upd_ctdef_);

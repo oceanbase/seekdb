@@ -56,6 +56,7 @@ int calc_sqrt_expr_mysql(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
+    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else {
@@ -76,6 +77,7 @@ int calc_sqrt_expr_mysql_in_batch(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("vectorized evaluate failed", K(ret), K(expr));
   } else {
     ObBitVector &eval_flag = expr.get_evaluated_flags(ctx);
     ObDatumVector arg_datums = expr.args_[0]->locate_expr_datumvector(ctx);
@@ -100,14 +102,17 @@ int ObExprSqrt::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
   rt_expr.extra_ = raw_expr.get_aggr_type();
-  {
-    OB_ASSERT(1 == rt_expr.arg_cnt_);
+  if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid arg_cnt_ of expr", K(ret), K(rt_expr));
+  } else {
     ObObjType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
     if (ObDoubleType == arg_res_type) {
       rt_expr.eval_func_ = calc_sqrt_expr_mysql;
       rt_expr.eval_batch_func_ = calc_sqrt_expr_mysql_in_batch;
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("arg_res_type must be double in mysql mode", K(ret), K(arg_res_type));
     }
   }
   return ret;

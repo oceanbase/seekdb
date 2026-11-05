@@ -22,7 +22,6 @@
 #include "storage/tmp_file/ob_tmp_file_flush_ctx.h"
 #include "storage/tmp_file/ob_tmp_file_flush_priority_manager.h"
 #include "storage/tmp_file/ob_tmp_file_thread_job.h"
-#include "lib/task/ob_timer.h"
 
 namespace oceanbase
 {
@@ -72,7 +71,7 @@ public:
   ~ObTmpFileFlushManager() {}
   int init();
   void destroy();
-  void set_flush_timers(common::ObTimer *flush_timers, const int64_t timer_cnt);
+  void set_flush_timer_tg_id(int* flush_timer_tg_id, const int64_t timer_cnt);
   TO_STRING_KV(K(is_inited_), K(flush_ctx_));
 
 public:
@@ -137,7 +136,7 @@ private:
   ObTmpFileEvictionManager &evict_mgr_;
   ObTmpFileFlushPriorityManager &flush_priority_mgr_;
   int32_t cur_flush_timer_idx_;
-  common::ObTimer *flush_timers_[ObTmpFileGlobal::FLUSH_TIMER_CNT];
+  int flush_timer_tg_id_[ObTmpFileGlobal::FLUSH_TIMER_CNT];
 };
 
 }  // end namespace tmp_file

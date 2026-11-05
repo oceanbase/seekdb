@@ -18,7 +18,7 @@
 #define OCEANBASE_TRANSACTION_OB_UNIQUE_ID_SERVICE_
 
 #include "ob_trans_service.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -31,7 +31,7 @@ class ObUniqueIDService
 public:
   ObUniqueIDService() {}
   ~ObUniqueIDService() {}
-  static int server_module_init(ObUniqueIDService *&unique_id_service)
+  static int mtl_init(ObUniqueIDService *&unique_id_service)
   {
     return OB_SUCCESS;
   }
@@ -43,7 +43,7 @@ public:
     int64_t expire_ts = ObTimeUtility::current_time() + timeout_ts;
     
     do {
-      if (OB_SUCC(::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->gen_trans_id(trans_id))) {
+      if (OB_SUCC(share::g_mp->trans_service()->gen_trans_id(trans_id))) {
         unique_id = trans_id.get_id();
       } else if (OB_GTI_NOT_READY == ret) {
         if (ObTimeUtility::current_time() > expire_ts) {

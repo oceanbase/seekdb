@@ -1,0 +1,15 @@
+# ==== load_file(location, filename): read a local file as a BLOB ====
+DROP DATABASE IF EXISTS ai_lf_test;
+CREATE DATABASE ai_lf_test;
+USE ai_lf_test;
+# whole file content
+SELECT load_file('lf_loc', 'ai_lf_hello.txt') AS content;
+content
+Hello from load_file!
+
+# byte length
+SELECT length(load_file('lf_loc', 'ai_lf_hello.txt')) AS content_len;
+content_len
+22
+DROP LOCATION lf_loc;
+DROP DATABASE ai_lf_test;

@@ -25,7 +25,6 @@
 #include "storage/blocksstable/index_block/ob_index_block_row_scanner.h"
 #include "storage/blocksstable/ob_row_cache.h"
 #include "storage/blocksstable/ob_sstable.h"
-#include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
 #include "storage/access/ob_rows_info.h"
 
@@ -34,18 +33,21 @@ using namespace blocksstable;
 namespace storage {
 class ObAggStoreBase;
 class ObRowsInfo;
-class ObAdvanceScanHelper;
+class ObAdvanceSkipScanner;
 
 struct ObSSTableReadHandle
 {
 public:
   ObSSTableReadHandle() :
       is_get_(false),
+      is_bf_contain_(false),
+      has_macro_block_bf_(false),
       is_sorted_multi_get_(false),
       row_state_(0),
       range_idx_(-1),
       micro_begin_idx_(-1),
       micro_end_idx_(-1),
+      current_rows_info_idx_(-1),
       query_range_(nullptr),
       index_block_info_(),
       row_handle_(),
@@ -56,11 +58,14 @@ public:
   void reuse()
   {
     is_get_ = false;
+    is_bf_contain_ = false;
+    has_macro_block_bf_ = false;
     is_sorted_multi_get_ = false;
     row_state_ = 0;
     range_idx_ = -1;
     micro_begin_idx_ = -1;
     micro_end_idx_ = -1;
+    current_rows_info_idx_ = -1;
     query_range_ = nullptr;
     index_block_info_.reset();
     row_handle_.reset();
@@ -68,11 +73,14 @@ public:
   void reset()
   {
     is_get_ = false;
+    is_bf_contain_ = false;
+    has_macro_block_bf_ = false;
     is_sorted_multi_get_ = false;
     row_state_ = 0;
     range_idx_ = -1;
     micro_begin_idx_ = -1;
     micro_end_idx_ = -1;
+    current_rows_info_idx_ = -1;
     query_range_ = nullptr;
     micro_handle_ = nullptr;
     index_block_info_.reset();
@@ -81,6 +89,7 @@ public:
   void move_from(ObSSTableReadHandle& other)
   {
     this->is_get_ = other.is_get_;
+    this->is_bf_contain_ = other.is_bf_contain_;
     this->is_sorted_multi_get_ = other.is_sorted_multi_get_;
     this->row_state_ = other.row_state_;
     this->range_idx_ = other.range_idx_;
@@ -100,6 +109,7 @@ public:
       this->reset();
     } else {
       this->is_get_ = other.is_get_;
+      this->is_bf_contain_ = other.is_bf_contain_;
       this->is_sorted_multi_get_ = other.is_sorted_multi_get_;
       this->row_state_ = other.row_state_;
       this->range_idx_ = other.range_idx_;
@@ -132,19 +142,23 @@ public:
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpect null micro_handle ", K(ret));
     } else if (OB_FAIL(micro_handle_->get_micro_block_data(&block_reader, block_data))) {
+      STORAGE_LOG(WARN, "Fail to get block data ", K(ret));
     }
     return ret;
   }
-  TO_STRING_KV(K_(is_get), K_(is_sorted_multi_get), K_(row_state), K_(range_idx), K_(index_block_info),
+  TO_STRING_KV(K_(is_get), K_(is_bf_contain), K_(has_macro_block_bf), K_(is_sorted_multi_get), K_(row_state), K_(range_idx), K_(index_block_info),
                K_(micro_begin_idx), K_(micro_end_idx), KP_(query_range), KPC_(micro_handle));
 
 public:
   bool is_get_;
+  bool is_bf_contain_;
+  bool has_macro_block_bf_;
   bool is_sorted_multi_get_;
   int8_t row_state_;    // possible states: NOT_EXIST, IN_ROW_CACHE, IN_BLOCK
   int64_t range_idx_;
   int64_t micro_begin_idx_;
   int64_t micro_end_idx_;
+  int64_t current_rows_info_idx_;
   union {
     const blocksstable::ObDatumRowkey *rowkey_;
     const blocksstable::ObDatumRange *range_;
@@ -325,6 +339,7 @@ struct ObCachedLevelMicroDataHandle
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(this->handle_.assign(handle))) {
+      COMMON_LOG(WARN, "failed to set handle_");
     } else {
       is_valid_ = true;
       is_leaf_block_ = leaf;
@@ -499,7 +514,7 @@ public:
       micro_data_prefetch_idx_(0),
       row_lock_check_version_(transaction::ObTransVersion::INVALID_TRANS_VERSION),
       agg_store_(nullptr),
-      advance_scan_helper_(nullptr),
+      skip_scanner_(nullptr),
       can_blockscan_(false),
       need_check_prefetch_depth_(false),
       use_multi_block_prefetch_(false),
@@ -575,6 +590,11 @@ public:
   int check_row_lock(
       const blocksstable::ObMicroIndexInfo &index_info,
       bool &is_prefetch_end);
+  // For columnar store.
+  OB_INLINE virtual bool switch_to_columnar_scan()
+  {
+    return false;
+  };
   OB_INLINE const blocksstable::ObDatumRowkey& get_border_rowkey()
   {
     return border_rowkey_;
@@ -591,6 +611,15 @@ public:
   {
     return DEFAULT_SCAN_MICRO_DATA_HANDLE_CNT;
   }
+  OB_INLINE const ObIndexSkipState *get_next_skip_state() const
+  {
+    const ObIndexSkipState *tmp_state = nullptr;
+    if (cur_micro_data_fetch_idx_ + 1 < micro_data_prefetch_idx_) {
+      tmp_state = &micro_data_infos_[(cur_micro_data_fetch_idx_ + 1) % MAX_DATA_PREFETCH_DEPTH].skip_state_;
+    }
+    return tmp_state;
+  }
+
   static const int16_t MIN_DATA_READ_BATCH_COUNT = 4;
   static const int16_t MAX_INDEX_TREE_HEIGHT = 16;
   static const int32_t MAX_DATA_PREFETCH_DEPTH = DATA_PREFETCH_DEPTH;
@@ -710,10 +739,10 @@ protected:
         OB_INLINE int get_next_data_row(
         const bool is_multi_check,
         ObMicroIndexInfo &block_info,
-        ObAdvanceScanHelper *advance_scan_helper = nullptr)
+        ObAdvanceSkipScanner *skip_scanner = nullptr)
     {
       int ret = OB_SUCCESS;
-      if (OB_FAIL(index_scanner_.get_next(block_info, is_multi_check, false/*is_sorted_multi_get*/, advance_scan_helper))) {
+      if (OB_FAIL(index_scanner_.get_next(block_info, is_multi_check, false/*is_sorted_multi_get*/, skip_scanner))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           STORAGE_LOG(WARN, "Fail to get_next index row", K(ret), K_(index_scanner));
         }
@@ -725,6 +754,7 @@ protected:
           block_info.set_blockscan();
         }
         if (OB_FAIL(block_info.copy_skipping_filter_results(current_block_read_handle().index_info_))) {
+          STORAGE_LOG(WARN, "Failed to copy skipping filter results", K_(current_block_read_handle().index_info));
         }
       }
       return ret;
@@ -734,13 +764,14 @@ protected:
         ObIndexTreeMultiPassPrefetcher &prefetcher)
     {
       int ret = OB_SUCCESS;
-      ObAdvanceScanHelper *advance_scan_helper = prefetcher.access_ctx_->query_flag_.is_reverse_scan() ? nullptr : prefetcher.advance_scan_helper_;
+      ObAdvanceSkipScanner *skip_scanner = prefetcher.access_ctx_->query_flag_.is_reverse_scan() ? nullptr : prefetcher.skip_scanner_;
       while (OB_SUCC(ret)) {
-        if (OB_FAIL(index_scanner_.get_next(block_info, prefetcher.is_multi_check(), false/*is_sorted_multi_get*/, advance_scan_helper))) {
+        if (OB_FAIL(index_scanner_.get_next(block_info, prefetcher.is_multi_check(), false/*is_sorted_multi_get*/, skip_scanner))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
             STORAGE_LOG(WARN, "Fail to get_next index row", K(ret), K_(index_scanner));
           } else if (fetch_idx_ < prefetch_idx_) {
             if (OB_FAIL(forward(prefetcher))) {
+              STORAGE_LOG(WARN, "Fail to forward index tree handle", K(ret));
             }
           }
         } else {
@@ -748,6 +779,7 @@ protected:
             block_info.set_blockscan();
           }
           if (OB_FAIL(block_info.copy_skipping_filter_results(current_block_read_handle().index_info_))) {
+            STORAGE_LOG(WARN, "Failed to copy skipping filter results", K_(current_block_read_handle().index_info));
           }
           break;
         }
@@ -772,6 +804,7 @@ protected:
       if (!can_blockscan_) {
       } else if (index_scanner_.end_of_block()) {
       } else if (OB_FAIL(index_scanner_.check_blockscan(border_rowkey, can_blockscan_))) {
+        STORAGE_LOG(WARN, "Fail to update_blockscan", K(ret), K(index_scanner_), K(border_rowkey));
       }
       return ret;
     }
@@ -806,7 +839,7 @@ public:
   int64_t micro_data_prefetch_idx_;
   int64_t row_lock_check_version_;
   ObAggStoreBase *agg_store_;
-  ObAdvanceScanHelper *advance_scan_helper_;
+  ObAdvanceSkipScanner *skip_scanner_;
 protected:
   bool can_blockscan_;
   bool need_check_prefetch_depth_;

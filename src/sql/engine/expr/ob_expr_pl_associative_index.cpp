@@ -30,7 +30,8 @@ OB_SERIALIZE_MEMBER((ObExprPLAssocIndex, ObExprOperator),
                     info_.is_index_by_varchar_);
 
 ObExprPLAssocIndex::ObExprPLAssocIndex(ObIAllocator &alloc)
-  : ObExprOperator(alloc, T_FUN_PL_ASSOCIATIVE_INDEX, N_PL_ASSOCIATIVE_INDEX, 2, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
+  : ObExprOperator(alloc, T_FUN_PL_ASSOCIATIVE_INDEX, N_PL_ASSOCIATIVE_INDEX, 2, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
+                  false, INTERNAL_IN_ORACLE_MODE),
     info_()
 {
 }
@@ -52,6 +53,7 @@ int ObExprPLAssocIndex::assign(const ObExprOperator &other)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr operator is mismatch", K(other.get_type()));
   } else if (OB_FAIL(ObExprOperator::assign(other))) {
+    LOG_WARN("assign parent expr failed", K(ret));
   } else {
     info_ = static_cast<const ObExprPLAssocIndex &>(other).info_;
   }
@@ -82,6 +84,7 @@ int ObExprPLAssocIndex::cg_expr(ObExprCGCtx &op_cg_ctx,
   const ObPLAssocIndexRawExpr &assoc_idx_expr = static_cast<const ObPLAssocIndexRawExpr &>(raw_expr);
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected arg cnt", K(ret), K(rt_expr.arg_cnt_));
   } else {
     Info info;
     info.for_write_ = assoc_idx_expr.get_write();

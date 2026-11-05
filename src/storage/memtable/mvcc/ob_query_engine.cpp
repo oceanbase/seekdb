@@ -15,7 +15,7 @@
  */
 
 #include "storage/memtable/mvcc/ob_query_engine.h"
-#include "storage/ob_iter_cache.h"
+#include "storage/memtable/mvcc/ob_btree_iter_cache.h"
 #include "lib/allocator/ob_malloc.h"
 #include "common/ob_store_range.h"
 #include "storage/blocksstable/ob_row_reader.h"
@@ -49,6 +49,7 @@ void ObQueryEngine::check_cleanout(bool &is_all_cleanout,
                                              true, /*start_exclusive*/
                                              scan_end_key_wrapper,
                                              true  /*end_exclusive*/))) {
+    TRANS_LOG(ERROR, "set key range to btree scan handle fail", KR(ret));
   } else {
     blocksstable::ObRowReader row_reader;
     blocksstable::ObDatumRow datum_row;
@@ -85,6 +86,7 @@ void ObQueryEngine::dump2text(FILE* fd)
                                              true, /*start_exclusive*/
                                              scan_end_key_wrapper,
                                              true  /*end_exclusive*/))) {
+    TRANS_LOG(ERROR, "set key range to btree scan handle fail", KR(ret));
   } else {
     blocksstable::ObRowReader row_reader;
     blocksstable::ObDatumRow datum_row;
@@ -98,6 +100,7 @@ void ObQueryEngine::dump2text(FILE* fd)
           helper.reset();
           fprintf(fd, "\t%s dml=%d size=%ld\n", helper.convert(*node), mtd->dml_flag_, mtd->buf_len_);
           if (OB_FAIL(row_reader.read_row(mtd->buf_, mtd->buf_len_, nullptr, datum_row))) {
+            TRANS_LOG(WARN, "Failed to read datum row", K(ret));
           } else {
             for (int64_t i = 0; OB_SUCC(ret) && i < datum_row.get_column_count(); i++) {
               blocksstable::ObStorageDatum &datum = datum_row.storage_datums_[i];
@@ -111,6 +114,42 @@ void ObQueryEngine::dump2text(FILE* fd)
     keybtree_.dump(fd);
     fprintf(fd, "--------------------------\n");
   }
+}
+
+int ObQueryEngine::dump_keyhash(FILE *fd) const
+{
+  int ret = OB_SUCCESS;
+  const bool print_bucket_node = true;
+  const bool print_row_value = false; // basic info of ObMvccRow
+  const bool print_row_value_verbose = false; // data part of ObMvccRow
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    TRANS_LOG(WARN, "not init", "this", this);
+  } else if (OB_ISNULL(fd)) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid param", KP(fd));
+  } else {
+    keyhash_.dump_hash(fd,
+                       print_bucket_node,
+                       print_row_value,
+                       print_row_value_verbose);
+  }
+
+  return ret;
+}
+
+
+int64_t ObQueryEngine::hash_size() const
+{
+  int64_t arr_size = keyhash_.get_arr_size();
+  return arr_size;
+}
+
+int64_t ObQueryEngine::hash_alloc_memory() const
+{
+  int64_t alloc_mem = keyhash_.get_alloc_memory();
+  return alloc_mem;
 }
 
 int64_t ObQueryEngine::btree_size() const
@@ -133,6 +172,7 @@ int ObQueryEngine::init()
     TRANS_LOG(WARN, "init twice", K(this));
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(keybtree_.init())) {
+    TRANS_LOG(WARN, "keybtree init fail", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -146,6 +186,7 @@ void ObQueryEngine::destroy()
 {
   keybtree_.destroy(true /*is_batch_destroy*/);
   btree_allocator_.reset();
+  keyhash_.destroy();
   is_inited_ = false;
 }
 
@@ -154,9 +195,39 @@ void ObQueryEngine::pre_batch_destroy_keybtree()
   (void)keybtree_.pre_batch_destroy();
 }
 
+// The hashmap is thread safe and only one of concurrency inserts will succeed.
+// While others will get the OB_ENTRY_EXIST error code.
+int ObQueryEngine::set(const ObMemtableKey *key, ObMvccRow *value)
+{
+  int ret = OB_SUCCESS;
+
+  if (IS_NOT_INIT) {
+    TRANS_LOG(WARN, "not init", KP(this));
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(key) || OB_ISNULL(value)) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid param when query_engine set",
+              KR(ret), KP(key), KP(value));
+  } else {
+    ObStoreRowkeyWrapper key_wrapper(key->get_rowkey());
+    if (OB_FAIL(keyhash_.insert(&key_wrapper, value))) {
+      if (OB_ENTRY_EXIST != ret) {
+        TRANS_LOG(WARN, "put to keyhash fail", K(ret),
+                  KPC(key), KPC(value));
+      }
+    } else {
+      value->set_hash_indexed();
+    }
+  }
+  if (OB_FAIL(ret) && OB_ENTRY_EXIST != ret) {
+    TRANS_LOG(WARN, "query engine set fail", KR(ret), K(ret), KPC(key), KPC(value));
+  }
+  return ret;
+}
+
 int ObQueryEngine::get(const ObMemtableKey *parameter_key,
-                                  ObMvccRow *&row,
-                                  ObMemtableKey *returned_key)
+                       ObMvccRow *&row,
+                       ObMemtableKey *returned_key)
 {
   int ret = OB_SUCCESS;
   row = nullptr;
@@ -169,38 +240,50 @@ int ObQueryEngine::get(const ObMemtableKey *parameter_key,
     TRANS_LOG(WARN, "invalid param", KP(parameter_key));
   } else {
     const ObStoreRowkeyWrapper parameter_key_wrapper(parameter_key->get_rowkey());
+    const ObStoreRowkeyWrapper *copy_inner_key_wrapper = nullptr;
 
-    if (OB_FAIL(keybtree_.get(parameter_key_wrapper, row))) {
+    if (OB_FAIL(keyhash_.get(&parameter_key_wrapper, row, copy_inner_key_wrapper))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        TRANS_LOG(WARN, "get from keybtree fail", KR(ret), KPC(parameter_key));
+        TRANS_LOG(WARN, "get from keyhash fail", KR(ret), KPC(parameter_key));
       }
       row = nullptr;
     } else if (OB_ISNULL(row)) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "get NULL value from keybtree", KR(ret), KPC(parameter_key));
+      TRANS_LOG(ERROR, "get NULL value from keyhash", KR(ret), KPC(parameter_key));
+    } else if (returned_key) {
+      ret = returned_key->encode(copy_inner_key_wrapper->get_rowkey());
     }
   }
+
   return ret;
 }
 
-int ObQueryEngine::create_btree_kv(const ObMemtableKey *parameter_key,
-                                   const ObMvccRowCreator &row_creator,
-                                   ObMvccRow *&row)
+// The caller need to guarantee the mutual exclusive enforced here, otherwise
+// the concurrent modification will violate the rules of the btree(the ERROR
+// will be reported if two same key is inserted into keybtree successively)
+int ObQueryEngine::ensure(const ObMemtableKey *key, ObMvccRow *value)
 {
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", K(this));
+    TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(parameter_key)) {
+  } else if (OB_ISNULL(key) || OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid param", KP(parameter_key));
-  } else if (OB_UNLIKELY(!row_creator.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid row creator", K(row_creator));
+    TRANS_LOG(WARN, "query_engine ensure error, invalid param", KR(ret), KP(key), KP(value));
   } else {
-    const ObStoreRowkeyWrapper parameter_key_wrapper(parameter_key->get_rowkey());
-    if (OB_FAIL(keybtree_.insert_or_get(parameter_key_wrapper, row_creator, row))) {
+    if (!value->is_btree_indexed()) {
+      ObStoreRowkeyWrapper key_wrapper(key->get_rowkey());
+      if (OB_FAIL(keybtree_.insert(key_wrapper, value))) {
+        TRANS_LOG(WARN, "ensure keybtree fail", KR(ret), K(*key));
+        if (OB_ENTRY_EXIST == ret) {
+          TRANS_LOG(ERROR, "ensure keybtree fail", KR(ret), K(*key));
+        } else {
+          TRANS_LOG(WARN, "ensure keybtree fail", KR(ret), K(*key));
+        }
+      } else {
+        value->set_btree_indexed();
+      }
     }
   }
 
@@ -220,9 +303,7 @@ int ObQueryEngine::scan(const ObMemtableKey *start_key,
     TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
   } else {
-    void *buf = storage::iter_alloc(
-        storage::ObIterCacheType::BTREE_ITER,
-        sizeof(Iterator<BtreeIterator>));
+    void *buf = btree_iter_alloc(sizeof(Iterator<BtreeIterator>));
     if (OB_ISNULL(buf)) {
       TRANS_LOG(WARN, "alloc iter fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -240,6 +321,9 @@ int ObQueryEngine::scan(const ObMemtableKey *start_key,
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "set key range to btree scan handle fail", KR(ret));
     }
+    TRANS_LOG(DEBUG, "[BTREE_SCAN_PARAM]",
+              "start_key", start_key, "start_exclude", start_exclude,
+              "end_key", end_key, "end_exclude", end_exclude);
   }
 
   if (OB_FAIL(ret)) {
@@ -260,7 +344,7 @@ void ObQueryEngine::revert_iter(ObIQueryEngineIterator *iter)
   if (OB_NOT_NULL(iter)) {
     auto *typed = static_cast<Iterator<BtreeIterator> *>(iter);
     typed->~Iterator();
-    storage::iter_free(storage::ObIterCacheType::BTREE_ITER, typed);
+    btree_iter_free(typed);
   }
 }
 
@@ -284,6 +368,7 @@ int ObQueryEngine::sample_rows(Iterator<BtreeRawIterator> *iter,
   ratio = 1.5;
   ObStoreRowkeyWrapper scan_start_key_wrapper(start_key->get_rowkey());
   ObStoreRowkeyWrapper scan_end_key_wrapper(end_key->get_rowkey());
+  TRANS_LOG(DEBUG, "estimate row count, key range", K(*start_key), K(*end_key));
   iter->reset();
 
   if (OB_FAIL(keybtree_.set_key_range(iter->get_read_handle(),
@@ -291,6 +376,7 @@ int ObQueryEngine::sample_rows(Iterator<BtreeRawIterator> *iter,
                                       start_exclude,
                                       scan_end_key_wrapper,
                                       end_exclude))) {
+    TRANS_LOG(WARN, "set key range to btree scan handle failed", KR(ret));
   } else {
     while (OB_SUCC(ret)) {
       if (OB_FAIL(iter->next())) {
@@ -369,6 +455,7 @@ int ObQueryEngine::init_raw_iter_for_estimate(Iterator<BtreeRawIterator>*& iter,
                                         true, /*start_exclusive*/
                                         end_key_wrapper,
                                         true  /*start_exclusive*/))) {
+      TRANS_LOG(WARN, "set key range to btree scan handle failed", K(ret));
     }
   }
 
@@ -429,6 +516,7 @@ int ObQueryEngine::split_range(const ObMemtableKey *start_key,
         ret = OB_ENTRY_NOT_EXIST;
         TRANS_LOG(WARN, "branch fan out less than range count", K(btree_node_count), K(range_count));
       } else if (OB_FAIL(init_raw_iter_for_estimate(iter, start_key, end_key))) {
+        TRANS_LOG(WARN, "init raw iter fail", K(ret), K(*start_key), K(*end_key));
       } else if (NULL == iter) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(iter->get_read_handle().split_range(top_level, btree_node_count, range_count, key_array))) {
@@ -446,6 +534,7 @@ int ObQueryEngine::split_range(const ObMemtableKey *start_key,
           ret = OB_SUCCESS;
         }
       } else if (OB_FAIL(convert_keys_to_store_ranges_(start_key, end_key, range_count, key_array, range_array))) {
+        TRANS_LOG(WARN, "convert keys to store ranges failed", KR(ret), K(range_count), K(key_array));
       } else {
         // split range succeed
       }
@@ -489,6 +578,7 @@ int ObQueryEngine::inner_loop_find_level_(const ObMemtableKey *start_key,
     top_level++;
     btree_node_count = 0;
     if (OB_FAIL(init_raw_iter_for_estimate(iter, start_key, end_key))) {
+      TRANS_LOG(WARN, "init raw iter fail", K(ret), K(*start_key), K(*end_key));
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(iter->get_read_handle().estimate_key_count(top_level, btree_node_count, total_rows))) {
@@ -552,6 +642,7 @@ int ObQueryEngine::convert_keys_to_store_ranges_(const ObMemtableKey *start_key,
       merge_range.set_left_open();
       merge_range.set_right_closed();
       if (OB_FAIL(range_array.push_back(merge_range))) {
+        TRANS_LOG(WARN, "Failed to push back the merge range to array", K(ret), K(merge_range));
       }
     }
   }
@@ -618,6 +709,7 @@ int ObQueryEngine::estimate_row_count(const transaction::ObTransID &tx_id,
       if (OB_ITER_END != ret) {
         TRANS_LOG(WARN, "estimate row count fail", KR(ret));
       } else {
+        TRANS_LOG(DEBUG, "estimate_element_count result", K(remaining_row_count), K(element_count));
         // logical row count should be calculated with btree element count
         logical_row_count = static_cast<int64_t>(static_cast<double>(logical_row_count)
             * (static_cast<double>(element_count + MAX_SAMPLE_ROW_COUNT)

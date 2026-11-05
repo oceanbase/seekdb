@@ -28,7 +28,7 @@ class ObCreateDatabaseStmt;
 class ObDropDatabaseStmt;
 class ObUseDatabaseStmt;
 class ObAlterDatabaseStmt;
-class ObRecyclebinRestoreDatabaseStmt;
+class ObFlashBackDatabaseStmt;
 class ObPurgeDatabaseStmt;
 class ObCreateDatabaseExecutor
 {
@@ -77,14 +77,14 @@ private:
 /* *
  *
  * */
-class ObRecyclebinRestoreDatabaseExecutor
+class ObFlashBackDatabaseExecutor
 {
 public:
-  ObRecyclebinRestoreDatabaseExecutor() {}
-  virtual ~ObRecyclebinRestoreDatabaseExecutor() {}
-  int execute(ObExecContext &ctx, ObRecyclebinRestoreDatabaseStmt &stmt);
+  ObFlashBackDatabaseExecutor() {}
+  virtual ~ObFlashBackDatabaseExecutor() {}
+  int execute(ObExecContext &ctx, ObFlashBackDatabaseStmt &stmt);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObRecyclebinRestoreDatabaseExecutor);
+  DISALLOW_COPY_AND_ASSIGN(ObFlashBackDatabaseExecutor);
 };
 
 class ObPurgeDatabaseExecutor

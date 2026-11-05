@@ -19,7 +19,6 @@
 
 #include "lib/ob_abort.h"
 #include "lib/allocator/ob_retire_station.h"
-#include "lib/function/ob_function.h"
 
 #define BTREE_ASSERT(x) if (OB_UNLIKELY(!(x))) { ob_abort(); }
 
@@ -302,6 +301,7 @@ protected:
       __builtin_prefetch(mid_key.get_ptr(), 0, 3);
       int cmp_ret = 0;
       if (OB_FAIL(nh.compare(key, mid_key, cmp_ret))) {
+        OB_LOG(ERROR, "failed to compare", K(key), K(mid_key));
       } else if (0 == cmp_ret) {
         is_equal = true;
         end = mid + 1;
@@ -440,7 +440,7 @@ private:
 public:
   GetHandle(ObKeyBtree &tree): BaseHandle(tree.get_qclock()) { UNUSED(tree); }
   ~GetHandle() {}
-  int get(BtreeNode *root, BtreeKey key, BtreeVal &val, BtreeKey **copy_inner_key = nullptr);
+  int get(BtreeNode *root, BtreeKey key, BtreeVal &val);
 };
 
 template<typename BtreeKey, typename BtreeVal>
@@ -561,9 +561,6 @@ public:
   }
 public:
   int insert_and_split_upward(BtreeKey key, BtreeVal &val, BtreeNode *&new_root);
-  typedef ObFunction<int(const bool is_exist_key, BtreeKey &key, BtreeVal &val)> BtreeKvCreator;
-  int insert_or_get_and_split_upward(BtreeKey key, const BtreeKvCreator &creator,
-                                     BtreeVal &val, BtreeNode *&new_root, bool &inserted);
 private:
   int insert_into_node(BtreeNode *old_node, int pos, BtreeKey key, BtreeVal val, BtreeNode *&new_node_1, BtreeNode *&new_node_2);
   // judge whether it's wrlocked

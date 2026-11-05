@@ -1,0 +1,98 @@
+#owner: lana.lgx
+#owner group: data
+#description: dbms_mview
+#tags: pl
+#author: suzhi.yt
+
+--disable_query_log
+
+#################### Case1 begin ####################
+-- echo #
+-- echo # Case1 Basic test
+-- echo #
+
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_table_err.inc
+drop table t1;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv1;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv2;
+
+create table t1 (c1 int, c2 int);
+create materialized view log on t1 with (c1, c2);
+
+-- echo # purge without mv
+insert into t1 values (1, 1), (2,2);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.purge_log('t1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+insert into t1 values (10, 10), (20, 20);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.purge_log('t1', purge_log_parallel => 10);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+insert into t1 values (11, 11), (21, 21);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.purge_log('t1', 10);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+
+-- echo # purge with one mv
+create materialized view mv1 as select c1 from t1;
+insert into t1 values (3, 3);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.purge_log('t1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+insert into t1 values (30, 30);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+--error 1210
+call dbms_mview.purge_log('t1', purge_log_parallel => 1/0);
+call dbms_mview.purge_log('t1', purge_log_parallel => 10);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+insert into t1 values (31, 31);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.purge_log('t1', 10);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+
+-- echo # purge with multi mv
+create materialized view mv2 as select c2 from t1;
+insert into t1 values (4, 4);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.purge_log('t1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv2');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+insert into t1 values (40, 40);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.purge_log('t1', purge_log_parallel => 10);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv2');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+insert into t1 values (41, 41);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.purge_log('t1', 10);
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv1');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+call dbms_mview.refresh('mv2');
+select dmltype$$, old_new$$, c1, c2 from mlog$_t1;
+
+# clear
+drop materialized view mv1;
+drop materialized view mv2;
+drop materialized view log on t1;
+drop table t1;
+
+#################### Case1 end ####################
+
+--enable_query_log

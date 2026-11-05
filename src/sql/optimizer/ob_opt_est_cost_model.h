@@ -37,6 +37,7 @@ class OptSelectivityCtx;
 class ObOptCostModelParameter;
 class OptSystemStat;
 
+enum RowCountEstMethod { INVALID_METHOD = 0 }; // deprecated
 enum ObBaseTableEstBasicMethod
 {
   EST_INVALID   = 0,
@@ -64,7 +65,8 @@ struct ObTableMetaInfo
       row_count_(0),
       has_opt_stat_(false),
       micro_block_count_(-1),
-      table_type_(share::schema::MAX_TABLE_TYPE)
+      table_type_(share::schema::MAX_TABLE_TYPE),
+      is_broadcast_table_(false)
   { }
   virtual ~ObTableMetaInfo()
   { }
@@ -93,6 +95,7 @@ struct ObTableMetaInfo
   bool has_opt_stat_;
   int64_t micro_block_count_;  // main table micro block count
   share::schema::ObTableType table_type_;
+  bool is_broadcast_table_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableMetaInfo);
 };
@@ -176,6 +179,34 @@ struct ObTwoNodeCostInfo
   OptSelectivityCtx *sel_ctx_;
 };
 
+struct ObCostColumnGroupInfo {
+  ObCostColumnGroupInfo()
+  :micro_block_count_(0.0),
+  filter_sel_(1.0),
+  skip_rate_(0.0),
+  skip_filter_sel_(1.0)
+  {
+  }
+  int assign(const ObCostColumnGroupInfo& info);
+
+  TO_STRING_KV(
+    K_(filters),
+    K_(access_column_items),
+    K_(column_id),
+    K_(micro_block_count),
+    K_(filter_sel),
+    K_(skip_rate),
+    K_(skip_filter_sel)
+  );
+  common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> filters_;
+  common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> access_column_items_;
+  uint64_t column_id_;
+  int64_t micro_block_count_;
+  double filter_sel_;
+  double skip_rate_;
+  double skip_filter_sel_;
+};
+
 /*
  * store all the info needed to cost table scan
  */
@@ -194,9 +225,11 @@ struct ObCostTableScanInfo
      is_batch_rescan_(false),
      ranges_(),
      total_range_cnt_(0),
+     ss_ranges_(),
      range_columns_(),
      prefix_filters_(),
      pushdown_prefix_filters_(),
+     ss_postfix_range_filters_(),
      postfix_filters_(),
      table_filters_(),
      table_metas_(NULL),
@@ -207,12 +240,18 @@ struct ObCostTableScanInfo
      postfix_filter_sel_(1.0),
      table_filter_sel_(1.0),
      join_filter_sel_(1.0),
+     ss_prefix_ndv_(1.0),
+     ss_postfix_range_filters_sel_(1.0),
      logical_query_range_row_count_(0.0),
      phy_query_range_row_count_(0.0),
      index_back_row_count_(0.0),
      output_row_count_(0.0),
      batch_type_(common::ObSimpleBatch::ObBatchType::T_NONE),
+     use_column_store_(false),
      at_most_one_range_(false),
+     index_back_with_column_store_(false),
+     rescan_left_server_list_(NULL),
+     rescan_server_list_(NULL),
      limit_rows_(-1.0),
      unique_range_rowcnt_(-1)
   { }
@@ -230,7 +269,12 @@ struct ObCostTableScanInfo
                K_(is_das_scan), K_(is_rescan), K_(is_batch_rescan), K_(est_method),
                K_(prefix_filter_sel), K_(pushdown_prefix_filter_sel),
                K_(postfix_filter_sel), K_(table_filter_sel),
+               K_(ss_prefix_ndv), K_(ss_postfix_range_filters_sel),
                K_(limit_rows), K_(total_range_cnt), K_(unique_range_rowcnt),
+               K_(use_column_store),
+               K_(index_back_with_column_store),
+               K_(index_scan_column_group_infos),
+               K_(index_back_column_group_infos),
                K_(batch_type));
   // the following information need to be set before estimating cost
   uint64_t table_id_; // table id
@@ -245,12 +289,14 @@ struct ObCostTableScanInfo
   bool is_batch_rescan_;
   ObRangesArray ranges_;  // all the ranges
   int64_t total_range_cnt_;
+  ObRangesArray ss_ranges_;  // skip scan ranges
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> range_columns_; // all the range columns
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> access_column_items_; // all the access columns
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> index_access_column_items_; // all the access columns
   // The classification of these filters refers to ObJoinOrder::fill_filters()
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> prefix_filters_; // filters match index prefix
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> pushdown_prefix_filters_; // filters match index prefix along pushed down filter
+  common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> ss_postfix_range_filters_;  // range conditions extract postfix range for skip scan
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> postfix_filters_; // filters evaluated before index back, but not index prefix
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> table_filters_;  // filters evaluated after index back
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> real_range_exprs_; // range conditions constructed by query range, only valid when unprecise_range_filters_ not empty 
@@ -268,13 +314,21 @@ struct ObCostTableScanInfo
   double postfix_filter_sel_;
   double table_filter_sel_;
   double join_filter_sel_;
+  double ss_prefix_ndv_;  // skip scan prefix columns NDV
+  double ss_postfix_range_filters_sel_;
   double logical_query_range_row_count_;// Estimated number of rows contained in the extracted query range (logical)
   double phy_query_range_row_count_;// Estimated number of rows contained in the extracted query range (physical)
   double index_back_row_count_;// Estimated number of rows that need to go back to the table
   double output_row_count_;
   common::ObSimpleBatch::ObBatchType batch_type_;
   SampleInfo sample_info_;
+  bool use_column_store_;
   bool at_most_one_range_;
+  bool index_back_with_column_store_;
+  common::ObSEArray<ObCostColumnGroupInfo, 4, common::ModulePageAllocator, true> index_scan_column_group_infos_;
+  common::ObSEArray<ObCostColumnGroupInfo, 4, common::ModulePageAllocator, true> index_back_column_group_infos_;
+  const common::ObIArray<common::ObAddr> *rescan_left_server_list_;
+  const common::ObIArray<common::ObAddr> *rescan_server_list_;
 
   double limit_rows_;
   int64_t unique_range_rowcnt_;
@@ -544,19 +598,21 @@ struct ObDelUpCostInfo
 struct ObExchCostInfo
 {
   ObExchCostInfo(double rows,
-                 double width,
-                 ObPQDistributeMethod::Type dist_method,
-                 int64_t out_parallel,
-                 int64_t in_parallel,
-                 bool is_local_order,
-                 const ObIArray<OrderItem> &sort_keys)
+                   double width,
+                   ObPQDistributeMethod::Type dist_method,
+                   int64_t out_parallel,
+                   int64_t in_parallel,
+                   bool is_local_order,
+                   const ObIArray<OrderItem> &sort_keys,
+                   int64_t in_server_cnt)
     : sort_keys_(sort_keys),
       rows_(rows),
       width_(width),
       dist_method_(dist_method),
       out_parallel_(out_parallel),
       in_parallel_(in_parallel),
-      is_local_order_(is_local_order)
+      is_local_order_(is_local_order),
+      in_server_cnt_(in_server_cnt)
     { }
    const ObIArray<OrderItem> &sort_keys_;
    double rows_;
@@ -565,6 +621,7 @@ struct ObExchCostInfo
    int64_t out_parallel_;
    int64_t in_parallel_;
    bool is_local_order_;
+   int64_t in_server_cnt_;
 };
 
 struct ObExchInCostInfo
@@ -573,6 +630,7 @@ struct ObExchInCostInfo
                    double width,
                    ObPQDistributeMethod::Type dist_method,
                    int64_t parallel,
+                    int64_t server_cnt,
                    bool is_local_order,
                    const ObIArray<OrderItem> &sort_keys)
   : sort_keys_(sort_keys),
@@ -580,6 +638,7 @@ struct ObExchInCostInfo
     width_(width),
     dist_method_(dist_method),
     parallel_(parallel),
+    server_cnt_(server_cnt),
     is_local_order_(is_local_order)
   {}
   const ObIArray<OrderItem> &sort_keys_;
@@ -587,6 +646,7 @@ struct ObExchInCostInfo
   double width_;
   ObPQDistributeMethod::Type dist_method_;
   int64_t parallel_;
+  int64_t server_cnt_;
   bool is_local_order_;
 };
 
@@ -595,16 +655,19 @@ struct ObExchOutCostInfo
   ObExchOutCostInfo(double rows,
                     double width,
                     ObPQDistributeMethod::Type dist_method,
-                    int64_t parallel)
+                    int64_t parallel,
+                    int64_t server_cnt)
   : rows_(rows),
     width_(width),
     dist_method_(dist_method),
-    parallel_(parallel)
+    parallel_(parallel),
+    server_cnt_(server_cnt)
   {}
   double rows_;
   double width_;
   ObPQDistributeMethod::Type dist_method_;
   int64_t parallel_;
+  int64_t server_cnt_;
 };
 
 class ObOptEstCostModel
@@ -633,19 +696,20 @@ public:
                     double &cost);
 
   int cost_sort_and_exchange(OptTableMetas *table_metas,
-                             OptSelectivityCtx *sel_ctx,
-                             const ObPQDistributeMethod::Type dist_method,
-                             const bool is_distributed,
-                             const bool input_local_order,
-                             const double input_card,
-                             const double input_width,
-                             const double input_cost,
-                             const int64_t out_parallel,
-                             const int64_t in_parallel,
-                             const ObIArray<OrderItem> &expected_ordering,
-                             const bool need_sort,
-                             const int64_t prefix_pos,
-                             double &cost);
+														OptSelectivityCtx *sel_ctx,
+														const ObPQDistributeMethod::Type dist_method,
+														const bool is_distributed,
+														const bool input_local_order,
+														const double input_card,
+														const double input_width,
+														const double input_cost,
+														const int64_t out_parallel,
+														const int64_t in_server_cnt,
+														const int64_t in_parallel,
+														const ObIArray<OrderItem> &expected_ordering,
+														const bool need_sort,
+														const int64_t prefix_pos,
+														double &cost);
   // Provide two interfaces for estimating the cost of sort operators, one using ObRawExpr to represent the sort key, another using
   // OrderItem。
   // The other parameter information is passed through cost_info, internally it should adopt which sorting based on the parameter information
@@ -689,6 +753,8 @@ public:
 
   double cost_get_rows(double rows);
 
+  double cost_sequence(double rows, double uniq_sequence_cnt);
+
   double cost_material(const double rows, const double average_row_size);
 
   double cost_read_materialized(const double rows);
@@ -706,11 +772,13 @@ public:
   int cost_project(double rows, 
                    const ObIArray<ColumnItem> &columns,
                    bool is_get, 
+                   bool use_column_store,
                    double &cost);
 
   int cost_project(double rows, 
                    const ObIArray<ObRawExpr*> &columns,
                    bool is_get, 
+                   bool use_column_store,
                    double &cost);
 
   int cost_full_table_scan_project(double rows, 
@@ -827,6 +895,14 @@ protected:
                       double row_count,
                       double &cost);
 
+  int cost_column_store_index_scan(const ObCostTableScanInfo &est_cost_info,
+                                    double row_count,
+                                    double &cost);
+
+  int cost_column_store_index_back(const ObCostTableScanInfo &est_cost_info,
+                                    double row_count,
+                                    double limit_count,
+                                    double &cost);
   int cost_row_store_index_scan(const ObCostTableScanInfo &est_cost_info,
                                 double row_count,
                                 double &cost);
@@ -835,6 +911,12 @@ protected:
                                 double row_count,
                                 double limit_count,
                                 double &cost);
+  int calc_das_rpc_cost(const ObCostTableScanInfo &est_cost_info,
+                        double &das_rpc_cost);
+  int get_rescan_rpc_cnt(const ObIArray<common::ObAddr> *left_server_list,
+                         const ObIArray<common::ObAddr> *right_server_list,
+                         double &remote_rpc_cnt,
+                         double &local_rpc_cnt);
   // estimate the network transform and rpc cost for global index
   int cost_global_index_back_with_rp(double row_count,
                                     const ObCostTableScanInfo &est_cost_info,

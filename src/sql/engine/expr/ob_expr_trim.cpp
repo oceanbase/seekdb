@@ -141,6 +141,7 @@ int ObExprTrim::trim(ObString &result, const int64_t trim_type, const ObString &
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid type", K(trim_type), K(ret));
         break;
       }
     }
@@ -163,6 +164,7 @@ int ObExprTrim::trim(ObString &result, const int64_t trim_type, const ObString &
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid type", K(trim_type), K(ret));
         break;
       }
     }
@@ -202,6 +204,7 @@ int ObExprTrim::trim2(common::ObString &result,
       }
     default: {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid type", K(trim_type), K(ret));
         break;
       }
     }
@@ -218,6 +221,7 @@ int ObExprTrim::lrtrim(const ObString src, const ObString pattern, int32_t &star
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pattern.length() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret), K(pattern.length()));
   } else {
     int32_t i = 0;
     start = 0;
@@ -252,6 +256,7 @@ int ObExprTrim::ltrim(const ObString src, const ObString pattern, int32_t &start
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pattern.length() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret), K(pattern.length()));
   } else {
     start = 0;
     int32_t src_len = src.length();
@@ -275,6 +280,7 @@ int ObExprTrim::rtrim(const ObString src, const ObString pattern, int32_t &end)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pattern.length() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret), K(pattern.length()));
   } else {
     end = src.length();
     int32_t src_len = src.length();
@@ -304,6 +310,7 @@ int ObExprTrim::ltrim2(const ObString src,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pattern.length() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invaild arguemnt", K(ret), K(pattern.length()));
   } else {
     int32_t i = 0;
     start = 0;
@@ -341,6 +348,7 @@ int ObExprTrim::rtrim2(const ObString src,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pattern.length() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invaild arguemnt", K(ret), K(pattern.length()));
   } else {
     int32_t i = 0;
     int32_t src_len = src.length();
@@ -396,7 +404,7 @@ inline int ObExprTrim::deduce_result_type(ObExprResType &type,
   } else {
     const common::ObLengthSemantics default_length_semantics =
                   (OB_NOT_NULL(type_ctx.get_session())
-                  ? type_ctx.get_session()->get_actual_length_semantics()
+                  ? type_ctx.get_session()->get_actual_nls_length_semantics()
                   : common::LS_BYTE);
     type.set_varchar();
     type.set_length_semantics(types[0].is_varchar_or_char()
@@ -431,8 +439,10 @@ int ObExprTrim::fill_default_pattern(char *buf, const int64_t in_len,
   const ObCharsetInfo *cs = ObCharset::get_charset(cs_type);
   if (OB_ISNULL(cs) || OB_ISNULL(cs->cset)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected collation type", K(ret), K(cs_type), K(cs));
   } else if (NULL == buf || in_len < cs->mbminlen) {
     ret = OB_BUF_NOT_ENOUGH;
+    LOG_WARN("buffer not enough", K(ret), KP(buf), K(in_len), K(cs->mbminlen));
   } else if (1 == cs->mbminlen) {
     *buf = default_pattern;
     out_len = 1;
@@ -449,6 +459,7 @@ int ObExprTrim::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
   int ret = OB_SUCCESS;
   CK(1 <= rt_expr.arg_cnt_ && rt_expr.arg_cnt_ <= 3);
   rt_expr.eval_func_ = eval_trim;
+  rt_expr.eval_vector_func_ = &ObExprTrim::eval_trim_vector;
   return ret;
 }
 
@@ -463,6 +474,7 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
   ObString output;
   int64_t total_byte_len = 0;
   if (OB_FAIL(str_iter.get_byte_len(total_byte_len))) {
+    LOG_WARN("get str_iter byte len failed", K(ret));
   } else {
     ObTextStringIterState state;
     ObString str_data;
@@ -478,17 +490,22 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
                   cs_type,
                   pattern_byte_num,
                   pattern_byte_offset))) {
+            LOG_WARN("do trim2 failed", K(ret));
           } else if (output.length() != 0) {
             found_start = true;
             str_iter.reset_reserve_len();
             int64_t result_len =
                 output.length() + (total_byte_len - str_iter.get_accessed_byte_len());
             if (false == is_vec && OB_FAIL(output_result.init(result_len))) {
+              LOG_WARN("init stringtext result failed", K(ret), K(result_len));
             } else if (true == is_vec && output_result.init_with_batch_idx(result_len, idx)) {
+              LOG_WARN("init stringtext vec result failed", K(ret), K(result_len), K(idx));
             } else if (OB_FAIL(output_result.append(output))) {
+              LOG_WARN("fail to append to result", K(ret), K(output.length()), K(output_result));
             }
           }
         } else if (OB_FAIL(output_result.append(str_data))) {
+          LOG_WARN("fail to append to result", K(ret), K(str_data.length()), K(output_result));
         }
       }
     } else if (trim_type == ObExprTrim::TYPE_RTRIM) {
@@ -506,16 +523,21 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
                   cs_type,
                   pattern_byte_num,
                   pattern_byte_offset))) {
+            LOG_WARN("do trim2 failed", K(ret));
           } else if (output.length() != 0) {
             found_end = true;
             str_iter.reset_reserve_len();
             int64_t result_len =
                 output.length() + (total_byte_len - str_iter.get_accessed_byte_len());
             if (false == is_vec && OB_FAIL(output_result.init(result_len))) {
+              LOG_WARN("init stringtext result failed", K(ret), K(result_len));
             } else if (true == is_vec &&
                        OB_FAIL(output_result.init_with_batch_idx(result_len, idx))) {
+              LOG_WARN("init stringtext vec result failed", K(ret), K(result_len), K(idx));
             } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
+              LOG_WARN("stringtext result reserve buffer failed", K(ret));
             } else if (OB_FAIL(output_result.lseek(result_len, 0))) {
+              LOG_WARN("result lseek failed", K(ret));
             } else {
               buf_pos = buf_size - output.length();
               MEMCPY(buf + buf_pos, output.ptr(), output.length());
@@ -531,14 +553,18 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid type", K(trim_type), K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
       ret = (str_iter.get_inner_ret() != OB_SUCCESS) ? str_iter.get_inner_ret() : OB_INVALID_DATA;
+      LOG_WARN("iter state invalid", K(ret), K(state), K(str_iter));
     } else if (!output_result.is_init() && false == is_vec &&
                OB_FAIL(output_result.init(0))) {  // nothing found build empty lob
+      LOG_WARN("init stringtext result for empty lob failed", K(ret));
     } else if (!output_result.is_init() && true == is_vec &&
                OB_FAIL(output_result.init_with_batch_idx(0, idx))) {
+      LOG_WARN("init stringtext vec result for empty lob failed", K(ret), K(idx));
     } else {
       output_result.set_result();
     }
@@ -549,15 +575,15 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
 template <typename ResType>
 static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_iter,
     ObIAllocator &calc_alloc, ResType &output_result, int64_t trim_type,
-    const common::ObString &pattern,
-    const common::ObLobReadOptions &lob_options,
-    const int64_t &idx = 0, bool is_vec = false)
+    const common::ObString &pattern, const int64_t &idx = 0, bool is_vec = false)
 {
   int ret = OB_SUCCESS;
   ObString output;
   int64_t total_byte_len = 0;
-  if (OB_FAIL(str_iter.init(0, &lob_options, &calc_alloc))) {
+  if (OB_FAIL(str_iter.init(0, NULL, &calc_alloc))) {
+    LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
   } else if (OB_FAIL(str_iter.get_byte_len(total_byte_len))) {
+    LOG_WARN("get str_iter byte len failed", K(ret));
   } else {
     ObTextStringIterState state;
     ObString str_data;
@@ -567,18 +593,23 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
       while (OB_SUCC(ret) && (state = str_iter.get_next_block(str_data)) == TEXTSTRING_ITER_NEXT) {
         if (!found_start) {
           if (OB_FAIL(ObExprTrim::trim(output, trim_type, pattern, str_data))) {
+            LOG_WARN("do trim failed", K(ret));
           } else if (output.length() != 0) {
             found_start = true;
             str_iter.reset_reserve_len();
             int64_t result_len =
                 output.length() + (total_byte_len - str_iter.get_accessed_byte_len());
             if (false == is_vec && OB_FAIL(output_result.init(result_len))) {
+              LOG_WARN("init stringtext result failed", K(ret), K(result_len));
             } else if (true == is_vec &&
                        OB_FAIL(output_result.init_with_batch_idx(result_len, idx))) {
+              LOG_WARN("init stringtext vec result failed", K(ret), K(result_len), K(idx));
             } else if (OB_FAIL(output_result.append(output))) {
+              LOG_WARN("fail to append to result", K(ret), K(output.length()), K(output_result));
             }
           }
         } else if (OB_FAIL(output_result.append(str_data))) {
+          LOG_WARN("fail to append to result", K(ret), K(str_data.length()), K(output_result));
         }
       }
     } else if (trim_type == ObExprTrim::TYPE_RTRIM) {
@@ -590,17 +621,24 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
       while (OB_SUCC(ret) && (state = str_iter.get_next_block(str_data)) == TEXTSTRING_ITER_NEXT) {
         if (!found_end) {
           if (OB_FAIL(ObExprTrim::trim(output, trim_type, pattern, str_data))) {
+            LOG_WARN("do trim failed", K(ret));
           } else if (output.length() != 0) {
             found_end = true;
             str_iter.reset_reserve_len();
             int64_t result_len =
                 output.length() + (total_byte_len - str_iter.get_accessed_byte_len());
             if (false == is_vec && OB_FAIL(output_result.init(result_len))) {
+              LOG_WARN("init stringtext result failed", K(ret), K(result_len));
             } else if (true == is_vec && output_result.init_with_batch_idx(result_len, idx)) {
+              LOG_WARN("init stringtext vec result failed", K(ret), K(result_len), K(idx));
             } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
+              LOG_WARN("stringtext result reserve buffer failed", K(ret));
             } else if (OB_FAIL(output_result.lseek(result_len, 0))) {
+              LOG_WARN("result lseek failed", K(ret));
             } else if (buf_size < output.length()) {
               ret = OB_ERR_UNEXPECTED;
+              LOG_WARN(
+                  "buf size is wrong with data length", K(ret), K(buf_size), K(output.length()));
             } else {
               buf_pos = buf_size - output.length();
               MEMCPY(buf + buf_pos, output.ptr(), output.length());
@@ -609,6 +647,7 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
         } else {
           if (buf_pos < str_data.length()) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("buf pos is wrong with data length", K(ret), K(buf_pos), K(str_data.length()));
           } else {
             buf_pos -= str_data.length();
             MEMCPY(buf + buf_pos, str_data.ptr(), str_data.length());
@@ -627,6 +666,7 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
       while (OB_SUCC(ret) && found_start == false && is_finished == false &&
              (state = str_iter.get_next_block(str_data)) == TEXTSTRING_ITER_NEXT) {
         if (OB_FAIL(ObExprTrim::trim(output, ObExprTrim::TYPE_LTRIM, pattern, str_data))) {
+          LOG_WARN("do front ltrim failed", K(ret), K(pattern), K(str_data));
         } else if (output.length() != 0) {
           found_start = true;
           str_iter.reset_reserve_len();
@@ -636,20 +676,24 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
                    total_byte_len) {  // search to end and all output is zero
           is_finished = true;
           if (false == is_vec && OB_FAIL(output_result.init(output.length()))) {
+            LOG_WARN("init stringtext result failed", K(ret), K(output.length()));
           } else if (true == is_vec && output_result.init_with_batch_idx(output.length(), idx)) {
+            LOG_WARN("init stringtext vec result failed", K(ret), K(output.length()), K(idx));
           } else if (OB_FAIL(output_result.append(output))) {
+            LOG_WARN("fail to append to result", K(ret), K(output.length()), K(output_result));
           }
         }
       }
       if (OB_FAIL(ret) || is_finished) {
       } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
         ret = (str_iter.get_inner_ret() != OB_SUCCESS) ? str_iter.get_inner_ret() : OB_INVALID_DATA;
+        LOG_WARN("iter state invalid", K(ret), K(state), K(str_iter));
       } else {
         OB_ASSERT(found_start);
         // find end
         ObTextStringIterState back_state;
-        if (OB_FAIL(str_backward_iter.init(
-                0, &lob_options, &calc_alloc))) {
+        if (OB_FAIL(str_backward_iter.init(0, NULL, &calc_alloc))) {
+          LOG_WARN("init str_iter failed ", K(ret), K(str_backward_iter));
         } else {
           ObString backward_str_data;
           ObString backward_output;
@@ -661,6 +705,7 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
                      TEXTSTRING_ITER_NEXT) {
             if (OB_FAIL(ObExprTrim::trim(
                     backward_output, ObExprTrim::TYPE_RTRIM, pattern, backward_str_data))) {
+              LOG_WARN("do backward rtrim failed", K(ret), K(pattern), K(backward_str_data));
             } else if (backward_output.length() != 0) {
               found_end = true;
               end_pos = total_byte_len - str_backward_iter.get_accessed_byte_len() +
@@ -674,20 +719,26 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
             ret = (str_backward_iter.get_inner_ret() != OB_SUCCESS)
                       ? str_backward_iter.get_inner_ret()
                       : OB_INVALID_DATA;
+            LOG_WARN("str_backward_iter state invalid", K(ret), K(state), K(str_backward_iter));
           } else if (result_len < 0) {
             ret = OB_SIZE_OVERFLOW;
+            LOG_WARN("init stringtext result failed", K(ret), K(start_pos), K(end_pos));
             // } else if (result_len == total_byte_len) {
             // the same as input if it is a temp lob?
           } else if (OB_FAIL(output_result.init(result_len))) {
+            LOG_WARN("init stringtext result failed", K(ret), K(output.length()));
           } else {
             str_data = output;
             do {
               if (str_data.length() > result_len) {
                 if (OB_FAIL(output_result.append(str_data.ptr(), result_len))) {
+                  LOG_WARN("fail to append to result", K(ret), K(result_len), K(output_result));
                 } else {
                   result_len = 0;
                 }
               } else if (OB_FAIL(output_result.append(str_data))) {
+                LOG_WARN(
+                    "fail to append to result", K(ret), K(str_data.length()), K(output_result));
               } else {
                 result_len -= str_data.length();
               }
@@ -703,10 +754,13 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
     if (OB_FAIL(ret)) {
     } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
       ret = (str_iter.get_inner_ret() != OB_SUCCESS) ? str_iter.get_inner_ret() : OB_INVALID_DATA;
+      LOG_WARN("iter state invalid", K(ret), K(state), K(str_iter));
     } else if (!output_result.is_init() && false == is_vec &&
                OB_FAIL(output_result.init(0))) {  // nothing found build empty lob
+      LOG_WARN("init stringtext result for empty lob failed", K(ret));
     } else if (!output_result.is_init() && true == is_vec &&
                OB_FAIL(output_result.init_with_batch_idx(0, idx))) {
+      LOG_WARN("init stringtext vec result for empty lob failed", K(ret), K(idx));
     } else {
       output_result.set_result();
     }
@@ -731,41 +785,36 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
     ObFixedArray<size_t, ObIAllocator> pattern_byte_offset(calc_alloc,  pattern_len_in_char +1);
     if (OB_FAIL(ObExprUtil::get_mb_str_info(pattern, cs_type,
                                             pattern_byte_num, pattern_byte_offset))) {
+      LOG_WARN("get_mb_str_info failed", K(ret), K(pattern), K(cs_type), K(pattern_len_in_char));
     } else if (!res_is_clob && (pattern_byte_num.count() + 1 != pattern_byte_offset.count())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("size of pattern_byte_num and size of pattern_byte_offset should be same",
+                K(ret), K(pattern_byte_num), K(pattern_byte_offset));
     }
     if (OB_FAIL(ret)) {
     } else if (!ob_is_text_tc(str_meta.type_)) {
       if (OB_FAIL(ObExprTrim::trim2(output, trim_type, pattern,
                                     str_datum.get_string(), cs_type,
                                     pattern_byte_num, pattern_byte_offset))) {
+        LOG_WARN("do trim2 failed", K(ret));
       } else {
         expr_datum.set_string(output);
       }
     } else { // is text tc, trim left or right
       ObTextStringIter str_iter(str_meta.type_, str_meta.cs_type_, str_datum.get_string(), str_has_lob_header);
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
-      const ObDatumAccessContext *access_ctx = nullptr;
-      if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-      } else {
-        const common::ObLobReadOptions &shared_options =
-            *access_ctx->lob_read_options_;
-        // TRIM may open independent scans for one LOB.  Keep their cursors
-        // isolated, as the legacy path did, while retaining the explicit
-        // read service and deadline required by the Share interface.
-        const common::ObLobReadOptions trim_options(
-            *shared_options.read_service_, shared_options.timeout_ts_);
-        if (OB_FAIL(str_iter.init(0, &trim_options, &calc_alloc))) {
-        } else if (OB_FAIL(text_trim2(str_iter, output_result, trim_type,
-                                     pattern, pattern_len_in_char, cs_type,
-                                     pattern_byte_num, pattern_byte_offset))) {
-        }
+      if (OB_FAIL(str_iter.init(0, NULL, &calc_alloc))) {
+        LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
+      } else if (OB_FAIL(text_trim2(str_iter, output_result, trim_type, pattern, pattern_len_in_char, 
+                                    cs_type, pattern_byte_num,  pattern_byte_offset))) {
+        LOG_WARN("text_trim2 failed", K(ret));
       }
     }
   } else {
     if (!ob_is_text_tc(str_meta.type_)) {
       if (OB_FAIL(ObExprTrim::trim(
               output, trim_type, pattern, str_datum.get_string()))) {
+        LOG_WARN("do trim failed", K(ret));
       } else {
         expr_datum.set_string(output);
       }
@@ -776,21 +825,13 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
       ObTextStringIter str_forward_iter(str_meta.type_, CS_TYPE_BINARY, str_datum.get_string(), str_has_lob_header);
       ObTextStringIter str_backward_iter(str_meta.type_, CS_TYPE_BINARY, str_datum.get_string(), str_has_lob_header);
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
-      const ObDatumAccessContext *access_ctx = nullptr;
-      if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-      } else {
-        const common::ObLobReadOptions &shared_options =
-            *access_ctx->lob_read_options_;
-        const common::ObLobReadOptions trim_options(
-            *shared_options.read_service_, shared_options.timeout_ts_);
-        if (OB_FAIL(text_trim(str_forward_iter,
-                str_backward_iter,
-                calc_alloc,
-                output_result,
-                trim_type,
-                pattern,
-                trim_options))) {
-        }
+      if (OB_FAIL(text_trim(str_forward_iter,
+              str_backward_iter,
+              calc_alloc,
+              output_result,
+              trim_type,
+              pattern))) {
+        LOG_WARN("text_trim failed", K(ret));
       }
     }
   }
@@ -802,6 +843,7 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   int ret = OB_SUCCESS;
   bool has_null = false;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("evaluate parameters failed", K(ret));
   } else {
     for (int64_t i = 0; i < expr.arg_cnt_; i++) {
       if (expr.locate_param_datum(ctx, i).is_null()) {
@@ -850,15 +892,18 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
       if (!ob_is_text_tc(pattern_meta.type_)) { // pattern not text tc
         if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                     res_is_clob, str_meta, str_has_lob_header, str_datum))) {
+          LOG_WARN("failed to eval trim case 1", K(ret));
         }
       } else { // pattern is text tc
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         ObIAllocator &calc_alloc = alloc_guard.get_allocator();
         const ObDatum &pattern_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 1);
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, calc_alloc, pattern_datum,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(calc_alloc, pattern_datum,
                                                               pattern_meta, pattern_has_lob_header, pattern))) {
+          LOG_WARN("failed to read real pattern", K(ret), K(pattern));
         } else if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                            res_is_clob, str_meta, str_has_lob_header, str_datum))) {
+          LOG_WARN("failed to eval trim case 1 for text tc pattern", K(ret));
         }
       }
     } else {
@@ -872,15 +917,18 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
           pattern = expr.locate_param_datum(ctx, 1).get_string();
           if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                              res_is_clob, str_meta, str_has_lob_header, str_datum))) {
+            LOG_WARN("failed to eval trim case 2", K(ret));
           }
         } else {
           ObEvalCtx::TempAllocGuard alloc_guard(ctx);
           ObIAllocator &calc_alloc = alloc_guard.get_allocator();
           const ObDatum &pattern_datum = expr.locate_param_datum(ctx, 1);
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, calc_alloc, pattern_datum,
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(calc_alloc, pattern_datum,
                                                                 pattern_meta, pattern_has_lob_header, pattern))) {
+            LOG_WARN("failed to read real pattern", K(ret), K(pattern));
           } else if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                              res_is_clob, str_meta, str_has_lob_header, str_datum))) {
+            LOG_WARN("failed to eval trim case 2 for text tc pattern", K(ret));
           }
         }
       } else {
@@ -891,14 +939,494 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
                                          out_len))) {
         } else if (out_len <= 0) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected out length", K(ret), K(out_len));
         } else {
           pattern.assign_ptr(default_pattern_buffer, static_cast<int32_t>(out_len));
         }
         if (OB_SUCC(ret)
             && OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
                                        res_is_clob, str_meta, str_has_lob_header, str_datum))) {
+          LOG_WARN("failed to eval trim case 3", K(ret));
         }
       }
+    }
+  }
+  return ret;
+}
+
+template <typename ArgPatternVec, typename ArgStrVec, typename ResVec>
+static int eval_trim_vector_inner_for_oracle_two_args(
+    VECTOR_EVAL_FUNC_ARG_DECL, const int64_t trim_type)
+{
+  int ret = OB_SUCCESS;
+  bool pattern_is_const = false;
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
+  batch_info_guard.set_batch_size(bound.batch_size());
+  ObCollationType cs_type = expr.datum_meta_.cs_type_;
+  int64_t arg_str_idx = 0;
+  int64_t arg_pattern_idx = 1;
+  ObString str;
+  ObString pattern;
+  ObString output;
+  const ObDatumMeta &str_meta = expr.args_[arg_str_idx]->datum_meta_;
+  const ObDatumMeta &pattern_meta = expr.args_[arg_pattern_idx]->datum_meta_;
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+  const ArgStrVec *arg_str_vec =
+      static_cast<const ArgStrVec *>(expr.args_[arg_str_idx]->get_vector(ctx));
+  const ArgPatternVec *arg_pattern_vec =
+      static_cast<const ArgPatternVec *>(expr.args_[arg_pattern_idx]->get_vector(ctx));
+  pattern_is_const = (arg_pattern_vec->get_format() == VEC_UNIFORM_CONST);
+  if (true == pattern_is_const) {
+    const ObDatumMeta &pattern_meta = expr.args_[arg_pattern_idx]->datum_meta_;
+    const bool pattern_has_lob_header = expr.args_[arg_pattern_idx]->obj_meta_.has_lob_header();
+    if (!ob_is_text_tc(pattern_meta.type_)) {
+      pattern = arg_pattern_vec->get_string(0);
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+                   arg_pattern_vec,
+                   pattern_meta,
+                   pattern_has_lob_header,
+                   pattern,
+                   0))) {
+      LOG_WARN("failed to read real pattern", K(ret), K(pattern));
+    }
+  }
+  for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
+    if (skip.at(idx) || eval_flags.at(idx)) {
+      continue;
+    }
+    batch_info_guard.set_batch_idx(idx);
+    if (arg_str_vec->is_null(idx) || arg_pattern_vec->is_null(idx)) {
+      res_vec->set_null(idx);
+      eval_flags.set(idx);
+    } else {
+      if (!pattern_is_const) {
+        if (!ob_is_text_tc(pattern_meta.type_)) {
+          pattern = arg_pattern_vec->get_string(idx);
+        } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+                       arg_pattern_vec,
+                       pattern_meta,
+                       expr.args_[arg_pattern_idx]->obj_meta_.has_lob_header(),
+                       pattern,
+                       idx))) {
+          LOG_WARN("failed to read pattern", K(ret), K(pattern));
+        }
+      }
+      str = arg_str_vec->get_string(idx);
+      if (OB_FAIL(ret)) {
+      } else {
+        size_t pattern_len_in_char =
+            ObCharset::strlen_char(cs_type, pattern.ptr(), pattern.length());
+        ObFixedArray<size_t, ObIAllocator> pattern_byte_num(tmp_allocator, pattern_len_in_char);
+        ObFixedArray<size_t, ObIAllocator> pattern_byte_offset(
+            tmp_allocator, pattern_len_in_char + 1);
+        if (OB_FAIL(ObExprUtil::get_mb_str_info(
+                pattern, cs_type, pattern_byte_num, pattern_byte_offset))) {
+          LOG_WARN(
+              "get_mb_str_info failed", K(ret), K(pattern), K(cs_type), K(pattern_len_in_char));
+        } else if (pattern_byte_num.count() + 1 != pattern_byte_offset.count()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("size of pattern_byte_num and size of pattern_byte_offset should be same",
+              K(ret),
+              K(pattern_byte_num),
+              K(pattern_byte_offset));
+        }
+        if (OB_FAIL(ret)) {
+          // todo: maybe check text before
+        } else if (!ob_is_text_tc(str_meta.type_)) {
+          if (OB_FAIL(ObExprTrim::trim2(output,
+                  trim_type,
+                  pattern,
+                  str,
+                  cs_type,
+                  pattern_byte_num,
+                  pattern_byte_offset))) {
+            LOG_WARN("do trim2 failed", K(ret));
+          } else {
+            res_vec->set_string(idx, output);
+          }
+        } else {  // is text tc, trim left or right
+          ObTextStringIter str_iter(str_meta.type_,
+              str_meta.cs_type_,
+              str,
+              expr.args_[arg_str_idx]->obj_meta_.has_lob_header());
+          ObTextStringVectorResult<ResVec> output_result(
+              expr.datum_meta_.type_, &expr, &ctx, res_vec, idx);
+          if (OB_FAIL(str_iter.init(0, NULL, &tmp_allocator))) {
+            LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
+          } else if (OB_FAIL(text_trim2<ObTextStringVectorResult<ResVec>>(str_iter,
+                         output_result,
+                         trim_type,
+                         pattern,
+                         pattern_len_in_char,
+                         cs_type,
+                         pattern_byte_num,
+                         pattern_byte_offset,
+                         idx,
+                         true))) {
+            LOG_WARN("text_trim2_vector failed", K(ret));
+          }
+        }
+        eval_flags.set(idx);
+      }
+    }
+  }
+  return ret;
+}
+
+template <typename ArgPatternVec, typename ArgStrVec, typename ResVec>
+static int eval_trim_vector_inner_for_others_args(
+    VECTOR_EVAL_FUNC_ARG_DECL, const int64_t trim_type)
+{
+  int ret = OB_SUCCESS;
+  bool pattern_is_const = false;
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
+  batch_info_guard.set_batch_size(bound.batch_size());
+  ObCollationType cs_type = expr.datum_meta_.cs_type_;
+  int64_t arg_str_idx = expr.arg_cnt_ - 1;
+  int64_t arg_pattern_idx = -1;
+  ObString str;
+  ObString pattern;
+  ObString output;
+  bool is_default_pattern = false;
+  if (3 == expr.arg_cnt_) {
+    arg_pattern_idx = 1;
+  } else {
+    is_default_pattern = true;
+  }
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+  char default_pattern_buffer[8];
+  const ObDatumMeta &str_meta = expr.args_[arg_str_idx]->datum_meta_;
+  const bool str_has_lob_header = expr.args_[arg_str_idx]->obj_meta_.has_lob_header();
+  const ArgStrVec *arg_str_vec =
+      static_cast<const ArgStrVec *>(expr.args_[arg_str_idx]->get_vector(ctx));
+  const ArgPatternVec *arg_pattern_vec = nullptr;
+  if (false == is_default_pattern) {
+    arg_pattern_vec =
+        static_cast<const ArgPatternVec *>(expr.args_[arg_pattern_idx]->get_vector(ctx));
+    pattern_is_const = (VEC_UNIFORM_CONST == arg_pattern_vec->get_format());
+    if (true == pattern_is_const) {
+      const ObDatumMeta &pattern_meta = expr.args_[arg_pattern_idx]->datum_meta_;
+      const bool pattern_has_lob_header = expr.args_[arg_pattern_idx]->obj_meta_.has_lob_header();
+      if (!ob_is_text_tc(pattern_meta.type_)) {
+        pattern = arg_pattern_vec->get_string(0);
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+                     arg_pattern_vec,
+                     pattern_meta,
+                     pattern_has_lob_header,
+                     pattern,
+                     0))) {
+        LOG_WARN("failed to read real pattern", K(ret), K(pattern));
+      }
+    }
+  } else {
+    int64_t out_len = 0;
+    if (OB_FAIL(ObExprTrim::fill_default_pattern(
+            default_pattern_buffer, sizeof(default_pattern_buffer), cs_type, out_len))) {
+    } else if (out_len <= 0) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected out length", K(ret), K(out_len));
+    } else {
+      pattern.assign_ptr(default_pattern_buffer, static_cast<int32_t>(out_len));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else {
+    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
+      if (skip.at(idx) || eval_flags.at(idx)) {
+        continue;
+      }
+      batch_info_guard.set_batch_idx(idx);
+      if (arg_str_vec->is_null(idx) ||
+          (false == is_default_pattern && arg_pattern_vec->is_null(idx))) {
+        res_vec->set_null(idx);
+        eval_flags.set(idx);
+      } else {
+        str = arg_str_vec->get_string(idx);
+        if (false == pattern_is_const && false == is_default_pattern) {
+          pattern = arg_pattern_vec->get_string(idx);
+          const ObDatumMeta &pattern_meta = expr.args_[arg_pattern_idx]->datum_meta_;
+          const bool pattern_has_lob_header =
+              expr.args_[arg_pattern_idx]->obj_meta_.has_lob_header();
+          if (ob_is_text_tc(pattern_meta.type_) &&
+              OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+                  arg_pattern_vec,
+                  pattern_meta,
+                  pattern_has_lob_header,
+                  pattern,
+                  idx))) {
+            LOG_WARN("failed to read real pattern", K(ret), K(pattern));
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (!ob_is_text_tc(str_meta.type_)) {
+          if (OB_FAIL(ObExprTrim::trim(output, trim_type, pattern, str))) {
+            LOG_WARN("do trim failed", K(ret));
+          } else {
+            res_vec->set_string(idx, output);
+          }
+        } else {  // is text tc, trim left or right or both
+          // Notice: need to access with byte length
+          ObTextStringIter str_forward_iter(
+              str_meta.type_, CS_TYPE_BINARY, str, str_has_lob_header);
+          ObTextStringIter str_backward_iter(
+              str_meta.type_, CS_TYPE_BINARY, str, str_has_lob_header);
+          ObTextStringVectorResult<ResVec> output_result(
+              expr.datum_meta_.type_, &expr, &ctx, res_vec, idx);
+          if (OB_FAIL(text_trim<ObTextStringVectorResult<ResVec>>(str_forward_iter,
+                  str_backward_iter,
+                  tmp_allocator,
+                  output_result,
+                  trim_type,
+                  pattern,
+                  idx,
+                  true))) {
+            LOG_WARN("text_trim_vector failed", K(ret));
+          }
+        }
+        eval_flags.set(idx);
+      }
+    }
+  }
+  return ret;
+}
+
+template <typename ArgPatternVec, typename ArgStrVec, typename ResVec>
+static int eval_trim_vector_inner(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  int64_t trim_type = ObExprTrim::TYPE_LRTRIM;
+  // may be called by ltrim() or rtrim()
+  if (1 == expr.arg_cnt_) {
+    if (T_FUN_SYS_LTRIM == expr.type_) {
+      trim_type = ObExprTrim::TYPE_LTRIM;
+    } else if (T_FUN_SYS_RTRIM == expr.type_) {
+      trim_type = ObExprTrim::TYPE_RTRIM;
+    }
+  } else if (2 == expr.arg_cnt_) {
+    if (T_FUN_SYS_LTRIM == expr.type_) {
+      trim_type = ObExprTrim::TYPE_LTRIM;
+    } else if (T_FUN_SYS_RTRIM == expr.type_) {
+      trim_type = ObExprTrim::TYPE_RTRIM;
+    } else {
+      const ConstUniformFormat *type_vector =
+        static_cast<ConstUniformFormat *>(expr.args_[0]->get_vector(ctx));
+      trim_type = type_vector->get_int(0);
+    }
+  } else {
+    const ConstUniformFormat *type_vector =
+      static_cast<ConstUniformFormat *>(expr.args_[0]->get_vector(ctx));
+    trim_type = type_vector->get_int(0);
+  }
+
+  if (2 == expr.arg_cnt_ && (T_FUN_SYS_LTRIM == expr.type_ || T_FUN_SYS_RTRIM == expr.type_)) {
+    ret = eval_trim_vector_inner_for_oracle_two_args<ArgPatternVec, ArgStrVec, ResVec>(
+        VECTOR_EVAL_FUNC_ARG_LIST, trim_type);
+  } else {
+    ret = eval_trim_vector_inner_for_others_args<ArgPatternVec, ArgStrVec, ResVec>(
+        VECTOR_EVAL_FUNC_ARG_LIST, trim_type);
+  }
+  return ret;
+}
+
+int ObExprTrim::eval_trim_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
+    if (OB_FAIL(expr.args_[i]->eval_vector(ctx, skip, bound))) {
+      LOG_WARN("failed to evaluate `trim` parameters", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else {
+    int64_t arg_str_idx = -1;
+    int64_t arg_pattern_idx = -1;
+    if (2 == expr.arg_cnt_ && (T_FUN_SYS_LTRIM == expr.type_ || T_FUN_SYS_RTRIM == expr.type_)) {
+      arg_str_idx = 0;
+      arg_pattern_idx = 1;
+    } else if (3 == expr.arg_cnt_) {
+      arg_str_idx = 2;
+      arg_pattern_idx = 1;
+    } else {
+      arg_str_idx = expr.arg_cnt_ - 1;
+    }
+    VectorFormat arg_str_format = expr.args_[arg_str_idx]->get_format(ctx);
+    VectorFormat arg_pattern_format = VEC_UNIFORM_CONST;
+    VectorFormat res_format = expr.get_format(ctx);
+    if (-1 != arg_pattern_idx) {
+      arg_pattern_format = expr.args_[arg_pattern_idx]->get_format(ctx);
+    }
+    // LOG_WARN("arg_pattern_format", K(arg_str_format), K(arg_pattern_format), K(res_format));
+    if (VEC_DISCRETE == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+        VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrDiscVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrUniVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrContVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrDiscVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrUniVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrContVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrDiscVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrUniVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrContVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrDiscVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrUniVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrContVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrDiscVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrUniVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrContVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrDiscVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrUniVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrContVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrDiscVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrUniVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_DISCRETE == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrDiscVec, StrContVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrDiscVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrUniVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniVec, StrContVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrDiscVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrUniVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_CONTINUOUS == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrContVec, StrContVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_DISCRETE == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_UNIFORM == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrDiscVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrUniVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_str_format && VEC_UNIFORM_CONST == arg_pattern_format &&
+               VEC_CONTINUOUS == res_format) {
+      ret = eval_trim_vector_inner<StrUniCVec, StrContVec, StrContVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else {
+      ret = eval_trim_vector_inner<ObVectorBase, ObVectorBase, ObVectorBase>(
+          VECTOR_EVAL_FUNC_ARG_LIST);
     }
   }
   return ret;
@@ -964,7 +1492,7 @@ inline int ObExprLtrim::deduce_result_type(ObExprResType &type,
     }
   } else {
     const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-                                                                ? type_ctx.get_session()->get_actual_length_semantics()
+                                                                ? type_ctx.get_session()->get_actual_nls_length_semantics()
                                                                 : common::LS_BYTE);
     type.set_varchar();
     type.set_length_semantics(types[0].is_varchar_or_char()
@@ -998,6 +1526,7 @@ int ObExprLtrim::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) cons
   CK(1 == rt_expr.arg_cnt_ || 2 == rt_expr.arg_cnt_);
   // trim type is detected by expr type in ObExprTrim::eval_trim
   rt_expr.eval_func_ = &ObExprTrim::eval_trim;
+  rt_expr.eval_vector_func_ = &ObExprTrim::eval_trim_vector;
   return ret;
 }
 

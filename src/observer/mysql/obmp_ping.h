@@ -28,7 +28,7 @@ class ObMPPing : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_PING;
-  explicit ObMPPing(const share::ObGlobalContext &gctx);
+  explicit ObMPPing(const ObGlobalContext &gctx);
   virtual ~ObMPPing();
 
 protected:

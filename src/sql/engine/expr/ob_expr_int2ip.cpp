@@ -94,9 +94,13 @@ int ObExprInt2ip::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT(rt_expr.arg_cnt_ == 1);
-    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+  if (rt_expr.arg_cnt_ != 1) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("int2ip expr should have one param", K(ret), K(rt_expr.arg_cnt_));
+  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of int2ip expr is null", K(ret), K(rt_expr.args_));
+  } else {
     CK(ObIntType == rt_expr.args_[0]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprInt2ip::int2ip_varchar;
   }
@@ -107,6 +111,7 @@ int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("int2ip expr eval param value failed", K(ret));
   } else {
     ObDatum &text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
@@ -115,6 +120,7 @@ int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
       CK(expr.res_buf_len_ >= 16);
       int64_t int_val = text.get_int();
       if (OB_FAIL(int2ip(expr_datum, int_val))) {
+        LOG_WARN("fail to convert int 2 ip", K(ret), K(int_val));
       }
     }
   }

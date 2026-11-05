@@ -1,0 +1,130 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_OB_TSI_UTILS_
+#define OCEANBASE_COMMON_OB_TSI_UTILS_
+#include <errno.h>
+#ifndef _WIN32
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/time.h>
+#endif
+#ifdef __linux__
+#include <linux/futex.h>
+#endif
+#include <sched.h>
+#include "lib/atomic/ob_atomic.h"
+#include "lib/ob_define.h"
+
+namespace oceanbase
+{
+namespace common
+{
+extern uint64_t itid_slots[1024];
+static constexpr int64_t INVALID_ITID = -1;
+extern volatile int64_t max_itid;
+extern volatile int64_t max_used_itid;
+
+int64_t alloc_itid();
+void free_itid(int64_t itid);
+void defer_free_itid(int64_t &itid);
+int64_t detect_max_itid();
+
+#ifdef COMPILE_DLL_MODE
+class Itid 
+{
+public:
+  inline static int64_t get_tid()
+  {
+    if (OB_UNLIKELY(tid_ < 0)) {
+      tid_ = alloc_itid();
+      defer_free_itid(tid_);
+    }
+    return tid_;
+  }
+private:
+  static TLOCAL(int64_t, tid_);
+};
+inline int64_t get_itid()		
+{		
+  return Itid::get_tid();		
+}
+#else
+inline int64_t get_itid()
+{
+  // NOTE: Thread ID
+  static TLOCAL(int64_t, tid) = INVALID_ITID;
+  if (OB_UNLIKELY(tid < 0)) {
+    tid = alloc_itid();
+    defer_free_itid(tid);
+  }
+  return tid;
+}
+#endif
+
+inline int64_t get_max_itid()
+{
+  // Make compatible with historical usage of this function.  It
+  // returned the max itid plus one, not the max itid before. So we
+  // obey the rule and return same value.
+  return ATOMIC_LOAD(&max_itid) + 1;
+}
+
+inline int64_t get_max_used_itid()
+{
+  return ATOMIC_LOAD(&max_used_itid) + 1;
+}
+
+#ifndef HAVE_SCHED_GETCPU
+inline int sched_getcpu(void) { return get_itid() & (OB_MAX_CPU_NUM - 1); }
+#endif
+
+inline int64_t icpu_id()
+{
+  return sched_getcpu();
+}
+
+inline int64_t get_max_icpu_id()
+{
+#ifndef HAVE_SCHED_GETCPU
+  return OB_MAX_CPU_NUM;
+#else
+  return sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+}
+
+inline int icore_id()
+{
+  return sched_getcpu();
+}
+
+class SimpleItem
+{
+public:
+  SimpleItem(): value_(0) {}
+  ~SimpleItem() {}
+  inline void reset() {value_ = 0;}
+  inline SimpleItem &operator+=(const SimpleItem &item)
+  {
+    this->value_ += item.value_;
+    return *this;
+  }
+  int64_t value_;
+};
+} // end namespace common
+} // end namespace oceanbase
+
+#endif // OCEANBASE_COMMON_OB_TSI_UTILS_

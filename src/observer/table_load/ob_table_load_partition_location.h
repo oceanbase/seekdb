@@ -1,0 +1,111 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "common/ob_tablet_id.h"
+#include "lib/hash/ob_hashmap.h"
+#include "lib/net/ob_addr.h"
+#include "share/ob_ls_id.h"
+#include "share/table/ob_table_load_array.h"
+#include "share/table/ob_table_load_define.h"
+
+namespace oceanbase
+{
+namespace share
+{
+class ObLSLocation;
+}  // namespace share
+namespace storage
+{
+class ObTabletHandle;
+}  // namespace storage
+namespace observer
+{
+
+class ObTableLoadPartitionLocation
+{
+public:
+  struct PartitionLocationInfo
+  {
+    table::ObTableLoadLSIdAndPartitionId partition_id_;
+    common::ObAddr leader_addr_;
+    TO_STRING_KV(K_(partition_id), K_(leader_addr));
+  };
+  struct LeaderInfo
+  {
+    common::ObAddr addr_;
+    table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> partition_id_array_;
+    TO_STRING_KV(K_(addr), K_(partition_id_array));
+  };
+  struct LeaderInfoForSort
+  {
+    common::ObAddr addr_;
+    common::ObIArray<table::ObTableLoadLSIdAndPartitionId> *partition_id_array_ptr_;
+    TO_STRING_KV(K_(addr), KP_(partition_id_array_ptr));
+  };
+public:
+  ObTableLoadPartitionLocation() 
+    : allocator_("TLD_PL"),
+      is_inited_(false) 
+  { 
+    
+     
+  }
+  int init(const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
+  int get_leader(common::ObTabletID tablet_id, PartitionLocationInfo &info) const;
+  int get_all_leader(table::ObTableLoadArray<common::ObAddr> &addr_array) const;
+  int get_all_leader_info(table::ObTableLoadArray<LeaderInfo> &info_array) const;
+  void reset() {
+    tablet_ids_.reset();
+    partition_map_.destroy();
+    all_leader_addr_array_.reset();
+    all_leader_info_array_.reset();
+    allocator_.reset();
+    is_inited_ = false;
+  }
+  int check_tablet_has_same_leader(const ObTableLoadPartitionLocation &other, bool &result);
+
+public:
+  static int init_partition_location(const ObIArray<table::ObTableLoadPartitionId> &partition_ids,
+                                     const ObIArray<table::ObTableLoadPartitionId> &target_partition_ids,
+                                     ObTableLoadPartitionLocation &partition_location,
+                                     ObTableLoadPartitionLocation &target_partition_location);
+  // Get through tablet_id
+  static int fetch_ls_id(const common::ObTabletID &tablet_id,
+                         share::ObLSID &ls_id);
+  static int fetch_ls_location(const common::ObTabletID &tablet_id,
+                               share::ObLSLocation &ls_location, share::ObLSID &ls_id);
+  static int fetch_tablet_handle(const share::ObLSID &ls_id,
+                                 const common::ObTabletID &tablet_id,
+                                 storage::ObTabletHandle &tablet_handle);
+private:
+  int init_all_partition_location(
+      const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
+  int init_all_leader_info();
+  int fetch_ls_locations(
+    const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
+ private:
+  common::ObArenaAllocator allocator_;
+  common::ObArray<common::ObTabletID> tablet_ids_; // Ensure the order remains unchanged when traversing partition_map_
+  common::hash::ObHashMap<common::ObTabletID, PartitionLocationInfo> partition_map_;
+  table::ObTableLoadArray<common::ObAddr> all_leader_addr_array_;
+  table::ObTableLoadArray<LeaderInfo> all_leader_info_array_;
+  bool is_inited_;
+};
+
+}  // namespace observer
+}  // namespace oceanbase

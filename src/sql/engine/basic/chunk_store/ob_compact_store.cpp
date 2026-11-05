@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_compact_store.h"
 #include "sql/engine/basic/chunk_store/ob_compact_block_writer.h"
+#include "storage/ddl/ob_direct_load_struct.h"
 
 namespace oceanbase
 {
@@ -28,7 +29,9 @@ int ObCompactStore::prepare_blk_for_write(Block *blk)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the store is not inited", K(ret));
   } else if (OB_FAIL(writer_->prepare_blk_for_write(blk))) {
+    LOG_WARN("fail to prepare blk for write", K(ret));
   }
 
   return ret;
@@ -39,7 +42,9 @@ int ObCompactStore::prepare_blk_for_read(Block *blk)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the store is not inited", K(ret));
   } else if (OB_FAIL(reader_->prepare_blk_for_read(blk))) {
+    LOG_WARN("fail to prepare blk for write", K(ret));
   }
 
   return ret;
@@ -67,6 +72,7 @@ int ObCompactStore::inner_get_next_row(const ObChunkDatumStore::StoredRow *&sr)
         ret = OB_ITER_END;
       } else if (OB_FAIL(block_reader_.get_block(cur_blk_id_, tmp_blk))) {
         if (ret != OB_ITER_END) {
+          LOG_WARN("fail to get block", K(ret), K(cur_blk_id_));
         }
       } else {
         start_iter_ = true;
@@ -77,10 +83,12 @@ int ObCompactStore::inner_get_next_row(const ObChunkDatumStore::StoredRow *&sr)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(reader_->get_row(sr))) {
       if (ret != OB_ITER_END) {
+        LOG_WARN("fail to get row", K(ret), K(cur_blk_id_));
       } else if (cur_blk_id_ >= get_block_id_cnt()) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(block_reader_.get_block(cur_blk_id_, tmp_blk))) {
         if (ret != OB_ITER_END) {
+          LOG_WARN("fail to get block", K(ret), K(cur_blk_id_));
         }
       } else {
         reader_->reuse();
@@ -88,6 +96,7 @@ int ObCompactStore::inner_get_next_row(const ObChunkDatumStore::StoredRow *&sr)
         if (OB_SUCC(ret)) {
           if (OB_FAIL(reader_->get_row(sr))) {
             if (ret != OB_ITER_END) {
+              LOG_WARN("fail to get row", K(ret));
             }
           } else {
             cur_blk_id_++;
@@ -98,9 +107,11 @@ int ObCompactStore::inner_get_next_row(const ObChunkDatumStore::StoredRow *&sr)
       cur_blk_id_++;
     }
     if (OB_SUCC(ret)) {
+      LOG_TRACE("block reader read row", KPC(sr));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("store is not init", K(ret));
   }
   return ret;
 }
@@ -112,11 +123,13 @@ int ObCompactStore::inner_add_batch(const common::ObDatum **datums, const common
   int ret = OB_SUCCESS;
   if (inited_) {
     if (OB_FAIL(writer_->add_batch(datums, exprs, selector, size, stored_rows, batch_ctx_))) {
+      LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_ += size;
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should init writer first", K(ret));
   }
 
   return ret;
@@ -135,6 +148,7 @@ int ObCompactStore::add_batch_fallback(const common::ObIArray<ObExpr *> &exprs, 
     batch_info_guard.set_batch_idx(idx);
     ObChunkDatumStore::StoredRow *srow = NULL;
     if (OB_FAIL(add_row(exprs, ctx, &srow))) {
+      LOG_WARN("add row failed", K(ret), K(i), K(idx));
     } else {
       if (NULL != stored_rows) {
         stored_rows[i] = srow;
@@ -167,6 +181,7 @@ int ObCompactStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx
     stored_rows_count = size;
     if (OB_FAIL(add_batch(exprs, ctx, skip, batch_size,
                           batch_ctx_->selector_, size, stored_rows))) {
+      LOG_WARN("add batch failed");
     }
   }
   return ret;
@@ -186,6 +201,7 @@ int ObCompactStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx
     if (OB_ISNULL(e)) {
       batch_ctx_->datums_[i] = nullptr;
     } else if (OB_FAIL(e->eval_batch(ctx, skip, batch_size))) {
+      LOG_WARN("evaluate batch failed", K(ret));
     } else {
       if (!e->is_batch_result()) {
         all_batch_res = false;
@@ -197,12 +213,14 @@ int ObCompactStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx
   }
   if (OB_SUCC(ret) && !all_batch_res) {
     if (OB_FAIL(add_batch_fallback(exprs, ctx, skip, batch_size, selector, size, stored_rows))) {
+      LOG_WARN("add batch fallback failed", K(batch_size), K(size));
     }
   }
 
   if (OB_SUCC(ret) && all_batch_res) {
     if (OB_FAIL(inner_add_batch(batch_ctx_->datums_, exprs, selector, size,
                                 NULL == stored_rows ? batch_ctx_->stored_rows_ : stored_rows))) {
+      LOG_WARN("inner add batch failed", K(ret), K(batch_size), K(size));
     }
   }
 
@@ -218,6 +236,7 @@ int ObCompactStore::has_next(bool &has_next)
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should init writer first", K(ret));
   }
 
   return ret;
@@ -228,11 +247,30 @@ int ObCompactStore::add_row(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &
   int ret = OB_SUCCESS;
   if (inited_) {
     if (OB_FAIL(writer_->add_row(exprs, ctx, stored_row))) {
+      LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_++;
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should init writer first", K(ret));
+  }
+  return ret;
+}
+
+int ObCompactStore::add_row(const blocksstable::ObDatumRow &datum_row, const ObStorageColumnGroupSchema &cg_schema,
+                            const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row)
+{
+  int ret = OB_SUCCESS;
+  if (inited_) {
+    if (OB_FAIL(writer_->add_row(datum_row.storage_datums_, cg_schema, extra_size, stored_row))) {
+      LOG_WARN("fail to add row", K(ret));
+    } else {
+      row_cnt_++;
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should init writer first", K(ret));
   }
   return ret;
 }
@@ -242,11 +280,13 @@ int ObCompactStore::add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkD
   int ret = OB_SUCCESS;
   if (inited_) {
     if (OB_FAIL(writer_->add_row(src_sr, dst_sr))) {
+      LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_++;
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should init writer first", K(ret));
   }
 
   return ret;
@@ -258,10 +298,12 @@ int ObCompactStore::get_next_row(const ObChunkDatumStore::StoredRow *&sr)
   if (inited_) {
     if (OB_FAIL(inner_get_next_row(sr))) {
       if (ret != OB_ITER_END) {
+        LOG_WARN("fail to get row", K(ret));
       }
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should init reader first", K(ret));
   }
   return ret;
 }
@@ -278,8 +320,10 @@ int ObCompactStore::init_batch_ctx(const int64_t col_cnt, const int64_t max_batc
     char *mem = static_cast<char *>(alloc(size));
     if (OB_UNLIKELY(max_batch_size <= 0)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("max batch size is not positive when init batch ctx", K(ret), K(max_batch_size));
     } else if (NULL == mem) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory failed", K(ret), K(size), K(col_cnt), K(max_batch_size));
     } else {
       char* begin = mem;
       batch_ctx_ = reinterpret_cast<BatchCtx *>(mem);
@@ -296,6 +340,7 @@ int ObCompactStore::init_batch_ctx(const int64_t col_cnt, const int64_t max_batc
 
       if (mem - begin != size) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("size mismatch", K(ret), K(mem - begin), K(size), K(col_cnt), K(max_batch_size));
       }
     }
   }
@@ -324,6 +369,27 @@ int ObCompactStore::init(const int64_t mem_limit,
   return ret;
 }
 
+int ObCompactStore::init(const int64_t mem_limit,
+                         const ObIArray<storage::ObColumnSchemaItem> &col_array,
+                         const int64_t mem_ctx_id,
+                         const char *label,
+                         const bool enable_dump,
+                         const uint32_t row_extra_size,
+                         const bool enable_trunc,
+                         const ObCompressorType compress_type)
+{
+  int ret = OB_SUCCESS;
+  inited_ = true;
+  ObTempBlockStore::set_inner_allocator_attr(ObMemAttr("CompactStore"));
+  OZ(row_meta_.init(col_array, row_extra_size));
+  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_ctx_id, label, compress_type, enable_trunc));
+  OZ(block_reader_.init(this));
+  OZ(init_writer_reader());
+  LOG_INFO("success to init compact store", K(enable_dump), K(enable_trunc), K(compress_type),
+            K(col_array), K(ret));
+  return ret;
+}
+
 void ObCompactStore::reset()
 {
   if (OB_NOT_NULL(reader_)) {
@@ -348,7 +414,9 @@ int ObCompactStore::finish_write()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(writer_) || !inited_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the store in not proper status", K(ret));
   } else if (OB_FAIL(writer_->close())) {
+    LOG_WARN("fail to flush buffer", K(ret));
   }
   return ret;
 }
@@ -363,6 +431,7 @@ int ObCompactStore::init_writer_reader()
   reader_buf = get_inner_allocator().alloc(sizeof(ObCompactBlockReader));
   if (OB_ISNULL(writer_buf) || OB_ISNULL(reader_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to allocate memory for writer", K(ret));
   } else {
     writer_ = new (writer_buf)ObCompactBlockWriter(this, &row_meta_);
     reader_ = new (reader_buf)ObCompactBlockReader(this, &row_meta_);
@@ -376,7 +445,9 @@ int ObCompactStore::get_last_stored_row(const ObChunkDatumStore::StoredRow *&sr)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("store is not inited", K(ret));
   } else if (OB_FAIL(writer_->get_last_stored_row(sr))) {
+    LOG_WARN("fail to get last stored row", K(ret));
   }
   return ret;
 }

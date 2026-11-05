@@ -134,6 +134,7 @@ int ObTimeUtility2::usec_format_to_str(int64_t usec, const ObString &format, cha
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("convert second to struct tm failed", K(second));
   } else if (OB_FAIL(timestamp_format_to_str(t, incre_usec, format, buf, buf_len, pos))) {
+    LOG_WARN("format date failed", K(ret));
   }
   return ret;
 }
@@ -161,6 +162,8 @@ int ObTimeUtility2::timestamp_format_to_str(const struct tm &t, int64_t usec, co
       || OB_UNLIKELY(!is_valid_date(t.tm_year + 1900, t.tm_mon + 1, t.tm_mday))
       || OB_UNLIKELY(!is_valid_time(t.tm_hour, t.tm_min, t.tm_sec, static_cast<int>(usec)))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(format), K(buf), K(buf_len), K(t.tm_year), K(t.tm_mon),
+             K(t.tm_mday), K(t.tm_hour), K(t.tm_min), K(t.tm_sec), K(usec));
   } else if (pos >= buf_len) {
     ret = OB_SIZE_OVERFLOW;
     //size overflow isn't an error, so don't print warnings
@@ -446,6 +449,7 @@ int ObTimeUtility2::extract_usec(const ObString &str, int64_t &pos, int64_t &use
   if (OB_ISNULL(str.ptr()) || OB_UNLIKELY(str.length() <= 0)
       || OB_UNLIKELY(pos < 0) || OB_UNLIKELY(pos >= str.length())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(str), K(pos));
   } else {
     const char *cur_ptr = str.ptr() + pos;
     const char *end_ptr = str.ptr() + str.length();
@@ -495,6 +499,7 @@ int ObTimeUtility2::str_to_time(const ObString &date, int64_t &usec, DecimalDigt
   int64_t sec = 0;
   int64_t tmp_usec = 0;
   if (OB_FAIL(extract_int(date, 13, pos, sec))) {
+    LOG_WARN("extract second failed", K(ret));
   } else if (OB_ISNULL(date.ptr()) || OB_UNLIKELY(date.length() <= 0) || OB_UNLIKELY(pos >= date.length())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("date string is invalid", K(date), K(pos));
@@ -508,6 +513,7 @@ int ObTimeUtility2::str_to_time(const ObString &date, int64_t &usec, DecimalDigt
     if (pos < date.length()) {
       ++pos; //skip '.'
       if (OB_FAIL(extract_usec(date, pos, tmp_usec, num_flag))) {
+        LOG_WARN("extract usec part failed", K(ret));
       } else {
         usec += tmp_usec;
       }
@@ -538,9 +544,11 @@ int ObTimeUtility2::str_to_timestamp(const ObString &date, struct tm &t, int64_t
     if (OB_UNLIKELY(6 == matched)) {
       //to match usec
       if (OB_FAIL(ObTimeUtility2::extract_usec(date, pos, dates[i], DIGTS_INSENSITIVE))) {
+        LOG_WARN("extract usec with digts insensitive failed", K(ret));
       }
     } else {
       if (OB_FAIL(ObTimeUtility2::extract_date(date, 0, pos, dates[i]))) {
+        LOG_WARN("extract date failed", K(ret));
       }
     }
     ++matched;
@@ -598,9 +606,11 @@ int ObTimeUtility2::str_to_usec(const ObString &date, int64_t &usec)
   memset(&t, 0, sizeof(struct tm));
   t.tm_isdst = -1;
   if (OB_FAIL(str_to_timestamp(date, t, tmp_usec))) {
+    LOG_WARN("parse string to date failed", K(ret));
   } else {
     time_t sec_time_t = 0;
     if (OB_FAIL(make_second(t, sec_time_t))) {
+      LOG_WARN("parse time to usec failed", K(ret));
     } else {
       sec = static_cast<int64_t>(sec_time_t);
       usec = sec * 1000L * 1000L + tmp_usec;

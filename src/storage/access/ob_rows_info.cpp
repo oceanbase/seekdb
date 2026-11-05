@@ -76,10 +76,12 @@ int ObRowsInfo::ExistHelper::init(const ObRelativeTable &table,
 
     if (OB_FAIL(table_access_context_.init(query_flag, store_ctx, allocator, stmt_allocator,
             trans_version_range, &mds_filter, true /*+ for_exist */))) {
+      STORAGE_LOG(WARN, "failed to init table access ctx", K(ret));
     } else {
       table_iter_param_.table_id_ = table.get_table_id();
       table_iter_param_.tablet_id_ = table.get_tablet_id();
       if (nullptr != table.tablet_iter_.get_tablet()) {
+        table_iter_param_.ls_id_ = table.tablet_iter_.get_tablet()->get_tablet_meta().ls_id_;
       }
       table_iter_param_.out_cols_project_ = NULL;
       table_iter_param_.read_info_ = &rowkey_read_info;
@@ -148,6 +150,7 @@ int ObRowsInfo::init(
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObRowsinfo init twice", K(ret));
   } else if (OB_FAIL(exist_helper_.init(table, store_ctx, rowkey_read_info, exist_allocator_, scan_mem_allocator_, table.get_truncate_part_filter()))) {
+    STORAGE_LOG(WARN, "Failed to init exist helper", K(ret));
   } else {
     col_descs_ = &column_descs;
     datum_utils_ = &rowkey_read_info.get_datum_utils();
@@ -187,7 +190,9 @@ int ObRowsInfo::assign_rows(const int64_t row_count, blocksstable::ObDatumRow *r
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(rowkeys_.reserve(row_count))) {
+      STORAGE_LOG(WARN, "Failed to reserve rowkeys", K(ret), K(row_count));
     } else if (OB_FAIL(permutation_.prepare_allocate(row_count))) {
+      STORAGE_LOG(WARN, "Failed to prepare allocate permutation", K(ret), K(row_count));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < row_count; i++) {
@@ -199,7 +204,9 @@ int ObRowsInfo::assign_rows(const int64_t row_count, blocksstable::ObDatumRow *r
         marked_rowkey_and_lock_state.row_idx_ = i;
         ObDatumRowkey &datum_rowkey = marked_rowkey_and_lock_state.marked_rowkey_.get_rowkey();
         if (OB_FAIL(blocksstable::ObDatumRowUtils::prepare_rowkey(rows[i], rowkey_column_num_, *col_descs_, key_allocator_, datum_rowkey))) {
+          STORAGE_LOG(WARN, "Failed to prepare rowkey", K(ret), K(rowkey_column_num_), K(rows_[i]));
         } else if (OB_FAIL(rowkeys_.push_back(marked_rowkey_and_lock_state))) {
+          STORAGE_LOG(WARN, "Failed to push back rowkey", K(ret), K(marked_rowkey_and_lock_state));
         } else {
           permutation_[i] = i;
         }
@@ -318,6 +325,7 @@ int ObRowsInfo::check_min_rowkey_boundary(const blocksstable::ObDatumRowkey &max
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "rows must be has sorted", K(ret));
   } else if (OB_FAIL(rowkeys_.at(0).marked_rowkey_.get_rowkey().compare(max_rowkey, *datum_utils_, cmp_ret))) {
+    STORAGE_LOG(WARN, "Failed to compare datum rowkey", K(ret), K(max_rowkey));
   } else if (cmp_ret > 0) {
     may_exist = false;
   }
@@ -330,7 +338,8 @@ int ObRowsInfo::refine_rowkeys()
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected not init rowsinfo", K_(delete_count), KP_(rows), K(ret));
-  } else if (OB_FAIL(exist_helper_.table_access_context_.alloc_iter_pool())) {
+  } else if (OB_FAIL(exist_helper_.table_access_context_.alloc_iter_pool(false))) {
+    STORAGE_LOG(WARN, "Failed to alloc exist iter pool", K(ret));
   } else {
     for (int64_t i = 0; i < rowkeys_.count(); ++i) {
       rowkeys_[i].marked_rowkey_.clear_row_non_existent();

@@ -20,12 +20,14 @@
 namespace oceanbase
 {
 using namespace common;
+using namespace sql;
 namespace share
 {
 namespace schema
 {
 
 OB_SERIALIZE_MEMBER((ObTriggerInfo, ObSimpleTriggerSchema),
+//                  tenant_,
 //                  trigger_id_,
                     owner_id_,
 //                  database_id_,
@@ -90,7 +92,7 @@ void ObTriggerInfo::reset()
   reset_string(reference_names_[RT_PARENT]);
   reset_string(when_condition_);
   reset_string(trigger_body_);
-  // pl_flag / pl_exec_env are reset below.
+  // pl_flag / pl_comp_flag / pl_exec_env are reset below.
   package_spec_info_.reset();
   package_body_info_.reset();
   reset_string(priv_user_);
@@ -106,6 +108,7 @@ void ObTriggerInfo::reset()
 bool ObTriggerInfo::is_valid_for_create() const
 {
   return ObSchema::is_valid() &&
+         true &&
          trigger_type_ != TT_INVALID &&
          trigger_events_.get_value() != 0 &&
          timing_points_.get_value() != 0 &&
@@ -118,6 +121,7 @@ bool ObTriggerInfo::is_valid_for_create() const
 bool ObTriggerInfo::is_valid() const
 {
   return ObSimpleTriggerSchema::is_valid() &&
+//       true &&
          trigger_type_ != TT_INVALID &&
          trigger_events_.get_value() != 0 &&
          timing_points_.get_value() != 0 &&
@@ -151,6 +155,7 @@ int ObTriggerInfo::deep_copy(const ObTriggerInfo &other)
   OZ (set_package_spec_source(other.get_package_spec_source()));
   OZ (set_package_body_source(other.get_package_body_source()));
   OX (set_package_flag(other.get_package_flag()));
+  OX (set_package_comp_flag(other.get_package_comp_flag()));
   OZ (set_package_exec_env(other.get_package_exec_env()));
   OX (set_sql_mode(other.get_sql_mode()));
   OZ (set_trigger_priv_user(other.get_trigger_priv_user()));
@@ -182,6 +187,67 @@ int64_t ObTriggerInfo::get_convert_size() const
   return convert_size;
 }
 
+// trigger package source macro DSL moved together with the gen/fill function family to sql/resolver/ddl/ob_trigger_resolver.cpp
+
+// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
+
+// ObTriggerInfo::gen_package_source_simple moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in this class header, transitional state)
+
+// gen_package_source_compound moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
+
+int ObTriggerInfo::fill_compound_declare_body(const char *body_fmt,
+                                              const common::ObString &body_declare,
+                                              char *buf, int64_t buf_len, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  OV (OB_NOT_NULL(body_fmt) && OB_NOT_NULL(buf));
+  OZ (BUF_PRINTF(body_fmt, body_declare.length(), body_declare.ptr()));
+  return ret;
+}
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(macro DSL user, fill family)
+
+void ObTriggerInfo::TriggerContext::dispatch_decalare_execute(const ObTriggerInfo &trigger_info,
+                                                              ObString *&simple_declare,
+                                                              ObString *&simple_execute,
+                                                              ObString *&tg_body)
+{
+  if (trigger_info.has_before_stmt_point() || trigger_info.is_system_type()) {
+    simple_declare = &before_stmt_declare_;
+    simple_execute = &before_stmt_execute_;
+  } else if (trigger_info.has_before_row_point()) {
+    simple_declare = &before_row_declare_;
+    simple_execute = &before_row_execute_;
+  } else if (trigger_info.has_after_row_point()) {
+    simple_declare = &after_row_declare_;
+    simple_execute = &after_row_execute_;
+  } else if (trigger_info.has_after_stmt_point()) {
+    simple_declare = &after_stmt_declare_;
+    simple_execute = &after_stmt_execute_;
+  }
+  tg_body = &trigger_body_;
+}
+
+// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
+
 bool ObTriggerInfo::ActionOrderComparator::operator()(const ObTriggerInfo *left, const ObTriggerInfo *right)
 {
   bool bool_ret = false;
@@ -195,6 +261,10 @@ bool ObTriggerInfo::ActionOrderComparator::operator()(const ObTriggerInfo *left,
   }
   return bool_ret;
 }
+
+
+// for rebuild trigger body due to rename table
+// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
 
 } // namespace schema
 } // namespace share

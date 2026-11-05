@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_LOG_BLOCK_POOL_INTERFACE_
 #include <stdint.h>
 #include "lib/file/file_directory_utils.h"        // FileDirectoryUtils
-#include "share/log/palf/log_define.h"                           // block_id_t
+#include "log_define.h"                           // block_id_t
 #include "log_block_header.h"                     // LogBlockHeader
 namespace oceanbase
 {

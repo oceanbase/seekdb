@@ -47,12 +47,16 @@ const char *ObTabletStatus::get_str(const ObTabletStatus &status)
 
 bool ObTabletStatus::is_deleted_for_gc() const
 {
-  return ObTabletStatus::DELETED == status_;
+  return ObTabletStatus::DELETED == status_
+      || ObTabletStatus::TRANSFER_OUT_DELETED == status_
+      || ObTabletStatus::SPLIT_SRC_DELETED == status_;
 }
 
 bool ObTabletStatus::is_writable_for_dml() const
 {
-  return ObTabletStatus::NORMAL == status_;
+  return ObTabletStatus::NORMAL == status_
+      || ObTabletStatus::TRANSFER_IN == status_
+      || ObTabletStatus::SPLIT_DST == status_;
 }
 
 int ObTabletStatus::serialize(char *buf, const int64_t len, int64_t &pos) const
@@ -64,7 +68,9 @@ int ObTabletStatus::serialize(char *buf, const int64_t len, int64_t &pos) const
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::encode_i8(buf, len, new_pos, static_cast<int8_t>(status_)))) {
+    LOG_WARN("failed to serialize status", K(ret), K(len), K_(status));
   } else {
     pos = new_pos;
   }
@@ -81,7 +87,9 @@ int ObTabletStatus::deserialize(const char *buf, const int64_t len, int64_t &pos
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i8(buf, len, new_pos, (int8_t*)(&status_)))) {
+    LOG_WARN("failed to deserialize status", K(ret), K(len), K(new_pos));
   } else {
     pos = new_pos;
   }

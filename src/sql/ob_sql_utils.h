@@ -17,46 +17,36 @@
 #ifndef _OCEANBASE_SQL_OB_SQL_UTILS_H
 #define _OCEANBASE_SQL_OB_SQL_UTILS_H
 
-#include "config_bridge.h"
 #include "common/ob_range.h"
 #include "sql/rewrite/ob_query_range_provider.h"
 #include "common/object/ob_object.h"
 #include "lib/container/ob_vector.h"
 #include "lib/container/ob_2d_array.h"
+#include "common/mysqlclient/ob_mysql_connection.h"
 #include "share/geo/ob_s2adapter.h"
-#include "query/engine/expr/ob_sql_expression.h" // ObISqlExpression, ObExprCtx
+#include "share/partition_table/ob_partition_location.h"
+#include "share/ob_i_sql_expression.h"          // ObISqlExpression,ObExprCtx
+#include "storage/access/ob_table_param.h"        // ObColDesc
 #include "share/schema/ob_multi_version_schema_service.h"     // ObMultiVersionSchemaService
 #include "share/ob_simple_batch.h"
-#include "share/config/ob_server_config.h"
+#include "sql/ob_phy_table_location.h"
 #include "sql/ob_sql_define.h"
 #include "sql/parser/parse_node.h"
-#include "share/statement/ob_stmt_type.h"
+#include "sql/resolver/ob_stmt_type.h"
+#include "sql/optimizer/ob_phy_table_location_info.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
 #include "sql/session/ob_local_session_var.h"
+#include "sql/monitor/flt/ob_flt_span_mgr.h"
+#include "share/ob_compatibility_control.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 
 namespace oceanbase
 {
-// Transitional compatibility: ob_table_read_info.h historically injected
-// this using-directive at namespace oceanbase scope.  Keep SQL's existing
-// unqualified schema vocabulary local to SQL while removing that storage
-// implementation header from the include graph.
-using namespace share::schema;
 namespace share {
-namespace schema
-{
-struct CclRuleContainsInfo;
-struct ObMaxConcurrentParam;
-}
-}
-namespace common
-{
-class ObISrsProvider;
 }
 namespace sql
 {
 class ObRawExprFactory;  // fwd: previously re-exported through the share schema include chain
-class ObMaintainDepInfoTaskQueue;
 class RowDesc;
 class ObSQLSessionInfo;
 class ObRawExpr;
@@ -65,8 +55,9 @@ class ObStmt;
 class ObDMLStmt;
 class ObOpRawExpr;
 class OrderItem;
-class ObSqlExecutorCtx;
+class ObTaskExecutorCtx;
 class ObTableLocation;
+class ObPhyTableLocation;
 class ObQueryRange;
 class ObSqlExpression;
 class ObPhysicalPlan;
@@ -74,42 +65,45 @@ class ObRawExprResType;
 class ObStmtHint;
 struct ObTransformerCtx;
 struct ObPreCalcExprFrameInfo;
-struct ObSqlCtx;
 typedef common::ObSEArray<common::ObNewRange *, 1> ObQueryRangeArray;
 struct ObExprConstraint;
 typedef common::ObSEArray<common::ObSpatialMBR, 1> ObMbrFilterArray;
 class ObSelectStmt;
 class ObConstRawExpr;
 class ObColumnRefRawExpr;
+struct ObPCResourceMapRule;
 class ObResolverParams;
 class ObGlobalHint;
 class ObSqlSchemaGuard;
-class ObCandiTabletLoc;
 struct ObPlanCacheCtx;
 
 struct EstimatedPartition {
   common::ObAddr addr_;
   common::ObTabletID tablet_id_;
+  share::ObLSID ls_id_;
 
-  EstimatedPartition() : addr_(), tablet_id_()
+  EstimatedPartition() : addr_(), tablet_id_(), ls_id_()
   {}
 
   bool is_valid() const {
-    return addr_.is_valid() && tablet_id_.is_valid();
+    return addr_.is_valid() && tablet_id_.is_valid() && ls_id_.is_valid();
   }
 
   void reset() {
     addr_.reset();
     tablet_id_.reset();
+    ls_id_.reset();
   }
 
   void set(const common::ObAddr &addr,
-           const common::ObTabletID &tablet_id) {
+           const common::ObTabletID &tablet_id,
+           const share::ObLSID &ls_id) {
     addr_ = addr;
     tablet_id_ = tablet_id;
+    ls_id_ = ls_id;
   }
 
-  TO_STRING_KV(K_(addr), K_(tablet_id));
+  TO_STRING_KV(K_(addr), K_(tablet_id), K_(ls_id));
 };
 
 struct ObHiddenColumnItem
@@ -149,7 +143,7 @@ class ObSqlPrinter : public ObISqlPrinter
 {
 public:
   ObSqlPrinter(const ObStmt *stmt,
-               share::schema::ObSchemaGetterGuard *schema_guard,
+               ObSchemaGetterGuard *schema_guard,
                ObObjPrintParams print_params,
                const ParamStore *param_store,
                const ObSQLSessionInfo *session) :
@@ -163,7 +157,7 @@ public:
 
 protected:
   const ObStmt *stmt_;
-  share::schema::ObSchemaGetterGuard *schema_guard_;
+  ObSchemaGetterGuard *schema_guard_;
   ObObjPrintParams print_params_;
   const ParamStore *param_store_;
   const ObSQLSessionInfo *session_;
@@ -198,6 +192,7 @@ public:
    *  duplicates.
    */
 
+  static int has_outer_join_symbol(const ParseNode *node, bool &has);
   static int replace_questionmarks(ParseNode *tree,
                                    const ParamStore &params);
 
@@ -239,6 +234,7 @@ public:
     need_check = false;
     if (param.is_unknown()) {
       if (OB_FAIL(param.get_unknown(param_idx))) {
+        SQL_LOG(WARN, "get question mark value failed", K(param), K(ret));
       } else if (param_idx < 0 || param_idx >= params_array.count()) {
         ret = common::OB_ERR_ILLEGAL_INDEX;
         SQL_LOG(WARN, "Wrong index of question mark position", K(ret), K(param_idx));
@@ -257,6 +253,7 @@ public:
                                       ObEvalCtx &eval_ctx,
                                       int64_t check_size)
   {
+    SQL_LOG(TRACE, "enable datum ptr check", K(exprs), K(check_size));
     // TODO: add sanity check for vector formats
 
     // auto expr_idx = 0;
@@ -324,6 +321,11 @@ public:
                                 const ObSQLSessionInfo *session,
                                 common::ObString &name,
                                 ObIAllocator *allocator);
+  static int cvt_db_name_to_org(sql::ObSqlSchemaGuard &sql_schema_guard,
+                                const ObSQLSessionInfo *session,
+                                const uint64_t catalog_id,
+                                common::ObString &db_name,
+                                ObIAllocator *allocator);
   static int check_and_convert_table_name(const common::ObCollationType cs_type,
                                           const bool preserve_lettercase,
                                           common::ObString &name,
@@ -335,16 +337,16 @@ public:
                                bool is_from_view = false);
   static int check_and_copy_column_alias_name(const common::ObCollationType cs_type, const bool is_auto_gen,
                                               common::ObIAllocator *allocator, common::ObString &name);
+  static int check_and_convert_context_namespace(const common::ObCollationType cs_type,
+                                                 common::ObString &name);
   static bool cause_implicit_commit(ParseResult &result);
   static bool is_end_trans_stmt(const ParseResult &result);
   static bool is_commit_stmt(const ParseResult &result);
   static bool is_mysql_ps_not_support_stmt(const ParseResult &result);
   static bool is_readonly_stmt(ParseResult &result);
-  static bool is_allowed_on_standby(const ObItemType stmt_type);
   static int make_field_name(const char *src, int64_t len, const common::ObCollationType cs_type,
                              common::ObIAllocator *allocator, common::ObString &name);
-  static int set_compatible_cast_mode(const ObSQLSessionInfo *session,
-                                      common::ObCastMode &cast_mode);
+  static int set_compatible_cast_mode(const ObSQLSessionInfo *session, ObCastMode &cast_mode);
   static int get_default_cast_mode(const stmt::StmtType &stmt_type,
                                    const ObSQLSessionInfo *session,
                                    common::ObCastMode &cast_mode);
@@ -388,6 +390,7 @@ public:
                               const ObSQLSessionInfo *session,
                               const common::ObString &query_sql,
                               common::ObString &outline_key,
+                              share::schema::ObMaxConcurrentParam::FixParamStore &fixed_param_store,
                               ParseMode mode,
                               bool &has_questionmark_in_sql,
                               bool need_format);
@@ -406,7 +409,7 @@ public:
                                    common::ObString &outline_sql);
 
   static int reconstruct_sql(ObIAllocator &allocator, const ObStmt *stmt, ObString &sql,
-                             share::schema::ObSchemaGetterGuard *schema_guard,
+                             ObSchemaGetterGuard *schema_guard,
                              ObObjPrintParams print_params = ObObjPrintParams(),
                              const ParamStore *param_store = NULL,
                              const ObSQLSessionInfo *session = NULL);
@@ -417,7 +420,7 @@ public:
                        int64_t buf_len,
                        int64_t &pos,
                        const ObStmt *stmt,
-                       share::schema::ObSchemaGetterGuard *schema_guard,
+                       ObSchemaGetterGuard *schema_guard,
                        ObObjPrintParams print_params,
                        const ParamStore *param_store = NULL,
                        const ObSQLSessionInfo *session = NULL);
@@ -463,7 +466,22 @@ public:
                                  common::ObNewRange &partition_range,
                                  ObArenaAllocator &allocator);
 
-  static int revise_hash_part_object(common::ObObj &obj);
+  static int revise_hash_part_object(common::ObObj &obj,
+                                     const ObNewRow &row,
+                                     const bool calc_oracle_hash,
+                                     const share::schema::ObPartitionFuncType part_type);
+
+  static int choose_best_replica_for_estimation(
+                              const ObCandiTabletLoc &phy_part_loc_info,
+                              const ObAddr &local_addr,
+                              const common::ObIArray<ObAddr> &addrs_list,
+                              const bool no_use_remote,
+                              EstimatedPartition &best_partition);
+
+  static int choose_best_partition_replica_addr(const ObAddr &local_addr,
+                                                const ObCandiTabletLoc &phy_part_loc_info,
+                                                const bool is_est_block_count,
+                                                ObAddr &selected_addr);
 
   static int has_global_index(share::schema::ObSchemaGetterGuard *schema_guard,
                               const uint64_t table_id,
@@ -487,6 +505,10 @@ public:
                                                   ObCollationType &cs_type);
   static int merge_solidified_var_into_max_allowed_packet(const ObLocalSessionVar *local_vars,
                                                           int64_t &max_allowed_packet);
+  static int merge_solidified_var_into_compat_version(const ObLocalSessionVar *local_vars,
+                                                      uint64_t &compat_version);
+
+  static bool is_oracle_sys_view(const ObString &table_name);
 
   static int make_whole_range(ObIAllocator &allocator,
                               const uint64_t ref_table_id,
@@ -523,12 +545,13 @@ public:
                                                   common::ObCollationType connection_collation,
                                                   const share::schema::ObViewSchema &view_schema,
                                                   common::ObString &view_definition);
-  static void record_execute_time(const ObPhyPlanType type, const int64_t time_cost);
+  static void record_execute_time(const ObPhyPlanType type,
+                                  const int64_t time_cost);
   static int64_t get_query_record_size_limit()
   {
     int64_t thredhold = OB_MAX_SQL_LENGTH;
 
-    thredhold = config::_query_record_size_limit();
+    thredhold = GCONF._query_record_size_limit;
 
     return thredhold;
   }
@@ -536,9 +559,9 @@ public:
   static int convert_escape_char(common::ObIAllocator &allocator,
                                  const ObString &in,
                                  ObString &out);
-  // Check if the parameter is an empty-string typed null.
-  static bool is_empty_string_typed_null(const common::ObObjParam &param);
-  static bool is_typed_null_with_normal_type(const common::ObObjParam &param);
+  // Check if the parameter is '' in Oracle mode
+  static bool is_oracle_empty_string(const common::ObObjParam &param);
+  static bool is_oracle_null_with_normal_type(const common::ObObjParam &param);
   static int convert_sql_text_from_schema_for_resolve(common::ObIAllocator &allocator,
                                                     const common::ObDataTypeCastParams &dtc_params,
                                                     ObString &sql_text,
@@ -550,7 +573,7 @@ public:
    * @param sql_text, source sql string from client
    * @param convert_flag, options to control convert behavior
    * @param action_flag, affected options
-   * @param nls_collation_string, convert to nls_collation result
+   * @param oracle_nls_string, convert to nls_collation result
    * @return 
    */                                        
   static int convert_sql_text_to_schema_for_storing(common::ObIAllocator &allocator,
@@ -558,7 +581,7 @@ public:
                                                     common::ObString &sql_text,
                                                     int64_t convert_flag = 0,
                                                     int64_t *action_flag = NULL,
-                                                    common::ObString *nls_collation_string = NULL);
+                                                    common::ObString *oracle_nls_string = NULL);
 
   static int print_identifier(char *buf, const int64_t buf_len, int64_t &pos,
                               common::ObCollationType connection_collation,
@@ -578,6 +601,7 @@ public:
   static bool is_online_stat_gathering_nested_sql(ObExecContext *cur_ctx);
   static bool is_iter_uncommitted_row(ObExecContext *cur_ctx);
   static bool is_nested_sql(ObExecContext *cur_ctx);
+  static bool is_in_autonomous_block(ObExecContext *cur_ctx);
 
   static int get_result_from_ctx(ObExecContext &exec_ctx,
                                  const ObRawExpr *expr,
@@ -594,6 +618,10 @@ public:
                                            int64_t query_num,
                                            int64_t param_num,
                                            ParamStore &param_store);
+  static int transform_pl_ext_type(ParamStore &src, int64_t array_binding_size, ObIAllocator &alloc, ParamStore *&dst, bool is_forall = false);
+  static int get_one_group_params(int64_t &pos, ParamStore &src, ParamStore &obj_params);
+  static int copy_params_to_array_params(int64_t query_pos, ParamStore &src, ParamStore &dst, ObIAllocator &alloc, bool is_forall = false);
+  static int init_elements_info(ParamStore &src, ParamStore &dst);
   /*-----------------------
   *  Observer no longer depends on Linux NTP service to adjust server time since 4.0.
   *  So, timestamp between servers can be vary large.
@@ -603,16 +631,34 @@ public:
   ------------------------*/
   static void adjust_time_by_ntp_offset(int64_t &dst_timeout_ts);
 
+  static int check_sql_map_expected_resource_group(const ObSqlCtx &context,
+                                            const ObResultSet &result,
+                                            const ObResolverParams *resolve_ctx, 
+                                            const ObStmt *stmt, 
+                                            ObPCResourceMapRule &resource_map_rule);
+
+
+  static int recursive_check_equal_condition(const ObResolverParams *resolve_ctx,
+                                      const ObStmt *stmt,
+                                      const ObRawExpr &expr,
+                                      ObPCResourceMapRule &resource_map_rule,
+                                      uint64_t &group_id);
+
+  static int check_column_with_res_mapping_rule(const ObResolverParams *resolve_ctx,
+                                                const ObStmt *stmt,
+                                                const ObColumnRefRawExpr *col_expr,
+                                                const ObConstRawExpr *const_expr,
+                                                ObPCResourceMapRule &resource_map_rule,
+                                                uint64_t &group_id);
+
   static int async_recompile_view(const share::schema::ObTableSchema &old_view_schema,
                                   ObSelectStmt *select_stmt,
                                   bool reset_column_infos,
                                   common::ObIAllocator &alloc,
-                                  sql::ObSQLSessionInfo &session_info,
-                                  ObMaintainDepInfoTaskQueue &dependency_info_queue);
+                                  sql::ObSQLSessionInfo &session_info);
   static int check_sys_view_changed(const share::schema::ObTableSchema &old_view_schema,
                                     const share::schema::ObTableSchema &new_view_schema,
-                                    bool &changed,
-                                    ObMaintainDepInfoTaskQueue &dependency_info_queue);
+                                    bool &changed);
   static bool check_need_disconnect_parser_err(const int ret_code);
   static bool check_json_expr(const ObRawExpr &expr);
 
@@ -635,6 +681,9 @@ public:
     };
     return next_ts;
   }
+  static int64_t combine_server_id(int64_t ts, uint64_t server_id) {
+    return (ts & ((1LL << 43) - 1LL)) | ((server_id & 0xFFFF) << 48);
+  }
   static int check_ident_name(const common::ObCollationType cs_type, common::ObString &name,
                               const bool check_for_path_char, const int64_t max_ident_len);
 
@@ -648,8 +697,7 @@ public:
   static int match_ccl_rule(ObIAllocator &alloc, ObSQLSessionInfo &session, ObSqlCtx &context,
                             const ObString &sql, bool is_ps_mode,
                             const ObIArray<const common::ObObjParam *> &param_store,
-                            const ObString &format_sqlid,
-                            share::schema::CclRuleContainsInfo contians_info,
+                            const ObString &format_sqlid, CclRuleContainsInfo contians_info,
                             ParseResult *parse_result = nullptr, ObStmt *stmt = nullptr);
 
   static int match_ccl_rule(const ObPlanCacheCtx *pc_ctx, ObSQLSessionInfo &session, bool is_ps_mode,
@@ -685,14 +733,14 @@ private:
     common::ObTimeZoneInfo tz_info_;
   };
 public:
-  // SQL parsing and rendering helpers for outline plan management.
+  // --- from share::schema::ObOutlineInfo demoted  outline SQL construction helpers(A-set)---
   static int gen_limit_sql(const common::ObString &visible_signature,
-                           const share::schema::ObMaxConcurrentParam *param,
+                           const ObMaxConcurrentParam *param,
                            const sql::ObSQLSessionInfo &session,
                            common::ObIAllocator &allocator,
                            common::ObString &limit_sql);
   static int replace_question_mark(const common::ObString &not_param_sql,
-                                   const share::schema::ObMaxConcurrentParam &concurrent_param,
+                                   const ObMaxConcurrentParam &concurrent_param,
                                    int64_t start_pos,
                                    int64_t cur_pos,
                                    int64_t &question_mark_offset,
@@ -708,13 +756,8 @@ public:
 class ObSqlGeoUtils
 {
 public:
-  static int check_srid_by_srs(
-      common::ObISrsProvider &srs_provider,
-      uint64_t srid);
-  static int check_srid(
-      common::ObISrsProvider &srs_provider,
-      uint32_t column_srid,
-      uint32_t input_srid);
+  static int check_srid_by_srs(uint64_t srid);
+  static int check_srid(uint32_t column_srid, uint32_t input_srid);
 };
 
 class RelExprCheckerBase
@@ -832,11 +875,13 @@ struct ObSqlTraits
 {
   char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];// sql id //the last byte stores '\0'
   bool is_readonly_stmt_;
+  bool is_modify_tenant_stmt_;
   bool is_cause_implicit_commit_;
   bool is_commit_stmt_;
   ObItemType stmt_type_;
 
   ObSqlTraits() : is_readonly_stmt_(false),
+                  is_modify_tenant_stmt_(false),
                   is_cause_implicit_commit_(false),
                   is_commit_stmt_(false),
                   stmt_type_(T_INVALID)
@@ -847,11 +892,13 @@ struct ObSqlTraits
   void reset() {
     sql_id_[common::OB_MAX_SQL_ID_LENGTH] = '\0';
     is_readonly_stmt_ = false;
+    is_modify_tenant_stmt_ = false;
     is_cause_implicit_commit_ = false;
     is_commit_stmt_ = false;
     stmt_type_ = T_INVALID;
   }
    TO_STRING_KV(K(is_readonly_stmt_),
+                K(is_modify_tenant_stmt_),
                 K(is_cause_implicit_commit_),
                 K(is_commit_stmt_),
                 K(stmt_type_));
@@ -1000,6 +1047,13 @@ enum ObThreeStageAggrStage {
   FIRST_STAGE,
   SECOND_STAGE,
   THIRD_STAGE,
+};
+
+enum ObRollupStatus {
+  NONE_ROLLUP,          // no rollup
+  ROLLUP_NORMAL,        // normal rollup
+  ROLLUP_DISTRIBUTOR,   // rollup distributor
+  ROLLUP_COLLECTOR,     // rollup collector
 };
 
 class ObVirtualTableResultConverter

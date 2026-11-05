@@ -19,6 +19,7 @@
 
 #include "share/scn.h"
 #include "storage/allocator/ob_tx_data_allocator.h"
+#include "lib/objectpool/ob_server_object_pool.h"
 #include "storage/tx/ob_committer_define.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx_table/ob_tx_data_hash_map.h"
@@ -42,7 +43,7 @@ class ObTxDataOp;
 // avoid memory fragmentation caused by frequent allocation of non-fixed-length memory
 // 2. Avoid dumping failure caused by memory allocation failure
 //
-// The tx data table uses ObTxDataAllocator to allocate multiple memory slices. There are three kinds of
+// The tx data table uses ObTenantTxDataAllocator to allocate multiple memory slices. There are three kinds of
 // slice. The first kind of slice is divided into three areas. This kind of slice is used in link
 // hash map of tx data memtable. :
 // 1. HashNodes that ObLinkHashMap needs
@@ -163,7 +164,7 @@ public:
 
 public:
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
-  int deserialize(const char *buf, const int64_t data_len, int64_t &pos, share::ObTxDataAllocator &tx_data_allocator);
+  int deserialize(const char *buf, const int64_t data_len, int64_t &pos, share::ObTenantTxDataAllocator &tx_data_allocator);
   int64_t get_serialize_size() const;
   bool is_contain(const  transaction::ObTxSEQ seq_no, int32_t tx_data_state) const;
   void reset()
@@ -178,7 +179,7 @@ private:
   int deserialize_(const char *buf,
                    const int64_t data_len,
                    int64_t &pos,
-                   share::ObTxDataAllocator &tx_data_allocator);
+                   share::ObTenantTxDataAllocator &tx_data_allocator);
   int64_t get_serialize_size_() const;
 
 public:
@@ -325,7 +326,7 @@ public:
    */
   bool is_valid_in_tx_data_table() const;
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
-  int deserialize(const char *buf, const int64_t data_len, int64_t &pos, share::ObTxDataAllocator &tx_data_allocator);
+  int deserialize(const char *buf, const int64_t data_len, int64_t &pos, share::ObTenantTxDataAllocator &tx_data_allocator);
   int64_t get_serialize_size() const;
   int64_t size_need_cache() const;
 
@@ -339,7 +340,7 @@ private:
   int deserialize_(const char *buf,
                    const int64_t data_len,
                    int64_t &pos,
-                   share::ObTxDataAllocator &tx_data_allocator);
+                   share::ObTenantTxDataAllocator &tx_data_allocator);
   int64_t get_serialize_size_() const;
   bool equals_(ObTxData &rhs);
   int merge_undo_actions_(ObTxDataTable *tx_data_table,
@@ -358,8 +359,8 @@ public:
   }
 
 public:
-  share::ObTxDataAllocator *tx_data_allocator_;
-  share::ObTxDataOpAllocator *op_allocator_;
+  share::ObTenantTxDataAllocator *tx_data_allocator_;
+  share::ObTenantTxDataOpAllocator *op_allocator_;
   int64_t ref_cnt_;
   ExclusiveType exclusive_flag_;
   ObTxDataOpGuard op_guard_;

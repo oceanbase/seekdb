@@ -22,20 +22,18 @@
 #include "storage/tmp_file/ob_tmp_file_eviction_manager.h"
 #include "storage/tmp_file/ob_tmp_file_global.h"
 #include "storage/tmp_file/ob_tmp_file_flush_manager.h"
-#include "lib/lock/ob_thread_cond.h"
-#include "lib/task/ob_timer.h"
-#include "lib/thread/thread_pool.h"
+#include "lib/thread/thread_mgr_interface.h"
 
 namespace oceanbase
 {
 namespace tmp_file
 {
-class ObSNTmpFileManager;
+class ObSNTenantTmpFileManager;
 class ObTmpFileFlushManager;
 
-// When originally designed, ObTmpFileFlushThread was an independent thread. In order to reduce the
-// number of threads, the thread of ObTmpFileFlushThread was driven by ObTmpFileSwapThread.
-class ObTmpFileFlushThread
+// When originally designed, ObTmpFileFlushTG was an independent thread. in order to reduce the
+// number of threads, the thread of ObTmpFileFlushTG was driven by ObTmpFileSwapTG.
+class ObTmpFileFlushTG
 {
 public:
   typedef ObTmpFileFlushTask::ObTmpFileFlushTaskState FlushState;
@@ -45,7 +43,7 @@ public:
     FAST    = 2
   };
 public:
-  ObTmpFileFlushThread(ObTmpWriteBufferPool &wbp,
+  ObTmpFileFlushTG(ObTmpWriteBufferPool &wbp,
                    ObTmpFileFlushManager &flush_mgr,
                    ObIAllocator &allocator,
                    ObTmpFileBlockManager &tmp_file_block_mgr);
@@ -113,15 +111,15 @@ private:
   int64_t fast_loop_cnt_;
   int64_t fast_idle_loop_cnt_;
 
-  common::ObTimer flush_timers_[ObTmpFileGlobal::FLUSH_TIMER_CNT];
+  int flush_timer_tg_id_[ObTmpFileGlobal::FLUSH_TIMER_CNT];
 };
 
-class ObTmpFileSwapThread : public lib::ThreadPool
+class ObTmpFileSwapTG : public lib::TGRunnable
 {
 public:
-  ObTmpFileSwapThread(ObTmpWriteBufferPool &wbp,
+  ObTmpFileSwapTG(ObTmpWriteBufferPool &wbp,
                   ObTmpFileEvictionManager &elimination_mgr,
-                  ObTmpFileFlushThread &flush_thread,
+                  ObTmpFileFlushTG &flush_tg,
                   ObTmpFilePageCacheController &pc_ctrl);
   virtual int init();
   int start();
@@ -135,7 +133,7 @@ public:
   int swap_job_dequeue(ObTmpFileSwapJob *&swap_job);
   // wake up swap thread to do work
   void notify_doing_swap();
-  TO_STRING_KV(K(is_inited_), K(swap_job_num_), K(working_list_size_),
+  TO_STRING_KV(K(is_inited_), K(tg_id_), K(swap_job_num_), K(working_list_size_),
                K(flush_io_finished_round_), K(last_swap_timestamp_), K(has_set_stop()));
 private:
   static const int64_t ALLOC_PAGE_SIZE = ObTmpFileGlobal::ALLOC_PAGE_SIZE;
@@ -154,6 +152,7 @@ private:
   int shrink_wbp_if_needed_();
 private:
   bool is_inited_;
+  int tg_id_;
   ObThreadCond idle_cond_;
   int64_t last_swap_timestamp_;
 
@@ -164,13 +163,13 @@ private:
 
   ObTmpFileSwapMonitor swap_monitor_;
 
-  ObTmpFileFlushThread &flush_thread_ref_;
+  ObTmpFileFlushTG &flush_tg_ref_;
   int64_t flush_io_finished_round_;
 
   ObTmpWriteBufferPool &wbp_;
   ObTmpFileEvictionManager &evict_mgr_;
   ObTmpFilePageCacheController &pc_ctrl_;
-  ObSNTmpFileManager *file_mgr_;
+  ObSNTenantTmpFileManager *file_mgr_;
 };
 
 }  // end namespace tmp_file

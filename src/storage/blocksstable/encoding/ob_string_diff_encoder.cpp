@@ -47,12 +47,16 @@ int ObStringDiffEncoder::init(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
+    LOG_WARN("init base column encoder failed",
+        K(ret), K(ctx), K(column_index), "row count", rows.count());
   } else {
     const ObObjTypeStoreClass sc = get_store_class_map()[
         ob_obj_type_class(column_type_.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(sc))) {
       ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not supported type for string diff", K(ret), K(sc), K_(column_index));
     }
     column_header_.type_ = type_;
   }
@@ -80,6 +84,7 @@ int ObStringDiffEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     suitable = true;
     char *data = NULL;
@@ -92,7 +97,10 @@ int ObStringDiffEncoder::traverse(bool &suitable)
         nope_cnt_++;
       } else if (datum.is_ext()) {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("not supported extend object type",
+            K(ret), K(datum), K_(column_type), K_(column_index));
       } else if (OB_FAIL(traverse_cell(data, diff, suitable, datum, i))) {
+        LOG_WARN("traverse cell failed", K(ret), K(datum));
       }
     }
     if (OB_SUCC(ret) && suitable && hex_string_map_.can_packing()) {
@@ -101,6 +109,7 @@ int ObStringDiffEncoder::traverse(bool &suitable)
         const ObDatum &datum = rows_->at(i).get_datum(column_index_);
         if (!datum.is_null() && !datum.is_nop()) {
           if (OB_FAIL(traverse_cell(data, diff, suitable, datum, i))) {
+            LOG_WARN("traverse cell failed", K(ret), K(datum));
           }
         }
       }
@@ -119,6 +128,7 @@ int ObStringDiffEncoder::traverse(bool &suitable)
             common_size_ += desc.count_;
           }
           if (OB_FAIL(diff_descs_.push_back(desc))) {
+            LOG_WARN("add diff description failed", K(ret), K(desc));
           } else {
             begin = i;
             if (i < string_size_) {
@@ -142,6 +152,9 @@ int ObStringDiffEncoder::traverse(bool &suitable)
           suitable = false;
         } else {
           ObString tmp(string_size_, data);
+          LOG_DEBUG("may use string diff",
+              K_(column_index), "string", tmp,
+              K_(string_size), K_(common_size), K(hex_packing));
           desc_.need_data_store_ = true;
           desc_.has_null_ = null_cnt_ > 0;
           desc_.has_nope_ = nope_cnt_ > 0;
@@ -177,15 +190,18 @@ int ObStringDiffEncoder::traverse_cell(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     if (string_size_ <= 0) {
       if (datum.len_ <= 0 || datum.len_ >= UINT16_MAX) {
         suitable = false;
       } else if (OB_ISNULL(data = static_cast<char *>(allocator_.alloc(datum.len_)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc memory failed", K(ret), "size", datum.len_);
       } else if (OB_ISNULL(diff = static_cast<bool *>(
           allocator_.alloc(sizeof(bool) * datum.len_)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc memory failed", K(ret), "size", sizeof(bool) * datum.len_);
       } else {
         string_size_ = datum.len_;
         first_string_ = datum.ptr_;
@@ -233,6 +249,7 @@ int ObStringDiffEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else {
     const bool hex_packing = string_size_ - common_size_ != row_store_size_;
     char *data = buf_writer.current();
@@ -243,6 +260,7 @@ int ObStringDiffEncoder::store_meta(ObBufferWriter &buf_writer)
         + sizeof(ObStringDiffHeader::DiffDesc) * diff_descs_.count()
         + (hex_packing ? hex_string_map_.size_ : 0) + common_size_;
     if (OB_FAIL(buf_writer.advance_zero(size))) {
+      LOG_WARN("advance meta store size failed", K(ret), K(size));
     } else {
       header_->string_size_ = static_cast<uint16_t>(string_size_);
       header_->diff_desc_cnt_ = static_cast<uint8_t>(diff_descs_.count());
@@ -262,9 +280,9 @@ int ObStringDiffEncoder::store_meta(ObBufferWriter &buf_writer)
   return ret;
 }
 
-struct ObStringDiffEncoder::FixedDataFiller
+struct ObStringDiffEncoder::ColumnStoreFiller
 {
-  explicit FixedDataFiller(ObStringDiffEncoder &encoder) : enc_(encoder) {}
+  explicit ColumnStoreFiller(ObStringDiffEncoder &encoder) : enc_(encoder) {}
 
   // fill fix store value
   OB_INLINE int operator()(
@@ -296,18 +314,23 @@ int ObStringDiffEncoder::store_data(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (row_id < 0 || row_id >= rows_->count() || len < 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(row_id));
   } else {
     const ObDatum &datum = rows_->at(row_id).get_datum(column_index_);
     const ObStoredExtValue ext_val = get_stored_ext_value(datum);
     if (STORED_NOT_EXT != ext_val) {
       if (OB_FAIL(bs.set(column_header_.extend_value_index_,
           extend_value_bit_, static_cast<int64_t>(ext_val)))) {
+        LOG_WARN("store extend value bit failed",
+            K(ret), K_(column_header), K_(extend_value_bit), K(ext_val));
       }
     } else {
-      FixedDataFiller filler(*this);
+      ColumnStoreFiller filler(*this);
       if (OB_FAIL(filler(row_id, datum, buf, len))) {
+        LOG_WARN("fill data failed", K(ret), K(row_id), K(datum), KP(buf), K(len));
       }
     }
   }
@@ -319,10 +342,14 @@ int ObStringDiffEncoder::set_data_pos(const int64_t offset, const int64_t length
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(header_)) {
     ret = OB_INNER_STAT_ERROR;
+    LOG_WARN("call set data pos before store meta", K(ret));
   } else if (OB_UNLIKELY(offset < 0 || length < 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid data position",
+        K(ret), K(offset), K(length), K(desc_), K_(column_header));
   } else {
     header_->offset_ = static_cast<uint32_t>(offset);
     header_->length_ = static_cast<uint32_t>(length);
@@ -335,8 +362,10 @@ int ObStringDiffEncoder::get_var_length(const int64_t row_id, int64_t &length)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(row_id < 0 || row_id >= rows_->count())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(row_id));
   } else {
     const ObDatum &datum = rows_->at(row_id).get_datum(column_index_);
     if (datum.is_null() || datum.is_nop()) {
@@ -361,6 +390,7 @@ int64_t ObStringDiffEncoder::calc_size() const
       size += DEF_VAR_INDEX_BYTE * rows_->count()
           + row_store_size_ * (rows_->count() - null_cnt_ - nope_cnt_);
     }
+    LOG_DEBUG("string diff encoded size", K(size), K_(column_index));
   }
   return size;
 }
@@ -370,17 +400,21 @@ int ObStringDiffEncoder::store_fix_data(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!is_valid_fix_encoder())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K_(desc));
   } else if (OB_UNLIKELY(0 >= desc_.fix_data_length_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fix_data_length should be larger than 0", K(ret), K_(desc));
   } else {
     if (desc_.fix_data_length_ > 0) {
       header_->length_ = static_cast<uint32_t>(desc_.fix_data_length_);
     }
     EmptyGetter getter;
-    FixedDataFiller filler(*this);
-    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, getter, filler))) {
+    ColumnStoreFiller filler(*this);
+    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, filler))) {
+      LOG_WARN("fill column store failed", K(ret));
     }
   }
   return ret;

@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_IK_OB_IK_PROCESSOR_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
@@ -31,7 +32,6 @@ class TokenizeContext
 {
 public:
   TokenizeContext(ObCollationType coll_type,
-                  ObIAllocator &allocator,
                   const char *fulltext,
                   int64_t fulltext_len,
                   bool is_smart);
@@ -39,6 +39,10 @@ public:
   ~TokenizeContext();
 
   int init();
+  int reuse(ObCollationType coll_type,
+            const char *fulltext,
+            int64_t fulltext_len,
+            bool is_smart);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -47,6 +51,9 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  int current_char_and_type(const char *&ch,
+                            uint8_t &char_len,
+                            ObFTCharUtil::CharType &type);
 
   int step_next();
 
@@ -75,10 +82,12 @@ public:
 
 private:
   int prepare_next_char();
+  const char *normalized_current_char();
 
   ObCollationType coll_type_;
   const char *fulltext_;
   int64_t fulltext_len_;
+  char normalized_char_;
 
   int64_t cursor_;
   int64_t next_char_len_;
@@ -87,6 +96,7 @@ private:
   uint32_t handle_size_;
   bool is_smart_;
 
+  ObArenaAllocator token_allocator_;
   ObFTSortList token_list_;
   ObList<ObIKToken, ObIAllocator> result_list_;
 
@@ -101,7 +111,12 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  virtual void reuse() = 0;
+
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,

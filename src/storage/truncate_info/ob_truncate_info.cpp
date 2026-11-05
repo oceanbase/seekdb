@@ -24,7 +24,7 @@ namespace oceanbase
 {
 using namespace share;
 using namespace share::schema;
-using namespace storage::mds;
+using namespace mds;
 namespace storage
 {
 OB_SERIALIZE_MEMBER_SIMPLE(
@@ -40,8 +40,10 @@ int ObTruncateInfoKey::mds_serialize(char *buf, const int64_t buf_len,
   } else {
     buf[pos++] = MAGIC_NUMBER;
     if (OB_FAIL(ObMdsSerializeUtil::mds_key_serialize(tx_id_, buf, buf_len, pos))) {
+      LOG_WARN("failed to serialize tx_id", KR(ret), K_(tx_id));
     } else if (OB_FAIL(ObMdsSerializeUtil::mds_key_serialize(
                    inc_seq_, buf, buf_len, pos))) {
+      LOG_WARN("failed to serialize inc_seq", KR(ret), K_(inc_seq));
     }
   }
   return ret;
@@ -58,8 +60,10 @@ int ObTruncateInfoKey::mds_deserialize(const char *buf, const int64_t buf_len,
     if (magic_number != MAGIC_NUMBER) {
       ob_abort(); // compat case, just abort for fast fail
     } else if (OB_FAIL(ObMdsSerializeUtil::mds_key_deserialize(buf, buf_len, pos, tmp))) {
+      LOG_WARN("failed to serialize tx_id", KR(ret));
     } else if (FALSE_IT(tx_id_ = tmp)) {
     } else if (OB_FAIL(ObMdsSerializeUtil::mds_key_deserialize(buf, buf_len, pos, tmp))) {
+      LOG_WARN("failed to serialize inc_seq", KR(ret));
     } else {
       inc_seq_ = tmp;
     }
@@ -114,6 +118,7 @@ int ObStorageListRowValues::init(
   int64_t alloc_buf_size = 0;
   if (OB_UNLIKELY(nullptr != values_ || cnt_ > 0)) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("exist unfree ptr, should not init", KR(ret), KP_(values), K_(cnt));
   } else if (0 == (cnt_ = row_values.count())) {
   } else {
     alloc_buf_size += cnt_ * sizeof(ObNewRow);
@@ -122,11 +127,13 @@ int ObStorageListRowValues::init(
     } // for
     if (OB_ISNULL(alloc_buf = allocator.alloc(alloc_buf_size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc memory", KR(ret), K(cnt_));
     } else {
       values_ = new (alloc_buf) ObNewRow[cnt_];
       int64_t pos = cnt_ * sizeof(ObNewRow);
       for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
         if (OB_FAIL(values_[i].deep_copy(row_values.at(i), (char *)alloc_buf, alloc_buf_size, pos))) {
+          LOG_WARN("Fail to deep copy row", K(ret), K(i), K(row_values.at(i)));
         }
       } // for
     }
@@ -144,18 +151,22 @@ int ObStorageListRowValues::assign(ObIAllocator &allocator, const ObStorageListR
   void *alloc_buf = nullptr;
   if (OB_UNLIKELY(nullptr != values_ || cnt_ > 0)) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("exist unfree ptr, should not init", KR(ret), KP_(values), K_(cnt));
   } else if (OB_UNLIKELY(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(other));
   } else if (0 == (cnt_ = other.count())) {
   } else if (FALSE_IT(deep_copy_size = other.get_deep_copy_size())) {
   } else if (OB_ISNULL(alloc_buf = allocator.alloc(deep_copy_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc memory", KR(ret), K(cnt_));
   } else {
     values_ = new (alloc_buf) ObNewRow[cnt_];
     int64_t pos = cnt_ * sizeof(ObNewRow);
     const ObNewRow *other_values = other.get_values();
     for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
       if (OB_FAIL(values_[i].deep_copy(other_values[i], (char *)alloc_buf, deep_copy_size, pos))) {
+        LOG_WARN("Fail to deep copy row", K(ret), K(i), K(other_values[i]));
       }
     } // for
     if (OB_FAIL(ret)) {
@@ -172,6 +183,7 @@ int ObStorageListRowValues::compare(const ObStorageListRowValues &other, bool &e
   if (equal) {
   } else if (OB_UNLIKELY(!is_valid() || !other.is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to compare", KR(ret), KPC(this), K(other));
   } else {
     equal = (cnt_ == other.cnt_);
     for (int64_t i = 0; OB_SUCC(ret) && equal && i < cnt_; i++) {
@@ -179,6 +191,7 @@ int ObStorageListRowValues::compare(const ObStorageListRowValues &other, bool &e
       equal = (values_[i].count_ == other.values_[i].count_);
       for (int64_t j = 0; OB_SUCC(ret) && equal && j < values_[i].count_; ++j) {
         if (OB_FAIL(values_[i].get_cell(j).compare(other.values_[i].get_cell(j), cmp))) {
+          LOG_WARN("failed to compare object", KR(ret), K(i), K(j), K(values_[i]), K(other.values_[i]));
         } else {
           equal = (0 == cmp);
         }
@@ -193,10 +206,13 @@ int ObStorageListRowValues::serialize(char *buf, const int64_t buf_len, int64_t 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to serialize", KR(ret), KPC(this));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, cnt_))) {
+    LOG_WARN("fail to encode count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i ++) {
     if (OB_FAIL(values_[i].serialize(buf, buf_len, pos))) {
+      LOG_WARN("fail to encode row", K(ret));
     }
   }
   return ret;
@@ -221,10 +237,12 @@ int ObStorageListRowValues::deserialize(ObIAllocator &allocator, const char *buf
   const int obj_capacity = 1024;
   int64_t tmp_cnt = 0;
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &tmp_cnt))) {
+    LOG_WARN("fail to decode vi64", K(ret));
   } else if (0 == tmp_cnt) {
     cnt_ = 0;
   } else if (OB_ISNULL(tmp_buf = tmp_allocator.alloc(sizeof(ObObj) * obj_capacity))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc buf", KR(ret));
   } else {
     ObSEArray<ObNewRow, 4> deseralize_row_array;
     obj_array = new (tmp_buf) ObObj[obj_capacity];
@@ -234,11 +252,15 @@ int ObStorageListRowValues::deserialize(ObIAllocator &allocator, const char *buf
       ObNewRow dest_row;
       tmp_row.count_ = obj_capacity;
       if (OB_FAIL(tmp_row.deserialize(buf, data_len, pos))) {
+        LOG_WARN("fail to deserialize row", K(ret));
       } else if (OB_FAIL(ob_write_row(tmp_allocator, tmp_row, dest_row))) {
+        LOG_WARN("fail to copy row", K(ret), K(tmp_row));
       } else if (OB_FAIL(deseralize_row_array.push_back(dest_row))) {
+        LOG_WARN("Fail to deep copy row", K(ret), K(i), K(dest_row));
       }
     } // for
     if (FAILEDx(init(allocator, deseralize_row_array))) {
+      LOG_WARN("failed to init from deserialize row array", KR(ret), K(deseralize_row_array));
     }
   }
   if (OB_FAIL(ret)) {
@@ -281,19 +303,23 @@ int ObStorageListRowValues::deep_copy(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to deep copy", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(pos + get_deep_copy_size() > buf_len)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("deep copy buf is invalid", KR(ret), K(cnt_), K(get_deep_copy_size()), K(pos), K(buf_len));
   } else {
     dest.values_ = new (buf + pos) ObNewRow[cnt_];
     dest.cnt_ = cnt_;
     pos += cnt_ * sizeof(ObNewRow);
     for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
       if (OB_FAIL(dest.values_[i].deep_copy(values_[i], buf, buf_len, pos))) {
+        LOG_WARN("Fail to deep copy row", K(ret), K(i), K(values_[i]));
       }
     } // for
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(!dest.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("deep copy dest is invalid", KR(ret), KPC(this));
     }
   }
   return ret;
@@ -344,10 +370,13 @@ int ObPartKeyIdxArray::inner_init(
   void *buf = nullptr;
   if (OB_UNLIKELY(count <= 0 || nullptr == data)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(count), KP(data));
   } else if (OB_UNLIKELY(cnt_ > 0 || nullptr != col_idxs_)) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data", KR(ret), K(cnt_), KP(col_idxs_));
   } else if (OB_ISNULL(buf = allocator.alloc(sizeof(int64_t) * count))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc part key array", KR(ret), K(count));
   } else {
     MEMCPY(buf, data, sizeof(int64_t) * count);
     col_idxs_ = static_cast<int64_t *>(buf);
@@ -361,6 +390,7 @@ int ObPartKeyIdxArray::serialize(char *buf, const int64_t buf_len, int64_t &pos)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid to serialize", KR(ret));
   } else {
     OB_UNIS_ENCODE_ARRAY(col_idxs_, cnt_);
   }
@@ -378,10 +408,13 @@ int ObPartKeyIdxArray::deserialize(
   int64_t *tmp_buf = nullptr;
   LST_DO_CODE(OB_UNIS_DECODE, tmp_count);
   if (OB_FAIL(ret)) {
+    LOG_WARN("failed to deserialize count", KR(ret), K(data_len), K(pos));
   } else if (OB_UNLIKELY(tmp_count <= 0)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid count", KR(ret), K(tmp_count));
   } else if (OB_ISNULL(tmp_buf = static_cast<int64_t *>(allocator.alloc(sizeof(int64_t) * tmp_count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to alloc part key array", KR(ret), K(tmp_count));
   } else {
     OB_UNIS_DECODE_ARRAY(tmp_buf, tmp_count);
     if (OB_SUCC(ret)) {
@@ -416,8 +449,10 @@ int ObPartKeyIdxArray::deep_copy(
   const int64_t deep_copy_size = get_deep_copy_size();
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to deep copy", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(pos + deep_copy_size > buf_len)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("deep copy buf is invalid", KR(ret), K(deep_copy_size), K(pos), K(buf_len));
   } else {
     dest.col_idxs_ = (int64_t *)(buf + pos);
     dest.cnt_ = cnt_;
@@ -433,6 +468,7 @@ int ObPartKeyIdxArray::compare(const ObPartKeyIdxArray &other, bool &equal) cons
   equal = false;
   if (OB_UNLIKELY(!is_valid() || !other.is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to compare", KR(ret), KPC(this), K(other));
   } else if (cnt_ == other.cnt_) {
     equal = true;
     for (int64_t idx = 0; idx < cnt_ && equal; ++idx) {
@@ -527,8 +563,11 @@ int ObTruncatePartition::init_range_part(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_range_part(part_type))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid part type", KR(ret), K(part_type));
   } else if (OB_FAIL(low_bound_val.deep_copy(low_bound_val_/*dst*/, allocator))) {
+    LOG_WARN("failed to deep copy low bound val", KR(ret), K(low_bound_val));
   } else if (OB_FAIL(high_bound_val.deep_copy(high_bound_val_/*dst*/, allocator))) {
+    LOG_WARN("failed to deep copy high bound val", KR(ret), K(high_bound_val));
   } else {
     part_type_ = part_type;
     part_op_ = INCLUDE;
@@ -548,7 +587,9 @@ int ObTruncatePartition::init_list_part(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_list_part(part_type) || !is_valid_part_op(part_op))) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid part type or op", KR(ret), K(part_type), K(part_op));
   } else if (OB_FAIL(list_row_values_.init(allocator, list_row_values.get_values()))) {
+    LOG_WARN("failed to init list row values", KR(ret), K(list_row_values));
   } else {
     part_type_ = part_type;
     part_op_ = part_op;
@@ -564,16 +605,22 @@ int ObTruncatePartition::assign(ObIAllocator &allocator, const ObTruncatePartiti
   int ret = OB_SUCCESS;
   if (OB_FAIL(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(other));
   } else if (OB_FAIL(part_key_idxs_.assign(allocator, other.part_key_idxs_))) {
+    LOG_WARN("failed to assign part key idxs", KR(ret), K(other.part_key_idxs_));
   } else if (is_range_part(other.part_type_)) {
     if (OB_FAIL(other.low_bound_val_.deep_copy(low_bound_val_/*dst*/, allocator))) {
+      LOG_WARN("failed to assign low bound val", KR(ret), K(other));
     } else if (OB_FAIL(other.high_bound_val_.deep_copy(high_bound_val_/*dst*/, allocator))) {
+      LOG_WARN("failed to assign hight bound val", KR(ret), K(other));
     }
   } else if (is_list_part(other.part_type_)) {
     if (OB_FAIL(list_row_values_.assign(allocator, other.list_row_values_))) {
+      LOG_WARN("fail to assign row value", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected part type", KR(ret), K(other));
   }
   if (OB_SUCC(ret)) {
     part_type_ = other.part_type_;
@@ -601,6 +648,7 @@ int ObTruncatePartition::serialize(char *buf, const int64_t buf_len, int64_t &po
       LST_DO_CODE(OB_UNIS_ENCODE, list_row_values_);
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected part type", KR(ret), KPC(this));
     }
   }
   return ret;
@@ -631,15 +679,20 @@ int ObTruncatePartition::deserialize(
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, part_type_, part_op_);
   if (FAILEDx(part_key_idxs_.deserialize(allocator, buf, data_len, pos))) {
+    LOG_WARN("failed to deserialize part_key_idxs", KR(ret));
   } else if (is_range_part(part_type_)) {
     if (OB_FAIL(low_bound_val_.deserialize(allocator, buf, data_len, pos))) {
+      LOG_WARN("failed to deserialize low bould val", KR(ret));
     } else if (OB_FAIL(high_bound_val_.deserialize(allocator, buf, data_len, pos))) {
+      LOG_WARN("failed to deserialize high bould val", KR(ret));
     }
   } else if (is_list_part(part_type_)) {
     if (OB_FAIL(list_row_values_.deserialize(allocator, buf, data_len, pos))) {
+      LOG_WARN("failed to deserialize list row val", KR(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected part type", KR(ret), K(part_type_));
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
@@ -674,18 +727,25 @@ int ObTruncatePartition::deep_copy(
   const int64_t deep_copy_size = get_deep_copy_size();
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to deep copy", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(pos + deep_copy_size > buf_len)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("deep copy buf is invalid", KR(ret), K(deep_copy_size), K(pos), K(buf_len));
   } else if (OB_FAIL(part_key_idxs_.deep_copy(buf, buf_len, pos, dest.part_key_idxs_))) {
+    LOG_WARN("failed to deep copy part_key_idxs", KR(ret), K_(part_key_idxs), K(deep_copy_size), K(pos), K(buf_len));
   } else if (is_range_part(part_type_)) {
     if (OB_FAIL(dest.low_bound_val_.deep_copy(low_bound_val_, buf, buf_len, pos))) {
+      LOG_WARN("failed to deep copy low_bound_val", KR(ret), K_(low_bound_val), K(deep_copy_size), K(pos), K(buf_len));
     } else if (OB_FAIL(dest.high_bound_val_.deep_copy(high_bound_val_, buf, buf_len, pos))) {
+      LOG_WARN("failed to deep copy high_bound_val", KR(ret), K_(high_bound_val), K(deep_copy_size), K(pos), K(buf_len));
     }
   } else if (is_list_part(part_type_)) {
     if (OB_FAIL(list_row_values_.deep_copy(buf, buf_len, pos, dest.list_row_values_))) {
+      LOG_WARN("failed to deep copy list_row_values", KR(ret), K_(list_row_values), K(deep_copy_size), K(pos), K(buf_len));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected part type", KR(ret), K(part_type_));
   }
   if (OB_SUCC(ret)) {
     dest.part_type_ = part_type_;
@@ -701,6 +761,7 @@ int ObTruncatePartition::shallow_copy(ObTruncatePartition &dest)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to deep copy", KR(ret), KPC(this));
   } else if (is_range_part(part_type_)) {
     dest.low_bound_val_.assign(low_bound_val_.get_obj_ptr(), low_bound_val_.get_obj_cnt());
     dest.high_bound_val_.assign(high_bound_val_.get_obj_ptr(), high_bound_val_.get_obj_cnt());
@@ -708,6 +769,7 @@ int ObTruncatePartition::shallow_copy(ObTruncatePartition &dest)
     list_row_values_.shallow_copy(dest.list_row_values_);
   } else {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected part type", KR(ret), K(part_type_));
   }
   if (OB_SUCC(ret)) {
     dest.part_type_ = part_type_;
@@ -736,6 +798,7 @@ int ObTruncatePartition::compare(const ObTruncatePartition &other, bool &equal) 
       ret = list_row_values_.compare(other.list_row_values_, equal);
     } else {
       ret = OB_INVALID_DATA;
+      LOG_WARN("invalid part type", KR(ret), K_(part_type));
     }
   } else {
     equal = false;
@@ -824,9 +887,12 @@ int ObTruncateInfo::assign(ObIAllocator &allocator, const ObTruncateInfo &other)
   int ret = OB_SUCCESS;
   if (OB_FAIL(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(other));
   } else if (FALSE_IT(allocator_ = &allocator)) {
   } else if (OB_FAIL(truncate_part_.assign(allocator, other.truncate_part_))) {
+    LOG_WARN("failed to assign truncate part", KR(ret), K(other));
   } else if (other.is_sub_part_ && OB_FAIL(truncate_subpart_.assign(allocator, other.truncate_subpart_))) {
+    LOG_WARN("failed to assign truncate subpart", KR(ret), K(other));
   } else {
     info_ = other.info_;
     key_ = other.key_;
@@ -887,10 +953,13 @@ int ObTruncateInfo::deserialize(
               commit_version_,
               schema_version_);
   if (FAILEDx(truncate_part_.deserialize(allocator, buf, data_len, pos))) {
+    LOG_WARN("failed to deserialize truncate part", KR(ret), K(data_len), K(pos));
   } else if (is_sub_part_ && OB_FAIL(truncate_subpart_.deserialize(allocator, buf, data_len, pos))) {
+    LOG_WARN("failed to deserialize truncate subpart", KR(ret), K(data_len), K(pos));
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("deserialized truncate_info is invalid", KR(ret), KPC(this));
   }
   if (OB_FAIL(ret)) {
     destroy();
@@ -913,10 +982,14 @@ int ObTruncateInfo::deep_copy(
   const int64_t deep_copy_size = get_deep_copy_size();
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to deep copy", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(pos + deep_copy_size > buf_len)) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("deep copy buf is invalid", KR(ret), K(deep_copy_size), K(pos), K(buf_len));
   } else if (OB_FAIL(truncate_part_.deep_copy(buf, buf_len, pos, dest.truncate_part_))) {
+    LOG_WARN("failed to deep copy truncate_part", KR(ret), K_(truncate_part));
   } else if (is_sub_part_ && OB_FAIL(truncate_subpart_.deep_copy(buf, buf_len, pos, dest.truncate_subpart_))) {
+    LOG_WARN("failed to deep copy truncate_subpart", KR(ret), K_(is_sub_part), K_(truncate_subpart));
   } else {
     dest.info_ = info_;
     dest.key_ = key_;
@@ -931,8 +1004,11 @@ int ObTruncateInfo::shallow_copy(ObTruncateInfo &dest)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid data to shallow copy", KR(ret), KPC(this));
   } else if (OB_FAIL(truncate_part_.shallow_copy(dest.truncate_part_))) {
+    LOG_WARN("failed to shallow copy truncate_part", KR(ret), K_(truncate_part));
   } else if (is_sub_part_ && OB_FAIL(truncate_subpart_.shallow_copy(dest.truncate_subpart_))) {
+    LOG_WARN("failed to shallow copy truncate_subpart", KR(ret), K_(is_sub_part), K_(truncate_subpart));
   } else {
     dest.info_ = info_;
     dest.key_ = key_;
@@ -980,10 +1056,12 @@ int ObTruncateInfo::compare_truncate_part_info(const ObTruncateInfo &other, bool
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(truncate_part_.compare(other.truncate_part_, equal))) {
+    LOG_WARN("failed to compare truncate part", KR(ret), KPC(this), K(other));
   } else if (!equal) {
   } else if (is_sub_part_ != other.is_sub_part_) {
     equal = false;
   } else if (is_sub_part_ && OB_FAIL(truncate_subpart_.compare(other.truncate_subpart_, equal))) {
+    LOG_WARN("failed to compare truncate subpart", KR(ret), KPC(this), K(other));
   }
   return ret;
 }

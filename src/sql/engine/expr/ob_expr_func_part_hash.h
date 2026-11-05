@@ -23,18 +23,19 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObSqlExecutorCtx;
+class ObTaskExecutorCtx;
 class ObExprFuncPartHashBase : public ObFuncExprOperator
 {
 public:
   ObExprFuncPartHashBase(common::ObIAllocator &alloc, ObExprOperatorType type,
           const char *name, int32_t param_num, int32_t dimension,
-          bool is_internal_for_mysql = false);
+          bool is_internal_for_mysql = false,
+          bool is_internal_for_oracle = false);
   template<typename T>
   static int calc_value_for_mysql(const T &input, T &output, const common::ObObjType input_type);
 };
 
-class ObSqlExecutorCtx;
+class ObTaskExecutorCtx;
 class ObExprFuncPartHash : public ObExprFuncPartHashBase
 {
 public:
@@ -55,6 +56,8 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int eval_part_hash(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+private:
+  static bool is_oracle_supported_type(const common::ObObjType type);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprFuncPartHash);

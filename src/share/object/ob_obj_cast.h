@@ -30,11 +30,6 @@ namespace oceanbase
 {
 namespace common
 {
-class ObILobReadService;
-
-class ObISrsProvider;
-
-class ObIObjCastRuntime;
 
 #define DOUBLE_TRUE_VALUE_THRESHOLD (1e-50)
 
@@ -50,6 +45,7 @@ class ObIObjCastRuntime;
 #define CM_ZERO_FILL                     (1ULL << 4)
 #define CM_FORMAT_NUMBER_WITH_LIMIT      (1ULL << 5)
 #define CM_CHARSET_CONVERT_IGNORE_ERR    (1ULL << 6)
+#define CM_FORCE_USE_STANDARD_NLS_FORMAT (1ULL << 7)
 #define CM_STRICT_MODE                   (1ULL << 8)
 #define CM_SET_MIN_IF_OVERFLOW           (1ULL << 9)
 #define CM_ERROR_ON_SCALE_OVER           (1ULL << 10)
@@ -77,7 +73,8 @@ class ObIObjCastRuntime;
 #define CM_CONST_TO_DECIMAL_INT_EQ        (1ULL << 19)
 #define CM_BY_TRANSFORMER                (1ULL << 20)
 #define CM_CONST_TO_DECIMAL_INT_UP       (1ULL << 21)
-#define CM_INTERNAL_CAST_IGNORE          (1ULL << 23)
+#define CM_FAST_COLUMN_CONV              (1ULL << 22)
+#define CM_ORA_SYS_VIEW_CAST             (1ULL << 23)
 #define CM_DEMOTE_CAST                   (1ULL << 24)
 // string->integer(int/uint) when default rounding (round to nearest) is performed,
 // If this flag is set, truncation (round to zero) will be performed
@@ -86,7 +83,7 @@ class ObIObjCastRuntime;
 #define CM_COLUMN_CONVERT                (1ULL << 58)
 #define CM_ENABLE_BLOB_CAST              (1ULL << 59)
 #define CM_EXPLICIT_CAST                 (1ULL << 60)
-// bit 61 is retired and left unused
+#define CM_ORACLE_MODE                   (1ULL << 61)
 #define CM_INSERT_UPDATE_SCOPE           (1ULL << 62)
 #define CM_INTERNAL_CALL                 (1ULL << 63)
 
@@ -106,6 +103,8 @@ typedef uint64_t ObCastMode;
 #define CM_IS_BLOB_CAST_ENABLED(mode)         ((CM_ENABLE_BLOB_CAST & (mode)) != 0)
 #define CM_IS_EXPLICIT_CAST(mode)             ((CM_EXPLICIT_CAST & (mode)) != 0)
 #define CM_IS_IMPLICIT_CAST(mode)             (!CM_IS_EXPLICIT_CAST(mode))
+#define CM_IS_ORACLE_MODE(mode)               ((CM_ORACLE_MODE & (mode)) != 0)
+#define CM_SET_ORACLE_MODE(mode)              (CM_ORACLE_MODE | (mode))
 #define CM_IS_INTERNAL_CALL(mode)             ((CM_INTERNAL_CALL & (mode)) != 0)
 #define CM_IS_EXTERNAL_CALL(mode)             (!CM_IS_INTERNAL_CALL(mode))
 #define CM_IS_STRICT_MODE(mode)               ((CM_STRICT_MODE & (mode)) != 0)
@@ -123,6 +122,8 @@ typedef uint64_t ObCastMode;
   ((CM_FORMAT_NUMBER_WITH_LIMIT & (mode)) != 0)
 #define CM_IS_IGNORE_CHARSET_CONVERT_ERR(mode)    \
   ((CM_CHARSET_CONVERT_IGNORE_ERR & (mode)) != 0)
+#define CM_IS_FORCE_USE_STANDARD_NLS_FORMAT(mode) \
+  ((CM_FORCE_USE_STANDARD_NLS_FORMAT & (mode)) != 0)
 #define CM_IS_SET_MIN_IF_OVERFLOW(mode)       ((CM_SET_MIN_IF_OVERFLOW & (mode)) != 0)
 #define CM_IS_ERROR_ON_SCALE_OVER(mode)       ((CM_ERROR_ON_SCALE_OVER & (mode)) != 0)
 #define CM_IS_STRICT_JSON(mode)               ((CM_STRICT_JSON & (mode)) != 0)
@@ -161,7 +162,7 @@ typedef uint64_t ObCastMode;
    || (((mode)&CM_CONST_TO_DECIMAL_INT_EQ) != 0))
 #define CM_IS_BY_TRANSFORMER(mode) ((CM_BY_TRANSFORMER & (mode)) != 0)
 #define CM_SET_BY_TRANSFORMERN(mode)  (CM_BY_TRANSFORMER | (mode))
-#define CM_IS_INTERNAL_CAST_IGNORE(mode)         ((CM_INTERNAL_CAST_IGNORE & (mode)) != 0)
+#define CM_IS_ORA_SYS_VIEW_CAST(mode)            ((CM_ORA_SYS_VIEW_CAST & (mode)) != 0)
 
 struct ObObjCastParams
 {
@@ -180,13 +181,12 @@ struct ObObjCastParams
       dtc_params_(),
       format_number_with_limit_(true),
       is_ignore_(false),
-      runtime_(nullptr),
+      exec_ctx_(NULL),
       gen_query_range_(false),
-      dest_max_length_(LENGTH_UNKNOWN_YET),
-      srs_provider_(nullptr),
-      lob_read_service_(nullptr),
-      json_max_depth_(100)
-  {}
+      dest_max_length_(LENGTH_UNKNOWN_YET)
+  {
+    set_compatible_cast_mode();
+  }
 
   ObObjCastParams(ObIAllocator *allocator_v2, const ObDataTypeCastParams *dtc_params,
                   ObCastMode cast_mode, ObCollationType dest_collation,
@@ -203,13 +203,11 @@ struct ObObjCastParams
       dtc_params_(),
       format_number_with_limit_(true),
       is_ignore_(false),
-      runtime_(nullptr),
+      exec_ctx_(NULL),
       gen_query_range_(false),
-      dest_max_length_(LENGTH_UNKNOWN_YET),
-      srs_provider_(nullptr),
-      lob_read_service_(nullptr),
-      json_max_depth_(100)
+      dest_max_length_(LENGTH_UNKNOWN_YET)
   {
+    set_compatible_cast_mode();
     if (NULL != dtc_params) {
     	dtc_params_ = *dtc_params;
     }
@@ -232,13 +230,11 @@ struct ObObjCastParams
       dtc_params_(),
       format_number_with_limit_(true),
       is_ignore_(false),
-      runtime_(nullptr),
+      exec_ctx_(NULL),
       gen_query_range_(false),
-      dest_max_length_(LENGTH_UNKNOWN_YET),
-      srs_provider_(nullptr),
-      lob_read_service_(nullptr),
-      json_max_depth_(100)
+      dest_max_length_(LENGTH_UNKNOWN_YET)
   {
+    set_compatible_cast_mode();
     if (NULL != dtc_params) {
     	dtc_params_ = *dtc_params;
     }
@@ -258,6 +254,12 @@ struct ObObjCastParams
   {
     UNUSED(attr);
     return alloc(size);
+  }
+
+  void set_compatible_cast_mode()
+  {
+    cast_mode_ &= ~CM_ORACLE_MODE;
+    return;
   }
 
   void set_allow_invalid_dates_cast_mode()
@@ -287,12 +289,9 @@ struct ObObjCastParams
   ObDataTypeCastParams dtc_params_;
   bool format_number_with_limit_;
   bool is_ignore_;
-  ObIObjCastRuntime *runtime_;
+  sql::ObExecContext *exec_ctx_;
   bool gen_query_range_;
   int32_t dest_max_length_;
-  ObISrsProvider *srs_provider_;
-  ObILobReadService *lob_read_service_;
-  int32_t json_max_depth_;
 };
 
 class ObExpectType
@@ -347,6 +346,9 @@ typedef int (*ObCastEnumOrSetFunc)(const ObExpectType &expect_type, ObObjCastPar
 // whether the cast is supported
 bool cast_supported(const ObObjType orig_type, const ObCollationType orig_cs_type,
                     const ObObjType expect_type, const ObCollationType expect_cs_type);
+int ob_obj_to_ob_time_with_date(const ObObj& obj, const ObTimeZoneInfo* tz_info, ObTime& ob_time,
+                                const int64_t cur_ts_value, const ObDateSqlMode date_sql_mode = 0);
+int ob_obj_to_ob_time_without_date(const ObObj &obj, const ObTimeZoneInfo *tz_info, ObTime &ob_time);
 
 
 // CM_STRING_INTEGER_TRUNC only affect string to [unsigned] integer cast.
@@ -386,10 +388,7 @@ private:
 //==============================
 
 
-int obj_collation_check(ObCastCtx &cast_ctx,
-                        const bool is_strict_mode,
-                        const ObCollationType cs_type,
-                        ObObj &obj);
+int obj_collation_check(const bool is_strict_mode, const ObCollationType cs_type, ObObj &obj);
 int obj_accuracy_check(ObCastCtx &cast_ctx, const ObAccuracy &accuracy, const ObCollationType cs_type,
                        const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj);
 int get_bit_len(const ObString &str, int32_t &bit_len);
@@ -423,6 +422,7 @@ public:
                      const ObObj &in_obj, ObObj &out_obj);
   static int to_type(const ObObjType expect_type, ObCollationType expect_cs_type,
                      ObCastCtx &cast_ctx, const ObObj &in_obj, ObObj &out_obj);
+  // get_zero_value has been demoted to sql::get_obj_zero_value(ob_datum_cast.h; kept in sql because it uses the SET_RES macro)
   static int to_type(const ObExpectType &expect_type, ObCastCtx &cast_ctx, const ObObj &in_obj, ObObj &out_obj);
   static int is_cast_monotonic(ObObjType t1, ObObjType t2, bool &is_monotonic);
   static int is_order_consistent(const ObObjMeta &from,
@@ -497,10 +497,15 @@ public:
   static int init(ObIAllocator &allocator);
 
 public:
+  static const ObScale MAX_ORACLE_SCALE_DELTA = 0 - number::ObNumber::MIN_SCALE;
+  static const ObScale MAX_ORACLE_SCALE_SIZE = number::ObNumber::MAX_SCALE - number::ObNumber::MIN_SCALE;
+
   static number::ObNumber MYSQL_MIN[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_MAX[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_CHECK_MIN[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_CHECK_MAX[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
+  static number::ObNumber ORACLE_CHECK_MIN[OB_MAX_NUMBER_PRECISION + 1][MAX_ORACLE_SCALE_SIZE + 1];
+  static number::ObNumber ORACLE_CHECK_MAX[OB_MAX_NUMBER_PRECISION + 1][MAX_ORACLE_SCALE_SIZE + 1];
 };
 
 class ObGeoCastUtils

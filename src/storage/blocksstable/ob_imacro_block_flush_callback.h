@@ -44,6 +44,7 @@ public:
   
   virtual int wait() = 0;
   virtual void reset() {}
+  virtual int64_t get_ddl_start_row_offset() const { return -1; };
 };
 
 }  // end namespace blocksstable

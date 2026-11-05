@@ -17,15 +17,19 @@
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_DEFINE_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_DEFINE_H_
 #include "share/ob_define.h"
-#include "lib/list/ob_list.h"
 #include "share/ob_ls_id.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/ob_phy_table_location.h"
+#include "rpc/frame/ob_result_code.h"
 
 #define DAS_SCAN_OP(_task_op) \
-    (::oceanbase::sql::DAS_OP_TABLE_SCAN != (_task_op)->get_type() ? \
+    (::oceanbase::sql::DAS_OP_TABLE_SCAN != (_task_op)->get_type() && \
+        ::oceanbase::sql::DAS_OP_TABLE_BATCH_SCAN != (_task_op)->get_type() ? \
         nullptr : static_cast<::oceanbase::sql::ObDASScanOp*>(_task_op))
+#define DAS_GROUP_SCAN_OP(_task_op) \
+    (::oceanbase::sql::DAS_OP_TABLE_BATCH_SCAN != (_task_op)->get_type() ? \
+        nullptr : static_cast<::oceanbase::sql::ObDASGroupScanOp*>(_task_op))
 
 #define IS_DAS_DML_OP(_task_op)                         \
   ({                                                    \
@@ -39,8 +43,7 @@ namespace oceanbase
 {
 namespace sql
 {
-static constexpr uint64_t EMPTY_VIRTUAL_TABLE_TABLET_ID = (1ULL << 55);
-
+class ObDASTaskArg;
 class ObIDASTaskOp;
 class ObExecContext;
 class ObPhysicalPlan;
@@ -49,10 +52,18 @@ class ObEvalCtx;
 
 namespace das
 {
-// Reserve 8 KiB for the DAS write-buffer bookkeeping structures.
-const int64_t OB_DAS_TASK_BUFFER_SIZE = 2 * 1024 * 1024l - 8 * 1024;
-const int64_t OB_DAS_TOTAL_TASK_BUFFER_SIZE = OB_DAS_TASK_BUFFER_SIZE;
+//reserve 8K for das write buffer's another structure
+const int64_t OB_DAS_MAX_PACKET_SIZE = 2 * 1024 * 1024l - 8 * 1024;
+/**
+ * Generally, the most common configuration of a cluster is 3 zones.
+ * When the leader is randomly distributed,
+ * it can be considered that the DAS request will send at most one RPC request to each zone.
+ * so OB_DAS_MAX_TOTAL_PACKET_SIZE was defined as:
+ */
+const int64_t OB_DAS_MAX_TOTAL_PACKET_SIZE = 1 * OB_DAS_MAX_PACKET_SIZE;
+const int64_t OB_DAS_MAX_META_TENANT_PACKET_SIZE = 1 * 1024 * 1024l - 8 * 1024;
 // offset of das parallel thread_pool group_id
+static const int32_t OB_DAS_PARALLEL_POOL_MARK = 1 << 30;
 }  // namespace das
 
 enum class ObDasTaskStatus: uint8_t
@@ -71,7 +82,7 @@ enum ObDASOpType
   DAS_OP_TABLE_UPDATE,
   DAS_OP_TABLE_DELETE,
   DAS_OP_TABLE_LOCK,
-  DAS_OP_RESERVED_6,
+  DAS_OP_TABLE_BATCH_SCAN,
   DAS_OP_SPLIT_MULTI_RANGES,
   DAS_OP_GET_RANGES_COST,
   DAS_OP_TABLE_LOOKUP,
@@ -103,7 +114,8 @@ public:
     : table_loc_id_(common::OB_INVALID_ID),
       ref_table_id_(common::OB_INVALID_ID),
       related_table_ids_(alloc),
-      flags_(0)
+      flags_(0),
+      route_policy_(0)
   { }
   ~ObDASTableLocMeta() = default;
   int assign(const ObDASTableLocMeta &other);
@@ -120,8 +132,12 @@ public:
                K_(ref_table_id),
                K_(related_table_ids),
                K_(use_dist_das),
+               K_(select_leader),
+               K_(is_dup_table),
                K_(is_weak_read),
-               K_(unuse_related_pruning));
+               K_(unuse_related_pruning),
+               K_(is_external_table),
+               K_(route_policy));
 
   uint64_t table_loc_id_; //location object id
   uint64_t ref_table_id_; //table object id
@@ -130,12 +146,18 @@ public:
     uint64_t flags_;
     struct {
       uint64_t use_dist_das_                    : 1; //mark whether this table touch data through distributed DAS
+      uint64_t select_leader_                   : 1; //mark whether this table use leader replica
+      uint64_t is_dup_table_                    : 1; //mark if this table is a duplicated table
       uint64_t is_weak_read_                    : 1; //mark if this tale can use weak read consistency
       uint64_t unuse_related_pruning_           : 1; //mark if this table use the related pruning to prune local index tablet_id
+      uint64_t is_external_table_               : 1; //mark if this table is an external table
+      uint64_t is_external_files_on_disk_       : 1; //mark if files in external table are located at local disk
       uint64_t das_empty_part_                  : 1; //mark there is false startup filter on DAS access table
-      uint64_t reserved_                        : 60;
+      uint64_t reserved_                        : 56;
     };
   };
+  int64_t route_policy_;
+
 private:
   void light_assign(const ObDASTableLocMeta &other); //without array
 };
@@ -156,6 +178,8 @@ struct ObDASTabletLoc
 public:
   ObDASTabletLoc()
     : tablet_id_(),
+      ls_id_(),
+      server_(),
       loc_meta_(nullptr),
       next_(this),
       flags_(0),
@@ -165,6 +189,8 @@ public:
   ~ObDASTabletLoc() = default;
 
   TO_STRING_KV(K_(tablet_id),
+               K_(ls_id),
+               K_(server),
                K_(loc_meta),
                K_(in_retry),
                K_(partition_id),
@@ -177,6 +203,10 @@ public:
    * because ObDASTabletLoc will not be released
    */
   common::ObTabletID tablet_id_; //the data_object_id corresponding to partition_id
+  //To reduce the conversion between tablet_id to ls_id,
+  //DAS caches ls_id_, SQL should not actually touch ls_id_
+  share::ObLSID ls_id_;
+  common::ObAddr server_;
   const ObDASTableLocMeta *loc_meta_; //reference the table location meta, not serialize it
   ObDASTabletLoc *next_; //to bind all data table and local index tablet location
   union {
@@ -192,6 +222,7 @@ public:
   uint64_t first_level_part_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDASTabletLoc);
+  int assign(const ObDASTabletLoc &other);
 };
 
 static const int64_t DAS_TABLET_LOC_LOOKUP_THRESHOLD = 1000;
@@ -374,14 +405,43 @@ protected:
 typedef common::ObFixedArray<const ObDASBaseCtDef*, common::ObIAllocator> DASCtDefFixedArray;
 typedef common::ObFixedArray<ObDASBaseRtDef*, common::ObIAllocator> DASRtDefFixedArray;
 
+OB_INLINE void duplicate_type_to_loc_meta(ObDuplicateType v, ObDASTableLocMeta &loc_meta)
+{
+  switch (v) {
+    case ObDuplicateType::NOT_DUPLICATE:
+      loc_meta.is_dup_table_ = 0;
+      break;
+    case ObDuplicateType::DUPLICATE:
+      loc_meta.is_dup_table_ = 1;
+      loc_meta.select_leader_ = 0;
+      break;
+    case ObDuplicateType::DUPLICATE_IN_DML:
+      loc_meta.is_dup_table_ = 1;
+      loc_meta.select_leader_ = 1;
+      break;
+    default:
+      break;
+  }
+}
+
+OB_INLINE ObDuplicateType loc_meta_to_duplicate_type(const ObDASTableLocMeta &loc_meta)
+{
+  ObDuplicateType dup_type = ObDuplicateType::NOT_DUPLICATE;
+  if (loc_meta.is_dup_table_) {
+    dup_type = loc_meta.select_leader_ ?
+        ObDuplicateType::DUPLICATE_IN_DML : ObDuplicateType::DUPLICATE;
+  }
+  return dup_type;
+}
+
 enum ObTSCIRScanType : uint16_t
 {
   OB_NOT_A_SPEC_SCAN = 0,
   OB_IR_DOC_ID_IDX_AGG,
   OB_IR_INV_IDX_AGG,
   OB_IR_INV_IDX_SCAN,
-  // Value 4 remains intentionally unassigned.
-  OB_VEC_DELTA_BUF_SCAN = 5,
+  OB_IR_FWD_IDX_AGG,
+  OB_VEC_DELTA_BUF_SCAN,
   OB_VEC_IDX_ID_SCAN,
   OB_VEC_SNAPSHOT_SCAN,
   OB_VEC_COM_AUX_SCAN,

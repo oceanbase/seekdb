@@ -16,11 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_cast.h"
-#include "sql/engine/expr/ob_datum_cast.h"
 #include "share/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "sql/pl/ob_pl_resolver.h"
+#include "pl/ob_pl_resolver.h"
+#include "sql/engine/expr/vector_cast/vector_cast.h"
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
@@ -37,6 +37,7 @@ ObExprCast::ObExprCast(ObIAllocator &alloc)
                                              2,
                                              VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
+  extra_serialize_ = 0;
   disable_operand_auto_cast();
 }
 
@@ -55,6 +56,7 @@ int ObExprCast::get_cast_inttc_len(ObExprResType &type1,
       length_semantics = type1.get_length_semantics();
     } else if (OB_FAIL(ObField::get_field_mb_length(type1.get_type(),
         type1.get_accuracy(), type1.get_collation_type(), res_len))) {
+      LOG_WARN("failed to get filed mb length");
     }
   } else {
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
@@ -65,6 +67,7 @@ int ObExprCast::get_cast_inttc_len(ObExprResType &type1,
     } else if ((ObDateTimeTC == tc1 || ObMySQLDateTimeTC == tc1) && scale > 0) {
       res_len += scale - 1;
     } else if (OB_FAIL(get_cast_string_len(type1, type2, type_ctx, res_len, length_semantics, conn, cast_mode))) {
+      LOG_WARN("fail to get cast string length", K(ret));
     } else {
       // do nothing
     }
@@ -164,6 +167,7 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
     res_len = 0;//compatible with mysql;
   } else if (OB_ISNULL(type_ctx.get_session())) {
     // calc type don't set ret, just print the log. by design.
+    LOG_WARN("my_session is null");
   } else { // literal
     ObArenaAllocator oballocator(ObModIds::BLOCK_ALLOC);
     ObCollationType cast_coll_type = (CS_TYPE_INVALID != type2.get_collation_type())
@@ -175,6 +179,7 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
     ObRawExpr *raw_expr = NULL;
     if (OB_ISNULL(raw_expr = type_ctx.get_raw_expr())) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret));
     } else {
       ObCastCtx cast_ctx(&oballocator,
                         &type_ctx.get_dtc_params(),
@@ -203,7 +208,8 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
   return ret;
 }
 
-// Resolve the cast mode for an explicit cast. Implicit cast mode is set during type deduction.
+// this is only for engine 3.0. old engine will get cast mode from expr_ctx.
+// only for explicit cast, implicit cast's cm is setup while deduce type(in type_ctx.cast_mode_)
 int ObExprCast::get_explicit_cast_cm(const ObExprResType &src_type,
                               const ObExprResType &dst_type,
                               const ObSQLSessionInfo &session,
@@ -287,19 +293,25 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       OB_ISNULL(exec_ctx = session->get_cur_exec_ctx()) ||
       OB_ISNULL(cast_raw_expr = get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ptr is NULL", K(ret), KP(session), KP(cast_raw_expr));
   } else if (OB_UNLIKELY(NOT_ROW_DIMENSION != row_dimension_)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("invalid row_dimension_", K(row_dimension_), K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimalint))) {
+    LOG_WARN("fail to check_enable_decimalint", K(ret));
   } else if (OB_FAIL(get_cast_type(enable_decimalint,
                                    type2, cast_raw_expr->get_cast_mode(), type_ctx, dst_type))) {
+    LOG_WARN("get cast dest type failed", K(ret));
   } else if (OB_FAIL(ObSQLUtils::get_cs_level_from_cast_mode(cast_raw_expr->get_cast_mode(),
                                                              type1.get_collation_level(),
                                                              cs_level))) {
+    LOG_WARN("failed to get collation level", K(ret));
   } else if (!dst_type.is_collection_sql_type() && FALSE_IT(dst_type.set_collation_level(cs_level))) {
   } else if (OB_UNLIKELY(!cast_supported(type1.get_type(), type1.get_collation_type(),
                                         dst_type.get_type(), dst_type.get_collation_type()))) {
     if (session->is_varparams_sql_prepare()) {
       type.set_null();
+      LOG_TRACE("ps prepare phase ignores type deduce error");
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("transition does not support", "src", ob_obj_type_str(type1.get_type()),
@@ -312,8 +324,10 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
                                  is_explicit_cast)) {
     if (session->is_varparams_sql_prepare()) {
       type.set_null();
+      LOG_TRACE("ps prepare phase ignores type deduce error");
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      LOG_WARN("explicit cast to lob type not allowed", K(ret), K(dst_type));
     }
   } else {
     // always cast to user requested type
@@ -332,6 +346,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       if (OB_UNLIKELY(float_scale > OB_MAX_DOUBLE_FLOAT_SCALE)) {
         ret = OB_ERR_TOO_BIG_SCALE;
         LOG_USER_ERROR(OB_ERR_TOO_BIG_SCALE, float_scale, "CAST", OB_MAX_DOUBLE_FLOAT_SCALE);
+        LOG_WARN("scale of float overflow", K(ret), K(float_scale), K(float_precision));
       } else if (float_precision < -1 ||
           (SCALE_UNKNOWN_YET == float_scale && float_precision > OB_MAX_DOUBLE_FLOAT_PRECISION)) {
         ret = OB_ERR_TOO_BIG_PRECISION;
@@ -367,24 +382,28 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, "CAST", OB_MAX_DATETIME_PRECISION);
     }
     if (OB_SUCC(ret)) {
+      ObCompatibilityMode compatibility_mode = get_compatibility_mode();
       ObCollationType collation_connection = type_ctx.get_coll_type();
+      ObCollationType collation_nation = session->get_nls_collation_nation();
       type1.set_calc_type(get_calc_cast_type(type1.get_type(), dst_type.get_type()));
       int32_t length = 0;
       if (ob_is_string_or_lob_type(dst_type.get_type())
           || ob_is_json(dst_type.get_type())
-          || ob_is_geometry(dst_type.get_type())) {
+          || ob_is_geometry(dst_type.get_type())
+          || ob_is_roaringbitmap(dst_type.get_type())) {
         type.set_collation_level(dst_type.get_collation_level());
         int32_t len = dst_type.get_length();
         int16_t length_semantics = ((dst_type.is_string_or_lob_locator_type() || dst_type.is_json())
             ? dst_type.get_length_semantics()
             : (OB_NOT_NULL(type_ctx.get_session())
-                ? type_ctx.get_session()->get_actual_length_semantics()
+                ? type_ctx.get_session()->get_actual_nls_length_semantics()
                 : LS_BYTE));
         if (len > 0) { // cast(1 as char(10))
           type.set_full_length(len, length_semantics);
         } else if (OB_FAIL(get_cast_string_len(type1, dst_type, type_ctx, len, length_semantics,
                                                collation_connection,
-                                               cast_raw_expr->get_cast_mode()))) {
+                                               cast_raw_expr->get_cast_mode()))) { // cast (1 as char)
+          LOG_WARN("fail to get cast string length", K(ret));
         } else {
           type.set_full_length(len, length_semantics);
         }
@@ -403,8 +422,8 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
         if ((ObNumberTC == dst_type.get_type_class() || ObDecimalIntTC == dst_type.get_type_class())
             && 0 == dst_type.get_precision()) {
           // MySql:cast (1 as decimal(0)) = cast(1 as decimal)
-          // Use the compatibility-mode default precision for number casts.
-          type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY2[0][ObNumberType].get_precision());
+          // Oracle: cast(1.4 as number) = cast(1.4 as number(-1, -1))
+          type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][ObNumberType].get_precision());
         } else if ((ObIntTC == dst_type.get_type_class() || ObUIntTC == dst_type.get_type_class())
                    && dst_type.get_precision() <= 0) {
           // for int or uint , the precision = len
@@ -412,12 +431,13 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           int16_t length_semantics = LS_BYTE;//unused
           if (OB_FAIL(get_cast_inttc_len(type1, dst_type, type_ctx, len, length_semantics,
                                          collation_connection, cast_raw_expr->get_cast_mode()))) {
+            LOG_WARN("fail to get cast inttc length", K(ret));
           } else {
             len = len > OB_LITERAL_MAX_INT_LEN ? OB_LITERAL_MAX_INT_LEN : len;
             type.set_precision(static_cast<int16_t>(len));
           }
         } else if (ObYearType == dst_type.get_type()) {
-          ObAccuracy acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][dst_type.get_type()];
+          ObAccuracy acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][dst_type.get_type()];
           type.set_accuracy(acc);
           if (type1.is_decimal_int() && acc.precision_ < type1.get_precision()) {
             acc.precision_ = type1.get_precision();
@@ -445,6 +465,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
                                      type_ctx.get_sql_mode(),
                                      *cast_raw_expr,
                                      explicit_cast_cm))) {
+      LOG_WARN("set cast mode failed", K(ret));
     } else if (CM_IS_EXPLICIT_CAST(explicit_cast_cm)) {
       // cast_raw_expr.extra_ store explicit cast's cast mode
       cast_raw_expr->set_cast_mode(explicit_cast_cm);
@@ -453,7 +474,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       // eg: select cast(18446744073709551615 as signed) -> -1
       //     because exprlicit case need CM_NO_RANGE_CHECK
       type_ctx.set_cast_mode(explicit_cast_cm & ~CM_EXPLICIT_CAST);
-      // Let the source or destination helper cast perform the conversion when needed.
+      // in engine 3.0, let implicit cast do the real cast
       bool need_extra_cast_for_src_type = false;
       bool need_extra_cast_for_dst_type = false;
       ObRawExprUtils::need_extra_cast(type1, type, need_extra_cast_for_src_type,
@@ -471,7 +492,9 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
         if (ob_is_enumset_tc(type1.get_type())) {
           // For enum/set type, need to check whether warp to string is required.
           if (OB_FAIL(ObRawExprUtils::need_wrap_to_string(type1, type1.get_calc_type(),
-                                          false, need_wrap, true))) {
+                                          false, need_wrap,
+                                          exec_ctx->support_enum_set_type_subschema(*session)))) {
+            LOG_WARN("need_wrap_to_string failed", K(ret), K(type1));
           } else if (!need_wrap) {
             // need_wrap is false, set calc_type to type1 itself.
             type1.set_calc_meta(type1.get_obj_meta());
@@ -488,6 +511,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
             parse_node.value_ = param.get_int();
             ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
             if (OB_FAIL(ObGeoCastUtils::set_geo_type_to_cast_mode(geo_type, cast_mode))) {
+              LOG_WARN("fail to set geometry type to cast mode", K(ret), K(geo_type));
             } else {
               cast_raw_expr->set_cast_mode(cast_mode);
             }
@@ -568,7 +592,7 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
       }
     } else if (ob_is_json(obj_type)) {
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-    } else if (ob_is_geometry(obj_type)) {
+    } else if (ob_is_geometry(obj_type) || ob_is_roaringbitmap(obj_type)) {
       dst_type.set_collation_type(CS_TYPE_BINARY);
       dst_type.set_collation_level(CS_LEVEL_IMPLICIT);
     } else if (ObNumberType == obj_type) {
@@ -591,9 +615,47 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
         }
       }
     }
+    LOG_DEBUG("get_cast_type", K(dst_type), K(param_type2));
   }
   return ret;
 }
+
+int ObExprCast::eval_cast_multiset(const sql::ObExpr &expr,
+                                   sql::ObEvalCtx &ctx,
+                                   sql::ObDatum &res_datum)
+{
+  int ret = OB_SUCCESS;
+  ret = OB_NOT_SUPPORTED;
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, "eval cast multiset");
+  return ret;
+}
+
+int ObExprCast::cg_cast_multiset(ObExprCGCtx &op_cg_ctx,
+                                 const ObRawExpr &raw_expr,
+                                 ObExpr &rt_expr) const
+{
+  int ret = OB_SUCCESS;
+  ret = OB_NOT_SUPPORTED;
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast multiset");
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER(ObExprCast::CastMultisetExtraInfo,
+                    pl_type_, not_null_, elem_type_, capacity_, udt_id_);
+
+int ObExprCast::CastMultisetExtraInfo::deep_copy(common::ObIAllocator &allocator,
+                                                    const ObExprOperatorType type,
+                                                    ObIExprExtraInfo *&copied_info) const
+{
+  int ret = OB_SUCCESS;
+  OZ(ObExprExtraInfoFactory::alloc(allocator, type, copied_info));
+  CastMultisetExtraInfo &other = *static_cast<CastMultisetExtraInfo *>(copied_info);
+  if (OB_SUCC(ret)) {
+    other = *this;
+  }
+  return ret;
+}
+
 
 int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
                         const ObRawExpr &raw_expr,
@@ -616,7 +678,7 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
   ObScale in_scale = rt_expr.args_[0]->datum_meta_.scale_;
   if (ob_is_integer_type(in_type)) {
     in_scale = 0;
-    in_prec = ObAccuracy::MAX_ACCURACY2[0][in_type].get_precision();
+    in_prec = ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][in_type].get_precision();
   }
   // suppose we have (P1, S1) -> (P2, S2)
   // if S2 > S1 && P1 + S2 - S1 <= P2, sizeof(result_type) is wide enough to store result value
@@ -629,10 +691,14 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
       fast_cast_decint = true;
     }
   }
+  LOG_DEBUG("fast decimal int cast", K(fast_cast_decint),
+            K(in_prec), K(in_scale), K(out_prec), K(out_scale));
 
   if (OB_UNLIKELY(ObMaxType == in_type || ObMaxType == out_type) ||
       OB_ISNULL(op_cg_ctx.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("in_type or out_type or allocator is invalid", K(ret),
+             K(in_type), K(out_type), KP(op_cg_ctx.allocator_));
   } else {
     // setup cast mode for explicit cast.
     // Implicit cast's cast mode has already been set when creating cast expr, directly get it from raw_expr.get_cast_mode()
@@ -647,6 +713,7 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
           // do nothing, setting the zerofill length only makes sense when in_type is a numeric type
         } else if (OB_UNLIKELY(UINT_MAX8 < src_res_type.get_length())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected zerofill length", K(ret), K(src_res_type.get_length()));
         } else if (ob_is_string_or_lob_type(out_type)) {
           // The zerofill information will only be used when cast to string/lob type.
           // for these types, scale is unused, so the previous design is to save child length
@@ -661,6 +728,11 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
       const ObRawExpr *src_raw_expr = raw_expr.get_param_expr(0);
       if (OB_ISNULL(src_raw_expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret));
+      } else if (src_raw_expr->is_multiset_expr()) {
+        if (OB_FAIL(cg_cast_multiset(op_cg_ctx, raw_expr, rt_expr))) {
+          LOG_WARN("failed to cg cast multiset", K(ret));
+        }
       } else if (fast_cast_decint) {
         if (CM_IS_EXPLICIT_CAST(cast_mode)) {
           ObDatumCast::get_decint_cast(ob_obj_type_class(in_type), in_prec, in_scale, out_prec,
@@ -677,6 +749,20 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
         if (OB_FAIL(ObDatumCast::choose_cast_function(in_type, in_cs_type, out_type, out_cs_type,
                                                       cast_mode, *(op_cg_ctx.allocator_),
                                                       just_eval_arg, rt_expr))) {
+          LOG_WARN("choose_cast_func failed", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        int tmp_ret = OB_E(EventTable::EN_ENABLE_VECTOR_CAST) OB_SUCCESS;
+        rt_expr.eval_vector_func_ =
+          tmp_ret == OB_SUCCESS ?
+            VectorCasterUtil::get_vector_cast(rt_expr.args_[0]->get_vec_value_tc(),
+                                              rt_expr.get_vec_value_tc(), just_eval_arg,
+                                              rt_expr.eval_func_, cast_mode) :
+            nullptr;
+        // Some VEC_TC_XXXX classes still have some types not yet implemented for vectorization, and they still use the non-vectorized interface
+        if (ObTinyTextType == in_type || ObTinyTextType == out_type) {
+          rt_expr.eval_vector_func_ = nullptr;
         }
       }
     }
@@ -692,17 +778,18 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprCast, raw_expr) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(raw_expr) || OB_ISNULL(raw_expr->get_param_expr(0))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret));
   } else {
     ObObjType src = raw_expr->get_param_expr(0)->get_result_type().get_type();
     ObObjType dst = raw_expr->get_result_type().get_type();
     SET_LOCAL_SYSVAR_CAPACITY(3);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
+    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
+    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
     if (ob_is_datetime_tc(src)
         || ob_is_datetime_tc(dst)
         || ob_is_otimestampe_tc(src)
         || ob_is_otimestampe_tc(dst)) {
-      EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
+      EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
     }
   }
   return ret;
@@ -731,3 +818,4 @@ OB_DEF_SERIALIZE_SIZE(ObExprCast)
 
 }
 }
+

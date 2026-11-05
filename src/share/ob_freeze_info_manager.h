@@ -71,7 +71,7 @@ public:
 };
 
 
-/* Runtime freeze information manager.
+/* ObFreezeInfoManager(tenant level)
  * Only opt freeze info && snapshot_gc_scn
  * The Concurrency should be controlled by the upper layer
  */

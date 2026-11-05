@@ -108,7 +108,7 @@ struct SelectItem
   bool need_check_dup_name_;
   // select item is implicit filled in updatable view, to pass base table's column to top view.
   bool implicit_filled_;
-  bool is_implicit_added_; // used for expressions implicitly added by the resolver
+  bool is_implicit_added_; //used for temporary table and label security at insert resolver
 
   bool is_hidden_rowid_;
 };
@@ -127,6 +127,7 @@ struct ObSelectIntoItem
         is_single_(DEFAULT_SINGLE_OPT),
         max_file_size_(DEFAULT_MAX_FILE_SIZE),
         escaped_cht_(),
+        file_partition_expr_(NULL),
         buffer_size_(DEFAULT_BUFFER_SIZE),
         external_properties_()
   {
@@ -153,6 +154,7 @@ struct ObSelectIntoItem
     max_file_size_ = other.max_file_size_;
     escaped_cht_ = other.escaped_cht_;
     cs_type_ = other.cs_type_;
+    file_partition_expr_ = other.file_partition_expr_;
     buffer_size_ = other.buffer_size_;
     external_properties_ = other.external_properties_;
     return user_vars_.assign(other.user_vars_);
@@ -170,6 +172,7 @@ struct ObSelectIntoItem
                K_(max_file_size),
                K_(escaped_cht),
                K_(cs_type),
+               N_EXPR, file_partition_expr_,
                K_(buffer_size),
                K_(external_properties));
   ObItemType into_type_;
@@ -184,6 +187,7 @@ struct ObSelectIntoItem
   int64_t max_file_size_;
   common::ObObj escaped_cht_;
   common::ObCollationType cs_type_;
+  sql::ObRawExpr* file_partition_expr_;
   int64_t buffer_size_;
   common::ObString external_properties_;
 
@@ -292,6 +296,15 @@ public:
       "recursive",
       "unknown",
     };
+    static const char *set_operator_name_oracle[SET_OP_NUM + 1] =
+    {
+      "none",
+      "union",
+      "intersect",
+      "minus",
+      "unknown",
+      "unknown",
+    };
     return set_operator_name[op];
   }
 
@@ -303,7 +316,8 @@ public:
           global_scope_(false),
           show_database_id_(common::OB_INVALID_ID),
           show_table_id_(common::OB_INVALID_ID),
-          grants_user_id_(common::OB_INVALID_ID)
+          grants_user_id_(common::OB_INVALID_ID),
+          show_seed_(false)
     {}
     virtual ~ObShowStmtCtx() {}
 
@@ -313,6 +327,7 @@ public:
       show_database_id_ = other.show_database_id_;
       show_table_id_ = other.show_table_id_;
       grants_user_id_ = other.grants_user_id_;
+      show_seed_ = other.show_seed_;
     }
 
     bool      is_from_show_stmt_; // whether it is converted from a show statement
@@ -320,12 +335,14 @@ public:
     uint64_t  show_database_id_;
     uint64_t  show_table_id_; // ex: show columns from t1, and show_table_id_ is the table id of t1
     uint64_t grants_user_id_; // for show grants
+    bool show_seed_; // for show seed parameter
 
     TO_STRING_KV(K_(is_from_show_stmt),
                  K_(global_scope),
                  K_(show_database_id),
                  K_(show_table_id),
-                 K_(grants_user_id));
+                 K_(grants_user_id),
+                 K_(show_seed));
   };
 
   ObSelectStmt();
@@ -350,6 +367,7 @@ public:
   void set_is_from_show_stmt(bool is_from_show_stmt) { show_stmt_ctx_.is_from_show_stmt_ = is_from_show_stmt; }
   void set_global_scope(bool global_scope) { show_stmt_ctx_.global_scope_ = global_scope; }
   
+  void set_show_seed(bool show_seed) { show_stmt_ctx_.show_seed_ = show_seed; }
   void set_show_database_id(uint64_t show_database_id) { show_stmt_ctx_.show_database_id_ = show_database_id; }
   void set_show_table_id(uint64_t show_table_id) { show_stmt_ctx_.show_table_id_ = show_table_id; }
   void set_show_grants_user_id(uint64_t user_id) { show_stmt_ctx_.grants_user_id_ = user_id; }
@@ -359,6 +377,7 @@ public:
   int check_using_column(ObStmtResolver &ctx, const common::ObString &column_name) const;
   bool get_global_scope() const { return show_stmt_ctx_.global_scope_; }
   
+  bool get_show_seed() const { return show_stmt_ctx_.show_seed_; }
   uint64_t get_show_database_id() const { return show_stmt_ctx_.show_database_id_; }
   uint64_t get_show_table_id() const { return show_stmt_ctx_.show_table_id_; }
   bool is_distinct() const { return is_distinct_; }
@@ -389,6 +408,8 @@ public:
                                                  get_aggr_item_size() > 0; }
 
   inline bool has_recursive_cte() const { return is_recursive_cte_; }
+  inline void set_expanded_mview(bool is_expanded_mview) { is_expanded_mview_ = is_expanded_mview; }
+  inline bool is_expanded_mview() const { return is_expanded_mview_; }
   // return single row
   inline bool is_single_set_query() const { return get_aggr_item_size() > 0 &&
                                                    group_exprs_.empty() &&
@@ -545,6 +566,9 @@ public:
   inline void set_implicit_distinct(bool v) { is_implicit_distinct_ = v; }
   inline void reset_implicit_distinct() { is_implicit_distinct_ = false; }
   int is_query_deterministic(bool &is_deterministic) const;
+  inline bool is_oracle_compat_groupby() const {return is_oracle_compat_groupby_; }
+  inline void set_is_oracle_compat_groupby(bool v) { is_oracle_compat_groupby_ = v; }
+
 private:
   SetOperator set_op_;
   /* these var is only used for recursive union */
@@ -564,7 +588,7 @@ private:
   //select a,b,sum(d) from t group by a desc, b asc with rollup.
   common::ObSEArray<ObOrderDirection, 8, common::ModulePageAllocator, true> rollup_directions_;
 
-  // Used for statement printing.
+  // for oracle mode only, for stmt print only
   common::ObSEArray<ObColumnRefRawExpr*, 4, common::ModulePageAllocator, true> for_update_columns_;
 
   /* These fields are only used by set select */
@@ -585,11 +609,13 @@ private:
   bool children_swapped_;
   share::schema::ViewCheckOption check_option_;
   bool contain_ab_param_;
+  bool is_expanded_mview_;
   //denote if the query option 'STRAIGHT_JOIN' has been specified
   bool is_select_straight_join_;
   // denote if the duplicate value of this stmt will not change the query result
   // optimizer can assign or remove DISTINCT for this stmt 
   bool is_implicit_distinct_;
+  bool is_oracle_compat_groupby_; // true if has rollup/cube/grouping sets in mysql mode
 };
 }
 }

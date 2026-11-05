@@ -28,6 +28,7 @@ int ObSPIVDaaTIter::init(const ObSPIVDaaTParam &param)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_init(param))) {
+    LOG_WARN("failed to init spiv daat iter");
   }
   return ret;
 }
@@ -56,6 +57,7 @@ int ObSPIVDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
   int ret = OB_SUCCESS;
   if(OB_FAIL(inner_get_next_rows(capacity, count))) {
     if(OB_UNLIKELY(ret != OB_ITER_END)) {
+      LOG_WARN("failed to inner get next rows", K(ret));
     }
   }
   return ret;
@@ -66,6 +68,7 @@ int ObSPIVDaaTIter::get_next_row()
   int ret = OB_SUCCESS;
   if(OB_FAIL(inner_get_next_row())) {
     if(OB_UNLIKELY(ret != OB_ITER_END)) {
+      LOG_WARN("failed to inner get next row", K(ret));
     }
   }
   return ret;
@@ -93,14 +96,17 @@ int ObSPIVDaaTIter::set_valid_docid_set(const common::hash::ObHashSet<ObDocIdExt
   int64_t expected_size = valid_docid_set.size();
   if (valid_docid_set.empty()){
   } else if (OB_FAIL(valid_docid_set_.create(expected_size, ObMemAttr("ValidDocidSet")))) {
+    LOG_WARN("failed to create valid docid set", K(ret), K(expected_size));
   } else {
     for (common::hash::ObHashSet<ObDocIdExt>::const_iterator iter = valid_docid_set.begin(); OB_SUCC(ret) && iter != valid_docid_set.end(); ++iter) {
       if (OB_FAIL(valid_docid_set_.set_refactored(iter->first))) {
+        LOG_WARN("failed to insert docid to valid docid set", K(ret), K(iter->first));
       }
     }
   }
 
   if (OB_FAIL(ret)) {
+    LOG_WARN("failed to set valid docid set", K(ret));
     valid_docid_set_.clear();
   }
   return ret;
@@ -130,7 +136,9 @@ int ObSPIVDaaTNaiveIter::inner_init(const ObSPIVDaaTParam &param)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(param.base_param_) || OB_ISNULL(param.dim_iters_) || OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null base param", K(ret));
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_, *param.allocator_, *param.relevance_collector_))) {
+    LOG_WARN("failed to init spiv daat iter", K(ret));
   } else {
     is_pre_filter_ = param.is_pre_filter_;
     is_use_docid_ = param.is_use_docid_;
@@ -141,12 +149,14 @@ int ObSPIVDaaTNaiveIter::inner_init(const ObSPIVDaaTParam &param)
     }
     if (OB_ISNULL(iter_allocator_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("iter_allocator_ is null", K(ret));
     } else if (OB_ISNULL(sort_heap_ = OB_NEWx(SPIVSortHeap,
                              iter_allocator_,
                              param.base_param_->topk_limit_,
                              *iter_allocator_,
                              docid_score_cmp_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to init sort heap", K(ret));
     }
   }
   return ret;
@@ -180,6 +190,7 @@ int ObSPIVDaaTNaiveIter::project_results(int64_t count)
     if (!is_pre_filter_ || exist) {
       // negative inner product
       if (OB_FAIL(sort_heap_->push(buffered_domain_ids_[i], -buffered_relevances_[i]))) {
+        LOG_WARN("failed to push item to sort heap", K(ret));
       }
     }
   }
@@ -194,10 +205,12 @@ int ObSPIVDaaTNaiveIter::process()
     int64_t count = 0;
     if (OB_FAIL(do_one_merge_round(count))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("failed to do one merge round", K(ret), K(count));
       }
     }
     if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0) {
       if (OB_FAIL(project_results(count))) {
+        LOG_WARN("failed to project rows", K(ret));
       }
     }
   }
@@ -211,12 +224,14 @@ int ObSPIVDaaTNaiveIter::process()
     } else {
       ObDocIdExt docid;
       if (OB_FAIL(result_docids_.prepare_allocate(heap_size))) {
+        LOG_WARN("failed to prepare allocate", K(ret));
       }
       for (int i = 0; OB_SUCC(ret) && i < heap_size; i++) {
         docid = sort_heap_->get_doc_id(sort_heap_->top().doc_idx_);
         // for negative inner product, using ascend sorting
         result_docids_[heap_size - 1 - i].from_datum(docid.get_datum());
         if (OB_FAIL(sort_heap_->pop())) {
+          LOG_WARN("failed to pop docid", K(ret));
         }
       }
     }
@@ -241,6 +256,7 @@ int ObSPIVDaaTNaiveIter::inner_get_next_rows(const int64_t capacity, int64_t &co
   } else if (OB_INVALID_INDEX_INT64 == result_docids_curr_iter_) {
     if (OB_FAIL(process())) {
       if (ret != OB_ITER_END) {
+        LOG_WARN("failed to process", K(ret));
       }
     }
   }
@@ -248,6 +264,7 @@ int ObSPIVDaaTNaiveIter::inner_get_next_rows(const int64_t capacity, int64_t &co
   if (OB_FAIL(ret)) {
   } else if (OB_INVALID_INDEX_INT64 == result_docids_curr_iter_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to get heap iter", K(ret));
   } else if (result_docids_curr_iter_ == result_docids_.count()) {
     ret = OB_ITER_END;
   } else {
@@ -274,7 +291,9 @@ int ObSPIVBMWIter::init(const ObSPIVDaaTParam &param)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(param.base_param_) || OB_ISNULL(param.dim_iters_) || OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null base param", K(ret));
   } else if (OB_FAIL(ObSRBMWIterImpl::init(*param.base_param_, *param.dim_iters_, *param.allocator_, *param.relevance_collector_))) {
+    LOG_WARN("failed to init spiv daat iter", K(ret));
   } else {
     is_pre_filter_ = param.is_pre_filter_;
     is_use_docid_ = param.is_use_docid_;
@@ -294,13 +313,16 @@ int ObSPIVBMWIter::set_valid_docid_set(const common::hash::ObHashSet<ObDocIdExt>
   int64_t expected_size = valid_docid_set.size();
   if (valid_docid_set.empty()){
   } else if (OB_FAIL(valid_docid_set_.create(expected_size, ObMemAttr("ValidDocidSet")))) {
+    LOG_WARN("failed to create valid docid set", K(ret), K(expected_size));
   } else {
     for (common::hash::ObHashSet<ObDocIdExt>::const_iterator iter = valid_docid_set.begin(); OB_SUCC(ret) && iter != valid_docid_set.end(); ++iter) {
       if (OB_FAIL(valid_docid_set_.set_refactored(iter->first))) {
+        LOG_WARN("failed to insert docid to valid docid set", K(ret), K(iter->first));
       }
     }
   }
   if (OB_FAIL(ret)) {
+    LOG_WARN("failed to set valid docid set", K(ret));
     valid_docid_set_.clear();
   }
   return ret;
@@ -339,18 +361,22 @@ int ObSPIVBMWIter::get_next_rows(const int64_t capacity, int64_t &count){
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(capacity <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(capacity));
   } else if (BMWStatus::FINISHED == status_) {
     // skip
   } else if (OB_FAIL(top_k_search())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("failed to top k search", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
   }
   if (FAILEDx(project_rows_from_result_docids(capacity, count))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("failed to project rows from top k heap", K(ret));
     }
   }
   return ret;
@@ -365,12 +391,14 @@ int ObSPIVBMWIter::reverse_top_k_heap()
   } else {
     ObDocIdExt docid;
     if (OB_FAIL(result_docids_.prepare_allocate(heap_size))) {
+      LOG_WARN("failed to prepare allocate", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && i < heap_size; i++) {
       const TopKItem &top_k_item = top_k_heap_.top();
       docid = id_cache_.at(top_k_item.cache_idx_);
       result_docids_[heap_size - 1 - i].from_datum(docid.get_datum());
       if (OB_FAIL(top_k_heap_.pop())) {
+        LOG_WARN("failed to pop docid", K(ret));
       }
     }
   }
@@ -388,6 +416,7 @@ int ObSPIVBMWIter::project_rows_from_result_docids(const int64_t capacity, int64
   } else if (OB_INVALID_INDEX_INT64 == result_docids_curr_iter_) {
     if (OB_FAIL(reverse_top_k_heap())) {
       if (ret != OB_ITER_END) {
+        LOG_WARN("failed to reverse top k heap", K(ret));
       }
     }
   }
@@ -395,6 +424,7 @@ int ObSPIVBMWIter::project_rows_from_result_docids(const int64_t capacity, int64
   if (OB_FAIL(ret)) {
   } else if (OB_INVALID_INDEX_INT64 == result_docids_curr_iter_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to get heap iter", K(ret));
   } else if (result_docids_curr_iter_ == result_docids_.count()) {
     ret = OB_ITER_END;
   } else {
@@ -421,6 +451,7 @@ int ObSPIVBMWIter::process_collected_row(const ObDatum &id_datum, const double r
   if (is_pre_filter_) {
     ObDocIdExt docid;
     if (OB_FAIL(docid.from_datum(id_datum))) {
+      LOG_WARN("failed to from datum", K(ret));
     } else {
       int hash_ret = valid_docid_set_.exist_refactored(docid);
       if (OB_HASH_EXIST == hash_ret) {
@@ -432,9 +463,12 @@ int ObSPIVBMWIter::process_collected_row(const ObDatum &id_datum, const double r
   } else if (valid || !is_pre_filter_) {
     if (OB_UNLIKELY(top_k_heap_.count() > top_k_count_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected top k heap count", K(ret), K(top_k_heap_.count()), K_(top_k_count));
     } else if (top_k_heap_.count() < top_k_count_) {
       if (OB_FAIL(id_cache_.at(top_k_heap_.count()).from_datum(id_datum))) {
+        LOG_WARN("failed to from datum", K(ret));
       } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, top_k_heap_.count())))) {
+        LOG_WARN("failed to push top k item", K(ret));
       }
     } else {
       const int64_t cache_idx = top_k_heap_.top().cache_idx_;
@@ -442,8 +476,11 @@ int ObSPIVBMWIter::process_collected_row(const ObDatum &id_datum, const double r
       if (relevance <= top_k_threshold) {
         // not a new top k candidate
       } else if (OB_FAIL(id_cache_.at(cache_idx).from_datum(id_datum))) {
+        LOG_WARN("failed to from datum", K(ret));
       } else if (OB_FAIL(top_k_heap_.pop())) {
+        LOG_WARN("failed to pop top k heap", K(ret));
       } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, cache_idx)))) {
+        LOG_WARN("failed to push top k item", K(ret));
       }
     }
   }
@@ -457,6 +494,7 @@ int ObSPIVBMWIter::init_before_wand_process()
   for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
     ObSPIVBlockMaxDimIter *block_max_iter = static_cast<ObSPIVBlockMaxDimIter *>(dim_iters_->at(i));
     if (OB_FAIL(block_max_iter->init_block_max_iter())) {
+      LOG_WARN("failed to init block max iter", K(ret));
     }
   }
   return ret;

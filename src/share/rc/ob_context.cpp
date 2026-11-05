@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/rc/ob_context.h"
+#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
@@ -33,14 +35,37 @@ namespace share
 {
 
 
-ObResourceOwner &ObResourceOwner::root()
+int ObTenantSpace::guard_init_cb(const ObTenantSpace &tenant_space, char *buf, bool &is_inited)
 {
-  static ObResourceOwner *root = nullptr;
+  int ret = OB_SUCCESS;
+  is_inited = false;
+  if (&tenant_space == &ObTenantSpace::root()) {
+    // do-nothing
+  } else {
+    lib::Worker::CompatMode mode = THIS_WORKER.get_compatibility_mode();
+    *reinterpret_cast<lib::Worker::CompatMode*>(buf) = mode;
+    mode = ::oceanbase::share::g_mp->compat_mode();
+    THIS_WORKER.set_compatibility_mode(mode);
+    is_inited = true;
+  }
+  return ret;
+}
+
+void ObTenantSpace::guard_deinit_cb(const ObTenantSpace &tenant_space, char *buf)
+{
+  UNUSEDx(tenant_space);
+  lib::Worker::CompatMode mode = *reinterpret_cast<lib::Worker::CompatMode*>(buf);
+  THIS_WORKER.set_compatibility_mode(mode);
+}
+
+ObTenantSpace &ObTenantSpace::root()
+{
+  static ObTenantSpace *root = nullptr;
   if (OB_UNLIKELY(nullptr == root)) {
     static lib::ObMutex mutex;
     lib::ObMutexGuard guard(mutex);
     if (nullptr == root) {
-      static ObResourceOwner tmp(common::OB_SERVER_RUNTIME_ID);
+      static ObTenantSpace tmp(nullptr);
       int ret = tmp.init();
       abort_unless(OB_SUCCESS == ret);
       root = &tmp;
@@ -48,6 +73,53 @@ ObResourceOwner &ObResourceOwner::root()
   }
   return *root;
 }
+
+ObResourceOwner &ObResourceOwner::root()
+{
+  static ObResourceOwner *root = nullptr;
+  if (OB_UNLIKELY(nullptr == root)) {
+    static lib::ObMutex mutex;
+    lib::ObMutexGuard guard(mutex);
+    if (nullptr == root) {
+      static ObResourceOwner tmp(common::OB_SERVER_TENANT_ID);
+      int ret = tmp.init();
+      abort_unless(OB_SUCCESS == ret);
+      root = &tmp;
+    }
+  }
+  return *root;
+}
+
+ObTenantSpaceFetcher::ObTenantSpaceFetcher()
+  : ret_(OB_SUCCESS),
+    entity_(nullptr)
+{
+  int ret = common::OB_SUCCESS;
+  ObTenantSpace *tmp = nullptr;
+  if (OB_FAIL(get_tenant_ctx_with_tenant_lock(tmp))) {
+    if (REACH_TIME_INTERVAL(1000 * 1000)) {
+      SHARE_LOG(WARN, "get tenant ctx failed", K(ret));
+    }
+  } else if (OB_ISNULL(tmp)) {
+    ret = OB_ERR_UNEXPECTED;
+    SHARE_LOG(WARN, "null ptr", K(ret));
+  } else {
+    entity_ = tmp;
+  }
+  if (OB_FAIL(ret) && ret == OB_IN_STOP_STATE) {
+    ret = OB_TENANT_NOT_IN_SERVER;
+  }
+  ret_ = ret;
+}
+
+ObTenantSpaceFetcher::~ObTenantSpaceFetcher()
+{
+  if (entity_ != nullptr && entity_->get_tenant() != nullptr) {
+    entity_->get_tenant()->unlock();
+    entity_ = nullptr;
+  }
+}
+
 
 } // end of namespace share
 } // end of namespace oceanbase

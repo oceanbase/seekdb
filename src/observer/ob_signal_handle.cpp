@@ -41,7 +41,7 @@ static int sigtimedwait(const sigset_t *set, siginfo_t *info, const struct times
 #include "observer/ob_server.h"
 #include "observer/ob_dump_task_generator.h"
 #include "sql/ob_sql_init.h"
-#include "storage/tx_storage/ob_memory_printer.h"
+#include "storage/tx_storage/ob_tenant_memory_printer.h"
 
 extern void switch_check_io_hang_errsim();
 
@@ -62,6 +62,7 @@ void ObSignalHandle::run1()
   lib::set_thread_name("SignalHandle");
   sigset_t   waitset;
   if (OB_FAIL(add_signums_to_set(waitset))) {
+    LOG_ERROR("Add signal set error", K(ret));
   } else {
     int signum = -1;
     //to check _stop every second
@@ -73,6 +74,7 @@ void ObSignalHandle::run1()
       if (-1 == signum) {
         //do not log error, because timeout will also return -1.
       } else if (OB_FAIL(deal_signals(signum))) {
+        LOG_WARN("Deal signal error", K(ret), K(signum));
       } else {
         //do nothing
       }
@@ -85,6 +87,7 @@ int ObSignalHandle::change_signal_mask()
   int ret = OB_SUCCESS;
   sigset_t block_set, old_set;
   if (OB_FAIL(add_signums_to_set(block_set))) {
+    LOG_ERROR("Add signal set error", K(ret));
   } else if (0 != pthread_sigmask(SIG_BLOCK, &block_set, &old_set)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("Fail to change mask of blcked signals", K(ret));
@@ -169,7 +172,7 @@ int ObSignalHandle::deal_signals(int signum)
     }
     case 49: {
       ob_print_mod_memory_usage();
-      ObMemoryPrinter::get_instance().print_memory_usage();
+      ObTenantMemoryPrinter::get_instance().print_tenant_usage();
       switch_check_io_hang_errsim();
       break;
     }
@@ -183,6 +186,27 @@ int ObSignalHandle::deal_signals(int signum)
       // debug SQL modules
       if (OB_FAIL(
           ObLogger::get_logger().set_mod_log_levels("ALL.*:ERROR, SQL.*:DEBUG, RPC.*:WARN"))) {
+        LOG_WARN("Set mod log level error", K(ret));
+      }
+      break;
+    }
+    case 55: {
+      if (OB_ISNULL(ObServer::get_instance().get_gctx().omt_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("ObMultiTenant in global context should not be NULL", K(ret));
+      } else {
+        ObServer::get_instance().get_gctx().omt_->set_cpu_dump();
+        LOG_INFO("CPU_DUMP: switch on");
+      }
+      break;
+    }
+    case 56: {
+      if (OB_ISNULL(ObServer::get_instance().get_gctx().omt_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("ObMultiTenant in global context should not be NULL", K(ret));
+      } else {
+        ObServer::get_instance().get_gctx().omt_->unset_cpu_dump();
+        LOG_INFO("CPU_DUMP: switch off");
       }
       break;
     }
@@ -204,8 +228,8 @@ int ObSignalHandle::deal_signals(int signum)
       break;
     }
     case 63: {
-      // Print runtime memstore consumption.
-      ObMemoryPrinter::get_instance().print_memory_usage();
+      // print tenant memstore consumption condition by wenduo.swd
+      ObTenantMemoryPrinter::get_instance().print_tenant_usage();
       break;
     }
     default: {

@@ -43,8 +43,11 @@ public:
         buffer_size_(DEFAULT_BUFFER_SIZE),
         escaped_cht_(),
         cs_type_(CS_TYPE_INVALID),
+        file_partition_expr_(NULL),
         is_overwrite_(false),
-        external_properties_()
+        external_properties_(),
+        external_partition_(),
+        alias_names_()
   {
   }
   virtual ~ObLogSelectInto() {}
@@ -69,6 +72,7 @@ public:
     int ret = common::OB_SUCCESS;
     for (int i = 0 ; i < user_vars.count() ; ++i) {
       if (OB_FAIL(user_vars_.push_back(user_vars.at(i)))) {
+        SQL_OPT_LOG(ERROR, "push back failed", K(ret));
       }
     }
   }
@@ -100,6 +104,10 @@ public:
   {
     cs_type_ = cs_type;
   }
+  inline void set_file_partition_expr(sql::ObRawExpr* file_partition_expr)
+  {
+    file_partition_expr_ = file_partition_expr;
+  }
   inline void set_is_overwrite(bool is_overwrite)
   {
     is_overwrite_ = is_overwrite;
@@ -107,6 +115,19 @@ public:
   inline void set_external_properties(const common::ObString &external_properties)
   {
     external_properties_.assign_ptr(external_properties.ptr(), external_properties.length());
+  }
+  inline void set_external_partition(const common::ObString &external_partition)
+  {
+    external_partition_.assign_ptr(external_partition.ptr(), external_partition.length());
+  }
+  inline void set_alias_names(common::ObIArray<common::ObString> &alias_names)
+  {
+    int ret = common::OB_SUCCESS;
+    for (int i = 0 ; OB_SUCC(ret) && i < alias_names.count() ; ++i) {
+      if (OB_FAIL(alias_names_.push_back(alias_names.at(i)))) {
+        SQL_OPT_LOG(WARN, "push back failed", K(ret));
+      }
+    }
   }
   inline ObItemType get_into_type() const
   {
@@ -156,6 +177,10 @@ public:
   {
     return cs_type_;
   }
+  inline sql::ObRawExpr* get_file_partition_expr() const
+  {
+    return file_partition_expr_;
+  }
   inline bool get_is_overwrite() const
   {
     return is_overwrite_;
@@ -163,6 +188,18 @@ public:
   inline common::ObString get_external_properties() const
   {
     return external_properties_;
+  }
+  inline common::ObString get_external_partition() const
+  {
+    return external_partition_;
+  }
+  inline const common::ObIArray<common::ObString> &get_alias_names() const
+  {
+    return alias_names_;
+  }
+  inline common::ObIArray<common::ObString> &get_alias_names()
+  {
+    return alias_names_;
   }
   const common::ObIArray<ObRawExpr*> &get_select_exprs() const { return select_exprs_; }
   common::ObIArray<ObRawExpr*> &get_select_exprs() { return select_exprs_; }
@@ -186,8 +223,11 @@ private:
   int64_t buffer_size_;
   common::ObObj escaped_cht_;
   common::ObCollationType cs_type_;
+  sql::ObRawExpr* file_partition_expr_;
   bool is_overwrite_;
   common::ObString external_properties_;
+  common::ObString external_partition_;
+  common::ObSEArray<common::ObString, 8, common::ModulePageAllocator, true> alias_names_;
 };
 }
 }

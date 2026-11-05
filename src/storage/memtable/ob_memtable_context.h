@@ -18,7 +18,6 @@
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_CONTEXT_
 
 #include "lib/allocator/ob_fifo_allocator.h"
-#include "lib/literals/ob_literals.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/lock/ob_spin_lock.h"
@@ -91,27 +90,33 @@ public:
   static const uint8_t BIG_ROW_NEW = 1;
   static const uint8_t BIG_ROW_OLD = 2;
   static const uint8_t MAX = 3;
+  static const uint8_t ENCRYPT = (1 << 3);
 public:
   static bool is_valid_row_flag(const uint8_t row_flag)
   {
-    return row_flag < MAX;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return real_flag < MAX;
   }
   // Is it the beginning of a line
   static bool is_row_start(const uint8_t row_flag)
   {
-    return NORMAL_ROW == row_flag;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return NORMAL_ROW == real_flag;
   }
   static bool is_normal_row(const uint8_t row_flag)
   {
-    return row_flag == NORMAL_ROW;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return real_flag == NORMAL_ROW;
   }
   static bool is_big_row(const uint8_t row_flag)
   {
-    return BIG_ROW_NEW == row_flag || BIG_ROW_OLD == row_flag;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return BIG_ROW_NEW == real_flag || BIG_ROW_OLD == real_flag;
   }
   static bool is_big_row_new(const uint8_t row_flag)
   {
-    return BIG_ROW_NEW == row_flag;
+    const uint8_t real_flag = row_flag & (~ENCRYPT);
+    return BIG_ROW_NEW == real_flag;
   }
   static bool is_big_row_start(const uint8_t row_flag)
   {
@@ -127,6 +132,18 @@ public:
   {
     UNUSED(row_flag);
     return false;
+  }
+  static bool is_encrypted(const uint8_t row_flag)
+  {
+    return row_flag & ENCRYPT;
+  }
+  static void add_encrypt_flag(uint8_t &row_flag)
+  {
+    row_flag |= ENCRYPT;
+  }
+  static void remove_encrypt_flag(uint8_t &row_flag)
+  {
+    row_flag &= (~ENCRYPT);
   }
 };
 
@@ -156,6 +173,7 @@ public:
       if (OB_FAIL(allocator_.init(NULL, //use default allocator in fifo_allocator
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
+        TRANS_LOG(ERROR, "query allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }
@@ -245,6 +263,7 @@ public:
       if (OB_FAIL(allocator_.init(NULL,
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
+        TRANS_LOG(ERROR, "callback allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }
@@ -315,6 +334,7 @@ class ObMemtableCtx : public ObIMemtableCtx
   using RDLockGuard = common::SpinRLockGuard;
   static const int64_t SLOW_QUERY_THRESHOULD = 500 * 1000;
   static const int64_t LOG_CONFLICT_INTERVAL = 3 * 1000 * 1000;
+  static const int64_t MAX_RESERVED_CONFLICT_TX_NUM = 30;
 public:
   ObMemtableCtx();
   virtual ~ObMemtableCtx();
@@ -325,6 +345,11 @@ public:
   virtual void old_row_free(void *row) override;
   virtual common::ObIAllocator &get_query_allocator();
   virtual void inc_lock_for_read_retry_count();
+  // When row lock conflict occurs in a remote execution, record the trans id in
+  // transaction context, and carries it back after execution, for dead lock detect use
+  virtual int add_conflict_trans_id(const transaction::ObTransID conflict_trans_id);
+  void reset_conflict_trans_ids();
+  int get_conflict_trans_ids(common::ObIArray<transaction::ObTransIDAndAddr> &array);
   virtual int read_lock_yield()
   {
     return ATOMIC_LOAD(&end_code_);
@@ -360,6 +385,7 @@ public:
   virtual int trans_replay_end(const bool commit,
                                const share::SCN trans_version,
                                const share::SCN final_scn,
+                               const uint64_t log_cluster_version = 0,
                                const uint64_t checksum = 0);
   //method called when leader takeover
   virtual int replay_to_commit(const bool is_resume);
@@ -381,8 +407,8 @@ public:
   int log_submitted(const ObRedoLogSubmitHelper &helper);
   int sync_log_succ(const share::SCN scn, const ObCallbackScopeArray &callbacks);
   void sync_log_fail(const ObCallbackScopeArray &callbacks, const share::SCN &max_applied_scn);
-  virtual void set_trans_ctx(transaction::ObTxCtx *ctx);
-  virtual transaction::ObTxCtx *get_trans_ctx() const { return ctx_; }
+  virtual void set_trans_ctx(transaction::ObPartTransCtx *ctx);
+  virtual transaction::ObPartTransCtx *get_trans_ctx() const { return ctx_; }
   virtual void inc_truncate_cnt() override { truncate_cnt_++; }
   int get_memtable_key_arr(transaction::ObMemtableKeyArray &memtable_key_arr);
   uint64_t get_lock_for_read_retry_count() const { return lock_for_read_retry_count_; }
@@ -505,8 +531,10 @@ public:
   // used by the replay process of multi data source.
   int replay_lock(const transaction::tablelock::ObTableLockOp &lock_op,
                   const share::SCN &scn);
-  int recover_from_table_lock_durable_info(const ObTableLockInfo &table_lock_info);
+  int recover_from_table_lock_durable_info(const ObTableLockInfo &table_lock_info,
+                                           const bool transfer_merge = false);
   int get_table_lock_store_info(ObTableLockInfo &table_lock_info);
+  int get_table_lock_for_transfer(ObTableLockInfo &table_lock_info, const ObIArray<common::ObTabletID> &tablet_list);
   // for deadlock detect.
   void set_table_lock_killed() { lock_mem_ctx_.set_killed(); }
   bool is_table_lock_killed() const { return lock_mem_ctx_.is_killed(); }
@@ -565,7 +593,7 @@ private:
   ObMemtableCtxCbAllocator ctx_cb_allocator_;
   ObRedoLogGenerator log_gen_;
   RetryInfo retry_info_;
-  transaction::ObTxCtx *ctx_;
+  transaction::ObPartTransCtx *ctx_;
   int64_t truncate_cnt_;
   // the retry count of lock for read
   uint64_t lock_for_read_retry_count_;
@@ -582,6 +610,11 @@ private:
   // Used to indicate whether mvcc row is updated or not.
   // When a statement is update or select for update, the value can be set ture;
   bool has_row_updated_;
+  // For deaklock detection
+  // The trans id of the holder of the conflict row lock
+  // TODO(Handora), for non-local execution, if no-occupy-thread wait is implemented,
+  // it should be carried back the same way as local execution
+  common::ObArray<transaction::ObTransID> conflict_trans_ids_;
   transaction::ObMemtableCtxObjPool mem_ctx_obj_pool_;
   // table lock mem ctx.
   transaction::tablelock::ObLockMemCtx lock_mem_ctx_;

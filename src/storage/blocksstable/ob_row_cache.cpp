@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_row_cache.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/statistic_event/ob_stat_event.h"
 namespace oceanbase
 {
 using namespace common;
@@ -64,6 +67,7 @@ int ObRowCacheKey::hash(uint64_t &hash_val) const
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected error for null datum utils", K(ret), K(*this));
     } else if (OB_FAIL(rowkey_.hash(*datum_utils_, hash_val))) {
+      STORAGE_LOG(WARN, "Failed to calc hash value for datum rowkey", K(ret), K(rowkey_));
     }
   }
   return ret;
@@ -84,6 +88,7 @@ int ObRowCacheKey::equal(const ObIKVCacheKey &other, bool &equal) const
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "Invalid argument to compare row cachekey", K(ret), K(*this), K(other_key));
     } else if (OB_FAIL(rowkey_.equal(other_key.rowkey_, *datum_utils, equal))) {
+      STORAGE_LOG(WARN, "Failed to check rowkey cache key equal", K(ret), K(rowkey_), K(other_key));
     }
   }
   return ret;
@@ -115,6 +120,7 @@ int ObRowCacheKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&k
     if (rowkey_.is_valid() && 0 < rowkey_size_) {
       ObRawBufAllocatorWrapper temp_buf(buf + sizeof(*this), rowkey_size_);
       if (OB_FAIL(rowkey_.deep_copy(pkey->rowkey_, temp_buf))) {
+        STORAGE_LOG(WARN, "Fail to deep copy rowkey, ", K(ret));
       } else {
         pkey->rowkey_size_ = rowkey_size_;
         key = pkey;
@@ -204,6 +210,7 @@ int ObRowCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheValue
       int64_t pos = sizeof(ObRowCacheValue) + sizeof(ObStorageDatum) * column_cnt_;
       for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; i ++) {
         if (OB_FAIL(pvalue->datums_[i].deep_copy(datums_[i], buf, buf_len, pos))) {
+          STORAGE_LOG(WARN, "Failed to deepl copy datum", K(ret), K(i));
         }
       }
     }
@@ -234,7 +241,9 @@ int ObRowCache::get_row(const ObRowCacheKey &key, ObRowValueHandle &handle)
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       STORAGE_LOG(WARN, "Fail to get key from row cache, ", K(ret));
     }
+    EVENT_INC(ObStatEventIds::ROW_CACHE_MISS);
   } else {
+    EVENT_INC(ObStatEventIds::ROW_CACHE_HIT);
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected error, the value is NULL, ", K(ret));
@@ -254,6 +263,7 @@ int ObRowCache::put_row(const ObRowCacheKey &key, const ObRowCacheValue &value)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid row cache input param.", K(key), K(value), K(ret));
   } else if (OB_SUCCESS != (ret = put(key, value, overwrite))) {
+    STORAGE_LOG(WARN, "Fail to put row to row cache, ", K(ret));
   }
   return ret;
 }

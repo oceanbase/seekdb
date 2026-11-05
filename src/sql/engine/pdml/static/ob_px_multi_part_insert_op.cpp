@@ -36,16 +36,25 @@ int ObPxMultiPartInsertOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
+    LOG_WARN("failed to inner open", K(ret));
   } else if (OB_FAIL(ObDMLService::init_ins_rtdef(dml_rtctx_,
                                                   ins_rtdef_,
                                                   MY_SPEC.ins_ctdef_,
                                                   trigger_clear_exprs_,
                                                   fk_checkers_))) {
+    LOG_WARN("init insert rtdef failed", K(ret));
   } else if (!(MY_SPEC.row_desc_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table or row desc is invalid", K(ret), K(MY_SPEC.row_desc_));
   } else if (OB_FAIL(data_driver_.init(get_spec(), ctx_.get_allocator(), ins_rtdef_, this, this,
                                        MY_SPEC.ins_ctdef_.is_table_without_pk_))) {
+    LOG_WARN("failed to init data driver", K(ret));
+  } else if (OB_UNLIKELY(GET_PHY_PLAN_CTX(ctx_)->get_is_direct_insert_plan())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("direct-insert plan should not use pdml op",
+        KR(ret), K(GET_PHY_PLAN_CTX(ctx_)->get_is_direct_insert_plan()));
   }
+  LOG_TRACE("pdml static insert op", K(ret), K_(MY_SPEC.row_desc), K_(MY_SPEC.ins_ctdef));
   return ret;
 }
 
@@ -54,10 +63,13 @@ int ObPxMultiPartInsertOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the child op is null", K(ret));
   } else if (MY_SPEC.is_returning_) {
     if (OB_FAIL(data_driver_.get_next_row(ctx_, child_->get_spec().output_))) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("failed get next row from data driver", K(ret));
       } else {
+        LOG_TRACE("data driver has been iterated to end");
       }
     } else {
       clear_evaluated_flag();
@@ -68,7 +80,9 @@ int ObPxMultiPartInsertOp::inner_get_next_row()
     do {
       if (OB_FAIL(data_driver_.get_next_row(ctx_, child_->get_spec().output_))) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("failed get next row from data driver", K(ret));
         } else {
+          LOG_TRACE("data driver has been iterated to end");
         }
       } else {
         clear_evaluated_flag();
@@ -85,6 +99,7 @@ int ObPxMultiPartInsertOp::inner_close()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_close())) {
+    LOG_WARN("failed to inner close table modify", K(ret));
   } else {
     data_driver_.destroy();
   }
@@ -103,14 +118,17 @@ int ObPxMultiPartInsertOp::read_row(ObExecContext &ctx,
   // Read data from child, data is stored in child's output exprs
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("child op is null", K(ret));
   } else if (OB_FAIL(child_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("fail get next row from child", K(ret));
     }
   } else {
     op_monitor_info_.otherstat_2_value_++;
     // Every time new data is obtained from the child node, a clear calculation flag is required
     clear_evaluated_flag();
     if (OB_FAIL(ObDMLService::process_insert_row(MY_SPEC.ins_ctdef_, ins_rtdef_, *this, is_skipped))) {
+      LOG_WARN("process insert row failed", K(ret));
     } else if (!is_skipped) {
       // Obtain the corresponding partition for the row through the partition id expr
       const int64_t part_id_idx = MY_SPEC.row_desc_.get_part_id_index();
@@ -120,6 +138,7 @@ int ObPxMultiPartInsertOp::read_row(ObExecContext &ctx,
         ObDASTableLoc *table_loc = ins_rtdef_.das_rtdef_.table_loc_;
         if (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().size() != 1) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("insert table location is invalid", K(ret), KPC(table_loc));
         } else {
           tablet_id = table_loc->get_first_tablet_loc()->tablet_id_;
         }
@@ -127,6 +146,7 @@ int ObPxMultiPartInsertOp::read_row(ObExecContext &ctx,
         ObExpr *expr = child_->get_spec().output_.at(part_id_idx);
         ObDatum &expr_datum = expr->locate_expr_datum(get_eval_ctx());
         tablet_id = expr_datum.get_int();
+        LOG_DEBUG("get the part id", K(ret), K(expr_datum));
       }
     } else {
       op_monitor_info_.otherstat_4_value_++;
@@ -148,18 +168,23 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
   // Write data to storage layer
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("get physical plan context failed", K(ret));
   } else {
     while (OB_SUCC(ret)) {
       ObChunkDatumStore::StoredRow* stored_row = nullptr;
       clear_evaluated_flag();
       if (OB_FAIL(try_check_status())) {
+        LOG_WARN("check status failed", K(ret));
       } else if (OB_FAIL(dml_row_iter.get_next_row(child_->get_spec().output_))) {
         if (OB_ITER_END != ret) {
+          LOG_WARN("fail to get next row", K(ret));
         } else {
           iter_end_ = true;
         }
       } else if (OB_FAIL(ObDMLService::insert_row(MY_SPEC.ins_ctdef_, ins_rtdef_, tablet_loc, dml_rtctx_, stored_row))) {
+        LOG_WARN("insert row to das failed", K(ret));
       } else if (OB_FAIL(discharge_das_write_buffer())) {
+        LOG_WARN("failed to submit all dml task when the buffer of das op is full", K(ret));
       } else {
         op_monitor_info_.otherstat_3_value_++;
       }
@@ -167,6 +192,7 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
 
     if (OB_ITER_END == ret) {
       if (OB_FAIL(submit_all_dml_task())) {
+        LOG_WARN("do insert rows post process failed", K(ret));
       } else {
         op_monitor_info_.otherstat_5_value_ += ins_rtdef_.das_rtdef_.affected_rows_;
       }
@@ -175,6 +201,10 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
       plan_ctx->add_row_matched_count(ins_rtdef_.das_rtdef_.affected_rows_);
       plan_ctx->add_affected_rows(ins_rtdef_.das_rtdef_.affected_rows_);
     }
+    LOG_TRACE("pdml insert ok", K(MY_SPEC.is_pdml_index_maintain_),
+              K(ins_rtdef_.das_rtdef_.affected_rows_), K(op_monitor_info_.otherstat_1_value_),
+              K(op_monitor_info_.otherstat_2_value_), K(op_monitor_info_.otherstat_3_value_),
+              K(op_monitor_info_.otherstat_4_value_), K(op_monitor_info_.otherstat_5_value_));
     ins_rtdef_.das_rtdef_.affected_rows_ = 0;
   }
   return ret;

@@ -42,8 +42,10 @@ EVENT_INFO(NETWORK_WAIT_TIME, network_wait_time)
 
 #ifndef OCEANBASE_SQL_OB_EXEC_STAT_H
 #define OCEANBASE_SQL_OB_EXEC_STAT_H
+#include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"  // ObLocalDiagnosticInfo(previously hidden behind a transitive include)
 #include "lib/wait_event/ob_wait_event.h"
-#include "share/scn.h"
+#include "lib/statistic_event/ob_stat_event.h"
 #include "lib/net/ob_addr.h"
 #include "sql/ob_sql_define.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
@@ -73,6 +75,16 @@ struct ObExecRecord
 #include "ob_exec_stat.h"
 #undef EVENT_INFO
 
+
+#define EVENT_STAT_GET(event_stats_array, stat_no)              \
+ ({                                                            \
+   int64_t ret = 0;                                            \
+   oceanbase::common::ObStatEventAddStat *stat = NULL;         \
+   if (NULL != (stat = event_stats_array.get(::oceanbase::common::stat_no))) { \
+     ret = stat->get_stat_value();                             \
+   }                                                           \
+   ret;                                                        \
+ })
 
 #define RECORD(se) \
   do { \
@@ -262,15 +274,18 @@ struct ObAuditRecordData {
     ps_stmt_id_ = OB_INVALID_STMT_ID;
     ps_inner_stmt_id_ = OB_INVALID_STMT_ID;
     trans_id_ = 0;
-    request_type_ = 0;
+    request_type_ = EXECUTE_INVALID;
     is_batched_multi_stmt_ = false;
     plan_hash_ = 0;
     trx_lock_for_read_elapse_ = 0;
     params_value_len_ = 0;
+    partition_hit_ = true;
     is_perf_event_closed_ = false;
     pl_trace_id_.reset();
     stmt_type_ = sql::stmt::T_NONE;
     sql_memory_used_ = nullptr;
+    ccl_rule_id_ = 0;
+    ccl_match_time_ = 0;
   }
 
   int64_t get_elapsed_time() const
@@ -300,7 +315,7 @@ struct ObAuditRecordData {
 
   int64_t get_extra_size() const
   {
-    return sql_len_ + user_name_len_ + db_name_len_;
+    return sql_len_ + tenant_name_len_ + user_name_len_ + db_name_len_;
   }
 
   share::SCN get_snapshot_version() const
@@ -317,8 +332,9 @@ struct ObAuditRecordData {
   int status_; //error code
   common::ObCurTraceId::TraceId trace_id_;
   int64_t request_id_; //set by request_manager automatic when add record
-  int64_t execution_id_;
+  int64_t execution_id_;  //used to jion v$sql_plan_monitor
   uint64_t session_id_;
+  uint64_t proxy_session_id_;
   uint64_t qc_id_;  //px framework id
   int64_t dfo_id_;
   int64_t sqc_id_;
@@ -328,10 +344,12 @@ struct ObAuditRecordData {
   common::ObAddr user_client_addr_;
   
   
+  char *tenant_name_;
+  int64_t tenant_name_len_;
   int64_t user_id_;
   char *user_name_;
   int64_t user_name_len_;
-  int user_group_;
+  int user_group_; // user belongs to cgroup id, only main thread displays
   uint64_t db_id_;
   char *db_name_;
   int64_t db_name_len_;
@@ -375,6 +393,7 @@ struct ObAuditRecordData {
   int64_t seq_num_; // sequence num, for sequencing stmts in transaction
   uint64_t txn_free_route_flag_; // flag contains txn free route meta
   uint64_t txn_free_route_version_; // the version of txn's state
+  bool partition_hit_;// flag for need das partition route or not
   bool is_perf_event_closed_;
   char flt_trace_id_[OB_MAX_UUID_STR_LENGTH + 1];
   char snapshot_source_[OB_MAX_SNAPSHOT_SOURCE_LENGTH + 1];
@@ -387,8 +406,12 @@ struct ObAuditRecordData {
   int64_t *sql_memory_used_;
   int64_t plsql_compile_time_;
   int64_t insert_update_or_replace_duplicate_row_count_;
+  int64_t ccl_rule_id_;
+  int64_t ccl_match_time_;
 };
 
 } //namespace sql
 } //namespace oceanbase
 #endif
+
+

@@ -1,0 +1,35 @@
+drop table if exists t1, t2;
+create table t1(id int primary key auto_increment, a int DEFAULT NULL, b int DEFAULT NULL) merge_engine = delete_insert with column group(each column);
+update  t1 set b = 101 where a = 100;
+select * from t1 order by a;
+id	a	b
+1	100	101
+2	200	200
+3	300	300
+4	400	400
+5	500	500
+6	600	600
+7	700	700
+8	800	800
+9	900	900
+10	1000	1000
+select * from t1 where a = 800;
+id	a	b
+8	800	800
+alter system minor freeze;
+select * from t1 order by a;
+id	a	b
+1	100	101
+2	200	200
+3	300	300
+4	400	400
+5	500	500
+6	600	600
+7	700	700
+8	800	800
+9	900	900
+10	1000	1000
+select * from t1 where a = 800;
+id	a	b
+8	800	800
+drop table t1;

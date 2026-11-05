@@ -19,18 +19,18 @@
 
 #include "common/row/ob_row.h"
 #include "lib/guard/ob_shared_guard.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "observer/omt/ob_multi_tenant.h"
 #include "sql/ob_scanner.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "lib/container/ob_se_array.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 
 namespace oceanbase
 {
 namespace storage
 {
-  class ObIStorageMetaObjPool;
+  class ObITenantMetaObjPool;
 }
 namespace observer
 {
@@ -51,17 +51,21 @@ private:
 public:
   ObAllVirtualStorageMetaMemoryStatus();
   virtual ~ObAllVirtualStorageMetaMemoryStatus();
-  int init(common::ObIAllocator *allocator);
+  int init(common::ObIAllocator *allocator, common::ObAddr &addr);
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
 private:
 private:
+  static const int64_t STRING_LEN = 128;
   static const int64_t POOL_NUM = 10;
 
 private:
+  common::ObAddr addr_;
+  char ip_buf_[common::OB_IP_STR_BUFF];
+  char address_[STRING_LEN];
   int64_t pool_idx_;
-  ObSEArray<ObStorageMetaMemStatus, POOL_NUM> status_arr_;
+  ObSEArray<ObTenantMetaMemStatus, POOL_NUM> status_arr_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualStorageMetaMemoryStatus);
 };

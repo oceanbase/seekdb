@@ -32,9 +32,11 @@ OB_DEF_SERIALIZE(ObPartitionScanRanges)
   UNF_UNUSED_SER;
   LST_DO_CODE(OB_UNIS_ENCODE, partition_id_);
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, ranges_.count()))) {
+    LOG_WARN("fail to encode ranges count", K(ret), K(ranges_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < ranges_.count(); ++i) {
     if (OB_FAIL(ranges_.at(i).serialize(buf, buf_len, pos))) {
+      LOG_WARN("fail to serialize key range", K(ret), K(i));
     }
   }
   return ret;
@@ -49,10 +51,12 @@ OB_DEF_DESERIALIZE(ObPartitionScanRanges)
     int64_t count = 0;
     ranges_.reset();
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+      LOG_WARN("fail to decode key ranges count", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
       if (OB_ISNULL(deserialize_allocator_)) {
         ret = OB_NOT_INIT;
+        LOG_WARN("deserialize allocator is NULL", K(ret));
       } else {
         ObObj array[OB_MAX_ROWKEY_COLUMN_NUMBER * 2];
         ObNewRange copy_range;
@@ -60,8 +64,11 @@ OB_DEF_DESERIALIZE(ObPartitionScanRanges)
         copy_range.start_key_.assign(array, OB_MAX_ROWKEY_COLUMN_NUMBER);
         copy_range.end_key_.assign(array + OB_MAX_ROWKEY_COLUMN_NUMBER, OB_MAX_ROWKEY_COLUMN_NUMBER);
         if (OB_FAIL(copy_range.deserialize(buf, data_len, pos))) {
+          LOG_WARN("fail to deserialize range", K(ret));
         } else if (OB_FAIL(deep_copy_range(*deserialize_allocator_, copy_range, key_range))) {
+          LOG_WARN("fail to deep copy range", K(ret));
         } else if (OB_FAIL(ranges_.push_back(key_range))) {
+          LOG_WARN("fail to add key range to array", K(ret));
         }
       }
     }
@@ -85,9 +92,11 @@ OB_DEF_SERIALIZE(ObMultiPartitionsRangesWarpper)
   int ret = OK_;
   UNF_UNUSED_SER;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, partitions_ranges_.count()))) {
+    LOG_WARN("fail to encode ranges count", K(ret), K(partitions_ranges_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < partitions_ranges_.count(); ++i) {
     if (OB_FAIL(partitions_ranges_.at(i)->serialize(buf, buf_len, pos))) {
+      LOG_WARN("fail to serialize key range", K(ret), K(i));
     }
   }
   LST_DO_CODE(OB_UNIS_ENCODE, mode_);
@@ -102,13 +111,16 @@ OB_DEF_DESERIALIZE(ObMultiPartitionsRangesWarpper)
     int64_t count = 0;
     partitions_ranges_.reset();
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+      LOG_WARN("fail to decode partition ranges count", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
       ObPartitionScanRanges *partition_ranges = nullptr;
       if (OB_FAIL(get_new_partition_ranges(partition_ranges))) {
+        LOG_WARN("Failed to get new partition ranges", K(ret));
       } else {
         partition_ranges->set_des_allocator(&allocator_);
         if (OB_FAIL(partition_ranges->deserialize(buf, data_len, pos))) {
+          LOG_WARN("fail to deserialize range", K(ret));
         }
       }
     }
@@ -138,6 +150,7 @@ int ObMultiPartitionsRangesWarpper::get_partition_ranges_by_partition_id(int64_t
     ObPartitionScanRanges *tmp_partition_ranges = partitions_ranges_.at(idx);
     if (nullptr == tmp_partition_ranges) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("The partition ranges is null", K(ret));
     } else if (partition_id == tmp_partition_ranges->partition_id_) {
       partition_ranges = tmp_partition_ranges;
     }
@@ -154,8 +167,10 @@ int ObMultiPartitionsRangesWarpper::get_new_partition_ranges(ObPartitionScanRang
   void *buf = allocator_.alloc(sizeof(ObPartitionScanRanges));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("No memory", K(ret));
   } else if (FALSE_IT(partition_ranges = new (buf) ObPartitionScanRanges())) {
   } else if (OB_FAIL(partitions_ranges_.push_back(partition_ranges))) {
+    LOG_WARN("Failed to push back partition ranges", K(ret));
     partition_ranges = nullptr;
   }
   return ret;
@@ -169,6 +184,7 @@ int ObMultiPartitionsRangesWarpper::init_main_table_rowkey(const int64_t column_
   void *ptr = NULL;
   if (column_count <= 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(column_count));
   } else if (OB_ISNULL(ptr = allocator_.alloc(column_count * sizeof(ObObj)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc memory for row failed", "size", column_count * sizeof(ObObj));

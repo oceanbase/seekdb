@@ -22,7 +22,6 @@
 
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/ob_exec_context.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -61,6 +60,7 @@ int ObExprNullif::calc_result_type2(ObExprResType &type,
     // setup cmp type
     ObExprResType cmp_type;
     if (OB_FAIL(se_deduce_type(type, cmp_type, type1, type2, type_ctx))) {
+      LOG_WARN("se deduce type failed", K(ret));
     }
   }
   return ret;
@@ -76,7 +76,7 @@ int ObExprNullif::se_deduce_type(ObExprResType &type,
   type.set_meta(type1.get_obj_meta());
   type.set_accuracy(type1.get_accuracy());
   if (ob_is_real_type(type.get_type()) && SCALE_UNKNOWN_YET != type1.get_scale()) {
-    type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type1.get_scale())));
+    type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type1.get_scale())));
   } else if (ob_is_string_type(type.get_type()) || ob_is_enumset_tc(type.get_type())) {
     type.set_collation_level(type1.get_collation_level());
     type.set_collation_type(type1.get_collation_type());
@@ -141,8 +141,10 @@ int ObExprNullif::set_extra_info(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   DatumCastExtraInfo *info = OB_NEWx(DatumCastExtraInfo, expr_cg_ctx.allocator_, *(expr_cg_ctx.allocator_), type_);
   if (OB_ISNULL(info)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc memory failed", K(ret));
   } else if (OB_ISNULL(expr_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ctx.session is null", K(ret));
   } else {
     const ObObjMeta &cmp_meta = raw_expr.get_extra_calc_meta();
     ObSQLUtils::get_default_cast_mode(is_explicit_cast, result_flag,
@@ -172,11 +174,15 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   if (ObNullType == rt_expr.args_[0]->datum_meta_.type_) {
     OX(rt_expr.eval_func_ = eval_nullif);
   } else if (OB_FAIL(ObSQLUtils::get_solidified_vars_from_ctx(raw_expr, local_vars))) {
+    LOG_WARN("failed to get local session var", K(ret));
   } else if (OB_FAIL(ObSQLUtils::merge_solidified_var_into_sql_mode(local_vars, sql_mode))) {
+    LOG_WARN("try get local sql mode failed", K(ret));
   } else if (OB_FAIL(set_extra_info(expr_cg_ctx, raw_expr, sql_mode, rt_expr))) {
+    LOG_WARN("set extra info failed", K(ret));
   } else if (ob_is_enumset_inner_tc(rt_expr.args_[0]->datum_meta_.type_)) {
     if (OB_UNLIKELY(!ob_is_uint_tc(rt_expr.args_[1]->datum_meta_.type_))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected param type", K(ret), K(rt_expr.args_[1]->datum_meta_));
     } else {
       rt_expr.eval_func_ = eval_nullif_enumset;
     }
@@ -184,6 +190,7 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
     if (OB_UNLIKELY(rt_expr.datum_meta_.type_ != rt_expr.args_[0]->datum_meta_.type_
                     || rt_expr.datum_meta_.cs_type_ != rt_expr.args_[0]->datum_meta_.cs_type_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected type", K(ret), K(rt_expr.datum_meta_), K(rt_expr.args_[0]->datum_meta_));
     } else {
       rt_expr.eval_func_ = eval_nullif_enumset;
     }
@@ -227,6 +234,7 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                                             cmp_meta.get_collation_type(),
                                                             has_lob_header))){
             ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("cmp func is null", K(ret), K(cmp_meta));
           } else {
             rt_expr.inner_func_cnt_ = 1;
             rt_expr.inner_functions_[0] = reinterpret_cast<void*>(cmp_func);
@@ -252,10 +260,13 @@ int ObExprNullif::cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
       && (!string_type || src_expr.datum_meta_.cs_type_ == dst_meta.cs_type_)) {
     res_datum = src_expr.locate_expr_datum(ctx);
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
+    LOG_WARN("init datum caster failed", K(ret));
   } else {
     ObDatum *cast_datum = NULL;
     if (OB_FAIL(ctx.datum_caster_->to_type(dst_meta, src_expr, cm, cast_datum, ctx.get_batch_idx()))) {
+      LOG_WARN("fail to dynamic cast", K(ret), K(cm));
     } else if (OB_FAIL(res_datum.deep_copy(*cast_datum, allocator))) {
+      LOG_WARN("deep copy datum failed", K(ret));
     } else {
       LOG_DEBUG("cast_param", K(src_expr), KP(ctx.frames_[src_expr.frame_idx_]),
                 K(&(src_expr.locate_expr_datum(ctx))),
@@ -274,14 +285,18 @@ int ObExprNullif::cast_result(const ObExpr &src_expr, const ObExpr &dst_expr, Ob
       && (!string_type || src_expr.datum_meta_.cs_type_ == dst_expr.datum_meta_.cs_type_)) {
     ObDatum *res_datum = nullptr;
     if (OB_FAIL(src_expr.eval(ctx, res_datum))) {
+      LOG_WARN("eval param value failed", K(ret));
     } else {
       expr_datum = *res_datum;
     }
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
+    LOG_WARN("init datum caster failed", K(ret));
   } else {
     ObDatum *cast_datum = NULL;
     if (OB_FAIL(ctx.datum_caster_->to_type(dst_expr.datum_meta_, src_expr, cm, cast_datum, ctx.get_batch_idx()))) {
+      LOG_WARN("fail to dynamic cast", K(ret));
     } else if (OB_FAIL(dst_expr.deep_copy_datum(ctx, *cast_datum))) {
+      LOG_WARN("deep copy datum failed", K(ret));
     }
   }
   return ret;
@@ -294,15 +309,17 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObDatum *cmp_e1 = NULL;
   ObDatum *res_e = NULL;
   DatumCastExtraInfo *cast_info = NULL;
-  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-  } else if (OB_FAIL(expr.args_[0]->eval(ctx, cmp_e0))) {
+  if (OB_FAIL(expr.args_[0]->eval(ctx, cmp_e0))) {
+    LOG_WARN("eval param 0 failed", K(ret));
   } else if (cmp_e0->is_null()) {
     res.set_null();
   } else if (OB_UNLIKELY(1 != expr.inner_func_cnt_) || OB_ISNULL(expr.inner_functions_)
       || OB_ISNULL(expr.inner_functions_[0])) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected param", K(ret), K(expr.inner_func_cnt_), KP(expr.inner_functions_),
+                                 KP(expr.inner_functions_[0]));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, cmp_e1))) {
+    LOG_WARN("eval param failed", K(ret));
   } else if (FALSE_IT(cast_info = static_cast<DatumCastExtraInfo *>(expr.extra_info_))) {
   } else if (ObNullType == cast_info->cmp_meta_.type_) {
     // can compare directly.
@@ -310,8 +327,8 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     int cmp_ret = 0;
     bool equal = false;
     if (!cmp_e1->is_null()) {
-      if (OB_FAIL(cmp_func(
-              *cmp_e0, *cmp_e1, cmp_ret, datum_access_ctx))) {
+      if (OB_FAIL(cmp_func(*cmp_e0, *cmp_e1, cmp_ret))) {
+        LOG_WARN("cmp failed", K(ret));
       } else {
         equal = (0 == cmp_ret);
       }
@@ -320,10 +337,12 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     } else if (equal) {
       res.set_null();
     } else if (OB_FAIL(cast_result(*expr.args_[0], expr, ctx, cast_info->cm_, res))) {
+      LOG_WARN("cast result failed", K(ret));
     }
   } else if (cmp_e1->is_null()) {
     // e0 is not null, e1 is null
     if (OB_FAIL(cast_result(*expr.args_[0], expr, ctx, cast_info->cm_, res))) {
+      LOG_WARN("cast result failed", K(ret));
     }
   } else {
     DatumCmpFunc cmp_func = reinterpret_cast<DatumCmpFunc>(expr.inner_functions_[0]);
@@ -332,15 +351,18 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     ObDatum datum2;
     if (OB_FAIL(cast_param(*expr.args_[0], ctx, cast_info->cmp_meta_, cast_info->cm_,
                              tmp_alloc_guard.get_allocator(), datum1))) {
+      LOG_WARN("cast param failed", K(ret));
     } else if (OB_FAIL(cast_param(*expr.args_[1], ctx, cast_info->cmp_meta_, cast_info->cm_,
                              tmp_alloc_guard.get_allocator(), datum2))) {
+      LOG_WARN("cast param failed", K(ret));
     } else {
       int cmp_ret = 0;
-      if (OB_FAIL(cmp_func(
-              datum1, datum2, cmp_ret, datum_access_ctx))) {
+      if (OB_FAIL(cmp_func(datum1, datum2, cmp_ret))) {
+        LOG_WARN("cmp failed", K(ret));
       } else if (cmp_ret == 0) {
         res.set_null();
       } else if (OB_FAIL(cast_result(*expr.args_[0], expr, ctx, cast_info->cm_, res))) {
+        LOG_WARN("cast result failed", K(ret));
       }
     }
   }
@@ -356,15 +378,19 @@ int ObExprNullif::eval_nullif_enumset(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   DatumCastExtraInfo *cast_info = NULL;
   bool equal = 0;
   if (OB_FAIL(expr.args_[0]->eval(ctx, cmp_e0))) {
+    LOG_WARN("eval param 0 failed", K(ret));
   } else if (cmp_e0->is_null()) {
     res.set_null();
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, cmp_e1))) {
+    LOG_WARN("eval param failed", K(ret));
   } else if (OB_ISNULL(expr.extra_info_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("extra info is null", K(ret));
   } else if (FALSE_IT(cast_info = static_cast<DatumCastExtraInfo *>(expr.extra_info_))) {
   } else if (ob_is_enumset_inner_tc(expr.args_[0]->datum_meta_.type_)) {
     ObEnumSetInnerValue inner_value;
     if (OB_FAIL(cmp_e0->get_enumset_inner(inner_value))) {
+      LOG_WARN("failed to inner_value", K(ret));
     } else if (cmp_e1->is_null()) {
       res.set_string(inner_value.string_value_);
     } else if (cmp_e1->get_uint64() == inner_value.numberic_value_) {
@@ -379,8 +405,10 @@ int ObExprNullif::eval_nullif_enumset(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     if (cmp_e1->is_null()) {
       res = *cmp_e0;
     } else if (OB_FAIL(cmp_e1->get_enumset_inner(inner_value))) {
+      LOG_WARN("failed to inner_value", K(ret));
     } else if (OB_FAIL(cast_param(*expr.args_[0], ctx, cast_info->cmp_meta_, cast_info->cm_,
                                   tmp_alloc_guard.get_allocator(), datum0))) {
+      LOG_WARN("cast param failed", K(ret));
     } else if (datum0.get_uint64() == inner_value.numberic_value_) {
       res.set_null();
     } else {

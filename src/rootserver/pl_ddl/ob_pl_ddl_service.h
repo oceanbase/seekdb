@@ -40,8 +40,10 @@ class ObPLDDLService
 public:
   //----Functions for managing routine----
   static int create_routine(const obcall::ObCreateRoutineArg &arg,
+                            obcall::ObRoutineDDLRes* res,
                             rootserver::ObDDLService &ddl_service);
   static int alter_routine(const obcall::ObCreateRoutineArg &arg,
+                           obcall::ObRoutineDDLRes* res,
                            rootserver::ObDDLService &ddl_service);
   static int drop_routine(const ObDropRoutineArg &arg,
                           rootserver::ObDDLService &ddl_service);
@@ -50,6 +52,7 @@ public:
 
   //----Functions for managing package----
   static int create_package(const obcall::ObCreatePackageArg &arg,
+                            obcall::ObRoutineDDLRes *res,
                             rootserver::ObDDLService &ddl_service);
   static int drop_package(const obcall::ObDropPackageArg &arg,
                           rootserver::ObDDLService &ddl_service);
@@ -60,6 +63,7 @@ public:
                             obcall::ObCreateTriggerRes *res,
                             rootserver::ObDDLService &ddl_service);
   static int alter_trigger(const obcall::ObAlterTriggerArg &arg,
+                           obcall::ObRoutineDDLRes *res,
                            rootserver::ObDDLService &ddl_service);
   static int drop_trigger(const obcall::ObDropTriggerArg &arg,
                           rootserver::ObDDLService &ddl_service);
@@ -72,9 +76,11 @@ public:
                                       rootserver::ObDDLOperator &ddl_operator,
                                       ObSchemaGetterGuard &schema_guard,
                                       const uint64_t user_id);
-  static int rebuild_triggers_on_hidden_table(const ObTableSchema &orig_table_schema,
+  static int rebuild_triggers_on_hidden_table(const obcall::ObAlterTableArg &alter_table_arg,
+                                              const ObTableSchema &orig_table_schema,
                                               const ObTableSchema &hidden_table_schema,
-                                              ObSchemaGetterGuard &runtime_schema_guard,
+                                              ObSchemaGetterGuard &src_tenant_schema_guard,
+                                              ObSchemaGetterGuard &dst_tenant_schema_guard,
                                               rootserver::ObDDLOperator &ddl_operator,
                                               ObMySQLTransaction &trans);
   static int rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard &schema_guard,
@@ -92,7 +98,7 @@ public:
                                                share::schema::ObTableSchema &new_table_schema,
                                                rootserver::ObDDLOperator &ddl_operator,
                                                ObMySQLTransaction &trans);
-  static int restore_trigger(const share::schema::ObTableSchema &table_schema,
+  static int flashback_trigger(const share::schema::ObTableSchema &table_schema,
                                const uint64_t new_database_id,
                                const common::ObString &new_table_name,
                                share::schema::ObSchemaGetterGuard &schema_guard,
@@ -185,6 +191,22 @@ private:
                              rootserver::ObDDLService &ddl_service);
   //----End of functions for managing trigger----
 
+  //----Functions for restore table ddl ----
+  //  Dont rebuild trigger if 
+  //  1. database name has changed.
+  //  2. base_table name has changed.
+  //  3. database of the trigger does no exist.
+  //  4. same name trigger has existed.
+  static int check_and_construct_restore_trigger_info(
+        const obcall::ObAlterTableArg &alter_table_arg,
+        ObSchemaGetterGuard &src_tenant_schema_guard,
+        ObSchemaGetterGuard &dst_tenant_schema_guard,
+        const ObTableSchema &orig_table_schema,
+        const ObTableSchema &hidden_table_schema,
+        const ObTriggerInfo &src_trigger_info,
+        ObTriggerInfo &new_trigger_info,
+        bool &need_rebuild);
+//----End of functions for restore table ddl----
 };
 
 } // namespace rootserver

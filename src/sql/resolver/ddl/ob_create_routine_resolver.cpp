@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_create_routine_resolver.h"
 #include "ob_create_routine_stmt.h"
-#include "sql/pl/ob_pl_router.h"
-#include "sql/pl/ob_pl_resolver.h"
-#include "sql/pl/parser/parse_stmt_item_type.h"
+#include "pl/ob_pl_router.h"
+#include "pl/ob_pl_resolver.h"
+#include "pl/parser/parse_stmt_item_type.h"
 
 namespace oceanbase
 {
@@ -37,6 +37,7 @@ int ObCreateRoutineResolver::check_dup_routine_param(const ObIArray<ObRoutinePar
     if (OB_SUCC(ret) && 0 == param_name.case_compare(param->get_param_name())) {
       ret = OB_ERR_SP_DUP_PARAM;
       LOG_USER_ERROR(OB_ERR_SP_DUP_PARAM, param_name.length(), param_name.ptr());
+      LOG_WARN("Duplicate parameter", K(param_name), K(ret));
       break;
     }
   }
@@ -50,6 +51,7 @@ int ObCreateRoutineResolver::create_routine_arg(obcall::ObCreateRoutineArg *&crt
   crt_routine_arg = NULL;
   if (OB_ISNULL(crt_routine_stmt = create_stmt<ObCreateRoutineStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory for create routine stmt failed", K(ret));
   } else {
     crt_routine_arg = &(crt_routine_stmt->get_routine_arg());
   }
@@ -57,13 +59,17 @@ int ObCreateRoutineResolver::create_routine_arg(obcall::ObCreateRoutineArg *&crt
 }
 
 int ObCreateRoutineResolver::set_routine_info(const ObRoutineType &type,
-                                              ObRoutineInfo &routine_info)
+                                              ObRoutineInfo &routine_info,
+                                              bool is_udt_udf)
 {
   int ret = OB_SUCCESS;
   uint64_t user_id;
   CK(OB_NOT_NULL(session_info_));
   OZ (schema_checker_->get_user_id(session_info_->get_user_name(),  session_info_->get_host_name(), user_id));
   if (OB_SUCC(ret)) {
+    if (is_udt_udf) {
+      routine_info.set_is_udt_udf();
+    }
     routine_info.set_routine_type(type);
     
     routine_info.set_owner_id(user_id);
@@ -73,6 +79,7 @@ int ObCreateRoutineResolver::set_routine_info(const ObRoutineType &type,
     char buf[OB_MAX_PROC_ENV_LENGTH];
     int64_t pos = 0;
     if (OB_FAIL(ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+      LOG_WARN("failed to generate exec env", K(ret));
     } else {
       routine_info.set_exec_env(ObString(pos, buf));
     }
@@ -86,17 +93,15 @@ int ObCreateRoutineResolver::analyze_router_sql(obcall::ObCreateRoutineArg *crt_
   ObRoutineInfo &routine_info = crt_routine_arg->routine_info_;
   CK(OB_NOT_NULL(schema_checker_), OB_NOT_NULL(params_.sql_proxy_), OB_NOT_NULL(session_info_));
   if (OB_SUCC(ret)) {
-    pl::ObPLRouter router(routine_info,
-                          *session_info_,
-                          *schema_checker_->get_schema_guard(),
-                          *params_.sql_proxy_,
-                          params_.pl_sql_runtime_,
-                          params_.pl_engine_);
+    pl::ObPLRouter router(routine_info, *session_info_, *schema_checker_->get_schema_guard(), *params_.sql_proxy_);
     ObString route_sql;
     if (OB_FAIL(router.analyze(route_sql, crt_routine_arg->dependency_infos_, routine_info, crt_routine_arg))) {
+      LOG_WARN("failed to analyze route sql", K(route_sql), K(ret));
     } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                          *allocator_, session_info_->get_dtc_params(), route_sql))) {
+      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(routine_info.set_route_sql(route_sql))) {
+      LOG_WARN("set routine body failed", K(route_sql), K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -122,6 +127,7 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
 
       if (OB_ISNULL(user_node)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("user must be specified", K(ret));
       } else {
         user_name.assign_ptr(user_node->str_value_, static_cast<int32_t>(user_node->str_len_));
         // Need to distinguish between current_user and "current_user", the former needs to obtain the current user and host, the latter exists as a username
@@ -157,6 +163,7 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
           if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(user_name,
                                                                          host_name,
                                                                          user_info))) {
+            LOG_WARN("fail to get_user_info", K(ret));
           } else if (OB_ISNULL(user_info)) {
             LOG_USER_WARN(OB_ERR_USER_NOT_EXIST, user_name.length(), user_name.ptr());
             ObPL::insert_error_msg(OB_ERR_USER_NOT_EXIST);
@@ -179,7 +186,9 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
     ObString priv_user(tmp_buf);
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
               *allocator_, session_info_->get_dtc_params(), priv_user))) {
+      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(routine_info.set_priv_user(priv_user))) {
+      LOG_WARN("failed to set priv user", K(ret));
     }
   }
   return ret;
@@ -194,7 +203,9 @@ int ObCreateRoutineResolver::resolve_sp_name(const ParseNode *parse_node,
     ObRoutineInfo &proc_info = crt_routine_arg->routine_info_;
     ObString db_name, sp_name;
     if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *parse_node, db_name, sp_name))) {
+      LOG_WARN("failed to resolve sp name", K(ret));
     } else if (OB_FAIL(proc_info.set_routine_name(sp_name))) {
+      LOG_WARN("failed to set routine name", K(sp_name), K(ret));
     } else {
       crt_routine_arg->db_name_ = db_name;
     }
@@ -212,7 +223,9 @@ int ObCreateRoutineResolver::resolve_sp_body(const ParseNode *parse_node,
     routine_body.assign_ptr(parse_node->str_value_, static_cast<int32_t>(parse_node->str_len_));
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                   *allocator_, session_info_->get_dtc_params(), routine_body))) {
+      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(routine_info.set_routine_body(routine_body))) {
+      LOG_WARN("failed to set routine body", K(ret));
     }
   }
   return ret;
@@ -245,7 +258,8 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
   CK (ObObjAccessIdx::is_table_column(access_idxs)
       || ObObjAccessIdx::is_package_variable(access_idxs)
       || ObObjAccessIdx::is_table(access_idxs)
-      || ObObjAccessIdx::is_pkg_type(access_idxs));
+      || ObObjAccessIdx::is_pkg_type(access_idxs)
+      || ObObjAccessIdx::is_udt_type(access_idxs));
   CK (OB_NOT_NULL(params_.session_info_));
   if (ObObjAccessIdx::is_table_column(access_idxs)) {
     const ObTableSchema *table = nullptr;
@@ -266,7 +280,7 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       OZ (params_.schema_checker_->get_table_schema(
               access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
-      if (OB_SUCC(ret) && ObCharset::case_insensitive_equal(table->get_table_name_str(), routine_param.get_type_subname())) {
+      if (OB_SUCC(ret) && ObCharset::case_compat_mode_equal(table->get_table_name_str(), routine_param.get_type_subname())) {
         routine_param.set_type_owner(table->get_database_id());
       }
     }
@@ -280,10 +294,12 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
     OX (routine_param.set_type_subname(access_idxs.at(access_idxs.count() - 2).var_name_));
     if (OB_FAIL(ret)) {
     } else if (3 == access_idxs.count()) {
-      {
+      if (true) {
         OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
+      } else {
+        OX (routine_param.set_type_owner(access_idxs.at(0).var_index_));
       }
-    } else { // var in system package
+    } else if (true) { // var in system package
       OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
     }
     if (OB_SUCC(ret)) {
@@ -318,7 +334,7 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       OZ (params_.schema_checker_->get_table_schema(
               access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
-      if (OB_SUCC(ret) && ObCharset::case_insensitive_equal(table->get_table_name_str(), routine_param.get_type_name())) {
+      if (OB_SUCC(ret) && ObCharset::case_compat_mode_equal(table->get_table_name_str(), routine_param.get_type_name())) {
         routine_param.set_type_owner(table->get_database_id());
       }
     }
@@ -333,13 +349,15 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       OX (routine_param.set_type_name(access_idxs.at(access_idxs.count()-1).var_name_));
       if (2 == access_idxs.count()) { // pkg.type
         OX (routine_param.set_type_subname(access_idxs.at(0).var_name_));
-        { // type in system package
+        if (true) { // type in system package
           OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
         }
       } else if (3 == access_idxs.count()) { // db.pkg.type
         OX (routine_param.set_type_subname(access_idxs.at(1).var_name_));
-        {
+        if (true) {
           OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
+        } else {
+          OX (routine_param.set_type_owner(access_idxs.at(0).var_index_));
         }
       }
       if (OB_SUCC(ret)) {
@@ -356,6 +374,23 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
                                  ObDependencyTableType::DEPENDENCY_PACKAGE));
       }
     }
+  } else if (ObObjAccessIdx::is_udt_type(access_idxs)) {
+    CK (access_idxs.count() >= 1 && access_idxs.count() <= 2);
+    OX (routine_param.set_param_type(ObExtendType));
+    OX (routine_param.set_udt_type());
+    OX (routine_param.set_type_name(access_idxs.at(access_idxs.count()-1).var_name_));
+    if (OB_FAIL(ret)) {
+    } else if (2 == access_idxs.count()) {
+      if (true) {
+        // system type, set owner is oceanbase
+        routine_param.set_type_owner(OB_SYS_DATABASE_ID);
+      } else {
+        routine_param.set_type_owner(access_idxs.at(0).var_index_);
+      }
+    } else if (true) {
+      // system type, set owner is oceanbase
+      routine_param.set_type_owner(OB_SYS_DATABASE_ID);
+    }
   }
   return ret;
 }
@@ -369,7 +404,8 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
   CK (OB_NOT_NULL(type_node));
   CK (OB_NOT_NULL(allocator_));
   if (OB_SUCC(ret)) {
-    if (T_SP_ROWTYPE == type_node->type_) { // %ROWTYPE
+    if (T_SP_ROWTYPE == type_node->type_
+        || T_SP_TYPE == type_node->type_) { // %Type %RowType
       ObArray<ObObjAccessIdx> access_idxs;
       ObArray<ObObjAccessIdent> obj_access_idents;
       CK (OB_LIKELY(2 == type_node->num_child_),
@@ -390,6 +426,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                                access_idxs,
                                                                params_.package_guard_))) {
         // maybe dependent object not exist yet!
+        LOG_WARN("failed to transform from iparam", K(ret));
         if (ObPLResolver::is_object_not_exist_error(ret)) {
           ret = OB_SUCCESS;
           ObArray<ObObjAccessIdent> obj_access_idents;
@@ -399,7 +436,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                       *(params_.expr_factory_),
                                                       obj_access_idents,
                                                       session_info));
-          OZ (ObPLResolver::resolve_extern_type_info(true,
+          OZ (ObPLResolver::resolve_extern_type_info(T_SP_ROWTYPE == type_node->type_,
                                                      *(schema_checker_->get_schema_guard()),
                                                      session_info,
                                                      obj_access_idents,
@@ -423,13 +460,26 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
         OX (routine_param.set_type_owner(owner_id));
         CK (OB_LIKELY(access_idxs.count() > 0));
         if (OB_SUCC(ret)) {
-          if (ObObjAccessIdx::is_table(access_idxs) ||
-              ObObjAccessIdx::is_package_cursor_variable(access_idxs)) {
+          if (T_SP_TYPE == type_node->type_) {
+            if (ObObjAccessIdx::is_table_column(access_idxs)
+                || ObObjAccessIdx::is_package_variable(access_idxs)) {
+              OZ (set_routine_param(access_idxs, routine_param));
+            } else {
+              ret = OB_ERR_TYPE_DECL_ILLEGAL;
+              LOG_USER_ERROR(OB_ERR_TYPE_DECL_ILLEGAL,
+                            access_idxs.at(access_idxs.count() - 1).var_name_.length(), access_idxs.at(access_idxs.count() - 1).var_name_.ptr());
+              LOG_WARN("PLS-00206: %TYPE must be applied to a variable, column, field or attribute",
+                      K(ret), K(access_idxs));
+            }
+          } else if (ObObjAccessIdx::is_table(access_idxs) ||
+                     ObObjAccessIdx::is_package_cursor_variable(access_idxs)) {
             OZ (set_routine_param(access_idxs, routine_param));
           } else {
             ret = OB_ERR_WRONG_ROWTYPE;
             LOG_USER_ERROR(OB_ERR_WRONG_ROWTYPE,
                            access_idxs.at(access_idxs.count() - 1).var_name_.length(), access_idxs.at(access_idxs.count() - 1).var_name_.ptr());
+            LOG_WARN("PLS-00310: with %ROWTYPE attribute, ident must name a table, cursor or cursor-variable",
+                     K(ret), K(access_idxs));
           }
         }
       }
@@ -453,6 +503,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                       access_idxs,
                                                       params_.package_guard_))) {
         // maybe dependent object not exist yet!
+        LOG_WARN("failed to transform from iparam", K(ret));
         if (ObPLResolver::is_object_not_exist_error(ret)) {
           ret = OB_SUCCESS;
           ObArray<ObObjAccessIdent> obj_access_idents;
@@ -463,8 +514,14 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                       obj_access_idents,
                                                       session_info));
           if (OB_FAIL(ret)) {
-          } else if (1 == obj_access_idents.count()) {
-            ret = OB_ERR_SP_UNDECLARED_TYPE;
+          } else if (1 == obj_access_idents.count()
+                     && 0 == obj_access_idents.at(0).access_name_.case_compare("SYS_REFCURSOR")) {
+            routine_param.set_type_name(obj_access_idents.at(0).access_name_);
+            routine_param.set_sys_refcursor_type();
+          } else if (1 == obj_access_idents.count()) { //udt
+            routine_param.set_type_name(obj_access_idents.at(0).access_name_);
+            routine_param.set_type_owner(current_db_id);
+            routine_param.set_udt_type();
           } else if (3 == obj_access_idents.count()) { //db.pkg.type
             uint64_t owner_id = OB_INVALID_ID;
             OZ (schema_checker_->get_database_id(obj_access_idents.at(0).access_name_,
@@ -481,7 +538,9 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
               &owner_id));
             if (OB_FAIL(ret)) {
             } else if (exist) {
-              ret = OB_ERR_SP_UNDECLARED_TYPE;
+              routine_param.set_type_name(obj_access_idents.at(1).access_name_);
+              routine_param.set_type_owner(owner_id);
+              routine_param.set_udt_type();
             } else {
               routine_param.set_type_name(obj_access_idents.at(1).access_name_);
               routine_param.set_type_owner(current_db_id);
@@ -489,12 +548,10 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
               routine_param.set_pkg_type();
             }
           }
-          if (OB_SUCC(ret)) {
-            OX (routine_param.set_param_type(ObExtendType));
-          }
+          OX (routine_param.set_param_type(ObExtendType));
         }
       } else {
-        CK (ObObjAccessIdx::is_pkg_type(access_idxs));
+        CK (ObObjAccessIdx::is_pkg_type(access_idxs) || ObObjAccessIdx::is_udt_type(access_idxs));
         OZ (set_routine_param(access_idxs, routine_param));
         if (OB_SUCC(ret)
             && routine_param.is_extern_type()
@@ -511,7 +568,8 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
                                                type_node,
                                                param_name,
                                                *session_info_,
-                                               data_type));
+                                               data_type,
+                                               param_name.empty() ? false : true));
       if (OB_SUCC(ret) && data_type.is_pl_integer_type()) {
         routine_param.set_pl_integer_type(data_type.get_pl_integer_type());
       }
@@ -520,6 +578,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED,
                        "character set ANY_CS not supported in standalone function/procedure");
+        LOG_WARN("character set ANY_CS not supported in standalone function/procedure", K(ret));
       }
       common::ObIArray<common::ObString>* type_info = NULL;
       CK (OB_NOT_NULL(data_type.get_data_type()));
@@ -569,6 +628,9 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
     CK(OB_NOT_NULL(param_list->children_));
     if (param_list->num_child_ > OB_MAX_PROC_PARAM_COUNT) {
       ret = OB_NOT_SUPPORTED;
+      LOG_WARN("too many formal parameters, max number of formal parameters"
+               "in an explicit cursor, function, or procedure is 65536!",
+               K(ret), K(OB_MAX_PROC_PARAM_COUNT));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "number of formal parameters large than 65536");
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < param_list->num_child_; ++i) {
@@ -591,11 +653,14 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
         routine_param.set_param_level(0); //todo user defined type guangang.gg
         param_name.assign_ptr(name_node->str_value_, static_cast<int32_t>(name_node->str_len_));
         if (OB_FAIL(check_dup_routine_param(routine_info.get_routine_params(), param_name))) {
+          LOG_WARN("fail to check dup routine param", K(param_name), K(ret));
         } else if (OB_FAIL(routine_param.set_param_name(param_name))) {
+          LOG_WARN("set param name failed", K(ret), K(param_name));
         } else if (OB_FAIL(resolve_param_type(type_node,
                                               param_name,
                                               *session_info_,
                                               routine_param))) {
+          LOG_WARN("failed to resolve param type", K(ret), K(param_name));
         }
       }
       if (OB_SUCC(ret)) {
@@ -617,17 +682,64 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
           break;
         }
       }
+      if (OB_SUCC(ret) && 1 == param_node->int32_values_[1]) {
+        routine_param.set_nocopy_param();
+      }
       // set default value expr str
       if (OB_SUCC(ret)
-          && 3 == param_node->num_child_ // default node
+          && 3 == param_node->num_child_ // oracle mode has default node
           && OB_NOT_NULL(param_node->children_[2])) {
-        {
+        if (true) {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("stored procedure's paramlist not supported default value in mysql mode", K(ret), K(lbt()));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "stored procedure's paramlist use default value in mysql mode");
+        } else {
+          const ParseNode *default_node = param_node->children_[2];
+          if (OB_UNLIKELY(default_node->type_ != T_SP_DECL_DEFAULT)
+              || OB_ISNULL(default_node->children_[0])) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("wrong default value node", K(ret));
+          } else if (!routine_param.is_in_sp_param()) {
+            ret = OB_ERR_OUT_PARAM_HAS_DEFAULT;
+            LOG_WARN("PLS-00230: out or in out parameter can not has default value", K(ret));
+          } else {
+            ObString default_value(static_cast<int32_t>(default_node->str_len_),
+                                  default_node->str_value_);
+            ObRawExpr *default_expr = NULL;
+            ObPLDataType pl_type;
+            ObObjType src_type = ObMaxType;
+            uint64_t src_type_id = OB_INVALID_ID;
+            ObRoutineMatchInfo::MatchInfo match_info;
+            pl::ObPLEnumSetCtx enum_set_ctx(*params_.allocator_);
+            pl_type.set_enum_set_ctx(&enum_set_ctx);
+            OZ (pl::ObPLDataType::transform_from_iparam(&(routine_param),
+                                                        *(schema_checker_->get_schema_guard()),
+                                                        *(session_info_),
+                                                        *(allocator_),
+                                                        *(params_.sql_proxy_),
+                                                        pl_type));
+            // Default value does not need to be calculated in the CreateRoutine stage, it is calculated at execution time, but here we need to resolve it to avoid users using illegal variables
+            OZ (pl::ObPLResolver::resolve_raw_expr(*(default_node->children_[0]),
+                                                  params_,
+                                                  default_expr,
+                                                  false /*for_writer*/,
+                                                  nullptr,
+                                                  &deps));
+            CK (OB_NOT_NULL(default_expr));
+            OZ (ObResolverUtils::get_type_and_type_id(default_expr, src_type, src_type_id));
+            OZ (ObResolverUtils::check_type_match(
+              params_, match_info, default_expr, src_type, src_type_id, pl_type));
+            OZ (ObSQLUtils::convert_sql_text_to_schema_for_storing(
+              *allocator_, session_info_->get_dtc_params(), default_value));
+            OZ (routine_param.set_default_value(default_value));
+            OX (match_info.need_cast_ ? routine_param.set_default_cast() : void(NULL));
+            OZ (analyze_expr_type(default_expr, routine_info));
+          }
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(routine_info.add_routine_param(routine_param))) {
+          LOG_WARN("add proc param failed", K(ret));
         }
       }
     }
@@ -681,6 +793,7 @@ int ObCreateRoutineResolver::resolve_ret_type(const ParseNode *ret_type_node,
   ObRoutineParam ret_type_param;
   CK (OB_NOT_NULL(session_info_));
   CK (OB_NOT_NULL(ret_type_node));
+  CHECK_COMPATIBILITY_MODE(session_info_);
   OX (ret_type_param.set_sequence(ROUTINE_RET_TYPE_SEQUENCE));
   OX (ret_type_param.set_param_position(ROUTINE_RET_TYPE_POSITION));
   OX (ret_type_param.set_subprogram_id(func_info.get_subprogram_id()));
@@ -699,18 +812,20 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
                                      const ParseNode *ret_node,
                                      const ParseNode *param_node,
                                      const ParseNode *clause_list,
-                                     obcall::ObCreateRoutineArg *crt_routine_arg)
+                                     obcall::ObCreateRoutineArg *crt_routine_arg,
+                                     bool is_udt_udf)
 {
   int ret = OB_SUCCESS;
   bool need_reset_default_database = false;
   uint64_t old_database_id = OB_INVALID_ID;
   ObSqlString old_database_name;
   CK(OB_NOT_NULL(session_info_), OB_NOT_NULL(allocator_), OB_NOT_NULL(schema_checker_));
+  CHECK_COMPATIBILITY_MODE(session_info_);
   CK (INVALID_ROUTINE_TYPE != routine_type);
 
   OZ(resolve_sp_definer(sp_definer_node, crt_routine_arg->routine_info_));
   OZ (resolve_sp_name(name_node, crt_routine_arg));
-  OZ (set_routine_info(routine_type, crt_routine_arg->routine_info_));
+  OZ (set_routine_info(routine_type, crt_routine_arg->routine_info_, is_udt_udf));
 
   if (OB_SUCC(ret)) {
     uint64_t database_id = OB_INVALID_ID;
@@ -721,6 +836,7 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
                                                                  database_id, database_schema));
     if (OB_FAIL(ret) || OB_ISNULL(database_schema)) {
       ret = OB_ERR_BAD_DATABASE;
+      LOG_WARN("fail to get database schema", K(ret));
       LOG_USER_ERROR(OB_ERR_BAD_DATABASE, crt_routine_arg->db_name_.length(), crt_routine_arg->db_name_.ptr());
     }
     if (OB_FAIL(ret)) {
@@ -774,13 +890,14 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
   CK (OB_NOT_NULL(allocator_));
   CK (OB_NOT_NULL(schema_checker_));
 
+  CHECK_COMPATIBILITY_MODE(session_info_);
   if (OB_SUCC(ret)) {
     ObRoutineType type = T_SF_CREATE == parse_tree.type_ ? ROUTINE_FUNCTION_TYPE :
                  T_SP_CREATE == parse_tree.type_ ? ROUTINE_PROCEDURE_TYPE : INVALID_ROUTINE_TYPE;
     if (session_info_->is_inner()
                && FALSE_IT(crt_routine_arg->is_or_replace_ = true)) {
-      // This field is reused to indicate whether the request is sent by
-      // InnerSQL, and is used to restore routines placed in the recycle bin.
+      // MySQL mode this field is reused to indicate whether the request is sent by InnerSQL. Used to restore Routine placed in the recycle bin under MySQL.
+      // Oracle mode does not process, because PL objects do not enter the recycle bin in Oracle mode.
     } else if (OB_FAIL(resolve_impl(type,
                                     sp_definer_node,
                                     name_node,
@@ -789,6 +906,7 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
                                     param_node,
                                     clause_list,
                                     crt_routine_arg))) {
+      LOG_WARN("failed to resolve routine info", K(ret));
     } else {
       if (parse_tree.value_ != 0) {
         OX (crt_routine_arg->with_if_not_exist_ = parse_tree.value_);
@@ -805,11 +923,13 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree)
   if (OB_NOT_NULL(get_basic_stmt())) {
     // basic stmt would be set externally in alter routine
     OX (crt_routine_arg = &(static_cast<ObCreateRoutineStmt *>(get_basic_stmt())->get_routine_arg()));
+    LOG_DEBUG("get basic stmt from alter routine");
   } else {
     OZ (create_routine_arg(crt_routine_arg));
   }
   if (OB_SUCC(ret) && OB_ISNULL(crt_routine_arg)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory for create routine stmt failed", K(ret));
   }
   OZ (resolve_impl(parse_tree, crt_routine_arg));
   if (OB_SUCC(ret)) {
@@ -840,6 +960,7 @@ int ObCreateProcedureResolver::resolve_impl(
     if (OB_FAIL(ObCreateRoutineResolver::resolve(parse_tree, sp_definer_node, sp_name_node,
                                                  body_node, NULL, param_node, clause_node,
                                                  crt_routine_arg))) {
+      LOG_WARN("failed to resolve sp body", K(ret));
     }
   }
   return ret;
@@ -867,6 +988,8 @@ int ObCreateFunctionResolver::resolve_impl(
     ParseNode *param_node = source_tree.children_[2];
     ParseNode *ret_node = source_tree.children_[3];
     ParseNode *sf_clause_list = source_tree.children_[4];
+    ParseNode *pipelined_clase =  NULL;
+
     if (OB_FAIL(ObCreateRoutineResolver::resolve(parse_tree,
                                                  sp_definer_node,
                                                  sf_name_node,
@@ -875,6 +998,7 @@ int ObCreateFunctionResolver::resolve_impl(
                                                  param_node,
                                                  sf_clause_list,
                                                  crt_routine_arg))) {
+      LOG_WARN("failed to resolve sp body", K(ret));
     }
   }
   return ret;

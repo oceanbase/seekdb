@@ -31,30 +31,27 @@ namespace storage
 {
 
 class ObStorageLogger;
-class ObIServerRuntime;
 
 class ObServerCheckpointWriter final
 {
 public:
-  ObServerCheckpointWriter()
-    : is_inited_(false), server_slogger_(nullptr), server_runtime_(nullptr) {}
+  ObServerCheckpointWriter() : is_inited_(false), server_slogger_(nullptr) {}
   ~ObServerCheckpointWriter() = default;
   ObServerCheckpointWriter(const ObServerCheckpointWriter &) = delete;
   ObServerCheckpointWriter &operator=(const ObServerCheckpointWriter &) = delete;
 
-  int init(ObStorageLogger *server_slogger, ObIServerRuntime &server_runtime);
+  int init(ObStorageLogger *server_slogger);
   int write_checkpoint(const common::ObLogCursor &log_cursor);
   common::ObIArray<blocksstable::MacroBlockId> &get_meta_block_list();
 
 private:
-  int write_runtime_meta_checkpoint(blocksstable::MacroBlockId &block_entry);
+  int write_tenant_meta_checkpoint(blocksstable::MacroBlockId &block_entry);
 
 private:
   bool is_inited_;
   ObStorageLogger *server_slogger_;
-  ObIServerRuntime *server_runtime_;
   common::ObConcurrentFIFOAllocator allocator_;
-  ObLinkedMacroBlockItemWriter runtime_meta_item_writer_;
+  ObLinkedMacroBlockItemWriter tenant_meta_item_writer_;
 };
 
 }  // end namespace storage

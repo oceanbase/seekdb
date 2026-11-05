@@ -1,0 +1,133 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_COMMON_OB_ROW_CHECKSUM_H_
+#define OCEANBASE_COMMON_OB_ROW_CHECKSUM_H_
+
+#include <utility>
+#include "lib/ob_define.h"
+#include "lib/utility/utility.h"
+#include "lib/allocator/page_arena.h"
+
+namespace oceanbase
+{
+namespace common
+{
+
+class ObRow;
+struct ObRowChecksumValue
+{
+  typedef std::pair<uint64_t, uint64_t> ObColumnIdChecksum;
+
+
+  ObRowChecksumValue() { reset(); }
+
+  NEED_SERIALIZE_AND_DESERIALIZE;
+
+  template <typename Allocator>
+  int deep_copy(const ObRowChecksumValue &src, Allocator &allocator);
+
+  void reset();
+
+
+
+  template <typename Allocator>
+  int string2column_checksum(Allocator &allocator, const char *str);
+
+  uint64_t checksum_;
+  // we do not store detail column checksum if %column_count_ is zero
+  int64_t column_count_;
+  ObColumnIdChecksum *column_checksum_array_;
+};
+
+template <typename Allocator>
+int ObRowChecksumValue::deep_copy(const ObRowChecksumValue &src, Allocator &allocator)
+{
+  int ret = OB_SUCCESS;
+
+  checksum_ = src.checksum_;
+  column_count_ = src.column_count_;
+  if (0 == column_count_) {
+    column_checksum_array_ = NULL;
+  } else {
+    if (NULL == (column_checksum_array_ = reinterpret_cast<ObColumnIdChecksum *>(
+        allocator.alloc(sizeof(ObColumnIdChecksum) * column_count_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      COMMON_LOG(ERROR, "allocate memory failed", K(ret),
+          "size", sizeof(ObColumnIdChecksum) * column_count_);
+    } else {
+      MEMCPY(column_checksum_array_, src.column_checksum_array_,
+             sizeof(ObColumnIdChecksum) * column_count_);
+    }
+  }
+
+  return ret;
+}
+
+template <typename Allocator>
+int ObRowChecksumValue::string2column_checksum(Allocator &allocator, const char *str)
+{
+  // %str can be NULL
+  int64_t count = (NULL != str && strlen(str) > 0) ? 1 : 0;
+  const char *p = str;
+  int ret = OB_SUCCESS;
+  while (NULL != p && NULL != (p = strchr(p, ','))) {
+    p++;
+    count++;
+  }
+  column_count_ = count;
+  if (count == 0) {
+    column_checksum_array_ = NULL;
+  } else if (NULL == (column_checksum_array_ = reinterpret_cast<ObColumnIdChecksum *>(
+      allocator.alloc(sizeof(*column_checksum_array_) * count)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    COMMON_LOG(ERROR, "allocate memory failed", K(ret),
+        "size", sizeof(*column_checksum_array_) * count);
+  } else {
+    p = str;
+    char *end = NULL;
+    for (int64_t i = 0; i < count; i++) {
+      column_checksum_array_[i].first = strtoull(p, &end, 10);
+      if (*end != ':') {
+        ret = OB_INVALID_DATE_FORMAT;
+        COMMON_LOG(WARN, "invalid column check string format", K(ret), K(str));
+        break;
+      }
+      end++;
+      p = end;
+      column_checksum_array_[i].second = strtoull(p, &end, 10);
+      if (*end != ',' && *end != '\0') {
+        ret = OB_INVALID_DATE_FORMAT;
+        COMMON_LOG(WARN, "invalid column check string format", K(ret), K(str));
+        break;
+      }
+      end++;
+      p = end;
+    }
+
+    if (OB_FAIL(ret)) {
+      allocator.free(column_checksum_array_);
+      column_checksum_array_ = NULL;
+    }
+  }
+
+  return ret;
+}
+
+} // end namespace common
+} // end namespace oceanbase
+
+#endif // OCEANBASE_COMMON_OB_ROW_CHECKSUM_H_

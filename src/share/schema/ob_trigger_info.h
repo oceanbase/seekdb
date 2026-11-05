@@ -41,10 +41,14 @@ public:
   OB_INLINE void add_insert_event() { bit_value_ |= TE_INSERT; }
   OB_INLINE void add_update_event() { bit_value_ |= TE_UPDATE; }
   OB_INLINE void add_delete_event() { bit_value_ |= TE_DELETE; }
+  OB_INLINE void add_logon_event() { logon_ = 1; }
+  OB_INLINE void add_logoff_event() { logoff_ = 1; }
   OB_INLINE uint64_t get_value() const { return bit_value_; }
   OB_INLINE bool has_insert_event() const { return has_insert_event(bit_value_); }
   OB_INLINE bool has_update_event() const { return has_update_event(bit_value_); }
   OB_INLINE bool has_delete_event() const { return has_delete_event(bit_value_); }
+  OB_INLINE bool has_logon_event() const { return 1 == logon_; }
+  OB_INLINE bool has_logoff_event() const { return 1 == logoff_; }
   OB_INLINE bool has_value(uint64_t value) const { return 0 != (bit_value_ & value); }
   OB_INLINE static uint64_t get_insert_event() { return TE_INSERT; }
   OB_INLINE static uint64_t get_update_event() { return TE_UPDATE; }
@@ -64,7 +68,8 @@ public:
       uint64_t insert_:1;
       uint64_t update_:1;
       uint64_t delete_:1;
-      uint64_t reserved_events_:2;
+      uint64_t logon_ :1;
+      uint64_t logoff_:1;
       uint64_t reserved_:59;
     };
   };
@@ -82,18 +87,31 @@ public:
   OB_INLINE void reset() { set_value(0); }
   OB_INLINE void merge(const ObTimingPoints &other) { bit_value_ |= other.get_value(); }
   OB_INLINE void set_value(uint64_t value) { bit_value_ = value; }
+  OB_INLINE void add_before_stmt() { before_stmt_ = 1; }
   OB_INLINE void add_before_row() { before_row_ = 1; }
   OB_INLINE void add_after_row() { after_row_ = 1; }
+  OB_INLINE void add_after_stmt() { after_stmt_ = 1; }
+  OB_INLINE void add_instead_row() { instead_row_ = 1; }
   OB_INLINE void add_when_condition() { when_condition_ = 1; }
   OB_INLINE uint64_t get_value() const { return bit_value_; }
+  OB_INLINE bool has_before_stmt() const { return 1 == before_stmt_; }
   OB_INLINE bool has_before_row() const { return 1 == before_row_; }
   OB_INLINE bool has_after_row() const { return 1 == after_row_; }
+  OB_INLINE bool has_after_stmt() const { return 1 == after_stmt_; }
+  OB_INLINE bool has_instead_row() const { return 1 == instead_row_; }
   OB_INLINE bool has_when_condition() const { return 1 == when_condition_; }
-  OB_INLINE bool has_before_point() const { return 1 == before_row_; }
-  OB_INLINE bool has_after_point() const { return 1 == after_row_; }
-  OB_INLINE bool has_row_point() const { return 1 == before_row_ || 1 == after_row_; }
-  OB_INLINE bool only_before_row() const { return 1 == before_row_ && 0 == after_row_; }
-  OB_INLINE bool only_after_row() const { return 0 == before_row_ && 1 == after_row_; }
+  OB_INLINE bool has_before_point() const { return 1 == before_stmt_ || 1 == before_row_; }
+  OB_INLINE bool has_after_point() const { return 1 == after_stmt_ || 1 == after_row_; }
+  OB_INLINE bool has_stmt_point() const { return 1 == before_stmt_ || 1 == after_stmt_; }
+  OB_INLINE bool has_row_point() const { return 1 == before_row_ || 1 == after_row_ || 1 == instead_row_; }
+  OB_INLINE bool only_before_row() const { return 1 == before_row_ && 0 == after_row_ 
+                                           && 0 == before_stmt_ && 0 == after_stmt_ && 0 == instead_row_; }
+  OB_INLINE bool only_after_row() const { return 0 == before_row_ && 1 == after_row_ 
+                                           && 0 == before_stmt_ && 0 == after_stmt_ && 0 == instead_row_; }
+  OB_INLINE bool only_before_stmt() const { return 0 == before_row_ && 0 == after_row_ 
+                                            && 1 == before_stmt_ && 0 == after_stmt_ && 0 == instead_row_; }
+  OB_INLINE bool only_after_stmt() const { return 0 == before_row_ && 0 == after_row_ 
+                                           && 0 == before_stmt_ && 1 == after_stmt_ && 0 == instead_row_; }
   OB_INLINE void set_before_event() { before_event_ = 1; }
   OB_INLINE void set_after_event() { after_event_ = 1; }
   OB_INLINE bool is_before_event() const { return 1 == before_event_; }
@@ -104,10 +122,11 @@ public:
     uint64_t bit_value_;
     struct {
       uint64_t when_condition_:1;
-      uint64_t reserved_point1_:1;
+      uint64_t before_stmt_:1;
       uint64_t before_row_:1;
       uint64_t after_row_:1;
-      uint64_t reserved_point2_:2;
+      uint64_t after_stmt_:1;
+      uint64_t instead_row_:1;
       uint64_t before_event_:1;
       uint64_t after_event_:1;
       uint64_t reserved_:56;
@@ -157,9 +176,9 @@ public:
   {
     TT_INVALID = 0,
     TT_SIMPLE_DML,
-    TT_RESERVED_2,
-    TT_RESERVED_3,
-    TT_RESERVED_4,
+    TT_COMPOUND_DML,
+    TT_INSTEAD_DML,
+    TT_SYSTEM,
   };
   enum ReferenceType
   {
@@ -167,6 +186,12 @@ public:
     RT_NEW,
     RT_PARENT,
     RT_MAX,
+  };
+  enum PackageSouceType
+  {
+    SPEC_AND_BODY = 0,
+    SPEC_ONLY,
+    BODY_ONLY
   };
   enum OrderType
   {
@@ -182,11 +207,16 @@ public:
                                    common::ObString *&simple_declare,
                                    common::ObString *&simple_execute,
                                    common::ObString *&tg_body);
+    common::ObString before_stmt_declare_;
+    common::ObString before_stmt_execute_;
     common::ObString before_row_declare_;
     common::ObString before_row_execute_;
     common::ObString after_row_declare_;
     common::ObString after_row_execute_;
+    common::ObString after_stmt_declare_;
+    common::ObString after_stmt_execute_;
     common::ObString trigger_body_; // for mysql trigger
+    common::ObString compound_declare_; // only for compound trigger
   };
 
   struct ActionOrderComparator
@@ -253,13 +283,21 @@ public:
     package_body_info_.set_type(PACKAGE_BODY_TYPE);
   }
   OB_INLINE void set_simple_dml_type() { trigger_type_ = TT_SIMPLE_DML; }
+  OB_INLINE void set_compound_dml_type() { trigger_type_ = TT_COMPOUND_DML; }
+  OB_INLINE void set_instead_dml_type() { trigger_type_ = TT_INSTEAD_DML; }
+  OB_INLINE void set_system_type() { trigger_type_ = TT_SYSTEM; }
   OB_INLINE void set_trigger_events(uint64_t value) { trigger_events_.set_value(value); }
   OB_INLINE void add_insert_event() { trigger_events_.add_insert_event(); }
   OB_INLINE void add_update_event() { trigger_events_.add_update_event(); }
   OB_INLINE void add_delete_event() { trigger_events_.add_delete_event(); }
+  OB_INLINE void add_logon_event() { trigger_events_.add_logon_event(); }
+  OB_INLINE void add_logoff_event() { trigger_events_.add_logoff_event(); }
   OB_INLINE void set_timing_points(uint64_t value) { timing_points_.set_value(value); }
+  OB_INLINE void add_before_stmt() { timing_points_.add_before_stmt(); }
+  OB_INLINE void add_after_stmt() { timing_points_.add_after_stmt(); }
   OB_INLINE void add_before_row() { timing_points_.add_before_row(); }
   OB_INLINE void add_after_row() { timing_points_.add_after_row(); }
+  OB_INLINE void add_instead_row() { timing_points_.add_instead_row(); }
   OB_INLINE void set_before_event() { timing_points_.set_before_event(); }
   OB_INLINE void set_after_event() { timing_points_.set_after_event(); }
   OB_INLINE void set_trigger_flags(uint64_t value) { trigger_flags_.set_value(value); }
@@ -276,8 +314,11 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(deep_copy_str(trigger_name, trigger_name_))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to deep copy trigger name", K(ret), K(trigger_name));
     } else if (OB_FAIL(package_spec_info_.set_package_name(trigger_name))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package name", K(ret), K(trigger_name));
     } else if (OB_FAIL(package_body_info_.set_package_name(trigger_name))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package name", K(ret), K(trigger_name));
     }
     return ret;
   }
@@ -313,11 +354,18 @@ public:
     package_spec_info_.set_flag(flag);
     package_body_info_.set_flag(flag);
   }
+  OB_INLINE void set_package_comp_flag(int64_t comp_flag)
+  {
+    package_spec_info_.set_comp_flag(comp_flag);
+    package_body_info_.set_comp_flag(comp_flag);
+  }
   OB_INLINE int set_package_exec_env(const common::ObString &exec_env)
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(package_spec_info_.set_exec_env(exec_env))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package exec env", K(ret), K(exec_env));
     } else if (OB_FAIL(package_body_info_.set_exec_env(exec_env))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to set package exec env", K(ret), K(exec_env));
     }
     return ret;
   }
@@ -337,21 +385,31 @@ public:
   OB_INLINE uint64_t get_data_table_id() const { return get_base_object_id(); }
   OB_INLINE int64_t get_base_object_type() const { return static_cast<int64_t>(base_object_type_); }
   OB_INLINE bool is_based_on_table() const { return TABLE_SCHEMA == base_object_type_; }
+  OB_INLINE bool is_based_on_user() const { return USER_SCHEMA == base_object_type_; }
   OB_INLINE int64_t get_trigger_type() const { return static_cast<int64_t>(trigger_type_); }
   OB_INLINE bool is_simple_dml_type() const { return TT_SIMPLE_DML == trigger_type_; }
-  OB_INLINE bool is_dml_type() const { return is_simple_dml_type(); }
+  OB_INLINE bool is_compound_dml_type() const { return TT_COMPOUND_DML == trigger_type_; }
+  OB_INLINE bool is_instead_dml_type() const { return TT_INSTEAD_DML == trigger_type_; }
+  OB_INLINE bool is_dml_type() const { return is_simple_dml_type() || is_compound_dml_type() || is_instead_dml_type(); }
+  OB_INLINE bool is_system_type() const { return TT_SYSTEM == trigger_type_; }
   OB_INLINE uint64_t get_trigger_events() const { return trigger_events_.get_value(); }
   OB_INLINE bool has_insert_event() const { return trigger_events_.has_insert_event(); }
   OB_INLINE bool has_update_event() const { return trigger_events_.has_update_event(); }
   OB_INLINE bool has_delete_event() const { return trigger_events_.has_delete_event(); }
+  OB_INLINE bool has_logon_event() const { return trigger_events_.has_logon_event(); }
+  OB_INLINE bool has_logoff_event() const { return trigger_events_.has_logoff_event(); }
   OB_INLINE bool has_before_event() const { return timing_points_.is_before_event(); }
   OB_INLINE bool has_after_event() const { return timing_points_.is_after_event(); }
   OB_INLINE uint64_t get_timing_points() const { return timing_points_.get_value(); }
+  OB_INLINE bool has_before_stmt_point() const { return timing_points_.has_before_stmt(); }
+  OB_INLINE bool has_after_stmt_point() const { return timing_points_.has_after_stmt(); }
   OB_INLINE bool has_before_row_point() const { return timing_points_.has_before_row(); }
   OB_INLINE bool has_after_row_point() const { return timing_points_.has_after_row(); }
+  OB_INLINE bool has_instead_row() const { return timing_points_.has_instead_row(); }
   OB_INLINE bool has_when_condition() const { return timing_points_.has_when_condition(); }
   OB_INLINE bool has_before_point() const { return timing_points_.has_before_point(); }
   OB_INLINE bool has_after_point() const { return timing_points_.has_after_point(); }
+  OB_INLINE bool has_stmt_point() const { return timing_points_.has_stmt_point(); }
   OB_INLINE bool has_row_point() const { return timing_points_.has_row_point(); }
   OB_INLINE uint64_t get_trigger_flags() const { return trigger_flags_.get_value(); }
   OB_INLINE bool is_enable() const { return trigger_flags_.is_enable(); }
@@ -368,6 +426,7 @@ public:
   OB_INLINE const common::ObString &get_package_body_source() const { return package_body_info_.get_source(); }
   OB_INLINE const ObPackageInfo &get_package_body_info() const { return package_body_info_; }
   OB_INLINE int64_t get_package_flag() const { return package_spec_info_.get_flag(); }
+  OB_INLINE int64_t get_package_comp_flag() const { return package_spec_info_.get_comp_flag(); }
   OB_INLINE const common::ObString &get_package_exec_env() const { return package_spec_info_.get_exec_env(); }
   OB_INLINE uint64_t get_sql_mode() const { return sql_mode_; }
   OB_INLINE OrderType get_order_type() const { return order_type_; }
@@ -394,12 +453,18 @@ public:
   OB_INLINE bool is_wps() const { return is_wps_; }
   OB_INLINE void set_rps(bool v) { is_rps_ = v; }
   OB_INLINE bool is_rps() const { return is_rps_; }
+  OB_INLINE void set_has_sequence(bool v) { is_has_sequence_ = v; }
+  OB_INLINE bool is_has_sequence() const { return is_has_sequence_; }
   OB_INLINE void set_has_out_param(bool v) { is_has_out_param_ = v; }
   OB_INLINE bool is_has_out_param() const { return is_has_out_param_; }
   OB_INLINE void set_external_state(bool v) { is_external_state_ = v; }
   OB_INLINE bool is_external_state() const { return is_external_state_; }
+  OB_INLINE void set_has_auto_trans(bool v) { is_has_auto_trans_ = v; }
+  OB_INLINE bool is_has_auto_trans() const { return is_has_auto_trans_; }
   OB_INLINE bool is_row_level_before_trigger() const { return is_simple_dml_type() && timing_points_.only_before_row(); }
   OB_INLINE bool is_row_level_after_trigger() const { return is_simple_dml_type() && timing_points_.only_after_row(); }
+  OB_INLINE bool is_stmt_level_before_trigger() const { return is_simple_dml_type() && timing_points_.only_before_stmt(); }
+  OB_INLINE bool is_stmt_level_after_trigger() const { return is_simple_dml_type() && timing_points_.only_after_stmt(); }
   OB_INLINE bool has_event(uint64_t value) const { return trigger_events_.has_value(value); }
   OB_INLINE static uint64_t get_insert_event() { return ObTriggerEvents::get_insert_event(); }
   OB_INLINE static uint64_t get_update_event() { return ObTriggerEvents::get_update_event(); }
@@ -449,6 +514,24 @@ public:
     return left.get_timing_points() == right.get_timing_points()
            && left.get_trigger_events() == right.get_trigger_events();
   }
+  static int gen_package_source(const uint64_t tg_package_id,
+                                common::ObString &source,
+                                bool is_header,
+                                share::schema::ObSchemaGetterGuard &schema_guard,
+                                common::ObIAllocator &alloc);
+  int gen_package_source(const common::ObString &base_object_database,
+                         const common::ObString &base_object_name,
+                         const ParseNode &parse_node,
+                         const common::ObDataTypeCastParams &dtc_params);
+  int gen_procedure_source(const common::ObString &base_object_database,
+                           const common::ObString &base_object_name,
+                           const ParseNode &parse_node,
+                           const ObDataTypeCastParams &dtc_params,
+                           ObString &procedure_source);
+  static int replace_table_name_in_body(ObTriggerInfo &trigger_info,
+                                        common::ObIAllocator &alloc,
+                                        const common::ObString &base_object_database,
+                                        const common::ObString &base_object_name);
   TO_STRING_KV(K(trigger_id_),
                K(owner_id_),
                K(database_id_),
@@ -475,6 +558,82 @@ public:
                K(ref_trg_name_),
                K(action_order_),
                K(analyze_flag_));
+protected:
+  static int gen_package_source_simple(const ObTriggerInfo &trigger_info,
+                                       const common::ObString &base_object_database,
+                                       const common::ObString &base_object_name,
+                                       const ParseNode &parse_node,
+                                       const common::ObDataTypeCastParams &dtc_params,
+                                       common::ObString &spec_source,
+                                       common::ObString &body_source,
+                                       common::ObIAllocator &alloc,
+                                       const PackageSouceType type = SPEC_AND_BODY);
+  static int gen_package_source_compound(const ObTriggerInfo &trigger_info,
+                                         const common::ObString &base_object_database,
+                                         const common::ObString &base_object_name,
+                                         const ParseNode &parse_node,
+                                         const common::ObDataTypeCastParams &dtc_params,
+                                         common::ObString &spec_source,
+                                         common::ObString &body_source,
+                                         common::ObIAllocator &alloc,
+                                         const PackageSouceType type = SPEC_AND_BODY);
+
+  static int gen_package_source_system(const ObTriggerInfo &trigger_info,
+                                       const common::ObString &base_object_database,
+                                       const common::ObString &base_object_name,
+                                       const ParseNode &parse_node,
+                                       const common::ObDataTypeCastParams &dtc_params,
+                                       common::ObString &spec_source,
+                                       common::ObString &body_source,
+                                       common::ObIAllocator &alloc,
+                                       const PackageSouceType type = SPEC_AND_BODY);
+  static void calc_package_source_size(const ObTriggerInfo &trigger_info,
+                                       const common::ObString &base_object_database,
+                                       const common::ObString &base_object_name,
+                                       int64_t &spec_size, int64_t &body_size);
+  static int fill_package_spec_source(const ObTriggerInfo &trigger_info,
+                                      const common::ObString &base_object_database,
+                                      const common::ObString &base_object_name,
+                                      const int64_t spec_size,
+                                      common::ObString &spec_source,
+                                      common::ObIAllocator &alloc);
+  static int fill_package_body_source(const ObTriggerInfo &trigger_info,
+                                      const common::ObString &base_object_database,
+                                      const common::ObString &base_object_name,
+                                      const int64_t body_size,
+                                      const TriggerContext &trigger_ctx,
+                                      common::ObString &body_source,
+                                      common::ObIAllocator &alloc);
+  static int fill_row_routine_spec(const char *spec_fmt,
+                                   const ObTriggerInfo &trigger_info,
+                                   const common::ObString &base_object_database,
+                                   const common::ObString &base_object_name,
+                                   char *buf, int64_t buf_len, int64_t &pos,
+                                   const bool is_before_row);
+  static int fill_when_routine_body(const char *body_fmt,
+                                    const ObTriggerInfo &trigger_info,
+                                    const common::ObString &base_object_database,
+                                    const common::ObString &base_object_name,
+                                    const common::ObString &body_execute,
+                                    char *buf, int64_t buf_len, int64_t &pos);
+  static int fill_row_routine_body(const ObTriggerInfo &trigger_info,
+                                   const common::ObString &base_object_database,
+                                   const common::ObString &base_object_name,
+                                   const TriggerContext &trigger_ctx,
+                                   char *buf, int64_t buf_len, int64_t &pos,
+                                   const bool is_before_row);
+  static int fill_stmt_routine_body(const ObTriggerInfo &trigger_info,
+                                    const TriggerContext &trigger_ctx,
+                                    char *buf, int64_t buf_len, int64_t &pos,
+                                    const bool is_before);
+  static int fill_compound_declare_body(const char *body_fmt,
+                                        const common::ObString &body_declare,
+                                        char *buf, int64_t buf_len, int64_t &pos);
+  static int fill_system_trigger_body(const ObTriggerInfo &trigger_info,
+                                      const TriggerContext &trigger_ctx,
+                                      char *buf,
+                                      int64_t buf_len,
+                                      int64_t &pos);
 protected:
 //// set by user
 //uint64_t trigger_id_;                           // set by sys
@@ -509,9 +668,11 @@ protected:
       uint64_t is_contains_sql_ : 1;
       uint64_t is_wps_ : 1;
       uint64_t is_rps_ : 1;
+      uint64_t is_has_sequence_ : 1;
       uint64_t is_has_out_param_ : 1;
       uint64_t is_external_state_ : 1;
-      uint64_t reserved_:54;
+      uint64_t is_has_auto_trans_ : 1; // only for system trigger, has PRAGMA_AUTONOMOUS_TRANSACTION
+      uint64_t reserved_:53;
     };
   };
 };

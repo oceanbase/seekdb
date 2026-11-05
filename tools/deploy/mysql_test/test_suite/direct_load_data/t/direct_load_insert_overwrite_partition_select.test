@@ -1,0 +1,675 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: yuya.yu
+# owner group: Storage
+# description: direct load insert overwrite partition select case
+
+--source mysql_test/test_suite/direct_load_data/include/set_direct_load_allow_fallback_false.inc
+
+# parser bug: 2024080600104055950
+connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection conn_admin;
+alter system set_tp tp_no = 1170, error_code = 4001, frequency = 1;
+connection default;
+
+--disable_warnings
+--disable_query_log
+drop table if exists t1_ins_overwrt;
+drop table if exists t2_ins_overwrt;
+--enable_query_log
+--enable_warnings
+
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+
+--echo # rowkey table + overwrite all partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10), (12, 20), (23, 30), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+--echo # before insert overwrite partition
+select * from t1_ins_overwrt partition(p0);
+select * from t2_ins_overwrt partition(p0);
+select * from t1_ins_overwrt partition(p1);
+select * from t2_ins_overwrt partition(p1);
+select * from t1_ins_overwrt partition(p2);
+select * from t2_ins_overwrt partition(p2);
+select * from t1_ins_overwrt partition(p3);
+select * from t2_ins_overwrt partition(p3);
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+--echo # after insert overwrite partition
+select * from t2_ins_overwrt partition(p0);
+select * from t2_ins_overwrt partition(p1);
+select * from t2_ins_overwrt partition(p2);
+select * from t2_ins_overwrt partition(p3);
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # rowkey table + overwrite partial partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (12, 20), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+--echo # before insert overwrite partition
+select * from t1_ins_overwrt partition(p0);
+select * from t2_ins_overwrt partition(p0);
+select * from t1_ins_overwrt partition(p1);
+select * from t2_ins_overwrt partition(p1);
+select * from t1_ins_overwrt partition(p2);
+select * from t2_ins_overwrt partition(p2);
+select * from t1_ins_overwrt partition(p3);
+select * from t2_ins_overwrt partition(p3);
+insert overwrite t2_ins_overwrt partition(p1, p3) select * from t1_ins_overwrt;
+--echo # after insert overwrite partition
+select * from t2_ins_overwrt partition(p0);
+select * from t2_ins_overwrt partition(p1);
+select * from t2_ins_overwrt partition(p2);
+select * from t2_ins_overwrt partition(p3);
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # heap table + overwrite all partitions
+create table t1_ins_overwrt (c1 int, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10), (12, 20), (23, 30), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+--echo # before insert overwrite partition
+--sorted_result
+select * from t1_ins_overwrt partition(p0);
+--sorted_result
+select * from t2_ins_overwrt partition(p0);
+--sorted_result
+select * from t1_ins_overwrt partition(p1);
+--sorted_result
+select * from t2_ins_overwrt partition(p1);
+--sorted_result
+select * from t1_ins_overwrt partition(p2);
+--sorted_result
+select * from t2_ins_overwrt partition(p2);
+--sorted_result
+select * from t1_ins_overwrt partition(p3);
+--sorted_result
+select * from t2_ins_overwrt partition(p3);
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+--echo # after insert overwrite partition
+--sorted_result
+select * from t2_ins_overwrt partition(p0);
+--sorted_result
+select * from t2_ins_overwrt partition(p1);
+--sorted_result
+select * from t2_ins_overwrt partition(p2);
+--sorted_result
+select * from t2_ins_overwrt partition(p3);
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # heap table + overwrite partial partitions
+create table t1_ins_overwrt (c1 int, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (12, 20), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+--echo # before insert overwrite partition
+--sorted_result
+select * from t1_ins_overwrt partition(p0);
+--sorted_result
+select * from t2_ins_overwrt partition(p0);
+--sorted_result
+select * from t1_ins_overwrt partition(p1);
+--sorted_result
+select * from t2_ins_overwrt partition(p1);
+--sorted_result
+select * from t1_ins_overwrt partition(p2);
+--sorted_result
+select * from t2_ins_overwrt partition(p2);
+--sorted_result
+select * from t1_ins_overwrt partition(p3);
+--sorted_result
+select * from t2_ins_overwrt partition(p3);
+insert overwrite t2_ins_overwrt partition(p1, p3) select * from t1_ins_overwrt;
+--echo # after insert overwrite partition
+--sorted_result
+select * from t2_ins_overwrt partition(p0);
+--sorted_result
+select * from t2_ins_overwrt partition(p1);
+--sorted_result
+select * from t2_ins_overwrt partition(p2);
+--sorted_result
+select * from t2_ins_overwrt partition(p3);
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # insert table with hash partition type
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by hash(c1) partitions 5;
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by hash(c1) partitions 5;
+insert into t1_ins_overwrt values (1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60), (7, 70), (8, 80), (9, 90), (10, 100);
+insert into t2_ins_overwrt values (11, 100), (12, 120), (13, 130), (14, 140), (15, 150), (16, 160), (17, 170), (18, 180), (19, 190), (20, 200);
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3, p4) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # table with global indexes
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create index k2 on t2_ins_overwrt(c1, c2) global;
+insert into t1_ins_overwrt values (1, 10), (12, 20), (23, 30), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+--error 1235
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # table with local index
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create index k2 on t2_ins_overwrt(c1, c2) local;
+insert into t1_ins_overwrt values (1, 10), (12, 20), (23, 30), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+set ob_enable_index_direct_select=1;
+let $idx1 = query_get_value(select table_name from oceanbase.__all_table where data_table_id = (select table_id from oceanbase.__all_table where table_name = 't2_ins_overwrt'), table_name, 1);
+--disable_query_log
+eval select * from $idx1;
+--enable_query_log
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+--disable_query_log
+eval select * from $idx1;
+--enable_query_log
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # table with lob
+create table t1_ins_overwrt (c1 int primary key, c2 text) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 text) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, repeat('1', 5000));
+insert into t2_ins_overwrt values (11, repeat('2', 5000));
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+create table t1_ins_overwrt (c1 int primary key, c2 json) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 json) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, '{"id": "3", "name": "jack"}');
+insert into t1_ins_overwrt values (11, '{"id": "13", "name": "rose"}');
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # select-table has no partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (12, 20), (23, 30), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p1, p2, p3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # not all data hit the partition of insert-table
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10), (12, 20), (23, 30), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+--error 1526
+insert overwrite t2_ins_overwrt partition(p1, p3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # list partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by list(c1)(
+  partition p0 values in (1, 3, 5, 7, 9),
+  partition p1 values in (2, 4, 6, 8, 10),
+  partition p2 values in (11, 13, 15, 17, 19),
+  partition p3 values in (12, 14, 16, 18, 20)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by list(c1)(
+  partition p0 values in (1, 3, 5, 7, 9),
+  partition p1 values in (2, 4, 6, 8, 10),
+  partition p2 values in (11, 13, 15, 17, 19),
+  partition p3 values in (12, 14, 16, 18, 20)
+);
+insert into t1_ins_overwrt values (1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (11, 110), (12, 120), (13, 130), (14, 140), (15, 150);
+insert into t2_ins_overwrt values (6, 60), (7, 70), (8, 80), (9, 90), (10, 100), (16, 160), (17, 170), (18, 180), (19, 190), (20, 200);
+--sorted_result
+select * from t1_ins_overwrt;
+--sorted_result
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+--sorted_result
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # sub partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int);
+create table t2_ins_overwrt (c1 int primary key, c2 int)
+partition by list(c1) subpartition by range(c1)
+subpartition template
+(
+  subpartition p0 values less than (5),
+  subpartition p1 values less than (10),
+  subpartition p2 values less than (15),
+  subpartition p3 values less than (MAXVALUE)
+)
+(
+  partition p0 values in (1, 3, 5, 7, 9),
+  partition p1 values in (2, 4, 6, 8, 10),
+  partition p2 values in (11, 13, 15, 17, 19),
+  partition p3 values in (12, 14, 16, 18, 20)
+);
+insert into t1_ins_overwrt values (1, 10), (3, 30), (5, 50), (7, 70), (11, 110), (13, 130), (15, 150), (17, 170), (12, 120), (18, 180), (20, 200);
+insert into t2_ins_overwrt values (6, 60), (8, 80), (9, 90), (10, 100), (16, 160), (19, 190);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p2sp0, p2sp1, p2sp2, p2sp3, p3sp2, p3sp3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # select-table with partial columns
+create table t1_ins_overwrt (c1 int primary key, c2 int, c3 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10, 100), (12, 20, 200), (23, 30, 300), (34, 40, 400), (45, 50, 500);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select c1, c3 from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # insert-table with partial column
+create table t1_ins_overwrt (c1 int primary key, c2 int, c3 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int default 1, c2 int, c3 int) partition by range(c2)
+(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10, 100), (12, 20, 200), (23, 30, 300), (34, 40, 400), (45, 50, 500);
+insert into t2_ins_overwrt values (13, 3, 60), (18, 8, 80), (117, 17, 170), (126, 26, 260), (129, 29, 290), (1142, 142, 1420);
+select * from t1_ins_overwrt;
+--sorted_result
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) (c2, c3) select c1, c2 from t1_ins_overwrt;
+--sorted_result
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # empty select-table + overwrite all partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # empty select-table + overwrite partial partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p2) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # empty insert-table + overwrite all partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10), (12, 20), (23, 30), (34, 40), (45, 50);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # empty insert-table + overwrite partial partitions
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (12, 20), (34, 40), (45, 50);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p1, p3) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # table with auto_increment columns
+create table t1_ins_overwrt (c1 int, c2 int) partition by range(c2)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int auto_increment, c2 int) partition by range(c2)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (10, 1), (20, 12), (30, 23), (40, 34), (50, 45);
+insert into t2_ins_overwrt values (60, 3), (80, 8), (170, 17), (260, 26), (290, 29), (1420, 142);
+--error 1235
+insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # duplicate table
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10), (12, 20), (23, 30), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+#--error 1235
+#insert overwrite t2_ins_overwrt partition(p0, p1, p2, p3) select * from t1_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # a partition appears multiple times
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (12, 20), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p1, p3, p1) select * from t1_ins_overwrt;
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # drop partition before insert overwrite
+create table t1_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create table t2_ins_overwrt (c1 int primary key, c2 int) partition by range(c1)(
+  partition p0 values less than(10),
+  partition p1 values less than(20),
+  partition p2 values less than(30),
+  partition p3 values less than (MAXVALUE)
+);
+create index k2 on t2_ins_overwrt(c1, c2) local;
+insert into t1_ins_overwrt values (1, 10), (12, 20), (23, 30), (34, 40), (45, 50);
+insert into t2_ins_overwrt values (3, 60), (8, 80), (17, 170), (26, 260), (29, 290), (142, 1420);
+--sorted_result
+select part_name, part_idx from oceanbase.__all_part where table_id in (select table_id from oceanbase.__all_table where table_name = 't2_ins_overwrt');
+--sorted_result
+select part_name, part_idx from oceanbase.__all_part where table_id in (select table_id from oceanbase.__all_table where data_table_id in (select table_id from oceanbase.__all_table where table_name = 't2_ins_overwrt'));
+alter table t2_ins_overwrt drop partition p1;
+--sorted_result
+select part_name, part_idx from oceanbase.__all_part where table_id in (select table_id from oceanbase.__all_table where table_name = 't2_ins_overwrt');
+--sorted_result
+select part_name, part_idx from oceanbase.__all_part where table_id in (select table_id from oceanbase.__all_table where data_table_id in (select table_id from oceanbase.__all_table where table_name = 't2_ins_overwrt'));
+select * from t2_ins_overwrt;
+insert overwrite t2_ins_overwrt partition(p2) select * from t1_ins_overwrt partition (p2);
+select * from t2_ins_overwrt;
+--sorted_result
+select part_name, part_idx from oceanbase.__all_part where table_id in (select table_id from oceanbase.__all_table where table_name = 't2_ins_overwrt');
+--sorted_result
+select part_name, part_idx from oceanbase.__all_part where table_id in (select table_id from oceanbase.__all_table where data_table_id in (select table_id from oceanbase.__all_table where table_name = 't2_ins_overwrt'));
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # subpartition is hash
+create table t1_ins_overwrt (c1 int primary key, c2 int);
+create table t2_ins_overwrt (c1 int primary key, c2 int)
+partition by range(c1)
+subpartition by hash(c1) subpartitions 2
+(
+partition p0 values less than (10),
+Partition p1 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10), (2, 20), (11, 110), (12, 120);
+let $t2_table_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't2_ins_overwrt', table_id, 1);
+let $t2_sub_part_id_before = query_get_value(select sub_part_id from oceanbase.__all_sub_part where table_id = $t2_table_id and sub_part_name = 'p0sp1', sub_part_id, 1);
+let $t2_sub_part_idx_before = query_get_value(select sub_part_idx from oceanbase.__all_sub_part where table_id = $t2_table_id and sub_part_name = 'p0sp1', sub_part_idx, 1);
+let $t2_tablet_id_before = query_get_value(select tablet_id from oceanbase.__all_sub_part where table_id = $t2_table_id and sub_part_name = 'p0sp1', tablet_id, 1);
+
+insert overwrite t2_ins_overwrt partition (p0sp1) select * from t1_ins_overwrt where c1 = 1;
+let $t2_sub_part_id_after = query_get_value(select sub_part_id from oceanbase.__all_sub_part where table_id = $t2_table_id and sub_part_name = 'p0sp1', sub_part_id, 1);
+let $t2_sub_part_idx_after = query_get_value(select sub_part_idx from oceanbase.__all_sub_part where table_id = $t2_table_id and sub_part_name = 'p0sp1', sub_part_idx, 1);
+let $t2_tablet_id_after = query_get_value(select tablet_id from oceanbase.__all_sub_part where table_id = $t2_table_id and sub_part_name = 'p0sp1', tablet_id, 1);
+if ($t2_sub_part_id_after != $t2_sub_part_id_before)
+{
+  echo 'failed';
+}
+if ($t2_sub_part_idx_after != $t2_sub_part_idx_before)
+{
+  echo 'failed';
+}
+if ($t2_tablet_id_after == $t2_tablet_id_before)
+{
+  echo 'failed';
+}
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # subpartition is hash, insert into first-level partition
+create table t1_ins_overwrt (c1 int primary key, c2 int);
+create table t2_ins_overwrt (c1 int primary key, c2 int)
+partition by range(c1)
+subpartition by hash(c1) subpartitions 2
+(
+partition p0 values less than (10),
+Partition p1 values less than (MAXVALUE)
+);
+insert into t1_ins_overwrt values (1, 10), (2, 20), (11, 110), (12, 120);
+insert overwrite t2_ins_overwrt partition (p1) select * from t1_ins_overwrt where c1 > 10;
+--sorted_result
+select * from t2_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+--echo # subpartition is hash, with local index
+create table t1_ins_overwrt (c1 int primary key, c2 int);
+create table t2_ins_overwrt (c1 int primary key, c2 int)
+partition by range(c1)
+subpartition by hash(c1) subpartitions 2
+(
+  partition p0 values less than (10),
+  Partition p1 values less than (MAXVALUE)
+);
+create index k1 on t2_ins_overwrt(c1, c2) local;
+insert into t1_ins_overwrt values (1, 10), (2, 20), (11, 110), (12, 120);
+insert overwrite t2_ins_overwrt partition (p0, p1) select * from t1_ins_overwrt;
+insert overwrite t2_ins_overwrt partition (p0, p1) select * from t1_ins_overwrt;
+drop table t1_ins_overwrt;
+drop table t2_ins_overwrt;
+
+connection conn_admin;
+alter system set_tp tp_no = 1170, error_code = 0, frequency = 1;
+connection default;
+
+--source mysql_test/test_suite/direct_load_data/include/set_direct_load_allow_fallback_true.inc

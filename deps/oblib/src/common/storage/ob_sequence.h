@@ -1,0 +1,111 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_SEQUENCE_H_
+#define OB_SEQUENCE_H_
+
+#include "lib/literals/ob_literals.h"
+#include "lib/ob_define.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "lib/time/ob_clock_generator.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObSequence
+{
+  static const int64_t MAX_STEP_US = 1_day;
+public:
+  static int64_t get_max_seq_no();
+  static int64_t inc_and_get_max_seq_no();
+  static int inc_and_get_max_seq_no(const int64_t n, int64_t &seq);
+  static int64_t get_and_inc_max_seq_no();
+  static int get_and_inc_max_seq_no(const int64_t n, int64_t &seq);
+  static void inc();
+  static void update_max_seq_no(int64_t seq_no);
+private:
+  // change us to ns
+  static int64_t max_seq_no_ CACHE_ALIGNED;
+  ObSequence() = delete;
+};
+
+inline int64_t ObSequence::get_max_seq_no()
+{
+  return ATOMIC_LOAD64(&max_seq_no_);
+}
+
+inline int64_t ObSequence::inc_and_get_max_seq_no()
+{
+  return ATOMIC_AAF(&max_seq_no_, 1);
+}
+
+inline int ObSequence::inc_and_get_max_seq_no(const int64_t n, int64_t &seq)
+{
+  int ret = OB_SUCCESS;
+  if (n > MAX_STEP_US || n < 0) {
+    ret = OB_ERR_UNEXPECTED;
+    if (REACH_TIME_INTERVAL(10_s)) {
+      COMMON_LOG(ERROR, "seq no update encounter fatal error.", K(ret), K(n));
+    }
+  } else {
+    seq = ATOMIC_AAF(&max_seq_no_, n);
+  }
+  return ret;
+}
+
+inline int64_t ObSequence::get_and_inc_max_seq_no()
+{
+  return ATOMIC_FAA(&max_seq_no_, 1);
+}
+
+inline int ObSequence::get_and_inc_max_seq_no(const int64_t n, int64_t &seq)
+{
+  int ret = OB_SUCCESS;
+  if (n > MAX_STEP_US || n < 0) {
+    ret = OB_ERR_UNEXPECTED;
+    if (REACH_TIME_INTERVAL(10_s)) {
+      COMMON_LOG(ERROR, "seq no update encounter fatal error.", K(ret), K(n));
+    }
+  } else {
+    seq = ATOMIC_FAA(&max_seq_no_, n);
+  }
+  return ret;
+}
+
+inline void ObSequence::inc()
+{
+  ATOMIC_INC(&max_seq_no_);
+}
+
+inline void ObSequence::update_max_seq_no(int64_t seq_no)
+{
+  int ret = OB_SUCCESS;
+  int64_t now = ObClockGenerator::getClock();
+  int64_t new_seq_no = std::max(now, seq_no + 1);
+  if (new_seq_no - now > MAX_STEP_US) {
+    ret = OB_ERR_UNEXPECTED;
+    if (REACH_TIME_INTERVAL(10_s)) {
+      COMMON_LOG(WARN, "seq no is far from physical time.", K(ret), K(now), K(seq_no));
+    }
+  }
+  inc_update(&max_seq_no_, new_seq_no);
+}
+
+} // common
+} // oceanbase
+
+#endif

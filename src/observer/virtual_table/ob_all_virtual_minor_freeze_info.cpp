@@ -15,8 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_minor_freeze_info.h"
-#include "share/rc/ob_server_runtime.h"
-#include "storage/ls/ob_ls.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -29,7 +28,8 @@ namespace observer
 
 ObAllVirtualMinorFreezeInfo::ObAllVirtualMinorFreezeInfo()
   : ObVirtualTableScannerIterator(),
-    ls_(nullptr),
+    addr_(),
+    ls_iter_guard_(),
     diagnose_info_(),
     memtables_info_()
 {
@@ -42,11 +42,36 @@ ObAllVirtualMinorFreezeInfo::~ObAllVirtualMinorFreezeInfo()
 
 void ObAllVirtualMinorFreezeInfo::reset()
 {
-  ls_ = nullptr;
+  addr_.reset();
+  ls_iter_guard_.reset();
   diagnose_info_.reset();
   memtables_info_.reset();
+  memset(ip_buf_, 0, common::OB_IP_STR_BUFF);
   memset(memtables_info_string_, 0, OB_MAX_CHAR_LENGTH);
   ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualMinorFreezeInfo::get_next_ls(ObLS *&ls)
+{
+  int ret = OB_SUCCESS;
+
+  while (OB_SUCC(ret)) {
+    if (!ls_iter_guard_.get_ptr()
+        || OB_FAIL(ls_iter_guard_->get_next(ls))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "fail to switch tenant", K(ret));
+      }
+      // switch to next tenant
+      ret = OB_ITER_END;
+    } else if (OB_ISNULL(ls)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(ERROR, "ls is null", K(ret));
+    } else {
+      break;
+    }
+  }
+
+  return ret;
 }
 
 int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
@@ -56,14 +81,14 @@ int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
-  } else if (start_to_read_) {
-    ret = OB_ITER_END;
+  } else if (FALSE_IT(start_to_read_ = true)) {
+  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+    SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(get_next_freeze_stat(freeze_stat))) {
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "get_next_freeze_stat failed", K(ret));
     }
   } else {
-    start_to_read_ = true;
     int64_t freeze_clock = 0;
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
@@ -134,6 +159,7 @@ int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
         case OB_APP_MIN_COLUMN_ID + 9:
           // memtables_info
           if (OB_FAIL(freeze_stat.get_memtables_info(memtables_info_))) {
+            TRANS_LOG(WARN, "fail to get_memtables_info", K(ret));
           } else {
             generate_memtables_info();
             cur_row_.cells_[i].set_varchar(memtables_info_string_);
@@ -157,19 +183,29 @@ int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
 int ObAllVirtualMinorFreezeInfo::get_next_freeze_stat(ObFreezerStat &freeze_stat)
 {
   int ret = OB_SUCCESS;
+  ObLS *ls = nullptr;
   ObFreezer *freezer = nullptr;
 
-  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
-  if (OB_ISNULL(ls_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "ls service is null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-  } else if (OB_ISNULL(freezer = ls_->get_freezer())) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "freezer is null", K(ret));
-  } else if (OB_FAIL(freezer->get_stat().deep_copy_to(freeze_stat))) {
-  } else if (!freeze_stat.is_valid()) {
-    ret = OB_ITER_END;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(get_next_ls(ls))) {
+      if (OB_ITER_END != ret) {
+        SERVER_LOG(WARN, "get_next_ls failed", K(ret));
+      }
+    } else if (OB_ISNULL(ls)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret));
+    } else if (FALSE_IT(freezer = ls->get_freezer())) {
+    } else if (OB_ISNULL(freezer)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret));
+    } else if (OB_FAIL(freezer->get_stat().deep_copy_to(freeze_stat))) {
+      SERVER_LOG(WARN, "fail to deep copy", K(ret));
+    } else if (!(freeze_stat.is_valid())) {
+      SERVER_LOG(WARN, "freeze_stat is invalid", KP(ls), KP(freezer));
+    } else {
+      // freeze_stat is valid
+      break;
+    }
   }
 
   return ret;
@@ -194,11 +230,17 @@ int ObAllVirtualMinorFreezeInfo::generate_memtables_info()
       const char *unsynced_cnt_str = nullptr;
       const char *current_right_boundary_str = nullptr;
       if (OB_FAIL(helper.convert(memtables_info_[i].tablet_id_.id(), tablet_id_str))) {
+         SERVER_LOG(WARN, "fail to conver tablet_id", "tablet_id", memtables_info_[i].tablet_id_.id(), K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].start_scn_, start_scn_str))) {
+        SERVER_LOG(WARN, "fail to conver start_scnd", "start_scn", memtables_info_[i].start_scn_, K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].end_scn_, end_scn_str))) {
+        SERVER_LOG(WARN, "fail to conver end_scn", "end_scn", memtables_info_[i].end_scn_, K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].write_ref_cnt_, write_ref_cnt_str))) {
+        SERVER_LOG(WARN, "fail to conver write_ref_cnt", "write_ref_cnt", memtables_info_[i].write_ref_cnt_, K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].unsubmitted_cnt_, unsubmitted_cnt_str))) {
+        SERVER_LOG(WARN, "fail to conver unsubmitted_cnt", "unsubmitted_cnt", memtables_info_[i].unsubmitted_cnt_, K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].current_right_boundary_, current_right_boundary_str))) {
+        SERVER_LOG(WARN, "fail to conver current_right_boundary", "current_right_boundary", memtables_info_[i].current_right_boundary_, K(ret));
       } else {
         // tablet_id
         append_memtable_info_string(MEMTABLE_INFO_MEMBER[0], tablet_id_str, size);

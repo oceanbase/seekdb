@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_storage_struct.h"
-#include "storage/blocksstable/ob_sstable.h"
+#include "storage/tx/ob_trans_ctx_mgr.h"
 
 using namespace oceanbase;
 using namespace storage;
@@ -38,6 +38,7 @@ void ObErrsimBackfillPointType::reset()
 {
   type_ = ObErrsimBackfillPointType::ERRSIM_POINT_NONE;
 }
+
 bool ObErrsimBackfillPointType::is_valid() const
 {
   return true;
@@ -70,41 +71,45 @@ int ObErrsimBackfillPointType::hash(uint64_t &hash_val) const
 
 OB_SERIALIZE_MEMBER(ObErrsimBackfillPointType, type_);
 
-ObErrsimBackfillPoint::ObErrsimBackfillPoint()
+ObErrsimTransferBackfillPoint::ObErrsimTransferBackfillPoint()
   : point_type_(ObErrsimBackfillPointType::ERRSIM_MODULE_MAX),
     point_start_time_(0)
 {
 }
 
-ObErrsimBackfillPoint::~ObErrsimBackfillPoint()
+ObErrsimTransferBackfillPoint::~ObErrsimTransferBackfillPoint()
 {
 }
 
-bool ObErrsimBackfillPoint::is_valid() const
+bool ObErrsimTransferBackfillPoint::is_valid() const
 {
   return point_type_.is_valid() && point_start_time_ > 0;
 }
 
-int ObErrsimBackfillPoint::set_point_type(const ObErrsimBackfillPointType &point_type)
+int ObErrsimTransferBackfillPoint::set_point_type(const ObErrsimBackfillPointType &point_type)
 {
   int ret = OB_SUCCESS;
   if (!point_type.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("point type is invalid", K(ret), K(point_type));
   } else if (is_valid()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("The point type is in effect, reset is not allowed", K(ret), K(point_type_), K(point_type));
   } else {
     point_type_ = point_type;
   }
 
   return ret;
 }
-int ObErrsimBackfillPoint::set_point_start_time(int64_t start_time)
+int ObErrsimTransferBackfillPoint::set_point_start_time(int64_t start_time)
 {
   int ret = OB_SUCCESS;
   if (start_time < 0) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("point type is invalid", K(ret), K(start_time));
   } else if (is_valid()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("The point type is in effect, reset is not allowed", K(ret), K(point_start_time_), K(start_time));
   } else {
     point_start_time_ = start_time;
   }
@@ -112,13 +117,13 @@ int ObErrsimBackfillPoint::set_point_start_time(int64_t start_time)
   return ret;
 }
 
-void ObErrsimBackfillPoint::reset()
+void ObErrsimTransferBackfillPoint::reset()
 {
   point_type_.type_ = ObErrsimBackfillPointType::ERRSIM_MODULE_MAX;
   point_start_time_ = 0;
 }
 
-bool ObErrsimBackfillPoint::is_errsim_point(const ObErrsimBackfillPointType &point_type) const
+bool ObErrsimTransferBackfillPoint::is_errsim_point(const ObErrsimBackfillPointType &point_type) const
 {
   bool is_point = false;
   if (!is_valid()) {
@@ -206,7 +211,8 @@ ObGetMergeTablesResult::ObGetMergeTablesResult()
     error_location_(nullptr),
     snapshot_info_(),
     is_backfill_(false),
-    backfill_scn_()
+    backfill_scn_(),
+    transfer_seq_(ObStorageObjectOpt::INVALID_TABLET_TRANSFER_SEQ)
 {
 }
 
@@ -244,6 +250,7 @@ void ObGetMergeTablesResult::reset()
   snapshot_info_.reset();
   is_backfill_ = false;
   backfill_scn_.reset();
+  transfer_seq_ = ObStorageObjectOpt::INVALID_TABLET_TRANSFER_SEQ;
 }
 
 int ObGetMergeTablesResult::copy_basic_info(const ObGetMergeTablesResult &src)
@@ -251,6 +258,7 @@ int ObGetMergeTablesResult::copy_basic_info(const ObGetMergeTablesResult &src)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!src.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(src));
   } else {
     version_range_ = src.version_range_;
     merge_version_ = src.merge_version_;
@@ -261,6 +269,7 @@ int ObGetMergeTablesResult::copy_basic_info(const ObGetMergeTablesResult &src)
     is_backfill_ = src.is_backfill_;
     backfill_scn_ = src.backfill_scn_;
     snapshot_info_ = src.snapshot_info_;
+    transfer_seq_ = src.transfer_seq_;
   }
   return ret;
 }
@@ -270,8 +279,11 @@ int ObGetMergeTablesResult::assign(const ObGetMergeTablesResult &src)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!src.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(src));
   } else if (OB_FAIL(handle_.assign(src.handle_))) {
+    LOG_WARN("failed to assign table handle", K(ret), K(src));
   } else if (OB_FAIL(copy_basic_info(src))) {
+    LOG_WARN("failed to copy basic info", K(ret), K(src));
   }
   return ret;
 }
@@ -289,7 +301,10 @@ ObDDLTableStoreParam::ObDDLTableStoreParam()
     ddl_checkpoint_scn_(SCN::min_scn()),
     ddl_snapshot_version_(0),
     ddl_execution_id_(-1),
-    data_format_version_(0)
+    data_format_version_(0),
+    ddl_redo_callback_(nullptr),
+    ddl_finish_callback_(nullptr),
+    ddl_replay_status_(CS_REPLICA_REPLAY_NONE)
 {
 
 }
@@ -314,9 +329,23 @@ void UpdateUpperTransParam::reset()
 }
 
 
+ObHATableStoreParam::ObHATableStoreParam(
+    const bool need_replace_remote_sstable,
+    const bool is_only_replace_major)
+  : need_replace_remote_sstable_(need_replace_remote_sstable),
+    is_only_replace_major_(is_only_replace_major)
+   
+{}
+
+bool ObHATableStoreParam::is_valid() const
+{
+  return true;
+}
+
 ObCompactionTableStoreParam::ObCompactionTableStoreParam()
   : merge_type_(MERGE_TYPE_MAX),
     clog_checkpoint_scn_(SCN::min_scn()),
+    major_ckm_info_(),
     need_report_(false),
     has_truncate_info_(false)
 {
@@ -329,6 +358,7 @@ ObCompactionTableStoreParam::ObCompactionTableStoreParam(
     const bool has_truncate_info)
   : merge_type_(merge_type),
     clog_checkpoint_scn_(clog_checkpoint_scn),
+    major_ckm_info_(),
     need_report_(need_report),
     has_truncate_info_(has_truncate_info)
 {
@@ -336,14 +366,19 @@ ObCompactionTableStoreParam::ObCompactionTableStoreParam(
 
 bool ObCompactionTableStoreParam::is_valid() const
 {
-  return clog_checkpoint_scn_.is_valid();
+  return clog_checkpoint_scn_.is_valid() && major_ckm_info_.is_valid();
 }
 
-int ObCompactionTableStoreParam::assign(const ObCompactionTableStoreParam &other)
+int ObCompactionTableStoreParam::assign(
+  const ObCompactionTableStoreParam &other,
+  ObArenaAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(other));
+  } else if (OB_FAIL(major_ckm_info_.assign(other.major_ckm_info_, allocator))) {
+    LOG_WARN("failed to assign major ckm info", KR(ret), K(other));
   } else {
     merge_type_ = other.merge_type_;
     clog_checkpoint_scn_ = other.clog_checkpoint_scn_;
@@ -353,12 +388,30 @@ int ObCompactionTableStoreParam::assign(const ObCompactionTableStoreParam &other
   return ret;
 }
 
+int64_t ObCompactionTableStoreParam::get_report_scn() const
+{
+  int64_t report_scn = 0;
+  if (need_report_
+      && !major_ckm_info_.is_empty()
+      && is_output_exec_mode(major_ckm_info_.get_exec_mode())) {
+    report_scn = major_ckm_info_.get_compaction_scn();
+  }
+  return report_scn;
+}
+
+bool ObCompactionTableStoreParam::is_valid_with_sstable(const bool have_sstable) const
+{
+  return is_valid() && (!have_sstable || major_ckm_info_.is_empty());
+}
+
 ObUpdateTableStoreParam::ObUpdateTableStoreParam()
     : compaction_info_(),
       ddl_info_(),
+      ha_info_(),
       snapshot_version_(ObVersionRange::MIN_VERSION),
       multi_version_start_(ObVersionRange::MIN_VERSION),
       storage_schema_(NULL),
+      rebuild_seq_(-1),
       sstable_(NULL),
       allow_duplicate_sstable_(false),
       upper_trans_param_()
@@ -369,12 +422,15 @@ ObUpdateTableStoreParam::ObUpdateTableStoreParam(
     const int64_t snapshot_version,
     const int64_t multi_version_start,
     const ObStorageSchema *storage_schema,
+    const int64_t rebuild_seq,
     const UpdateUpperTransParam upper_trans_param)
   : compaction_info_(),
     ddl_info_(),
+    ha_info_(),
     snapshot_version_(snapshot_version),
     multi_version_start_(multi_version_start),
     storage_schema_(storage_schema),
+    rebuild_seq_(rebuild_seq),
     sstable_(NULL),
     allow_duplicate_sstable_(false),
     upper_trans_param_(upper_trans_param)
@@ -385,13 +441,17 @@ ObUpdateTableStoreParam::ObUpdateTableStoreParam(
     const int64_t snapshot_version,
     const int64_t multi_version_start,
     const ObStorageSchema *storage_schema,
+    const int64_t rebuild_seq,
     const blocksstable::ObSSTable *sstable,
-    const bool allow_duplicate_sstable)
+    const bool allow_duplicate_sstable,
+    const bool need_wait_check_flag)
     : compaction_info_(),
       ddl_info_(),
+      ha_info_(),
       snapshot_version_(snapshot_version),
       multi_version_start_(multi_version_start),
       storage_schema_(storage_schema),
+      rebuild_seq_(rebuild_seq),
       sstable_(sstable),
       allow_duplicate_sstable_(allow_duplicate_sstable),
       upper_trans_param_()
@@ -405,24 +465,42 @@ bool ObUpdateTableStoreParam::is_valid() const
       && snapshot_version_ >= ObVersionRange::MIN_VERSION
       && nullptr != storage_schema_
       && storage_schema_->is_valid()
-      && compaction_info_.is_valid();
+      && rebuild_seq_ >= 0
+      && compaction_info_.is_valid_with_sstable(NULL != sstable_/*have_sstable*/)
+      && ha_info_.is_valid();
   return bret;
 }
 
 bool ObUpdateTableStoreParam::need_report_major() const
 {
   return compaction_info_.need_report_
-    && nullptr != sstable_
-    && sstable_->is_major_sstable();
+    && ((nullptr != sstable_ && sstable_->is_major_sstable())
+        || compaction_info_.get_report_scn() > 0);
 }
 
 
-int ObUpdateTableStoreParam::init_with_compaction_info(const ObCompactionTableStoreParam &input_param)
+int ObUpdateTableStoreParam::init_with_compaction_info(
+  const ObCompactionTableStoreParam &input_param,
+  ObArenaAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!input_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(input_param));
   } else if (OB_FAIL(compaction_info_.assign(input_param))) {
+    LOG_WARN("failed to assign compaction info", KR(ret));
+  }
+  return ret;
+}
+
+int ObUpdateTableStoreParam::init_with_ha_info(const ObHATableStoreParam &ha_param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!ha_param.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(ha_param));
+  } else {
+    ha_info_ = ha_param;
   }
   return ret;
 }
@@ -432,24 +510,68 @@ ObBatchUpdateTableStoreParam::ObBatchUpdateTableStoreParam()
 #ifdef ERRSIM
     errsim_point_info_(),
 #endif
-    source_storage_schema_(nullptr),
-    tablet_fork_param_()
+    rebuild_seq_(OB_INVALID_VERSION),
+    is_transfer_replace_(false),
+    start_scn_(SCN::min_scn()),
+    tablet_meta_(nullptr),
+    restore_status_(ObTabletRestoreStatus::FULL),
+    tablet_split_param_(),
+    tablet_fork_param_(),
+    need_replace_remote_sstable_(false),
+    release_mds_scn_()
 {
 }
 
 void ObBatchUpdateTableStoreParam::reset()
 {
   tables_handle_.reset();
-  source_storage_schema_ = nullptr;
+  rebuild_seq_ = OB_INVALID_VERSION;
+  is_transfer_replace_ = false;
+  start_scn_.set_min();
+  tablet_meta_ = nullptr;
+  restore_status_ = ObTabletRestoreStatus::FULL;
+  tablet_split_param_.reset();
   tablet_fork_param_.reset();
+  need_replace_remote_sstable_ = false;
+  release_mds_scn_.reset();
 }
 
 bool ObBatchUpdateTableStoreParam::is_valid() const
 {
-  return tablet_fork_param_.is_valid();
+  return rebuild_seq_ > OB_INVALID_VERSION
+      && ObTabletRestoreStatus::is_valid(restore_status_)
+      && release_mds_scn_.is_valid();
 }
 
 
+
+ObSplitTableStoreParam::ObSplitTableStoreParam()
+  : snapshot_version_(-1),
+    multi_version_start_(-1),
+    merge_type_(INVALID_MERGE_TYPE),
+    skip_split_keys_()
+{
+}
+
+ObSplitTableStoreParam::~ObSplitTableStoreParam()
+{
+  reset();
+}
+
+bool ObSplitTableStoreParam::is_valid() const
+{
+  return snapshot_version_ > -1
+    && multi_version_start_ >= 0
+    && is_valid_merge_type(merge_type_);
+}
+
+void ObSplitTableStoreParam::reset()
+{
+  snapshot_version_ = -1;
+  multi_version_start_ = -1;
+  merge_type_ = INVALID_MERGE_TYPE;
+  skip_split_keys_.reset();
+}
 
 ObForkTableStoreParam::ObForkTableStoreParam()
   : snapshot_version_(-1),
@@ -496,3 +618,66 @@ ObPartitionReadableInfo::ObPartitionReadableInfo()
 ObPartitionReadableInfo::~ObPartitionReadableInfo()
 {
 }
+
+
+
+
+ObTabletSplitTscInfo::ObTabletSplitTscInfo()
+  : start_partkey_(),
+    end_partkey_(),
+    is_split_dst_(),
+    split_cnt_(0),
+    split_type_(ObTabletSplitType::MAX_TYPE),
+    partkey_is_rowkey_prefix_(false)
+{
+}
+
+bool ObTabletSplitTscInfo::is_split_dst_with_partkey() const
+{
+  return start_partkey_.is_valid() 
+      && end_partkey_.is_valid()
+      && is_split_dst_
+      && split_type_ < ObTabletSplitType::MAX_TYPE;
+}
+
+// e.g., lob split dst tablet
+bool ObTabletSplitTscInfo::is_split_dst_without_partkey() const
+{
+  return !start_partkey_.is_valid()
+      && !end_partkey_.is_valid()
+      && is_split_dst_
+      && split_type_ < ObTabletSplitType::MAX_TYPE;
+}
+
+void ObTabletSplitTscInfo::reset()
+{
+  start_partkey_.reset();
+  end_partkey_.reset();
+  is_split_dst_ = false;
+  split_type_ = ObTabletSplitType::MAX_TYPE;
+  split_cnt_ = 0;
+  partkey_is_rowkey_prefix_ = false;
+}
+
+
+ObRebuildListener::ObRebuildListener(transaction::ObLSTxCtxMgr &mgr)
+  : ls_tx_ctx_mgr_(mgr)
+{
+  int tmp_ret = OB_SUCCESS;
+  while (OB_SUCCESS != (tmp_ret = ls_tx_ctx_mgr_.lock_minor_merge_lock())) {
+    STORAGE_LOG_RET(ERROR, tmp_ret, "lock minor merge lock failed, we need retry forever", K(tmp_ret));
+  }
+}
+
+ObRebuildListener::~ObRebuildListener()
+{
+  int tmp_ret = OB_SUCCESS;
+  while (OB_SUCCESS != (tmp_ret = ls_tx_ctx_mgr_.unlock_minor_merge_lock())) {
+    STORAGE_LOG_RET(ERROR, tmp_ret, "unlock minor merge lock failed, we need retry forever", K(tmp_ret));
+  }
+}
+
+
+/***********************ObBackupRestoreTableSchemaChecker***************************/
+
+

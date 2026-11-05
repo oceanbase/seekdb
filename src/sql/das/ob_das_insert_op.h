@@ -17,13 +17,15 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_INSERT_OP_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_INSERT_OP_H_
 #include "sql/das/ob_das_task.h"
-#include "data_plane/ob_i_dml_service.h"
+#include "storage/access/ob_dml_param.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 namespace oceanbase
 {
 namespace sql
 {
+class ObDASInsertResult;
+
 typedef common::ObList<blocksstable::ObDatumRowIterator *, common::ObIAllocator> ObDuplicatedIterList;
 class ObDASConflictIterator : public blocksstable::ObDatumRowIterator
 {
@@ -54,6 +56,7 @@ private:
 class ObDASInsertOp : public ObIDASTaskOp
 {
   OB_UNIS_VERSION(1);
+  friend class ObDASInsertResult;
 public:
   ObDASInsertOp(common::ObIAllocator &op_alloc);
   virtual ~ObDASInsertOp() = default;
@@ -62,7 +65,10 @@ public:
   virtual int release_op() override;
   virtual int record_task_result_to_rtdef() override;
   virtual int assign_task_result(ObIDASTaskOp *other) override;
+  virtual int decode_task_result(ObIDASTaskResult *task_result) override;
+  virtual int fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit) override;
   virtual int init_task_info(uint32_t row_extend_size) override;
+  virtual int swizzling_remote_task(ObDASRemoteInfo *remote_info) override;
   virtual const ObDASBaseCtDef *get_ctdef() const override { return ins_ctdef_; }
   virtual ObDASBaseRtDef *get_rtdef() override { return ins_rtdef_; }
   int write_row(const ExprFixedArray &row,
@@ -91,14 +97,15 @@ public:
 private:
   int insert_rows();
   int insert_row_with_fetch();
+  int store_conflict_row(ObDASInsertResult &ins_result);
 
-  int insert_index_with_fetch(data_plane::ObDmlExecution &execution,
-                              data_plane::ObIDmlService *dml_service,
+  int insert_index_with_fetch(ObDMLBaseParam &dml_param,
+                              ObAccessService *as,
                               blocksstable::ObDatumRowIterator &dml_iter,
                               ObDASConflictIterator *result_iter,
                               const ObDASInsCtDef *ins_ctdef,
                               ObDASInsRtDef *ins_rtdef,
-                              data_plane::ObWriteContext &write_context,
+                              storage::ObStoreCtxGuard &store_ctx_guard,
                               const UIntFixedArray *duplicated_column_ids,
                               common::ObTabletID tablet_id,
                               transaction::ObTxReadSnapshot *snapshot);
@@ -110,6 +117,39 @@ private:
   blocksstable::ObDatumRowIterator *result_;
   int64_t affected_rows_;  // local execute result, no need to serialize
   bool is_duplicated_;  // local execute result, no need to serialize
+};
+
+class ObDASInsertResult : public ObIDASTaskResult, public blocksstable::ObDatumRowIterator
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObDASInsertResult();
+  virtual ~ObDASInsertResult();
+  virtual int init(const ObIDASTaskOp &op, common::ObIAllocator &alloc) override;
+  virtual int reuse() override;
+  virtual int get_next_row(blocksstable::ObDatumRow *&row) override;
+  virtual void reset();
+  virtual int link_extra_result(ObDASExtraData &extra_result, ObIDASTaskOp *task_op) override;
+  int init_result_newrow_iter(const ObjMetaFixedArray *output_types);
+  ObDASWriteBuffer &get_result_buffer() { return result_buffer_; }
+  int64_t get_affected_rows() const { return affected_rows_; }
+  void set_affected_rows(int64_t affected_rows) { affected_rows_ = affected_rows; }
+
+  bool is_duplicated() { return is_duplicated_; }
+  void set_is_duplicated(bool is_duplicated) { is_duplicated_ = is_duplicated; }
+  transaction::ObTxReadSnapshot &get_response_snapshot() { return response_snapshot_; }
+
+  INHERIT_TO_STRING_KV("ObIDASTaskResult", ObIDASTaskResult,
+                       K_(affected_rows),
+                       K_(is_duplicated),
+                       K_(response_snapshot));
+private:
+  int64_t affected_rows_;
+  ObDASWriteBuffer result_buffer_;
+  ObDASWriteBuffer::NewRowIterator result_newrow_iter_;
+  const ObjMetaFixedArray *output_types_;
+  bool is_duplicated_;
+  transaction::ObTxReadSnapshot response_snapshot_;
 };
 }  // namespace sql
 }  // namespace oceanbase

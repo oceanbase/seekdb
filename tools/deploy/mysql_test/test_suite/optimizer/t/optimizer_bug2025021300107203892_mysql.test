@@ -1,0 +1,63 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner: zhanyue.zzy
+#owner group: sql1
+# tags: optimizer
+
+--disable_warnings
+drop table if exists temp_table_1;
+drop table if exists t6;
+--enable_warnings
+
+--result_format 4
+
+CREATE TABLE `t6` (
+  `c1` int(11) NOT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` int(11) DEFAULT NULL,
+  `c4` varchar(100) DEFAULT NULL,
+  `c5` text DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  KEY `idx1` (`c2`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `idx2` (`c3`) BLOCK_SIZE 16384 LOCAL
+) partition by hash(c1)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`,
+partition `p4`,
+partition `p5`,
+partition `p6`,
+partition `p7`,
+partition `p8`,
+partition `p9`);
+
+CREATE TABLE `temp_table_1` (
+  `c1` int(11) NOT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` int(11) DEFAULT NULL,
+  `c4` varchar(100) DEFAULT NULL,
+  `c5` text DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  KEY `idx1` (`c2`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `idx2` (`c3`) BLOCK_SIZE 16384 LOCAL
+) partition by hash(c1)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`,
+partition `p4`,
+partition `p5`,
+partition `p6`,
+partition `p7`,
+partition `p8`,
+partition `p9`);
+
+explain basic insert /*+ direct(true,0,'full') enable_parallel_dml parallel(10) */ into temp_table_1 select * from t6;
+insert /*+ direct(true,0,'full') enable_parallel_dml parallel(10) */ into temp_table_1 select * from t6;
+
+--disable_warnings
+drop table if exists temp_table_1;
+drop table if exists t6;
+--enable_warnings

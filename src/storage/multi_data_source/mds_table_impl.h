@@ -36,6 +36,7 @@
 #include "adapter_define/mds_dump_node.h"
 #include "mds_writer.h"
 #include "common/ob_tablet_id.h"
+#include "share/ob_ls_id.h"
 #include "mds_table_base.h"
 #include "compile_utility/map_type_index_in_tuple.h"
 #include "storage/multi_data_source/compile_utility/compile_mapper.h"
@@ -50,6 +51,15 @@ class MdsDumpNode;
 class MdsTableHandle;
 
 typedef DropFirstElemtTuple<char
+#define GENERATE_TEST_MDS_TABLE
+#define _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION) \
+        ,MdsUnit<KEY_TYPE, VALUE_TYPE>
+#include "compile_utility/mds_register.h"
+#undef _GENERATE_MDS_UNIT_
+#undef GENERATE_TEST_MDS_TABLE
+>::type UnitTestMdsTable;
+
+typedef DropFirstElemtTuple<char
 #define GENERATE_NORMAL_MDS_TABLE
 #define _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION) \
         ,MdsUnit<KEY_TYPE, VALUE_TYPE>
@@ -58,17 +68,20 @@ typedef DropFirstElemtTuple<char
 #undef GENERATE_NORMAL_MDS_TABLE
 >::type NormalMdsTable;
 
-typedef ObTuple<NormalMdsTable> MdsTableTypeTuple;
+typedef DropFirstElemtTuple<char
+#define GENERATE_LS_INNER_MDS_TABLE
+#define _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION) \
+        ,MdsUnit<KEY_TYPE, VALUE_TYPE>
+#include "compile_utility/mds_register.h"
+#undef _GENERATE_MDS_UNIT_
+#undef GENERATE_LS_INNER_MDS_TABLE
+>::type LsInnerMdsTable;
 
-// Table ID 0 belonged to the removed unit-test table. Persistent MDS keys use
-// explicit IDs, so keep the production table at its established ID without a
-// placeholder type in the tuple.
-static constexpr uint8_t MDS_TABLE_ID_OFFSET = 1;
+typedef ObTuple<UnitTestMdsTable, NormalMdsTable, LsInnerMdsTable> MdsTableTypeTuple;
 
 template <typename MdsTableType>
 struct GET_MDS_TABLE_ID {
-  static constexpr uint8_t value = MDS_TABLE_ID_OFFSET
-                                 + MdsTableTypeTuple::get_element_index<MdsTableType>();
+  static constexpr uint8_t value = MdsTableTypeTuple::get_element_index<MdsTableType>();
 };
 
 template <typename MdsTableType, typename K, typename V>
@@ -155,7 +168,7 @@ public:
                              const bool for_flush,
                              const ScanRowOrder scan_row_order,
                              const ScanNodeOrder scan_node_order);
-  TO_STRING_KV(KP(this), K_(tablet_id), K_(flushing_scn), K_(rec_scn), K_(max_aborted_scn),
+  TO_STRING_KV(KP(this), K_(ls_id), K_(tablet_id), K_(flushing_scn), K_(rec_scn), K_(max_aborted_scn),
                K_(last_inner_recycled_scn), K_(total_node_cnt), K_(construct_sequence), K_(debug_info));
   template <typename SCAN_OP>
   int for_each_scan_row(FowEachRowAction action_type, SCAN_OP &&op);

@@ -41,8 +41,9 @@ int ObTabletFullMediumInfo::assign(common::ObIAllocator &allocator, const ObTabl
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(medium_info_list_.assign(allocator, other.medium_info_list_))) {
+    LOG_WARN("failed to assign", K(ret), K(other));
   } else {
-    extra_medium_info_ = other.extra_medium_info_;
+    extra_medium_info_.info_ = other.extra_medium_info_.info_;
     extra_medium_info_.last_medium_scn_ = other.extra_medium_info_.last_medium_scn_;
   }
 
@@ -64,7 +65,9 @@ int ObTabletFullMediumInfo::deserialize(common::ObIAllocator &allocator, const c
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(extra_medium_info_.deserialize(buf, data_len, pos))) {
+    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_FAIL(medium_info_list_.deserialize(allocator, buf, data_len, pos))) {
+    LOG_WARN("failed to deserialize", K(ret));
   }
 
   return ret;

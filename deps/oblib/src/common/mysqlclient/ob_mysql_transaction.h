@@ -1,0 +1,105 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_MYSQL_TRANSACTION_H_
+#define OCEANBASE_MYSQL_TRANSACTION_H_
+
+#include "lib/string/ob_sql_string.h"
+#include "lib/oblog/ob_log_module.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_mysql_connection.h"
+#include "common/mysqlclient/ob_single_connection_proxy.h"
+
+namespace oceanbase
+{
+namespace common
+{
+namespace sqlclient
+{
+class ObISQLConnection;
+class ObISQLConnectionPool;
+}
+
+// query stash desc for query batch
+class ObSqlTransQueryStashDesc
+{
+public:
+  ObSqlTransQueryStashDesc() : stash_query_row_cnt_(0) {}
+  ~ObSqlTransQueryStashDesc() { reset(); }
+  void reset() {
+    
+    stash_query_row_cnt_ = 0;
+    stash_query_.reuse();
+  }
+  
+  
+  void add_row_cnt(int64_t row_cnt) { stash_query_row_cnt_ += row_cnt; }
+  int64_t get_row_cnt() { return stash_query_row_cnt_; }
+  ObSqlString &get_stash_query() { return stash_query_; }
+  TO_STRING_KV(K_(stash_query_row_cnt), K_(stash_query));
+private:
+  
+  int64_t stash_query_row_cnt_;
+  ObSqlString stash_query_;
+};
+
+// not thread safe sql transaction execution
+// use one connection
+class ObMySQLTransaction : public ObSingleConnectionProxy
+{
+public:
+  ObMySQLTransaction(bool enable_query_stash = false);
+  virtual ~ObMySQLTransaction();
+public:
+  // start transaction
+  virtual int start(ObISQLClient *proxy,
+                    bool with_snapshot = false,
+                    const int32_t group_id = 0);
+  virtual int start(ObISQLClient *proxy,
+                    const int64_t &refreshed_schema_version,
+                    bool with_snapshot = false);
+  // end the transaction
+  virtual int end(const bool commit);
+  virtual bool is_started() const { return in_trans_; }
+
+  // get_stash_query for query batch buf
+  int get_stash_query(const char* table_name, ObSqlTransQueryStashDesc *&desc);
+  bool get_enable_query_stash() {
+    return enable_query_stash_;
+  }
+  // do stash query in batch
+  int do_stash_query_batch() {
+    return do_stash_query(QUERY_MIN_BATCH_CNT);
+  }
+  constexpr static int QUERY_MIN_BATCH_CNT = 200;
+  // do stash query all
+  int do_stash_query(int min_batch_cnt = 1);
+  int handle_trans_in_the_end(const int err_no);
+protected:
+  int start_transaction(bool with_snap_shot);
+  int end_transaction(const bool commit);
+protected:
+  int64_t start_time_;
+  bool in_trans_;
+  // inner sql now not support multi query, enable_query_stash now just enable for batch insert values
+  bool enable_query_stash_;
+  hash::ObHashMap<const char*, ObSqlTransQueryStashDesc*> query_stash_desc_;
+};
+
+} // end namespace commmon
+} // end namespace oceanbase
+
+#endif // OCEANBASE_MYSQL_TRANSACTION_H_

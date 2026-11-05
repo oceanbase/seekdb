@@ -16,12 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_utils.h"
-#include "data_plane/blocksstable/ob_datum_row.h"
-#include "share/ob_server_struct.h"
-#include "share/schema/ob_multi_version_schema_service.h"
-#include "sql/pl/ob_pl.h"
-#include "data_plane/access/ob_datum_reshape.h"
-#include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
+#include "pl/ob_pl.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "sql/das/ob_das_vec_define.h"
 namespace oceanbase
 {
@@ -30,6 +26,22 @@ using namespace share;
 using namespace share::schema;
 namespace sql
 {
+void ObDASUtils::log_user_error_and_warn(const rpc::frame::ObResultCode &rcode)
+{
+  if (OB_UNLIKELY(OB_SUCCESS != rcode.rcode_)) {
+    FORWARD_USER_ERROR(rcode.rcode_, rcode.msg_);
+  }
+  for (int i = 0; i < rcode.warnings_.count(); ++i) {
+    const common::ObWarningBuffer::WarningItem &warning_item = rcode.warnings_.at(i);
+    if (ObLogger::USER_WARN == warning_item.log_level_) {
+      FORWARD_USER_WARN(warning_item.code_, warning_item.msg_);
+    } else if (ObLogger::USER_NOTE == warning_item.log_level_) {
+      FORWARD_USER_NOTE(warning_item.code_, warning_item.msg_);
+    }
+  }
+}
+
+
 int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext &exec_ctx, bool is_reading)
 {
   int ret = OB_SUCCESS;
@@ -39,16 +51,20 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
   //indicating that this SQL is triggered by a foreign key,
   //and no mutating check is required.
   //pl_stack != nullptr means this sql is triggered by trigger or pl udf
-  //only this sql(trigger or pl udf) needs to check mutating
+  //only this sql(trigger or pl udf) needs to check mutating,
+  //and the statement in autonomous transaction does not need to be checked
   if (OB_ISNULL(cur_parent_ctx)) {
     //do nothing
   } else if (cur_parent_ctx->get_das_ctx().is_fk_cascading_) {
     cur_parent_ctx = nullptr;
   } else if (OB_ISNULL(cur_parent_ctx->get_pl_stack_ctx())) {
     cur_parent_ctx = nullptr;
+  } else if (cur_parent_ctx->get_pl_stack_ctx()->in_autonomous()) {
+    cur_parent_ctx = nullptr;
   }
   while (OB_SUCC(ret) && cur_parent_ctx != nullptr) {
     ObDASCtx &parent_das_ctx = cur_parent_ctx->get_das_ctx();
+    LOG_DEBUG("check nested sql mutating", K(cur_parent_ctx), K(parent_das_ctx), K(ref_table_id));
     FOREACH_X(node, parent_das_ctx.get_table_loc_list(), OB_SUCC(ret)) {
       ObDASTableLoc *table_loc = *node;
       if (table_loc->loc_meta_->ref_table_id_ == ref_table_id 
@@ -57,12 +73,15 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
         ObSchemaGetterGuard schema_guard;
         const ObTableSchema *table_schema = NULL;
         
-        if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+        if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+          LOG_WARN("get tenant schema guard failed", K(ret));
         } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
+          LOG_WARN("get table schema failed", K(ret), K(ref_table_id));
         } else if (table_schema != nullptr) {
           LOG_MYSQL_USER_ERROR(OB_ERR_MUTATING_TABLE_OPERATION, table_schema->get_table_name());
         }
         ret = OB_ERR_MUTATING_TABLE_OPERATION;
+        LOG_WARN("table is mutating", K(ret), K(ref_table_id));
       }
     }
     if (OB_SUCC(ret)) {
@@ -72,6 +91,8 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
       } else if (cur_parent_ctx->get_das_ctx().is_fk_cascading_) {
         cur_parent_ctx = nullptr;
       } else if (OB_ISNULL(cur_parent_ctx->get_pl_stack_ctx())) {
+        cur_parent_ctx = nullptr;
+      } else if (cur_parent_ctx->get_pl_stack_ctx()->in_autonomous()) {
         cur_parent_ctx = nullptr;
       }
     }
@@ -107,9 +128,11 @@ int ObDASUtils::build_table_loc_meta(ObIAllocator &allocator,
   void *buf = allocator.alloc(sizeof(ObDASTableLocMeta));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate table loc meta failed", K(ret), K(sizeof(ObDASTableLocMeta)));
   } else {
     dst = new(buf) ObDASTableLocMeta(allocator);
     if (OB_FAIL(dst->assign(src))) {
+      LOG_WARN("assign table loc meta failed", K(ret));
     }
   }
   return ret;
@@ -148,6 +171,7 @@ int ObDASUtils::deserialize_das_ctdefs(const char *buf, const int64_t data_len, 
   for (int64_t i = 0; OB_SUCC(ret) && i < array_size; ++i) {
     ObDASDMLBaseCtDef *ctdef = nullptr;
     if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(op_type, allocator, ctdef))) {
+      SQL_DAS_LOG(WARN, "allocate das ctdef failed", K(ret));
     }
     OB_UNIS_DECODE(*ctdef);
     OZ(ctdefs.push_back(ctdef));
@@ -172,8 +196,8 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
     } else if (FALSE_IT(storage_row.storage_datums_[i].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
     } else if (storage_row.storage_datums_[i].is_null()) {
       //nothing to do
-    } else if (OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(
-            col_type, col_accuracy, allocator, storage_row.storage_datums_[i]))) {
+    } else if (OB_FAIL(reshape_datum_value(col_type, col_accuracy, false, allocator, storage_row.storage_datums_[i]))) {
+      LOG_WARN("reshape storage value failed", K(ret));
     } else if (col_type.is_lob_storage() && col_type.has_lob_header()) {
       storage_row.storage_datums_[i].set_has_lob_header();
     }
@@ -205,6 +229,7 @@ int ObDASUtils::reshape_storage_value(const ObObjMeta &col_type,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(padding_fixed_string_value(col_accuracy.get_length(), allocator, value))) {
+    LOG_WARN("padding char value failed", K(ret), K(col_accuracy), K(value));
   }
   return ret;
 }
@@ -220,6 +245,7 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
       const char *str = value.get_string_ptr();
       if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
       } else {
         char pad_char = '\0';
         MEMCPY(dest_str, str, len);
@@ -243,6 +269,486 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
   return ret;
 }
 
+int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
+                                    const ObAccuracy &col_accuracy,
+                                    const bool enable_oracle_empty_char_reshape_to_null,
+                                    ObIAllocator &allocator,
+                                    blocksstable::ObStorageDatum &datum_value)
+{
+  int ret = OB_SUCCESS;
+  if (col_type.is_binary()) {
+    int32_t binary_len = col_accuracy.get_length();
+    int32_t len = datum_value.len_;
+    if (binary_len > len) {
+      char *dest_str = NULL;
+      const char *str = datum_value.ptr_;
+      if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
+      } else {
+        char pad_char = '\0';
+        MEMCPY(dest_str, str, len);
+        MEMSET(dest_str + len, pad_char, binary_len - len);
+        datum_value.set_string(ObString(binary_len, dest_str));
+      }
+    }
+  } else if (col_type.is_fixed_len_char_type()) {
+    const char *str = datum_value.ptr_;
+    int32_t len = datum_value.len_;
+    ObString space_pattern = ObCharsetUtils::get_const_str(col_type.get_collation_type(), ' ');
+    for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+      if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+        break;
+      }
+    }
+    datum_value.set_string(ObString(len, str));
+  }
+  return ret;
+}
+
+int ObDASUtils::reshape_datum_vector_value(const ObObjMeta &col_type,
+                                           const ObAccuracy &col_accuracy,
+                                           ObIAllocator &allocator,
+                                           const ObDatumVector &datum_vector,
+                                           ObBatchSelector &batch_selector)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!batch_selector.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), K(batch_selector));
+  } else {
+    ObBatchSelector single_selector(static_cast<int64_t>(0), 1);
+    ObBatchSelector &selector = datum_vector.is_batch() ? batch_selector : single_selector;
+    if (col_type.is_binary()) {
+      const int32_t binary_len = col_accuracy.get_length();
+      const char pad_char = '\0';
+      int64_t i = 0;
+      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+        ObDatum &datum = datum_vector.datums_[i];
+        if (!datum.is_null() && datum.len_ < binary_len) {
+          const char *str = datum.ptr_;
+          ObLength len = datum.len_;
+          char *dest_str = nullptr;
+          if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
+          } else {
+            MEMCPY(dest_str, str, len);
+            MEMSET(dest_str + len, pad_char, binary_len - len);
+            datum.ptr_ = dest_str;
+            datum.len_ = binary_len;
+          }
+        }
+      }
+      if (OB_LIKELY(OB_ITER_END == ret)) {
+        ret = OB_SUCCESS;
+      }
+    } else if (col_type.is_fixed_len_char_type()) {
+      const ObString space_pattern = ObCharsetUtils::get_const_str(col_type.get_collation_type(), ' ');
+      int64_t i = 0;
+      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+        ObDatum &datum = datum_vector.datums_[i];
+        if (!datum.is_null()) {
+          ObLength len = datum.len_;
+          const char *str = datum.ptr_;
+          for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+            if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+              break;
+            }
+          }
+          datum.len_ = len;
+        }
+      }
+      if (OB_LIKELY(OB_ITER_END == ret)) {
+        ret = OB_SUCCESS;
+      }
+    }
+  }
+  return ret;
+}
+
+static bool fast_check_vector_is_all_null(ObIVector *vector, const int64_t batch_size)
+{
+  bool is_all_null = false;
+  VectorFormat format = vector->get_format();
+  switch (format) {
+    case VEC_FIXED:
+    case VEC_DISCRETE:
+    case VEC_CONTINUOUS: {
+      ObBitmapNullVectorBase *base = static_cast<ObBitmapNullVectorBase *>(vector);
+      is_all_null = base->has_null() && base->get_nulls()->is_all_true(batch_size);
+      break;
+    }
+    default:
+      break;
+  }
+  return is_all_null;
+}
+
+static int new_discrete_vector(VecValueTypeClass value_tc,
+                               const int64_t max_batch_size,
+                               ObIAllocator &allocator,
+                               ObDiscreteBase *&result_vec)
+{
+  int ret = OB_SUCCESS;
+  result_vec = nullptr;
+  ObIVector *vector = nullptr;
+  switch (value_tc) {
+#define DISCRETE_VECTOR_INIT_SWITCH(value_tc)                           \
+  case value_tc: {                                                      \
+    using VecType = RTVectorType<VEC_DISCRETE, value_tc>;               \
+    static_assert(sizeof(VecType) <= ObIVector::MAX_VECTOR_STRUCT_SIZE, \
+                  "vector size exceeds MAX_VECTOR_STRUCT_SIZE");        \
+    vector = OB_NEWx(VecType, &allocator, nullptr, nullptr, nullptr);   \
+    break;                                                              \
+  }
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_NUMBER);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_EXTEND);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_STRING);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_ENUM_SET_INNER);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_RAW);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_ROWID);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_LOB);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_JSON);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_GEO);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_UDT);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_COLLECTION);
+    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_ROARINGBITMAP);
+#undef DISCRETE_VECTOR_INIT_SWITCH
+    default:
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected discrete vector value type class", KR(ret), K(value_tc));
+      break;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(vector)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc vecttor", KR(ret));
+  } else {
+    ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
+    const int64_t nulls_size = ObBitVector::memory_size(max_batch_size);
+    const int64_t lens_size = sizeof(int32_t) * max_batch_size;
+    const int64_t ptrs_size = sizeof(char *) * max_batch_size;
+    ObBitVector *nulls = nullptr;
+    int32_t *lens = nullptr;
+    char **ptrs = nullptr;
+    if (OB_ISNULL(nulls = to_bit_vector(allocator.alloc(nulls_size)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc mem", KR(ret), K(nulls_size));
+    } else if (OB_ISNULL(lens = static_cast<int32_t *>(allocator.alloc(lens_size)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc mem", KR(ret), K(lens_size));
+    } else if (OB_ISNULL(ptrs = static_cast<char **>(allocator.alloc(ptrs_size)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc mem", KR(ret), K(ptrs_size));
+    } else {
+      nulls->reset(max_batch_size);
+      discrete_vec->set_nulls(nulls);
+      discrete_vec->set_lens(lens);
+      discrete_vec->set_ptrs(ptrs);
+      result_vec = discrete_vec;
+    }
+  }
+  return ret;
+}
+
+int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
+                                     const ObAccuracy &col_accuracy,
+                                     const bool enable_oracle_empty_char_reshape_to_null,
+                                     ObIAllocator &allocator,
+                                     ObIVector *&vector,
+                                     ObBatchSelector &selector)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(vector) || !selector.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), KP(vector), K(selector));
+  } else if (fast_check_vector_is_all_null(vector, selector.get_max())) {
+    // do nothing
+  } else if (col_type.is_binary()) {
+    const int32_t binary_len = col_accuracy.get_length();
+    const char pad_char = '\0';
+    const VectorFormat format = vector->get_format();
+    switch (format) {
+      case VEC_CONTINUOUS:
+      {
+        ObContinuousBase *continuous_vec = static_cast<ObContinuousBase *>(vector);
+        ObDiscreteBase *discrete_vec = nullptr;
+        char *data = continuous_vec->get_data();
+        uint32_t *offsets = continuous_vec->get_offsets();
+        char **ptrs = nullptr;
+        ObLength *lens = nullptr;
+        bool has_value_change = false;
+        VecValueTypeClass value_tc = get_vec_value_tc(col_type.get_type(),
+                                                      col_type.get_scale(),
+                                                      col_type.get_stored_precision());
+        if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
+          LOG_WARN("fail to new discrete vector", KR(ret));
+        } else {
+          ptrs = discrete_vec->get_ptrs();
+          lens = discrete_vec->get_lens();
+        }
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          if (continuous_vec->is_null(i)) {
+            discrete_vec->set_null(i);
+          } else {
+            const ObLength len = offsets[i + 1] - offsets[i];
+            char *str = data + offsets[i];
+            if (len < binary_len) {
+              char *dest_str = nullptr;
+              if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
+              } else {
+                MEMCPY(dest_str, str, len);
+                MEMSET(dest_str + len, pad_char, binary_len - len);
+                ptrs[i] = dest_str;
+                lens[i] = binary_len;
+                has_value_change = true;
+              }
+            } else {
+              ptrs[i] = str;
+              lens[i] = binary_len;
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        if (OB_SUCC(ret) && has_value_change) {
+          vector = discrete_vec;
+        }
+        break;
+      }
+      case VEC_DISCRETE:
+      {
+        ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
+        char **ptrs = discrete_vec->get_ptrs();
+        ObLength *lens =discrete_vec->get_lens();
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          if (!discrete_vec->is_null(i) && lens[i] < binary_len) {
+            char *str = ptrs[i];
+            ObLength len = lens[i];
+            char *dest_str = nullptr;
+            if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
+            } else {
+              MEMCPY(dest_str, str, len);
+              MEMSET(dest_str + len, pad_char, binary_len - len);
+              ptrs[i] = dest_str;
+              lens[i] = binary_len;
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
+      case VEC_UNIFORM:
+      {
+        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
+        ObDatum *datums = uniform_vec->get_datums();
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          ObDatum &datum = datums[i];
+          if (!datum.is_null() && datum.len_ < binary_len) {
+            const char *str = datum.ptr_;
+            ObLength len = datum.len_;
+            char *dest_str = nullptr;
+            if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
+            } else {
+              MEMCPY(dest_str, str, len);
+              MEMSET(dest_str + len, pad_char, binary_len - len);
+              datum.ptr_ = dest_str;
+              datum.len_ = binary_len;
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
+      case VEC_UNIFORM_CONST:
+      {
+        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
+        ObDatum &datum = uniform_vec->get_datums()[0];
+        if (!datum.is_null() && datum.len_ < binary_len) {
+          const char *str = datum.ptr_;
+          ObLength len = datum.len_;
+          char *dest_str = nullptr;
+          if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
+          } else {
+            MEMCPY(dest_str, str, len);
+            MEMSET(dest_str + len, pad_char, binary_len - len);
+            datum.ptr_ = dest_str;
+            datum.len_ = binary_len;
+          }
+        }
+        break;
+      }
+      default:
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected binary vector format", KR(ret), K(format), K(col_type));
+        break;
+    }
+  } else if (col_type.is_fixed_len_char_type()) {
+    const ObString space_pattern = ObCharsetUtils::get_const_str(col_type.get_collation_type(), ' ');
+    const VectorFormat format = vector->get_format();
+    switch (format) {
+      case VEC_CONTINUOUS:
+      {
+        ObContinuousBase *continuous_vec = static_cast<ObContinuousBase *>(vector);
+        ObDiscreteBase *discrete_vec = nullptr;
+        char *data = continuous_vec->get_data();
+        uint32_t *offsets = continuous_vec->get_offsets();
+        char **ptrs = nullptr;
+        ObLength *lens = nullptr;
+        bool has_value_change = false;
+        VecValueTypeClass value_tc = get_vec_value_tc(col_type.get_type(),
+                                                      col_type.get_scale(),
+                                                      col_type.get_stored_precision());
+        if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
+          LOG_WARN("fail to new discrete vector", KR(ret));
+        } else {
+          ptrs = discrete_vec->get_ptrs();
+          lens = discrete_vec->get_lens();
+        }
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          if (continuous_vec->is_null(i)) {
+            discrete_vec->set_null(i);
+          } else {
+            const ObLength length = offsets[i + 1] - offsets[i];
+            {
+              ObLength len = length;
+              char *str = data + offsets[i];
+              for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+                if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+                  break;
+                }
+              }
+              ptrs[i] = str;
+              lens[i] = len;
+              if (len != length) {
+                has_value_change = true;
+              }
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        if (OB_SUCC(ret) && has_value_change) {
+          vector = discrete_vec;
+        }
+        break;
+      }
+      case VEC_DISCRETE:
+      {
+        ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
+        char **ptrs = discrete_vec->get_ptrs();
+        ObLength *lens =discrete_vec->get_lens();
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          if (!discrete_vec->is_null(i)) {
+            ObLength len = lens[i];
+            {
+              const char *str = ptrs[i];
+              for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+                if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+                  break;
+                }
+              }
+            }
+            lens[i] = len;
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
+      case VEC_UNIFORM:
+      {
+        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
+        ObDatum *datums = uniform_vec->get_datums();
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          ObDatum &datum = datums[i];
+          if (!datum.is_null()) {
+            ObLength len = datum.len_;
+            {
+              const char *str = datum.ptr_;
+              for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+                if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+                  break;
+                }
+              }
+              datum.len_ = len;
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
+      case VEC_UNIFORM_CONST:
+      {
+        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
+        ObDatum &datum = uniform_vec->get_datums()[0];
+        if (!datum.is_null()) {
+          ObLength len = datum.len_;
+          {
+            const char *str = datum.ptr_;
+            for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+              if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+                break;
+              }
+            }
+            datum.len_ = len;
+          }
+        }
+        break;
+      }
+      default:
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected fixed len char vector format", KR(ret), K(format), K(col_type));
+        break;
+    }
+  }
+  return ret;
+}
+
+int ObDASUtils::wait_das_retry(int64_t retry_cnt)
+{
+  int ret = OB_SUCCESS;
+  uint32_t timeout_factor = static_cast<uint32_t>((retry_cnt > 100) ? 100 : retry_cnt);
+  int64_t sleep_us = 10000L * timeout_factor > THIS_WORKER.get_timeout_remain()
+                                            ? THIS_WORKER.get_timeout_remain()
+                                                : 10000L * timeout_factor;
+  if (sleep_us > 0) {
+    LOG_INFO("[DAS RETRY] will sleep", K(sleep_us), K(THIS_WORKER.get_timeout_remain()));
+    THIS_WORKER.sched_wait();
+    ob_usleep(static_cast<uint32_t>(sleep_us));
+    THIS_WORKER.sched_run();
+    if (THIS_WORKER.is_timeout()) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("this worker is timeout after retry sleep. no more retry", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObDASUtils::find_child_das_def(const ObDASBaseCtDef *root_ctdef,
                                    ObDASBaseRtDef *root_rtdef,
                                    ObDASOpType op_type,
@@ -252,9 +758,13 @@ int ObDASUtils::find_child_das_def(const ObDASBaseCtDef *root_ctdef,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root_ctdef) || OB_ISNULL(root_rtdef)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("root ctdef or rtdef is nullptr", K(ret), KP(root_ctdef), K(root_rtdef));
   } else if (OB_UNLIKELY(root_ctdef->op_type_ != root_rtdef->op_type_
       || root_ctdef->children_cnt_ != root_rtdef->children_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the op_type of ctdef and rtdef do not match", K(ret),
+             K(root_ctdef->op_type_), K(root_rtdef->op_type_),
+             K(root_ctdef->children_cnt_), K(root_rtdef->children_cnt_));
   } else if (root_ctdef->op_type_ == op_type) {
     target_ctdef = root_ctdef;
     target_rtdef = root_rtdef;
@@ -265,6 +775,7 @@ int ObDASUtils::find_child_das_def(const ObDASBaseCtDef *root_ctdef,
                                      op_type,
                                      target_ctdef,
                                      target_rtdef))) {
+        LOG_WARN("find child das def failed", K(ret));
       }
     }
   }
@@ -278,6 +789,7 @@ int ObDASUtils::find_child_das_ctdef(const ObDASBaseCtDef *root_ctdef,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("root ctdef or rtdef is nullptr", K(ret), KP(root_ctdef));
   } else if (root_ctdef->op_type_ == op_type) {
     target_ctdef = root_ctdef;
   } else {
@@ -285,6 +797,7 @@ int ObDASUtils::find_child_das_ctdef(const ObDASBaseCtDef *root_ctdef,
       if (OB_FAIL(find_child_das_ctdef(root_ctdef->children_[i],
                                      op_type,
                                      target_ctdef))) {
+        LOG_WARN("find child das def failed", K(ret));
       }
     }
   }
@@ -298,6 +811,7 @@ int ObDASUtils::find_child_das_rtdef(ObDASBaseRtDef *root_rtdef,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root_rtdef)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("root ctdef or rtdef is nullptr", K(ret), KP(root_rtdef));
   } else if (root_rtdef->op_type_ == op_type) {
     target_rtdef = root_rtdef;
   } else {
@@ -305,6 +819,7 @@ int ObDASUtils::find_child_das_rtdef(ObDASBaseRtDef *root_rtdef,
       if (OB_FAIL(find_child_das_rtdef(root_rtdef->children_[i],
                                       op_type,
                                       target_rtdef))) {
+        LOG_WARN("find child das def failed", K(ret));
       }
     }
   }
@@ -336,6 +851,7 @@ bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef)
   if (nullptr != attach_ctdef && attach_ctdef->op_type_ == ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP) {
     const ObDASBaseCtDef *func_ctdef = nullptr;
     if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_FUNC_LOOKUP, func_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else {
       bret = (nullptr != func_ctdef);
     }
@@ -351,6 +867,7 @@ bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef)
   if (attach_ctdef != nullptr) {
     const ObDASBaseCtDef *vir_scan_ctdef = nullptr;
     if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_VEC_SCAN, vir_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else {
       bret = (nullptr != vir_scan_ctdef);
     }
@@ -367,6 +884,7 @@ bool ObDASUtils::is_fts_idx_scan(const ObDASBaseCtDef *attach_ctdef)
   if (attach_ctdef != nullptr) {
     const ObDASBaseCtDef *vir_scan_ctdef = nullptr;
     if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_IR_SCAN, vir_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else {
       bret = (nullptr != vir_scan_ctdef);
     }
@@ -384,6 +902,7 @@ bool ObDASUtils::is_es_match_scan(const ObDASBaseCtDef *attach_ctdef)
     const ObDASBaseCtDef *match_scan_ctdef = nullptr;
     ObDASBaseRtDef *match_scan_rtdef = nullptr;
     if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_IR_ES_SCORE, match_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else {
       bret = (nullptr != match_scan_ctdef);
     }
@@ -392,22 +911,61 @@ bool ObDASUtils::is_es_match_scan(const ObDASBaseCtDef *attach_ctdef)
   return bret;
 }
 
-int ObDASUtils::wait_das_retry(int64_t retry_cnt)
+int ObDASUtils::generate_mlog_row(const ObLSID &ls_id,
+                                  const ObTabletID &tablet_id,
+                                  const storage::ObDMLBaseParam &dml_param,
+                                  blocksstable::ObDatumRow &row,
+                                  ObDASOpType op_type,
+                                  bool is_old_row)
 {
   int ret = OB_SUCCESS;
-  uint32_t timeout_factor =
-      static_cast<uint32_t>((retry_cnt > 100) ? 100 : retry_cnt);
-  int64_t sleep_us = 10000L * timeout_factor > THIS_WORKER.get_timeout_remain()
-      ? THIS_WORKER.get_timeout_remain()
-      : 10000L * timeout_factor;
-  if (sleep_us > 0) {
-    LOG_INFO("[DAS RETRY] will sleep",
-             K(sleep_us), K(THIS_WORKER.get_timeout_remain()));
-    THIS_WORKER.sched_wait();
-    ob_usleep(static_cast<uint32_t>(sleep_us));
-    THIS_WORKER.sched_run();
-    if (THIS_WORKER.is_timeout()) {
-      ret = OB_TIMEOUT;
+  
+  uint64_t autoinc_seq = 0;
+  ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
+  if (OB_ISNULL(dml_param.table_param_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table param is null", KR(ret));
+  } else if (!dml_param.table_param_->get_data_table().is_mlog_table()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("data table is not materialized view log",
+        KR(ret), K(dml_param.table_param_->get_data_table()));
+  } else if (row.count_ < 4) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("each mlog row should at least contain 4 columns", KR(ret), K(row.count_));
+  } else if (OB_FAIL(auto_inc.get_autoinc_seq_for_mlog(ls_id, tablet_id, autoinc_seq))) {
+    LOG_WARN("get_autoinc_seq fail", K(ret), K(ls_id), K(tablet_id));
+  } else {
+    // mlog_row = | base_table_rowkey_cols | partition key cols | sequence_col | ... | dmltype_col | old_new_col |
+    int sequence_col = 0;
+    int dmltype_col = row.count_ - 2;
+    int old_new_col = row.count_ - 1;
+    const ObTableDMLParam::ObColDescArray &col_descs = dml_param.table_param_->get_col_descs();
+    bool found_seq_col = false;
+    for (int64_t i = 0; !found_seq_col && (i < row.count_); ++i) {
+      if (OB_MLOG_SEQ_NO_COLUMN_ID == col_descs.at(i).col_id_) {
+        sequence_col = i; // sequence_no is the last rowkey
+        found_seq_col = true;
+      }
+    }
+
+    row.storage_datums_[sequence_col].reuse();
+    row.storage_datums_[dmltype_col].reuse();
+    row.storage_datums_[old_new_col].reuse();
+
+    row.storage_datums_[sequence_col].set_int(static_cast<int64_t>(autoinc_seq));
+    if (sql::DAS_OP_TABLE_DELETE == op_type) {
+      row.storage_datums_[dmltype_col].set_string(ObString("D"));
+      row.storage_datums_[old_new_col].set_string(ObString("O"));
+    } else if (sql::DAS_OP_TABLE_UPDATE == op_type) {
+      row.storage_datums_[dmltype_col].set_string(ObString("U"));
+      if (is_old_row) {
+        row.storage_datums_[old_new_col].set_string(ObString("O"));
+      } else {
+        row.storage_datums_[old_new_col].set_string(ObString("N"));
+      }
+    } else {
+      row.storage_datums_[dmltype_col].set_string(ObString("I"));
+      row.storage_datums_[old_new_col].set_string(ObString("N"));
     }
   }
   return ret;

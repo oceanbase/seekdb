@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ALLOCATOR_OB_LF_FIFO_ALLOCATOR_V2_H_
+#define OCEANBASE_ALLOCATOR_OB_LF_FIFO_ALLOCATOR_V2_H_
+#include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/ob_vslice_alloc.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObLfFIFOAllocator: public ObVSliceAlloc
+{
+public:
+  typedef ObBlockAllocMgr BlockAlloc;
+  static const int64_t DEFAULT_CACHE_PAGE_COUNT = 64;
+  ObLfFIFOAllocator() {}
+  virtual ~ObLfFIFOAllocator() { destroy(); }
+  int init(const int64_t page_size,
+           const lib::ObMemAttr &attr,
+           const int64_t cache_page_count = DEFAULT_CACHE_PAGE_COUNT,
+           const int64_t total_limit = INT64_MAX)
+  {
+    int ret = OB_SUCCESS;
+    mattr_ = attr;
+    block_alloc_.set_limit(total_limit);
+    if (OB_FAIL(ObVSliceAlloc::init(page_size, block_alloc_, mattr_))) {
+    } else if (cache_page_count < 0 || cache_page_count > INT32_MAX) {
+      ret = OB_INVALID_ARGUMENT;
+      LIB_ALLOC_LOG(ERROR, "invalid cache_page_count", K(ret), K(cache_page_count));
+    } else{
+      ObVSliceAlloc::set_nway(static_cast<int32_t>(cache_page_count));
+    }
+    return ret;
+  }
+  int init(const int64_t page_size,
+           const lib::ObLabel &label,
+           const int64_t cache_page_count = DEFAULT_CACHE_PAGE_COUNT,
+           const int64_t total_limit = INT64_MAX)
+  {
+    mattr_.label_ = label;
+    
+    return init(page_size, mattr_, cache_page_count, total_limit);
+  }
+public:
+  void *alloc(const int64_t size) { return ObVSliceAlloc::alloc(size); }
+  void *alloc(const int64_t size, const ObMemAttr &attr) { UNUSED(attr); return alloc(size); }
+  void free(void *ptr) { ObVSliceAlloc::free(ptr); }
+  int64_t allocated() const { return block_alloc_.hold(); }
+  
+  void set_label(const lib::ObLabel &label) { mattr_.label_ = label; }
+  void set_attr(const lib::ObMemAttr &attr) { mattr_ = attr; }
+  void set_total_limit(int64_t total_limit) { block_alloc_.set_limit(total_limit); }
+  bool is_fragment(void* ptr) { return get_block_using_ratio(ptr) < 0.8; }
+private:
+  BlockAlloc block_alloc_;
+};
+}; // end namespace allocator
+}; // end namespace oceanbase
+
+#endif /* OCEANBASE_ALLOCATOR_OB_LF_FIFO_ALLOCATOR_V2_H_ */

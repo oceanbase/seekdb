@@ -48,11 +48,7 @@ public:
   class Compare
   {
   public:
-    Compare()
-        : eval_ctx_(nullptr),
-          datum_access_ctx_(nullptr),
-          cmp_funcs_(nullptr),
-          ret_code_(common::OB_SUCCESS)
+    Compare() : eval_ctx_(nullptr), cmp_funcs_(nullptr), ret_code_(common::OB_SUCCESS)
     {}
 
     int init(ObEvalCtx *eval_ctx, const common::ObIArray<ObCmpFunc> *cmp_funcs);
@@ -68,7 +64,6 @@ public:
                         const int64_t curr_idx,
                         bool &equal);
     ObEvalCtx *eval_ctx_;
-    const common::ObDatumAccessContext *datum_access_ctx_;
     const common::ObIArray<ObCmpFunc> *cmp_funcs_;
     int ret_code_;
   };

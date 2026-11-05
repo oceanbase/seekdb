@@ -17,14 +17,15 @@
 #ifndef SHARE_STORAGE_MULTI_DATA_SOURCE_UTILITY_MDS_FACTORY_H
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_UTILITY_MDS_FACTORY_H
 #include "lib/allocator/ob_malloc.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include <type_traits>
 #include <typeinfo>
 #include "lib/atomic/ob_atomic.h"
 #include "ob_tablet_id.h"
+#include "share/ob_ls_id.h"
 #include "src/share/ob_errno.h"
 #include "common/meta_programming/ob_type_traits.h"
-#include "mds_service.h"
+#include "mds_tenant_service.h"
 #include "common_define.h"
 
 namespace oceanbase
@@ -47,6 +48,7 @@ struct MdsFactory
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(create_(p_obj, std::forward<Args>(args)...))) {
+      MDS_LOG(WARN, "fail to create object", KR(ret), K(typeid(T).name()), KP(p_obj), K(lbt()));
     }
     return ret;
   }
@@ -63,11 +65,11 @@ struct MdsFactory
   static int deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
                                   const BufferCtx &old_ctx,
                                   BufferCtx *&new_ctx,
-                                  ObIAllocator &allocator = ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator());
+                                  ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator());
   static int create_buffer_ctx(const transaction::ObTxDataSourceType &data_source_type,
                                const transaction::ObTransID &trans_id,
                                BufferCtx *&buffer_ctx,
-                               ObIAllocator &allocator = ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator());
+                               ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator());
 private:
   // If type T has an init function, then first construct it using the default constructor, and then call its init function
   template <typename T, typename ...Args, ENABLE_IF_HAS(T, init, int(Args...))>

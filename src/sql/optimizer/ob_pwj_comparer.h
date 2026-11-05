@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_OPTIMIZER_OB_PWJ_COMPARER_H
 #define OCEANBASE_SQL_OPTIMIZER_OB_PWJ_COMPARER_H 1
 #include "lib/container/ob_array.h"
+#include "share/partition_table/ob_partition_location.h"
 #include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/optimizer/ob_sharding_info.h"
@@ -34,6 +35,7 @@ class ObLogPlan;
 struct PwjTable {
   PwjTable()
     : phy_table_loc_info_(NULL),
+      server_list_(),
       part_level_(share::schema::PARTITION_LEVEL_ZERO),
       part_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
       subpart_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
@@ -50,13 +52,16 @@ struct PwjTable {
   int init(const ObShardingInfo &info);
   int init(const share::schema::ObTableSchema &table_schema,
            const ObCandiTableLoc &phy_tbl_info);
+  int init(const ObIArray<ObAddr> &server_list);
 
   TO_STRING_KV(K_(part_level), K_(part_type), K_(subpart_type),
                K_(part_number),
                K_(is_partition_single), K_(is_subpartition_single),
-               K_(all_partition_indexes), K_(all_subpartition_indexes));
+               K_(all_partition_indexes), K_(all_subpartition_indexes),
+               K_(server_list));
 
   const ObCandiTableLoc *phy_table_loc_info_;
+  ObSEArray<common::ObAddr, 8> server_list_;
   // Partition level
   share::schema::ObPartitionLevel part_level_;
   // First-level partition type
@@ -80,6 +85,30 @@ struct PwjTable {
   common::ObSEArray<int64_t, 8> all_subpartition_indexes_;
 };
 
+typedef common::ObSEArray<uint64_t, 8> TabletIdArray;
+
+struct GroupPWJTabletIdInfo {
+  OB_UNIS_VERSION(1);
+public:
+  TO_STRING_KV(K_(group_id), K_(tablet_id_array));
+  /* 
+    for union all non strict partition wise join, there may be several partition wise join groups,
+    for example:
+                          union all
+                    |                     |
+                  join                  join
+                |       |             |       |
+          t1(p0-p15)  t2(p0-p15)    t3(p0-p8)  t4(p0-p8)
+
+        t1 and t2 are in group 0
+        t3 and t4 are in group 1
+  */
+  int64_t group_id_{0};
+  TabletIdArray tablet_id_array_;
+};
+// TODO yibo use a pointer to PartitionIdArray as value, otherwise each get will copy the array once
+typedef common::hash::ObHashMap<uint64_t, TabletIdArray, common::hash::NoPthreadDefendMode> PWJTabletIdMap;
+typedef common::hash::ObHashMap<uint64_t, GroupPWJTabletIdInfo, common::hash::NoPthreadDefendMode> GroupPWJTabletIdMap;
 typedef common::hash::ObHashMap<uint64_t, uint64_t, common::hash::NoPthreadDefendMode,
                                 common::hash::hash_func<uint64_t>,
                                 common::hash::equal_to<uint64_t>,
@@ -87,6 +116,9 @@ typedef common::hash::ObHashMap<uint64_t, uint64_t, common::hash::NoPthreadDefen
                                 common::hash::NormalPointer,
                                 oceanbase::common::ObMalloc,
                                 2> TabletIdIdMap;
+typedef common::hash::ObHashMap<uint64_t, const ObCandiTabletLoc *,
+                                common::hash::NoPthreadDefendMode> TabletIdLocationMap;
+
 //Do not allocate a ObPwjComparer on the heap. If it is necessary to allocate a ObPwjComparer on the heap, manually free it after its lifecycle ends.
 class ObPwjComparer
 {
@@ -164,11 +196,13 @@ public:
   TO_STRING_KV(K_(is_strict), K_(pwj_tables));
 
 protected:
-  // Strict partition-wise comparison requires matching partition logic and
-  // physical tablet structure.
+  // Whether to check partition wise join in strict mode
+  // Strict mode requires that the partition logic and physical structure of the two base tables are equal
+  // Non-strict mode requires that the data distribution nodes of the two base tables are the same
   bool is_strict_;
   // Save a set of pwj constraint related base table information
   common::ObSEArray<PwjTable, 4> pwj_tables_;
+  static const int64_t MIN_ID_LOCATION_BUCKET_NUMBER;
   static const int64_t DEFAULT_ID_ID_BUCKET_NUMBER;
   DISALLOW_COPY_AND_ASSIGN(ObPwjComparer);
 };
@@ -297,10 +331,12 @@ public:
                                     ObIArray<std::pair<uint64_t,uint64_t> > &subpart_tablet_id_map,
                                     bool &is_equal);
 
-  // Validate the tablet mapping and record the right-table tablet order.
-  int match_partitioned_tablets(const PwjTable &l_table,
-                                const PwjTable &r_table,
-                                bool &is_match);
+  /**
+   * According to the mapping relationship of partition_id (physical partition id) in phy_part_map_, check if the corresponding partitions in the two tables are in the same physical location
+   */
+  int is_physically_equal_partitioned(const PwjTable &l_table,
+                                      const PwjTable &r_table,
+                                      bool &is_physical_equal);
 
   /**
    * Get the part_id (primary logical partition id) of the partition corresponding to part_index (offset of the primary logical partition in part_array)
@@ -334,6 +370,25 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObStrictPwjComparer);
 };
 
+class ObNonStrictPwjComparer : public ObPwjComparer
+{
+public:
+  ObNonStrictPwjComparer()
+    : ObPwjComparer(false) {};
+  virtual ~ObNonStrictPwjComparer() {};
+  /**
+   * Add a PwjTable to ObPwjComparer, it will perform a non-strict comparison with subsequent PwjTables using the first added PwjTable as the baseline
+   */
+  virtual int add_table(PwjTable &table, bool &is_match_nonstrict_pw) override;
+  /**
+   * check left table and right table have at least one partition on corresponding server
+   */
+  int is_match_non_strict_partition_wise(PwjTable &l_table,
+                                         PwjTable &r_table,
+                                         bool &is_match_nonstrict_pw);
+private:  
+  DISALLOW_COPY_AND_ASSIGN(ObNonStrictPwjComparer);
+};
 }
 }
 #endif

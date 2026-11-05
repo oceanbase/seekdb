@@ -18,22 +18,25 @@
 #define OCEANBASE_OBSERVER_MYSQL_OBMP_BASE_H_
 
 #include "rpc/frame/ob_sql_processor.h"
+#include "rpc/obmysql/ob_2_0_protocol_utils.h"
 #include "sql/ob_sql_context.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "sql/monitor/ob_process_malloc_callback.h"
-#include "share/ob_server_struct.h"
-#include "query/protocol/ob_mysql_packet_sender.h"
+#include "observer/ob_server_struct.h"
+#include "observer/virtual_table/ob_virtual_table_iterator_factory.h"
+#include "observer/mysql/obmp_packet_sender.h"
+#include "lib/utility/ob_mod_define.h"
+#include "lib/alloc/ob_malloc_callback.h"
+#include "lib/utility/ob_tracepoint.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 
-class ObSqlEndTransCb;
-
-class ObMPBase : public rpc::frame::ObSqlProcessor {
+class ObMPBase : public rpc::frame::ObSqlProcessor, public ObIMPPacketSender
+{
 public:
-  explicit ObMPBase(const share::ObGlobalContext &gctx);
+  explicit ObMPBase(const ObGlobalContext &gctx);
   virtual ~ObMPBase();
 
   int64_t get_process_timestamp() const { return process_timestamp_; };
@@ -50,19 +53,28 @@ protected:
 
   bool is_conn_valid() const { return packet_sender_.is_conn_valid(); }
 
+  virtual int update_last_pkt_pos() { return packet_sender_.update_last_pkt_pos(); }
+  virtual bool need_send_extra_ok_packet() { return packet_sender_.need_send_extra_ok_packet(); }
+
+  virtual int read_packet(obmysql::ObICSMemPool& mem_pool, obmysql::ObMySQLPacket*& pkt) override;
+  virtual int release_packet(obmysql::ObMySQLPacket* pkt) override;
+
+
   // Response a packet to client peer.
   //
   // It'll wake up responding IO thread and then wait for that thread
   // write the data back to this fd. After data has been sent out, IO
   // thread will wake up this thread in turn.
   //
-  OB_INLINE int response_packet(obmysql::ObMySQLPacket &pkt) {
-    return packet_sender_.response_packet(pkt);
+  OB_INLINE int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session)
+  {
+    return packet_sender_.response_packet(pkt, session);
   }
 
   /// send a error packet to client
   int send_error_packet(int err,
                         const char* errmsg,
+                        bool is_partition_hit = true,
                         void *extra_err_info = NULL);
 
   // send a ok packet to client
@@ -71,6 +83,7 @@ protected:
 
   int send_null_packet(sql::ObSQLSessionInfo &session, ObOKPParam &ok_param);
 
+  int send_switch_packet(common::ObString &auth_name, common::ObString& auth_data);
   ObSMConnection *get_conn() const;
   int get_conn_id(uint32_t &sessid) const;
   int create_session(ObSMConnection *conn, sql::ObSQLSessionInfo *&sess_info);
@@ -78,12 +91,13 @@ protected:
   int get_session(sql::ObSQLSessionInfo *&sess_info);
   int revert_session(sql::ObSQLSessionInfo *sess_info);
   int flush_buffer(const bool is_last);
+  int clean_buffer();
   int init_process_var(sql::ObSqlCtx &ctx,
                        const sql::ObMultiStmtItem &multi_stmt_item,
                        sql::ObSQLSessionInfo &session) const;
   int do_after_process(sql::ObSQLSessionInfo &session,
-                       bool async_resp_used,
-                       int process_ret) const;
+                       bool async_resp_used) const;
+  int record_flt_trace(sql::ObSQLSessionInfo &session) const;
   // reset warning buffer err msg, for inner retry
   void setup_wb(sql::ObSQLSessionInfo &session);
   void clear_wb_content(sql::ObSQLSessionInfo &session);
@@ -95,10 +109,15 @@ protected:
     return session.set_session_active(sql, get_receive_timestamp(), last_active_time_ts, cmd);
   }
   int check_and_refresh_schema(sql::ObSQLSessionInfo *session = NULL);
+  bool need_flush_buffer() const;
+  int update_transmission_checksum_flag(const sql::ObSQLSessionInfo &session);
+  int update_proxy_and_client_sys_vars(sql::ObSQLSessionInfo &session);
   int update_charset_sys_vars(ObSMConnection &conn, sql::ObSQLSessionInfo &sess_info);
-  int handoff_async_request(ObSqlEndTransCb &end_trans_cb);
-  int cancel_unsubmitted_callback(ObSqlEndTransCb &end_trans_cb);
 
+  int build_encode_param_(obmysql::ObProtoEncodeParam &param,
+                          obmysql::ObMySQLPacket *pkt, const bool is_last);
+  void set_request_expect_group_id(sql::ObSQLSessionInfo *session);
+  // Calculate and set the current user's cgroup for resource isolation. If not set, the default cgroup id is 0
   int response_row(sql::ObSQLSessionInfo &session,
                    common::ObNewRow &row,
                    const ColumnsFieldIArray *fields,
@@ -106,17 +125,19 @@ protected:
                    sql::ObExecContext *exec_ctx = NULL,
                    bool is_ps_protocol = true,
                    ObSchemaGetterGuard *schema_guard = NULL);
+  int process_extra_info(sql::ObSQLSessionInfo &session, const obmysql::ObMySQLRawPacket &pkt,
+                                bool &need_response_error);
+  int process_kill_client_session(sql::ObSQLSessionInfo &session, bool is_connect = false);
   int load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session);
 protected:
   static const int64_t MAX_TRY_STEPS = 5;
   static int64_t TRY_EZ_BUF_SIZES[MAX_TRY_STEPS];
 
-  const share::ObGlobalContext &gctx_;
+  const ObGlobalContext &gctx_;
   ObMPPacketSender packet_sender_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPBase);
   int64_t process_timestamp_;
-  ObSqlEndTransCb *end_trans_cb_to_enable_;
 }; // end of class ObMPBase
 
 inline void ObMPBase::setup_wb(sql::ObSQLSessionInfo &session)
@@ -143,10 +164,13 @@ public:
 
   virtual void operator()(const ObMemAttr &attr, int64_t add_size) override
   {
-    // EN_SQL_MEMORY_LABEL_HIGH64 and EN_SQL_MEMORY_LABEL_LOW64 inject the two
-    // halves of a monitored lib::ObLabel. Both events must be set together.
-    // When the injection takes effect, the maximum memory usage is counted
-    // only for the specified label.
+    //You can use:
+    //alter system set_tp tp_no=405, error_code=label_high64, frequency=1;
+    //alter system set_tp tp_no=406, error_code=label_low64, frequency=1;
+    //to inject a monitored lib::ObLabel.
+    //When this injection takes effect,
+    //the maximum memory usage will only be counted for the specified label.
+    //tp_no=405 and tp_no=406 need to be used at the same time
 
     //To obtain the label_high64 and label_low64 values of an lib::ObLabel,
     //you can use the tool './label2int64 LabelName' to easily retrieve them.
@@ -155,7 +179,7 @@ public:
     //ensuring consistency with the endianness of the target machine.
     int64_t label_high64 = - EVENT_CODE(EventTable::EN_SQL_MEMORY_LABEL_HIGH64);
     if (OB_UNLIKELY(lib::ObLabel("SqlDtlBuf") == attr.label_
-                    || lib::ObLabel(ObNewModIds::OB_MEMSTORE) == attr.label_)) {
+                    || ObCtxIds::MEMSTORE_CTX_ID == attr.ctx_id_)) {
       // do nothing
     } else if (label_high64 != 0) {
       int64_t label_low64 = - EVENT_CODE(EventTable::EN_SQL_MEMORY_LABEL_LOW64);

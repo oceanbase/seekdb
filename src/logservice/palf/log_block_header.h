@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "share/log/palf/lsn.h"
+#include "logservice/palf/lsn.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -34,9 +34,11 @@ public:
   ~LogBlockHeader();
   bool is_valid() const;
   void reset();
+  int generate(const int64_t palf_id, const block_id_t curr_block_id,
+               const LSN &min_lsn, const share::SCN &min_scn);
   // NB: not thread safe
   void update_lsn_and_scn(const LSN &lsn, const share::SCN &scn);
-  void update_curr_block_id(const block_id_t curr_block_id);
+  void update_palf_id_and_curr_block_id(const int64_t palf_id, const block_id_t curr_block_id);
   void mark_block_can_be_reused(const share::SCN &max_scn);
   block_id_t get_curr_block_id() const;
   const share::SCN &get_min_scn() const;
@@ -53,7 +55,7 @@ public:
   void calc_checksum();
   bool check_integrity() const;
   NEED_SERIALIZE_AND_DESERIALIZE;
-  TO_STRING_KV(K_(magic), K_(version), K_(min_lsn), K_(min_scn), K_(curr_block_id));
+  TO_STRING_KV(K_(magic), K_(version), K_(min_lsn), K_(min_scn), K_(curr_block_id), K_(palf_id));
   // 0x4942 means InfoBlock
   static constexpr int16_t MAGIC= 0x4942;
   static constexpr int16_t LOG_INFO_BLOCK_VERSION = 1;
@@ -78,6 +80,7 @@ private:
   // palf instance, even if switch block when write failed.
   // NB: to locate logs by LSN, we need keep the pair(physical block name, InfoBlock).
   block_id_t curr_block_id_;
+  int64_t palf_id_;
   int64_t checksum_;
 };
 } // end namespace palf

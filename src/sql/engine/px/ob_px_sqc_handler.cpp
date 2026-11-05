@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/px/ob_px_sqc_handler.h"
-#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_px_admission.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 using namespace oceanbase::sql;
@@ -55,7 +54,7 @@ void ObPxWorkNotifier::worker_start(int64_t tid)
 {
   int64_t start_worker_count = ATOMIC_AAF(&start_worker_count_, 1);
   if (start_worker_count == expect_worker_count_) {
-    // Notify the local SQC launcher after all task workers have started.
+    // notify rpc worker to exit
     cond_.signal();
   }
   tid_array_[start_worker_count - 1] = tid;
@@ -68,8 +67,8 @@ void ObPxWorkNotifier::worker_end(bool &all_worker_finish)
    * Memory should not be accessed after ATOMIC_AAF execution, as data on the heap may have been recycled.
    * Therefore, a record was made in advance here.
    */
-  const int64_t sqc_launcher_thread = 1;
-  int64_t expect_end_count = expect_worker_count_ + sqc_launcher_thread;
+  const int64_t rpc_thread = 1;
+  int64_t expect_end_count = expect_worker_count_ + rpc_thread;
   int64_t finish_worker_count = ATOMIC_AAF(&finish_worker_count_, 1);
   if (finish_worker_count == expect_end_count) {
     all_worker_finish = true;
@@ -80,6 +79,7 @@ int ObPxWorkNotifier::set_expect_worker_count(int64_t worker_count)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tid_array_.prepare_allocate(worker_count))) {
+    LOG_WARN("failed to prepare allocate worker", K(ret));
   } else {
     expect_worker_count_ = worker_count;
   }
@@ -91,7 +91,9 @@ int ObPxSqcHandler::worker_end_hook() {
   bool all_finish = false;
   notifier_->worker_end(all_finish);
   if (all_finish) {
+    LOG_TRACE("all sqc finished, begin sqc end process");
     if (OB_FAIL(sub_coord_->end_process())) {
+      LOG_WARN("failed to end sqc", K(ret));
     }
   }
   end_ret_ = ret;
@@ -103,9 +105,10 @@ int ObPxSqcHandler::pre_acquire_px_worker(int64_t &reserved_thread_count)
   int ret = OB_SUCCESS;
   int64_t max_thread_count = sqc_init_args_->sqc_.get_max_task_count();
   int64_t min_thread_count = sqc_init_args_->sqc_.get_min_task_count();
-    // Pre-reserve threads for PX worker execution.
+    // Pre-reserve thread count in the tenant for px worker execution
   reserved_px_thread_count_ = max_thread_count;
   if (OB_FAIL(notifier_->set_expect_worker_count(reserved_px_thread_count_))) {
+    LOG_WARN("failed to set expect worker count", K(ret), K(reserved_px_thread_count_));
   } else {
     sqc_init_args_->sqc_.set_task_count(reserved_px_thread_count_);
     reserved_thread_count = reserved_px_thread_count_;
@@ -121,9 +124,11 @@ int ObPxSqcHandler::pre_acquire_px_worker(int64_t &reserved_thread_count)
               K(sqc_init_args_));
     }
     /**
-     * The initial reference belongs to the local SQC launcher thread.
+     * sqc handler's reference count, 1 for rpc thread, at this time only the rpc thread references it.
      */
     reference_count_ = 1;
+    LOG_TRACE("SQC acquire px worker", K(max_thread_count), K(min_thread_count),
+        K(reserved_px_thread_count_), K(reserved_thread_count));
   }
   return ret;
 }
@@ -152,23 +157,23 @@ void ObPxSqcHandler::check_rf_leak()
   IGNORE_RETURN sub_coord_->destroy_shared_rf_msgs();
 }
 
-int ObPxSqcHandler::init(
-    const ObExecContext::RuntimeServices &runtime_services)
+int ObPxSqcHandler::init()
 {
   int ret = OB_SUCCESS;
   reserved_px_thread_count_ = 0;
-  request_level_ = THIS_WORKER.get_curr_request_level();
-  runtime_services_ = runtime_services;
+  rpc_level_ = THIS_WORKER.get_curr_request_level();
   void *buf = nullptr;
-  share::ObGlobalContext &gctx = GCTX;
+  observer::ObGlobalContext &gctx = GCTX;
   lib::ContextParam param;
   param.set_mem_attr("SqcHandlerParam")
     .set_parallel(4)
     .set_properties(lib::ALLOC_THREAD_SAFE);
   ObIAllocator *allocator = nullptr;
   if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
+    LOG_WARN("create memory entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null memory entity returned", K(ret));
   } else {
     allocator = &mem_context_->get_arena_allocator();
   }
@@ -176,19 +181,23 @@ int ObPxSqcHandler::init(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxWorkNotifier)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc px nofitier", K(ret));
   } else if (FALSE_IT(notifier_ = new(buf) ObPxWorkNotifier())) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObDesExecContext)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (FALSE_IT(exec_ctx_ = new(buf) ObDesExecContext(
-      *allocator, share::server_service<ObSQLSessionMgr>()))) {
+    LOG_WARN("Failed to alloc des execontext", K(ret));
+  } else if (FALSE_IT(exec_ctx_ = new(buf) ObDesExecContext(*allocator, gctx.session_mgr_))) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPhysicalPlan)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc physical plan", K(ret));
   } else if (FALSE_IT(des_phy_plan_ = new(buf) ObPhysicalPlan(mem_context_))) {
-  } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxInitSqcArgs)))) {
+  } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxRpcInitSqcArgs)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (FALSE_IT(sqc_init_args_ = new(buf) ObPxInitSqcArgs())) {
+    LOG_WARN("Failed to alloc sqc init args", K(ret));
+  } else if (FALSE_IT(sqc_init_args_ = new(buf) ObPxRpcInitSqcArgs())) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPxSubCoord)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc des px sub coord", K(ret));
   } else if (FALSE_IT(sub_coord_ = new(buf) ObPxSubCoord(gctx, *sqc_init_args_))) {
   } else {
     exec_ctx_->set_sqc_handler(this);
@@ -231,13 +240,13 @@ int ObPxSqcHandler::copy_sqc_init_arg(int64_t &pos, const char *data_buf, int64_
   ObIAllocator *allocator = nullptr;
   if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Sqc handler need to be inited", K(ret));
   } else {
     allocator = &mem_context_->get_arena_allocator();
     WITH_CONTEXT(mem_context_) {
       sqc_init_args_->set_deserialize_param(*exec_ctx_, *des_phy_plan_, allocator);
       if (OB_FAIL(sqc_init_args_->do_deserialize(pos, data_buf, data_len))) {
-      } else {
-        exec_ctx_->set_runtime_services(runtime_services_);
+        LOG_WARN("Failed to deserialize", K(ret));
       }
       sqc_init_args_->sqc_handler_ = this;
     }
@@ -256,12 +265,17 @@ int ObPxSqcHandler::init_env()
       || OB_ISNULL(sqc_init_args_->des_phy_plan_)
       || OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(*sqc_init_args_->exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sqc args should not be NULL", K(ret));
   } else if (OB_ISNULL(session = GET_MY_SESSION(*sqc_init_args_->exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("deserialized exec ctx without phy plan session set. Unexpected", K(ret));
   } else if (OB_FAIL(sub_coord_->init_exec_env(*sqc_init_args_->exec_ctx_))) {
+    LOG_WARN("Failed to init env", K(ret));
   } else if (OB_UNLIKELY(common::OB_SUCCESS != (tmp_ret = session->get_query_lock().lock()))) {
+    LOG_ERROR("Fail to lock, ", K(tmp_ret));
   } else {
     is_session_query_locked_ = true;
+    init_flt_content();
   }
 
   if (OB_SUCC(ret) && OB_UNLIKELY(session->is_zombie())) {
@@ -269,9 +283,23 @@ int ObPxSqcHandler::init_env()
     // we don't need explicitly cll unlock() here, we do it in
     // ObPxSqcHandler::destroy_sqc()
     ret = OB_ERR_SESSION_INTERRUPTED;
+    LOG_WARN("session has been killed", K(session->get_session_state()), K(session->get_server_sid()),
+             K(ret));
   }
   return ret;
 }
+
+void ObPxSqcHandler::init_flt_content()
+{
+  if (OBTRACE->is_inited()) {
+    flt_ctx_.trace_id_ = OBTRACE->get_trace_id();
+    flt_ctx_.span_id_ = OBTRACE->get_root_span_id();
+    flt_ctx_.policy_ = OBTRACE->get_policy();
+  }
+  LOG_TRACE("init flt rpc content", K(flt_ctx_), K(OBTRACE->get_trace_id()));
+}
+
+
 
 int ObPxSqcHandler::destroy_sqc(int &report_ret)
 {
@@ -290,15 +318,17 @@ int ObPxSqcHandler::destroy_sqc(int &report_ret)
   }
   if (has_flag(OB_SQC_HANDLER_QC_SQC_LINKED)) {
     /**
-     * Linking the SQC-QC channel is the last local launch step. Once linked, QC
-     * considers the SQC started and expects exactly one finish report.
+     * The connection of the sqc-qc channel is the last step in rpc process. If the link is successful, this flag will be set.
+     * That means once this flag is set, rpc will return normally, and qc will consider sqc as started normally,
      * qc will record in its own information that this sqc has started normally. qc's current termination is synchronous termination, every
      * marked started sqc must report to qc when it ends normally or abnormally. If any marked started sqc does not report, qc will keep waiting until timeout.
      */
     if (OB_FAIL(sub_coord_->report_sqc_finish(end_ret))) {
+      LOG_WARN("fail report sqc to qc", K(ret), K(end_ret_));
       report_ret = ret;
     }
     ObPxSqcMeta &sqc = sqc_init_args_->sqc_;
+    LOG_TRACE("sqc send report to qc", K(sqc));
   }
   if (has_flag(OB_SQC_HANDLER_QC_SQC_LINKED)) {
     get_sqc_ctx().sqc_proxy_.destroy();
@@ -309,13 +339,16 @@ int ObPxSqcHandler::destroy_sqc(int &report_ret)
     // It will set ch to 0 inside the unlink_sqc_qc_channel of ObPxSQCProxy.
     // If the normal termination process is not followed, then rely on here for release.
     if (OB_NOT_NULL(ch) && OB_FAIL(dtl::ObDtlChannelGroup::unlink_channel(ci))) {
+      LOG_WARN("Failed to unlink channel", K(ret));
     }
   }
 
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = GET_MY_SESSION(*sqc_init_args_->exec_ctx_))) {
+    LOG_WARN("session is null, which is unexpected!", K(ret));
   } else if (is_session_query_locked_) {
     if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = session->get_query_lock().unlock()))) {
+      LOG_ERROR("Fail to unlock, ", K(tmp_ret));
     }
   }
   return ret;
@@ -328,6 +361,7 @@ int ObPxSqcHandler::link_qc_sqc_channel()
   dtl::ObDtlChannelInfo &ci = sqc.get_sqc_channel_info();
   dtl::ObDtlChannel *ch = NULL;
   if (OB_FAIL(dtl::ObDtlChannelGroup::link_channel(ci, ch))) {
+    LOG_WARN("Failed to link qc-sqc channel", K(ci), K(ret));
   } else {
     ch->set_sqc_owner();
     ch->set_thread_id(GETTID());
@@ -346,6 +380,7 @@ void ObPxSqcHandler::check_interrupt()
     ObInterruptCode code = GET_INTERRUPT_CODE();
     int ret = code.code_;
     if (OB_NOT_NULL(sqc_init_args_)) {
+      LOG_WARN("sqc interrupted", K(ret), K(code), K(sqc_init_args_->sqc_));
       ObPxSqcMeta &sqc = sqc_init_args_->sqc_;
       ObInterruptUtil::interrupt_tasks(sqc, ret);
     }
@@ -365,17 +400,22 @@ int ObPxSqcHandler::thread_count_auto_scaling(int64_t &reserved_px_thread_count)
   if (reserved_px_thread_count <= 1 || !sqc_init_args_->sqc_.is_single_tsc_leaf_dfo()) {
   } else if (OB_ISNULL(sub_coord_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("subcoord is null", K(ret));
   } else {
     ObGranulePump &pump = sub_coord_->get_sqc_ctx().gi_pump_;
     if (OB_FAIL(pump.get_first_tsc_range_cnt(range_cnt))) {
+      LOG_WARN("fail to get first tsc range cnt", K(ret));
     } else if (0 == range_cnt) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("range cnt equal 0", K(ret));
     } else {
       reserved_px_thread_count = min(reserved_px_thread_count, range_cnt);
       reserved_px_thread_count_ = reserved_px_thread_count;
       if (temp_cnt > reserved_px_thread_count) {
+        LOG_TRACE("sqc px worker auto-scaling worked", K(temp_cnt), K(range_cnt), K(reserved_px_thread_count));
       }
       if (OB_FAIL(notifier_->set_expect_worker_count(reserved_px_thread_count))) {
+        LOG_WARN("failed to set expect worker count", K(ret), K(reserved_px_thread_count_));
       } else {
         sqc_init_args_->sqc_.set_task_count(reserved_px_thread_count);
       }
@@ -390,6 +430,7 @@ int ObPxSqcHandler::set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(part_ranges.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("part ranges is empty", K(ret), K(part_ranges.count()));
   } else {
     bool part_ranges_empty = false;
     {
@@ -406,8 +447,11 @@ int ObPxSqcHandler::set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_
         for (int64_t i = 0; OB_SUCC(ret) && i < part_ranges.count(); ++i) {
           const ObPxTabletRange &cur_range = part_ranges.at(i);
           if (0 == size && OB_FAIL(tmp_range.deep_copy_from<true>(cur_range, get_safe_allocator(), buf, size, pos))) {
+            LOG_WARN("deep copy partition range failed", K(ret), K(cur_range));
           } else if (0 != size && OB_FAIL(tmp_range.deep_copy_from<false>(cur_range, get_safe_allocator(), buf, size, pos))) {
+            LOG_WARN("deep copy partition range failed", K(ret), K(cur_range));
           } else if (OB_FAIL(part_ranges_.push_back(tmp_range))) {
+            LOG_WARN("push back partition range failed", K(ret), K(tmp_range));
           }
         }
       }

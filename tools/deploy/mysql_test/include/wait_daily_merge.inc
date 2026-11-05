@@ -4,7 +4,9 @@ connect (obsys_ydm,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys_ydm;
 
 #reduce wait major compation time cost
-alter system set ob_compaction_schedule_interval='10s';
+alter system set ob_compaction_schedule_interval = '10s' tenant sys;
+alter system set ob_compaction_schedule_interval = '10s' tenant all_user;
+alter system set ob_compaction_schedule_interval = '10s' tenant all_meta;
 
 let $__i__= 1200;
 sleep 3;

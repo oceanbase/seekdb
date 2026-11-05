@@ -15,19 +15,20 @@
  */
 
 #include "ob_tx_ctx_mds.h"
-#include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/ob_trans_part_ctx.h"
 
 namespace oceanbase
 {
 namespace transaction
 {
 
-int ObTxMDSCache::init(const ObTransID tx_id)
+int ObTxMDSCache::init(const share::ObLSID ls_id, const ObTransID tx_id)
 {
   int ret = OB_SUCCESS;
 
 #ifdef  ENABLE_DEBUG_LOG 
   owner_id_ = 1UL;
+  ls_id_ = ls_id;
   tx_id_ = tx_id;
   record_mem_ret_ = OB_SUCCESS;
 
@@ -46,6 +47,7 @@ void ObTxMDSCache::reset()
   max_register_no_ = 0;
 #ifdef  ENABLE_DEBUG_LOG
   owner_id_ = 0;
+  ls_id_.reset();
   tx_id_.reset();
   mem_stat_hash_.destroy();
   record_mem_ret_ = OB_SUCCESS;
@@ -66,13 +68,14 @@ void ObTxMDSCache::destroy()
 
 #ifdef ENABLE_DEBUG_LOG
   owner_id_ = 0;
+  ls_id_.reset();
   tx_id_.reset();
   mem_stat_hash_.destroy();
   record_mem_ret_ = OB_SUCCESS;
 #endif
 }
 
-int ObTxMDSCache::alloc_mds_node(const ObTxCtx *tx_ctx,
+int ObTxMDSCache::alloc_mds_node(const ObPartTransCtx *tx_ctx,
                                  const char *buf,
                                  const int64_t buf_len,
                                  common::ObString &data,
@@ -92,7 +95,8 @@ int ObTxMDSCache::alloc_mds_node(const ObTxCtx *tx_ctx,
   }
 
   void *ptr = nullptr;
-  if (OB_ISNULL(ptr = MultiTxDataFactory::alloc(buf_len))) {
+  if (OB_ISNULL(ptr =
+                    MultiTxDataFactory::alloc(buf_len, tx_ctx->get_trans_id(), (uint64_t)tx_ctx))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "allocate memory failed", KR(ret), K(buf_len));
   } else {
@@ -105,14 +109,15 @@ int ObTxMDSCache::alloc_mds_node(const ObTxCtx *tx_ctx,
     ObMemAttr attr(owner_id_, "MdsMemHash");
     if (OB_TMP_FAIL(mem_stat_hash_.create(16, attr, attr))) {
       record_mem_ret_ = tmp_ret;
-      TRANS_LOG(WARN, "create mds mem stat failed", K(ret), K(tmp_ret), K(owner_id_), K(tx_id_), K(record_mem_ret_));
+      TRANS_LOG(WARN, "create mds mem stat failed", K(ret), K(tmp_ret), K(owner_id_), K(ls_id_),
+                K(tx_id_), K(record_mem_ret_));
     }
   }
   if (OB_SUCCESS == tmp_ret) {
     if (OB_TMP_FAIL(mem_stat_hash_.get_refactored(cur_register_no, tmp_mem_stat))) {
       if (OB_HASH_NOT_EXIST != tmp_ret) {
         TRANS_LOG(ERROR, "get tmp_mem_stat from mem_stat_hash failed", K(ret), K(tmp_ret),
-                  K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(tx_id_),
+                  K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(ls_id_), K(tx_id_),
                   K(record_mem_ret_));
       }
       tmp_mem_stat.reset();
@@ -124,7 +129,7 @@ int ObTxMDSCache::alloc_mds_node(const ObTxCtx *tx_ctx,
     if (OB_TMP_FAIL(mem_stat_hash_.set_refactored(cur_register_no, tmp_mem_stat, 1))) {
       record_mem_ret_ = tmp_ret;
       TRANS_LOG(WARN, "insert mem_stat_ into hash table failed", K(ret), K(tmp_ret),
-                K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(tx_id_),
+                K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(ls_id_), K(tx_id_),
                 K(record_mem_ret_));
     }
   }
@@ -152,11 +157,12 @@ void ObTxMDSCache::free_mds_node(common::ObString &data, uint64_t register_no)
   if (OB_TMP_FAIL(mem_stat_hash_.get_refactored(cur_register_no, tmp_mem_stat))) {
     if (record_mem_ret_ != OB_SUCCESS) {
       TRANS_LOG_RET(WARN, tmp_ret, "get tmp_mem_stat from mem_stat_hash failed", K(ret), K(tmp_ret),
-                    K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(tx_id_),
+                    K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(ls_id_), K(tx_id_),
                     K(record_mem_ret_));
     } else {
       TRANS_LOG_RET(ERROR, tmp_ret, "get tmp_mem_stat from mem_stat_hash failed", K(ret),
-                    K(tmp_ret), K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(tx_id_), K(record_mem_ret_));
+                    K(tmp_ret), K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(ls_id_),
+                    K(tx_id_), K(record_mem_ret_));
     }
     tmp_mem_stat.reset();
   }
@@ -167,7 +173,7 @@ void ObTxMDSCache::free_mds_node(common::ObString &data, uint64_t register_no)
       if (OB_TMP_FAIL(mem_stat_hash_.erase_refactored(cur_register_no))) {
         TRANS_LOG_RET(ERROR, tmp_ret, "insert mem_stat_ into hash table failed", K(ret), K(tmp_ret),
                       K(cur_register_no), K(tmp_mem_stat), K(tmp_mem_stat), K(owner_id_),
-                      K(tx_id_), K(record_mem_ret_));
+                      K(ls_id_), K(tx_id_), K(record_mem_ret_));
       }
     }
   }
@@ -185,10 +191,10 @@ bool ObTxMDSCache::is_mem_leak()
          iter++) {
       if (record_mem_ret_ != OB_SUCCESS) {
         TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "mds node mem leak", K(iter->first), K(iter->second),
-                      K(owner_id_), K(tx_id_), K(record_mem_ret_));
+                      K(owner_id_), K(ls_id_), K(tx_id_), K(record_mem_ret_));
       } else {
         TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "mds node mem leak", K(iter->first),
-                      K(iter->second), K(owner_id_), K(tx_id_), K(record_mem_ret_));
+                      K(iter->second), K(owner_id_), K(ls_id_), K(tx_id_), K(record_mem_ret_));
       }
     }
   }
@@ -221,7 +227,9 @@ int ObTxMDSCache::insert_mds_node(ObTxBufferNode &buf_node)
   } else if (OB_FALSE_IT(max_register_no_++)) {
     //do nothing
   } else if (OB_FAIL(buf_node.set_mds_register_no(max_register_no_))) {
+    TRANS_LOG(WARN, "set mds register no failed", K(ret), K(buf_node), KPC(this));
   } else if (OB_FAIL(mds_list_.push_back(buf_node))) {
+    TRANS_LOG(WARN, "push back MDS buf node", K(ret));
   } else {
     unsubmitted_size_ += buf_node.get_serialize_size();
   }
@@ -235,6 +243,7 @@ int ObTxMDSCache::rollback_last_mds_node()
 
   ObTxBufferNode buf_node = mds_list_.get_last();
   if (OB_FAIL(mds_list_.pop_back())) {
+    TRANS_LOG(WARN, "pop back last node failed", K(ret));
   } else {
     TRANS_LOG(INFO, "rollback the last mds node", K(ret), K(buf_node), KPC(this));
     free_mds_node(buf_node.data_, buf_node.get_register_no());
@@ -246,7 +255,7 @@ int ObTxMDSCache::rollback_last_mds_node()
   return ret;
 }
 
-int ObTxMDSCache::fill_mds_log(ObTxCtx *ctx,
+int ObTxMDSCache::fill_mds_log(ObPartTransCtx *ctx,
                                ObTxMultiDataSourceLog &mds_log,
                                ObTxMDSRange &mds_range,
                                logservice::ObReplayBarrierType &barrier_flag,
@@ -264,6 +273,7 @@ int ObTxMDSCache::fill_mds_log(ObTxCtx *ctx,
       logservice::ObReplayBarrierType::NO_NEED_BARRIER;
 
   if (OB_FAIL(mds_range.init(ctx))) {
+    TRANS_LOG(WARN, "init mds range failed", K(ret));
   } else {
     if (submitted_iterator_ == mds_list_.end()) {
       submitted_iterator_ = mds_list_.begin();
@@ -277,6 +287,7 @@ int ObTxMDSCache::fill_mds_log(ObTxCtx *ctx,
           TRANS_LOG(WARN, "fill mds data in log failed", K(ret));
         }
       } else if (OB_FAIL(mds_range.update_range(iter))) {
+        TRANS_LOG(WARN, "update mds range failed", K(ret), K(iter));
       } else if (OB_FALSE_IT(
                      tmp_barrier_type = ObTxLogTypeChecker::need_replay_barrier(
                          ObTxLogType::TX_MULTI_DATA_SOURCE_LOG, iter->get_data_source_type()))) {
@@ -337,6 +348,8 @@ int ObTxMDSCache::decide_cache_state_log_mds_barrier_type(
         ObTxLogTypeChecker::need_replay_barrier(state_log_type, iter->get_data_source_type());
     if (OB_FAIL(ObTxLogTypeChecker::decide_final_barrier_type(tmp_barrier_type,
                                                               cache_final_barrier_type))) {
+      TRANS_LOG(WARN, "decide one mds node barrier type failed", K(ret), K(tmp_barrier_type),
+                K(cache_final_barrier_type), K(*iter));
     }
   }
 
@@ -348,6 +361,8 @@ int ObTxMDSCache::reserve_final_notify_array(const ObTxBufferNodeArray &mds_dura
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(final_notify_array_.reserve(mds_list_.size() + mds_durable_arr.count()))) {
+    TRANS_LOG(WARN, "reserve notify array space failed", K(ret), K(mds_list_.size()),
+              K(mds_durable_arr.count()));
   }
 
   return ret;
@@ -360,8 +375,13 @@ int ObTxMDSCache::generate_final_notify_array(const ObTxBufferNodeArray &mds_dur
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(final_notify_array_.assign(mds_durable_arr))) {
+    TRANS_LOG(WARN, "assign mds_durable_arr failed", K(ret), K(mds_durable_arr.count()),
+              K(final_notify_array_.get_capacity()), KPC(this));
+
   } else if (need_merge_cache) {
     if (OB_FAIL(copy_to_(final_notify_array_))) {
+      TRANS_LOG(WARN, "merge mds_cache into final_notify_array failed", K(ret),
+                K(mds_durable_arr.count()), K(final_notify_array_.get_capacity()), KPC(this));
     }
   }
 
@@ -383,6 +403,7 @@ int ObTxMDSCache::copy_to_(ObTxBufferNodeArray &tmp_array) const
   ObTxBufferNodeList::const_iterator iter = mds_list_.begin();
   for (; iter != mds_list_.end() && OB_SUCC(ret); iter++) {
     if (OB_FAIL(tmp_array.push_back(*iter))) {
+      TRANS_LOG(WARN, "push back failed", K(ret), K(*iter));
     }
   }
 
@@ -463,7 +484,7 @@ void ObTxMDSRange::reset()
 //   start_iter_ = ObTxBufferNodeList::iterator();
 // }
 
-int ObTxMDSRange::init(ObTxCtx *tx_ctx)
+int ObTxMDSRange::init(ObPartTransCtx *tx_ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(tx_ctx_)) {
@@ -475,6 +496,7 @@ int ObTxMDSRange::init(ObTxCtx *tx_ctx)
   }
 
   if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "init MDS range failed", K(ret), KPC(tx_ctx));
   }
 
   return ret;
@@ -491,6 +513,8 @@ int ObTxMDSRange::update_range(ObTxBufferNodeList::iterator iter)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid iter", K(ret), K(*iter));
   } else if (OB_FAIL(range_array_.push_back(*iter))) {
+    TRANS_LOG(WARN, "push back into the range array failed", K(ret), K(*iter), KPC(this),
+              KPC(tx_ctx_));
   }
 
   return ret;
@@ -520,9 +544,13 @@ int ObTxMDSRange::move_from_cache_to_arr(ObTxMDSCache &mds_cache,
         TRANS_LOG(ERROR, "invalid smaller register no", K(ret), K(i), K(range_array_[i]),
                   K(mds_durable_arr[mds_durable_arr.count() - 1]));
       } else if (OB_FAIL(mds_cache.earse_from_cache(range_array_[i]))) {
+        TRANS_LOG(WARN, "earse from mds cache failed", K(ret), K(range_array_[i]), K(mds_cache),
+                  K(mds_durable_arr));
       } else if (OB_FALSE_IT(range_array_[i].set_synced())) {
         // do nothing
       } else if (OB_FAIL(mds_durable_arr.push_back(range_array_[i]))) {
+        TRANS_LOG(WARN, "push back into mds_durable_arr failed", K(ret), K(range_array_[i]),
+                  K(mds_cache), K(mds_durable_arr));
       }
     }
   }
@@ -558,6 +586,7 @@ int ObTxMDSRange::assign(const ObTxMDSRange &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(range_array_.assign(other.range_array_))) {
+    TRANS_LOG(WARN, "assign range array failed", K(ret));
   } else {
     tx_ctx_ = other.tx_ctx_;
   }

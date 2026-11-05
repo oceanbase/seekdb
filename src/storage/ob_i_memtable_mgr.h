@@ -35,7 +35,6 @@ namespace storage
 class ObIMemtable;
 class ObFreezer;
 class CreateMemtableArg;
-class ObTabletMemtableMgrPool;
 
 
 using ObTableHdlArray = common::ObIArray<ObTableHandleV2>;
@@ -233,15 +232,20 @@ public:
   }
   virtual ~ObIMemtableMgr();
 
-  int init(const ObTabletID &tablet_id);
+  int init(
+      const share::ObLSID &ls_id,
+      const ObTabletID &tablet_id,
+      const lib::Worker::CompatMode compat_mode);
 
   int init(
       const ObTabletID &tablet_id,
+      const share::ObLSID &ls_id,
       const int64_t max_saved_schema_version,
       const int64_t max_saved_medium_scn,
+      const lib::Worker::CompatMode compat_mode,
       logservice::ObLogHandler *log_handler,
       ObFreezer *freezer,
-      ObStorageMetaMemMgr *t3m);
+      ObTenantMetaMemMgr *t3m);
 
   virtual void destroy() = 0;
   virtual int create_memtable(const CreateMemtableArg &arg) = 0;
@@ -287,13 +291,17 @@ public:
 
   virtual int init_storage_recorder(
       const ObTabletID &tablet_id,
+      const share::ObLSID &ls_id,
       const int64_t max_saved_schema_version,
       const int64_t max_saved_medium_scn,
+      const lib::Worker::CompatMode compat_mode,
       logservice::ObLogHandler *log_handler)
   { // do nothing
     UNUSED(tablet_id);
+    UNUSED(ls_id);
     UNUSED(max_saved_schema_version);
     UNUSED(max_saved_medium_scn);
+    UNUSED(compat_mode);
     UNUSED(log_handler);
     return OB_NOT_SUPPORTED;
   }
@@ -301,6 +309,7 @@ public:
   virtual int set_frozen_for_all_memtables() { return common::OB_SUCCESS; }
   virtual int set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle) { return OB_NOT_SUPPORTED; }
   virtual int get_last_frozen_memtable(ObTableHandleV2 &handle) { return OB_NOT_SUPPORTED; }
+  virtual int get_direct_load_memtables_for_write(ObTableHdlArray &handles) { return OB_NOT_SUPPORTED; }
   DECLARE_VIRTUAL_TO_STRING;
 protected:
   static int64_t get_memtable_idx(const int64_t pos) { return pos & (MAX_MEMSTORE_CNT - 1); }
@@ -315,8 +324,9 @@ protected:
   void release_head_memtable();
   void release_tail_memtable();
   virtual int init(const ObTabletID &tablet_id,
+                   const share::ObLSID &ls_id,
                    ObFreezer *freezer,
-                   ObStorageMetaMemMgr *t3m) = 0;
+                   ObTenantMetaMemMgr *t3m) = 0;
 protected:
   bool is_inited_;
   volatile int64_t ref_cnt_;
@@ -325,7 +335,7 @@ protected:
   ObFreezer *freezer_;
   int64_t memtable_head_;
   int64_t memtable_tail_;
-  ObStorageMetaMemMgr *t3m_;
+  ObTenantMetaMemMgr *t3m_;
   ObIMemtable *tables_[MAX_MEMSTORE_CNT];
   mutable MemtableMgrLock lock_;
 };

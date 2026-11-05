@@ -16,34 +16,71 @@
 
 #ifndef OCEANBASE_SHARE_OB_SHARE_UTIL_H_
 #define OCEANBASE_SHARE_OB_SHARE_UTIL_H_
-#include "config_bridge.h"
-#include "common/ob_timeout_ctx.h"
 #include "share/ob_define.h"
-#include "share/ob_id_generator.h"
 #include "share/scn.h"
+#include "share/ob_tenant_role.h"
 namespace oceanbase
 {
 namespace common
 {
+class ObTimeoutCtx;
 class ObISQLClient;
 }
 namespace share
 {
 namespace schema
 {
-class ObServerRuntimeSchema;
+class ObTenantSchema;
 }
+class ObResourcePool;
+class ObUnit;
 typedef ObFixedLengthString<common::OB_SERVER_VERSION_LENGTH> ObBuildVersion;
+// available range is [start_id, end_id]
+class ObIDGenerator
+{
+public:
+  ObIDGenerator()
+    : inited_(false),
+      step_(0),
+      start_id_(common::OB_INVALID_ID),
+      end_id_(common::OB_INVALID_ID),
+      current_id_(common::OB_INVALID_ID)
+  {}
+  ObIDGenerator(const uint64_t step)
+    : inited_(false),
+      step_(step),
+      start_id_(common::OB_INVALID_ID),
+      end_id_(common::OB_INVALID_ID),
+      current_id_(common::OB_INVALID_ID)
+  {}
+
+  virtual ~ObIDGenerator() {}
+  void reset();
+
+  int init(const uint64_t step,
+           const uint64_t start_id,
+           const uint64_t end_id);
+  int next(uint64_t &current_id);
+
+  int get_start_id(uint64_t &start_id) const;
+  int get_current_id(uint64_t &current_id) const;
+  int get_end_id(uint64_t &end_id) const;
+  int get_id_cnt(uint64_t &cnt) const;
+  TO_STRING_KV(K_(inited), K_(step), K_(start_id), K_(end_id), K_(current_id));
+protected:
+  bool inited_;
+  uint64_t step_;
+  uint64_t start_id_;
+  uint64_t end_id_;
+  uint64_t current_id_;
+};
 
 class ObShareUtil
 {
 public:
-  static int get_server_ip(const common::ObAddr &self_addr,
-                           common::ObIAllocator &allocator,
-                           common::ObString &ip_string);
   // priority to set timeout_ctx: ctx > worker > default_timeout
   static int set_default_timeout_ctx(common::ObTimeoutCtx &ctx, const int64_t default_timeout);
-  // moved up from rootserver::ObRootUtils(body uses only config::rpc_timeout() + set_default_timeout_ctx, share-clean)
+  // moved up from rootserver::ObRootUtils(body uses only GCONF.rpc_timeout + set_default_timeout_ctx, share-clean)
   static int get_rs_default_timeout_ctx(common::ObTimeoutCtx &ctx);
   // priority to get timeout: ctx > worker > default_timeout
   static int get_abs_timeout(const int64_t default_timeout, int64_t &abs_timeout);
@@ -54,19 +91,33 @@ public:
              uint64_t &data_version);
 
   // get ora_rowscn from one row
+  // @params[in]: tenant, the table owner
   // @params[in]: sql, the sql should be "select ORA_ROWSCN from xxx", where count() is 1
   // @params[out]: the ORA_ROWSCN
   static int get_ora_rowscn(
     common::ObISQLClient &client,
     const ObSqlString &sql,
     SCN &ora_rowscn);
-  // Write capability is independent from the immutable boot role.
-  static int is_server_write_enabled(bool &enabled);
+  static int mtl_get_tenant_role(ObTenantRole::Role &tenant_role);
+  static int mtl_check_if_tenant_role_is_primary(bool &is_primary);
+  static int mtl_check_if_tenant_role_is_standby(bool &is_standby);
+  static int table_get_tenant_role(ObTenantRole &tenant_role);
+  static int table_check_if_tenant_role_is_primary(bool &is_primary);
+  static int table_check_if_tenant_role_is_standby(bool &is_standby);
+  static const char *replica_type_to_string(const ObReplicaType type);
+  static ObReplicaType string_to_replica_type(const char *str);
+  static ObReplicaType string_to_replica_type(const ObString &str);
+  static inline uint64_t compute_server_index(uint64_t server_id) {
+    return server_id % (MAX_SERVER_COUNT + 1);
+  }
   // get_sys_ls_readable_scn has been demoted to storage::free function(see end of file storage ns)
   // check_clog_disk_full_or_hang has been demoted to logservice::free function
-  static int gen_default_server_runtime_schema(
-      common::ObISQLClient &sql_client,
-      schema::ObServerRuntimeSchema &runtime_schema);
+  // get_tenant_gts has been demoted to storage::free function(transaction::get_tenant_gts, see end of file storage/transaction ns and ob_ts_mgr.cpp)
+  // Note: master still keeps ObShareUtil::get_tenant_gts(SCN&) shape and still has callers, changed to transaction::get_tenant_gts (see routing item)
+  static int gen_sys_unit(ObUnit &unit);
+  static int gen_sys_resource_pool(ObResourcePool &resource_pool);
+  static int gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_schema);
+  static int is_primary_cluster(bool &is_primary);
 };
 }//end namespace share
 }//end namespace oceanbase

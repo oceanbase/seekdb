@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Enum/set internal values to strings.
+// moved down from sql ObExprEnumToStr/ObExprSetToStr::inner_to_str:pure data conversion
+// (enum/set internal values -> string),depends only on lib;sql-side original methods forward here。
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/charset/ob_charset.h"
@@ -43,12 +44,15 @@ int enum_to_str(const uint64_t enum_val,
     // ObString empty_string;
   } else if (OB_UNLIKELY(element_idx > element_num - 1)) {
     ret = OB_ERR_DATA_TRUNCATED;
+    LOG_WARN("enum value out of range", K(element_idx), K(element_num), K(ret));
   } else {
     element_str = str_values.at(element_idx);
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(text_result.init(element_str.length()))) {
+      LOG_WARN("init lob result failed");
     } else if (OB_FAIL(text_result.append(element_str.ptr(), element_str.length()))) {
+      LOG_WARN("failed to append real data", K(ret), K(text_result));
     }
   }
   return ret;
@@ -66,6 +70,7 @@ int set_to_str(const ObCollationType cs_type,
   int64_t element_num = str_values.count();
   if (OB_UNLIKELY(element_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid element num", K(element_num), K(ret));
   } else if (OB_UNLIKELY(element_num < EFFECTIVE_COUNT && set_val >= (1ULL << element_num))) {
     ret = OB_ERR_DATA_TRUNCATED;
     LOG_WARN("set value out of range", K(set_val), K(element_num));
@@ -84,6 +89,7 @@ int set_to_str(const ObCollationType cs_type,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(text_result.init(need_size))) {
+      LOG_WARN("init lob result failed", K(ret), K(need_size));
     } else {
       uint64_t index = 1ULL;
       for (int64_t i = 0;
@@ -94,10 +100,12 @@ int set_to_str(const ObCollationType cs_type,
           if (OB_UNLIKELY(element_val.empty())) {
             // skip empty string and its separator
           } else if (OB_FAIL(text_result.append(element_val))) {
+            LOG_WARN("fail to append str to lob result", K(ret), K(element_val));
           } else if ((i + 1) < element_num && (i + 1) < EFFECTIVE_COUNT &&
               ((index << 1) <= set_val)) {
             // skip setting last seperator
             if (OB_FAIL(text_result.append(sep))) {
+              LOG_WARN("fail to append str to lob result", K(ret), K(sep));
             }
           }
         }

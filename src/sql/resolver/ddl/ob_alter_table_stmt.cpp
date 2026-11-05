@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
-#include "query/session/ob_session_access.h"
+#include "storage/tablelock/ob_lock_executor.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/session/ob_local_session_var.h"
 
@@ -28,15 +27,15 @@ namespace sql
 {
 
 ObAlterTableStmt::ObAlterTableStmt(common::ObIAllocator *name_pool)
-    : ObTableStmt(name_pool, stmt::T_ALTER_TABLE), is_comment_table_(false),
-      is_alter_system_(false), fts_arg_allocator_(nullptr), is_alter_triggers_(false),
-      alter_table_action_count_(0)
+    : ObTableStmt(name_pool, stmt::T_ALTER_TABLE), is_comment_table_(false), 
+      is_alter_system_(false), fts_arg_allocator_(nullptr), is_alter_triggers_(false), 
+      interval_expr_(NULL), transition_expr_(NULL), alter_table_action_count_(0)
 {
 }
 
 ObAlterTableStmt::ObAlterTableStmt()
     : ObTableStmt(stmt::T_ALTER_TABLE), is_comment_table_(false), is_alter_system_(false),
-      fts_arg_allocator_(nullptr), is_alter_triggers_(false), alter_table_action_count_(0)
+      fts_arg_allocator_(nullptr), is_alter_triggers_(false), interval_expr_(NULL), transition_expr_(NULL), alter_table_action_count_(0)
 {
 }
 
@@ -58,6 +57,18 @@ int ObAlterTableStmt::add_column(const share::schema::AlterColumnSchema &column_
   share::schema::AlterTableSchema &alter_table_schema =
       get_alter_table_arg().alter_table_schema_;
   if (OB_FAIL(alter_table_schema.add_alter_column(column_schema, true))){
+    SQL_RESV_LOG(WARN, "failed to add column schema to alter table schema", K(ret));
+  }
+  return ret;
+}
+
+int ObAlterTableStmt::add_column_group(const ObColumnGroupSchema &column_group)
+{
+  int ret = OB_SUCCESS;
+  share::schema::AlterTableSchema &alter_table_schema =
+      get_alter_table_arg().alter_table_schema_;
+  if (OB_FAIL(alter_table_schema.add_column_group(column_group))){
+    SQL_RESV_LOG(WARN, "failed to add column schema to alter table schema", K(ret), K(column_group), K(alter_table_schema));
   }
   return ret;
 }
@@ -69,6 +80,7 @@ int ObAlterTableStmt::add_index_arg(obcall::ObIndexArg *index_arg)
     ret = OB_INVALID_ARGUMENT;
     SQL_RESV_LOG(WARN, "index arg should not be null!", K(ret));
   } else if (OB_FAIL(alter_table_arg_.index_arg_list_.push_back(index_arg))) {
+    SQL_RESV_LOG(WARN, "failed to add index arg to alter table arg!", K(ret));
   }
   return ret;
 }
@@ -123,6 +135,7 @@ void ObAlterTableStmt::set_table_id(const uint64_t table_id)
 int ObAlterTableStmt::fill_session_vars(const ObBasicSessionInfo &session) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLocalSessionVarHelper::load_session_vars(&session, alter_table_arg_.local_session_var_))) {
+    SQL_RESV_LOG(WARN, "load local session vars failed", K(ret));
   }
   return ret;
 }
@@ -131,17 +144,27 @@ int ObAlterTableStmt::set_exchange_partition_arg(const obcall::ObExchangePartiti
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(exchange_partition_arg_.assign(exchange_partition_arg))) {
+    SQL_RESV_LOG(WARN, "failed to assign", K(ret), K(exchange_partition_arg));
   }
   return ret;
 }
 
-void ObAlterTableStmt::set_lock_priority()
+int ObAlterTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
-
-  if (config::enable_lock_priority()) {
-    alter_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
+  
+  if (!true) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret));
+  } else if (GCONF.enable_lock_priority) {
+    if (!ObLockExecutor::proxy_is_support(session)) {
+      ret = OB_NOT_SUPPORTED;
+      SQL_RESV_LOG(WARN, "is in proxy_mode and not support rename", K(ret), KPC(session));
+    } else {
+      alter_table_arg_.lock_priority_ = ObTableLockPriority::HIGH1;
+    }
   }
+  return ret;
 }
 
 } //namespace sql

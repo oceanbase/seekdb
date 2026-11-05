@@ -42,19 +42,27 @@ int ObTransformJoinElimination::transform_one_stmt(common::ObIArray<ObParentDMLS
   ObSEArray<ObSEArray<TableItem *, 4>, 4> eliminated_tables;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("stmt is null", K(ret));
   } else if (stmt->get_table_size() < 2) {
     //do nothing
   } else if (OB_FAIL(eliminate_join_self_foreign_key(stmt, trans_happened_self_foreign_key, eliminated_tables))) {
+    LOG_WARN("failed to eliminate self join/join between primary key and foreign key", K(ret));
   } else if (OB_FAIL(eliminate_outer_join(parent_stmts, stmt, trans_happened_outer_join, eliminated_tables))) {
+    LOG_WARN("failed to eliminate outer join if need", K(ret));
   } else if (OB_FAIL(eliminate_left_outer_join(stmt, trans_happened_left_outer_join, eliminated_tables))) {
+    LOG_WARN("failed to eliminate left outer join if join condition is always false", K(ret));
   } else if (OB_FAIL(eliminate_semi_join_self_foreign_key(stmt, trans_happened_self_foreign_semi_join, eliminated_tables))) {
+    LOG_WARN("failed to eliminated self semi join", K(ret));
   } else if (!trans_happened_self_foreign_key && !trans_happened_outer_join &&
              !trans_happened_self_foreign_semi_join && !trans_happened_left_outer_join) {
     /* do nothing*/
   } else if (OB_FAIL(trans_self_equal_conds(stmt))) {
+    LOG_WARN("failed to trans condition exprs", K(ret));
   } else {
     trans_happened = true;
     ret = add_transform_hint(*stmt, &eliminated_tables);
+    LOG_TRACE("succeed to do join elimination", K(ret), K(trans_happened_self_foreign_key), K(trans_happened_left_outer_join),
+                          K(trans_happened_outer_join), K(trans_happened_self_foreign_semi_join));
   }
   return ret;
 }
@@ -69,16 +77,22 @@ int ObTransformJoinElimination::construct_transform_hint(ObDMLStmt &stmt, void *
       OB_FALSE_IT(eliminated_tables = static_cast<ObIArray<single_or_joined_table>*>(trans_params)) ||
       OB_UNLIKELY(eliminated_tables->empty())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(ctx_), K(eliminated_tables));
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_ELIMINATE_JOIN, hint))) {
+    LOG_WARN("failed to create hint", K(ret));
   } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
+    LOG_WARN("failed to push back hint", K(ret));
   } else if (OB_FAIL(ctx_->add_used_trans_hint(get_hint(stmt.get_stmt_hint())))) {
+    LOG_WARN("failed to add used trans hint", K(ret));
   } else {
     hint->set_qb_name(ctx_->src_qb_name_);
     for (int64_t i = 0; OB_SUCC(ret) && i < eliminated_tables->count(); ++i) {
       ObHint::TablesInHint single_or_joined_hint_table;
       if (OB_FAIL(ObTransformUtils::get_sorted_table_hint(eliminated_tables->at(i),
                                                           single_or_joined_hint_table))) {
+        LOG_WARN("failed to get table hint", K(ret));
       } else if (OB_FAIL(hint->get_tb_name_list().push_back(single_or_joined_hint_table))) {
+        LOG_WARN("failed to push back table name list", K(ret));
       }
     }
   }
@@ -95,10 +109,14 @@ int ObTransformJoinElimination::eliminate_join_self_foreign_key(ObDMLStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(stmt) ) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(ctx_), K(ret));
   } else if (OB_FAIL(eliminate_join_in_from_base_table(stmt, from_happedend, trans_tables))) {
+    LOG_WARN("eliminate join in from base table failed", K(ret));
   } else if (OB_FAIL(eliminate_join_in_joined_table(stmt, joined_happedend, trans_tables))) {
+    LOG_WARN("eliminate join in joined table failed", K(ret));
   } else {
     trans_happened = from_happedend | joined_happedend;
+    LOG_TRACE("succ to do self foreign key elimination", K(from_happedend), K(joined_happedend));
   }
   return ret;
 }
@@ -114,11 +132,15 @@ int ObTransformJoinElimination::eliminate_join_in_from_base_table(ObDMLStmt *stm
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(ctx_), K(ret));
   } else if (OB_FAIL(stmt->get_equal_set_conditions(conds, true))) {
+    LOG_WARN("failed to get equal set conditions", K(ret));
   } else if (OB_FAIL(extract_candi_table(stmt, stmt->get_from_items(), candi_tables,
                                          child_candi_tables))) {
+      LOG_WARN("failed to extract candi tables", K(ret));
   } else if (OB_FAIL(eliminate_candi_tables(stmt, conds, candi_tables, child_candi_tables,
                                             true, trans_happened, trans_tables))) {
+    LOG_WARN("failed to eliminate candi tables", K(ret));
   }
   return ret;
 }
@@ -137,6 +159,7 @@ int ObTransformJoinElimination::do_join_elimination_self_key(ObDMLStmt *stmt,
   bool can_be_eliminated = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(ctx_), K(ret));
   } else if (OB_FAIL(check_eliminate_join_self_key_valid(stmt,
                                                          source_table,
                                                          target_table,
@@ -144,14 +167,20 @@ int ObTransformJoinElimination::do_join_elimination_self_key(ObDMLStmt *stmt,
                                                          is_from_base_table,
                                                          can_be_eliminated,
                                                          equal_sets))) {
+    LOG_WARN("failed to check eliminate valid", K(ret));
   } else if (!can_be_eliminated) {
     /*do nothing*/
   } else if (OB_FAIL(construct_eliminated_table(stmt, target_table, trans_tables))) {
+    LOG_WARN("failed to construct eliminated tables", K(ret));
   } else if (OB_FAIL(adjust_table_items(stmt, source_table, target_table, stmt_map_info))) {
+    LOG_WARN("failed to adjust table items", K(ret));
   } else if (OB_FAIL(trans_table_item(stmt, source_table, target_table))) {
+    LOG_WARN("failed to transform target into source", K(ret));
   } else if (OB_FAIL(append(ctx_->equal_param_constraints_, stmt_map_info.equal_param_map_))) {
+    LOG_WARN("failed to append equal params constraints", K(ret));
   } else {
     trans_happened = true;
+    LOG_TRACE("do join elimination for", K(*source_table), K(*target_table));
   }
   return ret;
 }
@@ -170,7 +199,9 @@ int ObTransformJoinElimination::check_eliminate_join_self_key_valid(ObDMLStmt *s
   bool is_on_null_side = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(ctx_), K(ret), K(source_table), K(target_table));
   } else if (OB_FAIL(check_hint_valid(*stmt, *target_table, tmp_valid))) {
+    LOG_WARN("failed to check hint valid", K(ret));
   } else if (!tmp_valid) {
     /*do nothing*/
     OPT_TRACE("hint disable transform");
@@ -179,6 +210,7 @@ int ObTransformJoinElimination::check_eliminate_join_self_key_valid(ObDMLStmt *s
              OB_FAIL(check_eliminate_delupd_table_valid(static_cast<ObDelUpdStmt *> (stmt),
                                                         target_table->table_id_,
                                                         tmp_valid))) {
+    LOG_WARN("failed to check table can be eliminated", K(ret));
   } else if (!tmp_valid) {
     /*do nothing*/
     OPT_TRACE("dml target table can not be eliminated");
@@ -187,6 +219,7 @@ int ObTransformJoinElimination::check_eliminate_join_self_key_valid(ObDMLStmt *s
                                         target_table->table_id_,
                                         is_from_base_table,
                                         is_on_null_side))) {
+    LOG_WARN("failed to check table on null side", K(ret));
   } else if (OB_FAIL(ObTransformUtils::check_loseless_join(stmt, ctx_,
                                                            source_table,
                                                            target_table,
@@ -196,6 +229,7 @@ int ObTransformJoinElimination::check_eliminate_join_self_key_valid(ObDMLStmt *s
                                                            is_on_null_side,
                                                            tmp_valid,
                                                            equal_sets))) {
+    LOG_WARN("failed to check whether transformation is possible", K(ret));
   } else if (tmp_valid) {
     is_valid = tmp_valid;
   } else {
@@ -217,12 +251,15 @@ int ObTransformJoinElimination::check_eliminate_delupd_table_valid(const ObDelUp
   ObSEArray<const ObDmlTableInfo*, 2> table_infos;
   if (OB_ISNULL(del_up_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null stmt", K(ret));
   } else if (OB_FAIL(del_up_stmt->get_dml_table_infos(table_infos))) {
+    LOG_WARN("failed to get dml table infos", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < table_infos.count(); ++i) {
       const ObDmlTableInfo* table_info = table_infos.at(i);
       if (OB_ISNULL(table_info)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get null table info", K(ret), K(i), K(table_infos));
       } else {
         is_valid = table_info->table_id_ != table_id;
       }
@@ -241,16 +278,19 @@ int ObTransformJoinElimination::check_on_null_side(ObDMLStmt *stmt,
   is_on_null_side = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (is_from_base_table) {
     if (OB_FAIL(ObOptimizerUtil::is_table_on_null_side(stmt,
                                                        source_table_id,
                                                        is_on_null_side))) {
+      LOG_WARN("failed to check table is on null side", K(ret));
     }
   } else {
     if (OB_FAIL(ObOptimizerUtil::is_table_on_null_side_of_parent(stmt,
                                                                  source_table_id,
                                                                  target_table_id,
                                                                  is_on_null_side))) {
+      LOG_WARN("failed to check table is on null side", K(ret));
     }
   }
   return ret;
@@ -264,10 +304,13 @@ int ObTransformJoinElimination::do_join_elimination_foreign_key(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt is null", K(ret));
   } else {
     if (OB_FAIL(trans_column_items_foreign_key(stmt, child_table, parent_table,
                                                foreign_key_info))) {
+      LOG_WARN("failed to transform columns of the eliminated table", K(ret));
     } else if (OB_FAIL(trans_table_item(stmt, child_table, parent_table))) {
+      LOG_WARN("failed to transform target into source", K(ret));
     }
   }
   return ret;
@@ -282,6 +325,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(ctx_), K(ret));
   } else {
     ObSEArray<JoinedTable*, 4> joined_tables;
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_from_item_size(); i++) {
@@ -290,6 +334,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
         /*do nothing*/
       } else if (OB_FAIL(eliminate_join_in_joined_table(stmt, cur_from_item, joined_tables,
                                                         happened, trans_tables))) {
+        LOG_WARN("failed to eliminate self key join in joined table.", K(ret));
       } else {
         trans_happened |= happened;
       }
@@ -297,10 +342,15 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
     if (OB_SUCC(ret) && trans_happened) {
       // Update stmt's joined table list
       if (OB_FAIL(stmt->get_joined_tables().assign(joined_tables))) {
+        LOG_WARN("failed to reset joined table container", K(ret));
       } else if (OB_FAIL(stmt->rebuild_tables_hash())) {
+        LOG_WARN("failed to rebuild table hash", K(ret));
       } else if (OB_FAIL(stmt->update_column_item_rel_id())) {
+        LOG_WARN("failed to update colun item rel id", K(ret));
       } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
+        LOG_WARN("failed to formalize stmt", K(ret));
       } else {
+        LOG_TRACE("succ to do self key join in joined table elimination to remove.");
       }
     } else {/*do nothing*/}
   }
@@ -317,22 +367,27 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
   bool can_trans = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt is null.", K(ret));
   } else if (from_item.is_joined_) {
     TableItem *joined_table = stmt->get_joined_table(from_item.table_id_);
     ObSEArray<TableItem *, 4> child_candi_tables;
     ObSEArray<ObRawExpr *, 16> trans_conditions;
     if (OB_ISNULL(joined_table)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("joined table is null.", K(ret));
     } else if (OB_FAIL(eliminate_join_in_joined_table(stmt, joined_table,
                                                       child_candi_tables,
                                                       trans_conditions,
                                                       can_trans,
                                                       trans_tables))) {
+      LOG_WARN("failed to eliminate self key join in joined table.", K(ret));
     } else if (OB_ISNULL(joined_table)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("joined table is null.", K(ret));
     } else if (!can_trans) {
       /* do nothing. */
     } else if (OB_FAIL(stmt->add_condition_exprs(trans_conditions))) {
+      LOG_WARN("add trans conditions to where conditions failed", K(ret));
     } else {
       // Update joined table structure
       trans_happened = true;
@@ -344,6 +399,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
     } else if (!joined_table->is_joined_table()) {
       /*do nothing*/
     } else if (OB_FAIL(joined_tables.push_back(static_cast<JoinedTable *>(joined_table)))) {
+      LOG_WARN("failed to push back joined table.", K(ret));
     } else { /*do nothing.*/ }
   } else { /*do nothing.*/ }
   return ret;
@@ -361,6 +417,7 @@ int ObTransformJoinElimination::extract_equal_join_columns(const ObIArray<ObRawE
   target_exprs.reuse();
   if (OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parameter is null", K(ret), K(source_table), K(target_table));
   } else {
     const uint64_t source_tid = source_table->table_id_;
     const uint64_t target_tid = target_table->table_id_;
@@ -369,6 +426,7 @@ int ObTransformJoinElimination::extract_equal_join_columns(const ObIArray<ObRawE
       bool used = false;
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("expr is null", K(ret));
       } else if (T_OP_EQ == expr->get_expr_type()) {
         ObOpRawExpr *op = static_cast<ObOpRawExpr *>(expr);
         if (op->get_param_expr(0)->is_column_ref_expr() &&
@@ -377,13 +435,17 @@ int ObTransformJoinElimination::extract_equal_join_columns(const ObIArray<ObRawE
           ObColumnRefRawExpr *col2 = static_cast<ObColumnRefRawExpr *>(op->get_param_expr(1));
           if (col1->get_table_id() == source_tid && col2->get_table_id() == target_tid) {
             if (OB_FAIL(source_exprs.push_back(col1))) {
+              LOG_WARN("failed to push back expr", K(ret));
             } else if (OB_FAIL(target_exprs.push_back(col2))) {
+              LOG_WARN("failed to push back expr", K(ret));
             } else {
               used = true;
             }
           } else if (col1->get_table_id() == target_tid && col2->get_table_id() == source_tid) {
             if (OB_FAIL(target_exprs.push_back(col1))) {
+              LOG_WARN("failed to push back expr", K(ret));
             } else if (OB_FAIL(source_exprs.push_back(col2))) {
+              LOG_WARN("failed to push back expr", K(ret));
             } else {
               used = true;
             }
@@ -406,6 +468,8 @@ int ObTransformJoinElimination::adjust_table_items(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(source_table),
+        K(target_table), K(ret));
   } else if ((source_table->is_basic_table() &&
              target_table->is_basic_table()) ||
             (source_table->is_temp_table() &&
@@ -414,6 +478,7 @@ int ObTransformJoinElimination::adjust_table_items(ObDMLStmt *stmt,
                                                     source_table,
                                                     target_table,
                                                     NULL))) {
+      LOG_WARN("failed to check merge table items", K(ret));
     } else { /*do nothing*/ }
   } else if (source_table->is_generated_table() &&
              target_table->is_generated_table()) {
@@ -423,17 +488,22 @@ int ObTransformJoinElimination::adjust_table_items(ObDMLStmt *stmt,
     if (OB_ISNULL(source_stmt = source_table->ref_query_) ||
         OB_ISNULL(target_stmt = target_table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(source_stmt), K(target_stmt),
+          K(ret));
     } else if (OB_FAIL(reverse_select_items_map(source_stmt,
                                                 target_stmt,
                                                 stmt_map_info.select_item_map_,
                                                 column_map))) {
+      LOG_WARN("failed to reverse select items map", K(ret));
     } else if (OB_FAIL(create_missing_select_items(source_stmt, target_stmt,
                                                    column_map,
                                                    stmt_map_info.table_map_))) {
+      LOG_WARN("failed to create missing select items", K(ret));
     } else if (OB_FAIL(ObTransformUtils::merge_table_items(stmt,
                                                            source_table,
                                                            target_table,
                                                            &column_map))) {
+      LOG_WARN("failed to merge table items", K(ret));
     } else { /*do nothing*/ }
   } else { /*do nothing*/ }
 
@@ -448,8 +518,12 @@ int ObTransformJoinElimination::create_missing_select_items(ObSelectStmt *source
   int ret = OB_SUCCESS;
   if (OB_ISNULL(source_stmt) || OB_ISNULL(target_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(source_stmt),
+        K(target_stmt), K(ret));
   } else if (OB_UNLIKELY(column_map.count() != target_stmt->get_select_item_size())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected array count", K(column_map.count()),
+        K(target_stmt->get_select_item_size()), K(ret));
   } else {
     ObSEArray<ObRawExpr*, 16> new_exprs;
     ObSEArray<ObRawExpr*, 16> old_exprs;
@@ -459,7 +533,9 @@ int ObTransformJoinElimination::create_missing_select_items(ObSelectStmt *source
       if (OB_INVALID_ID != column_map.at(i)) {
         /*do nothing*/
       } else if (OB_FAIL(miss_select_items.push_back(&target_stmt->get_select_item(i)))) {
+        LOG_WARN("failed to push back select item", K(ret));
       } else if (OB_FAIL(miss_select_item_idx_array.push_back(i))) {
+        LOG_WARN("failed to push back select item idx", K(ret));
       } else { /*do nothing*/ }
     }
 
@@ -470,6 +546,7 @@ int ObTransformJoinElimination::create_missing_select_items(ObSelectStmt *source
         if (OB_ISNULL(temp_source_table = source_stmt->get_table_item(i)) ||
             OB_ISNULL(temp_target_table = target_stmt->get_table_item(table_map.at(i)))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(temp_source_table), K(temp_target_table), K(ret));
         } else if ((temp_source_table->is_basic_table() && temp_target_table->is_basic_table()) ||
                    (temp_source_table->is_temp_table() && temp_target_table->is_temp_table()) ||
                    (temp_source_table->is_generated_table() && temp_target_table->is_generated_table())) {
@@ -479,9 +556,12 @@ int ObTransformJoinElimination::create_missing_select_items(ObSelectStmt *source
                                                           temp_target_table,
                                                           old_exprs,
                                                           new_exprs))) {
+            LOG_WARN("failed to merge table items", K(ret));
           } else { /*do nothing*/ }
         } else {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected table type", K(temp_source_table->type_),
+              K(temp_target_table->type_), K(ret));
         }
       }
     }
@@ -489,18 +569,24 @@ int ObTransformJoinElimination::create_missing_select_items(ObSelectStmt *source
     for (int64_t i = 0; OB_SUCC(ret) && i < miss_select_items.count(); i++) {
       if (OB_ISNULL(miss_select_items.at(i)->expr_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ObTransformUtils::replace_expr(old_exprs,
                                                         new_exprs,
                                                         miss_select_items.at(i)->expr_))) {
+        LOG_WARN("failed to replace expr", K(ret));
       } else if (OB_FAIL(ObTransformUtils::adjust_agg_and_win_expr(source_stmt,
                                                                    miss_select_items.at(i)->expr_))) {
+        LOG_WARN("failed to remove duplicated agg expr", K(ret));
       } else if (OB_FAIL(source_stmt->add_select_item(*miss_select_items.at(i)))) {
+        LOG_WARN("failed to add select item", K(ret));
       } else if (OB_FAIL(ObTransformUtils::extract_query_ref_expr(miss_select_items.at(i)->expr_,
                                                                   source_stmt->get_subquery_exprs()))) {
+        LOG_WARN("failed to extract query ref exprs", K(ret));
       } else {
         int64_t miss_select_item_idx = miss_select_item_idx_array.at(i);
         if (OB_UNLIKELY(miss_select_item_idx < 0 || miss_select_item_idx >= column_map.count())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected idx", K(miss_select_item_idx), K(column_map), K(ret));
         } else {
           column_map.at(miss_select_item_idx) = source_stmt->get_select_item_size() - 1;
         }
@@ -519,10 +605,15 @@ int ObTransformJoinElimination::reverse_select_items_map(const ObSelectStmt *sou
   int ret = OB_SUCCESS;
   if (OB_ISNULL(source_stmt) || OB_ISNULL(target_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(source_stmt),
+        K(target_stmt), K(ret));
   } else if (OB_UNLIKELY(column_map.count() !=
                          source_stmt->get_select_item_size())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected array count", K(column_map.count()),
+        K(source_stmt->get_select_item_size()), K(ret));
   } else if (OB_FAIL(reverse_column_map.prepare_allocate(target_stmt->get_select_item_size()))) {
+    LOG_WARN("failed to allocate memory", K(ret));
   } else {
     int64_t source_count = source_stmt->get_select_item_size();
     int64_t target_count = target_stmt->get_select_item_size();
@@ -535,6 +626,8 @@ int ObTransformJoinElimination::reverse_select_items_map(const ObSelectStmt *sou
       } else if (OB_UNLIKELY(column_map.at(i) < 0 ||
                              column_map.at(i) >= target_count)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected array count", K(column_map.at(i)),
+            K(target_count), K(ret));
       } else {
         reverse_column_map.at(column_map.at(i)) = i;
       }
@@ -550,18 +643,28 @@ int ObTransformJoinElimination::trans_table_item(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parameter is null", K(ret), K(stmt), K(source_table), K(target_table));
   } else {
     if (OB_FAIL(ObTransformUtils::replace_table_in_semi_infos(stmt, source_table, target_table))) {
+      LOG_WARN("failed to replace table info in semi infos", K(ret));
     } else if (OB_FAIL(stmt->remove_table_item(target_table))) {
+      LOG_WARN("failed to remove target table items", K(ret));
     } else if (OB_FAIL(stmt->remove_from_item(target_table->table_id_))) {
+      LOG_WARN("failed to remove assoicated from item", K(ret));
     } else if (OB_FAIL(stmt->remove_part_expr_items(target_table->table_id_))) {
+      LOG_WARN("failed to remove part expr item", K(ret));
     } else if ((stmt->is_update_stmt() || stmt->is_delete_stmt()) &&
                OB_FAIL(static_cast<ObDelUpdStmt*>(stmt)->remove_table_item_dml_info(target_table))) {
+      LOG_WARN("failed to remove table item dml info", K(ret));
     } else if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("transform context is null", K(ret));
     } else if (OB_FAIL(stmt->rebuild_tables_hash())) {
+      LOG_WARN("rebuild table hash failed", K(ret));
     } else if (OB_FAIL(stmt->update_column_item_rel_id())) {
+      LOG_WARN("failed to update columns' relation id", K(ret));
     } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
+      LOG_WARN("formalize stmt is failed", K(ret));
     }
   }
   return ret;
@@ -586,27 +689,33 @@ int ObTransformJoinElimination::check_transform_validity_outer_join(
   if (OB_ISNULL(stmt) || OB_ISNULL(joined_table) ||
       OB_ISNULL(joined_table->left_table_) || OB_ISNULL(joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt or joined table is null.", K(ret), K(stmt), K(joined_table));
   } else if (LEFT_OUTER_JOIN != joined_table->joined_type_) {
     is_valid = false;
   } else if (OB_FAIL(check_hint_valid(*stmt, *joined_table->right_table_, is_hint_valid))) {
+    LOG_WARN("failed to check hint valid", K(ret));
   } else if (!is_hint_valid) {
     OPT_TRACE("hint disable transform");
   } else if (OB_FAIL(stmt->get_table_rel_ids(*joined_table->right_table_, right_tables))) {
+    LOG_WARN("failed to get table ids", K(ret));
   } else if (is_non_sens_dul_vals) {
     is_valid = true;
     OPT_TRACE("is non sens dul vals");
   } else if (OB_FAIL(stmt->get_table_rel_ids(*joined_table->left_table_, left_tables))) {
+    LOG_WARN("failed to get table ids", K(ret));
   } else if (OB_FAIL(ObTransformUtils::get_table_joined_exprs(left_tables,
                                                               right_tables,
                                                               joined_table->join_conditions_,
                                                               target_exprs,
                                                               join_source_ids,
                                                               join_target_ids))) {
+    LOG_WARN("failed to get table joined exprs.", K(ret));
   } else if (join_source_ids.num_members() != 1 || join_target_ids.num_members() != 1) {
     // do nothing
   } else if (OB_FAIL(ObTransformUtils::check_exprs_unique(*stmt, joined_table->right_table_,
                                                           target_exprs, ctx_->session_info_,
                                                           ctx_->schema_checker_, is_unique))) {
+    LOG_WARN("failed to check exptrs all row expr.", K(ret));
   } else if (is_unique) {
     is_valid = true;
   }
@@ -615,6 +724,7 @@ int ObTransformJoinElimination::check_transform_validity_outer_join(
     if (OB_FAIL(ObTransformUtils::check_table_contain_in_semi(stmt,
                                                               joined_table->right_table_,
                                                               contained))) {
+      LOG_WARN("failed to check table contained in semi", K(ret));
     } else if (contained) {
       is_valid = false;
     }
@@ -626,12 +736,16 @@ int ObTransformJoinElimination::check_transform_validity_outer_join(
     int64_t join_ref_count = 0;
     int64_t total_ref_count = 0;
     if (OB_FAIL(join_conditions.assign(joined_table->join_conditions_))) {
+      LOG_WARN("failed to push back to join conditions.", K(ret));
     } else if (OB_FAIL(extract_child_conditions(stmt,
                                                 joined_table->right_table_,
                                                 join_conditions,
                                                 rel_ids))) {
+      LOG_WARN("failed to extract right child exprs.", K(ret));
     } else if (OB_FAIL(compute_table_expr_ref_count(rel_ids, join_conditions, join_ref_count))) {
+      LOG_WARN("failed to compute expr ref", K(ret));
     } else if (OB_FAIL(compute_table_expr_ref_count(rel_ids, relation_exprs, total_ref_count))) {
+      LOG_WARN("failed to compute table expr ref count", K(ret));
     } else {
       is_valid = (join_ref_count == total_ref_count);
     }
@@ -646,6 +760,7 @@ int ObTransformJoinElimination::compute_table_expr_ref_count(const ObSqlBitSet<>
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     if (OB_FAIL(compute_table_expr_ref_count(rel_ids, exprs.at(i), total_ref_count))) {
+      LOG_WARN("failed to compute table expr ref count", K(ret));
     }
   } 
   return ret;
@@ -661,7 +776,9 @@ int ObTransformJoinElimination::compute_table_expr_ref_count(const ObSqlBitSet<>
     ObRawExpr *expr = NULL;
     int64_t count = 0;
     if (OB_FAIL(expr_ptr.get(expr))) {
+      LOG_WARN("failed to get expr", K(ret));
     } else if (OB_FAIL(compute_table_expr_ref_count(rel_ids, expr, count))) {
+      LOG_WARN("failed to compute table expr ref count", K(ret));
     } else {
       total_ref_count += (count * expr_ptr.ref_count());
     }
@@ -676,6 +793,7 @@ int ObTransformJoinElimination::compute_table_expr_ref_count(const ObSqlBitSet<>
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (expr->get_relation_ids().overlap2(rel_ids)) {
     if (expr->is_column_ref_expr()) {
       ++ total_ref_count;
@@ -684,6 +802,7 @@ int ObTransformJoinElimination::compute_table_expr_ref_count(const ObSqlBitSet<>
         if (OB_FAIL(compute_table_expr_ref_count(rel_ids, 
                                                  expr->get_param_expr(i), 
                                                  total_ref_count))) {
+          LOG_WARN("failed to compute table expr ref count", K(ret));
         }
       }
     }
@@ -700,27 +819,34 @@ int ObTransformJoinElimination::extract_child_conditions(ObDMLStmt *stmt,
   bool is_stack_overflow = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt or joined table is null.", K(table_item), K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
+    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (table_item->is_joined_table()) {
     JoinedTable *joined_table = static_cast<JoinedTable*>(table_item);
     if (OB_FAIL(SMART_CALL(extract_child_conditions(stmt,
                                                     joined_table->left_table_,
                                                     join_conditions,
                                                     rel_ids)))) {
+      LOG_WARN("failed to remove right tables from stmt", K(ret));
     } else if (OB_FAIL(SMART_CALL(extract_child_conditions(stmt,
                                                            joined_table->right_table_,
                                                            join_conditions,
                                                            rel_ids)))) {
+      LOG_WARN("failed to remove right tables from stmt", K(ret));
     } else {
       int64_t N = joined_table->join_conditions_.count();
       for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
         if (OB_FAIL(join_conditions.push_back(joined_table->join_conditions_.at(i)))) {
+          LOG_WARN("failed to push back to join condition.", K(ret));
         } else { /* do nothing. */ }
       }
     }
   } else if (OB_FAIL(rel_ids.add_member(stmt->get_table_bit_index(table_item->table_id_)))) {
+    LOG_WARN("failed to add member to rel ids.", K(ret));
   } else { /* do nothing. */ }
   return ret;
 }
@@ -743,44 +869,55 @@ int ObTransformJoinElimination::eliminate_outer_join_in_joined_table(ObDMLStmt *
   trans_happen = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt or joined table is null.", K(stmt), K(table_item), K(ret));
   } else if (table_item->is_joined_table()) {
     joined_table = static_cast<JoinedTable*>(table_item);
     // eliminate right branch
     if (OB_ISNULL(joined_table->left_table_) || OB_ISNULL(joined_table->right_table_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("left child or right child is null.", K(ret));
     } else if (OB_FAIL(SMART_CALL(eliminate_outer_join_in_joined_table(stmt,
                                   joined_table->right_table_, is_non_sens_dul_vals, false,
                                   table_ids, relation_exprs, right_is_happend, trans_tables)))) {
+      LOG_WARN("failed to eliminate ouer join in joined table.", K(ret));
     } else if (!right_is_happend) {
       /* do nothing */
     } else if (OB_FAIL(ObTransformUtils::adjust_single_table_ids(joined_table))) {
+      LOG_WARN("failed to construct single table ids.", K(ret));
     } else {
       trans_happen = true;
+      LOG_TRACE("right branch transforms happened");
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(check_transform_validity_outer_join(stmt, joined_table, is_non_sens_dul_vals,
                                                            relation_exprs, is_valid))) {
+      LOG_WARN("failed to check transform validity outer join.", K(ret));
     } else if (!is_valid) {
       // eliminate left branch
       if (OB_FAIL(SMART_CALL(eliminate_outer_join_in_joined_table(stmt, joined_table->left_table_,
                              is_non_sens_dul_vals, false, table_ids, relation_exprs,
                              left_is_happend, trans_tables)))) {
+        LOG_WARN("failed to eliminate ouer join in joined table.", K(ret));
       } else if (!left_is_happend) {
         /* do nothing */
       } else if (OB_FAIL(ObTransformUtils::adjust_single_table_ids(joined_table))) {
+        LOG_WARN("failed to construct single table ids.", K(ret));
       } else {
         trans_happen = true;
       }
     } else if (OB_FAIL(construct_eliminated_table(stmt, joined_table->right_table_,
                                                   trans_tables))) {
+      LOG_WARN("failed to construct eliminated tables", K(ret));
     } else if (OB_FAIL(ObTransformUtils::remove_tables_from_stmt(stmt, joined_table->right_table_,
                                                                  table_ids))) {
+      LOG_WARN("failed to remove table items.", K(ret));
     } else {
       table_item = joined_table->left_table_;
       trans_happen = true;
       relation_exprs.reset();
       if (is_root_table) {
         if (OB_FAIL(stmt->remove_joined_table_item(joined_table))) {
+          LOG_WARN("failed to remove joined table item.", K(ret));
         } else if (table_item->is_joined_table() &&
                    OB_FAIL(stmt->add_joined_table(static_cast<JoinedTable*>(table_item)))) {
           LOG_WARN("failed to add joined table item.");
@@ -788,9 +925,11 @@ int ObTransformJoinElimination::eliminate_outer_join_in_joined_table(ObDMLStmt *
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+        LOG_WARN("failed to get relation exprs", K(ret));
       } else if (OB_FAIL(SMART_CALL(eliminate_outer_join_in_joined_table(stmt, table_item,
                                     is_non_sens_dul_vals, is_root_table, table_ids, relation_exprs,
                                     is_happened, trans_tables)))) {
+        LOG_WARN("failed to eliminate ouer join in joined table.", K(ret));
       }
     }
   }
@@ -809,20 +948,25 @@ int ObTransformJoinElimination::do_eliminate_left_outer_join_rec(ObDMLStmt *stmt
   bool right_happened = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt is null", K(ret));
   } else if (!table->is_joined_table()) {
     // do nothing
   } else if (OB_ISNULL(joined_table = static_cast<JoinedTable*>(table))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null joined table", K(ret));
   } else if (OB_FAIL(left_join_can_be_eliminated(stmt, table, can_be_eliminated))) {
+    LOG_WARN("failed to check if the joined table can be eliminated", K(ret), K(*table));
   } else if (!can_be_eliminated) {
     if (OB_FAIL(SMART_CALL(do_eliminate_left_outer_join_rec(stmt,
                                                             joined_table->left_table_,
                                                             left_happened,
                                                             trans_tables)))) {
+      LOG_WARN("failed to eliminate left child", K(ret), K(*joined_table));
     } else if (OB_FAIL(SMART_CALL(do_eliminate_left_outer_join_rec(stmt,
                                                                    joined_table->right_table_,
                                                                    right_happened,
                                                                    trans_tables)))) {
+      LOG_WARN("failed to eliminate right child", K(ret), K(*joined_table));
     } else if (!left_happened && !right_happened) {
     } else {
       trans_happened = true;
@@ -830,16 +974,19 @@ int ObTransformJoinElimination::do_eliminate_left_outer_join_rec(ObDMLStmt *stmt
   } else if (OB_FAIL(do_eliminate_left_outer_join(stmt,
                                                   table,
                                                   trans_tables))) {
+    LOG_WARN("failed to eliminate left outer join", K(ret), K(*table));
   } else if (OB_FAIL(SMART_CALL(do_eliminate_left_outer_join_rec(stmt,
                                                                  table,
                                                                  trans_happened,
-                                                                 trans_tables)))) {
+                                                                 trans_tables)))) { // the trans_happened here is unused
+    LOG_WARN("failed to eliminate current table", K(ret), K(*table));
   } else {
     trans_happened = true;
   }
 
   if (OB_FAIL(ret) || !trans_happened || !table->is_joined_table()) {
   } else if (OB_FAIL(ObTransformUtils::adjust_single_table_ids(static_cast<JoinedTable *>(table)))) {
+    LOG_WARN("failed to adjust single table ids", K(ret), K(*joined_table));
   }
   return ret;
 }
@@ -852,6 +999,7 @@ int ObTransformJoinElimination::eliminate_left_outer_join(ObDMLStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(ctx_), K(ret));
   } else {
     TableItem *root_table = NULL;
     JoinedTable *joined_table = NULL;
@@ -869,16 +1017,20 @@ int ObTransformJoinElimination::eliminate_left_outer_join(ObDMLStmt *stmt,
                                                           root_table,
                                                           cur_trans_happened,
                                                           trans_tables))) {
+        LOG_WARN("failed to eliminate left join elimination", K(ret));
       } else if (cur_trans_happened) {
         trans_happened = true;
         // the original table should be removed
         // if the root_table is still a joined table after transformation, we should add it
         if (OB_FAIL(stmt->remove_joined_table_item(joined_table))) {
+          LOG_WARN("failed to remove joined table", K(ret));
         } else if (OB_ISNULL(root_table)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret));
         } else if (!root_table->is_joined_table()) {
           // do nothing
         } else if (OB_FAIL(stmt->add_joined_table(static_cast<JoinedTable*>(root_table)))) {
+          LOG_WARN("failed to add joined table");
         }
         // update the from item
         if (OB_SUCC(ret)) {
@@ -903,8 +1055,11 @@ int ObTransformJoinElimination::eliminate_left_outer_join(ObDMLStmt *stmt,
     }
     if (OB_FAIL(ret) || !trans_happened) {
     } else if (OB_FAIL(stmt->rebuild_tables_hash())) {
+      LOG_WARN("failed to rebuild tables hash", K(ret));
     } else if (OB_FAIL(stmt->update_column_item_rel_id())) {
+      LOG_WARN("failed to update columns relation id", K(ret));
     } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
+      LOG_WARN("failed to formalizae stmt", K(ret));
     }
   }
   return ret;
@@ -921,15 +1076,18 @@ int ObTransformJoinElimination::do_eliminate_left_outer_join(ObDMLStmt *stmt,
   ObSEArray<TableItem *, 4> right_table_items;
   if (OB_ISNULL(stmt) || OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("stmt is null", K(ret), K(stmt), K(table));
   } else if (!table->is_joined_table()) {
   } else if (OB_FALSE_IT(joined_table = static_cast<JoinedTable*>(table))) {
   } else if (OB_ISNULL(joined_table->left_table_) ||
              OB_ISNULL(right_table = joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("left table or right table in joined table is null", K(ret));
   } else if (OB_FAIL(get_table_items_and_ids(stmt,
                                              right_table,
                                              right_table_ids,
                                              right_table_items))) {
+    LOG_WARN("failed to get table items and ids", K(ret));
   } else {
     // to eliminate the right table, we must:
     // 1. remove the table item
@@ -942,6 +1100,7 @@ int ObTransformJoinElimination::do_eliminate_left_outer_join(ObDMLStmt *stmt,
       const ColumnItem *col_item = stmt->get_column_item(i);
       if (OB_ISNULL(col_item)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (is_contain(right_table_ids, col_item->table_id_)) {
         // create new null raw expr
         // add a cast expr to the null expr, whose type is same to original expr
@@ -949,34 +1108,46 @@ int ObTransformJoinElimination::do_eliminate_left_outer_join(ObDMLStmt *stmt,
         ObRawExpr *to_expr = NULL;
         if (OB_ISNULL(from_expr)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(ObRawExprUtils::build_null_expr(*ctx_->expr_factory_, to_expr))) {
+          LOG_WARN("failed to create new raw expr", K(ret));
         } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace(*ctx_->expr_factory_,
                                                                   from_expr, to_expr,
                                                                   ctx_->session_info_))) {
+          LOG_WARN("failed to add cast for replace", K(ret));
         } else if (OB_ISNULL(to_expr)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null expr", K(ret));
         } else if (OB_FAIL(from_exprs.push_back(from_expr))) {
+          LOG_WARN("failed to push back column item expr", K(ret));
         } else if (OB_FAIL(to_exprs.push_back(to_expr))) {
+          LOG_WARN("failed to add T_NULL raw expr", K(ret));
         }
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(construct_eliminated_table(stmt, right_table, trans_tables))) {
+      LOG_WARN("failed to construct eliminated table", K(ret));
     } else if (OB_FAIL(stmt->remove_table_info(right_table_items))) {
+      LOG_WARN("failed to remove table info", K(ret));
     } else if (OB_FAIL(stmt->replace_relation_exprs(from_exprs, to_exprs))) {
+      LOG_WARN("failed to replace inner stmt expr", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_semi_infos().count(); ++i) {
         if (OB_ISNULL(stmt->get_semi_infos().at(i))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("semi info is null", K(ret));
         } else if (OB_FAIL(ObOptimizerUtil::remove_item(stmt->get_semi_infos().at(i)->left_table_ids_,
                                                         right_table_ids))) {
+          LOG_WARN("failed to eliminate outer join in from items.", K(ret));
         }
       }
       if (OB_SUCC(ret) && (stmt->is_update_stmt() || stmt->is_delete_stmt())) {
         ObDelUpdStmt* del_upd_stmt = static_cast<ObDelUpdStmt*>(stmt);
         for (int64_t i = 0; OB_SUCC(ret) && i < right_table_items.count(); ++i) {
           if (OB_FAIL(del_upd_stmt->remove_table_item_dml_info(right_table_items.at(i)))) {
+            LOG_WARN("failed to remove table item dml info", K(ret));
           }
         }
       }
@@ -996,21 +1167,27 @@ int ObTransformJoinElimination::get_table_items_and_ids(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(stmt), K(table));
   } else if (table->is_joined_table()) {
     JoinedTable *joined_table = static_cast<JoinedTable *>(table);
     if (OB_FAIL(table_ids.assign(joined_table->single_table_ids_))) {
+      LOG_WARN("failed to assign joined table ids", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
         TableItem *child_table = NULL;
         if (OB_ISNULL(child_table = stmt->get_table_item_by_id(table_ids.at(i)))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(table_items.push_back(child_table))) {
+          LOG_WARN("failed to push back table item", K(ret));
         }
       }
     }
   } else {
     if (OB_FAIL(table_ids.push_back(table->table_id_))) {
+      LOG_WARN("failed to push back table id", K(ret));
     } else if (OB_FAIL(table_items.push_back(table))) {
+      LOG_WARN("failed to push back child table item", K(ret));
     }
   }
   return ret;
@@ -1029,12 +1206,14 @@ int ObTransformJoinElimination::left_join_can_be_eliminated(ObDMLStmt *stmt,
       OB_ISNULL(plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx()) ||
       OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(stmt), K(table), K(ctx_));
   } else if (!table->is_joined_table()) {
   } else if (OB_FALSE_IT(joined_table = static_cast<JoinedTable*>(table))) {
   } else if (!joined_table->is_left_join()) {
     // do nothing
   } else if (OB_ISNULL(joined_table->left_table_) || OB_ISNULL(joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (joined_table->right_table_->for_update_) {
     // Two cases that contains joined tables should not be eliminated:
     // 1. MERGE INTO
@@ -1046,9 +1225,11 @@ int ObTransformJoinElimination::left_join_can_be_eliminated(ObDMLStmt *stmt,
   } else if (ObStmt::is_dml_write_stmt(stmt->get_stmt_type()) &&
              OB_FAIL(static_cast<ObDelUpdStmt *>(stmt)->has_dml_table_info(joined_table->right_table_->table_id_,
                                                                            is_dml_table))) {
+    LOG_WARN("failed to check is dml table", K(ret));
   } else if (is_dml_table) {
     // do nothing
   } else if (OB_FAIL(check_hint_valid(*stmt, *joined_table->right_table_, is_hint_valid))) {
+    LOG_WARN("failed to check hint valid", K(ret));
   } else if (!is_hint_valid) {
     // do nothing
   } else {
@@ -1057,6 +1238,7 @@ int ObTransformJoinElimination::left_join_can_be_eliminated(ObDMLStmt *stmt,
                         i < joined_table->join_conditions_.count(); ++i) {
       if (OB_ISNULL(condition = joined_table->join_conditions_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("condition is null", K(ret));
         // todo 
       } else if (condition->is_static_scalar_const_expr()) {
         ObObj value;
@@ -1066,14 +1248,17 @@ int ObTransformJoinElimination::left_join_can_be_eliminated(ObDMLStmt *stmt,
                                                               value,
                                                               got_result,
                                                               *ctx_->allocator_))) {
+          LOG_WARN("failed to calc const or calculable expr", K(ret));
         } else if (got_result) {
           can_be_eliminated = value.is_false();
           if (can_be_eliminated && OB_FAIL(ObTransformUtils::add_param_bool_constraint(ctx_, condition, false))) {
+            LOG_WARN("failed to add param bool constraint", K(ret));
           }
         }
       }
     }
   }
+  LOG_TRACE("left join can be eliminated: ", K(can_be_eliminated), KPC(table));
   return ret;
 }
 
@@ -1087,8 +1272,11 @@ int ObTransformJoinElimination::eliminate_outer_join(ObIArray<ObParentDMLStmt> &
   bool is_non_sens_dul_vals = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(ctx_), K(ret));
   } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+    LOG_WARN("failed to get relations exprs all.", K(ret));
   } else if (OB_FAIL(stmt->check_from_dup_insensitive(is_non_sens_dul_vals))) {
+    LOG_WARN("failed to check from scope duplicate insensitive", K(ret));
   } else {
     TableItem *table = NULL;
     bool is_happend = false;
@@ -1100,6 +1288,7 @@ int ObTransformJoinElimination::eliminate_outer_join(ObIArray<ObParentDMLStmt> &
         /*do nothing*/
       } else if (OB_ISNULL(table = stmt->get_joined_table(from_item.table_id_))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret), K(table));
       } else if (OB_FAIL(eliminate_outer_join_in_joined_table(stmt,
                                                               table,
                                                               is_non_sens_dul_vals,
@@ -1108,6 +1297,7 @@ int ObTransformJoinElimination::eliminate_outer_join(ObIArray<ObParentDMLStmt> &
                                                               relation_exprs,
                                                               is_happend,
                                                               trans_tables))) {
+        LOG_WARN("failed to eliminate outer join in from items.", K(ret));
       } else if (is_happend) {
         from_item.is_joined_ = table->is_joined_table();
         from_item.table_id_ = table->table_id_;
@@ -1119,17 +1309,24 @@ int ObTransformJoinElimination::eliminate_outer_join(ObIArray<ObParentDMLStmt> &
       for (int64_t i = 0; OB_SUCC(ret) && i < semi_infos.count(); ++i) {
         if (OB_ISNULL(semi_infos.at(i))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("semi info is null", K(ret));
         } else if (OB_FAIL(ObOptimizerUtil::remove_item(semi_infos.at(i)->left_table_ids_,
                                                         table_ids))) {
+          LOG_WARN("failed to eliminate outer join in from items.", K(ret));
         } else if (OB_UNLIKELY(semi_infos.at(i)->left_table_ids_.empty())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("left_table_ids_ is empty", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(stmt->rebuild_tables_hash())) {
+        LOG_WARN("failed to rebuild table hash", K(ret));
       } else if (OB_FAIL(stmt->update_column_item_rel_id())) {
+        LOG_WARN("failed to update colun item rel id", K(ret));
       } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
+        LOG_WARN("failed to formalize stmt", K(ret));
       } else {
+        LOG_TRACE("succ to do outer join elimination to remove.");
       }
     }
   }
@@ -1156,6 +1353,7 @@ int ObTransformJoinElimination::get_eliminable_tables(const ObDMLStmt *stmt,
       if (OB_FAIL(check_transform_validity_foreign_key(stmt, conds, source_table, target_table,
                                                        can_be_eliminated, is_first_table_parent,
                                                        foreign_key_info))) {
+        LOG_WARN("failed to check whether transformation is possible", K(ret));
       } else if (can_be_eliminated) {
         TableItem *parent_table = NULL;
         TableItem *child_table = NULL;
@@ -1170,6 +1368,7 @@ int ObTransformJoinElimination::get_eliminable_tables(const ObDMLStmt *stmt,
         if (ObOptimizerUtil::find_item(helper.parent_table_items_, parent_table)) {
           // There is already another table that can eliminate the parent table
         } else if (OB_FAIL(helper.push_back(child_table, parent_table, foreign_key_info))) {
+          LOG_WARN("failed to push back table item or foreign key info", K(ret));
         }
       }
     }
@@ -1178,9 +1377,11 @@ int ObTransformJoinElimination::get_eliminable_tables(const ObDMLStmt *stmt,
       if (OB_FAIL(check_transform_validity_foreign_key(stmt, conds, source_table, target_table,
                                                       can_be_eliminated, is_first_table_parent,
                                                       foreign_key_info))) {
+        LOG_WARN("failed to check whether transformation is possible", K(ret));
       } else if (!can_be_eliminated || is_first_table_parent) {
         // Only allow elimination of candi_tables
       } else if (OB_FAIL(helper.push_back(source_table, target_table, foreign_key_info))) {
+        LOG_WARN("failed to push back table item or foreign key info", K(ret));
       } else {
         target_be_eliminated = true;
       }
@@ -1207,11 +1408,13 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
   if ( OB_ISNULL(stmt) || OB_ISNULL(ctx_) || 
       OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parameter have null", K(ctx_), K(source_table), K(target_table), K(ret));
   } else if (source_table->is_basic_table() &&
              target_table->is_basic_table()) {
     OPT_TRACE(source_table, "try eliminate", target_table, "on", join_conds, "with foreign keys");
     if (OB_FAIL(extract_equal_join_columns(join_conds, source_table, target_table,
                                            source_exprs, target_exprs, NULL))) {
+      LOG_WARN("failed to extract join columns", K(ret));
     } else if (source_exprs.empty()) {
       /* do nothing */
       OPT_TRACE("no equal join conditions");
@@ -1225,6 +1428,7 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
                                                                     is_foreign_primary_join,
                                                                     is_first_table_parent,
                                                                     foreign_key_info))) {
+      LOG_WARN("failed to check has foreign key constraint", K(ret));
     } else if (!is_foreign_primary_join) {
       /* do nothing */
       OPT_TRACE("is not foreign primary join");
@@ -1239,6 +1443,7 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
     } else if (OB_FAIL(ObTransformUtils::is_foreign_key_rely(ctx_->session_info_,
                                                             foreign_key_info,
                                                             is_rely_foreign_key))) {
+      LOG_WARN("check foreign key is rely failed", K(ret));
     } else if (!is_rely_foreign_key) {
       /*Non-reliable foreign key relationship, cannot be removed, do nothing*/
       OPT_TRACE("foreign key is not rely");
@@ -1247,11 +1452,13 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
                                                         source_table->table_id_,
                                                         foreign_key_info,
                                                         all_primary_key))) {
+      LOG_WARN("failed to check all column primary key", K(ret));
     } else if (!is_first_table_parent
                 && OB_FAIL(check_all_column_primary_key(stmt,
                                                         target_table->table_id_,
                                                         foreign_key_info,
                                                         all_primary_key))) {
+      LOG_WARN("failed to check all column primary key", K(ret));
     } else if (source_table->is_has_sample_info()) {
       // do nothing
       OPT_TRACE("table has sample info", K(source_table->table_id_));
@@ -1276,6 +1483,7 @@ int ObTransformJoinElimination::check_all_column_primary_key(const ObDMLStmt *st
   all_primary_key = true;
   if (OB_ISNULL(info) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parameters have null", K(ret), K(stmt), K(info));
   } else {
     const ObIArray<ColumnItem> &all_columns = stmt->get_column_items();
     for(int64_t i = 0; all_primary_key && OB_SUCC(ret) && i < all_columns.count(); ++i) {
@@ -1293,6 +1501,7 @@ int ObTransformJoinElimination::check_all_column_primary_key(const ObDMLStmt *st
         const ObRawExprResType *res_type = item.get_column_type();
         if (OB_ISNULL(res_type)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null", K(ret));
         } else {
           // Only replace exprs with bin sort foreign keys
           all_primary_key = !ob_is_string_type(res_type->get_type());
@@ -1313,6 +1522,7 @@ int ObTransformJoinElimination::trans_column_items_foreign_key(ObDMLStmt *stmt,
   ObSEArray<ObRawExpr *, 16> to_col_exprs;
   if (OB_ISNULL(stmt) || OB_ISNULL(child_table) || OB_ISNULL(parent_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid parameters", K(ret), K(stmt), K(child_table), K(parent_table));
   } else {
     const uint64_t child_table_id = child_table->table_id_;
     const uint64_t parent_table_id = parent_table->table_id_;
@@ -1326,17 +1536,21 @@ int ObTransformJoinElimination::trans_column_items_foreign_key(ObDMLStmt *stmt,
         if(OB_FAIL(get_child_column_id_by_parent_column_id(foreign_key_info,
                                                            item.column_id_,
                                                            child_column_id))) {
+          LOG_WARN("get child column id by parent column id failed", K(ret));
         } else {
           ColumnItem *child_col = stmt->get_column_item_by_id(child_table_id, child_column_id);
           ColumnItem *parent_col = stmt->get_column_item_by_id(parent_table_id, item.column_id_);
           if (OB_ISNULL(parent_col) || OB_ISNULL(child_col)) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("parent column or source column is null", K(ret));
           } else {
             //duplicate column item, to be replaced and remove
             if (OB_FAIL(from_col_exprs.push_back(parent_col->get_expr()))
                 || OB_FAIL(to_col_exprs.push_back(child_col->get_expr()))) {
+              LOG_WARN("failed to push back expr", K(ret));
             } else if (OB_FAIL(stmt->remove_column_item(item.table_id_,
                                                         item.column_id_))) {
+              LOG_WARN("failed to remove column item", K(ret), K(item));
             }
           }
         }
@@ -1344,6 +1558,7 @@ int ObTransformJoinElimination::trans_column_items_foreign_key(ObDMLStmt *stmt,
     }
     if (OB_SUCC(ret) && !from_col_exprs.empty()) {
       if (OB_FAIL(stmt->replace_relation_exprs(from_col_exprs, to_col_exprs))) {
+        LOG_WARN("failed to replace col exprs", K(ret));
       }
     }
   }
@@ -1357,6 +1572,7 @@ int ObTransformJoinElimination::get_child_column_id_by_parent_column_id(const Ob
   int ret = OB_SUCCESS;
   if (OB_ISNULL(info)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("foreign key info should not be null", K(info));
   } else {
     bool find = false;
     for (int64_t i = 0; !find && i < info->parent_column_ids_.count(); ++i) {
@@ -1376,12 +1592,14 @@ int ObTransformJoinElimination::EliminationHelper::is_table_in_child_items(const
   find = false;
   if (OB_ISNULL(target)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("target is null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !find && i < count_; ++i) {
       if (bitmap_.at(i)) {
         /* table already eliminated */
       } else if (OB_ISNULL(child_table_items_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table item in child_table_items_ should not be null", K(ret));
       } else if (child_table_items_.at(i)->table_id_ == target->table_id_) {
         find = true;
       }
@@ -1400,8 +1618,11 @@ int ObTransformJoinElimination::eliminate_semi_join_self_foreign_key(ObDMLStmt *
   OPT_TRACE("try eliminate semi join");
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(semi_infos.assign(stmt->get_semi_infos()))) {
+    LOG_WARN("get unexpected null", K(stmt), K(ret));
+  } else if (OB_FAIL(semi_infos.assign(stmt->get_semi_infos()))) {//copy origin semi infos
+    LOG_WARN("failed to assign semi infos", K(ret));
   } else if (OB_FAIL(stmt->get_equal_set_conditions(candi_conds, true))) {
+    LOG_WARN("failed to get equal set conditions", K(ret));
   } else {
     bool is_happened_self_key = false;
     bool is_happened_foreign_key = false;
@@ -1411,12 +1632,14 @@ int ObTransformJoinElimination::eliminate_semi_join_self_foreign_key(ObDMLStmt *
     for (int64_t i = 0; OB_SUCC(ret) && i < semi_infos.count(); ++i) {
       if (OB_ISNULL(semi_info = semi_infos.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret), K(semi_info));
       } else if (OB_FAIL(eliminate_semi_join_self_key(stmt,
                                                       semi_info,
                                                       candi_conds,
                                                       is_happened_self_key,
                                                       has_removed_semi_info,
                                                       trans_tables))) {
+        LOG_WARN("failed to eliminate semi join self key", K(ret));
       } else if (has_removed_semi_info) {
         trans_happened = true;
       } else if (OB_FAIL(eliminate_semi_join_foreign_key(stmt,
@@ -1424,11 +1647,13 @@ int ObTransformJoinElimination::eliminate_semi_join_self_foreign_key(ObDMLStmt *
                                                          is_happened_foreign_key,
                                                          has_removed_semi_info,
                                                          trans_tables))) {
+        LOG_WARN("failed to eliminate semi join foreign key", K(ret));
       } else if (has_removed_semi_info) {
         trans_happened = true;
       } else if (!is_happened_self_key && !is_happened_foreign_key) {
         /* do nothing */
       } else if (OB_FAIL(try_remove_semi_info(stmt, semi_info))) {
+        LOG_WARN("failed to try remove semi info", K(ret));
       } else {
         trans_happened = true;
       }
@@ -1461,21 +1686,31 @@ int ObTransformJoinElimination::eliminate_semi_join_self_key(ObDMLStmt *stmt,
   SMART_VAR(StmtMapInfoArray, stmt_map_infos) {
     if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(semi_info)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(stmt), K(semi_info));
     } else if (OB_FAIL(candi_conds.assign(conds))) {
+      LOG_WARN("failed to assign exprs", K(ret));
     } else if (semi_info->is_anti_join() && //conds do not contain anti join condition, here append it
               OB_FAIL(append(candi_conds, semi_info->semi_conditions_))) {
+      LOG_WARN("failed to append exprs", K(ret));
     } else if (OB_FAIL(check_transform_validity_semi_self_key(stmt, semi_info, candi_conds,
                                                               left_table, right_table,
                                                               stmt_map_info))) {
+      LOG_WARN("failed to check transform validity semi self key", K(ret));
     } else if (NULL != left_table) {
       OPT_TRACE("eliminate right table", right_table, "with left table", left_table);
       if (OB_FAIL(ObOptimizerUtil::remove_item(stmt->get_semi_infos(), semi_info))) {
+        LOG_WARN("failed to remove item", K(ret));
       } else if (OB_FAIL(construct_eliminated_table(stmt, right_table, trans_tables))) {
+        LOG_WARN("failed to construct eliminated table", K(ret));
       } else if (OB_FAIL(trans_semi_condition_exprs(stmt, semi_info))) {
+        LOG_WARN("transform anti condition failed", K(ret));
       } else if (OB_FAIL(adjust_table_items(stmt, left_table, right_table,
                                             stmt_map_info))) {
+        LOG_WARN("adjust table items failed", K(ret));
       } else if (OB_FAIL(trans_semi_table_item(stmt, right_table))) {
+        LOG_WARN("transform semi right table item failed", K(ret));
       } else if (OB_FAIL(append(ctx_->equal_param_constraints_, stmt_map_info.equal_param_map_))) {
+        LOG_WARN("failed to append equal params constraints", K(ret));
       } else { 
         has_removed_semi_info = true;
         trans_happened = true;
@@ -1483,23 +1718,27 @@ int ObTransformJoinElimination::eliminate_semi_join_self_key(ObDMLStmt *stmt,
     } else if (OB_FAIL(check_transform_validity_semi_self_key(stmt, semi_info, conds,
                                                               left_tables, right_tables,
                                                               stmt_map_infos, target_stmt))) {
+      LOG_WARN("check whether tranformation is possibl failed", K(ret));
     } else if (stmt_map_infos.empty()) {
       /*do nothing*/
     } else if (OB_FAIL(convert_target_table_column_exprs(stmt, target_stmt, left_tables,
                                                         right_tables, stmt_map_infos,
                                                         source_col_exprs, target_col_exprs))) {
+      LOG_WARN("failed to convert parent table column exprs", K(ret));
     } else if (OB_FAIL(eliminate_semi_right_child_table(stmt,
                                                         semi_info,
                                                         right_tables,
                                                         source_col_exprs,
                                                         target_col_exprs,
                                                         trans_tables))) {
+      LOG_WARN("failed to eliminate semi right child table", K(ret));
     } else {
       OPT_TRACE("eliminate right tables", right_tables, "with left tables", left_tables);
       trans_happened = true;
       for (int64_t i = 0; OB_SUCC(ret) && i < stmt_map_infos.count(); ++i) {
         if (OB_FAIL(append(ctx_->equal_param_constraints_,
                            stmt_map_infos.at(i).equal_param_map_))) {
+          LOG_WARN("failed to append equal params constraints", K(ret));
         }
       }
     }
@@ -1526,20 +1765,27 @@ int ObTransformJoinElimination::eliminate_semi_join_foreign_key(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(semi_info) ||
       OB_ISNULL(right_table = stmt->get_table_item_by_id(semi_info->right_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(stmt), K(semi_info), K(right_table));
   } else if (right_table->is_basic_table()) {
     TableItem *left_table = NULL;
     ObForeignKeyInfo *foreign_key_info = NULL;
     if (OB_FAIL(check_transform_validity_semi_foreign_key(stmt, semi_info, right_table, left_table,
                                                           foreign_key_info))) {
+      LOG_WARN("check whether tranformation is possibl failed", K(ret));
     } else if (NULL == left_table || NULL == foreign_key_info) {
       /* do nothing */
     } else if (OB_FAIL(construct_eliminated_table(stmt, right_table, trans_tables))) {
+      LOG_WARN("failed to construct eliminated table", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::remove_item(stmt->get_semi_infos(), semi_info))) {
+      LOG_WARN("failed to remove item", K(ret));
     } else if (OB_FAIL(trans_semi_condition_exprs(stmt, semi_info))) {
+      LOG_WARN("transform anti condition failed", K(ret));
     } else if (OB_FAIL(trans_column_items_foreign_key(stmt, left_table,
                                                       right_table,
                                                       foreign_key_info))) {
+      LOG_WARN("failed to transform columns of the eliminated table", K(ret));
     } else if (OB_FAIL(trans_semi_table_item(stmt, right_table))) {
+      LOG_WARN("transform semi right table item failed", K(ret));
     } else {
       trans_happened = true;
       has_removed_semi_info = true;
@@ -1548,19 +1794,25 @@ int ObTransformJoinElimination::eliminate_semi_join_foreign_key(ObDMLStmt *stmt,
     /* do nothing */
   } else if (OB_ISNULL(child_stmt = right_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected semi info", K(ret), K(*right_table), K(child_stmt));
   } else if (OB_FAIL(check_transform_validity_semi_foreign_key(stmt, semi_info, right_table,
                                                                left_tables, right_tables,
                                                                foreign_key_infos))) {
+    LOG_WARN("check whether tranformation is possibl failed", K(ret));
   } else if (foreign_key_infos.empty()) {
     /*do nothing*/
   } else if (OB_UNLIKELY(foreign_key_infos.count() != left_tables.count() ||
                          foreign_key_infos.count() != right_tables.count())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected count num", K(ret), K(foreign_key_infos.count()),
+                                     K(left_tables.count()), K(right_tables.count()));
   } else if (OB_FAIL(convert_target_table_column_exprs(stmt, child_stmt, left_tables,
                                                        right_tables, foreign_key_infos,
                                                        source_col_exprs, target_col_exprs))) {
+    LOG_WARN("failed to convert parent table column exprs", K(ret));
   } else if (OB_FAIL(eliminate_semi_right_child_table(stmt, semi_info, right_tables,
                                                       source_col_exprs, target_col_exprs, trans_tables))) {
+    LOG_WARN("failed to eliminate semi right child table", K(ret));
   } else {
     trans_happened = true;
   }
@@ -1585,17 +1837,26 @@ int ObTransformJoinElimination::eliminate_semi_right_child_table(ObDMLStmt *stmt
   if (OB_ISNULL(stmt) || OB_ISNULL(semi_info) || OB_ISNULL(ctx_) ||
       OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(stmt), K(semi_info));
   } else if (OB_ISNULL(semi_right_table = stmt->get_table_item_by_id(semi_info->right_table_id_))
              || OB_UNLIKELY(!semi_right_table->is_generated_table())
              || OB_ISNULL(child_stmt = semi_right_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected semi info", K(ret), K(semi_right_table), K(child_stmt));
   } else if (OB_FAIL(construct_eliminated_tables(child_stmt, right_tables, trans_tables))) {
+    LOG_WARN("failed to construct eliminated tables", K(ret));
   } else if (OB_FAIL(child_stmt->get_table_rel_ids(right_tables, right_rel_ids))) {
+    LOG_WARN("failed to get rel ids", K(ret));
   } else if (OB_FAIL(child_stmt->relids_to_table_ids(right_rel_ids, right_table_ids))) {
+    LOG_WARN("failed to do relids to table ids", K(ret));
   } else if (OB_FAIL(child_stmt->remove_table_item(right_tables))) {
+    LOG_WARN("failed to remove table items.", K(ret));
   } else if (OB_FAIL(child_stmt->remove_from_item(right_tables))) {
+    LOG_WARN("failed to remove assoicated from item", K(ret));
   } else if (OB_FAIL(child_stmt->remove_part_expr_items(right_table_ids))) {
+    LOG_WARN("failed to remove part expr item", K(ret));
   } else if (OB_FAIL(child_stmt->remove_column_item(right_table_ids))) {
+    LOG_WARN("failed to remove column items.", K(ret));
   } else {
     // 1. pullup select exprs contains right_tables column exprs
     ObIArray<SelectItem> &select_items = child_stmt->get_select_items();
@@ -1605,24 +1866,30 @@ int ObTransformJoinElimination::eliminate_semi_right_child_table(ObDMLStmt *stmt
     for (int64_t i = 0; OB_SUCC(ret) && i < select_items.count(); ++i) {
       if (OB_ISNULL(expr = select_items.at(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret), K(expr));
       } else if (!expr->get_relation_ids().overlap(right_rel_ids)) {
         /* do nothing */
       } else if (OB_FAIL(removed_idxs.add_member(i))) {
+        LOG_WARN("failed to add member", K(ret));
       } else {
         col = stmt->get_column_expr_by_id(semi_right_table->table_id_,
                                           i + OB_APP_MIN_COLUMN_ID);
         if (NULL == col) {
         } else if (OB_FAIL(pullup_column_exprs.push_back(col))) {
+          LOG_WARN("failed to push back column expr", K(ret));
         } else if (OB_FAIL(pullup_select_exprs.push_back(expr))) {
+          LOG_WARN("failed to push back", K(ret));
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObTransformUtils::remove_select_items(ctx_, semi_right_table->table_id_,
                                                              *child_stmt, *stmt, removed_idxs))) {
+      LOG_WARN("failed to remove select items", K(ret));
     } else if (OB_FAIL(ObTransformUtils::replace_exprs(pullup_column_exprs,
                                                        pullup_select_exprs,
                                                        semi_info->semi_conditions_))) {
+      LOG_WARN("failed to update semi condition", K(ret));
     }
   }
 
@@ -1634,14 +1901,18 @@ int ObTransformJoinElimination::eliminate_semi_right_child_table(ObDMLStmt *stmt
     for (int64_t i = 0; OB_SUCC(ret) && i < cond_exprs.count(); ++i) {
       if (OB_ISNULL(expr = cond_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret), K(expr));
       } else if (!expr->get_relation_ids().overlap(right_rel_ids)) {
         ret = new_cond_epxrs.push_back(expr);
       } else if (OB_FAIL(pullup_conds.push_back(expr))) {
+        LOG_WARN("failed to push back", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(append(semi_info->semi_conditions_, pullup_conds))) {
+      LOG_WARN("failed to append", K(ret));
     } else if (OB_FAIL(child_stmt->get_condition_exprs().assign(new_cond_epxrs))) {
+      LOG_WARN("failed to push assign", K(ret));
     }
   }
 
@@ -1649,17 +1920,28 @@ int ObTransformJoinElimination::eliminate_semi_right_child_table(ObDMLStmt *stmt
   if (OB_SUCC(ret)) {
     ObSEArray<ObRawExpr*, 4> select_exprs;
     if (OB_FAIL(stmt->remove_table_item(semi_right_table))) {
+      LOG_WARN("failed to remove table item", K(ret));
     } else if (OB_FAIL(stmt->replace_relation_exprs(target_col_exprs, source_col_exprs))) {
+      LOG_WARN("failed to replace inner stmt expr", K(ret));
     } else if (OB_FAIL(stmt->get_table_items().push_back(semi_right_table))) {
+      LOG_WARN("failed to push back table item", K(ret));
     } else if (OB_FAIL(child_stmt->get_select_exprs(select_exprs))) {
+      LOG_WARN("failed to get child stmt select exprs", K(ret));
     } else if (OB_FAIL(ObTransformUtils::remove_const_exprs(select_exprs, select_exprs))) {
+      LOG_WARN("failed to remove const exprs", K(ret));
     } else if (OB_FAIL(ObTransformUtils::generate_select_list(ctx_, stmt,
                                                               semi_right_table, &select_exprs))) {
+      LOG_WARN("failed to generate select list for shared exprs", K(ret));
     } else if (OB_FAIL(child_stmt->rebuild_tables_hash())) {
+      LOG_WARN("rebuild table hash failed", K(ret));
     } else if (OB_FAIL(child_stmt->update_column_item_rel_id())) {
+      LOG_WARN("failed to update columns' relation id", K(ret));
     } else if (OB_FAIL(stmt->rebuild_tables_hash())) {
+      LOG_WARN("rebuild table hash failed", K(ret));
     } else if (OB_FAIL(stmt->update_column_item_rel_id())) {
+      LOG_WARN("failed to update columns' relation id", K(ret));
     } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
+      LOG_WARN("formalize stmt is failed", K(ret));
     }
   }
   return ret;
@@ -1678,8 +1960,11 @@ int ObTransformJoinElimination::adjust_source_table(ObDMLStmt *source_stmt,
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) || OB_ISNULL(source_stmt) ||
       OB_ISNULL(target_stmt) || OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid parameters", K(ret), K(ctx_), K(source_stmt), K(target_stmt),
+                                   K(source_table), K(target_table));
   } else if (OB_FAIL(target_stmt->get_column_items(target_table->table_id_,
                                                    target_column_items))) {
+    LOG_WARN("failed to get column items", K(ret));
   } else {
     uint64_t source_table_id = source_table->table_id_;
     uint64_t target_table_id = target_table->table_id_;
@@ -1695,6 +1980,7 @@ int ObTransformJoinElimination::adjust_source_table(ObDMLStmt *source_stmt,
                                               target_column_items.at(i).column_id_)) ||
           OB_ISNULL(target_col->get_expr())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (NULL == output_map) {
         column_id = target_col->column_id_;
         source_col = source_stmt->get_column_item_by_id(source_table_id, column_id);
@@ -1703,8 +1989,11 @@ int ObTransformJoinElimination::adjust_source_table(ObDMLStmt *source_stmt,
         int64_t output_id = target_col->column_id_ - OB_APP_MIN_COLUMN_ID;
         if (OB_UNLIKELY(output_id < 0 || output_id >= output_map->count())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected array count", K(output_id),
+              K(output_map->count()), K(ret));
         } else if (OB_UNLIKELY(OB_INVALID_ID == output_map->at(output_id))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid output idx", K(output_id), K(ret));
         } else {
           column_id = output_map->at(output_id) + OB_APP_MIN_COLUMN_ID;
           source_col = source_stmt->get_column_item_by_id(source_table_id, column_id);
@@ -1713,12 +2002,18 @@ int ObTransformJoinElimination::adjust_source_table(ObDMLStmt *source_stmt,
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(source_col)) {  // no map relationship found
         if (OB_FAIL(columns_need_copy.push_back(target_col))) {
+          LOG_WARN("failed to push back expr", K(ret));
         } else if (OB_FAIL(column_ids_for_copy.push_back(column_id))) {
+          LOG_WARN("failed to push back uint64_t", K(ret));
         }
       } else if (OB_FAIL(expr_copier.add_replaced_expr(target_col->get_expr(), 
                                                        source_col->get_expr()))) {
+        // reuse the existing column mapping for copying the dependant expr of generated column
+        LOG_WARN("failed to add replaced expr", K(ret));
       } else if (OB_FAIL(source_col_exprs.push_back(source_col->get_expr()))) {
+        LOG_WARN("failed to push back epxr", K(ret));
       } else if (OB_FAIL(target_col_exprs.push_back(target_col->get_expr()))) {
+        LOG_WARN("failed to push back expr", K(ret));
       }
     }
     // 2. deep copy column item if need
@@ -1735,9 +2030,12 @@ int ObTransformJoinElimination::adjust_source_table(ObDMLStmt *source_stmt,
         uint64_t column_id = column_ids_for_copy.at(i);
         if (OB_ISNULL(target_col)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(new_col.deep_copy(expr_copier, *target_col))) {
+          LOG_WARN("failed to deep copy column item", K(ret));
         } else if (OB_ISNULL(col_expr = new_col.get_expr())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret));
         } else {
           source_col = &new_col;
           new_col.table_id_ = source_table_id;
@@ -1748,17 +2046,25 @@ int ObTransformJoinElimination::adjust_source_table(ObDMLStmt *source_stmt,
           int64_t rel_id = source_stmt->get_table_bit_index(source_table_id);
           if (OB_UNLIKELY(rel_id <= 0 || rel_id > source_stmt->get_table_items().count())) {
             ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("invalid argument", K(ret), K(rel_id));
           } else if (OB_FAIL(col_expr->add_relation_id(rel_id))) {
+            LOG_WARN("fail to add relation id", K(rel_id), K(ret));
           } else if (OB_FAIL(col_expr->pull_relation_id())) {
+            LOG_WARN("failed to pull relation id and levels");
           } else if (OB_FAIL(col_expr->formalize(ctx_->session_info_))) {
+            LOG_WARN("failed to formalize a new expr", K(ret));
           } else if (OB_FAIL(source_stmt->add_column_item(new_col))) {
+            LOG_WARN("failed to add column item", K(new_col), K(ret));
           }
         }
         if (OB_FAIL(ret)) {
         } else if (OB_ISNULL(source_col) || OB_ISNULL(target_col)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(source_col_exprs.push_back(source_col->get_expr()))) {
+          LOG_WARN("failed to push back epxr", K(ret));
         } else if (OB_FAIL(target_col_exprs.push_back(target_col->get_expr()))) {
+          LOG_WARN("failed to push back expr", K(ret));
         }
       }
     }
@@ -1781,14 +2087,18 @@ int ObTransformJoinElimination::convert_target_table_column_exprs(ObDMLStmt *sou
   TableItem *target_table = NULL;
   if (OB_ISNULL(source_stmt) || OB_ISNULL(target_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid parameters", K(ret), K(source_stmt), K(target_stmt));
   } else if (OB_UNLIKELY(stmt_map_infos.count() != source_tables.count() ||
                          stmt_map_infos.count() != target_tables.count())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected count num", K(ret), K(stmt_map_infos.count()),
+                                     K(source_tables.count()), K(target_tables.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt_map_infos.count(); ++i) {
     if (OB_ISNULL(source_table = source_tables.at(i))
         || OB_ISNULL(target_table = target_tables.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected count num", K(ret));
     } else if ((source_table->is_basic_table() &&
                target_table->is_basic_table()) ||
                (source_table->is_temp_table() &&
@@ -1797,6 +2107,7 @@ int ObTransformJoinElimination::convert_target_table_column_exprs(ObDMLStmt *sou
                                 NULL, source_col_exprs, target_col_exprs);
     } else if (!source_table->is_generated_table() || !target_table->is_generated_table()) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected table", K(ret), K(*source_table), K(*target_table));
     } else {
       ObSelectStmt *source_ref_query = NULL;
       ObSelectStmt *target_ref_query = NULL;
@@ -1804,14 +2115,18 @@ int ObTransformJoinElimination::convert_target_table_column_exprs(ObDMLStmt *sou
       if (OB_ISNULL(source_ref_query = source_table->ref_query_) ||
           OB_ISNULL(target_ref_query = target_table->ref_query_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(source_ref_query), K(target_ref_query), K(ret));
       } else if (OB_FAIL(reverse_select_items_map(source_ref_query, target_ref_query,
                                                   stmt_map_infos.at(i).select_item_map_,
                                                   column_map))) {
+        LOG_WARN("failed to reverse select items map", K(ret));
       } else if (OB_FAIL(create_missing_select_items(source_ref_query, target_ref_query,
                                                      column_map,
                                                      stmt_map_infos.at(i).table_map_))) {
       } else if (OB_FAIL(adjust_source_table(source_stmt, target_stmt, source_table, target_table,
                                              &column_map, source_col_exprs, target_col_exprs))) {
+        LOG_WARN("failed to merge table items", K(ret));
+        LOG_WARN("failed to create missing select items", K(ret));
       }
     }
   }
@@ -1833,11 +2148,16 @@ int ObTransformJoinElimination::convert_target_table_column_exprs(ObDMLStmt *sou
   to_col_exprs.reuse();
   if (OB_ISNULL(source_stmt) || OB_ISNULL(target_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid parameters", K(ret), K(source_stmt), K(target_stmt));
   } else if (OB_UNLIKELY(foreign_key_infos.count() != child_tables.count() ||
                          foreign_key_infos.count() != parent_tables.count())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected count num", K(ret), K(foreign_key_infos.count()),
+                                     K(child_tables.count()), K(parent_tables.count()));
   } else if (OB_FAIL(target_stmt->get_table_rel_ids(parent_tables, parent_rel_ids))) {
+    LOG_WARN("failed to get rel ids", K(ret));
   } else if (OB_FAIL(target_stmt->relids_to_table_ids(parent_rel_ids, parent_table_ids))) {
+    LOG_WARN("failed to do relids to table ids", K(ret));
   } else {
     int64_t idx = OB_INVALID_INDEX;
     ObRawExpr* child_col = NULL;
@@ -1846,7 +2166,9 @@ int ObTransformJoinElimination::convert_target_table_column_exprs(ObDMLStmt *sou
     for (int64_t i = 0; OB_SUCC(ret) && i < parent_tables.count(); ++i) {
       if (OB_ISNULL(parent_tables.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret));
       } else if (OB_FAIL(parent_table_ids.push_back(parent_tables.at(i)->table_id_))) {
+        LOG_WARN("failed to push back", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < origin_column_items.count(); ++i) {
@@ -1856,15 +2178,19 @@ int ObTransformJoinElimination::convert_target_table_column_exprs(ObDMLStmt *sou
         /* do nothing */
       } else if (OB_UNLIKELY(idx < 0 || idx >= child_tables.count())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected idx", K(ret), K(parent_table_ids), K(item.table_id_));
       } else if(OB_FAIL(get_child_column_id_by_parent_column_id(foreign_key_infos.at(idx),
                                                                 item.column_id_,
                                                                 child_column_id))) {
+          LOG_WARN("get child column id by parent column id failed", K(ret));
       } else if (OB_ISNULL(parent_col = item.expr_) || OB_ISNULL(child_tables.at(idx)) ||
                  OB_ISNULL(child_col = source_stmt->get_column_expr_by_id(
                                             child_tables.at(idx)->table_id_, child_column_id))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("parent column or source column is null", K(ret));
       } else if (OB_FAIL(from_col_exprs.push_back(parent_col))
                  || OB_FAIL(to_col_exprs.push_back(child_col))) {
+        LOG_WARN("failed to push back expr", K(ret));
       }
     }
   }
@@ -1882,28 +2208,44 @@ int ObTransformJoinElimination::try_remove_semi_info(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(semi_info) || OB_ISNULL(ctx_) ||
       OB_ISNULL(right_table = stmt->get_table_item_by_id(semi_info->right_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexcepted null", K(ret), K(stmt), K(semi_info),
+                                    K(ctx_), K(right_table));
   } else if (!right_table->is_generated_table()) {
     /* do nothing */
   } else if (OB_ISNULL(child_stmt = right_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexcepted null", K(ret), K(child_stmt));
   } else if (!child_stmt->get_from_items().empty()) {
     /* do nothing */
   } else if (OB_UNLIKELY(!child_stmt->get_column_items().empty() ||
                          !child_stmt->get_table_items().empty())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexcepted child stmt", K(ret), K(*child_stmt));
   } else if (OB_FAIL(stmt->get_column_exprs(right_table->table_id_, column_exprs))) {
+    LOG_WARN("failed to get column exprs", K(ret));
   } else if (OB_FAIL(ObTransformUtils::convert_column_expr_to_select_expr(column_exprs, *child_stmt,
                                                                           child_select_exprs))) {
+    LOG_WARN("failed to convert column expr to select expr", K(ret));
   } else if (OB_FAIL(stmt->replace_relation_exprs(column_exprs, child_select_exprs))) {
+    LOG_WARN("failed to replace relation expr", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::remove_item(stmt->get_semi_infos(), semi_info))) {
+    LOG_WARN("failed to remove item", K(ret));
   } else if (OB_FAIL(append(semi_info->semi_conditions_, child_stmt->get_condition_exprs()))) {
+    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(trans_semi_condition_exprs(stmt, semi_info))) {
+    LOG_WARN("transform anti condition failed", K(ret));
   } else if (OB_FAIL(stmt->remove_table_item(right_table))) {
+    LOG_WARN("failed to remove target table items", K(ret));
   } else if (OB_FAIL(stmt->remove_column_item(right_table->table_id_))) {
+    LOG_WARN("failed to remove column items.", K(ret));
   } else if (OB_FAIL(stmt->remove_part_expr_items(right_table->table_id_))) {
+    LOG_WARN("failed to remove part expr item", K(ret));
   } else if (OB_FAIL(stmt->rebuild_tables_hash())) {
+    LOG_WARN("rebuild table hash failed", K(ret));
   } else if (OB_FAIL(stmt->update_column_item_rel_id())) {
+    LOG_WARN("failed to update columns' relation id", K(ret));
   } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
+    LOG_WARN("formalize stmt is failed", K(ret));
   }
   return ret;
 }
@@ -1932,12 +2274,16 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
   ObSEArray<ObRawExpr*, 16> dummy_exprs;
   if (OB_ISNULL(stmt) || OB_ISNULL(semi_info)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexcepted null", K(ret), K(stmt), K(semi_info));
   } else if (OB_ISNULL(right_table = stmt->get_table_item_by_id(semi_info->right_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected semi right table", K(ret), K(*semi_info));
   } else if (OB_FAIL(check_hint_valid(*stmt, *right_table, is_hint_valid))) {
+    LOG_WARN("failed to check hint valid", K(ret));
   } else if (!is_hint_valid) {
     OPT_TRACE("hint reject eliminate", right_table);
   } else if (OB_FAIL(stmt->get_table_item_by_id(semi_info->left_table_ids_ , left_tables))) {
+    LOG_WARN("failed to get table items", K(ret));
   } else {
     OPT_TRACE("try eliminate semi join", right_table, "with self key");
     for (int64_t i = 0; OB_SUCC(ret) && NULL == source_table && i < left_tables.count(); ++i) {
@@ -1946,9 +2292,11 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
       stmt_map_info.reset();
       if (OB_ISNULL(left_table = left_tables.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexcepted null", K(ret), K(left_table));
       } else if (OB_FAIL(ObTransformUtils::check_table_item_containment(stmt, left_table, stmt,
                                                                         right_table, stmt_map_info,
                                                                         is_contain))) {
+        LOG_WARN("check table item containment failed", K(ret));
       } else if (!is_contain) {
         /*do nothing*/
         OPT_TRACE(left_table, "not contain", right_table);
@@ -1958,6 +2306,7 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
                                                   is_simple_join_condition,
                                                   right_tables_have_filter,
                                                   is_simple_filter))) {
+        LOG_WARN("check semi join condition failed", K(ret));
       } else if (source_exprs.empty() && semi_info->is_anti_join()) {
         /*do nothing*/
         OPT_TRACE("anti join not have same join keys");
@@ -1966,6 +2315,8 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
           can eliminate right table without checking unique. */
         source_table = left_table;
         OPT_TRACE("is simply equal join condition and right table do not have filter, semi join will be eliminated");
+        LOG_TRACE("succeed to check lossless semi join", K(is_simple_join_condition),
+                                                        K(right_tables_have_filter));
       } else if (semi_info->is_anti_join() && !(is_simple_join_condition && is_simple_filter)) {
         /* for anti join, all join conditions should be simple condition
             and all right filter should be simple filter */
@@ -1981,16 +2332,19 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
                                                           ctx_->session_info_, ctx_->schema_checker_,
                                                           left_table, source_exprs, candi_conds,
                                                           false, source_unique))) {
+        LOG_WARN("check expr unique in semi left tables failed", K(ret));
       } else if (OB_FAIL(ObTransformUtils::check_exprs_unique_on_table_items(stmt,
                                                 ctx_->session_info_, ctx_->schema_checker_,
                                                 right_table, target_exprs,
                                                 semi_info->is_anti_join() ? dummy_exprs : candi_conds,
                                                 false, target_unique))) {
+        LOG_WARN("check expr unique in semi right tables failed", K(ret));
       } else {
         source_table = source_unique && target_unique ? left_table : NULL;
         if (NULL != left_table) {
           OPT_TRACE("lossless semi join can be elimated");
         }
+        LOG_TRACE("succeed to check lossless semi join", K(source_unique), K(target_unique));
       }
     }
   }
@@ -2015,19 +2369,25 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
   ObSEArray<ObRawExpr*, 16> dummy_exprs;
   if (OB_ISNULL(stmt) || OB_ISNULL(semi_info) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexcepted null", K(ret));
   } else if (OB_ISNULL(semi_right_table = stmt->get_table_item_by_id(semi_info->right_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected semi right table", K(ret), K(*semi_info));
   } else if (!semi_right_table->is_generated_table()) {
     OPT_TRACE("right table is not view");
   } else if (OB_ISNULL(semi_right_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexcepted null", K(ret));
   } else if (!semi_right_table->ref_query_->is_spj()) {
     OPT_TRACE("right view stmt is not spj");
   } else if (OB_FAIL(stmt->get_table_item_by_id(semi_info->left_table_ids_ , all_left_tables))) {
+    LOG_WARN("failed to get table items", K(ret));
   } else if (OB_FAIL(get_epxrs_rel_ids_in_child_stmt(stmt, semi_right_table->ref_query_,
                                                      semi_info->semi_conditions_,
                                                      semi_info->right_table_id_, select_relids))) {
+    LOG_WARN("failed to get expr rel ids", K(ret));
   } else if (OB_FAIL(semi_right_table->ref_query_->get_equal_set_conditions(right_conds, true))) {
+    LOG_WARN("failed to extract table exprs", K(ret));
   } else {
     target_stmt = semi_right_table->ref_query_;
     ObStmtMapInfo stmt_map_info;
@@ -2051,11 +2411,14 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
         /* do nothing */
       } else if (OB_ISNULL(right_table = target_stmt->get_table_item_by_id(item.table_id_))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexcepted null", K(ret), K(right_table));
       } else if (OB_FAIL(check_hint_valid(*stmt, *right_table, is_hint_valid))) {
+        LOG_WARN("failed to check hint valid", K(ret));
       } else if (!is_hint_valid) {
         OPT_TRACE("hint reject transform", right_table);
       } else if (OB_FAIL(is_table_column_used_in_subquery(*semi_right_table->ref_query_,
                                                           item.table_id_, used))) {
+        LOG_WARN("failed to check is table column used in subquery", K(ret));
       } else if (used) {
         OPT_TRACE(right_table, "is used in subquery");
       } else {
@@ -2067,12 +2430,14 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
           stmt_map_info.reset();
           if (OB_ISNULL(left_table = all_left_tables.at(j))) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get unexcepted null", K(ret), K(left_table));
           } else if (OB_FAIL(ObTransformUtils::check_table_item_containment(stmt,
                                                                             left_table,
                                                                             target_stmt,
                                                                             right_table,
                                                                             stmt_map_info,
                                                                             is_contain))) {
+            LOG_WARN("check table item containment failed", K(ret));
           } else if (!is_contain) {
             OPT_TRACE("left table", left_table, "do not contain right_table");
           } else if(OB_FAIL(check_semi_join_condition(stmt, semi_right_table->ref_query_,
@@ -2082,11 +2447,14 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
                                                       is_simple_join_condition,
                                                       right_tables_have_filter,
                                                       is_simple_filter))) {
+            LOG_WARN("check semi join condition failed", K(ret));
           } else if (is_simple_join_condition && !right_tables_have_filter) {
             /* if all semi join conditions are simple condition and there is no right table filter,
                 can eliminate right table without checking unique. */
             can_be_eliminated = true;
             OPT_TRACE("simple join without right table filters can be eliminated");
+            LOG_TRACE("succeed to check validity semi self key", K(is_simple_join_condition),
+                                                              K(right_tables_have_filter));
           } else if (semi_info->is_anti_join() && !(is_simple_join_condition && is_simple_filter)) {
             /* for anti join, all join conditions should be simple condition
                 and all right filter should be simple filter */
@@ -2102,16 +2470,20 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
                                                         ctx_->session_info_, ctx_->schema_checker_,
                                                         left_table, source_exprs, candi_conds,
                                                         false, source_unique))) {
+            LOG_WARN("check expr unique in semi left tables failed", K(ret));
           } else if (OB_FAIL(ObTransformUtils::check_exprs_unique_on_table_items(target_stmt,
                                             ctx_->session_info_, ctx_->schema_checker_,
                                             right_table, target_exprs,
                                             semi_info->is_anti_join() ? dummy_exprs : right_conds,
                                             false, target_unique))) {
+            LOG_WARN("check expr unique in semi right tables failed", K(ret));
           } else {
             can_be_eliminated = source_unique && target_unique;
             if (can_be_eliminated) {
               OPT_TRACE("unique semi join can be eliminated");
             }
+            LOG_TRACE("succeed to check validity semi self key", K(source_unique),
+                                                                 K(target_unique));
           }
         }
       }
@@ -2119,6 +2491,7 @@ int ObTransformJoinElimination::check_transform_validity_semi_self_key(ObDMLStmt
         if (OB_FAIL(stmt_map_infos.push_back(stmt_map_info)) ||
             OB_FAIL(left_tables.push_back(left_table)) ||
             OB_FAIL(right_tables.push_back(right_table))) {
+          LOG_WARN("failed to push back", K(ret));
         }
       }
     }
@@ -2137,6 +2510,7 @@ int ObTransformJoinElimination::is_table_column_used_in_subquery(const ObSelectS
   for (int64_t i = 0; OB_SUCC(ret) && !used && i < stmt.get_select_item_size(); ++i) {
     if (OB_ISNULL(expr = stmt.get_select_item(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret));
     } else if (expr->has_flag(CNT_SUB_QUERY)) {
       used = expr->get_relation_ids().has_member(table_idx);
     }
@@ -2144,6 +2518,7 @@ int ObTransformJoinElimination::is_table_column_used_in_subquery(const ObSelectS
   for (int64_t i = 0; OB_SUCC(ret) && !used && i < stmt.get_condition_size(); ++i) {
     if (OB_ISNULL(expr = stmt.get_condition_expr(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret));
     } else if (expr->has_flag(CNT_SUB_QUERY)) {
       used = expr->get_relation_ids().has_member(table_idx);
     }
@@ -2168,6 +2543,7 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
   is_simple_filter = true;
   if (OB_ISNULL(stmt) || OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param has null", K(ret));
   } else {
     ObRawExpr *expr = NULL;
     ObOpRawExpr *op = NULL;
@@ -2176,13 +2552,12 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < semi_conds.count(); ++i) {
       if (OB_ISNULL(expr = semi_conds.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("expr is null", K(ret));
       } else if (!expr->get_relation_ids().has_member(right_idx)) {
         /* do nothing */
       } else if (!expr->get_relation_ids().has_member(left_idx)) {
         target_tables_have_filter = true;
-        if (expr->get_relation_ids().num_members() > 1) {
-          is_simple_join_condition = false;
-        } else if (T_OP_OR == expr->get_expr_type()) { // complex right table filter
+        if (T_OP_OR == expr->get_expr_type()) { // complex right table filter
           is_simple_filter = false;
         } else { /*do nothing*/ }
       } else if (T_OP_EQ != expr->get_expr_type()) {
@@ -2190,6 +2565,7 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
       } else if (OB_FALSE_IT(op = static_cast<ObOpRawExpr *>(expr))) {
       } else if (OB_ISNULL(op->get_param_expr(0)) || OB_ISNULL(op->get_param_expr(1))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexcept null param", K(ret));
       } else if (!op->get_param_expr(0)->has_flag(IS_COLUMN)
                  || !op->get_param_expr(1)->has_flag(IS_COLUMN)) {
         is_simple_join_condition = false;
@@ -2205,10 +2581,13 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
         if (OB_FAIL(is_equal_column(source_table, target_table, stmt_map_info.select_item_map_,
                                     col1->get_column_id(), col2->get_column_id(),
                                     is_equal))) {
+          LOG_WARN("check column ref table id is equal failed", K(ret));
         } else if (!is_equal) { /*Equations of non-identical columns*/
           is_simple_join_condition = false;
         } else  if (OB_FAIL(source_exprs.push_back(col1))) {
+          LOG_WARN("push back column expr failed", K(ret));
         } else if (OB_FAIL(target_exprs.push_back(col2))) {
+          LOG_WARN("push back column expr failed", K(ret));
         } else {/*do nothing*/}
       }
     }
@@ -2229,16 +2608,20 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
       if (OB_FAIL(ObOptimizerUtil::is_table_on_null_side(stmt,
                                                          source_table->table_id_,
                                                          is_on_null_side))) {
+        LOG_WARN("failed to check table is on null side", K(ret));
       } else if (!is_on_null_side) {
         /* do nothing */
       } else if (OB_FAIL(left_ids.add_member(left_idx))) {
+        LOG_WARN("failed to add member");
       } else if (OB_FAIL(ObTransformUtils::is_null_reject_conditions(semi_conds,
                                                                       left_ids,
                                                                       has_null_reject))) {
+        LOG_WARN("failed to get is null reject conditions", K(ret));
       } else if (!has_null_reject &&
                   OB_FAIL(ObTransformUtils::is_null_reject_conditions(stmt->get_condition_exprs(),
                                                                       left_ids,
                                                                       has_null_reject))) {
+        LOG_WARN("failed to get is null reject conditions", K(ret));
       } else if (!has_null_reject) {
         is_simple_join_condition = false;
       }
@@ -2267,6 +2650,7 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
   is_simple_filter = true;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param has null", K(ret));
   } else {
     ObRawExpr *expr = NULL;
     ObOpRawExpr *op = NULL;
@@ -2275,13 +2659,12 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < semi_conds.count(); ++i) {
       if (OB_ISNULL(expr = semi_conds.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("expr is null", K(ret));
       } else if (!select_relids.at(i).has_member(right_idx)) {
         /* do nothing */
       } else if (!expr->get_relation_ids().has_member(left_idx)) {
         target_tables_have_filter = true;
-        if (expr->get_relation_ids().num_members() > 1) {
-          is_simple_join_condition = false;
-        } else if (T_OP_OR == expr->get_expr_type()) { // complex right table filter
+        if (T_OP_OR == expr->get_expr_type()) { // complex right table filter
           is_simple_filter = false;
         } else { /*do nothing*/ }
       } else if (T_OP_EQ != expr->get_expr_type()) {
@@ -2289,6 +2672,7 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
       } else if (OB_FALSE_IT(op = static_cast<ObOpRawExpr *>(expr))) {
       } else if (OB_ISNULL(op->get_param_expr(0)) || OB_ISNULL(op->get_param_expr(1))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexcept null param", K(ret));
       } else if (!op->get_param_expr(0)->has_flag(IS_COLUMN)
                  || !op->get_param_expr(1)->has_flag(IS_COLUMN)) {
         is_simple_join_condition = false;
@@ -2307,15 +2691,20 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
         } else if (OB_UNLIKELY(pos < 0 || pos >= target_stmt->get_select_item_size())
                    || OB_ISNULL(child_expr = target_stmt->get_select_item(pos).expr_)) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("invalid array pos",  K(ret), K(pos), K(target_stmt->get_select_item_size()),
+                                         K(child_expr));
         } else if (!child_expr->is_column_ref_expr()) {
           is_simple_join_condition = false;
         } else if (OB_FALSE_IT(col2 = static_cast<ObColumnRefRawExpr*>(child_expr))) {
         } else if (OB_FAIL(is_equal_column(source_table, target_table, stmt_map_info.select_item_map_,
                                     col1->get_column_id(), col2->get_column_id(), is_equal))) {
+          LOG_WARN("check column ref table id is equal failed", K(ret));
         } else if (!is_equal) {
           is_simple_join_condition = false;
         } else if (OB_FAIL(source_exprs.push_back(col1))) {
+          LOG_WARN("push back column expr failed", K(ret));
         } else if (OB_FAIL(target_exprs.push_back(col2))) {
+          LOG_WARN("push back column expr failed", K(ret));
         }
       }
     }
@@ -2324,6 +2713,7 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
       if (OB_FAIL(ObOptimizerUtil::is_table_on_null_side(stmt,
                                                          source_table->table_id_,
                                                          is_on_null_side))) {
+        LOG_WARN("failed to check table is on null side", K(ret));
       } else if (is_on_null_side) {
         is_simple_join_condition = false;
       }
@@ -2334,6 +2724,7 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
       for (int64_t i = 0; OB_SUCC(ret) && i < conds.count(); ++i) {
         if (OB_ISNULL(expr = conds.at(i))) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("expr is null", K(ret));
         } else if (expr->get_relation_ids().has_member(right_idx)) {
           target_tables_have_filter = true;
           if (T_OP_OR == expr->get_expr_type()) {
@@ -2362,31 +2753,40 @@ int ObTransformJoinElimination::get_epxrs_rel_ids_in_child_stmt(ObDMLStmt *stmt,
   rel_ids.reuse();
   if (OB_ISNULL(stmt) || OB_ISNULL(child_stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexcepted null", K(ret), K(stmt), K(child_stmt));
   } else if (OB_FAIL(rel_ids.prepare_allocate(cond_exprs.count()))) {
+    LOG_WARN("failed to prepare allocate array", K(ret));
   } else if (OB_FAIL(select_relids.prepare_allocate(child_stmt->get_select_item_size()))) {
+    LOG_WARN("failed to prepare allocate array", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < child_stmt->get_select_item_size(); ++i) {
     if (OB_ISNULL(expr = child_stmt->get_select_item(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexcepted null", K(ret));
     } else if (OB_FAIL(select_relids.at(i).add_members(expr->get_relation_ids()))) {
+      LOG_WARN("failed to add members", K(ret));
     }
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < cond_exprs.count(); ++i) {
     column_exprs.reuse();
     if (OB_FAIL(ObRawExprUtils::extract_column_exprs(cond_exprs.at(i), column_exprs))) {
+      LOG_WARN("failed to extract column exprs", K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < column_exprs.count(); ++j) {
       ObColumnRefRawExpr *col = static_cast<ObColumnRefRawExpr *>(column_exprs.at(j));
       if (OB_ISNULL(column_exprs.at(j)) || !column_exprs.at(j)->is_column_ref_expr()) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexcepted column expr", K(ret), K(column_exprs.at(j)));
       } else if (col->get_table_id() == table_id) {
         pos = col->get_column_id() - OB_APP_MIN_COLUMN_ID;
         if (OB_FALSE_IT(pos = col->get_column_id() - OB_APP_MIN_COLUMN_ID)) {
         } else if (OB_UNLIKELY(pos < 0 || pos >= select_relids.count())) {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexcepted position", K(ret), K(pos), K(select_relids.count()));
         } else if (OB_FAIL(rel_ids.at(i).add_members(select_relids.at(pos)))) {
+          LOG_WARN("failed to add members", K(ret));
         }
       }
     }
@@ -2405,6 +2805,7 @@ int ObTransformJoinElimination::is_equal_column(const TableItem *source_table,
   is_equal = false;
   if (OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param has null", K(source_table), K(target_table));
   } else {
     if (target_table->is_basic_table() || target_table->is_temp_table()) {
       is_equal = (source_col_id == target_col_id);
@@ -2412,6 +2813,7 @@ int ObTransformJoinElimination::is_equal_column(const TableItem *source_table,
       int64_t pos = source_col_id - OB_APP_MIN_COLUMN_ID;
       if (OB_UNLIKELY(pos < 0 || pos >= output_map.count())) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(pos), K(output_map.count()), K(ret));
       } else if (OB_INVALID_ID == output_map.at(pos)) {
         /*do nothing*/
       } else {
@@ -2428,13 +2830,20 @@ int ObTransformJoinElimination::trans_semi_table_item(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parameter is null", K(ret), K(stmt), K(target_table));
   } else  if (OB_FAIL(stmt->remove_table_item(target_table))) {
+    LOG_WARN("failed to remove target table items", K(ret));
   } else if (OB_FAIL(stmt->remove_part_expr_items(target_table->table_id_))) {
+    LOG_WARN("failed to remove part expr item", K(ret));
   } else if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("transform context is null", K(ret));
   } else if (OB_FAIL(stmt->rebuild_tables_hash())) {
+    LOG_WARN("rebuild table hash failed", K(ret));
   } else if (OB_FAIL(stmt->update_column_item_rel_id())) {
+    LOG_WARN("failed to update columns' relation id", K(ret));
   } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
+    LOG_WARN("formalize stmt is failed", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -2448,10 +2857,13 @@ int ObTransformJoinElimination::trans_semi_condition_exprs(ObDMLStmt *stmt,
   ObArray<ObRawExpr *> constraints;
   if (OB_ISNULL(stmt) || OB_ISNULL(semi_info) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param has null", K(stmt), K(ctx_), K(ret));
   } else if (semi_info->is_semi_join()) {
     ret = append(stmt->get_condition_exprs(), semi_info->semi_conditions_);
   } else if (OB_FAIL(stmt->get_table_rel_ids(semi_info->left_table_ids_, left_rel_ids))) {
+    LOG_WARN("failed to get table rel ids", K(ret));
   } else if (OB_FAIL(stmt->get_table_rel_ids(semi_info->right_table_id_, right_rel_ids))) {
+    LOG_WARN("failed to get table rel ids", K(ret));
   } else {
     const int64_t count = semi_info->semi_conditions_.count();
     ObSEArray<ObRawExpr*, 16> new_conditions;
@@ -2463,11 +2875,14 @@ int ObTransformJoinElimination::trans_semi_condition_exprs(ObDMLStmt *stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_ISNULL(expr = semi_info->semi_conditions_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("expr is null", K(ret));
       } else if (OB_FAIL(expr->pull_relation_id())) {
+        LOG_WARN("failed to pull relation id and levels", K(ret));
       } else if (T_OP_EQ != expr->get_expr_type()) {
         is_lnnvl_cond = true;
       } else if (OB_ISNULL(expr->get_param_expr(0)) || OB_ISNULL(expr->get_param_expr(1))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexcept null param", K(ret));
       } else if (expr->get_param_expr(0) == expr->get_param_expr(1)) {
         is_lnnvl_cond = false;
         col_expr = expr->get_param_expr(0);
@@ -2492,10 +2907,14 @@ int ObTransformJoinElimination::trans_semi_condition_exprs(ObDMLStmt *stmt,
                                                             NULLABLE_SCOPE::NS_WHERE,
                                                             is_not_null,
                                                             &constraints))) {
+        LOG_WARN("failed to check whether expr is nullable", K(ret));
       } else if (is_not_null && OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, constraints))) {
+        LOG_WARN("failed to add param not null constraints", K(ret));
       } else if (is_not_null) { // create const false
         if (OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, constraints))) {
+          LOG_WARN("failed to add param not null constraint", K(ret));
         } else if (OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_, new_cond, false))) {
+          LOG_WARN("failed to build const bool expr", K(ret));
         }
       } else { // create is null
         ret = ObRawExprUtils::build_is_not_null_expr(*ctx_->expr_factory_, col_expr,
@@ -2505,7 +2924,9 @@ int ObTransformJoinElimination::trans_semi_condition_exprs(ObDMLStmt *stmt,
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(new_cond)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("new expr is null", K(ret));
       } else if (OB_FAIL(new_conditions.push_back(new_cond))) {
+        LOG_WARN("push back new expr to conditions failed", K(ret));
       }
     }
     /*Convert all rewritten conditions to NOT(join_cond1) OR NOT(join_cond2) OR ...
@@ -2513,11 +2934,16 @@ int ObTransformJoinElimination::trans_semi_condition_exprs(ObDMLStmt *stmt,
     if (OB_SUCC(ret) ) {
       ObRawExpr *filter_expr = NULL;
       if (!new_conditions.empty() && OB_FAIL(ObRawExprUtils::build_or_exprs(*ctx_->expr_factory_, new_conditions, filter_expr))) {
+        LOG_WARN("make or expr failed", K(ret));
       } else if (new_conditions.empty() && OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_, filter_expr, false))) {
+        LOG_WARN("make or expr failed", K(ret));
       } else if (OB_ISNULL(filter_expr)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("or expr is null", K(ret));
       } else if (OB_FAIL(filter_expr->formalize(ctx_->session_info_))) {
+        LOG_WARN("formalize expr failed", K(ret));
       } else if (OB_FAIL(stmt->get_condition_exprs().push_back(filter_expr))) {
+        LOG_WARN("failed to push back cond", K(ret));
       } else {/*do nothing*/}
     } else {/*do nothing*/}
   }
@@ -2540,6 +2966,7 @@ int ObTransformJoinElimination::get_column_exprs(ObDMLStmt &stmt,
   for (int64_t i = 0; OB_SUCC(ret) && i < child_stmt.get_select_item_size(); ++i) {
     if (OB_ISNULL(select_expr = child_stmt.get_select_item(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret));
     } else if (!select_expr->is_column_ref_expr()) {
       /* do nothing */
     } else if (FALSE_IT(column_expr = static_cast<ObColumnRefRawExpr*>(select_expr))) {
@@ -2549,7 +2976,9 @@ int ObTransformJoinElimination::get_column_exprs(ObDMLStmt &stmt,
                                                                  i + OB_APP_MIN_COLUMN_ID))) {
       // current select expr is not used by upper stmt
     } else if (OB_FAIL(upper_columns.push_back(upper_expr))) {
+      LOG_WARN("failed to push back column expr", K(ret));
     } else if (OB_FAIL(child_columns.push_back(select_expr))) {
+      LOG_WARN("failed to push back column expr", K(ret));
     }
   }
   return ret;
@@ -2568,7 +2997,9 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
   if (OB_ISNULL(stmt) || OB_ISNULL(semi_info) || OB_ISNULL(right_table) ||
       OB_UNLIKELY(!right_table->is_basic_table())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected input param", K(ret), K(stmt), K(semi_info), K(right_table));
   } else if (OB_FAIL(stmt->get_table_item_by_id(semi_info->left_table_ids_ , left_tables))) {
+    LOG_WARN("failed to get table items", K(ret));
   } else {
     const ObIArray<ObRawExpr*>& semi_conds = semi_info->semi_conditions_;
     const int64_t right_idx = stmt->get_table_bit_index(right_table->table_id_);
@@ -2581,10 +3012,12 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
       unused_conds.reuse();
       if (OB_FAIL(extract_equal_join_columns(semi_conds, left_tables.at(i), right_table,
                                              source_exprs, target_exprs, &unused_conds))) {
+        LOG_WARN("failed to extract join columns", K(ret));
       } else if (OB_FAIL(check_transform_validity_foreign_key(stmt, left_tables.at(i), right_table,
                                                               source_exprs, target_exprs,
                                                               can_be_eliminated,
                                                               tmp_foreign_key_info))) {
+        LOG_WARN("check transform validity with foreign key failed", K(ret));
       } else if (!can_be_eliminated) {
         /* do nothing */
       } else if (!semi_info->is_anti_join()) {
@@ -2596,6 +3029,7 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
           if (OB_UNLIKELY(semi_conds.count() <= unused_conds.at(i)) ||
               OB_ISNULL(expr = semi_conds.at(unused_conds.at(i)))) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected exprs", K(ret), K(semi_conds.count()), K(unused_conds.at(i)), K(expr));
           } else if (expr->get_relation_ids().has_member(right_idx)) {
             can_be_eliminated = false;
           }
@@ -2624,9 +3058,12 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
       OB_UNLIKELY(!right_table->is_generated_table()) ||
       OB_ISNULL(child_stmt = right_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected input param", K(ret), K(stmt), K(semi_info),
+                                       K(right_table), K(child_stmt));
   } else if (!child_stmt->is_spj()) {
     /* do nothing */
   } else if (OB_FAIL(stmt->get_table_item_by_id(semi_info->left_table_ids_ , all_left_tables))) {
+    LOG_WARN("failed to get table items", K(ret));
   } else {
     const ObIArray<ObRawExpr*>& semi_conds = semi_info->semi_conditions_;
     TableItem *right_child_table = NULL;
@@ -2646,23 +3083,28 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
         /* do nothing */
       } else if (OB_ISNULL(right_child_table = child_stmt->get_table_item_by_id(item.table_id_))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret), K(right_child_table));
       } else if (OB_FAIL(is_table_column_used_in_subquery(*child_stmt, item.table_id_, used))) {
+        LOG_WARN("failed to check is table column used in subquery", K(ret));
       } else if (used) {
         /* do nothing */
       } else if (OB_FAIL(get_column_exprs(*stmt, *child_stmt, right_table->table_id_,
                                           right_child_table->table_id_, right_column_exprs,
                                           right_child_column_exprs))) {
+        LOG_WARN("failed to get column exprs", K(ret));
       } else if (right_column_exprs.empty()) {
         /* do nothing */
       } else {
         for (int64_t j = 0; OB_SUCC(ret) && !can_be_eliminated && j < all_left_tables.count(); ++j) {
           if (OB_ISNULL(all_left_tables.at(j))) {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected null", K(ret), K(all_left_tables.at(j)));
           } else if (OB_FAIL(extract_equal_join_columns(semi_conds,
                                                         all_left_tables.at(j)->table_id_,
                                                         right_table->table_id_, right_column_exprs,
                                                         right_child_column_exprs, source_exprs,
                                                         target_exprs, &unused_conds))) {
+            LOG_WARN("failed to extract join columns", K(ret));
           } else if (OB_FAIL(check_transform_validity_foreign_key(child_stmt,
                                                                   all_left_tables.at(j),
                                                                   right_child_table,
@@ -2670,6 +3112,7 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
                                                                   target_exprs,
                                                                   can_be_eliminated,
                                                                   foreign_key_info))) {
+            LOG_WARN("check transform validity with foreign key failed", K(ret));
           } else if (!can_be_eliminated) {
             /*do nothing*/
           } else if (!semi_info->is_anti_join()) {
@@ -2685,6 +3128,8 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
               if (OB_UNLIKELY(semi_conds.count() <= unused_conds.at(i)) ||
                   OB_ISNULL(expr = semi_conds.at(unused_conds.at(i)))) {
                 ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("unexpected exprs", K(ret), K(semi_conds.count()),
+                                             K(unused_conds.at(i)), K(expr));
               } else if (expr->get_relation_ids().has_member(right_idx)) {
                 can_be_eliminated = false;
               }
@@ -2692,6 +3137,7 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
             for (int64_t i = 0; OB_SUCC(ret) && can_be_eliminated && i < child_conds.count(); ++i) {
               if (OB_ISNULL(expr = child_conds.at(i))) {
                 ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("expr is null", K(ret));
               } else if (expr->get_relation_ids().has_member(right_child_idx)) {
                 can_be_eliminated = false;
               }
@@ -2701,6 +3147,7 @@ int ObTransformJoinElimination::check_transform_validity_semi_foreign_key(ObDMLS
           } else if (OB_FAIL(left_tables.push_back(all_left_tables.at(j))) ||
                      OB_FAIL(right_tables.push_back(right_child_table)) ||
                      OB_FAIL(foreign_key_infos.push_back(foreign_key_info))) {
+            LOG_WARN("failed to push back", K(ret));
           }
         }
       }
@@ -2728,7 +3175,10 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
   if (OB_ISNULL(target_stmt) || OB_ISNULL(ctx_) || 
       OB_ISNULL(source_table) || OB_ISNULL(target_table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parameter have null", K(ctx_), K(target_stmt), K(source_table),
+                                    K(target_table), K(ret));
   } else if (OB_FAIL(check_hint_valid(*target_stmt, *target_table, is_hint_valid))) {
+    LOG_WARN("failed to check hint valid", K(ret));
   } else if (!is_hint_valid) {
     /* do nothing */
     OPT_TRACE("hint disable transform");
@@ -2746,6 +3196,7 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
                                                                   is_foreign_primary_join,
                                                                   is_first_table_parent,
                                                                   foreign_key_info))) {
+    LOG_WARN("failed to check has foreign key constraint", K(ret));
   } else if (!is_foreign_primary_join || is_first_table_parent) {
     /* do nothing */
     OPT_TRACE("is not foreign primary join");
@@ -2756,11 +3207,13 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
   } else if (OB_FAIL(ObTransformUtils::is_foreign_key_rely(ctx_->session_info_,
                                                            foreign_key_info,
                                                            is_rely_foreign_key))) {
+    LOG_WARN("check foreign key is rely failed", K(ret));
   } else if (!is_rely_foreign_key) {
     /*Non-reliable foreign key relationship, cannot be removed, do nothing*/
     OPT_TRACE("foreign key is not reliable");
   } else if (OB_FAIL(check_all_column_primary_key(target_stmt, target_table->table_id_,
                                                   foreign_key_info, all_primary_key))) {
+    LOG_WARN("failed to check all column primary key", K(ret));
   } else if (source_table->is_has_sample_info()) {
     OPT_TRACE("table has sample info", K(source_table->table_id_));
   } else if (all_primary_key) {
@@ -2791,11 +3244,14 @@ int ObTransformJoinElimination::extract_equal_join_columns(const ObIArray<ObRawE
   target_exprs.reuse();
   if (OB_UNLIKELY(upper_column_exprs.count() != child_column_exprs.count())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected exprs count", K(ret), K(upper_column_exprs.count()),
+                                       K(child_column_exprs.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < join_conds.count(); ++i) {
     used = false;
     if (OB_ISNULL(expr = join_conds.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("expr is null", K(ret));
     } else if (T_OP_EQ == expr->get_expr_type()) {
       ObOpRawExpr *op = static_cast<ObOpRawExpr*>(expr);
       if (op->get_param_expr(0)->has_flag(IS_COLUMN)
@@ -2806,7 +3262,9 @@ int ObTransformJoinElimination::extract_equal_join_columns(const ObIArray<ObRawE
           if (!ObOptimizerUtil::find_item(upper_column_exprs, col1, &idx)) {
             /* do nothing */
           } else if (OB_FAIL(source_exprs.push_back(col1))) {
+            LOG_WARN("failed to push back expr", K(ret));
           } else if (OB_FAIL(target_exprs.push_back(child_column_exprs.at(idx)))) {
+            LOG_WARN("failed to push back expr", K(ret));
           } else {
             used = true;
           }
@@ -2814,7 +3272,9 @@ int ObTransformJoinElimination::extract_equal_join_columns(const ObIArray<ObRawE
           if (!ObOptimizerUtil::find_item(upper_column_exprs, col2, &idx)) {
             /* do nothing */
           } else if (OB_FAIL(target_exprs.push_back(child_column_exprs.at(idx)))) {
+            LOG_WARN("failed to push back expr", K(ret));
           } else if (OB_FAIL(source_exprs.push_back(col2))) {
+            LOG_WARN("failed to push back expr", K(ret));
           } else {
             used = true;
           }
@@ -2834,9 +3294,13 @@ int ObTransformJoinElimination::EliminationHelper::push_back(TableItem *child,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(child_table_items_.push_back(child))) {
+    LOG_WARN("faild to push back table item", K(ret));
   } else if (OB_FAIL(parent_table_items_.push_back(parent))) {
+    LOG_WARN("faild to push back table item", K(ret));
   } else if (OB_FAIL(foreign_key_infos_.push_back(info))) {
+    LOG_WARN("failed to push back foreign key info", K(ret));
   } else if (OB_FAIL(bitmap_.push_back(false))) {
+    LOG_WARN("failed to push back bool", K(ret));
   }
   ++count_;
   ++remain_;
@@ -2856,6 +3320,7 @@ int ObTransformJoinElimination::EliminationHelper::get_eliminable_group(TableIte
       if (bitmap_.at(i)) {
         /* table already eliminated */
       } else if (OB_FAIL(is_table_in_child_items(parent_table_items_.at(i), in_child))) {
+        LOG_WARN("faild to find table item", K(ret));
       } else if (in_child) {
         /* do nothing */
       } else {
@@ -2879,6 +3344,7 @@ int ObTransformJoinElimination::extract_candi_table(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(stmt), K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < from_items.count(); ++i) {
     const FromItem &from_item = from_items.at(i);
@@ -2887,6 +3353,7 @@ int ObTransformJoinElimination::extract_candi_table(ObDMLStmt *stmt,
       ret = extract_candi_table(stmt->get_joined_table(from_item.table_id_), child_candi_tables);
     } else if (OB_ISNULL(table_item = stmt->get_table_item_by_id(from_item.table_id_))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid table id", K(ret), K(from_item.table_id_));
     } else if (table_item->is_basic_table() || table_item->is_temp_table() || table_item->is_generated_table()) {
       ret = candi_tables.push_back(table_item);
     }
@@ -2903,6 +3370,7 @@ int ObTransformJoinElimination::extract_candi_table(JoinedTable *table,
   if (OB_ISNULL(table) || OB_ISNULL(left_table = table->left_table_)
       || OB_ISNULL(right_table = table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (table->is_inner_join() || IS_OUTER_JOIN(table->joined_type_)) {
     if (left_table->is_joined_table()) {
       ret = SMART_CALL(extract_candi_table(static_cast<JoinedTable*>(left_table),
@@ -2933,19 +3401,24 @@ int ObTransformJoinElimination::classify_joined_table(JoinedTable *joined_table,
   ObSEArray<JoinedTable*, 8> tmp_joined_tables;
   JoinedTable *cur_joined_table = NULL;
   if (OB_FAIL(tmp_joined_tables.push_back(joined_table))) {
+    LOG_WARN("failed to push back exprs", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tmp_joined_tables.count(); i++) {
     if (OB_ISNULL(cur_joined_table = tmp_joined_tables.at(i)) ||
         OB_ISNULL(left_table = cur_joined_table->left_table_) ||
         OB_ISNULL(right_table = cur_joined_table->right_table_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", K(ret), K(cur_joined_table), K(left_table), K(right_table));
     } else if (IS_OUTER_JOIN(cur_joined_table->joined_type_)) {
       ret = outer_join_tables.push_back(cur_joined_table);
     } else if (!cur_joined_table->is_inner_join()) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected joined table type", K(ret), K(*cur_joined_table));
     } else if (OB_FAIL(append(inner_join_conds, cur_joined_table->get_join_conditions()))) {
+      LOG_WARN("failed to push back exprs", K(ret));
     } else if (cur_joined_table != joined_table &&
                OB_FAIL(inner_join_tables.push_back(cur_joined_table))) {
+      LOG_WARN("failed to push back table", K(ret));
     } else { // inner join
       JoinedTable *left_joined_table = NULL;
       JoinedTable *right_joined_table = NULL;
@@ -2982,19 +3455,22 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
   TableItem *right_table = NULL;
   if (OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null",  K(ret), K(table_item));
   } else if (!table_item->is_joined_table()) {
     if (!table_item->is_basic_table() && !table_item->is_generated_table() && !table_item->is_temp_table()) {
       /*do nothing*/
     } else if (OB_FAIL(child_candi_tables.push_back(table_item))) {
+      LOG_WARN("failed to push back table", K(ret));
     }
   } else if (OB_ISNULL(joined_table = static_cast<JoinedTable*>(table_item))
              || OB_ISNULL(left_table = joined_table->left_table_)
              || OB_ISNULL(right_table = joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(joined_table), K(left_table), K(right_table));
   } else if (joined_table->is_full_join()) {
     // full outer join internal elimination is not performed for now, trans_conditions may be passed out after join elimination
     // to do: full outer join internal will not pass out trans_conditions when it can be eliminated
-    ret = extract_candi_table(joined_table, child_candi_tables);
+    ret = extract_candi_table(joined_table, child_candi_tables);//allow using child table to eliminate external table
   } else if (IS_OUTER_JOIN(joined_table->joined_type_)) {
     bool left_happened = false;
     bool right_happened = false;
@@ -3007,16 +3483,20 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
                                                          right_trans_conditions,
                                                          right_happened,
                                                          trans_tables)))) {
+      LOG_WARN("failed to eliminate join in joined table`s right table.", K(ret));
     } else if (OB_FAIL(SMART_CALL(eliminate_join_in_joined_table(stmt, joined_table->left_table_,
                                                                 left_child_candi_tables,
                                                                 left_trans_conditions,
                                                                 left_happened,
                                                                 trans_tables)))) {
+      LOG_WARN("failed to eliminate join in joined table`s left table.", K(ret));
     } else if (OB_FAIL(append(child_candi_tables, left_child_candi_tables))
                || OB_FAIL(append(child_candi_tables, right_child_candi_tables))) {
+      LOG_WARN("failed to append child candi tables", K(ret));
     } else if (!left_happened && !right_happened) {
       /* do nothing */
     } else if (OB_FAIL(ObTransformUtils::adjust_single_table_ids(joined_table))) {
+      LOG_WARN("failed to construct single table ids.", K(ret));
     } else if (joined_table->is_left_join() && 
                (OB_FAIL(append(trans_conditions, left_trans_conditions))
                 || OB_FAIL(append(joined_table->join_conditions_, right_trans_conditions)))) {
@@ -3030,6 +3510,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
     }
   } else if (!joined_table->is_inner_join()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected joined type",  K(ret), K(joined_table));
   } else {
     ObSEArray<JoinedTable*, 4> inner_join_tables;
     ObSEArray<TableItem*, 4> outer_join_tables;
@@ -3040,6 +3521,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
     bool is_happened = false;
     if (OB_FAIL(classify_joined_table(joined_table, inner_join_tables, outer_join_tables,
                                       other_tables, inner_join_conds))) {
+      LOG_WARN("failed to classify joined table", K(ret), K(*joined_table));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < outer_join_tables.count(); i++) {// eliminate sub-table
       tmp_child_candi_tables.reuse();
@@ -3049,8 +3531,11 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
                                                             tmp_trans_conditions,
                                                             is_happened,
                                                             trans_tables)))) {
+        LOG_WARN("failed to eliminate join in inner join", K(ret));
       } else if (OB_FAIL(append(child_candi_tables, tmp_child_candi_tables))) {
+        LOG_WARN("failed to append child candi tables", K(ret));
       } else if (OB_FAIL(append(inner_join_conds, tmp_trans_conditions))) {
+        LOG_WARN("failed to append inner join conds", K(ret));
       } else {
         trans_happened |= is_happened;
       }
@@ -3059,16 +3544,20 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(eliminate_candi_tables(stmt, inner_join_conds, other_tables,
                                               child_candi_tables, false, is_happened, trans_tables))) {
+      LOG_WARN("failed to eliminate candi tables", K(ret));
     } else if (false == (trans_happened |= is_happened)) {
       /* do nothing */
     } else if (OB_FAIL(append(outer_join_tables, other_tables))) {
+      LOG_WARN("failed to append tables", K(ret));
     } else if (OB_FAIL(rebuild_joined_tables(stmt, table_item, inner_join_tables,
                                              outer_join_tables, inner_join_conds))) {
+      LOG_WARN("failed to rebuild joined tables", K(ret));
     } else if (!table_item->is_joined_table() ||
                !static_cast<JoinedTable*>(table_item)->is_inner_join()) {
       ret = trans_conditions.assign(inner_join_conds);
     } else if (!inner_join_conds.empty()) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("join conditions not empty after rebuild joined table", K(ret), K(*table_item));
     }
   }
   return ret;
@@ -3089,6 +3578,7 @@ int ObTransformJoinElimination::eliminate_candi_tables(ObDMLStmt *stmt,
   if (conds.empty()) {
     /*do nothing*/
   } else if (OB_FAIL(ObEqualAnalysis::compute_equal_set(&allocator, conds, *equal_sets))) {
+    LOG_WARN("failed to compute equal set", K(ret));
   } else {
     ObSqlBitSet<> removed_items;
     for (int64_t i = 0; OB_SUCC(ret) && i < candi_tables.count(); ++i) {
@@ -3102,9 +3592,11 @@ int ObTransformJoinElimination::eliminate_candi_tables(ObDMLStmt *stmt,
           } else if (OB_FAIL(do_join_elimination_self_key(stmt, candi_tables.at(i),
                                                           candi_tables.at(j), is_from_base_table,
                                                           is_happened, trans_tables, equal_sets))) {
+            LOG_WARN("failed to eliminate self key join in base table", K(ret));
           } else if (!is_happened) {
             /*do nothing*/
           } else if (OB_FAIL(removed_items.add_member(j))) {
+            LOG_WARN("failed to add removed items", K(ret));
           } else {
             trans_happened = true;
           }
@@ -3114,9 +3606,11 @@ int ObTransformJoinElimination::eliminate_candi_tables(ObDMLStmt *stmt,
           if (OB_FAIL(do_join_elimination_self_key(stmt, child_candi_tables.at(j),
                                                    candi_tables.at(i), is_from_base_table,
                                                    is_happened, trans_tables, equal_sets))) {
+            LOG_WARN("failed to do join elimination erlf key", K(ret));
           } else if (!is_happened) {
             /*do nothing*/
           } else if (OB_FAIL(removed_items.add_member(i))) {
+            LOG_WARN("failed to add removed items", K(ret));
           } else {
             trans_happened = true;
           }
@@ -3131,6 +3625,7 @@ int ObTransformJoinElimination::eliminate_candi_tables(ObDMLStmt *stmt,
         ret = removed_tables.push_back(candi_tables.at(i));
       } else if (candi_tables.at(i)->is_basic_table() &&
                  OB_FAIL(baisc_candi_tables.push_back(candi_tables.at(i)))) {
+        LOG_WARN("failed to push back table", K(ret));
       }
     }
 
@@ -3139,6 +3634,7 @@ int ObTransformJoinElimination::eliminate_candi_tables(ObDMLStmt *stmt,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(get_eliminable_tables(stmt, conds, baisc_candi_tables,
                                              child_candi_tables, helper))) {
+      LOG_WARN("failed to get eliminable tables", K(ret));
     } else {
       bool find = false;
       TableItem *child = NULL;
@@ -3146,12 +3642,16 @@ int ObTransformJoinElimination::eliminate_candi_tables(ObDMLStmt *stmt,
       ObForeignKeyInfo *info = NULL;
       while (OB_SUCC(ret) && helper.get_remain() > 0) {
         if (OB_FAIL(helper.get_eliminable_group(child, parent, info, find))) {
+          LOG_WARN("failed to get eliminable_group", K(ret));
         } else if (!find) {
           LOG_WARN("can not find one eliminable group, circle elimination may exists");
           break;
         } else if (OB_FAIL(construct_eliminated_table(stmt, parent, trans_tables))) {
+          LOG_WARN("failed to construct eliminated table", K(ret));
         } else if (OB_FAIL(do_join_elimination_foreign_key(stmt, child, parent, info))) {
+          LOG_WARN("failed to eliminate useless join", K(ret));
         } else if (OB_FAIL(removed_tables.push_back(parent))) {
+          LOG_WARN("failed to push back table", K(ret));
         } else {
           trans_happened = true;
         }
@@ -3160,6 +3660,7 @@ int ObTransformJoinElimination::eliminate_candi_tables(ObDMLStmt *stmt,
 
     if (OB_SUCC(ret) && !removed_tables.empty()
         && OB_FAIL(ObOptimizerUtil::remove_item(candi_tables, removed_tables))) {
+      LOG_WARN("failed to remove item", K(ret));
     }
   }
   return ret;
@@ -3175,9 +3676,11 @@ int ObTransformJoinElimination::rebuild_joined_tables(ObDMLStmt *stmt,
   ObSqlBitSet<> table_set;
   if (tables.empty()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("empty tables", K(ret), K(tables));
   } else if (1 == tables.count()) {
     top_table = tables.at(0);
   } else if (OB_FAIL(stmt->get_table_rel_ids(*tables.at(0), table_set))) {
+    LOG_WARN("failed to get table rel ids", K(ret));
   } else {
     TableItem *left_table = NULL;
     TableItem *right_table = NULL;
@@ -3188,16 +3691,22 @@ int ObTransformJoinElimination::rebuild_joined_tables(ObDMLStmt *stmt,
       cur_join_conds.reuse();
       if (OB_ISNULL(left_table = tables.at(i)) || OB_ISNULL(right_table = cur_table)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret), K(left_table), K(right_table));
       } else if (OB_FAIL(stmt->get_table_rel_ids(*left_table, table_set))) {
+        LOG_WARN("failed to get table rel ids", K(ret));
       } else if (OB_FAIL(ObTransformUtils::extract_table_exprs(*stmt, join_conds, table_set,
                                                                 cur_join_conds))) {
+        LOG_WARN("failed to extract table exprs", K(ret));
       } else if (OB_FAIL(ObOptimizerUtil::remove_item(join_conds, cur_join_conds))) {
+        LOG_WARN("failed to remove cur cond exprs", K(ret));
       } else if (i > inner_join_tables.count()) {
         ret = ObTransformUtils::add_new_joined_table(ctx_, *stmt, INNER_JOIN, left_table,
                                                      right_table, cur_join_conds, cur_table, false);
       } else if (OB_ISNULL(tmp_joined_table = inner_join_tables.at(i-1))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret), K(inner_join_tables.at(i-1)));
       } else if (OB_FAIL(tmp_joined_table->get_join_conditions().assign(cur_join_conds))) {
+        LOG_WARN("failed to assign exprs", K(ret));
       } else {
         tmp_joined_table->left_table_ = left_table;
         tmp_joined_table->right_table_ = right_table;
@@ -3210,6 +3719,7 @@ int ObTransformJoinElimination::rebuild_joined_tables(ObDMLStmt *stmt,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(append(static_cast<JoinedTable*>(cur_table)->get_join_conditions(),
                               join_conds))) {
+      LOG_WARN("failed to append exprs", K(ret));
     } else {
       join_conds.reuse();
       top_table = cur_table;
@@ -3224,26 +3734,35 @@ int ObTransformJoinElimination::trans_self_equal_conds(ObDMLStmt *stmt)
   ObSEArray<JoinedTable *, 16> joined_tables;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("input paramter is null", K(stmt));
   } else if (OB_FAIL(trans_self_equal_conds(stmt, stmt->get_condition_exprs()))) {
+    LOG_WARN("failed to trans condition exprs", K(ret));
   } else if (OB_FAIL(joined_tables.assign(stmt->get_joined_tables()))) {
+    LOG_WARN("failed to assign joined tables", K(ret));
   } else {
     JoinedTable *joined_table = NULL;
     TableItem *table = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < joined_tables.count(); ++i) {
       if (OB_ISNULL(joined_table = joined_tables.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret));
       } else if (OB_FAIL(trans_self_equal_conds(stmt, joined_table->get_join_conditions()))) {
+        LOG_WARN("failed to trans self equal conds", K(ret));
       } else if (OB_NOT_NULL(table = joined_table->left_table_) && table->is_joined_table()
                  && OB_FAIL(joined_tables.push_back(static_cast<JoinedTable*>(table)))) {
+        LOG_WARN("failed to push back", K(ret));
       } else if (OB_NOT_NULL(table = joined_table->right_table_) && table->is_joined_table()
                  && OB_FAIL(joined_tables.push_back(static_cast<JoinedTable*>(table)))) {
+        LOG_WARN("failed to push back", K(ret));
       }
     }
     ObIArray<SemiInfo*> &semi_infos = stmt->get_semi_infos();
     for (int64_t i = 0; OB_SUCC(ret) && i < semi_infos.count(); ++i) {
       if (OB_ISNULL(semi_infos.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret));
       } else if (OB_FAIL(trans_self_equal_conds(stmt, semi_infos.at(i)->semi_conditions_))) {
+        LOG_WARN("failed to trans self equal conds", K(ret));
       }
     }
   }
@@ -3259,10 +3778,12 @@ int ObTransformJoinElimination::trans_self_equal_conds(ObDMLStmt *stmt,
   ObRawExpr *expr = NULL;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("input paramter is null", K(ret), K(stmt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cond_exprs.count(); ++i) {
     if (OB_ISNULL(expr = cond_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("condition expr is null", K(ret));
     } else if (T_OP_EQ == expr->get_expr_type()) {
       ObOpRawExpr *op = static_cast<ObOpRawExpr *>(expr);
       if (op->get_param_expr(0)->has_flag(IS_COLUMN)
@@ -3270,21 +3791,28 @@ int ObTransformJoinElimination::trans_self_equal_conds(ObDMLStmt *stmt,
         // equal condition on the same column
         if (OB_FAIL(removed_col_exprs.push_back(
                             static_cast<ObColumnRefRawExpr *>(op->get_param_expr(0))))) {
+          LOG_WARN("failed to push back col expr");
         }
       } else if (OB_FAIL(new_cond_exprs.push_back(expr))) {
+        LOG_WARN("failed to push back expr", K(ret));
       }
     } else if (OB_FAIL(new_cond_exprs.push_back(expr))) {
+      LOG_WARN("failed to push back expr", K(ret));
     } else if (T_OP_OR == expr->get_expr_type()) {
       if (OB_FAIL(recursive_trans_equal_join_condition(stmt, expr))) {
+        LOG_WARN("recursive trans equal join condition failed", K(ret));
       } else if(OB_FAIL(expr->formalize(ctx_->session_info_))) {
+        LOG_WARN("formlize expr failed", K(ret));
       } else {
         /*do nothing*/
       }
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(cond_exprs.assign(new_cond_exprs))) {
+  } else if (OB_FAIL(cond_exprs.assign(new_cond_exprs))) {//assign cond exprs first
+    LOG_WARN("failed to assign exprs", K(ret));
   } else if (OB_FAIL(add_is_not_null_if_needed(stmt, removed_col_exprs, cond_exprs))) {
+    LOG_WARN("failed to add is not null condition", K(ret));
   }
   return ret;
 }
@@ -3297,23 +3825,29 @@ int ObTransformJoinElimination::add_is_not_null_if_needed(ObDMLStmt *stmt,
   ObArray<ObRawExpr *> constraints;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < col_exprs.count(); ++i) {
     bool is_not_null = true;
     ObRawExpr *is_not_expr = NULL;
     if (OB_ISNULL(col_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::is_expr_not_null(ctx_, stmt, col_exprs.at(i), 
                                                           NULLABLE_SCOPE::NS_WHERE,
                                                           is_not_null,
                                                           &constraints))) {
+      LOG_WARN("failed to check whether expr is nullable", K(ret));
     } else if (is_not_null) {
       if (OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, constraints))) {
+        LOG_WARN("failed to add param not null constraint", K(ret));
       }
     } else if (OB_FAIL(ObTransformUtils::add_is_not_null(ctx_,
                                                          col_exprs.at(i),
                                                          is_not_expr))) {
+      LOG_WARN("failed to add is not null for col", K(ret));
     } else if (OB_FAIL(cond_exprs.push_back(is_not_expr))) {
+      LOG_WARN("failed to add is_not_expr into condition", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -3326,15 +3860,19 @@ int ObTransformJoinElimination::recursive_trans_equal_join_condition(ObDMLStmt *
   bool is_stack_overflow = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param has null when trans equal join condition", K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
+    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (T_OP_OR == expr->get_expr_type() ||
             T_OP_AND == expr->get_expr_type()) {//Recursively rewrite each parameter expression containing COLUMN in the OR expression}
     ObOpRawExpr *op = static_cast<ObOpRawExpr *>(expr);
     for (int64_t i = 0; OB_SUCC(ret) && i < op->get_param_count(); ++i) {
       if (OB_ISNULL(op->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("op expr has null param", K(ret));
       } else if (op->get_param_expr(i)->has_flag(CNT_COLUMN)) {
         bool has_trans = false;
         ObRawExpr* new_expr = NULL;
@@ -3343,13 +3881,17 @@ int ObTransformJoinElimination::recursive_trans_equal_join_condition(ObDMLStmt *
                                                   op->get_param_expr(i), 
                                                   has_trans,
                                                   new_expr))) {
+          LOG_WARN("do trans equal join condition failed", K(ret));
         } else if (has_trans && !(OB_ISNULL(new_expr))) {//rewrite succeeded}
           // Replace the new expression with the original parameter
           if (OB_FAIL(op->replace_param_expr(i, new_expr))) {
+            LOG_WARN("replace param expr failed", K(ret), K(op), K(i));
           } else {
+            LOG_TRACE("trans param expr succ", K(op), K(i));
           }
         } else if (OB_FAIL(SMART_CALL(recursive_trans_equal_join_condition(stmt, // rewrite failed, recursively check if its sub-expressions can be rewritten
                                                                   op->get_param_expr(i))))) {
+          LOG_WARN("recursive trans equal join condition failed", K(ret));
         } else {/*do nothing*/}
       } else {/*do nothing*/}
     }
@@ -3371,11 +3913,13 @@ int ObTransformJoinElimination::do_trans_equal_join_condition(ObDMLStmt *stmt,
   ObArray<ObRawExpr *> constraints;
   if (OB_ISNULL(stmt) || OB_ISNULL(expr) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("param has null when do trans equal join condition", K(ret));
   } else if (T_OP_EQ != expr->get_expr_type()) {
     /* do nothing */
   } else if (OB_ISNULL(param1 = expr->get_param_expr(0)) ||
              OB_ISNULL(param2 = expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("op expr has null param", K(ret));
   } else if (!param1->has_flag(IS_COLUMN) || !param2->has_flag(IS_COLUMN) ||
              (param1 != param2 && !param1->same_as(*param2))) {
     /* do nothing */
@@ -3383,9 +3927,12 @@ int ObTransformJoinElimination::do_trans_equal_join_condition(ObDMLStmt *stmt,
                                                         NULLABLE_SCOPE::NS_FROM,
                                                         is_not_null,
                                                         &constraints))) {
+    LOG_WARN("failed to check whether expr is nullable", K(ret));
   } else if (is_not_null) { // create const true
     if (OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, constraints))) {
+      LOG_WARN("failed to add param not null constraint", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_, new_expr, true))) {
+      LOG_WARN("failed to build const bool expr", K(ret));
     } else {
       has_trans = true;
     }
@@ -3408,8 +3955,10 @@ int ObTransformJoinElimination::check_hint_valid(const ObDMLStmt &stmt,
     is_valid = true;
   } else if (OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(query_hint));
   } else {
     is_valid = hint->enable_eliminate_join(query_hint->cs_type_, table);
+    LOG_TRACE("succeed to check eliminate_join hint valid", K(is_valid), K(table), K(*hint));
   }
   return ret;
 }
@@ -3421,13 +3970,16 @@ int ObTransformJoinElimination::construct_eliminated_tables(const ObDMLStmt *stm
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < removed_tables.count(); ++i) {
       if (OB_ISNULL(removed_tables.at(i))) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(construct_eliminated_table(stmt,
                                                     removed_tables.at(i),
                                                     trans_tables))) {
+        LOG_WARN("failed to construct eliminated table", K(ret));
       }
     }
   }
@@ -3442,18 +3994,23 @@ int ObTransformJoinElimination::construct_eliminated_table(const ObDMLStmt *stmt
   ObSEArray<TableItem *, 4> trans_table;
   if (OB_ISNULL(stmt) || OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
   } else if (table->is_joined_table()) {
     const JoinedTable *joined_table = static_cast<const JoinedTable *>(table);
     for (int64_t i = 0; OB_SUCC(ret) && i < joined_table->single_table_ids_.count(); ++i) {
       TableItem *table = stmt->get_table_item_by_id(joined_table->single_table_ids_.at(i));
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(trans_table.push_back(table))) {
+        LOG_WARN("failed to push back trans table", K(ret));
       }
     }
   } else if (OB_FAIL(trans_table.push_back(const_cast<TableItem *>(table)))) {
+    LOG_WARN("failed to push back table", K(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(trans_tables.push_back(trans_table))) {
+    LOG_WARN("failed to push back trans tables", K(ret));
   }
   return ret;
 }

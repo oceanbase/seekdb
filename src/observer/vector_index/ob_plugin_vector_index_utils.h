@@ -15,20 +15,21 @@
  */
 #ifndef OCEANBASE_OBSERVER_OB_MOCK_PLUGIN_VECTOR_INDEX_UTILS_DEFINE_H_
 #define OCEANBASE_OBSERVER_OB_MOCK_PLUGIN_VECTOR_INDEX_UTILS_DEFINE_H_
+#include "share/ob_ls_id.h"
 #include "share/scn.h"
-#include "share/rc/ob_server_runtime.h"
-#include "query/vector/ob_vector_index_adaptor.h"
+#include "share/rc/ob_tenant_base.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 #include "share/schema/ob_schema_struct.h"
 #include "storage/access/ob_table_access_param.h"
 #include "storage/access/ob_dml_param.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "common/rowkey/ob_rowkey.h"
-#include "share/schema/ob_schema_runtime_service.h"
+#include "share/schema/ob_tenant_schema_service.h"
 #include "lib/vector/ob_vector_util.h"
-#include "storage/vector_index/ob_vector_kmeans_ctx.h"
+#include "ob_vector_kmeans_ctx.h"
 #include "observer/vector_index/ob_vector_index_util.h"
-#include "query/vector/ob_vector_index_cache.h"
+#include "observer/vector_index/ob_vector_index_ivf_cache_mgr.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 
 namespace oceanbase
@@ -55,16 +56,16 @@ public:
 class ObPluginVectorIndexUtils
 {
 public:
-  static int get_task_read_snapshot(SCN &read_version);
-  static int refresh_memdata(ObPluginVectorIndexAdaptor *adapter,
+  static int get_task_read_snapshot(ObLSID &ls_id, SCN &read_version);
+  static int refresh_memdata(ObLSID &ls_id,
+                             ObPluginVectorIndexAdaptor *adapter,
                              SCN target_scn,
-                             ObIAllocator &allocator,
-                             const common::ObLobReadOptions &lob_read_options);
-  static int refresh_adp_from_table(ObPluginVectorIndexAdaptor *&adapter,
+                             ObIAllocator &allocator);
+  static int refresh_adp_from_table(ObLSID &ls_id,
+                                    ObPluginVectorIndexAdaptor *&adapter,
                                     const bool create_new_adapter,
                                     SCN target_scn,
-                                    ObIAllocator &allocator,
-                                    const common::ObLobReadOptions &lob_read_options);
+                                    ObIAllocator &allocator);
   static int release_vector_index_adapter(ObPluginVectorIndexAdaptor* &adapter);
   static int release_vector_index_build_helper(ObIvfBuildHelper* &helper);
   static int release_ivf_cache_mgr(ObIvfCacheMgr* &mgr);
@@ -82,11 +83,9 @@ public:
     return obvectorutil::init_vasg_logger(&ObVsagLoggerSingleton::getInstance());
   }
 
-  static void set_leader_flag(bool is_leader);
-  static int get_leader_flag(bool &is_leader);
-  static int query_need_refresh_memdata(
-      ObPluginVectorIndexAdaptor *adapter,
-      const common::ObLobReadOptions &lob_read_options);
+  static void set_ls_leader_flag(const ObLSID &ls_id, const bool is_leader);
+  static int get_ls_leader_flag(const ObLSID &ls_id, bool &is_leader);
+  static int query_need_refresh_memdata(ObPluginVectorIndexAdaptor *adapter, ObLSID &ls_id);
 
   static int add_key_ranges(uint64_t table_id, ObRowkey& rowkey, storage::ObTableScanParam &scan_param);
   static int add_key_ranges(uint64_t table_id, ObRowkey& start_key, ObRowkey& end_key, storage::ObTableScanParam &scan_param);
@@ -135,9 +134,11 @@ public:
                                  int offset = 1);
   static int read_vector_info(ObPluginVectorIndexAdaptor *adapter,
                               ObIAllocator &allocator,
+                              ObLSID &ls_id,
                               SCN target_scn,
                               ObVectorQueryAdaptorResultContext &ada_ctx);
-  static int read_local_tablet(ObPluginVectorIndexAdaptor* adapter,
+  static int read_local_tablet(ObLSID &ls_id,
+                               ObPluginVectorIndexAdaptor* adapter,
                                SCN target_scn,
                                schema::ObIndexType type,
                                ObIAllocator &allocator,
@@ -150,13 +151,13 @@ public:
                                const bool need_ora_scn = false,
                                const SCN *min_scn = nullptr);
 
-  static int erase_ivf_build_helper(const ObIvfHelperKey &key);
+  static int erase_ivf_build_helper(ObLSID ls_id, const ObIvfHelperKey &key);
   static int get_mem_context_detail_info(ObPluginVectorIndexService *service,
-                                         ObIArray<obcall::ObTabletPair> &complete_tablet_ids,
-                                         ObIArray<obcall::ObTabletPair> &partial_tablet_ids,
-                                         ObIArray<obcall::ObTabletPair> &cache_tablet_ids,
+                                         ObIArray<ObLSTabletPair> &complete_tablet_ids,
+                                         ObIArray<ObLSTabletPair> &partial_tablet_ids,
+                                         ObIArray<ObLSTabletPair> &cache_tablet_ids,
                                          char *buf, int64_t buf_len, int64_t &pos);
-  static int get_vector_index_ids(bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array);
+  static int get_tenant_vector_index_ids(bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array);
 
 private:
   static const int EMBEDDED_TABLE_BASE_COLUMN_CNT = 2;
@@ -185,17 +186,18 @@ private:
   static int get_shared_table_rowkey_colum_count(schema::ObIndexType type,
                                                  uint64_t table_id,
                                                  uint32 &col_cnt);
-  static int try_sync_snapshot_memdata(ObPluginVectorIndexAdaptor *&adapter,
+  static int try_sync_snapshot_memdata(ObLSID &ls_id,
+                                       ObPluginVectorIndexAdaptor *&adapter,
                                        const bool create_new_adp,
                                        SCN &target_scn,
-                                       ObIAllocator &allocator,
-                                       const common::ObLobReadOptions &lob_read_options);
-  static int try_sync_vbitmap_memdata(ObPluginVectorIndexAdaptor *adapter,
+                                       ObIAllocator &allocator);
+  static int try_sync_vbitmap_memdata(ObLSID &ls_id,
+                                      ObPluginVectorIndexAdaptor *adapter,
                                       SCN &target_scn,
                                       ObIAllocator &allocator,
                                       ObVectorQueryAdaptorResultContext &ada_ctx);
-  static int fill_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<obcall::ObTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos);
-  static int fill_ivf_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<obcall::ObTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos);
+  static int fill_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<ObLSTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos);
+  static int fill_ivf_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<ObLSTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos);
 
 };
 

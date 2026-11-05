@@ -24,6 +24,7 @@
 #include "sql/plan_cache/ob_plan_cache_value.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
+#include "observer/omt/ob_th_worker.h"
 
 namespace oceanbase
 {
@@ -69,6 +70,7 @@ public:
       pc_alloc_(NULL),
       sql_(),
       normal_parse_const_cnt_(0),
+      min_cluster_version_(0),
       plan_num_(0),
       need_check_gen_tbl_col_(false),
       expired_time_(0)
@@ -126,6 +128,7 @@ private:
   common::ObDList<ObPlanCacheValue> pcv_list_;
   // Number of constants that can be recognized by normal parser, used to verify if the number of constants recognized by faster parse is consistent with that recognized by normal parser.
   int64_t normal_parse_const_cnt_;
+  int64_t min_cluster_version_;
   // Record how many plans are hanging under this pcv_set, with a limit of MAX_PCV_SET_PLAN_NUM
   int64_t plan_num_;
   common::ObSEArray<common::ObString, 4> sql_ids_;

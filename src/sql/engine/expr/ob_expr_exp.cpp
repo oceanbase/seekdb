@@ -45,6 +45,7 @@ int calc_exp_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
+    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else {
@@ -65,6 +66,7 @@ int calc_exp_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
+    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else {
@@ -72,6 +74,7 @@ int calc_exp_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
     number::ObNumber res_nmb;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(arg_nmb.e_power(res_nmb, alloc_guard.get_allocator()))) {
+      LOG_WARN("e_power failed", K(ret));
     } else {
       res_datum.set_number(res_nmb);
     }
@@ -85,8 +88,10 @@ int ObExprExp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
-  {
-    OB_ASSERT(1 == rt_expr.arg_cnt_);
+  if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid arg_cnt_ of expr", K(ret), K(rt_expr));
+  } else {
     ObObjType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
     if (ObDoubleType == arg_res_type) {
       rt_expr.eval_func_ = calc_exp_expr_double;
@@ -94,6 +99,7 @@ int ObExprExp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
       rt_expr.eval_func_ = calc_exp_expr_number;
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("arg type must be double or number", K(ret), K(arg_res_type));
     }
   }
   return ret;

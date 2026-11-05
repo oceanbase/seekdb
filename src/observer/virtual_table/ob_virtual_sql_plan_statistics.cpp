@@ -15,9 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_virtual_sql_plan_statistics.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
-#include "sql/engine/ob_physical_plan.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
 using namespace oceanbase;
@@ -55,7 +54,9 @@ struct ObGetAllOperatorStatOp
         for (int64_t i = 0; i < plan->op_stats_.count() && OB_SUCC(ret); i++) {
           if (OB_FAIL(plan->op_stats_.get_op_stat_accumulation(plan,
                                                                i, stat))) {
+            SERVER_LOG(WARN, "fail to get op stat accumulation", K(ret), K(i));
           } else if (OB_FAIL(key_array_->push_back(stat))) {
+            SERVER_LOG(WARN, "fail to push back plan_id", K(ret));
           }
         } // for end
       }
@@ -84,7 +85,15 @@ void ObVirtualSqlPlanStatistics::reset()
   iter_end_ = false;
 }
 
-int ObVirtualSqlPlanStatistics::get_next_operator_stat_row(bool &is_end)
+int ObVirtualSqlPlanStatistics::inner_open()
+{
+  int ret = OB_SUCCESS;
+  return ret;
+}
+
+
+
+int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(bool &is_end)
 {
   int ret = OB_SUCCESS;
   // !!! Must add ObReqTimeGuard before referencing plan cache resources
@@ -92,9 +101,10 @@ int ObVirtualSqlPlanStatistics::get_next_operator_stat_row(bool &is_end)
   is_end = false;
   sql::ObPlanCache *plan_cache = NULL;
   if (OB_INVALID_ID == static_cast<uint64_t>(operator_stat_array_idx_)) {
-    plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
+    plan_cache = share::g_mp->plan_cache();
     ObGetAllOperatorStatOp operator_stat_op(&operator_stat_array_);
     if (OB_FAIL(plan_cache->foreach_cache_obj(operator_stat_op))) {
+      SERVER_LOG(WARN, "fail to traverse id2stat_map");
     } else {
       operator_stat_array_idx_ = 0;
     }
@@ -112,9 +122,13 @@ int ObVirtualSqlPlanStatistics::get_next_operator_stat_row(bool &is_end)
       ObOperatorStat &opstat = operator_stat_array_.at(operator_stat_array_idx_);
       ++operator_stat_array_idx_;
       if (OB_FAIL(fill_cells(opstat))) {
+        SERVER_LOG(WARN, "fail to fill cells", K(opstat));
       }
     }
   }
+  SERVER_LOG(DEBUG,
+             "add plan from a tenant",
+             K(ret));
   return ret;
 }
 
@@ -195,12 +209,13 @@ int ObVirtualSqlPlanStatistics::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   bool is_sub_end = false;
-  // At most one SERVER_MODULE_SCOPE pass
+  // At most one MOD_SCOPE pass
   if (iter_end_) {
     ret = OB_ITER_END;
   } else {
-    SERVER_MODULE_SCOPE {
-      if (OB_FAIL(get_next_operator_stat_row(is_sub_end))) {
+    MOD_SCOPE {
+      if (OB_FAIL(get_row_from_specified_tenant(is_sub_end))) {
+        SERVER_LOG(WARN, "fail to insert plan by tenant id", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;
@@ -214,3 +229,4 @@ int ObVirtualSqlPlanStatistics::inner_get_next_row(common::ObNewRow *&row)
 }
 } //end namespace observer
 } //end namespace oceanbase
+

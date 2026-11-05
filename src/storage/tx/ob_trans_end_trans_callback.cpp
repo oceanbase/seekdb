@@ -47,6 +47,7 @@ void ObTxCommitCallback::reset()
 int ObTxCommitCallback::link(ObTransCtx *tx_ctx, ObTxCommitCallback *link_next)
 {
   int ret = OB_SUCCESS;
+  TRANS_LOG(DEBUG, "", KPC(tx_ctx), KP(link_next));
   if (linked_) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "already linked", KPC(this), KPC(tx_ctx), KP(link_next));
@@ -73,6 +74,7 @@ int ObTxCommitCallback::callback()
     txs_->handle_tx_commit_result(tx_id_, ret_, commit_version_);
   }
   if (linked_) {
+    TRANS_LOG(DEBUG, "linked commit cb", KPC(tx_ctx_), K(ret_));
     if (OB_ISNULL(tx_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "tx ctx should not be null for linked commit cb", K(ret), KPC(this));
@@ -93,6 +95,7 @@ int ObTxCommitCallbackTask::make(const int64_t task_type,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTransTask::make(task_type))) {
+    TRANS_LOG(WARN, "ObTransTask make error", KR(ret), K(task_type));
   } else {
     cb_ = cb;
     trans_need_wait_wrap_.set_trans_need_wait_wrap(receive_gts_ts,
@@ -109,6 +112,7 @@ int ObTxCommitCallbackTask::callback(bool &has_cb)
     has_cb = false;
   } else {
     if (OB_FAIL(cb_.callback())) {
+      TRANS_LOG(WARN, "callback error", KR(ret), K_(cb));
     }
     has_cb = true;
   }

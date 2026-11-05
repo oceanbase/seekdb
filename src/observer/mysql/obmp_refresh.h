@@ -28,7 +28,7 @@ class ObMPRefresh : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_REFRESH;
-  explicit ObMPRefresh(const share::ObGlobalContext &gctx);
+  explicit ObMPRefresh(const ObGlobalContext &gctx);
   virtual ~ObMPRefresh();
 
 protected:

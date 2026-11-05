@@ -19,7 +19,7 @@
 
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
-#include "sql/session/ob_inner_sql_connection.h"
+#include "observer/ob_inner_sql_connection.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/dml/ob_fk_checker.h"
 
@@ -28,11 +28,12 @@ namespace oceanbase
 namespace sql
 {
 
-enum ObDmlSnapshotOptState
+enum ObDmlGTSOptState
 {
-  WITHOUT_SNAPSHOT_OPT_STATE = 0,
-  USE_RESPONSE_SNAPSHOT_STATE = 1,
-  USE_STMT_SNAPSHOT_STATE = 2,
+  WITHOUT_GTS_OPT_STATE = 0,
+  USE_PARTITION_SNAPSHOT_STATE = 1,
+  WITH_UNIQUE_GLOBAL_INDEX_STATE = 2,
+  GTE_GTS_STATE = 3,
 };
   
 class ForeignKeyHandle
@@ -143,12 +144,13 @@ public:
       uint64_t is_pdml_index_maintain_          : 1; // indicates whether the current dml operator is the operator used for index maintenance in pdml (index maintain)
       uint64_t table_location_uncertain_        : 1; // Target access partition location uncertain, need full table scan
       uint64_t use_dist_das_                    : 1;
+      uint64_t has_instead_of_trigger_          : 1; // abandoned, don't use again
       uint64_t is_pdml_update_split_            : 1; // Mark whether delete, insert op is split from update
       uint64_t check_fk_batch_                  : 1; // mark if the foreign key constraint can be checked in batch    
       uint64_t is_pdml_                         : 1;
       uint64_t need_foreign_key_check_          : 1; // mark if need foreign key check  
       uint64_t need_trigger_fire_               : 1; // mark if need trigger fire
-      uint64_t reserved_                        : 53;
+      uint64_t reserved_                        : 52;
     };
   };
   int64_t das_dop_; // default is 0
@@ -168,6 +170,7 @@ public:
       tablet_loc_(nullptr)
   { }
   virtual ~ObTableModifyOpInput() { }
+  virtual int init(ObTaskInfo &task_info) override { UNUSED(task_info); return common::OB_SUCCESS; }
   virtual void reset()
   {
     table_loc_ = nullptr;
@@ -299,16 +302,17 @@ protected:
   virtual void record_err_for_load_data(int err_ret, int row_num) { UNUSED(err_ret); UNUSED(row_num); }
 public:
   common::ObMySQLProxy *sql_proxy_;
-  common::sqlclient::ObISQLConnectionGuard inner_conn_guard_;
-  ObIInnerSQLConnection *inner_conn_;
-  ObIInnerSQLConnection::SavedValue saved_conn_;
+  observer::ObInnerSQLConnection *inner_conn_;
+  observer::ObInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;
   bool need_close_conn_;
 
   ObObjPrintParams obj_print_params_;
   bool iter_end_;
   ObDMLRtCtx dml_rtctx_;
+  bool is_error_logging_;
   bool execute_single_row_;
+  ObErrLogRtDef err_log_rt_def_;
   ObSEArray<ObExpr *, 4> trigger_clear_exprs_;
   ObDMLModifyRowsList dml_modify_rows_;
   ObSEArray<ObForeignKeyChecker *, 4> fk_checkers_;

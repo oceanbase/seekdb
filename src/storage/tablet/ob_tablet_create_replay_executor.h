@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_TABLET_REPLAY_EXECUTOR
 #define OCEANBASE_STORAGE_OB_TABLET_REPLAY_EXECUTOR
 
-#include "storage/tablet/ob_tablet_replay_executor.h"
+#include "logservice/replayservice/ob_tablet_replay_executor.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -29,7 +29,7 @@ namespace mds
 class BufferCtx;
 }
 
-class ObTabletCreateReplayExecutor final : public ObTabletReplayExecutor
+class ObTabletCreateReplayExecutor final : public logservice::ObTabletReplayExecutor
 {
 public:
   ObTabletCreateReplayExecutor();
@@ -37,6 +37,7 @@ public:
   int init(
       mds::BufferCtx &user_ctx,
       const share::SCN &scn,
+      const bool for_old_mds,
       const ObTabletCreateDeleteMdsUserData &user_data);
 
 protected:
@@ -55,6 +56,7 @@ protected:
 private:
   mds::BufferCtx *user_ctx_;
   share::SCN scn_;
+  bool for_old_mds_;
   const ObTabletCreateDeleteMdsUserData *user_data_;
 };
 } // namespace storage

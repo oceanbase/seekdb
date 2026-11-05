@@ -29,10 +29,13 @@ int UnionFind::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_FAIL(parent_.push_back(i))) {
+        LOG_WARN("failed to push back node", K(ret));
       } else if (OB_FAIL(tree_size_.push_back(1))) {
+        LOG_WARN("failed to push back size", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -49,8 +52,11 @@ int UnionFind::connect(int64_t p, int64_t q)
   int64_t root_q = OB_INVALID_INDEX;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("union find is not initialized", K(ret));
   } else if (OB_FAIL(find_root(p, root_p))) {
+    LOG_WARN("failed to find node", K(ret));
   } else if (OB_FAIL(find_root(q, root_q))) {
+    LOG_WARN("failed to find node", K(ret));
   } else if (root_p != root_q) {
     if (tree_size_.at(root_p) > tree_size_.at(root_q)) {
       parent_.at(root_q) = root_p;
@@ -70,8 +76,10 @@ int UnionFind::find_root(int64_t x, int64_t &root)
   root = OB_INVALID_INDEX;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("union find is not initialized", K(ret));
   } else if (x < 0 || x >= parent_.count()) {
     ret = OB_INVALID_INDEX;
+    LOG_WARN("invalid index", K(ret));
   } else {
     // compress the height of the tree
     while (parent_.at(x) != x) {
@@ -93,8 +101,11 @@ int UnionFind::is_connected(int64_t p,
   int64_t root_q = OB_INVALID_INDEX;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+    LOG_WARN("union find is not initialized", K(ret));
   } else if (OB_FAIL(find_root(p, root_p))) {
+    LOG_WARN("failed to find node", K(ret));
   } else if (OB_FAIL(find_root(q, root_q))) {
+    LOG_WARN("failed to find node", K(ret));
   } else {
     connected = (root_p == root_q);
   }

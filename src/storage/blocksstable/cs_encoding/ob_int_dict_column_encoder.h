@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ENCODING_OB_INT_DICT_COLUMN_ENCODER_H_
+#define OCEANBASE_ENCODING_OB_INT_DICT_COLUMN_ENCODER_H_
+
+#include "ob_dict_column_encoder.h"
+
+namespace oceanbase
+{
+namespace blocksstable
+{
+class ObIntDictColumnEncoder : public ObDictColumnEncoder
+{
+public:
+  static const ObCSColumnHeader::Type type_ = ObCSColumnHeader::INT_DICT;
+  ObIntDictColumnEncoder()
+    : ObDictColumnEncoder(),
+      integer_dict_enc_ctx_(),
+      dict_integer_range_(0),
+      precision_width_size_(-1),
+      is_monotonic_inc_integer_dict_(false)  { }
+  virtual ~ObIntDictColumnEncoder() {}
+
+  int init(
+    const ObColumnCSEncodingCtx &ctx, const int64_t column_index, const int64_t row_count) override;
+  void reuse() override;
+  int store_column(ObMicroBufferWriter &buf_writer) override;
+  int store_column_meta(ObMicroBufferWriter &buf_writer) override;
+  int64_t estimate_store_size() const override;
+  ObCSColumnHeader::Type get_type() const override { return type_; }
+  int get_maximal_encoding_store_size(int64_t &size) const override;
+  int get_string_data_len(uint32_t &len) const override;
+
+  INHERIT_TO_STRING_KV("ObDictColumnEncoder", ObDictColumnEncoder,
+     K_(integer_dict_enc_ctx), K_(dict_integer_range), K_(is_monotonic_inc_integer_dict));
+
+private:
+  int build_integer_dict_encoder_ctx_();
+  int store_dict_(ObMicroBufferWriter &buf_writer);
+  int sort_dict_();
+  ObIntegerStreamEncoderCtx integer_dict_enc_ctx_;
+  uint64_t dict_integer_range_;
+  int64_t  precision_width_size_;
+  bool is_monotonic_inc_integer_dict_;
+
+  
+};
+
+}  // end namespace blocksstable
+}  // end namespace oceanbase
+
+#endif  // OCEANBASE_ENCODING_OB_INT_DICT_COLUMN_ENCODER_H_

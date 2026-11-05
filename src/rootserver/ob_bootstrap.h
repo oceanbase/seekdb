@@ -29,6 +29,7 @@ namespace common
 class ObDataBuffer;
 class ObMySQLProxy;
 class ObAddr;
+class ObServerConfig;
 class ObISQLClient;
 }
 
@@ -42,21 +43,21 @@ namespace schema
 {
 class ObMultiVersionSchemaService;
 class ObTableSchema;
-class ObServerRuntimeSchema;
+class ObTenantSchema;
 class ObSimpleTableSchemaV2;
 }
 }
 
 namespace rootserver
 {
+class ObRsGtsManager;
 struct ObSysStat;
 class ObTableCreator;
-class ObSystemBootstrapService;
 
 class ObBaseBootstrap
 {
 public:
-  ObBaseBootstrap();
+  explicit ObBaseBootstrap(common::ObServerConfig &config);
   virtual ~ObBaseBootstrap() {}
 
 
@@ -64,6 +65,8 @@ protected:
   virtual int check_inner_stat() const;
 public:
   int64_t step_id_;
+protected:
+  common::ObServerConfig &config_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBaseBootstrap);
 };
@@ -71,18 +74,19 @@ private:
 class ObPreBootstrap : public ObBaseBootstrap
 {
 public:
-  ObPreBootstrap();
+  explicit ObPreBootstrap(common::ObServerConfig &config);
   virtual ~ObPreBootstrap() {}
   virtual int prepare_bootstrap(common::ObAddr &master_rs);
 
 private:
-  // wait leader elect time + local DDL service start time
+  // wait leader elect time + root service start time
   static const int64_t WAIT_ELECT_SYS_LEADER_TIMEOUT_US = 30 * 1000 * 1000;
   static const int64_t NOTIFY_RESOURCE_RPC_TIMEOUT = 9 * 1000 * 1000; // 9 second
 
   virtual int check_server_is_empty();
   virtual int create_ls();
 
+  int notify_sys_tenant_config_();
 private:
   volatile bool stop_;
   int64_t begin_ts_;
@@ -104,7 +108,8 @@ private:
     int ret_;
   };
   explicit ObBootstrap(ObDDLService &ddl_service,
-                       ObRuntimeDDLService &runtime_ddl_service);
+                       ObTenantDDLService &tenant_ddl_service,
+                       common::ObServerConfig &config);
 
   virtual ~ObBootstrap() {}
   virtual int execute_bootstrap();
@@ -133,7 +138,7 @@ private:
   virtual int construct_schema(
       const share::schema_create_func func,
       share::schema::ObTableSchema &tschema);
-  virtual int publish_sys_schema(const ObSArray<ObTableSchema> &table_schemas);
+  virtual int broadcast_sys_schema(const ObSArray<ObTableSchema> &table_schemas);
   static int batch_create_schema(
       ObDDLService &ddl_service,
       common::ObIArray<share::schema::ObTableSchema> &table_schemas,
@@ -141,14 +146,18 @@ private:
   virtual int check_is_already_bootstrap(bool &is_bootstrap);
   virtual int init_global_stat();
   virtual int init_system_data();
-  int create_system_runtime();
+  template<typename SCHEMA>
+    int set_replica_options(SCHEMA &schema);
+
+  int init_sys_unit_config(share::ObUnitConfig &unit_config);
+  int create_sys_tenant();
   int set_in_bootstrap();
   int add_sys_table_lob_aux_table(
       uint64_t data_table_id,
       ObIArray<ObTableSchema> &table_schemas);
 private:
   ObDDLService &ddl_service_;
-  ObRuntimeDDLService &runtime_ddl_service_;
+  ObTenantDDLService &tenant_ddl_service_;
   int64_t begin_ts_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBootstrap);

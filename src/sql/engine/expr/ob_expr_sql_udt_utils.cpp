@@ -17,8 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "sql/ob_spi.h"
-#include "sql/pl/ob_pl_resolver.h"
+#include "src/pl/ob_pl_resolver.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -27,91 +26,6 @@ namespace oceanbase
 {
 namespace sql
 {
-
-int ObSqlUdtUtils::convert_result_for_client(ObObj &value, ObResultSet &result)
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator *allocator = NULL;
-  if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-  } else if (OB_ISNULL(allocator)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(convert_result_for_client(value,
-                                               allocator,
-                                               &result.get_session(),
-                                               &result.get_exec_context(),
-                                               result.is_ps_protocol()))) {
-  }
-  return ret;
-}
-
-int ObSqlUdtUtils::convert_result_for_client(ObObj &value,
-                                             ObIAllocator *allocator,
-                                             ObSQLSessionInfo *session_info,
-                                             ObExecContext *exec_context,
-                                             bool is_ps_protocol,
-                                             const ColumnsFieldIArray *fields,
-                                             share::schema::ObSchemaGetterGuard *schema_guard)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(session_info) || OB_ISNULL(allocator)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (!value.is_collection_sql_type() && !value.is_geometry()) {
-    ret = OB_NOT_SUPPORTED;
-  } else if (value.is_geometry()) {
-    // MySQL mode: no-op.
-  } else {
-    if (OB_ISNULL(exec_context)) {
-      ret = OB_BAD_NULL_ERROR;
-    } else if (OB_ISNULL(exec_context->get_physical_plan_ctx())
-               || !exec_context->get_physical_plan_ctx()->is_subschema_ctx_inited()) {
-      if (OB_ISNULL(fields)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(exec_context->get_physical_plan_ctx())
-                 && OB_FAIL(exec_context->create_physical_plan_ctx())) {
-      } else if (OB_FAIL(exec_context->get_physical_plan_ctx()->build_subschema_by_fields(fields, schema_guard))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      const uint16_t subschema_id = value.get_meta().get_subschema_id();
-      ObSubSchemaValue sub_meta;
-      if (OB_NOT_NULL(exec_context->get_physical_plan_ctx())
-          && OB_FAIL(exec_context->get_sqludt_meta_by_subschema_id(subschema_id, sub_meta))) {
-      }
-      if (OB_FAIL(ret)) {
-      } else if (sub_meta.type_ == ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
-        ObSqlCollectionInfo *coll_meta = reinterpret_cast<ObSqlCollectionInfo *>(sub_meta.value_);
-        ObString res_str;
-        if (OB_FAIL(convert_collection_to_string(
-                *exec_context, value, *coll_meta, allocator, res_str))) {
-        } else {
-          value.set_udt_value(res_str.ptr(), res_str.length());
-        }
-      } else {
-        ObSqlUDTMeta udt_meta = *(reinterpret_cast<ObSqlUDTMeta *>(sub_meta.value_));
-        if (!ObObjUDTUtil::ob_is_supported_sql_udt(udt_meta.udt_id_)) {
-          ret = OB_NOT_SUPPORTED;
-        } else if (!is_ps_protocol) {
-          ObSqlUDT sql_udt;
-          sql_udt.set_udt_meta(udt_meta);
-          ObString res_str;
-          if (OB_FAIL(convert_sql_udt_to_string(value, allocator, exec_context, sql_udt, res_str))) {
-          } else {
-            value.set_udt_value(res_str.ptr(), res_str.length());
-          }
-        } else {
-          ObString udt_data = value.get_string();
-          ObObj result;
-          if (OB_FAIL(cast_sql_record_to_pl_record(exec_context, result, udt_data, udt_meta))) {
-          } else {
-            value = result;
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 bool ObSqlUdtNullBitMap::is_valid()
 {
   return (OB_NOT_NULL(bitmap_) && bitmap_len_ > 0);
@@ -125,6 +39,7 @@ int ObSqlUdtNullBitMap::check_bitmap_pos(uint32_t pos, bool &is_set)
   uint32 byte_index = pos % 8;
   if (index >= bitmap_len_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("check udt bitmap overflow", K(ret), K(*this), K(index), K(byte_index), K(pos));
   } else {
     is_set = bitmap_[index] & (1 << byte_index);
   }
@@ -139,6 +54,7 @@ int ObSqlUdtNullBitMap::set_bitmap_pos(uint32_t pos)
   uint32 byte_index = pos % 8;
   if (index >= bitmap_len_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("set udt bitmap overflow", K(ret), K(*this), K(index), K(byte_index), K(pos));
   } else {
     bitmap_[index] |= (1 << byte_index);
   }
@@ -157,6 +73,7 @@ int ObSqlUdtNullBitMap::reset_bitmap_pos(uint32_t pos)
   uint32 byte_index = pos % 8;
   if (index >= bitmap_len_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("reset udt bitmap overflow", K(ret), K(*this), K(index), K(byte_index), K(pos));
   } else {
     bitmap_[index] &= ~(1 << byte_index);
   }
@@ -171,7 +88,9 @@ int ObSqlUdtNullBitMap::assign(ObSqlUdtNullBitMap &src, uint32_t pos, uint32_t b
   for (int i = 0; i < bit_len && OB_SUCC(ret); i++) {
     bool is_set = false;
     if (OB_FAIL(src.check_bitmap_pos(pos + i, is_set))) {
+      LOG_WARN("failed to check nested udt bitmap", K(ret));
     } else if (is_set && OB_FAIL(set_current_bitmap_pos())) {
+      LOG_WARN("failed to set nested udt bitmap", K(ret));
     } else {
       get_pos()++;
     }
@@ -192,6 +111,7 @@ int ObSqlUdtUtils::ob_udt_flattern_pl_extend(const ObObj **flattern_objs,
 {
   int ret = OB_SUCCESS;
   ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support", K(ret));
   return ret;
 }
 
@@ -214,6 +134,7 @@ int ObSqlUdtUtils::ob_udt_calc_sql_varray_length(const ObObj *cur_obj,
 {
   int ret = OB_SUCCESS;
   ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support", K(ret));
   return ret;
 }
 
@@ -224,6 +145,7 @@ int ObSqlUdtUtils::ob_udt_calc_total_len(const ObObj **sorted_objs,
 {
   int ret = OB_SUCCESS;
   ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support", K(ret));
   return ret;
 }
 
@@ -235,6 +157,7 @@ int ObSqlUdtUtils::ob_udt_convert_pl_varray_to_sql_varray(const ObObj *cur_obj,
 {
   int ret = OB_SUCCESS;
   ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support", K(ret));
   return ret;
 }
 
@@ -247,6 +170,7 @@ int ObSqlUdtUtils::ob_udt_convert_sorted_objs_array_to_udf_format(const ObObj **
 {
   int ret = OB_SUCCESS;
   ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support", K(ret));
   return ret;
 }
 
@@ -262,14 +186,12 @@ int ObSqlUdtUtils::convert_sql_udt_to_string(ObObj &sql_udt_obj,
 {
   int ret = OB_SUCCESS;
   ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support", K(ret));
   return ret;
 }
 
-int ObSqlUdtUtils::convert_collection_to_string(ObExecContext &exec_ctx,
-                                                ObObj &coll_obj,
-                                                const ObSqlCollectionInfo &coll_meta,
-                                                common::ObIAllocator *allocator,
-                                                ObString &res_str)
+int ObSqlUdtUtils::convert_collection_to_string(ObObj &coll_obj, const ObSqlCollectionInfo &coll_meta,
+                                                common::ObIAllocator *allocator, ObString &res_str)
 {
   int ret = OB_SUCCESS;
   ObIArrayType *arr_obj = NULL;
@@ -277,14 +199,18 @@ int ObSqlUdtUtils::convert_collection_to_string(ObExecContext &exec_ctx,
   ObStringBuffer buf(allocator);
   ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObCollectionArrayType *arr_type = static_cast<ObCollectionArrayType *>(coll_meta.collection_meta_);
-  if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(exec_ctx, &lob_allocator,
+  if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&lob_allocator,
                                                         ObLongTextType,
                                                         CS_TYPE_BINARY,
                                                         true, coll_data))) {
+    LOG_WARN("fail to get real string data", K(ret), K(coll_data));
   } else if (OB_FAIL(ObArrayTypeObjFactory::construct(*allocator, *arr_type, arr_obj, true))) {
+    LOG_WARN("construct array obj failed", K(ret),  K(coll_meta));
   } else {
     if (OB_FAIL(arr_obj->init(coll_data))) {
+      LOG_WARN("failed to init array", K(ret));
     } else if (OB_FAIL(arr_obj->print(buf))) {
+      LOG_WARN("failed to format array", K(ret));
     } else {
       res_str.assign_ptr(buf.ptr(), buf.length());
     }
@@ -305,6 +231,7 @@ int ObSqlUdtUtils::cast_sql_record_to_pl_record(sql::ObExecContext *exec_ctx,
 {
   int ret = OB_SUCCESS;
   ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support", K(ret));
   return ret;
 }
 
@@ -317,6 +244,7 @@ int ObSqlUdtMetaUtils::generate_udt_meta_from_schema(ObSchemaGetterGuard *schema
 {
   int ret = OB_SUCCESS;
   ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support", K(ret));
   return ret;
 }
 

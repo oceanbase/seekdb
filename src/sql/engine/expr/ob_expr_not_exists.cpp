@@ -62,6 +62,7 @@ int ObExprNotExists::not_exists_eval(
   int ret = OB_SUCCESS;
   bool exists = false;
   if (OB_FAIL(check_exists(expr, ctx, exists))) {
+    LOG_WARN("check exists failed", K(ret));
   } else {
     expr_datum.set_bool(!exists);
   }

@@ -30,27 +30,10 @@ class ObLobLocatorV2;
 struct ObLobTextIterCtx;
 enum ObTextStringIterState : int;
 
-// Opaque request-scoped state owned by the data-plane implementation.
-class ObILobAccessContext
-{
-protected:
-  virtual ~ObILobAccessContext() {}
-};
-
-// Cursor contract shared by the LOB runtime and its Storage adapter.
-class ObILobReadCursor
-{
-public:
-  virtual int get_next_row(ObString &data) = 0;
-  virtual void reset() = 0;
-protected:
-  virtual ~ObILobReadCursor() {}
-};
-
 // dependency-inversion port: complete abstract service surface for the lob-read domain。
 // share layer(ObTextStringIter/ObDeltaLob/ObLobTextIterCtx)reads out-of-row lob through this port,
 // no longer depends directly on storage::ObLobManager / ObLobAccessParam and other storage types。
-// The storage layer (ObLobManager) implements this port and the server module provider injects it.
+// storage layer(ObLobManager)implements this port, injected through MTL(ObILobReadService*)。
 //
 // constraint: all inputs/outputs are share-level types(ObLobTextIterCtx&/ObString/ObIAllocator*/
 //       ObObjType/ObCollationType/ObTextStringIterState&), no storage types appear;
@@ -75,7 +58,7 @@ public:
                                       ObIAllocator *allocator,
                                       ObString &data_str) = 0;
 
-  // Read a character prefix into ctx.
+  // read prefix data from the out-of-row lob(prefix_char_len characters), writes the result to ctx.buff_ / ctx.content_byte_len_。
   virtual int get_outrow_prefix_data(ObLobTextIterCtx &ctx,
                                      ObCollationType cs_type,
                                      bool has_lob_header,
@@ -83,7 +66,7 @@ public:
                                      ObIAllocator *tmp_alloc,
                                      uint32_t prefix_char_len) = 0;
 
-  // Start an out-of-row query and return its first block.
+  // start the out-of-row lob query iter and fetch the first chunk, writes the result to ctx and str, advances state。
   virtual int get_first_block(ObLobTextIterCtx &ctx,
                               ObCollationType cs_type,
                               bool has_lob_header,
@@ -92,7 +75,7 @@ public:
                               ObString &str,
                               ObTextStringIterState &state) = 0;
 
-  // Return the next block from an active query.
+  // fetch the next out-of-row lob chunk(query iter is already ready, reserve has already been done on the share side), writes the result to ctx and str, advances state。
   virtual int get_next_block_inner(ObLobTextIterCtx &ctx,
                                    ObCollationType cs_type,
                                    bool has_lob_header,
@@ -100,13 +83,13 @@ public:
                                    ObString &str,
                                    ObTextStringIterState &state) = 0;
 
-  // Return the character length of an out-of-row value.
+  // get the character length of the out-of-row lob。
   virtual int get_outrow_char_len(ObLobTextIterCtx &ctx,
                                   ObCollationType cs_type,
                                   ObIAllocator *tmp_alloc,
                                   int64_t &char_length) = 0;
 
-  // Release the opaque query state held by ctx.
+  // release the storage query iter held by ctx(cleaned during destruction/reuse, share side does not hold a storage complete type)。
   virtual void free_lob_query_iter(ObLobTextIterCtx &ctx) = 0;
 };
 

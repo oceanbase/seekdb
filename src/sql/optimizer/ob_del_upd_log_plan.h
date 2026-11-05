@@ -193,7 +193,8 @@ public:
 
   int prepare_table_dml_info_basic(const ObDmlTableInfo& table_info,
                                    IndexDMLInfo*& table_dml_info,
-                                   ObIArray<IndexDMLInfo*> &index_dml_infos);
+                                   ObIArray<IndexDMLInfo*> &index_dml_infos,
+                                   const bool has_tg);
   virtual int prepare_table_dml_info_special(const ObDmlTableInfo& table_info,
                                              IndexDMLInfo* table_dml_info,
                                              ObIArray<IndexDMLInfo*> &index_dml_infos,
@@ -257,10 +258,12 @@ protected:
   int extract_assignment_subqueries(ObRawExpr *expr,
                                     ObIArray<ObRawExpr*> &normal_query_refs,
                                     ObIArray<ObRawExpr*> &alias_query_refs);
+  int check_use_direct_load();
   int check_basic_sharding_for_dml_stmt(ObShardingInfo &target_sharding,
                                         ObLogicalOperator &child,
                                         bool &is_basic);
 private:
+  int get_parallel_info_from_direct_load(int64_t &dml_parallel) const;
   int check_dml_table_write_dependency(const uint64_t table_id, const ObTableSchema &index_schema) const;
   DISALLOW_COPY_AND_ASSIGN(ObDelUpdLogPlan);
 

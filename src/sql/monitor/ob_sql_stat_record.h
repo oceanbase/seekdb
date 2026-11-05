@@ -27,19 +27,8 @@
 #define OB_MAX_SQL_STAT_QUERY_SQL_LEN 1024
 namespace oceanbase
 {
-namespace common
-{
-class ObDiagnoseSessionInfo;
-}
-namespace query
-{
-class ObIQueryRuntimeEnvironment;
-class ObIPlanCacheAccessService;
-}
 namespace sql
 {
-
-class ObPlanCache;
 
 struct ObSqlStatRecordKey : public sql::ObILibCacheKey
 {
@@ -132,27 +121,26 @@ public:
   ~ObExecutingSqlStatRecord() = default;
   void reset();
   int assign(const ObExecutingSqlStatRecord& other);
-  int record_sqlstat_start_value(
-      query::ObIQueryRuntimeEnvironment &runtime_environment);
+  int record_sqlstat_start_value();
   /// WARN: current sression's di address can be changed by time. So please always using
   /// get_local_diagnose_info() to get latest di paramter.
-  int record_sqlstat_end_value(
-      query::ObIQueryRuntimeEnvironment &runtime_environment,
-      common::ObDiagnoseSessionInfo* di = nullptr);
+  int record_sqlstat_end_value(ObDiagnoseSessionInfo* di = nullptr);
   // WARNNIGN!!! 
   // It is forbidden to use the cur_plan_ pointer on sql_ctx_, 
   // which can be modified and risks CORE. It is only safe to use the result_set pointer.
   int move_to_sqlstat_cache(ObSQLSessionInfo &session_info,
-                            ObPlanCache &plan_cache,
-                            query::ObIPlanCacheAccessService &access_service,
                             ObString &cur_sql,
-                            const ObPhysicalPlan *plan = nullptr);
+                            const ObPhysicalPlan *plan = nullptr,
+                            const bool is_px_remote_exec = false);
+  int move_to_sqlstat_cache(ObSqlStatRecordKey& key); // just for das remote exec
 
   bool get_is_in_retry() const { return is_in_retry_; }
   void set_is_in_retry(const bool is_in_retry) { is_in_retry_ = is_in_retry; }
   void set_rows_processed(int64_t rows_processed) { rows_processed_end_ = rows_processed; } 
   void inc_fetch_cnt() { fetches_end_ ++; }
   void set_partition_cnt(int64_t partition_cnt) { partition_end_ = partition_cnt; } 
+  bool is_route_miss() const { return is_route_miss_; }
+  void set_is_route_miss(const bool is_route_miss) { is_route_miss_ = is_route_miss; }
   bool is_plan_cache_hit() const { return is_plan_cache_hit_;}
   void set_is_plan_cache_hit(const bool is_plan_cache_hit) { is_plan_cache_hit_ = is_plan_cache_hit; }
 #define DEF_SQL_STAT_ITEM_DELTA_FUNC(def_name)                 \
@@ -181,6 +169,7 @@ public:
 #undef DEF_SQL_STAT_ITEM_DELTA_FUNC
 public:
   bool is_in_retry_;
+  bool is_route_miss_;
   bool is_plan_cache_hit_;
 #define DEF_SQL_STAT_ITEM(def_name)           \
   int64_t def_name##_start_;                  \
@@ -234,6 +223,7 @@ public:
     DEF_SQL_STAT_ITEM_CONSTRUCT(retry);
     DEF_SQL_STAT_ITEM_CONSTRUCT(partition);
     DEF_SQL_STAT_ITEM_CONSTRUCT(nested_sql);
+    DEF_SQL_STAT_ITEM_CONSTRUCT(route_miss);
     DEF_SQL_STAT_ITEM_CONSTRUCT(plan_cache_hit);
 #undef DEF_SQL_STAT_ITEM_CONSTRUCT
   }
@@ -275,6 +265,7 @@ public:
     DEF_SQL_STAT_ITEM_DELTA_FUNC(retry);
     DEF_SQL_STAT_ITEM_DELTA_FUNC(partition);
     DEF_SQL_STAT_ITEM_DELTA_FUNC(nested_sql);
+    DEF_SQL_STAT_ITEM_DELTA_FUNC(route_miss);
     DEF_SQL_STAT_ITEM_DELTA_FUNC(plan_cache_hit);
   #undef DEF_SQL_STAT_ITEM_DELTA_FUNC
   
@@ -304,6 +295,7 @@ private:
     DEF_SQL_STAT_ITEM(retry);
     DEF_SQL_STAT_ITEM(partition);
     DEF_SQL_STAT_ITEM(nested_sql);
+    DEF_SQL_STAT_ITEM(route_miss);
     DEF_SQL_STAT_ITEM(plan_cache_hit);
   #undef DEF_SQL_STAT_ITEM
 };
@@ -345,16 +337,8 @@ private:
 class ObSqlStatRecordUtil
 {
 public:
-  static int get_cache_obj(
-      ObPlanCache &plan_cache,
-      query::ObIPlanCacheAccessService &access_service,
-      ObSqlStatRecordKey &key,
-      ObCacheObjGuard &guard);
-  static int create_cache_obj(
-      ObPlanCache &plan_cache,
-      query::ObIPlanCacheAccessService &access_service,
-      ObSqlStatRecordKey &key,
-      ObCacheObjGuard &guard);
+  static int get_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard& guard);
+  static int create_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard& guard);
   int add_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard& guard);
 };
 } // end sql

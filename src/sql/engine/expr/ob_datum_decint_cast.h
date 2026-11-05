@@ -51,6 +51,7 @@ struct BatchAccuracyChecker<ObDecimalIntTC>
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, out_acc, out_type))) {
+      LOG_WARN("get accuracy failed", K(ret));
     } else {
       ObDatumVector result_dv = expr.locate_expr_datumvector(ctx);
       ObDecimalIntBuilder res_val;
@@ -63,6 +64,7 @@ struct BatchAccuracyChecker<ObDecimalIntTC>
                      expr.extra_, result_dv.at(i)->get_decimal_int(),
                      result_dv.at(i)->get_int_bytes(), out_acc.get_precision(), out_acc.get_scale(),
                      res_val, warn))) {
+          LOG_WARN("check decimal int accuracy failed", K(ret));
         } else {
           result_dv.at(i)->set_decimal_int(res_val.get_decimal_int(),
                                            res_val.get_int_bytes());
@@ -84,6 +86,7 @@ struct BatchAccuracyChecker<ObNumberTC>
     ObAccuracy out_acc;
     ObObjType out_type;
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, out_acc, out_type))) {
+      LOG_WARN("get accuracy failed", K(ret));
     } else {
       ObDatumVector result_dv = expr.locate_expr_datumvector(ctx);
       for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
@@ -95,6 +98,7 @@ struct BatchAccuracyChecker<ObNumberTC>
           ObDatum in_datum = *result_dv.at(i);
           if (OB_FAIL(number_range_check_v2(expr.extra_, out_acc, out_type, in_datum,
                                             *result_dv.at(i), warning))) {
+            LOG_WARN("number range check failed", K(ret));
           }
         }
       }
@@ -114,16 +118,16 @@ int ObBatchCast::explicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
   batch_func_ batch_cast = implicit_batch_cast<in_tc, out_tc>;
   batch_func_ check_accuracy = BatchAccuracyChecker<out_tc>::check;
   if (OB_FAIL(batch_cast(expr, ctx, skip, batch_size))) {
+    LOG_WARN("batch cast failed", K(ret));
   } else if (OB_FAIL(check_accuracy(expr, ctx, skip, batch_size))) {
+    LOG_WARN("batch accuracy check failed", K(ret));
   }
   return ret;
 }
 
-template <typename in_type, typename out_type>
-OB_NOINLINE void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
-                                      unsigned scale, const bool is_scale_up,
-                                      int64_t batch_size, const ObBitVector &skip,
-                                      ObBitVector &eval_flags)
+template <typename in_type, typename out_type, bool is_scale_up>
+void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv, unsigned scale,
+                          int64_t batch_size, const ObBitVector &skip, ObBitVector &eval_flags)
 {
   static_assert(wide::IsIntegral<out_type>::value, "");
   static_assert(wide::IsIntegral<in_type>::value, "");
@@ -210,55 +214,10 @@ OB_NOINLINE void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
   }
 }
 
-template <typename int_type>
-OB_NOINLINE int batch_implicit_integer_scale(const ObExpr &expr, ObDatumVector &arg_dv,
-                                             ObDatumVector &result_dv, const ObScale in_scale,
-                                             const ObPrecision in_prec, const ObScale out_scale,
-                                             const ObPrecision out_prec, const int64_t batch_size,
-                                             const ObBitVector &skip, ObBitVector &eval_flags)
-{
-  // Integer expressions can have a smaller result precision than their type's
-  // maximum precision. Use scalar conversion semantics for these narrowing casts.
-  int ret = OB_SUCCESS;
-  const int32_t out_width = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
-  for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
-    if (skip.at(i) || eval_flags.at(i)) {
-      continue;
-    } else if (arg_dv.at(i)->is_null()) {
-      result_dv.at(i)->set_null();
-    } else {
-      const int_type in_val = *reinterpret_cast<const int_type *>(
-          arg_dv.at(i)->get_decimal_int());
-      ObDecimalIntBuilder in_builder;
-      ObDecimalIntBuilder res_builder;
-      ObDecimalInt *decint = nullptr;
-      int32_t int_bytes = 0;
-      ObPrecision value_prec = in_prec;
-      const int_type decint64_max = get_scale_factor<int_type>(MAX_PRECISION_DECIMAL_INT_64);
-      if (value_prec > MAX_PRECISION_DECIMAL_INT_64 && in_val < decint64_max) {
-        value_prec = MAX_PRECISION_DECIMAL_INT_64;
-      }
-      if (OB_FAIL(wide::from_integer(in_val, in_builder, decint, int_bytes, value_prec))) {
-      } else if (OB_FAIL(ObDatumCast::common_scale_decimalint(
-                   decint, int_bytes, in_scale, out_scale, out_prec, expr.extra_, res_builder))) {
-      } else {
-        OB_ASSERT(res_builder.get_int_bytes() == out_width);
-        result_dv.at(i)->set_decimal_int(res_builder.get_decimal_int(),
-                                         res_builder.get_int_bytes());
-      }
-    }
-    if (OB_SUCC(ret)) {
-      eval_flags.set(i);
-    }
-  }
-  return ret;
-}
-
-template <typename in_type, typename out_type>
-OB_NOINLINE void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
-                                      unsigned scale, const bool is_scale_up,
-                                      ObPrecision out_prec, int64_t batch_size,
-                                      const ObBitVector &skip, ObBitVector &eval_flags)
+template <typename in_type, typename out_type, bool is_scale_up>
+void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv, unsigned scale,
+                          ObPrecision out_prec, int64_t batch_size, const ObBitVector &skip,
+                          ObBitVector &eval_flags)
 {
   static_assert(wide::IsIntegral<in_type>::value, "");
   static_assert(wide::IsIntegral<out_type>::value, "");
@@ -356,12 +315,10 @@ OB_NOINLINE void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
   }
 }
 
-template <typename in_type, typename out_type>
-OB_NOINLINE void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
-                                   const int64_t batch_size, const ObBitVector &skip,
-                                   ObBitVector &eval_flags, unsigned scale,
-                                   const bool is_scale_up, const ObScale out_prec,
-                                   const ObCastMode cast_mode)
+template <typename in_type, typename out_type, bool is_scale_up>
+void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv, const int64_t batch_size,
+                       const ObBitVector &skip, ObBitVector &eval_flags, unsigned scale,
+                       const ObScale out_prec, const ObCastMode cast_mode)
 {
   static_assert(wide::IsIntegral<in_type>::value, "");
   static_assert(wide::IsIntegral<out_type>::value, "");
@@ -522,11 +479,14 @@ static void logging_truncated_decint(const ObExpr &expr, ObEvalCtx &ctx, int64_t
   }
 }
 
-template <typename in_type, typename out_type>
+template <typename in_type, typename out_type, bool is_up_scale, bool is_explicit>
+
 static int decimalint_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                       const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("fast batch cast to decimal int", K(sizeof(in_type)), K(sizeof(out_type)),
+            K(batch_size));
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
@@ -538,28 +498,30 @@ static int decimalint_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const 
         || eval_flags.accumulate_bit_cnt(batch_size) == batch_size) {
       // do nothing
     } else {
-      const bool is_scale_up = in_scale <= out_scale;
-      const unsigned scale = static_cast<unsigned>(
-          is_scale_up ? out_scale - in_scale : in_scale - out_scale);
-      batch_implicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,
-                                              batch_size, skip, eval_flags);
-      if (!is_scale_up) {
+      if (is_up_scale) {
+        batch_implicit_scale<in_type, out_type, true>(arg_dv, result_dv, out_scale - in_scale,
+                                                      batch_size, skip, eval_flags);
+      } else {
+        batch_implicit_scale<in_type, out_type, false>(arg_dv, result_dv, in_scale - out_scale,
+                                                       batch_size, skip, eval_flags);
         logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);
       }
     }
   }
-  if (CM_IS_EXPLICIT_CAST(expr.extra_) && OB_SUCC(ret)) {
+  if (is_explicit && OB_SUCC(ret)) {
     if (OB_FAIL(BatchAccuracyChecker<ObDecimalIntTC>::check(expr, ctx, skip, batch_size))) {
+      LOG_WARN("batch check accuracy failed", K(ret));
     }
   }
   return ret;
 }
 
-template <typename in_type, typename out_type, bool is_up_scale>
+template <typename in_type, typename out_type, bool is_up_scale, bool is_explicit>
 static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   EVAL_ARG()
   {
+    LOG_DEBUG("fast casting routing from decimalint to decimalint");
     ObDecimalIntBuilder res_val;
     ObScale out_scale = expr.datum_meta_.scale_;
     ObScale in_scale = expr.args_[0]->datum_meta_.scale_;
@@ -578,7 +540,7 @@ static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
       }
     }
   }
-  if (CM_IS_EXPLICIT_CAST(expr.extra_) && !res_datum.is_null() && OB_SUCC(ret)) {
+  if (is_explicit && !res_datum.is_null() && OB_SUCC(ret)) {
     ObPrecision out_prec = expr.datum_meta_.precision_;
     ObScale out_scale = expr.datum_meta_.scale_;
     ObDecimalIntBuilder res_val;
@@ -586,6 +548,7 @@ static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
     if (OB_FAIL(check_decimalint_accuracy(expr.extra_, res_datum.get_decimal_int(),
                                           res_datum.get_int_bytes(), out_prec, out_scale, res_val,
                                           warning))) {
+      LOG_WARN("check decimal int accuracy failed", K(ret));
     } else {
       res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }
@@ -593,11 +556,13 @@ static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
   return ret;
 }
 
-template <typename out_type, typename int_type>
+template <typename in_type, typename out_type, typename int_type, bool is_explicit>
 static int int_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
+  LOG_DEBUG("fsat batch cast from int to decimal int", K(ret), K(sizeof(in_type)),
+            K(sizeof(out_type)), K(batch_size));
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
@@ -637,15 +602,17 @@ static int int_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVe
       }
     }
   }
-  if (CM_IS_EXPLICIT_CAST(expr.extra_) && OB_SUCC(ret)) {
+  if (is_explicit && OB_SUCC(ret)) {
     if (OB_FAIL(BatchAccuracyChecker<ObDecimalIntTC>::check(expr, ctx, skip, batch_size))) {
+      LOG_WARN("batch accuracy check failed", K(ret));
     }
   }
   return ret;
 }
-template <typename in_type, typename out_type, typename int_type>
+template <typename in_type, typename out_type, typename int_type, bool is_explicit>
 static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
+  LOG_DEBUG("fast casting routine from int to decimal int");
   EVAL_ARG()
   {
     ObScale out_scale = expr.datum_meta_.scale_;
@@ -655,7 +622,7 @@ static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     res = res * rhs;
     res_datum.set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&res), sizeof(out_type));
   }
-  if (CM_IS_EXPLICIT_CAST(expr.extra_) && !res_datum.is_null() && OB_SUCC(ret)) {
+  if (is_explicit && !res_datum.is_null() && OB_SUCC(ret)) {
     ObPrecision out_prec = expr.datum_meta_.precision_;
     ObScale out_scale = expr.datum_meta_.scale_;
     ObDecimalIntBuilder res_val;
@@ -663,6 +630,7 @@ static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     if (OB_FAIL(check_decimalint_accuracy(expr.extra_, res_datum.get_decimal_int(),
                                           res_datum.get_int_bytes(), out_prec, out_scale, res_val,
                                           warning))) {
+      LOG_WARN("check decimal int accuracy failed", K(ret));
     } else {
       res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }
@@ -682,34 +650,32 @@ int ObBatchCast::implicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
 }
 
 #define DO_EXPLICIT_CAST(in_type, out_type)                                                        \
-  do {                                                                                             \
-    const bool is_scale_up = in_scale <= out_scale;                                                \
-    const unsigned scale = static_cast<unsigned>(                                                  \
-        is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
-    batch_explicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,                 \
-                                             out_prec, batch_size, skip, eval_flags);              \
-    if (!is_scale_up) {                                                                            \
-      logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);         \
-    }                                                                                              \
-  } while (false)
+  if (in_scale <= out_scale) {                                                                     \
+    batch_explicit_scale<in_type, out_type, true>(arg_dv, result_dv, out_scale - in_scale,         \
+                                                  out_prec, batch_size, skip, eval_flags);         \
+  } else {                                                                                         \
+    batch_explicit_scale<in_type, out_type, false>(arg_dv, result_dv, in_scale - out_scale,        \
+                                                   out_prec, batch_size, skip, eval_flags);        \
+    logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);           \
+  }
 
 #define DO_IMPLICIT_CAST(in_type, out_type)                                                        \
-  do {                                                                                             \
-    const bool is_scale_up = in_scale <= out_scale;                                                \
-    const unsigned scale = static_cast<unsigned>(                                                  \
-        is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
-    batch_implicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,                 \
-                                             batch_size, skip, eval_flags);                        \
-  } while (false)
+  if (in_scale <= out_scale) {                                                                     \
+    batch_implicit_scale<in_type, out_type, true>(arg_dv, result_dv, out_scale - in_scale,         \
+                                                  batch_size, skip, eval_flags);                   \
+  } else {                                                                                         \
+    batch_implicit_scale<in_type, out_type, false>(arg_dv, result_dv, in_scale - out_scale,        \
+                                                   batch_size, skip, eval_flags);                  \
+  }
 
 #define DO_CONST_CAST(in_type, out_type)                                                           \
-  do {                                                                                             \
-    const bool is_scale_up = in_scale <= out_scale;                                                \
-    const unsigned scale = static_cast<unsigned>(                                                  \
-        is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
-    batch_const_scale<in_type, out_type>(arg_dv, result_dv, batch_size, skip, eval_flags,          \
-                                         scale, is_scale_up, out_prec, expr.extra_);                \
-  } while (false)
+  if (in_scale <= out_scale) {                                                                     \
+    batch_const_scale<in_type, out_type, true>(arg_dv, result_dv, batch_size, skip, eval_flags,    \
+                                               out_scale - in_scale, out_prec, expr.extra_);       \
+  } else {                                                                                         \
+    batch_const_scale<in_type, out_type, false>(arg_dv, result_dv, batch_size, skip, eval_flags,   \
+                                                in_scale - out_scale, out_prec, expr.extra_);      \
+  }
 
 DEF_BATCH_CAST_FUNC(ObDecimalIntTC, ObDecimalIntTC)
 {
@@ -717,6 +683,7 @@ DEF_BATCH_CAST_FUNC(ObDecimalIntTC, ObDecimalIntTC)
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
+    LOG_DEBUG("common batch scale for decimal int to decimal int", K(batch_size));
     int64_t skip_sz = skip.accumulate_bit_cnt(batch_size);
     int64_t eval_sz = eval_flags.accumulate_bit_cnt(batch_size);
     if (skip_sz == batch_size || eval_sz == batch_size) {
@@ -776,6 +743,7 @@ DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
   }
 
   int ret = OB_SUCCESS;
+  LOG_DEBUG("common batch scale for int to decimal int", K(batch_size));
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
@@ -785,7 +753,7 @@ DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
     } else {
       ObScale in_scale = 0;
       ObScale in_prec =
-        ObAccuracy::MAX_ACCURACY2[0][expr.args_[0]->datum_meta_.type_]
+        ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][expr.args_[0]->datum_meta_.type_]
           .get_precision();
       if (in_prec > MAX_PRECISION_DECIMAL_INT_64) { in_prec = MAX_PRECISION_DECIMAL_INT_64; }
       ObScale out_scale = expr.datum_meta_.scale_;
@@ -797,12 +765,8 @@ DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
           DISPATCH_INOUT_WIDTH_TASK(in_width, out_width, DO_CONST_CAST);
         } else if (CM_IS_EXPLICIT_CAST(expr.extra_) || CM_IS_COLUMN_CONVERT(expr.extra_)) {
           DISPATCH_INOUT_WIDTH_TASK(in_width, out_width, DO_EXPLICIT_CAST);
-        } else if (out_width < in_width) {
-          OZ(batch_implicit_integer_scale<int64_t>(expr, arg_dv, result_dv, in_scale, in_prec,
-                                                    out_scale, out_prec, batch_size, skip,
-                                                    eval_flags));
         } else {
-          OB_ASSERT(out_width >= in_width);
+          OB_ASSERT(out_width >= in_width || (in_prec > 0 && in_prec <= out_prec));
           DISPATCH_INOUT_WIDTH_TASK(in_width, out_width, DO_IMPLICIT_CAST);
         }
       } else {
@@ -835,6 +799,7 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
 #define EXPLICIT_CAST_UINT(int_type) DO_EXPLICIT_CAST(uint64_t, int_type)
 
   int ret = OB_SUCCESS;
+  LOG_DEBUG("common batch scale for uint to decimal int", K(batch_size));
   EVAL_BATCH_ARGS()
   {
     DEF_BATCH_CAST_PARAMS;
@@ -844,7 +809,7 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
     } else {
       ObScale in_scale = 0;
       ObScale in_prec =
-        ObAccuracy::MAX_ACCURACY2[0][expr.args_[0]->datum_meta_.type_]
+        ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][expr.args_[0]->datum_meta_.type_]
           .get_precision();
       ObScale out_scale = expr.datum_meta_.scale_;
       ObPrecision out_prec = expr.datum_meta_.precision_;
@@ -855,12 +820,8 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
           DISPATCH_WIDTH_TASK(out_width, CONST_CAST_UINT);
         } else if (CM_IS_EXPLICIT_CAST(expr.extra_) || CM_IS_COLUMN_CONVERT(expr.extra_)) {
           DISPATCH_WIDTH_TASK(out_width, EXPLICIT_CAST_UINT);
-        } else if (out_width < in_width) {
-          OZ(batch_implicit_integer_scale<uint64_t>(expr, arg_dv, result_dv, in_scale, in_prec,
-                                                     out_scale, out_prec, batch_size, skip,
-                                                     eval_flags));
         } else {
-          OB_ASSERT(out_width >= in_width);
+          OB_ASSERT(out_width >= in_width || (in_prec > 0 && in_prec <= out_prec));
           DISPATCH_WIDTH_TASK(out_width, IMPLICIT_CAST_UINT);
         }
       } else {
@@ -958,15 +919,31 @@ void ObDatumCast::get_decint_cast(ObObjTypeClass in_tc, ObPrecision in_prec, ObS
 {
 #define SET_FUNC_PTR_DECINT(in_type, out_type)                                                     \
   if (in_scale <= out_scale) {                                                                     \
-    cast_func = decimalint_fast_cast<in_type, out_type, true>;                                     \
+    if (is_explicit) {                                                                             \
+      cast_func = decimalint_fast_cast<in_type, out_type, true, true>;                             \
+      batch_cast_func = decimalint_fast_batch_cast<in_type, out_type, true, true>;                 \
+    } else {                                                                                       \
+      cast_func = decimalint_fast_cast<in_type, out_type, true, false>;                            \
+      batch_cast_func = decimalint_fast_batch_cast<in_type, out_type, true, false>;                \
+    }                                                                                              \
   } else {                                                                                         \
-    cast_func = decimalint_fast_cast<in_type, out_type, false>;                                    \
-  }                                                                                                \
-  batch_cast_func = decimalint_fast_batch_cast<in_type, out_type>
+    if (is_explicit) {                                                                             \
+      cast_func = decimalint_fast_cast<in_type, out_type, false, true>;                            \
+      batch_cast_func = decimalint_fast_batch_cast<in_type, out_type, false, true>;                \
+    } else {                                                                                       \
+      cast_func = decimalint_fast_cast<in_type, out_type, false, false>;                           \
+      batch_cast_func = decimalint_fast_batch_cast<in_type, out_type, false, false>;               \
+    }                                                                                              \
+  }
 
 #define SET_FUNC_PTR_INT(int_type, in_type, out_type)                                              \
-  cast_func = int_fast_cast<in_type, out_type, int_type>;                                          \
-  batch_cast_func = int_fast_batch_cast<out_type, int_type>
+  if (is_explicit) {                                                                               \
+    cast_func = int_fast_cast<in_type, out_type, int_type, true>;                                  \
+    batch_cast_func = int_fast_batch_cast<in_type, out_type, int_type, true>;                      \
+  } else {                                                                                         \
+    cast_func = int_fast_cast<in_type, out_type, int_type, false>;                                 \
+    batch_cast_func = int_fast_batch_cast<in_type, out_type, int_type, false>;                     \
+  }
 
 #define SET_FUNC_PTR(in_type, out_type)                                                            \
   if (in_tc == ObIntTC) {                                                                          \
@@ -985,8 +962,6 @@ void ObDatumCast::get_decint_cast(ObObjTypeClass in_tc, ObPrecision in_prec, ObS
 
   int32_t in_type = get_decimalint_type(in_prec);
   int32_t out_type = get_decimalint_type(out_prec);
-  // Keep the selector interface stable; evaluators recover this flag from serialized expr.extra_.
-  UNUSED(is_explicit);
   batch_cast_func = nullptr;
   cast_func = nullptr;
   switch (in_type) {
@@ -1035,100 +1010,245 @@ void ObDatumCast::get_decint_cast(ObObjTypeClass in_tc, ObPrecision in_prec, ObS
   OB_ASSERT(cast_func != nullptr);
 #undef CASE_DEF
 #undef SET_FUNC_PTR
-#undef SET_FUNC_PTR_INT
-#undef SET_FUNC_PTR_DECINT
+#undef SET_FUNC_PTR_TC
 }
 
 // ==================================================================================
 // register functions
 static ObExpr::EvalFunc g_decimalint_cast_functions[] = {
-  int_fast_cast<int32_t, int32_t, int64_t>,
-  int_fast_cast<int32_t, int64_t, int64_t>,
-  int_fast_cast<int32_t, int128_t, int64_t>,
-  int_fast_cast<int32_t, int256_t, int64_t>,
-  int_fast_cast<int32_t, int512_t, int64_t>,
-  int_fast_cast<int64_t, int64_t, int64_t>,
-  int_fast_cast<int64_t, int128_t, int64_t>,
-  int_fast_cast<int64_t, int256_t, int64_t>,
-  int_fast_cast<int64_t, int512_t, int64_t>,
-  int_fast_cast<int128_t, int128_t, int64_t>,
-  int_fast_cast<int128_t, int256_t, int64_t>,
-  int_fast_cast<int128_t, int512_t, int64_t>,
+  int_fast_cast<int32_t, int32_t, int64_t, true>,
+  int_fast_cast<int32_t, int64_t, int64_t, true>,
+  int_fast_cast<int32_t, int128_t, int64_t, true>,
+  int_fast_cast<int32_t, int256_t, int64_t, true>,
+  int_fast_cast<int32_t, int512_t, int64_t, true>,
+  int_fast_cast<int64_t, int64_t, int64_t, true>,
+  int_fast_cast<int64_t, int128_t, int64_t, true>,
+  int_fast_cast<int64_t, int256_t, int64_t, true>,
+  int_fast_cast<int64_t, int512_t, int64_t, true>,
+  int_fast_cast<int128_t, int128_t, int64_t, true>,
+  int_fast_cast<int128_t, int256_t, int64_t, true>,
+  int_fast_cast<int128_t, int512_t, int64_t, true>,
 
-  int_fast_cast<int32_t, int32_t, uint64_t>,
-  int_fast_cast<int32_t, int64_t, uint64_t>,
-  int_fast_cast<int32_t, int128_t, uint64_t>,
-  int_fast_cast<int32_t, int256_t, uint64_t>,
-  int_fast_cast<int32_t, int512_t, uint64_t>,
-  int_fast_cast<int64_t, int64_t, uint64_t>,
-  int_fast_cast<int64_t, int128_t, uint64_t>,
-  int_fast_cast<int64_t, int256_t, uint64_t>,
-  int_fast_cast<int64_t, int512_t, uint64_t>,
-  int_fast_cast<int128_t, int128_t, uint64_t>,
-  int_fast_cast<int128_t, int256_t, uint64_t>,
-  int_fast_cast<int128_t, int512_t, uint64_t>,
+  int_fast_cast<int32_t, int32_t, uint64_t, true>,
+  int_fast_cast<int32_t, int64_t, uint64_t, true>,
+  int_fast_cast<int32_t, int128_t, uint64_t, true>,
+  int_fast_cast<int32_t, int256_t, uint64_t, true>,
+  int_fast_cast<int32_t, int512_t, uint64_t, true>,
+  int_fast_cast<int64_t, int64_t, uint64_t, true>,
+  int_fast_cast<int64_t, int128_t, uint64_t, true>,
+  int_fast_cast<int64_t, int256_t, uint64_t, true>,
+  int_fast_cast<int64_t, int512_t, uint64_t, true>,
+  int_fast_cast<int128_t, int128_t, uint64_t, true>,
+  int_fast_cast<int128_t, int256_t, uint64_t, true>,
+  int_fast_cast<int128_t, int512_t, uint64_t, true>,
 
-  decimalint_fast_cast<int32_t, int32_t, true>,
-  decimalint_fast_cast<int32_t, int64_t, true>,
-  decimalint_fast_cast<int32_t, int128_t, true>,
-  decimalint_fast_cast<int32_t, int256_t, true>,
-  decimalint_fast_cast<int32_t, int512_t, true>,
-  decimalint_fast_cast<int64_t, int64_t, true>,
-  decimalint_fast_cast<int64_t, int128_t, true>,
-  decimalint_fast_cast<int64_t, int256_t, true>,
-  decimalint_fast_cast<int64_t, int512_t, true>,
-  decimalint_fast_cast<int128_t, int128_t, true>,
-  decimalint_fast_cast<int128_t, int256_t, true>,
-  decimalint_fast_cast<int128_t, int512_t, true>,
-  decimalint_fast_cast<int256_t, int256_t, true>,
-  decimalint_fast_cast<int256_t, int512_t, true>,
-  decimalint_fast_cast<int512_t, int512_t, true>,
+  int_fast_cast<int32_t, int32_t, int64_t, false>,
+  int_fast_cast<int32_t, int64_t, int64_t, false>,
+  int_fast_cast<int32_t, int128_t, int64_t, false>,
+  int_fast_cast<int32_t, int256_t, int64_t, false>,
+  int_fast_cast<int32_t, int512_t, int64_t, false>,
+  int_fast_cast<int64_t, int64_t, int64_t, false>,
+  int_fast_cast<int64_t, int128_t, int64_t, false>,
+  int_fast_cast<int64_t, int256_t, int64_t, false>,
+  int_fast_cast<int64_t, int512_t, int64_t, false>,
+  int_fast_cast<int128_t, int128_t, int64_t, false>,
+  int_fast_cast<int128_t, int256_t, int64_t, false>,
+  int_fast_cast<int128_t, int512_t, int64_t, false>,
 
-  decimalint_fast_cast<int32_t, int32_t, false>,
-  decimalint_fast_cast<int32_t, int64_t, false>,
-  decimalint_fast_cast<int32_t, int128_t, false>,
-  decimalint_fast_cast<int32_t, int256_t, false>,
-  decimalint_fast_cast<int32_t, int512_t, false>,
-  decimalint_fast_cast<int64_t, int64_t, false>,
-  decimalint_fast_cast<int64_t, int128_t, false>,
-  decimalint_fast_cast<int64_t, int256_t, false>,
-  decimalint_fast_cast<int64_t, int512_t, false>,
-  decimalint_fast_cast<int128_t, int128_t, false>,
-  decimalint_fast_cast<int128_t, int256_t, false>,
-  decimalint_fast_cast<int128_t, int512_t, false>,
-  decimalint_fast_cast<int256_t, int256_t, false>,
-  decimalint_fast_cast<int256_t, int512_t, false>,
-  decimalint_fast_cast<int512_t, int512_t, false>,
+  int_fast_cast<int32_t, int32_t, uint64_t, false>,
+  int_fast_cast<int32_t, int64_t, uint64_t, false>,
+  int_fast_cast<int32_t, int128_t, uint64_t, false>,
+  int_fast_cast<int32_t, int256_t, uint64_t, false>,
+  int_fast_cast<int32_t, int512_t, uint64_t, false>,
+  int_fast_cast<int64_t, int64_t, uint64_t, false>,
+  int_fast_cast<int64_t, int128_t, uint64_t, false>,
+  int_fast_cast<int64_t, int256_t, uint64_t, false>,
+  int_fast_cast<int64_t, int512_t, uint64_t, false>,
+  int_fast_cast<int128_t, int128_t, uint64_t, false>,
+  int_fast_cast<int128_t, int256_t, uint64_t, false>,
+  int_fast_cast<int128_t, int512_t, uint64_t, false>,
+
+  decimalint_fast_cast<int32_t, int32_t, true, true>,
+  decimalint_fast_cast<int32_t, int64_t, true, true>,
+  decimalint_fast_cast<int32_t, int128_t, true, true>,
+  decimalint_fast_cast<int32_t, int256_t, true, true>,
+  decimalint_fast_cast<int32_t, int512_t, true, true>,
+  decimalint_fast_cast<int64_t, int64_t, true, true>,
+  decimalint_fast_cast<int64_t, int128_t, true, true>,
+  decimalint_fast_cast<int64_t, int256_t, true, true>,
+  decimalint_fast_cast<int64_t, int512_t, true, true>,
+  decimalint_fast_cast<int128_t, int128_t, true, true>,
+  decimalint_fast_cast<int128_t, int256_t, true, true>,
+  decimalint_fast_cast<int128_t, int512_t, true, true>,
+  decimalint_fast_cast<int256_t, int256_t, true, true>,
+  decimalint_fast_cast<int256_t, int512_t, true, true>,
+  decimalint_fast_cast<int512_t, int512_t, true, true>,
+
+  decimalint_fast_cast<int32_t, int32_t, true, false>,
+  decimalint_fast_cast<int32_t, int64_t, true, false>,
+  decimalint_fast_cast<int32_t, int128_t, true, false>,
+  decimalint_fast_cast<int32_t, int256_t, true, false>,
+  decimalint_fast_cast<int32_t, int512_t, true, false>,
+  decimalint_fast_cast<int64_t, int64_t, true, false>,
+  decimalint_fast_cast<int64_t, int128_t, true, false>,
+  decimalint_fast_cast<int64_t, int256_t, true, false>,
+  decimalint_fast_cast<int64_t, int512_t, true, false>,
+  decimalint_fast_cast<int128_t, int128_t, true, false>,
+  decimalint_fast_cast<int128_t, int256_t, true, false>,
+  decimalint_fast_cast<int128_t, int512_t, true, false>,
+  decimalint_fast_cast<int256_t, int256_t, true, false>,
+  decimalint_fast_cast<int256_t, int512_t, true, false>,
+  decimalint_fast_cast<int512_t, int512_t, true, false>,
+
+  decimalint_fast_cast<int32_t, int32_t, false, true>,
+  decimalint_fast_cast<int32_t, int64_t, false, true>,
+  decimalint_fast_cast<int32_t, int128_t, false, true>,
+  decimalint_fast_cast<int32_t, int256_t, false, true>,
+  decimalint_fast_cast<int32_t, int512_t, false, true>,
+  decimalint_fast_cast<int64_t, int64_t, false, true>,
+  decimalint_fast_cast<int64_t, int128_t, false, true>,
+  decimalint_fast_cast<int64_t, int256_t, false, true>,
+  decimalint_fast_cast<int64_t, int512_t, false, true>,
+  decimalint_fast_cast<int128_t, int128_t, false, true>,
+  decimalint_fast_cast<int128_t, int256_t, false, true>,
+  decimalint_fast_cast<int128_t, int512_t, false, true>,
+  decimalint_fast_cast<int256_t, int256_t, false, true>,
+  decimalint_fast_cast<int256_t, int512_t, false, true>,
+  decimalint_fast_cast<int512_t, int512_t, false, true>,
+
+  decimalint_fast_cast<int32_t, int32_t, false, false>,
+  decimalint_fast_cast<int32_t, int64_t, false, false>,
+  decimalint_fast_cast<int32_t, int128_t, false, false>,
+  decimalint_fast_cast<int32_t, int256_t, false, false>,
+  decimalint_fast_cast<int32_t, int512_t, false, false>,
+  decimalint_fast_cast<int64_t, int64_t, false, false>,
+  decimalint_fast_cast<int64_t, int128_t, false, false>,
+  decimalint_fast_cast<int64_t, int256_t, false, false>,
+  decimalint_fast_cast<int64_t, int512_t, false, false>,
+  decimalint_fast_cast<int128_t, int128_t, false, false>,
+  decimalint_fast_cast<int128_t, int256_t, false, false>,
+  decimalint_fast_cast<int128_t, int512_t, false, false>,
+  decimalint_fast_cast<int256_t, int256_t, false, false>,
+  decimalint_fast_cast<int256_t, int512_t, false, false>,
+  decimalint_fast_cast<int512_t, int512_t, false, false>,
 };
 
 static ObExpr::EvalBatchFunc g_decimalint_cast_batch_functions[] = {
-  int_fast_batch_cast<int32_t, int64_t>,
-  int_fast_batch_cast<int64_t, int64_t>,
-  int_fast_batch_cast<int128_t, int64_t>,
-  int_fast_batch_cast<int256_t, int64_t>,
-  int_fast_batch_cast<int512_t, int64_t>,
+  int_fast_batch_cast<int32_t, int32_t, int64_t, true>,
+  int_fast_batch_cast<int32_t, int64_t, int64_t, true>,
+  int_fast_batch_cast<int32_t, int128_t, int64_t, true>,
+  int_fast_batch_cast<int32_t, int256_t, int64_t, true>,
+  int_fast_batch_cast<int32_t, int512_t, int64_t, true>,
+  int_fast_batch_cast<int64_t, int64_t, int64_t, true>,
+  int_fast_batch_cast<int64_t, int128_t, int64_t, true>,
+  int_fast_batch_cast<int64_t, int256_t, int64_t, true>,
+  int_fast_batch_cast<int64_t, int512_t, int64_t, true>,
+  int_fast_batch_cast<int128_t, int128_t, int64_t, true>,
+  int_fast_batch_cast<int128_t, int256_t, int64_t, true>,
+  int_fast_batch_cast<int128_t, int512_t, int64_t, true>,
 
-  int_fast_batch_cast<int32_t, uint64_t>,
-  int_fast_batch_cast<int64_t, uint64_t>,
-  int_fast_batch_cast<int128_t, uint64_t>,
-  int_fast_batch_cast<int256_t, uint64_t>,
-  int_fast_batch_cast<int512_t, uint64_t>,
+  int_fast_batch_cast<int32_t, int32_t, uint64_t, true>,
+  int_fast_batch_cast<int32_t, int64_t, uint64_t, true>,
+  int_fast_batch_cast<int32_t, int128_t, uint64_t, true>,
+  int_fast_batch_cast<int32_t, int256_t, uint64_t, true>,
+  int_fast_batch_cast<int32_t, int512_t, uint64_t, true>,
+  int_fast_batch_cast<int64_t, int64_t, uint64_t, true>,
+  int_fast_batch_cast<int64_t, int128_t, uint64_t, true>,
+  int_fast_batch_cast<int64_t, int256_t, uint64_t, true>,
+  int_fast_batch_cast<int64_t, int512_t, uint64_t, true>,
+  int_fast_batch_cast<int128_t, int128_t, uint64_t, true>,
+  int_fast_batch_cast<int128_t, int256_t, uint64_t, true>,
+  int_fast_batch_cast<int128_t, int512_t, uint64_t, true>,
 
-  decimalint_fast_batch_cast<int32_t, int32_t>,
-  decimalint_fast_batch_cast<int32_t, int64_t>,
-  decimalint_fast_batch_cast<int32_t, int128_t>,
-  decimalint_fast_batch_cast<int32_t, int256_t>,
-  decimalint_fast_batch_cast<int32_t, int512_t>,
-  decimalint_fast_batch_cast<int64_t, int64_t>,
-  decimalint_fast_batch_cast<int64_t, int128_t>,
-  decimalint_fast_batch_cast<int64_t, int256_t>,
-  decimalint_fast_batch_cast<int64_t, int512_t>,
-  decimalint_fast_batch_cast<int128_t, int128_t>,
-  decimalint_fast_batch_cast<int128_t, int256_t>,
-  decimalint_fast_batch_cast<int128_t, int512_t>,
-  decimalint_fast_batch_cast<int256_t, int256_t>,
-  decimalint_fast_batch_cast<int256_t, int512_t>,
-  decimalint_fast_batch_cast<int512_t, int512_t>,
+  int_fast_batch_cast<int32_t, int32_t, int64_t, false>,
+  int_fast_batch_cast<int32_t, int64_t, int64_t, false>,
+  int_fast_batch_cast<int32_t, int128_t, int64_t, false>,
+  int_fast_batch_cast<int32_t, int256_t, int64_t, false>,
+  int_fast_batch_cast<int32_t, int512_t, int64_t, false>,
+  int_fast_batch_cast<int64_t, int64_t, int64_t, false>,
+  int_fast_batch_cast<int64_t, int128_t, int64_t, false>,
+  int_fast_batch_cast<int64_t, int256_t, int64_t, false>,
+  int_fast_batch_cast<int64_t, int512_t, int64_t, false>,
+  int_fast_batch_cast<int128_t, int128_t, int64_t, false>,
+  int_fast_batch_cast<int128_t, int256_t, int64_t, false>,
+  int_fast_batch_cast<int128_t, int512_t, int64_t, false>,
+
+  int_fast_batch_cast<int32_t, int32_t, uint64_t, false>,
+  int_fast_batch_cast<int32_t, int64_t, uint64_t, false>,
+  int_fast_batch_cast<int32_t, int128_t, uint64_t, false>,
+  int_fast_batch_cast<int32_t, int256_t, uint64_t, false>,
+  int_fast_batch_cast<int32_t, int512_t, uint64_t, false>,
+  int_fast_batch_cast<int64_t, int64_t, uint64_t, false>,
+  int_fast_batch_cast<int64_t, int128_t, uint64_t, false>,
+  int_fast_batch_cast<int64_t, int256_t, uint64_t, false>,
+  int_fast_batch_cast<int64_t, int512_t, uint64_t, false>,
+  int_fast_batch_cast<int128_t, int128_t, uint64_t, false>,
+  int_fast_batch_cast<int128_t, int256_t, uint64_t, false>,
+  int_fast_batch_cast<int128_t, int512_t, uint64_t, false>,
+
+  decimalint_fast_batch_cast<int32_t, int32_t, true, true>,
+  decimalint_fast_batch_cast<int32_t, int64_t, true, true>,
+  decimalint_fast_batch_cast<int32_t, int128_t, true, true>,
+  decimalint_fast_batch_cast<int32_t, int256_t, true, true>,
+  decimalint_fast_batch_cast<int32_t, int512_t, true, true>,
+  decimalint_fast_batch_cast<int64_t, int64_t, true, true>,
+  decimalint_fast_batch_cast<int64_t, int128_t, true, true>,
+  decimalint_fast_batch_cast<int64_t, int256_t, true, true>,
+  decimalint_fast_batch_cast<int64_t, int512_t, true, true>,
+  decimalint_fast_batch_cast<int128_t, int128_t, true, true>,
+  decimalint_fast_batch_cast<int128_t, int256_t, true, true>,
+  decimalint_fast_batch_cast<int128_t, int512_t, true, true>,
+  decimalint_fast_batch_cast<int256_t, int256_t, true, true>,
+  decimalint_fast_batch_cast<int256_t, int512_t, true, true>,
+  decimalint_fast_batch_cast<int512_t, int512_t, true, true>,
+
+  decimalint_fast_batch_cast<int32_t, int32_t, true, false>,
+  decimalint_fast_batch_cast<int32_t, int64_t, true, false>,
+  decimalint_fast_batch_cast<int32_t, int128_t, true, false>,
+  decimalint_fast_batch_cast<int32_t, int256_t, true, false>,
+  decimalint_fast_batch_cast<int32_t, int512_t, true, false>,
+  decimalint_fast_batch_cast<int64_t, int64_t, true, false>,
+  decimalint_fast_batch_cast<int64_t, int128_t, true, false>,
+  decimalint_fast_batch_cast<int64_t, int256_t, true, false>,
+  decimalint_fast_batch_cast<int64_t, int512_t, true, false>,
+  decimalint_fast_batch_cast<int128_t, int128_t, true, false>,
+  decimalint_fast_batch_cast<int128_t, int256_t, true, false>,
+  decimalint_fast_batch_cast<int128_t, int512_t, true, false>,
+  decimalint_fast_batch_cast<int256_t, int256_t, true, false>,
+  decimalint_fast_batch_cast<int256_t, int512_t, true, false>,
+  decimalint_fast_batch_cast<int512_t, int512_t, true, false>,
+
+  decimalint_fast_batch_cast<int32_t, int32_t, false, true>,
+  decimalint_fast_batch_cast<int32_t, int64_t, false, true>,
+  decimalint_fast_batch_cast<int32_t, int128_t, false, true>,
+  decimalint_fast_batch_cast<int32_t, int256_t, false, true>,
+  decimalint_fast_batch_cast<int32_t, int512_t, false, true>,
+  decimalint_fast_batch_cast<int64_t, int64_t, false, true>,
+  decimalint_fast_batch_cast<int64_t, int128_t, false, true>,
+  decimalint_fast_batch_cast<int64_t, int256_t, false, true>,
+  decimalint_fast_batch_cast<int64_t, int512_t, false, true>,
+  decimalint_fast_batch_cast<int128_t, int128_t, false, true>,
+  decimalint_fast_batch_cast<int128_t, int256_t, false, true>,
+  decimalint_fast_batch_cast<int128_t, int512_t, false, true>,
+  decimalint_fast_batch_cast<int256_t, int256_t, false, true>,
+  decimalint_fast_batch_cast<int256_t, int512_t, false, true>,
+  decimalint_fast_batch_cast<int512_t, int512_t, false, true>,
+
+  decimalint_fast_batch_cast<int32_t, int32_t, false, false>,
+  decimalint_fast_batch_cast<int32_t, int64_t, false, false>,
+  decimalint_fast_batch_cast<int32_t, int128_t, false, false>,
+  decimalint_fast_batch_cast<int32_t, int256_t, false, false>,
+  decimalint_fast_batch_cast<int32_t, int512_t, false, false>,
+  decimalint_fast_batch_cast<int64_t, int64_t, false, false>,
+  decimalint_fast_batch_cast<int64_t, int128_t, false, false>,
+  decimalint_fast_batch_cast<int64_t, int256_t, false, false>,
+  decimalint_fast_batch_cast<int64_t, int512_t, false, false>,
+  decimalint_fast_batch_cast<int128_t, int128_t, false, false>,
+  decimalint_fast_batch_cast<int128_t, int256_t, false, false>,
+  decimalint_fast_batch_cast<int128_t, int512_t, false, false>,
+  decimalint_fast_batch_cast<int256_t, int256_t, false, false>,
+  decimalint_fast_batch_cast<int256_t, int512_t, false, false>,
+  decimalint_fast_batch_cast<int512_t, int512_t, false, false>,
 };
 
 int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
@@ -1136,6 +1256,7 @@ int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
   int ret = OB_SUCCESS;
   ObDatum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
+    LOG_WARN("failef to eval child datum");
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -1146,6 +1267,7 @@ int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
     number::ObNumber out_nmb;
     if (OB_FAIL(wide::to_number(child.get_decimal_int(), child.get_int_bytes(), in_scale,
                                 tmp_alloc, out_nmb))) {
+      LOG_WARN("to_number failed", K(ret));
     } else {
       expr_datum.set_number(out_nmb);
     }
@@ -1159,6 +1281,7 @@ static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, ObD
   int ret = OB_SUCCESS;
   ObDatum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
+    LOG_WARN("failef to eval child datum");
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -1172,7 +1295,9 @@ static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ObDecimalInt *decint = nullptr;
     int32_t int_bytes = 0;
     if (OB_FAIL(wide::from_number(in_nmb, tmp_alloc, in_scale, decint, int_bytes))) {
+      LOG_WARN("from number failed", K(ret));
     } else if (OB_FAIL(common::decint_scale::scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cm, res_val))) {
+      LOG_WARN("scale const decimal int failed", K(ret));
     } else {
       expr_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }
@@ -1186,6 +1311,7 @@ static int _eval_questionmark_decint2decint(const ObExpr &expr, ObEvalCtx &ctx, 
   int ret = OB_SUCCESS;
   ObDatum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
+    LOG_WARN("failef to eval child datum");
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -1196,6 +1322,7 @@ static int _eval_questionmark_decint2decint(const ObExpr &expr, ObEvalCtx &ctx, 
     const ObDatum &child = expr.args_[0]->locate_expr_datum(ctx);
     if (OB_FAIL(ObDatumCast::common_scale_decimalint(child.get_decimal_int(), child.get_int_bytes(),
                                                     in_scale, out_scale, out_prec, cm, res_val))) {
+      LOG_WARN("common scale decimal int failed", K(ret));
     } else {
       expr_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }

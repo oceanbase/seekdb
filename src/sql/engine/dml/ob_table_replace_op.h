@@ -81,7 +81,7 @@ public:
                         MY_SPEC.conflict_checker_ctdef_),
       replace_row_store_("ReplaceRow"),
       replace_rtctx_(eval_ctx_, ctx, *this),
-      snapshot_state_(WITHOUT_SNAPSHOT_OPT_STATE)
+      gts_state_(WITHOUT_GTS_OPT_STATE)
   {}
   virtual ~ObTableReplaceOp() {}
 
@@ -90,7 +90,7 @@ public:
   virtual int inner_close() override;
   virtual int inner_get_next_row() override;
   // Materialize all rows to be replace into to replace_row_store_
-  int load_all_replace_row(bool &is_iter_end, transaction::ObTxSEQ &savepoint_no);
+  int load_all_replace_row(bool &is_iter_end);
   int get_next_row_from_child();
   // Execute all attempted insert das tasks, fetch primary key of the main table for conflicting rows
   int fetch_conflict_rowkey(int64_t replace_row_cnt);
@@ -151,8 +151,6 @@ protected:
 private:
   int check_replace_ctdefs_valid() const;
 
-  int eval_replace_input();
-
   const ObIArray<ObExpr *> &get_all_saved_exprs();
 
   const ObIArray<ObExpr *> &get_primary_table_new_row();
@@ -175,7 +173,7 @@ protected:
   common::ObArrayWrap<ObReplaceRtDef> replace_rtdefs_;
   ObChunkDatumStore replace_row_store_; // All the rows of replace operations
   ObDMLRtCtx replace_rtctx_;
-  ObDmlSnapshotOptState snapshot_state_;
+  ObDmlGTSOptState gts_state_;
 };
 
 class ObTableReplaceOpInput : public ObTableModifyOpInput
@@ -185,6 +183,10 @@ public:
   ObTableReplaceOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     : ObTableModifyOpInput(ctx, spec)
   {}
+  int init(ObTaskInfo &task_info) override
+  {
+    return ObTableModifyOpInput::init(task_info);
+  }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableReplaceOpInput);
 };

@@ -18,7 +18,7 @@
 #define OB_ALL_VIRTUAL_DAG_H_
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/container/ob_array.h"
-#include "storage/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 
 namespace oceanbase
 {
@@ -47,7 +47,7 @@ public:
 
 private:
   common::ObArenaAllocator allocator_;
-  common::ObArray<void*> dag_infos_;
+  common::ObArray<void*> all_tenants_dag_infos_;
 
   int64_t cur_idx_;
   bool is_opened_;
@@ -58,8 +58,9 @@ class ObAllVirtualDag : public common::ObVirtualTableScannerIterator
 public:
   enum COLUMN_ID_LIST
   {
-    DAG_TYPE = common::OB_APP_MIN_COLUMN_ID,
+        DAG_TYPE = common::OB_APP_MIN_COLUMN_ID,
     DAG_KEY,
+    DAG_NET_KEY,
     DAG_ID,
     DAG_STATUS,
     RUNNING_TASK_CNT,

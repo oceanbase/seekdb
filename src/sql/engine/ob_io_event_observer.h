@@ -14,5 +14,32 @@
  * limitations under the License.
  */
 
-#pragma once
-#include "query/engine/ob_io_event_observer.h"
+#ifndef _OB_SQL_IO_EVENT_OBSERVER_H_
+#define _OB_SQL_IO_EVENT_OBSERVER_H_
+
+#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObIOEventObserver
+{
+public:
+  ObIOEventObserver(ObMonitorNode &monitor_info) : op_monitor_info_(monitor_info) {}
+  inline void on_read_io(uint64_t used_time)
+  {
+    op_monitor_info_.block_time_ += used_time;
+  }
+  inline void on_write_io(uint64_t used_time)
+  {
+    op_monitor_info_.block_time_ += used_time;
+  }
+private:
+  ObMonitorNode &op_monitor_info_;
+};
+}
+}
+#endif /* _OB_SQL_IO_EVENT_OBSERVER_H_ */
+//// end of header file
+

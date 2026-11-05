@@ -17,7 +17,6 @@
 #ifndef SRC_SQL_ENGINE_EXPR_OB_EXPR_SYMMETRIC_ENCRYPT_H_
 #define SRC_SQL_ENGINE_EXPR_OB_EXPR_SYMMETRIC_ENCRYPT_H_
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "share/ob_encryption_util.h"
 
 namespace oceanbase
 {

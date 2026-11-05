@@ -42,12 +42,14 @@ int ObInfoSchemaEnableRolesTable::inner_get_next_row(common::ObNewRow*& row)
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(prepare_scan())) {
+      LOG_WARN("fail to prepare scan", K(ret));
     }
   }
   
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
       if (OB_ITER_END != ret) {
+        LOG_WARN("fail to get next row", K(ret));
       }
     } else {
       row = &cur_row_;
@@ -73,12 +75,16 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
 
   if (0 > col_count || col_count > (MAX_COL_ID - OB_APP_MIN_COLUMN_ID)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("column count error ", K(ret), K(col_count));
   } else if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("cur row cell is NULL", K(ret));
   } else if (col_count > cur_row_.count_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("column num not match", K(ret), K(cur_row_), K(output_column_ids_));
   } else if (OB_ISNULL(session_) || OB_ISNULL(schema_guard = get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("not init", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < session_->get_enable_role_array().count(); ++i) {
       const ObUserInfo *user_info = NULL;
@@ -87,9 +93,13 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
       const uint64_t cur_user_id = session_->get_priv_user_id();
       
       if (OB_FAIL(schema_guard->get_user_info(role_user_id, user_info))) {
+        LOG_WARN("fail to get user id", KR(ret), K(role_user_id));
       } else if (OB_FAIL(schema_guard->get_user_info(cur_user_id, cur_user_info))) {
+        LOG_WARN("fail to get user id", KR(ret), K(role_user_id));
       } else if (OB_ISNULL(user_info) || OB_ISNULL(cur_user_info)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("user info is null", K(ret), KP(user_info), KP(cur_user_info),
+                 K(cur_user_id), K(role_user_id));
       }
 
       for (int j = 0; OB_SUCC(ret) && j < col_count; ++j) {
@@ -124,12 +134,14 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
           }
           default: {
             ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("invalid column", K(ret));
             break;
           }
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(scanner_.add_row(cur_row_))) {
+          LOG_WARN("fail to add row", K(ret), K(cur_row_));
         }
       }
     }

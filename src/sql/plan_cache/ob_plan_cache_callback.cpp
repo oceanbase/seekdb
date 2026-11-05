@@ -24,7 +24,7 @@ using namespace oceanbase::common;
 void ObLibCacheAtomicOp::operator()(LibCacheKV &entry)
 {
   if (NULL != entry.second) {
-    entry.second->inc_ref_count();
+    entry.second->inc_ref_count(ref_handle_);
     cache_node_ = entry.second;
     SQL_PC_LOG(DEBUG, "succ to get cache_node", "ref_count", cache_node_->get_ref_count());
   } else {
@@ -44,8 +44,9 @@ int ObLibCacheAtomicOp::get_value(ObILibCacheNode *&cache_node)
     cache_node = cache_node_;
   } else {
     if (NULL != cache_node_) {
-      cache_node_->dec_ref_count();
+      cache_node_->dec_ref_count(ref_handle_);
     }
+    SQL_PC_LOG(DEBUG, "failed to get read lock of lib cache value", K(ret));
   }
   return ret;
 }
@@ -64,11 +65,12 @@ deleting plan x                  |
 void ObCacheObjAtomicOp::operator()(ObjKV &entry)
 {
   if (NULL != entry.second) {
-    if (entry.second->try_inc_ref_count()) {
+    if (entry.second->try_inc_ref_count(ref_handle_)) {
       cache_obj_ = entry.second;
     } else {
       cache_obj_ = nullptr;
     }
+    SQL_PC_LOG(DEBUG, "succ to get plan");
   } else {
     // do nothing
   }

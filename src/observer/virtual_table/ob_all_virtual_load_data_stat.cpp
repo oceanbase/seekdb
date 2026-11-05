@@ -23,6 +23,7 @@ namespace observer
 
 ObAllVirtualLoadDataStat::ObAllVirtualLoadDataStat()
     : ObVirtualTableScannerIterator(),
+      addr_(),
       all_job_status_op_()
 {
 }
@@ -34,6 +35,7 @@ ObAllVirtualLoadDataStat::~ObAllVirtualLoadDataStat()
 
 void ObAllVirtualLoadDataStat::reset()
 {
+  addr_.reset();
   all_job_status_op_.reset();
 
   ObVirtualTableScannerIterator::reset();
@@ -44,6 +46,7 @@ int ObAllVirtualLoadDataStat::inner_open()
   int ret = OB_SUCCESS;
   sql::ObGlobalLoadDataStatMap *job_status_map = sql::ObGlobalLoadDataStatMap::getInstance();
   if (OB_FAIL(job_status_map->get_all_job_status(all_job_status_op_))) {
+    SERVER_LOG(WARN, "fail to get all job status", K(ret));
   }
   return ret;
 }
@@ -73,6 +76,11 @@ int ObAllVirtualLoadDataStat::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         case JOB_ID: {
           cells[i].set_int(job_status->job_id_);
+          break;
+        }
+        case JOB_TYPE: {
+          cells[i].set_varchar(job_status->job_type_);
+          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case TABLE_NAME: {
@@ -149,6 +157,69 @@ int ObAllVirtualLoadDataStat::inner_get_next_row(ObNewRow *&row)
         }
         case TOTAL_WAIT_SECS: {
           cells[i].set_int(job_status->total_wait_secs_);
+          break;
+        }
+        case MAX_ALLOWED_ERROR_ROWS: {
+          cells[i].set_int(job_status->max_allowed_error_rows_);
+          break;
+        }
+        case DETECTED_ERROR_ROWS: {
+          cells[i].set_int(job_status->detected_error_rows_);
+          break;
+        }
+        case COORDINATOR_RECEIVED_ROWS: {
+          cells[i].set_int(job_status->coordinator_.received_rows_);
+          break;
+        }
+        case COORDINATOR_LAST_COMMIT_SEGMENT_ID: {
+          cells[i].set_int(job_status->coordinator_.last_commit_segment_id_);
+          break;
+        }
+        case COORDINATOR_STATUS: {
+          cells[i].set_varchar(job_status->coordinator_.status_);
+          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          break;
+        }
+        case COORDINATOR_TRANS_STATUS: {
+          cells[i].set_varchar(job_status->coordinator_.trans_status_);
+          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          break;
+        }
+        case STORE_PROCESSED_ROWS: {
+          cells[i].set_int(job_status->store_.processed_rows_);
+          break;
+        }
+        case STORE_LAST_COMMIT_SEGMENT_ID: {
+          cells[i].set_int(job_status->store_.last_commit_segment_id_);
+          break;
+        }
+        case STORE_STATUS: {
+          cells[i].set_varchar(job_status->store_.status_);
+          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          break;
+        }
+        case STORE_TRANS_STATUS: {
+          cells[i].set_varchar(job_status->store_.trans_status_);
+          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          break;
+        }
+        case MESSAGE: {
+          int64_t pos = 0;
+          if (OB_FAIL(databuff_printf(job_status->message_, common::MAX_LOAD_DATA_MESSAGE_LENGTH, pos, 
+                                      "COMPACT_STAGE_LOAD_ROWS: %ld, COMPACT_STAGE_DUMP_ROWS: %ld, "
+                                      "COMPACT_STAGE_PRODUCT_TMP_FILES: %ld, COMPACT_STAGE_CONSUME_TMP_FILES: %ld, "
+                                      "COMPACT_STAGE_MERGE_WRITE_ROWS: %ld, MERGE_STAGE_WRITE_ROWS: %ld",
+                                      job_status->store_.compact_stage_load_rows_,
+                                      job_status->store_.compact_stage_dump_rows_,
+                                      job_status->store_.compact_stage_product_tmp_files_,
+                                      job_status->store_.compact_stage_consume_tmp_files_,
+                                      job_status->store_.compact_stage_merge_write_rows_,
+                                      job_status->store_.merge_stage_write_rows_))) {
+            SERVER_LOG(WARN, "fail to fill message_", K(ret));
+          } else {
+            cells[i].set_varchar(job_status->message_);
+            cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          }
           break;
         }
         default: {

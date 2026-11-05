@@ -42,11 +42,13 @@ int ObBarrierPieceMsgListener::on_message(
              K(pkt), K(ctx));
   } else {
     ctx.received_++;
+    LOG_DEBUG("got a barrier picece msg", "all_got", ctx.received_, "expected", ctx.task_cnt_);
   }
   // Already received all pieces, send sqc whole
   // Each sqc broadcasts to its respective task
   if (OB_SUCC(ret) && ctx.received_ == ctx.task_cnt_) {
     if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
+      LOG_WARN("fail to send whole msg", K(ret));
     }
     IGNORE_RETURN ctx.reset_resource();
   }
@@ -62,12 +64,18 @@ int ObBarrierPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
     dtl::ObDtlChannel *ch = sqcs.at(idx).get_qc_channel();
     if (OB_ISNULL(ch)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole, timeout_ts_))) {
+      LOG_WARN("fail push data to channel", K(ret));
     } else if (OB_FAIL(ch->flush(true, false))) {
+      LOG_WARN("fail flush dtl data", K(ret));
     } else {
+      LOG_DEBUG("dispatched barrier whole msg",
+                K(idx), K(cnt), K(whole), K(*ch));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {
+    LOG_WARN("failed to wait response", K(ret));
   }
   return ret;
 }
@@ -88,6 +96,7 @@ int ObBarrierPieceMsgCtx::alloc_piece_msg_ctx(const ObBarrierPieceMsg &pkt,
   void *buf = ctx.get_allocator().alloc(sizeof(ObBarrierPieceMsgCtx));
   if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("physical plan ctx is null", K(ret));
   } else if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {

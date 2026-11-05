@@ -191,6 +191,7 @@ int create_simple_estimator(ObSelEstimatorFactory &factory,
   if (!ObTemplateEstimator::check_expr_valid(expr)) {
     // do nothing
   } else if (OB_FAIL(factory.create_estimator_inner(temp_estimator))) {
+    LOG_WARN("failed to create estimator ", K(ret));
   } else {
     temp_estimator->set_expr(&expr);
     temp_estimator->extract_default_eigen_expr(&expr);
@@ -354,6 +355,7 @@ public:
     int ret = OB_SUCCESS;
     if (OB_ISNULL(expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", KPC(this));
     } else {
       ret = get_const_sel(ctx, *expr_, selectivity);
     }
@@ -396,6 +398,7 @@ public:
     int ret = OB_SUCCESS;
     if (OB_ISNULL(expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", KPC(this));
     } else {
       ret = get_column_sel(table_metas, ctx, *expr_, selectivity);
     }
@@ -443,6 +446,7 @@ public:
     int ret = OB_SUCCESS;
     if (OB_ISNULL(expr_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null", KPC(this));
     } else {
       ret = get_in_sel(table_metas, ctx, *expr_, selectivity);
     }

@@ -1,0 +1,86 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OBSERVER_OB_ALL_VIRTUAL_HA_DIAGNOSE_H_
+#define OCEANBASE_OBSERVER_OB_ALL_VIRTUAL_HA_DIAGNOSE_H_
+
+#include "common/row/ob_row.h"
+#include "observer/omt/ob_multi_tenant.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
+#include "storage/ls/ob_ls.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+enum IOStatColumn
+{
+    ELECTION_ROLE = common::OB_APP_MIN_COLUMN_ID,
+  ELECTION_EPOCH,
+  PALF_ROLE,
+  PALF_STATE,
+  PALF_PROPOSAL_ID,
+  LOG_HANDLER_ROLE,
+  LOG_HANDLER_PROPOSAL_ID,
+  LOG_HANDLER_TAKEOVER_STATE,
+  LOG_HANDLER_TAKEOVER_LOG_TYPE,
+  MAX_APPLIED_SCN,
+  MAX_REPALYED_LSN,
+  MAX_REPLAYED_SCN,
+  REPLAY_DIAGNOSE_INFO,
+  GC_STATE,
+  GC_START_TS,
+  ARCHIVE_SCN,
+  CHECKPOINT_SCN,
+  MIN_REC_SCN,
+  MIN_REC_SCN_LOG_TYPE,
+  RESTORE_HANDLER_ROLE,
+  RESTORE_HANDLER_PROPOSAL_ID,
+  RESTORE_CONTEXT_INFO,
+  RESTORE_ERR_CONTEXT_INFO,
+  ENABLE_SYNC,
+  ENABLE_VOTE,
+  ARB_SRV_INFO,
+  PARENT,
+  READ_TX,
+};
+
+class ObAllVirtualHADiagnose : public common::ObVirtualTableScannerIterator
+{
+public:
+  explicit ObAllVirtualHADiagnose(omt::ObMultiTenant *omt) : omt_(omt) {}
+public:
+  virtual int inner_get_next_row(common::ObNewRow *&row);
+private:
+  int insert_stat_(storage::DiagnoseInfo &diagnose_info);
+private:
+  static const int64_t VARCHAR_32 = 32;
+  char ip_[common::OB_IP_PORT_STR_BUFF] = {'\0'};
+  char election_role_str_[VARCHAR_32] = {'\0'};
+  char palf_role_str_[VARCHAR_32] = {'\0'};
+  char log_handler_role_str_[VARCHAR_32] = {'\0'};
+  char log_handler_takeover_state_str_[VARCHAR_32] = {'\0'};
+  char log_handler_takeover_log_type_str_[VARCHAR_32] = {'\0'};
+  char gc_state_str_[VARCHAR_32] = {'\0'};
+  char min_rec_log_scn_log_type_str_[VARCHAR_32] = {'\0'};
+  char restore_handler_role_str_[VARCHAR_32] = {'\0'};
+  char parent_[common::OB_IP_PORT_STR_BUFF] = {'\0'};
+  omt::ObMultiTenant *omt_;
+};
+} // namespace observer
+} // namespace oceanbase
+#endif /* OCEANBASE_OBSERVER_OB_ALL_VIRTUAL_HA_DIAGNOSE_H_ */

@@ -27,11 +27,15 @@ class ObPhysicalPlan;
 class ObPlanCacheCtx;
 class ObTableLocation;
 class ObPhyTableLocation;
+class ObSqlPlanSet;
 
 class ObPlanMatchHelper
 {
 public:
-  ObPlanMatchHelper() = default;
+  ObPlanMatchHelper(ObSqlPlanSet *plan_set)
+    : plan_set_(plan_set)
+  {
+  }
   int match_plan(const ObPlanCacheCtx &pc_ctx,
                  const ObPhysicalPlan *plan,
                  bool &is_matched,
@@ -65,6 +69,7 @@ private:
    */
   int cmp_table_types(
       const ObIArray<LocationConstraint> &loc_cons,
+      const common::ObAddr &server,
       const common::ObIArray<ObTableLocation> &tbl_locs,
       const common::ObIArray<ObCandiTableLoc> &phy_tbl_infos,
       bool &is_same) const;
@@ -100,12 +105,22 @@ private:
                             PWJTabletIdMap &pwj_map,
                             bool &is_same) const;
   /**
+   * @brief Check if non-strict pwj constraints are satisfied
+   *
+   */
+  int check_non_strict_pwj_cons(const ObPlanPwjConstraint &pwj_cons,
+                                const ObIArray<ObCandiTableLoc> &phy_tbl_infos,
+                                ObNonStrictPwjComparer &pwj_comparer,
+                                bool &is_same) const;                              
+  /**
    * @brief Check table partition location
    *
    */
   int match_tbl_partition_locs(const ObCandiTableLoc &left,
                                const ObCandiTableLoc &right,
                                bool &is_matched) const;
+private:
+  ObSqlPlanSet *plan_set_;
 };
 } // namespace sql
 } // namespace oceanbase

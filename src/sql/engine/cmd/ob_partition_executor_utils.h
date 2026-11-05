@@ -19,7 +19,7 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_se_array.h"
 #include "common/sql_mode/ob_sql_mode.h"
-#include "share/statement/ob_stmt_type.h"
+#include "sql/resolver/ob_stmt_type.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 #include "sql/resolver/ddl/ob_table_stmt.h"
 namespace oceanbase
@@ -37,14 +37,18 @@ namespace sql
 class ObExecContext;
 class ObRawExpr;
 class ObCreateTableStmt;
+class ObCreateTablegroupStmt;
 class ObCreateIndexStmt;
 class ObTableStmt;
+class ObTablegroupStmt;
 
 class ObPartitionExecutorUtils
 {
 public:
   const static int OB_DEFAULT_ARRAY_SIZE = 16;
   // demoted from share::schema::ObPartitionUtils(pure sql:builds a temporary expr context to evaluate interval)
+  static int check_interval_partition_table(const common::ObRowkey &transition_point,
+                                            const common::ObRowkey &interval_range);
   static int calc_values_exprs(ObExecContext &ctx, ObCreateTableStmt &stmt);
   static int calc_values_exprs(ObExecContext &ctx, ObCreateIndexStmt &stmt);
   static int calc_values_exprs_for_alter_table(ObExecContext &ctx, 
@@ -73,6 +77,53 @@ public:
                                        ObPartitionedStmt &stmt,
                                        bool is_subpart);
                                        
+  static int check_transition_interval_valid(const stmt::StmtType stmt_type,
+                                             ObExecContext &ctx,
+                                             ObRawExpr *transition_expr,
+                                             ObRawExpr *interval_expr);
+
+  static int set_interval_value(ObExecContext &ctx,
+                                const stmt::StmtType stmt_type,
+                                share::schema::ObTableSchema &table_schema,
+                                ObRawExpr *interval_expr);
+
+  /*--------------tablegroup related start------------------*/
+  static int calc_values_exprs(ObExecContext &ctx, ObCreateTablegroupStmt &stmt);
+
+  static int calc_values_exprs(ObExecContext &ctx, ObCreateTablegroupStmt &stmt, bool is_subpart);
+
+
+  static int cast_range_expr_to_obj(ObExecContext &ctx,
+                                    ObCreateTablegroupStmt &stmt,
+                                    bool is_subpart,
+                                    common::ObIArray<common::ObObj> &range_partition_obj);
+
+  static int cast_range_expr_to_obj(ObExecContext &ctx,
+                                    common::ObIArray<ObRawExpr *> &range_values_exprs,
+                                    const int64_t fun_expr_num,
+                                    const stmt::StmtType stmt_type,
+                                    const bool is_subpart,
+                                    const int64_t real_part_num,
+                                    share::schema::ObPartition **partition_array,
+                                    share::schema::ObSubPartition **subpartition_array,
+                                    common::ObIArray<common::ObObj> &range_partition_obj);
+
+  static int cast_list_expr_to_obj(ObExecContext &ctx,
+                                   ObCreateTablegroupStmt &stmt,
+                                   bool is_subpar);
+
+  static int cast_list_expr_to_obj(ObExecContext &ctx,
+                                   ObTablegroupStmt &stmt,
+                                   const bool is_subpart,
+                                   share::schema::ObPartition **partition_array,
+                                   share::schema::ObSubPartition **subpartition_array);
+
+  static int cast_expr_to_obj(ObExecContext &ctx,
+                              int64_t fun_expr_num,
+                              common::ObIArray<ObRawExpr *> &range_values_exprs,
+                              common::ObIArray<common::ObObj> &range_partition_obj);
+  /*--------------tablegroup related end------------------*/
+
   static int calc_range_values_exprs(ObExecContext &ctx, ObCreateIndexStmt &stmt);
 
   template<typename T>

@@ -51,6 +51,7 @@ int ObExprCurrentUserPriv::eval_current_user_priv(const ObExpr &expr, ObEvalCtx 
   const ObSQLSessionInfo *session_info = NULL;
   if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is null", K(ret));
   } else {
     const ObPrivSet user_priv_set = session_info->get_user_priv_set();
     expr_datum.set_int(user_priv_set);
@@ -107,9 +108,12 @@ int ObExprCurrentRole::eval_current_role(const ObExpr &expr, ObEvalCtx &ctx, ObD
 
   if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is null", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema_service", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema guard", K(ret));
   } else {
     const ObIArray<uint64_t> &roles = session_info->get_enable_role_array();
 
@@ -195,12 +199,17 @@ int ObExprIsEnabledRole::eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx
   bool is_enabled_role = false;
   if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is null", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema_service", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_UNLIKELY(2 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected arg cnt", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, user, host))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (user->is_null() || host->is_null()) {
   } else {
     user_name = user->get_string();
@@ -209,6 +218,7 @@ int ObExprIsEnabledRole::eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx
     const ObUserInfo *user_info = NULL;
     for (int i = 0; OB_SUCC(ret) && !is_enabled_role && i < roles.count(); i++) {
       if (OB_FAIL(schema_guard.get_user_info(roles.at(i), user_info))) {
+        LOG_WARN("failed to get user info", K(ret));
       } else if (OB_ISNULL(user_info)) {
         //ignored
       } else if ((user_info->get_user_name_str().compare(user_name) == 0)

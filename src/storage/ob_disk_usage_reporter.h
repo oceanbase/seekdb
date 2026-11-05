@@ -20,7 +20,7 @@
 #include "lib/task/ob_timer.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/container/ob_array.h"
-#include "data_plane/report/ob_i_disk_report.h"
+#include "observer/report/ob_i_disk_report.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 
 namespace oceanbase
@@ -32,15 +32,18 @@ namespace common
 
 namespace storage
 {
+class ObTenantTabletIterator;
 enum class ObDiskReportFileType : uint8_t
 {
-  SERVER_DATA = 0,
-  LOCAL_STORAGE_META_DATA = 1,
-  SERVER_INDEX_DATA = 2,
-  SERVER_TMP_DATA = 3,
-  SERVER_SLOG_DATA = 4,
-  SERVER_CLOG_DATA = 5,
-  SERVER_MAJOR_DATA = 6,
+  TENANT_DATA = 0,
+  TENANT_META_DATA = 1,
+  TENANT_INDEX_DATA = 2,
+  TENANT_TMP_DATA = 3,
+  TENANT_SLOG_DATA = 4,
+  TENANT_CLOG_DATA = 5,
+  TENANT_MAJOR_SSTABLE_DATA = 6, // shared_data in shared_storage_mode
+  TENANT_MAJOR_LOCAL_DATA = 7,
+  TENANT_BACKUP_DATA = 8,
   TYPE_MAX
 };
 
@@ -62,7 +65,7 @@ struct ObDiskUsageReportKey
 
   bool operator ==(const ObDiskUsageReportKey report_key) const
   {
-    return report_key.file_type_ == file_type_;
+    return report_key.file_type_ == file_type_ && true;
   }
 
   TO_STRING_KV(K_(file_type));
@@ -70,20 +73,20 @@ struct ObDiskUsageReportKey
 
 typedef hash::HashMapPair<ObDiskUsageReportKey, std::pair<int64_t, int64_t>> ObDiskUsageReportMap;// pair(occupy_size, required_size)
 
-class ObDiskUsageReportTask : public data_plane::ObIDiskReport
+class ObDiskUsageReportTask : public observer::ObIDiskReport
 {
 public:
   ObDiskUsageReportTask();
   virtual ~ObDiskUsageReportTask() {};
   int init(common::ObMySQLProxy &sql_proxy);
   void destroy();
-  virtual int delete_usage_stat() override;
+  virtual int delete_tenant_usage_stat() override;
 
-  // Get data-disk usage for the local server runtime.
+  // get data disk used size of specified tenant in current observer
   int get_data_disk_used_size(int64_t &used_size);
 
 private:
-  int count_server_data();
+  int count_tenant_data();
 
   typedef common::hash::ObHashMap<ObDiskUsageReportKey, std::pair<int64_t, int64_t>> ReportResultMap; // pair(occupy_size, required_size)
 private:

@@ -29,7 +29,9 @@ int ObSpatialMBR::filter(const ObSpatialMBR &other, ObDomainOpType type, bool &p
     S2LatLngRect this_rect;
     S2LatLngRect other_rect;
     if (OB_FAIL(generate_latlng_rect(this_rect))) {
+      LOG_WARN("fail to generate this latlng rectangle", K(ret));
     } else if (OB_FAIL(other.generate_latlng_rect(other_rect))) {
+      LOG_WARN("fail to generate other latlng rectangle", K(ret));
     } else {
       if (is_point_ && other.is_point_ && this_rect.ApproxEquals(other_rect)) {
         pass_through = false;
@@ -53,11 +55,13 @@ int ObSpatialMBR::filter(const ObSpatialMBR &other, ObDomainOpType type, bool &p
 
           case ObDomainOpType::T_GEO_DFULLYWITHIN: {
             ret = OB_NOT_SUPPORTED;
+            LOG_WARN("not support within geo relation type", K(ret), K(type));
             break;
           }
 
           default: {
             ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("undefined geo relation type", K(ret), K(type));
             break;
           }
         }
@@ -67,7 +71,9 @@ int ObSpatialMBR::filter(const ObSpatialMBR &other, ObDomainOpType type, bool &p
     ObCartesianBox this_rect;
     ObCartesianBox other_rect;
     if (OB_FAIL(generate_box(this_rect))) {
+      LOG_WARN("fail to generate this latlng rectangle", K(ret));
     } else if (OB_FAIL(other.generate_box(other_rect))) {
+      LOG_WARN("fail to generate other latlng rectangle", K(ret));
     } else {
       switch (type) {
         case ObDomainOpType::T_GEO_COVERS: {
@@ -88,11 +94,13 @@ int ObSpatialMBR::filter(const ObSpatialMBR &other, ObDomainOpType type, bool &p
 
         case ObDomainOpType::T_GEO_DFULLYWITHIN: {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("not support within geo relation type", K(ret), K(type));
           break;
         }
 
         default: {
           ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("undefined geo relation type", K(ret), K(type));
           break;
         }
       }
@@ -135,6 +143,7 @@ int ObSpatialMBR::from_string(ObString &mbr_str,
   const char *data = mbr_str.ptr();
   if (mbr_str.empty()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("mbr string is empty", K(ret), K(mbr_str));
   } else if (is_point) {
     double x_min = *reinterpret_cast<const double*>(data); // lng_lo
     data += sizeof(double);
@@ -230,6 +239,7 @@ int64_t ObS2Adapter::get_cellids(ObS2Cellids &cells, bool is_query)
 {
   INIT_SUCC(ret);
   if(OB_FAIL(visitor_->get_cellids(cells, is_query, need_buffer_, distance_))) {
+    LOG_WARN("fail to get cellid from visitor", K(ret));
   }
   return ret;
 }
@@ -238,6 +248,7 @@ int64_t ObS2Adapter::get_cellids_and_unrepeated_ancestors(ObS2Cellids &cells, Ob
 {
   INIT_SUCC(ret);
   if(OB_FAIL(visitor_->get_cellids_and_unrepeated_ancestors(cells, ancestors, need_buffer_, distance_))) {
+    LOG_WARN("fail to get cellid from visitor", K(ret));
   }
   return ret;
 }
@@ -246,6 +257,7 @@ int64_t ObS2Adapter::get_inner_cover_cellids(ObS2Cellids &cells)
 {
   INIT_SUCC(ret);
   if(OB_FAIL(visitor_->get_inner_cover_cellids(cells))) {
+    LOG_WARN("fail to get cellid from visitor", K(ret));
   }
   return ret;
 }
@@ -258,6 +270,7 @@ int64_t ObS2Adapter::get_ancestors(uint64_t cell, ObS2Cellids &cells)
   while (cellid.is_valid() && OB_SUCC(ret) && (level -= options_.level_mod()) >= options_.min_level()) {
     S2CellId ancestor_id = cellid.parent(level);
     if (OB_FAIL(cells.push_back(ancestor_id.id()))) {
+      LOG_WARN("fail to push_back cellid", K(ret));
     }
   }
   return ret;
@@ -268,12 +281,14 @@ int64_t ObS2Adapter::get_mbr(ObSpatialMBR &mbr)
   INIT_SUCC(ret);
   if (OB_ISNULL(geo_)) {
     ret = OB_ERR_NULL_VALUE;
+    LOG_WARN("input geo is null", K(ret));
   } else {
     mbr.is_geog_ = is_geog_;
     mbr.is_point_ = (geo_->type() == ObGeoType::POINT);
     if (is_geog_) {
       S2LatLngRect rect;
       if (OB_FAIL(visitor_->get_mbr(rect, need_buffer_, distance_))) {
+        LOG_WARN("fail to get cellid from visitor", K(ret));
       } else if (rect.is_empty()) {
         LOG_DEBUG("It's might be empty geometry collection", K(geo_->type()), K(geo_->is_empty()));
       } else {
@@ -287,7 +302,9 @@ int64_t ObS2Adapter::get_mbr(ObSpatialMBR &mbr)
         ObCartesianBox box;
         ObGeoEvalCtx gis_context(CURRENT_CONTEXT, NULL);
         if (OB_FAIL(gis_context.append_geo_arg(geo_))) {
+          LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
         } else if (OB_FAIL(ObGeoFuncEnvelope::eval(gis_context, box))) {
+          LOG_WARN("get mbr box failed", K(ret));
         } else if (box.is_empty()) {
           LOG_DEBUG("It's might be empty geometry collection", K(geo_->type()), K(geo_->is_empty()));
         } else {
@@ -308,21 +325,27 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
   if (OB_ISNULL(visitor_)) {
    if (OB_ISNULL(visitor_ = new ObWkbToS2Visitor(bound, options_, is_geog_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate memory", K(ret));
     } else if (OB_ISNULL(swkb.ptr())) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("input swkb is empty", K(ret));
     } else {
       ObGeoType type = ObGeoType::GEOTYPEMAX;
       ObGeometry *geo = NULL;
       ObString wkb;
       uint32_t offset;
       if (OB_FAIL(ObGeoTypeUtil::get_type_from_wkb(swkb, type))) {
+        LOG_WARN("fail to get geo type by swkb", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator_, type, is_geog_, true, geo))) {
+        LOG_WARN("fail to create_geo_by_type by swkb", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::get_wkb_from_swkb(swkb, wkb, offset))) {
+        LOG_WARN("fail to get wkb from swkb", K(ret), K(swkb));
       } else {
         geo->set_data(wkb);
         if (ObGeoTypeUtil::is_3d_geo_type(type)) {
           ObGeometry3D *geo_3d = static_cast<ObGeometry3D *>(geo);
           if (OB_FAIL(geo_3d->to_2d_geo(*allocator_, geo))) {
+            LOG_WARN("fail to convert 3d geo to 2d", K(ret));
           }
         }
       }
@@ -330,7 +353,9 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
       if (OB_SUCC(ret)) {
         geo_ = geo;
         if (OB_FAIL(geo->do_visit(*visitor_))) {
+          LOG_WARN("fail to do_visit by ObWkbToS2Visitor", K(ret));
         } else if (OB_FAIL(visitor_->get_s2_cell_union())) {
+          LOG_WARN("fail to get s2 cell union", K(ret));
         } else if (visitor_->is_invalid()) {
           // 1. get valid geo inside bounds
           ObGeometry *corrected_geo = NULL;
@@ -340,6 +365,7 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
               ret = OB_SUCCESS;
               need_do_visit = false;
             } else {
+              LOG_WARN("fail to do_visit by ObWkbToS2Visitor", K(ret));
             }
           }
 
@@ -349,7 +375,9 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
             visitor_->reset();
             // 3. do_visit again
             if (OB_FAIL(corrected_geo->do_visit(*visitor_))) {
+              LOG_WARN("fail to do_visit by ObWkbToS2Visitor", K(ret));
             } else if (OB_FAIL(visitor_->get_s2_cell_union())) {
+              LOG_WARN("fail to get s2 cell union", K(ret));
             } 
           }
         }

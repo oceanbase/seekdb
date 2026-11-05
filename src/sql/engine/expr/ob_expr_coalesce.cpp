@@ -41,8 +41,10 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("null types", K(ret));
   } else if (OB_UNLIKELY(param_num < 1)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("no enough param", K(ret), K(param_num));
   } else if (OB_FAIL(aggregate_result_type_for_case(
                        type,
                        types,
@@ -51,16 +53,20 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
                        true,
                        true,
                        is_called_in_sql_))) {
+    LOG_WARN("failed to agg resul type", K(ret));
   } else {
     const ObSQLSessionInfo *session =
       dynamic_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
     if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("cast basic session to sql session info failed", K(ret));
     } else {
       ObExprOperator::calc_result_flagN(type, types, param_num);
       bool is_expr_integer_type = (ob_is_int_tc(type.get_type()) ||
                              ob_is_uint_tc(type.get_type()));
+      bool all_null_type = true;
       for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
+        all_null_type = (types[i].get_type() != ObNullType) ? false : all_null_type;
         if (ob_is_enumset_tc(types[i].get_type())) {
           ObObjType calc_type = get_enumset_calc_type(type.get_type(), i);
           if (OB_UNLIKELY(ObMaxType == calc_type)) {
@@ -89,6 +95,10 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
           }
         }
       }
+      if (!is_called_in_sql() && all_null_type) {
+        ret = OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL;
+        LOG_USER_ERROR(OB_ERR_COALESCE_AT_LEAST_ONE_NOT_NULL);
+      }
     }
   }
   return ret;
@@ -103,7 +113,9 @@ int calc_coalesce_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     ObDatum *child_res = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, child_res))) {
+      LOG_WARN("eval arg failed", K(ret), K(i));
     } else if (OB_FAIL(pl::ObPLDataType::datum_is_null(child_res, is_udt_type, v))) {
+      LOG_WARN("failed to check datum null", K(ret), K(child_res), K(is_udt_type));
     } else if (!v) {
       // TODO: @shaoge coalesce result can be used directly without pre-allocating memory, using the result of a certain child node
       res_datum.set_datum(*child_res);
@@ -130,10 +142,12 @@ int ObExprCoalesce::calc_batch_coalesce_expr(const ObExpr &expr, ObEvalCtx &ctx,
   int  ret = OB_SUCCESS;
   constexpr bool is_udt_type = false;
   bool v = false;
+  LOG_DEBUG("calculate batch coalesce expr", K(batch_size));
 
   ObDatum *results = expr.locate_batch_datums(ctx);
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr results frame is not inited", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObBitVector &my_skip = expr.get_pvt_skip(ctx);
@@ -144,6 +158,7 @@ int ObExprCoalesce::calc_batch_coalesce_expr(const ObExpr &expr, ObEvalCtx &ctx,
       if (skip_cnt >= batch_size) {
         break;
       } else if (OB_FAIL(expr.args_[arg_idx]->eval_batch(ctx, my_skip, batch_size))) {
+        LOG_WARN("failed to eval batch results", K(arg_idx), K(ret));
       } else {        
         ObDatumVector dv = expr.args_[arg_idx]->locate_expr_datumvector(ctx);
         ObBitVector::flip_foreach(
@@ -151,6 +166,7 @@ int ObExprCoalesce::calc_batch_coalesce_expr(const ObExpr &expr, ObEvalCtx &ctx,
           batch_size,
           [&](int64_t idx) __attribute__((always_inline)) {
             if (OB_FAIL(pl::ObPLDataType::datum_is_null(dv.at(idx), is_udt_type, v))) {
+              LOG_WARN("failed to check datum null", K(ret), K(dv.at(idx)), K(is_udt_type));
             } else if (!v) {
               results[idx].set_datum(*dv.at(idx));
               eval_flags.set(idx);

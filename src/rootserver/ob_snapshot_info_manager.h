@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_SNAPSHOT_INFO_MANAGER_H_
 #define OCEANBASE_ROOTSERVER_OB_SNAPSHOT_INFO_MANAGER_H_
 
-#include "share/ob_snapshot_table_proxy.h"
+#include "rootserver/ob_snapshot_table_proxy.h"
 #include "lib/net/ob_addr.h"
 #include "share/scn.h"
 namespace oceanbase
@@ -40,6 +40,9 @@ public:
   virtual ~ObSnapshotInfoManager() {}
   int init(const common::ObAddr &self_addr);
 
+  int check_restore_point(common::ObMySQLProxy &proxy,
+                          const int64_t table_id,
+                          bool &is_exist);
   int batch_acquire_snapshot(
       common::ObMySQLTransaction &trans,
       share::ObSnapShotType snapshot_type,

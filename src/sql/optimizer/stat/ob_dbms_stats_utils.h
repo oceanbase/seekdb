@@ -152,12 +152,9 @@ public:
 
   static int truncate_string_for_opt_stats(const ObObj *old_obj,
                                            ObIAllocator &alloc,
-                                           ObObj *&new_obj,
-                                           const ObDatumAccessContext *datum_access_ctx);
+                                           ObObj *&new_obj);
 
-  static int truncate_string_for_opt_stats(ObObj &obj,
-                                           ObIAllocator &allocator,
-                                           const ObDatumAccessContext *datum_access_ctx);
+  static int truncate_string_for_opt_stats(ObObj &obj, ObIAllocator &allocator);
 
   static int64_t get_truncated_str_len(const ObString &str, const ObCollationType cs_type);
 
@@ -193,8 +190,10 @@ public:
   static int prepare_gather_stat_param(const ObTableStatParam &param,
                                        StatLevel stat_level,
                                        const PartitionIdBlockMap *partition_id_block_map,
+                                       const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                        bool is_split_gather,
                                        int64_t gather_vectorize,
+                                       bool use_column_store,
                                        ObOptStatGatherParam &gather_param);
 
   static int merge_split_gather_tab_stats(ObIArray<ObOptTableStat *> &all_tstats,
@@ -255,9 +254,7 @@ public:
                                              const ObObjMeta &text_col_meta,
                                              ObOptColumnStat *&text_column_stat);
 
-  static int get_max_work_area_size(
-      query::ObIQueryRuntimeEnvironment &runtime_environment,
-      int64_t &max_wa_memory_size);
+  static int get_max_work_area_size(int64_t &max_wa_memory_size);
 
 
   static int get_table_index_infos(share::schema::ObSchemaGetterGuard *schema_guard,

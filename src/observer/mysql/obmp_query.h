@@ -19,15 +19,17 @@
 
 #include "lib/string/ob_string.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
-#include "share/statement/ob_stmt_type.h"
+#include "sql/resolver/ob_stmt_type.h"
 #include "sql/ob_sql_context.h"
 #include "observer/mysql/obmp_base.h"
-#include "sql/ob_query_retry_ctrl.h"
+#include "observer/mysql/ob_query_retry_ctrl.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 namespace oceanbase
 {
 namespace sql
 {
+class ObMonitorInfoManager;
+class ObPhyPlanMonitorInfo;
 class ObMPParseStat;
 }
 namespace share
@@ -36,6 +38,7 @@ namespace schema
 {
 class ObTableSchema;
 }
+class ObPartitionLocation;
 }
 namespace observer
 {
@@ -45,7 +48,7 @@ public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_QUERY;
 
 public:
-  explicit ObMPQuery(const share::ObGlobalContext &gctx);
+  explicit ObMPQuery(const ObGlobalContext &gctx);
   virtual ~ObMPQuery();
 
 public:
@@ -63,9 +66,10 @@ protected:
   void assign_sql(const char * sql, int64_t sql_length) { sql_.assign_ptr(sql, sql_length); }
 private:
   int response_result(ObMySQLResultSet &result, bool force_sync_resp, bool &async_resp_used);
-  int get_schema_info_(ObCachedSchemaGuardInfo *cache_info,
+  int get_tenant_schema_info_(ObTenantCachedSchemaGuardInfo *cache_info,
                       share::schema::ObSchemaGetterGuard *&schema_guard,
-                      int64_t &database_schema_version);
+                      int64_t &tenant_version,
+                      int64_t &sys_version);
   int do_process(sql::ObSQLSessionInfo &session,
                  bool has_more_result,
                  bool force_sync_resp,
@@ -99,6 +103,11 @@ private:
                                bool &is_trans_ctrl_cmd,
                                stmt::StmtType &stmt_type);
 
+  void record_stat(const sql::stmt::StmtType type, const int64_t end_time,
+                   const sql::ObSQLSessionInfo& session,
+                   const int64_t ret,
+                   const bool is_commit_cmd,
+                   const bool is_rollback_cmd) const;
   void update_audit_info(const ObWaitEventStat &total_wait_desc,
                          ObAuditRecordData &record);
   int try_batched_multi_stmt_optimization(sql::ObSQLSessionInfo &session,
@@ -120,7 +129,7 @@ private:
 private:
   //Lifecycle in process_single_stmt()
   sql::ObSqlCtx ctx_;
-  sql::ObQueryRetryCtrl retry_ctrl_;
+  ObQueryRetryCtrl retry_ctrl_;
   common::ObString sql_;
   int64_t single_process_timestamp_;
   int64_t exec_start_timestamp_;

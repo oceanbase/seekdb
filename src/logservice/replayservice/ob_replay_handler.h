@@ -18,11 +18,16 @@
 #define OCEANBASE_LOGSERVICE_OB_REPLAY_HANDLER_
 
 #include "lib/lock/ob_tc_rwlock.h"
-#include "share/log/ob_log_base_type.h"
-#include "share/log/palf/lsn.h"
+#include "logservice/ob_log_base_type.h"
+#include "logservice/palf/lsn.h"
+#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObLS;
+}
 namespace share
 {
 class SCN;
@@ -33,7 +38,7 @@ class ObLogService;
 class ObReplayHandler
 {
 public:
-  ObReplayHandler();
+  ObReplayHandler(storage::ObLS *ls_);
   ~ObReplayHandler();
   void reset();
 public:
@@ -50,6 +55,7 @@ private:
   typedef common::RWLock::WLockGuard WLockGuard;
   typedef common::RWLock::RLockGuard RLockGuard;
 private:
+  storage::ObLS *ls_;
   common::RWLock lock_;
   ObIReplaySubHandler *handlers_[ObLogBaseType::MAX_LOG_BASE_TYPE];
 private:

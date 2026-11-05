@@ -59,6 +59,7 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
       if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT,
                                    *child_node,
                                    child_stmt))) {
+        LOG_WARN("failed to resolve child stmt", K(ret));
       } else if (OB_ISNULL(child_stmt)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to generate stmt for child stmt");
@@ -126,6 +127,7 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected display option", K(ret), K(opt_node->type_));
       }
     }
     if (OB_SUCC(ret)) {

@@ -58,6 +58,7 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
     ObCharsetType charset_type = CHARSET_INVALID;
     if (CHARSET_INVALID == (charset_type = ObCharset::charset_type(cs_name.trim()))) {
       ret = OB_ERR_UNKNOWN_CHARSET;
+      LOG_WARN("unknown charset", K(ret), K(cs_name));
     } else {
       type.set_collation_level(CS_LEVEL_IMPLICIT);
       type.set_collation_type(ObCharset::get_default_collation(charset_type));
@@ -70,6 +71,7 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
       type1.set_calc_collation_type(type.get_collation_type());
       type1.set_calc_collation_level(type.get_collation_level());
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_CHARSET_CONVERT_IGNORE_ERR);
+      LOG_DEBUG("in calc result type", K(ret), K(type1), K(type2), K(type));
     }
   }
 
@@ -81,10 +83,12 @@ int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   int ret = OB_SUCCESS;
   ObDatum *child_res = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_res))) {
+    LOG_WARN("eval arg 0 failed", K(ret));
   } else {
     ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;
     int64_t mbmaxlen = 1;
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(cs_type, mbmaxlen))) {
+      LOG_WARN("fail to get mbmaxlen", K(cs_type), K(ret));
     } else if (mbmaxlen > 1 && !child_res->is_null()) {
       ObString checked_res;
       bool is_null = false;
@@ -93,13 +97,18 @@ int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       ObSolidifiedVarsGetter helper(expr, ctx, session);
       if (OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("session is null", K(ret));
       } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
+        LOG_WARN("get sql mode failed", K(ret));
       } else if (OB_FAIL(ObSQLUtils::check_well_formed_str(child_res->get_string(),
                                                            cs_type,
                                                            checked_res,
                                                            is_null,
                                                            is_strict_mode(sql_mode),
                                                            false))) {
+        LOG_WARN("check_well_formed_str failed", K(ret),
+                                                 K(child_res->get_string()),
+                                                 K(expr.datum_meta_));
       } else if (is_null) {
         res_datum.set_null();
       } else {

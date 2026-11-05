@@ -22,7 +22,6 @@
 #include "sql/engine/expr/ob_expr_promotion_util.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 
 namespace oceanbase
@@ -48,13 +47,21 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(ObExprPromotionUtil::get_nvl_type(type, type1, type2))) {
+    LOG_WARN("failed to get nvl type", K(ret));
   } else if (ob_is_string_type(type.get_type()) || ob_is_json_tc(type.get_type())) {
     ObExprResTypes res_types;
     if (OB_FAIL(res_types.push_back(type1))) {
+      LOG_WARN("fail to push back res type", K(ret));
     } else if (OB_FAIL(res_types.push_back(type2))) {
+      LOG_WARN("fail to push back res type", K(ret));
     } else if (OB_FAIL(aggregate_charsets_for_string_result(type, &res_types.at(0), 2, type_ctx))) {
+      LOG_WARN("failed to aggregate_charsets_for_comparison", K(ret));
     }
+  } else if (ob_is_roaringbitmap_tc(type.get_type())) {
+    type.set_collation_level(CS_LEVEL_IMPLICIT);
+    type.set_collation_type(CS_TYPE_BINARY);
   }
 
   if (OB_FAIL(ret)) {
@@ -64,9 +71,11 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
     ObExprResType coll_calc_type = type;
     if (OB_ISNULL(exec_ctx)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("exec ctx is null", K(ret));
     } else if (type1.get_subschema_id() == type2.get_subschema_id()) {
       type.set_collection(type1.get_subschema_id());
     } else if (OB_FAIL(ObExprResultTypeUtil::get_array_calc_type(exec_ctx, type1, type2, coll_calc_type))) {
+      LOG_WARN("deduce calc type failed", K(ret));
     } else {
       type1.set_calc_meta(coll_calc_type);
       type2.set_calc_meta(coll_calc_type);
@@ -107,7 +116,7 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
     }
     if (SCALE_UNKNOWN_YET != type.get_scale()) {
       if (ob_is_real_type(type.get_type())) {
-        type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type.get_scale())));
+        type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type.get_scale())));
       } else if (ob_is_number_or_decimal_int_tc(type.get_type())) {
         const int16_t intd1 = type1.get_precision() - type1.get_scale();
         const int16_t intd2 = type2.get_precision() - type2.get_scale();
@@ -135,9 +144,11 @@ int ObExprIfNull::calc_ifnull_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObDatum *arg1 = NULL;
   // MySQL ifnull is short-circuiting
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg0))) {
+    LOG_WARN("eval arg0 failed", K(ret));
   } else if (!arg0->is_null()) {
     res_datum.set_datum(*arg0);
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, arg1))) {
+    LOG_WARN("eval arg1 failed", K(ret));
   } else {
     res_datum.set_datum(*arg1);
   }

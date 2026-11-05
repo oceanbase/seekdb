@@ -33,7 +33,10 @@ public:
   ObExpandAggregateUtils(ObRawExprFactory &expr_factory,
                          ObSQLSessionInfo *session_info): 
     expr_factory_(expr_factory),
-    session_info_(session_info) {}
+    session_info_(session_info),
+    expand_for_mv_(false) {}
+
+  void set_expand_for_mv() { expand_for_mv_ = true; }
 
   int expand_aggr_expr(ObDMLStmt *stmt, bool &trans_happened);
 
@@ -60,21 +63,97 @@ private:
                                 common::ObIArray<ObRawExpr*> &candi_win_items,
                                 common::ObIArray<ObWinFunRawExpr*> &new_win_exprs);
 
+  int expand_covar_expr(ObAggFunRawExpr *aggr_expr,
+                        ObRawExpr *&replace_expr,
+                        common::ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_corr_expr(ObAggFunRawExpr *aggr_expr,
+                       ObRawExpr *&replace_expr,
+                       common::ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
   int expand_var_expr(ObAggFunRawExpr *aggr_expr,
                       ObRawExpr *&replace_expr,
                       ObIArray<ObAggFunRawExpr*> &new_aggr_items);
 
+  int expand_regr_expr(ObAggFunRawExpr *aggr_expr,
+                       ObRawExpr *&replace_expr,
+                       ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_regr_slope_expr(ObAggFunRawExpr *aggr_expr,
+                             ObRawExpr *&replace_expr,
+                             ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_regr_intercept_expr(ObAggFunRawExpr *aggr_expr,
+                                 ObRawExpr *&replace_expr,
+                                 ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_regr_count_expr(ObAggFunRawExpr *aggr_expr,
+                             ObRawExpr *&replace_expr,
+                             ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_regr_r2_expr(ObAggFunRawExpr *aggr_expr,
+                          ObRawExpr *&replace_expr,
+                          ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_regr_avg_expr(ObAggFunRawExpr *aggr_expr,
+                           ObRawExpr *&replace_expr,
+                           ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_regr_s_expr(ObAggFunRawExpr *aggr_expr,
+                         ObRawExpr *&replace_expr,
+                         ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
   static bool is_valid_aggr_type(const ObItemType aggr_type);
+
+  static bool is_covar_expr_type(const ObItemType aggr_type) {
+    return aggr_type == T_FUN_COVAR_POP || aggr_type == T_FUN_COVAR_SAMP;
+  }
 
   static bool is_var_expr_type(const ObItemType aggr_type) {
     return aggr_type == T_FUN_VAR_POP || aggr_type == T_FUN_VAR_SAMP;
   }
 
+  static bool is_regr_expr_type(const ObItemType aggr_type);
+  // Construct a special case when expr:
+  //   case when param_expr1 is not null and param_expr2 is not null
+  //   then then_expr
+  //   else NULL
+  //   end
+  static int build_special_case_when_expr(ObRawExprFactory &expr_factory,
+                                          const ObSQLSessionInfo *session,
+                                          ObRawExpr *param_expr1,
+                                          ObRawExpr *param_expr2,
+                                          ObRawExpr *then_expr,
+                                          ObRawExpr *&case_when_expr);
+
+  static bool is_keep_aggr_type(const ObItemType aggr_type) {
+    return aggr_type == T_FUN_KEEP_AVG || aggr_type == T_FUN_KEEP_STDDEV ||
+           aggr_type == T_FUN_KEEP_VARIANCE;
+  }
+
+  int expand_keep_aggr_expr(ObAggFunRawExpr *aggr_expr,
+                            ObRawExpr *&replace_expr,
+                            ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_keep_avg_expr(ObAggFunRawExpr *aggr_expr,
+                           ObRawExpr *&replace_expr,
+                           ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_keep_variance_expr(ObAggFunRawExpr *aggr_expr,
+                                ObRawExpr *&replace_expr,
+                                ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
+  int expand_keep_stddev_expr(ObAggFunRawExpr *aggr_expr,
+                              ObRawExpr *&replace_expr,
+                              ObIArray<ObAggFunRawExpr*> &new_aggr_items);
+
   static bool is_common_aggr_type(const ObItemType aggr_type) {//used for some common aggr expansion
     return aggr_type == T_FUN_AVG || aggr_type == T_FUN_STDDEV ||
            aggr_type == T_FUN_VARIANCE || aggr_type == T_FUN_STDDEV_POP ||
            aggr_type == T_FUN_STDDEV_SAMP ||
-           aggr_type == T_FUN_APPROX_COUNT_DISTINCT;
+           aggr_type == T_FUN_APPROX_COUNT_DISTINCT || 
+           aggr_type == T_FUN_SYS_RB_AND_CARDINALITY_AGG ||
+           aggr_type == T_FUN_SYS_RB_OR_CARDINALITY_AGG;
   }
 
   int expand_avg_expr(ObAggFunRawExpr *aggr_expr,
@@ -101,6 +180,9 @@ private:
                                         ObRawExpr *&replace_expr,
                                         ObIArray<ObAggFunRawExpr *> &new_aggr_items);
 
+  int expand_rb_cardinality_expr(ObAggFunRawExpr *aggr_expr,
+                                 ObRawExpr *&replace_expr,
+                                 ObIArray<ObAggFunRawExpr*> &new_aggr_items);
   int add_cast_expr(ObRawExpr *expr,
                     const ObRawExprResType &dst_type,
                     ObRawExpr *&new_expr);
@@ -111,6 +193,7 @@ private:
 
   ObRawExprFactory &expr_factory_;
   ObSQLSessionInfo *session_info_;
+  bool expand_for_mv_;
 };
 
 } // namespace sql

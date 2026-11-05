@@ -17,9 +17,10 @@
 #ifndef OCEANBASE_SHARE_OB_GLOBAL_MERGE_TABLE_OPERATOR_
 #define OCEANBASE_SHARE_OB_GLOBAL_MERGE_TABLE_OPERATOR_
 
+#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/container/ob_iarray.h"
-#include "share/inner_table/local_table_schema.h"
 #include "common/mysqlclient/ob_isql_client.h"
+#include "common/ob_zone.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 
 namespace oceanbase
@@ -30,18 +31,15 @@ class ObMySQLTransaction;
 }
 namespace share
 {
-
-
 struct ObGlobalMergeInfo;
 class ObMergeInfoTableStorage;
-class LocalStore;
 
 // CRUD operation to __all_merge_info table
 class ObGlobalMergeTableOperator
 {
 public:
-  // Initialize local storage (called once at startup)
-  static int init(LocalStore &store);
+  // Initialize SQLite storage (called once at startup)
+  static int init();
   static int load_global_merge_info(common::ObISQLClient &sql_client,
                                     share::ObGlobalMergeInfo &info,
                                     const bool print_sql = false);

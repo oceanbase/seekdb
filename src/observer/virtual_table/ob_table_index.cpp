@@ -40,6 +40,7 @@ ObTableIndex::ObTableIndex()
       is_rowkey_end_(false),
       is_normal_end_(false),
       ft_dep_col_idx_(OB_INVALID_ID),
+      min_data_version_(OB_INVALID_VERSION),
       vec_dep_col_idx_(OB_INVALID_ID)
 {
 }
@@ -85,11 +86,16 @@ void ObTableIndex::reset()
   is_rowkey_end_ = false;
   simple_index_infos_.reset();
   ft_dep_col_idx_ = OB_INVALID_ID;
+  min_data_version_ = OB_INVALID_VERSION;
   vec_dep_col_idx_ = OB_INVALID_ID;
 }
 
 int ObTableIndex::init() {
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version_))) {
+    LOG_WARN("fail to get min data version", K(ret));
+  }
+  return ret;
 }
 
 int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
@@ -104,9 +110,12 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
     const int64_t col_count = output_column_ids_.count();
     bool is_end = false;
     if (OB_INVALID_ID == show_table_id_) {
-      {
+      if (false){
+        ret = OB_ITER_END;
+      } else {
         if (OB_INVALID_ID == static_cast<uint64_t>(database_schema_idx_)) {//first get next row
-          if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas_))) {
+          if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas_))) {
+            SERVER_LOG(WARN, "failed to get database schema of tenant");
           } else {
             database_schema_idx_ = 0;
           }
@@ -136,6 +145,8 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
                                                       cells,
                                                       col_count,
                                                       is_end))) {
+                SERVER_LOG(WARN, "failed to add table constraint of database schema!",
+                           K(ret));
               } else {
                 if (is_end) {
                   ++database_schema_idx_;
@@ -149,11 +160,14 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
       const ObTableSchema *table_schema = NULL;
       const ObDatabaseSchema *database_schema = NULL;
       if (OB_FAIL(schema_guard_->get_table_schema( show_table_id_, table_schema))) {
+        SERVER_LOG(WARN, "fail to get table schema", K(ret));
       } else if (OB_UNLIKELY(NULL == table_schema)) {
               ret = OB_TABLE_NOT_EXIST;
         SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_table_id_));
       } else if (OB_FAIL(schema_guard_->get_database_schema(
                  table_schema->get_database_id(), database_schema))) {
+        SERVER_LOG(WARN, "fail to get database schema", K(ret),
+                   "database_id", table_schema->get_database_id());
       } else if (OB_UNLIKELY(NULL == database_schema)) {
         ret = OB_ERR_BAD_DATABASE;
         SERVER_LOG(WARN, "fail to get database schema", K(ret),
@@ -163,6 +177,8 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
                                            cells,
                                            col_count,
                                            is_end))){
+        SERVER_LOG(WARN, "failed to add table indexes of table schema",
+                   "table_schema", *table_schema, K(ret));
       } else {/*do nothing*/}
       if (is_end) {
         ret = OB_ITER_END;
@@ -188,6 +204,7 @@ int ObTableIndex::add_database_indexes(const ObDatabaseSchema &database_schema,
       SERVER_LOG(WARN, "data member is not init", K(ret), K(schema_guard_));
     } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_schema.get_database_id(),
                                                                     table_schemas_))) {
+      SERVER_LOG(WARN, "failed to get table schema in database", K(ret));
     } else {
       table_schema_idx_ = 0;
     }
@@ -209,13 +226,16 @@ int ObTableIndex::add_database_indexes(const ObDatabaseSchema &database_schema,
           ret = OB_TABLE_NOT_EXIST;
           SERVER_LOG(WARN, "table schema not exist", K(ret));
         } else if(table_schema->is_index_table()
-            || table_schema->is_aux_lob_table()) {
+            || table_schema->is_aux_lob_table()
+            || table_schema->is_mlog_table()) {
           is_sub_end = true;
         } else if (OB_FAIL(add_table_indexes(*table_schema,
                                              database_schema.get_database_name_str(),
                                              cells,
                                              col_count,
                                              is_sub_end))){
+          SERVER_LOG(WARN, "failed to add table constraint of table schema",
+                     "table_schema", *table_schema, K(ret));
         } else {/*do nothing*/}
         if (OB_LIKELY(OB_SUCC(ret) && is_sub_end)) {
             ++table_schema_idx_;
@@ -243,6 +263,7 @@ int ObTableIndex::add_table_indexes(const ObTableSchema &table_schema,
                                    cells,
                                    col_count,
                                    is_rowkey_end_))) {
+      SERVER_LOG(WARN, "fail to add rowkey indexes", K(ret));
     }
     if (OB_SUCC(ret) && is_rowkey_end_) {
       if (OB_FAIL(add_normal_indexes(table_schema,
@@ -250,6 +271,7 @@ int ObTableIndex::add_table_indexes(const ObTableSchema &table_schema,
                                      cells,
                                      col_count,
                                      is_normal_end_))) {
+        SERVER_LOG(WARN, "fail to add normal indexes", K(ret));
       }
     }
   } else {
@@ -258,6 +280,7 @@ int ObTableIndex::add_table_indexes(const ObTableSchema &table_schema,
                                    cells,
                                    col_count,
                                    is_normal_end_))) {
+      SERVER_LOG(WARN, "fail to add normal indexes", K(ret));
     }
   }
   is_end = is_rowkey_end_ && is_normal_end_;
@@ -279,12 +302,13 @@ int ObTableIndex::get_rowkey_index_column(const ObTableSchema &table_schema,
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "rowkey_info_idx_ is wrong", K(rowkey_info_idx_));
   } else if (OB_FAIL(table_schema.get_store_column_ids(store_column_ids, true))) {
+    SERVER_LOG(WARN, "get store column ids failed");
   } else if (rowkey_info_idx_ >= store_column_ids.count()) {
     is_end = true;
     rowkey_info_idx_ = OB_INVALID_ID;
   } else {
     is_column_visible = false;
-    if (table_schema.is_view_table()) {
+    if (table_schema.is_view_table() && !table_schema.is_materialized_view()) {
       is_end = true;
       rowkey_info_idx_ = OB_INVALID_ID;
     } else if (table_schema.is_table_with_pk()
@@ -324,19 +348,37 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
     const ObColumnSchemaV2 *column_schema = NULL;
     bool is_column_visible = false;
     const ObTableSchema *real_table_schema = &table_schema;
-    if (OB_FAIL(ret)) {
-    } else {
-      OB_ASSERT(real_table_schema != nullptr);
-      if (OB_FAIL(get_rowkey_index_column(*real_table_schema, column_schema, is_column_visible, is_end))) {
-      } else if (is_end) {
-        // do nothing
-      } else if (OB_ISNULL(column_schema)) {
+    if (table_schema.is_materialized_view()) {
+      // a mview's indexes are built upon its container table
+      const ObTableSchema *container_table_schema = nullptr;
+      if (OB_FAIL(schema_guard_->get_table_schema(
+          table_schema.get_data_table_id(), container_table_schema))) {
+        SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
+      } else if (OB_ISNULL(container_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "column schema is NULL", K(ret));
+        SERVER_LOG(WARN, "invalid container table id", KR(ret),
+            "container table id", table_schema.get_data_table_id());
       } else {
-        uint64_t cell_idx = 0;
-        for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
-          uint64_t col_id = output_column_ids_.at(j);
+        real_table_schema = container_table_schema;
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(real_table_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null schema", KR(ret), KP(real_table_schema));
+    } else if (OB_FAIL(get_rowkey_index_column(*real_table_schema, column_schema, 
+                                        is_column_visible, is_end))) {
+      SERVER_LOG(WARN, "fail to get rowkey index column", K(ret));
+    } else if (is_end) {
+      // do nothing
+    } else if (OB_ISNULL(column_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "column schema is NULL", K(ret));
+    } else {
+      uint64_t cell_idx = 0;
+      for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
+        uint64_t col_id = output_column_ids_.at(j);
           switch(col_id) {
           // table_id
           case OB_APP_MIN_COLUMN_ID: {
@@ -467,7 +509,6 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
         }
       }
       ++rowkey_info_idx_;
-      }
     }
   }
   return ret;
@@ -487,7 +528,23 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
     SERVER_LOG(WARN, "schema guard is not init", KR(ret), KP(schema_guard_));
   } else if (OB_INVALID_ID == static_cast<uint64_t>(index_tid_array_idx_)) {
     simple_index_infos_.reset();
-    if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos_))) {
+    if (table_schema.mv_container_table()) {
+      // bypass
+    } else if (table_schema.is_materialized_view()) {
+      // a mview's indexes are built upon its container table
+      const ObTableSchema *container_table_schema = nullptr;
+      if (OB_FAIL(schema_guard_->get_table_schema(
+          table_schema.get_data_table_id(), container_table_schema))) {
+        SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
+      } else if (OB_ISNULL(container_table_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "invalid container table id", KR(ret),
+            "container table id", table_schema.get_data_table_id());
+      } else if (OB_FAIL(container_table_schema->get_simple_index_infos(simple_index_infos_))) {
+        SERVER_LOG(WARN, "cannot get index list", KR(ret));
+      }
+    } else if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos_))) {
+      SERVER_LOG(WARN, "cannot get index list", KR(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -510,6 +567,9 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
         if (OB_FAIL(schema_guard_->get_table_schema(
                   simple_index_infos_.at(index_tid_array_idx_).table_id_,
                   index_schema))) {
+          SERVER_LOG(WARN, "fail to get index table", K(ret),
+                     "index_table_id",
+                     simple_index_infos_.at(index_tid_array_idx_).table_id_);
         } else if (OB_UNLIKELY(NULL == index_schema)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "invalid index table id", K(ret),
@@ -524,6 +584,7 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
             is_sub_end = true;
           } else if (is_fts_index
                      && OB_FAIL(index_schema->get_fulltext_typed_col_ids(doc_id_col_id, type, ft_col_id))) {
+            LOG_WARN("get generated column ids failed", K(ret));
           } else if (is_fts_index) {
             ObArray<uint64_t> dep_column_ids;
             const ObColumnSchemaV2 *gen_column_schema = NULL;
@@ -533,12 +594,14 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
             if (OB_UNLIKELY(!ObDocIDUtils::is_docid_col_id_valid(doc_id_col_id) || ft_col_id <= OB_APP_MIN_COLUMN_ID
                             || OB_INVALID_ID == ft_col_id)) {
               ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("invalid doc id or fulltext column id", K(ret), K(doc_id_col_id), K(ft_col_id));
             } else if (OB_ISNULL(gen_column_schema = table_schema.get_column_schema(ft_col_id))) {
               ret = OB_SCHEMA_ERROR;
               SERVER_LOG(WARN, "fail to get data table column schema", K(ret));
             } else if (OB_FAIL(ObFtsIndexBuilderUtil::get_index_column_ids_for_fts(table_schema,
                                                                                    *gen_column_schema,
                                                                                    dep_column_ids))) {
+              LOG_WARN("get cascaded column ids from column schema failed", K(ret), K(*gen_column_schema));
             } else if (dep_column_ids.count() <= ft_dep_col_idx_) {
               is_sub_end = true;
               ft_dep_col_idx_ = OB_INVALID_ID;
@@ -556,14 +619,18 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
           } else if (index_schema->is_vec_index()) {
             uint64_t vec_column_id = OB_INVALID_ID;
             if (index_schema->is_vec_spiv_index() && OB_FAIL(index_schema->get_sparse_vec_index_column_id(vec_column_id))) {
+              LOG_WARN("get generated column id failed", K(ret));
             } else if (!index_schema->is_vec_spiv_index() && !is_hybrid_vec_index(index_schema->get_index_type()) && OB_FAIL(index_schema->get_vec_index_column_id(vec_column_id))) {
+              LOG_WARN("get generated column id failed", K(ret));
             } else if (is_hybrid_vec_index(index_schema->get_index_type()) && OB_FAIL(index_schema->get_hybrid_vec_chunk_column_id(vec_column_id))) {
+              LOG_WARN("get generated column id failed", K(ret));
             } else {
               if (OB_INVALID_ID == static_cast<uint64_t>(vec_dep_col_idx_)) {
                 vec_dep_col_idx_ = 0;
               }
               if (OB_UNLIKELY(vec_column_id <= OB_APP_MIN_COLUMN_ID || OB_INVALID_ID == vec_column_id)) {
                 ret = OB_INVALID_ARGUMENT;
+                LOG_WARN("invalid vec column id", K(ret), K(vec_column_id));
               } else if (index_schema->is_vec_spiv_index()) {
                 if (vec_dep_col_idx_ > 0) {
                   is_sub_end = true;
@@ -579,6 +646,7 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
                   ret = OB_SCHEMA_ERROR;
                   SERVER_LOG(WARN, "fail to get data table column schema", K(ret));
                 } else if (OB_FAIL(gen_column_schema->get_cascaded_column_ids(vec_index_key_column_ids))) {
+                  LOG_WARN("get cascaded column ids from column schema failed", K(ret), K(*gen_column_schema));
                 } else if (vec_index_key_column_ids.count() <= vec_dep_col_idx_) {
                   is_sub_end = true;
                   vec_dep_col_idx_ = OB_INVALID_ID;
@@ -632,6 +700,7 @@ int ObTableIndex::get_normal_index_column(const ObTableSchema &table_schema,
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "index_column_idx_ is wrong", K(ret));
   } else if (OB_FAIL(index_schema->get_store_column_ids(store_column_ids, true))) {
+    SERVER_LOG(WARN, "get store columns fail", K(ret));
   } else if (index_column_idx_ >= store_column_ids.count()) {
     is_end = true;
     index_column_idx_ = OB_INVALID_ID;
@@ -643,6 +712,7 @@ int ObTableIndex::get_normal_index_column(const ObTableSchema &table_schema,
       ret = OB_SCHEMA_ERROR;
       SERVER_LOG(WARN, "fail to get column desc", K(ret));
     } else if (OB_FAIL(index_info.is_rowkey_column(column_desc->col_id_, is_column_visible))) {
+      SERVER_LOG(WARN, "fail to check rowkey column", K(ret), K(column_desc->col_id_));
     } else if (index_schema->is_spatial_index()) {
       if (!is_column_visible) {
         // normal column
@@ -708,23 +778,41 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
     const ObColumnSchemaV2 *column_schema = NULL;
     bool is_column_visible;
     const ObTableSchema *real_table_schema = &table_schema;
-    if (OB_FAIL(ret)) {
-    } else {
-      OB_ASSERT(real_table_schema != nullptr);
-      if (OB_FAIL(
-              get_normal_index_column(*real_table_schema, index_schema, column_schema, is_column_visible, is_end))) {
-      } else if (is_end) {
-        // do nothing
-      } else if (OB_ISNULL(column_schema)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        SERVER_LOG(WARN, "column schema is NULL", K(ret));
-      } else if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(buf_len)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
+    if (table_schema.is_materialized_view()) {
+      // a mview's indexes are built upon its container table
+      const ObTableSchema *container_table_schema = nullptr;
+      if (OB_FAIL(schema_guard_->get_table_schema(
+          table_schema.get_data_table_id(), container_table_schema))) {
+        SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
+      } else if (OB_ISNULL(container_table_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "invalid container table id", KR(ret),
+            "container table id", table_schema.get_data_table_id());
       } else {
-        uint64_t cell_idx = 0;
-        for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
-          uint64_t col_id = output_column_ids_.at(j);
-          switch (col_id) {
+        real_table_schema = container_table_schema;
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(real_table_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error", K(ret));
+    } else if (OB_FAIL(get_normal_index_column(*real_table_schema, index_schema, column_schema, 
+                                        is_column_visible, is_end))) {
+      SERVER_LOG(WARN, "fail to get normal index column", K(ret));
+    } else if (is_end) {
+      // do nothing
+    } else if (OB_ISNULL(column_schema)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      SERVER_LOG(WARN, "column schema is NULL", K(ret));
+    } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(buf_len)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory for print buffer failed", K(ret), K(buf_len));
+    } else {
+      uint64_t cell_idx = 0;
+      for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
+        uint64_t col_id = output_column_ids_.at(j);
+        switch(col_id) {
           // table_id
           case OB_APP_MIN_COLUMN_ID: {
             cells[cell_idx].set_int(table_schema.get_table_id());
@@ -740,6 +828,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             } else if (OB_FAIL(ObTableSchema::get_index_name(*allocator_,
                 table_schema.get_table_id(), index_schema->get_table_name_str(),
                 index_name))) {
+              SERVER_LOG(WARN, "error get index table name failed", K(ret));
             } else {
               cells[cell_idx].set_varchar(index_name);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -784,6 +873,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
           case OB_APP_MIN_COLUMN_ID + 7: {
             ObString column_name;
             if (OB_FAIL(get_show_column_name(table_schema, *column_schema, column_name))) {
+              LOG_WARN("get show column name failed", K(ret), K(table_schema), KPC(column_schema));
             } else {
               cells[cell_idx].set_varchar(column_name);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -812,6 +902,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
               //print the length of the prefix index
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
+                LOG_WARN("print prefix column data length failed", K(ret), KPC(column_schema), K(buf), K(buf_len), K(pos));
               } else {
                 cells[cell_idx].set_varchar(ObString(pos, buf));
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -869,6 +960,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             if (column_schema->is_func_idx_column()) {
               ObString col_def;
               if (OB_FAIL(column_schema->get_cur_default_value().get_string(col_def))) {
+                LOG_WARN("get generated column definition failed", K(ret), K(*column_schema));
               } else {
                 cells[cell_idx].set_varchar(col_def);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -899,7 +991,6 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
         }
       }
       ++index_column_idx_;
-      }
     }
   }
   return ret;
@@ -933,6 +1024,7 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
       SERVER_LOG(WARN, "fail to get data table column schema", K(ret), K(column_id));
     } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory for print buffer failed", K(ret), K(buf_len));
     } else {
       uint64_t cell_idx = 0;
       for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
@@ -950,6 +1042,7 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
             if (OB_FAIL(ObTableSchema::get_index_name(*allocator_,
                 table_schema.get_table_id(), index_schema->get_table_name_str(),
                 index_name))) {
+              SERVER_LOG(WARN, "error get index table name failed", K(ret));
             } else {
               cells[cell_idx].set_varchar(index_name);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -1012,6 +1105,7 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
               //print the length of the prefix index
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
+                LOG_WARN("print prefix column data length failed", K(ret), KPC(column_schema), K(buf), K(buf_len), K(pos));
               } else {
                 cells[cell_idx].set_varchar(ObString(pos, buf));
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -1117,6 +1211,7 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
       SERVER_LOG(WARN, "fail to get data table column schema", K(ret), K(column_id));
     } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory for print buffer failed", K(ret), K(buf_len));
     } else {
       uint64_t cell_idx = 0;
       for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
@@ -1134,6 +1229,7 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
             if (OB_FAIL(ObTableSchema::get_index_name(*allocator_,
                 table_schema.get_table_id(), index_schema->get_table_name_str(),
                 index_name))) {
+              SERVER_LOG(WARN, "error get index table name failed", K(ret));
             } else {
               cells[cell_idx].set_varchar(index_name);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -1196,6 +1292,7 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
               //print the length of the prefix index
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
+                LOG_WARN("print prefix column data length failed", K(ret), KPC(column_schema), K(buf), K(buf_len), K(pos));
               } else {
                 cells[cell_idx].set_varchar(ObString(pos, buf));
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -1283,10 +1380,13 @@ int ObTableIndex::get_show_column_name(const ObTableSchema &table_schema,
     ObSEArray<uint64_t, 1> deps_column_ids;
     const ObColumnSchemaV2 *deps_column = NULL;
     if (OB_FAIL(column_schema.get_cascaded_column_ids(deps_column_ids))) {
+      LOG_WARN("get cascaded column ids from column schema failed", K(ret), K(column_schema));
     } else if (OB_UNLIKELY(deps_column_ids.count() != 1)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("deps column ids is invalid", K(ret), K(deps_column_ids));
     } else if (OB_ISNULL(deps_column = table_schema.get_column_schema(deps_column_ids.at(0)))) {
       ret = OB_ERR_COLUMN_NOT_FOUND;
+      LOG_WARN("deps column not found in table schema", K(ret), K(deps_column_ids.at(0)), K(table_schema));
     } else {
       column_name = deps_column->get_column_name_str();
     }

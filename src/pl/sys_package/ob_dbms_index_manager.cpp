@@ -15,10 +15,9 @@
  */
 
 #define USING_LOG_PREFIX PL
-#include "config_bridge.h"
 #include "ob_dbms_index_manager.h"
-#include "query/change_stream/ob_change_stream_service.h"
-#include "share/rc/ob_server_runtime.h"
+#include "observer/change_stream/ob_change_stream_mgr.h"
+#include "share/rc/ob_tenant_base.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 
 using namespace oceanbase::common;
@@ -37,20 +36,17 @@ int ObDBMSIndexManager::refresh(
   UNUSED(result);
 
   ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
-  const int64_t timeout_us = config::internal_sql_execute_timeout();
-  query::ObIChangeStreamService *change_stream =
-      OB_ISNULL(ctx.exec_ctx_)
-          ? nullptr
-          : ctx.exec_ctx_->get_change_stream_service();
+  const int64_t timeout_us = GCONF.internal_sql_execute_timeout;
 
   if (OB_ISNULL(ctx.exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("exec ctx is null", KR(ret));
   } else if (OB_ISNULL(mysql_proxy)) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(change_stream)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(change_stream->wait_until_refreshed(
+    LOG_WARN("mysql proxy is not inited", KR(ret));
+  } else if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
                  *mysql_proxy, timeout_us))) {
+    LOG_WARN("wait change stream refresh failed", KR(ret));
   }
   return ret;
 }

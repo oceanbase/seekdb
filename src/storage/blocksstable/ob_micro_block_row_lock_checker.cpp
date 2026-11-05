@@ -43,8 +43,11 @@ void ObMicroBlockRowLockChecker::inc_empty_read(ObSSTableReadHandle &read_handle
   if (OB_NOT_NULL(context_) && OB_NOT_NULL(sstable_) && !context_->query_flag_.is_index_back()
       && context_->query_flag_.is_use_bloomfilter_cache() && !sstable_->is_small_sstable()) {
     (void)OB_STORE_CACHE.get_bf_cache().inc_empty_read(param_->table_id_,
+                                                       param_->ls_id_,
+                                                       sstable_->get_key(),
                                                        macro_id_,
-                                                       read_handle.get_rowkey_datum_cnt());
+                                                       read_handle.get_rowkey_datum_cnt(),
+                                                       &read_handle);
   }
 }
 
@@ -55,6 +58,7 @@ int ObMicroBlockRowLockChecker::inner_get_next_row(
   int ret = OB_SUCCESS;
   if (OB_FAIL(end_of_block())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("Failed to get next row", K(ret));
     }
   } else {
     current = current_++;
@@ -80,6 +84,7 @@ int ObMicroBlockRowLockChecker::check_row(
     need_stop = false;
   } else if (OB_FAIL(ObGhostRowUtil::is_ghost_row(multi_version_flag,
                                                   is_ghost_row_flag))) {
+    LOG_WARN("Failed to check ghost row", K(ret), K(multi_version_flag));
   } else if (is_ghost_row_flag) {
     // Case2: We encounter the ghost row which means the version node is
     // faked, and the row has already ended. So, we believe that the next
@@ -103,6 +108,7 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(read_info_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Unexpected null param", K(ret), KP_(read_info));
   } else {
     const ObRowHeader *row_header = nullptr;
     int64_t sql_sequence = 0;
@@ -123,6 +129,7 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
       filtered_by_fork = false;
       if (OB_FAIL(inner_get_next_row(current, lock_state))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          LOG_WARN("Failed to get next row", K(ret), K_(macro_id), K(is_major_sstable));
         }
       } else if (!is_major_sstable) {
         if (OB_FAIL(reader_->get_multi_version_info(current,
@@ -130,6 +137,8 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
                                                     row_header,
                                                     trans_version,
                                                     sql_sequence))) {
+          LOG_WARN("failed to get multi version info", K(ret), K_(current), KPC(row_header),
+                   KPC_(lock_state), K(sql_sequence), K_(macro_id));
         } else if (OB_ISNULL(row_header)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("row header is null", K(ret));
@@ -168,6 +177,7 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
                                                         trans_version,
                                                         row_header->get_row_multi_version_flag().is_ghost_row(),
                                                         filtered_by_truncate))) {
+            LOG_WARN("failed to check truncate part filter", K(ret), K(current), K(trans_version), K(is_major_sstable));
           } else if (filtered_by_truncate) {
           } else if (FALSE_IT(*lock_state = uncommited_lock_state)) {
           } else if (lock_state->is_lock_decided()) {
@@ -175,17 +185,20 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
           }
         } else if (OB_UNLIKELY(nullptr != context_->truncate_part_filter_) &&
                    OB_FAIL(check_truncate_part_filter(current, 0/*trans_version*/, row_header->get_row_multi_version_flag().is_ghost_row(), filtered_by_truncate))) {
+          LOG_WARN("failed to check truncate part filter", K(ret), K(current), K(trans_version), K(is_major_sstable));
         } else if (filtered_by_truncate) {
         } else if (is_fork_ctx && trans_version > fork_snapshot_version) {
           // In fork context, skip committed rows with trans_version > fork_snapshot_version
           // These rows were written after the fork point and should not be visible
           filtered_by_fork = true;
         } else if (OB_FAIL(lock_state->trans_version_.convert_for_tx(trans_version))) {
+          LOG_ERROR("convert failed", K(ret), K(trans_version));
         } else {
           lock_state->lock_dml_flag_ = row_header->get_row_flag().get_dml_flag();
         }
       } else if (OB_UNLIKELY(nullptr != context_->truncate_part_filter_) &&
                  OB_FAIL(check_truncate_part_filter(current, 0/*trans_version*/, false, filtered_by_truncate))) {
+        LOG_WARN("failed to check truncate part filter", K(ret), K(current), K(trans_version), K(is_major_sstable));
       } else if (filtered_by_truncate) {
       } else {
         lock_state->trans_version_ = sstable_->get_end_scn();
@@ -196,7 +209,11 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
         if (is_major_sstable) {
           check_row_in_major_sstable(need_stop);
         } else if (OB_FAIL(check_row(read_trans_id, row_header, *lock_state, need_stop))) {
+          LOG_WARN("Failed to check row", K(ret), K(ret), KPC_(range), K(read_trans_id), KPC(row_header),
+                   K(sql_sequence), KPC(lock_state));
         }
+        STORAGE_LOG(DEBUG, "check row lock on sstable", K(ret), KPC_(range), K(need_stop),
+                    K(read_trans_id), KPC(row_header), KPC(lock_state), K(current));
         if (OB_SUCC(ret) && need_stop) {
           break;
         }
@@ -214,13 +231,17 @@ int ObMicroBlockRowLockChecker::check_truncate_part_filter(const int64_t current
   if (!is_ghost_row && context_->truncate_part_filter_->is_valid_filter()) {
     const int64_t rowkey_cnt = read_info_->get_schema_rowkey_count();
     if (OB_FAIL(reader_->get_row(current, row_))) {
+      LOG_WARN("failed to get row", K(ret));
     } else if (transaction::is_effective_trans_version(trans_version)) {
       row_.storage_datums_[rowkey_cnt].reuse();
       row_.storage_datums_[rowkey_cnt].set_int(trans_version);
     }
     if (FAILEDx(context_->truncate_part_filter_->filter(row_, fitered, true/*check_filter*/, !sstable_->is_major_sstable()))) {
+      LOG_WARN("failed to filter truncated part", K(ret));
     } else if (OB_UNLIKELY(fitered)) {
+      LOG_DEBUG("[TRUNCATE INFO] filtered by truncated main table partition", K(ret), K(current), K(trans_version), K_(row));
     } else {
+      LOG_DEBUG("[TRUNCATE INFO] not filtered row", KR(ret), K(row_), KPC(context_->truncate_part_filter_), K(rowkey_cnt));
     }
   }
   return ret;
@@ -252,6 +273,7 @@ int ObMicroBlockRowLockMultiChecker::open(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIMicroBlockRowScanner::open(macro_id, block_data, true, true))) {
+    LOG_WARN("Failed to open ObIMicroBlockRowScanner", K(ret));
   } else {
     // current_, start_, last_ are all -1.
     rowkey_current_idx_ = rowkey_begin_idx;
@@ -264,14 +286,17 @@ int ObMicroBlockRowLockMultiChecker::open(
   return ret;
 }
 
-void ObMicroBlockRowLockMultiChecker::inc_empty_read()
+void ObMicroBlockRowLockMultiChecker::inc_empty_read(ObSSTableReadHandle &read_handle)
 {
   if (OB_NOT_NULL(context_) && OB_NOT_NULL(sstable_) && !context_->query_flag_.is_index_back()
-      && context_->query_flag_.is_use_bloomfilter_cache()
-      && !sstable_->is_small_sstable() && empty_read_cnt_ > 0) {
+      && context_->query_flag_.is_use_bloomfilter_cache() && !sstable_->is_small_sstable() && empty_read_cnt_ > 0) {
+    read_handle.current_rows_info_idx_ = rowkey_begin_idx_;
     (void)OB_STORE_CACHE.get_bf_cache().inc_empty_read(param_->table_id_,
+                                                       param_->ls_id_,
+                                                       sstable_->get_key(),
                                                        macro_id_,
                                                        rows_info_->get_datum_cnt(),
+                                                       &read_handle,
                                                        empty_read_cnt_);
   }
 }
@@ -286,6 +311,7 @@ int ObMicroBlockRowLockMultiChecker::inner_get_next_row(
   } else if (OB_ITER_END == end_of_block() || rows_info_->is_row_skipped(rowkey_current_idx_ - 1)) {
     if (OB_FAIL(seek_forward())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("Failed to seek forward to next row", K(ret), K_(check_exist));
       }
     }
   }
@@ -314,6 +340,7 @@ int ObMicroBlockRowLockMultiChecker::check_row(
     need_stop = false;
   } else if (OB_FAIL(ObGhostRowUtil::is_ghost_row(multi_version_flag,
                                                   is_ghost_row_flag))) {
+    LOG_WARN("Failed to check ghost row", K(ret), K(multi_version_flag));
   } else if (is_ghost_row_flag) {
     // Case2: We encounter the ghost row which means the version node is
     // faked, and the row has already ended. So, we believe that the next
@@ -399,6 +426,8 @@ int ObMicroBlockRowLockMultiChecker::seek_forward()
                  K_(rowkey_current_idx), K_(rowkey_begin_idx), K_(rowkey_end_idx), K_(current), K_(start), K_(last),
                  K_(macro_id));
       } else if (OB_FAIL(micro_block_reader->find_bound(rowkey, true, begin_idx, row_idx, is_equal))) {
+        LOG_WARN("Failed to find bound", K(ret), K(begin_idx), K(rowkey), K_(current), K_(start), K_(last),
+                 K_(rowkey_current_idx), K(need_search_duplicate_row));
       } else if (!is_equal) {
         ++rowkey_current_idx_;
         ++empty_read_cnt_;
@@ -407,6 +436,7 @@ int ObMicroBlockRowLockMultiChecker::seek_forward()
         current_ = row_idx;
         start_ = row_idx;
         if (need_search_duplicate_row && OB_FAIL(micro_block_reader->find_bound_through_linear_search(rowkey, row_idx, last_))) {
+          LOG_WARN("Failed to find bound through linear search", K(ret), K(row_idx));
         } else {
           ++rowkey_current_idx_;
         }

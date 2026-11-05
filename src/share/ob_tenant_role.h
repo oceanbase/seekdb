@@ -1,0 +1,89 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_TENANT_ROLE_H_
+#define OCEANBASE_SHARE_OB_TENANT_ROLE_H_
+
+#include "lib/string/ob_string.h" // ObString
+#include "lib/utility/ob_print_utils.h"             // TO_STRING_KV
+#include "lib/utility/ob_unify_serialize.h"   // serialize
+#include "lib/oblog/ob_log_module.h"      // LOG*
+
+namespace oceanbase {
+namespace share {
+
+class ObTenantRole
+{
+  OB_UNIS_VERSION(1);
+public:
+  // Tenant Role
+  enum Role
+  {
+    INVALID_TENANT = 0,
+    PRIMARY_TENANT = 1,
+    STANDBY_TENANT = 2,
+    RESTORE_TENANT = 3,
+    MAX_TENANT = 4,
+  };
+public:
+  ObTenantRole() : value_(INVALID_TENANT) {}
+  explicit ObTenantRole(const Role value) : value_(value) {}
+  explicit ObTenantRole(const ObString &str);
+  ~ObTenantRole() { reset(); }
+
+public:
+  void reset() { value_ = INVALID_TENANT; }
+  bool is_valid() const { return INVALID_TENANT != value_; }
+  Role value() const { return value_; }
+  const char* to_str() const;
+
+  // assignment
+  ObTenantRole &operator=(const Role value) { value_ = value; return *this; }
+
+  // compare operator
+  bool operator == (const ObTenantRole &other) const { return value_ == other.value_; }
+  bool operator != (const ObTenantRole &other) const { return value_ != other.value_; }
+
+  // ObTenantRole attribute interface
+  bool is_invalid() const { return INVALID_TENANT == value_; }
+  bool is_primary() const { return PRIMARY_TENANT == value_; }
+  bool is_standby() const { return STANDBY_TENANT == value_; }
+  bool is_restore() const { return RESTORE_TENANT == value_; }
+
+  TO_STRING_KV("tenant_role", to_str(), K_(value));
+  DECLARE_TO_YSON_KV;
+private:
+  Role value_;
+};
+
+#define GEN_IS_TENANT_ROLE_DECLARE(TENANT_ROLE_VALUE, TENANT_ROLE) \
+  bool is_##TENANT_ROLE##_tenant(const ObTenantRole::Role value);
+
+GEN_IS_TENANT_ROLE_DECLARE(ObTenantRole::Role::INVALID_TENANT, invalid)
+GEN_IS_TENANT_ROLE_DECLARE(ObTenantRole::Role::PRIMARY_TENANT, primary)
+GEN_IS_TENANT_ROLE_DECLARE(ObTenantRole::Role::STANDBY_TENANT, standby)
+GEN_IS_TENANT_ROLE_DECLARE(ObTenantRole::Role::RESTORE_TENANT, restore)
+#undef GEN_IS_TENANT_ROLE_DECLARE
+
+static const ObTenantRole INVALID_TENANT_ROLE(ObTenantRole::INVALID_TENANT);
+static const ObTenantRole PRIMARY_TENANT_ROLE(ObTenantRole::PRIMARY_TENANT);
+static const ObTenantRole STANDBY_TENANT_ROLE(ObTenantRole::STANDBY_TENANT);
+static const ObTenantRole RESTORE_TENANT_ROLE(ObTenantRole::RESTORE_TENANT);
+
+}  // share
+}  // oceanbase
+
+#endif /* OCEANBASE_SHARE_OB_TENANT_ROLE_H_ */

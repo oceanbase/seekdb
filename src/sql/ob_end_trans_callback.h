@@ -23,12 +23,24 @@
 #include "lib/objectpool/ob_tc_factory.h"
 #include "lib/utility/ob_mod_define.h"
 #include "sql/ob_i_end_trans_callback.h"
-#include "sql/ob_mysql_end_trans_cb.h"
+#include "storage/tx/ob_trans_result.h"
+#include "storage/tx/ob_trans_define.h"
+#include "observer/mysql/ob_mysql_end_trans_cb.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+// The same object may be shared by multiple end trans functions at the same time, which may result in concurrent calls to the same object's callback function.
+// deprecated, only used in NullEndTransCallback and will be removed in 4.0
+class ObSharedEndTransCallback : public ObIEndTransCallback
+{
+public:
+  ObSharedEndTransCallback();
+  virtual ~ObSharedEndTransCallback();
+
+  virtual bool is_shared() const override final { return true; }
+};
 // An object can only be exclusively owned by one end trans function at a time, and the callback function of the same object can only be called serially
 class ObExclusiveEndTransCallback : public ObIEndTransCallback
 {
@@ -42,6 +54,8 @@ public:
 public:
   ObExclusiveEndTransCallback();
   virtual ~ObExclusiveEndTransCallback();
+
+  virtual bool is_shared() const override final { return false; }
 
   void set_is_need_rollback(bool is_need_rollback)
   {

@@ -1,0 +1,29 @@
+drop materialized view log on t1;
+drop materialized view mv;
+drop table if exists t1;
+create table t1 (a int primary key, b int, c int);
+create materialized view log on t1 parallel 10 with primary key, rowid, sequence(c);
+insert into t1 values(1,2,3);
+alter table t1 add column d int;
+alter table t1 drop column d;
+ERROR 0A000: modify column to table with materialized view log is not supported
+alter table t1 drop column d, parallel 10;
+ERROR 0A000: modify column to table with materialized view log is not supported
+select*from mlog$_t1;
+a	c	SEQUENCE$$	DMLTYPE$$	OLD_NEW$$
+1	3	1	I	N
+select*from mlog$_t1 where ORA_ROWSCN > 1836492048875290000;
+a	c	SEQUENCE$$	DMLTYPE$$	OLD_NEW$$
+select*from mlog$_t1 where ORA_ROWSCN > 1636492048875290000;
+ERROR HY000: Incorrect arguments to mlog query begin version which is more than tablet create commit version, materialized view need complete fresh
+create materialized view mv refresh fast enable on query computation as select count(*) from t1;
+select*from mv;
+count(*)
+1
+drop materialized view log on t1;
+create materialized view log on t1 parallel 10 with primary key, rowid, sequence(c);
+select*from mv;
+ERROR HY000: Incorrect arguments to mlog query begin version which is more than tablet create commit version, materialized view need complete fresh
+drop materialized view log on t1;
+drop materialized view mv;
+drop table if exists t1;

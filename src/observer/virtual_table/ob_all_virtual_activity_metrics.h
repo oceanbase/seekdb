@@ -18,7 +18,7 @@
 #define OB_ALL_VIRTUAL_ACTIVITY_METRICS_H_
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
 #include "sql/ob_scanner.h"
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
@@ -26,6 +26,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObAddr;
+}
 namespace observer
 {
 class ObAllVirtualActivityMetric : public common::ObVirtualTableScannerIterator
@@ -47,13 +51,16 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
+  inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
 private:
-  int get_next_freezer_stat_(storage::ObMemstoreFreezerStat& stat);
+  int get_next_freezer_stat_(storage::ObTenantFreezerStat& stat);
   int prepare_start_to_read_();
 
 private:
   int64_t current_pos_;
   int64_t length_;
+  common::ObAddr addr_;
+  char ip_buffer_[common::OB_IP_STR_BUFF];
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualActivityMetric);
 };

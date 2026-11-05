@@ -17,9 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_new_column_decoder.h"
-#include "data_plane/lob/ob_lob_value.h"
 #include "storage/access/ob_aggregate_base.h"
-#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {
@@ -36,12 +34,14 @@ int ObNewColumnCommonDecoder::decode(
   // it is sure that col_param can not be nullptr here
   const ObObj &def_cell = col_param->get_orig_default_value();
   if (OB_FAIL(datum.from_obj(def_cell))) {
+    LOG_WARN("Failed to transfer obj to datum", K(ret), K(def_cell));
   } else if (def_cell.is_lob_storage() && !def_cell.is_null()) {
     // lob def value must have no lob header when not null
     // When do lob decode, should add lob header for default value
     ObString data = datum.get_string();
     ObString out;
-    if (OB_FAIL(data_plane::fill_lob_header(*allocator, data, out))) {
+    if (OB_FAIL(ObLobManager::fill_lob_header(*allocator, data, out))) {
+      LOG_WARN("failed to fill lob header for column", K(ret), K(def_cell), K(data));
     } else {
       datum.set_string(out);
     }
@@ -59,9 +59,32 @@ int ObNewColumnCommonDecoder::batch_decode(
   int ret = OB_SUCCESS;
   for (int i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
     if (OB_FAIL(decode(col_param, allocator, datums[i]))) {
+      LOG_WARN("Failed to decode new added datum", K(ret), K(col_param->get_orig_default_value()));
     }
   }
   LOG_DEBUG("[NEW_COLUMN_DECODE] batch decode", K(col_param->get_orig_default_value()), K(row_cap), K(lbt()));
+  return ret;
+}
+
+int ObNewColumnCommonDecoder::decode_vector(ObVectorDecodeCtx &vector_ctx) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(vector_ctx.default_datum_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Unexpected null datum", K(ret));
+  } else {
+#define FOREACH_SET_VEC(FORMAT)                                                                     \
+  for (int64_t idx = 0; idx < vector_ctx.row_cap_; ++idx) {                                         \
+    const int64_t vec_idx = idx + vector_ctx.vec_offset_;                                           \
+    static_cast<FORMAT *>(vector_ctx.get_vector())->set_datum(vec_idx, *vector_ctx.default_datum_); \
+  }
+    if (VEC_DISCRETE == vector_ctx.get_format()) {
+      FOREACH_SET_VEC(ObDiscreteFormat)
+    } else {
+      FOREACH_SET_VEC(ObFixedLengthBase)
+    }
+  }
+  LOG_DEBUG("[NEW_COLUMN_DECODE] decode vector", KPC(vector_ctx.default_datum_), K(lbt()));
   return ret;
 }
 
@@ -72,7 +95,8 @@ int ObNewColumnCommonDecoder::pushdown_operator(
   int ret = OB_SUCCESS;
   bool filtered = false;
   ObStorageDatum *default_datum = const_cast<ObStorageDatum *>(&filter.get_default_datums().at(0));
-  if (OB_FAIL(filter.filter_datum(*default_datum, filtered))) {
+  if (OB_FAIL(blocksstable::ObIMicroBlockReader::filter_white_filter(filter, *default_datum, filtered))) {
+    LOG_WARN("Failed to filter row with white filter", K(ret), K(filter), K(default_datum));
   } else if (!filtered) {
     result_bitmap.bit_not();
   }
@@ -90,6 +114,7 @@ int ObNewColumnCommonDecoder::pushdown_operator(
   sql::ObPhysicalFilterExecutor *black_filter = static_cast<sql::ObPhysicalFilterExecutor *>(&filter);
   ObStorageDatum *default_datum = const_cast<ObStorageDatum *>(&filter.get_default_datums().at(0));
   if (OB_FAIL(black_filter->filter(default_datum, black_filter->get_col_count(), *pd_filter_info.skip_bit_, filtered))) {
+    LOG_WARN("Failed to filter row with black filter", K(ret), K(black_filter));
   } else if (!filtered) {
     result_bitmap.bit_not();
   }
@@ -119,6 +144,7 @@ int ObNewColumnCommonDecoder::read_distinct(
   int ret = OB_SUCCESS;
   common::ObDatum *datums = group_by_cell.get_group_by_col_datums_to_fill();
   if (OB_FAIL(datums[0].from_obj(col_param->get_orig_default_value(), ObDatum::get_obj_datum_map_type(col_param->get_orig_default_value().get_type())))) {
+    LOG_WARN("Failed to from storage datum", K(ret), K(col_param->get_orig_default_value()));
   } else {
     group_by_cell.set_distinct_cnt(1);
   }

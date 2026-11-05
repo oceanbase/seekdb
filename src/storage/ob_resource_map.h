@@ -22,7 +22,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_hashutils.h"
 #include "lib/lock/ob_bucket_lock.h"
-#include "src/share/rc/ob_server_runtime.h"
+#include "src/share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
@@ -220,17 +220,21 @@ int ObResourceMap<Key, Value>::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = common::OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObResourceMap has already been inited", K(ret));
-  } else if (OB_UNLIKELY(bucket_num <= 0 || total_limit <= 0 || hold_limit <= 0 || page_size <= 0)) {
+  } else if (OB_UNLIKELY(bucket_num <= 0 || total_limit <= 0 || hold_limit <= 0 || page_size <= 0
+      || false)) {
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(bucket_num), K(total_limit), K(hold_limit),
         K(page_size));
   } else if (OB_FAIL(bucket_lock_.init(bkt_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr("ResourMapLock")))) {
+    STORAGE_LOG(WARN, "fail to init bucket lock", K(ret), K(bkt_num));
   } else if (OB_FAIL(map_.create(bkt_num, attr, attr))) {
+    STORAGE_LOG(WARN, "fail to create map", K(ret));
   } else if (OB_UNLIKELY(bkt_num != map_.bucket_count())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "lock buckets isn't equal to map buckets, which could cause concurrency issues", K(ret),
         K(bkt_num), K(map_.bucket_count()));
   } else if (OB_FAIL(default_allocator_.init(page_size, "ResourceMap", total_limit))) {
+    STORAGE_LOG(WARN, "fail to init allocator", K(ret));
   } else {
     default_allocator_.set_attr(attr);
     is_inited_ = true;
@@ -248,10 +252,11 @@ int ObResourceMap<Key, Value>::init(const int64_t bucket_num, const ObMemAttr &a
   if (OB_UNLIKELY(is_inited_)) {
     ret = common::OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObResourceMap has already been inited", K(ret));
-  } else if (OB_UNLIKELY(bucket_num <= 0)) {
+  } else if (OB_UNLIKELY(bucket_num <= 0 || false)) {
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(bucket_num));
   } else if (OB_FAIL(bucket_lock_.init(bkt_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr("ResourMapLock")))) {
+    STORAGE_LOG(WARN, "fail to init bucket lock", K(ret), K(bkt_num));
   } else if (OB_FAIL(map_.create(bkt_num, attr, attr))) {
     STORAGE_LOG(WARN, "fail to create map", K(ret));
   } else if (OB_UNLIKELY(bkt_num != map_.bucket_count())) {
@@ -272,6 +277,7 @@ int ObResourceMap<Key, Value>::get(const Key &key, ObResourceHandle<Value> &hand
   int ret = OB_SUCCESS;
   uint64_t hash_val = 0;
   if (OB_FAIL(hash_func_(key, hash_val))) {
+    STORAGE_LOG(WARN, "fail to do hash", K(ret));
   } else {
     common::ObBucketHashRLockGuard guard(bucket_lock_, hash_val);
     handle.reset();
@@ -298,6 +304,7 @@ int ObResourceMap<Key, Value>::get_without_lock(
       ret = common::OB_ENTRY_NOT_EXIST;
     }
   } else if (OB_FAIL(ptr->inc_ref_cnt())) {
+    STORAGE_LOG(WARN, "fail to increase ref count", K(ret));
   } else {
     handle.ptr_ = ptr;
   }
@@ -315,6 +322,7 @@ int ObResourceMap<Key, Value>::set(const Key &key, Value &value, Callback callba
   char *buf = NULL;
   uint64_t hash_val = 0;
   if (OB_FAIL(hash_func_(key, hash_val))) {
+    STORAGE_LOG(WARN, "fail to do hash", K(ret));
   } else {
     lib::ObMemAttr attr("ResourceMapSet");
     common::ObBucketHashWLockGuard guard(bucket_lock_, hash_val);
@@ -327,14 +335,18 @@ int ObResourceMap<Key, Value>::set(const Key &key, Value &value, Callback callba
     } else {
       value_store = new (buf) ValueStore();
       if (OB_FAIL(value.deep_copy(buf + sizeof(ValueStore), buf_size - sizeof(ValueStore), ptr))) {
+        STORAGE_LOG(WARN, "fail to deep copy value", K(ret));
       } else {
         value_store->set_value_ptr(ptr);
         common::hash::HashMapPair<Key, Value *> pair;
         pair.first = key;
         pair.second = value_store->get_value_ptr();
         if (OB_FAIL(callback(pair))) {
+          STORAGE_LOG(WARN, "fail to callback", K(ret));
         } else if (OB_FAIL(inc_handle_ref(value_store))) {
+          STORAGE_LOG(WARN, "fail to inc handle reference count", K(ret));
         } else if (OB_FAIL(map_.set_refactored(key, value_store))) {
+          STORAGE_LOG(WARN, "fail to set to map", K(ret));
         }
       }
     }
@@ -444,6 +456,7 @@ int ObResourceMap<Key, Value>::inc_handle_ref(ValueStore *ptr)
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), KP(ptr));
   } else if (OB_FAIL(ptr->inc_ref_cnt())) {
+    STORAGE_LOG(WARN, "fail to increase ref count", K(ret));
   }
   return ret;
 }
@@ -460,6 +473,7 @@ int ObResourceMap<Key, Value>::dec_handle_ref(ValueStore *ptr)
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), KP(ptr));
   } else if (OB_FAIL(ptr->dec_ref_cnt(ref_cnt))) {
+    STORAGE_LOG(WARN, "fail to decrease ref count", K(ret));
   } else if (0 == ref_cnt) {
     free_resource(ptr);
   }

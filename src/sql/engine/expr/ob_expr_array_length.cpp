@@ -49,14 +49,17 @@ int ObExprArrayLength::calc_result_type1(ObExprResType &type,
   ObCollectionTypeBase *coll_type = NULL;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("exec ctx is null", K(ret));
   } else if (type1.is_null()){
     // do nothing
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
+    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   }
   if (OB_SUCC(ret)) {
     type.set_uint32();
@@ -76,37 +79,41 @@ int ObExprArrayLength::eval_array_length(const ObExpr &expr, ObEvalCtx &ctx, ObD
   ObCollectionArrayType *arr_type = NULL;
   ObDatum *datum_arr = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum_arr))) {
+    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (datum_arr->is_null()) {
     res.set_null();
   } else if (OB_FAIL(
                  ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
+    LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
   } else {
     ObString arr_str = datum_arr->get_string();
     uint32_t len = 0;
     char *raw_str = nullptr;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, 
                                       ObLongTextType,
-                                      CS_TYPE_BINARY,
-                                      true,
+                                      CS_TYPE_BINARY, 
+                                      true, 
                                       arr_str))) {
+      LOG_WARN("fail to get real data.", K(ret), K(arr_str)); 
     } else if (arr_type->type_id_ == ObNestedType::OB_ARRAY_TYPE){
       raw_str = arr_str.ptr();
       len = *reinterpret_cast<uint32_t *>(raw_str);
-      res.set_uint32(len);
+      res.set_uint32(len);     
     } else if (arr_type->type_id_ == ObNestedType::OB_VECTOR_TYPE) {
       len = arr_str.length() / sizeof(float);
       res.set_uint32(len);
     } else {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected array type", K(ret));
     }
   }
 
   return ret;
 }
 
-int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
+int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr, 
                                               ObEvalCtx &ctx,
-                                              const ObBitVector &skip,
+                                              const ObBitVector &skip, 
                                               const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
@@ -117,6 +124,7 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObCollectionArrayType *arr_type = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+    LOG_WARN("failed to eval args", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -127,24 +135,27 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL( ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
+        LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
       } else {
         ObString arr_str = arr_array.at(j)->get_string();
         uint32_t len = 0;
         char *raw_str = nullptr;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, 
                                           ObLongTextType,
-                                          CS_TYPE_BINARY,
-                                          true,
+                                          CS_TYPE_BINARY, 
+                                          true, 
                                           arr_str))) {
+          LOG_WARN("fail to get real data.", K(ret), K(arr_str));
         } else if (arr_type->type_id_ == ObNestedType::OB_ARRAY_TYPE){
           raw_str = arr_str.ptr();
-          len = *reinterpret_cast<uint32_t *>(raw_str);
+          len = *reinterpret_cast<uint32_t *>(raw_str);          
           res_datum.at(j)->set_uint32(len);
         } else if (arr_type->type_id_ == ObNestedType::OB_VECTOR_TYPE) {
           len = arr_str.length() / sizeof(float);
           res_datum.at(j)->set_uint32(len);
         } else {
           ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected array type", K(ret));
         }
       }
     } // end for
@@ -153,14 +164,70 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
   return ret;
 }
 
-int ObExprArrayLength::cg_expr(ObExprCGCtx &expr_cg_ctx,
-                              const ObRawExpr &raw_expr,
+int ObExprArrayLength::eval_array_length_vector(const ObExpr &expr, 
+                                                ObEvalCtx &ctx,
+                                                const ObBitVector &skip, 
+                                                const EvalBound &bound)
+{
+  int ret = OB_SUCCESS;
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
+  const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
+  ObCollectionArrayType *arr_type = NULL;
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("eval source array failed", K(ret));
+  } else {
+    ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
+    char *raw_str = nullptr;
+    uint32_t len = 0;
+    ObIVector *res_vec = expr.get_vector(ctx);
+    VectorFormat arr_format = arr_vec->get_format();
+    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+    for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
+      if (skip.at(idx) || eval_flags.at(idx)) {
+        continue;
+      }
+      eval_flags.set(idx);
+      ObString arr_str = arr_vec->get_string(idx);
+      if (arr_vec->is_null(idx)) {
+        res_vec->set_null(idx);
+      } else if (OB_FAIL(ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
+        LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
+      } else if (!ObCollectionExprUtil::is_compact_fmt_cell(arr_str.ptr())) {
+        ret = OB_ERR_UNEXPECTED;
+        SQL_LOG(WARN, "unexpected data format", K(ret));
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, 
+                                            ObLongTextType,
+                                            CS_TYPE_BINARY, 
+                                            true, 
+                                            arr_str))) {
+        LOG_WARN("fail to get real data.", K(ret), K(arr_str));
+      } else if (arr_type->type_id_ == ObNestedType::OB_ARRAY_TYPE) {
+        raw_str = arr_str.ptr();
+        len = *reinterpret_cast<uint32_t *>(raw_str);                 
+        res_vec->set_uint(idx, static_cast<uint64_t>(len));
+      } else if (arr_type->type_id_ == ObNestedType::OB_VECTOR_TYPE) {
+        len = arr_str.length() / sizeof(float);
+        res_vec->set_uint(idx, static_cast<uint64_t>(len));
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected array type", K(ret));
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObExprArrayLength::cg_expr(ObExprCGCtx &expr_cg_ctx, 
+                              const ObRawExpr &raw_expr, 
                               ObExpr &rt_expr) const
 {
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_array_length;
   rt_expr.eval_batch_func_ = eval_array_length_batch;
+  rt_expr.eval_vector_func_ = eval_array_length_vector;
   return OB_SUCCESS;
 }
 

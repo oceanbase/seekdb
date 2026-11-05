@@ -24,7 +24,7 @@ namespace oceanbase {
 namespace sql {
 ObExprEstimateNdv::ObExprEstimateNdv(ObIAllocator &alloc)
 :  ObFuncExprOperator(alloc, T_FUN_SYS_ESTIMATE_NDV, "estimate_ndv", 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                      INTERNAL_IN_MYSQL_MODE)
+                      INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
 
@@ -59,6 +59,7 @@ void ObExprEstimateNdv::llc_estimate_ndv(int64_t &result, const ObString &bitmap
   double res_double = 0.0;
   result = OB_INVALID_COUNT;
   if (OB_FAIL(llc_estimate_ndv(res_double, bitmap_str))) {
+    LOG_WARN("calculate estimate ndv failed.");
   } else if (OB_UNLIKELY(res_double > UINT64_MAX)) {
     // Basic will not reach here
     LOG_WARN("estimate ndv value overflows", K(res_double));
@@ -140,6 +141,7 @@ int ObExprEstimateNdv::calc_estimate_ndv_expr(const ObExpr &expr, ObEvalCtx &ctx
   ObDatum *arg = NULL;
   double res_double = 0.0;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
+    LOG_WARN("eval arg failed", K(ret));
   } else if (!arg->is_null() &&
              OB_FAIL(ObExprEstimateNdv::llc_estimate_ndv(res_double, arg->get_string()))) {
     LOG_WARN("calculate estimate ndv failed.");

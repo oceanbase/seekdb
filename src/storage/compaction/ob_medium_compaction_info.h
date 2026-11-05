@@ -20,17 +20,13 @@
 #include "lib/ob_errno.h"
 #include "storage/ob_storage_schema.h"
 #include "lib/container/ob_array_array.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 #include "storage/compaction/ob_partition_merge_policy.h"
 #include "storage/multi_data_source/mds_key_serialize_util.h"
 #include "storage/compaction/ob_mds_filter_info.h"
 
 namespace oceanbase
 {
-namespace blocksstable
-{
-struct ObDatumRowkey;
-}
 namespace storage
 {
 class ObTablet;
@@ -41,9 +37,10 @@ struct ObParallelMergeInfo
 {
 public:
   ObParallelMergeInfo()
-   : format_version_(PARALLEL_INFO_VERSION),
+   : compat_(PARALLEL_INFO_VERSION_V1),
      list_size_(0),
      reserved_(0),
+     parallel_store_rowkey_list_(nullptr),
      parallel_datum_rowkey_list_(nullptr)
   {}
   ~ObParallelMergeInfo();
@@ -51,17 +48,16 @@ public:
   void destroy(common::ObIAllocator &allocator);
   void clear()
   {
-    format_version_ = PARALLEL_INFO_VERSION;
     list_size_ = 0;
-    reserved_ = 0;
+    parallel_store_rowkey_list_ = nullptr;
     parallel_datum_rowkey_list_ = nullptr;
   }
   int64_t get_size() const { return list_size_; }
   bool is_valid() const
   {
-    return PARALLEL_INFO_VERSION == format_version_
-      && 0 == reserved_
-      && (list_size_ == 0 || nullptr != parallel_datum_rowkey_list_);
+    return list_size_ == 0
+      || (PARALLEL_INFO_VERSION_V0 == compat_ && nullptr != parallel_store_rowkey_list_)
+      || (PARALLEL_INFO_VERSION_V1 == compat_ && nullptr != parallel_datum_rowkey_list_);
   }
 
   template<typename T>
@@ -87,20 +83,27 @@ public:
   int64_t to_string(char* buf, const int64_t buf_len) const;
   static const int64_t MAX_PARALLEL_RANGE_SERIALIZE_LEN = 1 * 1024 * 1024;
   static const int64_t VALID_CONCURRENT_CNT = 1;
-  static const int64_t PARALLEL_INFO_VERSION = 1;
+  static const int64_t PARALLEL_INFO_VERSION_V0 = 0; // StoreRowkey
+  static const int64_t PARALLEL_INFO_VERSION_V1 = 1; // DatumRowkey
 private:
   int generate_datum_rowkey_list(
     ObIAllocator &allocator,
     ObArrayArray<ObStoreRange> &paral_range);
+  int generate_store_rowkey_list(
+    ObIAllocator &allocator,
+    ObArrayArray<ObStoreRange> &paral_range);
+
   union {
     uint32_t parallel_info_;
     struct {
-      uint32_t format_version_  : 4;
+      uint32_t compat_          : 4;
       uint32_t list_size_       : 8;
       uint32_t reserved_        : 20;
     };
   };
-  // concurrent_cnt - 1
+  // concurrent_cnt - 1; valid when compat_ = PARALLEL_INFO_VERSION_V0
+  ObStoreRowkey *parallel_store_rowkey_list_;
+  // concurrent_cnt - 1; valid when compat_ = PARALLEL_INFO_VERSION_V1
   blocksstable::ObDatumRowkey *parallel_datum_rowkey_list_;
 };
 
@@ -108,7 +111,7 @@ struct ObMediumCompactionInfoKey final
 {
 public:
   OB_UNIS_VERSION(1);
-  static constexpr uint8_t MAGIC_NUMBER = 0xFF;
+  static constexpr uint8_t MAGIC_NUMBER = 0xFF; // if meet compat case, abort directly for now
 public:
   ObMediumCompactionInfoKey()
     : medium_snapshot_(0)
@@ -142,7 +145,7 @@ public:
       ret = OB_BUF_NOT_ENOUGH;
     } else {
       buf[pos++] = MAGIC_NUMBER;
-      ret = storage::mds::ObMdsSerializeUtil::mds_key_serialize(medium_snapshot_, buf, buf_len, pos);
+      ret = mds::ObMdsSerializeUtil::mds_key_serialize(medium_snapshot_, buf, buf_len, pos);
     }
     return ret;
   }
@@ -155,9 +158,9 @@ public:
     } else {
       magic_number = buf[pos++];
       if (magic_number != MAGIC_NUMBER) {
-        ret = common::OB_ERR_UNEXPECTED;
+        ob_abort();// compat case, just abort for fast fail
       } else {
-        ret = storage::mds::ObMdsSerializeUtil::mds_key_deserialize(buf, buf_len, pos, tmp);
+        ret = mds::ObMdsSerializeUtil::mds_key_deserialize(buf, buf_len, pos, tmp);
       }
     }
     if (OB_SUCC(ret)) {
@@ -165,7 +168,7 @@ public:
     }
     return ret;
   }
-  int64_t mds_get_serialize_size() const { return sizeof(MAGIC_NUMBER) + storage::mds::ObMdsSerializeUtil::mds_key_get_serialize_size(medium_snapshot_); }
+  int64_t mds_get_serialize_size() const { return sizeof(MAGIC_NUMBER) + mds::ObMdsSerializeUtil::mds_key_get_serialize_size(medium_snapshot_); }
 
   TO_STRING_KV(K_(medium_snapshot));
 private:
@@ -190,6 +193,7 @@ public:
 
   int assign(ObIAllocator &allocator, const ObMediumCompactionInfo &medium_info);
   int init(ObIAllocator &allocator, const ObMediumCompactionInfo &medium_info);
+  int init_data_version(const uint64_t compat_version);
   void set_basic_info(
     const ObCompactionType type,
     const ObAdaptiveMergePolicy::AdaptiveMergeReason merge_reason,
@@ -206,6 +210,7 @@ public:
   static inline bool is_major_compaction(const ObCompactionType type) { return MAJOR_COMPACTION == type; }
   inline bool is_major_compaction() const { return is_major_compaction((ObCompactionType)compaction_type_); }
   inline bool is_medium_compaction() const { return is_medium_compaction((ObCompactionType)compaction_type_); }
+  inline bool is_invalid_mview_compaction() const { return storage_schema_.is_mv_major_refresh_table() && medium_merge_reason_ != ObAdaptiveMergePolicy::TENANT_MAJOR; }
   void clear_parallel_range()
   {
     parallel_merge_info_.clear();
@@ -213,6 +218,9 @@ public:
   }
   void reset();
   bool is_valid() const;
+  bool from_cur_cluster() const { return cluster_id_ == GCONF.cluster_id && true; }
+  bool cluster_id_equal() const { return cluster_id_ == GCONF.cluster_id; } // for compat
+  bool should_throw_for_standby_cluster() const;
   // serialize & deserialize
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize(
@@ -227,27 +235,34 @@ private:
   bool contain_storage_schema() const;
 public:
   static const int64_t DEFAULT_ENCODING_ROWS_LIMIT = 65536;
-  static const int64_t MEDIUM_INFO_VERSION = 5;
+  static const int64_t MEDIUM_COMPAT_VERSION = 1;
+  static const int64_t MEDIUM_COMPAT_VERSION_V2 = 2; // for add last_medium_snapshot_
+  static const int64_t MEDIUM_COMPAT_VERSION_V3 = 3; // for stanby tenant, not throw medium info
+  static const int64_t MEDIUM_COMPAT_VERSION_V4 = 4; // after this version, use is_schema_changed on medium info
+  static const int64_t MEDIUM_COMPAT_VERSION_V5 = 5; // after this version, use encoding row limit
+  static const int64_t MEDIUM_COMPAT_VERSION_LATEST = MEDIUM_COMPAT_VERSION_V5;
 private:
   static const int32_t SCS_ONE_BIT = 1;
-  static const int32_t SCS_RESERVED_BITS = 42;
+  static const int32_t SCS_RESERVED_BITS = 26;
 
 public:
   union {
     uint64_t info_;
     struct {
-      uint64_t format_version_                  : 4;
+      uint64_t medium_compat_version_           : 4;
       uint64_t compaction_type_                 : 2;
       uint64_t contain_parallel_range_          : SCS_ONE_BIT;
       uint64_t medium_merge_reason_             : 8;
       uint64_t is_schema_changed_               : SCS_ONE_BIT;
-      uint64_t reserved1_                       : 4;
-      uint64_t is_skip_database_major_          : SCS_ONE_BIT;
+       // record tenant of ls primary_leader, just for throw medium
+      uint64_t co_major_merge_type_             : 4;
+      uint64_t is_skip_tenant_major_            : SCS_ONE_BIT;
       uint64_t contain_mds_filter_info_         : SCS_ONE_BIT;
-      uint64_t reserved2_                       : SCS_RESERVED_BITS;
+      uint64_t reserved_                        : SCS_RESERVED_BITS;
     };
   };
 
+  uint64_t cluster_id_; // for backup database to throw MEDIUM_COMPACTION clog
   uint64_t data_version_;
   int64_t medium_snapshot_;
   int64_t last_medium_snapshot_;

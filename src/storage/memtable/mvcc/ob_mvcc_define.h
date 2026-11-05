@@ -36,7 +36,8 @@ struct ObTxNodeArg
   transaction::ObTransID tx_id_;
   // data_ is the new row of the modifiction
   const ObMemtableData *data_;
-  // old_row_ is consumed by the local Change Stream (for example, async vector indexes).
+  // old_row_ is the old row of the modificattion
+  // NB: It is only used for liboblog
   ObRowData old_row_;
   // modify_count_ is used for txn checksum now
   // NB: It is began with 0

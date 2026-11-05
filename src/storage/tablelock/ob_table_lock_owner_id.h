@@ -51,18 +51,18 @@ bool is_lock_owner_type_valid(const ObLockOwnerType &type)
 class ObTableLockOwnerID
 {
 public:
-  static constexpr int64_t MAGIC_NUM = -0xABC;
+  static const int64_t MAGIC_NUM = -0xABC;
   static const int64_t INVALID_ID = -1;
-  static const int64_t SESS_CREATE_TS_BIT = 22;
-  static const int64_t SESS_ID_BIT = 32;
+  static const int64_t CLIENT_SESS_CREATE_TS_BIT = 22;
+  static const int64_t CLIENT_SESS_ID_BIT = 32;
 #ifndef _WIN32
   static const int64_t INVALID_RAW_OWNER_ID = ((1ULL << 54) - 1);
-  static const int64_t SESS_CREATE_TS_MASK = (1L << SESS_CREATE_TS_BIT) - 1;
-  static const int64_t SESS_ID_MASK = (1L << SESS_ID_BIT) - 1;
+  static const int64_t CLIENT_SESS_CREATE_TS_MASK = (1L << CLIENT_SESS_CREATE_TS_BIT) - 1;
+  static const int64_t CLIENT_SESS_ID_MASK = (1L << CLIENT_SESS_ID_BIT) - 1;
 #else
   static const int64_t INVALID_RAW_OWNER_ID = ((UINT64_C(1) << 54) - 1);
-  static const int64_t SESS_CREATE_TS_MASK = (INT64_C(1) << SESS_CREATE_TS_BIT) - 1;
-  static const int64_t SESS_ID_MASK = (INT64_C(1) << SESS_ID_BIT) - 1;
+  static const int64_t CLIENT_SESS_CREATE_TS_MASK = (INT64_C(1) << CLIENT_SESS_CREATE_TS_BIT) - 1;
+  static const int64_t CLIENT_SESS_ID_MASK = (INT64_C(1) << CLIENT_SESS_ID_BIT) - 1;
 #endif
   ObTableLockOwnerID() :
     type_(static_cast<unsigned char>(ObLockOwnerType::INVALID_OWNER_TYPE)),
@@ -102,8 +102,8 @@ public:
                                      const int64_t id);
   int convert_from_value(const ObLockOwnerType owner_type,
                          const int64_t id);
-  int convert_from_session_id(const uint32_t sessid,
-                              const uint64_t sess_create_ts);
+  int convert_from_client_sessid(const uint32_t client_sessid,
+                                 const uint64_t client_sess_create_ts);
   int convert_to_sessid(uint32_t &sessid) const;
   // assignment
   ObTableLockOwnerID &operator=(const ObTableLockOwnerID &other)
@@ -163,6 +163,8 @@ public:
   NEED_SERIALIZE_AND_DESERIALIZE;
   TO_STRING_KV("type_name", get_name(static_cast<ObLockOwnerType>(type_)), K_(id), K_(hash_value));
 
+private:
+  int get_data_version_(uint64_t &data_version) const;
 private:
   unsigned char type_;
   int64_t id_;

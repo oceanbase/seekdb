@@ -1,4 +1,4 @@
-drop table if exists t, t1, t2, t3, t4;
+drop table if exists t, t1, t2, t3;
 result_format: 4
 create table t1(c1 varchar(10) primary key, c2 varchar(8) generated always as (substring(c1, 2)) virtual, c3 int) partition by key(c2) partitions 5;
 
@@ -276,17 +276,7 @@ Outputs & filters:
       is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t3.__pk_increment]), range(MIN ; MAX)always true
 
-create table t4(c1 int, c2 varchar(20), c3 int generated always as (length(c4)), c4 varchar(20)) partition by key(c3, c4) partitions 2;
-insert into t4(c1, c2, c4) values(1, 'x', 'ab');
-create index idx_t4_c2 on t4(c2);
-select c1, c2, c3, c4 from t4 force index(idx_t4_c2);
-+------+------+------+------+
-| c1   | c2   | c3   | c4   |
-+------+------+------+------+
-|    1 | x    |    2 | ab   |
-+------+------+------+------+
-
-drop table t1, t2, t3, t4;
+drop table t1, t2, t3;
 
 drop table if exists test;
 create table test(pk1 int, pk2 int, first_name varchar(100), last_name varchar(100), primary key(pk1, pk2));
@@ -474,7 +464,7 @@ jx_t1	CREATE TABLE `jx_t1` (
   PRIMARY KEY (`obschema_c_0_AOA0Kr`, `obschema_c_1_WVgnv`),
   KEY `obschema_i_0_o` (`obschema_c_3_lcWP`(5), `obschema_c_4_U`, `obschema_c_5_Oz`(213)) BLOCK_SIZE 16384 LOCAL,
   KEY `obschema_i_1_4Q` (`obschema_c_1_WVgnv`, `obschema_c_2_7`, `obschema_c_3_lcWP`(84), `obschema_c_4_U`, `obschema_c_5_Oz`(183)) BLOCK_SIZE 16384 LOCAL
-) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = SIZE TABLET_SIZE = SIZE PCTFREE = 10
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = NUM BLOCK_SIZE = SIZE USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = SIZE PCTFREE = 10
 select * from jx_t1;
 +---------------------+--------------------+----------------------------+-------------------+----------------+-----------------+
 | obschema_c_0_AOA0Kr | obschema_c_1_WVgnv | obschema_c_2_7             | obschema_c_3_lcWP | obschema_c_4_U | obschema_c_5_Oz |

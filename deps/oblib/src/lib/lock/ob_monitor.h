@@ -1,0 +1,170 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_MONITOR_H
+#define OB_MONITOR_H
+#include "lib/lock/ob_lock.h"
+#include "lib/lock/cond.h"
+
+
+namespace obutil
+{
+/**
+ * A monitor is a synchronization construct that allows threads to have both mutual exclusion and the ability to
+ * wait (block) for a certain condition to become false. Monitors also have a mechanism for signaling other threads
+ * that their condition has been met.
+ */
+template <class T>
+class ObMonitor
+{
+public:
+
+  typedef ObLockT<ObMonitor<T> > Lock;
+  typedef ObTryLockT<ObMonitor<T> > TryLock;
+
+  ObMonitor();
+  ~ObMonitor();
+
+  void lock() const;
+  void unlock() const;
+  bool trylock() const;
+  bool wait() const;
+  bool timed_wait(const ObSysTime&) const;
+  void notify();
+  void notify_all();
+
+private:
+
+  ObMonitor(const ObMonitor&);
+  ObMonitor& operator=(const ObMonitor&);
+
+  void notify_impl(int) const;
+
+  mutable Cond cond_;
+  T mutex_;
+  mutable int nnotify_;
+};
+
+template <class T>
+ObMonitor<T>::ObMonitor() :
+  nnotify_(0)
+{
+}
+
+template <class T>
+ObMonitor<T>::~ObMonitor()
+{
+}
+
+template <class T> inline void
+ObMonitor<T>::lock() const
+{
+  mutex_.lock();
+  if(mutex_.will_unlock()) {
+    nnotify_ = 0;
+  }
+}
+
+template <class T> inline void
+ObMonitor<T>::unlock() const
+{
+  if(mutex_.will_unlock()) {
+    notify_impl(nnotify_);
+  }
+  mutex_.unlock();
+}
+
+template <class T> inline bool
+ObMonitor<T>::trylock() const
+{
+  bool result = mutex_.trylock();
+  if(result && mutex_.will_unlock()) {
+    nnotify_ = 0;
+  }
+  return result;
+}
+
+template <class T> inline bool
+ObMonitor<T>::wait() const
+{
+  notify_impl(nnotify_);
+#ifdef _NO_EXCEPTION
+  const bool bRet = cond_.wait_impl(mutex_);
+  nnotify_ = 0;
+  return bRet;
+#else
+  try {
+    cond_.wait_impl(mutex_);
+  } catch(...) {
+    nnotify_ = 0;
+    throw;
+  }
+
+  nnotify_ = 0;
+  return true;
+#endif
+}
+
+template <class T> inline bool
+ObMonitor<T>::timed_wait(const ObSysTime& timeout) const
+{
+  notify_impl(nnotify_);
+#ifdef _NO_EXCEPTION
+  const bool rc = cond_.timed_wait_impl(mutex_, timeout);
+  nnotify_ = 0;
+  return rc;
+#else
+  try {
+    cond_.timed_wait_impl(mutex_, timeout);
+  } catch(...) {
+    nnotify_ = 0;
+    throw;
+  }
+  nnotify_ = 0;
+  return true;
+#endif
+}
+
+template <class T> inline void
+ObMonitor<T>::notify()
+{
+  if(nnotify_ != -1) {
+    ++nnotify_;
+  }
+}
+
+template <class T> inline void
+ObMonitor<T>::notify_all()
+{
+  nnotify_ = -1;
+}
+
+
+template <class T> inline void
+ObMonitor<T>::notify_impl(int nnotify) const
+{
+  if (nnotify == 0) {
+  } else if (nnotify == -1) {
+    cond_.broadcast();
+  } else {
+    while(nnotify > 0) {
+      cond_.signal();
+      --nnotify;
+    }
+  }
+}
+}//end namespace
+#endif

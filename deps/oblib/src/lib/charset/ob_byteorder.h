@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_BYTEORDER_H
+#define OB_BYTEORDER_H
+
+#include <stdint.h>
+#include "lib/charset/ob_template_helper.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <netinet/in.h>
+#endif
+#include <string.h>
+
+/*
+ Functions for big-endian loads and stores. These are safe to use
+ no matter what the compiler, CPU or alignment, and also with -fstrict-aliasing.
+
+ The stores return a pointer just past the value that was written.
+*/
+
+inline uint16_t load16be(const char *ptr) {
+  uint16_t val;
+  memcpy(&val, ptr, sizeof(val));
+  return ntohs(val);
+}
+
+inline uint32_t load32be(const char *ptr) {
+  uint32_t val;
+  memcpy(&val, ptr, sizeof(val));
+  return ntohl(val);
+}
+
+__attribute__((always_inline)) inline char *store16be(char *ptr, uint16_t val) {
+#if defined(_MSC_VER) && !defined(_WIN32)
+  // _byteswap_ushort is an intrinsic on MSVC, but htons is not.
+  val = _byteswap_ushort(val);
+#else
+  val = htons(val);
+#endif
+  memcpy(ptr, &val, sizeof(val));
+  return ptr + sizeof(val);
+}
+
+inline char *store32be(char *ptr, uint32_t val) {
+  val = htonl(val);
+  memcpy(ptr, &val, sizeof(val));
+  return ptr + sizeof(val);
+}
+
+// Adapters for using unsigned char * instead of char *.
+
+inline uint16_t load16be(const unsigned char *ptr) {
+  return load16be(pointer_cast<const char *>(ptr));
+}
+
+inline uint32_t load32be(const unsigned char *ptr) {
+  return load32be(pointer_cast<const char *>(ptr));
+}
+
+__attribute__((always_inline)) inline unsigned char *store16be(unsigned char *ptr, uint16_t val) {
+  return pointer_cast<unsigned char *>(store16be(pointer_cast<char *>(ptr), val));
+}
+
+inline unsigned char *store32be(unsigned char *ptr, uint32_t val) {
+  return pointer_cast<unsigned char *>(store32be(pointer_cast<char *>(ptr), val));
+}
+
+#endif // OB_BYTEORDER_H

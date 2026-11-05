@@ -19,7 +19,7 @@
 
 #include "share/scn.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "data_plane/scheduler/ob_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/blocksstable/ob_macro_block_struct.h"
 #include "storage/ddl/ob_ddl_struct.h"
@@ -33,18 +33,6 @@ namespace oceanbase
 namespace storage
 {
 class ObSNDDLMergeHelperV2;
-struct ObDDLSliceRange
-{
-  ObDDLSliceRange() : start_slice_idx_(-1), end_slice_idx_(-1) {}
-  ObDDLSliceRange(const int64_t start_slice_idx, const int64_t end_slice_idx)
-    : start_slice_idx_(start_slice_idx), end_slice_idx_(end_slice_idx) {}
-  bool is_valid() const { return start_slice_idx_ >= 0 && end_slice_idx_ >= start_slice_idx_; }
-  TO_STRING_KV(K(start_slice_idx_), K(end_slice_idx_));
-
-  int64_t start_slice_idx_;
-  int64_t end_slice_idx_;
-};
-
 class ObIDDLMergeHelper
 {
 public:
@@ -52,7 +40,7 @@ public:
                               const ObDirectLoadType direct_load_type,
                               ObIDDLMergeHelper *&helper);
   static int get_rec_scn_from_ddl_kvs(ObDDLTabletMergeDagParamV2 &merge_param);
-  static int remove_tablet_from_log_handler(const ObTabletID &tablet_id);
+  static int remove_tablet_from_log_handler(const ObLSID &ls_id, const ObTabletID &tablet_id);
 public:
 /* interface used for prpare_task*/
   ObIDDLMergeHelper() {}
@@ -73,19 +61,22 @@ public:
   }
   virtual int process_prepare_task(ObIDag *dag,
                                    ObDDLTabletMergeDagParamV2 &ddl_merge_param,
-                                   ObIArray<ObDDLSliceRange> &slice_ranges) = 0;
-  virtual int merge_slice(ObIDag* dag,
-                          ObDDLTabletMergeDagParamV2 &merge_param,
-                          const int64_t start_slice,
-                          const int64_t end_slice)
+                                   ObIArray<ObTuple<int64_t, int64_t, int64_t>> &cg_slices) = 0 ;
+  virtual int merge_cg_slice(ObIDag* dag,
+                             ObDDLTabletMergeDagParamV2 &merge_param,
+                             const int64_t cg_idx,
+                             const int64_t start_slice,
+                             const int64_t end_slice) 
   { return OB_NOT_SUPPORTED; }
   virtual int assemble_sstable(ObDDLTabletMergeDagParamV2 &param)
   { return OB_NOT_SUPPORTED; }
   virtual int freeze_ddl_kv(ObDDLTabletMergeDagParamV2 &param);
 
   virtual int prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge_param,
+                                const int64_t cg_idx,
                                 ObTabletDDLParam &ddl_param);
   virtual int prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge_param,
+                                const int64_t cg_idx, 
                                 const int64_t start_slice_idx,
                                 const int64_t end_slice_idx,
                                 ObTabletDDLParam &ddl_param);
@@ -105,14 +96,22 @@ public:
   virtual ~ObSNDDLMergeHelperV2() {}
   int process_prepare_task(ObIDag *dag,
                            ObDDLTabletMergeDagParamV2 &ddl_merge_param,
-                           ObIArray<ObDDLSliceRange> &slice_ranges) override;
-  int merge_slice(ObIDag* dag,
-                  ObDDLTabletMergeDagParamV2 &merge_param,
-                  const int64_t start_slice,
-                  const int64_t end_slice) override;
+                           ObIArray<ObTuple<int64_t, int64_t, int64_t>> &cg_slices) override;
+  int merge_cg_slice(ObIDag* dag,
+                     ObDDLTabletMergeDagParamV2 &merge_param,
+                     const int64_t cg_idx,
+                     const int64_t start_slice,
+                     const int64_t end_slice);
   int assemble_sstable(ObDDLTabletMergeDagParamV2 &param) override;
 
   int get_rec_scn(ObDDLTabletMergeDagParamV2 &merge_param) override;
+
+  // partition-level full bypass import fills an empty major for unspecified partitions
+  static int set_ddl_complete_for_direct_load(const share::ObLSID &ls_id,
+                                              const ObTabletID &tablet_id,
+                                              const ObDirectLoadType direct_load_type,
+                                              const int64_t snapshot_version,
+                                              const int64_t data_version);
 
 protected:
   bool is_supported_direct_load_type(const ObDirectLoadType direct_load_type) override ;

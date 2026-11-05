@@ -26,7 +26,7 @@ namespace sql
 
 ObExprRemoveConst::ObExprRemoveConst(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_REMOVE_CONST, N_REMOVE_CONST, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE)
+                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
 
@@ -56,6 +56,7 @@ int ObExprRemoveConst::eval_remove_const(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
+    LOG_WARN("expr evaluate parameter failed", K(ret));
   } else {
     expr_datum.set_datum(*arg);
   }

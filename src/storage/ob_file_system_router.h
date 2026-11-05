@@ -17,6 +17,7 @@
 #ifndef OB_FILE_SYSTEM_ROUTER_H_
 #define OB_FILE_SYSTEM_ROUTER_H_
 
+#include "common/ob_zone.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/ob_define.h"
@@ -35,14 +36,16 @@ public:
   OB_INLINE const char* get_data_dir() const { return data_dir_; }
   OB_INLINE const char* get_slog_dir() const { return slog_dir_; }
   OB_INLINE const char* get_clog_dir() const { return clog_dir_; }
-  int get_server_clog_dir(
-      char (&server_clog_dir)[common::MAX_PATH_SIZE]);
+  int get_tenant_clog_dir(
+      char (&tenant_clog_dir)[common::MAX_PATH_SIZE]);
 
   // only work in local file system
   OB_INLINE const char* get_sstable_dir() const { return sstable_dir_; }
 
   OB_INLINE int64_t get_svr_seq() const { return svr_seq_; }
   OB_INLINE void set_svr_seq(const int64_t svr_seq) { svr_seq_ = svr_seq; }
+
+  OB_INLINE bool is_single_zone_deployment_on() const { return false; }
 
   OB_INLINE const blocksstable::ObLogFileSpec &get_clog_file_spec() const { return clog_file_spec_; }
   OB_INLINE const blocksstable::ObLogFileSpec &get_slog_file_spec() const { return slog_file_spec_; }
