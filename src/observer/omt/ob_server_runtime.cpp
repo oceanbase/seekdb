@@ -753,6 +753,22 @@ bool ObServerRuntime::do_add_worker()
   return OB_SUCCESS == ret && succ_num == 1;
 }
 
+bool ObServerRuntime::ensure_worker_capacity(int64_t min_workers)
+{
+  // try_expand_one() reserves one worker slot per call; a lost CAS means
+  // another thread already moved the count, so re-check instead of failing.
+  // The attempt bound keeps the caller from spinning forever synchronously.
+  constexpr int64_t MAX_EXPAND_ATTEMPTS = 64;
+  int64_t attempts = 0;
+  while (worker_count() < min_workers && attempts++ < MAX_EXPAND_ATTEMPTS) {
+    if (OB_UNLIKELY(has_stopped())) {
+      break;
+    }
+    try_expand_one(min_workers);
+  }
+  return worker_count() >= min_workers;
+}
+
 
 void ObServerRuntime::periodically_check()
 {

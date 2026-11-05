@@ -209,6 +209,10 @@ public:
   int64_t cpu_quota_concurrency() const;
   int64_t min_worker_cnt() const;
   int64_t max_worker_cnt() const;
+  // Ensure at least `min_workers` request workers exist. The synchronous
+  // in-process dispatch path uses it before blocking: the caller must never be
+  // the only potential executor of the task it just enqueued.
+  bool ensure_worker_capacity(int64_t min_workers);
   int64_t cur_ddl_thread_count() {return ATOMIC_LOAD(&total_ddl_thread_cnt_);}
   void inc_ddl_thread_count() { ATOMIC_INC(&total_ddl_thread_cnt_); };
   void dec_ddl_thread_count() { ATOMIC_DEC(&total_ddl_thread_cnt_); };
