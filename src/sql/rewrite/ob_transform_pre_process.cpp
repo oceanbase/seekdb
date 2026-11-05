@@ -32,6 +32,149 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+namespace
+{
+// ANN queries disable the general rewrite rules. Remove a scalar integer
+// negation without enabling transformations of the approximate query itself.
+// Keep comparison domains homogeneous; mixed signedness and other casts
+// must retain independent comparisons. Literal/bind nodes have no side effects.
+bool get_ann_integer_exclusion(ObRawExpr *expr, ObRawExpr *&column, ObRawExpr *&value)
+{
+  column = nullptr;
+  value = nullptr;
+  bool valid = expr != nullptr && expr->get_expr_type() == T_OP_NE
+      && expr->get_param_count() == 2;
+  if (valid) {
+    column = expr->get_param_expr(0);
+    value = expr->get_param_expr(1);
+    if (column != nullptr && value != nullptr && value->is_column_ref_expr()) {
+      std::swap(column, value);
+    }
+    valid = column != nullptr && value != nullptr && column->is_column_ref_expr()
+        && value->is_const_raw_expr() && value->is_static_scalar_const_expr();
+    if (valid) {
+      const ObObjType column_type = column->get_data_type();
+      const ObObjType value_type = value->get_data_type();
+      valid = ((ob_is_int_tc(column_type) && ob_is_int_tc(value_type))
+          || (ob_is_uint_tc(column_type) && ob_is_uint_tc(value_type))
+          || ((ob_is_int_tc(column_type) || ob_is_uint_tc(column_type)) && value_type == ObNullType));
+    }
+  }
+  return valid;
+}
+
+int fuse_ann_integer_exclusions(ObIArray<ObRawExpr*> &conditions,
+                                ObRawExprFactory &factory,
+                                ObSQLSessionInfo *session,
+                                bool &changed)
+{
+  int ret = OB_SUCCESS;
+  // Bound the quadratic grouping work; leave larger conjunctions unchanged.
+  const int64_t max_conditions = 32;
+  if (conditions.count() >= 3 && conditions.count() <= max_conditions) {
+    bool used[max_conditions] = {};
+    ObSEArray<ObRawExpr*, 8> result;
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      if (used[i]) {
+        continue;
+      }
+      ObRawExpr *column = nullptr;
+      ObRawExpr *value = nullptr;
+      ObSEArray<ObRawExpr*, 4> values;
+      ObSEArray<int64_t, 4> indices;
+      if (get_ann_integer_exclusion(conditions.at(i), column, value)) {
+        for (int64_t j = i; OB_SUCC(ret) && j < conditions.count(); ++j) {
+          ObRawExpr *other_column = nullptr;
+          ObRawExpr *other_value = nullptr;
+          if (!used[j] && get_ann_integer_exclusion(conditions.at(j), other_column, other_value)
+              && other_column == column) {
+            if (OB_FAIL(values.push_back(other_value))) {
+            } else if (OB_FAIL(indices.push_back(j))) {
+            }
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (values.count() < 3) {
+        if (OB_FAIL(result.push_back(conditions.at(i)))) {
+        }
+      } else {
+        ObOpRawExpr *row = nullptr;
+        ObOpRawExpr *not_in = nullptr;
+        if (OB_FAIL(factory.create_raw_expr(T_OP_ROW, row))) {
+        } else if (OB_FAIL(factory.create_raw_expr(T_OP_NOT_IN, not_in))) {
+        } else if (OB_ISNULL(row) || OB_ISNULL(not_in)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(row->init_param_exprs(values.count()))) {
+        } else {
+          for (int64_t j = 0; OB_SUCC(ret) && j < values.count(); ++j) {
+            if (OB_FAIL(row->add_param_expr(values.at(j)))) {
+            }
+          }
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(not_in->set_param_exprs(column, row))) {
+          } else if (OB_FAIL(not_in->formalize(session))) {
+          } else if (OB_FAIL(result.push_back(not_in))) {
+          } else {
+            for (int64_t j = 0; j < indices.count(); ++j) {
+              used[indices.at(j)] = true;
+            }
+            changed = true;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && changed && OB_FAIL(conditions.assign(result))) {
+    }
+  }
+  return ret;
+}
+
+int simplify_ann_integer_not_equal(ObRawExpr *&expr,
+                                   ObRawExprFactory &factory,
+                                   ObSQLSessionInfo *session,
+                                   bool &changed)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (expr->get_expr_type() == T_OP_AND) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(simplify_ann_integer_not_equal(
+          expr->get_param_expr(i), factory, session, changed)))) {
+      }
+    }
+  } else if (expr->get_expr_type() == T_OP_NOT && expr->get_param_count() == 1) {
+    ObRawExpr *equal = expr->get_param_expr(0);
+    if (equal != nullptr && equal->get_expr_type() == T_OP_EQ && equal->get_param_count() == 2) {
+      ObRawExpr *column = equal->get_param_expr(0);
+      ObRawExpr *constant = equal->get_param_expr(1);
+      if (column != nullptr && constant != nullptr && constant->is_column_ref_expr()) {
+        std::swap(column, constant);
+      }
+      if (column != nullptr && constant != nullptr && column->is_column_ref_expr()
+          && constant->is_const_expr()
+          && (ob_is_int_tc(column->get_data_type()) || ob_is_uint_tc(column->get_data_type()))
+          && (ob_is_int_tc(constant->get_data_type()) || ob_is_uint_tc(constant->get_data_type())
+              || constant->get_data_type() == ObNullType)) {
+        ObOpRawExpr *replacement = nullptr;
+        if (OB_FAIL(factory.create_raw_expr(T_OP_NE, replacement))) {
+        } else if (OB_ISNULL(replacement)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(replacement->set_param_exprs(
+                       static_cast<ObOpRawExpr*>(equal)->get_param_exprs()))) {
+        } else if (OB_FAIL(replacement->formalize(session))) {
+        } else {
+          expr = replacement;
+          changed = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+}
+
 int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                               ObDMLStmt *&stmt,
                                               bool &trans_happened)
@@ -49,13 +192,38 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     trans_happened |= is_happened;
     OPT_TRACE("adjust duplicated table name", is_happened);
 
+    // Preserve explicit rewrite controls and replayed outline plans.
+    if (stmt->has_vec_approx() && ctx_->expr_factory_ != nullptr && ctx_->session_info_ != nullptr
+        && !stmt->get_stmt_hint().enable_no_rewrite()
+        && stmt->get_stmt_hint().query_hint_ != nullptr
+        && !stmt->get_stmt_hint().query_hint_->has_outline_data()) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_exprs().count(); ++i) {
+        if (OB_FAIL(simplify_ann_integer_not_equal(stmt->get_condition_exprs().at(i),
+                     *ctx_->expr_factory_, ctx_->session_info_, trans_happened))) {
+        }
+      }
+    }
+
     if (OB_SUCC(ret)) {
       if (OB_FAIL(flatten_conditions(stmt, is_happened))) {
       } else {
         trans_happened |= is_happened;
         OPT_TRACE("flatten condition:", is_happened);
       }
-    }  
+    }
+    if (OB_SUCC(ret) && stmt->has_vec_approx()
+        && ctx_->expr_factory_ != nullptr && ctx_->session_info_ != nullptr
+        && !stmt->get_stmt_hint().enable_no_rewrite()
+        && stmt->get_stmt_hint().query_hint_ != nullptr
+        && !stmt->get_stmt_hint().query_hint_->has_outline_data()) {
+      bool fused = false;
+      if (OB_FAIL(fuse_ann_integer_exclusions(stmt->get_condition_exprs(),
+                   *ctx_->expr_factory_, ctx_->session_info_, fused))) {
+      } else {
+        trans_happened |= fused;
+      }
+    }
+
     if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
       } else {

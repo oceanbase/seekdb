@@ -476,6 +476,153 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
   return ret;
 }
 
+int ColumnExclusionSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
+                                                  const OptSelectivityCtx &ctx,
+                                                  const ObRawExpr &expr,
+                                                  ObSelEstimator *&estimator)
+{
+  int ret = OB_SUCCESS;
+  estimator = NULL;
+  const ObRawExpr *predicate = &expr;
+  const ObRawExpr *column = NULL;
+  ObSEArray<const ObRawExpr *, 4> values;
+  bool is_not = T_OP_NOT == expr.get_expr_type();
+  bool valid = true;
+  bool contains_null = false;
+  if (is_not) {
+    if (expr.get_param_count() != 1 || OB_ISNULL(predicate = expr.get_param_expr(0))) {
+      valid = false;
+    }
+  }
+  if (!valid) {
+  } else if ((is_not && T_OP_EQ == predicate->get_expr_type()) ||
+             (!is_not && T_OP_NE == predicate->get_expr_type())) {
+    const ObRawExpr *value = NULL;
+    const ObRawExpr *unused = NULL;
+    ObItemType type = T_INVALID;
+    if (OB_FAIL(ObOptEstUtils::extract_var_op_const(predicate, column, value, unused, type, valid))) {
+    } else if (valid && OB_FAIL(values.push_back(value))) {
+    }
+  } else if ((is_not && T_OP_IN == predicate->get_expr_type()) ||
+             (!is_not && T_OP_NOT_IN == predicate->get_expr_type())) {
+    const ObRawExpr *row = NULL;
+    if (predicate->get_param_count() != 2 ||
+        OB_ISNULL(column = predicate->get_param_expr(0)) ||
+        OB_ISNULL(row = predicate->get_param_expr(1)) || T_OP_ROW != row->get_expr_type()) {
+      valid = false;
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < row->get_param_count(); ++i) {
+        if (OB_FAIL(values.push_back(row->get_param_expr(i)))) {
+        }
+      }
+    }
+  } else {
+    valid = false;
+  }
+  if (OB_SUCC(ret) && valid) {
+    valid = OB_NOT_NULL(column) && column->is_column_ref_expr() && !values.empty();
+  }
+  // Only combine exclusions whose values can be compared in the column's
+  // domain. In particular, do not conflate mixed-type or collation-sensitive
+  // comparisons that are not equality-transitive, or unresolved dynamic values.
+  for (int64_t i = 0; OB_SUCC(ret) && valid && i < values.count(); ++i) {
+    ObObj value;
+    bool can_compare = false;
+    if (OB_ISNULL(values.at(i)) || !values.at(i)->is_static_scalar_const_expr()) {
+      valid = false;
+    } else if (values.at(i)->get_result_type().is_null()) {
+      contains_null = true;
+    } else {
+      int tmp_ret = ObOptSelectivity::get_compare_value(ctx,
+          static_cast<const ObColumnRefRawExpr *>(column), values.at(i), value, can_compare);
+      if (OB_SUCCESS != tmp_ret || !can_compare) {
+        // Conversion failures must retain the pre-existing estimator behavior.
+        valid = false;
+      } else {
+        contains_null |= value.is_null();
+      }
+    }
+  }
+  if (OB_SUCC(ret) && valid) {
+    ColumnExclusionSelEstimator *exclusion = NULL;
+    if (OB_FAIL(factory.create_estimator_inner(exclusion))) {
+    } else if (is_not && OB_FAIL(ObBoolOpSelEstimator::create_estimator(factory, ctx, expr, exclusion->fallback_))) {
+    } else if (!is_not && T_OP_NE == expr.get_expr_type() &&
+               OB_FAIL(ObEqualSelEstimator::create_estimator(factory, ctx, expr, exclusion->fallback_))) {
+    } else if (!is_not && T_OP_NOT_IN == expr.get_expr_type() &&
+               OB_FAIL(ObInSelEstimator::create_estimator(factory, ctx, expr, exclusion->fallback_))) {
+    } else if (OB_ISNULL(exclusion->fallback_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(exclusion->values_.assign(values))) {
+    } else {
+      exclusion->column_ = static_cast<const ObColumnRefRawExpr *>(column);
+      exclusion->eigen_expr_ = column;
+      exclusion->contains_null_ = contains_null;
+      estimator = exclusion;
+    }
+  }
+  return ret;
+}
+
+int ColumnExclusionSelEstimator::merge(const ObSelEstimator &other, bool &is_success)
+{
+  int ret = OB_SUCCESS;
+  is_success = false;
+  if (get_type() == other.get_type()) {
+    const ColumnExclusionSelEstimator &exclusion = static_cast<const ColumnExclusionSelEstimator &>(other);
+    if (column_ == exclusion.column_) {
+      if (OB_FAIL(append(values_, exclusion.values_))) {
+      } else {
+        contains_null_ |= exclusion.contains_null_;
+        merged_ = true;
+        is_success = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int ColumnExclusionSelEstimator::get_sel(const OptTableMetas &table_metas,
+                                         const OptSelectivityCtx &ctx,
+                                         double &selectivity,
+                                         ObIArray<ObExprSelPair> &all_predicate_sel)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(column_) || OB_ISNULL(fallback_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!merged_) {
+    if (OB_FAIL(fallback_->get_sel(table_metas, ctx, selectivity, all_predicate_sel))) {
+    }
+  } else if (contains_null_) {
+    // A conjunction containing col <> NULL cannot evaluate to TRUE.
+    selectivity = 0.0;
+  } else {
+    // These temporary expressions are used only by the existing IN estimator;
+    // they never enter the statement or its execution plan. It handles typed
+    // value deduplication, histogram frequencies and NDV fallback for the union.
+    ObOpRawExpr row(ctx.get_allocator());
+    ObOpRawExpr in(ctx.get_allocator());
+    row.set_expr_type(T_OP_ROW);
+    in.set_expr_type(T_OP_IN);
+    double excluded_sel = 0.0;
+    double null_sel = 0.0;
+    if (OB_FAIL(row.init_param_exprs(values_.count()))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < values_.count(); ++i) {
+      if (OB_FAIL(row.add_param_expr(const_cast<ObRawExpr *>(values_.at(i))))) {
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(in.set_param_exprs(const_cast<ObColumnRefRawExpr *>(column_), &row))) {
+    } else if (OB_FAIL(ObInSelEstimator::get_in_sel(table_metas, ctx, in, excluded_sel))) {
+    } else if (OB_FAIL(ObOptSelectivity::get_column_basic_sel(table_metas, ctx, *column_, NULL, &null_sel))) {
+    } else {
+      selectivity = ObOptSelectivity::revise_between_0_1(1.0 - null_sel - excluded_sel);
+    }
+  }
+  return ret;
+}
+
 int ObIsSelEstimator::get_sel(const OptTableMetas &table_metas,
                               const OptSelectivityCtx &ctx,
                               double &selectivity,
@@ -1654,6 +1801,7 @@ int ObBoolOpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
   estimator = NULL;
   ObBoolOpSelEstimator *bool_estimator = NULL;
   ObSEArray<ObRawExpr *, 4> exprs;
+  ObSEArray<const ObRawExpr *, 4> input_exprs;
   ObQuestionmarkEqualCtx equal_ctx(false);
   if (T_OP_NOT != expr.get_expr_type() &&
       T_OP_AND != expr.get_expr_type() &&
@@ -1666,7 +1814,22 @@ int ObBoolOpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     bool_estimator->expr_ = &expr;
     estimator = bool_estimator;
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_count(); ++i) {
-      const ObRawExpr *child_expr = expr.get_param_expr(i);
+      if (OB_FAIL(input_exprs.push_back(expr.get_param_expr(i)))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < input_exprs.count(); ++i) {
+      const ObRawExpr *child_expr = input_exprs.at(i);
+      // Flatten only the estimator input, not the executable expression tree.
+      // Creating fresh leaf estimators avoids mutating an estimator shared with
+      // an inner AND when outer exclusions are merged into it.
+      if (T_OP_AND == expr.get_expr_type() && OB_NOT_NULL(child_expr) &&
+          T_OP_AND == child_expr->get_expr_type()) {
+        for (int64_t j = 0; OB_SUCC(ret) && j < child_expr->get_param_count(); ++j) {
+          if (OB_FAIL(input_exprs.push_back(child_expr->get_param_expr(j)))) {
+          }
+        }
+        continue;
+      }
       ObSelEstimator *child_estimator = NULL;
       bool is_duplicate = false;
       if (OB_ISNULL(child_expr)) {
@@ -2656,6 +2819,7 @@ int ObSelEstimatorFactory::create_estimator(const OptSelectivityCtx &ctx,
     ObAggSelEstimator::create_estimator,
     ObConstSelEstimator::create_estimator,
     ObColumnSelEstimator::create_estimator,
+    ColumnExclusionSelEstimator::create_estimator,
     ObEqualSelEstimator::create_estimator,
     ObLikeSelEstimator::create_estimator,
     ObBoolOpSelEstimator::create_estimator,

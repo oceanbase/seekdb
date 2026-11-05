@@ -80,6 +80,7 @@ enum class ObSelEstType
   SIMPLE_JOIN,
   INEQUAL_JOIN,
   UNIFORM_RANGE,
+  COLUMN_EXCLUSION,
 };
 
 class ObSelEstimatorFactory;
@@ -422,6 +423,7 @@ private:
  */
 class ObInSelEstimator : public ObIndependentSelEstimator
 {
+  friend class ColumnExclusionSelEstimator;
 public:
   ObInSelEstimator() : ObIndependentSelEstimator(ObSelEstType::IN) {}
   virtual ~ObInSelEstimator() = default;
@@ -458,6 +460,41 @@ private:
                         double &selectivity);
 private:
   DISABLE_COPY_ASSIGN(ObInSelEstimator);
+};
+
+// Estimate conjunctions of exclusions as the complement of their union.
+// Keep the original predicates for execution and for unmerged estimates.
+class ColumnExclusionSelEstimator : public ObSelEstimator
+{
+public:
+  ColumnExclusionSelEstimator()
+    : ObSelEstimator(ObSelEstType::COLUMN_EXCLUSION), column_(NULL),
+      fallback_(NULL), merged_(false), contains_null_(false) {}
+
+  static int create_estimator(ObSelEstimatorFactory &factory,
+                              const OptSelectivityCtx &ctx,
+                              const ObRawExpr &expr,
+                              ObSelEstimator *&estimator);
+  virtual int merge(const ObSelEstimator &other, bool &is_success) override;
+  virtual bool is_independent() const override { return false; }
+  virtual bool is_complex_filter_qual() override {
+    return OB_NOT_NULL(fallback_) && fallback_->is_complex_filter_qual();
+  }
+  virtual bool is_complex_join_qual() override {
+    return OB_NOT_NULL(fallback_) && fallback_->is_complex_join_qual();
+  }
+  virtual int get_sel(const OptTableMetas &table_metas,
+                      const OptSelectivityCtx &ctx,
+                      double &selectivity,
+                      ObIArray<ObExprSelPair> &all_predicate_sel) override;
+
+private:
+  const ObColumnRefRawExpr *column_;
+  ObSelEstimator *fallback_;
+  bool merged_;
+  bool contains_null_;
+  common::ObSEArray<const ObRawExpr *, 4> values_;
+  DISABLE_COPY_ASSIGN(ColumnExclusionSelEstimator);
 };
 
 // get var is[not] NULL\true\false selectivity
