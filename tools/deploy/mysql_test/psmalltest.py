@@ -52,6 +52,7 @@ psmall_test=[
 'executor.trx',
 'explain',
 'expr.collation_expr',
+'expr.compress_trailing_space',
 'expr.expr_ceil',
 'expr.expr_floor',
 'expr.expr_instr',

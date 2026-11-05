@@ -1,0 +1,14 @@
+# Compressed data ending in a space needs the MySQL trailing '.' guard.
+SELECT HEX(RIGHT(COMPRESS(CHAR(31)), 2)) AS protected_suffix;
+SELECT OCTET_LENGTH(COMPRESS(CHAR(31))) AS compressed_length;
+SELECT HEX(UNCOMPRESS(COMPRESS(CHAR(31)))) AS roundtrip;
+SELECT UNCOMPRESSED_LENGTH(COMPRESS(CHAR(31))) AS original_length;
+SELECT HEX(RIGHT(COMPRESS(CHAR(0, 31)), 2)) AS binary_suffix,
+       HEX(UNCOMPRESS(COMPRESS(CHAR(0, 31)))) AS binary_roundtrip;
+# A space in the input alone must not add a guard to a non-space-ending stream.
+SELECT HEX(RIGHT(COMPRESS(' '), 1)) AS unchanged_suffix,
+       HEX(UNCOMPRESS(COMPRESS(' '))) AS space_roundtrip;
+SELECT OCTET_LENGTH(COMPRESS('a')) AS regular_length;
+SELECT COMPRESS(NULL) IS NULL AS null_input,
+       OCTET_LENGTH(COMPRESS('')) AS empty_input;
+SELECT UNCOMPRESS(COMPRESS(REPEAT('a', 4096))) = REPEAT('a', 4096) AS large_roundtrip;

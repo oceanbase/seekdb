@@ -90,6 +90,11 @@ int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
         ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
       } else {
         new_len = static_cast<uint64_t>(new_len_zlib);
+        // Protect the compressed stream from trailing-space trimming, as in MySQL.
+        if (' ' == buf[COMPRESS_HEADER_LEN + new_len - 1]) {
+          buf[COMPRESS_HEADER_LEN + new_len] = '.';
+          ++new_len;
+        }
         int32_t compress_header = str_val.length() & COMPRESS_HEADER_MASK;
         MEMCPY(buf, &compress_header, sizeof(compress_header));
         expr_datum.set_string(buf, new_len + COMPRESS_HEADER_LEN);

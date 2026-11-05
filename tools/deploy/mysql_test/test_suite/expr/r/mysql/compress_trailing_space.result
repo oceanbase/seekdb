@@ -1,0 +1,30 @@
+SELECT HEX(RIGHT(COMPRESS(CHAR(31)), 2)) AS protected_suffix;
+protected_suffix
+202E
+SELECT OCTET_LENGTH(COMPRESS(CHAR(31))) AS compressed_length;
+compressed_length
+14
+SELECT HEX(UNCOMPRESS(COMPRESS(CHAR(31)))) AS roundtrip;
+roundtrip
+1F
+SELECT UNCOMPRESSED_LENGTH(COMPRESS(CHAR(31))) AS original_length;
+original_length
+1
+SELECT HEX(RIGHT(COMPRESS(CHAR(0, 31)), 2)) AS binary_suffix,
+       HEX(UNCOMPRESS(COMPRESS(CHAR(0, 31)))) AS binary_roundtrip;
+binary_suffix	binary_roundtrip
+202E	001F
+SELECT HEX(RIGHT(COMPRESS(' '), 1)) AS unchanged_suffix,
+       HEX(UNCOMPRESS(COMPRESS(' '))) AS space_roundtrip;
+unchanged_suffix	space_roundtrip
+21	20
+SELECT OCTET_LENGTH(COMPRESS('a')) AS regular_length;
+regular_length
+13
+SELECT COMPRESS(NULL) IS NULL AS null_input,
+       OCTET_LENGTH(COMPRESS('')) AS empty_input;
+null_input	empty_input
+1	0
+SELECT UNCOMPRESS(COMPRESS(REPEAT('a', 4096))) = REPEAT('a', 4096) AS large_roundtrip;
+large_roundtrip
+1
