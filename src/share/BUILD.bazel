@@ -1698,7 +1698,10 @@ cc_library(
     hdrs = glob(
         ["**/*.h", "**/*.ipp", "**/*.def"],
         allow_empty = True,
-        exclude = ["ob_tenant_role_transition_service.h"],
+        exclude = [
+            "ob_tenant_role_transition_service.h",
+            "seek1243_drop_diagnostic.h",
+        ],
     ),
     deps = _SHARE_RUNTIME_COMPILE_DEPS,
     implementation_deps = _SHARE_RUNTIME_OBLIB_DEPS,
@@ -1784,6 +1787,7 @@ grouped_unity_cc_library(
     split_unity_groups = True,
     implementation_deps = [
         ":_share_implementation_headers",
+        ":seek1243_drop_diagnostic",
         "//rust:config_headers",
     ] + _SHARE_RUNTIME_COMPILE_DEPS + [
         "//src/oblib:common_sql_mode",

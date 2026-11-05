@@ -233,6 +233,13 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
         deps = ["//src/oblib:oblib_foundation"],
     ),
+    "seek1243_drop_diagnostic": struct(
+        hdrs = ["seek1243_drop_diagnostic.h"],
+        deps = [
+            "//src/oblib:oblib_base",
+            "//src/oblib:oblib_common",
+        ],
+    ),
     "execution_contracts": struct(
         hdrs = [
             "aggregate/ob_pushdown_aggregate_protocol.h",

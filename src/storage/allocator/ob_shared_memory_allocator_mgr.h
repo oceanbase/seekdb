@@ -26,6 +26,9 @@
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/ls/ob_ls.h"
 #include "share/config/ob_server_config.h"
+#if defined(_WIN32)
+#include "lib/stat/ob_diagnose_info.h"
+#endif
 
 namespace oceanbase {
 namespace share {
@@ -148,6 +151,10 @@ public:
       if (0 < sleep_interval) {
         sleep_time += sleep_interval;
         left_interval -= sleep_interval;
+#if defined(_WIN32)
+        common::ObSleepEventGuard<common::ObWaitEventIds::STORAGE_WRITING_THROTTLE_SLEEP> seek1243_sleep_event(
+            sleep_interval, sleep_interval, sleep_time, 0);
+#endif
         ob_usleep<ObWaitEventIds::STORAGE_WRITING_THROTTLE_SLEEP>(sleep_interval, sleep_interval, sleep_time, 0);
       }
 

@@ -127,6 +127,24 @@ public:
   virtual int rollback() = 0;
   virtual int commit() = 0;
 
+  // Controller-only DROP timing context.  The default is deliberately inert so
+  // other ObISQLConnection implementations keep their existing behavior when
+  // the isolated Windows diagnostic is disabled.
+  virtual void set_seek1243_drop_context(const uint64_t table_id,
+                                         const int64_t table_type)
+  {
+    UNUSEDx(table_id, table_type);
+  }
+  virtual void clear_seek1243_drop_context() {}
+  virtual bool get_seek1243_drop_context(uint64_t &table_id,
+                                         int64_t &table_type,
+                                         uint64_t &session_id,
+                                         int64_t &inner_tx_id) const
+  {
+    UNUSEDx(table_id, table_type, session_id, inner_tx_id);
+    return false;
+  }
+
   // session environment
   virtual int get_session_variable(const ObString &name, int64_t &val) = 0;
   virtual int set_session_variable(const ObString &name, int64_t val) = 0;

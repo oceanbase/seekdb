@@ -21,6 +21,7 @@
 #include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_constraint.h"
 #include "share/schema/ob_partition_sql_helper.h"
+#include "share/seek1243_drop_diagnostic.h"
 #include "share/ob_timezone_mgr.h"
 
 namespace oceanbase
@@ -669,60 +670,74 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
                                   bool is_drop_db /*false*/,
                                   bool is_force_drop_lonely_lob_aux_table /*false*/,
                                   ObSchemaGetterGuard *schema_guard /*=NULL*/,
-                                  DropTableIdHashSet *drop_table_set/*=NULL*/)
+                                  DropTableIdHashSet *drop_table_set/*=NULL*/,
+                                  const bool is_drop_table /*false*/)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   
   const uint64_t table_id = table_schema.get_table_id();
-  if (OB_FAIL(check_ddl_allowed(table_schema))) {
+  ::oceanbase::share::seek1243::DropConnectionScope seek1243_drop_context(
+      sql_client, is_drop_table, table_id, static_cast<int64_t>(table_schema.get_table_type()));
+  if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "check drop allowed", table_id, table_schema.get_table_type(),
+                                    check_ddl_allowed(table_schema)))) {
   } else {
     // delete from __all_table_history
-    if (OB_FAIL(delete_from_all_table_history(
-                sql_client, table_schema, new_schema_version))) {
+    if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete table history", table_id, table_schema.get_table_type(),
+                                      delete_from_all_table_history(
+                sql_client, table_schema, new_schema_version)))) {
     }
   }
   bool need_drop_column = (!table_schema.is_view_table() || table_schema.view_column_filled());
   // delete from __all_column_history
   if (OB_FAIL(ret)) {
-  } else if (need_drop_column && OB_FAIL(delete_from_all_column_history(
-      sql_client, table_schema, new_schema_version))) {
+  } else if (need_drop_column && OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client,
+      "delete column history", table_id, table_schema.get_table_type(),
+      delete_from_all_column_history(sql_client, table_schema, new_schema_version)))) {
   }
   // delete from __all_table and __all_column
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(delete_from_all_table(sql_client, table_id))) {
-    } else if (OB_FAIL(delete_from_all_column(
-                       sql_client, table_id,
-                       table_schema.get_column_count(),
-                       true))) {
+    if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete table metadata", table_id, table_schema.get_table_type(),
+                                      delete_from_all_table(sql_client, table_id)))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete column metadata", table_id, table_schema.get_table_type(),
+                                             delete_from_all_column(sql_client, table_id,
+                                                                    table_schema.get_column_count(), true)))) {
     }
   }
 
   // delete from __all_table_stat, __all_monitor_modified, __all_column_usage, __all_optstat_user_prefs
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(delete_from_all_table_stat(sql_client, table_id))) {
-    } else if (OB_FAIL(delete_from_all_column_usage(sql_client, table_id))) {
-    } else if (OB_FAIL(delete_from_all_monitor_modified(sql_client, table_id))) {
-    } else if (OB_FAIL(delete_from_all_optstat_user_prefs(sql_client, table_id))) {
+    if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete table stats", table_id, table_schema.get_table_type(),
+                                      delete_from_all_table_stat(sql_client, table_id)))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete column usage", table_id, table_schema.get_table_type(),
+                                             delete_from_all_column_usage(sql_client, table_id)))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete monitor metadata", table_id, table_schema.get_table_type(),
+                                             delete_from_all_monitor_modified(sql_client, table_id)))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete optstat preferences", table_id, table_schema.get_table_type(),
+                                             delete_from_all_optstat_user_prefs(sql_client, table_id)))) {
     }
   }
 
   // delete from __all_part_info, __all_part and __all_sub_part
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(delete_table_part_info(table_schema, new_schema_version, sql_client))) {
+    if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete partition metadata", table_id, table_schema.get_table_type(),
+                                      delete_table_part_info(table_schema, new_schema_version, sql_client)))) {
     }
   }
 
   if (OB_SUCC(ret)) {
     // Foreign keys should be dropped while dropping the table.
-    if (OB_FAIL(delete_foreign_key(sql_client, table_schema, new_schema_version, is_truncate_table))) {
+    if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete foreign keys", table_id, table_schema.get_table_type(),
+                                      delete_foreign_key(sql_client, table_schema, new_schema_version,
+                                                         is_truncate_table)))) {
     }
   }
 
   // delete constraint here
   if (OB_SUCC(ret)) {
     // Drop all constraints while drop table and recyclebin is off.
-    if (OB_FAIL(delete_constraint(sql_client, table_schema, new_schema_version))) {
+    if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "delete constraints", table_id, table_schema.get_table_type(),
+                                      delete_constraint(sql_client, table_schema, new_schema_version)))) {
     }
   }
 
@@ -745,7 +760,8 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
     }
     opt.schema_version_ = new_schema_version;
     opt.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
-    if (OB_FAIL(log_operation_wrapper(opt, sql_client))) {
+    if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "log drop operation", table_id, table_schema.get_table_type(),
+                                      log_operation_wrapper(opt, sql_client)))) {
     } else {
       if (is_force_drop_lonely_lob_aux_table) {
         // Due to some bugs, the lob aux table was not deleted along with the main table。
@@ -755,7 +771,11 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
         // the schema_version of the main table cannot be updated. Thus, this step needs to be skipped.
         // But for safety, we try to update it, but the expectation was to fail.
         if (table_schema.is_aux_lob_table()) {
-          ret = update_data_table_schema_version(sql_client, table_schema.get_data_table_id(), table_schema.get_in_offline_ddl_white_list());
+          ret = update_data_table_schema_version(sql_client,
+                                                 table_schema.get_data_table_id(),
+                                                 table_schema.get_in_offline_ddl_white_list(),
+                                                 OB_INVALID_VERSION,
+                                                 is_drop_table);
           if (OB_TABLE_NOT_EXIST != ret) {
             ret = OB_ERR_UNEXPECTED;
             LOG_ERROR("is_force_drop_lonely_lob_aux_table is true, but update_data_table_schema_version success ", K(table_schema));
@@ -769,8 +789,12 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
         }
       } else if (table_schema.is_index_table()
           || table_schema.is_aux_lob_table()) {
-        if (OB_FAIL(update_data_table_schema_version(sql_client,
-            table_schema.get_data_table_id(), table_schema.get_in_offline_ddl_white_list()))) {
+        if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "update data table schema version", table_id,
+                                          table_schema.get_table_type(),
+                                          update_data_table_schema_version(
+                                              sql_client, table_schema.get_data_table_id(),
+                                              table_schema.get_in_offline_ddl_white_list(),
+                                              OB_INVALID_VERSION, is_drop_table)))) {
         }
       } else if (table_schema.get_foreign_key_real_count() > 0) {
         // Auxiliary tables do not have foreign keys.
@@ -796,7 +820,8 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
               } else if (table_schema.get_database_id() != external_db_table_schema->get_database_id()) {
                 // FIXME: foreign key should not be across dbs.
                 tmp_ret = update_data_table_schema_version(sql_client,
-                          update_table_id, table_schema.get_in_offline_ddl_white_list());
+                          update_table_id, table_schema.get_in_offline_ddl_white_list(),
+                          OB_INVALID_VERSION, is_drop_table);
                 LOG_WARN("update child table schema version", K(tmp_ret));
               }
             }
@@ -805,7 +830,8 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
           } else if (update_table_id == table_schema.get_table_id()) {
             // no need to update data table schema version since data table is itself.
           } else if (OB_FAIL(update_data_table_schema_version(sql_client, update_table_id,
-                             table_schema.get_in_offline_ddl_white_list()))) {
+                             table_schema.get_in_offline_ddl_white_list(),
+                             OB_INVALID_VERSION, is_drop_table))) {
           }
         }
       }
@@ -2918,7 +2944,8 @@ int ObTableSqlService::update_data_table_schema_version(
     ObISQLClient &sql_client,
     const uint64_t data_table_id,
     const bool in_offline_ddl_white_list,
-    int64_t new_schema_version)
+    int64_t new_schema_version,
+    const bool is_drop_table)
 {
   int ret = OB_SUCCESS;
   
@@ -2927,18 +2954,22 @@ int ObTableSqlService::update_data_table_schema_version(
   
   ObTableSchema table_schema;
   if (OB_INVALID_VERSION == new_schema_version
-      && OB_FAIL(schema_service_.gen_new_schema_version(
-                 OB_INVALID_VERSION, new_schema_version))) {
+      && OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "generate update schema version", data_table_id, -1,
+                                        schema_service_.gen_new_schema_version(
+                                            OB_INVALID_VERSION, new_schema_version)))) {
     // for generating different schema version for the same table in one trans
   } else if (OB_INVALID_ID == data_table_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid data table id", K(data_table_id));
-  } else if (OB_FAIL(schema_service_.get_table_schema_from_inner_table(
-                     schema_status, data_table_id, sql_client, table_schema))) {
+  } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "fetch data table schema", data_table_id, -1,
+                                           schema_service_.get_table_schema_from_inner_table(
+                                               schema_status, data_table_id, sql_client, table_schema)))) {
   }
   if (OB_SUCC(ret)) {
     if (FALSE_IT(table_schema.set_in_offline_ddl_white_list(in_offline_ddl_white_list))) {
-    } else if (OB_FAIL(check_ddl_allowed(table_schema))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "check updated table allowed", data_table_id,
+                                             table_schema.get_table_type(),
+                                             check_ddl_allowed(table_schema)))) {
     } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                    data_table_id)))
           || OB_FAIL(dml.add_column("schema_version", new_schema_version))
@@ -2950,8 +2981,10 @@ int ObTableSqlService::update_data_table_schema_version(
       int64_t affected_rows = 0;
       const char *table_name = NULL;
       if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
-      } else if (OB_FAIL(exec_update(sql_client, data_table_id,
-                                     table_name, dml, affected_rows))) {
+      } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "update data table metadata", data_table_id,
+                                               table_schema.get_table_type(),
+                                               exec_update(sql_client, data_table_id,
+                                                           table_name, dml, affected_rows)))) {
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -2961,7 +2994,10 @@ int ObTableSqlService::update_data_table_schema_version(
       const bool only_history = true;
       const bool update_object_status_ignore_version = false;
       table_schema.set_schema_version(new_schema_version);
-      if (OB_FAIL(add_table(sql_client, table_schema, update_object_status_ignore_version, only_history))) {
+      if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "add data table history", data_table_id,
+                                        table_schema.get_table_type(),
+                                        add_table(sql_client, table_schema,
+                                                  update_object_status_ignore_version, only_history)))) {
       }
     }
     if (OB_SUCC(ret)) {
@@ -2971,7 +3007,9 @@ int ObTableSqlService::update_data_table_schema_version(
       opt.table_id_ = data_table_id;
       opt.op_type_ = OB_DDL_MODIFY_TABLE_SCHEMA_VERSION;
       opt.schema_version_ = new_schema_version;
-      if (OB_FAIL(log_operation_wrapper(opt, sql_client))) {
+      if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE_IF(is_drop_table, sql_client, "log schema version operation", data_table_id,
+                                        table_schema.get_table_type(),
+                                        log_operation_wrapper(opt, sql_client)))) {
       }
     }
   } else if (OB_TABLE_NOT_EXIST == ret) { // need to check if mock fk parent table exist

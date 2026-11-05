@@ -33,6 +33,8 @@
 #include "observer/mysql/obmp_base.h"
 #include "ob_inner_sql_read_context.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
+#include "data_plane/api/data_plane/transaction/ob_tx_desc_access.h"
+#include "share/seek1243_drop_diagnostic.h"
 
 namespace oceanbase
 {
@@ -84,6 +86,83 @@ private:
   ObString sql_;
 };
 
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+class Seek1243InnerTimingScope
+{
+public:
+  Seek1243InnerTimingScope(ObInnerSQLConnection &conn,
+                           const char *event,
+                           int &ret)
+      : enabled_(false),
+        event_(event),
+        ret_(ret),
+        deadline_us_(0),
+        wall_start_us_(0),
+        start_us_(0)
+  {
+    enabled_ = conn.get_seek1243_drop_context(table_id_, table_type_, session_id_, inner_tx_id_);
+    if (enabled_) {
+      const ObTimeoutCtx &timeout_ctx = ObTimeoutCtx::get_ctx();
+      deadline_us_ = timeout_ctx.is_timeout_set() ? timeout_ctx.get_abs_timeout() : 0;
+      wall_start_us_ = ObTimeUtility::current_time();
+      start_us_ = ObTimeUtility::current_monotonic_raw_time();
+    }
+  }
+
+  ~Seek1243InnerTimingScope()
+  {
+    if (enabled_) {
+      const int64_t end_us = ObTimeUtility::current_monotonic_raw_time();
+      const int64_t wall_end_us = ObTimeUtility::current_time();
+      LOG_INFO("seek1243 drop diagnostic inner boundary",
+               K(event_), "trace_id", ObCurTraceId::get()[0],
+               K(session_id_), K(inner_tx_id_), K(table_id_), K(table_type_), K(ret_),
+               K(deadline_us_), K(wall_start_us_), K(wall_end_us),
+               "elapsed_us", end_us - start_us_);
+    }
+  }
+
+private:
+  bool enabled_;
+  uint64_t table_id_ = 0;
+  int64_t table_type_ = 0;
+  uint64_t session_id_ = 0;
+  int64_t inner_tx_id_ = 0;
+  const char *event_;
+  int &ret_;
+  int64_t deadline_us_;
+  int64_t wall_start_us_;
+  int64_t start_us_;
+};
+
+template <typename Fn>
+int run_seek1243_inner_timed(ObInnerSQLConnection &conn,
+                             const char *event,
+                             Fn &&fn)
+{
+  int ret = OB_SUCCESS;
+  {
+    Seek1243InnerTimingScope scope(conn, event, ret);
+    ret = fn();
+  }
+  return ret;
+}
+#else
+class Seek1243InnerTimingScope
+{
+public:
+  Seek1243InnerTimingScope(ObInnerSQLConnection &, const char *, int &) {}
+};
+
+template <typename Fn>
+int run_seek1243_inner_timed(ObInnerSQLConnection &,
+                             const char *,
+                             Fn &&fn)
+{
+  return fn();
+}
+#endif
+
 ObInnerSQLConnection::TimeoutGuard::TimeoutGuard(ObInnerSQLConnection &conn)
   : conn_(conn)
 {
@@ -132,7 +211,10 @@ ObInnerSQLConnection::ObInnerSQLConnection()
       use_external_session_(false),
       group_id_(0),
       user_timeout_(0),
-      inner_sess_query_locked_(false)
+      inner_sess_query_locked_(false),
+      seek1243_drop_context_active_(false),
+      seek1243_drop_table_id_(0),
+      seek1243_drop_table_type_(0)
 {
   free_session_ctx_.sessid_ = ObSQLSessionInfo::INVALID_SESSID;
 }
@@ -148,6 +230,38 @@ ObInnerSQLConnection::~ObInnerSQLConnection()
       inner_session_->get_tx_desc() = NULL;
     }
   }
+}
+
+void ObInnerSQLConnection::set_seek1243_drop_context(const uint64_t table_id,
+                                                     const int64_t table_type)
+{
+  seek1243_drop_context_active_ = true;
+  seek1243_drop_table_id_ = table_id;
+  seek1243_drop_table_type_ = table_type;
+}
+
+void ObInnerSQLConnection::clear_seek1243_drop_context()
+{
+  seek1243_drop_context_active_ = false;
+  seek1243_drop_table_id_ = 0;
+  seek1243_drop_table_type_ = 0;
+}
+
+bool ObInnerSQLConnection::get_seek1243_drop_context(
+    uint64_t &table_id,
+    int64_t &table_type,
+    uint64_t &session_id,
+    int64_t &inner_tx_id) const
+{
+  bool active = seek1243_drop_context_active_;
+  if (active) {
+    table_id = seek1243_drop_table_id_;
+    table_type = seek1243_drop_table_type_;
+    session_id = get_session().get_server_sid();
+    const transaction::ObTxDesc *tx_desc = get_session().get_tx_desc();
+    inner_tx_id = NULL == tx_desc ? 0 : data_plane::tx_desc_id(tx_desc).get_id();
+  }
+  return active;
 }
 
 int ObInnerSQLConnection::create_connection_with_owned_session(
@@ -572,6 +686,28 @@ int ObInnerSQLConnection::process_record(sql::ObResultSet &result_set,
   }
   ret = process_audit_record(result_set, sql_ctx, session, last_ret, execution_id,
             ps_stmt_id, ps_sql, is_from_pl);
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  uint64_t drop_table_id = 0;
+  int64_t drop_table_type = 0;
+  uint64_t drop_session_id = 0;
+  int64_t drop_inner_tx_id = 0;
+  if (get_seek1243_drop_context(drop_table_id, drop_table_type,
+                               drop_session_id, drop_inner_tx_id)) {
+    const ObString drop_sql_id(static_cast<int32_t>(sizeof(sql_ctx.sql_id_) - 1), sql_ctx.sql_id_);
+    const ObString statement_prefix(sql_ctx.cur_sql_.length() < 256 ? sql_ctx.cur_sql_.length() : 256,
+                                    sql_ctx.cur_sql_.ptr());
+    LOG_INFO("seek1243 drop diagnostic inner query wait attribution",
+             "measurement_scope", "attempt_wait_guard_includes_error_force_close_excludes_caller_close",
+             K(execution_id), K(drop_session_id), K(drop_inner_tx_id),
+             K(drop_table_id), K(drop_table_type), K(last_ret), K(drop_sql_id), K(statement_prefix),
+             "is_plan_cache_hit", sql_ctx.plan_cache_hit_,
+             "audit_try_count_after_record", audit_record.try_cnt_,
+             "diagnose_info_enabled_at_record", lib::is_diagnose_info_enabled(),
+             "stage_timestamps", audit_record.exec_timestamp_,
+             K(max_wait_desc), "time_waited_us", total_wait_desc.time_waited_,
+             "wait_count", total_wait_desc.total_waits_);
+  }
+#endif
   if (NULL != pl_exec_params) {
     audit_record.params_value_ = pl_exec_params->ptr();
     audit_record.params_value_len_ = pl_exec_params->length();
@@ -821,7 +957,8 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
             ret_code = ret;
             ret = process_retry(res, ret, abs_timeout_us, need_retry, retry_cnt);
             // moved here from ObInnerSQLConnection::do_query() -> ObInnerSQLResult::open().
-            int close_ret = res.force_close();
+            int close_ret = run_seek1243_inner_timed(*this, "inner sql error force_close",
+                                                     [&]() { return res.force_close(); });
             if (OB_SUCCESS != close_ret) {
             }
           } else if (retry_cnt > 0) {
@@ -939,8 +1076,10 @@ int ObInnerSQLConnection::start_transaction_inner(
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(res.init())) {
       } else {
-        if (OB_FAIL(query(executor, res))) {
-        } else if (OB_FAIL(res.close())) {
+        if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql query",
+                                             [&]() { return query(executor, res); }))) {
+        } else if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql res.close",
+                                                    [&]() { return res.close(); }))) {
         }
       }
       if (OB_SUCC(ret)) {
@@ -982,7 +1121,8 @@ int ObInnerSQLConnection::register_multi_data_source(
                                                                          buf,
                                                                          buf_len,
                                                                          register_flag))) {
-          } else if (OB_FAIL(res.close())) {
+          } else if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql res.close",
+                                                      [&]() { return res.close(); }))) {
           }
         }
       }
@@ -1001,6 +1141,7 @@ int ObInnerSQLConnection::register_multi_data_source(
 int ObInnerSQLConnection::rollback()
 {
   int ret = OB_SUCCESS;
+  Seek1243InnerTimingScope rollback_scope(*this, "transaction rollback", ret);
   ObSqlQueryExecutor executor("ROLLBACK");
   if (!is_in_trans()) {
     ret = OB_ERR_UNEXPECTED;
@@ -1011,19 +1152,23 @@ int ObInnerSQLConnection::rollback()
         ret = OB_NOT_INIT;
       } else if (OB_FAIL(res.init())) {
       } else {
-        if (OB_FAIL(query(executor, res))) {
-        } else if (OB_FAIL(res.close())) {
+        if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql query",
+                                             [&]() { return query(executor, res); }))) {
+        } else if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql res.close",
+                                                    [&]() { return res.close(); }))) {
         }
       }
     }
   }
   set_is_in_trans(false);
+  clear_seek1243_drop_context();
   return ret;
 }
 
 int ObInnerSQLConnection::commit()
 {
   int ret = OB_SUCCESS;
+  Seek1243InnerTimingScope commit_scope(*this, "transaction commit", ret);
   DEBUG_SYNC(BEFORE_INNER_SQL_COMMIT);
   ObSqlQueryExecutor executor("COMMIT");
   if (!is_in_trans()) {
@@ -1035,13 +1180,16 @@ int ObInnerSQLConnection::commit()
         ret = OB_NOT_INIT;
       } else if (OB_FAIL(res.init())) {
       } else {
-        if (OB_FAIL(query(executor, res))) {
-        } else if (OB_FAIL(res.close())) {
+        if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql query",
+                                             [&]() { return query(executor, res); }))) {
+        } else if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql res.close",
+                                                    [&]() { return res.close(); }))) {
         }
       }
     }
   }
   set_is_in_trans(false);
+  clear_seek1243_drop_context();
   return ret;
 }
 
@@ -1088,9 +1236,11 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     if (OB_FAIL(ret)) {
     } else {
       res.result_set().set_user_sql(is_user_sql);
-      if (OB_FAIL(query(executor, res))) {
+      if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql query",
+                                           [&]() { return query(executor, res); }))) {
       } else if (FALSE_IT(affected_rows = res.result_set().get_affected_rows())) {
-      } else if (OB_FAIL(res.close())) {
+      } else if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql res.close",
+                                                  [&]() { return res.close(); }))) {
       }
       if (get_session().get_ddl_info().is_ddl()) {
         SERVER_EVENT_ADD(
@@ -1144,8 +1294,9 @@ int ObInnerSQLConnection::execute_read_inner(const ObString &sql,
   } else if (OB_FAIL(read_ctx->get_result().init())) {
   } else {
     read_ctx->get_result().result_set().set_user_sql(is_user_sql);
-    if (OB_FAIL(query(executor, read_ctx->get_result(),
-                      &read_ctx->get_vt_iter_factory()))) {
+    if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql query",
+                                         [&]() { return query(executor, read_ctx->get_result(),
+                                                              &read_ctx->get_vt_iter_factory()); }))) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -1163,13 +1314,16 @@ int ObInnerSQLConnection::execute(
     if (OB_FAIL(res.init())) {
     } else if (!inited_) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(query(executor, res))) {
+    } else if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql query",
+                                                [&]() { return query(executor, res); }))) {
     } else {
       SERVER_MODULE_SCOPE {
         WITH_CONTEXT(res.mem_context_) {
-          if (OB_FAIL(executor.process_result(res.result_set()))) {
+          if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql process_result",
+                                               [&]() { return executor.process_result(res.result_set()); }))) {
           } else {
-            if (OB_FAIL(res.close())) {
+            if (OB_FAIL(run_seek1243_inner_timed(*this, "inner sql res.close",
+                                                 [&]() { return res.close(); }))) {
             }
           }
         }

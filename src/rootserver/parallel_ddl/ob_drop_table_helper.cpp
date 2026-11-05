@@ -25,6 +25,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_table_sql_service.h"
+#include "share/seek1243_drop_diagnostic.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 using namespace oceanbase::rootserver;
@@ -282,6 +283,7 @@ int ObDropTableHelper::calc_schema_version_cnt_()
 int ObDropTableHelper::generate_schemas_()
 {
   int ret = OB_SUCCESS;
+  OB_SEEK1243_DROP_SCOPE("outer generate_schemas", 0, -1, ret);
   if (OB_FAIL(check_inner_stat_())) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas_.count(); i++) {
@@ -372,6 +374,7 @@ int ObDropTableHelper::generate_schemas_()
 int ObDropTableHelper::operate_schemas_()
 {
   int ret = OB_SUCCESS;
+  OB_SEEK1243_DROP_SCOPE("outer operate_schemas", 0, -1, ret);
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_UNLIKELY(table_schemas_.count() != existing_table_items_.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1137,11 +1140,24 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
+    ::oceanbase::share::seek1243::DropConnectionScope seek1243_drop_context(
+        get_trans_(), true, table_schema.get_table_id(),
+        static_cast<int64_t>(table_schema.get_table_type()));
+    OB_SEEK1243_DROP_CONNECTION_SCOPE(get_trans_(), "drop table boundary", table_schema.get_table_id(),
+                          table_schema.get_table_type(), ret);
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-    if (FAILEDx(drop_obj_privs_(table_schema.get_table_id(), ObObjectType::TABLE))) {
-    } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-    } else if (OB_FAIL(ddl_operator.cleanup_autoinc_cache(table_schema))) {
-    } else if (OB_FAIL(schema_service_impl->get_table_sql_service().drop_table(
+    if (FAILEDx(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "drop object privileges", table_schema.get_table_id(),
+                                      table_schema.get_table_type(),
+                                      drop_obj_privs_(table_schema.get_table_id(), ObObjectType::TABLE)))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "generate table schema version", table_schema.get_table_id(),
+                                             table_schema.get_table_type(),
+                                             schema_service_->gen_new_schema_version(new_schema_version)))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "cleanup autoincrement cache", table_schema.get_table_id(),
+                                             table_schema.get_table_type(),
+                                             ddl_operator.cleanup_autoinc_cache(table_schema)))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "table SQL service drop", table_schema.get_table_id(),
+                                             table_schema.get_table_type(),
+                                             schema_service_impl->get_table_sql_service().drop_table(
                        table_schema,
                        new_schema_version,
                        get_trans_(),
@@ -1150,9 +1166,16 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
                        false/*is_drop_db*/,
                        false/*is_force_drop_lonely_lob_aux_table*/,
                        NULL/*schema_guard*/,
-                       &drop_table_ids_))) {
-    } else if (OB_FAIL(ddl_operator.sync_version_for_cascade_table(table_schema.get_depend_table_ids(), get_trans_()))) {
-    } else if (OB_FAIL(sync_version_for_cascade_mock_fk_parent_table_(table_schema.get_depend_mock_fk_parent_table_ids()))) {
+                       &drop_table_ids_,
+                       true/*is_drop_table*/)))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "sync cascade table version", table_schema.get_table_id(),
+                                             table_schema.get_table_type(),
+                                             ddl_operator.sync_version_for_cascade_table(
+                                                 table_schema.get_depend_table_ids(), get_trans_())))) {
+    } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "sync mock FK parent version", table_schema.get_table_id(),
+                                             table_schema.get_table_type(),
+                                             sync_version_for_cascade_mock_fk_parent_table_(
+                                                 table_schema.get_depend_mock_fk_parent_table_ids())))) {
     }
 
     if (OB_SUCC(ret)) {
@@ -1160,27 +1183,37 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
         ObSnapshotInfoManager snapshot_mgr;
         ObArray<ObTabletID> tablet_ids;
         SCN invalid_scn;
-        if (OB_FAIL(snapshot_mgr.init(GCTX.self_addr()))) {
-        } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-        } else if (OB_FAIL(snapshot_mgr.batch_release_snapshot_in_trans(
+        if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "init snapshot manager", table_schema.get_table_id(),
+                                          table_schema.get_table_type(),
+                                          snapshot_mgr.init(GCTX.self_addr())))) {
+        } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "get aux tablet ids", table_schema.get_table_id(),
+                                                 table_schema.get_table_type(),
+                                                 table_schema.get_tablet_ids(tablet_ids)))) {
+        } else if (OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(), "release aux snapshots", table_schema.get_table_id(),
+                                                 table_schema.get_table_type(),
+                                                 snapshot_mgr.batch_release_snapshot_in_trans(
                            get_trans_(),
                            SNAPSHOT_FOR_DDL,
                            -1/*schema_version*/,
                            invalid_scn/*snapshot_scn*/,
-                           tablet_ids))) {
+                           tablet_ids)))) {
         }
       }
     }
 
     if (OB_SUCC(ret)) {
-      if (table_schema.has_tablet() && OB_FAIL(ddl_operator.drop_tablet_of_table(table_schema, get_trans_()))) {
+      if (table_schema.has_tablet() && OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(),
+          "drop table tablets", table_schema.get_table_id(), table_schema.get_table_type(),
+          ddl_operator.drop_tablet_of_table(table_schema, get_trans_())))) {
         LOG_ERROR("fail to drop tablet", KR(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if ((table_schema.is_vec_delta_buffer_type() || table_schema.is_hybrid_vec_index_log_type()) &&
-          OB_FAIL(ObVectorIndexUtil::remove_dbms_vector_jobs(get_trans_(), table_schema.get_table_id()))) {
+          OB_FAIL(OB_SEEK1243_DROP_CONNECTION_STAGE(get_trans_(),
+              "remove vector jobs", table_schema.get_table_id(), table_schema.get_table_type(),
+              ObVectorIndexUtil::remove_dbms_vector_jobs(get_trans_(), table_schema.get_table_id())))) {
       }
     }
   }

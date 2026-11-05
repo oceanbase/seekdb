@@ -107,7 +107,8 @@ public:
                          const bool is_drop_db,
                          const bool is_force_drop_lonely_lob_aux_table,
                          share::schema::ObSchemaGetterGuard *schema_guard,
-                         share::schema::DropTableIdHashSet *drop_table_set);
+                         share::schema::DropTableIdHashSet *drop_table_set,
+                         const bool is_drop_table = false);
 
   virtual int log_core_operation(common::ObISQLClient &sql_client,
                                  const int64_t schema_version);
@@ -268,7 +269,8 @@ public:
   int update_data_table_schema_version(common::ObISQLClient &sql_client,
                                        const uint64_t data_table_id,
                                        const bool in_offline_ddl_white_list,
-                                       int64_t new_schema_version = common::OB_INVALID_VERSION);
+                                       int64_t new_schema_version = common::OB_INVALID_VERSION,
+                                       const bool is_drop_table = false);
   int batch_insert_ori_schema_version(
       common::ObISQLClient &sql_client,
       const ObIArray<uint64_t> &table_id,

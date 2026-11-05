@@ -220,6 +220,8 @@ grouped_unity_cc_library(
     implementation_deps = [
         ":observer_internal_interface",
         "//rust:config_headers",
+        "//src/data_plane:tx_desc_access_interface",
+        "//src/share:seek1243_drop_diagnostic",
     ] + _OBSERVER_NON_OBLIB_NATIVE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",

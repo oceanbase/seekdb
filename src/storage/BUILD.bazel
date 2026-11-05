@@ -398,6 +398,7 @@ cc_library(
     hdrs = STORAGE_PUBLIC_HEADER_ROOTS,
     textual_hdrs = STORAGE_INTERFACE_CLOSURE_HEADERS,
     deps = [
+        "//src/oblib:oblib_base",
         ":_textual_ob_keybtree",
         ":tablet_autoincrement_state",
         "//rust:config_headers",

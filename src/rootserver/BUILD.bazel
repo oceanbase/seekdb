@@ -382,6 +382,7 @@ grouped_unity_cc_library(
         "//src/share:debug_sync_interface",
         "//src/share:delegate_interface",
         "//src/share:diagnostics",
+        "//src/share:seek1243_drop_diagnostic",
         "//src/share:error_codes",
         "//src/share:execution_contracts",
         "//src/share:external_storage",

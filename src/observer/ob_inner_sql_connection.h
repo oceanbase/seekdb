@@ -156,6 +156,13 @@ public:
   virtual int start_transaction(bool with_snap_shot = false) override;
   virtual int rollback() override;
   virtual int commit() override;
+  virtual void set_seek1243_drop_context(const uint64_t table_id,
+                                         const int64_t table_type) override;
+  virtual void clear_seek1243_drop_context() override;
+  virtual bool get_seek1243_drop_context(uint64_t &table_id,
+                                         int64_t &table_type,
+                                         uint64_t &session_id,
+                                         int64_t &inner_tx_id) const override;
   sql::ObSQLSessionInfo &get_session() { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
   const sql::ObSQLSessionInfo &get_session() const { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
   const sql::ObSQLSessionInfo *get_extern_session() const { return extern_session_; }
@@ -335,6 +342,9 @@ private:
   int64_t user_timeout_;
   sql::ObFreeSessionCtx free_session_ctx_;
   bool inner_sess_query_locked_;
+  bool seek1243_drop_context_active_;
+  uint64_t seek1243_drop_table_id_;
+  int64_t seek1243_drop_table_type_;
   DISABLE_COPY_ASSIGN(ObInnerSQLConnection);
 };
 
