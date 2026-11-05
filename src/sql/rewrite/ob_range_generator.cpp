@@ -1285,6 +1285,7 @@ int ObRangeGenerator::merge_and_remove_ranges()
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ranges_.assign(out_ranges))) {
       } else if (OB_FAIL(range_set.destroy())) {
+	  } else if (OB_FAIL(merge_adjacent_equal_ranges())) {
       }
     }
   } else {
@@ -1336,6 +1337,57 @@ int ObRangeGenerator::merge_and_remove_ranges()
     }
   }
   return ret;
+}
+
+int ObRangeGenerator::merge_adjacent_equal_ranges()
+{
+  int ret = OB_SUCCESS;
+  if (ranges_.count() < 2) {
+    // nothing to merge
+  } else {
+    lib::ob_sort(&ranges_.at(0), &ranges_.at(0) + ranges_.count(), RangeCmp());
+    ObSEArray<ObNewRange *, 16> out_ranges;
+    ObNewRange *l_range = ranges_.at(0);
+    for (int64_t i = 1; OB_SUCC(ret) && i < ranges_.count(); ++i) {
+      ObNewRange *r_range = ranges_.at(i);
+      if (OB_ISNULL(l_range) || OB_ISNULL(r_range)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (is_consecutive_range(*l_range, *r_range)) {
+        l_range->end_key_.assign(r_range->end_key_.get_obj_ptr(),
+                                 r_range->end_key_.get_obj_cnt());
+        l_range->border_flag_.set_inclusive_end();
+      } else if (OB_FAIL(out_ranges.push_back(l_range))) {
+      } else {
+        l_range = r_range;
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(out_ranges.push_back(l_range))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(ranges_.assign(out_ranges))) {
+    }
+  }
+  return ret;
+}
+
+bool ObRangeGenerator::is_consecutive_range(const ObNewRange &l_range,
+                                            const ObNewRange &r_range)
+{
+  bool is_consecutive = false;
+  const int64_t cnt = l_range.start_key_.get_obj_cnt();
+  if (cnt >= 1 && cnt == r_range.start_key_.get_obj_cnt()) {
+    const ObObj *l_start = l_range.start_key_.get_obj_ptr();
+    const ObObj *l_end = l_range.end_key_.get_obj_ptr();
+    const ObObj *r_start = r_range.start_key_.get_obj_ptr();
+    const ObObj *r_end = r_range.end_key_.get_obj_ptr();
+    bool rest_identical = true;
+    for (int64_t i = 1; rest_identical && i < cnt; ++i) {
+      rest_identical = (0 == l_start[i].compare(r_start[i]))
+                       && (0 == l_end[i].compare(r_end[i]));
+    }
+    is_consecutive = rest_identical
+        && l_end[0].is_integer_type() && r_start[0].is_integer_type()
+        && (l_end[0].get_int() + 1 == r_start[0].get_int());
+  }
+  return is_consecutive;
 }
 
 int ObRangeGenerator::create_new_range(ObNewRange *&range, int64_t column_cnt)
