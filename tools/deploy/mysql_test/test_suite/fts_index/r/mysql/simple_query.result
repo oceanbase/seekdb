@@ -2831,3 +2831,86 @@ drop table if exists t_more_data;
 drop table if exists batch_delete_test;
 drop table if exists articles;
 drop database fts;
+result_format: 1
+# complete-order-control
+id
+10
+20
+30
+40
+50
+# first-boundary-tie
+id
+10
+# offset-boundary-tie
+id
+20
+# two-boundary-ties
+id
+10
+20
+# offset-two-ties
+id
+20
+30
+# descending-secondary
+id
+50
+40
+# three-keys-null-secondary
+id
+30
+10
+50
+# expression-secondary
+id
+10
+20
+# multi-token
+id
+10
+# boolean-mode
+id
+10
+# zero-limit
+id
+# offset-past-end
+id
+# no-matches
+id
+# metadata-filter-control
+id
+20
+40
+# score-only-fast-path-control
+n
+2
+# prepared-first-execution
+id
+10
+# prepared-reused-parameters
+id
+20
+30
+# heap-hidden-rowkey
+id
+10
+# partition-local-boundary-ties
+id
+7
+9
+10
+# batch-boundary
+id
+18
+19
+20
+# dml-maintains-secondary-order
+id
+5
+20
+30
+# different-scores-with-boundary-ties
+id
+10
+result_format: 4

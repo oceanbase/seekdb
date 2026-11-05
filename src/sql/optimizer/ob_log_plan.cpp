@@ -12727,7 +12727,6 @@ int ObLogPlan::try_push_topn_into_text_retrieval_scan(ObLogicalOperator *&top,
   int ret = OB_SUCCESS;
   need_further_sort = true;
   ObLogTableScan *table_scan = NULL;
-  bool has_multi_sort_keys = false;
   ObRawExpr *pushed_limit_expr = NULL;
   ObRawExpr *pushed_offset_expr = NULL;
   if (OB_ISNULL(top) || OB_ISNULL(get_stmt())) {
@@ -12740,11 +12739,13 @@ int ObLogPlan::try_push_topn_into_text_retrieval_scan(ObLogicalOperator *&top,
   } else if (table_scan->get_filter_exprs().count() != 0 ||
              table_scan->get_pushdown_filter_exprs().count() != 0) {
     // do nothing, topn pushdown requires that only match filter exists on the base table.
-  } else if (sort_keys.count() >= 1 && OB_NOT_NULL(sort_keys.at(0).expr_) &&
+  } else if (sort_keys.count() > 1) {
+    // Score-only Top-K can discard boundary ties needed by secondary sort keys.
+    // Keep all candidates for the outer sort to apply the complete ordering.
+  } else if (sort_keys.count() == 1 && OB_NOT_NULL(sort_keys.at(0).expr_) &&
              sort_keys.at(0).expr_ == table_scan->get_text_retrieval_info().match_expr_) {
     // only accept match expr as prefix sort key.
-    has_multi_sort_keys = sort_keys.count() == 1 ? false : true;
-    need_further_sort = has_multi_sort_keys || table_scan->use_das() || need_exchange;
+    need_further_sort = table_scan->use_das() || need_exchange;
     pushed_limit_expr = need_further_sort ? topn_expr : limit_expr;
     pushed_offset_expr = need_further_sort ? NULL : offset_expr;
     ObSEArray<OrderItem, 1> tmp_sort_keys;
@@ -12752,7 +12753,7 @@ int ObLogPlan::try_push_topn_into_text_retrieval_scan(ObLogicalOperator *&top,
     table_scan->get_text_retrieval_info().topk_offset_expr_ = pushed_offset_expr;
     table_scan->get_text_retrieval_info().sort_key_.expr_ = sort_keys.at(0).expr_;
     table_scan->get_text_retrieval_info().sort_key_.order_type_ = sort_keys.at(0).order_type_;
-    table_scan->get_text_retrieval_info().with_ties_ = (has_multi_sort_keys || is_fetch_with_ties);
+    table_scan->get_text_retrieval_info().with_ties_ = is_fetch_with_ties;
     if (OB_FAIL(tmp_sort_keys.push_back(sort_keys.at(0)))) {
     } else if (OB_FAIL(table_scan->set_op_ordering(tmp_sort_keys))) {
     }
