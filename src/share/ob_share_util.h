@@ -67,6 +67,14 @@ public:
   static int gen_default_server_runtime_schema(
       common::ObISQLClient &sql_client,
       schema::ObServerRuntimeSchema &runtime_schema);
+
+  // Escape MySQL identifier: double each backtick character in src.
+  // If src does not contain a backtick, dst is set to src (no copy).
+  // Returns OB_ALLOCATE_MEMORY_FAILED on allocation failure.
+  static int escape_mysql_identifier(
+      common::ObIAllocator &allocator,
+      const common::ObString &src,
+      common::ObString &dst);
 };
 }//end namespace share
 }//end namespace oceanbase

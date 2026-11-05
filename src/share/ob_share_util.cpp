@@ -182,5 +182,43 @@ int ObShareUtil::is_server_write_enabled(bool &enabled)
   return OB_SUCCESS;
 }
 
+int ObShareUtil::escape_mysql_identifier(
+    common::ObIAllocator &allocator,
+    const common::ObString &src,
+    common::ObString &dst)
+{
+  int ret = common::OB_SUCCESS;
+  const char escape_char = '`';
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src.length())) {
+    dst.assign(NULL, 0);
+  } else if (NULL == src.find(escape_char)) {
+    dst = src;
+  } else {
+    const common::ObString::obstr_size_t src_len = src.length();
+    common::ObString::obstr_size_t dst_len = src_len;
+    for (common::ObString::obstr_size_t i = 0; i < src_len; ++i) {
+      if (src[i] == escape_char) {
+        ++dst_len;
+      }
+    }
+    char *buf = static_cast<char *>(allocator.alloc(dst_len + 1));
+    if (OB_ISNULL(buf)) {
+      ret = common::OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("allocate memory for escaped identifier failed", K(ret), "size", dst_len);
+    } else {
+      common::ObString::obstr_size_t pos = 0;
+      for (common::ObString::obstr_size_t i = 0; i < src_len; ++i) {
+        if (src[i] == escape_char) {
+          buf[pos++] = escape_char;
+        }
+        buf[pos++] = src[i];
+      }
+      buf[dst_len] = '\0';
+      dst.assign_ptr(buf, static_cast<int32_t>(dst_len));
+    }
+  }
+  return ret;
+}
+
 } //end namespace share
 } //end namespace oceanbase
