@@ -49,10 +49,26 @@ fi
 # (rust-toolchain.toml). Run it in a subshell: this script is sourced by CI
 # steps that call `bash build.sh ...` right afterwards, and the cd must not
 # leak into the caller's working directory.
+#
+# The pinned channel is a dated snapshot, so rustup downloads several
+# components in one go; a single flaky mirror response aborts the entire
+# install. Retry a few times before failing the job.
 (
   cd "$repo_root"
-  RUSTUP_AUTO_INSTALL=1 cargo --version
-  rustc --version
+  attempt=1
+  while true; do
+    if RUSTUP_AUTO_INSTALL=1 cargo --version && rustc --version; then
+      break
+    fi
+    if ((attempt >= 3)); then
+      echo "install-rust: toolchain install failed after $attempt attempts" >&2
+      exit 1
+    fi
+    delay=$((attempt * 15))
+    echo "install-rust: toolchain install failed (attempt $attempt), retrying in ${delay}s" >&2
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
 )
 
 # Binding-test crates (e.g. unittest/include/rust) have no rust-toolchain.toml

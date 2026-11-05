@@ -10,6 +10,7 @@ cross-module edge that is absent here.
 # checked graph.  Easy is owned by OBLib, not modeled as a peer module.
 MODULE_ROOTS = {
     "data_plane": "src/data_plane",
+    "include": "src/include",
     "logservice": "src/logservice",
     "oblib": "src/oblib",
     "observer": "src/observer",
@@ -31,6 +32,9 @@ ALLOWED_MODULE_DEPS = {
         "oblib",
         "share",
     ],
+    # The public C API surface only holds headers, the FFI translation unit, and
+    # the linker export-symbol generators; it must not depend on any module.
+    "include": [],
     "logservice": [
         "data_plane",
         "oblib",
@@ -40,6 +44,7 @@ ALLOWED_MODULE_DEPS = {
     "oblib": [],
     "observer": [
         "data_plane",
+        "include",
         "logservice",
         "oblib",
         "pl",
