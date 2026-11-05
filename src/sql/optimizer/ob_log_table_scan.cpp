@@ -20,6 +20,8 @@
 #include "data_plane/access/ob_tablet_split_type.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/das/ob_domain_id.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
+#include "common/object/ob_obj_compare.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -27,6 +29,145 @@ using namespace oceanbase::share;
 using namespace oceanbase::storage;
 using oceanbase::share::schema::ObTableSchema;
 using oceanbase::share::schema::ObSchemaGetterGuard;
+
+namespace
+{
+const ObObj &get_static_literal_value(const ObConstRawExpr &expr)
+{
+  return expr.get_value().is_unknown() ? expr.get_param() : expr.get_value();
+}
+
+bool get_static_numeric_lt_bound(const ObRawExpr *expr,
+                                 const bool allow_static_param,
+                                 const ObRawExpr *&column_expr,
+                                 const ObConstRawExpr *&const_expr)
+{
+  bool is_valid = false;
+  column_expr = NULL;
+  const_expr = NULL;
+  if (OB_NOT_NULL(expr) && T_OP_LT == expr->get_expr_type() &&
+      2 == expr->get_param_count()) {
+    const ObRawExpr *left_expr = expr->get_param_expr(0);
+    const ObRawExpr *right_expr = expr->get_param_expr(1);
+    if (OB_NOT_NULL(left_expr) && OB_NOT_NULL(right_expr) &&
+        left_expr->is_column_ref_expr() && right_expr->is_const_raw_expr() &&
+        right_expr->is_static_const_expr() &&
+        (!right_expr->is_param_expr() ||
+         (allow_static_param && right_expr->has_flag(IS_STATIC_PARAM) &&
+          !right_expr->has_flag(IS_DYNAMIC_PARAM)))) {
+      const ObConstRawExpr *raw_const = static_cast<const ObConstRawExpr *>(right_expr);
+      const ObObj &value = get_static_literal_value(*raw_const);
+      const ObObjType column_type = left_expr->get_result_type().get_type();
+      const ObObjType const_type = raw_const->get_result_type().get_type();
+      // Text SQL literals can be static plan parameters. Bound parameters and
+      // dynamic parameters are not safe to compare during plan generation.
+      if (ob_is_integer_type(column_type) && ob_is_integer_type(const_type) &&
+          ob_is_integer_type(value.get_type()) && !value.is_null() && !value.is_unknown()) {
+        column_expr = left_expr;
+        const_expr = raw_const;
+        is_valid = true;
+      }
+    }
+  }
+  return is_valid;
+}
+
+int remove_redundant_vector_scan_filters(ObIArray<ObRawExpr *> &filters,
+                                         ObQueryCtx &query_ctx)
+{
+  int ret = OB_SUCCESS;
+  bool trans_happened = false;
+  ObSEArray<const ObRawExpr *, 8> column_exprs;
+  ObSEArray<const ObConstRawExpr *, 8> const_exprs;
+  ObSEArray<int8_t, 8> keep_filter;
+  ObSEArray<int8_t, 8> needs_param_constraint;
+  ObSEArray<ObRawExpr *, 8> simplified_filters;
+  for (int64_t i = 0; OB_SUCC(ret) && i < filters.count(); ++i) {
+    const ObRawExpr *column_expr = NULL;
+    const ObConstRawExpr *const_expr = NULL;
+    if (OB_ISNULL(filters.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      get_static_numeric_lt_bound(filters.at(i), !query_ctx.is_prepare_stmt(), column_expr, const_expr);
+      if (OB_FAIL(column_exprs.push_back(column_expr)) ||
+          OB_FAIL(const_exprs.push_back(const_expr)) ||
+          OB_FAIL(keep_filter.push_back(1)) ||
+          OB_FAIL(needs_param_constraint.push_back(0))) {
+      }
+    }
+  }
+  // For c < k, only the smallest literal bound is needed. Keep the first
+  // predicate when equal bounds occur so the output order stays stable.
+  for (int64_t i = 0; OB_SUCC(ret) && i < filters.count(); ++i) {
+    bool is_redundant = false;
+    if (OB_ISNULL(column_exprs.at(i)) || OB_ISNULL(const_exprs.at(i))) {
+      // Not a supported static numeric upper-bound predicate.
+    } else {
+      const ObObj &value = get_static_literal_value(*const_exprs.at(i));
+      for (int64_t j = 0; OB_SUCC(ret) && !is_redundant && j < filters.count(); ++j) {
+        if (i == j || OB_ISNULL(column_exprs.at(j)) || OB_ISNULL(const_exprs.at(j)) ||
+            !column_exprs.at(i)->same_as(*column_exprs.at(j))) {
+          // Different column or no candidate bound.
+        } else {
+          int cmp = 0;
+          const int compare_ret = ObObjCmpFuncs::compare(
+              get_static_literal_value(*const_exprs.at(j)), value, CS_TYPE_INVALID, cmp);
+          if (OB_SUCCESS == compare_ret && (cmp < 0 || (cmp == 0 && j < i))) {
+            is_redundant = true;
+            needs_param_constraint.at(i) = 1;
+            needs_param_constraint.at(j) = 1;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && is_redundant) {
+      keep_filter.at(i) = 0;
+      trans_happened = true;
+    }
+  }
+
+  if (OB_SUCC(ret) && trans_happened) {
+    // The retained upper bound depends on the literal parameter values. Keep
+    // the cached plan valid only for the exact values used to simplify it.
+    ObPCConstParamInfo const_param_info;
+    for (int64_t i = 0; OB_SUCC(ret) && i < const_exprs.count(); ++i) {
+      const ObConstRawExpr *const_expr = const_exprs.at(i);
+      if (!needs_param_constraint.at(i) || OB_ISNULL(const_expr) ||
+          !const_expr->get_value().is_unknown()) {
+        // A literal that is not represented by a plan parameter needs no constraint.
+      } else {
+        int64_t param_idx = OB_INVALID_INDEX;
+        if (OB_FAIL(const_expr->get_value().get_unknown(param_idx))) {
+        } else if (param_idx < 0) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          bool has_param = false;
+          for (int64_t j = 0; OB_SUCC(ret) && !has_param && j < const_param_info.const_idx_.count(); ++j) {
+            has_param = const_param_info.const_idx_.at(j) == param_idx;
+          }
+          if (!has_param &&
+              (OB_FAIL(const_param_info.const_idx_.push_back(param_idx)) ||
+               OB_FAIL(const_param_info.const_params_.push_back(get_static_literal_value(*const_expr))))) {
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && const_param_info.const_idx_.count() > 0 &&
+        OB_FAIL(query_ctx.all_plan_const_param_constraints_.push_back(const_param_info))) {
+    }
+  }
+
+  if (OB_SUCC(ret) && trans_happened) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < filters.count(); ++i) {
+      if (keep_filter.at(i) && OB_FAIL(simplified_filters.push_back(filters.at(i)))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(filters.assign(simplified_filters))) {
+    }
+  }
+  return ret;
+}
+} // namespace
 
 const char *ObLogTableScan::get_name() const
 {
@@ -1082,7 +1223,14 @@ int ObLogTableScan::filter_before_index_back_set()
 int ObLogTableScan::set_table_scan_filters(const common::ObIArray<ObRawExpr *> &filters)
 {
   int ret = OB_SUCCESS;
+  ObQueryCtx *query_ctx = NULL;
   if (OB_FAIL(get_filter_exprs().assign(filters))) {
+  } else if (get_vector_index_info().is_vec_adaptive_scan() &&
+             (OB_ISNULL(get_plan()) ||
+              OB_ISNULL(query_ctx = get_plan()->get_optimizer_context().get_query_ctx()))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (get_vector_index_info().is_vec_adaptive_scan() &&
+             OB_FAIL(remove_redundant_vector_scan_filters(get_filter_exprs(), *query_ctx))) {
   } else if (OB_FAIL(pick_out_query_range_exprs())) {
   } else if (OB_FAIL(pick_out_dbms_calc_partition_id_exprs())) {
   } else if (OB_FAIL(pick_out_startup_filters())) {
