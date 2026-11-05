@@ -2662,9 +2662,13 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
     } else if (expr->get_expr_type() == T_OP_OR || expr->get_expr_type() == T_OP_AND) {
       ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
       ObSEArray<ObRawExpr *, 4> param_conds;
-      if (op_expr->get_param_count() > 100) {
-        /* use too much resource and need add lots of constraints */
-      } else if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
+      // Do not skip duplicate removal for long AND/OR lists.
+      // An arbitrary param-count cutoff leaves semantically redundant
+      // predicates in the expression tree. The surviving duplicates change
+      // the selectivity estimate of the filter, which may flip the vector
+      // index scan mode (pre-filter vs post-iterative-filter) for a filter
+      // that is equivalent to a much shorter one.
+      if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
       } else if (OB_FAIL(do_remove_duplicate_exprs(query_ctx, param_conds))) {
       } else if (param_conds.count() == op_expr->get_param_count()) {
         //do nothing
