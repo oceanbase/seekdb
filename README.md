@@ -377,6 +377,23 @@ docker run -d \
   -v ./data:/var/lib/oceanbase \
   oceanbase/seekdb:latest
 ```
+
+**Docker Desktop on Windows (WSL 2)**
+
+Run the commands above in a WSL 2 distribution with Docker Desktop running.
+If `docker` is not found, enable that distribution under **Settings → Resources →
+WSL Integration** in Docker Desktop and apply the change. See Docker's
+[WSL 2 integration guide](https://docs.docker.com/desktop/features/wsl/).
+
+If connecting to `/var/run/docker.sock` returns `permission denied`, check the
+socket's ownership and your user's group membership. When your user has already
+been added to the socket's `docker` group, log out and back in, or run
+`newgrp docker` without `sudo` to refresh the current shell's group access.
+The `docker` group grants root-level privileges; see Docker's
+[non-root access guidance](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user)
+before changing membership. Run `docker version` again and confirm that both
+the Client and Server sections are available before starting seekdb.
+
 Please refer to the [document](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) of this docker image for details.
 
 </details>
