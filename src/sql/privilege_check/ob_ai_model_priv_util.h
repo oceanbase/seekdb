@@ -63,6 +63,10 @@ private:
     AI_PRIV_DROP   = OB_PRIV_DROP_AI_MODEL,
     AI_PRIV_ACCESS = OB_PRIV_ACCESS_AI_MODEL
   };
+  static_assert(sizeof(ObAIServiceEndpointPrivType) == sizeof(ObPrivSet),
+                "AI model privilege masks are 64-bit and must not narrow on any ABI");
+  static_assert(AI_PRIV_ACCESS > 0xFFFFFFFFLL,
+                "AI model privileges use bits above 32; an int-based enum cannot hold them");
 
   int check_ai_model_priv(
     ObIAllocator &allocator,

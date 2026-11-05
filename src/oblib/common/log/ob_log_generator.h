@@ -28,7 +28,11 @@ namespace common
 {
 struct DebugLog
 {
-  enum { MAGIC = 0xde6a9de6a901 };
+  // The magic is a 48-bit value; MSVC's default int-based enum would keep
+  // only the low 32 bits of it.
+  enum : int64_t { MAGIC = 0xde6a9de6a901 };
+  static_assert(MAGIC == 0xde6a9de6a901LL,
+                "debug log magic is 48 bits and must keep its 64-bit value");
   DebugLog(): server_(), ctime_(0), last_ctime_(0) {}
   ~DebugLog() {}
   int advance();
