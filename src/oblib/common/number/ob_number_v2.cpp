@@ -4675,7 +4675,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 //      ObCalcVector dividend_amplify;
 //      ObCalcVector *dividend_ptr = NULL;
 //      if (dividend.size() < divisor.size()) {
-//        _OB_LOG(WARN, "dividend_size=%ld must not less than divisor_size=%ld", dividend.size(),
+//        _OB_LOG(WARN, "dividend_size=%lld must not less than divisor_size=%lld", dividend.size(),
 //                divisor.size());
 //        ret = OB_ERR_UNEXPECTED;
 //      } else if (dividend.size() > divisor.size()) {
@@ -4686,7 +4686,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 //          LOG_WARN("divisor_amplify.ensure() fails", K(ret));
 //        } else if (OB_FAIL(poly_mono_mul(divisor, BASE - 1, divisor_amplify))) {
 //          ObCStringHelper helper;
-//          _OB_LOG(WARN, "[%s] mul [%lu] fail, ret=%d", helper.convert(divisor), BASE - 1, ret);
+//          _OB_LOG(WARN, "[%s] mul [%llu] fail, ret=%d", helper.convert(divisor), BASE - 1, ret);
 //        } else {
 //          int64_t sum_size = std::max(dividend.size(), divisor_amplify.size()) + 1;
 //          if (OB_FAIL(dividend_amplify.ensure(sum_size))) {

@@ -58,7 +58,7 @@ ObCachedAllocator<T>::ObCachedAllocator()
 template<typename T>
 ObCachedAllocator<T>::~ObCachedAllocator()
 {
-  //_OB_LOG(DEBUG, "free cached objs, count=%ld", cached_objs_.count());
+  //_OB_LOG(DEBUG, "free cached objs, count=%lld", cached_objs_.count());
   T *obj = NULL;
   while (OB_SUCCESS == cached_objs_.pop_back(obj)) {
     obj->~T();

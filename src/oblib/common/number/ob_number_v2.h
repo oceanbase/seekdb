@@ -2970,16 +2970,16 @@ int knuth_probe_quotient(
 //    uint64_t d = base / (divisor.at(0) + 1);
 //
 //    if (OB_FAIL(u.ensure(dividend_size + 1))) {
-//      _OB_LOG(WARN, "ensure dividend fail ret=%d size=%ld", ret, dividend_size + 1);
+//      _OB_LOG(WARN, "ensure dividend fail ret=%d size=%lld", ret, dividend_size + 1);
 //    } else if (OB_FAIL(v.ensure(divisor_size + 1))) {
-//      _OB_LOG(WARN, "ensure divisor fail ret=%d size=%ld", ret, divisor_size + 1);
+//      _OB_LOG(WARN, "ensure divisor fail ret=%d size=%lld", ret, divisor_size + 1);
 //    }
 //    if (OB_FAIL(poly_mono_mul(dividend, d, u))) {
 //      ObCStringHelper helper;
-//      _OB_LOG(WARN, "%s mul %lu fail, ret=%d", helper.convert(dividend), d, ret);
+//      _OB_LOG(WARN, "%s mul %llu fail, ret=%d", helper.convert(dividend), d, ret);
 //    } else if (OB_FAIL(poly_mono_mul(divisor, d, v))) {
 //      ObCStringHelper helper;
-//      _OB_LOG(WARN, "%s mul %lu fail, ret=%d", helper.convert(divisor), d, ret);
+//      _OB_LOG(WARN, "%s mul %llu fail, ret=%d", helper.convert(divisor), d, ret);
 //    } else {
 //      LIB_LOG(DEBUG, "Knuth Algo start",
 //              K(dividend), K(divisor), K(d), K(u), K(v), K(n), K(m));
@@ -3011,7 +3011,7 @@ int knuth_probe_quotient(
 //        uint64_t r = 0;
 //        if (OB_FAIL(poly_mono_div(u.ref(m + 1, m + n), d, remainder, r))) {
 //          ObCStringHelper helper;
-//          _OB_LOG(WARN, "%s div %lu fail, ret=%d", helper.convert(u.ref(m + 1, m + n)), d, ret);
+//          _OB_LOG(WARN, "%s div %llu fail, ret=%d", helper.convert(u.ref(m + 1, m + n)), d, ret);
 //        }
 //      }
 //

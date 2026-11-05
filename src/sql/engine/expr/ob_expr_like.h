@@ -244,9 +244,9 @@ int ObExprLike::calc_with_non_instr_mode(T &result,
    // escape use its own collation,
    // @see 
    // try this query in MySQL:
-   // mysql>  select 'a%' like 'A2%' ESCAPE X'32', X'32';
+   // mysql>  select 'a%' lldke 'A2%' ESCAPE X'32', X'32';
    // +------------------------------+-------+
-   // | 'a%' like 'A2%' ESCAPE X'32' | X'32' |
+   // | 'a%' lldke 'A2%' ESCAPE X'32' | X'32' |
    // +------------------------------+-------+
    // |                            1 | 2     |
    // +------------------------------+-------+

@@ -149,10 +149,10 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
     uint64_t ttisgmtcnt;
     char *tzinfo_buf = NULL;
     int64_t Count = sizeof(u.buf);
-    //_OB_LOG(INFO, "the size of current timezone buffer is %ld", Count);
+    //_OB_LOG(INFO, "the size of current timezone buffer is %lld", Count);
     int64_t readbytes = 0;
     if((readbytes = fread(u.buf, sizeof(char), Count, _fd)) != Count){
-      //_OB_LOG(INFO, "the time info file size is %ld, but the Count size is %ld", readbytes, Count);
+      //_OB_LOG(INFO, "the time info file size is %lld, but the Count size is %lld", readbytes, Count);
     }
     if(0 != fclose(_fd)){
        ret = OB_IO_ERROR;
@@ -165,7 +165,7 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
         ttisstdcnt = int4net(u.tzhead.tzh_ttisgmtcnt);
         ttisgmtcnt = int4net(u.tzhead.tzh_ttisstdcnt);
         sp.leapcnt= int4net(u.tzhead.tzh_leapcnt);
-        //_OB_LOG(DEBUG, "the leap second cnt is %lu", sp.leapcnt);
+        //_OB_LOG(DEBUG, "the leap second cnt is %llu", sp.leapcnt);
         sp.timecnt= int4net(u.tzhead.tzh_timecnt);
         sp.typecnt= int4net(u.tzhead.tzh_typecnt);
         sp.charcnt= int4net(u.tzhead.tzh_charcnt);

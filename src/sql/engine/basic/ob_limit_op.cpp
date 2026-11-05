@@ -273,7 +273,7 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
         batch_cnt = limit_ - output_cnt_;
       }
       if (is_percent_first_) {
-        // Fetch one row for percent first fetch, make sure %output_cnt_ never exceed %limit_
+        // Fetch one row for percent first fetch, make sure %output_cnt_ never exceed %lldmit_
         // in this round.
         batch_cnt = 1;
       }
