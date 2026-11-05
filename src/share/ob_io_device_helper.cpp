@@ -45,7 +45,6 @@
 #ifndef F_OK
 #define F_OK 0
 #endif
-#include "share/ob_statvfs_win32.h"
 #else
 #include <sys/vfs.h>
 #endif
@@ -1003,7 +1002,7 @@ int ObIODeviceLocalFileOp::compute_block_file_size(
 {
   int ret = OB_SUCCESS;
   int64_t total_space = 0;
-  struct statvfs svfs;
+  int64_t free_space = 0;
   if (OB_ISNULL(sstable_dir)
       || OB_UNLIKELY(reserved_size < 0)
       || OB_UNLIKELY(block_size <= 0)
@@ -1014,12 +1013,12 @@ int ObIODeviceLocalFileOp::compute_block_file_size(
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "Invalid argument, ", K(ret), KP(sstable_dir), K(reserved_size), K(block_size),
         K(suggest_file_size), K(disk_percentage), K(block_file_size));
-  } else if (OB_UNLIKELY(0 != statvfs(sstable_dir, &svfs))) {
+  } else if (OB_UNLIKELY(0 != ob_get_disk_space_utf8(sstable_dir, total_space, free_space))) {
     ret = ObIODeviceLocalFileOp::convert_sys_errno();
     SHARE_LOG(WARN, "Failed to get disk space ", K(ret), K(sstable_dir));
   } else {
     // remove reserved space for root user
-    total_space = std::max(static_cast<int64_t>(0), (int64_t)((svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize - reserved_size));
+    total_space = std::max(static_cast<int64_t>(0), total_space - reserved_size);
     block_file_size = suggest_file_size > 0 ? suggest_file_size : total_space * disk_percentage / 100;
     if (block_file_size <= block_size) {
       ret = OB_INVALID_ARGUMENT;
@@ -1040,7 +1039,8 @@ int ObIODeviceLocalFileOp::check_disk_space_available(
     const bool need_report_user_error)
 {
   int ret = OB_SUCCESS;
-  struct statvfs svfs;
+  int64_t total_space = 0;
+  int64_t available_space = 0;
   if (OB_ISNULL(sstable_dir)
       || OB_UNLIKELY(reserved_size < 0)
       || OB_UNLIKELY(data_disk_size < 0)
@@ -1048,12 +1048,12 @@ int ObIODeviceLocalFileOp::check_disk_space_available(
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "Invalid argument, ", K(ret), KP(sstable_dir),
               K(reserved_size), K(data_disk_size), K(used_disk_size));
-  } else if (OB_UNLIKELY(0 != statvfs(sstable_dir, &svfs))) {
+  } else if (OB_UNLIKELY(0 != ob_get_disk_space_utf8(sstable_dir, total_space, available_space))) {
     ret = ObIODeviceLocalFileOp::convert_sys_errno();
     SHARE_LOG(WARN, "Failed to get disk space ", K(ret), K(sstable_dir));
   } else {
     // check disk space availability for datafile_size, must satisfy datafile_size < used_disk_size + disk_free_space
-    const int64_t free_space = std::max(static_cast<int64_t>(0), (int64_t)(svfs.f_bavail * svfs.f_bsize - reserved_size));
+    const int64_t free_space = std::max(static_cast<int64_t>(0), available_space - reserved_size);
     if (data_disk_size > used_disk_size + free_space) {
       ret = OB_SERVER_OUTOF_DISK_SPACE;
       if (need_report_user_error) {

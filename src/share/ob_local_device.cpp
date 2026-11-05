@@ -77,7 +77,6 @@ struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #ifndef O_DIRECT
 #define O_DIRECT 0
 #endif
-#include "share/ob_statvfs_win32.h"
 #endif
 
 struct io_event_queue {
@@ -1240,7 +1239,8 @@ int64_t ObLocalDevice::get_max_block_count(int64_t reserved_size) const
 int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
 {
   int ret = OB_SUCCESS;
-  struct statvfs svfs;
+  int64_t total_space = 0;
+  int64_t available_space = 0;
 
   const int64_t config_max_file_size = config::datafile_maxsize();
   const int64_t current_size = get_total_block_size();
@@ -1251,11 +1251,11 @@ int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
   } else if (OB_ISNULL(sstable_dir_)) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "Failed to get max block size", K(ret), K(sstable_dir_));
-  } else if (OB_UNLIKELY(0 != statvfs(sstable_dir_, &svfs))) {
+  } else if (OB_UNLIKELY(0 != ob_get_disk_space_utf8(sstable_dir_, total_space, available_space))) {
     ret = ObIODeviceLocalFileOp::convert_sys_errno();
     SHARE_LOG(WARN, "Failed to get disk space", K(ret), K(sstable_dir_));
   } else {
-    const int64_t free_space = std::max(static_cast<int64_t>(0), (int64_t)(svfs.f_bavail * svfs.f_bsize));
+    const int64_t free_space = std::max(static_cast<int64_t>(0), available_space);
     const int64_t max_file_size = std::max(current_size, current_size + free_space - reserved_size);
     /* when datafile_maxsize is large than current datafile_size, we should return
        the Maximun left space that can be extend. */

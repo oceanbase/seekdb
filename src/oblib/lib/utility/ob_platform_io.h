@@ -139,6 +139,11 @@ int ob_unlinkat_utf8(int dir_fd, const char *path, bool is_dir);
 // Free and total space of the filesystem containing `path`.
 int ob_get_disk_space_utf8(const char *path, int64_t &total_space, int64_t &free_space);
 
+// Identity of the filesystem containing `path`: the volume serial number on
+// Windows, statvfs(3)::f_fsid on POSIX. Two paths report the same id when they
+// live on the same filesystem.
+int ob_get_filesystem_id_utf8(const char *path, int64_t &filesystem_id);
+
 // Flushes a directory entry table (fsync(2) on a directory descriptor on POSIX,
 // FlushFileBuffers on a directory handle on Windows).
 int ob_fsync_dir_utf8(const char *path);

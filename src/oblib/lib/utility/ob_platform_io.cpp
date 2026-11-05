@@ -1065,6 +1065,46 @@ int ob_unlinkat_utf8(int dir_fd, const char *path, bool is_dir)
   return ret;
 }
 
+#ifdef _WIN32
+// Returns a new[] volume root ("C:\\" or "\\\\server\\share\\") for a wide
+// path. Returns NULL with errno set on failure.
+static wchar_t *make_volume_root(const wchar_t *wide_path)
+{
+  wchar_t *root = NULL;
+  const size_t wide_len = ::wcslen(wide_path);
+  if (wide_len >= 3 && L':' == wide_path[1]) {
+    if (NULL != (root = new (std::nothrow) wchar_t[4])) {
+      root[0] = wide_path[0];
+      root[1] = L':';
+      root[2] = L'\\';
+      root[3] = L'\0';
+    } else {
+      errno = ENOMEM;
+    }
+  } else if (wide_len >= 2 && L'\\' == wide_path[0] && L'\\' == wide_path[1]) {
+    size_t root_len = 2;
+    int64_t separators = 0;
+    for (; root_len < wide_len && separators < 2; ++root_len) {
+      if (L'\\' == wide_path[root_len]) {
+        ++separators;
+      }
+    }
+    if (2 == separators) {
+      if (NULL != (root = new (std::nothrow) wchar_t[root_len + 1])) {
+        ::wmemcpy(root, wide_path, root_len);
+        root[root_len] = L'\0';
+      } else {
+        errno = ENOMEM;
+      }
+    }
+  }
+  if (NULL == root && ENOMEM != errno) {
+    errno = ENOENT;
+  }
+  return root;
+}
+#endif
+
 int ob_get_disk_space_utf8(const char *path, int64_t &total_space, int64_t &free_space)
 {
   int ret = 0;
@@ -1079,35 +1119,8 @@ int ob_get_disk_space_utf8(const char *path, int64_t &total_space, int64_t &free
     ret = -1;
   } else {
     // GetDiskFreeSpaceExW takes a volume path; reduce an absolute path to its
-    // root ("C:\" or "\\server\share\").
-    wchar_t *root = NULL;
-    const size_t wide_len = ::wcslen(wide_path);
-    if (wide_len >= 3 && L':' == wide_path[1]) {
-      if (NULL != (root = new (std::nothrow) wchar_t[4])) {
-        root[0] = wide_path[0];
-        root[1] = L':';
-        root[2] = L'\\';
-        root[3] = L'\0';
-      } else {
-        errno = ENOMEM;
-      }
-    } else if (wide_len >= 2 && L'\\' == wide_path[0] && L'\\' == wide_path[1]) {
-      size_t root_len = 2;
-      int64_t separators = 0;
-      for (; root_len < wide_len && separators < 2; ++root_len) {
-        if (L'\\' == wide_path[root_len]) {
-          ++separators;
-        }
-      }
-      if (2 == separators) {
-        if (NULL != (root = new (std::nothrow) wchar_t[root_len + 1])) {
-          ::wmemcpy(root, wide_path, root_len);
-          root[root_len] = L'\0';
-        } else {
-          errno = ENOMEM;
-        }
-      }
-    }
+    // root ("C:\\" or "\\\\server\\share\\").
+    wchar_t *root = make_volume_root(wide_path);
     ULARGE_INTEGER free_bytes_available;
     ULARGE_INTEGER total_number_of_bytes;
     ULARGE_INTEGER total_number_of_free_bytes;
@@ -1135,6 +1148,47 @@ int ob_get_disk_space_utf8(const char *path, int64_t &total_space, int64_t &free
   } else {
     total_space = static_cast<int64_t>((svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize);
     free_space = static_cast<int64_t>(svfs.f_bavail * svfs.f_bsize);
+  }
+#endif
+  return ret;
+}
+
+int ob_get_filesystem_id_utf8(const char *path, int64_t &filesystem_id)
+{
+  int ret = 0;
+  filesystem_id = 0;
+#ifdef _WIN32
+  wchar_t *wide_path = NULL;
+  if (NULL == path || '\0' == path[0]) {
+    errno = EINVAL;
+    ret = -1;
+  } else if (0 != platform_io_internal::utf8_to_wide(path, wide_path)) {
+    ret = -1;
+  } else {
+    wchar_t *root = make_volume_root(wide_path);
+    if (NULL == root) {
+      ret = -1;
+    } else {
+      DWORD volume_serial = 0;
+      if (FALSE == ::GetVolumeInformationW(root, NULL, 0, &volume_serial, NULL, NULL, NULL, 0)) {
+        errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+        ret = -1;
+      } else {
+        filesystem_id = static_cast<int64_t>(volume_serial);
+      }
+      delete[] root;
+    }
+    delete[] wide_path;
+  }
+#else
+  struct statvfs svfs;
+  if (NULL == path) {
+    errno = EINVAL;
+    ret = -1;
+  } else if (0 != ::statvfs(path, &svfs)) {
+    ret = -1;
+  } else {
+    filesystem_id = static_cast<int64_t>(svfs.f_fsid);
   }
 #endif
   return ret;
