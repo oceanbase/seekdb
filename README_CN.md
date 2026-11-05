@@ -363,6 +363,22 @@ docker run -d \
   -v ./data:/var/lib/oceanbase \
   oceanbase/seekdb:latest
 ```
+
+**验证部署**
+
+- 等待就绪：`docker logs seekdb` 出现 `SeekDB SQL ready`（首次启动约 1-2 分钟）。
+- 冒烟查询。镜像内置 `mysql` 客户端（不含 `obclient`），root 默认空密码：
+
+  ```bash
+  docker exec seekdb mysql -h127.0.0.1 -uroot -P2881 -e "SELECT 1"
+  ```
+
+- 查看遥测文件。`content.id` 即本次部署的 UUID：
+
+  ```bash
+  docker exec seekdb cat /var/lib/seekdb/run/telemetry.json
+  ```
+
 请参考此 Docker 镜像的[文档](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md)获取详细信息。
 
 </details>
