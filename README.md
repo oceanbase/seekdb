@@ -155,6 +155,25 @@ WHERE MATCH(content) AGAINST('quarterly report')
 ORDER BY dist APPROXIMATE LIMIT 10;
 ```
 
+When you fuse both signals, normalize each score first — vector distance and
+full-text relevance have different ranges — then combine them with weights:
+
+```sql
+SELECT id, title,
+       -- vector: distance -> similarity in (0, 1]
+       0.7 * (1 / (1 + l2_distance(emb, '[0.12,0.34,...]')))
+       -- full-text: relevance -> (0, 1]
+     + 0.3 * (1 / (1 + MATCH(content) AGAINST('quarterly report'))) AS hybrid_score
+FROM docs
+WHERE MATCH(content) AGAINST('quarterly report')
+ORDER BY hybrid_score DESC
+LIMIT 10;
+```
+
+Adjust the `0.7 / 0.3` weights to bias the ranking toward semantic similarity
+or keyword relevance, and swap `l2_distance` for `cosine_distance` or
+`inner_product` to match the metric of your vector index.
+
 ### 🐬 MySQL-Compatible, ACID, Embeddable
 
 Built on the proven OceanBase SQL engine. Works as an embedded library,
@@ -593,3 +612,5 @@ If seekdb is useful to you, **a star helps others find it.** ⭐
 ## 📄 License
 
 seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same database engine running in production at Alipay, Taobao, DiDi, Xiaomi, and more. Fully open-source under the [Apache License, Version 2.0](LICENSE).
+
+OB-P:N6osUXnCDjdDDthvtBjjRA
