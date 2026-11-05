@@ -3,6 +3,18 @@ load("//bazel:defs.bzl", "cc_library")
 
 package(default_testonly = True)
 
+cc_test(
+    name = "test_escaped_identifier",
+    srcs = ["test_escaped_identifier.cpp"],
+    linkstatic = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//src/oblib:oblib_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
 cc_library(
     name = "jemalloc_hook_cases",
     srcs = ["test_jemalloc_hook.cpp"],

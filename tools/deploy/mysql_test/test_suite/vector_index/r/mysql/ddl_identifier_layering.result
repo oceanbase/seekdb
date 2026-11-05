@@ -1,0 +1,22 @@
+DROP TABLE IF EXISTS ddl_identifier_layering;
+CREATE TABLE ddl_identifier_layering (
+id INT PRIMARY KEY,
+`e``name` ENUM('a', 'b'),
+`s``name` SET('x', 'y'),
+plain ENUM('a', 'b')
+);
+INSERT INTO ddl_identifier_layering VALUES (1, 'a', 'x', 'a'), (2, 'b', 'y', 'b');
+CREATE UNIQUE INDEX idx_escaped_enum ON ddl_identifier_layering (`e``name`);
+CREATE UNIQUE INDEX idx_escaped_set ON ddl_identifier_layering (`s``name`);
+CREATE UNIQUE INDEX idx_plain_enum ON ddl_identifier_layering (plain);
+SELECT id, `e``name`, `s``name`, plain FROM ddl_identifier_layering ORDER BY id;
+id	e`name	s`name	plain
+1	a	x	a
+2	b	y	b
+SELECT id FROM ddl_identifier_layering FORCE INDEX (idx_escaped_enum) WHERE `e``name` = 'b';
+id
+2
+SELECT id FROM ddl_identifier_layering FORCE INDEX (idx_escaped_set) WHERE `s``name` = 'x';
+id
+1
+DROP TABLE ddl_identifier_layering;
