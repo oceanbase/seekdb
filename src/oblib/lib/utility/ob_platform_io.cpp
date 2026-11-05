@@ -333,6 +333,9 @@ int fill_stat_from_attributes(const wchar_t *extended_path, DWORD attributes,
     stat.ctime_sec = filetime_to_unix_seconds(data.ftCreationTime);
     stat.dev = 0;
     stat.inode = 0;
+    stat.rdev = 0;
+    stat.block_cnt = 0;
+    stat.block_size = 4096;
     stat.nlink = 1;
     stat.uid = 0;
     stat.gid = 0;
@@ -359,6 +362,9 @@ void fill_stat(const struct stat &src, ObPlatformFileStat &stat)
   stat.size = static_cast<int64_t>(src.st_size);
   stat.dev = static_cast<uint64_t>(src.st_dev);
   stat.inode = static_cast<uint64_t>(src.st_ino);
+  stat.rdev = static_cast<uint64_t>(src.st_rdev);
+  stat.block_cnt = static_cast<uint64_t>(src.st_blocks);
+  stat.block_size = static_cast<uint64_t>(src.st_blksize);
   stat.nlink = static_cast<uint32_t>(src.st_nlink);
   stat.uid = static_cast<uint32_t>(src.st_uid);
   stat.gid = static_cast<uint32_t>(src.st_gid);
@@ -538,6 +544,9 @@ int ob_stat_utf8(const char *path, ObPlatformFileStat &stat, bool follow_link)
       stat.ctime_sec = os_stat.st_ctime;
       stat.dev = os_stat.st_dev;
       stat.inode = os_stat.st_ino;
+      stat.rdev = os_stat.st_dev;
+      stat.block_cnt = 0;
+      stat.block_size = 4096;
       stat.mode = static_cast<uint32_t>(os_stat.st_mode);
       stat.nlink = static_cast<uint32_t>(os_stat.st_nlink);
       stat.uid = static_cast<uint32_t>(os_stat.st_uid);
@@ -725,6 +734,31 @@ int ob_symlink_utf8(const char *target_path, const char *link_path)
   delete[] extended_link;
 #else
   ret = ::symlink(target_path, link_path);
+#endif
+  return ret;
+}
+
+int ob_truncate_utf8(const char *path, int64_t length)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+    ret = -1;
+  } else {
+    const int fd = ::_wopen(extended_path, O_RDWR | _O_BINARY, 0);
+    if (-1 == fd) {
+      ret = -1;
+    } else {
+      if (0 != ::_chsize_s(fd, length)) {
+        ret = -1;
+      }
+      ::_close(fd);
+    }
+    delete[] extended_path;
+  }
+#else
+  ret = ::truncate(path, static_cast<off_t>(length));
 #endif
   return ret;
 }

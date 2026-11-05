@@ -454,7 +454,7 @@ static int create_redo_path(const char *redo_dir, bool &created_leaf)
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(parent_dir.assign(redo_dir, separator - redo_dir + (separator == redo_dir + 2 && ':' == redo_dir[1] ? 1 : 0)))) {
     } else if (OB_FAIL(FileDirectoryUtils::create_full_path(parent_dir.ptr()))) {
-    } else if (0 == _mkdir(redo_dir)) {
+    } else if (0 == ob_mkdir_utf8(redo_dir, 0755)) {
       created_leaf = true;
     } else if (EEXIST != errno) {
       ret = OB_IO_ERROR;

@@ -56,6 +56,9 @@ struct ObPlatformFileStat
   int64_t ctime_sec;
   uint64_t dev;
   uint64_t inode;
+  uint64_t rdev;
+  uint64_t block_cnt;
+  uint64_t block_size;
   uint32_t mode;
   uint32_t nlink;
   uint32_t uid;
@@ -91,6 +94,7 @@ int ob_rmdir_utf8(const char *path);
 int ob_unlink_utf8(const char *path);
 int ob_rename_utf8(const char *old_path, const char *new_path);
 int ob_symlink_utf8(const char *target_path, const char *link_path);
+int ob_truncate_utf8(const char *path, int64_t length);
 
 // Free and total space of the filesystem containing `path`.
 int ob_get_disk_space_utf8(const char *path, int64_t &total_space, int64_t &free_space);

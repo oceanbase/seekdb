@@ -328,11 +328,7 @@ int ObIODeviceLocalFileOp::mkdir(const char *pathname, mode_t mode)
   if (NULL == pathname || STRLEN(pathname) == 0) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid arguments.", K(pathname), K(ret));
-#ifdef _WIN32
-  } else if (::mkdir(pathname) != 0) {
-#else
-  } else if (::mkdir(pathname, mode) != 0) {
-#endif
+  } else if (0 != ob_mkdir_utf8(pathname, static_cast<int>(mode))) {
     if (EEXIST == errno) {
       ret = OB_SUCCESS;
     } else {
@@ -354,7 +350,7 @@ int ObIODeviceLocalFileOp::rmdir(const char *pathname)
   } else if (!S_ISDIR(f_stat.mode_)) {
     ret = OB_NO_SUCH_FILE_OR_DIRECTORY;
     SHARE_LOG(WARN, "file path is not a directory.", K(pathname), K(ret));
-  } else if (0 != ::rmdir(pathname)) {
+  } else if (0 != ob_rmdir_utf8(pathname)) {
     ret = convert_sys_errno();
     SHARE_LOG(WARN, "rmdir failed.", K(pathname), K(errno), KERRMSG, K(ret));
   }
@@ -372,7 +368,7 @@ int ObIODeviceLocalFileOp::unlink(const char *pathname)
   } else if (!S_ISREG(f_stat.mode_)) {
     ret = OB_NO_SUCH_FILE_OR_DIRECTORY;
     SHARE_LOG(WARN, "file path is a directory.", K(pathname), K(ret));
-  } else if (0 != ::unlink(pathname)){
+  } else if (0 != ob_unlink_utf8(pathname)){
     ret = convert_sys_errno();
     SHARE_LOG(WARN, "unlink file failed.", K(pathname), K(errno), KERRMSG, K(ret));
   }
@@ -387,7 +383,7 @@ int ObIODeviceLocalFileOp::rename(const char *oldpath, const char *newpath)
     SHARE_LOG(WARN, "Invalid argument, ", K(ret), KP(oldpath), KP(newpath));
   } else {
     int sys_ret = 0;
-    if (0 != (sys_ret = ::rename(oldpath, newpath))) {
+    if (0 != (sys_ret = ob_rename_utf8(oldpath, newpath))) {
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "Fail to rename file, ", K(ret), K(sys_ret), KERRMSG);
     }
@@ -697,17 +693,7 @@ int ObIODeviceLocalFileOp::truncate(const char *pathname, const int64_t len)
     SHARE_LOG(WARN, "invalid argument", K(ret), KP(pathname));
   } else {
     int sys_ret = 0;
-#ifdef _WIN32
-    int fd = ob_open_utf8(pathname, O_RDWR, 0);
-    if (fd < 0) {
-      sys_ret = -1;
-    } else {
-      sys_ret = ::_chsize_s(fd, len);
-      ::close(fd);
-    }
-#else
-    sys_ret = ::truncate(pathname, len);
-#endif
+    sys_ret = ob_truncate_utf8(pathname, len);
     if (0 != sys_ret) {
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "fail to ftruncate", K(ret), K(sys_ret), K(pathname), K(len), KERRMSG);
@@ -723,7 +709,7 @@ int ObIODeviceLocalFileOp::exist(const char *pathname, bool &is_exist)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), KP(pathname));
   } else {
-    if (0 != ::access(pathname, F_OK)) {
+    if (0 != ob_access_utf8(pathname, ObPathPermission::EXISTS)) {
       if (errno == ENOENT) {
         ret = OB_SUCCESS;
         is_exist = false;
@@ -745,49 +731,25 @@ int ObIODeviceLocalFileOp::stat(const char *pathname, ObIODFileStat &statbuf)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), KP(pathname));
   } else {
-    // MSVCRT's default `struct stat::st_size` is 32-bit `_off_t`; querying any
-    // file larger than 2 GiB silently truncates the size. Use `_stat64` so
-    // sstable / blockfile beyond 2 GiB still reports the correct size.
-#ifdef _WIN32
-    struct _stat64 buf;
-    if (0 != ::_stat64(pathname, &buf)) {
-#else
-    struct stat buf;
-    if (0 != ::stat(pathname, &buf)) {
-#endif
+    ObPlatformFileStat file_stat;
+    if (0 != ob_stat_utf8(pathname, file_stat)) {
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "Fail to stat file, ", K(ret), K(pathname), K(errno), KERRMSG);
     } else {
-      statbuf.rdev_ = static_cast<uint64_t>(buf.st_rdev);
-      statbuf.dev_ = static_cast<uint64_t>(buf.st_dev);
-      statbuf.inode_ = static_cast<uint64_t>(buf.st_ino);
+      statbuf.rdev_ = file_stat.rdev;
+      statbuf.dev_ = file_stat.dev;
+      statbuf.inode_ = file_stat.inode;
       statbuf.mask_ = 0; // local file system stat does not offer mask
-      statbuf.mode_ = static_cast<uint32_t>(buf.st_mode);
-      statbuf.nlink_ = static_cast<uint32_t>(buf.st_nlink);
-      statbuf.uid_ = static_cast<uint64_t>(buf.st_uid);
-      statbuf.gid_ = static_cast<uint64_t>(buf.st_gid);
-      statbuf.size_ = static_cast<uint64_t>(buf.st_size);
-#ifdef _WIN32
-      statbuf.block_cnt_ = 0;
-      statbuf.block_size_ = 4096;
-#else
-      statbuf.block_cnt_ = static_cast<uint64_t>(buf.st_blocks);
-      statbuf.block_size_ = static_cast<uint64_t>(buf.st_blksize);
-#endif
-
-#ifdef __APPLE__
-      statbuf.atime_s_ = static_cast<int64_t>(buf.st_atimespec.tv_sec);
-      statbuf.mtime_s_ = static_cast<int64_t>(buf.st_mtimespec.tv_sec);
-      statbuf.ctime_s_ = static_cast<int64_t>(buf.st_ctimespec.tv_sec);
-#elif defined(_WIN32)
-      statbuf.atime_s_ = static_cast<int64_t>(buf.st_atime);
-      statbuf.mtime_s_ = static_cast<int64_t>(buf.st_mtime);
-      statbuf.ctime_s_ = static_cast<int64_t>(buf.st_ctime);
-#else
-      statbuf.atime_s_ = static_cast<int64_t>(buf.st_atim.tv_sec);
-      statbuf.mtime_s_ = static_cast<int64_t>(buf.st_mtim.tv_sec);
-      statbuf.ctime_s_ = static_cast<int64_t>(buf.st_ctim.tv_sec);
-#endif
+      statbuf.mode_ = file_stat.mode;
+      statbuf.nlink_ = file_stat.nlink;
+      statbuf.uid_ = file_stat.uid;
+      statbuf.gid_ = file_stat.gid;
+      statbuf.size_ = file_stat.size;
+      statbuf.block_cnt_ = file_stat.block_cnt;
+      statbuf.block_size_ = file_stat.block_size;
+      statbuf.atime_s_ = file_stat.atime_sec;
+      statbuf.mtime_s_ = file_stat.mtime_sec;
+      statbuf.ctime_s_ = file_stat.ctime_sec;
       statbuf.btime_s_ = INT64_MAX; // local file system stat does not offer birth time
     }
   }
