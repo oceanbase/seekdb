@@ -652,7 +652,7 @@ int ObComplementDataDag::fill_dag_key(char *buf, const int64_t buf_len) const
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, "source_tablet_id=%ld dest_tablet_id=%ld",
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, "source_tablet_id=%" PRId64 " dest_tablet_id=%" PRId64 "",
                               param_.orig_tablet_id_.id(), param_.dest_tablet_id_.id()))) {
   }
   return ret;

@@ -504,7 +504,7 @@ public:
     // printf basic info
     ObCStringHelper helper;
     fprintf(fd_,
-            "ObTxData : tx_id=%-19ld state=%-8s start_scn=%-19s "
+            "ObTxData : tx_id=%-19" PRId64 " state=%-8s start_scn=%-19s "
             "end_scn=%-19s "
             "commit_version=%-19s ",
             tx_data->tx_id_.get_id(),

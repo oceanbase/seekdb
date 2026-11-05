@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_MEMTABLE_REDO_LOG_GENERATOR_
 #define OCEANBASE_MEMTABLE_REDO_LOG_GENERATOR_
 #include "mvcc/ob_mvcc_trans_ctx.h"
+#include <inttypes.h>
 #include "ob_memtable_mutator.h"
 #include "ob_memtable_interface.h"
 
@@ -73,7 +74,7 @@ struct RedoLogEpoch {
   {
     int64_t pos = 0;
     if (v_ == INT64_MAX) { BUF_PRINTF("MAX"); }
-    else { BUF_PRINTF("%ld", v_); }
+    else { BUF_PRINTF("%" PRId64 "", v_); }
     return pos;
   }
   int64_t v_;

@@ -355,7 +355,7 @@ int ObTxRedoLog::ob_admin_dump(memtable::ObMemtableMutatorIterator *iter_ptr,
       has_output = true;
     } else {
       if (!has_dumped_tx_id) {
-        databuff_printf(arg.buf_, arg.buf_len_, arg.pos_, "{BlockID: %s; LSN:%ld, TxID:%ld; SCN:",
+        databuff_printf(arg.buf_, arg.buf_len_, arg.pos_, "{BlockID: %s; LSN:%" PRId64 ", TxID:%" PRId64 "; SCN:",
                         block_name, lsn.val_, tx_id);
         databuff_printf(arg.buf_, arg.buf_len_, arg.pos_, scn);
       }

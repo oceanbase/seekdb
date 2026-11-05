@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_ddl_pipeline.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/api/storage/vector/ob_i_vector_index_runtime.h"
@@ -460,12 +461,12 @@ int ObHNSWIndexRowIterator::get_next_row(
     char *key_str = static_cast<char*>(row_allocator_.alloc(OB_VEC_IDX_SNAPSHOT_KEY_LENGTH));
     if (OB_ISNULL(key_str)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (index_type_ == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hnsw_data_part%05ld", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
+    } else if (index_type_ == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRId64 "_hnsw_data_part%05" PRId64 "", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
     } else if (index_type_ == VIAT_HGRAPH &&
-      OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hgraph_data_part%05ld", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
-    } else if (index_type_ == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hnsw_sq_data_part%05ld", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
-    } else if (index_type_ == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hnsw_bq_data_part%05ld", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
-    } else if (index_type_ == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_ipivf_data_part%05ld", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
+      OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRId64 "_hgraph_data_part%05" PRId64 "", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
+    } else if (index_type_ == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRId64 "_hnsw_sq_data_part%05" PRId64 "", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
+    } else if (index_type_ == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRId64 "_hnsw_bq_data_part%05" PRId64 "", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
+    } else if (index_type_ == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%" PRIu64 "_%" PRId64 "_ipivf_data_part%05" PRId64 "", tablet_id_.id(), snapshot_version_, cur_row_pos_))) {
     }  else {
       current_row_.storage_datums_[vector_key_col_idx_].set_string(key_str, key_pos);
     }

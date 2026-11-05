@@ -15,6 +15,7 @@
  */
 
 #include "ob_tx_data_op.h"
+#include <inttypes.h>
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -72,10 +73,10 @@ int64_t ObTxOpVector::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
 
-  common::databuff_printf(buf, buf_len, pos, "count=%ld", count_);
+  common::databuff_printf(buf, buf_len, pos, "count=%" PRId64 "", count_);
   for (int64_t idx = 0; idx < count_; idx++) {
     ObTxOp *op = &tx_op_[idx];
-    common::databuff_printf(buf, buf_len, pos, " op(%ld)=(op_code:%ld, op_scn:%ld)",
+    common::databuff_printf(buf, buf_len, pos, " op(%" PRId64 ")=(op_code:%" PRId64 ", op_scn:%" PRId64 ")",
         idx, op->get_op_code(), op->get_op_scn().convert_to_ts());
   }
   return pos;

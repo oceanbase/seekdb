@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_delete_lob_meta_row_task.h"
+#include <inttypes.h>
 #include "data_plane/ddl/ob_ddl_coordinator.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/scheduler/ob_dag_warning_history_mgr.h"
@@ -172,7 +173,7 @@ int ObDeleteLobMetaRowDag::fill_dag_key(char *buf, const int64_t buf_len) const
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_id=%ld lob_meta_tablet_id=%ld",
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_id=%" PRId64 " lob_meta_tablet_id=%" PRId64 "",
                               param_.tablet_id_.id(), param_.dest_tablet_id_.id()))) {
   }
   return ret;

@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_META_OBJ_POOL_H_
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "lib/objectpool/ob_resource_pool.h"
 
 #include "share/config/ob_server_config.h"
@@ -270,14 +271,14 @@ void ObMetaObjPool<T>::free_node_(typename BasePool::Node *ptr)
     ptr->next = NULL;
     if (BasePool::ALLOC_BY_INNER_ALLOCATOR == ptr->flag) {
       if (common::OB_SUCCESS != BasePool::free_list_.push(ptr)) {
-        _COMMON_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "free node to list fail, size=%ld ptr=%p", BasePool::free_list_.get_total(), ptr);
+        _COMMON_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "free node to list fail, size=%" PRId64 " ptr=%p", BasePool::free_list_.get_total(), ptr);
       }
       (void)ATOMIC_AAF(&(BasePool::inner_used_num_), -1);
     } else if (BasePool::ALLOC_BY_BACKING_ALLOCATOR == ptr->flag) {
       ptr->~Node();
       common::ob_free(ptr);
     } else {
-      _COMMON_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "invalid flag=%lu ptr=%p", ptr->flag, ptr);
+      _COMMON_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "invalid flag=%" PRIu64 " ptr=%p", ptr->flag, ptr);
     }
   }
 }

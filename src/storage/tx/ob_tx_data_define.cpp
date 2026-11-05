@@ -641,7 +641,7 @@ void ObTxData::print_to_stderr(const ObTxData &tx_data)
 {
   ObCStringHelper helper;
   fprintf(stderr,
-          "TX_DATA:{tx_id=%-20ld start_log_scn=%-20s end_log_scn=%-20s commit_version=%-20s "
+          "TX_DATA:{tx_id=%-20" PRId64 " start_log_scn=%-20s end_log_scn=%-20s commit_version=%-20s "
           "state=%s",
           tx_data.tx_id_.get_id(),
           helper.convert(tx_data.start_scn_),
@@ -662,7 +662,7 @@ void ObTxData::dump_2_text(FILE *fd) const
 
   ObCStringHelper helper;
   fprintf(fd,
-          "TX_DATA:\n{\n    tx_id=%-20ld\n    start_log_scn=%-20s\n    end_log_scn=%-20s\n  "
+          "TX_DATA:\n{\n    tx_id=%-20" PRId64 "\n    start_log_scn=%-20s\n    end_log_scn=%-20s\n  "
           "  commit_version=%-20s\n    state=%s\n",
           tx_id_.get_id(),
           helper.convert(start_scn_),

@@ -15,6 +15,7 @@
  */
 
 #include "data_plane/fts/ob_fts_parser_property.h"
+#include <inttypes.h>
 
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_parse.h"
@@ -913,7 +914,7 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (FAILEDx(databuff_printf(buf,
                                   buf_len,
                                   pos,
-                                  "%s=%ld",
+                                  "%s=%" PRId64 "",
                                   ObFTSLiteral::CONFIG_NAME_MIN_TOKEN_SIZE,
                                   min_token_size))) {
       }
@@ -930,7 +931,7 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (FAILEDx(databuff_printf(buf,
                                   buf_len,
                                   pos,
-                                  "%s=%ld",
+                                  "%s=%" PRId64 "",
                                   ObFTSLiteral::CONFIG_NAME_MAX_TOKEN_SIZE,
                                   max_token_size))) {
       }
@@ -964,7 +965,7 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (FAILEDx(databuff_printf(buf,
                                   buf_len,
                                   pos,
-                                  "%s=%ld",
+                                  "%s=%" PRId64 "",
                                   ObFTSLiteral::CONFIG_NAME_NGRAM_TOKEN_SIZE,
                                   ngram_token_size))) {
       }
@@ -981,7 +982,7 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (FAILEDx(databuff_printf(buf,
                                   buf_len,
                                   pos,
-                                  "%s=%ld",
+                                  "%s=%" PRId64 "",
                                   ObFTSLiteral::CONFIG_NAME_MIN_NGRAM_SIZE,
                                   min_ngram_token_size))) {
       }
@@ -998,7 +999,7 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (FAILEDx(databuff_printf(buf,
                                   buf_len,
                                   pos,
-                                  "%s=%ld",
+                                  "%s=%" PRId64 "",
                                   ObFTSLiteral::CONFIG_NAME_MAX_NGRAM_SIZE,
                                   max_ngram_token_size))) {
       }

@@ -15,6 +15,7 @@
  */
 
 #include "storage/tablet/ob_batch_create_tablet_pretty_arg.h"
+#include <inttypes.h>
 #include "share/ob_rpc_struct.h"
 
 
@@ -45,7 +46,7 @@ int64_t ObBatchCreateTabletPrettyArg::to_string(char *buf, const int64_t buf_len
       const obcall::ObCreateTabletInfo &info = arg_.tablets_.at(i);
       const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
       J_NEWLINE();
-      BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
+      BUF_PRINTF("[%" PRId64 "][%s] [", GETTID(), GETTNAME());
       BUF_PRINTO(PC(trace_id));
       BUF_PRINTF("] ");
       J_KV("data_tablet_id", info.data_tablet_id_,
