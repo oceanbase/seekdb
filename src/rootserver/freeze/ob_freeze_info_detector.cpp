@@ -277,24 +277,15 @@ int ObMajorMergeInfoDetector::try_reload_freeze_info()
   int ret = OB_SUCCESS;
   if (!is_primary_service() || ATOMIC_LOAD(&is_replay_mode_)) {
     share::InternalTableChangeWatcher::CheckResult check_result;
-    share::InternalTableChangeWatcher::CheckErrorStage error_stage;
-    const int check_ret = table_change_watcher_.check_changed(
-        check_result, &error_stage);
-    if (OB_SUCCESS != check_ret) {
-      LOG_WARN("fail to check freeze table change, defer reload",
-               KR(check_ret));
-    }
+    const int check_ret = table_change_watcher_.check_changed(check_result);
 
     if (OB_ISNULL(major_merge_info_mgr_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to try reload freeze info, freeze info manager is null", KR(ret),
                K_(is_primary_service));
     } else if (OB_SUCCESS != check_ret) {
-      // Without a reliable commit watermark, defer the inner-SQL refresh.
-      if (share::InternalTableChangeWatcher::VISIBILITY_CHECK_ERROR ==
-          error_stage) {
-        ret = check_ret;
-      }
+      ret = check_ret;
+      LOG_WARN("fail to check freeze table change", KR(ret));
     } else if (share::InternalTableChangeWatcher::NO_CHANGE == check_result) {
       // Standby metadata is unchanged; avoid issuing the periodic inner SQL.
     } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==

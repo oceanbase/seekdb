@@ -262,58 +262,42 @@ int InternalTableChangeWatcher::init_watched_tables(
   return ret;
 }
 
-int InternalTableChangeWatcher::check_changed(CheckResult &result,
-                                              CheckErrorStage *error_stage)
+int InternalTableChangeWatcher::check_changed(CheckResult &result)
 {
   int ret = OB_SUCCESS;
   bool changed = false;
   bool is_visible = false;
   result = NO_CHANGE;
-  if (OB_NOT_NULL(error_stage)) {
-    *error_stage = NO_CHECK_ERROR;
-  }
   InternalTableChangeNotifier *notifier = GCTX.internal_table_change_notifier_;
+  OB_ASSERT(nullptr != notifier);
+  OB_ASSERT(watched_tables_.count() > 0);
   target_captured_ = false;
   target_commit_version_ = SCN::min_scn();
-  if (OB_ISNULL(notifier) || watched_tables_.count() <= 0) {
-    ret = OB_NOT_INIT;
-    if (OB_NOT_NULL(error_stage)) {
-      *error_stage = VERSION_CHECK_ERROR;
+  for (int64_t i = 0; OB_SUCC(ret) && i < watched_tables_.count(); ++i) {
+    WatchedTable &watched_table = watched_tables_.at(i);
+    if (OB_FAIL(notifier->get_change_version(
+            watched_table.table_id_, watched_table.target_version_))) {
+      LOG_WARN("failed to get watched internal table version", K(ret),
+               "table_id", watched_table.table_id_);
+    } else {
+      changed = changed || watched_table.target_version_ !=
+                               watched_table.processed_version_;
+      target_commit_version_ =
+          SCN::max(target_commit_version_,
+                   watched_table.target_version_.commit_version_);
     }
-    LOG_WARN("internal table watcher is not registered", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < watched_tables_.count(); ++i) {
-      WatchedTable &watched_table = watched_tables_.at(i);
-      if (OB_FAIL(notifier->get_change_version(
-              watched_table.table_id_, watched_table.target_version_))) {
-        if (OB_NOT_NULL(error_stage)) {
-          *error_stage = VERSION_CHECK_ERROR;
-        }
-        LOG_WARN("failed to get watched internal table version", K(ret),
-                 "table_id", watched_table.table_id_);
-      } else {
-        changed = changed || watched_table.target_version_ !=
-                                 watched_table.processed_version_;
-        target_commit_version_ =
-            SCN::max(target_commit_version_,
-                     watched_table.target_version_.commit_version_);
-      }
-    }
-    if (OB_SUCC(ret) && !changed) {
-      result = NO_CHANGE;
-    } else if (OB_SUCC(ret) && OB_FAIL(notifier->is_change_visible(
-                                   target_commit_version_, is_visible))) {
-      if (OB_NOT_NULL(error_stage)) {
-        *error_stage = VISIBILITY_CHECK_ERROR;
-      }
-      LOG_WARN("failed to check watched internal table visibility", K(ret),
-               K(target_commit_version_));
-    } else if (OB_SUCC(ret) && !is_visible) {
-      result = CHANGE_NOT_VISIBLE;
-    } else if (OB_SUCC(ret)) {
-      result = REFRESH_ALLOWED;
-      target_captured_ = true;
-    }
+  }
+  if (OB_SUCC(ret) && !changed) {
+    result = NO_CHANGE;
+  } else if (OB_SUCC(ret) && OB_FAIL(notifier->is_change_visible(
+                                 target_commit_version_, is_visible))) {
+    LOG_WARN("failed to check watched internal table visibility", K(ret),
+             K(target_commit_version_));
+  } else if (OB_SUCC(ret) && !is_visible) {
+    result = CHANGE_NOT_VISIBLE;
+  } else if (OB_SUCC(ret)) {
+    result = REFRESH_ALLOWED;
+    target_captured_ = true;
   }
   return ret;
 }

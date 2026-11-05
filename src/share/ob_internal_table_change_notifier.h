@@ -103,12 +103,6 @@ public:
     REFRESH_ALLOWED,
   };
 
-  enum CheckErrorStage {
-    NO_CHECK_ERROR,
-    VERSION_CHECK_ERROR,
-    VISIBILITY_CHECK_ERROR,
-  };
-
   ~InternalTableChangeWatcher() = default;
   DISALLOW_COPY_AND_ASSIGN(InternalTableChangeWatcher);
 
@@ -118,8 +112,7 @@ public:
 
   // Captures the current target versions and checks GTS visibility. The caller
   // must call mark_refreshed() only after the associated refresh succeeds.
-  int check_changed(CheckResult &result,
-                    CheckErrorStage *error_stage = nullptr);
+  int check_changed(CheckResult &result);
 
   // Advances only to the target captured by the most recent REFRESH_ALLOWED
   // result, leaving notifications received during the refresh for next time.
