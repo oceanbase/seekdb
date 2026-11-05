@@ -1,0 +1,63 @@
+# Regression for #1535: ANN filters must reach expression simplification.
+--disable_warnings
+DROP TABLE IF EXISTS ann_predicate_absorption;
+--enable_warnings
+CREATE TABLE ann_predicate_absorption (
+  id INT PRIMARY KEY,
+  embedding VECTOR(3) NOT NULL,
+  category INT,
+  parity VARCHAR(8),
+  KEY idx_category(category)
+) ORGANIZATION HEAP;
+INSERT INTO ann_predicate_absorption VALUES
+  (1, '[1,0,0]', 1, 'even'),
+  (2, '[2,0,0]', 2, 'even'),
+  (3, '[3,0,0]', 1, 'odd'),
+  (4, '[4,0,0]', 2, 'odd'),
+  (5, '[5,0,0]', NULL, 'even'),
+  (6, '[6,0,0]', NULL, NULL),
+  (7, '[7,0,0]', 1, NULL),
+  (8, '[8,0,0]', 2, NULL);
+CREATE VECTOR INDEX absorption_hnsw ON ann_predicate_absorption(embedding)
+  WITH (distance=l2, type=hnsw, lib=vsag, m=16,
+        ef_construction=128, sync_mode=immediate);
+ANALYZE TABLE ann_predicate_absorption;
+SET ob_hnsw_ef_search=64;
+
+--echo # AND absorption, including UNKNOWN values of P and Q
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 AND (category=1 OR parity='even')
+  AND (category=1 OR parity='even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+
+--echo # OR absorption must preserve the same SQL three-valued semantics
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 OR (category=1 AND parity='even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+
+--echo # The physical filter must contain only the absorbed predicate
+--replace_regex /[0-9]+/N/ / +/ / /-+/-/ /=+/=/ / +$//
+EXPLAIN SELECT id FROM ann_predicate_absorption
+WHERE category=1 AND (category=1 OR parity='even')
+  AND (category=1 OR parity='even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+
+--echo # A non-absorbed OR remains effective
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 OR parity='even'
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+
+--echo # NOT and constant predicates retain their semantics
+SELECT id FROM ann_predicate_absorption
+WHERE NOT (category=1 AND (category=1 OR parity='even'))
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 AND (category=1 OR parity='even') AND FALSE
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 8;
+
+--echo # LIMIT and OFFSET are preserved
+SELECT id FROM ann_predicate_absorption
+WHERE category=1 AND (category=1 OR parity='even')
+ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 1 OFFSET 1;
+
+DROP TABLE ann_predicate_absorption;
