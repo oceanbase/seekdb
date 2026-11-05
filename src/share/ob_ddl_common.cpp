@@ -518,6 +518,53 @@ int ObDDLUtil::refresh_alter_table_arg(ObMultiVersionSchemaService &schema_servi
   return ret;
 }
 
+int ObDDLUtil::generate_new_name_with_escape_character(
+    common::ObIAllocator &allocator,
+    const common::ObString &src,
+    common::ObString &dest)
+{
+  int ret = OB_SUCCESS;
+  const common::ObString::obstr_size_t src_len = src.length();
+  common::ObString::obstr_size_t dst_len = src_len;
+  const char escape_character = '`';
+  char *ptr = NULL;
+
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
+    dest.assign(NULL, 0);
+  } else if (NULL == src.find(escape_character)) {
+    dest = src;
+  } else {
+    for (int64_t i = 0; i < src_len; ++i) {
+      if (src[i] == escape_character) {
+        ++dst_len;
+      }
+    }
+    if (NULL == (ptr = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
+      dest = NULL;
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("allocate memory failed", K(ret), "size", dst_len);
+    } else {
+      int64_t tmp_dst_pos = 0;
+      for (int64_t i = 0; i < src_len; i++) {
+        if (src[i] == escape_character) {
+          ptr[tmp_dst_pos++] = escape_character;
+          ptr[tmp_dst_pos++] = escape_character;
+        } else {
+          ptr[tmp_dst_pos++] = src[i];
+        }
+      }
+      if (tmp_dst_pos != dst_len) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ptr[dst_len] = '\0';
+        dest.assign_ptr(ptr, dst_len);
+      }
+    }
+  }
+
+  return ret;
+}
+
 int ObDDLUtil::generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
     const bool with_origin_name,

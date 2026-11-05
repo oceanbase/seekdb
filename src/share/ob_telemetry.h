@@ -21,6 +21,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObAddr;
+} // namespace common
 namespace share
 {
 class LocalStore;
@@ -47,7 +51,12 @@ int generate_telemetry_uuid(const char *machine_id,
                             char *uuid,
                             const int64_t uuid_len);
 
-int report_telemetry(LocalStore &store, const char *reporter, const char *event_name);
+// Report one telemetry event. The self address is injected by the caller so
+// that the share implementation does not read the hidden global context.
+int report_telemetry(LocalStore &store,
+                     const common::ObAddr &self_addr,
+                     const char *reporter,
+                     const char *event_name);
 
 } // namespace share
 } // namespace oceanbase

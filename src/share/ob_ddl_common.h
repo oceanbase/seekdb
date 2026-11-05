@@ -613,6 +613,14 @@ public:
       const uint64_t task_id,
       ObDDLTaskDataInfo &data_info);
 
+  // Escape an SQL identifier by doubling the escape character. The helper is
+  // owned by share so that shared DDL code can quote identifiers without
+  // depending on an upper module.
+  static int generate_new_name_with_escape_character(
+      common::ObIAllocator &allocator,
+      const common::ObString &src,
+      common::ObString &dest);
+
   static int generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
     const bool with_origin_name,
