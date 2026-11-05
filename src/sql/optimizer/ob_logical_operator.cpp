@@ -1226,7 +1226,7 @@ int ObLogicalOperator::get_plan_item_info(PlanText &plan_text,
   // print output
   if (OB_SUCC(ret) && !output.empty()) {
     BEGIN_BUF_PRINT;
-    EXPLAIN_PRINT_EXPRS(output, type);
+    EXPLAIN_PRINT_EXPRS_WITH_ANNOTATIONS(output, type, plan_text.address_annotations_);
     END_BUF_PRINT(plan_item.projection_,
                   plan_item.projection_len_);
   }
@@ -1234,14 +1234,14 @@ int ObLogicalOperator::get_plan_item_info(PlanText &plan_text,
   if (OB_SUCC(ret) && !filter_exprs_.empty()) {
     const ObIArray<ObRawExpr *> &filter = filter_exprs_;
     BEGIN_BUF_PRINT;
-    EXPLAIN_PRINT_EXPRS(filter, type);
+    EXPLAIN_PRINT_EXPRS_WITH_ANNOTATIONS(filter, type, plan_text.address_annotations_);
     END_BUF_PRINT(plan_item.filter_predicates_,
                   plan_item.filter_predicates_len_);
   }
   // print startup filter
   if (OB_SUCC(ret) && !startup_filter.empty()) {
     BEGIN_BUF_PRINT;
-    EXPLAIN_PRINT_EXPRS(startup_filter, type);
+    EXPLAIN_PRINT_EXPRS_WITH_ANNOTATIONS(startup_filter, type, plan_text.address_annotations_);
     END_BUF_PRINT(plan_item.startup_predicates_,
                   plan_item.startup_predicates_len_);
   }

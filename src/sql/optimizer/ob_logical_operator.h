@@ -59,7 +59,7 @@ struct partition_access
 /**
  *  Print log info with expressions
  */
-#define EXPLAIN_PRINT_EXPRS(exprs, type)                                                    \
+#define EXPLAIN_PRINT_EXPRS_WITH_ANNOTATIONS(exprs, type, address_annotations)                                                    \
 {                                                                                           \
   int64_t N = -1;                                                                           \
   if (OB_FAIL(ret)) { /* Do nothing */                                                      \
@@ -73,7 +73,7 @@ struct partition_access
       } else if (OB_ISNULL(exprs.at(i))) {                                                  \
         ret = OB_ERR_UNEXPECTED;                                                            \
       } else if (OB_FAIL(exprs.at(i)                                                        \
-                         ->get_name(buf, buf_len, pos, type))) { /*Do nothing */            \
+                         ->get_name(buf, buf_len, pos, type, address_annotations))) { /*Do nothing */            \
       } else if (OB_FAIL(BUF_PRINTF("]"))) { /* Do nothing */                               \
       } else if (i < N - 1) {                                                               \
         ret = BUF_PRINTF(", ");                                                             \
@@ -84,6 +84,9 @@ struct partition_access
     ret = BUF_PRINTF(")");                                                                  \
   } else { /* Do nothing */ }                                                               \
 }
+
+#define EXPLAIN_PRINT_EXPRS(exprs, type) \
+  EXPLAIN_PRINT_EXPRS_WITH_ANNOTATIONS(exprs, type, nullptr)
 
 #define EXPLAIN_PRINT_EXPR(expr, type)                                                      \
 {                                                                                           \
