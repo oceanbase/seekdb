@@ -1881,7 +1881,7 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
 
   // remove current_directory prefix of data_dir and redo_dir if exists
   char current_dir[4096] = {0};
-  if (nullptr == getcwd(current_dir, sizeof(current_dir))) {
+  if (0 != ob_getcwd_utf8(current_dir, sizeof(current_dir))) {
     LOG_ERROR("failed to get current directory", K(ret), KCSTRING(strerror(errno)));
   } else if (current_dir[strlen(current_dir) - 1] == '/') {
   } else if (strlen(current_dir) + 2 >= sizeof(current_dir)) {

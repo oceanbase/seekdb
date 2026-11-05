@@ -87,6 +87,8 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #endif
 #ifdef _WIN32
 #include <windows.h>
+#include <shellapi.h>
+#pragma comment(lib, "shell32.lib")
 #include "observer/ob_win_service.h"
 extern "C" void win32_trace(const char *msg) {
   HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
@@ -700,7 +702,7 @@ int inner_main(int argc, char *argv[])
   }
 
   if (OB_FAIL(ret)) {
-  } else if (0 != chdir(opts->base_dir_.ptr())) {
+  } else if (0 != ob_chdir_utf8(opts->base_dir_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
     MPRINT("Failed to change working directory to base dir. path='%s', system error='%s'",
       opts->base_dir_.ptr(), strerror(errno));
@@ -831,8 +833,54 @@ static const char *get_arg_value(int argc, char *argv[], const char *name)
 }
 #endif
 
+#ifdef _WIN32
+// MSVC converts the command line to the ANSI code page before calling `main`;
+// every file name the server consumes is UTF-8, so rebuild argv from the wide
+// command line once at process start. The converted copy lives for the whole
+// process and is intentionally never freed.
+static void convert_command_line_to_utf8(int &argc, char **&argv)
+{
+  int wide_argc = 0;
+  LPWSTR *wide_argv = ::CommandLineToArgvW(::GetCommandLineW(), &wide_argc);
+  if (NULL == wide_argv || wide_argc <= 0) {
+    return;
+  }
+  char **utf8_argv = static_cast<char **>(
+      ::calloc(static_cast<size_t>(wide_argc) + 1, sizeof(char *)));
+  if (NULL == utf8_argv) {
+    ::LocalFree(wide_argv);
+    return;
+  }
+  bool converted = true;
+  for (int i = 0; i < wide_argc && converted; ++i) {
+    const int utf8_len = ::WideCharToMultiByte(CP_UTF8, 0, wide_argv[i], -1, NULL, 0, NULL, NULL);
+    if (utf8_len <= 0) {
+      converted = false;
+    } else if (NULL == (utf8_argv[i] = static_cast<char *>(::malloc(utf8_len)))) {
+      converted = false;
+    } else if (0 == ::WideCharToMultiByte(CP_UTF8, 0, wide_argv[i], -1, utf8_argv[i],
+                                          utf8_len, NULL, NULL)) {
+      converted = false;
+    }
+  }
+  ::LocalFree(wide_argv);
+  if (!converted) {
+    for (int i = 0; i < wide_argc; ++i) {
+      ::free(utf8_argv[i]);
+    }
+    ::free(utf8_argv);
+    return;
+  }
+  argc = wide_argc;
+  argv = utf8_argv;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+  convert_command_line_to_utf8(argc, argv);
+#endif
 #if defined(__linux__)
   disable_hugepage_for_self_text();
 #endif

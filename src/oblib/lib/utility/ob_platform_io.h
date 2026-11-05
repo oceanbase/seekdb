@@ -151,6 +151,11 @@ bool ob_is_absolute_path_utf8(const char *path);
 // errno set (ENAMETOOLONG when the resolved name does not fit).
 int ob_absolute_path_utf8(const char *path, char *buffer, int64_t buffer_size);
 
+// Working-directory access on UTF-8 paths. Windows converts the name to UTF-16
+// (SetCurrentDirectoryW / GetCurrentDirectoryW), POSIX maps to chdir(2)/getcwd(2).
+int ob_chdir_utf8(const char *path);
+int ob_getcwd_utf8(char *buffer, int64_t buffer_size);
+
 // An open directory stream. The implementation is platform specific and opaque.
 class ObPlatformDir;
 

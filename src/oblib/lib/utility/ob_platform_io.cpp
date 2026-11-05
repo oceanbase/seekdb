@@ -1242,6 +1242,60 @@ int ob_absolute_path_utf8(const char *path, char *buffer, int64_t buffer_size)
   return ret;
 }
 
+int ob_chdir_utf8(const char *path)
+{
+  int ret = 0;
+#ifdef _WIN32
+  wchar_t *extended_path = platform_io_internal::utf8_to_extended_path(path);
+  if (NULL == extended_path) {
+    ret = -1;
+  } else {
+    if (FALSE == ::SetCurrentDirectoryW(extended_path)) {
+      errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+      ret = -1;
+    }
+    delete[] extended_path;
+  }
+#else
+  ret = ::chdir(path);
+#endif
+  return ret;
+}
+
+int ob_getcwd_utf8(char *buffer, int64_t buffer_size)
+{
+  int ret = 0;
+  if (NULL == buffer || buffer_size <= 0) {
+    errno = EINVAL;
+    ret = -1;
+#ifdef _WIN32
+  } else {
+    const DWORD need = ::GetCurrentDirectoryW(0, NULL);
+    if (0 == need) {
+      errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+      ret = -1;
+    } else {
+      wchar_t *wide_cwd = new (std::nothrow) wchar_t[need + 1];
+      if (NULL == wide_cwd) {
+        errno = ENOMEM;
+        ret = -1;
+      } else if (0 == ::GetCurrentDirectoryW(need + 1, wide_cwd)) {
+        errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+        ret = -1;
+      } else {
+        ret = platform_io_internal::wide_to_utf8(wide_cwd, buffer, buffer_size);
+      }
+      delete[] wide_cwd;
+    }
+  }
+#else
+  } else if (NULL == ::getcwd(buffer, static_cast<size_t>(buffer_size))) {
+    ret = -1;
+  }
+#endif
+  return ret;
+}
+
 ObPlatformDir *ob_opendir_utf8(const char *path)
 {
   ObPlatformDir *dir = NULL;
