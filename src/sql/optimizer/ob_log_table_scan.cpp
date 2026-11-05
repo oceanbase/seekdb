@@ -20,6 +20,7 @@
 #include "data_plane/access/ob_tablet_split_type.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/das/ob_domain_id.h"
+#include "share/object/ob_obj_cast.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -1211,7 +1212,12 @@ int ObLogTableScan::pick_out_query_range_exprs()
   } else if (get_contains_fake_cte()) {
     // do nothing
   } else if (get_vector_index_info().is_vec_adaptive_scan()) {
-    // do nothing
+    // A vector index adaptive scan keeps every predicate in the per-row filter,
+    // so redundant constant identity operands (`X OR FALSE`, `X AND TRUE`) would
+    // be evaluated for every scanned row. Rewrite them away once at plan time.
+    if (OB_FAIL(simplify_vec_scan_filter_exprs(filter_exprs_))) {
+      LOG_WARN("failed to simplify vector index scan filters", K(ret));
+    }
   } else if (OB_FAIL(schema_guard->get_table_schema(table_id_, ref_table_id_, get_stmt(), index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1242,6 +1248,98 @@ int ObLogTableScan::pick_out_query_range_exprs()
       }
     } //end for
   } else { /*do nothing*/ }
+  return ret;
+}
+
+int ObLogTableScan::simplify_vec_scan_filter_exprs(ObIArray<ObRawExpr *> &filters)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < filters.count(); ++i) {
+    if (OB_FAIL(remove_identity_operands(filters.at(i)))) {
+      LOG_WARN("failed to remove identity operands from vector scan filter", K(ret));
+    }
+  }
+  return ret;
+}
+
+// Rewrites `X AND TRUE` / `X OR FALSE` into `X` in place. The rewrite preserves
+// SQL three-valued logic and only drops constant identity operands, so it never
+// changes which rows a filter keeps.
+int ObLogTableScan::remove_identity_operands(ObRawExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret));
+  } else if (T_OP_AND != expr->get_expr_type() && T_OP_OR != expr->get_expr_type()) {
+    // leaf expr, keep it as is
+  } else {
+    const bool is_and = (T_OP_AND == expr->get_expr_type());
+    ObSEArray<ObRawExpr *, 8> kept_exprs;
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      ObRawExpr *&child = expr->get_param_expr(i);
+      bool is_identity = false;
+      if (OB_ISNULL(child)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null param expr", K(ret));
+      } else if (OB_FAIL(remove_identity_operands(child))) {
+        LOG_WARN("failed to rewrite child expr", K(ret));
+      } else if (OB_FAIL(is_identity_operand(child, is_and, is_identity))) {
+        LOG_WARN("failed to check identity operand", K(ret));
+      } else if (!is_identity && OB_FAIL(kept_exprs.push_back(child))) {
+        LOG_WARN("failed to push back expr", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (kept_exprs.empty()) {
+        // every operand is an identity (e.g. `TRUE AND TRUE`), keep the expr
+      } else if (1 == kept_exprs.count()) {
+        expr = kept_exprs.at(0);
+      } else if (kept_exprs.count() != expr->get_param_count()) {
+        if (OB_FAIL(static_cast<ObOpRawExpr *>(expr)->set_param_exprs(kept_exprs))) {
+          LOG_WARN("failed to set param exprs", K(ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObLogTableScan::is_identity_operand(ObRawExpr *expr, bool is_and, bool &is_identity)
+{
+  int ret = OB_SUCCESS;
+  is_identity = false;
+  ObRawExpr *candidate = expr;
+  // A boolean literal is wrapped by T_OP_BOOL, unwrap it before looking at the
+  // constant value.
+  if (OB_NOT_NULL(candidate) &&
+      T_OP_BOOL == candidate->get_expr_type() &&
+      1 == candidate->get_param_count() &&
+      OB_NOT_NULL(candidate->get_param_expr(0))) {
+    candidate = candidate->get_param_expr(0);
+  }
+  // A parameterized literal stays an ObConstRawExpr, but its value is the
+  // parameter slot instead of the bound value. Such operands can only be
+  // resolved at execution time, so leave them untouched here.
+  if (OB_NOT_NULL(candidate) &&
+      T_QUESTIONMARK == candidate->get_expr_type()) {
+    // do nothing
+  } else if (OB_NOT_NULL(candidate) && candidate->is_const_raw_expr()) {
+    const ObObj &value = static_cast<ObConstRawExpr *>(candidate)->get_value();
+    // Only plain boolean / integer constants are identities. Other constant
+    // types (e.g. a string that needs a diagnostic cast) are kept so that
+    // their warnings and errors still surface at execution time.
+    if (!value.is_null() && ob_is_integer_type(value.get_type())) {
+      bool is_true = false;
+      if (OB_FAIL(ObObjEvaluator::is_true(value, is_true))) {
+        // The constant cannot be evaluated as boolean, keep it.
+        LOG_TRACE("predicate operand is not a boolean constant", K(ret));
+        ret = OB_SUCCESS;
+      } else if ((is_and && is_true) || (!is_and && !is_true)) {
+        is_identity = true;
+      }
+    }
+  }
   return ret;
 }
 
