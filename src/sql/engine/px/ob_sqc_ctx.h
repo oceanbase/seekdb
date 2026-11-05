@@ -75,8 +75,9 @@ public:
     for (int i = 0; i < whole_msg_provider_list_.count(); ++i) {
       if (OB_NOT_NULL(whole_msg_provider_list_.at(i))) {
         whole_msg_provider_list_.at(i)->reset();
-        // The execution arena releases provider storage without running destructors.
-        whole_msg_provider_list_.at(i)->sqc_level_sync_cond_.destroy();
+        // The execution arena releases provider storage without running
+        // destructors; the provider releases its own OS resources explicitly.
+        whole_msg_provider_list_.at(i)->destroy();
       }
     }
 
