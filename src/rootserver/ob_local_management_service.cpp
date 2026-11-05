@@ -412,8 +412,23 @@ int ObLocalManagementService::execute_bootstrap()
     FLOG_INFO("try to get local-service lock in execute_bootstrap");
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
     FLOG_INFO("success to get local-service lock in execute_bootstrap");
+    // A fresh bootstrap has just created the core table partitions and now
+    // reads and writes them with completely cold caches. Those metadata
+    // operations inherit config::rpc_timeout() (2s by default) through
+    // ObShareUtil::get_rs_default_timeout_ctx(), which is far too short for the
+    // first accesses on a cold or slow file system: the statement then returns
+    // OB_TIMEOUT (-4012) and the whole bootstrap is aborted. Give the metadata
+    // phase the same budget the DDL path already uses instead of relying on
+    // that fallback.
+    ObTimeoutCtx bootstrap_timeout_ctx;
+    if (OB_SUCC(ret) && OB_FAIL(ObShareUtil::set_default_timeout_ctx(
+                                    bootstrap_timeout_ctx,
+                                    config::_ob_ddl_timeout()))) {
+      LOG_WARN("failed to set bootstrap timeout context", KR(ret));
+    }
     ObBootstrap bootstrap(ddl_service_, runtime_ddl_service_);
-    if (OB_FAIL(bootstrap.execute_bootstrap())) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(bootstrap.execute_bootstrap())) {
     }
 
     BOOTSTRAP_LOG(INFO, "start local services");
