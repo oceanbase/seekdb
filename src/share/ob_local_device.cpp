@@ -509,7 +509,8 @@ int ObLocalDevice::rename(const char *oldpath, const char *newpath)
   return ret;
 }
 
-int ObLocalDevice::scan_dir(const char *dir_name, int (*func)(const dirent *entry))
+int ObLocalDevice::scan_dir(const char *dir_name,
+                            int (*func)(const common::ObPlatformDirEntry &entry))
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::scan_dir(dir_name, func))) {

@@ -2226,7 +2226,7 @@ int is_dir_empty(const char *dirname, bool &is_empty)
     ret = OB_INVALID_ARGUMENT;
   } else {
     is_empty = true;
-    DIR *dir = opendir(dirname);
+    common::ObPlatformDir *dir = common::ob_opendir_utf8(dirname);
     if (NULL == dir) {
       if (ENOENT == errno) {
         is_empty = true;
@@ -2235,33 +2235,21 @@ int is_dir_empty(const char *dirname, bool &is_empty)
         LIB_LOG(ERROR, "opendir failed", K(ret), K(errno), KP(dirname));
       }
     } else {
-      while (OB_SUCC(ret)) {
-        struct dirent entry;
-        struct dirent *pentry = &entry;
-        memset(&entry, 0, sizeof(struct dirent));
-        if (0 != readdir_r(dir, pentry, &pentry)) {
-          ret = OB_IO_ERROR;
-          LIB_LOG(WARN, "readdir_r failed", K(ret), K(errno), KP(dirname));
-        } else if (NULL == pentry) {
-          ret = OB_ITER_END;
-        } else if (strcmp(".", pentry->d_name) == 0
-            || strcmp("..", pentry->d_name) == 0) {
-          continue;
-        } else {
+      common::ObPlatformDirEntry entry;
+      int read_ret = 0;
+      while (OB_SUCC(ret) && true == is_empty
+             && 1 == (read_ret = common::ob_readdir_entry_utf8(dir, entry))) {
+        if (0 != strcmp(".", entry.name) && 0 != strcmp("..", entry.name)) {
           is_empty = false;
-          break;
         }
       }
-
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS;
+      if (OB_SUCC(ret) && read_ret < 0) {
+        ret = OB_IO_ERROR;
+        LIB_LOG(WARN, "readdir failed", K(ret), K(errno), KP(dirname));
       }
-
-      if (0 != closedir(dir)) {
+      if (0 != common::ob_closedir_utf8(dir)) {
         ret = OB_IO_ERROR;
         LIB_LOG(ERROR, "closedir failed", K(ret), K(errno), KP(dirname));
-      } else {
-        dir = NULL;
       }
     }
   }

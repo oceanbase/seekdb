@@ -164,12 +164,43 @@ int ob_getcwd_utf8(char *buffer, int64_t buffer_size);
 // An open directory stream. The implementation is platform specific and opaque.
 class ObPlatformDir;
 
-// Directory iteration on UTF-8 paths. ob_readdir_utf8() returns 1 and copies
-// one entry name (including "." and "..") into `name`, 0 at the end of the
-// directory, or -1 with errno set.
+// Portable kind of one directory entry. POSIX reports the readdir(3) d_type
+// where the filesystem provides it; when it is DT_UNKNOWN the caller may stat
+// the entry itself. Windows derives the kind from the find data attributes.
+enum ObPlatformDirEntryType
+{
+  OB_DIR_ENTRY_UNKNOWN = 0,
+  OB_DIR_ENTRY_FILE = 1,
+  OB_DIR_ENTRY_DIR = 2,
+  OB_DIR_ENTRY_OTHER = 3,  // symlink, device, socket, ...
+};
+
+static const int64_t OB_PLATFORM_DIR_ENTRY_NAME_SIZE = 1024;
+
+struct ObPlatformDirEntry
+{
+  ObPlatformDirEntry() : name(), type(OB_DIR_ENTRY_UNKNOWN) { name[0] = '\0'; }
+  char name[OB_PLATFORM_DIR_ENTRY_NAME_SIZE];
+  ObPlatformDirEntryType type;
+};
+
+// Directory iteration on UTF-8 paths. ob_readdir_entry_utf8() returns 1 and
+// fills one entry (including "." and ".."), 0 at the end of the directory, or
+// -1 with errno set. ob_readdir_utf8() is the name-only form used by callers
+// that do not need the entry kind; it reports ENAMETOOLONG when the caller
+// buffer cannot hold the name.
 ObPlatformDir *ob_opendir_utf8(const char *path);
+int ob_readdir_entry_utf8(ObPlatformDir *dir, ObPlatformDirEntry &entry);
 int ob_readdir_utf8(ObPlatformDir *dir, char *name, int64_t name_size);
 int ob_closedir_utf8(ObPlatformDir *dir);
+
+// Absolute UTF-8 path of the running executable (without a verbatim prefix).
+int ob_get_executable_path_utf8(char *buffer, int64_t buffer_size);
+
+// Creates/refreshes `alias_path` as an alias of the running executable:
+// a symbolic link on POSIX/macOS, and on Windows a hard link (copy fallback)
+// named `<alias_path>.exe`. The previous alias is removed first.
+int ob_create_executable_alias_utf8(const char *alias_path);
 
 #ifdef _WIN32
 // Maps a Win32 error code (GetLastError()) to the errno value this layer would

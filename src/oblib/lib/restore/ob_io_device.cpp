@@ -87,26 +87,24 @@ DEFINE_GET_SERIALIZE_SIZE(ObIOFd)
 /**
  * -------------------------------------ObDirEntryNameFilter--------------------------------------------
  */
-int ObDirRegularEntryNameFilter::func(const dirent *entry)
+int ObDirRegularEntryNameFilter::func(const ObPlatformDirEntry &entry)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(entry)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (STRLEN(entry->d_name) >= STRLEN(filter_str_)){
+  if (STRLEN(entry.name) >= STRLEN(filter_str_)){
     bool is_matched = false;
     switch(type_) {
     case PREFIX:
-      if (0 == STRNCMP(entry->d_name, filter_str_, STRLEN(filter_str_))) {
+      if (0 == STRNCMP(entry.name, filter_str_, STRLEN(filter_str_))) {
         is_matched = true;
       }
       break;
     case KEY_WORD:
-      if (NULL != STRSTR(entry->d_name, filter_str_)) {
+      if (NULL != STRSTR(entry.name, filter_str_)) {
         is_matched = true;
       }
       break;
     case SUFFIX:
-      if (0 == STRCMP(entry->d_name + STRLEN(entry->d_name) - STRLEN(filter_str_),
+      if (0 == STRCMP(entry.name + STRLEN(entry.name) - STRLEN(filter_str_),
                            filter_str_)) {
         is_matched = true;
       }
@@ -116,7 +114,7 @@ int ObDirRegularEntryNameFilter::func(const dirent *entry)
       break;
     }
     if (OB_SUCC(ret) && is_matched) {
-      ObIODirentEntry p_entry(entry->d_name, entry->d_type);
+      ObIODirentEntry p_entry(entry.name, entry.type);
       if (OB_FAIL(d_entrys_.push_back(p_entry))) {
       }
     }

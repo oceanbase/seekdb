@@ -419,60 +419,10 @@ static int create_observer_softlink()
   int ret = OB_SUCCESS;
   char softlink_path[4096] = {0};
   snprintf(softlink_path, sizeof(softlink_path), "%s/seekdb", PID_DIR);
-  char target_path[4096] = {0};
-#ifdef _WIN32
-  if (0 == GetModuleFileNameA(nullptr, target_path, sizeof(target_path))) {
+  if (0 != common::ob_create_executable_alias_utf8(softlink_path)) {
     ret = OB_IO_ERROR;
-    MPRINT("failed to get executable path on Windows");
+    MPRINT("create seekdb softlink failed, errno=%d (%s)", errno, strerror(errno));
   }
-  if (OB_SUCC(ret)) {
-    char link_path_exe[4096] = {0};
-    snprintf(link_path_exe, sizeof(link_path_exe), "%s.exe", softlink_path);
-    DeleteFileA(link_path_exe);
-    if (!CopyFileA(target_path, link_path_exe, FALSE)) {
-      if (!CreateHardLinkA(link_path_exe, target_path, NULL)) {
-        ret = OB_IO_ERROR;
-        MPRINT("create seekdb copy/hardlink failed, err=%lu", GetLastError());
-      }
-    }
-  }
-#elif defined(__APPLE__)
-  uint32_t size = PATH_MAX;
-  if (0 != _NSGetExecutablePath(target_path, &size)) {
-    ret = OB_IO_ERROR;
-    MPRINT("failed to get executable path on macOS");
-  }
-  if (OB_SUCC(ret)) {
-    char resolved_path[PATH_MAX] = {0};
-    if (nullptr == realpath(target_path, resolved_path)) {
-      ret = OB_IO_ERROR;
-      MPRINT("failed to resolve executable path, errno=%s", strerror(errno));
-    } else {
-      strncpy(target_path, resolved_path, PATH_MAX - 1);
-      target_path[PATH_MAX - 1] = '\0';
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (FALSE_IT(FileDirectoryUtils::unlink_symlink(softlink_path))) {
-  } else if (OB_FAIL(FileDirectoryUtils::symlink(target_path, softlink_path))) {
-    ret = OB_IO_ERROR;
-    MPRINT("create seekdb softlink failed, errno=%s", strerror(errno));
-  }
-#else
-  ssize_t read_len = readlink("/proc/self/exe", target_path, sizeof(target_path) - 1);
-  if (read_len < 0) {
-    ret = OB_IO_ERROR;
-    MPRINT("failed to readlink /proc/self/exe, errno=%s", strerror(errno));
-  } else {
-    target_path[read_len] = '\0';
-  }
-  if (OB_FAIL(ret)) {
-  } else if (FALSE_IT(FileDirectoryUtils::unlink_symlink(softlink_path))) {
-  } else if (OB_FAIL(FileDirectoryUtils::symlink(target_path, softlink_path))) {
-    ret = OB_IO_ERROR;
-    MPRINT("create seekdb softlink failed, errno=%s", strerror(errno));
-  }
-#endif
   return ret;
 }
 static void print_args(int argc, char *argv[])

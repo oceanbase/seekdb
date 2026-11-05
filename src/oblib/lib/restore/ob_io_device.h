@@ -240,17 +240,19 @@ struct ObIODFileStat
 };
 
 struct ObIODirentEntry {
-  ObIODirentEntry() : type_(0) {}
-  ObIODirentEntry(const char *name, const int type) : type_(type) {
+  ObIODirentEntry() : type_(OB_DIR_ENTRY_UNKNOWN) {}
+  ObIODirentEntry(const char *name, const ObPlatformDirEntryType type) : type_(type) {
     STRNCPY(name_, name, sizeof(name_) - 1);
   }
   TO_STRING_KV(KCSTRING_(name), K_(type));
-  bool is_valid() const { return 0 != name_[0] && (DT_DIR == type_ || DT_REG == type_); }
-  bool is_dir() const { return DT_DIR == type_; }
-  bool is_file() const { return DT_REG == type_; }
+  bool is_valid() const {
+    return 0 != name_[0] && (OB_DIR_ENTRY_DIR == type_ || OB_DIR_ENTRY_FILE == type_);
+  }
+  bool is_dir() const { return OB_DIR_ENTRY_DIR == type_; }
+  bool is_file() const { return OB_DIR_ENTRY_FILE == type_; }
 
   char name_[common::MAX_PATH_SIZE];
-  int  type_;
+  ObPlatformDirEntryType type_;
 };
 
 class ObDirRegularEntryNameFilter : public ObBaseDirEntryOperator
@@ -269,7 +271,7 @@ public:
     STRNCPY(filter_str_, filter_str, sizeof(filter_str_) - 1);
   }
   virtual ~ObDirRegularEntryNameFilter() = default;
-  virtual int func(const dirent *entry) override;
+  virtual int func(const ObPlatformDirEntry &entry) override;
 
 private:
   char filter_str_[common::MAX_PATH_SIZE];
@@ -306,7 +308,7 @@ public:
   virtual int rmdir(const char *pathname) = 0;
   virtual int unlink(const char *pathname) = 0;
   virtual int rename(const char *oldpath, const char *newpath) = 0;
-  virtual int scan_dir(const char *dir_name, int (*func)(const dirent *entry)) = 0;
+  virtual int scan_dir(const char *dir_name, int (*func)(const ObPlatformDirEntry &entry)) = 0;
   virtual int scan_dir(const char *dir_name, ObBaseDirEntryOperator &op) = 0;
   virtual int fsync(const ObIOFd &fd) = 0;
   virtual int fdatasync(const ObIOFd &fd) = 0;

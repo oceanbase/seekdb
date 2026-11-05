@@ -337,6 +337,97 @@ TEST_F(TestPlatformIo, AccessAndAbsolutePath)
   EXPECT_EQ(0, ob_unlink_utf8(file.c_str()));
 }
 
+TEST_F(TestPlatformIo, DirectoryEntryKindRoundTrip)
+{
+  const std::string sub_dir = path_of("entry_sub_dir");
+  const std::string file_path = path_of("entry_file");
+  ASSERT_EQ(0, make_dir(sub_dir)) << "errno=" << errno;
+  const int fd = ob_open_utf8(file_path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  ASSERT_GE(fd, 0) << "errno=" << errno;
+  ASSERT_EQ(0, close_fd(fd));
+
+  ObPlatformDir *dir = ob_opendir_utf8(root_.c_str());
+  ASSERT_NE(nullptr, dir) << "errno=" << errno;
+  int seen = 0;
+  int read_ret = 0;
+  ObPlatformDirEntry entry;
+  while (1 == (read_ret = ob_readdir_entry_utf8(dir, entry))) {
+    const bool is_sub_dir = 0 == ::strcmp(entry.name, "entry_sub_dir");
+    const bool is_file = 0 == ::strcmp(entry.name, "entry_file");
+    if (is_sub_dir || is_file) {
+      // Filesystems may report DT_UNKNOWN (macOS APFS does); callers then stat
+      // the entry, so resolve the expected kind the same way here.
+      ObPlatformDirEntryType expected = entry.type;
+      if (OB_DIR_ENTRY_UNKNOWN == expected) {
+        ObPlatformFileStat stat;
+        const std::string full_path = path_of(entry.name);
+        ASSERT_EQ(0, ob_stat_utf8(full_path.c_str(), stat)) << "errno=" << errno;
+        expected = ob_stat_is_dir(stat.mode) ? OB_DIR_ENTRY_DIR : OB_DIR_ENTRY_FILE;
+      }
+      if (is_sub_dir) {
+        EXPECT_EQ(OB_DIR_ENTRY_DIR, expected);
+      } else {
+        EXPECT_EQ(OB_DIR_ENTRY_FILE, expected);
+      }
+      ++seen;
+    }
+  }
+  EXPECT_EQ(0, read_ret) << "errno=" << errno;
+  EXPECT_EQ(2, seen);
+  EXPECT_EQ(0, ob_closedir_utf8(dir));
+
+  EXPECT_TRUE(remove_file(file_path));
+  EXPECT_EQ(0, remove_dir(sub_dir));
+}
+
+TEST_F(TestPlatformIo, ReaddirNameOnlyCompatibility)
+{
+  const std::string file_path = path_of("readdir_file");
+  const int fd = ob_open_utf8(file_path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  ASSERT_GE(fd, 0) << "errno=" << errno;
+  ASSERT_EQ(0, close_fd(fd));
+
+  ObPlatformDir *dir = ob_opendir_utf8(root_.c_str());
+  ASSERT_NE(nullptr, dir) << "errno=" << errno;
+  bool found = false;
+  char name[OB_PLATFORM_DIR_ENTRY_NAME_SIZE];
+  int read_ret = 0;
+  while (1 == (read_ret = ob_readdir_utf8(dir, name, sizeof(name)))) {
+    if (0 == ::strcmp(name, "readdir_file")) {
+      found = true;
+    }
+  }
+  EXPECT_EQ(0, read_ret) << "errno=" << errno;
+  EXPECT_TRUE(found);
+  EXPECT_EQ(0, ob_closedir_utf8(dir));
+  EXPECT_TRUE(remove_file(file_path));
+}
+
+TEST_F(TestPlatformIo, ExecutablePathAndAlias)
+{
+  char exe_path[4096];
+  ASSERT_EQ(0, ob_get_executable_path_utf8(exe_path, sizeof(exe_path))) << "errno=" << errno;
+  ASSERT_LT(0, static_cast<int64_t>(::strlen(exe_path)));
+  ObPlatformFileStat exe_stat;
+  ASSERT_EQ(0, ob_stat_utf8(exe_path, exe_stat)) << "errno=" << errno;
+  EXPECT_GT(exe_stat.size, 0);
+
+  const std::string alias = path_of("seekdb_alias");
+  ASSERT_EQ(0, ob_create_executable_alias_utf8(alias.c_str())) << "errno=" << errno;
+#ifdef _WIN32
+  const std::string alias_file = alias + ".exe";
+  ObPlatformFileStat alias_stat;
+  ASSERT_EQ(0, ob_stat_utf8(alias_file.c_str(), alias_stat)) << "errno=" << errno;
+  EXPECT_EQ(exe_stat.size, alias_stat.size);
+  EXPECT_TRUE(remove_file(alias_file));
+#else
+  ObPlatformFileStat link_stat;
+  ASSERT_EQ(0, ob_stat_utf8(alias.c_str(), link_stat, false)) << "errno=" << errno;
+  EXPECT_TRUE(ob_stat_is_link(link_stat.mode));
+  EXPECT_EQ(0, ::unlink(alias.c_str()));
+#endif
+}
+
 #ifdef _WIN32
 TEST_F(TestPlatformIo, Win32ErrorMapping)
 {

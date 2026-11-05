@@ -47,6 +47,10 @@
 #include <unistd.h>
 #endif
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
 namespace oceanbase
 {
 namespace common
@@ -1453,10 +1457,10 @@ ObPlatformDir *ob_opendir_utf8(const char *path)
   return dir;
 }
 
-int ob_readdir_utf8(ObPlatformDir *dir, char *name, int64_t name_size)
+int ob_readdir_entry_utf8(ObPlatformDir *dir, ObPlatformDirEntry &entry)
 {
   int ret = -1;
-  if (NULL == dir || NULL == name || name_size <= 0) {
+  if (NULL == dir) {
     errno = EINVAL;
 #ifdef _WIN32
   } else {
@@ -1474,7 +1478,16 @@ int ob_readdir_utf8(ObPlatformDir *dir, char *name, int64_t name_size)
         }
         break;
       }
-      if (0 == platform_io_internal::wide_to_utf8(dir->find_data_.cFileName, name, name_size)) {
+      if (0 == platform_io_internal::wide_to_utf8(dir->find_data_.cFileName, entry.name,
+                                                  sizeof(entry.name))) {
+        const DWORD attributes = dir->find_data_.dwFileAttributes;
+        if (0 != (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+          entry.type = OB_DIR_ENTRY_DIR;
+        } else if (0 != (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+          entry.type = OB_DIR_ENTRY_OTHER;
+        } else {
+          entry.type = OB_DIR_ENTRY_FILE;
+        }
         ret = 1;
         break;
       }
@@ -1482,15 +1495,153 @@ int ob_readdir_utf8(ObPlatformDir *dir, char *name, int64_t name_size)
   }
 #else
   } else {
-    const struct dirent *entry = ::readdir(dir->dir_);
-    if (NULL == entry) {
+    const struct dirent *os_entry = ::readdir(dir->dir_);
+    if (NULL == os_entry) {
       ret = 0;
-    } else if (::strlen(entry->d_name) + 1 > static_cast<size_t>(name_size)) {
+    } else if (::strlen(os_entry->d_name) + 1 > sizeof(entry.name)) {
       errno = platform_io_internal::name_too_long_errno();
       ret = -1;
     } else {
-      ::snprintf(name, name_size, "%s", entry->d_name);
+      ::snprintf(entry.name, sizeof(entry.name), "%s", os_entry->d_name);
+#ifdef _DIRENT_HAVE_D_TYPE
+      switch (os_entry->d_type) {
+        case DT_REG:
+          entry.type = OB_DIR_ENTRY_FILE;
+          break;
+        case DT_DIR:
+          entry.type = OB_DIR_ENTRY_DIR;
+          break;
+        case DT_UNKNOWN:
+          entry.type = OB_DIR_ENTRY_UNKNOWN;
+          break;
+        default:
+          entry.type = OB_DIR_ENTRY_OTHER;
+          break;
+      }
+#else
+      entry.type = OB_DIR_ENTRY_UNKNOWN;
+#endif
       ret = 1;
+    }
+  }
+#endif
+  return ret;
+}
+
+int ob_readdir_utf8(ObPlatformDir *dir, char *name, int64_t name_size)
+{
+  int ret = -1;
+  if (NULL == dir || NULL == name || name_size <= 0) {
+    errno = EINVAL;
+  } else {
+    ObPlatformDirEntry entry;
+    const int read_ret = ob_readdir_entry_utf8(dir, entry);
+    if (read_ret <= 0) {
+      ret = read_ret;
+    } else if (::strlen(entry.name) + 1 > static_cast<size_t>(name_size)) {
+      errno = platform_io_internal::name_too_long_errno();
+    } else {
+      ::snprintf(name, name_size, "%s", entry.name);
+      ret = 1;
+    }
+  }
+  return ret;
+}
+
+int ob_get_executable_path_utf8(char *buffer, int64_t buffer_size)
+{
+  int ret = -1;
+  if (NULL == buffer || buffer_size <= 0) {
+    errno = EINVAL;
+#ifdef _WIN32
+  } else {
+    wchar_t wide_path[32768];
+    const DWORD len = ::GetModuleFileNameW(NULL, wide_path,
+                                           static_cast<DWORD>(sizeof(wide_path) / sizeof(wchar_t)));
+    if (0 == len) {
+      errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+    } else if (len >= sizeof(wide_path) / sizeof(wchar_t)) {
+      errno = platform_io_internal::name_too_long_errno();
+    } else if (0 == platform_io_internal::wide_to_utf8(wide_path, buffer, buffer_size)) {
+      ret = 0;
+    }
+  }
+#elif defined(__APPLE__)
+  } else {
+    char raw_path[PATH_MAX];
+    uint32_t raw_size = sizeof(raw_path);
+    char resolved_path[PATH_MAX];
+    if (0 != _NSGetExecutablePath(raw_path, &raw_size)) {
+      errno = EIO;
+    } else if (NULL == ::realpath(raw_path, resolved_path)) {
+      // realpath sets errno
+    } else if (::strlen(resolved_path) + 1 > static_cast<size_t>(buffer_size)) {
+      errno = platform_io_internal::name_too_long_errno();
+    } else {
+      ::snprintf(buffer, buffer_size, "%s", resolved_path);
+      ret = 0;
+    }
+  }
+#else
+  } else {
+    const ssize_t len = ::readlink("/proc/self/exe", buffer, buffer_size - 1);
+    if (len < 0) {
+      // readlink sets errno
+    } else if (len >= buffer_size - 1) {
+      errno = platform_io_internal::name_too_long_errno();
+    } else {
+      buffer[len] = '\0';
+      ret = 0;
+    }
+  }
+#endif
+  return ret;
+}
+
+int ob_create_executable_alias_utf8(const char *alias_path)
+{
+  int ret = 0;
+  if (NULL == alias_path || '\0' == alias_path[0]) {
+    errno = EINVAL;
+    ret = -1;
+#ifdef _WIN32
+  } else {
+    char exe_path[4096];
+    char link_path[4096];
+    wchar_t *wide_exe = NULL;
+    wchar_t *wide_link = NULL;
+    if (0 != ob_get_executable_path_utf8(exe_path, sizeof(exe_path))) {
+      ret = -1;
+    } else if (::snprintf(link_path, sizeof(link_path), "%s.exe", alias_path) <= 0) {
+      errno = platform_io_internal::name_too_long_errno();
+      ret = -1;
+    } else if (0 != platform_io_internal::utf8_to_wide(exe_path, wide_exe)) {
+      ret = -1;
+    } else if (0 != platform_io_internal::utf8_to_wide(link_path, wide_link)) {
+      ret = -1;
+    } else {
+      ::DeleteFileW(wide_link);
+      if (FALSE == ::CreateHardLinkW(wide_link, wide_exe, NULL)
+          && FALSE == ::CopyFileW(wide_exe, wide_link, FALSE)) {
+        errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+        ret = -1;
+      }
+    }
+    delete[] wide_exe;
+    delete[] wide_link;
+  }
+#else
+  } else {
+    char exe_path[4096];
+    if (0 != ob_get_executable_path_utf8(exe_path, sizeof(exe_path))) {
+      ret = -1;
+    } else {
+      // Drop the previous alias; a missing one is not an error.
+      if (0 != ::unlink(alias_path) && ENOENT != errno) {
+        ret = -1;
+      } else if (0 != ::symlink(exe_path, alias_path)) {
+        ret = -1;
+      }
     }
   }
 #endif

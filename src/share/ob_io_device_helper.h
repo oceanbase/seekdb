@@ -38,7 +38,7 @@ public:
   }
   virtual ~ObGetFileIdRangeFunctor() = default;
 
-  virtual int func(const dirent *entry) override;
+  virtual int func(const common::ObPlatformDirEntry &entry) override;
   uint32_t get_min_file_id() const { return min_file_id_; }
   uint32_t get_max_file_id() const { return max_file_id_; }
 private:
@@ -58,7 +58,7 @@ public:
   }
   virtual ~ObGetFileSizeFunctor() = default;
 
-  virtual int func(const dirent *entry) override;
+  virtual int func(const common::ObPlatformDirEntry &entry) override;
   int64_t get_total_size() const { return total_size_; }
 private:
   const char* dir_;
@@ -73,7 +73,7 @@ public:
   ObScanDirOp(const char *dir = nullptr)
    : dir_(dir) {}
   virtual ~ObScanDirOp() = default;
-  virtual int func(const dirent *entry) override;
+  virtual int func(const common::ObPlatformDirEntry &entry) override;
   int set_dir(const char *dir);
   const char *get_dir() const { return dir_; }
   TO_STRING_KV(K_(dir));
@@ -161,7 +161,8 @@ public:
   static int rmdir(const char *pathname);
   static int unlink(const char *pathname);
   static int rename(const char *oldpath, const char *newpath);
-  static int scan_dir(const char *dir_name, int (*func)(const dirent *entry));
+  static int scan_dir(const char *dir_name,
+                      int (*func)(const common::ObPlatformDirEntry &entry));
   static int scan_dir(const char *dir_name, common::ObBaseDirEntryOperator &op);
   static int scan_dir_rec(const char *dir_name, ObScanDirOp &reg_op, ObScanDirOp &dir_op);
   static int fsync(const common::ObIOFd &fd);
