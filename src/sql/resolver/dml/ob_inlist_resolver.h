@@ -99,6 +99,25 @@ public:
                                const bool is_root_condition,
                                const ParseNode *root_node,
                                const ParseNode *&ret_node);
+  // Build a duplicate-free copy of the right branch (T_EXPR_LIST) of an IN/NOT IN
+  // node if all its elements are literal constant nodes and some elements are
+  // syntactically equal. Duplicate members do not change the three-valued semantics
+  // of IN/NOT IN, but keeping them enlarges the expression tree and may wrongly
+  // trigger the values-table rewrite, which changes the physical plan and degrades
+  // vector index search latency. See https://github.com/oceanbase/seekdb/issues/1512.
+  // ret_node points to in_list_node itself when dedup is not applicable or not needed.
+  static int dedup_inlist_node(ObExprResolveContext &resolve_ctx,
+                               const ParseNode &in_list_node,
+                               const ParseNode *&ret_node);
+  // Count distinct parameter values of a question-mark inlist, early exiting once
+  // `distinct_limit` distinct values are found. Used to decide whether the
+  // values-table rewrite is still worthwhile for inlists with many duplicates.
+  static int count_inlist_distinct_elems(const ParseNode &in_list,
+                                         const int64_t row_cnt,
+                                         const int64_t distinct_limit,
+                                         const ParamStore *param_store,
+                                         int64_t &distinct_cnt,
+                                         bool &reach_limit);
   int resolve_inlist(ObInListInfo &inlist_infos);
 private:
   static int get_inlist_rewrite_info(const ParseNode &in_list,

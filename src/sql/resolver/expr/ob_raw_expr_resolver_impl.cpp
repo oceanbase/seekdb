@@ -3164,9 +3164,14 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
   int ret = OB_SUCCESS;
   bool is_enable_rewrite = false;
   bool is_question_mark = true;
+  const ParseNode *deduped_node = node;
   if (OB_ISNULL(node)|| OB_ISNULL(left_expr)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*node,
+  } else if (OB_FAIL(ObInListResolver::dedup_inlist_node(ctx_, *node, deduped_node))) {
+    LOG_WARN("failed to dedup inlist node", K(ret));
+  } else if (OB_ISNULL(deduped_node)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ObInListResolver::check_inlist_rewrite_enable(*deduped_node,
             op_type,
             *left_expr,
             ctx_.current_scope_,
@@ -3187,9 +3192,9 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
     } else {
       ObInListInfo inlist_info;
       inlist_info.in_list_expr_ = sub_query_expr;
-      inlist_info.in_list_ = node;
+      inlist_info.in_list_ = deduped_node;
       inlist_info.column_cnt_ = left_expr->get_expr_type() == T_OP_ROW ? left_expr->get_param_count() : 1;
-      inlist_info.row_cnt_ = node->num_child_;
+      inlist_info.row_cnt_ = deduped_node->num_child_;
       inlist_info.is_question_mark_ = is_question_mark;
       if (OB_FAIL(ctx_.inlist_infos_->push_back(inlist_info))) {
       } else {
@@ -3197,7 +3202,7 @@ int ObRawExprResolverImpl::resolve_right_branch_of_in_op(const ParseNode *node,
       }
     }
   /* do as normal process */
-  } else if (OB_FAIL(SMART_CALL(recursive_resolve(node, right_expr)))) {
+  } else if (OB_FAIL(SMART_CALL(recursive_resolve(deduped_node, right_expr)))) {
   } else {/* do nothing */}
   return ret;
 }
