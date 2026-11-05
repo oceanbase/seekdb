@@ -36,7 +36,7 @@ inline int ob_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
   for (const char *src = fmt; nullptr != src && '\0' != *src; ++src) {
     if (!conversion) {
       conversion = '%' == *src;
-    } else if ('l' == *src && 'l' != src[-1] && '\0' != src[1]
+    } else if ('l' == *src && 'l' != src[-1] && 'l' != src[1] && '\0' != src[1]
         && nullptr != strchr("diouxX", src[1])) {
       ++extra;
     } else if (nullptr != strchr("diouxXfFeEgGaAcCsSpnm%", *src)) {
@@ -64,7 +64,7 @@ inline int ob_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
   for (const char *src = fmt; '\0' != *src; ++src) {
     if (!conversion) {
       conversion = '%' == *src;
-    } else if ('l' == *src && 'l' != src[-1] && '\0' != src[1]
+    } else if ('l' == *src && 'l' != src[-1] && 'l' != src[1] && '\0' != src[1]
         && nullptr != strchr("diouxX", src[1])) {
       *dst++ = 'l';
     } else if (nullptr != strchr("diouxXfFeEgGaAcCsSpnm%", *src)) {
