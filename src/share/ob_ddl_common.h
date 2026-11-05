@@ -625,6 +625,12 @@ public:
       const bool with_alias_name,
       const bool with_comma,
       ObSqlString &sql_string);
+  // Append src to dst with every escape character duplicated, so that dst can be used
+  // as the body of a backtick quoted identifier.
+  // NOTE: this helper is implemented inside the share module on purpose. Identifier
+  // escaping is needed by shared DDL code, and share must stay independent of the
+  // upper sql module, so it must not be borrowed from sql::ObSQLUtils.
+  static int escape_identifier(const ObString &src, ObSqlString &dst);
   static int reshape_ddl_column_obj(
       common::ObDatum &datum,
       const ObObjMeta &obj_meta);
