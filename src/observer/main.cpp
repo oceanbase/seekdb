@@ -38,7 +38,7 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
     snprintf(abs_base, sizeof(abs_base), "%s", base);
   } else {
     char cwd[1024] = {0};
-    (void)getcwd(cwd, sizeof(cwd));
+    (void)ob_getcwd_utf8(cwd, sizeof(cwd));
     snprintf(abs_base, sizeof(abs_base), "%s/%s", cwd, base);
   }
   char val[1100];

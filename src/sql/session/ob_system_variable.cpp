@@ -27,6 +27,7 @@
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "lib/locale/ob_locale_type.h"
+#include "lib/utility/ob_platform_io.h"
 #include <inttypes.h>
 
 #include <string>
@@ -2499,7 +2500,7 @@ int ObPreProcessSysVars::init_config_sys_vars()
   if (OB_SUCC(ret)) {
     pos = 0;
     char cur_work_path[MAX_PATH_SIZE];
-    if (OB_ISNULL(getcwd(cur_work_path, MAX_PATH_SIZE))) {
+    if (0 != ob_getcwd_utf8(cur_work_path, MAX_PATH_SIZE)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_pid_file_str_,
                                 MAX_PATH_SIZE,
@@ -2526,7 +2527,7 @@ int ObPreProcessSysVars::init_config_sys_vars()
   if (OB_SUCC(ret)) {
     pos = 0;
     char cur_work_path[MAX_PATH_SIZE];
-    if (OB_ISNULL(getcwd(cur_work_path, MAX_PATH_SIZE))) {
+    if (0 != ob_getcwd_utf8(cur_work_path, MAX_PATH_SIZE)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_socket_file_str_,
                                 MAX_PATH_SIZE,
