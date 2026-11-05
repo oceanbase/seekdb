@@ -467,18 +467,27 @@ struct ObVecIndexExecCtx {
       pre_filter_chosen_times_(0),
       iter_filter_chosen_times_(0),
       in_filter_chosen_times_(0),
-      record_count_(0)
+      record_count_(0),
+      search_cnt_(0),
+      pre_filter_candidate_cnt_(0),
+      iter_filter_scanned_cnt_(0)
   {}
   TO_STRING_KV(K_(cur_path),
                K_(pre_filter_chosen_times),
                K_(iter_filter_chosen_times),
                K_(in_filter_chosen_times),
-               K_(record_count));
+               K_(record_count),
+               K_(search_cnt),
+               K_(pre_filter_candidate_cnt),
+               K_(iter_filter_scanned_cnt));
   uint8_t cur_path_;               // cur path
   int64_t pre_filter_chosen_times_; // times of changing to pre-filter
   int64_t iter_filter_chosen_times_;// times of changing to iter-filter
   int64_t in_filter_chosen_times_;  // times of changing toin-filter
   int32_t record_count_;            // window size
+  int64_t search_cnt_;              // number of ANN searches executed by the vector index scan
+  int64_t pre_filter_candidate_cnt_; // candidate vectors evaluated by the pre-filter path
+  int64_t iter_filter_scanned_cnt_; // vectors scanned by the iterative-filter path
 };
 
 enum ObPlanExpiredStat  {
