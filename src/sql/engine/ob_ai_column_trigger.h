@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_SQL_ENGINE_OB_AI_COLUMN_TRIGGER_H_
 #define OCEANBASE_SQL_ENGINE_OB_AI_COLUMN_TRIGGER_H_
 
-#include "sql/engine/dml/ob_dml_base_op.h"
 #include "sql/engine/ob_ai_column_scheduler.h"
+#include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
 {
