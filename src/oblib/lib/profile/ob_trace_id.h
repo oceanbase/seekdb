@@ -26,7 +26,7 @@ namespace oceanbase
 {
 namespace common
 {
-// Use %llX (%llX on Linux = 64-bit, but %llX on Windows = 32-bit which truncates
+// Use %llX (%lX on Linux = 64-bit, but %lX on Windows = 32-bit which truncates
 // the port field stored in the upper 32 bits of uval_[0]).  %llX is always
 // 64-bit on both platforms.
 #define TRACE_ID_FORMAT_V4 "Y%llX-%016llX-%llx-%llx"
