@@ -436,8 +436,8 @@ static int create_redo_path(const char *redo_dir, bool &created_leaf)
   } else {
     // A trailing separator must not cause the parent creation to create the
     // leaf first and lose its provenance. Normalize before splitting the path.
-    char absolute_dir[PATH_MAX] = {0};
-    if (NULL == _fullpath(absolute_dir, redo_dir, sizeof(absolute_dir))) {
+    char absolute_dir[4096] = {0};
+    if (0 != ob_absolute_path_utf8(redo_dir, absolute_dir, sizeof(absolute_dir))) {
       return OB_IO_ERROR;
     }
     size_t length = strlen(absolute_dir);
@@ -1880,11 +1880,11 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
   rust::String configured_redo_dir = config::redo_dir();
 
   // remove current_directory prefix of data_dir and redo_dir if exists
-  char current_dir[PATH_MAX] = {0};
+  char current_dir[4096] = {0};
   if (nullptr == getcwd(current_dir, sizeof(current_dir))) {
     LOG_ERROR("failed to get current directory", K(ret), KCSTRING(strerror(errno)));
   } else if (current_dir[strlen(current_dir) - 1] == '/') {
-  } else if (strlen(current_dir) + 2 >= PATH_MAX) {
+  } else if (strlen(current_dir) + 2 >= sizeof(current_dir)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_ERROR("current directory is too long", K(ret), KCSTRING(current_dir));
   } else {

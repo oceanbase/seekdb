@@ -21,6 +21,10 @@
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
 #include "lib/utility/ob_platform_io.h"
 
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 // LOAD DATA SERVER_DISK wildcard expansion. The repository does not depend on
 // the platform glob(3) so that both the path encoding and the wildcard
 // semantics are identical on Linux, macOS and Windows: '*' matches any run of
@@ -79,10 +83,12 @@ int append_glob_path(glob_t *result, size_t &capacity, const char *path)
     }
   }
   if (0 == ret) {
-    char *copy = ::strdup(path);
+    const size_t path_len = ::strlen(path);
+    char *copy = static_cast<char *>(::malloc(path_len + 1));
     if (NULL == copy) {
       ret = -1;
     } else {
+      ::memcpy(copy, path, path_len + 1);
       result->gl_pathv[result->gl_pathc++] = copy;
     }
   }
@@ -719,9 +725,9 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
       if (ObLoadFileLocation::SERVER_DISK == load_args.load_file_storage_) {
         load_args.file_name_ = file_name;
         char *full_path_buf = nullptr;
-        char *actual_path = nullptr;
+        const int64_t full_path_size = 4096;
         ObArray<ObString> match_array;
-        if (OB_ISNULL(full_path_buf = static_cast<char *>(allocator_->alloc(MAX_PATH_SIZE)))) {
+        if (OB_ISNULL(full_path_buf = static_cast<char *>(allocator_->alloc(full_path_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else if (exist_wildcard(file_name)) {
           sub_file_name = file_name.trim_space_only();
@@ -769,14 +775,11 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
             for (int32_t i = 0; OB_SUCC(ret) && i < match_array.size(); i++) {
               //security check for mysql mode
               ObString secure_file_priv;
-#ifdef _WIN32
-              if (OB_ISNULL(actual_path = _fullpath(full_path_buf, match_array[i].ptr(), PATH_MAX))) {
-#else
-              if (OB_ISNULL(actual_path = realpath(match_array[i].ptr(), full_path_buf))) {
-#endif
+              if (0 != ob_absolute_path_utf8(match_array[i].ptr(), full_path_buf,
+                                             full_path_size)) {
                 ret = OB_FILE_NOT_EXIST;
               } else if (OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
-              } else if (!session_info_->is_inner() && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
+              } else if (!session_info_->is_inner() && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, full_path_buf))) {
               } else if (OB_FAIL(load_args.file_iter_.add_files(&match_array[i]))) {
               }
             }

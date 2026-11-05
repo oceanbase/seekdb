@@ -265,7 +265,7 @@ TEST_F(TestPlatformIo, DirectoryMetadataRoundTrip)
 
   ObPlatformFileStat dir_stat;
   ASSERT_EQ(0, ob_stat_utf8(dir.c_str(), dir_stat)) << "stat dir failed errno=" << errno;
-  EXPECT_TRUE(S_ISDIR(dir_stat.mode));
+  EXPECT_TRUE(ob_stat_is_dir(dir_stat.mode));
 
   const std::string file = dir + "/plain.bin";
   const int fd = ob_open_utf8(file.c_str(), O_CREAT | O_TRUNC | O_RDWR, 0644);

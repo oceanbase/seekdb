@@ -84,7 +84,7 @@ int FileDirectoryUtils::is_directory(const char *directory_path, bool &result)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(directory_path), K(ret));
   } else {
-    result = (0 == ob_stat_utf8(directory_path, file_info) && S_ISDIR(file_info.mode));
+    result = (0 == ob_stat_utf8(directory_path, file_info) && ob_stat_is_dir(file_info.mode));
   }
 
   return ret;
@@ -98,7 +98,7 @@ int FileDirectoryUtils::is_link(const char *link_path, bool &result)
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(link_path), K(ret));
   }  else {
     ObPlatformFileStat file_info;
-    result = (0 == ob_stat_utf8(link_path, file_info, false) && S_ISLNK(file_info.mode));
+    result = (0 == ob_stat_utf8(link_path, file_info, false) && ob_stat_is_link(file_info.mode));
   }
   return ret;
 }
@@ -140,7 +140,7 @@ int FileDirectoryUtils::create_full_path(const char *fullpath)
   } else {
     ret = ob_stat_utf8(fullpath, file_info);
     if (0 == ret) {
-      if (!S_ISDIR(file_info.mode)) {
+      if (!ob_stat_is_dir(file_info.mode)) {
         ret = OB_ENTRY_EXIST;
         LIB_LOG(WARN, "file is exists but not a directory.", KCSTRING(fullpath), K(ret));
       } else {
@@ -207,7 +207,7 @@ int FileDirectoryUtils::delete_file(const char *filename)
     if (0 != ret) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is not exists.", KCSTRING(filename), K(ret));
-    } else if (S_ISDIR(file_info.mode)) {
+    } else if (ob_stat_is_dir(file_info.mode)) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is directory, use delete_directory.",
               KCSTRING(filename), K(ret));
@@ -253,7 +253,7 @@ int FileDirectoryUtils::get_file_size(const char *filename, int64_t &size)
     if (0 != ret) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is not exists.", KCSTRING(filename), K(ret));
-    } else if (S_ISDIR(file_info.mode)) {
+    } else if (ob_stat_is_dir(file_info.mode)) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is not a file.", KCSTRING(filename), K(ret));
     } else {
@@ -535,7 +535,7 @@ int FileDirectoryUtils::to_absolute_path(ObSqlString &dir)
 {
   int ret = OB_SUCCESS;
   if (!dir.empty() && dir.ptr()[0] != '\0' && !ob_is_absolute_path_utf8(dir.ptr())) {
-    char real_path[PATH_MAX] = {0};
+    char real_path[4096] = {0};
     if (0 != ob_absolute_path_utf8(dir.ptr(), real_path, sizeof(real_path))) {
       LIB_LOG(WARN, "Failed to get absolute path", K(dir), K(errno), KCSTRING(strerror(errno)));
       ret = OB_ERR_UNEXPECTED;

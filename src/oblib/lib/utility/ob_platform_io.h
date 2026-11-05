@@ -66,6 +66,12 @@ struct ObPlatformFileStat
 // lstat(2) when false. Returns 0 or -1 with errno set.
 int ob_stat_utf8(const char *path, ObPlatformFileStat &stat, bool follow_link = true);
 
+// Predicates for ObPlatformFileStat::mode. They spell out the POSIX S_IS*
+// macros so call sites do not depend on platform stat headers.
+bool ob_stat_is_file(uint32_t mode);
+bool ob_stat_is_dir(uint32_t mode);
+bool ob_stat_is_link(uint32_t mode);
+
 enum class ObPathPermission
 {
   EXISTS = 0,
@@ -97,8 +103,8 @@ int ob_fsync_dir_utf8(const char *path);
 // "C:\", "C:/", "\\server" or "//server" on Windows).
 bool ob_is_absolute_path_utf8(const char *path);
 
-// Writes the absolute UTF-8 form of `path` into `buffer`. The buffer must be
-// PATH_MAX bytes for POSIX realpath(3); returns 0 or -1 with errno set.
+// Writes the absolute UTF-8 form of `path` into `buffer`; returns 0 or -1 with
+// errno set (ENAMETOOLONG when the resolved name does not fit).
 int ob_absolute_path_utf8(const char *path, char *buffer, int64_t buffer_size);
 
 // An open directory stream. The implementation is platform specific and opaque.

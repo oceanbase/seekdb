@@ -565,6 +565,33 @@ int ob_stat_utf8(const char *path, ObPlatformFileStat &stat, bool follow_link)
   return ret;
 }
 
+bool ob_stat_is_file(uint32_t mode)
+{
+#ifdef _WIN32
+  return (mode & _S_IFMT) == _S_IFREG;
+#else
+  return S_ISREG(static_cast<mode_t>(mode));
+#endif
+}
+
+bool ob_stat_is_dir(uint32_t mode)
+{
+#ifdef _WIN32
+  return (mode & _S_IFMT) == _S_IFDIR;
+#else
+  return S_ISDIR(static_cast<mode_t>(mode));
+#endif
+}
+
+bool ob_stat_is_link(uint32_t mode)
+{
+#ifdef _WIN32
+  return (mode & _S_IFMT) == S_IFLNK;
+#else
+  return S_ISLNK(static_cast<mode_t>(mode));
+#endif
+}
+
 int ob_access_utf8(const char *path, ObPathPermission permission)
 {
 #ifdef _WIN32
@@ -868,11 +895,23 @@ int ob_absolute_path_utf8(const char *path, char *buffer, int64_t buffer_size)
     delete[] wide_path;
   }
 #else
-  if (NULL == path || NULL == buffer || buffer_size < PATH_MAX) {
+  if (NULL == path || NULL == buffer || buffer_size <= 0) {
     errno = EINVAL;
     ret = -1;
-  } else if (NULL == ::realpath(path, buffer)) {
-    ret = -1;
+  } else {
+    char *resolved = ::realpath(path, NULL);
+    if (NULL == resolved) {
+      ret = -1;
+    } else {
+      const size_t resolved_size = ::strlen(resolved) + 1;
+      if (resolved_size > static_cast<size_t>(buffer_size)) {
+        errno = platform_io_internal::name_too_long_errno();
+        ret = -1;
+      } else {
+        ::memcpy(buffer, resolved, resolved_size);
+      }
+      ::free(resolved);
+    }
   }
 #endif
   return ret;
