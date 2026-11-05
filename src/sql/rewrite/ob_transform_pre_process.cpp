@@ -32,6 +32,121 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+namespace
+{
+struct AnnIntegerRange
+{
+  ObRawExpr *column_ = nullptr;
+  ObRawExpr *value_expr_ = nullptr;
+  int64_t value_ = 0;
+  int64_t condition_idx_ = 0;
+  bool upper_ = false;
+  bool strict_ = false;
+};
+
+// Restrict implication to direct signed-integer comparisons. In particular,
+// do not fold casts, strings, unsigned values, NULLs or calculable expressions.
+int extract_ann_integer_range(ObRawExpr *expr, ObTransformerCtx *ctx,
+                              AnnIntegerRange &range, bool &valid)
+{
+  int ret = OB_SUCCESS;
+  valid = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (expr->get_param_count() == 2
+             && (T_OP_LT == expr->get_expr_type() || T_OP_LE == expr->get_expr_type()
+                 || T_OP_GT == expr->get_expr_type() || T_OP_GE == expr->get_expr_type())) {
+    ObRawExpr *column = expr->get_param_expr(0);
+    ObRawExpr *value_expr = expr->get_param_expr(1);
+    if (OB_ISNULL(column) || OB_ISNULL(value_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (column->is_column_ref_expr()
+               && ob_is_int_tc(column->get_result_type().get_type())
+               && value_expr->is_const_raw_expr()
+               && value_expr->is_static_const_expr()
+               && ob_is_int_tc(value_expr->get_result_type().get_type())) {
+      ObObj value;
+      bool calculated = false;
+      bool has_warning = false;
+      if (OB_FAIL(ObTransformUtils::calc_const_expr_result(value_expr, ctx, value,
+                                                          calculated, &has_warning))) {
+      } else if (calculated && !has_warning && ob_is_int_tc(value.get_type())) {
+        range.column_ = column;
+        range.value_expr_ = value_expr;
+        range.value_ = value.get_int();
+        range.upper_ = T_OP_LT == expr->get_expr_type() || T_OP_LE == expr->get_expr_type();
+        range.strict_ = T_OP_LT == expr->get_expr_type() || T_OP_GT == expr->get_expr_type();
+        valid = true;
+      }
+    }
+  }
+  return ret;
+}
+}
+
+int ObTransformPreProcess::simplify_ann_integer_ranges(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  bool enabled = false;
+  ObSqlCtx *sql_ctx = nullptr;
+  if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())
+      || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)
+      || OB_ISNULL(ctx_->exec_ctx_)
+      || OB_ISNULL(sql_ctx = ctx_->exec_ctx_->get_sql_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!stmt->has_vec_approx() || stmt->get_condition_exprs().count() < 2
+             || sql_ctx->is_batch_params_execute()
+             || stmt->get_query_ctx()->get_global_hint().disable_query_transform()
+             || stmt->get_query_ctx()->get_query_hint().has_outline_data()) {
+    // Keep statement shape and explicit rewrite controls unchanged.
+  } else if (OB_FAIL(ctx_->session_info_->is_transformation_enabled(enabled))) {
+  } else if (enabled) {
+    ObSEArray<ObRawExpr *, 8> conditions;
+    ObSEArray<AnnIntegerRange, 8> ranges;
+    const ObIArray<ObRawExpr *> &original = stmt->get_condition_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && i < original.count(); ++i) {
+      AnnIntegerRange candidate;
+      bool valid = false;
+      bool matched = false;
+      if (OB_FAIL(extract_ann_integer_range(original.at(i), ctx_, candidate, valid))) {
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && valid && !matched && j < ranges.count(); ++j) {
+        AnnIntegerRange &kept = ranges.at(j);
+        if (candidate.upper_ == kept.upper_ && candidate.column_ == kept.column_) {
+          const bool tighter = candidate.upper_ ? candidate.value_ < kept.value_
+                                                : candidate.value_ > kept.value_;
+          const bool replace = tighter || (candidate.value_ == kept.value_
+                                           && candidate.strict_ && !kept.strict_);
+          // SQL literals are normally parameterized. Guard BOTH values before
+          // discarding either bound so cached/PS plans cannot reuse this decision
+          // when a formerly weaker parameter becomes the tighter (or NULL) one.
+          if (OB_FAIL(ObTransformUtils::add_const_param_constraints(candidate.value_expr_, ctx_))) {
+          } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(kept.value_expr_, ctx_))) {
+          } else {
+            if (replace) {
+              candidate.condition_idx_ = kept.condition_idx_;
+              conditions.at(kept.condition_idx_) = original.at(i);
+              kept = candidate;
+            }
+            matched = true;
+            trans_happened = true;
+          }
+        }
+      }
+      if (OB_SUCC(ret) && !matched) {
+        candidate.condition_idx_ = conditions.count();
+        if (OB_FAIL(conditions.push_back(original.at(i)))) {
+        } else if (valid && OB_FAIL(ranges.push_back(candidate))) {
+        }
+      }
+    }
+    if (OB_SUCC(ret) && trans_happened && OB_FAIL(stmt->get_condition_exprs().assign(conditions))) {
+    }
+  }
+  return ret;
+}
+
 int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                               ObDMLStmt *&stmt,
                                               bool &trans_happened)
@@ -56,6 +171,13 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         OPT_TRACE("flatten condition:", is_happened);
       }
     }  
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(simplify_ann_integer_ranges(stmt, is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+        OPT_TRACE("simplify ANN integer ranges:", is_happened);
+      }
+    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
       } else {

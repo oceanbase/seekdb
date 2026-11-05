@@ -1,0 +1,201 @@
+# Exact eligible IDs: original
+id
+1
+2
+3
+4
+12
+# Exact eligible IDs: balanced 129-term conjunction
+id
+1
+2
+3
+4
+12
+# ANN: original
+id
+1
+2
+3
+4
+12
+# ANN: balanced 129-term conjunction
+id
+1
+2
+3
+4
+12
+# Original filter plan
+  0 - output([t.id]), filter([t.age < 10]), rowset=N
+# Expanded filter plan
+  0 - output([t.id]), filter([t.age < 10]), rowset=N
+# Strict bound replaces inclusive bound
+  0 - output([t.id]), filter([t.age < 10]), rowset=N
+# Later tighter bound replaces earlier bound
+  0 - output([t.id]), filter([t.age < 10]), rowset=N
+# Inclusive upper bound
+id
+1
+2
+3
+4
+5
+12
+# Strict lower bound
+id
+6
+7
+8
+9
+10
+11
+# Inclusive lower bound
+id
+5
+6
+7
+8
+9
+10
+11
+# Keep both range directions
+id
+5
+6
+7
+# Contradictory bounds
+id
+# NULL comparison remains UNKNOWN
+id
+# NULL column remains excluded
+id
+# Other column is not subsumed
+id
+1
+4
+12
+# OR boundary is preserved
+id
+1
+2
+3
+4
+5
+12
+# Unsigned column is preserved
+id
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+# String comparison is preserved
+id
+1
+2
+12
+# Lexical and numeric bound ordering differ
+id
+1
+2
+5
+6
+7
+12
+# Implicit string conversion is preserved
+id
+1
+2
+3
+4
+12
+# Decimal bound is preserved
+id
+1
+2
+3
+4
+12
+# Explicit cast is preserved
+id
+1
+2
+3
+4
+12
+# Reversed comparison is preserved
+id
+1
+2
+3
+4
+12
+# Signed maximum has no overflow
+id
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+12
+# Signed minimum has no overflow
+id
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+# NO_REWRITE keeps results
+id
+1
+2
+3
+4
+12
+# Literal plan cache: original order
+id
+1
+2
+3
+4
+12
+# Literal plan cache: second bound becomes tighter
+id
+1
+2
+12
+# Prepared statement: changed values, NULL, then changed type
+id
+1
+2
+3
+4
+12
+id
+1
+2
+12
+id
+id
+1
+2
+3
+4
+12
