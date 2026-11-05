@@ -374,7 +374,7 @@ docker run -d \
   --name seekdb \
   -p 2881:2881 \
   -p 2886:2886 \
-  -v ./data:/var/lib/oceanbase \
+  -v ./data:/var/lib/seekdb \
   oceanbase/seekdb:latest
 ```
 Please refer to the [document](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) of this docker image for details.
@@ -593,3 +593,4 @@ If seekdb is useful to you, **a star helps others find it.** ⭐
 ## 📄 License
 
 seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same database engine running in production at Alipay, Taobao, DiDi, Xiaomi, and more. Fully open-source under the [Apache License, Version 2.0](LICENSE).
+OB-P:RVyrovJ5ThhGUmHRnn6jwA
