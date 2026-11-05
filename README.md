@@ -570,6 +570,35 @@ cd ~/seekdb
 
 In this example, the working directory is $HOME/seekdb, please use a fresh directory for testing. Please see the [Developer Guide](docs/developer-guide/en/README.md) for detailed instructions.
 
+### DDL identifier escaping (issue #1469)
+
+This branch is based on PR #1442 (`342c01b2`) because its unmerged DDL
+identifier fix introduces the dependency reported in #1469. It is not a
+standalone change against the competition branch.
+
+The shared DDL formatter doubles embedded backticks using the lower-level
+`ObSqlString` buffer, without including `sql/ob_sql_utils.h`. Original column
+names, aliases, shadow-column prefixes and enum/set casts retain their quoting.
+
+Validate the module boundary from the repository root:
+
+```bash
+python3 tools/module_check/share_terminal_check.py .
+```
+
+The PR base also reports an unrelated `GCTX` use in `src/share/ob_telemetry.cpp`;
+that existing violation is outside this fix. The DDL upper-module violation
+must disappear. After building seekdb, run the existing mysqltest case
+`vector_index.vector_index_rebuild_identifier_quoting` using the workflow in
+[Running mysqltest](docs/developer-guide/en/mysqltest.md).
+
+Validated on Ubuntu 24.04 x86_64 with the pinned toolchain: the full Release
+(`RelWithDebInfo`) seekdb build passed, and the existing regression above passed
+through the [CI mysqltest runner](.github/script/seekdb/mysqltest_for_seekdb.py)
+with one case and zero failures. The test instance used `TELEMETRY_ENABLED=false`.
+This validates the selected regression, not the full mysqltest suite; the
+unrelated module-check violation described above remains.
+
 ### Contributing
 
 We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) to get started.
