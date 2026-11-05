@@ -25,7 +25,9 @@ def patch_lexer(source, kind):
 
 
 def type_names(source):
-    names = re.findall(r"^\s*(T_[A-Z0-9_]+)[ =0-9]*,", source, flags=re.MULTILINE)
+    names = re.findall(
+        r"^\s*(T_[A-Z0-9_]+)(?:\s*=\s*-?[0-9]+)?\s*,", source, flags=re.MULTILINE
+    )
     cases = "".join(f'\tcase {name} : return "{name}";\n' for name in names)
     return (
         '#include "query/parser/ob_item_type.h"\n'
