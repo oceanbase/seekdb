@@ -87,6 +87,16 @@ class ObMemtableCtx;
 
 namespace transaction
 {
+
+enum class MinStartScnStatus
+{
+  UNKOWN = 0, // collection failed
+  NO_CTX,
+  HAS_CTX,
+
+  MAX
+};
+
 class ObLSTxCtxMgr;
 class ObTransCtx;
 class ObTxCtx;

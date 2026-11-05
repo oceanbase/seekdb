@@ -45,7 +45,7 @@ public:
     provider_.store(provider, std::memory_order_release);
   }
   int get_number(int64_t &gts);
-  void get_virtual_info(int64_t &ts_value);
+  int get_virtual_info(int64_t &ts_value);
 
 private:
   std::atomic<ObTimestampProvider> provider_;

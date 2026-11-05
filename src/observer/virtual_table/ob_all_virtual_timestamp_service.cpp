@@ -43,7 +43,10 @@ int ObAllVirtualTimestampService::inner_get_next_row(ObNewRow *&row)
   } else {
     start_to_read_ = true;
     SERVER_MODULE_SCOPE {
-      ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampAccess>()->get_virtual_info(ts_value_);
+      if (OB_FAIL(::oceanbase::share::server_service<
+          ::oceanbase::transaction::ObTimestampAccess>()->get_virtual_info(ts_value_))) {
+        SERVER_LOG(WARN, "failed to persist timestamp for virtual table", KR(ret));
+      }
     }
   }
   if (OB_SUCC(ret)) {
