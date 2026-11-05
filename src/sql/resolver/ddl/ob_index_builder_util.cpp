@@ -774,7 +774,7 @@ int ObIndexBuilderUtil::generate_ordinary_generated_column(
         if (OB_FAIL(ret)) {
           //do nothing
         } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH, pos,
-                                           "SYS_NC%ld$", /*internal generated column name*/
+                                           "SYS_NC%" PRId64 "$", /*internal generated column name*/
                                            tmp_gen_col.get_column_id()))) {
         } else if (OB_FAIL(tmp_gen_col.set_column_name(col_name_buf))) {
         } else if (OB_FAIL(tmp_gen_col.set_orig_default_value(default_value))) {
@@ -814,7 +814,7 @@ int ObIndexBuilderUtil::generate_prefix_column(
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "prefix index on generated column");
     } else if (OB_FAIL(sql::ObDDLResolver::check_prefix_key(sort_item.prefix_len_, *old_column))) {
-    } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH, name_pos, "__substr%d_%ld",
+    } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH, name_pos, "__substr%d_%" PRId64 "",
                                        sort_item.prefix_len_, old_column->get_column_id()))) {
     } else if ((prefix_col = data_schema.get_column_schema(ObString(name_pos, col_name_buf))) != NULL) {
       //The generated column that the index depends on already exists, so we will reference that generated column and not recreate it.
@@ -961,7 +961,7 @@ int ObIndexBuilderUtil::generate_spatial_cellid_column(
     if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
         name_pos, "__cellid"))) {
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
-        name_pos, "_%ld", geo_col_id))) {
+        name_pos, "_%" PRId64 "", geo_col_id))) {
     } else if (OB_FAIL(databuff_printf(cellid_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
         def_pos, "SPATIAL_CELLID(`%s`)", col_schema.get_column_name()))) {
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {
@@ -1015,7 +1015,7 @@ int ObIndexBuilderUtil::generate_spatial_mbr_column(
     if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
         name_pos, "__mbr"))) {
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
-        name_pos, "_%ld", geo_col_id))) {
+        name_pos, "_%" PRId64 "", geo_col_id))) {
     } else if (OB_FAIL(databuff_printf(mbr_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
         def_pos, "SPATIAL_MBR(`%s`)", col_schema.get_column_name()))) {
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {

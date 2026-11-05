@@ -15,6 +15,7 @@
  */
 
 #include "ob_replay_status.h"
+#include <inttypes.h>
 #include "logservice/ob_log_service.h"
 #include "share/ob_structured_event_logger.h"
 
@@ -1313,13 +1314,13 @@ int ObReplayStatus::diagnose(ReplayDiagnoseInfo &diagnose_info)
     ret = OB_SUCCESS;
     if (OB_FAIL(diagnose_info.diagnose_str_.append_fmt("is_enabled:%s; "
                                                        "ret:%d; "
-                                                       "min_unreplayed_lsn:%ld; "
-                                                       "min_unreplayed_scn:%lu; "
-                                                       "replay_hint:%ld; "
+                                                       "min_unreplayed_lsn:%" PRId64 "; "
+                                                       "min_unreplayed_scn:%" PRIu64 "; "
+                                                       "replay_hint:%" PRId64 "; "
                                                        "log_type:%s; "
-                                                       "replay_cost:%ld; "
-                                                       "retry_cost:%ld; "
-                                                       "first_handle_time:%ld;" ,
+                                                       "replay_cost:%" PRId64 "; "
+                                                       "retry_cost:%" PRId64 "; "
+                                                       "first_handle_time:%" PRId64 ";" ,
                                                        is_enabled_? "true" : "false",
                                                        replay_ret, min_unreplayed_lsn.val_,
                                                        min_unreplayed_scn.get_val_for_inner_table_field(), replay_hint,

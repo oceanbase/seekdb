@@ -405,7 +405,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
       ObString err_msg, err_msg_c, sqlstate, sqlstate_c;
       ObSqlString query_virtual;
       if (OB_FAIL(query_virtual.assign_fmt(
-        "select message, ori_code, sql_state from %s.%s limit %ld, 1", 
+        "select message, ori_code, sql_state from %s.%s limit %" PRId64 ", 1", 
         OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME, restored_arg - 1))) {
       } else {
         SMART_VAR(ObISQLClient::ReadResult, res) {
@@ -498,10 +498,10 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
         }
         if (OB_FAIL(ret)) {
         } else if (val == "NUMBER") {
-          if (OB_FAIL(set_sql.assign_fmt("set %s%s=%ld;", "@", var.ptr(), number))) {
+          if (OB_FAIL(set_sql.assign_fmt("set %s%s=%" PRId64 ";", "@", var.ptr(), number))) {
           }
         } else if (val == "ROW_COUNT") {
-          if (OB_FAIL(set_sql.assign_fmt("set %s%s=%ld;", "@", var.ptr(), old_affected_rows))) {
+          if (OB_FAIL(set_sql.assign_fmt("set %s%s=%" PRId64 ";", "@", var.ptr(), old_affected_rows))) {
           }
         }
         if (OB_SUCC(ret)) {

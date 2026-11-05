@@ -356,7 +356,7 @@ private: // helpers
       ++pages_;
     } else {
       _OB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED,
-                  "cannot allocate memory.sz=%ld, pages_=%ld,total_=%ld",
+                  "cannot allocate memory.sz=%" PRId64 ", pages_=%" PRId64 ",total_=%" PRId64 "",
                   sz, pages_, total_);
     }
 
@@ -381,7 +381,7 @@ private: // helpers
         page = alloc_new_page(sz);
         if (NULL == page) {
           _OB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED,
-                      "extend_page sz =%ld cannot alloc new page", sz);
+                      "extend_page sz =%" PRId64 " cannot alloc new page", sz);
         } else {
           insert_tail(page);
         }
@@ -493,7 +493,7 @@ public: // API
         pages_(0), used_(0), total_(0), page_allocator_(alloc), tc_(nullptr)
   {
     if (page_size < (int64_t)sizeof(Page)) {
-      _OB_LOG_RET(ERROR, OB_ERROR, "invalid page size(page_size=%ld, page=%ld)", page_size,
+      _OB_LOG_RET(ERROR, OB_ERROR, "invalid page size(page_size=%" PRId64 ", page=%" PRId64 ")", page_size,
               (int64_t)sizeof(Page));
     }
   }
@@ -506,7 +506,7 @@ public: // API
   {
     int ret = OB_SUCCESS;
     if (page_size < (int64_t)sizeof(Page)) {
-      _OB_LOG(ERROR, "invalid page size(page_size=%ld, page=%ld)", page_size,
+      _OB_LOG(ERROR, "invalid page size(page_size=%" PRId64 ", page=%" PRId64 ")", page_size,
               (int64_t)sizeof(Page));
     } else {
       page_size_ = page_size;
@@ -955,7 +955,7 @@ public: // API
     int64_t count = 0;
     while (NULL != page) {
       abort_unless(page->check_magic_code());
-      _OB_LOG(INFO, "DUMP PAGEARENA page[%ld]:rawsize[%ld],used[%ld],remain[%ld]",
+      _OB_LOG(INFO, "DUMP PAGEARENA page[%" PRId64 "]:rawsize[%" PRId64 "],used[%" PRId64 "],remain[%" PRId64 "]",
                 count++, page->raw_size(), page->used(), page->remain());
       page = page->next_page_;
     }

@@ -157,7 +157,7 @@ int file_expand_by_fallocate(const int fd, const int64_t file_size)
   } else if (0 != (st.st_size & ObLogConstants::LOG_FILE_ALIGN_MASK)
              || 0 != (file_size & ObLogConstants::LOG_FILE_ALIGN_MASK)) {
     ret = OB_LOG_NOT_ALIGN;
-    _SHARE_LOG(ERROR, "file_size[%ld] or file_size[%ld] not align by %lx",
+    _SHARE_LOG(ERROR, "file_size[%" PRId64 "] or file_size[%" PRId64 "] not align by %" PRIx64 "",
                st.st_size, file_size,
                ObLogConstants::LOG_FILE_ALIGN_MASK);
   } else if (st.st_size >= file_size) {

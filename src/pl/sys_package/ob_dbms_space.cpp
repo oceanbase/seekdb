@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 #include "ob_dbms_space.h"
+#include <inttypes.h>
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/ddl/ob_create_index_resolver.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
@@ -909,7 +910,7 @@ int ObDbmsSpace::generate_tablet_predicate_str(ObSqlString &target_str,
   int ret = OB_SUCCESS;
   target_str.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_list.count(); i++) {
-    if (OB_FAIL(target_str.append_fmt((i == tablet_list.count() - 1) ? "%lu" : "%lu,",
+    if (OB_FAIL(target_str.append_fmt((i == tablet_list.count() - 1) ? "%" PRIu64 "" : "%" PRIu64 ",",
                                        tablet_list.at(i).id()))) {
     }
   }

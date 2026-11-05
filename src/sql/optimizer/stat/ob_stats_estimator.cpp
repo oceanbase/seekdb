@@ -159,7 +159,7 @@ int ObStatsEstimator::fill_specify_scn_info(common::ObIAllocator &alloc,
 {
   int ret = OB_SUCCESS;
   if (sepcify_scn > 0) {
-    const char* fmt_str = "as of snapshot %lu";
+    const char* fmt_str = "as of snapshot %" PRIu64 "";
     char *buf = NULL;
     int64_t buf_len = strlen(fmt_str) + 30;//uint64_t:0 ~ 18446744073709551615,length no more than 20
     int64_t real_len = -1;
