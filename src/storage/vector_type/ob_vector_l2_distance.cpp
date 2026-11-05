@@ -20,36 +20,22 @@ namespace oceanbase
 namespace common
 {
 template<>
-int ObVectorL2Distance<float>::l2_square_func(const float *a, const float *b, const int64_t len, double &square) 
+int ObVectorL2Distance<float>::l2_square_func(const float *a, const float *b, const int64_t len,
+                                              double &square)
 {
   int ret = OB_SUCCESS;
-#if OB_USE_MULTITARGET_CODE && defined(__x86_64__)
-    // AVX512 slower than AVX2, maybe using AVX512 lower CPU frequency which leads to worse performance.
-    if (common::is_arch_supported(ObTargetArch::AVX2)) {
-      ret = common::specific::avx2::l2_square(a, b, len, square);
-    } else if (common::is_arch_supported(ObTargetArch::AVX)) {
-      ret = common::specific::avx::l2_square(a, b, len, square);
-    } else if (common::is_arch_supported(ObTargetArch::SSE42)) {
-      ret = common::specific::sse42::l2_square(a, b, len, square);
-    } else {
-      ret = common::specific::normal::l2_square(a, b, len, square);
-    }
-#elif defined(__aarch64__) 
-    if (common::is_arch_supported(ObTargetArch::NEON)) {
-      ret = l2_square_neon(a, b, len, square);
-    } else {
-      ret = common::specific::normal::l2_square(a, b, len, square);
-    }
-#else
-#if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
-    // No GNU target attributes on MSVC style builds: use the SSE2 port of the
-    // float32 lane kernel so that the value matches the AVX2 build. Input that
-    // leaves the float32 lane range is summed by the checked double kernel.
-    ret = l2_square_float_lane(a, b, len, square);
-#else
-    ret = common::specific::normal::l2_square(a, b, len, square);
-#endif
-#endif
+  // Single deterministic binary64 reduction for every platform/build/CPU, see
+  // ob_vector_l2_distance_reference.h. This used to dispatch to per-ISA float32
+  // lane kernels (AVX2/AVX/SSE42) on GNU x86-64 builds and to a plain double
+  // accumulation elsewhere, so the SQL-visible l2_distance()/l2_squared()/
+  // l2_similarity() value depended on the compiler and host CPU, and the
+  // float32 lanes additionally saturated to inf or underflowed on inputs whose
+  // squares leave the normal float32 range.
+  square = l2_square_float_reference(a, b, len);
+  if (OB_UNLIKELY(0 != ::isinf(square))) {
+    ret = OB_NUMERIC_OVERFLOW;
+    LIB_LOG(WARN, "value is overflow", K(ret), K(len), K(square));
+  }
   return ret;
 }
 template <>

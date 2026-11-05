@@ -22,6 +22,7 @@
 #include "lib/ob_define.h"
 #include "common/object/ob_obj_compare.h"
 #include "ob_vector_op_common.h"
+#include "ob_vector_l2_distance_reference.h"
 
 #if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
 #include <cfloat>
