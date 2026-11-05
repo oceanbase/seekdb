@@ -200,6 +200,7 @@ namespace sql
                             ObDMLStmt &stmt,
                             common::ObIArray<ObSqlTempTableInfo*> &temp_table_infos);
     int init_env_info(ObDMLStmt &stmt);
+    int convert_vec_approx_or_to_in(ObDMLStmt &stmt, ObSQLSessionInfo *session_info);
     int get_session_parallel_info(int64_t &force_parallel_dop,
                                   bool &enable_auto_dop,
                                   bool &enable_manual_dop);

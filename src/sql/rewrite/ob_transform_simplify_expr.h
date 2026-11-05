@@ -98,6 +98,8 @@ private:
                           ObNotNullContext &not_null_ctx,
                           bool &trans_happened);
 
+  int convert_or_to_in(ObDMLStmt *stmt, bool &trans_happened);
+
   int convert_nvl_predicate(ObDMLStmt *stmt, bool &trans_happened);
   int inner_convert_nvl_predicate(ObDMLStmt *stmt,
                                   ObRawExpr *&expr,

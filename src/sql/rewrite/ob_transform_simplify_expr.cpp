@@ -70,6 +70,13 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
     }
   }
   if (OB_SUCC(ret)) {
+    if (OB_FAIL(convert_or_to_in(stmt, is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+      OPT_TRACE("convert or to in:", is_happened);
+    }
+  }
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(replace_is_null_condition(stmt, is_happened))) {
     } else {
       trans_happened |= is_happened;
@@ -2063,6 +2070,33 @@ int ObTransformSimplifyExpr::replace_expr_when_filter_is_false(ObRawExpr*& expr)
       } 
     }
   } 
+  return ret;
+}
+
+int ObTransformSimplifyExpr::convert_or_to_in(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool where_happened = false;
+  bool having_happened = false;
+  trans_happened = false;
+  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) ||
+      OB_ISNULL(ctx_->session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
+  } else if (OB_FAIL(ObOptimizerUtil::convert_or_to_in(*ctx_->expr_factory_,
+                                                       ctx_->session_info_,
+                                                       stmt->get_condition_exprs(),
+                                                       where_happened))) {
+    LOG_WARN("failed to convert or to in", K(ret));
+  } else if (stmt->is_select_stmt() &&
+             OB_FAIL(ObOptimizerUtil::convert_or_to_in(*ctx_->expr_factory_,
+                                                       ctx_->session_info_,
+                                                       static_cast<ObSelectStmt *>(stmt)->get_having_exprs(),
+                                                       having_happened))) {
+    LOG_WARN("failed to convert or to in in having", K(ret));
+  } else {
+    trans_happened = where_happened || having_happened;
+  }
   return ret;
 }
 
