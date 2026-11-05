@@ -2618,8 +2618,8 @@ int ObTransformSimplifyExpr::remove_duplicate_exprs(ObQueryCtx* query_ctx,
     //select * from t1 where c1 > 1 and c1 > 1
     //like above stmt, and expr in level 0 is process here
     ObSEArray<ObRawExpr *, 4> param_conds;
-    if (param_count <= 1 || param_count > 100) {
-      /* use too much resource and need add lots of constraints */
+    if (param_count <= 1) {
+      /* do nothing */
     } else if (OB_FAIL(param_conds.assign(conditions))) {
     } else if (OB_FAIL(do_remove_duplicate_exprs(*query_ctx, param_conds))) {
     } else if (param_conds.count() == conditions.count()) {
@@ -2662,9 +2662,7 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
     } else if (expr->get_expr_type() == T_OP_OR || expr->get_expr_type() == T_OP_AND) {
       ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
       ObSEArray<ObRawExpr *, 4> param_conds;
-      if (op_expr->get_param_count() > 100) {
-        /* use too much resource and need add lots of constraints */
-      } else if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
+      if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
       } else if (OB_FAIL(do_remove_duplicate_exprs(query_ctx, param_conds))) {
       } else if (param_conds.count() == op_expr->get_param_count()) {
         //do nothing
@@ -2692,15 +2690,22 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
 {
   int ret = OB_SUCCESS;
   const int64_t param_count = exprs.count();
+  // Keep the comparison budget of the previous 100-expression
+  // limit, while still simplifying longer lists with many duplicates.
+  const int64_t max_comparisons = 100 * 99 / 2;
+  int64_t comparison_count = 0;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObQuestionmarkEqualCtx cmp_ctx(false);
-    for (int64_t i = param_count - 1; OB_SUCC(ret) && i >= 1; i--) {
+    for (int64_t i = param_count - 1;
+         OB_SUCC(ret) && i >= 1 && comparison_count < max_comparisons; i--) {
       if (OB_ISNULL(exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
       }
-      for (int64_t j = 0; OB_SUCC(ret) && j < i; j++) {
+      for (int64_t j = 0;
+           OB_SUCC(ret) && j < i && comparison_count < max_comparisons; j++) {
+        ++comparison_count;
         if (OB_ISNULL(exprs.at(j))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (exprs.at(i)->same_as(*exprs.at(j), &cmp_ctx)) {
