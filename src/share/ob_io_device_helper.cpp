@@ -124,9 +124,9 @@ int ObGetFileSizeFunctor::func(const ObPlatformDirEntry &entry)
     } else if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret) {
       // file could be renamed (tmp file) or recycled concurrently, ignore
       ret = OB_SUCCESS;
-    } else if (S_ISREG(statbuf.mode_)) {
+    } else if (ob_stat_is_file(statbuf.mode_)) {
       total_size_ += statbuf.size_;
-    } else if (S_ISDIR(statbuf.mode_)) {
+    } else if (ob_stat_is_dir(statbuf.mode_)) {
       ObGetFileSizeFunctor functor(full_path);
       if (OB_FAIL(LOCAL_DEVICE_INSTANCE.scan_dir(full_path, functor))) {
       } else {
@@ -338,7 +338,7 @@ int ObIODeviceLocalFileOp::rmdir(const char *pathname)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid arguments.", K(ret), KP(pathname));
   } else if (OB_FAIL(stat(pathname, f_stat))) {
-  } else if (!S_ISDIR(f_stat.mode_)) {
+  } else if (!ob_stat_is_dir(f_stat.mode_)) {
     ret = OB_NO_SUCH_FILE_OR_DIRECTORY;
     SHARE_LOG(WARN, "file path is not a directory.", K(pathname), K(ret));
   } else if (0 != ob_rmdir_utf8(pathname)) {
@@ -356,7 +356,7 @@ int ObIODeviceLocalFileOp::unlink(const char *pathname)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid arguments.", K(pathname), K(ret));
   } else if (OB_FAIL(stat(pathname, f_stat))) {
-  } else if (!S_ISREG(f_stat.mode_)) {
+  } else if (!ob_stat_is_file(f_stat.mode_)) {
     ret = OB_NO_SUCH_FILE_OR_DIRECTORY;
     SHARE_LOG(WARN, "file path is a directory.", K(pathname), K(ret));
   } else if (0 != ob_unlink_utf8(pathname)){
@@ -497,7 +497,7 @@ int ObIODeviceLocalFileOp::scan_dir_rec(const char *dir_name,
         } else if (OB_DIR_ENTRY_UNKNOWN == entry.type) {
           ObIODFileStat statbuf;
           if (OB_FAIL(ObIODeviceLocalFileOp::stat(current_file_path, statbuf))) {
-          } else if (S_ISDIR(statbuf.mode_)) {
+          } else if (ob_stat_is_dir(statbuf.mode_)) {
             is_dir = true;
           }
         }
