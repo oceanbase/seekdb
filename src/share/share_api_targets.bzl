@@ -379,7 +379,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "math_compat": struct(
         hdrs = ["ob_math_compat.h"],
-        deps = [],
+        deps = ["//rust:math_headers"],
     ),
     "memory_support": struct(
         hdrs = ["allocator/ob_reserve_arena.h"],

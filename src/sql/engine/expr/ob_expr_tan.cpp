@@ -18,7 +18,7 @@
 
 #include "sql/engine/expr/ob_expr_tan.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "sql/engine/expr/tan_compat.h"
+#include "share/ob_math_compat.h"
 
 namespace oceanbase
 {

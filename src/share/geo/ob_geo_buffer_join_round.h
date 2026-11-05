@@ -18,8 +18,8 @@
 //
 // Modification (OceanBase): the general-angle trigonometric calls inside
 // generate_points use oceanbase::math_compat::cos/sin instead of the C library
-// so that Windows results follow the same CORE-MATH path already used by the
-// SQL layer. Angle normalization, ceil/max step count, promoted type selection,
+// so every platform follows the same unified binary64 math path. Angle
+// normalization, ceil/max step count, promoted type selection,
 // equal-perpendicular handling, absolute distance, point push order and
 // max_distance are unchanged.
 
@@ -78,8 +78,10 @@ private:
 
     PromotedType const two_pi = boost::geometry::math::two_pi<PromotedType>();
 
-    PromotedType const angle1 = std::atan2(dy1, dx1);
-    PromotedType angle2 = std::atan2(dy2, dx2);
+    PromotedType const angle1 = static_cast<PromotedType>(
+        math_compat::atan2(static_cast<double>(dy1), static_cast<double>(dx1)));
+    PromotedType angle2 = static_cast<PromotedType>(
+        math_compat::atan2(static_cast<double>(dy2), static_cast<double>(dx2)));
     while (angle2 > angle1)
     {
       angle2 -= two_pi;

@@ -17,9 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_pow.h"
 #include "sql/session/ob_sql_session_info.h"
-#ifdef _WIN32
-#include "sql/engine/expr/pow_compat.h"
-#endif
+#include "share/ob_math_compat.h"
 
 namespace oceanbase
 {
@@ -85,19 +83,8 @@ int ObExprPow::calc_pow_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
     if (base->is_null() || exp->is_null()) {
       res_datum.set_null();
     } else {
-#ifdef _WIN32
-      bool environment_restored = true;
-      const double value = math_compat::pow(base->get_double(), exp->get_double(),
-                                            environment_restored);
-      if (!environment_restored) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ret = ObExprPow::safe_set_double(res_datum, value);
-      }
-#else
-      ret = ObExprPow::safe_set_double(res_datum,
-          std::pow(base->get_double(), exp->get_double()));
-#endif
+ret = ObExprPow::safe_set_double(res_datum,
+          math_compat::pow(base->get_double(), exp->get_double()));
     }
   } else {
     ret = (OB_SUCCESS == ret_base) ? ret_exp : ret_base;

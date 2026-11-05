@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_exp.h"
-#include "sql/engine/expr/exp_compat.h"
+#include "share/ob_math_compat.h"
 
 namespace oceanbase
 {

@@ -44,6 +44,7 @@
 #include "share/geo/ob_geo_close_ring_visitor.h"
 #include "share/rc/ob_server_runtime.h"
 #include "common/mysqlclient/ob_mysql_global.h" // DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE
+#include "share/ob_math_compat.h"
 
 namespace oceanbase
 {
@@ -954,7 +955,7 @@ int ObGeoTypeUtil::get_wkb_from_swkb(const ObString &swkb, ObString &wkb, uint32
 double ObGeoTypeUtil::round_double(double x, int32_t dec, bool truncate)
 {
   double dret = 0.0;
-  double pow_val = std::pow(10, static_cast<double>(std::abs(dec)));
+  double pow_val = math_compat::pow(10, static_cast<double>(std::abs(dec)));
   double val_mul_tmp = x * pow_val;
   if (dec < 0 && std::isinf(pow_val)) {
     dret = 0.0;

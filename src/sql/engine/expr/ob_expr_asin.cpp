@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_asin.h"
-#include "sql/engine/expr/sin_asin_compat.h"
+#include "share/ob_math_compat.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;

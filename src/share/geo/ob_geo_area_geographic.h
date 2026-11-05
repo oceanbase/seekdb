@@ -60,22 +60,14 @@
 #include <boost/geometry/util/condition.hpp>
 #include <boost/geometry/util/math.hpp>
 
-// The CORE-MATH backends need Clang 18 or newer on x86-64. Any other Windows
-// toolchain, and every non-Windows platform, keeps the upstream strategy
-// unchanged, so an unsupported compiler never silently changes this value.
-#if defined(_WIN32) && defined(__clang__) && __clang_major__ >= 18 && defined(_M_X64)
-#define OB_GEO_AREA_USES_CORE_MATH 1
+// Every platform links the same pinned binary64 backend, so the geographic
+// area strategy evaluates identical operations everywhere.
 #include "share/ob_math_compat.h"
-#else
-#define OB_GEO_AREA_USES_CORE_MATH 0
-#endif
 
 namespace oceanbase
 {
 namespace common
 {
-#if OB_GEO_AREA_USES_CORE_MATH
-
 namespace ob_geo_detail
 {
 namespace bg = boost::geometry;
@@ -96,25 +88,18 @@ inline T ob_authalic_radius_sqr(T a2, T e2)
   if (bg::math::equals(e2, c0)) {
     return a2;
   }
-  if (math_compat::atanh_uses_core_math()) {
-    const T e = bg::math::sqrt(e2);
-    return (a2 / c2) * (c1 + (c1 - e2) * math_compat::atanh(e) / e);
-  }
-  // Every FP environment the CORE-MATH backend does not cover keeps the
-  // upstream expression, including boost::math::atanh and its log1p
-  // combination. Substituting the CRT atanh here would evaluate a different
-  // formula rather than the previous one.
-  return bg::formula_dispatch::authalic_radius_sqr<T, Spheroid>::apply(a2, e2);
+  // Evaluate the formula in binary64 everywhere; the shared layer defines the
+  // single atanh value used by every platform.
+  const T e = bg::math::sqrt(e2);
+  return (a2 / c2) * (c1 + (c1 - e2) * math_compat::atanh(e) / e);
 }
 
 /*!
-\brief Andoyer inverse with a defined cosine
+\brief Andoyer inverse on the shared platform-independent math layer
 \details Byte-for-byte copy of boost::geometry::formula::andoyer_inverse except
-         that every cos() call is served by the shared math layer. sin, acos and
-         atan2 are not routed: only cos is observed to differ between the two
-         platform libms on the inputs reached from ST_AREA, so routing the rest
-         would broaden the change without evidence. Same operations, same order,
-         same branches, same normalize_azimuth.
+         that the transcendentals (sin/cos/acos/atan2) are served by the shared
+         binary64 layer. Same operations, same order, same branches, same
+         normalize_azimuth.
 */
 template
 <
@@ -171,7 +156,7 @@ public:
         else if (cos_d > c1)
             cos_d = c1;
 
-        CT const d = acos(cos_d); // [0, pi]
+        CT const d = static_cast<CT>(math_compat::acos(static_cast<double>(cos_d))); // [0, pi]
         CT const sin_d = math_compat::sin(d);  // [-1, 1]
 
         if ( BOOST_GEOMETRY_CONDITION(EnableDistance) )
@@ -241,7 +226,7 @@ public:
                 {
                     CT const tan_lat2 = sin_lat2/cos_lat2;
                     CT const M = cos_lat1*tan_lat2-sin_lat1*cos_dlon;
-                    A = atan2(sin_dlon, M);
+                    A = static_cast<CT>(math_compat::atan2(static_cast<double>(sin_dlon), static_cast<double>(M)));
                     CT const sin_2A = math_compat::sin(c2*A);
                     U = (f/ c2)*bg::math::sqr(cos_lat1)*sin_2A;
                 }
@@ -259,7 +244,7 @@ public:
                 {
                     CT const tan_lat1 = sin_lat1/cos_lat1;
                     CT const N = cos_lat2*tan_lat1-sin_lat2*cos_dlon;
-                    B = atan2(sin_dlon, N);
+                    B = static_cast<CT>(math_compat::atan2(static_cast<double>(sin_dlon), static_cast<double>(N)));
                     CT const sin_2B = math_compat::sin(c2*B);
                     V = (f/ c2)*bg::math::sqr(cos_lat2)*sin_2B;
                 }
@@ -373,13 +358,12 @@ struct ObAndoyerPolicy
 };
 
 /*!
-\brief Area formulas whose cosine calls use the shared math layer
+\brief Area formulas on the shared platform-independent math layer
 \details Same body as boost::geometry::formula::area_formulas::ellipsoidal,
          including the short-segment atan2 branch, the long-segment
          alp2 - alp1 branch, the series expansion selected by ExpandEpsN, and
-         every coefficient helper inherited unchanged from upstream. Only the
-         four cos() calls that feed spherical_term are routed; tan, atan,
-         atan2 and sin keep the upstream expression.
+         every coefficient helper inherited unchanged from upstream. The
+         transcendentals are served by the shared binary64 layer.
 */
 template <typename CT, std::size_t SeriesOrder, bool ExpandEpsN>
 struct ObAreaFormulas
@@ -428,7 +412,7 @@ struct ObAreaFormulas
     CT cos_bet2 = math_compat::cos(math_compat::atan(tan_bet2));
     CT sin_bet1 = tan_bet1 * cos_bet1;
     CT sin_bet2 = tan_bet2 * cos_bet2;
-    CT sin_alp1 = sin(alp1);
+    CT sin_alp1 = static_cast<CT>(math_compat::sin(static_cast<double>(alp1)));
     CT cos_alp1 = math_compat::cos(alp1);
     CT cos_alp2 = math_compat::cos(alp2);
     CT sin_alp0 = sin_alp1 * cos_bet1;
@@ -455,8 +439,9 @@ struct ObAreaFormulas
         CT cos_omg12p1 = CT(1) + cos_omg12;
         CT cos_bet1p1 = CT(1) + cos_bet1;
         CT cos_bet2p1 = CT(1) + cos_bet2;
-        excess = CT(2) * atan2(sin_omg12 * (sin_bet1 * cos_bet2p1 + sin_bet2 * cos_bet1p1),
-                            cos_omg12p1 * (sin_bet1 * sin_bet2 + cos_bet1p1 * cos_bet2p1));
+        excess = CT(2) * static_cast<CT>(math_compat::atan2(
+            static_cast<double>(sin_omg12 * (sin_bet1 * cos_bet2p1 + sin_bet2 * cos_bet1p1)),
+            static_cast<double>(cos_omg12p1 * (sin_bet1 * sin_bet2 + cos_bet1p1 * cos_bet2p1))));
     }
     else
     {
@@ -690,21 +675,7 @@ template
 using ObGeoAreaStrategy = ObGeoAreaGeographic
     <FormulaPolicy, SeriesOrder, Spheroid, CalculationType>;
 
-#else // !OB_GEO_AREA_USES_CORE_MATH
 
-// Other platforms, and Windows toolchains without the CORE-MATH backend, keep
-// the upstream strategy and its promoted evaluation.
-template
-<
-    typename FormulaPolicy = boost::geometry::strategy::andoyer,
-    std::size_t SeriesOrder = boost::geometry::strategy::default_order<FormulaPolicy>::value,
-    typename Spheroid = boost::geometry::srs::spheroid<double>,
-    typename CalculationType = void
->
-using ObGeoAreaStrategy = boost::geometry::strategy::area::geographic
-    <FormulaPolicy, SeriesOrder, Spheroid, CalculationType>;
-
-#endif // OB_GEO_AREA_USES_CORE_MATH
 
 } // namespace common
 } // namespace oceanbase

@@ -20,6 +20,7 @@
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_func_helper.h"
 #include "sql/engine/ob_exec_context.h"
+#include "share/ob_math_compat.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
@@ -156,7 +157,7 @@ int ObExprJsonSearch::find_matches(common::ObIAllocator *allocator,
             if (OB_ISNULL(child)) {
               ret = OB_ERR_NULL_VALUE;
             } else {
-              uint64_t reserve_len = i == 0 ? 3 : static_cast<uint64_t>(std::log10(i)) + 3;
+              uint64_t reserve_len = i == 0 ? 3 : static_cast<uint64_t>(math_compat::log10(static_cast<double>(i))) + 3;
               char temp_buf[reserve_len + 1];
               int64_t count = lnprintf(temp_buf, reserve_len + 1, "[%lu]", i);
               if (count < 0) {
