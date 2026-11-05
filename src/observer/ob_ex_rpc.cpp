@@ -22,7 +22,6 @@
 #include "share/rc/ob_server_runtime.h"
 #include "observer/ob_srv_task.h"
 #include "observer/omt/ob_server_runtime_controller.h"
-#include "observer/omt/ob_server_runtime.h"
 #include "share/ob_server_struct.h"
 #include "lib/worker.h"
 #include "lib/lock/ob_futex.h"
@@ -118,23 +117,6 @@ static int dispatch_(int64_t timeout_us, std::function<int()> fn,
   return ret;
 }
 
-// The in-process sync task runs on the server runtime request queue. When the
-// caller itself is a request worker and the pool has shrunk to a single worker,
-// dispatching and then blocking would deadlock on that one worker. Guarantee a
-// second executor before waiting; the bounded wait below remains the safety net
-// for any other interleaving.
-static void ensure_sync_executor()
-{
-  auto *controller =
-      ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>();
-  if (NULL != controller) {
-    ::oceanbase::omt::ObServerRuntime *runtime = controller->runtime();
-    if (NULL != runtime) {
-      runtime->ensure_worker_capacity(2);
-    }
-  }
-}
-
 // Wait for the dispatched callback with a bounded wait. On deadline the caller
 // may leave only when the callback never started (PENDING -> CANCELED); if it is
 // already RUNNING the caller must stay until it finishes because the callback
@@ -177,9 +159,14 @@ int sync_call_internal(int64_t timeout_us, std::function<int()> fn)
     timeout_us = EX_RPC_DEFAULT_TIMEOUT_US;
   }
   std::shared_ptr<SyncCtx> ctx = std::make_shared<SyncCtx>();
+  // dispatch_() enqueues the callback through ObServerRuntime::recv_request,
+  // whose foreground expansion runs before this thread blocks: when the queued
+  // requests outnumber the idle workers it spawns a worker immediately
+  // (high-priority ExRpcTask expands up to max_worker_cnt), so the callback has
+  // an executor other than this caller. The wait below is bounded as a safety
+  // net, not as the mechanism that guarantees progress.
   ret = dispatch_(timeout_us, std::move(fn), ctx);
   if (OB_SUCC(ret)) {
-    ensure_sync_executor();
     ret = wait_sync_ctx(*ctx, timeout_us);
   }
   return ret;

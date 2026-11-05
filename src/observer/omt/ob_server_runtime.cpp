@@ -632,15 +632,18 @@ int ObServerRuntime::recv_request(ObRequest &req)
 
   if (OB_SUCC(ret)) {
     EVENT_INC(REQUEST_ENQUEUE_COUNT);
-    // Expand from foreground when no idle worker, in case the only
-    // worker is busy and cannot fire the worker-loop expand signal.
-    // Regular requests stay bounded by min_worker_cnt; high-priority
-    // requests jump straight to max_worker_cnt so a fresh worker is
-    // spawned on the spot instead of waiting for the 3s stalled-completion
-    // rescue in timeup(). Spawned workers are reused by subsequent requests
-    // and idle out through the normal 10s keep-alive shrink, so no threads
-    // are permanently reserved.
-    if (idle_count() == 0) {
+    // Expand from foreground when the queued requests outnumber the idle
+    // workers: at least one request then has an executor that is not the busy
+    // worker blocked on it. In particular in-process sync dispatch enqueues its
+    // callback here and then waits on it, so this expansion (which runs before
+    // the caller blocks) is what guarantees the callback an executor -- no
+    // separate "ensure" path is needed. Regular requests stay bounded by
+    // min_worker_cnt; high-priority requests jump straight to max_worker_cnt so
+    // a fresh worker is spawned on the spot instead of waiting for the 3s
+    // stalled-completion rescue in timeup(). Spawned workers are reused by
+    // subsequent requests and idle out through the normal 10s keep-alive
+    // shrink, so no threads are permanently reserved.
+    if (queue_size() > idle_count()) {
       try_expand_one(is_high_prio ? max_worker_cnt() : min_worker_cnt());
     }
   }
@@ -752,23 +755,6 @@ bool ObServerRuntime::do_add_worker()
   }
   return OB_SUCCESS == ret && succ_num == 1;
 }
-
-bool ObServerRuntime::ensure_worker_capacity(int64_t min_workers)
-{
-  // try_expand_one() reserves one worker slot per call; a lost CAS means
-  // another thread already moved the count, so re-check instead of failing.
-  // The attempt bound keeps the caller from spinning forever synchronously.
-  constexpr int64_t MAX_EXPAND_ATTEMPTS = 64;
-  int64_t attempts = 0;
-  while (worker_count() < min_workers && attempts++ < MAX_EXPAND_ATTEMPTS) {
-    if (OB_UNLIKELY(has_stopped())) {
-      break;
-    }
-    try_expand_one(min_workers);
-  }
-  return worker_count() >= min_workers;
-}
-
 
 void ObServerRuntime::periodically_check()
 {
