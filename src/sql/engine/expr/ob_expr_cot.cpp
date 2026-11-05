@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_cot.h"
+#include "sql/engine/expr/tan_compat.h"
 
 namespace oceanbase
 {
@@ -52,7 +53,7 @@ int ObExprCot::calc_cot_expr(const ObExpr &expr, ObEvalCtx &ctx,
     res_datum.set_null();
   } else if (ObDoubleType == expr.args_[0]->datum_meta_.type_) {
     const double arg = radian->get_double();
-    double tan_out = tan(arg);
+    double tan_out = math_compat::tan(arg);
     // Check if tan(arg) is approaching 0, when it is too small, consider it as 0
     if (0.0 == tan_out) {
       ret = OB_DOUBLE_OVERFLOW;

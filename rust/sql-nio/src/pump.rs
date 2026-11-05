@@ -152,7 +152,17 @@ impl WireProtocol {
     }
 }
 
-pub(crate) fn send_greeting(conn: &Arc<Conn>, greeting: &NioGreetingInfo) -> bool {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GreetingSendOutcome {
+    Sent,
+    Deferred,
+    Failed,
+}
+
+pub(crate) fn send_greeting(
+    conn: &Arc<Conn>,
+    greeting: &NioGreetingInfo,
+) -> GreetingSendOutcome {
     let version: &[u8] = match usize::try_from(greeting.version_len) {
         Ok(len) if len <= greeting.version.len() => &greeting.version[..len],
         _ => b"5.7.25",
@@ -169,24 +179,24 @@ pub(crate) fn send_greeting(conn: &Arc<Conn>, greeting: &NioGreetingInfo) -> boo
     let mut pos = 0;
     while pos < out.len() {
         match g.sock.write(&out[pos..]) {
-            Ok(0) => return false,
+            Ok(0) => return GreetingSendOutcome::Failed,
             Ok(k) => pos += k,
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 // Admission registers writable interest for this pending tail.
                 // Waiting here would prevent the reactor from serving other
                 // clients or processing shutdown on a bounded transport.
                 if g.outbuf.try_reserve(out.len() - pos).is_err() {
-                    return false;
+                    return GreetingSendOutcome::Failed;
                 }
                 g.outbuf.extend_from_slice(&out[pos..]);
                 g.want_write = true;
-                break;
+                return GreetingSendOutcome::Deferred;
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(_) => return false,
+            Err(_) => return GreetingSendOutcome::Failed,
         }
     }
-    true
+    GreetingSendOutcome::Sent
 }
 
 pub(crate) fn pump(conn: &Arc<Conn>, handler: Handler) -> bool {

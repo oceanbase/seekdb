@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RPC_OBMYSQL
 #include "rpc/obmysql/ob_sql_nio_server.h"
+#include "rust/sql-nio/include/callbacks.h"
 #include "lib/ob_running_mode.h"
 #include "lib/string/ob_string.h"
 #include <stdio.h>
@@ -73,6 +74,118 @@ void ob_sql_sock_handler_on_disconnect(ObSqlSockHandler* handler, ObSqlSockSessi
 }
 void ob_sql_sock_handler_on_close(ObSqlSockHandler* handler, ObSqlSockSession* sess, int err) {
   handler->on_close(sess, err);
+}
+static const char *nio_accept_error_kind_name(const int32_t kind)
+{
+  switch (kind) {
+    case 1: return "NotFound"; // ACCEPT_ERROR_KIND_NOT_FOUND
+    case 2: return "PermissionDenied"; // ACCEPT_ERROR_KIND_PERMISSION_DENIED
+    case 3: return "ConnectionRefused"; // ACCEPT_ERROR_KIND_CONNECTION_REFUSED
+    case 4: return "ConnectionReset"; // ACCEPT_ERROR_KIND_CONNECTION_RESET
+    case 5: return "HostUnreachable"; // ACCEPT_ERROR_KIND_HOST_UNREACHABLE
+    case 6: return "NetworkUnreachable"; // ACCEPT_ERROR_KIND_NETWORK_UNREACHABLE
+    case 7: return "ConnectionAborted"; // ACCEPT_ERROR_KIND_CONNECTION_ABORTED
+    case 8: return "NotConnected"; // ACCEPT_ERROR_KIND_NOT_CONNECTED
+    case 9: return "AddrInUse"; // ACCEPT_ERROR_KIND_ADDR_IN_USE
+    case 10: return "AddrNotAvailable"; // ACCEPT_ERROR_KIND_ADDR_NOT_AVAILABLE
+    case 11: return "BrokenPipe"; // ACCEPT_ERROR_KIND_BROKEN_PIPE
+    case 12: return "AlreadyExists"; // ACCEPT_ERROR_KIND_ALREADY_EXISTS
+    case 13: return "WouldBlock"; // ACCEPT_ERROR_KIND_WOULD_BLOCK
+    case 14: return "InvalidInput"; // ACCEPT_ERROR_KIND_INVALID_INPUT
+    case 15: return "InvalidData"; // ACCEPT_ERROR_KIND_INVALID_DATA
+    case 16: return "TimedOut"; // ACCEPT_ERROR_KIND_TIMED_OUT
+    case 17: return "WriteZero"; // ACCEPT_ERROR_KIND_WRITE_ZERO
+    case 18: return "Interrupted"; // ACCEPT_ERROR_KIND_INTERRUPTED
+    case 19: return "Unsupported"; // ACCEPT_ERROR_KIND_UNSUPPORTED
+    case 20: return "UnexpectedEof"; // ACCEPT_ERROR_KIND_UNEXPECTED_EOF
+    case 21: return "OutOfMemory"; // ACCEPT_ERROR_KIND_OUT_OF_MEMORY
+    default: return "Other"; // ACCEPT_ERROR_KIND_OTHER
+  }
+}
+
+static const char *nio_accept_outcome_name(const int32_t outcome)
+{
+  switch (outcome) {
+    case 0: return "would_block"; // ACCEPT_OUTCOME_WOULD_BLOCK
+    case 1: return "fatal"; // ACCEPT_OUTCOME_FATAL
+    case 2: return "rearmed"; // ACCEPT_OUTCOME_REARMED
+    case 3: return "rearm_failed"; // ACCEPT_OUTCOME_REARM_FAILED
+    default: return "unknown";
+  }
+}
+
+void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain_id,
+                                 uint64_t accepted, uint32_t transient_errors,
+                                 uint32_t consecutive_errors, int32_t outcome) {
+  const char *kind_name = nio_accept_error_kind_name(kind);
+  const char *outcome_name = nio_accept_outcome_name(outcome);
+  const int ret = (1 == outcome || 3 == outcome) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
+  LOG_ERROR("Rust SQL-NIO TCP accept drain state", KCSTRING(kind_name), K(raw_error), K(drain_id),
+            K(accepted), K(transient_errors), K(consecutive_errors), KCSTRING(outcome_name));
+}
+
+static const char *nio_reactor_poll_result_name(const int32_t poll_result)
+{
+  switch (poll_result) {
+    case 0: return "timeout"; // REACTOR_POLL_TIMEOUT
+    case 1: return "events"; // REACTOR_POLL_EVENTS
+    case 2: return "failed"; // REACTOR_POLL_FAILED
+    case 3: return "skipped"; // REACTOR_POLL_SKIPPED
+    case 4: return "final"; // REACTOR_POLL_FINAL
+    case 5: return "stall_probe_would_block"; // REACTOR_POLL_STALL_PROBE_WOULD_BLOCK
+    case 6: return "stall_probe_progress"; // REACTOR_POLL_STALL_PROBE_PROGRESS
+    case 7: return "stall_probe_rearmed"; // REACTOR_POLL_STALL_PROBE_REARMED
+    case 8: return "stall_probe_rearm_failed"; // REACTOR_POLL_STALL_PROBE_REARM_FAILED
+    default: return "unknown";
+  }
+}
+
+static const char *nio_listener_os_probe_state_name(const uint32_t state)
+{
+  switch (state) {
+    case 0: return "not_attempted";
+    case 1: return "not_ready";
+    case 2: return "ready";
+    case 3: return "error";
+    default: return "unknown";
+  }
+}
+
+void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
+                                  uint64_t event_count, uint64_t listener_events,
+                                  uint64_t accept_calls, uint64_t accepted,
+                                  uint64_t cxx_connect_attempts,
+                                  uint64_t cxx_connect_returns,
+                                  uint64_t cxx_connect_rejects,
+                                  uint64_t greeting_sent,
+                                  uint64_t greeting_deferred,
+                                  uint64_t greeting_failed,
+                                  uint64_t greeting_flushed,
+                                  uint64_t admission_register_failed,
+                                  uint64_t dispatch_handoff,
+                                  uint64_t dispatch_direct,
+                                  uint64_t dispatch_queue_full,
+                                  uint64_t greeting_close_before_flush,
+                                  uint32_t listener_event_flags,
+                                  uint32_t listener_os_probe_state,
+                                  uint32_t listener_os_probe_revents,
+                                  int32_t listener_os_probe_raw_error) {
+  const char *poll_result_name = nio_reactor_poll_result_name(poll_result);
+  const char *listener_os_probe_state_name =
+      nio_listener_os_probe_state_name(listener_os_probe_state);
+  const int ret = (2 == poll_result || 8 == poll_result || 3 == listener_os_probe_state)
+                      ? OB_ERR_UNEXPECTED : OB_SUCCESS;
+  LOG_ERROR("Rust SQL-NIO reactor poll state", KCSTRING(poll_result_name), K(poll_id),
+            K(event_count), K(listener_events), K(accept_calls), K(accepted),
+            K(cxx_connect_attempts), K(cxx_connect_returns), K(cxx_connect_rejects),
+            K(greeting_sent), K(greeting_deferred), K(greeting_failed), K(greeting_flushed),
+            K(admission_register_failed), K(dispatch_handoff), K(dispatch_direct),
+            K(dispatch_queue_full), K(greeting_close_before_flush),
+            K(listener_event_flags));
+  LOG_ERROR("Rust SQL-NIO listener probe state", KCSTRING(poll_result_name),
+            K(poll_id), K(listener_event_flags), KCSTRING(listener_os_probe_state_name),
+            K(listener_os_probe_state), K(listener_os_probe_revents),
+            K(listener_os_probe_raw_error));
 }
 
 static uint8_t nio_tls_min_version(const char *value)

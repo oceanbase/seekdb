@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_cos.h"
+#include "sql/engine/expr/sin_asin_compat.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
@@ -42,7 +44,31 @@ int ObExprCos::calc_result_type1(ObExprResType &type,
   return calc_trig_function_result_type1(type, radian, type_ctx);
 }
 
-DEF_CALC_TRIGONOMETRIC_EXPR(cos, false, OB_SUCCESS);
+int calc_cos_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+{
+  int ret = OB_SUCCESS;
+  ObDatum *radian = NULL;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {
+    LOG_WARN("eval radian arg failed", K(ret), K(expr));
+  } else if (radian->is_null()) {
+    res_datum.set_null();
+  } else if (ObNumberType == expr.args_[0]->datum_meta_.type_) {
+    number::ObNumber res_nmb;
+    number::ObNumber radian_nmb(radian->get_number());
+    ObEvalCtx::TempAllocGuard alloc_guard(ctx);
+    if (OB_FAIL(radian_nmb.cos(res_nmb, alloc_guard.get_allocator()))) {
+      LOG_WARN("calc expr failed", K(ret), K(radian_nmb), K(expr));
+    } else {
+      res_datum.set_number(res_nmb);
+    }
+  } else if (ObDoubleType == expr.args_[0]->datum_meta_.type_) {
+    const double arg = radian->get_double();
+    res_datum.set_double(math_compat::cos(arg));
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
 
 int ObExprCos::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const
@@ -51,6 +77,10 @@ int ObExprCos::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   rt_expr.eval_func_ = calc_cos_expr;
+  if (ObDoubleType != rt_expr.args_[0]->datum_meta_.type_
+      && ObNumberType != rt_expr.args_[0]->datum_meta_.type_) {
+    ret = OB_INVALID_ARGUMENT;
+  }
   return ret;
 }
 

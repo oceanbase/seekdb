@@ -105,7 +105,7 @@ inline static void uint64_mask_to_bits_mask(
   while (pos < end_pos) {
     if (*pos == 0) {
       i = pos - data;
-      skip64[i / 64] |= 1LU << (i % 64);
+      skip64[i / 64] |= 1ULL << (i % 64);
     }
     ++pos;
   }
@@ -408,7 +408,7 @@ inline static void uint64_mask_to_bits_mask(
   while (pos < end_pos) {
     if (*pos == 0) {
       i = pos - data;
-      skip64[i / 64] |= 1LU << (i % 64);
+      skip64[i / 64] |= 1ULL << (i % 64);
     }
     ++pos;
   }
@@ -811,7 +811,7 @@ inline static void inner_from_bits_mask(
   uint8_t *out = data + from;
   uint64_t *bits64 = reinterpret_cast<uint64_t *>(bits);
   for (uint64_t i = 0; i < size; ++i) {
-    if (bits64[i / 64] & (1LU << (i % 64))) {
+    if (bits64[i / 64] & (1ULL << (i % 64))) {
       *out = 1;
     }
     ++out;

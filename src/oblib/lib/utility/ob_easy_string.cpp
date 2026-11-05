@@ -63,7 +63,8 @@ static char *easy_sprintf_num(char *buf, char *last, uint64_t ui64, char zero, i
         len = last - buf;
     }
 
-    return reinterpret_cast<char*>(std::memcpy(buf, p, len));
+    std::memcpy(buf, p, len);
+    return buf + len;
 }
 
 
@@ -122,7 +123,7 @@ int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 
             case 'l':
                 fmt++;
-#ifdef _LP64
+#if defined(_LP64) || defined(_WIN64)
                 length_modifier ++;
 #endif
 

@@ -846,6 +846,17 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
                                            OB_INVALID_ID /*package_id*/, final_type.get_type_info_id()));
         }
       }
+    } else if (p.is_out() && OB_INVALID_INDEX == p.out_idx_
+               && OB_NOT_NULL(act_expr)
+               && T_OP_GET_USER_VAR == act_expr->get_expr_type()) {
+      // A user variable used as an OUT/INOUT actual has no local slot: resolve_inout_param
+      // leaves out_idx_ at OB_INVALID_INDEX for T_OP_GET_USER_VAR, and the actual is not an
+      // obj-access expression either, so neither branch above fires and the callee's result
+      // was silently dropped. Write it back through the same helper exec_assign uses for
+      // variable targets -- spi_set_variable already handles T_OP_GET_USER_VAR by taking the
+      // name from the compiled expr and serializing the value into its own SET statement, so
+      // storage[i] only has to be valid for the duration of this call.
+      OZ (ObSPIService::spi_set_variable_to_expr(ctx, p.param_, &storage[i]));
     }
   }
   return ret;

@@ -50,6 +50,8 @@ pub mod ffi {
         Limit = 6,
         Allocation = 7,
         Argument = 8,
+        PropertySyntax = 9,
+        UnsupportedProperty = 10,
     }
 
     struct RegexError {

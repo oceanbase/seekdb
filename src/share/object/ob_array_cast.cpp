@@ -1073,6 +1073,58 @@ int ObArrayCastUtils::string_cast_vector(common::ObIAllocator &alloc, ObString &
   return ret;
 }
 
+// SQL collection text accepts case-insensitive NULL elements. JSON string
+// contents and invalid non-token spellings must be left unchanged.
+static int normalize_array_null_elements(ObIAllocator &alloc, const ObString &text, const char *&parse_text)
+{
+  int ret = OB_SUCCESS;
+  const char *src = text.ptr();
+  const int64_t length = text.length();
+  char *copy = nullptr;
+  char quote = 0;
+  char previous = 0;
+  bool escaped = false;
+  parse_text = src;
+  for (int64_t i = 0; OB_SUCC(ret) && i < length; ++i) {
+    const char ch = src[i];
+    if (quote != 0) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch == '\\') {
+        escaped = true;
+      } else if (ch == quote) {
+        quote = 0;
+        previous = ch;
+      }
+    } else if (ch == '"' || ch == '\'') {
+      quote = ch;
+    } else if (!is_whitespace(ch)) {
+      if ((previous == '[' || previous == ',') && is_null_string_start(ch)
+          && i + ObArrayCastUtils::NULL_STR_LEN < length
+          && is_null_const_string(src + i, src + length)) {
+        int64_t next = i + ObArrayCastUtils::NULL_STR_LEN;
+        while (next < length && is_whitespace(src[next])) {
+          ++next;
+        }
+        if (next < length && (src[next] == ',' || src[next] == ']')
+            && MEMCMP(src + i, "null", ObArrayCastUtils::NULL_STR_LEN) != 0) {
+          if (OB_ISNULL(copy) && OB_ISNULL(copy = static_cast<char *>(alloc.alloc(length)))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            if (parse_text == src) {
+              MEMCPY(copy, src, length);
+              parse_text = copy;
+            }
+            MEMCPY(copy + i, "null", ObArrayCastUtils::NULL_STR_LEN);
+          }
+        }
+      }
+      previous = ch;
+    }
+  }
+  return ret;
+}
+
 int ObArrayCastUtils::string_cast(common::ObIAllocator &alloc, ObString &arr_text,
                                   ObIArrayType *&dst, const ObCollectionTypeBase *dst_elem_type)
 {
@@ -1081,8 +1133,10 @@ int ObArrayCastUtils::string_cast(common::ObIAllocator &alloc, ObString &arr_tex
   uint64_t err_offset = 0;
   ObJsonNode *j_node = NULL;
   uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
-  if (OB_FAIL(
-          ObJsonParser::parse_json_text(&alloc, arr_text.ptr(), arr_text.length(), syntaxerr, &err_offset, j_node, parse_flag))) {
+  const char *parse_text = arr_text.ptr();
+  if (OB_FAIL(normalize_array_null_elements(alloc, arr_text, parse_text))) {
+  } else if (OB_FAIL(
+          ObJsonParser::parse_json_text(&alloc, parse_text, arr_text.length(), syntaxerr, &err_offset, j_node, parse_flag))) {
   } else if (j_node->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_INVALID_ARGUMENT;
   } else if (j_node->element_count() == 0 && dst_elem_type->type_id_ != OB_BASIC_TYPE) {

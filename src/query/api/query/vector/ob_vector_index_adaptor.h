@@ -284,6 +284,7 @@ public:
                      const sql::ExprFixedArray &rowkey_exprs, const ObIArray<int64_t> &extra_in_rowkey_idxs);
   bool is_prefilter_valid();
   bool is_range_prefilter();
+  ObHnswBitmapFilter *get_pre_filter() { return pre_filter_; }
   ObObj *get_vids() { return vec_data_.vids_; }
   ObObj *get_vectors() { return vec_data_.vectors_; }
   int64_t get_curr_idx() { return vec_data_.curr_idx_; }

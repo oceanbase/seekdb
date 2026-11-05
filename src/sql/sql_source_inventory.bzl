@@ -1587,11 +1587,14 @@ SQL_STANDALONE_SOURCES = [
     "src/sql/engine/expr/ob_expr_array_sort.cpp",
     "src/sql/engine/expr/ob_expr_in.cpp",
     "src/sql/engine/expr/ob_expr_mul.cpp",
+    "src/sql/engine/expr/tan_compat.cpp",
 ]
 
 SQL_EXTRA_SOURCES = [
+    "src/sql/engine/expr/exp_compat.cpp",
     "src/sql/engine/expr/ob_datum_cast.cpp",
     "src/sql/engine/expr/ob_obj_cast_runtime.cpp",
+    "src/sql/engine/expr/pow_compat.cpp",
     "src/sql/engine/expr/ob_expr_cmp_func.cpp",
     "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_compile_init.cpp",
     "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part0.cpp",
@@ -1611,6 +1614,7 @@ SQL_EXTRA_SOURCES = [
     "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_5.cpp",
     "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_6.cpp",
     "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_7.cpp",
+    "src/sql/engine/expr/sin_asin_compat.cpp",
 ]
 
 SQL_PARSER_SOURCES = [

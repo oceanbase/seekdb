@@ -21,6 +21,7 @@
 #include "common/sql_mode/ob_sql_mode.h"
 #include "common/ob_field.h"
 #include "lib/time/ob_clock_generator.h"
+#include "lib/time/ob_time_utility.h"
 #include "data_plane/transaction/ob_tx_options.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/container/ob_2d_array.h"
@@ -112,7 +113,10 @@ public:
   }
   inline bool is_timeout(int64_t *remain_us = NULL) const
   {
-    int64_t now = common::ObClockGenerator::getClock();
+    // The deadline is compared against the precise clock: ObClockGenerator::getClock()
+    // only advances once per sampling tick, so a deadline inside the current tick window
+    // was invisible here and a short statement could finish long after it had expired.
+    int64_t now = common::ObTimeUtility::current_time();
     if (remain_us != NULL) {
       if (OB_LIKELY(ts_timeout_us_ > 0)) {
         *remain_us = ts_timeout_us_ - now;
@@ -124,7 +128,7 @@ public:
   }
   inline bool is_exec_timeout(int64_t *remain_us = NULL) const
   {
-    int64_t now = common::ObClockGenerator::getClock();
+    int64_t now = common::ObTimeUtility::current_time();
     int64_t ts_timeout_us = ts_timeout_us_;
     if (remain_us != NULL) {
       if (OB_LIKELY(ts_timeout_us > 0)) {
