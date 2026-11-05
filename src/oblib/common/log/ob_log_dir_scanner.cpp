@@ -17,8 +17,11 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "common/log/ob_log_dir_scanner.h"
-#include <dirent.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 #include "common/log/ob_log_entry.h"
+#include "lib/utility/ob_platform_io.h"
 
 using namespace oceanbase::common;
 
@@ -115,23 +118,16 @@ bool ObLogDirScanner::has_log() const
 int ObLogDirScanner::search_log_dir_(const char *log_dir)
 {
   int ret = OB_SUCCESS;
-
   int func_ret = 0;
-
   common::ObVector<ObSimpleLogFile> log_files(NULL, ObModIds::OB_SLOG_SCANNER);
-  DIR *plog_dir = opendir(log_dir);
+  oceanbase::common::ObPlatformDir *plog_dir = oceanbase::common::ob_opendir_utf8(log_dir);
   if (OB_UNLIKELY(NULL == plog_dir)) {
-#ifdef _WIN32
-    func_ret = _mkdir(log_dir);
-#else
-    func_ret = mkdir(log_dir, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-#endif
-    if (func_ret != 0
-        && EEXIST != errno) {
+    func_ret = oceanbase::common::ob_mkdir_utf8(log_dir, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    if (func_ret != 0 && EEXIST != errno) {
       ret = OB_ERROR;
       SHARE_LOG(ERROR, "mkdir error", K(ret), KCSTRING(log_dir), KERRMSG);
     } else {
-      plog_dir = opendir(log_dir);
+      plog_dir = oceanbase::common::ob_opendir_utf8(log_dir);
       if (NULL == plog_dir) {
         ret = OB_ERROR;
         SHARE_LOG(ERROR, "opendir error", K(ret), KCSTRING(log_dir), KERRMSG);
@@ -140,41 +136,33 @@ int ObLogDirScanner::search_log_dir_(const char *log_dir)
   }
 
   if (OB_SUCC(ret)) {
-    struct dirent entry;
-    memset(&entry, 0x00, sizeof(struct dirent));
-    struct dirent *pentry = &entry;
-
+    char entry_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     ObSimpleLogFile log_file;
     ObSimpleLogFile::FileType file_type;
-
-    func_ret = readdir_r(plog_dir, pentry, &pentry);
-    while (OB_SUCC(ret) && 0 == func_ret && NULL != pentry) {
-      if (OB_FAIL(log_file.assign(pentry->d_name, file_type))) {
+    int read_ret = 0;
+    while (OB_SUCC(ret)
+           && 1 == (read_ret = oceanbase::common::ob_readdir_utf8(plog_dir, entry_name,
+                                                       sizeof(entry_name)))) {
+      if (OB_FAIL(log_file.assign(entry_name, file_type))) {
+      } else if (ObSimpleLogFile::LOG == file_type) {
+        if (OB_FAIL(log_files.push_back(log_file))) {
+        }
+      } else if (ObSimpleLogFile::CKPT == file_type) {
+        if (max_ckpt_id_ < log_file.id) {
+          max_ckpt_id_ = log_file.id;
+          has_ckpt_ = true;
+        }
       } else {
-        if (ObSimpleLogFile::LOG == file_type) {
-          if (OB_FAIL(log_files.push_back(log_file))) {
-          } else {
-          }
-        } else if (ObSimpleLogFile::CKPT == file_type) {
-          if (max_ckpt_id_ < log_file.id) {
-            max_ckpt_id_ = log_file.id;
-            has_ckpt_ = true;
-          }
-        } else {
-        }
-        if (OB_SUCC(ret)) {
-          func_ret = readdir_r(plog_dir, pentry, &pentry);
-        }
       }
     }
-    if (0 != func_ret) {
-      SHARE_LOG(ERROR, "readdir_r error", K(func_ret), K(pentry), K(plog_dir));
+    // A failed directory read must fail the scan; treating it as end-of-directory
+    // would silently truncate the log id range.
+    if (OB_SUCC(ret) && 0 > read_ret) {
+      SHARE_LOG(ERROR, "readdir error", K(errno), KCSTRING(log_dir));
       ret = OB_ERROR;
     }
-    func_ret = closedir(plog_dir);
-    if (func_ret < 0) {
+    if (0 > oceanbase::common::ob_closedir_utf8(plog_dir)) {
       SHARE_LOG(ERROR, "closedir", KCSTRING(log_dir), KERRMSG);
-      ret = OB_SUCCESS;
     }
   }
 
