@@ -3048,7 +3048,8 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
   expr_min.set_min_value();
   expr_max.set_max_value();
   double ndv = 1.0;
-  double not_null_sel = 1.0; // todo
+  double not_null_sel = 1.0;
+  int min_max_cmp = 0;
   bool dummy = false;
   bool discrete = (expr_->get_type_class() != ObFloatTC) && (expr_->get_type_class() != ObDoubleTC);
   ObBorderFlag border_flag;
@@ -3074,6 +3075,14 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
                                                                   &min_scalar, &max_scalar,
                                                                   &start_scalar, &end_scalar))) {
   } else if (OB_FAIL(ObOptSelectivity::calculate_distinct(table_metas, ctx, *expr_, ctx.get_current_rows(), ndv))) {
+  } else if (OB_FAIL(ObOptSelectivity::calculate_expr_nns(table_metas, ctx, expr_, not_null_sel))) {
+  } else if (OB_FAIL(expr_min.compare(expr_max, min_max_cmp))) {
+  } else if (0 == min_max_cmp) {
+    // A collapsed domain (for example, age * 0) has one non-NULL value.
+    // Test membership directly so strict bounds can also have zero selectivity.
+    SimpleRange point;
+    point.set_bound(T_OP_EQ, expr_min);
+    selectivity = (range_.is_superset(point) != is_not_op_) ? not_null_sel : 0.0;
   } else if (OB_FAIL(ObOptSelectivity::do_calc_range_selectivity(min_scalar.get_double(),
                                                                  max_scalar.get_double(),
                                                                  start_scalar,
