@@ -546,11 +546,12 @@ int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_ro
 }
 
 int ObConflictChecker::update_row(const ObChunkDatumStore::StoredRow *new_row,
-                                  const ObChunkDatumStore::StoredRow *old_row)
+                                  const ObChunkDatumStore::StoredRow *old_row,
+                                  ObNewRowSource from)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(delete_old_row(old_row, ObNewRowSource::FROM_INSERT))) {
-  } else if (OB_FAIL(insert_new_row(new_row, ObNewRowSource::FROM_UPDATE))) {
+  } else if (OB_FAIL(insert_new_row(new_row, from))) {
   }
   return ret;
 }

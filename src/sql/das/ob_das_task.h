@@ -117,6 +117,7 @@ public:
       task_flag_(0),
       write_branch_id_(0),
       tablet_access_(nullptr),
+      row_source_ctdef_(nullptr),
       op_alloc_(op_alloc),
       related_ctdefs_(op_alloc),
       related_rtdefs_(op_alloc),
@@ -149,6 +150,8 @@ public:
   // tablet_access_ will not be serialized, therefore it cannot be accessed during the execution phase
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
   const DASRuntimeTabletAccess *get_tablet_access() const { return tablet_access_; }
+  void set_row_source_ctdef(const ObDASBaseCtDef *ctdef) { row_source_ctdef_ = ctdef; }
+  const ObDASBaseCtDef *get_row_source_ctdef() const { return row_source_ctdef_; }
   inline int64_t get_ref_table_id() const { return tablet_access_->access_meta_->ref_table_id_; }
   virtual int init_task_info(uint32_t row_extend_size) = 0;
   virtual const ObDASBaseCtDef *get_ctdef() const { return nullptr; }
@@ -265,6 +268,9 @@ protected:
   // tablet_access_ will not be serialized, therefore it cannot be accessed during the execution phase
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
   const DASRuntimeTabletAccess *tablet_access_;
+  // Local batching identity only; the plan owns this definition until tasks
+  // finish. Execution uses the task's actual ctdefs, never this pointer.
+  const ObDASBaseCtDef *row_source_ctdef_;
   common::ObIAllocator &op_alloc_;
   //In DML DAS Task,related_ctdefs_ means related local index ctdefs
   //In Scan DAS Task for normal secondary index, related_ctdefs_ have only one element, means the lookup ctdef

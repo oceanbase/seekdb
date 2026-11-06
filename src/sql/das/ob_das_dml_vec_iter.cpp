@@ -676,6 +676,10 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
             ObString embedded_vector;
             if (is_old_row_) {
               obj_arr[embedded_vec_idx].set_null();
+            } else if (das_ctdef_->is_embedded_vec_from_old_row_) {
+              // Domain-ID lookup supplied the stored vector. The generated
+              // expression for changed text instead requires embedding.
+              obj_arr[embedded_vec_idx].set_string(chunk);
             } else {
               if (OB_FAIL(ObVectorIndexUtil::get_vector_from_text_by_embedding(allocator_, chunk, vec_index_param, embedded_vector))) {
               } else {

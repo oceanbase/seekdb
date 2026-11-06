@@ -230,7 +230,8 @@ public:
                      ObNewRowSource from);
 
   int update_row(const ObChunkDatumStore::StoredRow *new_row,
-                 const ObChunkDatumStore::StoredRow *old_row);
+                 const ObChunkDatumStore::StoredRow *old_row,
+                 ObNewRowSource from);
 
   int lock_row(const ObChunkDatumStore::StoredRow *lock_row);
 

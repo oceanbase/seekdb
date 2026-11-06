@@ -1638,6 +1638,15 @@ int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_
             ret = OB_ERR_UNEXPECTED;
           } else {
             new_row_projector.at(i) = projector_idx;
+            if (share::schema::is_hybrid_vec_index_embedded_type(
+                    das_ctdef.table_param_.get_data_table().get_index_type())
+                && storage_cid == das_ctdef.table_param_.get_data_table().get_embedded_vec_col_id()
+                && column_expr->is_column_ref_expr()
+                && static_cast<ObColumnRefRawExpr *>(column_expr)->is_hybrid_embedded_vec_column()) {
+              // Keep the datum's representation when an update is expanded
+              // into DELETE + INSERT, which has no old-row projector.
+              das_ctdef.is_embedded_vec_from_old_row_ = true;
+            }
           }
         }
       }
