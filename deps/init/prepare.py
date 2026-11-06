@@ -202,40 +202,48 @@ def ready(destination, key):
     return (destination / key).is_file() and (destination / "DONE").is_file()
 
 
+def populate_profile(profile, stage, archive_directory):
+    for filename, url in packages(profile):
+        print("Preparing " + filename, flush=True)
+        archive = stage / "pkg" / filename
+        cached = archive_directory / filename
+        if cached.is_file():
+            shutil.copyfile(cached, archive)
+        else:
+            download(url, archive)
+        unpack(archive, stage)
+
+
+def populate_lock(lock_file, stage, archive_directory, system, architecture):
+    prefix = (stage / "vcpkg/x64-windows" if system == "Windows" else
+              stage / "usr/local/oceanbase/deps/devel")
+    prefix.mkdir(parents=True, exist_ok=True)
+    for package in locked_packages(lock_file, system, architecture):
+        url = package.get("url")
+        checksum = package.get("sha256")
+        if not url or not checksum or not package.get("version"):
+            raise ValueError("Incomplete locked dependency: " + str(package.get("name")))
+        filename = url.rsplit("/", 1)[-1]
+        archive = stage / "pkg" / filename
+        cached = archive_directory / filename
+        if cached.is_file():
+            shutil.copyfile(cached, archive)
+        else:
+            download(url, archive)
+        actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+        if actual.lower() != checksum.lower():
+            raise ValueError("SHA256 mismatch for " + filename)
+        print("Preparing locked package " + package["name"] + " " + package["version"], flush=True)
+        unpack(archive, prefix)
+
+
 def populate(profile, destination, key, archive_directory, lock_file, system, architecture):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".deps-", dir=destination.parent) as temporary:
         stage = Path(temporary) / "3rd"
         (stage / "pkg").mkdir(parents=True)
-        for filename, url in packages(profile):
-            print("Preparing " + filename, flush=True)
-            archive = stage / "pkg" / filename
-            cached = archive_directory / filename
-            if cached.is_file():
-                shutil.copyfile(cached, archive)
-            else:
-                download(url, archive)
-            unpack(archive, stage)
-        prefix = (stage / "vcpkg/x64-windows" if system == "Windows" else
-                  stage / "usr/local/oceanbase/deps/devel")
-        prefix.mkdir(parents=True, exist_ok=True)
-        for package in locked_packages(lock_file, system, architecture):
-            url = package.get("url")
-            checksum = package.get("sha256")
-            if not url or not checksum or not package.get("version"):
-                raise ValueError("Incomplete locked dependency: " + str(package.get("name")))
-            filename = url.rsplit("/", 1)[-1]
-            archive = stage / "pkg" / filename
-            cached = archive_directory / filename
-            if cached.is_file():
-                shutil.copyfile(cached, archive)
-            else:
-                download(url, archive)
-            actual = hashlib.sha256(archive.read_bytes()).hexdigest()
-            if actual.lower() != checksum.lower():
-                raise ValueError("SHA256 mismatch for " + filename)
-            print("Preparing locked package " + package["name"] + " " + package["version"], flush=True)
-            unpack(archive, prefix)
+        populate_profile(profile, stage, archive_directory)
+        populate_lock(lock_file, stage, archive_directory, system, architecture)
         (stage / key).touch()
         (stage / "DONE").touch()
         remove_directory(destination)
