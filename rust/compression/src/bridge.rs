@@ -12,7 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{crc32, zlib_compress_bound, Error, GzipEncoder, StreamDecoder, StreamProgress};
+use crate::{
+    crc32, zlib_compress_bound, DeflateError, Error, GzipEncoder, InflateError, StreamDecoder,
+    StreamProgress, GZIP_COMPRESSION_LEVEL,
+};
+
+pub struct GzipEncoderHandle(Result<GzipEncoder, Error>);
+
+pub struct StreamDecoderHandle(Result<StreamDecoder, Error>);
 
 #[cxx::bridge(namespace = "oceanbase::compression")]
 mod ffi {
@@ -21,6 +28,7 @@ mod ffi {
         InvalidArgument,
         InvalidData,
         OutputTooSmall,
+        OutOfMemory,
     }
 
     struct OperationResult {
@@ -42,20 +50,22 @@ mod ffi {
         fn zlib_decompress(input: &[u8], output: &mut [u8]) -> OperationResult;
         fn crc32(input: &[u8]) -> u32;
 
-        type GzipEncoder;
-        fn new_gzip_encoder() -> Box<GzipEncoder>;
+        type GzipEncoderHandle;
+        fn new_gzip_encoder() -> Box<GzipEncoderHandle>;
+        fn gzip_creation_status(stream: &GzipEncoderHandle) -> Code;
         fn gzip_process(
-            stream: &mut GzipEncoder,
+            stream: &mut GzipEncoderHandle,
             input: &[u8],
             output: &mut [u8],
             finish: bool,
         ) -> BridgeProgress;
-        fn gzip_reset(stream: &mut GzipEncoder);
+        fn gzip_reset(stream: &mut GzipEncoderHandle);
 
-        type StreamDecoder;
-        fn new_stream_decoder() -> Box<StreamDecoder>;
+        type StreamDecoderHandle;
+        fn new_stream_decoder() -> Box<StreamDecoderHandle>;
+        fn decoder_creation_status(stream: &StreamDecoderHandle) -> Code;
         fn decoder_process(
-            stream: &mut StreamDecoder,
+            stream: &mut StreamDecoderHandle,
             input: &[u8],
             output: &mut [u8],
         ) -> BridgeProgress;
@@ -66,6 +76,9 @@ fn code(error: Error) -> ffi::Code {
     match error {
         Error::InvalidCompressionLevel => ffi::Code::InvalidArgument,
         Error::OutputTooSmall => ffi::Code::OutputTooSmall,
+        Error::Deflate(DeflateError::MemError) | Error::Inflate(InflateError::MemError) => {
+            ffi::Code::OutOfMemory
+        }
         Error::InvalidData | Error::Inflate(_) | Error::Deflate(_) => ffi::Code::InvalidData,
     }
 }
@@ -110,31 +123,95 @@ fn progress(result: Result<StreamProgress, Error>) -> ffi::BridgeProgress {
     }
 }
 
-fn new_gzip_encoder() -> Box<GzipEncoder> {
-    Box::new(GzipEncoder::default())
+fn new_gzip_encoder() -> Box<GzipEncoderHandle> {
+    Box::new(GzipEncoderHandle(GzipEncoder::new(GZIP_COMPRESSION_LEVEL)))
 }
 
-fn new_stream_decoder() -> Box<StreamDecoder> {
-    Box::new(StreamDecoder::new())
+fn new_stream_decoder() -> Box<StreamDecoderHandle> {
+    Box::new(StreamDecoderHandle(StreamDecoder::new()))
+}
+
+fn gzip_creation_status(stream: &GzipEncoderHandle) -> ffi::Code {
+    stream
+        .0
+        .as_ref()
+        .map_or_else(|error| code(*error), |_| ffi::Code::Ok)
+}
+
+fn decoder_creation_status(stream: &StreamDecoderHandle) -> ffi::Code {
+    stream
+        .0
+        .as_ref()
+        .map_or_else(|error| code(*error), |_| ffi::Code::Ok)
 }
 
 fn gzip_process(
-    stream: &mut GzipEncoder,
+    stream: &mut GzipEncoderHandle,
     input: &[u8],
     output: &mut [u8],
     finish: bool,
 ) -> ffi::BridgeProgress {
-    progress(stream.process(input, output, finish))
+    progress(match &mut stream.0 {
+        Ok(stream) => stream.process(input, output, finish),
+        Err(error) => Err(*error),
+    })
 }
 
-fn gzip_reset(stream: &mut GzipEncoder) {
-    stream.reset();
+fn gzip_reset(stream: &mut GzipEncoderHandle) {
+    if let Ok(stream) = &mut stream.0 {
+        stream.reset();
+    }
 }
 
 fn decoder_process(
-    stream: &mut StreamDecoder,
+    stream: &mut StreamDecoderHandle,
     input: &[u8],
     output: &mut [u8],
 ) -> ffi::BridgeProgress {
-    progress(stream.process(input, output))
+    progress(match &mut stream.0 {
+        Ok(stream) => stream.process(input, output),
+        Err(error) => Err(*error),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_stream_handles_preserve_creation_errors() {
+        for (deflate_error, inflate_error, expected_code) in [
+            (
+                DeflateError::MemError,
+                InflateError::MemError,
+                ffi::Code::OutOfMemory,
+            ),
+            (
+                DeflateError::StreamError,
+                InflateError::StreamError,
+                ffi::Code::InvalidData,
+            ),
+        ] {
+            let mut encoder = GzipEncoderHandle(Err(deflate_error.into()));
+            let mut decoder = StreamDecoderHandle(Err(inflate_error.into()));
+            assert!(gzip_creation_status(&encoder) == expected_code);
+            assert!(decoder_creation_status(&decoder) == expected_code);
+
+            let mut output = [0xab; 32];
+            let compressed = gzip_process(&mut encoder, b"input", &mut output, true);
+            let decoded = decoder_process(&mut decoder, b"input", &mut output);
+            for progress in [compressed, decoded] {
+                assert!(progress.code == expected_code);
+                assert_eq!(0, progress.consumed);
+                assert_eq!(0, progress.produced);
+                assert!(!progress.drained);
+                assert!(!progress.stream_end);
+            }
+            assert_eq!([0xab; 32], output);
+            gzip_reset(&mut encoder);
+            assert!(gzip_creation_status(&encoder) == expected_code);
+        }
+        assert!(gzip_creation_status(&new_gzip_encoder()) == ffi::Code::Ok);
+        assert!(decoder_creation_status(&new_stream_decoder()) == ffi::Code::Ok);
+    }
 }

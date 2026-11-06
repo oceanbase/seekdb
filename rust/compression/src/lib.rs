@@ -211,13 +211,17 @@ enum StreamKind {
 }
 
 struct ZStream {
+    // zlib retains the z_stream address in its internal state across calls.
     raw: Box<libz_sys::z_stream>,
     kind: StreamKind,
 }
 
 impl ZStream {
     fn new_deflate(level: i32) -> Result<Self, DeflateError> {
-        let mut raw = Box::new(empty_stream());
+        Self::init_deflate(Box::new(empty_stream()), level)
+    }
+
+    fn init_deflate(mut raw: Box<libz_sys::z_stream>, level: i32) -> Result<Self, DeflateError> {
         // SAFETY: raw is initialized, the version comes from the linked zlib,
         // and the supplied size matches libz-sys's z_stream layout.
         let code = unsafe {
@@ -244,7 +248,10 @@ impl ZStream {
     }
 
     fn new_inflate() -> Result<Self, InflateError> {
-        let mut raw = Box::new(empty_stream());
+        Self::init_inflate(Box::new(empty_stream()))
+    }
+
+    fn init_inflate(mut raw: Box<libz_sys::z_stream>) -> Result<Self, InflateError> {
         // SAFETY: raw is initialized, the version comes from the linked zlib,
         // and the supplied size matches libz-sys's z_stream layout.
         let code = unsafe {
@@ -316,6 +323,7 @@ pub struct GzipEncoder {
 }
 
 impl GzipEncoder {
+    /// Initializes an encoder, reporting invalid levels or zlib allocation failure.
     pub fn new(level: i32) -> Result<Self, Error> {
         if !(-1..=9).contains(&level) {
             return Err(Error::InvalidCompressionLevel);
@@ -360,23 +368,18 @@ impl GzipEncoder {
     }
 }
 
-impl Default for GzipEncoder {
-    fn default() -> Self {
-        Self::new(GZIP_COMPRESSION_LEVEL).expect("the fixed gzip compression level is valid")
-    }
-}
-
 pub struct StreamDecoder {
     stream: ZStream,
     needs_reset: bool,
 }
 
 impl StreamDecoder {
-    pub fn new() -> Self {
-        Self {
-            stream: ZStream::new_inflate().expect("failed to initialize zlib inflate stream"),
+    /// Initializes a decoder, reporting zlib allocation failure to the caller.
+    pub fn new() -> Result<Self, Error> {
+        Ok(Self {
+            stream: ZStream::new_inflate()?,
             needs_reset: false,
-        }
+        })
     }
 
     pub fn process(&mut self, input: &[u8], output: &mut [u8]) -> Result<StreamProgress, Error> {
@@ -402,12 +405,6 @@ impl StreamDecoder {
             libz_sys::Z_MEM_ERROR => Err(InflateError::MemError.into()),
             _ => Err(InflateError::StreamError.into()),
         }
-    }
-}
-
-impl Default for StreamDecoder {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

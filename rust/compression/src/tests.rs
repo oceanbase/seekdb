@@ -93,7 +93,7 @@ fn checksum_matches_standard_vector() {
 #[test]
 fn gzip_streaming_handles_small_buffers_and_reuse() {
     let input = data(200_000);
-    let mut encoder = GzipEncoder::default();
+    let mut encoder = GzipEncoder::new(GZIP_COMPRESSION_LEVEL).unwrap();
     let mut encoded = Vec::new();
 
     for chunk in input.chunks(997) {
@@ -122,7 +122,7 @@ fn gzip_streaming_handles_small_buffers_and_reuse() {
         assert!(progress.produced > 0);
     }
 
-    let mut decoder = StreamDecoder::new();
+    let mut decoder = StreamDecoder::new().unwrap();
     let mut decoded = vec![0u8; input.len() + 1];
     let mut input_offset = 0;
     let mut output_offset = 0;
@@ -166,12 +166,12 @@ fn gzip_streaming_handles_small_buffers_and_reuse() {
 #[test]
 fn stream_decoder_accepts_zlib_and_concatenated_gzip_members() {
     let mut output = [0u8; 32];
-    let mut decoder = StreamDecoder::new();
+    let mut decoder = StreamDecoder::new().unwrap();
     let progress = decoder.process(NATIVE_ZLIB_LEVEL6, &mut output).unwrap();
     assert!(progress.stream_end);
     assert_eq!(b"hello world\n", &output[..progress.produced]);
 
-    let mut encoder = GzipEncoder::default();
+    let mut encoder = GzipEncoder::new(GZIP_COMPRESSION_LEVEL).unwrap();
     let mut member = Vec::new();
     let mut offset = 0;
     loop {
@@ -197,4 +197,86 @@ fn stream_decoder_accepts_zlib_and_concatenated_gzip_members() {
         .unwrap();
     assert!(second.stream_end);
     assert_eq!(b"hello", &decoded[..second.produced]);
+}
+
+#[derive(Default)]
+struct AllocationState {
+    fail_after: Option<usize>,
+    calls: usize,
+    live: usize,
+}
+
+unsafe extern "C" fn test_allocate(
+    opaque: libz_sys::voidpf,
+    items: libz_sys::uInt,
+    size: libz_sys::uInt,
+) -> libz_sys::voidpf {
+    // SAFETY: the test caller keeps this state alive until the stream is destroyed;
+    // zlib invokes its allocator synchronously with exclusive stream access.
+    let state = unsafe { &mut *opaque.cast::<AllocationState>() };
+    let fail = state.fail_after.is_some_and(|limit| state.calls >= limit);
+    state.calls += 1;
+    if fail {
+        ptr::null_mut()
+    } else {
+        // SAFETY: this delegates to the production zlib allocator.
+        let address = unsafe { allocate(opaque, items, size) };
+        if !address.is_null() {
+            state.live += 1;
+        }
+        address
+    }
+}
+
+unsafe extern "C" fn test_deallocate(opaque: libz_sys::voidpf, address: libz_sys::voidpf) {
+    // SAFETY: opaque follows the same lifetime and exclusive access contract as
+    // test_allocate, and address was allocated by that callback.
+    let state = unsafe { &mut *opaque.cast::<AllocationState>() };
+    if !address.is_null() {
+        state.live -= 1;
+    }
+    unsafe { deallocate(opaque, address) };
+}
+
+fn test_stream(state: &mut AllocationState) -> Box<libz_sys::z_stream> {
+    let mut raw = Box::new(empty_stream());
+    raw.zalloc = test_allocate;
+    raw.zfree = test_deallocate;
+    raw.opaque = (state as *mut AllocationState).cast();
+    raw
+}
+
+#[test]
+fn stream_initialization_returns_allocation_errors_and_releases_partial_state() {
+    // Discover each library's allocation count, then fail every allocation in
+    // turn. This covers both immediate failure and partially initialized state.
+    for kind in [StreamKind::Deflate, StreamKind::Inflate] {
+        let initialize = |raw| match kind {
+            StreamKind::Deflate => {
+                ZStream::init_deflate(raw, GZIP_COMPRESSION_LEVEL).map_err(Error::from)
+            }
+            StreamKind::Inflate => ZStream::init_inflate(raw).map_err(Error::from),
+        };
+        let expected_error = match kind {
+            StreamKind::Deflate => Error::Deflate(DeflateError::MemError),
+            StreamKind::Inflate => Error::Inflate(InflateError::MemError),
+        };
+        let mut state = AllocationState::default();
+        drop(initialize(test_stream(&mut state)).unwrap());
+        assert_eq!(0, state.live);
+        assert!(state.calls > 0);
+        let allocation_count = state.calls;
+        for fail_after in 0..allocation_count {
+            let mut state = AllocationState {
+                fail_after: Some(fail_after),
+                ..AllocationState::default()
+            };
+            assert!(
+                matches!(initialize(test_stream(&mut state)), Err(error) if error == expected_error)
+            );
+            assert_eq!(0, state.live);
+        }
+    }
+    assert!(GzipEncoder::new(GZIP_COMPRESSION_LEVEL).is_ok());
+    assert!(StreamDecoder::new().is_ok());
 }
