@@ -1,0 +1,51 @@
+small list
+ids
+4,5,6
+duplicate-heavy list
+ids
+4,5,6
+threshold boundary
+ids
+2,3,4,5
+large distinct membership
+ids
+1,2,3,4,5,6,7
+integer boundaries
+ids
+9,10
+NULL in membership
+ids
+4,5
+NOT IN with NULL
+ids
+none
+NOT IN duplicates
+ids
+1,2,3,7,9,10
+mixed integer and string
+ids
+4,5,6
+unsigned fallback
+ids
+4
+row membership
+ids
+4,5
+automatic parameterization: duplicate pattern
+ids
+4,5,6
+automatic parameterization: changed values
+ids
+4,5,6,7
+prepared: duplicates
+ids
+4,5,6
+prepared: changed values
+ids
+4,5,6,7
+prepared: all equal
+ids
+5
+prepared: all NULL
+ids
+none
