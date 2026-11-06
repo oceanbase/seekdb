@@ -215,10 +215,14 @@ def locked_archive(package, archive_directory, staging_directory):
     return archive
 
 
-def unpack(archive, destination):
+def unpack(archive, destination, *, ignore_owner=False):
     if archive.suffix != ".rpm":
-        subprocess.run(["tar", "-xf", str(archive), "-C", str(destination),
-                        "--strip-components=1"], check=True)
+        command = ["tar"]
+        if ignore_owner:
+            command.append("--no-same-owner")
+        command.extend(["-xf", str(archive), "-C", str(destination),
+                        "--strip-components=1"])
+        subprocess.run(command, check=True)
     else:
         with subprocess.Popen(["rpm2cpio", str(archive)], stdout=subprocess.PIPE) as rpm:
             try:
@@ -257,7 +261,7 @@ def populate_lock(lock_file, stage, archive_directory, system, architecture):
     for package in locked_packages(lock_file, system, architecture):
         archive = locked_archive(package, archive_directory, stage / "pkg")
         print("Preparing locked package " + package["name"] + " " + package["version"], flush=True)
-        unpack(archive, stage)
+        unpack(archive, stage, ignore_owner=system == "Linux")
 
 
 def populate(profile, destination, key, archive_directory, lock_file, system, architecture):
