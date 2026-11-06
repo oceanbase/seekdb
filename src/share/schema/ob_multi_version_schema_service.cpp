@@ -2544,8 +2544,14 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
         case ObRecycleObject::RESERVED_TYPE_5:
           break;
         default:
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unknown recycle object type", K(recycle_obj));
+          // The object type is only used to estimate the purge timeout here, so an
+          // unrecognized value must not abort the statement: returning -4016 makes
+          // every later "purge recyclebin" fail while the offending row itself is
+          // never reclaimed.  Count it so the batch is not cut short by a zero
+          // timeout and the row is reported by the purge itself.
+          LOG_WARN("unexpected recycle object type, ignore it when estimating purge timeout",
+                   K(recycle_obj));
+          ++total_purge_count;
           break;
       }
     }
