@@ -300,6 +300,8 @@ int ObAIFuncClient::send_post_batch(common::ObIAllocator &allocator,
         ret = OB_SUCCESS;
         const int64_t delay_ms = 1000 * (1 << i) + rand() % 1000;
         ob_usleep(delay_ms * 1000);
+      } else if (OB_SUCC(ret)) {
+        break;
       }
     }
   }
