@@ -5871,7 +5871,15 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
+    // The base table row count is -1 when the statistics are unavailable, in which case
+    // row_count_ * selectivity_ degenerates to a non-positive value. The first branch below
+    // would then treat the candidate set as empty and pick the brute-force PRE_FILTER path,
+    // which is the most expensive choice when the result set is in fact non-empty.
+    // Fall back to the iterative path whenever the row count or the selectivity is unusable.
+    const bool estimate_usable = vc_info.row_count_ > 0 && vc_info.selectivity_ > 0.0;
+    if (!estimate_usable) {
+      vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
+    } else if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
