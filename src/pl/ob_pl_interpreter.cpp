@@ -361,7 +361,9 @@ static int exec_block(ObPLExecCtx *ctx, const ObPLStmtBlock *block, CtrlState &c
         const_cast<ObPLStmtBlock *>(block)->get_eh());
     for (int64_t i = 0; OB_SUCC(ret) && Ctrl::NORMAL == ctrl.flow && i < stmts.count(); ++i) {
       common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
+      const common::ObWarningBuffer *const wb_before = wb;
       const uint32_t warn_before = OB_NOT_NULL(wb) ? wb->get_total_warning_count() : 0;
+      const uint64_t reset_before = OB_NOT_NULL(wb) ? wb->get_warning_reset_generation() : 0;
       int sret = SMART_CALL(exec_stmt(ctx, stmts.at(i), ctrl));
       if (OB_SUCCESS != sret) {
         // A statement raised a condition: search this block's handlers.
@@ -400,13 +402,14 @@ static int exec_block(ObPLExecCtx *ctx, const ObPLStmtBlock *block, CtrlState &c
         // already ran this check for whichever of its own statements actually raised, so
         // gating on PL_BLOCK fires the search exactly once, at the innermost raising statement.
         wb = common::ob_get_tsi_warning_buffer();
-        // A plain SQL statement that is not diagnostic resets the TSI warning buffer before it
-        // runs (spi_execute does exactly this), so every readable warning belongs to this
-        // statement whether the counter went up or down. Diagnostic statements and PL
-        // statements only append, so only the newest ring slots belong to this statement.
-        const bool resets_da = PL_SQL == stmts.at(i)->get_type()
-            && !ObStmt::is_diagnostic_stmt(
-                   static_cast<const ObPLSqlStmt *>(stmts.at(i))->get_stmt_type());
+        // CALL and dynamic SQL can reset the diagnostic area through SPI too. A
+        // reset invalidates the old count even if the new count happens to equal
+        // it. Observe the buffer's actual reset rather than guessing from syntax.
+        // Without a reset, only appended slots are new; a diagnostic read or a
+        // warning-free callee must not replay a retained condition. A callee's
+        // consumed conditions have already been removed by reset_warning().
+        const bool resets_da = OB_NOT_NULL(wb)
+            && (wb != wb_before || wb->get_warning_reset_generation() != reset_before);
         if (OB_NOT_NULL(wb) && wb->get_readable_warning_count() > 0
             && (resets_da || wb->get_total_warning_count() > warn_before)) {
           const uint32_t total_after = wb->get_total_warning_count();
