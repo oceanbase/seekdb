@@ -179,6 +179,14 @@ def download(url, archive):
             partial.unlink()
 
 
+def locked_download_url(url):
+    if url.startswith("https://github.com/"):
+        prefix = os.environ.get("SEEKDB_DEPS_GITHUB_PROXY_PREFIX", "https://gh-proxy.com/")
+        if prefix:
+            return prefix.rstrip("/") + "/" + url
+    return url
+
+
 def sha256_file(path):
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -200,7 +208,7 @@ def locked_archive(package, archive_directory, staging_directory):
         return archive
     if cached.is_file():
         cached.unlink()
-    download(url, archive)
+    download(locked_download_url(url), archive)
     if sha256_file(archive) != checksum:
         archive.unlink()
         raise ValueError("SHA256 mismatch for " + url.rsplit("/", 1)[-1])
