@@ -549,7 +549,8 @@ impl<B: AsRef<[u64]> + AsMut<[u64]>> Execution<B> {
         if backing.as_ref().len() < words {
             return Err(EvalError::new(ErrorKind::Memory, 0, 0));
         }
-        backing.as_mut()[..words].fill(0);
+        let validity_start = program.input_count() * capacity;
+        backing.as_mut()[validity_start..2 * validity_start].fill(0);
         Ok(Self {
             program_id: program.id,
             nodes: program.node_count(),
@@ -603,8 +604,14 @@ impl<B: AsRef<[u64]> + AsMut<[u64]>> Execution<B> {
         }
         self.rows = rows;
         let flags = self.flags_start();
-        let end = flags + self.nodes * self.capacity;
-        self.backing.as_mut()[flags..end].fill(0);
+        if rows == self.capacity {
+            self.backing.as_mut()[flags..flags + self.nodes * self.capacity].fill(0);
+        } else {
+            for node in 0..self.nodes {
+                let start = flags + node * self.capacity;
+                self.backing.as_mut()[start..start + rows].fill(0);
+            }
+        }
         let selection = self.selection_start();
         for (row, &skipped) in skip.iter().enumerate() {
             self.backing.as_mut()[selection + row] = u64::from(skipped != 0);

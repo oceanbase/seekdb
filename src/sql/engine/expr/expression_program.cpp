@@ -55,6 +55,14 @@ public:
   {
     int ret = OB_SUCCESS;
     const ObOpSpec &spec = spec_;
+    // These producers retain inputs without changing expression semantics,
+    // unlike a ROLLUP key whose grand-total value is replaced with NULL.
+    // Table-scan final-limit paths can consume filters before this stage.
+    if (!(spec.is_table_scan() && spec.filters_.empty())
+        && spec.get_type() != PHY_SUBPLAN_SCAN
+        && spec.get_type() != PHY_SORT && spec.get_type() != PHY_MATERIAL) {
+      return OB_NOT_SUPPORTED;
+    }
     if (spec.output_.empty() || spec.output_.count() > 256 || spec.filters_.count() > 256) {
       ret = OB_NOT_SUPPORTED;
     }
@@ -90,21 +98,24 @@ public:
   ObSEArray<uint32_t, 16, ObWrapperAllocator> depths_;
 
 private:
-  bool is_boundary(const ObExpr *expr) const
+  enum class Boundary { Internal, Materialized, Unavailable };
+
+  Boundary boundary(const ObExpr *expr) const
   {
-    bool boundary = false;
-    for (uint32_t i = 0; !boundary && i < spec_.get_child_cnt(); ++i) {
+    for (uint32_t i = 0; i < spec_.get_child_cnt(); ++i) {
       const ObOpSpec &child_spec = *spec_.get_child(i);
       // Scalar plans can publish lazy outputs. Only eager production routes
       // guarantee that an output remains materialized on subsequent calls.
       const bool eager = child_spec.is_vectorized() || child_spec.get_phy_plan()->is_vectorized()
           || child_spec.get_phy_plan()->is_contains_assignment();
       const auto &outputs = child_spec.output_;
-      for (int64_t j = 0; !boundary && j < outputs.count(); ++j) {
-        boundary = outputs.at(j) == expr && (eager || expr->eval_func_ == nullptr);
+      for (int64_t j = 0; j < outputs.count(); ++j) {
+        if (outputs.at(j) == expr) {
+          return eager || expr->eval_func_ == nullptr ? Boundary::Materialized : Boundary::Unavailable;
+        }
       }
     }
-    return boundary;
+    return Boundary::Internal;
   }
 
   int lower(const ObExpr *expr, int64_t depth, uint32_t &id)
@@ -125,6 +136,10 @@ private:
     }
     if (expr == nullptr || depth >= MAX_PROGRAM_DEPTH || nodes_.count() >= MAX_PROGRAM_NODES
         || (!ob_is_int_tc(expr->datum_meta_.type_) && expr->datum_meta_.type_ != ObNullType)) {
+      return OB_NOT_SUPPORTED;
+    }
+    const Boundary input_boundary = boundary(expr);
+    if (input_boundary == Boundary::Unavailable) {
       return OB_NOT_SUPPORTED;
     }
     expression::Instruction instruction{};
@@ -149,7 +164,7 @@ private:
         instruction.value = datum.get_int();
       }
       argument_count = 0;
-    } else if (is_boundary(expr) || parameter || column) {
+    } else if (input_boundary == Boundary::Materialized || parameter || column) {
       instruction.opcode = 0;
       instruction.input = static_cast<uint32_t>(inputs_.count());
       argument_count = 0;
@@ -267,7 +282,7 @@ CompiledExpressionProgram::CompiledExpressionProgram(ObIAllocator &allocator)
     inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
     materialized_inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
     nodes_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-    roots_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator))
+    outputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator))
 {
 }
 
@@ -290,11 +305,7 @@ int CompiledExpressionProgram::create(const ObOpSpec &spec, ObIAllocator &alloca
       if (OB_FAIL(program->inputs_.assign(builder.inputs_))) {
       } else if (OB_FAIL(program->materialized_inputs_.assign(builder.materialized_inputs_))) {
       } else if (OB_FAIL(program->nodes_.assign(builder.nodes_))) {
-      } else if (OB_FAIL(program->roots_.assign(builder.filters_))) {
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < builder.projections_.count(); ++i) {
-          ret = program->roots_.push_back(builder.projections_.at(i));
-        }
+      } else if (OB_FAIL(program->outputs_.assign(builder.projections_))) {
       }
       if (OB_SUCC(ret)) {
         try {
@@ -614,8 +625,8 @@ int ExpressionProgram::execute(ObBitVector *skip, int64_t rows, bool batch,
       }
       all_filtered = survivors == 0;
       all_active &= survivors == rows;
-      for (int64_t i = 0; i < compiled_.roots_.count(); ++i) {
-        const uint32_t node = compiled_.roots_.at(i);
+      for (int64_t i = 0; i < compiled_.outputs_.count(); ++i) {
+        const uint32_t node = compiled_.outputs_.at(i);
         export_root(*compiled_.nodes_.at(node), node, rows, batch);
       }
       EVENT_ADD(RUST_EXPRESSION_PROGRAMS, 1);

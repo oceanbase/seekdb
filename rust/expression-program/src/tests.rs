@@ -962,3 +962,124 @@ fn invalid_compact_instructions_leave_caller_storage_unchanged() {
     ));
     assert_eq!(too_small, [77]);
 }
+
+#[test]
+fn batch_deepest_valid_program_preserves_word_boundary_rows() {
+    let mut operations = vec![Input(0)];
+    for node in 1..MAX_DEPTH {
+        operations.push(Identity(node - 1));
+    }
+    let program = program(operations, vec![], vec![MAX_DEPTH - 1], 1);
+    let mut execution = execution(&program, 256);
+    let values: Vec<_> = (0..256).map(|row| Some(row as i64 - 128)).collect();
+    let skip: Vec<_> = (0..256)
+        .map(|row| u8::from(![0, 63, 64, 127, 128, 255].contains(&row)))
+        .collect();
+    bind(&mut execution, &[&values], &skip);
+    execution.filter_project(&program, &mut ()).unwrap();
+    for (row, &skipped) in skip.iter().enumerate() {
+        assert_eq!(
+            execution.node_flags(MAX_DEPTH - 1)[row],
+            if skipped == 0 { EVALUATED | VALID } else { 0 }
+        );
+        if skipped == 0 {
+            assert_eq!(
+                execution.node_values(MAX_DEPTH - 1)[row] as i64,
+                row as i64 - 128
+            );
+        }
+    }
+}
+
+#[test]
+fn reused_dirty_backing_defaults_inputs_to_null_and_invalidates_growing_batches() {
+    let program = program(
+        vec![Input(0), Constant(Some(3)), Add(0, 1)],
+        vec![],
+        vec![2],
+        1,
+    );
+    let mut execution = Execution::new(
+        &program,
+        256,
+        vec![u64::MAX; required_words(&program, 256).unwrap()],
+    )
+    .unwrap();
+    execution.begin_batch(256, &[0; 256]).unwrap();
+    execution.filter_project(&program, &mut ()).unwrap();
+    assert_eq!(results(&execution, 2), vec![None; 256]);
+    for rows in [256, 1, 8, 128, 256] {
+        let column = vec![Some(rows as i64); rows];
+        bind(&mut execution, &[&column], &vec![0; rows]);
+        execution.filter_project(&program, &mut ()).unwrap();
+        assert_eq!(results(&execution, 2), vec![Some(rows as i64 + 3); rows]);
+    }
+}
+
+#[test]
+fn batch_shared_fallible_node_is_demanded_by_disjoint_case_roots() {
+    let program = program(
+        vec![
+            Input(0),
+            Input(1),
+            Div {
+                left: 0,
+                right: 1,
+                error_on_zero: true,
+            },
+            Constant(Some(0)),
+            Gt(0, 3),
+            Not(4),
+            Case {
+                arms: vec![(4, 2)],
+                otherwise: Some(3),
+            },
+            Case {
+                arms: vec![(5, 2)],
+                otherwise: Some(3),
+            },
+        ],
+        vec![],
+        vec![6, 7],
+        2,
+    );
+    let mut execution = execution(&program, 65);
+    let mut left = (0..65)
+        .map(|row| Some(if row % 2 == 0 { 9 } else { -9 }))
+        .collect::<Vec<_>>();
+    left[64] = None;
+    let mut right = vec![Some(3); 65];
+    right[64] = Some(0);
+    bind(&mut execution, &[&left, &right], &[0; 65]);
+    execution.filter_project(&program, &mut ()).unwrap();
+    for row in 0..64 {
+        assert_eq!(execution.node_flags(2)[row], EVALUATED | VALID);
+        assert_eq!(
+            execution.node_values(2)[row] as i64,
+            if row % 2 == 0 { 3 } else { -3 }
+        );
+        assert_eq!(
+            execution.node_values(6)[row] as i64,
+            if row % 2 == 0 { 3 } else { 0 }
+        );
+        assert_eq!(
+            execution.node_values(7)[row] as i64,
+            if row % 2 == 0 { 0 } else { -3 }
+        );
+    }
+    assert_eq!(execution.node_flags(2)[64], 0);
+    assert_eq!(execution.node_values(6)[64], 0);
+    assert_eq!(execution.node_values(7)[64], 0);
+
+    right[63] = Some(0);
+    bind(&mut execution, &[&left, &right], &[0; 65]);
+    let error = execution.filter_project(&program, &mut ()).unwrap_err();
+    assert_eq!(
+        (error.kind, error.node, error.row),
+        (ErrorKind::DivisionByZero, 2, 63)
+    );
+    assert!(execution
+        .node_flags(6)
+        .iter()
+        .all(|&flags| flags == EVALUATED | VALID));
+}

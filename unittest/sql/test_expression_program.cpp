@@ -171,7 +171,8 @@ TEST(ExpressionProgramBridge, SharedPreparedHasIndependentConcurrentRunners)
         WorkerResult &result = results[worker];
         try {
           {
-            auto runner = make_runner(shared, &host, 3);
+            constexpr size_t CAPACITY = 65;
+            auto runner = make_runner(shared, &host, CAPACITY);
             ready.fetch_add(1, std::memory_order_release);
             announced = true;
             while (!start.load(std::memory_order_acquire)) {
@@ -179,16 +180,17 @@ TEST(ExpressionProgramBridge, SharedPreparedHasIndependentConcurrentRunners)
             }
             for (int rebound = 0; rebound < REBINDS; ++rebound) {
               auto input = input_storage(*runner);
-              input[0] = worker * 100 + rebound + 1;
-              input[1] = static_cast<uint64_t>(-1000);
-              input[2] = 0;
-              input[3] = input[4] = input[5] = rebound * 2;
-              input[6] = input[7] = 1;
-              input[8] = 0;
-              input[9] = input[10] = input[11] = 1;
-              const std::array<uint8_t, 3> skip{0, 0, 0};
-              const auto status = execute(*runner, shared, 3,
-                  rust::Slice<const uint8_t>(skip.data(), skip.size()));
+              const size_t rows = rebound % 2 == 0 ? CAPACITY : 3;
+              for (size_t row = 0; row < rows; ++row) {
+                input[row] = row % 3 == 0 ? worker * 100 + rebound + 1
+                    : static_cast<uint64_t>(-1000);
+                input[CAPACITY + row] = rebound * 2;
+                input[2 * CAPACITY + row] = row % 3 != 2;
+                input[3 * CAPACITY + row] = 1;
+              }
+              const std::array<uint8_t, CAPACITY> skip{};
+              const auto status = execute(*runner, shared, rows,
+                  rust::Slice<const uint8_t>(skip.data(), rows));
               if (status.code != 0) {
                 result.outputs_match = false;
                 break;
@@ -199,10 +201,15 @@ TEST(ExpressionProgramBridge, SharedPreparedHasIndependentConcurrentRunners)
               const auto first_flags = node_flags(*runner, 5);
               const auto second_flags = node_flags(*runner, 6);
               const uint64_t expected = worker * 100 + rebound * 3 + 1;
-              result.outputs_match &= selected[0] == 0 && selected[1] == 1 && selected[2] == 1
-                  && first[0] == expected && second[0] == expected * expected
-                  && first_flags[0] == 3 && first_flags[1] == 0 && first_flags[2] == 0
-                  && second_flags[0] == 3 && second_flags[1] == 0 && second_flags[2] == 0;
+              for (size_t row = 0; row < rows; ++row) {
+                const bool survives = row % 3 == 0;
+                result.outputs_match &= selected[row] == (survives ? 0 : 1)
+                    && first_flags[row] == (survives ? 3 : 0)
+                    && second_flags[row] == (survives ? 3 : 0);
+                if (survives) {
+                  result.outputs_match &= first[row] == expected && second[row] == expected * expected;
+                }
+              }
               ++result.completed;
             }
           }

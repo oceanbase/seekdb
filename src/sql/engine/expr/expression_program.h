@@ -53,7 +53,7 @@ private:
   common::ObSEArray<const ObExpr *, 16, common::ObWrapperAllocator> inputs_;
   common::ObSEArray<uint8_t, 16, common::ObWrapperAllocator> materialized_inputs_;
   common::ObSEArray<const ObExpr *, 16, common::ObWrapperAllocator> nodes_;
-  common::ObSEArray<uint32_t, 8, common::ObWrapperAllocator> roots_;
+  common::ObSEArray<uint32_t, 8, common::ObWrapperAllocator> outputs_;
   bool allocation_failed_ = false;
 };
 

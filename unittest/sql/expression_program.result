@@ -84,6 +84,136 @@ id	id	CASE WHEN x.a IS NULL THEN y.b ELSE x.a+y.b END
 1	1	5
 2	2	4
 3	3	4
+SELECT id,a+1 AS v FROM
+(SELECT id,a FROM expression_program_values WHERE id<4 LIMIT 3) t
+WHERE a+1 ORDER BY id;
+id	v
+1	3
+2	-2
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,a+1 AS v FROM
+(SELECT id,a FROM expression_program_values WHERE id<4 LIMIT 3) t
+WHERE a+1 ORDER BY id;
+id	v
+1	3
+2	-2
+SELECT id,a,c,NULL,7 FROM
+(SELECT id,a,c FROM expression_program_values WHERE id<4 LIMIT 3) t
+WHERE a+1 ORDER BY id;
+id	a	c	NULL	7
+1	2	NULL	NULL	7
+2	-3	0	NULL	7
+SELECT id,a+1 AS v FROM
+(SELECT id,a FROM expression_program_values WHERE id<4 LIMIT 3) t
+WHERE a+1 ORDER BY id LIMIT 1 OFFSET 1;
+id	v
+2	-2
+PREPARE expression_filter_output FROM 'SELECT id,?,a+? FROM (SELECT id,a FROM expression_program_values WHERE id<4 LIMIT 3) t WHERE ? IS NULL OR a+? ORDER BY id';
+SET @expression_p=10;
+EXECUTE expression_filter_output USING @expression_p,@expression_p,@expression_p,@expression_p;
+id	?	a+?
+1	10	12
+2	10	7
+SET @expression_p=-5;
+EXECUTE expression_filter_output USING @expression_p,@expression_p,@expression_p,@expression_p;
+id	?	a+?
+1	-5	-3
+2	-5	-8
+SET @expression_p=NULL;
+EXECUTE expression_filter_output USING @expression_p,@expression_p,@expression_p,@expression_p;
+id	?	a+?
+1	NULL	NULL
+2	NULL	NULL
+3	NULL	NULL
+DEALLOCATE PREPARE expression_filter_output;
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ DISTINCT b+1 AS x
+FROM expression_program_values WHERE id<4 ORDER BY 1;
+x
+4
+5
+8
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ DISTINCT b+1 AS x
+FROM expression_program_values WHERE id<4 ORDER BY x;
+x
+4
+5
+8
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ b+1 AS x
+FROM expression_program_values WHERE id<4 GROUP BY 1 ORDER BY 1;
+x
+4
+5
+8
+SELECT DISTINCT b+1 AS x FROM expression_program_values WHERE id<4 ORDER BY 1;
+x
+4
+5
+8
+SELECT b+1 AS x FROM expression_program_values WHERE id<4 GROUP BY 1 ORDER BY 1;
+x
+4
+5
+8
+SELECT id,CASE WHEN id<4 THEN a+b ELSE 0 END,
+CASE WHEN c IS NULL THEN b ELSE c END
+FROM (SELECT id,a,b,c FROM expression_program_values LIMIT 5) t
+WHERE id>0 ORDER BY id;
+id	CASE WHEN id<4 THEN a+b ELSE 0 END	CASE WHEN c IS NULL THEN b ELSE c END
+1	5	3
+2	4	0
+3	NULL	1
+4	0	1
+5	0	0
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,CASE WHEN id<4 THEN a+b ELSE 0 END,
+CASE WHEN c IS NULL THEN b ELSE c END
+FROM (SELECT id,a,b,c FROM expression_program_values LIMIT 5) t
+WHERE id>0 ORDER BY id;
+id	CASE WHEN id<4 THEN a+b ELSE 0 END	CASE WHEN c IS NULL THEN b ELSE c END
+1	5	3
+2	4	0
+3	NULL	1
+4	0	1
+5	0	0
+SELECT id,a+1 FROM
+(SELECT id,a FROM expression_program_values LIMIT 5) t WHERE id<0;
+id	a+1
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,a+1 FROM
+(SELECT id,a FROM expression_program_values LIMIT 5) t WHERE id<0;
+id	a+1
+SELECT id,a+1 FROM
+(SELECT id,a FROM expression_program_values WHERE id=4 LIMIT 1) t;
+ERROR 22003: BIGINT value is out of range in ''(9223372036854775807 + 1)''
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,a+1 FROM
+(SELECT id,a FROM expression_program_values WHERE id=4 LIMIT 1) t;
+ERROR 22003: BIGINT value is out of range in ''(9223372036854775807 + 1)''
+SELECT x+1 FROM
+(SELECT DISTINCT b+1 AS x FROM expression_program_values WHERE id<4 ORDER BY 1 LIMIT 3) t
+WHERE x>0 ORDER BY 1;
+x+1
+5
+6
+9
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ x+1 FROM
+(SELECT DISTINCT b+1 AS x FROM expression_program_values WHERE id<4 ORDER BY 1 LIMIT 3) t
+WHERE x>0 ORDER BY 1;
+x+1
+5
+6
+9
+SELECT b+1 AS x FROM expression_program_values WHERE id<4
+GROUP BY b+1 WITH ROLLUP;
+x
+4
+5
+8
+NULL
+SELECT x+1 FROM
+(SELECT b+1 AS x FROM expression_program_values WHERE id<4 GROUP BY b+1 WITH ROLLUP) t
+ORDER BY 1;
+x+1
+NULL
+5
+6
+9
 SELECT id,CAST('invalid_integer' AS SIGNED)+a FROM expression_program_values WHERE id=1;
 id	CAST('invalid_integer' AS SIGNED)+a
 1	2

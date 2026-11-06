@@ -40,6 +40,68 @@ DEALLOCATE PREPARE expression_rebind;
 SELECT x.id,y.id,CASE WHEN x.a IS NULL THEN y.b ELSE x.a+y.b END
   FROM expression_program_values x JOIN expression_program_values y ON x.id=y.id
   WHERE x.id<4 ORDER BY x.id;
+SELECT id,a+1 AS v FROM
+  (SELECT id,a FROM expression_program_values WHERE id<4 LIMIT 3) t
+  WHERE a+1 ORDER BY id;
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,a+1 AS v FROM
+  (SELECT id,a FROM expression_program_values WHERE id<4 LIMIT 3) t
+  WHERE a+1 ORDER BY id;
+SELECT id,a,c,NULL,7 FROM
+  (SELECT id,a,c FROM expression_program_values WHERE id<4 LIMIT 3) t
+  WHERE a+1 ORDER BY id;
+SELECT id,a+1 AS v FROM
+  (SELECT id,a FROM expression_program_values WHERE id<4 LIMIT 3) t
+  WHERE a+1 ORDER BY id LIMIT 1 OFFSET 1;
+PREPARE expression_filter_output FROM 'SELECT id,?,a+? FROM (SELECT id,a FROM expression_program_values WHERE id<4 LIMIT 3) t WHERE ? IS NULL OR a+? ORDER BY id';
+SET @expression_p=10;
+EXECUTE expression_filter_output USING @expression_p,@expression_p,@expression_p,@expression_p;
+SET @expression_p=-5;
+EXECUTE expression_filter_output USING @expression_p,@expression_p,@expression_p,@expression_p;
+SET @expression_p=NULL;
+EXECUTE expression_filter_output USING @expression_p,@expression_p,@expression_p,@expression_p;
+DEALLOCATE PREPARE expression_filter_output;
+
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ DISTINCT b+1 AS x
+  FROM expression_program_values WHERE id<4 ORDER BY 1;
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ DISTINCT b+1 AS x
+  FROM expression_program_values WHERE id<4 ORDER BY x;
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ b+1 AS x
+  FROM expression_program_values WHERE id<4 GROUP BY 1 ORDER BY 1;
+SELECT DISTINCT b+1 AS x FROM expression_program_values WHERE id<4 ORDER BY 1;
+SELECT b+1 AS x FROM expression_program_values WHERE id<4 GROUP BY 1 ORDER BY 1;
+
+SELECT id,CASE WHEN id<4 THEN a+b ELSE 0 END,
+  CASE WHEN c IS NULL THEN b ELSE c END
+  FROM (SELECT id,a,b,c FROM expression_program_values LIMIT 5) t
+  WHERE id>0 ORDER BY id;
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,CASE WHEN id<4 THEN a+b ELSE 0 END,
+  CASE WHEN c IS NULL THEN b ELSE c END
+  FROM (SELECT id,a,b,c FROM expression_program_values LIMIT 5) t
+  WHERE id>0 ORDER BY id;
+SELECT id,a+1 FROM
+  (SELECT id,a FROM expression_program_values LIMIT 5) t WHERE id<0;
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,a+1 FROM
+  (SELECT id,a FROM expression_program_values LIMIT 5) t WHERE id<0;
+--error 1690
+SELECT id,a+1 FROM
+  (SELECT id,a FROM expression_program_values WHERE id=4 LIMIT 1) t;
+--error 1690
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,a+1 FROM
+  (SELECT id,a FROM expression_program_values WHERE id=4 LIMIT 1) t;
+SELECT x+1 FROM
+  (SELECT DISTINCT b+1 AS x FROM expression_program_values WHERE id<4 ORDER BY 1 LIMIT 3) t
+  WHERE x>0 ORDER BY 1;
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ x+1 FROM
+  (SELECT DISTINCT b+1 AS x FROM expression_program_values WHERE id<4 ORDER BY 1 LIMIT 3) t
+  WHERE x>0 ORDER BY 1;
+
+--sorted_result
+SELECT b+1 AS x FROM expression_program_values WHERE id<4
+  GROUP BY b+1 WITH ROLLUP;
+SELECT x+1 FROM
+  (SELECT b+1 AS x FROM expression_program_values WHERE id<4 GROUP BY b+1 WITH ROLLUP) t
+  ORDER BY 1;
+
 SELECT id,CAST('invalid_integer' AS SIGNED)+a FROM expression_program_values WHERE id=1;
 SHOW WARNINGS;
 DROP TABLE expression_program_values;
