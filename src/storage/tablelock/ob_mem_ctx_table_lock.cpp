@@ -32,6 +32,18 @@ namespace transaction
 namespace tablelock
 {
 
+void notify_internal_table_change_on_commit(
+    const ObTableLockOp &lock_op, const SCN &commit_version)
+{
+  if (IN_TRANS_DML_LOCK == lock_op.op_type_
+      && lock_op.lock_id_.is_tablet_lock()
+      && is_inner_table(lock_op.lock_id_.obj_id_)
+      && OB_NOT_NULL(GCTX.internal_table_change_notifier_)) {
+    GCTX.internal_table_change_notifier_->notify_table_changed(
+        lock_op.lock_id_.obj_id_, commit_version);
+  }
+}
+
 int ObMemCtxLockOpLinkNode::init(const ObTableLockOp &op_info)
 {
   int ret = OB_SUCCESS;
@@ -182,16 +194,10 @@ int ObLockMemCtx::commit_table_lock_(const SCN &commit_version, const SCN &commi
       switch (curr->lock_op_.op_type_) {
       case IN_TRANS_DML_LOCK:
       case IN_TRANS_COMMON_LOCK: {
-        if (IN_TRANS_DML_LOCK == curr->lock_op_.op_type_
-            && curr->lock_op_.lock_id_.is_tablet_lock()
-            && is_inner_table(curr->lock_op_.lock_id_.obj_id_)) {
-          if (OB_NOT_NULL(GCTX.internal_table_change_notifier_)) {
-            GCTX.internal_table_change_notifier_->notify_table_changed(
-                curr->lock_op_.lock_id_.obj_id_, commit_version);
-          }
-        }
         // remove the lock op.
         memtable->remove_lock_record(curr->lock_op_);
+        // Fast commit may have checkpointed and removed the callback already.
+        notify_internal_table_change_on_commit(curr->lock_op_, commit_version);
         break;
       }
       case OUT_TRANS_LOCK:
