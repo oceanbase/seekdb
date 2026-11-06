@@ -10975,5 +10975,31 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""
+  },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Enable the file-as-database feature (read_csv/read_json/read_ndjson/read_parquet/glob).",
+    "flags": "GLOBAL | SESSION ",
+    "publish_version": "1.0.0.0",
+    "info_cn": "开启文件即数据库特性（read_csv/read_json/read_ndjson/read_parquet/glob）。",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "ai_column_strict_read": {
+    "id": 10755,
+    "name": "ai_column_strict_read",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Reject a statement that references an AI column which still has rows that are not ready.",
+    "flags": "GLOBAL | SESSION ",
+    "publish_version": "1.0.0.0",
+    "info_cn": "开启后，语句引用的 AI 列存在未就绪行时报错。",
+    "background_cn": "",
+    "ref_url": ""
   }
 }

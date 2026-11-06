@@ -38,7 +38,7 @@ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+    external_properties_, with_header_, header_names_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -200,6 +200,14 @@ int ObSelectIntoOp::inner_get_next_row()
       && T_INTO_VARIABLES != into_type
       && OB_FAIL(create_the_only_data_writer(data_writer))) {
   }
+  if (OB_SUCC(ret) && MY_SPEC.with_header_ && !header_written_
+      && NULL != data_writer) {
+    if (OB_FAIL(into_outfile_header(data_writer))) {
+      LOG_WARN("write header line failed", K(ret));
+    } else {
+      header_written_ = true;
+    }
+  }
   while (OB_SUCC(ret) && row_count < top_limit_cnt_) {
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_row())) {
@@ -253,6 +261,15 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_FAIL(create_the_only_data_writer(data_writer))) {
     } else if (OB_ISNULL(data_writer)) {
       ret = OB_ERR_UNEXPECTED;
+    }
+  }
+  // write the header line once, before the first batch of rows
+  if (OB_SUCC(ret) && MY_SPEC.with_header_ && !header_written_
+      && NULL != data_writer) {
+    if (OB_FAIL(into_outfile_header(data_writer))) {
+      LOG_WARN("write header line failed", K(ret));
+    } else {
+      header_written_ = true;
     }
   }
 
@@ -940,6 +957,29 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
   }
+  return ret;
+}
+
+int ObSelectIntoOp::into_outfile_header(ObExternalFileWriter *data_writer)
+{
+  int ret = OB_SUCCESS;
+  ObCsvFileWriter *csv_data_writer = NULL;
+  const ObIArray<ObString> &names = MY_SPEC.header_names_;
+  if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null csv writer", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < names.count(); ++i) {
+    ObObj obj;
+    obj.set_varchar(names.at(i));
+    obj.set_collation_type(cs_type_);
+    OZ(print_field(obj, *csv_data_writer));
+    if (OB_SUCC(ret) && i != names.count() - 1) {
+      OZ(write_obj_to_file(field_str_, *csv_data_writer));
+    }
+  }
+  OZ(write_obj_to_file(line_str_, *csv_data_writer));
+  OZ(csv_data_writer->flush_shared_buf(shared_buf_));
   return ret;
 }
 

@@ -20,6 +20,7 @@
 
 #include "sql/resolver/ddl/ob_table_stmt.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
+#include "sql/resolver/ddl/ob_create_table_stmt.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "common/sql_mode/ob_sql_mode.h"
 #include "lib/hash/ob_placement_hashset.h"
@@ -36,6 +37,26 @@ public:
   ObAlterTableStmt();
   virtual ~ObAlterTableStmt();
   int add_column(const share::schema::AlterColumnSchema &column_schema);
+  // AI columns added by ALTER TABLE ... ADD COLUMN
+  int add_ai_column_def(const ObAiColumnDef &def) { return ai_column_defs_.push_back(def); }
+  const common::ObSEArray<ObAiColumnDef, 4> &get_ai_column_defs() const { return ai_column_defs_; }
+  // ALTER TABLE ... RETRY AI COLUMN <col> [WHERE ...] is not a schema change: the
+  // resolver turns it into the update that re-queues the selected rows.
+  void set_retry_ai_column(const common::ObString &column_name,
+                           const common::ObString &update_sql,
+                           const uint64_t table_id,
+                           const uint64_t column_id)
+  {
+    retry_ai_column_ = column_name;
+    retry_update_sql_ = update_sql;
+    retry_table_id_ = table_id;
+    retry_column_id_ = column_id;
+  }
+  bool has_retry_ai_column() const { return !retry_update_sql_.empty(); }
+  const common::ObString &get_retry_ai_column() const { return retry_ai_column_; }
+  const common::ObString &get_retry_update_sql() const { return retry_update_sql_; }
+  uint64_t get_retry_table_id() const { return retry_table_id_; }
+  uint64_t get_retry_column_id() const { return retry_column_id_; }
   int add_index_arg(obcall::ObIndexArg *index_arg);
   int check_drop_fk_arg_exist(obcall::ObDropForeignKeyArg *drop_fk_arg, bool &has_same_fk_arg);
   obcall::ObAlterTableArg& get_alter_table_arg(){ return alter_table_arg_; }
@@ -114,6 +135,11 @@ private:
   obcall::ObAlterTriggerArg tg_arg_;
   uint64_t alter_table_action_count_;
   obcall::ObExchangePartitionArg exchange_partition_arg_;
+  common::ObSEArray<ObAiColumnDef, 4> ai_column_defs_;
+  common::ObString retry_ai_column_;
+  common::ObString retry_update_sql_;
+  uint64_t retry_table_id_ = common::OB_INVALID_ID;
+  uint64_t retry_column_id_ = common::OB_INVALID_ID;
 };
 
 inline int ObAlterTableStmt::set_tz_info_wrap(const common::ObTimeZoneInfoWrap &tz_info_wrap)

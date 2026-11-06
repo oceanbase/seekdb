@@ -103,6 +103,16 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
+
+namespace oceanbase
+{
+namespace sql
+{
+// sql/engine/cmd/ob_table_executor.cpp: starts the async AI column executor.
+int ob_ai_column_worker_start();
+}  // namespace sql
+}  // namespace oceanbase
+
 namespace oceanbase
 {
 namespace observer
@@ -1260,6 +1270,16 @@ int ObServer::start()
       LOG_ERROR("fail to start oceanbase service", KR(ret));
     } else {
       FLOG_INFO("success to start oceanbase service");
+    }
+    // AI columns are maintained by a background worker; it has to run from boot
+    // so that tasks queued before a restart are drained without new DDL.
+    if (OB_SUCC(ret)) {
+      const int worker_ret = sql::ob_ai_column_worker_start();
+      if (OB_SUCCESS != worker_ret) {
+        LOG_WARN("fail to start the ai column worker", K(worker_ret));
+      } else {
+        FLOG_INFO("success to start the ai column worker");
+      }
     }
     if (FAILEDx(standby_module_->start())) {
       LOG_ERROR("fail to start standby module", KR(ret));

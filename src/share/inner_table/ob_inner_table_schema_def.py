@@ -2447,6 +2447,7 @@ all_ai_model_endpoint_def = dict(
 def_table_schema(**all_ai_model_endpoint_def)
 
 
+
 all_objauth_mysql_def = dict(
     owner = 'cjl476581',
     table_name     = '__all_objauth_mysql',
@@ -2466,6 +2467,86 @@ all_objauth_mysql_def = dict(
   )
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
+
+
+# AI column catalogue: one row per declared AI column.
+all_ai_column_def = dict(
+    owner = 'wzk',
+    table_name = '__all_ai_column',
+    table_id = '1135',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int')
+    ],
+
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('column_name', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'false'),
+        ('ai_function', 'varchar:64', 'true'),
+        ('model_name', 'varchar:128', 'true'),
+        ('normalized_expr', 'longtext', 'true'),
+        ('prompt_expr', 'longtext', 'true'),
+        ('depend_columns', 'varchar:1024', 'true'),
+        ('sync_mode', 'varchar:16', 'true'),
+        ('max_retries', 'int', 'true'),
+        ('state_column_id', 'int', 'true'),
+        ('request_column_id', 'int', 'true'),
+        ('result_spec_column_id', 'int', 'true'),
+        ('result_type', 'varchar:64', 'true'),
+        ('vector_dim', 'int', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_def)
+
+# AI column pending task queue.
+all_ai_column_task_def = dict(
+    owner = 'wzk',
+    table_name = '__all_ai_column_task',
+    table_id = '1136',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int'),
+      ('rowkey_predicate', 'varchar:1024')
+    ],
+
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('request_id', 'varchar:128', 'true'),
+        ('state', 'int', 'true'),
+        ('retry_count', 'int', 'true'),
+        ('eligible_ts', 'timestamp', 'true'),
+        ('dep_snapshot', 'longtext', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_task_def)
+
+# Rows whose AI generation reached the final failure state.
+all_ai_column_failed_def = dict(
+    owner = 'wzk',
+    table_name = '__all_ai_column_failed',
+    table_id = '1137',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int'),
+      ('rowkey_predicate', 'varchar:1024')
+    ],
+
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('retry_count', 'int', 'true'),
+        ('error_msg', 'varchar:512', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_failed_def)
 
 
 # Reserved position (placeholder before this line)

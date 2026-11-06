@@ -57,6 +57,19 @@ typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>
 typedef common::ObFixedArray<ObTableLocation, common::ObIAllocator> TableLocationFixedArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
 
+// One AI column a statement reads.  A strict read has to reject the statement
+// while any of these columns still waits for the model, and a plan cache hit
+// has to keep rejecting it, so the list is a property of the plan.
+struct ObAiColumnRef
+{
+  ObAiColumnRef() : table_id_(common::OB_INVALID_ID), column_id_(common::OB_INVALID_ID) {}
+  ObAiColumnRef(const uint64_t table_id, const uint64_t column_id)
+    : table_id_(table_id), column_id_(column_id) {}
+  uint64_t table_id_;
+  uint64_t column_id_;
+  TO_STRING_KV(K_(table_id), K_(column_id));
+};
+
 class ObPhysicalPlan : public ObPlanCacheObject
 {
 public:
@@ -81,6 +94,9 @@ public:
   //user var
   bool is_contains_assignment() const {return is_contains_assignment_;}
   void set_contains_assignment(bool v) {is_contains_assignment_ = v;}
+  // AI columns read by this plan, see ObAiColumnRef.  Duplicates are dropped.
+  int add_ai_column_ref(const uint64_t table_id, const uint64_t column_id);
+  const common::ObIArray<ObAiColumnRef> &get_ai_column_refs() const { return ai_column_refs_; }
   int set_vars(const common::ObIArray<ObVarInfo> &vars);
   const common::ObIArray<ObVarInfo> &get_vars() const { return vars_; }
   /**
@@ -452,6 +468,7 @@ private:
   //for plan cache, not need serialize
   TableLocationFixedArray table_locations_; // ordinary table's table location, participate in plan cache plan selection
   TableLocationFixedArray das_table_locations_; // DAS table's table location, used for calculating DAS partition information
+  common::ObSEArray<ObAiColumnRef, 2> ai_column_refs_; // AI columns read by this plan
 
   PhyRowParamMap row_param_map_;
   bool is_update_uniq_index_;

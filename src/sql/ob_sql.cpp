@@ -2734,6 +2734,83 @@ int ObSql::optimize_stmt(
   return ret;
 }
 
+namespace {
+
+// The AI flag carried by ObColumnSchemaV2 is not persisted through the schema
+// tables, so a schema read back from storage does not have it.  The auxiliary
+// state column an AI column implies is persisted as part of the table, which
+// makes it the reliable marker.
+bool is_ai_column_of_table(const ObTableSchema &table, const ObColumnSchemaV2 &column)
+{
+  bool found = false;
+  if (column.is_ai_column()) {
+    found = true;
+  } else if (!column.is_hidden()) {
+    char buf[common::OB_MAX_COLUMN_NAME_LENGTH];
+    int64_t pos = 0;
+    const ObString &name = column.get_column_name_str();
+    if (OB_SUCCESS == databuff_printf(buf, sizeof(buf), pos, "__ai_%.*s_state",
+                                      name.length(), name.ptr())) {
+      found = NULL != table.get_column_schema(ObString(static_cast<int32_t>(pos), buf));
+    }
+  }
+  return found;
+}
+
+// Remember the AI columns a statement reads.  A strict read has to reject the
+// statement while one of them still waits for the model, and the decision must
+// survive a plan cache hit, so the list is stored on the plan rather than in the
+// statement, which is gone once the plan is cached.
+int collect_ai_column_refs(ObSqlCtx &sql_ctx,
+                           const ObDMLStmt &stmt,
+                           ObPhysicalPlan &plan)
+{
+  int ret = OB_SUCCESS;
+  const common::ObIArray<ColumnItem> &items = stmt.get_column_items();
+  const common::ObIArray<TableItem *> &table_items = stmt.get_table_items();
+  for (int64_t i = 0; OB_SUCC(ret) && i < items.count(); ++i) {
+    const ObColumnRefRawExpr *expr = items.at(i).get_expr();
+    if (NULL == expr || NULL == sql_ctx.schema_guard_) {
+      // nothing to look at
+    } else {
+      // A column expression names its table by the logical id used inside the
+      // statement, while the schema is keyed by the real table id, so the table
+      // items have to be walked to find the table the column belongs to.
+      for (int64_t t = 0; OB_SUCC(ret) && t < table_items.count(); ++t) {
+        const TableItem *table_item = table_items.at(t);
+        const ObTableSchema *table_schema = NULL;
+        const ObColumnSchemaV2 *column_schema = NULL;
+        if (NULL == table_item) {
+        } else if (OB_FAIL(sql_ctx.schema_guard_->get_table_schema(table_item->ref_id_,
+                                                                   table_schema))) {
+          // a table that is gone from the schema guard cannot hold an AI column
+          ret = OB_SUCCESS;
+        } else if (NULL == table_schema) {
+        } else if (NULL == (column_schema = table_schema->get_column_schema(expr->get_column_id()))) {
+        } else if (0 != column_schema->get_column_name_str().case_compare(expr->get_column_name())) {
+          // the same column id of another table
+        } else if (!is_ai_column_of_table(*table_schema, *column_schema)) {
+          // an ordinary column
+        } else if (OB_FAIL(plan.add_ai_column_ref(table_item->ref_id_,
+                                                  expr->get_column_id()))) {
+          LOG_WARN("fail to remember ai column of the statement", K(ret));
+        }
+      }
+    }
+  }
+  // a subquery is a statement of its own, its AI columns count as well
+  common::ObSEArray<ObSelectStmt *, 4> child_stmts;
+  if (OB_SUCC(ret) && OB_FAIL(stmt.get_subquery_stmts(child_stmts))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
+    if (OB_FAIL(SMART_CALL(collect_ai_column_refs(sql_ctx, *child_stmts.at(i), plan)))) {
+    }
+  }
+  return ret;
+}
+
+}  // namespace
+
 int ObSql::code_generate(
     ObSqlCtx &sql_ctx,
     ObResultSet &result,
@@ -2753,7 +2830,8 @@ int ObSql::code_generate(
   } else {
     ObCodeGenerator code_generator(&(pctx->get_datum_param_store()));
     phy_plan->set_is_packed(logical_plan->get_optimizer_context().is_packed());
-    if (OB_FAIL(code_generator.generate(*logical_plan, *phy_plan))) {
+    if (OB_FAIL(collect_ai_column_refs(sql_ctx, *stmt, *phy_plan))) {
+    } else if (OB_FAIL(code_generator.generate(*logical_plan, *phy_plan))) {
     } else {
       // session's ignore_stmt status for CG use, needs to be cleared after CG ends
       sql_ctx.session_info_->set_ignore_stmt(false);

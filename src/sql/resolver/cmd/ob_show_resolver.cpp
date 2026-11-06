@@ -150,7 +150,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_ENGINE)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_OPEN_TABLES)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_USER)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)) {
+            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)
+            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_AI_COLUMNS)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     real_id = 1;
@@ -414,6 +415,37 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                   GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COLUMNS, OB_SYS_DATABASE_NAME,OB_ALL_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
                 }
               }
+            }
+          }
+        }();
+        break;
+      }
+      case T_SHOW_AI_COLUMNS: {
+        [&] {
+          if (OB_UNLIKELY(parse_tree.num_child_ != 3 || NULL == parse_tree.children_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            show_resv_ctx.condition_node_ = parse_tree.children_[2];
+            show_resv_ctx.stmt_type_ = stmt::T_SHOW_COLUMNS;
+            if (NULL != parse_tree.children_[0]) {
+              ObString show_db_name;
+              uint64_t show_db_id = OB_INVALID_ID;
+              ObString show_table_name;
+              uint64_t show_table_id = OB_INVALID_ID;
+              bool is_view = false;
+              if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], parse_tree.children_[1],
+                                                  database_name.empty(), T_SHOW_AI_COLUMNS, real_id,
+                                                  show_db_name, show_db_id, show_table_name,
+                                                  show_table_id, is_view))) {
+                LOG_WARN("fail to resolve show ai columns table", K(ret));
+              } else {
+                GEN_SQL_STEP_1(ObShowSqlSet::SHOW_AI_COLUMNS);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_AI_COLUMNS, OB_SYS_DATABASE_NAME, OB_ALL_AI_COLUMN_TNAME, show_table_id);
+              }
+            } else {
+              // without FROM, list every AI column of the tenant
+              GEN_SQL_STEP_1(ObShowSqlSet::SHOW_AI_COLUMNS_ALL);
+              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_AI_COLUMNS_ALL, OB_SYS_DATABASE_NAME, OB_ALL_AI_COLUMN_TNAME, 0);
             }
           }
         }();
@@ -1812,7 +1844,8 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
                  && parse_tree->type_ != T_SHOW_STATUS
                  && parse_tree->type_ != T_SHOW_PROCEDURE_STATUS
                  && parse_tree->type_ != T_SHOW_FUNCTION_STATUS
-                 && parse_tree->type_ != T_SHOW_TRIGGERS)) {
+                 && parse_tree->type_ != T_SHOW_TRIGGERS
+                 && parse_tree->type_ != T_SHOW_AI_COLUMNS)) {
     // do nothing
   } else {
     // Like or Where clause
@@ -2376,6 +2409,16 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_COLUMNS,
                         R"(SELECT "FIELD" AS "FIELD", "TYPE" AS "TYPE", "NULL" AS "NULL", "KEY" AS "KEY", "DEFAULT" AS "DEFAULT", "EXTRA" AS "EXTRA" )"
                         R"(FROM %s.%s  WHERE TABLE_ID = %ld AND IS_HIDDEN = 0)",
                        "Field");
+DEFINE_SHOW_CLAUSE_SET(SHOW_AI_COLUMNS,
+                       NULL,
+                       "SELECT table_id AS `Table_id`, column_name AS `Column`, ai_function AS `Function`, model_name AS `Model`, result_type AS `Result_type`, vector_dim AS `Vector_dim`, sync_mode AS `Sync_mode`, max_retries AS `Max_retries`, depend_columns AS `Depends_on`, normalized_expr AS `Expression` FROM %s.%s WHERE table_id = %ld",
+                       NULL,
+                       "Column");
+DEFINE_SHOW_CLAUSE_SET(SHOW_AI_COLUMNS_ALL,
+                       NULL,
+                       "SELECT table_id AS `Table_id`, column_name AS `Column`, ai_function AS `Function`, model_name AS `Model`, result_type AS `Result_type`, vector_dim AS `Vector_dim`, sync_mode AS `Sync_mode`, max_retries AS `Max_retries`, depend_columns AS `Depends_on`, normalized_expr AS `Expression` FROM %s.%s WHERE table_id > %ld",
+                       NULL,
+                       "Column");
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_COLUMNS,
                        NULL,
                        "SELECT field AS `Field`, type AS `Type`, collation AS `Collation`, `NULL` AS `Null`, `KEY` AS `Key`, `DEFAULT` AS `Default`, extra AS `Extra`, `PRIVILEGES` AS `Privileges`, `COMMENT` AS `Comment` \
