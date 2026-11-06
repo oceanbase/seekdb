@@ -365,7 +365,18 @@ int ObFtsIndexBuildTask::get_next_status(share::ObDDLTaskStatus &next_status)
         break;
       }
       case ObDDLTaskStatus::GENERATE_ROWKEY_DOC_SCHEMA: {
-        next_status = ObDDLTaskStatus::WAIT_ROWKEY_DOC_TABLE_COMPLEMENT;
+        // The rowkey-doc data is independent of the doc-word/domain builds; do
+        // not block on it here.  WAIT_AUX_TABLE_COMPLEMENT waits for every
+        // child task, so starting the dictionary load and the remaining aux
+        // schemas now overlaps the rowkey-doc build with the heavy FTS work.
+        bool need_to_load_dic = false;
+        const ObString &parser_name = create_index_arg_.index_option_.parser_name_;
+        if (is_fts_task() && OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(parser_name, need_to_load_dic))) {
+        } else if (need_to_load_dic) {
+          next_status = ObDDLTaskStatus::LOAD_DICTIONARY;
+        } else {
+          next_status = ObDDLTaskStatus::GENERATE_DOC_AUX_SCHEMA;
+        }
         break;
       }
       case ObDDLTaskStatus::WAIT_ROWKEY_DOC_TABLE_COMPLEMENT: {
