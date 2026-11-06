@@ -1320,9 +1320,12 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
     if (INDEX_STATUS_AVAILABLE == new_status) {
       // For create index syntax, create_index_arg_ will record the user sql, and generate the ddl_stmt_str when nabling index.
       // For alter table add index syntax, create_index_arg_ will not record the user sql, and generate the ddl_stmt_str when generating index schema.
-      if (index_schema.is_vec_index() && !index_schema.is_vec_delta_buffer_type()) {
-        // do nothing
-        // For create fts index, just record one ddl_stmt_str in the delta buf table which the user can see
+      if (index_schema.is_vec_index() && !index_schema.is_vec_index_snapshot_data_type()) {
+        // HNSW (including hybrid) records the original CREATE SQL only in the
+        // snapshot table's AVAILABLE transaction. The delta buffer is created
+        // AVAILABLE and no longer runs a status task. Other vector auxiliary
+        // tables do not own this SQL. This schema event does not imply that
+        // the parent DDL has completed; later failure compensation is separate.
       } else if (index_schema.is_fts_index() && !index_schema.is_fts_index_aux()) {
         // do nothing
         // For create fts index, just record one ddl_stmt_str in the fts_index_aux table which the user can see
