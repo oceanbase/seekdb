@@ -14,16 +14,16 @@
       "version": "1.14.0",
       "artifact_type": "binary",
       "target": "linux-aarch64-glibc217",
-      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-aarch64-glibc217-20261106-a0b4edfa6429.tar.gz",
-      "sha256": "63e5375564510883b70d7a23b9715a98e8d206b41a7e16d5e0c8762d761cb74b"
+      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-aarch64-glibc217-20261106-d5db0e766e25.tar.gz",
+      "sha256": "32b6bea8acea90eb6a125ccac2854a6089e54ce9d4ac5efc1e0ff9322bb6441b"
     },
     {
       "name": "gtest",
       "version": "1.14.0",
       "artifact_type": "binary",
       "target": "linux-x86_64-glibc217",
-      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-x86_64-glibc217-20261106-a0b4edfa6429.tar.gz",
-      "sha256": "6270ff0ba0a233dc638351d79c441db5c22cca781cc7deec67399d65d52bc666"
+      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-x86_64-glibc217-20261106-d5db0e766e25.tar.gz",
+      "sha256": "9386263da881ef49d7d11ce5229760486d88212e89043aa20ba20e1dcd1e0a22"
     },
     {
       "name": "gtest",
