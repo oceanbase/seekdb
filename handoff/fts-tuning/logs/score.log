@@ -1,0 +1,124 @@
+# Official scoring: tools/benchmark/fts_large_bench_score.py on each A/B report
+# baseline: tools/benchmark/fts_large_bench_baseline.json (CI, 2026-07-07)
+# date: 2026-11-01T19:10:02+08:00
+
+## before-1.txt
+FTS Large Benchmark Score
+=========================
+score: 100.00 / 100
+mean_improvement: 77.82%
+full_score_improvement: 50.00%
+
+build_improvement: 84.58%
+  build_ik_all_sec: baseline=35.2836, current=5.555, improvement=84.26%
+  build_ik_content_sec: baseline=28.3764, current=4.134, improvement=85.43%
+  build_beng_en_sec: baseline=14.7578, current=2.355, improvement=84.04%
+tokenize_improvement: 56.93%
+  tokenize_ik_avg_ms: baseline=0.76478, current=0.2722, improvement=64.41%
+  tokenize_beng_avg_ms: baseline=0.42262, current=0.2136, improvement=49.46%
+query_improvement: 91.95%
+  query_cn_avg_ms: baseline=16.6628, current=1.2866, improvement=92.28%
+  query_beng_avg_ms: baseline=24.3042, current=1.7351, improvement=92.86%
+  query_mixed_avg_ms: baseline=17.5593, current=1.4194, improvement=91.92%
+  query_limit_avg_ms: baseline=16.2334, current=1.4999, improvement=90.76%
+
+## before-2.txt
+FTS Large Benchmark Score
+=========================
+score: 100.00 / 100
+mean_improvement: 78.24%
+full_score_improvement: 50.00%
+
+build_improvement: 84.64%
+  build_ik_all_sec: baseline=35.2836, current=5.555, improvement=84.26%
+  build_ik_content_sec: baseline=28.3764, current=4.132, improvement=85.44%
+  build_beng_en_sec: baseline=14.7578, current=2.326, improvement=84.24%
+tokenize_improvement: 57.94%
+  tokenize_ik_avg_ms: baseline=0.76478, current=0.2572, improvement=66.37%
+  tokenize_beng_avg_ms: baseline=0.42262, current=0.2134, improvement=49.51%
+query_improvement: 92.12%
+  query_cn_avg_ms: baseline=16.6628, current=1.2112, improvement=92.73%
+  query_beng_avg_ms: baseline=24.3042, current=1.7461, improvement=92.82%
+  query_mixed_avg_ms: baseline=17.5593, current=1.3845, improvement=92.12%
+  query_limit_avg_ms: baseline=16.2334, current=1.4879, improvement=90.83%
+
+## before-3.txt
+FTS Large Benchmark Score
+=========================
+score: 100.00 / 100
+mean_improvement: 78.27%
+full_score_improvement: 50.00%
+
+build_improvement: 84.55%
+  build_ik_all_sec: baseline=35.2836, current=5.657, improvement=83.97%
+  build_ik_content_sec: baseline=28.3764, current=4.131, improvement=85.44%
+  build_beng_en_sec: baseline=14.7578, current=2.326, improvement=84.24%
+tokenize_improvement: 58.11%
+  tokenize_ik_avg_ms: baseline=0.76478, current=0.2671, improvement=65.07%
+  tokenize_beng_avg_ms: baseline=0.42262, current=0.2065, improvement=51.14%
+query_improvement: 92.15%
+  query_cn_avg_ms: baseline=16.6628, current=1.2104, improvement=92.74%
+  query_beng_avg_ms: baseline=24.3042, current=1.6731, improvement=93.12%
+  query_mixed_avg_ms: baseline=17.5593, current=1.3692, improvement=92.20%
+  query_limit_avg_ms: baseline=16.2334, current=1.5334, improvement=90.55%
+
+## after-1.txt
+FTS Large Benchmark Score
+=========================
+score: 100.00 / 100
+mean_improvement: 78.77%
+full_score_improvement: 50.00%
+
+build_improvement: 84.61%
+  build_ik_all_sec: baseline=35.2836, current=5.563, improvement=84.23%
+  build_ik_content_sec: baseline=28.3764, current=4.145, improvement=85.39%
+  build_beng_en_sec: baseline=14.7578, current=2.329, improvement=84.22%
+tokenize_improvement: 59.57%
+  tokenize_ik_avg_ms: baseline=0.76478, current=0.2379, improvement=68.89%
+  tokenize_beng_avg_ms: baseline=0.42262, current=0.2103, improvement=50.24%
+query_improvement: 92.13%
+  query_cn_avg_ms: baseline=16.6628, current=1.2182, improvement=92.69%
+  query_beng_avg_ms: baseline=24.3042, current=1.6951, improvement=93.03%
+  query_mixed_avg_ms: baseline=17.5593, current=1.3693, improvement=92.20%
+  query_limit_avg_ms: baseline=16.2334, current=1.5278, improvement=90.59%
+
+## after-2.txt
+FTS Large Benchmark Score
+=========================
+score: 100.00 / 100
+mean_improvement: 78.99%
+full_score_improvement: 50.00%
+
+build_improvement: 84.67%
+  build_ik_all_sec: baseline=35.2836, current=5.658, improvement=83.96%
+  build_ik_content_sec: baseline=28.3764, current=4.03, improvement=85.80%
+  build_beng_en_sec: baseline=14.7578, current=2.325, improvement=84.25%
+tokenize_improvement: 60.20%
+  tokenize_ik_avg_ms: baseline=0.76478, current=0.2566, improvement=66.45%
+  tokenize_beng_avg_ms: baseline=0.42262, current=0.1946, improvement=53.95%
+query_improvement: 92.09%
+  query_cn_avg_ms: baseline=16.6628, current=1.2114, improvement=92.73%
+  query_beng_avg_ms: baseline=24.3042, current=1.7716, improvement=92.71%
+  query_mixed_avg_ms: baseline=17.5593, current=1.3746, improvement=92.17%
+  query_limit_avg_ms: baseline=16.2334, current=1.5028, improvement=90.74%
+
+## after-3.txt
+FTS Large Benchmark Score
+=========================
+score: 100.00 / 100
+mean_improvement: 79.65%
+full_score_improvement: 50.00%
+
+build_improvement: 85.08%
+  build_ik_all_sec: baseline=35.2836, current=5.454, improvement=84.54%
+  build_ik_content_sec: baseline=28.3764, current=4.032, improvement=85.79%
+  build_beng_en_sec: baseline=14.7578, current=2.227, improvement=84.91%
+tokenize_improvement: 61.73%
+  tokenize_ik_avg_ms: baseline=0.76478, current=0.2422, improvement=68.33%
+  tokenize_beng_avg_ms: baseline=0.42262, current=0.1896, improvement=55.14%
+query_improvement: 92.14%
+  query_cn_avg_ms: baseline=16.6628, current=1.2036, improvement=92.78%
+  query_beng_avg_ms: baseline=24.3042, current=1.691, improvement=93.04%
+  query_mixed_avg_ms: baseline=17.5593, current=1.3955, improvement=92.05%
+  query_limit_avg_ms: baseline=16.2334, current=1.5102, improvement=90.70%
+

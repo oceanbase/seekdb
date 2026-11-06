@@ -1,0 +1,185 @@
+# AI column strict reads and predicate-selected row retry.
+
+connection default;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py start 19124
+--disable_warnings
+drop database if exists ai_column_retry_strict;
+--enable_warnings
+create database ai_column_retry_strict;
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('retry_strict_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('retry_strict_model');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('retry_strict_model',
+  '{"type":"completion","model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('retry_strict_ep',
+  '{"ai_model_name":"retry_strict_model","url":"http://127.0.0.1:19124/v1/chat/completions","access_key":"retry-key","provider":"openai","request_model_name":"mock-complete"}');
+
+create table ai_column_retry_strict.docs(
+  id bigint primary key,
+  category varchar(20),
+  status varchar(20),
+  content varchar(200),
+  result varchar(400) AI COLUMN (
+    AI_COMPLETE('retry_strict_model', content)
+  ) WITH (sync_mode='async', max_retries=0),
+  label varchar(400) AI COLUMN (
+    AI_COMPLETE('retry_strict_model', concat('Label: ', content))
+  ) WITH (sync_mode='async', max_retries=0)
+);
+
+insert into ai_column_retry_strict.docs(id, category, status, content)
+values (1, 'news', 'active', 'row-one'),
+       (2, 'sports', 'active', 'row-two'),
+       (3, 'news', 'inactive', 'row-three');
+
+let $retry = 150;
+let $ready = 0;
+while ($retry)
+{
+  let $ready = `select count(*) = 3
+      from ai_column_retry_strict.docs
+      where result is not null and label is not null`;
+  if ($ready == 1) { let $retry = 0; }
+  if ($ready == 0) { --real_sleep 0.1
+    dec $retry; }
+}
+eval select $ready = 1 as initial_results_ready;
+select @@ai_column_strict_read as strict_read_defaults_off;
+
+# READY rows can be retried by an arbitrary ordinary SQL predicate.
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py stop 19124
+alter table ai_column_retry_strict.docs
+  retry ai column result where id in (1, 3);
+set session ai_column_strict_read = off;
+select id,
+       result is null as selected_result_invalidated,
+       label is not null as other_ai_column_unchanged
+from ai_column_retry_strict.docs order by id;
+
+# Strict mode checks only AI columns actually referenced by the statement.
+set session ai_column_strict_read = on;
+select id, category from ai_column_retry_strict.docs order by id;
+select count(*) = 3 as ready_label_is_readable
+from ai_column_retry_strict.docs where label is not null;
+# Strictness is column-wide, not limited to rows selected by the query.
+# Row 2 is READY, but rows 1 and 3 still make RESULT incomplete.
+--replace_regex /table_id=[0-9]+, column_id=[0-9]+/table_id=<table_id>, column_id=<column_id>/
+--error 11120
+select result from ai_column_retry_strict.docs where id = 2;
+--replace_regex /table_id=[0-9]+, column_id=[0-9]+/table_id=<table_id>, column_id=<column_id>/
+--error 11120
+select id, result from ai_column_retry_strict.docs order by id;
+--replace_regex /table_id=[0-9]+, column_id=[0-9]+/table_id=<table_id>, column_id=<column_id>/
+--error 11120
+select id from ai_column_retry_strict.docs where result is null;
+--replace_regex /table_id=[0-9]+, column_id=[0-9]+/table_id=<table_id>, column_id=<column_id>/
+--error 11120
+select id from ai_column_retry_strict.docs
+where id in (select id from ai_column_retry_strict.docs where result is null);
+--replace_regex /table_id=[0-9]+, column_id=[0-9]+/table_id=<table_id>, column_id=<column_id>/
+--error 11120
+update ai_column_retry_strict.docs
+set category = category where result is null;
+--replace_regex /table_id=[0-9]+, column_id=[0-9]+/table_id=<table_id>, column_id=<column_id>/
+--error 11120
+delete from ai_column_retry_strict.docs where result is null;
+set session ai_column_strict_read = off;
+select count(*) = 3 as rejected_writes_leave_rows_unchanged
+from ai_column_retry_strict.docs;
+
+# Wait until the offline requests reach FAILED and their task rows are cleaned.
+let $retry = 100;
+let $tasks = 1;
+while ($retry)
+{
+  let $tasks = `select count(*)
+      from oceanbase.__all_ai_column_task task
+      join oceanbase.__all_table t on t.table_id = task.table_id
+      join oceanbase.__all_database d on d.database_id = t.database_id
+      where d.database_name = 'ai_column_retry_strict'
+        and t.table_name = 'docs'`;
+  if ($tasks == 0) { let $retry = 0; }
+  if ($tasks != 0) { --real_sleep 0.1
+    dec $retry; }
+}
+eval select $tasks = 0 as failed_task_rows_cleaned;
+set session ai_column_strict_read = on;
+--replace_regex /table_id=[0-9]+, column_id=[0-9]+/table_id=<table_id>, column_id=<column_id>/
+--error 11120
+select result from ai_column_retry_strict.docs where id = 1;
+set session ai_column_strict_read = off;
+
+# STATUS is a retry-only pseudo column and can be combined with business data.
+alter table ai_column_retry_strict.docs
+  retry ai column result
+  where status = 'FAILED' and category = 'news';
+
+# Restore all rows, then prove a READY row can be selected by a business field.
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py start 19124
+alter table ai_column_retry_strict.docs retry ai column result;
+let $retry = 150;
+let $ready = 0;
+while ($retry)
+{
+  let $ready = `select count(*) = 3
+      from ai_column_retry_strict.docs where result is not null`;
+  if ($ready == 1) { let $retry = 0; }
+  if ($ready == 0) { --real_sleep 0.1
+    dec $retry; }
+}
+eval select $ready = 1 as full_retry_ready;
+set session ai_column_strict_read = on;
+select count(*) = 3 as strict_read_succeeds_when_all_ready
+from ai_column_retry_strict.docs where result is not null;
+set session ai_column_strict_read = off;
+
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py stop 19124
+# READY is also a valid retry status. A zero-row predicate is a no-op.
+alter table ai_column_retry_strict.docs
+  retry ai column result where status = 'READY' and id = 999;
+select count(*) = 3 as zero_match_keeps_ready_results
+from ai_column_retry_strict.docs where result is not null;
+select count(*) = 0 as zero_match_creates_no_tasks
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_retry_strict'
+  and t.table_name = 'docs';
+alter table ai_column_retry_strict.docs
+  retry ai column result
+  where status = 'READY' and category = 'sports';
+select id, result is null as sports_row_retried
+from ai_column_retry_strict.docs order by id;
+
+# Backticks address the physical status column instead of the STATUS pseudo column.
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py start 19124
+alter table ai_column_retry_strict.docs retry ai column result;
+let $retry = 150;
+let $ready = 0;
+while ($retry)
+{
+  let $ready = `select count(*) = 3
+      from ai_column_retry_strict.docs where result is not null`;
+  if ($ready == 1) { let $retry = 0; }
+  if ($ready == 0) { --real_sleep 0.1
+    dec $retry; }
+}
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py stop 19124
+alter table ai_column_retry_strict.docs
+  retry ai column result where `status` = 'active' and id = 1;
+select id, result is null as physical_status_row_retried
+from ai_column_retry_strict.docs order by id;
+
+# RETRY targets exactly one AI column and cannot be mixed with another ALTER action.
+--error 1235
+alter table ai_column_retry_strict.docs retry ai column content where id = 1;
+--error 1235
+alter table ai_column_retry_strict.docs
+  retry ai column result where id = 1, add column extra_col int;
+
+drop table ai_column_retry_strict.docs;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('retry_strict_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('retry_strict_model');
+drop database ai_column_retry_strict;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py stop 19124
