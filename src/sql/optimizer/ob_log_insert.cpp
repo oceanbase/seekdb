@@ -104,7 +104,7 @@ int ObLogInsert::get_plan_item_info(PlanText &plan_text,
       if(OB_FAIL(BUF_PRINTF(", "))) {
       } else if (OB_FAIL(BUF_PRINTF("\n      "))) {
       } else {
-        EXPLAIN_PRINT_EXPRS(column_values, type);
+        EXPLAIN_PRINT_EXPRS_WITH_ANNOTATIONS(column_values, type, plan_text.address_annotations_);
       }
     }
 

@@ -99,7 +99,8 @@ public:
       is_oneline_(false),
       is_used_hint_(false),
       is_outline_data_(false),
-      type_(EXPLAIN_UNINITIALIZED)
+      type_(EXPLAIN_UNINITIALIZED),
+      address_annotations_(nullptr)
   {}
   virtual ~PlanText() {}
 
@@ -110,6 +111,8 @@ public:
   bool is_used_hint_;
   bool is_outline_data_;
   ExplainType type_;
+  // Borrowed only during synchronous served-EXPLAIN serialization/formatting.
+  common::ObIArray<common::ObString> *address_annotations_;
 };
 
 class ObSqlPlan
@@ -296,7 +299,8 @@ public:
                                     int64_t &pos,
                                     int &line_begin_pos,
                                     const char* expr_info,
-                                    int expr_len);
+                                    int expr_len,
+                                    const common::ObIArray<common::ObString> *address_annotations = nullptr);
 
   DISALLOW_COPY_AND_ASSIGN(ObSqlPlan);
 

@@ -111,6 +111,9 @@ int ObSqlPlan::store_sql_plan_for_explain(ObExecContext *ctx,
   int ret = OB_SUCCESS;
   PlanText plan_text;
   PlanText out_plan_text;
+  ObSEArray<ObString, 16> address_annotations;
+  plan_text.address_annotations_ = EXPLAIN_EXTENDED == type ? &address_annotations : nullptr;
+  out_plan_text.address_annotations_ = plan_text.address_annotations_;
   plan_text.type_ = type;
   ObSEArray<ObSqlPlanItem*, 16> sql_plan_infos;
   bool allocate_mem_failed = false;
@@ -155,6 +158,9 @@ int ObSqlPlan::print_sql_plan(ObLogicalOperator* plan_top,
   int ret = OB_SUCCESS;
   PlanText plan_text;
   PlanText out_plan_text;
+  ObSEArray<ObString, 16> address_annotations;
+  plan_text.address_annotations_ = EXPLAIN_EXTENDED == type ? &address_annotations : nullptr;
+  out_plan_text.address_annotations_ = plan_text.address_annotations_;
   plan_text.type_ = type;
   ObSEArray<ObSqlPlanItem*, 16> sql_plan_infos;
   if (OB_FAIL(init_buffer(plan_text))) {
@@ -536,6 +542,9 @@ int ObSqlPlan::get_sql_plan_infos(PlanText &plan_text,
                                   ObIArray<ObSqlPlanItem*> &sql_plan_infos)
 {
   int ret = OB_SUCCESS;
+  if (nullptr != plan_text.address_annotations_) {
+    plan_text.address_annotations_->reuse();
+  }
   if (OB_ISNULL(plan_top)) {
     ret = OB_ERR_UNEXPECTED;
   //get operator tree info
@@ -560,6 +569,9 @@ int ObSqlPlan::get_sql_plan_infos(PlanText &plan_text,
   } else if (OB_FAIL(get_plan_other_info(plan_text, 
                                          plan_top->get_plan(), 
                                          sql_plan_infos.at(0)))) {
+  }
+  if (OB_FAIL(ret) && nullptr != plan_text.address_annotations_) {
+    plan_text.address_annotations_->reuse();
   }
   return ret;
 }
@@ -1804,7 +1816,7 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
                                               pos,
                                               line_begin_pos,
                                               plan_item->projection_,
-                                              plan_item->projection_len_))) {
+                                              plan_item->projection_len_, plan_text.address_annotations_))) {
     } else if (OB_FAIL(BUF_PRINTF(", "))) {
     } else if (plan_item->filter_predicates_len_ <= 0 && 
                OB_FAIL(BUF_PRINTF("filter(nil)"))) {
@@ -1814,7 +1826,7 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
                                               pos,
                                               line_begin_pos,
                                               plan_item->filter_predicates_,
-                                              plan_item->filter_predicates_len_))) {
+                                              plan_item->filter_predicates_len_, plan_text.address_annotations_))) {
     } else if (plan_item->startup_predicates_len_ <= 0) {
     } else if (OB_FAIL(BUF_PRINTF(", "))) {
     } else if (OB_FAIL(format_one_output_expr(buf,
@@ -1822,7 +1834,7 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
                                               pos,
                                               line_begin_pos,
                                               plan_item->startup_predicates_,
-                                              plan_item->startup_predicates_len_))) {
+                                              plan_item->startup_predicates_len_, plan_text.address_annotations_))) {
     }
     if (OB_FAIL(ret)) {
     } else if (plan_item->rowset_ <= 1) {
@@ -1845,7 +1857,7 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
                                               pos,
                                               line_begin_pos,
                                               plan_item->access_predicates_,
-                                              plan_item->access_predicates_len_))) {
+                                              plan_item->access_predicates_len_, plan_text.address_annotations_))) {
     } else if (plan_item->partition_start_len_ <= 0) {
       //do nothing
     } else if (OB_FAIL(BUF_PRINTF(", "))) {
@@ -1854,7 +1866,7 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
                                               pos,
                                               line_begin_pos,
                                               plan_item->partition_start_,
-                                              plan_item->partition_start_len_))) {
+                                              plan_item->partition_start_len_, plan_text.address_annotations_))) {
     }
     //print special info
     if (OB_FAIL(ret)) {
@@ -1867,7 +1879,7 @@ int ObSqlPlan::format_plan_output(ObIArray<ObSqlPlanItem*> &sql_plan_infos, Plan
                                               pos,
                                               line_begin_pos,
                                               plan_item->special_predicates_,
-                                              plan_item->special_predicates_len_))) {
+                                              plan_item->special_predicates_len_, plan_text.address_annotations_))) {
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
@@ -1882,7 +1894,8 @@ int ObSqlPlan::format_one_output_expr(char *buf,
                                       int64_t &pos,
                                       int &line_begin_pos,
                                       const char* expr_info,
-                                      int expr_len)
+                                      int expr_len,
+                                      const ObIArray<ObString> *address_annotations)
 {
   int ret = OB_SUCCESS;
   const int MAX_LINE_LENGTH = 150;
@@ -1890,8 +1903,40 @@ int ObSqlPlan::format_one_output_expr(char *buf,
   int last_pos = 0;
   int print_len = pos - line_begin_pos;
   bool need_new_line = false;
+  // Slices are recorded by expression producers, in source-buffer order.
+  // Integer addresses also permit unrelated/absent metadata without comparing
+  // or subtracting pointers from distinct allocations.
+  const std::uintptr_t expr_begin = reinterpret_cast<std::uintptr_t>(expr_info);
+  int64_t annotation_idx = 0;
+  int64_t annotation_end = nullptr == address_annotations ? 0 : address_annotations->count();
+  while (annotation_idx < annotation_end) {
+    const int64_t mid = annotation_idx + (annotation_end - annotation_idx) / 2;
+    if (reinterpret_cast<std::uintptr_t>(address_annotations->at(mid).ptr()) < expr_begin) {
+      annotation_idx = mid + 1;
+    } else {
+      annotation_end = mid;
+    }
+  }
   while (OB_SUCC(ret) && expr_len > last_pos) {
-    if (0 == print_len && need_new_line) {
+    if (nullptr != address_annotations && annotation_idx < address_annotations->count()) {
+      const ObString &annotation = address_annotations->at(annotation_idx);
+      const std::uintptr_t begin = reinterpret_cast<std::uintptr_t>(annotation.ptr());
+      if (begin >= expr_begin && begin - expr_begin == static_cast<std::uintptr_t>(last_pos)) {
+        const int64_t length = annotation.length();
+        if (length < 4 || length > static_cast<int64_t>(2 * sizeof(std::uintptr_t) + 4) ||
+            length > expr_len - last_pos || annotation.ptr()[0] != '(' ||
+            annotation.ptr()[length - 1] != ')') {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (static_cast<int64_t>(print_len) + length > MAX_LENGTH + 1) {
+          // The old loop emits byte201 before folding. Only move that cut
+          // when it would be strictly inside a complete diagnostic annotation.
+          need_new_line = true;
+          print_len = 0;
+        }
+        ++annotation_idx;
+      }
+    }
+    if (OB_SUCC(ret) && 0 == print_len && need_new_line) {
       if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
       } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
       } else {
@@ -2251,6 +2296,10 @@ int ObSqlPlan::init_buffer(PlanText &plan_text)
 
 void ObSqlPlan::destroy_buffer(PlanText &plan_text)
 {
+  if (nullptr != plan_text.address_annotations_) {
+    plan_text.address_annotations_->reuse();
+    plan_text.address_annotations_ = nullptr;
+  }
   if (NULL != plan_text.buf_) {
     allocator_.free(plan_text.buf_);
   }
