@@ -14,12 +14,13 @@ Existing `CARGO_HOME` and `RUSTUP_HOME` settings are preserved. Without override
 
 ### Native module tests
 
-Run the XML, compression, HTTP, and crypto module tests with Bazel:
+Run the XML, compression, SQL network compression, HTTP, and crypto module tests with Bazel:
 
 ```bash
 python3 build.py test -j32 \
   //rust/xml-parser:xml_parser_test \
   //rust/compression:compression_test \
+  //rust/sql-nio:compression_test \
   //rust/http-client:http_client_test \
   //rust/crypto:crypto_test \
   --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=unwind \
@@ -81,13 +82,13 @@ brew install zstd lz4 utf8proc thrift re2 brotli
 
 See [Homebrew optimization](homebrew.md) if a mirror is required.
 
-The zlib crate compiles its bundled C sources directly with the selected compiler on Linux, macOS, Windows, iOS, and Wasm. Android uses the system `libz.so`, which does not need to be bundled with the application. The zlib build does not require CMake, Make, or Ninja.
+The Rust compression module uses the pure Rust `zlib-rs` implementation. Storage compression and SQL network compression share its native Rust interfaces; C++ consumers use CXX adapters to the same module. This compression backend does not compile C sources or require CMake, Make, or Ninja. Default zlib compression uses level 6. Its compressed streams retain the zlib wire format, but compressed bytes and sizes can differ from the C implementation.
 
 The Rust HTTP module wraps the existing target SDK libcurl through the repository's CXX integration. Rust owns client configuration, batch state, errors, and response buffers. A thin C++ adapter uses the SDK headers for libcurl options, callbacks, and resource management. The module has no `curl`, `curl-sys`, `openssl-sys`, vendored OpenSSL, AWS-LC, bindgen, or CMake dependency. The SDK retains ownership of libcurl's TLS backend, CA defaults, and supported content encodings. Existing SDK preparation and jemalloc have their own build requirements.
 
 The Rust crypto module exposes native Rust digest, HMAC, random-byte, cipher, SQL DES, and certificate-metadata interfaces. C++ consumers use CXX adapters to the same Rust implementation. Internal CXX bindings call the existing SDK OpenSSL; OpenSSL types and headers remain private to the SDK adapter. This module adds no OpenSSL crate or OpenSSL source build.
 
-On Windows, the existing SDK libcurl DLL and its zlib DLL dependency remain in the runtime package. Rust storage and SQL compression continue to use their separate stock-zlib build.
+On Windows, the existing SDK libcurl DLL and its zlib DLL dependency remain in the runtime package. Rust storage and SQL compression use `zlib-rs` independently of that SDK dependency.
 
 ## Windows host packages
 

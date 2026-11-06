@@ -23,7 +23,6 @@
 #include "lib/compress/zstd_1_3_8/ob_zstd_wrapper.h"
 #include "lib/compress/ob_compress_util.h"
 #include "sql/engine/ob_exec_context.h"
-#include <utility>
 
 namespace oceanbase
 {
@@ -599,15 +598,7 @@ int ObZlibDecompressor::init()
   if (decoder_.has_value()) {
     ret = OB_INIT_TWICE;
   } else {
-    auto decoder = compression::new_stream_decoder();
-    const auto code = compression::decoder_creation_status(*decoder);
-    if (compression::Code::Ok != code) {
-      ret = compression::Code::OutOfMemory == code
-          ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LOG_WARN("failed to initialize stream decoder", K(ret));
-    } else {
-      decoder_.emplace(std::move(decoder));
-    }
+    decoder_.emplace(compression::new_stream_decoder());
   }
   return ret;
 }

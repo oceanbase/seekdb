@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
 load(":features.bzl", "FEATURES")
 
@@ -20,8 +20,16 @@ rust_library(
     lint_config = ":lints",
     version = "0.1.0",
     crate_features = select(FEATURES),
-    deps = all_crate_deps(normal = True),
+    deps = ["//rust/compression"] + all_crate_deps(normal = True),
     proc_macro_deps = all_crate_deps(proc_macro = True),
     aliases = aliases(),
     tags = ["no-remote"],
+)
+
+rust_test(
+    name = "compression_test",
+    crate_root = "src/compress.rs",
+    srcs = ["src/compress.rs", "src/compress_tests.rs"],
+    edition = crate_edition(),
+    deps = ["//rust/compression"],
 )

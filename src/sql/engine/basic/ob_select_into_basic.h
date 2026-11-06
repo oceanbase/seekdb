@@ -77,7 +77,7 @@ public:
   void reset() override;
   void reuse() override;
 private:
-  std::optional<rust::Box<compression::GzipEncoderHandle>> encoder_;
+  std::optional<rust::Box<compression::GzipEncoder>> encoder_;
 };
 
 class ObCompressStreamWriter

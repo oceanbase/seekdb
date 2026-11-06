@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Compression and checksum primitives backed by libz-sys.
+//! Compression and checksum primitives backed by zlib-rs.
 //!
 //! One-shot operations borrow caller-owned buffers. Streaming objects own
 //! their compressor state and can be reset without retaining input or output
@@ -21,15 +21,13 @@
 mod bridge;
 
 use std::fmt;
-use std::mem::size_of;
-use std::ptr;
+use zlib_rs::{Deflate, DeflateConfig, DeflateFlush, Inflate, InflateFlush, ReturnCode, Status};
 
 pub const DEFAULT_COMPRESSION_LEVEL: i32 = -1;
 pub const GZIP_COMPRESSION_LEVEL: i32 = 5;
-const WINDOW_BITS: i32 = 15;
-const GZIP_WINDOW_BITS: i32 = 16 + WINDOW_BITS;
-const AUTO_WINDOW_BITS: i32 = 32 + WINDOW_BITS;
-const DEFAULT_MEM_LEVEL: i32 = 8;
+const WINDOW_BITS: u8 = 15;
+const GZIP_WINDOW_BITS: i32 = 16 + WINDOW_BITS as i32;
+const AUTO_WINDOW_BITS: u8 = 32 + WINDOW_BITS;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DeflateError {
@@ -110,227 +108,116 @@ pub struct StreamProgress {
     pub stream_end: bool,
 }
 
+impl From<zlib_rs::DeflateError> for Error {
+    fn from(error: zlib_rs::DeflateError) -> Self {
+        Self::Deflate(match error {
+            zlib_rs::DeflateError::StreamError => DeflateError::StreamError,
+            zlib_rs::DeflateError::DataError => DeflateError::DataError,
+            zlib_rs::DeflateError::MemError => DeflateError::MemError,
+        })
+    }
+}
+
+impl From<zlib_rs::InflateError> for Error {
+    fn from(error: zlib_rs::InflateError) -> Self {
+        Self::Inflate(match error {
+            zlib_rs::InflateError::NeedDict { dict_id } => InflateError::NeedDict { dict_id },
+            zlib_rs::InflateError::StreamError => InflateError::StreamError,
+            zlib_rs::InflateError::DataError => InflateError::DataError,
+            zlib_rs::InflateError::MemError => InflateError::MemError,
+        })
+    }
+}
+
 pub fn zlib_compress_bound(source_len: usize) -> usize {
-    // SAFETY: compressBound only inspects the supplied length.
-    unsafe { libz_sys::compressBound(source_len as libz_sys::uLong) as usize }
+    zlib_rs::compress_bound(source_len)
 }
 
 pub fn zlib_compress(input: &[u8], output: &mut [u8], level: i32) -> Result<usize, Error> {
     if !(-1..=9).contains(&level) {
         return Err(Error::InvalidCompressionLevel);
     }
-    let mut output_len = output.len() as libz_sys::uLongf;
-    // SAFETY: both buffers remain alive and exclusively borrowed for the call;
-    // output_len is initialized to the actual output capacity.
-    let code = unsafe {
-        libz_sys::compress2(
-            output.as_mut_ptr(),
-            &mut output_len,
-            input.as_ptr(),
-            input.len() as libz_sys::uLong,
-            level,
-        )
+    let config = DeflateConfig {
+        level,
+        ..DeflateConfig::default()
     };
+    let (compressed, code) = zlib_rs::compress_slice(output, input, config);
     match code {
-        libz_sys::Z_OK => Ok(output_len as usize),
-        libz_sys::Z_BUF_ERROR => Err(Error::OutputTooSmall),
-        libz_sys::Z_MEM_ERROR => Err(DeflateError::MemError.into()),
-        libz_sys::Z_STREAM_ERROR => Err(DeflateError::StreamError.into()),
+        ReturnCode::Ok => Ok(compressed.len()),
+        ReturnCode::BufError => Err(Error::OutputTooSmall),
+        ReturnCode::MemError => Err(DeflateError::MemError.into()),
+        ReturnCode::StreamError => Err(DeflateError::StreamError.into()),
         _ => Err(Error::InvalidData),
     }
 }
 
+/// Decodes one zlib stream, allowing bytes after its end.
 pub fn zlib_decompress(input: &[u8], output: &mut [u8]) -> Result<usize, Error> {
-    let mut output_len = output.len() as libz_sys::uLongf;
-    // SAFETY: both buffers remain alive and exclusively borrowed for the call;
-    // output_len is initialized to the actual output capacity.
-    let code = unsafe {
-        libz_sys::uncompress(
-            output.as_mut_ptr(),
-            &mut output_len,
-            input.as_ptr(),
-            input.len() as libz_sys::uLong,
-        )
-    };
+    let (decompressed, code) = zlib_rs::decompress_slice(output, input, Default::default());
     match code {
-        libz_sys::Z_OK => Ok(output_len as usize),
-        libz_sys::Z_BUF_ERROR => Err(Error::OutputTooSmall),
-        libz_sys::Z_MEM_ERROR => Err(InflateError::MemError.into()),
-        libz_sys::Z_STREAM_ERROR => Err(InflateError::StreamError.into()),
+        ReturnCode::Ok => Ok(decompressed.len()),
+        ReturnCode::BufError => Err(Error::OutputTooSmall),
+        ReturnCode::MemError => Err(InflateError::MemError.into()),
+        ReturnCode::StreamError => Err(InflateError::StreamError.into()),
         _ => Err(Error::InvalidData),
+    }
+}
+
+/// Decodes exactly one complete zlib stream, rejecting trailing input.
+pub fn zlib_decompress_complete(input: &[u8], output: &mut [u8]) -> Result<usize, Error> {
+    let mut decoder = Inflate::new(true, WINDOW_BITS);
+    let mut consumed = 0;
+    let mut produced = 0;
+    loop {
+        let before_in = consumed;
+        let before_out = produced;
+        let status = decoder.decompress(
+            &input[consumed..],
+            &mut output[produced..],
+            InflateFlush::Finish,
+        )?;
+        consumed = decoder.total_in() as usize;
+        produced = decoder.total_out() as usize;
+        if status == Status::StreamEnd {
+            return if consumed == input.len() {
+                Ok(produced)
+            } else {
+                Err(Error::InvalidData)
+            };
+        }
+        if produced == output.len() {
+            return Err(Error::OutputTooSmall);
+        }
+        if consumed == input.len() || (consumed == before_in && produced == before_out) {
+            return Err(Error::InvalidData);
+        }
     }
 }
 
 pub fn crc32(input: &[u8]) -> u32 {
-    let mut checksum = 0;
-    for chunk in input.chunks(libz_sys::uInt::MAX as usize) {
-        // SAFETY: each chunk pointer and length remain valid for the call.
-        checksum =
-            unsafe { libz_sys::crc32(checksum, chunk.as_ptr(), chunk.len() as libz_sys::uInt) };
-    }
-    checksum as u32
-}
-
-unsafe extern "C" fn allocate(
-    _opaque: libz_sys::voidpf,
-    items: libz_sys::uInt,
-    size: libz_sys::uInt,
-) -> libz_sys::voidpf {
-    // SAFETY: zlib provides allocation sizes and does not retain Rust references.
-    unsafe { libc::calloc(items as usize, size as usize) }
-}
-
-unsafe extern "C" fn deallocate(_opaque: libz_sys::voidpf, address: libz_sys::voidpf) {
-    // SAFETY: address was returned by allocate or is null, as permitted by free.
-    unsafe { libc::free(address) }
-}
-
-fn empty_stream() -> libz_sys::z_stream {
-    libz_sys::z_stream {
-        next_in: ptr::null_mut(),
-        avail_in: 0,
-        total_in: 0,
-        next_out: ptr::null_mut(),
-        avail_out: 0,
-        total_out: 0,
-        msg: ptr::null_mut(),
-        state: ptr::null_mut(),
-        zalloc: allocate,
-        zfree: deallocate,
-        opaque: ptr::null_mut(),
-        data_type: 0,
-        adler: 0,
-        reserved: 0,
-    }
-}
-
-#[derive(Clone, Copy)]
-enum StreamKind {
-    Deflate,
-    Inflate,
-}
-
-struct ZStream {
-    // zlib retains the z_stream address in its internal state across calls.
-    raw: Box<libz_sys::z_stream>,
-    kind: StreamKind,
-}
-
-impl ZStream {
-    fn new_deflate(level: i32) -> Result<Self, DeflateError> {
-        Self::init_deflate(Box::new(empty_stream()), level)
-    }
-
-    fn init_deflate(mut raw: Box<libz_sys::z_stream>, level: i32) -> Result<Self, DeflateError> {
-        // SAFETY: raw is initialized, the version comes from the linked zlib,
-        // and the supplied size matches libz-sys's z_stream layout.
-        let code = unsafe {
-            libz_sys::deflateInit2_(
-                &mut *raw,
-                level,
-                libz_sys::Z_DEFLATED,
-                GZIP_WINDOW_BITS,
-                DEFAULT_MEM_LEVEL,
-                libz_sys::Z_DEFAULT_STRATEGY,
-                libz_sys::zlibVersion(),
-                size_of::<libz_sys::z_stream>() as i32,
-            )
-        };
-        match code {
-            libz_sys::Z_OK => Ok(Self {
-                raw,
-                kind: StreamKind::Deflate,
-            }),
-            libz_sys::Z_MEM_ERROR => Err(DeflateError::MemError),
-            libz_sys::Z_DATA_ERROR => Err(DeflateError::DataError),
-            _ => Err(DeflateError::StreamError),
-        }
-    }
-
-    fn new_inflate() -> Result<Self, InflateError> {
-        Self::init_inflate(Box::new(empty_stream()))
-    }
-
-    fn init_inflate(mut raw: Box<libz_sys::z_stream>) -> Result<Self, InflateError> {
-        // SAFETY: raw is initialized, the version comes from the linked zlib,
-        // and the supplied size matches libz-sys's z_stream layout.
-        let code = unsafe {
-            libz_sys::inflateInit2_(
-                &mut *raw,
-                AUTO_WINDOW_BITS,
-                libz_sys::zlibVersion(),
-                size_of::<libz_sys::z_stream>() as i32,
-            )
-        };
-        match code {
-            libz_sys::Z_OK => Ok(Self {
-                raw,
-                kind: StreamKind::Inflate,
-            }),
-            libz_sys::Z_MEM_ERROR => Err(InflateError::MemError),
-            _ => Err(InflateError::StreamError),
-        }
-    }
-
-    fn set_buffers(&mut self, input: &[u8], output: &mut [u8]) {
-        self.raw.next_in = input.as_ptr().cast_mut();
-        self.raw.avail_in = input.len().min(libz_sys::uInt::MAX as usize) as libz_sys::uInt;
-        self.raw.next_out = output.as_mut_ptr();
-        self.raw.avail_out = output.len().min(libz_sys::uInt::MAX as usize) as libz_sys::uInt;
-    }
-
-    fn progress(&self, input: &[u8], output: &[u8], stream_end: bool) -> StreamProgress {
-        let consumed = input.len().min(libz_sys::uInt::MAX as usize) - self.raw.avail_in as usize;
-        let produced = output.len().min(libz_sys::uInt::MAX as usize) - self.raw.avail_out as usize;
-        StreamProgress {
-            consumed,
-            produced,
-            drained: consumed == input.len() && produced < output.len(),
-            stream_end,
-        }
-    }
-
-    fn reset(&mut self) {
-        // SAFETY: the stream is initialized and no input or output buffers are retained.
-        let code = unsafe {
-            match self.kind {
-                StreamKind::Deflate => libz_sys::deflateReset(&mut *self.raw),
-                StreamKind::Inflate => libz_sys::inflateReset(&mut *self.raw),
-            }
-        };
-        assert_eq!(
-            libz_sys::Z_OK,
-            code,
-            "failed to reset initialized zlib stream"
-        );
-    }
-}
-
-impl Drop for ZStream {
-    fn drop(&mut self) {
-        // SAFETY: the stream was initialized successfully and is dropped once.
-        unsafe {
-            match self.kind {
-                StreamKind::Deflate => libz_sys::deflateEnd(&mut *self.raw),
-                StreamKind::Inflate => libz_sys::inflateEnd(&mut *self.raw),
-            };
-        }
-    }
+    zlib_rs::crc32::crc32(0, input)
 }
 
 pub struct GzipEncoder {
-    stream: ZStream,
+    stream: Deflate,
 }
 
 impl GzipEncoder {
-    /// Initializes an encoder, reporting invalid levels or zlib allocation failure.
     pub fn new(level: i32) -> Result<Self, Error> {
         if !(-1..=9).contains(&level) {
             return Err(Error::InvalidCompressionLevel);
         }
-        Ok(Self {
-            stream: ZStream::new_deflate(level)?,
-        })
+        Ok(Self::with_valid_level(level))
+    }
+
+    fn with_valid_level(level: i32) -> Self {
+        Self {
+            stream: Deflate::new_with_config(DeflateConfig {
+                level,
+                window_bits: GZIP_WINDOW_BITS,
+                ..DeflateConfig::default()
+            }),
+        }
     }
 
     pub fn process(
@@ -339,28 +226,25 @@ impl GzipEncoder {
         output: &mut [u8],
         finish: bool,
     ) -> Result<StreamProgress, Error> {
-        self.stream.set_buffers(input, output);
-        // SAFETY: the stream is initialized and its pointers reference the
-        // live, exclusively borrowed buffers configured above.
-        let code = unsafe {
-            libz_sys::deflate(
-                &mut *self.stream.raw,
-                if finish {
-                    libz_sys::Z_FINISH
-                } else {
-                    libz_sys::Z_NO_FLUSH
-                },
-            )
-        };
-        match code {
-            libz_sys::Z_OK | libz_sys::Z_STREAM_END | libz_sys::Z_BUF_ERROR => Ok(self
-                .stream
-                .progress(input, output, code == libz_sys::Z_STREAM_END)),
-            libz_sys::Z_STREAM_ERROR => Err(DeflateError::StreamError.into()),
-            libz_sys::Z_DATA_ERROR => Err(DeflateError::DataError.into()),
-            libz_sys::Z_MEM_ERROR => Err(DeflateError::MemError.into()),
-            _ => Err(DeflateError::StreamError.into()),
-        }
+        let before_in = self.stream.total_in();
+        let before_out = self.stream.total_out();
+        let status = self.stream.compress(
+            input,
+            output,
+            if finish {
+                DeflateFlush::Finish
+            } else {
+                DeflateFlush::NoFlush
+            },
+        )?;
+        let consumed = (self.stream.total_in() - before_in) as usize;
+        let produced = (self.stream.total_out() - before_out) as usize;
+        Ok(StreamProgress {
+            consumed,
+            produced,
+            drained: consumed == input.len() && produced < output.len(),
+            stream_end: status == Status::StreamEnd,
+        })
     }
 
     pub fn reset(&mut self) {
@@ -368,43 +252,52 @@ impl GzipEncoder {
     }
 }
 
+impl Default for GzipEncoder {
+    fn default() -> Self {
+        Self::with_valid_level(GZIP_COMPRESSION_LEVEL)
+    }
+}
+
 pub struct StreamDecoder {
-    stream: ZStream,
+    stream: Inflate,
     needs_reset: bool,
 }
 
 impl StreamDecoder {
-    /// Initializes a decoder, reporting zlib allocation failure to the caller.
-    pub fn new() -> Result<Self, Error> {
-        Ok(Self {
-            stream: ZStream::new_inflate()?,
+    pub fn new() -> Self {
+        Self {
+            stream: Inflate::new(true, AUTO_WINDOW_BITS),
             needs_reset: false,
-        })
+        }
     }
 
     pub fn process(&mut self, input: &[u8], output: &mut [u8]) -> Result<StreamProgress, Error> {
         if self.needs_reset {
-            self.stream.reset();
+            // Inflate::reset(true) selects zlib-only mode rather than autodetection.
+            self.stream = Inflate::new(true, AUTO_WINDOW_BITS);
             self.needs_reset = false;
         }
-        self.stream.set_buffers(input, output);
-        // SAFETY: the stream is initialized and its pointers reference the
-        // live, exclusively borrowed buffers configured above.
-        let code = unsafe { libz_sys::inflate(&mut *self.stream.raw, libz_sys::Z_NO_FLUSH) };
-        match code {
-            libz_sys::Z_OK | libz_sys::Z_STREAM_END | libz_sys::Z_BUF_ERROR => {
-                let stream_end = code == libz_sys::Z_STREAM_END;
-                self.needs_reset = stream_end;
-                Ok(self.stream.progress(input, output, stream_end))
-            }
-            libz_sys::Z_NEED_DICT => Err(InflateError::NeedDict {
-                dict_id: self.stream.raw.adler as u32,
-            }
-            .into()),
-            libz_sys::Z_DATA_ERROR => Err(InflateError::DataError.into()),
-            libz_sys::Z_MEM_ERROR => Err(InflateError::MemError.into()),
-            _ => Err(InflateError::StreamError.into()),
-        }
+        let before_in = self.stream.total_in();
+        let before_out = self.stream.total_out();
+        let status = self
+            .stream
+            .decompress(input, output, InflateFlush::NoFlush)?;
+        let consumed = (self.stream.total_in() - before_in) as usize;
+        let produced = (self.stream.total_out() - before_out) as usize;
+        let stream_end = status == Status::StreamEnd;
+        self.needs_reset = stream_end;
+        Ok(StreamProgress {
+            consumed,
+            produced,
+            drained: consumed == input.len() && produced < output.len(),
+            stream_end,
+        })
+    }
+}
+
+impl Default for StreamDecoder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

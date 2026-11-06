@@ -44,27 +44,6 @@ crate.annotation(
     build_script_env = {"NUM_JOBS": "4"},
 )
 crate.annotation(
-    crate = "libz-sys",
-    repositories = ["rust_crates"],
-    build_script_env = {"NUM_JOBS": "4"},
-    build_script_toolchains = ["@@//bazel:windows_build_script_environment"],
-)
-crate.annotation_select(
-    crate = "libz-sys",
-    repositories = ["rust_crates"],
-    triples = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"],
-    build_script_env = {
-        "PATH": "$(CARGO_BUILD_SCRIPT_PATH)",
-    },
-    build_script_env_files = ["@@//bazel:windows_build_script_environment"],
-)
-crate.annotation_select(
-    crate = "libz-sys",
-    repositories = ["rust_crates"],
-    triples = ["wasm32-unknown-emscripten"],
-    build_script_env = {"EM_FROZEN_CACHE": "1"},
-)
-crate.annotation(
     crate = "spdlog-rs",
     version = "0.5.3",
     repositories = ["rust_crates"],

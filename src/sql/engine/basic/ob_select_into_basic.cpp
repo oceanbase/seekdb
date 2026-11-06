@@ -19,7 +19,6 @@
 #include "ob_select_into_basic.h"
 #include "lib/compress/ob_compress_util.h"
 #include "lib/compress/zstd_1_3_8/ob_zstd_wrapper.h"
-#include <utility>
 
 namespace oceanbase
 {
@@ -256,15 +255,7 @@ int ObOutfileGzipStreamCompressor::init()
   if (encoder_.has_value()) {
     ret = OB_INIT_TWICE;
   } else {
-    auto encoder = compression::new_gzip_encoder();
-    const auto code = compression::gzip_creation_status(*encoder);
-    if (compression::Code::Ok != code) {
-      ret = compression::Code::OutOfMemory == code
-          ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LOG_WARN("failed to initialize gzip encoder", K(ret));
-    } else {
-      encoder_.emplace(std::move(encoder));
-    }
+    encoder_.emplace(compression::new_gzip_encoder());
   }
   return ret;
 }

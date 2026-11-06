@@ -275,7 +275,7 @@ public:
   ObCSVGeneralFormat::ObCSVCompression compression_format() const override { return compression_format_; }
 
 private:
-  std::optional<rust::Box<compression::StreamDecoderHandle>> decoder_;
+  std::optional<rust::Box<compression::StreamDecoder>> decoder_;
 
   ObCSVGeneralFormat::ObCSVCompression compression_format_;
 };

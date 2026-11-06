@@ -25,8 +25,7 @@ memory-transport = []
 
 [dependencies]
 cxx = "1"
-# Use the same zlib backend as storage compression.
-flate2 = { version = "1", default-features = false, features = ["zlib"] }
+compression = { path = "../compression" }
 # Direct-indexed storage for the reactor's mio Token -> connection hot table.
 slab = "0.4"
 # TLS for the MySQL channel. default-features=false drops the aws-lc-rs

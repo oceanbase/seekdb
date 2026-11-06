@@ -6,5 +6,4 @@ publish = false
 
 [dependencies]
 cxx = "=1.0.202"
-libc = "0.2"
-libz-sys = { version = "=1.1.31", default-features = false, features = ["libc", "static", "stock-zlib"] }
+zlib-rs = { version = "=0.6.8", default-features = false, features = ["std"] }

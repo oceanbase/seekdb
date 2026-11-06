@@ -122,7 +122,7 @@ fn gzip_streaming_handles_small_buffers_and_reuse() {
         assert!(progress.produced > 0);
     }
 
-    let mut decoder = StreamDecoder::new().unwrap();
+    let mut decoder = StreamDecoder::new();
     let mut decoded = vec![0u8; input.len() + 1];
     let mut input_offset = 0;
     let mut output_offset = 0;
@@ -166,7 +166,7 @@ fn gzip_streaming_handles_small_buffers_and_reuse() {
 #[test]
 fn stream_decoder_accepts_zlib_and_concatenated_gzip_members() {
     let mut output = [0u8; 32];
-    let mut decoder = StreamDecoder::new().unwrap();
+    let mut decoder = StreamDecoder::new();
     let progress = decoder.process(NATIVE_ZLIB_LEVEL6, &mut output).unwrap();
     assert!(progress.stream_end);
     assert_eq!(b"hello world\n", &output[..progress.produced]);
@@ -199,84 +199,129 @@ fn stream_decoder_accepts_zlib_and_concatenated_gzip_members() {
     assert_eq!(b"hello", &decoded[..second.produced]);
 }
 
-#[derive(Default)]
-struct AllocationState {
-    fail_after: Option<usize>,
-    calls: usize,
-    live: usize,
-}
+#[test]
+fn strict_zlib_decoder_accepts_exact_and_larger_output_buffers() {
+    let mut exact = [0; 12];
+    assert_eq!(
+        exact.len(),
+        zlib_decompress_complete(NATIVE_ZLIB_LEVEL6, &mut exact).unwrap()
+    );
+    assert_eq!(b"hello world\n", &exact);
 
-unsafe extern "C" fn test_allocate(
-    opaque: libz_sys::voidpf,
-    items: libz_sys::uInt,
-    size: libz_sys::uInt,
-) -> libz_sys::voidpf {
-    // SAFETY: the test caller keeps this state alive until the stream is destroyed;
-    // zlib invokes its allocator synchronously with exclusive stream access.
-    let state = unsafe { &mut *opaque.cast::<AllocationState>() };
-    let fail = state.fail_after.is_some_and(|limit| state.calls >= limit);
-    state.calls += 1;
-    if fail {
-        ptr::null_mut()
-    } else {
-        // SAFETY: this delegates to the production zlib allocator.
-        let address = unsafe { allocate(opaque, items, size) };
-        if !address.is_null() {
-            state.live += 1;
-        }
-        address
-    }
-}
-
-unsafe extern "C" fn test_deallocate(opaque: libz_sys::voidpf, address: libz_sys::voidpf) {
-    // SAFETY: opaque follows the same lifetime and exclusive access contract as
-    // test_allocate, and address was allocated by that callback.
-    let state = unsafe { &mut *opaque.cast::<AllocationState>() };
-    if !address.is_null() {
-        state.live -= 1;
-    }
-    unsafe { deallocate(opaque, address) };
-}
-
-fn test_stream(state: &mut AllocationState) -> Box<libz_sys::z_stream> {
-    let mut raw = Box::new(empty_stream());
-    raw.zalloc = test_allocate;
-    raw.zfree = test_deallocate;
-    raw.opaque = (state as *mut AllocationState).cast();
-    raw
+    let mut larger = [0xab; 32];
+    let produced = zlib_decompress_complete(NATIVE_ZLIB_LEVEL6, &mut larger).unwrap();
+    assert_eq!(12, produced);
+    assert_eq!(b"hello world\n", &larger[..produced]);
+    assert!(larger[produced..].iter().all(|&byte| byte == 0xab));
 }
 
 #[test]
-fn stream_initialization_returns_allocation_errors_and_releases_partial_state() {
-    // Discover each library's allocation count, then fail every allocation in
-    // turn. This covers both immediate failure and partially initialized state.
-    for kind in [StreamKind::Deflate, StreamKind::Inflate] {
-        let initialize = |raw| match kind {
-            StreamKind::Deflate => {
-                ZStream::init_deflate(raw, GZIP_COMPRESSION_LEVEL).map_err(Error::from)
+fn strict_zlib_decoder_rejects_every_truncation_and_trailing_input() {
+    for end in 0..NATIVE_ZLIB_LEVEL6.len() {
+        assert!(zlib_decompress_complete(&NATIVE_ZLIB_LEVEL6[..end], &mut [0; 32]).is_err());
+    }
+    for suffix in [b"trailing".as_slice(), NATIVE_ZLIB_LEVEL6] {
+        let mut input = NATIVE_ZLIB_LEVEL6.to_vec();
+        input.extend_from_slice(suffix);
+        assert_eq!(
+            Error::InvalidData,
+            zlib_decompress_complete(&input, &mut [0; 64]).unwrap_err()
+        );
+    }
+}
+
+#[test]
+fn strict_zlib_decoder_rejects_corrupt_data_and_small_output() {
+    for index in [5, NATIVE_ZLIB_LEVEL6.len() - 1] {
+        let mut corrupt = NATIVE_ZLIB_LEVEL6.to_vec();
+        corrupt[index] ^= 0xff;
+        assert!(zlib_decompress_complete(&corrupt, &mut [0; 32]).is_err());
+    }
+    assert_eq!(
+        Error::OutputTooSmall,
+        zlib_decompress_complete(NATIVE_ZLIB_LEVEL6, &mut [0; 4]).unwrap_err()
+    );
+}
+
+#[test]
+fn strict_zlib_decoder_accepts_an_empty_stream() {
+    const EMPTY: &[u8] = &[0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01];
+    assert_eq!(0, zlib_decompress_complete(EMPTY, &mut []).unwrap());
+    let mut output = [0xab];
+    assert_eq!(0, zlib_decompress_complete(EMPTY, &mut output).unwrap());
+    assert_eq!([0xab], output);
+}
+
+#[test]
+fn strict_zlib_decoder_rejects_dictionaries_and_gzip() {
+    // RFC1950 FDICT header with dictionary Adler32 1.
+    const DICTIONARY: &[u8] = &[0x78, 0xbb, 0x00, 0x00, 0x00, 0x01];
+    assert_eq!(
+        Error::Inflate(InflateError::NeedDict { dict_id: 1 }),
+        zlib_decompress_complete(DICTIONARY, &mut [0; 32]).unwrap_err()
+    );
+
+    let mut encoded = [0; 128];
+    let progress = GzipEncoder::default()
+        .process(b"hello", &mut encoded, true)
+        .unwrap();
+    assert!(progress.stream_end);
+    assert!(zlib_decompress_complete(&encoded[..progress.produced], &mut [0; 32]).is_err());
+    let decoded = StreamDecoder::new()
+        .process(&encoded[..progress.produced], &mut [0; 32])
+        .unwrap();
+    assert!(decoded.stream_end);
+    assert_eq!(5, decoded.produced);
+}
+
+#[test]
+fn gzip_encoder_rejects_invalid_levels() {
+    for level in [-2, 10] {
+        assert!(matches!(
+            GzipEncoder::new(level),
+            Err(Error::InvalidCompressionLevel)
+        ));
+    }
+}
+
+#[test]
+fn decoder_handles_empty_and_fragmented_gzip_members() {
+    let mut encoder = GzipEncoder::default();
+    let mut encoded = [0; 128];
+    let empty = encoder.process(&[], &mut encoded, true).unwrap();
+    assert!(empty.stream_end);
+
+    let mut decoder = StreamDecoder::new();
+    let decoded = decoder
+        .process(&encoded[..empty.produced], &mut [0; 1])
+        .unwrap();
+    assert!(decoded.stream_end);
+    assert_eq!(0, decoded.produced);
+
+    encoder.reset();
+    let full = encoder.process(b"fragmented", &mut encoded, true).unwrap();
+    assert!(full.stream_end);
+    let mut output = Vec::new();
+    let mut ended = false;
+    for chunk in encoded[..full.produced].chunks(3) {
+        let mut offset = 0;
+        loop {
+            let mut buffer = [0; 2];
+            let progress = decoder.process(&chunk[offset..], &mut buffer).unwrap();
+            offset += progress.consumed;
+            output.extend_from_slice(&buffer[..progress.produced]);
+            ended |= progress.stream_end;
+            if offset == chunk.len() && progress.produced < buffer.len() {
+                break;
             }
-            StreamKind::Inflate => ZStream::init_inflate(raw).map_err(Error::from),
-        };
-        let expected_error = match kind {
-            StreamKind::Deflate => Error::Deflate(DeflateError::MemError),
-            StreamKind::Inflate => Error::Inflate(InflateError::MemError),
-        };
-        let mut state = AllocationState::default();
-        drop(initialize(test_stream(&mut state)).unwrap());
-        assert_eq!(0, state.live);
-        assert!(state.calls > 0);
-        let allocation_count = state.calls;
-        for fail_after in 0..allocation_count {
-            let mut state = AllocationState {
-                fail_after: Some(fail_after),
-                ..AllocationState::default()
-            };
-            assert!(
-                matches!(initialize(test_stream(&mut state)), Err(error) if error == expected_error)
-            );
-            assert_eq!(0, state.live);
+            assert!(progress.consumed > 0 || progress.produced > 0);
         }
     }
-    assert!(GzipEncoder::new(GZIP_COMPRESSION_LEVEL).is_ok());
-    assert!(StreamDecoder::new().is_ok());
+    assert!(ended);
+    assert_eq!(b"fragmented", output.as_slice());
+
+    let mut output = [0; 32];
+    let decoded = decoder.process(NATIVE_ZLIB_LEVEL6, &mut output).unwrap();
+    assert!(decoded.stream_end);
+    assert_eq!(b"hello world\n", &output[..decoded.produced]);
 }
