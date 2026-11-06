@@ -138,6 +138,35 @@ SELECT id,CASE
   ELSE 0 END AS v
   FROM (SELECT id,a FROM expression_program_values ORDER BY id LIMIT 3) t ORDER BY id;
 
+--disable_warnings
+DROP TABLE IF EXISTS expression_program_growth;
+--enable_warnings
+CREATE TABLE expression_program_growth(id BIGINT PRIMARY KEY, a BIGINT, b BIGINT, c BIGINT);
+INSERT INTO expression_program_growth
+SELECT id,id+100,MOD(id,11),CASE WHEN MOD(id,7)=0 THEN NULL ELSE MOD(id,17)-8 END
+FROM (
+  SELECT 100*h.n+10*t.n+u.n+1 AS id
+  FROM (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) h,
+       (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) t,
+       (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) u
+) rows_to_insert;
+SELECT /*+ NO_MERGE(t) OPT_PARAM('ROWSETS_MAX_ROWS',300) */
+  id,(a+b)*(a-b)+7 AS v,
+  CASE WHEN c IS NULL OR c<0 THEN a+b ELSE c-a END AS w,
+  (a+b)>0 AND (b<8 OR c IS NULL) AS p,c+1 AS n
+FROM (
+  SELECT id,a,b,c FROM expression_program_growth WHERE id<=3
+  UNION ALL
+  SELECT id,a,b,c FROM expression_program_growth WHERE id>=4 AND id<=65
+  UNION ALL
+  SELECT id,a,b,c FROM expression_program_growth WHERE id>65
+  LIMIT 600
+) t
+WHERE (a+b)>0 AND (b<8 OR c IS NULL)
+  AND (id<4 OR (id>=63 AND id<=67) OR id>595)
+ORDER BY id;
+DROP TABLE expression_program_growth;
+
 SELECT id,CAST('invalid_integer' AS SIGNED)+a FROM expression_program_values WHERE id=1;
 SHOW WARNINGS;
 DROP TABLE expression_program_values;
