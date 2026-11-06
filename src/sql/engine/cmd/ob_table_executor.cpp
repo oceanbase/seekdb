@@ -760,7 +760,7 @@ int ai_worker_scalar(common::ObMySQLProxy &proxy, const ObString &sql, ObSqlStri
   out.reset();
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     common::sqlclient::ObMySQLResult *result = NULL;
-    if (OB_FAIL(proxy.read(res, sql.ptr(), NULL))) {
+    if (OB_FAIL(proxy.read(res, sql.ptr(), static_cast<const ObSessionParam *>(NULL)))) {
       SQL_ENG_LOG(WARN, "ai worker read failed", K(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -869,7 +869,7 @@ int ObAiColumnWorker::fetch_tasks(int64_t &count)
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         common::sqlclient::ObMySQLResult *result = NULL;
-        if (OB_FAIL(proxy->read(res, sql.ptr(), NULL))) {
+        if (OB_FAIL(proxy->read(res, sql.ptr(), static_cast<const ObSessionParam *>(NULL)))) {
           SQL_ENG_LOG(WARN, "ai worker fetch tasks failed", K(ret));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
@@ -1015,7 +1015,7 @@ int ObAiColumnWorker::load_input(ObAiColumnTaskRow &row)
       common::sqlclient::ObMySQLResult *result = NULL;
       if (OB_ISNULL(GCTX.sql_proxy_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr(), NULL))) {
+      } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr(), static_cast<const ObSessionParam *>(NULL)))) {
         SQL_ENG_LOG(WARN, "read ai input failed", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -3077,7 +3077,7 @@ static int read_has_row(common::ObMySQLProxy &proxy, const ObSqlString &sql, boo
   has_row = false;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     common::sqlclient::ObMySQLResult *result = NULL;
-    if (OB_FAIL(proxy.read(res, sql.ptr(), NULL))) {
+    if (OB_FAIL(proxy.read(res, sql.ptr(), static_cast<const ObSessionParam *>(NULL)))) {
       LOG_WARN("read ai column readiness failed", K(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
