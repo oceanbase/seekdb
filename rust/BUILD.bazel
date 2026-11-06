@@ -52,6 +52,7 @@ cxx_bridge(
 )
 cxx_bridge(name = "uuid_generator", src = "uuid-generator/src/bridge.rs")
 cxx_bridge(name = "math", src = "math/src/bridge.rs")
+cxx_bridge(name = "vector_kernels", src = "vector-kernels/src/bridge.rs")
 cxx_bridge(name = "logger", src = "logger/src/bridge.rs")
 cxx_bridge(name = "regex_engine", src = "regex-engine/src/bridge.rs")
 cxx_bridge(
@@ -80,6 +81,7 @@ filegroup(
         "regex_engine.h",
         "uuid_generator.h",
         "math.h",
+        "vector_kernels.h",
         "in_process.h",
         "sql_nio.h",
     ],
@@ -103,7 +105,7 @@ cargo_library(
 
 cc_library(
     name = "bridges",
-    deps = [":local_bridge", ":config_bridge", ":logger_bridge", ":regex_engine_bridge", ":sql_nio_bridge", ":uuid_generator_bridge", ":math_bridge"] + select({
+    deps = [":local_bridge", ":config_bridge", ":logger_bridge", ":regex_engine_bridge", ":sql_nio_bridge", ":uuid_generator_bridge", ":math_bridge", ":vector_kernels_bridge"] + select({
         "@platforms//os:windows": [],
         "@platforms//os:emscripten": [],
         "//conditions:default": [":in_process_bridge"],

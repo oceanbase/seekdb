@@ -20,3 +20,4 @@ in-process = { path = "../in-process" }
 regex-engine = { path = "../regex-engine" }
 uuid-generator = { path = "../uuid-generator" }
 math = { path = "../math" }
+vector-kernels = { path = "../vector-kernels" }

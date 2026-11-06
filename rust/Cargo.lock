@@ -930,6 +930,7 @@ dependencies = [
  "regex-engine",
  "sql-nio",
  "uuid-generator",
+ "vector-kernels",
 ]
 
 [[package]]
@@ -998,6 +999,15 @@ name = "simd-adler32"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
+
+[[package]]
+name = "simsimd"
+version = "6.5.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4fb3bc3cdce07a7d7d4caa4c54f8aa967f6be41690482b54b24100a2253fa70"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "slab"
@@ -1341,6 +1351,14 @@ dependencies = [
  "sval_json",
  "sval_ref",
  "sval_serde",
+]
+
+[[package]]
+name = "vector-kernels"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "simsimd",
 ]
 
 [[package]]

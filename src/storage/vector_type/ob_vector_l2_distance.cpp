@@ -15,6 +15,9 @@
  */
 
 #include "ob_vector_l2_distance.h"
+#include <cfloat>
+#include <cstring>
+#include "rust/vector_kernels.h"
 namespace oceanbase
 {
 namespace common
@@ -24,14 +27,20 @@ int ObVectorL2Distance<float>::l2_square_func(const float *a, const float *b, co
                                               double &square)
 {
   int ret = OB_SUCCESS;
-  // Single deterministic binary64 reduction for every platform/build/CPU, see
-  // ob_vector_l2_distance_reference.h. This used to dispatch to per-ISA float32
-  // lane kernels (AVX2/AVX/SSE42) on GNU x86-64 builds and to a plain double
-  // accumulation elsewhere, so the SQL-visible l2_distance()/l2_squared()/
-  // l2_similarity() value depended on the compiler and host CPU, and the
-  // float32 lanes additionally saturated to inf or underflowed on inputs whose
-  // squares leave the normal float32 range.
-  square = l2_square_float_reference(a, b, len);
+  // One portable SIMD implementation (Rust `simsimd`, runtime ISA dispatch)
+  // replaces the per-ISA hand-written float32 lane kernels. Its float32 lane
+  // accumulation has the old range defect: a square/lane sum outside the
+  // normal float32 range becomes inf or loses all precision. Detect that on
+  // the result and redo the rare unsafe vector with the deterministic binary64
+  // reference (ob_vector_l2_distance_reference.h), which is in range for the
+  // whole finite-float32 domain.
+  square = l2_square_f32(rust::Slice<const float>(a, len),
+                         rust::Slice<const float>(b, len));
+  if (OB_UNLIKELY(!std::isfinite(square)
+                  || (square > 0 && square < FLT_MIN)
+                  || (0 == square && 0 != std::memcmp(a, b, len * sizeof(float))))) {
+    square = l2_square_float_reference(a, b, len);
+  }
   if (OB_UNLIKELY(0 != ::isinf(square))) {
     ret = OB_NUMERIC_OVERFLOW;
     LIB_LOG(WARN, "value is overflow", K(ret), K(len), K(square));

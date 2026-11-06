@@ -21,3 +21,4 @@ pub use regex_engine;
 pub use sql_nio as network;
 pub use uuid_generator;
 pub use math;
+pub use vector_kernels;

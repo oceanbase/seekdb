@@ -24,14 +24,15 @@ namespace oceanbase
 namespace common
 {
 
-// Deterministic binary64 contract for the float L2 square kernel, i.e. for
+// Deterministic binary64 reference for the float L2 square kernel, i.e. for
 // sum((a[i] - b[i])^2) over the whole vector.
 //
-// ObVectorL2Distance<float>::l2_square_func() delegates here on every platform
-// and every build configuration, so the SQL-visible l2_distance()/l2_squared()/
-// l2_similarity() values do not depend on the compiler, the host ISA, the
-// compile-time SIMD feature set or the runtime CPU dispatch. Three properties
-// make that true:
+// ObVectorL2Distance<float>::l2_square_func() normally uses the portable
+// `simsimd` float32 SIMD kernel (Rust bridge, runtime ISA dispatch). This
+// binary64 function is the fallback for inputs whose float32 lane arithmetic
+// overflows or underflows (inf, zero, subnormal result), where it produces the
+// finite, correctly ranged value. It is also the reference for tests. Three
+// properties make its result independent of the platform:
 //
 //   * both operands are converted to binary64 before the subtraction (the
 //     conversion is exact, and a difference of two binary32 values is exactly
