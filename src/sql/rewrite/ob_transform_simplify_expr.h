@@ -163,6 +163,11 @@ private:
   int canonicalize_conditions(ObDMLStmt *stmt, bool &trans_happened);
   int recursive_canonicalize_join_conditions(ObDMLStmt *stmt, TableItem *table, bool &trans_happened);
   int do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
+  int fold_dense_or_equalities_into_in(ObDMLStmt *stmt, bool &trans_happened);
+  int try_fold_dense_or_equalities_into_in(ObRawExpr *&expr, bool &trans_happened);
+  int extract_equality_operands(ObRawExpr *branch,
+                                ObRawExpr *&column_side,
+                                ObRawExpr *&const_side);
   int push_not(ObIArray<ObRawExpr*> &conditions,
                bool &trans_happened);
   int recursive_push_not(ObRawExpr *&expr,
