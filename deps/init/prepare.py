@@ -130,6 +130,32 @@ def locked_packages(lock_file, system, architecture):
             else:
                 matches = [package for package in matches
                            if package["target"] == prefix]
+    elif system == "Darwin":
+        version = re.match(r"(\d+)", platform.mac_ver()[0])
+        if version:
+            compatible = []
+            for package in matches:
+                target = re.fullmatch(r"macos-[^-]+-min(\d+)", package["target"])
+                if target and int(target.group(1)) <= int(version.group(1)):
+                    compatible.append((int(target.group(1)), package))
+            if compatible:
+                best = max(minimum for minimum, _ in compatible)
+                matches = [package for minimum, package in compatible if minimum == best]
+            else:
+                matches = [package for package in matches if package["target"] == prefix]
+    elif system == "Android":
+        compatible = []
+        for package in matches:
+            target = re.fullmatch(r"android-[^-]+-v8a-api(\d+)", package["target"])
+            if target and int(target.group(1)) <= 26:
+                compatible.append((int(target.group(1)), package))
+        if compatible:
+            best = max(api for api, _ in compatible)
+            matches = [package for api, package in compatible if api == best]
+        else:
+            matches = [package for package in matches if package["target"] == prefix]
+    elif system == "Windows":
+        matches = [package for package in matches if package["target"] == prefix + "-md"]
     else:
         matches = [package for package in matches if package["target"] == prefix]
 
@@ -190,7 +216,8 @@ def populate(profile, destination, key, archive_directory, lock_file, system, ar
             else:
                 download(url, archive)
             unpack(archive, stage)
-        prefix = stage / "usr/local/oceanbase/deps/devel"
+        prefix = (stage / "vcpkg/x64-windows" if system == "Windows" else
+                  stage / "usr/local/oceanbase/deps/devel")
         prefix.mkdir(parents=True, exist_ok=True)
         for package in locked_packages(lock_file, system, architecture):
             url = package.get("url")
@@ -286,8 +313,11 @@ def main(arguments):
 
     profile = host_profile()
     system = platform.system()
-    architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(
-        platform.machine().lower(), platform.machine().lower())
+    architecture = platform.machine().lower()
+    if system == "Darwin":
+        architecture = {"aarch64": "arm64", "amd64": "x86_64"}.get(architecture, architecture)
+    else:
+        architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture)
     rust_target = None
     if options.android:
         rust_target = "aarch64-linux-android"
