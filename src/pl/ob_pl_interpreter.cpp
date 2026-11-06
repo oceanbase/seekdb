@@ -481,6 +481,14 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(s));
+  // A user-variable SET starts its statement diagnostics before RHS evaluation.
+  for (int64_t i = 0; OB_SUCC(ret) && i < s->get_into().count(); ++i) {
+    const ObRawExpr *into = s->get_into_expr(i);
+    if (OB_NOT_NULL(into) && T_OP_GET_USER_VAR == into->get_expr_type()) {
+      common::ob_reset_tsi_warning_buffer();
+      break;
+    }
+  }
   for (int64_t i = 0; OB_SUCC(ret) && i < s->get_into().count(); ++i) {
     int64_t result_idx = OB_INVALID_INDEX;
     const ObRawExpr *into = s->get_into_expr(i);
@@ -1051,8 +1059,8 @@ static int exec_signal(ObPLExecCtx *ctx, const ObPLSignalStmt *s)
   return ret;
 }
 
-// EXECUTE IMMEDIATE / dynamic SQL. The resolver also lowers session-variable
-// assignments such as `SET @uservar = expr` (and `SET @@sysvar = ...`) to this.
+// EXECUTE IMMEDIATE / dynamic SQL. The resolver also lowers user-variable
+// assignments with a subquery RHS to this path.
 // Mirrors codegen visit(ObPLExecuteStmt): evaluate USING actuals into ObObjParams,
 // then call spi_execute_immediate, which computes the SQL-text expr and runs it.
 static int exec_execute(ObPLExecCtx *ctx, const ObPLExecuteStmt *s)

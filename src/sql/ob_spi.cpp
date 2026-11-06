@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_spi.h"
+#include "sql/engine/cmd/ob_variable_set_executor.h"
+#include "common/enumset/ob_enum_set_meta.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_sql.h"
 #include "sql/ob_query_retry_ctrl.h"
@@ -1250,6 +1252,40 @@ int ObSPIService::spi_set_variable_to_expr(ObPLExecCtx *ctx,
   return ret;
 }
 
+// Persist an evaluated PL user-variable value without issuing a second SQL
+// statement that would erase diagnostics produced by RHS evaluation.
+static int store_pl_user_variable(ObPLExecCtx *ctx, const ObString &name,
+                                  const ObObjParam &value)
+{
+  int ret = OB_SUCCESS;
+  CK (OB_NOT_NULL(ctx), OB_NOT_NULL(ctx->exec_ctx_));
+  ObSQLSessionInfo *session = OB_SUCC(ret) ? ctx->exec_ctx_->get_my_session() : NULL;
+  CK (OB_NOT_NULL(session), OB_NOT_NULL(session->get_pl_implicit_cursor()));
+  ObObj stored_value = value;
+  if (OB_SUCC(ret) && ob_is_enum_or_set_type(value.get_type())) {
+    ObRawExprResType source_type;
+    source_type.set_meta(value.get_param_meta());
+    const ObEnumSetMeta *meta = NULL;
+    OZ (ObRawExprUtils::extract_enum_set_meta(source_type, session, meta));
+    CK (OB_NOT_NULL(meta), OB_NOT_NULL(meta->get_str_values()));
+    ObObjParam source = value;
+    OZ (ObSPIService::cast_enum_set_to_string(*ctx->exec_ctx_, *meta->get_str_values(), source, stored_value));
+  }
+  if (OB_SUCC(ret)) {
+    ObExprCtx expr_ctx;
+    expr_ctx.my_session_ = session;
+    expr_ctx.exec_ctx_ = ctx->exec_ctx_;
+    expr_ctx.phy_plan_ctx_ = ctx->exec_ctx_->get_physical_plan_ctx();
+    expr_ctx.calc_buf_ = ctx->get_top_expr_allocator();
+    OZ (ObVariableSetExecutor::set_user_variable(stored_value, name, expr_ctx));
+    // ROW_COUNT()/GET DIAGNOSTICS read the session counter; PL cursor state is
+    // separate. A successful SET publishes zero to both, as the SQL path did.
+    OX (session->set_affected_rows(0));
+    OX (session->get_pl_implicit_cursor()->set_rowcount(0));
+  }
+  return ret;
+}
+
 int ObSPIService::spi_set_variable(ObPLExecCtx *ctx,
                                    const ObSqlExpression* expr,
                                    const ObObjParam *value,
@@ -1273,7 +1309,9 @@ int ObSPIService::spi_set_variable(ObPLExecCtx *ctx,
             scope = static_cast<ObSetVar::SetScopeType>(expr->get_expr_items().at(2).get_obj().get_int());
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(set_variable(ctx, scope, name, *value, is_default))) {
+        if (OB_SUCC(ret) && T_OP_GET_USER_VAR == expr_type && !is_default) {
+          OZ (store_pl_user_variable(ctx, name, *value));
+        } else if (OB_SUCC(ret) && OB_FAIL(set_variable(ctx, scope, name, *value, is_default))) {
         }
       }
     } else if (T_OP_GET_PACKAGE_VAR == expr_type) {
