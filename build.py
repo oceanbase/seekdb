@@ -240,9 +240,6 @@ def main(arguments: List[str]) -> int:
         "build --workspace_status_command=" + _quote(status_command),
     ]
     lines.extend(concurrency_defaults)
-    if android_ndk := os.environ.get("ANDROID_NDK_HOME"):
-        # CMake uses NDK_ROOT; the Android C++ toolchain uses NDK_HOME.
-        lines.append("build:android --action_env=" + _quote("ANDROID_NDK_ROOT=" + android_ndk))
     if os.name == "nt":
         # Starlark can inspect fixed action variables, but not inherited ones.
         # Native build scripts need both the compiler's PATH and shell tools.

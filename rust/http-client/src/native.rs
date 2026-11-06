@@ -71,9 +71,9 @@ impl Client {
             }
         });
         Batch {
+            requests: Vec::new(),
             client: self.clone(),
             multi,
-            requests: Vec::new(),
         }
     }
 
@@ -153,9 +153,9 @@ enum Request {
 }
 
 pub struct Batch {
+    requests: Vec<Request>,
     client: Client,
     multi: Result<UniquePtr<ffi::Multi>, HttpError>,
-    requests: Vec<Request>,
 }
 
 impl Batch {
@@ -166,8 +166,8 @@ impl Batch {
             HttpError::new(ErrorKind::Multi, 0, "cannot allocate HTTP request slot")
         })?;
         let index = self.requests.len();
-        // SAFETY: Batch owns both handles. Easy detaches on destruction, and Drop
-        // clears every request before destroying Multi. No callback runs here.
+        // SAFETY: Batch owns both handles and drops requests before Multi.
+        // Easy detaches on destruction. No callback runs here.
         check_multi(unsafe { multi.pin_mut().add(easy.pin_mut(), index) })?;
         self.requests.push(Request::Pending(easy));
         Ok(index)
@@ -223,13 +223,6 @@ impl Batch {
 
     pub fn result_count(&self) -> usize {
         self.requests.len()
-    }
-}
-
-impl Drop for Batch {
-    fn drop(&mut self) {
-        // Easy detaches while the Multi handle and its connection cache are live.
-        self.requests.clear();
     }
 }
 

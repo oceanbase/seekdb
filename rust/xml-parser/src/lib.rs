@@ -22,29 +22,14 @@
 mod bridge;
 mod name;
 
-pub use bridge::ffi::XmlAttributeView;
-pub use bridge::xml_parse;
-
 use quick_xml::escape::unescape;
 use quick_xml::events::{BytesDecl, BytesStart, Event as XmlEvent};
 use quick_xml::Reader;
 use std::borrow::Cow;
 use std::fmt;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::str::Utf8Error;
 
 use name::{is_name_char, is_name_start_char};
-
-pub const XML_PARSE_RECOVER: u64 = 1 << 1;
-pub const XML_PARSE_NOT_IGNORE_SPACE: u64 = 1 << 2;
-pub const XML_PARSE_SYNTAX_CHECK: u64 = 1 << 3;
-pub const XML_PARSE_CONTENT_ALLOW_XML_DECL: u64 = 1 << 4;
-pub const XML_PARSE_CONTAINER_LAZY_SORT: u64 = 1 << 5;
-pub const XML_PARSE_NOT_ENTITY_REPLACE: u64 = 1 << 6;
-
-pub const XML_PARSE_SYNTAX_ERROR: i32 = 1;
-pub const XML_PARSE_INTERNAL_ERROR: i32 = 2;
-pub const XML_PARSE_ARGUMENT_ERROR: i32 = 3;
 
 const MAX_DEPTH: usize = 257;
 
@@ -54,17 +39,6 @@ pub struct ParseOptions {
     pub syntax_check: bool,
     pub content_allow_xml_decl: bool,
     pub preserve_entity_references: bool,
-}
-
-impl ParseOptions {
-    fn from_bits(bits: u64) -> Self {
-        Self {
-            recover: bits & XML_PARSE_RECOVER != 0,
-            syntax_check: bits & XML_PARSE_SYNTAX_CHECK != 0,
-            content_allow_xml_decl: bits & XML_PARSE_CONTENT_ALLOW_XML_DECL != 0,
-            preserve_entity_references: bits & XML_PARSE_NOT_ENTITY_REPLACE != 0,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -589,111 +563,6 @@ fn validate_qname(name: &[u8]) -> Result<(), Error> {
         return Err(Error::Syntax("invalid qualified XML name"));
     }
     Ok(())
-}
-
-struct BridgeHandler {
-    context: *mut u8,
-}
-
-impl EventHandler for BridgeHandler {
-    type Error = i32;
-
-    fn on_event(&mut self, event: Event<'_>) -> Result<(), Self::Error> {
-        let context = self.context;
-        let status = unsafe {
-            match event {
-                Event::StartDocument => bridge::ffi::xml_on_start_document(context),
-                Event::EndDocument => bridge::ffi::xml_on_end_document(context),
-                Event::Declaration(value) => {
-                    bridge::ffi::xml_on_declaration(context, value.as_ptr(), value.len())
-                }
-                Event::StartElement {
-                    name,
-                    attributes,
-                    empty,
-                } => {
-                    let views = attributes
-                        .iter()
-                        .map(|attribute| XmlAttributeView {
-                            name: attribute.name.as_ptr(),
-                            name_len: attribute.name.len(),
-                            value: attribute.value.as_ptr(),
-                            value_len: attribute.value.len(),
-                        })
-                        .collect::<Vec<_>>();
-                    bridge::ffi::xml_on_start_element(
-                        context,
-                        name.as_ptr(),
-                        name.len(),
-                        views.as_ptr(),
-                        views.len(),
-                        empty,
-                    )
-                }
-                Event::EndElement { empty, .. } => bridge::ffi::xml_on_end_element(context, empty),
-                Event::Text(value) => {
-                    bridge::ffi::xml_on_text(context, value.as_ptr(), value.len())
-                }
-                Event::CData(value) => {
-                    bridge::ffi::xml_on_cdata(context, value.as_ptr(), value.len())
-                }
-                Event::Comment(value) => {
-                    bridge::ffi::xml_on_comment(context, value.as_ptr(), value.len())
-                }
-                Event::ProcessingInstruction { target, value } => {
-                    bridge::ffi::xml_on_processing_instruction(
-                        context,
-                        target.as_ptr(),
-                        target.len(),
-                        value.as_ptr(),
-                        value.len(),
-                    )
-                }
-            }
-        };
-        if status == 0 {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-}
-
-unsafe fn parse_ffi(
-    input: *const u8,
-    input_len: usize,
-    content: bool,
-    options: u64,
-    context: *mut u8,
-) -> i32 {
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        if context.is_null() || (input.is_null() && input_len != 0) {
-            return XML_PARSE_ARGUMENT_ERROR;
-        }
-        let input = if input_len == 0 {
-            &[][..]
-        } else {
-            // SAFETY: the CXX caller guarantees the readable input buffer.
-            unsafe { std::slice::from_raw_parts(input, input_len) }
-        };
-        let options = ParseOptions::from_bits(options);
-        let mut handler = BridgeHandler { context };
-        match parse(
-            input,
-            if content {
-                ParseMode::Content
-            } else {
-                ParseMode::Document
-            },
-            options,
-            &mut handler,
-        ) {
-            Ok(()) => 0,
-            Err(ParseError::Handler(status)) => status,
-            Err(ParseError::Xml(_)) => XML_PARSE_SYNTAX_ERROR,
-        }
-    }));
-    result.unwrap_or(XML_PARSE_INTERNAL_ERROR)
 }
 
 #[cfg(test)]

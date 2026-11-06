@@ -1252,7 +1252,6 @@ int send_telemetry_by_http(const char *url, const ObString &json_str)
   config.https_only = true;
   config.follow_redirects = true;
   config.max_redirects = 3;
-  // Preserve the existing endpoint authentication policy.
   config.verify_peer = false;
   config.verify_host = true;
   config.discard_body = true;

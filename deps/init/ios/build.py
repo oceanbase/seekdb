@@ -180,7 +180,6 @@ def builder_identity():
     """Bind cache reuse to tracked dependency recipes and package version definitions."""
     digest = hashlib.sha256()
     digest.update(Path(__file__).read_bytes())
-    digest.update((ROOT / "Cargo.lock").read_bytes())
     return digest.hexdigest()
 
 
