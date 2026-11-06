@@ -23,6 +23,7 @@ rust_static_library(
         "//rust/regex-engine:regex_engine",
         "//rust/xml-parser:xml_parser",
         "//rust/compression",
+        "//rust/crypto",
         "//rust/spatial-covering:spatial_covering",
         "//rust/uuid-generator:uuid_generator",
     ] + select({

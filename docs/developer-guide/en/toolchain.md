@@ -69,6 +69,8 @@ The zlib crate compiles its bundled C sources directly with the selected compile
 
 The Rust HTTP module wraps the existing target SDK libcurl through the repository's CXX integration. Rust owns client configuration, batch state, errors, and response buffers. A thin C++ adapter uses the SDK headers for libcurl options, callbacks, and resource management. The module has no `curl`, `curl-sys`, `openssl-sys`, vendored OpenSSL, AWS-LC, bindgen, or CMake dependency. The SDK retains ownership of libcurl's TLS backend, CA defaults, and supported content encodings. Existing SDK preparation and jemalloc have their own build requirements.
 
+The Rust crypto module exposes native Rust digest, HMAC, random-byte, cipher, SQL DES, and certificate-metadata interfaces. C++ consumers use CXX adapters to the same Rust implementation. Internal CXX bindings call the existing SDK OpenSSL; OpenSSL types and headers remain private to the SDK adapter. This module adds no OpenSSL crate or OpenSSL source build.
+
 On Windows, the existing SDK libcurl DLL and its zlib DLL dependency remain in the runtime package. Rust storage and SQL compression continue to use their separate stock-zlib build.
 
 ## Windows host packages

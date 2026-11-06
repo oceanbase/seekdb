@@ -378,6 +378,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
+name = "crypto"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+]
+
+[[package]]
 name = "cxx"
 version = "1.0.202"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1560,6 +1567,7 @@ version = "0.1.0"
 dependencies = [
  "compression",
  "config",
+ "crypto",
  "http-client",
  "in-process",
  "local",

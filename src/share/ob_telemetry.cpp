@@ -31,8 +31,7 @@
 #include "rust/http_client.h"
 #endif
 #include <errno.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
+#include "rust/crypto.h"
 #include <stdlib.h>
 #include <string.h>
 #include <mutex>
@@ -63,6 +62,7 @@ static const char *TELEMETRY_INSTANCE_ID_ENV_NAME = "SEEKDB_TELEMETRY_INSTANCE_I
 // Payload schema version reported to the telemetry endpoint.
 static const int64_t TELEMETRY_VERSION = 6;
 static const int64_t TELEMETRY_MACHINE_ID_BYTE_LENGTH = 16;
+static const size_t TELEMETRY_HASH_BYTE_LENGTH = 32;
 static const int64_t TELEMETRY_MACHINE_ID_HEX_LENGTH = 2 * TELEMETRY_MACHINE_ID_BYTE_LENGTH;
 static const int64_t TELEMETRY_BASE_DIR_LENGTH_FIELD_SIZE = 8;
 static const int64_t TELEMETRY_SCOPE_ID_LENGTH_FIELD_SIZE = 8;
@@ -311,7 +311,6 @@ int generate_telemetry_uuid(const char *machine_id,
                             const int64_t uuid_len)
 {
   int ret = OB_SUCCESS;
-  unsigned int digest_len = 0;
   const bool has_scope_id = OB_NOT_NULL(scope_id) && scope_id_len > 0;
   const bool valid_scope_args = (OB_ISNULL(scope_id) && 0 == scope_id_len) || has_scope_id;
   unsigned char machine_id_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
@@ -323,7 +322,7 @@ int generate_telemetry_uuid(const char *machine_id,
                            + common::OB_MAX_FILE_NAME_LENGTH
                            + TELEMETRY_SCOPE_ID_LENGTH_FIELD_SIZE
                            + TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
-  unsigned char digest[SHA256_DIGEST_LENGTH] = {0};
+  unsigned char digest[TELEMETRY_HASH_BYTE_LENGTH] = {0};
   unsigned char uuid_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
   if (OB_ISNULL(uuid) || uuid_len <= TELEMETRY_UUID_STRING_LENGTH
       || !valid_scope_args) {
@@ -364,12 +363,12 @@ int generate_telemetry_uuid(const char *machine_id,
         input_pos += sizeof(scope_id_bytes);
       }
 
-      if (OB_ISNULL(HMAC(EVP_sha256(),
-                         machine_id_bytes, static_cast<int>(sizeof(machine_id_bytes)),
-                         hmac_input, static_cast<size_t>(input_pos),
-                         digest, &digest_len))) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_UNLIKELY(SHA256_DIGEST_LENGTH != digest_len)) {
+      const auto result = crypto::hmac_into(
+          static_cast<uint32_t>(OB_HASH_SH256),
+          rust::Slice<const uint8_t>(machine_id_bytes, sizeof(machine_id_bytes)),
+          rust::Slice<const uint8_t>(hmac_input, input_pos),
+          rust::Slice<uint8_t>(digest, sizeof(digest)));
+      if (crypto::Code::Ok != result.code || result.size != sizeof(digest)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
         MEMCPY(uuid_bytes, digest, sizeof(uuid_bytes));
@@ -455,11 +454,10 @@ static int generate_telemetry_container_scope_id(
     int64_t &scope_id_len)
 {
   int ret = OB_SUCCESS;
-  unsigned int digest_len = 0;
   unsigned char hmac_input[sizeof(TELEMETRY_CONTAINER_SCOPE_DOMAIN) - 1
                            + 1 + sizeof(uint64_t)
                            + TELEMETRY_CONTAINER_ID_MAX_LENGTH] = {0};
-  unsigned char digest[SHA256_DIGEST_LENGTH] = {0};
+  unsigned char digest[TELEMETRY_HASH_BYTE_LENGTH] = {0};
   unsigned char uuid_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
   scope_id_len = 0;
   if (OB_ISNULL(identity) || identity_len <= 0
@@ -485,11 +483,12 @@ static int generate_telemetry_container_scope_id(
     input_pos += sizeof(value_len);
     MEMCPY(hmac_input + input_pos, identity, identity_len);
     input_pos += identity_len;
-    if (OB_ISNULL(HMAC(EVP_sha256(),
-                       TELEMETRY_APP_ID, static_cast<int>(sizeof(TELEMETRY_APP_ID)),
-                       hmac_input, static_cast<size_t>(input_pos), digest, &digest_len))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(SHA256_DIGEST_LENGTH != digest_len)) {
+    const auto result = crypto::hmac_into(
+        static_cast<uint32_t>(OB_HASH_SH256),
+        rust::Slice<const uint8_t>(TELEMETRY_APP_ID, sizeof(TELEMETRY_APP_ID)),
+        rust::Slice<const uint8_t>(hmac_input, input_pos),
+        rust::Slice<uint8_t>(digest, sizeof(digest)));
+    if (crypto::Code::Ok != result.code || result.size != sizeof(digest)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       MEMCPY(uuid_bytes, digest, sizeof(uuid_bytes));
@@ -1077,7 +1076,7 @@ int get_host_hash(char *buf, const int64_t buf_len)
   int ret = OB_SUCCESS;
   int64_t out_len = 0;
   char ip_buf[MAX_IP_ADDR_LENGTH] = {'\0'};
-  char hash_buf[SHA256_DIGEST_LENGTH + 1] = {'\0'};
+  char hash_buf[TELEMETRY_HASH_BYTE_LENGTH + 1] = {'\0'};
   ObAddr addr = GCTX.self_addr();
   if (!addr.ip_to_string(ip_buf, sizeof(ip_buf))) {
     ret = OB_ERR_UNEXPECTED;
@@ -1130,7 +1129,7 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
     ObIAllocator *allocator, ObString &json_str, const int64_t created_at_us)
 {
   int ret = OB_SUCCESS;
-  const int64_t SHA256_DIGEST_HEX_LEN = 2 * SHA256_DIGEST_LENGTH + 1;
+  const int64_t SHA256_DIGEST_HEX_LEN = 2 * TELEMETRY_HASH_BYTE_LENGTH + 1;
   const int64_t OS_INFO_LEN = 32;
   const int64_t CPU_MODEL_LEN = 64;
   const int64_t SIZE_STR_LEN = 16;

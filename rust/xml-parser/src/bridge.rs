@@ -57,9 +57,8 @@ pub mod ffi {
     }
 
     extern "Rust" {
-        /// Returns zero, a callback's seekdb error, XML_PARSE_SYNTAX_ERROR,
-        /// or one of the other small positive adapter errors documented in
-        /// ob_xml_parser.cpp.
+        /// Returns zero, a callback error, or a positive adapter status mapped
+        /// by map_parse_status in ob_rust_xml_parser.cpp.
         unsafe fn xml_parse(
             input: *const u8,
             input_len: usize,

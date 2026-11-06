@@ -23,6 +23,7 @@ in-process = { path = "../in-process" }
 regex-engine = { path = "../regex-engine" }
 xml-parser = { path = "../xml-parser" }
 compression = { path = "../compression" }
+crypto = { path = "../crypto" }
 spatial-covering = { path = "../spatial-covering" }
 uuid-generator = { path = "../uuid-generator" }
 http-client = { path = "../http-client", optional = true }

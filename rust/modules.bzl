@@ -28,6 +28,11 @@ MODULES = {
     "regex-engine": {"bridge": "src/bridge.rs"},
     "xml-parser": {"bridge": "src/bridge.rs", "headers": ["include/callbacks.h"]},
     "compression": {"bridge": "src/bridge.rs"},
+    "crypto": {
+        "bridge": "src/bridge.rs",
+        "headers": ["include/sdk.h"],
+        "deps": ["//rust/crypto:sdk_headers"],
+    },
     "spatial-covering": {"bridge": "src/bridge.rs"},
     "http-client": {
         "bridge": "src/bridge.rs",

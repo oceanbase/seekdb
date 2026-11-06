@@ -120,7 +120,7 @@ SQL_RUNTIME_NATIVE_DEPS = [
     "//rust:regex_engine_headers",
     "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
-    "//bazel/third_party:openssl_headers",
+    "//rust:crypto_headers",
     "//bazel/third_party:rapidjson_headers",
     "//bazel/third_party:roaring_headers",
     "//bazel/third_party:vsag_headers",

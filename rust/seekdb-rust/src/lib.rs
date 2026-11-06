@@ -14,6 +14,7 @@
 
 //! One static library (and one Rust runtime/allocator) for all seekdb components.
 pub use compression;
+pub use crypto;
 #[cfg(feature = "native-http")]
 pub use http_client;
 pub use config as parameter_config;
