@@ -10,7 +10,6 @@ repo=http://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/
 
 
 [deps]
-devdeps-gtest-1.8.0-312026021311.el8.x86_64.rpm
 devdeps-libcurl-static-8.12.1-132025040210.el8.x86_64.rpm
 devdeps-libaio-0.3.112-12022092915.el8.x86_64.rpm
 devdeps-relaxed-rapidjson-1.0.0-52023011719.el8.x86_64.rpm
