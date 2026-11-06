@@ -67,6 +67,35 @@ int ObIKFTParser::init(const ObFTParserParam &param)
   return ret;
 }
 
+int ObIKFTParser::reset_for_reuse(ObFTParserParam *param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(param) || OB_ISNULL(ctx_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!IS_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(param->cs_) || OB_ISNULL(param->cs_->name)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_UNLIKELY(coll_type_ != ObCharset::collation_type(param->cs_->name))) {
+    // the charset changed, the parser cannot be reused
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_UNLIKELY((param->ik_param_.mode_ == ObFTIKParam::Mode::SMART) != ctx_->is_smart())) {
+    // the segment mode changed, the parser cannot be reused
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    // reset the per document state of the segmenters
+    for (ObIIKProcessor *segmenter : segmenters_) {
+      if (OB_NOT_NULL(segmenter) && OB_FAIL(segmenter->reset())) {
+        break;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = ctx_->reset(param->fulltext_, param->ft_length_);
+    }
+  }
+  return ret;
+}
+
 int ObIKFTParser::get_next_token(const char *&word,
                                  int64_t &word_len,
                                  int64_t &char_cnt,

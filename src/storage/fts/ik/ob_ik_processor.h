@@ -41,6 +41,14 @@ public:
   int init();
   int reset_resource();
 
+  /**
+   * Reset the context so that it can segment another document.
+   *
+   * @param[in] fulltext the text of the new document
+   * @param[in] fulltext_len the length of the new document
+   */
+  int reset(const char *fulltext, int64_t fulltext_len);
+
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
 
   int compound(ObIKToken &result);
@@ -102,6 +110,12 @@ public:
   virtual ~ObIIKProcessor() {}
 
   int process(TokenizeContext &ctx);
+
+  /**
+   * Reset the per document state of the processor. It is called when the
+   * parser is reused for another document.
+   */
+  virtual int reset() { return OB_SUCCESS; }
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,

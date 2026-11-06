@@ -63,6 +63,7 @@ public:
         ft_length_(0),
         parser_version_(0),
         allocator_(nullptr),
+        word_allocator_(nullptr),
         ik_param_(),
         ngram_token_size_(NGRAM_TOKEN_SIZE),
         min_ngram_size_(NGRAM_TOKEN_SIZE),
@@ -77,7 +78,8 @@ public:
         && nullptr != fulltext_
         && 0 < ft_length_
         && 0 <= parser_version_
-        && nullptr != allocator_;
+        && nullptr != allocator_
+        && nullptr != word_allocator_;
   }
 
   void reset()
@@ -87,6 +89,7 @@ public:
     ft_length_ = 0;
     parser_version_ = 0;
     allocator_ = nullptr;
+    word_allocator_ = nullptr;
     ik_param_ = ObFTIKParam();
     ngram_token_size_ = NGRAM_TOKEN_SIZE;
     min_ngram_size_ = NGRAM_TOKEN_SIZE;
@@ -98,6 +101,7 @@ public:
                K_(ft_length),
                K_(parser_version),
                KP_(allocator),
+               KP_(word_allocator),
                K_(ngram_token_size),
                K_(min_ngram_size),
                K_(max_ngram_size));
@@ -107,7 +111,13 @@ public:
   const char *fulltext_;
   int64_t ft_length_;
   int64_t parser_version_;
+  // the allocator of the parser instance, it keeps the state of the parser
+  // between the documents
   common::ObIAllocator *allocator_;
+  // the allocator that owns the words of the document, the words of the
+  // parsers that do not copy them into the allocator of the caller point
+  // into it
+  common::ObIAllocator *word_allocator_;
   ObFTIKParam ik_param_;
   int64_t ngram_token_size_;
   int64_t min_ngram_size_;
@@ -124,6 +134,23 @@ public:
       int64_t &word_len,
       int64_t &char_cnt,
       int64_t &word_freq) = 0;
+
+  /**
+   * Reset the iterator so that it can segment another document without being
+   * destroyed and created again. The parser keeps the resources that do not
+   * depend on the document (the dictionaries for example) and only resets the
+   * per document state.
+   *
+   * @param[in] param the parameter of the document to segment
+   * @return OB_SUCCESS if the iterator is ready to segment the new document,
+   *         OB_NOT_SUPPORTED if the iterator cannot be reused
+   */
+  virtual int reset_for_reuse(ObFTParserParam *param)
+  {
+    UNUSED(param);
+    return OB_NOT_SUPPORTED;
+  }
+
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 

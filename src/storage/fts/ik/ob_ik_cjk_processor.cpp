@@ -29,6 +29,14 @@ namespace oceanbase
 {
 namespace storage
 {
+int ObIKCJKProcessor::reset()
+{
+  hits_.reset();
+  cjk_start_ = -1;
+  cjk_end_ = -1;
+  return OB_SUCCESS;
+}
+
 int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
                                  const char *ch,
                                  const uint8_t char_len,

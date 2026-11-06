@@ -64,6 +64,56 @@ using share::schema::ObSchemaGetterGuard;
 
 ERRSIM_POINT_DEF(EN_FORCE_GBY_PUSHDOWN_STORAGE, "force pushdown group by to storage layer");
 
+namespace
+{
+// The relevance score of a MATCH() expression is always strictly positive, so
+// the score may be replaced by any positive constant as long as the statement
+// consumes it as a boolean value only.  This helper walks an expression tree
+// and tells whether the numeric value of a match expression is consumed.
+//
+// `in_bool_context` tells whether the expression is used as a boolean value
+// only: in a filter the score is tested for being zero or not, while in a
+// projection or in a sort key the score itself is visible.
+bool match_score_used_as_value(ObRawExpr *expr, bool in_bool_context, bool &need_score)
+{
+  if (OB_ISNULL(expr) || need_score) {
+    // do nothing
+  } else if (expr->is_match_against_expr()) {
+    // the match expression itself, the score is consumed as a number unless
+    // the expression is used as a boolean value only
+    if (!in_bool_context) {
+      need_score = true;
+    }
+  } else if (expr->is_query_ref_expr()) {
+    // a sub query owns its own statement and its own match expressions
+  } else if (!in_bool_context && expr->has_flag(CNT_MATCH_EXPR)) {
+    // the expression contains a match expression whose score may be consumed
+    // as a number
+    need_score = true;
+  } else {
+    // a boolean operator consumes the value of its arguments as a boolean
+    // value only
+    bool child_bool_context = false;
+    switch (expr->get_expr_type()) {
+      case T_OP_AND:
+      case T_OP_OR:
+      case T_OP_NOT:
+      case T_OP_BOOL:
+        child_bool_context = true;
+        break;
+      default:
+        break;
+    }
+    for (int64_t i = 0; !need_score && i < expr->get_param_count(); ++i) {
+      if (match_score_used_as_value(expr->get_param_expr(i), child_bool_context, need_score)) {
+        break;
+      }
+    }
+  }
+  return need_score;
+}
+} // anonymous namespace
+
 static const char *ExplainColumnName[] =
 {
   "ID",
@@ -12052,6 +12102,87 @@ int ObLogPlan::construct_startup_filter_for_limit(ObRawExpr *limit_expr, ObLogic
   return ret;
 }
 
+int ObLogPlan::check_need_calc_relevance(bool &need_calc_relevance)
+{
+  int ret = OB_SUCCESS;
+  need_calc_relevance = true;
+  const ObDMLStmt *stmt = get_stmt();
+  if (OB_ISNULL(stmt) || !stmt->is_select_stmt() || stmt->get_match_exprs().count() < 1) {
+    // keep the relevance score for the statements that are not plain selects
+  } else {
+    const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt *>(stmt);
+    ObSEArray<ObRawExpr *, 16> value_exprs;
+    bool need_score = false;
+    // the select list, the having conditions, the grouping expressions, the
+    // window function arguments and the sorting expressions consume the score
+    // as a number
+    for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_select_item_size(); ++i) {
+      const SelectItem &select_item = select_stmt->get_select_item(i);
+      if (OB_NOT_NULL(select_item.expr_)) {
+        // the wildcard select item has no expression
+        if (OB_FAIL(value_exprs.push_back(select_item.expr_))) {
+        }
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_having_exprs().count(); ++i) {
+      if (OB_FAIL(value_exprs.push_back(select_stmt->get_having_exprs().at(i)))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_group_exprs().count(); ++i) {
+      if (OB_FAIL(value_exprs.push_back(select_stmt->get_group_exprs().at(i)))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_rollup_exprs().count(); ++i) {
+      if (OB_FAIL(value_exprs.push_back(select_stmt->get_rollup_exprs().at(i)))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_window_func_exprs().count(); ++i) {
+      const ObWinFunRawExpr *win_func_expr = select_stmt->get_window_func_expr(i);
+      if (OB_ISNULL(win_func_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        // the arguments of the window function are the parameters of the
+        // expression, the partition and the order expressions are stored apart
+        if (OB_FAIL(value_exprs.push_back(const_cast<ObWinFunRawExpr *>(win_func_expr)))) {
+        }
+        for (int64_t j = 0; OB_SUCC(ret) && j < win_func_expr->get_partition_exprs().count(); ++j) {
+          if (OB_FAIL(value_exprs.push_back(win_func_expr->get_partition_exprs().at(j)))) {
+          }
+        }
+        for (int64_t j = 0; OB_SUCC(ret) && j < win_func_expr->get_order_items().count(); ++j) {
+          if (OB_FAIL(value_exprs.push_back(win_func_expr->get_order_items().at(j).expr_))) {
+          }
+        }
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_order_item_size(); ++i) {
+      if (OB_FAIL(value_exprs.push_back(stmt->get_order_item(i).expr_))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < value_exprs.count() && !need_score; ++i) {
+      if (match_score_used_as_value(value_exprs.at(i), false, need_score)) {
+        break;
+      }
+    }
+    if (OB_SUCC(ret) && !need_score) {
+      // the filters may only consume the score as a boolean value
+      ObSEArray<ObRawExpr *, 8> conditions;
+      if (OB_FAIL(stmt->get_where_scope_conditions(conditions))) {
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count() && !need_score; ++i) {
+          if (match_score_used_as_value(conditions.at(i), true, need_score)) {
+            break;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      need_calc_relevance = need_score;
+    }
+  }
+  return ret;
+}
+
 int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_match_exprs,
                                            const ObIArray<ObRawExpr *> &scan_match_filters,
                                            const ObIArray<ObRawExpr *> &all_match_filters,
@@ -12104,6 +12235,15 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
     tr_info.pushdown_match_filter_ = match_pred;
+    // The relevance score is only needed when the statement consumes it as a
+    // number.  A query that only filters on the match expression may skip the
+    // BM25 evaluation, the per token document count estimation and the
+    // document count aggregation.
+    bool need_calc_relevance = true;
+    if (OB_FAIL(check_need_calc_relevance(need_calc_relevance))) {
+    } else {
+      tr_info.need_calc_relevance_ = need_calc_relevance;
+    }
     // The mapping table is absent when the data-table rowkey is used as the document ID.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {

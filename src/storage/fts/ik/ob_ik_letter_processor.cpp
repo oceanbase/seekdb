@@ -203,6 +203,14 @@ int ObIKLetterProcessor::process_mix_letter(TokenizeContext &ctx,
   return ret;
 }
 
+int ObIKLetterProcessor::reset()
+{
+  reset_english_state();
+  reset_arabic_state();
+  reset_mix_state();
+  return OB_SUCCESS;
+}
+
 void ObIKLetterProcessor::reset_english_state()
 {
   english_start_ = -1;

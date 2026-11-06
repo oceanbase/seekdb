@@ -18,6 +18,7 @@
 #define OB_FTS_PARSER_HELPER_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
 #include "object/ob_object.h"
@@ -162,6 +163,20 @@ public:
       const common::ObString &parser_name,
       const common::ObString &parser_properties);
   /**
+   * Initialize the helper for a new call. The cached token iterator is kept if
+   * the parser configuration did not change, so that the parser instance is
+   * reused between the documents.
+   *
+   * @param[in] allocator the allocator used to build the word list
+   * @param[in] parser_name, which consists of two parts name and version.
+   * @param[in] parser_properties, which is a parser configuration in JSON format.
+   * @return error code
+   */
+  int reinit(
+      common::ObIAllocator *allocator,
+      const common::ObString &parser_name,
+      const common::ObString &parser_properties);
+  /**
    * Split document into multiple words
    *
    * @param[in] type, collation type for fulltext
@@ -207,7 +222,7 @@ public:
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
-  static int segment(
+  int segment(
       const ObFTParserProperty &property,
       const int64_t parser_version,
       const ObIFTParserDesc *parser_desc,
@@ -215,7 +230,14 @@ private:
       const char *fulltext,
       const int64_t fulltext_len,
       common::ObIAllocator &allocator,
-      ObAddWord &add_word);
+      ObAddWord &add_word) const;
+  /**
+   * Get the token iterator of the parser. The iterator is created if it does
+   * not exist yet or if it cannot be reused for the new document.
+   */
+  int prepare_token_iter(ObFTParserParam &param, const ObIFTParserDesc *parser_desc) const;
+  void free_token_iter() const;
+  static bool is_same_param(const ObFTParserParam &param, const ObFTParserParam &other);
   int set_add_word_flag(const ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
@@ -225,9 +247,21 @@ private:
   ObFTParserProperty parser_property_;
   bool is_inited_;
 
+  // The token iterator is reused between the documents. It is allocated from
+  // its own arena, so that it survives the reset of the allocator of the
+  // caller.
+  mutable ObITokenIterator *token_iter_;
+  mutable ObFTParserParam token_iter_param_;
+  mutable const ObIFTParserDesc *token_iter_desc_;
+  mutable int64_t token_iter_reuse_cnt_;
+  mutable common::ObArenaAllocator token_iter_allocator_;
+
 private:
   static constexpr const char *ENTRY_NAME_DOC_LEN = "doc_len";
   static constexpr const char *ENTRY_NAME_TOKENS = "tokens";
+  // The parser instance is recycled after this number of documents, so that
+  // the memory of the arena does not grow endlessly.
+  static constexpr int64_t MAX_TOKEN_ITER_REUSE_CNT = 128;
   DISALLOW_COPY_AND_ASSIGN(ObFTParseHelper);
 };
 

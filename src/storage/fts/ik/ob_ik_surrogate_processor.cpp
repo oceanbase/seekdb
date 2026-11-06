@@ -24,6 +24,12 @@ namespace oceanbase
 {
 namespace storage
 {
+int ObIKSurrogateProcessor::reset()
+{
+  reset_state();
+  return OB_SUCCESS;
+}
+
 int ObIKSurrogateProcessor::do_process(TokenizeContext &ctx,
                                        const char *ch,
                                        const uint8_t char_len,
@@ -39,15 +45,15 @@ int ObIKSurrogateProcessor::do_process(TokenizeContext &ctx,
     if (OB_FAIL(ctx.add_token(
             ctx.fulltext(), high_offset_, low_offset_ - high_offset_, 1, ObIKTokenType::IK_SURROGATE_TOKEN))) {
     }
-    reset();
+    reset_state();
   } else if (has_high()) { // so char is not surrogate
     // add high as the single char token
     if (OB_FAIL(ctx.add_token(
             ctx.fulltext(), high_offset_, low_offset_ - high_offset_, 1, ObIKTokenType::IK_SURROGATE_TOKEN))) {
     }
-    reset();
+    reset_state();
   } else if (ObFTCharUtil::CharType::SURROGATE_LOW == type) { // only a low surrogate, ignore
-    reset();
+    reset_state();
   } else {
   }
 
@@ -56,7 +62,7 @@ int ObIKSurrogateProcessor::do_process(TokenizeContext &ctx,
              && OB_FAIL(ctx.add_token(
                  ctx.fulltext(), high_offset_, low_offset_ - high_offset_, 1, ObIKTokenType::IK_SURROGATE_TOKEN))) {
   } else if (ctx.is_last() && has_high()) { // Succeed to add the last token
-    reset();
+    reset_state();
   }
   return ret;
 }

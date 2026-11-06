@@ -1,0 +1,261 @@
+drop database if exists fts;
+create database fts;
+use fts;
+create table t_relevance(
+id int primary key,
+digest varchar(64),
+detail varchar(4096),
+fulltext index i1(detail));
+insert into t_relevance values
+(1, 'd1', 'distributed database oceanbase fulltext index'),
+(2, 'd2', 'oceanbase distributed transaction'),
+(3, 'd3', 'mysql fulltext index distributed search'),
+(4, 'd4', 'distributed'),
+(5, 'd5', 'nothing to see here'),
+(6, 'd6', 'oceanbase database'),
+(7, 'd7', 'database database database');
+result_format: 4
+explain select count(*) from t_relevance where match (detail) against ("distributed database");
+Query Plan
+================================================================
+|ID|OPERATOR             |NAME           |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------
+|0 |SCALAR GROUP BY      |               |1       |35          |
+|1 |└─TEXT RETRIEVAL SCAN|t_relevance(i1)|7       |35          |
+================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_COUNT(*)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_COUNT(*)])
+  1 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      calc_relevance=false, match_expr(MATCH(t_relevance.detail) AGAINST('distributed database')), 
+      pushdown_match_filter(MATCH(t_relevance.detail) AGAINST('distributed database'))
+select count(*) from t_relevance where match (detail) against ("distributed database");
++----------+
+| count(*) |
++----------+
+|        6 |
++----------+
+
+select (select count(*) from t_relevance where match (detail) against ("distributed database")) as cnt_without_score,
+       (select count(*) from t_relevance where match (detail) against ("distributed database") > 0) as cnt_with_score;
++-------------------+----------------+
+| cnt_without_score | cnt_with_score |
++-------------------+----------------+
+|                 6 |              6 |
++-------------------+----------------+
+
+explain select digest, match (detail) against ("distributed database") as score from t_relevance where match (detail) against ("distributed database");
+Query Plan
+================================================================
+|ID|OPERATOR             |NAME           |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------
+|0 |SORT                 |               |7       |58          |
+|1 |└─TEXT RETRIEVAL SCAN|t_relevance(i1)|7       |56          |
+================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_relevance.digest], [MATCH(t_relevance.detail) AGAINST('distributed database')]), filter(nil), rowset=16
+      sort_keys([MATCH(t_relevance.detail) AGAINST('distributed database'), DESC])
+  1 - output([t_relevance.digest], [MATCH(t_relevance.detail) AGAINST('distributed database')]), filter(nil), rowset=16
+      access([t_relevance.id], [t_relevance.digest]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_relevance.detail) AGAINST('distributed database')), 
+      pushdown_match_filter(MATCH(t_relevance.detail) AGAINST('distributed database'))
+select digest, match (detail) against ("distributed database") as score from t_relevance where match (detail) against ("distributed database");
++--------+---------------------+
+| digest | score               |
++--------+---------------------+
+| d1     |  0.6302238526959963 |
+| d7     | 0.46461490942688544 |
+| d4     |  0.3956834532374101 |
+| d6     |  0.3735755014986443 |
+| d2     |  0.3503184713375797 |
+| d3     |  0.3142857142857143 |
++--------+---------------------+
+
+explain select max(match (detail) against ("distributed database")) from t_relevance where match (detail) against ("distributed database");
+Query Plan
+================================================================
+|ID|OPERATOR             |NAME           |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------
+|0 |SCALAR GROUP BY      |               |1       |35          |
+|1 |└─TEXT RETRIEVAL SCAN|t_relevance(i1)|7       |35          |
+================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_MAX(MATCH(t_relevance.detail) AGAINST('distributed database'))]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_MAX(MATCH(t_relevance.detail) AGAINST('distributed database'))])
+  1 - output([MATCH(t_relevance.detail) AGAINST('distributed database')]), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_relevance.detail) AGAINST('distributed database')), 
+      pushdown_match_filter(MATCH(t_relevance.detail) AGAINST('distributed database'))
+select max(match (detail) against ("distributed database")) from t_relevance where match (detail) against ("distributed database");
++------------------------------------------------------+
+| max(match (detail) against ("distributed database")) |
++------------------------------------------------------+
+|                                   0.6302238526959963 |
++------------------------------------------------------+
+
+explain select match (detail) against ("distributed database") > 0.5, count(*) from t_relevance where match (detail) against ("distributed database") group by match (detail) against ("distributed database") > 0.5;
+Query Plan
+================================================================
+|ID|OPERATOR             |NAME           |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------
+|0 |HASH GROUP BY        |               |7       |38          |
+|1 |└─TEXT RETRIEVAL SCAN|t_relevance(i1)|7       |35          |
+================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([MATCH(t_relevance.detail) AGAINST('distributed database') > cast(0.5, DOUBLE(-1, -1))], [T_FUN_COUNT(*)]), filter(nil), rowset=16
+      group([MATCH(t_relevance.detail) AGAINST('distributed database') > cast(0.5, DOUBLE(-1, -1))]), agg_func([T_FUN_COUNT(*)])
+  1 - output([MATCH(t_relevance.detail) AGAINST('distributed database')]), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_relevance.detail) AGAINST('distributed database')), 
+      pushdown_match_filter(MATCH(t_relevance.detail) AGAINST('distributed database'))
+select match (detail) against ("distributed database") > 0.5, count(*) from t_relevance where match (detail) against ("distributed database") group by match (detail) against ("distributed database") > 0.5;
++-------------------------------------------------------+----------+
+| match (detail) against ("distributed database") > 0.5 | count(*) |
++-------------------------------------------------------+----------+
+|                                                     1 |        1 |
+|                                                     0 |        5 |
++-------------------------------------------------------+----------+
+
+explain select digest from t_relevance where match (detail) against ("distributed database") > 0.5;
+Query Plan
+========================================================
+|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------
+|0 |SORT             |           |3       |703         |
+|1 |└─TABLE FULL SCAN|t_relevance|3       |703         |
+========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_relevance.digest]), filter(nil), rowset=16
+      sort_keys([MATCH(t_relevance.detail) AGAINST('distributed database'), DESC])
+  1 - output([t_relevance.digest], [MATCH(t_relevance.detail) AGAINST('distributed database')]), filter([MATCH(t_relevance.detail) AGAINST('distributed 
+      database') > cast(0.5, DOUBLE(-1, -1))]), rowset=16
+      access([t_relevance.id], [t_relevance.digest]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([t_relevance.id]), range(MIN ; MAX)always true, has_functional_lookup=true
+select digest from t_relevance where match (detail) against ("distributed database") > 0.5;
++--------+
+| digest |
++--------+
+| d1     |
++--------+
+
+explain select digest from t_relevance where match (detail) against ("distributed database") order by match (detail) against ("distributed database") desc;
+Query Plan
+================================================================
+|ID|OPERATOR             |NAME           |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------
+|0 |SORT                 |               |7       |58          |
+|1 |└─TEXT RETRIEVAL SCAN|t_relevance(i1)|7       |56          |
+================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_relevance.digest]), filter(nil), rowset=16
+      sort_keys([MATCH(t_relevance.detail) AGAINST('distributed database'), DESC])
+  1 - output([t_relevance.digest], [MATCH(t_relevance.detail) AGAINST('distributed database')]), filter(nil), rowset=16
+      access([t_relevance.id], [t_relevance.digest]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_relevance.detail) AGAINST('distributed database')), 
+      pushdown_match_filter(MATCH(t_relevance.detail) AGAINST('distributed database'))
+select digest from t_relevance where match (detail) against ("distributed database") order by match (detail) against ("distributed database") desc;
++--------+
+| digest |
++--------+
+| d1     |
+| d7     |
+| d4     |
+| d6     |
+| d2     |
+| d3     |
++--------+
+
+explain select digest from t_relevance where match (detail) against ("distributed database") order by id desc;
+Query Plan
+================================================================
+|ID|OPERATOR             |NAME           |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------
+|0 |SORT                 |               |7       |59          |
+|1 |└─TEXT RETRIEVAL SCAN|t_relevance(i1)|7       |57          |
+================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_relevance.digest]), filter(nil), rowset=16
+      sort_keys([t_relevance.id, DESC])
+  1 - output([t_relevance.id], [t_relevance.digest]), filter(nil), rowset=16
+      access([t_relevance.id], [t_relevance.digest]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=false, match_expr(MATCH(t_relevance.detail) AGAINST('distributed database')), 
+      pushdown_match_filter(MATCH(t_relevance.detail) AGAINST('distributed database'))
+select digest from t_relevance where match (detail) against ("distributed database") order by id desc;
++--------+
+| digest |
++--------+
+| d7     |
+| d6     |
+| d4     |
+| d3     |
+| d2     |
+| d1     |
++--------+
+
+explain select count(*) from (select id from t_relevance where match (detail) against ("distributed database") limit 3) t;
+Query Plan
+==================================================================
+|ID|OPERATOR               |NAME           |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |SCALAR GROUP BY        |               |1       |56          |
+|1 |└─SUBPLAN SCAN         |t              |7       |56          |
+|2 |  └─TEXT RETRIEVAL SCAN|t_relevance(i1)|7       |56          |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_COUNT(*)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_COUNT(*)])
+  1 - output(nil), filter(nil), rowset=16
+      access(nil)
+  2 - output([t_relevance.id]), filter(nil), rowset=16
+      access([t_relevance.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      calc_relevance=true, match_expr(MATCH(t_relevance.detail) AGAINST('distributed database')), 
+      pushdown_match_filter(MATCH(t_relevance.detail) AGAINST('distributed database')), 
+      sort_keys([MATCH(t_relevance.detail) AGAINST('distributed database'), DESC]), limit(3), offset(nil), with_ties(false)
+select id from (select id from t_relevance where match (detail) against ("distributed database") limit 3) t order by id;
++----+
+| id |
++----+
+|  1 |
+|  4 |
+|  7 |
++----+
+select id from (select id from t_relevance where match (detail) against ("distributed database") order by match (detail) against ("distributed database") desc limit 3) t order by id;
++----+
+| id |
++----+
+|  1 |
+|  4 |
+|  7 |
++----+
+
+select count(*) from t_relevance where match (detail) against ("distributed database" in boolean mode);
++----------+
+| count(*) |
++----------+
+|        6 |
++----------+
+select count(*) from t_relevance where match (detail) against ("distributed database" in natural language mode);
++----------+
+| count(*) |
++----------+
+|        6 |
++----------+
+
+drop database fts;
