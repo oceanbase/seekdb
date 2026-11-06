@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX PALF
 #include "log_engine.h"
 #include "embed_palf_warm_manifest.h"
-#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 #include "share/storage/local_store.h"
 #include "logservice/ob_log_allocator.h"  // ObILogAllocator
 #include "log_io_worker.h"                              // LogIOWorker
@@ -137,11 +136,9 @@ int LogEngine::load(share::LocalStore &store, const char *base_dir,
 #ifdef OB_BUILD_EMBED_MODE
   EmbedPalfWarmManifest warm_manifest;
   const EmbedPalfWarmStorageSnapshot *redo_warm_snapshot = nullptr;
-  bool used_embed_warm_manifest = false;
   warm_manifest.reset();
   if (OB_SUCC(load_embed_palf_warm_manifest(base_dir, warm_manifest))) {
     redo_warm_snapshot = &warm_manifest.redo_;
-    used_embed_warm_manifest = true;
     PALF_LOG(INFO, "loaded embed palf warm manifest", K(base_dir), K(warm_manifest.write_ts_us_));
   }
 #endif
@@ -165,8 +162,7 @@ int LogEngine::load(share::LocalStore &store, const char *base_dir,
     const LSN base_lsn = meta_exists ? log_meta_.get_log_snapshot_meta().base_lsn_
                                     : LSN(PALF_INITIAL_LSN_VAL);
     if (OB_FAIL(ret)) {
-    } else if (FALSE_IT(::oceanbase::storage::startup_substep_timeline_mark("mls_palf_meta_load"))
-               || (0 != log_storage_block_size
+    } else if (0 != log_storage_block_size
                    && OB_FAIL(log_storage_.load(base_dir, "log",
                        base_lsn, log_storage_block_size, LOG_DIO_ALIGN_SIZE, LOG_DIO_ALIGNED_BUF_SIZE_REDO,
                        update_manifest, log_block_pool, plugins, log_cache, io_adapter,
@@ -177,21 +173,13 @@ int LogEngine::load(share::LocalStore &store, const char *base_dir,
 #endif
                        )))) {
       PALF_LOG(ERROR, "LogStorage load failed", K(ret), K(base_dir));
-    } else if (FALSE_IT(::oceanbase::storage::startup_substep_timeline_mark("mls_palf_redo_load"))
-               || OB_FAIL(integrity_verify_(meta_exists, last_group_entry_header_lsn, is_integrity))) {
-    } else if (FALSE_IT(::oceanbase::storage::startup_substep_timeline_mark("mls_palf_integrity"))
-               || (meta_exists && 0 != log_storage_block_size
+    } else if (OB_FAIL(integrity_verify_(meta_exists, last_group_entry_header_lsn, is_integrity))) {
+    } else if (meta_exists && 0 != log_storage_block_size
                    && OB_FAIL(try_clear_up_holes_and_check_storage_integrity_(
                        last_group_entry_header_lsn, expected_next_block_id, entry_header)))) {
       PALF_LOG(ERROR, "the last block may be deleted by human, restart failed!!!", K(ret),
           K_(is_inited));
     } else {
-      ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_holes_ck");
-#ifdef OB_BUILD_EMBED_MODE
-      if (used_embed_warm_manifest && log_storage_.last_load_used_embed_warm_snapshot()) {
-        ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_warm_fast");
-      }
-#endif
       palf_epoch_ = palf_epoch;
       alloc_mgr_ = alloc_mgr;
       log_io_worker_ = log_io_worker;

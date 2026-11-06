@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX PALF
 #include "palf_env_impl.h"
 #include <cinttypes>
-#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 #ifdef _WIN32
 #include <direct.h>
 #endif
@@ -256,7 +255,6 @@ int PalfEnvImpl::start()
   } else if (OB_SUCC(ret) && OB_FAIL(log_loop_thread_.start())) {
 #endif
   } else if (OB_SUCC(ret)) {
-    ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_threads");
     is_running_ = true;
     PALF_LOG(INFO, "PalfEnv start success", K(ret));
   }
@@ -789,7 +787,6 @@ int PalfEnvImpl::reload_palf_handle_impl_()
     (void) tmp_palf_handle_impl->set_monitor_cb(monitor_);
     (void) tmp_palf_handle_impl->set_scan_disk_log_finished();
     int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-    ::oceanbase::storage::startup_substep_timeline_mark("mls_palf_reload");
     PALF_LOG(INFO, "reload_palf_handle_impl success", K(ret), K(cost_ts), KP(this));
   }
 

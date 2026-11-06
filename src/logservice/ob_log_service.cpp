@@ -20,7 +20,6 @@
 #include "logservice/ob_log_allocator_mgr.h"
 #include "lib/ob_running_mode.h"
 #include "share/ob_share_util.h"
-#include "storage/meta_store/ob_storage_meta_replay_timeline.h"
 
 namespace oceanbase
 {
@@ -114,10 +113,8 @@ int ObLogService::start()
   int ret = OB_SUCCESS;
   if (OB_FAIL(palf_env_->start())) {
   } else {
-    ::oceanbase::storage::startup_substep_timeline_mark("mls_palf");
     if (OB_FAIL(apply_service_.start())) {
     } else {
-      ::oceanbase::storage::startup_substep_timeline_mark("mls_apply");
 #ifdef OB_BUILD_EMBED_MODE
       if (OB_FAIL(palf_env_->start_embed_deferred_block_gc())) {
         CLOG_LOG(WARN, "failed to start embed deferred block gc", K(ret));
