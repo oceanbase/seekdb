@@ -897,9 +897,11 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     }
 
     // AI columns carry three hidden columns (state / request / result spec).
+    // Capture the declared AI columns so the executor can create their catalogue rows
+    // and maintenance triggers once the table id is known.
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(add_ai_column_hidden_columns(table_schema))) {
-        SQL_RESV_LOG(WARN, "fail to add ai column hidden columns", K(ret));
+      if (OB_FAIL(collect_ai_column_defs(table_schema))) {
+        SQL_RESV_LOG(WARN, "fail to collect ai column definitions", K(ret));
       }
     }
 
@@ -2338,6 +2340,93 @@ int ObCreateTableResolver::resolve_single_column_primary_key_node(const ParseNod
   return ret;
 }
 
+
+
+int ObCreateTableResolver::collect_ai_column_defs(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  ObCreateTableStmt *stmt = static_cast<ObCreateTableStmt *>(stmt_);
+  if (OB_FAIL(add_ai_column_hidden_columns(table_schema))) {
+    SQL_RESV_LOG(WARN, "fail to add ai column hidden columns", K(ret));
+  }
+  // An AI column may only read plain columns; feeding one AI column into another is rejected.
+  if (OB_SUCC(ret)) {
+    for (ObTableSchema::const_column_iterator iter = table_schema.column_begin();
+         OB_SUCC(ret) && iter != table_schema.column_end(); ++iter) {
+      const ObColumnSchemaV2 *col = *iter;
+      if (OB_ISNULL(col)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!col->is_ai_column() || col->get_ai_depend_columns().empty()) {
+        continue;
+      } else {
+        const ObString &deps = col->get_ai_depend_columns();
+        const char *p = deps.ptr();
+        const char *end = p + deps.length();
+        while (OB_SUCC(ret) && p < end) {
+          const char *comma = p;
+          while (comma < end && ',' != *comma) {
+            ++comma;
+          }
+          ObString item(static_cast<int32_t>(comma - p), p);
+          item = item.trim();
+          p = comma < end ? comma + 1 : end;
+          if (item.empty()) {
+            continue;
+          }
+          for (ObTableSchema::const_column_iterator it2 = table_schema.column_begin();
+               OB_SUCC(ret) && it2 != table_schema.column_end(); ++it2) {
+            const ObColumnSchemaV2 *other = *it2;
+            if (OB_ISNULL(other)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (!other->is_ai_column()
+                       || 0 != other->get_column_name_str().case_compare(item)) {
+              continue;
+            } else {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                             "AI column expression, an AI column may not depend on another AI column");
+              SQL_RESV_LOG(WARN, "ai column depends on another ai column", K(ret), K(item));
+            }
+          }
+        }
+      }
+    }
+  }
+  for (ObTableSchema::const_column_iterator iter = table_schema.column_begin();
+       OB_SUCC(ret) && iter != table_schema.column_end(); ++iter) {
+    const ObColumnSchemaV2 *col = *iter;
+    if (OB_ISNULL(col)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!col->is_ai_column()) {
+      continue;
+    } else {
+      ObAiColumnDef def;
+      def.column_name_ = col->get_column_name_str();
+      def.expr_ = col->get_ai_expr_str();
+      def.prompt_expr_ = col->get_ai_prompt_expr();
+      def.depend_columns_ = col->get_ai_depend_columns();
+      def.function_ = col->get_ai_function();
+      def.model_name_ = col->get_ai_model_name();
+      def.max_retries_ = col->get_ai_max_retries();
+      def.vector_dim_ = 0;
+      if (ObJsonType == col->get_data_type()) {
+        def.result_type_.assign_ptr("json", 4);
+      } else if (ObIntType == col->get_data_type()
+                 || ObNumberType == col->get_data_type()) {
+        def.result_type_.assign_ptr("integer", 7);
+      } else if (0 == col->get_ai_function().case_compare("ai_embed")) {
+        // an embedding always lands in the vector column it was declared on
+        def.result_type_.assign_ptr("vector", 6);
+      } else {
+        def.result_type_.assign_ptr("text", 4);
+      }
+      if (OB_FAIL(stmt->add_ai_column_def(def))) {
+        SQL_RESV_LOG(WARN, "add ai column def failed", K(ret), K(def));
+      }
+    }
+  }
+  return ret;
+}
 
 int ObCreateTableResolver::add_ai_column_hidden_columns(ObTableSchema &table_schema)
 {

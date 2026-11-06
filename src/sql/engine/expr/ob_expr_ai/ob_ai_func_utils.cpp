@@ -1380,6 +1380,39 @@ int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &mod
   return ret;
 }
 
+// An AI column request carries its type contract in the "system" member of the
+// config object; use it as the system message of the completion request.
+static int ai_config_system_prompt(common::ObIAllocator &allocator,
+                                   common::ObJsonObject *config,
+                                   common::ObString &sys_prompt)
+{
+  int ret = OB_SUCCESS;
+  common::ObIJsonBase *value = nullptr;
+  if (OB_ISNULL(config)) {
+    // nothing to do
+  } else if (OB_FAIL(config->get_object_value(common::ObString("system"), value))) {
+    if (OB_SEARCH_NOT_FOUND == ret) {
+      ret = OB_SUCCESS;
+    }
+  } else if (OB_ISNULL(value) || value->json_type() != common::ObJsonNodeType::J_STRING) {
+    ret = OB_SUCCESS;
+  } else {
+    common::ObJsonString *str = static_cast<common::ObJsonString *>(value);
+    const common::ObString text = str->get_str();
+    char *buf = nullptr;
+    if (0 == text.length()) {
+      // nothing to do
+    } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(text.length() + 1)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(buf, text.ptr(), text.length());
+      buf[text.length()] = '\0';
+      sys_prompt.assign_ptr(buf, static_cast<int32_t>(text.length()));
+    }
+  }
+  return ret;
+}
+
 int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObString &result)
 {
   int ret = OB_SUCCESS;
@@ -1399,6 +1432,7 @@ int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObStr
   } else if (OB_FAIL(ObAIFuncUtils::get_complete_provider(*allocator_, endpoint_info_.get_provider(), complete_provider))) {
   } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
   } else if (OB_FAIL(complete_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
+  } else if (OB_NOT_NULL(config) && OB_FAIL(ai_config_system_prompt(*allocator_, config, prompt_str))) {
   } else if (OB_FAIL(complete_provider->get_body(*allocator_, request_model_name, prompt_str, prompt, config, body))) {
   } else if (OB_FAIL(client.send_post(*allocator_, endpoint_info_.get_url(), headers, body, response))) {
   } else if (OB_FAIL(complete_provider->parse_output(*allocator_, response, result_base))) {
