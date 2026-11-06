@@ -51,7 +51,7 @@ OBSERVER_UNITY_GROUPS = [
         ],
     ),
     struct(
-        name = "ob_server_dbms_job_0",
+        name = "ob_server_dbms_scheduler_0",
         language = "c++",
         srcs = [
             "src/observer/dbms_scheduler/ob_dbms_sched_job_utils.cpp",

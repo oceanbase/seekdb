@@ -807,8 +807,8 @@ static int get_runtime_schema_guard_with_version_in_inner_table(share::schema::O
   int recompile_view(const ObTableSchema &view_schema, const bool reset_view_column_infos, ObDDLSQLTransaction &trans);
   int recompile_all_views_batch(const common::ObIArray<uint64_t > &view_ids);
 
-  static int set_dbms_job_exec_env(const obcall::ObCreateIndexArg &create_index_arg,
-                                   ObTableSchema& vidx_table_schema);
+  static int set_vec_index_exec_env(const obcall::ObCreateIndexArg &create_index_arg,
+                                    ObTableSchema& vidx_table_schema);
   int check_is_alter_decimal_int_offline(const share::ObDDLType &ddl_type,
                                          const share::schema::ObTableSchema &table_schema,
                                          const AlterTableSchema &alter_table_schema,

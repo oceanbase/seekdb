@@ -18,15 +18,6 @@ pl debug let you can debug the following program units (PL/SQL programs): anonym
 
 when debug a pl , use sys breakpoint to pause the PL/SQL programs. Threads enter "pl sys breakpoint lock wait" when concurrently debug the pl/sql program.
 
-## latch:dbms_job task lock wait
-
-dbms_job create a job task to execute user-defined job. Threads enter "dbms_job task lock wait" when concurrently when run/add/execute immediate a job.
-
-## latch:dbms_job master lock wait
-
-dbms_job use dbms_job master to schedule all tasks. Threads enter "dbms_job master lock wait" when concurrently when register a job to master.
-
-
 ## latch:plan cache evict lock
 There is a concurrency problem between the regularly triggered ps cache evict task and
 the manually triggered flush ps cache evict task. There is also a concurrency problem between

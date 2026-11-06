@@ -25,6 +25,8 @@
 #include "rootserver/ob_root_utils.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "rootserver/ob_thread_idling.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -35,15 +37,12 @@ using namespace share;
 namespace rootserver
 {
 ObMajorMergeInfoDetector::ObMajorMergeInfoDetector()
-  : is_inited_(false), is_paused_(false), is_primary_service_(true),
-    is_replay_mode_(false),
-    is_global_merge_info_adjusted_(false), is_gc_scn_inited_(false), sql_proxy_(nullptr),
-    last_run_timestamp_(0),
-    major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr),
-    major_scheduler_idling_(nullptr),
-    last_schedule_ts_(0), need_immediate_run_(true),
-    timer_()
-{}
+    : is_inited_(false), is_paused_(false), is_primary_service_(true),
+      is_replay_mode_(false), is_global_merge_info_adjusted_(false),
+      is_gc_scn_inited_(false), sql_proxy_(nullptr), last_run_timestamp_(0),
+      major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr),
+      major_scheduler_idling_(nullptr), last_schedule_ts_(0),
+      need_immediate_run_(true), table_change_watcher_(), timer_() {}
 
 ObMajorMergeInfoDetector::~ObMajorMergeInfoDetector()
 {
@@ -68,6 +67,9 @@ int ObMajorMergeInfoDetector::init(
     snapshot_gc_scn_renewer_ = &snapshot_gc_scn_renewer;
     major_scheduler_idling_ = &major_scheduler_idling;
     if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
+    } else if (OB_FAIL(table_change_watcher_.init_watched_tables(
+                   {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID}))) {
+      LOG_WARN("register freeze table change tracking failed", KR(ret));
     } else {
       is_inited_ = true;
       LOG_INFO("freeze info detector init succ");
@@ -274,9 +276,26 @@ int ObMajorMergeInfoDetector::try_reload_freeze_info()
 {
   int ret = OB_SUCCESS;
   if (!is_primary_service() || ATOMIC_LOAD(&is_replay_mode_)) {
+    share::InternalTableChangeWatcher::CheckResult check_result;
+    const int check_ret = table_change_watcher_.check_changed(check_result);
+
     if (OB_ISNULL(major_merge_info_mgr_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(major_merge_info_mgr_->reload())) {
+      LOG_WARN("fail to try reload freeze info, freeze info manager is null", KR(ret),
+               K_(is_primary_service));
+    } else if (OB_SUCCESS != check_ret) {
+      ret = check_ret;
+      LOG_WARN("fail to check freeze table change", KR(ret));
+    } else if (share::InternalTableChangeWatcher::NO_CHANGE == check_result) {
+      // Standby metadata is unchanged; avoid issuing the periodic inner SQL.
+    } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
+               check_result) {
+      LOG_DEBUG("defer freeze metadata reload until GTS reaches commit version");
+    } else if (OB_FAIL(major_merge_info_mgr_->reload(
+                   true /*force_reload_global_info*/))) {
+    } else if (OB_FAIL(table_change_watcher_.mark_refreshed())) {
+      LOG_WARN("failed to acknowledge refreshed freeze table versions",
+               KR(ret));
     }
   }
   return ret;

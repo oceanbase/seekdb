@@ -67,6 +67,7 @@
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
 #include "sql/session/ob_sql_session_mgr.h"
@@ -100,6 +101,26 @@ using namespace oceanbase::observer;
 using namespace oceanbase::rootserver;
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::tmp_file;
+
+namespace
+{
+int get_internal_table_change_gts(share::SCN &gts)
+{
+  int ret = OB_SUCCESS;
+  int64_t gts_value = 0;
+  transaction::ObTimestampAccess *timestamp_access =
+      share::server_service<transaction::ObTimestampAccess>();
+  if (OB_ISNULL(timestamp_access)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "timestamp access is not initialized for internal table refresh", KR(ret));
+  } else if (OB_FAIL(timestamp_access->get_number(gts_value))) {
+    SERVER_LOG(WARN, "failed to read GTS for internal table refresh", KR(ret));
+  } else if (OB_FAIL(gts.convert_for_gts(gts_value))) {
+    SERVER_LOG(WARN, "failed to convert GTS for internal table refresh", KR(ret), K(gts_value));
+  }
+  return ret;
+}
+} // namespace
 
 
 ObServerRuntimeController::ObServerRuntimeController()
@@ -1426,6 +1447,17 @@ int ObServer::obs_init_modules()
         *mods_ps_cache_,
         debug_sync_broadcaster_,
         conn_res_mgr_);
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(GCTX.internal_table_change_notifier_)) {
+      ret = OB_NOT_INIT;
+      SERVER_LOG(WARN, "internal table change notifier is not initialized", KR(ret));
+    } else if (OB_FAIL(GCTX.internal_table_change_notifier_->set_gts_provider(
+                           get_internal_table_change_gts))) {
+      SERVER_LOG(WARN, "set internal table change notifier GTS provider failed", KR(ret));
+    } else if (OB_FAIL(GCTX.internal_table_change_notifier_->seal())) {
+      SERVER_LOG(WARN, "seal internal table change notifier failed", KR(ret));
+    }
   }
   return ret;
 }

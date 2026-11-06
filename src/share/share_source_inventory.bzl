@@ -480,6 +480,7 @@ SHARE_STANDALONE_SOURCES = [
     "src/share/ob_rpc_struct.cpp",
     "src/share/ob_sql_client_decorator.cpp",
     "src/share/ob_timezone_mgr.cpp",
+    "src/share/ob_internal_table_change_notifier.cpp",
 ]
 
 SHARE_DATUM_STANDALONE_SOURCES = [

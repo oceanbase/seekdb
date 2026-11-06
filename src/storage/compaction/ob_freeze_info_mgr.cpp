@@ -21,6 +21,9 @@
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/ob_server_struct.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -120,8 +123,8 @@ int ObFreezeInfoMgr::init(ObISQLClient &sql_proxy)
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(freeze_info_mgr_.init(*GCTX.sql_proxy_))) {
-  } else if (OB_FAIL(reload_task_.init())) {
   } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
+  } else if (OB_FAIL(reload_task_.init())) {
   } else {
     inited_ = true;
   }
@@ -425,18 +428,18 @@ share::SCN ObFreezeInfoMgr::get_snapshot_gc_scn()
 }
 
 ObFreezeInfoMgr::ReloadTask::ReloadTask(ObFreezeInfoMgr &mgr)
-  : inited_(false),
-    check_runtime_status_(),
-    mgr_(mgr)
-{
-}
+    : inited_(false), check_runtime_status_(), mgr_(mgr),
+      table_change_watcher_() {}
 
-int ObFreezeInfoMgr::ReloadTask::init()
-{
+int ObFreezeInfoMgr::ReloadTask::init() {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
+  } else if (OB_FAIL(table_change_watcher_.init_watched_tables(
+                 {OB_ALL_CORE_TABLE_TID, OB_ALL_FREEZE_INFO_TID,
+                  OB_ALL_ACQUIRED_SNAPSHOT_TID}))) {
+    STORAGE_LOG(WARN, "fail to register freeze table change tracking", K(ret));
   } else {
     inited_ = true;
   }
@@ -537,11 +540,37 @@ void ObFreezeInfoMgr::ReloadTask::runTimerTask()
       LOG_WARN_RET(tmp_ret, "local storage recovery hasn't finished, this task can't start");
     }
   } else {
+    share::InternalTableChangeWatcher::CheckResult check_result;
+    const int check_ret = table_change_watcher_.check_changed(check_result);
+    const bool can_reload_inner_tables =
+        OB_SUCCESS == check_ret &&
+        share::InternalTableChangeWatcher::REFRESH_ALLOWED == check_result;
+    if (OB_SUCCESS != check_ret) {
+      LOG_WARN_RET(check_ret,
+                   "fail to check freeze table change, defer refresh",
+                   KR(check_ret));
+    } else if (share::InternalTableChangeWatcher::CHANGE_NOT_VISIBLE ==
+               check_result) {
+      LOG_DEBUG("defer freeze info refresh until GTS reaches commit version");
+    }
+
+    // SQLite-backed merge state has no table change sequence and must keep its
+    // original periodic refresh independently of the inner-table gate below.
     if (OB_TMP_FAIL(refresh_merge_info())) {
       LOG_WARN_RET(tmp_ret, "fail to refresh merge info", KR(tmp_ret));
     }
-    if (OB_TMP_FAIL(mgr_.try_update_info())) {
-      LOG_WARN_RET(tmp_ret, "fail to try update info", KR(tmp_ret));
+    if (can_reload_inner_tables) {
+      const int info_ret = mgr_.try_update_info();
+      if (OB_SUCCESS != info_ret) {
+        LOG_WARN_RET(info_ret, "fail to try update info", KR(info_ret));
+      } else {
+        const int ack_ret = table_change_watcher_.mark_refreshed();
+        if (OB_SUCCESS != ack_ret) {
+          LOG_WARN_RET(ack_ret,
+                       "failed to acknowledge refreshed freeze table versions",
+                       KR(ack_ret));
+        }
+      }
     }
   }
 }
