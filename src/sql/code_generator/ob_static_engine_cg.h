@@ -243,7 +243,8 @@ private:
                           common::ObIArray<ObExpr *> &calc_exprs,
                           const log_op_def::ObLogOpType log_type,
                           bool check_eval_once,
-                          bool need_flatten_gen_col = true);
+                          bool need_flatten_gen_col = true,
+                          const bool allow_skip_vec_distance = true);
 
   /////////////////////////////////////////////////////////////////////////////////
   //
