@@ -1,0 +1,37 @@
+# Regression for #1512: repetitions must not turn a small membership into VALUES.
+--disable_warnings
+drop database if exists inlist_duplicate_membership;
+--enable_warnings
+create database inlist_duplicate_membership;
+use inlist_duplicate_membership;
+create table docs(id int primary key, category int);
+insert into docs values (1,1),(2,2),(3,3),(4,4),(5,5),(6,null);
+
+--disable_query_log
+let $repeated = `select concat(repeat('1,2,3,',1023),'1,2,3')`;
+let $changed = `select concat(repeat('1,2,3,',1023),'1,2,4')`;
+let $with_null = `select concat(repeat('1,2,3,',1023),'1,2,NULL')`;
+--echo Repeated values retain a compact native IN expression
+--replace_regex /[0-9]+/#/
+eval explain select id from docs where category in ($repeated);
+--echo Reusing normalized SQL must retain newly distinct bindings
+eval select id from docs where category in ($repeated) order by id;
+eval select id from docs where category in ($changed) order by id;
+eval select id from docs where category in ($repeated) order by id;
+--echo NULL and NOT IN retain three-valued logic
+eval select id from docs where category in ($with_null) order by id;
+eval select id from docs where category not in ($repeated) order by id;
+eval select id from docs where category not in ($with_null) order by id;
+--echo Prepared statement bindings may change membership
+let $sql = `select concat('select id from docs where category in (',repeat('?,',1099),'?) order by id')`;
+eval prepare q from '$sql';
+set @a=1, @b=2, @changed=1;
+let $arguments = `select concat(repeat('@a,@b,',549),'@a,@changed')`;
+eval execute q using $arguments;
+set @changed=4;
+eval execute q using $arguments;
+set @changed=NULL;
+eval execute q using $arguments;
+deallocate prepare q;
+--enable_query_log
+drop database inlist_duplicate_membership;
