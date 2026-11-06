@@ -22,6 +22,7 @@ SDK_HEADERS = {
     "openssl_headers": _headers("openssl"),
     "curl_headers": _headers("curl") | {
         "linkopts": select({
+            "@platforms//os:android": ["-lz"],
             "@platforms//os:ios": ["-lz"],
             "//conditions:default": [],
         }),
