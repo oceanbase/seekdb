@@ -418,11 +418,11 @@ ExpressionProgramCatalog::~ExpressionProgramCatalog()
 ExpressionProgram::ExpressionProgram(ObOperator &owner, const CompiledExpressionProgram &compiled)
   : owner_(owner), compiled_(compiled),
     skip_(sizeof(uint8_t), ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
-    capacity_(std::max<int64_t>(1, owner.get_spec().max_batch_size_))
+    capacity_(0)
 {
 }
 
-int ExpressionProgram::create(ObOperator &owner, ExpressionProgram *&result)
+int ExpressionProgram::create(ObOperator &owner, int64_t initial_rows, ExpressionProgram *&result)
 {
   int ret = OB_SUCCESS;
   result = nullptr;
@@ -436,18 +436,44 @@ int ExpressionProgram::create(ObOperator &owner, ExpressionProgram *&result)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     auto *program = new (memory) ExpressionProgram(owner, *compiled);
-    try {
-      program->runner_.emplace(expression::make_runner(**compiled->prepared_, program, program->capacity_));
-    } catch (const rust::Error &error) {
-      ret = program->allocation_failed_ || std::strcmp(error.what(), "expression handle allocation failed") == 0
-          ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
-      SQL_ENG_LOG(WARN, "Rust expression execution creation failed", K(ret), "error", error.what());
-    }
+    ret = program->ensure_capacity(initial_rows);
     if (OB_SUCC(ret)) {
       result = program;
     } else {
       program->~ExpressionProgram();
       owner.get_exec_ctx().get_allocator().free(program);
+    }
+  }
+  return ret;
+}
+
+int ExpressionProgram::ensure_capacity(int64_t rows)
+{
+  int ret = OB_SUCCESS;
+  const int64_t declared_limit = std::max<int64_t>(1, owner_.get_spec().max_batch_size_);
+  if (rows < 0 || rows > declared_limit) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const size_t required = std::max<int64_t>(1, rows);
+  if (required > capacity_) {
+    allocation_failed_ = false;
+    try {
+      if (!runner_.has_value()) {
+        runner_.emplace(expression::make_runner(**compiled_.prepared_, this, required));
+        capacity_ = required;
+      } else {
+        // A floor-halved ladder bounds retained arena regions below twice the
+        // declared maximum, including an arbitrary exact first capacity.
+        size_t next = declared_limit;
+        while (next / 2 >= required) {
+          next /= 2;
+        }
+        capacity_ = expression::reserve_rows(**runner_, **compiled_.prepared_, next);
+      }
+    } catch (const rust::Error &error) {
+      ret = allocation_failed_ || std::strcmp(error.what(), "expression handle allocation failed") == 0
+          ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
+      SQL_ENG_LOG(WARN, "Rust expression workspace allocation failed", K(ret), "error", error.what());
     }
   }
   return ret;
@@ -594,14 +620,15 @@ int ExpressionProgram::execute(ObBitVector *skip, int64_t rows, bool batch,
 {
   int ret = OB_SUCCESS;
   all_filtered = false;
-  if (rows < 0 || static_cast<size_t>(rows) > capacity_) {
-    return OB_INVALID_ARGUMENT;
+  if (OB_FAIL(ensure_capacity(rows))) {
+    return ret;
   }
   skip_.reuse();
+  const size_t declared_limit = std::max<int64_t>(1, owner_.get_spec().max_batch_size_);
   const size_t previous_capacity = skip_.get_capacity();
   if (static_cast<size_t>(rows) > previous_capacity) {
     const size_t next_capacity = std::max(static_cast<size_t>(rows),
-        previous_capacity + std::min(previous_capacity, capacity_ - previous_capacity));
+        previous_capacity + std::min(previous_capacity, declared_limit - previous_capacity));
     if (OB_FAIL(skip_.reserve(next_capacity))) {
       return ret;
     }

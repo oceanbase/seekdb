@@ -16,6 +16,7 @@
 #include <array>
 #include <atomic>
 #include <cstdlib>
+#include <limits>
 #include <thread>
 #include <vector>
 #include "rust/expression_program.h"
@@ -125,6 +126,90 @@ TEST(ExpressionProgramBridge, AllocationFailureAndCancellation)
   EXPECT_EQ(2, host.releases_);
 }
 
+TEST(ExpressionProgramBridge, CapacityGrowthIsTransactional)
+{
+  TestHost host;
+  int64_t copied_result = 0;
+  {
+    auto prepared = prepare_add(host);
+    auto runner = make_runner(*prepared, &host, 3);
+    const auto check_batch = [&](size_t rows, int64_t offset) {
+      {
+        auto input = input_storage(*runner);
+        const size_t capacity = input.size() / 2;
+        for (size_t row = 0; row < rows; ++row) {
+          input[row] = static_cast<uint64_t>(offset + static_cast<int64_t>(row));
+          input[capacity + row] = row % 3 != 1;
+        }
+      }
+      std::vector<uint8_t> skip(rows);
+      for (size_t row = 0; row < rows; ++row) {
+        skip[row] = row == 63 || row % 5 == 2;
+      }
+      ASSERT_EQ(0, execute(*runner, *prepared, rows, view(skip)).code);
+      const auto values = node_values(*runner, 2);
+      const auto flags = node_flags(*runner, 2);
+      ASSERT_EQ(rows, values.size());
+      for (size_t row = 0; row < rows; ++row) {
+        const uint64_t expected_flags = skip[row] ? 0 : row % 3 == 1 ? 1 : 3;
+        ASSERT_EQ(expected_flags, flags[row]) << row;
+        if (expected_flags == 3) {
+          ASSERT_EQ(offset + static_cast<int64_t>(row) + 7, static_cast<int64_t>(values[row]));
+        }
+      }
+    };
+    ASSERT_NO_FATAL_FAILURE(check_batch(3, 4));
+    copied_result = static_cast<int64_t>(node_values(*runner, 2)[0]);
+    {
+      TestHost other_host;
+      auto other = prepare_add(other_host);
+      EXPECT_THROW(reserve_rows(*runner, *other, 0), rust::Error);
+      EXPECT_THROW(reserve_rows(*runner, *other, 65), rust::Error);
+    }
+    EXPECT_EQ(2, host.allocations_);
+    EXPECT_EQ(0, host.releases_);
+    host.fail_allocation_ = true;
+    EXPECT_THROW(reserve_rows(*runner, *prepared, 65), rust::Error);
+    EXPECT_EQ(3U, reserve_rows(*runner, *prepared, 0));
+    EXPECT_EQ(6U, input_storage(*runner).size());
+    EXPECT_EQ(11, static_cast<int64_t>(node_values(*runner, 2)[0]));
+    EXPECT_EQ(3U, node_flags(*runner, 2)[0]);
+    EXPECT_EQ(2, host.allocations_);
+    EXPECT_EQ(0, host.releases_);
+    host.fail_allocation_ = false;
+    ASSERT_EQ(65U, reserve_rows(*runner, *prepared, 65));
+    EXPECT_EQ(3, host.allocations_);
+    EXPECT_EQ(1, host.releases_);
+    ASSERT_EQ(0, execute(*runner, *prepared, 65, view(std::vector<uint8_t>(65, 0))).code);
+    for (size_t row = 0; row < 65; ++row) {
+      ASSERT_EQ(1U, node_flags(*runner, 2)[row]);
+    }
+    ASSERT_NO_FATAL_FAILURE(check_batch(65, 20));
+    ASSERT_EQ(0, execute(*runner, *prepared, 65, view(std::vector<uint8_t>(65, 1))).code);
+    for (size_t row = 0; row < 65; ++row) {
+      ASSERT_EQ(0U, node_flags(*runner, 2)[row]);
+    }
+    ASSERT_EQ(65U, reserve_rows(*runner, *prepared, 3));
+    ASSERT_NO_FATAL_FAILURE(check_batch(3, -10));
+    ASSERT_EQ(128U, reserve_rows(*runner, *prepared, 128));
+    ASSERT_NO_FATAL_FAILURE(check_batch(128, -100));
+    ASSERT_EQ(0, execute(*runner, *prepared, 0, view(std::vector<uint8_t>{})).code);
+    EXPECT_EQ(0U, selection(*runner).size());
+    EXPECT_THROW(reserve_rows(*runner, *prepared, std::numeric_limits<size_t>::max()), rust::Error);
+    EXPECT_EQ(128U, reserve_rows(*runner, *prepared, 0));
+    EXPECT_EQ(4, host.allocations_);
+    EXPECT_EQ(2, host.releases_);
+    ASSERT_EQ(256U, reserve_rows(*runner, *prepared, 256));
+    ASSERT_NO_FATAL_FAILURE(check_batch(256, 300));
+    host.cancellation_ = -4012;
+    EXPECT_EQ(-4012, execute(*runner, *prepared, 256, view(std::vector<uint8_t>(256, 1))).code);
+    EXPECT_EQ(11, copied_result);
+  }
+  EXPECT_EQ(5, host.allocations_);
+  EXPECT_EQ(5, host.releases_);
+  EXPECT_EQ(11, copied_result);
+}
+
 TEST(ExpressionProgramBridge, SharedPreparedHasIndependentConcurrentRunners)
 {
   TestHost plan_host;
@@ -172,13 +257,14 @@ TEST(ExpressionProgramBridge, SharedPreparedHasIndependentConcurrentRunners)
         try {
           {
             constexpr size_t CAPACITY = 65;
-            auto runner = make_runner(shared, &host, CAPACITY);
+            auto runner = make_runner(shared, &host, 3);
             ready.fetch_add(1, std::memory_order_release);
             announced = true;
             while (!start.load(std::memory_order_acquire)) {
               std::this_thread::yield();
             }
             for (int rebound = 0; rebound < REBINDS; ++rebound) {
+              result.outputs_match &= reserve_rows(*runner, shared, CAPACITY) == CAPACITY;
               auto input = input_storage(*runner);
               const size_t rows = rebound % 2 == 0 ? CAPACITY : 3;
               for (size_t row = 0; row < rows; ++row) {
@@ -238,8 +324,8 @@ TEST(ExpressionProgramBridge, SharedPreparedHasIndependentConcurrentRunners)
       SCOPED_TRACE(worker);
       EXPECT_TRUE(results[worker].outputs_match);
       EXPECT_EQ(REBINDS, results[worker].completed);
-      EXPECT_EQ(1, results[worker].allocations);
-      EXPECT_EQ(1, results[worker].releases);
+      EXPECT_EQ(2, results[worker].allocations);
+      EXPECT_EQ(2, results[worker].releases);
       EXPECT_EQ(REBINDS, results[worker].polls);
     }
   }

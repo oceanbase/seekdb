@@ -59,6 +59,11 @@ mod ffi {
             host: *mut IExecutionHost,
             capacity: usize,
         ) -> Result<Box<Runner>>;
+        fn reserve_rows(
+            runner: &mut Runner,
+            program: &Prepared,
+            minimum_capacity: usize,
+        ) -> Result<usize>;
         fn input_storage(runner: &mut Runner) -> &mut [u64];
         fn execute(runner: &mut Runner, program: &Prepared, rows: usize, skip: &[u8]) -> RunStatus;
         fn selection(runner: &Runner) -> &[u64];
@@ -216,13 +221,40 @@ unsafe fn make_runner(
     capacity: usize,
 ) -> Result<Box<Runner>, &'static str> {
     let host = NonNull::new(host).ok_or("missing execution host")?;
+    // SAFETY: the caller keeps host alive through runner destruction.
+    let execution = unsafe { allocate_execution(program, host, capacity) }?;
+    try_box(Runner { execution, host })
+}
+
+// SAFETY: host supplies exclusive storage and outlives the returned execution.
+unsafe fn allocate_execution(
+    program: &Prepared,
+    host: NonNull<ffi::IExecutionHost>,
+    capacity: usize,
+) -> Result<Execution<HostBacking>, &'static str> {
     let words = crate::required_words(&program.program, capacity)
         .map_err(|_| "invalid expression workspace size")?;
-    // SAFETY: the caller owns host until Runner has been destroyed.
+    // SAFETY: the caller keeps host alive until this backing is dropped.
     let backing = unsafe { HostBacking::allocate(host, words) }?;
-    let execution = Execution::new(&program.program, capacity, backing)
-        .map_err(|_| "invalid expression workspace")?;
-    try_box(Runner { execution, host })
+    Execution::new(&program.program, capacity, backing).map_err(|_| "invalid expression workspace")
+}
+
+fn reserve_rows(
+    runner: &mut Runner,
+    program: &Prepared,
+    minimum_capacity: usize,
+) -> Result<usize, &'static str> {
+    if runner.execution.program_id != program.program.id {
+        return Err("expression program does not match runner");
+    }
+    if minimum_capacity > runner.execution.capacity() {
+        // SAFETY: the existing runner owns the live host contract. The exclusive
+        // borrow ends all prior buffer borrows before replacement; C++ callers
+        // must obey the same rule. Allocation failure leaves the old owner live.
+        let execution = unsafe { allocate_execution(program, runner.host, minimum_capacity) }?;
+        runner.execution = execution;
+    }
+    Ok(runner.execution.capacity())
 }
 
 fn input_storage(runner: &mut Runner) -> &mut [u64] {

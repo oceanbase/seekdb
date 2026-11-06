@@ -79,7 +79,7 @@ private:
 class ExpressionProgram final : public expression::IExecutionHost
 {
 public:
-  static int create(ObOperator &owner, ExpressionProgram *&result);
+  static int create(ObOperator &owner, int64_t initial_rows, ExpressionProgram *&result);
   ~ExpressionProgram() override = default;
   int execute(ObBitVector *skip, int64_t rows, bool batch,
               bool &all_filtered, bool &all_active);
@@ -89,6 +89,7 @@ public:
 
 private:
   ExpressionProgram(ObOperator &owner, const CompiledExpressionProgram &compiled);
+  int ensure_capacity(int64_t rows);
   int import_inputs(int64_t rows, bool batch, const ObBitVector *skip);
   void export_root(const ObExpr &expr, size_t node, int64_t rows, bool batch);
   int report_error(const expression::RunStatus &status);

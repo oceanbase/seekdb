@@ -487,7 +487,7 @@ int ObOperator::eval_expression_program(ObBitVector *skip, int64_t rows, bool ba
   used = false;
   if (!expression_program_checked_) {
     expression_program_checked_ = true;
-    ret = ExpressionProgram::create(*this, expression_program_);
+    ret = ExpressionProgram::create(*this, rows, expression_program_);
   }
   if (OB_SUCC(ret) && expression_program_ != nullptr) {
     used = true;
