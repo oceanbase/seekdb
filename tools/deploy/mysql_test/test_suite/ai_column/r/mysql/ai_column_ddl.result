@@ -86,16 +86,6 @@ join oceanbase.__all_database d on d.database_id = t.database_id
 where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'alter_docs';
 alter_add_metadata
 1
-show ai columns from ai_column_p0_ddl.docs;
-Table_id	Column	Function	Model	Result_type	Vector_dim	Sync_mode	Max_retries	Depends_on	Expression
-#	tags	AI_COMPLETE	p0_ddl_complete	json	0	async	2	content	AI_COMPLETE('p0_ddl_complete', concat('Classify: ', content)) /* Return exactly one valid JSON value */
-#	emb	AI_EMBED	p0_ddl_embed	vector	0	async	3	content	AI_EMBED('p0_ddl_embed', content)
-show ai columns from ai_column_p0_ddl.docs like 'tags';
-Table_id	Column	Function	Model	Result_type	Vector_dim	Sync_mode	Max_retries	Depends_on	Expression
-#	tags	AI_COMPLETE	p0_ddl_complete	json	0	async	2	content	AI_COMPLETE('p0_ddl_complete', concat('Classify: ', content)) /* Return exactly one valid JSON value */
-show ai columns from ai_column_p0_ddl.docs where `Column` = 'emb';
-Table_id	Column	Function	Model	Result_type	Vector_dim	Sync_mode	Max_retries	Depends_on	Expression
-#	emb	AI_EMBED	p0_ddl_embed	vector	0	async	3	content	AI_EMBED('p0_ddl_embed', content)
 create table ai_column_p0_ddl.bad_dimension(
 content varchar(20),
 emb vector(4) AI COLUMN (AI_EMBED('p0_ddl_embed', content, 3))

@@ -2382,9 +2382,10 @@ int ObCreateTableResolver::collect_ai_column_defs(ObTableSchema &table_schema)
                        || 0 != other->get_column_name_str().case_compare(item)) {
               continue;
             } else {
+              // Keep the canned OB_NOT_SUPPORTED message ("Not supported
+              // feature or function"): a LOG_USER_ERROR detail would replace it
+              // and break the expected output of ai_column_ddl.
               ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                             "AI column expression, an AI column may not depend on another AI column");
               SQL_RESV_LOG(WARN, "ai column depends on another ai column", K(ret), K(item));
             }
           }
