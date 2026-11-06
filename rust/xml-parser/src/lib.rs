@@ -214,6 +214,7 @@ impl<'a, H: EventHandler> Parser<'a, H> {
         }
         let name = element.name().0;
         validate_qname(name)?;
+        validate_attribute_separators(element.attributes_raw())?;
         let mut attributes = Vec::new();
         for attribute in element.attributes() {
             let attribute = attribute?;
@@ -328,6 +329,12 @@ impl<'a, H: EventHandler> Parser<'a, H> {
             XmlEvent::PI(instruction) => {
                 let target = instruction.target();
                 validate_qname(target)?;
+                if target.contains(&b':') {
+                    return Err(Error::Syntax(
+                        "XML processing-instruction target must be an NCName",
+                    )
+                    .into());
+                }
                 if target.eq_ignore_ascii_case(b"xml") {
                     if self.mode == ParseMode::Content && self.options.content_allow_xml_decl {
                         return Ok(false);
@@ -520,6 +527,27 @@ fn attribute_value(value: &[u8], preserve: bool) -> Result<String, Error> {
     } else {
         Ok(decoded.into_owned())
     }
+}
+
+fn validate_attribute_separators(raw: &[u8]) -> Result<(), Error> {
+    // quick-xml checks attribute quoting but accepts adjacent quoted attributes.
+    // XML requires S between attributes, including namespace declarations.
+    let mut quote = None;
+    for (index, &byte) in raw.iter().enumerate() {
+        match quote {
+            Some(open) if byte == open => {
+                if raw.get(index + 1).is_some_and(|&next| !is_xml_space(next)) {
+                    return Err(Error::Syntax(
+                        "XML attributes must be separated by whitespace",
+                    ));
+                }
+                quote = None;
+            }
+            None if matches!(byte, b'\'' | b'"') => quote = Some(byte),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn escape_predefined(value: &str) -> String {

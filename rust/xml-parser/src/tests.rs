@@ -145,6 +145,86 @@ fn normalizes_xml_newlines_and_attribute_spaces() {
 }
 
 #[test]
+fn rejects_attributes_without_xml_whitespace_separators() {
+    for input in [
+        "<r a='1'b='2'/>",
+        "<r a=\"1\"b=\"2\"/>",
+        "<r a=''b=\"2\"/>",
+        "<r a=\"1\"b=''/>",
+        "<r a='1'b='2'></r>",
+        "<r a=\"1\"b=\"2\"></r>",
+        "<r xmlns:p='urn:p'p:a='2'/>",
+        "<r a='1'\u{a0}b='2'/>",
+    ] {
+        for mode in [ParseMode::Document, ParseMode::Content] {
+            for syntax_check in [false, true] {
+                for preserve_entity_references in [false, true] {
+                    let options = ParseOptions {
+                        syntax_check,
+                        preserve_entity_references,
+                        ..ParseOptions::default()
+                    };
+                    assert!(
+                        matches!(events(input, mode, options), Err(ParseError::Xml(_))),
+                        "input: {input}, mode: {mode:?}, options: {options:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn accepts_xml_whitespace_between_attributes_and_before_tag_end() {
+    for separator in [" ", "\t", "\n", "\r", "\r\n", " \t\r\n "] {
+        for ending in ["/>", "></r>"] {
+            let input = format!("<r a = 'a\"&amp;b'{separator}b = \"c'&amp;d\"{separator}{ending}");
+            for mode in [ParseMode::Document, ParseMode::Content] {
+                let actual = events(&input, mode, ParseOptions::default()).unwrap();
+                assert_eq!(
+                    actual[1],
+                    OwnedEvent::Start(
+                        "r".into(),
+                        vec![
+                            ("a".into(), b"a\"&b".to_vec()),
+                            ("b".into(), b"c'&d".to_vec())
+                        ],
+                        ending == "/>"
+                    ),
+                    "input: {input}, mode: {mode:?}"
+                );
+                assert!(events(
+                    &input,
+                    mode,
+                    ParseOptions {
+                        syntax_check: true,
+                        ..ParseOptions::default()
+                    }
+                )
+                .unwrap()
+                .is_empty());
+            }
+        }
+    }
+}
+
+#[test]
+fn recover_does_not_emit_an_element_with_unseparated_attributes() {
+    for mode in [ParseMode::Document, ParseMode::Content] {
+        let actual = events(
+            "<r a='1'b='2'/>",
+            mode,
+            ParseOptions {
+                recover: true,
+                ..ParseOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(actual, vec![OwnedEvent::StartDocument]);
+    }
+}
+
+#[test]
 fn supports_fragments_cdata_comments_and_processing_instructions() {
     let actual = events(
         " before<a/><![CDATA[x&y]]><!--c--><?pi   data ?><b/>after ",
@@ -156,6 +236,38 @@ fn supports_fragments_cdata_comments_and_processing_instructions() {
     assert!(actual.contains(&OwnedEvent::CData(b"x&y".to_vec())));
     assert!(actual.contains(&OwnedEvent::Comment(b"c".to_vec())));
     assert!(actual.contains(&OwnedEvent::Pi(b"pi".to_vec(), b"data ".to_vec())));
+}
+
+#[test]
+fn processing_instruction_targets_are_namespace_names_without_colons() {
+    for target in ["a:b", ":a", "a:", "a:b:c"] {
+        let input = format!("<?{target} data?><r/>");
+        for mode in [ParseMode::Document, ParseMode::Content] {
+            for syntax_check in [false, true] {
+                assert!(matches!(
+                    events(
+                        &input,
+                        mode,
+                        ParseOptions {
+                            syntax_check,
+                            ..ParseOptions::default()
+                        }
+                    ),
+                    Err(ParseError::Xml(_))
+                ));
+            }
+        }
+    }
+    for target in ["pi", "a-b.c_1", "\u{4e00}a"] {
+        let input = format!("<?{target} data?><r/>");
+        for mode in [ParseMode::Document, ParseMode::Content] {
+            let actual = events(&input, mode, ParseOptions::default()).unwrap();
+            assert!(actual.contains(&OwnedEvent::Pi(
+                target.as_bytes().to_vec(),
+                b"data".to_vec()
+            )));
+        }
+    }
 }
 
 #[test]

@@ -167,7 +167,7 @@ int ObXmlParser::check()
   return ret;
 }
 
-int ObXmlParser::set_xml_decl(const ObString& xml_decl_str) 
+int ObXmlParser::set_xml_decl(const ObString& xml_decl_str)
 {
   INIT_SUCC(ret);
   ObXmlDocument* document = document_;
@@ -181,7 +181,7 @@ int ObXmlParser::set_xml_decl(const ObString& xml_decl_str)
   bool has_version_value = false;
   bool has_encoding_value = false;
   bool has_standalone_value = false;
-  
+
   if (content_parse_) {
     return ret;
   }
@@ -222,7 +222,7 @@ int ObXmlParser::set_xml_decl(const ObString& xml_decl_str)
   return ret;
 }
 
-int ObXmlParser::start_document() 
+int ObXmlParser::start_document()
 {
   INIT_SUCC(ret);
   if (OB_FAIL(this->check())) {
@@ -286,7 +286,7 @@ int ObXmlParser::get_namespace(const ObString& name, bool use_default_ns, ObXmlA
   return ret;
 }
 
-int ObXmlParser::set_element_name(ObXmlElement& element, const ObString& src_name) 
+int ObXmlParser::set_element_name(ObXmlElement& element, const ObString& src_name)
 {
   INIT_SUCC(ret);
   ObIAllocator* allocator = allocator_;
@@ -333,7 +333,7 @@ int ObXmlParser::construct_text_value(const ObString &src_attr_value, ObString &
   return ret;
 }
 
-int ObXmlParser::add_element_attr(ObXmlElement& element, const ObString& src_attr_name, const ObString& src_attr_value) 
+int ObXmlParser::add_element_attr(ObXmlElement& element, const ObString& src_attr_name, const ObString& src_attr_value)
 {
   INIT_SUCC(ret);
   ObIAllocator* allocator = allocator_;
@@ -355,7 +355,7 @@ int ObXmlParser::add_element_attr(ObXmlElement& element, const ObString& src_att
     attr_name_length = src_attr_name.length();
     attr_value_length = src_attr_value.length();
     src_attr_value_str = src_attr_value;
-    
+
     if (OB_SUCC(ret) && attr_name_length > 0) {
       if (src_attr_name[0] == ':') {
         ret = OB_ERR_PARSER_SYNTAX;
@@ -393,7 +393,7 @@ int ObXmlParser::add_element_attr(ObXmlElement& element, const ObString& src_att
         } else if (OB_FAIL(this->push_namespace(attr))) {
         }
       } else if (OB_FAIL(element.add_attribute(attr))) {
-      }   
+      }
     }
   }
   return ret;
@@ -426,7 +426,7 @@ int ObXmlParser::set_element_namespace(ObXmlElement& element) {
   return ret;
 }
 
-int ObXmlParser::start_element(const ObString& name, const XmlAttributeView* attrs, size_t attr_count, bool empty) 
+int ObXmlParser::start_element(const ObString& name, const XmlAttributeView* attrs, size_t attr_count, bool empty)
 {
   INIT_SUCC(ret);
   ObXmlElement* element = nullptr;
@@ -438,7 +438,7 @@ int ObXmlParser::start_element(const ObString& name, const XmlAttributeView* att
   } else if(OB_FAIL(ns_cnt_stack_.push_back(0))) {
   } else if (OB_FAIL(this->set_element_name(*element, name))) {
   }
-  
+
   for (size_t i = 0; OB_SUCC(ret) && i < attr_count; ++i) {
     ObString attr_name;
     ObString attr_value;
@@ -457,12 +457,12 @@ int ObXmlParser::start_element(const ObString& name, const XmlAttributeView* att
   return ret;
 }
 
-int ObXmlParser::end_element(bool empty) 
+int ObXmlParser::end_element(bool empty)
 {
   INIT_SUCC(ret);
   ObXmlElement* element = nullptr;
   if (OB_FAIL(this->check())) {
-  } else if (OB_ISNULL(element = 
+  } else if (OB_ISNULL(element =
                 ObXmlUtil::xml_node_cast<ObXmlElement>(cur_node_, ObMulModeNodeType::M_ELEMENT))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -470,17 +470,17 @@ int ObXmlParser::end_element(bool empty)
     if (OB_FAIL(ObXmlParserBase::end_element())) {
     } else if (OB_FAIL(this->pop_namespace())) {
     }
-  } 
+  }
   return ret;
 }
 
-int ObXmlParser::alloc_text_node(ObMulModeNodeType type, 
-                                        const char* src_value, 
-                                        int value_len, 
-                                        ObXmlText*& node) 
+int ObXmlParser::alloc_text_node(ObMulModeNodeType type,
+                                        const char* src_value,
+                                        int value_len,
+                                        ObXmlText*& node)
 {
   INIT_SUCC(ret);
-  char* str = nullptr; 
+  char* str = nullptr;
   if (OB_FAIL(this->check())) {
   } else if (OB_ISNULL(node = OB_NEWx(ObXmlText, allocator_, type, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -492,10 +492,10 @@ int ObXmlParser::alloc_text_node(ObMulModeNodeType type,
       node->set_value(ObString(value_len, str));
     }
   }
-  return ret; 
+  return ret;
 }
 
-int ObXmlParser::add_text_node(ObMulModeNodeType type, const char* value, int len) 
+int ObXmlParser::add_text_node(ObMulModeNodeType type, const char* value, int len)
 {
   INIT_SUCC(ret);
   ObXmlText* cdata = nullptr;
@@ -520,7 +520,7 @@ int ObXmlParser::characters(const char *ch, int len)
   return ret;
 }
 
-int ObXmlParser::processing_instruction(const ObString& target, const ObString& data) 
+int ObXmlParser::processing_instruction(const ObString& target, const ObString& data)
 {
   INIT_SUCC(ret);
   ObXmlAttribute* pi = nullptr;
