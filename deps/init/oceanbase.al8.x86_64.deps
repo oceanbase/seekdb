@@ -9,7 +9,7 @@ arch=x86_64
 repo=http://mirrors.oceanbase.com/oceanbase/community/stable/al/8/x86_64/
 
 [deps]
-devdeps-gtest-1.8.0-242026020914.al8.x86_64.rpm
+gtest-1.14.0-bin-linux-x86_64-glibc217-20261106-75e97b8357c0.tar.gz url=https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-x86_64-glibc217-20261106-75e97b8357c0.tar.gz sha256=10aa4c2226cbbf48bd68eefbc50963c1aebede4c07bcefb867c5b8fb7329e783
 devdeps-libcurl-static-8.12.1-132025040210.al8.x86_64.rpm
 devdeps-libaio-0.3.112-42024092715.al8.x86_64.rpm
 devdeps-relaxed-rapidjson-1.0.0-132024092715.al8.x86_64.rpm

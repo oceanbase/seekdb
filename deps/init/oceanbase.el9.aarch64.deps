@@ -15,7 +15,7 @@ repo=http://mirrors.oceanbase.com/oceanbase/development-kit/el/9/aarch64/
 
 
 [deps]
-devdeps-gtest-1.8.0-242026020914.el8.aarch64.rpm
+gtest-1.14.0-bin-linux-aarch64-glibc217-20261106-75e97b8357c0.tar.gz url=https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-aarch64-glibc217-20261106-75e97b8357c0.tar.gz sha256=61edbf6caeba64f9f362c1f825a1a0d7f6392a72cd29aed0203a843aa2fc7c63
 devdeps-libcurl-static-8.12.1-132025040210.el8.aarch64.rpm
 devdeps-libaio-0.3.112-12022092915.el8.aarch64.rpm
 devdeps-relaxed-rapidjson-1.0.0-52023011719.el8.aarch64.rpm
