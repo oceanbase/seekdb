@@ -33,6 +33,11 @@ def _windows_sdk(repository_ctx):
         "tools/llvm18": "devtools",
     }.items():
         repository_ctx.symlink(sdk + "/" + source, destination)
+    locked_gtest = sdk + "/include"
+    if repository_ctx.path(locked_gtest).exists:
+        repository_ctx.file("seekdb_deps/.keep", "")
+        repository_ctx.symlink(locked_gtest, "seekdb_deps/include")
+        repository_ctx.symlink(sdk + "/lib", "seekdb_deps/lib")
     redist = repository_ctx.getenv("VCToolsRedistDir")
     if not redist:
         fail("Run the Windows build from a Visual Studio Developer Command Prompt (VCToolsRedistDir is required)")
@@ -94,6 +99,13 @@ def _third_party_headers_repository_impl(repository_ctx):
     repository_ctx.symlink(sdk + "/devtools", "devtools")
     repository_ctx.symlink(libraries, "lib")
     repository_ctx.symlink(libraries64, "lib64")
+    locked_sdk = str(repository_ctx.workspace_root) + "/deps/3rd"
+    if platform == "android":
+        locked_sdk = str(repository_ctx.workspace_root) + "/deps/android"
+    if repository_ctx.path(locked_sdk + "/include").exists:
+        repository_ctx.file("seekdb_deps/.keep", "")
+        repository_ctx.symlink(locked_sdk + "/include", "seekdb_deps/include")
+        repository_ctx.symlink(locked_sdk + "/lib", "seekdb_deps/lib")
     repository_ctx.file("BUILD.bazel", '''load("@seekdb//bazel/third_party:targets.bzl", "sdk_targets")
 package(default_visibility = ["//visibility:public"])
 sdk_targets()

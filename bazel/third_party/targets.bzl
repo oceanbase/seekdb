@@ -9,7 +9,12 @@ def _headers(directory, includes = ["include"]):
     return {"hdrs": ["include/" + directory + "/**/*." + extension for extension in _HEADER_EXTENSIONS], "includes": includes}
 
 SDK_HEADERS = {
-    "gtest": _headers("gtest") | {
+    "gtest": {
+        "hdrs": [
+            "seekdb_deps/include/gtest/**/*.h",
+            "seekdb_deps/include/gmock/**/*.h",
+        ],
+        "includes": ["seekdb_deps/include"],
         "deps": [":gtest_archive"],
         "defines": ["_GLIBCXX_USE_CXX11_ABI=1"],
         "linkopts": select({"@platforms//os:linux": ["-pthread"], "//conditions:default": []}),
@@ -29,7 +34,7 @@ SDK_HEADERS = {
     "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
 }
 SDK_IMPORTS = {
-    "gtest_archive": {"static_library": "lib/libgtest.a"},
+    "gtest_archive": {"static_library": "seekdb_deps/lib/libgtest.a"},
     "libaio": {
         "static_library": "lib/libaio.a",
         "hdrs": ["include/libaio.h"],
@@ -96,7 +101,7 @@ _WINDOWS_HEADER_LIBRARIES = {
 }
 
 def _windows_libraries():
-    cc_import(name = "gtest_archive", static_library = "lib/gtest.lib")
+    cc_import(name = "gtest_archive", static_library = "seekdb_deps/lib/gtest.lib")
     for name, (interface, dll, deps) in _WINDOWS_SHARED.items():
         cc_import(
             name = name,

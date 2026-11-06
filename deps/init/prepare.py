@@ -246,13 +246,10 @@ def populate_profile(profile, stage, archive_directory):
 
 
 def populate_lock(lock_file, stage, archive_directory, system, architecture):
-    prefix = (stage / "vcpkg/x64-windows" if system == "Windows" else
-              stage / "usr/local/oceanbase/deps/devel")
-    prefix.mkdir(parents=True, exist_ok=True)
     for package in locked_packages(lock_file, system, architecture):
         archive = locked_archive(package, archive_directory, stage / "pkg")
         print("Preparing locked package " + package["name"] + " " + package["version"], flush=True)
-        unpack(archive, prefix)
+        unpack(archive, stage)
 
 
 def populate(profile, destination, key, archive_directory, lock_file, system, architecture):
