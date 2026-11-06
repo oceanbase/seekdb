@@ -25,12 +25,14 @@
 #include "sql/ob_result_set.h"
 #include "sql/ob_sql_context.h"
 #include "share/rc/ob_context.h"
+#include "lib/utility/seek1243_drop_context.h"
 
 namespace oceanbase
 {
 namespace lib
 {
 class MemoryContext;
+class Worker;
 }
 namespace sql
 {
@@ -42,6 +44,7 @@ namespace observer
 class ObInnerSQLResult : public common::sqlclient::ObMySQLResult
 {
   friend class ObInnerSQLConnection;
+  friend class ObInnerSQLReadContext;
 public:
   explicit ObInnerSQLResult(
       sql::ObSQLSessionInfo &session,
@@ -124,6 +127,21 @@ private:
 
   static inline int check_extend_value(const common::ObObj &obj);
 private:
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  lib::Seek1243DropKey seek1243_call_key() const;
+  // First member, destroyed last: spans original members, but not the base class.
+  struct Seek1243DestructionTail {
+    void begin(const lib::Seek1243DropKey &key);
+    ~Seek1243DestructionTail();
+    lib::Worker *worker = nullptr;
+    lib::Seek1243DropKey saved;
+    lib::Seek1243DropKey key;
+    int64_t entry = 0;
+    int64_t start = 0;
+    int exceptions = 0;
+  } seek1243_destruction_tail_;
+  lib::Seek1243DropKey seek1243_query_key_;
+#endif
   class MemEntifyDestroyGuard
   {
   public:

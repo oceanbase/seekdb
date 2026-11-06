@@ -176,6 +176,8 @@ cc_library(
         "lib/ob_abort.h",
         "lib/ob_check_macros.h",
         "lib/ob_define.h",
+        "lib/utility/seek1243_drop_context.h",
+        "lib/utility/seek1243_drop_event.h",
         "lib/ob_lib_config.h",
         "lib/ob_running_mode.h",
         "lib/objectpool/ob_cached_allocator.h",

@@ -23,6 +23,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/time/ob_time_utility.h"
 #include <cstring>
+#include "lib/utility/seek1243_drop_context.h"
 
 namespace oceanbase
 {
@@ -167,6 +168,9 @@ struct ObLockWaitNode: public common::SpHashNode
                K_(last_compact_cnt),
                K_(total_update_cnt));
 
+  lib::Seek1243DropKey seek1243_key_;
+  // Constant labels only; never changes queue/control decisions.
+  const char *seek1243_wake_reason_ = "none";
   uint64_t hold_key_;
   ObLink retire_link_;
   bool need_wait_;

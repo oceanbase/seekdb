@@ -26,6 +26,7 @@
 #include "lib/statistic_event/ob_stat_event.h"
 #include "lib/thread/threads.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
+#include "lib/utility/seek1243_drop_event.h"
 
 using namespace oceanbase;
 using namespace oceanbase::lib;
@@ -147,6 +148,27 @@ ObThWorker::Status ObThWorker::check_wait()
 
 inline void ObThWorker::process_request(rpc::ObRequest &req)
 {
+  // Copy while this request is owned, before process/queue paths can release it.
+  const lib::Seek1243DropKey previous_wait_key = req.get_lock_wait_node().seek1243_key_;
+  lib::Seek1243DropKey request_key;
+  request_key.request_generation = req.get_nio_request_generation();
+  request_key.request_recv_ts = req.get_receive_timestamp();
+  const auto &request_trace = req.get_trace_id();
+  request_trace.get_uval(request_key.request_trace);
+  request_key.request_key_available = request_key.request_generation != 0
+      && request_key.request_recv_ts != 0 && request_trace.is_valid();
+  bool same_request = previous_wait_key.request_key_available && request_key.request_key_available
+      && previous_wait_key.request_generation == request_key.request_generation
+      && previous_wait_key.request_recv_ts == request_key.request_recv_ts;
+  for (int i = 0; same_request && i < 4; ++i) {
+    same_request = previous_wait_key.request_trace[i] == request_key.request_trace[i];
+  }
+  common::seek1243::mark(previous_wait_key, "request wait-key check before setup", K(same_request));
+  if (same_request) {
+    request_key.parent_span = previous_wait_key.span;
+    request_key.parent_span_owner_tid = previous_wait_key.span_owner_tid;
+  }
+  lib::Seek1243ContextGuard diagnostic_request_context(*this, request_key);
   // reset retry flags
   can_retry_ = true;
   need_retry_ = false;

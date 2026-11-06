@@ -21,6 +21,8 @@
 
 #include "omt/ob_server_runtime.h"
 #include "observer/ob_inner_sql_connection.h"
+#include "lib/worker.h"
+#include "lib/utility/seek1243_drop_event.h"
 
 namespace oceanbase
 {
@@ -32,6 +34,62 @@ using namespace sql;
 
 namespace observer
 {
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+#define SEEK1243_RESULT_CALL(event, expression) common::seek1243::run( \
+    seek1243_query_key_.active ? THIS_WORKER.seek1243_drop_key() : lib::Seek1243DropKey{}, \
+    event, [&]() { return (expression); })
+#else
+#define SEEK1243_RESULT_CALL(event, expression) (expression)
+#endif
+
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+lib::Seek1243DropKey ObInnerSQLResult::seek1243_call_key() const
+{
+  lib::Seek1243DropKey key = seek1243_query_key_;
+  if (key.active) {
+    const auto &current = THIS_WORKER.seek1243_drop_key();
+    bool same_query = current.active && current.session_id == key.session_id;
+    for (int i = 0; i < 4; ++i) { same_query = same_query && current.trace[i] == key.trace[i]; }
+    const bool direct = current.span == key.span && current.span_owner_tid == key.span_owner_tid;
+    const bool child = current.parent_span == key.span && current.parent_span_owner_tid == key.span_owner_tid;
+    const auto &parent = same_query && (direct || child) ? current : key;
+    key.parent_span = parent.span;
+    key.parent_span_owner_tid = parent.span_owner_tid;
+    key.span = THIS_WORKER.next_seek1243_span();
+    key.span_owner_tid = ob_syscall_gettid();
+    key.worker_timeout_ts = THIS_WORKER.get_timeout_ts();
+  }
+  return key;
+}
+
+void ObInnerSQLResult::Seek1243DestructionTail::begin(const lib::Seek1243DropKey &value)
+{
+  key = value;
+  worker = &THIS_WORKER;
+  saved = worker->seek1243_drop_key();
+  worker->seek1243_drop_key() = key;
+  exceptions = common::seek1243::unwind_count();
+  if (key.active) {
+    entry = ObTimeUtility::current_monotonic_raw_time();
+    common::seek1243::mark(key, "result destruction including members", "edge", "begin", "entry_raw_us", entry);
+    start = ObTimeUtility::current_monotonic_raw_time();
+  }
+}
+
+ObInnerSQLResult::Seek1243DestructionTail::~Seek1243DestructionTail()
+{
+  if (nullptr != worker) {
+    if (key.active && common::seek1243::unwind_count() == exceptions) {
+      const int64_t end = ObTimeUtility::current_monotonic_raw_time();
+      common::seek1243::mark(key, "result destruction including members", "edge", "end",
+          "ret_available", false, "entry_raw_us", entry, "call_start_raw_us", start,
+          "call_end_raw_us", end, "begin_log_interval_us", start - entry, "call_elapsed_us", end - start);
+    }
+    worker->seek1243_drop_key() = saved;
+  }
+}
+#endif
+
 inline int ObInnerSQLResult::check_extend_value(const common::ObObj &obj)
 {
   int ret = OB_SUCCESS;
@@ -100,12 +158,27 @@ int ObInnerSQLResult::init()
 
 ObInnerSQLResult::~ObInnerSQLResult()
 {
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  seek1243_destruction_tail_.begin(seek1243_call_key());
+#endif
   close();
   if (result_set_ != nullptr) {
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+    common::seek1243::Call destroy_call(THIS_WORKER.seek1243_drop_key(), "result_set destructor");
+#endif
     result_set_->~ObResultSet();
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+    destroy_call.finish_unavailable();
+#endif
   }
   if (runtime_ != nullptr) {
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+    common::seek1243::Call unlock_call(THIS_WORKER.seek1243_drop_key(), "result runtime unlock");
+#endif
     runtime_->unlock();
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+    unlock_call.finish_unavailable();
+#endif
     runtime_ = nullptr;
   }
 }
@@ -127,14 +200,14 @@ int ObInnerSQLResult::open()
     WITH_CONTEXT(mem_context_) {
       if (opened_) {
         ret = OB_INIT_TWICE;
-      } else if (OB_FAIL(result_set_->open())) {
+      } else if (OB_FAIL(SEEK1243_RESULT_CALL("result_set open", result_set_->open()))) {
         result_set_->get_exec_context().get_das_ctx().record_access_error(ret);
         // move after precess_retry().
 //        result_set_->close();
       } else if (is_read_&& is_select) {
         //prefetch 1 row for throwing error code and retry
         opened_ = true;
-        if (OB_FAIL(result_set_->get_next_row(row_))) {
+        if (OB_FAIL(SEEK1243_RESULT_CALL("result_set prefetch", result_set_->get_next_row(row_)))) {
           if (OB_ITER_END == ret) {
             iter_end_ = true;
             ret = OB_SUCCESS;
@@ -156,6 +229,12 @@ int ObInnerSQLResult::open()
 int ObInnerSQLResult::close()
 {
   int ret = OB_SUCCESS;
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  const auto key = seek1243_call_key();
+  lib::Seek1243ContextGuard context(THIS_WORKER, key);
+  common::seek1243::Scope scope(key, "result close", ret);
+  common::seek1243::mark(key, "result close state", K(opened_), K(is_inited_));
+#endif
   // close can be executed too if result set not open.
   if (opened_) {
     // opened=true imply is_inited=true
@@ -170,6 +249,11 @@ int ObInnerSQLResult::close()
 int ObInnerSQLResult::force_close()
 {
   int ret = OB_SUCCESS;
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  const auto key = seek1243_call_key();
+  lib::Seek1243ContextGuard context(THIS_WORKER, key);
+  common::seek1243::Scope scope(key, "result force_close", ret);
+#endif
   if (OB_FAIL(inner_close())) {
   }
   column_map_.clear();
@@ -179,6 +263,9 @@ int ObInnerSQLResult::force_close()
 int ObInnerSQLResult::inner_close()
 {
   int ret = OB_SUCCESS;
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  common::seek1243::Scope scope(THIS_WORKER.seek1243_drop_key(), "result inner_close", ret);
+#endif
   SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
   ObInnerSQLSessionGuard sess_guard(&session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
@@ -186,7 +273,7 @@ int ObInnerSQLResult::inner_close()
   ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
 
   WITH_CONTEXT(mem_context_) {
-    if (OB_FAIL(result_set_->close())) {
+    if (OB_FAIL(SEEK1243_RESULT_CALL("result_set close", result_set_->close()))) {
       result_set_->get_exec_context().get_das_ctx().record_access_error(ret);
     }
   }
@@ -199,6 +286,11 @@ int ObInnerSQLResult::inner_close()
 int ObInnerSQLResult::next()
 {
   int ret = OB_SUCCESS;
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  const auto key = seek1243_call_key();
+  lib::Seek1243ContextGuard context(THIS_WORKER, key);
+  common::seek1243::Scope scope(key, "result next", ret);
+#endif
   ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
   if (!opened_) {
@@ -212,12 +304,11 @@ int ObInnerSQLResult::next()
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     WITH_CONTEXT(mem_context_) {
-      if (OB_FAIL(result_set_->get_next_row(row_))) {
+      if (OB_FAIL(SEEK1243_RESULT_CALL("result_set get_next_row", result_set_->get_next_row(row_)))) {
         if (OB_ITER_END != ret) {
           result_set_->get_exec_context().get_das_ctx().record_access_error(ret);
         }
       }
-
     }
   }
   return ret;
@@ -634,3 +725,4 @@ int ObInnerSQLResult::print_info() const
 }
 } // end of namespace observer
 } // end of namespace oceanbase
+#undef SEEK1243_RESULT_CALL

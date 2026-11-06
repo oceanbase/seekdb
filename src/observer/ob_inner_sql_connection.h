@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 
+#include "lib/utility/seek1243_drop_context.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "lib/guard/ob_weak_guard.h"
 #include "storage/tx/ob_multi_data_source.h"  // ObRegisterMdsFlag complete type(previously hidden behind the rpc_struct include chain)
@@ -159,6 +160,7 @@ public:
   virtual void set_seek1243_drop_context(const uint64_t table_id,
                                          const int64_t table_type) override;
   virtual void clear_seek1243_drop_context() override;
+  const lib::Seek1243DropKey &seek1243_last_query_key() const { return seek1243_last_query_key_; }
   virtual bool get_seek1243_drop_context(uint64_t &table_id,
                                          int64_t &table_type,
                                          uint64_t &session_id,
@@ -342,6 +344,7 @@ private:
   int64_t user_timeout_;
   sql::ObFreeSessionCtx free_session_ctx_;
   bool inner_sess_query_locked_;
+  lib::Seek1243DropKey seek1243_last_query_key_;
   bool seek1243_drop_context_active_;
   uint64_t seek1243_drop_table_id_;
   int64_t seek1243_drop_table_type_;

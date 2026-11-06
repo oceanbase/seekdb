@@ -37,6 +37,9 @@
 #include "logservice/ob_log_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
+#include "lib/worker.h"
+#include "lib/utility/seek1243_drop_event.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -2675,6 +2678,10 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
   int ret = OB_TRY_LOCK_ROW_CONFLICT;
   ObLockWaitMgr *lock_wait_mgr = NULL;
   ObTransID conflict_tx_id = lock_state.lock_trans_id_;
+  const lib::Seek1243DropKey diagnostic_key = THIS_WORKER.seek1243_drop_key();
+  common::seek1243::Scope diagnostic_scope(diagnostic_key, "row conflict producer", ret);
+  common::seek1243::mark(diagnostic_key, "initial row conflict", "tablet_id", key_.get_tablet_id().id(),
+      "initial_holder", conflict_tx_id.get_id(), "requester_tx", acc_ctx.get_tx_id().get_id());
   ObMemtableCtx *mem_ctx = acc_ctx.get_mem_ctx();
   int64_t current_ts = common::ObClockGenerator::getClock();
   int64_t lock_wait_start_ts = mem_ctx->get_lock_wait_start_ts() > 0
@@ -2709,6 +2716,9 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
         locked = lock_state.is_locked_ && lock_state.lock_trans_id_ != tx_id;
         wait_on_row = !lock_state.is_delayed_cleanout_;
       }
+      common::seek1243::mark(diagnostic_key, "row conflict recheck", K(ret),
+          "holder_valid", OB_SUCC(ret), "observed_holder", OB_SUCC(ret) ? lock_state.lock_trans_id_.get_id() : 0,
+          "locked", OB_SUCC(ret) ? locked : false, "wait_on_row", OB_SUCC(ret) ? wait_on_row : false);
       return ret;
     });
     tmp_ret = lock_wait_mgr->post_lock(OB_TRY_LOCK_ROW_CONFLICT,

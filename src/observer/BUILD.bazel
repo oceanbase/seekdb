@@ -201,7 +201,7 @@ _OBSERVER_HEADER_NATIVE_DEPS = [
 cc_library(
     name = "observer_internal_interface",
     hdrs = glob(["**/*.h", "**/*.ipp"], allow_empty = True),
-    deps = _OBSERVER_HEADER_NATIVE_DEPS,
+    deps = _OBSERVER_HEADER_NATIVE_DEPS + ["//src/oblib:oblib_base"],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = ["//src/wasm:__pkg__"],

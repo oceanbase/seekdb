@@ -19,6 +19,8 @@
 #include "sql/ob_query_retry_ctrl.h"
 #include "data_plane/memtable/ob_lock_wait_service.h"
 #include "share/rc/ob_server_runtime.h"
+#include "lib/worker.h"
+#include "lib/utility/seek1243_drop_event.h"
 
 namespace oceanbase
 {
@@ -87,9 +89,14 @@ void ObRetryPolicy::sleep_before_local_retry(ObRetryParam &v,
     if (sleep_us > 0) {
       LOG_INFO("will sleep", K(sleep_us), K(remain_us), K(base_sleep_us),
                K(retry_sleep_type), K(v.stmt_retry_times_), K(v.err_), K(timeout_timestamp));
+      const lib::Seek1243DropKey diagnostic_key = THIS_WORKER.seek1243_drop_key();
+      common::seek1243::Call diagnostic_sleep(diagnostic_key, "local retry sleep and scheduling");
+      common::seek1243::mark(diagnostic_key, "local retry sleep parameters", K(sleep_us), K(base_sleep_us),
+          K(timeout_timestamp), "original_err", v.err_);
       THIS_WORKER.sched_wait();
       ob_usleep(static_cast<uint32_t>(sleep_us));
       THIS_WORKER.sched_run();
+      diagnostic_sleep.finish(OB_SUCCESS);
       if (THIS_WORKER.is_timeout()) {
         v.client_ret_ = OB_TIMEOUT;
         v.retry_type_ = RETRY_TYPE_NONE;

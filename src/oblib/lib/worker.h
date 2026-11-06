@@ -21,6 +21,7 @@
 #include "lib/ob_define.h"
 #include "lib/rc/context.h"
 #include "lib/runtime.h"
+#include "lib/utility/seek1243_drop_context.h"
 
 namespace oceanbase
 {
@@ -106,6 +107,8 @@ public:
 public:
   static LogReductionMode get_log_reduction_mode();
   static void set_log_reduction_mode(const LogReductionMode log_reduction_mode);
+  Seek1243DropKey &seek1243_drop_key() { return seek1243_drop_key_; }
+  uint64_t next_seek1243_span() { return ++seek1243_span_; }
   static Worker& self();
   static void set_worker_to_thread_local(Worker *worker);
 
@@ -139,6 +142,8 @@ private:
   // Used to prevent the thread holding the lock from being suspended by check_wait
   bool disable_wait_;
 
+  Seek1243DropKey seek1243_drop_key_;
+  uint64_t seek1243_span_ = 0;
   DISALLOW_COPY_AND_ASSIGN(Worker);
 }; // end of class Worker
 
@@ -172,6 +177,20 @@ inline Worker &this_worker()
 }
 
 #define THIS_WORKER oceanbase::lib::Worker::self()
+
+// Restore the captured Worker object, not whichever thread happens to run later.
+class Seek1243ContextGuard {
+public:
+  Seek1243ContextGuard(Worker &worker, const Seek1243DropKey &key, bool enabled = true)
+      : worker_(worker), saved_(worker.seek1243_drop_key()), enabled_(enabled)
+  { if (enabled_) { worker_.seek1243_drop_key() = key; } }
+  ~Seek1243ContextGuard() { if (enabled_) { worker_.seek1243_drop_key() = saved_; } }
+private:
+  Worker &worker_;
+  Seek1243DropKey saved_;
+  bool enabled_;
+  DISALLOW_COPY_AND_ASSIGN(Seek1243ContextGuard);
+};
 
 class DisableSchedInterGuard
 {

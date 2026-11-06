@@ -67,6 +67,9 @@ public:
 
   // process result after result open
   virtual int process_result(sql::ObResultSet &res) = 0;
+  // Restricted diagnostic evidence, not a redacted or necessarily complete SQL.
+  virtual bool seek1243_sql_view(const char *&ptr, int64_t &length) const
+  { ptr = NULL; length = 0; return false; }
 
   virtual int64_t to_string(char *, const int64_t) const { return 0; }
 };

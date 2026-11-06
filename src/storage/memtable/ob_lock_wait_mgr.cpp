@@ -32,6 +32,9 @@ void request_finish_callback()
   memtable::ObLockWaitMgr::clear_thread_node();
 }
 
+#include "lib/worker.h"
+#include "lib/utility/seek1243_drop_event.h"
+
 namespace oceanbase
 {
 
@@ -292,6 +295,10 @@ bool ObLockWaitMgr::wait(Node* node)
   uint64_t hash = node->hash();
   uint64_t last_lock_seq = node->lock_seq_;
   bool is_standalone_task = false;
+  const lib::Seek1243DropKey diagnostic_key = node->seek1243_key_;
+  bool diagnostic_inserted = false;
+  int64_t diagnostic_insert_raw_us = 0;
+  common::seek1243::mark(diagnostic_key, "wait entry", K(hash), K(last_lock_seq));
   ATOMIC_INC(&total_wait_node_);
   if (has_set_stop()) {
     // wait fail if _stop
@@ -305,6 +312,10 @@ bool ObLockWaitMgr::wait(Node* node)
       while(-EAGAIN == (err = hash_.insert(node)))
         ;
       assert(0 == err);
+      diagnostic_inserted = true;
+      if (diagnostic_key.active) {
+        diagnostic_insert_raw_us = ObTimeUtility::current_monotonic_raw_time();
+      }
 
       // 2. double checkcheck_wakeup_seq
       if (!is_standalone_task && check_wakeup_seq(hash, last_lock_seq, is_standalone_task)) {
@@ -335,6 +346,8 @@ bool ObLockWaitMgr::wait(Node* node)
   if (!wait_succ) {
     ATOMIC_DEC(&total_wait_node_);
   }
+  common::seek1243::mark(diagnostic_key, "wait return", K(hash), K(last_lock_seq),
+      K(diagnostic_inserted), K(diagnostic_insert_raw_us), K(wait_succ), K(is_standalone_task));
   TRANS_LOG(TRACE, "LockWaitMgr.wait", K(is_standalone_task),
             K(wait_succ), K(has_set_stop()), KPC(node));
   return wait_succ;
@@ -347,7 +360,10 @@ void ObLockWaitMgr::wakeup(uint64_t hash)
     node = fetch_waiter(hash);
 
     if (NULL != node) {
+      const lib::Seek1243DropKey diagnostic_key = node->seek1243_key_;
+      common::seek1243::mark(diagnostic_key, "wakeup fetched waiter", K(hash));
       node->on_retry_lock(hash);
+      node->seek1243_wake_reason_ = "wakeup";
       (void)repost(node);
     }
     // continue loop to wake up all requests waitting on the transaction.
@@ -436,16 +452,19 @@ ObLink* ObLockWaitMgr::check_timeout()
       uint64_t curr_lock_seq = ATOMIC_LOAD(&sequence_[(hash >> 1)% LOCK_BUCKET_COUNT]);
       if (iter->is_timeout() || has_set_stop()) {
         TRANS_LOG_RET(WARN, OB_TIMEOUT, "LOCK_MGR: req wait lock timeout", K(curr_lock_seq), K(last_lock_seq), K(*iter));
+        iter->seek1243_wake_reason_ = "timeout_or_stop";
         need_check_session = true;
         node2del = iter;
         // it needs to be placed before the judgment of session_id to prevent the
         // abnormal case which session_id equals 0 from causing the problem of missing wakeup
       } else if (iter->is_standalone_task() && iter->get_run_ts() == 0) {
+        iter->seek1243_wake_reason_ = "standalone";
         node2del = iter;
         need_check_session = true;
         iter->on_retry_lock(hash);
         TRANS_LOG(INFO, "standalone task should be waken up", K(*iter), K(curr_lock_seq));
       } else if (iter->get_run_ts() > 0 && ObTimeUtility::current_time() > iter->get_run_ts()) {
+        iter->seek1243_wake_reason_ = "run_ts";
         node2del = iter;
         need_check_session = true;
         // it is desgined to fix the case once the mvcc_write does not try
@@ -459,6 +478,7 @@ ObLink* ObLockWaitMgr::check_timeout()
                  && is_deadlocked_session_(deadlocked_session,
                                            iter->sessid_)) {
         node2del = iter;
+        iter->seek1243_wake_reason_ = "deadlocked_session";
         TRANS_LOG(INFO, "session is deadlocked, pop the request",
                   "sessid", iter->sessid_, K(*iter));
       } else {
@@ -471,11 +491,13 @@ ObLink* ObLockWaitMgr::check_timeout()
         if (OB_FAIL(guard.acquire(iter->sessid_))) {
         } else if (OB_FAIL(guard.get_lock_wait_facts(session_facts))) {
         } else if (OB_UNLIKELY(session_facts.is_terminated_)) {
+          iter->seek1243_wake_reason_ = "session_terminated";
           // session is killed, just pop the request
           node2del = iter;
           TRANS_LOG(INFO, "session is killed, pop the request",  "sessid", iter->sessid_, K(*iter),
                     "terminate_error", session_facts.terminate_error_);
         } else if (NULL == node2del && curr_ts - iter->lock_ts_ > MAX_WAIT_TIME_US/2) {
+          iter->seek1243_wake_reason_ = "long_wait_scan";
           // in order to prevent missing to wakeup request, so we force to wakeup every 5s
           node2del = iter;
           iter->on_retry_lock(hash);
@@ -530,7 +552,11 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
                              ObFunction<int(bool &, bool &)> &rechecker)
 {
   int ret = OB_SUCCESS;
+  const lib::Seek1243DropKey diagnostic_key = THIS_WORKER.seek1243_drop_key();
+  common::seek1243::Scope diagnostic_scope(diagnostic_key, "post_lock preparation", ret);
   Node *node = NULL;
+  common::seek1243::mark(diagnostic_key, "post_lock inputs", "tablet_id", tablet_id.id(),
+      "passed_holder", holder_tx_id.get_id(), "requester_tx", tx_id.get_id());
   if (OB_NOT_NULL(node = get_thread_node())) {
     Key key(&row_key);
     uint64_t &hold_key = get_thread_hold_key();
@@ -540,8 +566,10 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
       int64_t row_lock_seq = get_seq(row_hash);
       int64_t tx_lock_seq = get_seq(tx_hash);
       bool locked = false, wait_on_row = true;
-      if (OB_FAIL(rechecker(locked, wait_on_row))) {
+      if (OB_FAIL(common::seek1243::run(diagnostic_key, "post_lock recheck",
+          [&]() { return rechecker(locked, wait_on_row); }))) {
       } else if (locked) {
+        common::seek1243::mark(diagnostic_key, "post_lock recheck locked", K(wait_on_row), K(row_hash), K(tx_hash));
         uint64_t hash = wait_on_row ? row_hash : tx_hash;
         if (hold_key == hash) {
           hold_key = 0;
@@ -551,7 +579,8 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
         if (OB_ISNULL(tx_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>())) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "ObTransService is null", K(sess_id), K(tx_id), K(holder_tx_id));
-        } else if (OB_FAIL(tx_service->get_trans_start_session_id(holder_tx_id, holder_session_id))) {
+        } else if (OB_FAIL(common::seek1243::run(diagnostic_key, "post_lock holder session lookup",
+            [&]() { return tx_service->get_trans_start_session_id(holder_tx_id, holder_session_id); }))) {
         } else {
           ObCStringHelper helper;
           const char *row_key_str = helper.convert(row_key);
@@ -571,6 +600,10 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
                       holder_session_id,
                       tx_id,
                       holder_tx_id);
+            node->seek1243_key_ = diagnostic_key;
+            node->seek1243_wake_reason_ = "none";
+            common::seek1243::mark(diagnostic_key, "wait node prepared", "wait_hash", hash,
+                "tablet_id", tablet_id.id(), "passed_holder", holder_tx_id.get_id(), K(holder_session_id));
             node->set_need_wait();
             advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::CONFLICTED);
           }
@@ -595,6 +628,10 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
 {
   int ret = OB_SUCCESS;
   Node *node = NULL;
+  const lib::Seek1243DropKey diagnostic_key = THIS_WORKER.seek1243_drop_key();
+  common::seek1243::Scope diagnostic_scope(diagnostic_key, "table lock preparation", ret);
+  common::seek1243::mark(diagnostic_key, "table lock inputs", "tablet_id", tablet_id.id(),
+      "passed_holder", holder_tx_id.get_id(), "requester_tx", tx_id.get_id());
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -611,14 +648,16 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
     }
     int64_t lock_seq = get_seq(hash);
     bool need_wait = false;
-    if (OB_FAIL(check_need_wait(need_wait))) {
+    if (OB_FAIL(common::seek1243::run(diagnostic_key, "table lock recheck",
+        [&]() { return check_need_wait(need_wait); }))) {
     } else if (need_wait) {
       transaction::ObTransService *tx_service = nullptr;
       uint32_t holder_session_id = common::INVALID_SESSID;
       if (OB_ISNULL(tx_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(ERROR, "ObTransService is null", K(sess_id), K(tx_id), K(holder_tx_id));
-      } else if (OB_FAIL(tx_service->get_trans_start_session_id(holder_tx_id, holder_session_id))) {
+      } else if (OB_FAIL(common::seek1243::run(diagnostic_key, "post_lock holder session lookup",
+            [&]() { return tx_service->get_trans_start_session_id(holder_tx_id, holder_session_id); }))) {
       } else {
         node->set((void*)node,
                   hash,
@@ -632,6 +671,10 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
                   holder_session_id,
                   tx_id,
                   holder_tx_id);
+        node->seek1243_key_ = diagnostic_key;
+        node->seek1243_wake_reason_ = "none";
+        common::seek1243::mark(diagnostic_key, "table wait node prepared", "wait_hash", hash,
+            "tablet_id", tablet_id.id(), "passed_holder", holder_tx_id.get_id(), K(holder_session_id));
         node->set_need_wait();
         node->set_lock_mode(lock_mode);
         advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::CONFLICTED);
@@ -645,6 +688,12 @@ int ObLockWaitMgr::repost(Node* node)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
+  const lib::Seek1243DropKey diagnostic_key = node->seek1243_key_;
+  const uint64_t diagnostic_hash = node->hash();
+  const char *diagnostic_reason = node->seek1243_wake_reason_;
+  common::seek1243::Scope diagnostic_scope(diagnostic_key, "repost", ret);
+  common::seek1243::mark(diagnostic_key, "repost ownership before transfer", "wait_hash", diagnostic_hash,
+      "wake_reason", diagnostic_reason);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     TRANS_LOG(ERROR, "lock wait mgr not inited", K(ret));
@@ -680,6 +729,7 @@ int ObLockWaitMgr::transform_row_lock_to_tx_lock(const ObTabletID &tablet_id,
   while (NULL != (node = fetch_waiter(hash_row_key))) {
     ObTransID self_tx_id(node->tx_id_);
     ObTransDeadlockDetectorAdapter::change_detector_waiting_obj_from_row_to_trans(self_tx_id, tx_id);
+    common::seek1243::mark(node->seek1243_key_, "wait object row to transaction", K(hash_row_key), K(hash_tx_id), K(lock_seq));
     node->change_hash(hash_tx_id, lock_seq);
 
     if (!wait(node)) {

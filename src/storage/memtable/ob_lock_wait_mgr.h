@@ -214,6 +214,8 @@ public:
   // local variables, thread_node and hold_key.
   void setup(Node &node, int64_t recv_ts)
   {
+    node.seek1243_key_ = {};
+    node.seek1243_wake_reason_ = "none";
     node.reset_need_wait();
     node.recv_ts_ = recv_ts;
     get_thread_node() = &node;

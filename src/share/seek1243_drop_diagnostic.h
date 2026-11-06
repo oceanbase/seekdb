@@ -37,6 +37,8 @@ class ObISQLClient;
 #include "common/ob_timeout_ctx.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/time/ob_time_utility.h"
+#include "lib/worker.h"
+#include "lib/utility/seek1243_drop_event.h"
 
 namespace oceanbase
 {
@@ -45,10 +47,28 @@ namespace share
 namespace seek1243
 {
 
-inline uint64_t current_trace_id()
+inline common::ObCurTraceId::TraceId current_trace_id()
 {
-  const uint64_t *trace_id = common::ObCurTraceId::get();
-  return NULL == trace_id ? 0 : trace_id[0];
+  common::ObCurTraceId::TraceId trace_id;
+  trace_id.set(common::ObCurTraceId::get());
+  return trace_id;
+}
+
+inline lib::Seek1243DropKey stage_event_key(uint64_t table_id, int64_t table_type,
+                                               uint64_t session_id, int64_t inner_tx_id)
+{
+  lib::Seek1243DropKey key = THIS_WORKER.seek1243_drop_key();
+  key.active = true;
+  key.stage_table_id = table_id;
+  key.stage_table_type = table_type;
+  key.session_id = session_id;
+  key.inner_tx_id = inner_tx_id;
+  const uint64_t *trace = common::ObCurTraceId::get();
+  for (int i = 0; i < 4; ++i) { key.trace[i] = NULL == trace ? 0 : trace[i]; }
+  const common::ObTimeoutCtx &ctx = common::ObTimeoutCtx::get_ctx();
+  key.ctx_abs_deadline_us = ctx.is_timeout_set() ? ctx.get_abs_timeout() : 0;
+  key.worker_timeout_ts = THIS_WORKER.get_timeout_ts();
+  return key;
 }
 
 // The context belongs to the SQL connection, not to a worker thread.  This is
@@ -115,7 +135,7 @@ public:
                          ? common::ObTimeoutCtx::get_ctx().get_abs_timeout() : 0),
         session_id_(0),
         inner_tx_id_(0)
-  {}
+  { diagnostic_call_.begin(stage_event_key(table_id_, table_type_, session_id_, inner_tx_id_), stage_); }
 
   DropStageScope(common::ObISQLClient &client,
                  const char *stage,
@@ -137,10 +157,12 @@ public:
       (void)conn->get_seek1243_drop_context(
           context_table_id, context_table_type, session_id_, inner_tx_id_);
     }
+    diagnostic_call_.begin(stage_event_key(table_id_, table_type_, session_id_, inner_tx_id_), stage_);
   }
 
   ~DropStageScope()
   {
+    if (common::seek1243::unwind_count() == exceptions_) { diagnostic_call_.finish(ret_); }
     const int64_t monotonic_end_us = common::ObTimeUtility::current_monotonic_raw_time();
     const int64_t wall_end_us = common::ObTimeUtility::current_time();
     LOG_INFO("seek1243 drop diagnostic table boundary",
@@ -160,6 +182,8 @@ private:
   const int64_t deadline_us_;
   uint64_t session_id_;
   int64_t inner_tx_id_;
+  common::seek1243::Call diagnostic_call_;
+  int exceptions_ = common::seek1243::unwind_count();
 };
 
 template <typename Fn>
@@ -172,7 +196,9 @@ int run_drop_stage(const char *stage,
   const int64_t monotonic_start_us = common::ObTimeUtility::current_monotonic_raw_time();
   const common::ObTimeoutCtx &timeout_ctx = common::ObTimeoutCtx::get_ctx();
   const int64_t deadline_us = timeout_ctx.is_timeout_set() ? timeout_ctx.get_abs_timeout() : 0;
+  common::seek1243::Call diagnostic_call(stage_event_key(table_id, table_type, 0, 0), stage);
   const int ret = fn();
+  diagnostic_call.finish(ret);
   const int64_t monotonic_end_us = common::ObTimeUtility::current_monotonic_raw_time();
   const int64_t wall_end_us = common::ObTimeUtility::current_time();
   LOG_INFO("seek1243 drop diagnostic stage",
@@ -193,6 +219,10 @@ int run_drop_connection_stage(common::ObISQLClient &client,
   int64_t context_table_type = 0;
   uint64_t session_id = 0;
   int64_t inner_tx_id = 0;
+  lib::Seek1243DropKey stage_key = THIS_WORKER.seek1243_drop_key();
+  stage_key.stage_table_id = table_id;
+  stage_key.stage_table_type = table_type;
+  lib::Seek1243ContextGuard stage_context(THIS_WORKER, stage_key);
   common::sqlclient::ObISQLConnection *conn = client.get_connection();
   if (NULL != conn && conn->get_seek1243_drop_context(
           context_table_id, context_table_type, session_id, inner_tx_id)) {
@@ -201,7 +231,19 @@ int run_drop_connection_stage(common::ObISQLClient &client,
   const int64_t monotonic_start_us = common::ObTimeUtility::current_monotonic_raw_time();
   const common::ObTimeoutCtx &timeout_ctx = common::ObTimeoutCtx::get_ctx();
   const int64_t deadline_us = timeout_ctx.is_timeout_set() ? timeout_ctx.get_abs_timeout() : 0;
+  lib::Seek1243DropKey event_key = stage_key;
+  event_key.active = true;
+  event_key.drop_table_id = context_table_id;
+  event_key.drop_table_type = context_table_type;
+  event_key.session_id = session_id;
+  event_key.inner_tx_id = inner_tx_id;
+  event_key.ctx_abs_deadline_us = deadline_us;
+  event_key.worker_timeout_ts = THIS_WORKER.get_timeout_ts();
+  const uint64_t *trace = common::ObCurTraceId::get();
+  for (int i = 0; i < 4; ++i) { event_key.trace[i] = NULL == trace ? 0 : trace[i]; }
+  common::seek1243::Call diagnostic_call(event_key, stage);
   const int ret = fn();
+  diagnostic_call.finish(ret);
   const int64_t monotonic_end_us = common::ObTimeUtility::current_monotonic_raw_time();
   const int64_t wall_end_us = common::ObTimeUtility::current_time();
   LOG_INFO("seek1243 drop diagnostic table boundary",

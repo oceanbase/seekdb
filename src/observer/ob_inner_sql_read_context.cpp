@@ -15,6 +15,8 @@
  */
 
 #include "ob_inner_sql_read_context.h"
+#include "lib/worker.h"
+#include "lib/utility/seek1243_drop_event.h"
 
 namespace oceanbase
 {
@@ -31,11 +33,19 @@ ObInnerSQLReadContext::ObInnerSQLReadContext(ObInnerSQLConnection &conn)
 
 ObInnerSQLReadContext::~ObInnerSQLReadContext()
 {
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  const auto key = result_.seek1243_call_key();
+  lib::Seek1243ContextGuard context(THIS_WORKER, key);
+  common::seek1243::Call body(key, "read context destructor body");
+#endif
   ObInnerSQLConnection *conn =
       static_cast<ObInnerSQLConnection *>(conn_guard_.get_ptr());
   if (OB_NOT_NULL(conn) && this == conn->get_prev_read_ctx()) {
     conn->get_prev_read_ctx() = NULL;
   }
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  body.finish_unavailable();
+#endif
 }
 
 } // end of namespace observer
