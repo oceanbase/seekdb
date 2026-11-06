@@ -18,6 +18,7 @@
 #include "ob_expr_ai_embed.h"
 #include "query/ai/ob_ai_endpoint_resolver.h"
 #include "share/rc/ob_server_runtime.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -135,9 +136,103 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   return ret;
 }
 
-int ObExprAIEmbed::cg_expr(ObExprCGCtx &expr_cg_ctx, 
+int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
+                                       const ObBitVector &skip, const int64_t batch_size)
+{
+  int ret = OB_SUCCESS;
+  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+  } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
+  } else if (expr.arg_cnt_ == 3 && OB_FAIL(expr.args_[2]->eval_batch(ctx, skip, batch_size))) {
+  } else {
+    ObDatumVector model_vec = expr.args_[0]->locate_expr_datumvector(ctx);
+    ObDatumVector content_vec = expr.args_[1]->locate_expr_datumvector(ctx);
+    ObDatumVector dim_vec = (expr.arg_cnt_ == 3)
+        ? expr.args_[2]->locate_expr_datumvector(ctx) : ObDatumVector();
+
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
+
+    ObString model_id;
+    int64_t dim = 0;
+    bool resolved = false;
+    ObArray<ObString> contents;
+    ObArray<int64_t> row_idx;
+    for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
+      if (skip.at(j) || eval_flags.at(j)) {
+        continue;
+      }
+      eval_flags.set(j);
+      if (model_vec.at(j)->is_null() || content_vec.at(j)->is_null()) {
+        res_datum.at(j)->set_null();
+      } else {
+        ObString content = content_vec.at(j)->get_string();
+        ObString model = model_vec.at(j)->get_string();
+        if (model.empty() || content.empty()) {
+          res_datum.at(j)->set_null();
+        } else {
+          if (!resolved) {
+            model_id = model;
+            if (expr.arg_cnt_ == 3) {
+              dim = dim_vec.at(j)->get_int();
+            }
+            resolved = true;
+          }
+          if (OB_FAIL(contents.push_back(content))) {
+          } else if (OB_FAIL(row_idx.push_back(j))) {
+          }
+        }
+      }
+    }
+
+    if (OB_SUCC(ret) && resolved) {
+      ObAIFuncExprInfo *info = nullptr;
+      share::ObAiModelEndpointInfo resolved_endpoint;
+      query::ObIAiEndpointResolver *endpoint_resolver =
+          ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
+      ObJsonObject *config = nullptr;
+      ObJsonInt *dim_json = nullptr;
+      if (dim > 0) {
+        if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(temp_allocator, config))) {
+        } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(temp_allocator, dim, dim_json))) {
+        } else if (OB_FAIL(config->add("dimensions", dim_json))) {
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
+      } else if (OB_ISNULL(endpoint_resolver)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
+                     model_id, temp_allocator, resolved_endpoint))) {
+      } else {
+        ObAIFuncModel model(temp_allocator, *info, resolved_endpoint);
+        ObArray<ObString> results;
+        if (OB_FAIL(model.call_dense_embedding_vector_v2(contents, config, results))) {
+        } else if (results.count() != contents.count()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          for (int64_t i = 0; OB_SUCC(ret) && i < results.count(); i++) {
+            int64_t j = row_idx.at(i);
+            ObString &result = results.at(i);
+            ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_datum.at(j));
+            if (OB_FAIL(output_result.init_with_batch_idx(result.length(), j))) {
+            } else if (OB_FAIL(output_result.append(result))) {
+            } else {
+              output_result.set_result();
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprAIEmbed::cg_expr(ObExprCGCtx &expr_cg_ctx,
                            const ObRawExpr &raw_expr,
-                           ObExpr &rt_expr) const 
+                           ObExpr &rt_expr) const
 {
   int ret = OB_SUCCESS;
   // TODO: support schema version match in plan cache for ai func
@@ -170,6 +265,7 @@ int ObExprAIEmbed::cg_expr(ObExprCGCtx &expr_cg_ctx,
 
   if (OB_SUCC(ret)) {
     rt_expr.eval_func_ = ObExprAIEmbed::eval_ai_embed;
+    rt_expr.eval_batch_func_ = ObExprAIEmbed::eval_ai_embed_batch;
   }
   return ret;
 }
