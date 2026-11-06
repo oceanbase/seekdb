@@ -22,6 +22,7 @@
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
 #include "sql/executor/ob_task_spliter.h"
+#include "sql/das/ob_das_ir_define.h"
 #include "share/geo/ob_geo_utils.h"
 #include "share/ob_ddl_checksum.h"
 #include "observer/omt/ob_tenant_srs.h"
@@ -898,6 +899,21 @@ int ObTableScanOp::attach_related_taskinfo(ObDASScanOp &target_op, ObDASBaseRtDe
   return ret;
 }
 
+static ObDASIRScanRtDef *find_ir_scan_rtdef(ObDASBaseRtDef *rtdef)
+{
+  ObDASIRScanRtDef *ir_rtdef = nullptr;
+  if (OB_NOT_NULL(rtdef)) {
+    if (DAS_OP_IR_SCAN == rtdef->op_type_) {
+      ir_rtdef = static_cast<ObDASIRScanRtDef *>(rtdef);
+    } else {
+      for (int64_t i = 0; nullptr == ir_rtdef && i < rtdef->children_cnt_; ++i) {
+        ir_rtdef = find_ir_scan_rtdef(rtdef->children_[i]);
+      }
+    }
+  }
+  return ir_rtdef;
+}
+
 int ObTableScanOp::prepare_pushdown_limit_param()
 {
   int ret = OB_SUCCESS;
@@ -914,6 +930,28 @@ int ObTableScanOp::prepare_pushdown_limit_param()
       OB_ASSERT(nullptr != tsc_rtdef_.lookup_rtdef_);
       tsc_rtdef_.lookup_rtdef_->limit_param_.offset_ = 0;
       tsc_rtdef_.lookup_rtdef_->limit_param_.limit_  = -1;
+    }
+
+    // For FTS match-against queries, the limit can be safely pushed down to the
+    // inverted index aux scan rtdef so that the DAAT/TAAT retrieval iter can
+    // terminate early, when the MATCH predicate is the sole filter of this scan
+    // (no residual pushdown filters, no batch rescan). The ir match_filter is
+    // evaluated by the retrieval iter before counting output rows, so early
+    // termination still outputs exactly limit matched rows. Otherwise the final
+    // limit at TSC is the only safe truncation point.
+    if (!MY_SPEC.batch_scan_flag_) {
+      ObDASIRScanRtDef *ir_rtdef = find_ir_scan_rtdef(tsc_rtdef_.attach_rtinfo_->attach_rtdef_);
+      const ObDASIRScanCtDef *ir_ctdef = (nullptr != ir_rtdef) ?
+          static_cast<const ObDASIRScanCtDef *>(ir_rtdef->ctdef_) : nullptr;
+      ObDASScanRtDef *inv_scan_rtdef = (nullptr != ir_rtdef) ?
+          ir_rtdef->get_inv_idx_scan_rtdef() : nullptr;
+      if (nullptr != ir_ctdef
+          && nullptr != inv_scan_rtdef
+          && MY_CTDEF.scan_ctdef_.pd_expr_spec_.pushdown_filters_.empty()
+          && (nullptr == MY_CTDEF.lookup_ctdef_
+              || MY_CTDEF.lookup_ctdef_->pd_expr_spec_.pushdown_filters_.empty())) {
+        inv_scan_rtdef->limit_param_ = limit_param_;
+      }
     }
   } else if (tsc_rtdef_.has_lookup_limit() || (OB_NOT_NULL(scan_iter_) && scan_iter_->get_das_task_cnt() > 1)) {
     //for index back, need to final limit output rows in TableScan operator,

@@ -231,7 +231,7 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
       FtsNode *node = fts_parser->root_;
       ObFtsEvalNode *parant_node =nullptr;
       hash::ObHashMap<ObString, int32_t> tokens_map;
-      const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
+      const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 3, 3);
       bool dummy_has_duplicate_boolean_tokens = false;
       if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
         LOG_WARN("failed to create token map", K(ret));
@@ -253,7 +253,7 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
     storage::ObFTParseHelper tokenize_helper;
     common::ObSEArray<ObFTWord, 16> tokens;
     hash::ObHashMap<ObFTWord, int64_t> token_map;
-    const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
+    const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 3, 3);
     if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties))) {
       LOG_WARN("failed to init tokenize helper", K(ret));
     } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {

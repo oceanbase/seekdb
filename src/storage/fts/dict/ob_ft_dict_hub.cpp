@@ -30,7 +30,7 @@ namespace storage
 {
 int ObFTDictHub::init()
 {
-  static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
+  static constexpr int K_MAX_DICT_BUCKET = 397;
   int ret = OB_SUCCESS;
   if (OB_FAIL(dict_map_.create(K_MAX_DICT_BUCKET, "dict_map"))) {
     LOG_WARN("init dict map failed", K(ret));

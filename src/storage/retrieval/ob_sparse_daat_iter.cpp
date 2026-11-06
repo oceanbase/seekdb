@@ -26,6 +26,7 @@ namespace storage
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    id_type_(common::ObMaxType),
     is_inited_(false)
 {
 }
@@ -38,6 +39,7 @@ int ObSRMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<const ObDatum *, 
     LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids));
   } else {
     iter_ids_ = iter_ids;
+    id_type_ = id_meta.type_;
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
@@ -59,6 +61,27 @@ int ObSRMergeCmp::cmp(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
+  } else if (common::ObUInt64Type == id_type_ || common::ObIntType == id_type_) {
+    // fast path: fulltext doc ids are integer and never null, compare them directly
+    // instead of going through the generic datum compare function pointer.
+    const ObDatum &l_id = get_id_datum(l.iter_idx_);
+    const ObDatum &r_id = get_id_datum(r.iter_idx_);
+    if (OB_LIKELY(!l_id.is_null() && !r_id.is_null())) {
+      if (common::ObUInt64Type == id_type_) {
+        const uint64_t l_val = l_id.get_uint64();
+        const uint64_t r_val = r_id.get_uint64();
+        cmp_ret = (l_val < r_val) ? -1 : ((l_val > r_val) ? 1 : 0);
+      } else {
+        const int64_t l_val = l_id.get_int();
+        const int64_t r_val = r_id.get_int();
+        cmp_ret = (l_val < r_val) ? -1 : ((l_val > r_val) ? 1 : 0);
+      }
+    } else if (l_id.is_null() && r_id.is_null()) {
+      cmp_ret = 0;
+    } else {
+      // null_first_cmp: null is smaller than any non-null value
+      cmp_ret = l_id.is_null() ? -1 : 1;
+    }
   } else {
     int tmp_ret = 0;
     if (OB_FAIL(cmp_func_(get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret))) {
@@ -221,9 +244,10 @@ int ObSRDaaTIterImpl::get_next_row()
   if (OB_FAIL(get_next_rows(1, count))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("failed to get next row", K(ret));
-    } else if (OB_UNLIKELY(count != 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected row count", K(ret), K(count));
+    } else if (count > 0) {
+      // The last row was already projected before the iterator reached its end
+      // (e.g. the pushed-down limit is satisfied), return it to the caller.
+      ret = OB_SUCCESS;
     }
   } else if (OB_UNLIKELY(count != 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -302,9 +326,13 @@ int ObSRDaaTIterImpl::fill_merge_heap()
 {
   int ret = OB_SUCCESS;
   ObSRMergeItem item;
+  // relevance is only consumed by the projected relevance column or the pushed-down
+  // match filter, skip fetching and weighting it for score-free (e.g. COUNT) queries.
+  const bool need_relevance = iter_param_->need_project_relevance() || iter_param_->need_filter();
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
     const int64_t iter_idx = next_round_iter_idxes_[i];
     ObISRDaaTDimIter *dim_iter = nullptr;
+    item.relevance_ = 0.0;
     if (OB_ISNULL(dim_iter = dim_iters_->at(iter_idx))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null dimension iter", K(ret), K(iter_idx), KPC_(iter_param));
@@ -314,9 +342,9 @@ int ObSRDaaTIterImpl::fill_merge_heap()
       } else {
         ret = OB_SUCCESS;
       }
-    } else if (OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
+    } else if (need_relevance && OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
       LOG_WARN("fail to get current score", K(ret));
-    } else if (OB_NOT_NULL(iter_param_->dim_weights_) && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx))) {
+    } else if (need_relevance && OB_NOT_NULL(iter_param_->dim_weights_) && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx))) {
     } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
       LOG_WARN("fail to get current doc id", K(ret));
     } else if (FALSE_IT(item.iter_idx_ = iter_idx)) {

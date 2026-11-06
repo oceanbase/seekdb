@@ -4779,7 +4779,19 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
       }
     }
   }
-  if (OB_SUCC(ret) && nullptr != match_expr && !static_cast<ObMatchFunRawExpr*>(match_expr)->is_es_match()) {
+  // A query without ORDER BY does not promise any row order, so returning the
+  // matches in relevance order is only a convenience. When such a query also
+  // carries a plain LIMIT (no OFFSET/LIMIT PERCENT), the implicit relevance
+  // ordering turns the scan into a full top-n ranking, which forces the retrieval
+  // iterator to walk the whole inverted index although only a handful of rows are
+  // ever emitted (e.g. COUNT over a limited subquery). Skip the implicit ordering
+  // in that case so the limit can be pushed into the retrieval scan and it can
+  // stop as soon as enough rows are produced.
+  const bool has_plain_limit = stmt->has_limit()
+      && nullptr == stmt->get_limit_percent_expr()
+      && nullptr == stmt->get_offset_expr();
+  if (OB_SUCC(ret) && !has_plain_limit && nullptr != match_expr &&
+      !static_cast<ObMatchFunRawExpr*>(match_expr)->is_es_match()) {
     OrderItem item(match_expr, default_desc_direction());
     if (OB_FAIL(stmt->add_order_item(item))) {
       LOG_WARN("failed to add order item", K(ret), K(item));

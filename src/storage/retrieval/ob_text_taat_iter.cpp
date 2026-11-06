@@ -36,7 +36,8 @@ int ObTextTaaTIter::init(const ObTextTaaTParam &param)
     LOG_WARN("failed to create text taat iter memory context", K(ret));
   } else if (OB_FAIL(ObSRTaaTIterImpl::init(*param.base_param_, *param.dim_iter_, *param.allocator_))) {
     LOG_WARN("failed to init sr taat iter", K(ret));
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (param.base_param_->need_project_relevance()
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
     LOG_WARN("failed to init bm25 param estimator", K(ret));
   } else {
     query_tokens_ = param.query_tokens_;
@@ -78,6 +79,11 @@ int ObTextTaaTIter::pre_process()
       const int64_t total_doc_cnt = bm25_param_estimator_.get_total_doc_cnt();
       partition_cnt_ = MIN((total_doc_cnt-1) / OB_HASHMAP_DEFAULT_SIZE + 1, OB_MAX_HASHMAP_COUNT);
     }
+  } else if (partition_cnt_ <= 0) {
+    // Relevance scoring is disabled: without the BM25 estimation there is no
+    // total doc count to derive the partition number from, fall back to a
+    // single hashmap so the TAAT iteration still works.
+    partition_cnt_ = 1;
   }
   return ret;
 }

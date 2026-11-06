@@ -78,16 +78,40 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("word is empty", K(ret), K(word));
+  } else if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+    // 内置停用词表全部是长度小于 FTS_STOP_WORD_MAX_LENGTH 的 ASCII 英文单词，
+    // 因此含非 ASCII 字节（如中文）或长度超长的 token 必然不是停用词，
+    // 可直接返回，省掉一次 UTF-8 串哈希与哈希表探测。
+    const ObString &word_str = word.get_word().get_string();
+    bool may_be_stopword = word_str.length() < FTS_STOP_WORD_MAX_LENGTH;
+    for (int64_t i = 0; may_be_stopword && i < word_str.length(); ++i) {
+      if (static_cast<unsigned char>(word_str.ptr()[i]) >= 0x80) {
+        may_be_stopword = false;
+      }
+    }
+    if (!may_be_stopword) {
+      is_stopword = false;
+    } else {
+      // 同一 collation 下无需字符集转换，直接查表，避免每个 token 构造临时 arena
+      ret = stopword_set_.exist_refactored(word);
+      if (OB_HASH_NOT_EXIST == ret) {
+        is_stopword = false;
+        ret = OB_SUCCESS;
+      } else if (OB_HASH_EXIST == ret) {
+        is_stopword = true;
+        ret = OB_SUCCESS;
+      } else if (OB_SUCC(ret)) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+    }
   } else {
+    common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
     common::ObString cmp_str;
     // do nothing set out with in if type is the same.
     if (OB_FAIL(common::ObCharset::charset_convert(
@@ -181,16 +205,36 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid src ft word", K(ret), K(src));
   } else if (flag_.casedown()) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
-      LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
+    const ObString src_str = src.get_word().get_string();
+    const char *str = src_str.ptr();
+    bool need_casedown = false;
+    // Case folding only changes ASCII letters and characters outside the CJK
+    // block.  Tokens made of lowercase ASCII or Chinese characters are already
+    // folded, so reuse the input slice instead of copying and re-scanning it.
+    for (int64_t i = 0; !need_casedown && i < src_str.length(); ++i) {
+      const unsigned char c = static_cast<unsigned char>(str[i]);
+      if (c < 0x80) {
+        need_casedown = (c >= 'A' && c <= 'Z');
+      } else if (c >= 0xC2 && (c < 0xE4 || c > 0xE9)) {
+        // Latin-1 supplement / Greek / Cyrillic / full-width letters can have
+        // case mappings; CJK code points (UTF-8 lead 0xE4-0xE9) never do.
+        need_casedown = true;
+      }
+    }
+    if (!need_casedown) {
+      dst = src;
     } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
+      ObString dst_str;
+      if (OB_FAIL(ObCharset::tolower(
+                      word_meta_.get_collation_type(),
+                      src_str,
+                      dst_str,
+                      allocator_))) {
+        LOG_WARN("fail to tolower", K(ret), K(src), K(word_meta_));
+      } else {
+        ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
+        dst = tmp;
+      }
     }
   } else {
     dst = src;
@@ -219,7 +263,6 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(word), K(word_freq));
@@ -227,16 +270,13 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
       LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("fail to get fulltext word", K(ret), K(word));
   } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-      LOG_WARN("fail to set fulltext word and count", K(ret), K(word), K(word_count));
+    auto add_frequency = [word_freq](common::hash::HashMapPair<ObFTWord, int64_t> &entry) {
+      entry.second += word_freq;
+    };
+    ret = word_map_.set_or_update(word, 1/*word count*/, add_frequency);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to set fulltext word and count", K(ret), K(word));
     }
   }
   return ret;

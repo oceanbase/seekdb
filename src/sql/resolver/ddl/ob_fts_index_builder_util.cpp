@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_FTS
 #include "ob_fts_index_builder_util.h"
+#include "lib/utility/utility.h"
 #include "ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -1230,6 +1231,16 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
     const int64_t original_parallelism,
     int64_t &decided_parallelism)
 {
+  // FTS builds are CPU bound: the inner INSERT ... SELECT tokenizes every document
+  // and emits inverted-index rows. DDL DOP resolves to 1 on tables without a
+  // parallel attribute, leaving most worker threads idle. The heavy aux tables
+  // (doc_rowkey / fts_index / doc_word) are built concurrently, so derive a per-task
+  // DOP of roughly a quarter of the cores, capped to avoid oversubscription.
+  static constexpr int64_t FTS_BUILD_MIN_PARALLELISM = 2;
+  static constexpr int64_t FTS_BUILD_MAX_PARALLELISM = 12;
+  const int64_t fts_build_parallelism =
+      MAX(FTS_BUILD_MIN_PARALLELISM,
+          MIN(common::get_cpu_num() / 4, FTS_BUILD_MAX_PARALLELISM));
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(original_parallelism <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1242,7 +1253,8 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
       case share::schema::ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
-        decided_parallelism = MAX(original_parallelism / 3, 1L);
+        decided_parallelism = MIN(MAX(original_parallelism / 3, fts_build_parallelism),
+                                  FTS_BUILD_MAX_PARALLELISM);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:

@@ -81,6 +81,14 @@ int ObTextRetrievalTokenIter::init(const ObTextRetrievalScanIterParam &iter_para
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inv_idx_scan_iter or eval_ctx is NULL", K(ret), K_(inv_idx_scan_iter), KPC_(eval_ctx), KPC_(inv_idx_scan_param), KP(allocator_), KP(mem_context_.ref_context()));
   } else if (!need_calc_relevance()) {
+    // The skip bitvector is also consumed by save_docids() on the score-free
+    // path, so it must be allocated regardless of relevance scoring.
+    if (OB_ISNULL(skip_ = sql::to_bit_vector(
+                           allocator_->alloc(sql::ObBitVector::memory_size(max_batch_size_))))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      skip_->init(max_batch_size_);
+    }
   } else if (OB_ISNULL(relevance_expr_) || OB_ISNULL(inv_idx_agg_expr_) || OB_ISNULL(inv_idx_agg_iter_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null relevance expr", K(ret), KPC_(relevance_expr), KPC_(inv_idx_agg_expr), KPC_(inv_idx_agg_iter));
@@ -369,8 +377,7 @@ int ObTextRetrievalTokenIter::get_next_row()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance() && !token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -454,8 +461,7 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
   count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("retrieval token iterator not inited", K(ret));
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (need_calc_relevance() && !token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
     LOG_WARN("failed to estimate token doc cnt", K(ret));
   } else if (OB_FAIL(inv_idx_scan_iter_->get_next_rows(count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -877,10 +883,14 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
 int ObTextRetrievalDaaTTokenIter::get_curr_score(double &score) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(cur_idx_ >= count_)) {
+  if (OB_ISNULL(relevance_expr_)) {
+    // score-free query: relevance is never projected or filtered, every dim
+    // contributes weight 0 so the merge/WAND heap degenerates to plain merge.
+    score = 0.0;
+  } else if (OB_UNLIKELY(cur_idx_ >= count_)) {
     ret = OB_ARRAY_OUT_OF_RANGE;
     LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
-  } else if (relevance_expr_) {
+  } else {
     score = relevance_[cur_idx_];
   }
   return ret;

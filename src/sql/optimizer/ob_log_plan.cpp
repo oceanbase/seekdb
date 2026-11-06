@@ -14590,6 +14590,94 @@ int ObLogPlan::compute_duplicate_table_replicas(ObLogicalOperator *op)
   return ret;
 }
 
+// Check whether the numeric constant equals zero.
+static bool is_const_zero_raw_expr(const ObRawExpr *expr)
+{
+  bool bret = false;
+  if (OB_LIKELY(nullptr != expr) && expr->is_static_const_expr()) {
+    const ObObj &val = static_cast<const ObConstRawExpr *>(expr)->get_value();
+    if (val.is_double()) {
+      bret = (0.0 == val.get_double());
+    } else if (val.is_float()) {
+      bret = (0.0f == val.get_float());
+    } else if (val.is_int()) {
+      bret = (0 == val.get_int());
+    } else if (val.is_uint64()) {
+      bret = (0 == val.get_uint64());
+    } else if (val.is_number()) {
+      bret = val.get_number().is_zero();
+    }
+  }
+  return bret;
+}
+
+// Documents returned by the inverted index merge always satisfy the bare match
+// predicate or the "match(...) >/>= 0" style predicate, so a pushed-down match
+// filter of those shapes can never reject a row. Dropping it also stops the code
+// generator from building the relevance projection column, which turns off
+// tf-idf scoring and the per-token document count aggregate for queries that do
+// not reference the match score at all.
+static bool is_always_true_match_filter(const ObRawExpr *match_pred, const ObMatchFunRawExpr *match_against)
+{
+  bool bret = false;
+  if (OB_LIKELY(nullptr != match_pred) && OB_LIKELY(nullptr != match_against)) {
+    if (match_pred == static_cast<const ObRawExpr *>(match_against)) {
+      bret = true; // bare match predicate
+    } else if (T_OP_BOOL == match_pred->get_expr_type() && 1 == match_pred->get_param_count()
+               && match_pred->get_param_expr(0) == static_cast<const ObRawExpr *>(match_against)) {
+      bret = true; // BOOL(match(...))
+    } else if (2 == match_pred->get_param_count()
+               && (T_OP_GT == match_pred->get_expr_type() || T_OP_GE == match_pred->get_expr_type())
+               && match_pred->get_param_expr(0) == static_cast<const ObRawExpr *>(match_against)
+               && is_const_zero_raw_expr(match_pred->get_param_expr(1))) {
+      bret = true; // match(...) > 0 / >= 0
+    }
+  }
+  return bret;
+}
+
+static bool raw_expr_tree_contains(const ObRawExpr *root, const ObRawExpr *target)
+{
+  bool bret = false;
+  if (OB_LIKELY(nullptr != root)) {
+    if (root == target) {
+      bret = true;
+    } else {
+      for (int64_t i = 0; !bret && i < root->get_param_count(); ++i) {
+        bret = raw_expr_tree_contains(root->get_param_expr(i), target);
+      }
+    }
+  }
+  return bret;
+}
+
+// Check whether the match expression itself is referenced outside the match
+// predicate, e.g. selected as the score output or used for ordering. Such
+// queries still need the relevance score computed by the retrieval scan.
+static bool is_match_score_referenced(const ObDMLStmt &stmt, const ObMatchFunRawExpr *match_against)
+{
+  bool bret = true;
+  const ObRawExpr *target = static_cast<const ObRawExpr *>(match_against);
+  // NOTE: qualify with stmt:: -- the unqualified T_SELECT binds to the parser
+  // token (ob_item_type.h, value 3299) while ObDMLStmt::get_stmt_type() returns
+  // the stmt::StmtType enum (T_SELECT == 1). Comparing 3299 with 1 made this
+  // check always fail, forcing relevance scoring for every fulltext query.
+  if (OB_LIKELY(nullptr != target) && stmt::T_SELECT == stmt.get_stmt_type()) {
+    const ObSelectStmt &sel = static_cast<const ObSelectStmt &>(stmt);
+    bret = false;
+    for (int64_t i = 0; !bret && i < sel.get_select_item_size(); ++i) {
+      bret = raw_expr_tree_contains(sel.get_select_item(i).expr_, target);
+    }
+    for (int64_t i = 0; !bret && i < sel.get_order_item_size(); ++i) {
+      bret = raw_expr_tree_contains(sel.get_order_item(i).expr_, target);
+    }
+    for (int64_t i = 0; !bret && i < sel.get_having_expr_size(); ++i) {
+      bret = raw_expr_tree_contains(sel.get_having_exprs().at(i), target);
+    }
+  }
+  return bret;
+}
+
 int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_match_exprs,
                                            const ObIArray<ObRawExpr *> &scan_match_filters,
                                            const ObIArray<ObRawExpr *> &all_match_filters,
@@ -14650,8 +14738,16 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   } else {
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
-    tr_info.pushdown_match_filter_ = match_pred;
-    // in new version, doc_id_idx_tid_ is invalid.
+    if (is_always_true_match_filter(match_pred, match_against)) {
+      // The match filter cannot reject any row returned by the inverted index
+      // merge. Drop it, and disable relevance scoring unless the query really
+      // references the match score outside the predicate.
+      tr_info.pushdown_match_filter_ = nullptr;
+      tr_info.need_calc_relevance_ = is_match_score_referenced(*get_stmt(), match_against);
+    } else {
+      tr_info.pushdown_match_filter_ = match_pred;
+    }
+    // The mapping table is absent when the data-table rowkey is used as the document ID.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
       table_scan->set_rowkey_doc_table_id(tr_info.rowkey_idx_tid_);
