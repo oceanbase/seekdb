@@ -91,7 +91,7 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, template_datum))) {
   } else if (template_datum->is_null()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObTextStringHelper::get_string(*ctx.exec_ctx_, expr, tmp_allocator, 0, template_datum, template_str))) {
+  } else if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_allocator, 0, template_datum, template_str))) {
   }
 
   if (OB_FAIL(ret)) {
@@ -114,7 +114,7 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, datum))) {
         } else if (datum->is_null()) {
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        } else if (OB_FAIL(ObTextStringHelper::get_string(*ctx.exec_ctx_, expr, tmp_allocator, i, datum, arg_str))) {
+        } else if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_allocator, i, datum, arg_str))) {
         } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(tmp_allocator, arg_str, arg_json_str))) {
         } else if (OB_FAIL(args_array->append(arg_json_str))) {
         }
