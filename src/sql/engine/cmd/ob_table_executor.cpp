@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "config_bridge.h"
 #include "common/ob_timeout_ctx.h"
+#include "lib/cpu/ob_cpu_topology.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_server_struct.h"
 #include "sql/engine/cmd/ob_table_executor.h"
@@ -751,6 +752,42 @@ int ObAlterTableExecutor::alter_table_exchange_partition_rpc(obcall::ObExchangeP
   return ret;
 }
 
+namespace {
+// Full-text index creation is a scan-tokenize-sort-write pipeline whose wall
+// clock is dominated by the doc-word INSERT ... SELECT child task.  The DDL
+// default parallelism is 1, which leaves every worker but one idle, so pick a
+// modest default DOP for FTS index builds.  Explicit PARALLEL hints and
+// session/table level parallelism settings are honored.
+const int64_t FTS_DDL_DEFAULT_MAX_DOP = 8;
+
+int maybe_boost_fts_ddl_parallelism(ObAlterTableStmt &stmt, obcall::ObAlterTableArg &alter_table_arg)
+{
+  int ret = OB_SUCCESS;
+  bool has_fts_index = false;
+  for (int64_t i = 0; OB_SUCC(ret) && !has_fts_index
+                      && i < alter_table_arg.index_arg_list_.count(); ++i) {
+    obcall::ObIndexArg *index_arg = alter_table_arg.index_arg_list_.at(i);
+    if (OB_ISNULL(index_arg)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index arg is null", K(ret), K(i));
+    } else if (obcall::ObIndexArg::ADD_INDEX == index_arg->index_action_type_) {
+      obcall::ObCreateIndexArg *create_index_arg = static_cast<obcall::ObCreateIndexArg *>(index_arg);
+      if (is_fts_index(create_index_arg->index_type_)) {
+        has_fts_index = true;
+      }
+    }
+  }
+  if (OB_SUCC(ret) && has_fts_index && !stmt.get_has_parallel_hint()
+      && alter_table_arg.parallelism_ <= 1) {
+    const int64_t cpu_count = common::get_cpu_count();
+    const int64_t dop = MAX(1L, MIN(cpu_count / 2, FTS_DDL_DEFAULT_MAX_DOP));
+    alter_table_arg.parallelism_ = dop;
+    LOG_INFO("boost fts ddl parallelism", K(dop), K(cpu_count));
+  }
+  return ret;
+}
+} // namespace
+
 int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
@@ -789,6 +826,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       } else if (OB_FAIL(check_alter_partition(ctx, stmt, alter_table_arg))) {
       } else if (OB_FAIL(check_alter_part_key(ctx, alter_table_arg))) {
       } else if (OB_FAIL(set_index_arg_list(ctx, stmt))) {
+      } else if (OB_FAIL(maybe_boost_fts_ddl_parallelism(stmt, alter_table_arg))) {
       } else if (OB_INVALID_ID == alter_table_arg.session_id_
                 && 0 != my_session->get_sessid_for_table()
                 && FALSE_IT(alter_table_arg.session_id_ = my_session->get_sessid_for_table())) {
