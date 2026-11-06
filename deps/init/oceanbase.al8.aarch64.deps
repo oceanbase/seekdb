@@ -9,7 +9,6 @@ arch=aarch64
 repo=http://mirrors.oceanbase.com/oceanbase/community/stable/al/8/aarch64/
 
 [deps]
-devdeps-gtest-1.8.0-242026020914.al8.aarch64.rpm
 devdeps-libcurl-static-8.12.1-132025040210.al8.aarch64.rpm
 devdeps-libaio-0.3.112-42024092715.al8.aarch64.rpm
 devdeps-relaxed-rapidjson-1.0.0-132024092715.al8.aarch64.rpm

@@ -2,6 +2,7 @@
 """Prepare seekdb dependencies for native and cross-platform builds."""
 
 import argparse
+import json
 import hashlib
 import os
 from pathlib import Path
@@ -101,8 +102,74 @@ def packages(profile):
     return result
 
 
+def locked_packages(lock_file, system, architecture):
+    if not lock_file.is_file():
+        return []
+    lock = json.loads(lock_file.read_text(encoding="utf-8"))
+    if lock.get("schema_version") != 1:
+        raise ValueError("Unsupported dependency lock schema: " + str(lock_file))
+
+    platform_name = {"Darwin": "macos", "Windows": "windows"}.get(system, system.lower())
+    prefix = "%s-%s" % (platform_name, architecture)
+    matches = [package for package in lock.get("packages", [])
+               if package.get("artifact_type") == "binary" and
+               package.get("target", "").startswith(prefix)]
+    if system == "Linux":
+        libc = platform.libc_ver()[1]
+        version = re.match(r"(\d+)\.(\d+)", libc)
+        if version:
+            libc_version = int(version.group(1)) * 100 + int(version.group(2))
+            compatible = []
+            for package in matches:
+                target = re.fullmatch(r"linux-[^-]+-glibc(\d+)", package["target"])
+                if target and int(target.group(1)) <= libc_version:
+                    compatible.append((int(target.group(1)), package))
+            if compatible:
+                best = max(version for version, _ in compatible)
+                matches = [package for version, package in compatible if version == best]
+            else:
+                matches = [package for package in matches
+                           if package["target"] == prefix]
+    elif system == "Darwin":
+        version = re.match(r"(\d+)", platform.mac_ver()[0])
+        if version:
+            compatible = []
+            for package in matches:
+                target = re.fullmatch(r"macos-[^-]+-min(\d+)", package["target"])
+                if target and int(target.group(1)) <= int(version.group(1)):
+                    compatible.append((int(target.group(1)), package))
+            if compatible:
+                best = max(minimum for minimum, _ in compatible)
+                matches = [package for minimum, package in compatible if minimum == best]
+            else:
+                matches = [package for package in matches if package["target"] == prefix]
+    elif system == "Android":
+        compatible = []
+        for package in matches:
+            target = re.fullmatch(r"android-[^-]+-v8a-api(\d+)", package["target"])
+            if target and int(target.group(1)) <= 26:
+                compatible.append((int(target.group(1)), package))
+        if compatible:
+            best = max(api for api, _ in compatible)
+            matches = [package for api, package in compatible if api == best]
+        else:
+            matches = [package for package in matches if package["target"] == prefix]
+    elif system == "Windows":
+        matches = [package for package in matches if package["target"] == prefix + "-md"]
+    else:
+        matches = [package for package in matches if package["target"] == prefix]
+
+    names = [package.get("name") for package in matches]
+    if len(names) != len(set(names)):
+        raise ValueError("Multiple locked binary packages match this host: " + str(lock_file))
+    return matches
+
+
 def download(url, archive):
-    partial = archive.with_name(archive.name + ".download")
+    descriptor, partial_name = tempfile.mkstemp(
+        prefix="." + archive.name + ".", suffix=".download", dir=archive.parent)
+    os.close(descriptor)
+    partial = Path(partial_name)
     try:
         with urllib.request.urlopen(url, timeout=60) as source, partial.open("wb") as output:
             shutil.copyfileobj(source, output)
@@ -112,10 +179,50 @@ def download(url, archive):
             partial.unlink()
 
 
-def unpack(archive, destination):
+def locked_download_url(url):
+    if url.startswith("https://github.com/"):
+        prefix = os.environ.get("SEEKDB_DEPS_GITHUB_PROXY_PREFIX", "https://gh-proxy.com/")
+        if prefix:
+            return prefix.rstrip("/") + "/" + url
+    return url
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def locked_archive(package, archive_directory, staging_directory):
+    url = package.get("url")
+    checksum = package.get("sha256", "").lower()
+    if not url or not re.fullmatch(r"[0-9a-f]{64}", checksum) or not package.get("version"):
+        raise ValueError("Incomplete locked dependency: " + str(package.get("name")))
+
+    cached = archive_directory / checksum
+    archive = staging_directory / checksum
+    if cached.is_file() and sha256_file(cached) == checksum:
+        shutil.copyfile(cached, archive)
+        return archive
+    if cached.is_file():
+        cached.unlink()
+    download(locked_download_url(url), archive)
+    if sha256_file(archive) != checksum:
+        archive.unlink()
+        raise ValueError("SHA256 mismatch for " + url.rsplit("/", 1)[-1])
+    return archive
+
+
+def unpack(archive, destination, *, ignore_owner=False):
     if archive.suffix != ".rpm":
-        subprocess.run(["tar", "-xf", str(archive), "-C", str(destination),
-                        "--strip-components=1"], check=True)
+        command = ["tar"]
+        if ignore_owner:
+            command.append("--no-same-owner")
+        command.extend(["-xf", str(archive), "-C", str(destination),
+                        "--strip-components=1"])
+        subprocess.run(command, check=True)
     else:
         with subprocess.Popen(["rpm2cpio", str(archive)], stdout=subprocess.PIPE) as rpm:
             try:
@@ -138,34 +245,47 @@ def ready(destination, key):
     return (destination / key).is_file() and (destination / "DONE").is_file()
 
 
-def populate(profile, destination, key, archive_directory):
+def populate_profile(profile, stage, archive_directory):
+    for filename, url in packages(profile):
+        print("Preparing " + filename, flush=True)
+        archive = stage / "pkg" / filename
+        cached = archive_directory / filename
+        if cached.is_file():
+            shutil.copyfile(cached, archive)
+        else:
+            download(url, archive)
+        unpack(archive, stage)
+
+
+def populate_lock(lock_file, stage, archive_directory, system, architecture):
+    for package in locked_packages(lock_file, system, architecture):
+        archive = locked_archive(package, archive_directory, stage / "pkg")
+        print("Preparing locked package " + package["name"] + " " + package["version"], flush=True)
+        unpack(archive, stage, ignore_owner=system == "Linux")
+
+
+def populate(profile, destination, key, archive_directory, lock_file, system, architecture):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".deps-", dir=destination.parent) as temporary:
         stage = Path(temporary) / "3rd"
         (stage / "pkg").mkdir(parents=True)
-        for filename, url in packages(profile):
-            print("Preparing " + filename, flush=True)
-            archive = stage / "pkg" / filename
-            cached = archive_directory / filename
-            if cached.is_file():
-                shutil.copyfile(cached, archive)
-            else:
-                download(url, archive)
-            unpack(archive, stage)
+        populate_profile(profile, stage, archive_directory)
+        populate_lock(lock_file, stage, archive_directory, system, architecture)
         (stage / key).touch()
         (stage / "DONE").touch()
         remove_directory(destination)
         stage.rename(destination)
 
 
-def install(profile, destination, cache_directory=None):
-    # Retain the existing cache identity so initialized SDKs remain reusable.
-    key = hashlib.md5(profile.read_bytes()).hexdigest()
+def install(profile, destination, cache_directory, lock_file, system, architecture):
+    lock_packages = locked_packages(lock_file, system, architecture)
+    identity = profile.read_bytes() + json.dumps(lock_packages, sort_keys=True).encode("utf-8")
+    key = hashlib.sha256(identity).hexdigest()
     if ready(destination, key):
         print("Dependencies ready: " + str(destination), flush=True)
         return
     if cache_directory is None:
-        populate(profile, destination, key, destination / "pkg")
+        populate(profile, destination, key, destination / "pkg", lock_file, system, architecture)
         return
 
     import fcntl
@@ -175,7 +295,7 @@ def install(profile, destination, cache_directory=None):
     with (cache_directory / (key + ".lock")).open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if not ready(cached, key):
-            populate(profile, cached, key, destination / "pkg")
+            populate(profile, cached, key, destination / "pkg", lock_file, system, architecture)
     destination.parent.mkdir(parents=True, exist_ok=True)
     remove_directory(destination)
     destination.symlink_to(cached, target_is_directory=True)
@@ -227,6 +347,12 @@ def main(arguments):
             raise ValueError("iOS SDK unavailable; install Xcode and set DEVELOPER_DIR to its Contents/Developer directory")
 
     profile = host_profile()
+    system = platform.system()
+    architecture = platform.machine().lower()
+    if system == "Darwin":
+        architecture = {"aarch64": "arm64", "amd64": "x86_64"}.get(architecture, architecture)
+    else:
+        architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture)
     rust_target = None
     if options.android:
         rust_target = "aarch64-linux-android"
@@ -234,11 +360,14 @@ def main(arguments):
         rust_target = "aarch64-apple-ios-sim" if options.simulator else "aarch64-apple-ios"
     prepare_rust(rust_target)
     cache = os.environ.get("DEP_CACHE_DIR") if os.name != "nt" else None
-    install(profile, ROOT / "deps/3rd", Path(cache).expanduser().resolve() if cache else None)
+    cache_directory = Path(cache).expanduser().resolve() if cache else None
+    install(profile, ROOT / "deps/3rd", cache_directory, ROOT / "deps.lock.json",
+            system, architecture)
     if options.wasm:
         subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
     if options.android:
-        install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android")
+        install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android", None,
+                ROOT / "deps.lock.json", "Android", "arm64")
     if options.ios:
         subprocess.run([
             sys.executable, str(PROFILES / "ios/build.py"), "--reuse", "--jobs", str(os.cpu_count() or 1),

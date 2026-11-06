@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "gtest",
+      "version": "1.14.0",
+      "artifact_type": "binary",
+      "target": "android-arm64-v8a-api26",
+      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-android-arm64-v8a-api26-20261106-8f0a0a8e9fe6.tar.gz",
+      "sha256": "6e689c35a406513b7eb358380b6ebd98790f4cf3925d8b9c75793a0470e4b51e"
+    },
+    {
+      "name": "gtest",
+      "version": "1.14.0",
+      "artifact_type": "binary",
+      "target": "linux-aarch64-glibc217",
+      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-aarch64-glibc217-20261106-8f0a0a8e9fe6.tar.gz",
+      "sha256": "6db9db8c31b26a5e52392ac4848d16681470c8554154ac046b47b78a2f65bac6"
+    },
+    {
+      "name": "gtest",
+      "version": "1.14.0",
+      "artifact_type": "binary",
+      "target": "linux-x86_64-glibc217",
+      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-x86_64-glibc217-20261106-8f0a0a8e9fe6.tar.gz",
+      "sha256": "403ff0e270fffeb5a5336696966963cf5e146fb96c70d9cf81b1383d7d0f8efa"
+    },
+    {
+      "name": "gtest",
+      "version": "1.14.0",
+      "artifact_type": "binary",
+      "target": "macos-arm64-min13",
+      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-macos-arm64-min13-20261106-8f0a0a8e9fe6.tar.gz",
+      "sha256": "421f1f3e3dec75cb92320f501ac0679db170d002884db7ac079d9702c38ce3d7"
+    },
+    {
+      "name": "gtest",
+      "version": "1.14.0",
+      "artifact_type": "binary",
+      "target": "windows-x86_64-md",
+      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-windows-x86_64-md-20261106-8f0a0a8e9fe6.tar.gz",
+      "sha256": "f2f42becbbbdee3b2f2e6284d1eb7d4a7983544ab1577642ed621a2be4f73029"
+    }
+  ]
+}

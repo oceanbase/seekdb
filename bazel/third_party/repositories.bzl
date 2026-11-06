@@ -1,10 +1,22 @@
 """Expose seekdb's bootstrapped third-party SDK as a Bazel repository."""
 
+def _link_directory_contents(repository_ctx, directories, destination):
+    names = {}
+    for directory in directories:
+        for child in repository_ctx.path(directory).readdir():
+            if child.basename not in names:
+                repository_ctx.symlink(child, destination + "/" + child.basename)
+                names[child.basename] = True
+
 def _windows_sdk(repository_ctx):
     sdk = str(repository_ctx.workspace_root) + "/deps/3rd"
     headers = {}
     for directory in ["vcpkg/x64-windows/include", "openssl/include", "vsag/include"]:
         for child in repository_ctx.path(sdk + "/" + directory).readdir():
+            headers[child.basename] = child
+    locked_headers = sdk + "/include"
+    if repository_ctx.path(locked_headers).exists:
+        for child in repository_ctx.path(locked_headers).readdir():
             headers[child.basename] = child
     for name, path in headers.items():
         if name != "dirent.h":
@@ -24,7 +36,6 @@ def _windows_sdk(repository_ctx):
     if result.return_code:
         fail("Cannot prepare Windows dirent header: " + result.stderr)
     for source, destination in {
-        "vcpkg/x64-windows/lib": "lib",
         "vcpkg/x64-windows/bin": "bin",
         "openssl/lib/VC/x64/MD": "openssl",
         "openssl/bin": "openssl_bin",
@@ -33,6 +44,11 @@ def _windows_sdk(repository_ctx):
         "tools/llvm18": "devtools",
     }.items():
         repository_ctx.symlink(sdk + "/" + source, destination)
+    locked_libraries = sdk + "/lib"
+    if repository_ctx.path(locked_libraries).exists:
+        _link_directory_contents(repository_ctx, [locked_libraries, sdk + "/vcpkg/x64-windows/lib"], "lib")
+    else:
+        repository_ctx.symlink(sdk + "/vcpkg/x64-windows/lib", "lib")
     redist = repository_ctx.getenv("VCToolsRedistDir")
     if not redist:
         fail("Run the Windows build from a Visual Studio Developer Command Prompt (VCToolsRedistDir is required)")
@@ -64,6 +80,9 @@ def _third_party_headers_repository_impl(repository_ctx):
         headers = prefix + "/include"
         libraries = prefix + "/lib"
         libraries64 = libraries
+    locked_sdk = str(repository_ctx.workspace_root) + "/deps/3rd"
+    if platform == "android":
+        locked_sdk = str(repository_ctx.workspace_root) + "/deps/android"
     source_headers = [
         "absl", "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
         "omp.h", "ompx.h", "omp-tools.h", "ompt.h", "lapack.h", "lapacke.h",
@@ -90,9 +109,17 @@ def _third_party_headers_repository_impl(repository_ctx):
             if child.basename not in source_headers:
                 repository_ctx.symlink(child, "include/" + child.basename)
     else:
-        repository_ctx.symlink(headers, "include")
+        locked_headers = locked_sdk + "/include"
+        if repository_ctx.path(locked_headers).exists:
+            _link_directory_contents(repository_ctx, [locked_headers, headers], "include")
+        else:
+            repository_ctx.symlink(headers, "include")
     repository_ctx.symlink(sdk + "/devtools", "devtools")
-    repository_ctx.symlink(libraries, "lib")
+    locked_libraries = locked_sdk + "/lib"
+    if not ios_sdk and platform != "wasm" and repository_ctx.path(locked_libraries).exists:
+        _link_directory_contents(repository_ctx, [locked_libraries, libraries], "lib")
+    else:
+        repository_ctx.symlink(libraries, "lib")
     repository_ctx.symlink(libraries64, "lib64")
     repository_ctx.file("BUILD.bazel", '''load("@seekdb//bazel/third_party:targets.bzl", "sdk_targets")
 package(default_visibility = ["//visibility:public"])

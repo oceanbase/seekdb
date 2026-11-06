@@ -9,7 +9,12 @@ def _headers(directory, includes = ["include"]):
     return {"hdrs": ["include/" + directory + "/**/*." + extension for extension in _HEADER_EXTENSIONS], "includes": includes}
 
 SDK_HEADERS = {
-    "gtest": _headers("gtest") | {
+    "gtest": {
+        "hdrs": [
+            "include/gtest/**/*.h",
+            "include/gmock/**/*.h",
+        ],
+        "includes": ["include"],
         "deps": [":gtest_archive"],
         "defines": ["_GLIBCXX_USE_CXX11_ABI=1"],
         "linkopts": select({"@platforms//os:linux": ["-pthread"], "//conditions:default": []}),
@@ -96,6 +101,7 @@ _WINDOWS_HEADER_LIBRARIES = {
 }
 
 def _windows_libraries():
+    cc_import(name = "gtest_archive", static_library = "lib/gtest.lib")
     for name, (interface, dll, deps) in _WINDOWS_SHARED.items():
         cc_import(
             name = name,
