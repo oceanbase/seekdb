@@ -102,6 +102,42 @@ SELECT x+1 FROM
   (SELECT b+1 AS x FROM expression_program_values WHERE id<4 GROUP BY b+1 WITH ROLLUP) t
   ORDER BY 1;
 
+SELECT id,CASE
+  WHEN id=1 THEN a+1
+  WHEN id=2 THEN a+2
+  WHEN id=3 THEN a+3
+  WHEN id=4 THEN a+4
+  WHEN id=5 THEN a+5
+  WHEN id=6 THEN a+6
+  WHEN id=7 THEN a+7
+  WHEN id=8 THEN a+8
+  WHEN id=9 THEN a+9
+  WHEN id=10 THEN a+10
+  WHEN id=11 THEN a+11
+  WHEN id=12 THEN a+12
+  WHEN id=13 THEN a+13
+  WHEN id=14 THEN a+14
+  WHEN id=15 THEN a+15
+  WHEN id=16 THEN a+16
+  WHEN id=17 THEN a+17
+  WHEN id=18 THEN a+18
+  WHEN id=19 THEN a+19
+  WHEN id=20 THEN a+20
+  WHEN id=21 THEN a+21
+  WHEN id=22 THEN a+22
+  WHEN id=23 THEN a+23
+  WHEN id=24 THEN a+24
+  WHEN id=25 THEN a+25
+  WHEN id=26 THEN a+26
+  WHEN id=27 THEN a+27
+  WHEN id=28 THEN a+28
+  WHEN id=29 THEN a+29
+  WHEN id=30 THEN a+30
+  WHEN id=31 THEN a+31
+  WHEN id=32 THEN a+32
+  ELSE 0 END AS v
+  FROM (SELECT id,a FROM expression_program_values ORDER BY id LIMIT 3) t ORDER BY id;
+
 SELECT id,CAST('invalid_integer' AS SIGNED)+a FROM expression_program_values WHERE id=1;
 SHOW WARNINGS;
 DROP TABLE expression_program_values;

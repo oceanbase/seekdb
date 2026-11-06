@@ -40,14 +40,14 @@ class ProgramBuilder
 {
 public:
   explicit ProgramBuilder(const ObOpSpec &spec, ObIAllocator &allocator)
-    : instructions_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-      arguments_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-      filters_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-      projections_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-      nodes_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-      inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-      materialized_inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-      depths_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
+    : instructions_(sizeof(expression::Instruction), ObWrapperAllocator(allocator)),
+      arguments_(sizeof(uint32_t), ObWrapperAllocator(allocator)),
+      filters_(sizeof(uint32_t), ObWrapperAllocator(allocator)),
+      projections_(sizeof(uint32_t), ObWrapperAllocator(allocator)),
+      nodes_(sizeof(const ObExpr *), ObWrapperAllocator(allocator)),
+      inputs_(sizeof(const ObExpr *), ObWrapperAllocator(allocator)),
+      materialized_inputs_(sizeof(uint8_t), ObWrapperAllocator(allocator)),
+      depths_(sizeof(uint32_t), ObWrapperAllocator(allocator)),
       spec_(spec), allocator_(allocator), operations_(0)
   {}
 
@@ -235,7 +235,7 @@ private:
       return OB_NOT_SUPPORTED;
     }
     ObSEArray<uint32_t, 8, ObWrapperAllocator> child_ids(
-        OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator_));
+        sizeof(uint32_t), ObWrapperAllocator(allocator_));
     for (uint32_t i = 0; OB_SUCC(ret) && i < argument_count; ++i) {
       uint32_t child = 0;
       if (OB_FAIL(lower(expr->args_[i], depth + 1, child))) {
@@ -279,10 +279,10 @@ private:
 
 CompiledExpressionProgram::CompiledExpressionProgram(ObIAllocator &allocator)
   : allocator_(allocator),
-    inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-    materialized_inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-    nodes_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator)),
-    outputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator))
+    inputs_(sizeof(const ObExpr *), ObWrapperAllocator(allocator)),
+    materialized_inputs_(sizeof(uint8_t), ObWrapperAllocator(allocator)),
+    nodes_(sizeof(const ObExpr *), ObWrapperAllocator(allocator)),
+    outputs_(sizeof(uint32_t), ObWrapperAllocator(allocator))
 {
 }
 
@@ -351,7 +351,7 @@ void CompiledExpressionProgram::release(uint64_t *data, size_t words)
 }
 
 ExpressionProgramCatalog::ExpressionProgramCatalog(ObIAllocator &allocator)
-  : allocator_(allocator), entries_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator))
+  : allocator_(allocator), entries_(sizeof(Entry), ObWrapperAllocator(allocator))
 {
 }
 
@@ -383,7 +383,7 @@ int ExpressionProgramCatalog::prepare(ObOpSpec &root)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObOpSpec *, 16, ObWrapperAllocator> pending(
-      OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(allocator_));
+      sizeof(ObOpSpec *), ObWrapperAllocator(allocator_));
   ret = pending.push_back(&root);
   while (OB_SUCC(ret) && !pending.empty()) {
     ObOpSpec *spec = pending.at(pending.count() - 1);
@@ -417,7 +417,7 @@ ExpressionProgramCatalog::~ExpressionProgramCatalog()
 
 ExpressionProgram::ExpressionProgram(ObOperator &owner, const CompiledExpressionProgram &compiled)
   : owner_(owner), compiled_(compiled),
-    skip_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
+    skip_(sizeof(uint8_t), ObWrapperAllocator(owner.get_exec_ctx().get_allocator())),
     capacity_(std::max<int64_t>(1, owner.get_spec().max_batch_size_))
 {
 }
@@ -598,6 +598,14 @@ int ExpressionProgram::execute(ObBitVector *skip, int64_t rows, bool batch,
     return OB_INVALID_ARGUMENT;
   }
   skip_.reuse();
+  const size_t previous_capacity = skip_.get_capacity();
+  if (static_cast<size_t>(rows) > previous_capacity) {
+    const size_t next_capacity = std::max(static_cast<size_t>(rows),
+        previous_capacity + std::min(previous_capacity, capacity_ - previous_capacity));
+    if (OB_FAIL(skip_.reserve(next_capacity))) {
+      return ret;
+    }
+  }
   int64_t active = 0;
   for (int64_t row = 0; OB_SUCC(ret) && row < rows; ++row) {
     const bool skipped = skip != nullptr && skip->at(row);
