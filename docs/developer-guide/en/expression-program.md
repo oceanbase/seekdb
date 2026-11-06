@@ -73,6 +73,7 @@ C++ receives stable copies of computed projection roots, so no Rust result point
 ## Verification gates
 
 - Native behavior tests cover shared nodes requested by different masks, SQL NULL truth tables, branch errors, all-skip, filter-before-project, overflow, division policy, batch rebind, snapshots and cancellation.
+- A separate Rust integration test links the normal library and uses the public native API for scalar and batch filter/project execution, without CXX host objects. It checks NULLs, skipped rows, multiple roots and retained results after the program is dropped.
 - CXX checks cover real input transport, output consumption, allocation failure, release, cancellation and concurrent isolated runners sharing one immutable program.
 - Production SQL checks must compare baseline and candidate, including scalar and batch execution, prepared parameters and unsupported warnings.
 - `information_schema.GLOBAL_STATUS` counters distinguish prepares, successful program calls, input rows, batch calls and rows reaching actual Rust filter programs. A plan alone is insufficient evidence of execution.
@@ -86,7 +87,7 @@ Native tests and lint use the repository registry configuration:
 
 ```bash
 source ~/.bashrc
-cargo test --config bazel/rust_cargo_config.toml --offline -p expression-program --lib
+cargo test --config bazel/rust_cargo_config.toml --offline -p expression-program
 cargo clippy --config bazel/rust_cargo_config.toml --offline -p expression-program --all-targets -- -D warnings
 ./build.py test //unittest/sql:test_expression_program
 ```
