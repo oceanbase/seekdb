@@ -62,6 +62,7 @@ public:
                        K_(is_batch_stmt),
                        K_(is_insert_up),
                        K_(is_main_table_in_fts_ddl),
+                       K_(is_embedded_vec_from_old_row),
                        K_(tz_info),
                        K_(table_param));
   uint64_t table_id_;
@@ -93,7 +94,8 @@ public:
       uint64_t is_update_pk_                    : 1;
       uint64_t is_vec_hnsw_index_vid_opt_       : 1;  // hnsw index vid opt for tables without pk
       uint64_t skip_check_schema_version_       : 1;  // skip storage schema_version validation for special internal writes
-      uint64_t reserved_                        : 51; //add new flag before reserved_
+      uint64_t is_embedded_vec_from_old_row_     : 1;  // new row contains a fetched embedding, not text
+      uint64_t reserved_                        : 50; //add new flag before reserved_
     };
   };
 protected:
