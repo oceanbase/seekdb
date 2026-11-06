@@ -203,6 +203,12 @@ inline void ObWarningBuffer::append_msg(UserMsgLevel msg_level, const char *str,
       item->set_log_level(msg_level);
       if (sql_state != nullptr) {
         item->set_sql_state(sql_state);
+      } else {
+        // The slot may be a reused ring entry. A warning appended without an explicit
+        // sqlstate must not inherit the previous occupant's state, or a later class
+        // match would treat it as that class. Clear only the state; the message buffer
+        // may alias `str`, so the item is not reset wholesale.
+        item->set_sql_state("");
       }
       append_idx_ = (append_idx_ + 1) % MAX_BUFFER_SIZE;
       total_warning_count_++;

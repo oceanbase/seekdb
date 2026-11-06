@@ -148,11 +148,11 @@ static bool is_internal_err(int error_code)
 // match precedence (the matched ObPLConditionType; INVALID_TYPE == no match).
 // Local mirror of ObPLEH::match_action_value (which is private). `exception` carries
 // the legacy codegen path's numeric code (MySQL errno in MySQL mode) for the ERROR_CODE
-// compare; `ob_err` is the raw OB-internal code, used only to exclude OB-internal
+// compare; `ob_err` retains error severity and excludes OB-internal
 // errors from SQLEXCEPTION/OTHERS (handler conditions never name internal codes, and
 // some convert to an unmapped -1, so checking the raw code here is strictly correct).
 static int64_t match_condition(const ObPLConditionValue &action, const ObPLConditionValue &exception,
-                               int ob_err)
+                               int ob_err, bool is_warning)
 {
   int64_t precedence = INVALID_TYPE;
   switch (action.type_) {
@@ -165,12 +165,17 @@ static int64_t match_condition(const ObPLConditionValue &action, const ObPLCondi
                     && 0 == STRNCMP(action.sql_state_, exception.sql_state_, exception.str_len_))
                    ? SQL_STATE : INVALID_TYPE;
       break;
+    // A successful statement can carry an exception-class warning or note.
+    // Generic handlers must use severity as well as SQLSTATE; exact matches above
+    // continue to accept the condition's actual errno/state.
     case SQL_EXCEPTION:
-      precedence = (classify_sqlstate(exception.sql_state_) == SQL_EXCEPTION
+      precedence = (OB_SUCCESS != ob_err
+                    && classify_sqlstate(exception.sql_state_) == SQL_EXCEPTION
                     && !is_internal_err(ob_err)) ? SQL_EXCEPTION : INVALID_TYPE;
       break;
     case SQL_WARNING:
-      precedence = (classify_sqlstate(exception.sql_state_) == SQL_WARNING) ? SQL_WARNING : INVALID_TYPE;
+      precedence = (is_warning || classify_sqlstate(exception.sql_state_) == SQL_WARNING)
+                   ? SQL_WARNING : INVALID_TYPE;
       break;
     case NOT_FOUND:
       precedence = (classify_sqlstate(exception.sql_state_) == NOT_FOUND) ? NOT_FOUND : INVALID_TYPE;
@@ -197,7 +202,8 @@ static int64_t match_condition(const ObPLConditionValue &action, const ObPLCondi
 // (try_handle) and the raised-warning path (try_handle_warning).
 static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *eh,
                                const ObPLConditionValue &exception, int mysql_errno,
-                               int ob_err, CtrlState &ctrl, bool &handled, bool &is_exit)
+                               int ob_err, CtrlState &ctrl, bool &handled, bool &is_exit,
+                               const char *caught_message = NULL, bool is_warning = false)
 {
   typedef ObPLDeclareHandlerStmt::DeclareHandler::HandlerDesc HandlerDesc;
   int ret = OB_SUCCESS;
@@ -215,7 +221,7 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
     if (OB_ISNULL(desc)) { continue; }
     const int64_t level = h.get_level();
     for (int64_t j = 0; j < desc->get_conditions().count(); ++j) {
-      const int64_t pre = match_condition(desc->get_condition(j), exception, ob_err);
+      const int64_t pre = match_condition(desc->get_condition(j), exception, ob_err, is_warning);
       if (pre < 0) { continue; }
       const bool better = (NULL == chosen)
           || (level > best_level)
@@ -238,7 +244,13 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
       // user SIGNALs (OB_ERR_SIGNAL_EXCEPTION), whose message is user-supplied and lives
       // on the buffer.
       const char *live_msg = wb->get_err_msg();
-      if ((OB_ISNULL(live_msg) || '\0' == live_msg[0])
+      if (OB_NOT_NULL(caught_message) && '\0' != caught_message[0]) {
+        // A matched warning's text lives in the WarningItem slot; the error slot that a bare
+        // RESIGNAL reads is empty. Install the selected condition's text and normalized errno
+        // as the authoritative caught condition before the snapshot below. set_error copies the
+        // string, so the caller's WarningItem pointer need not outlive this call.
+        wb->set_error(caught_message, mysql_errno);
+      } else if ((OB_ISNULL(live_msg) || '\0' == live_msg[0])
           && OB_SUCCESS != ob_err && OB_ERR_SIGNAL_EXCEPTION != ob_err) {
         wb->set_error(ob_strerror(ob_err), wb->get_err_code());  // keep errno, restore message
       }
@@ -316,20 +328,25 @@ static int try_handle(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *eh, int er
 // same search; is_exit is reported so the caller can unwind.
 static int try_handle_warning(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *eh,
                               int warn_errno, const char *warn_sql_state,
+                              const char *warn_message, bool is_warning,
                               CtrlState &ctrl, bool &handled, bool &is_exit)
 {
   int ret = OB_SUCCESS;
   handled = false;
   is_exit = false;
   if (OB_NOT_NULL(eh) && OB_NOT_NULL(warn_sql_state) && '\0' != warn_sql_state[0]) {
+    // Normalize once: the same MySQL errno is the matching key and the SQLCODE
+    // installed on handler entry (and re-read by a bare RESIGNAL).
+    const int mysql_warn_errno = (warn_errno < 0) ? ob_mysql_errno(warn_errno) : warn_errno;
     ObPLConditionValue exception;
     exception.type_ = SQL_STATE;
-    exception.error_code_ = warn_errno;
+    exception.error_code_ = mysql_warn_errno;
     exception.sql_state_ = warn_sql_state;
     exception.str_len_ = STRLEN(warn_sql_state);
-    // ob_err == OB_SUCCESS: a warning is never an OB-internal error, so it is not excluded
-    // from the SQLWARNING/SQLEXCEPTION class match.
-    ret = run_matched_handler(ctx, eh, exception, warn_errno, OB_SUCCESS, ctrl, handled, is_exit);
+    // Successful-statement conditions keep ob_err == OB_SUCCESS. Their actual
+    // warning/note level is independent of SQLSTATE; only errors match SQLEXCEPTION.
+    ret = run_matched_handler(ctx, eh, exception, mysql_warn_errno, OB_SUCCESS, ctrl, handled, is_exit,
+                              warn_message, is_warning);
   }
   return ret;
 }
@@ -383,36 +400,47 @@ static int exec_block(ObPLExecCtx *ctx, const ObPLStmtBlock *block, CtrlState &c
         // already ran this check for whichever of its own statements actually raised, so
         // gating on PL_BLOCK fires the search exactly once, at the innermost raising statement.
         wb = common::ob_get_tsi_warning_buffer();
-        if (OB_NOT_NULL(wb) && wb->get_total_warning_count() > warn_before
-            && wb->get_readable_warning_count() > 0) {
-          const ObWarningBuffer::WarningItem *item =
-              wb->get_warning_item(wb->get_readable_warning_count() - 1);
-          if (OB_NOT_NULL(item)) {
-            // A warning-class SIGNAL is appended with only an errno (OB_ERR_SIGNAL_WARN) and an
-            // empty sqlstate; recover the class from the errno so the SQLWARNING match works.
+        // A plain SQL statement that is not diagnostic resets the TSI warning buffer before it
+        // runs (spi_execute does exactly this), so every readable warning belongs to this
+        // statement whether the counter went up or down. Diagnostic statements and PL
+        // statements only append, so only the newest ring slots belong to this statement.
+        const bool resets_da = PL_SQL == stmts.at(i)->get_type()
+            && !ObStmt::is_diagnostic_stmt(
+                   static_cast<const ObPLSqlStmt *>(stmts.at(i))->get_stmt_type());
+        if (OB_NOT_NULL(wb) && wb->get_readable_warning_count() > 0
+            && (resets_da || wb->get_total_warning_count() > warn_before)) {
+          const uint32_t total_after = wb->get_total_warning_count();
+          const uint32_t readable = wb->get_readable_warning_count();
+          uint32_t first_new = 0;
+          if (!resets_da && total_after > warn_before) {
+            const uint32_t new_warnings = total_after - warn_before;
+            first_new = (readable > new_warnings) ? (readable - new_warnings) : 0;
+          }
+          bool whandled = false;
+          bool wexit = false;
+          for (uint32_t widx = first_new;
+               OB_SUCC(ret) && !whandled && widx < readable;
+               ++widx) {
+            const ObWarningBuffer::WarningItem *item = wb->get_warning_item(widx);
+            if (OB_ISNULL(item)) {
+              continue;
+            }
+            const int warn_code = item->get_code();
             const char *wss = item->get_sql_state();
-            if (OB_ISNULL(wss) || '\0' == wss[0]) { wss = ob_sqlstate(item->get_code()); }
-            const ObPLConditionType wcls = classify_sqlstate(wss);
-            if (SQL_WARNING == wcls || NOT_FOUND == wcls) {
-              // Search this statement's block and each enclosing block, innermost first. An EXIT
-              // handler in an outer scope is not copied into the inner block's eh (only CONTINUE
-              // handlers are passed down), so the warning search must climb the block chain the
-              // way an error propagates by return code -- and stop at the first match.
-              bool whandled = false;
-              bool wexit = false;
-              for (const ObPLStmtBlock *b = block;
-                   OB_SUCC(ret) && !whandled && OB_NOT_NULL(b);
-                   b = b->get_block()) {
-                const ObPLDeclareHandlerStmt *beh = static_cast<const ObPLDeclareHandlerStmt *>(
-                    const_cast<ObPLStmtBlock *>(b)->get_eh());
-                if (OB_NOT_NULL(beh)) {
-                  ret = try_handle_warning(ctx, beh, item->get_code(), wss, ctrl, whandled, wexit);
-                }
-              }
-              if (OB_SUCC(ret) && whandled && wexit) {
-                break;  // EXIT handler: leave this block (EXITING unwinds to the declaring one)
+            if (OB_ISNULL(wss) || '\0' == wss[0]) { wss = ob_sqlstate(warn_code); }
+            for (const ObPLStmtBlock *b = block;
+                 OB_SUCC(ret) && !whandled && OB_NOT_NULL(b);
+                 b = b->get_block()) {
+              const ObPLDeclareHandlerStmt *beh = static_cast<const ObPLDeclareHandlerStmt *>(
+                  const_cast<ObPLStmtBlock *>(b)->get_eh());
+              if (OB_NOT_NULL(beh)) {
+                ret = try_handle_warning(ctx, beh, warn_code, wss, item->get(),
+                                         USER_WARN == item->log_level_, ctrl, whandled, wexit);
               }
             }
+          }
+          if (OB_SUCC(ret) && whandled && wexit) {
+            break;  // EXIT handler: leave this block (EXITING unwinds to the declaring one)
           }
         }
       }
