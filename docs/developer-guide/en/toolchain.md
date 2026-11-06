@@ -12,6 +12,22 @@ Rustup downloads use [RsProxy](https://rsproxy.cn/) by default. Set `RUSTUP_DIST
 
 Existing `CARGO_HOME` and `RUSTUP_HOME` settings are preserved. Without overrides, rustup uses its standard user directories. `build.py` adds the Cargo binary directory to its own `PATH`; to run Cargo directly in another shell, add that directory to your shell's `PATH`.
 
+### Native module tests
+
+Run the XML, compression, HTTP, and crypto module tests with Bazel:
+
+```bash
+python3 build.py test -j32 \
+  //rust/xml-parser:xml_parser_test \
+  //rust/compression:compression_test \
+  //rust/http-client:http_client_test \
+  //rust/crypto:crypto_test \
+  --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=unwind \
+  --test_output=errors
+```
+
+The standard Rust test harness requires unwinding. This supported rules_rust setting applies to the test build and its Rust dependencies. Product builds retain `panic=abort` when invoked without the override.
+
 The build script downloads locked Cargo dependencies through the RsProxy sparse registry, overriding the user's crates.io source selection for this step. Downloads reuse the existing Cargo cache (`CARGO_HOME`, or `~/.cargo` by default).
 
 ## Host detection and supported architectures

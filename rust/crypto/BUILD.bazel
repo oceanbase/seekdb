@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("//bazel:defs.bzl", "cc_library")
 
@@ -37,4 +37,10 @@ rust_library(
     proc_macro_deps = all_crate_deps(proc_macro = True),
     aliases = aliases(),
     tags = ["no-remote"],
+)
+
+rust_test(
+    name = "crypto_test",
+    crate = ":crypto",
+    compile_data = glob(["src/testdata/*"]),
 )

@@ -14,6 +14,9 @@
 
 mod bridge;
 
+#[cfg(test)]
+mod tests;
+
 use bridge::ffi;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
