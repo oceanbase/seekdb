@@ -5,11 +5,15 @@ package(default_testonly = True)
 
 cc_library(
     name = "expression_program_cases",
-    srcs = ["test_expression_program.cpp"],
+    srcs = [
+        "test_expression_program.cpp",
+        "test_temporary_expression_program.cpp",
+    ],
     alwayslink = True,
     deps = [
         "//bazel/third_party:gtest",
         "//rust:expression_program_headers",
+        "//src/sql:sql_runtime_internal_headers",
     ],
 )
 

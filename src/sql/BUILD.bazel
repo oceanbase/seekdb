@@ -202,7 +202,10 @@ cc_library(
     ],
     implementation_deps = _SQL_PRIVATE_HEADER_SHARE_DEPS,
     tags = ["manual"],
-    visibility = ["//src/sql:__subpackages__"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//unittest/sql:__pkg__",
+    ],
 )
 
 _SQL_RUNTIME_UNITY_GROUPS = groups_without(

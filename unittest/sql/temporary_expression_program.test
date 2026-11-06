@@ -1,0 +1,76 @@
+--disable_warnings
+DROP TABLE IF EXISTS temporary_expression_ranges;
+DROP TABLE IF EXISTS temporary_expression_virtual;
+--enable_warnings
+CREATE TABLE temporary_expression_ranges(
+  id BIGINT NOT NULL PRIMARY KEY, v BIGINT
+) PARTITION BY RANGE(id+1)(
+  PARTITION p0 VALUES LESS THAN(0),
+  PARTITION p1 VALUES LESS THAN(10),
+  PARTITION p2 VALUES LESS THAN(20),
+  PARTITION pmax VALUES LESS THAN MAXVALUE
+);
+INSERT INTO temporary_expression_ranges VALUES
+  (-10,NULL),(-1,-8),(0,7),(1,NULL),(5,20),(9,0),(10,-3),(15,40),(25,50);
+
+SELECT id,v FROM temporary_expression_ranges WHERE id=-10;
+SELECT id,v FROM temporary_expression_ranges WHERE id=9;
+SELECT id,v FROM temporary_expression_ranges WHERE id=10;
+SELECT id,v FROM temporary_expression_ranges WHERE id IN(-10,-1,1,9,15,25) ORDER BY id;
+
+PREPARE temporary_range FROM
+  'SELECT id,v FROM temporary_expression_ranges WHERE id BETWEEN ?+1 AND ?+3 ORDER BY id';
+SET @lo=-11,@hi=7;
+EXECUTE temporary_range USING @lo,@hi;
+SET @lo=8,@hi=22;
+EXECUTE temporary_range USING @lo,@hi;
+SET @lo=NULL;
+EXECUTE temporary_range USING @lo,@hi;
+SET @lo=30,@hi=1;
+EXECUTE temporary_range USING @lo,@hi;
+SET @lo=-2,@hi=2;
+EXECUTE temporary_range USING @lo,@hi;
+DEALLOCATE PREPARE temporary_range;
+
+PREPARE temporary_case FROM
+  'SELECT id,v FROM temporary_expression_ranges WHERE id >= CASE WHEN ? IS NULL OR ?=0 THEN ?+1 ELSE ?-1 END AND id < ?+1 ORDER BY id';
+SET @flag=0,@base=4,@hi=15;
+EXECUTE temporary_case USING @flag,@flag,@base,@base,@hi;
+SET @flag=NULL,@base=-2,@hi=1;
+EXECUTE temporary_case USING @flag,@flag,@base,@base,@hi;
+SET @flag=1,@base=10,@hi=25;
+EXECUTE temporary_case USING @flag,@flag,@base,@base,@hi;
+DEALLOCATE PREPARE temporary_case;
+
+PREPARE temporary_lazy FROM
+  'SELECT id FROM temporary_expression_ranges WHERE id >= CASE WHEN ?=0 THEN ?+1 ELSE ?+1 END ORDER BY id';
+SET @flag=0,@safe=8,@large=9223372036854775807;
+EXECUTE temporary_lazy USING @flag,@safe,@large;
+SET @flag=1;
+--error 1690
+EXECUTE temporary_lazy USING @flag,@safe,@large;
+SET @flag=0,@safe=-2;
+EXECUTE temporary_lazy USING @flag,@safe,@large;
+DEALLOCATE PREPARE temporary_lazy;
+
+PREPARE temporary_scalar FROM
+  'SELECT /*+ OPT_PARAM(''ROWSETS_MAX_ROWS'',0) */ id,v FROM temporary_expression_ranges WHERE id BETWEEN ?+1 AND ?+3 ORDER BY id';
+SET @lo=-2,@hi=12;
+EXECUTE temporary_scalar USING @lo,@hi;
+SET @lo=8,@hi=22;
+EXECUTE temporary_scalar USING @lo,@hi;
+DEALLOCATE PREPARE temporary_scalar;
+
+CREATE TABLE temporary_expression_virtual(
+  id BIGINT NOT NULL PRIMARY KEY, v BIGINT,
+  g BIGINT GENERATED ALWAYS AS (id+1) VIRTUAL
+) PARTITION BY RANGE(g)(
+  PARTITION p0 VALUES LESS THAN(10),
+  PARTITION pmax VALUES LESS THAN MAXVALUE
+);
+INSERT INTO temporary_expression_virtual(id,v) VALUES(1,NULL),(9,8),(10,-2),(25,10);
+SELECT id,v,g FROM temporary_expression_virtual WHERE id=9;
+SELECT id,v,g FROM temporary_expression_virtual WHERE id IN(1,9,10,25) ORDER BY id;
+
+DROP TABLE temporary_expression_virtual;
+DROP TABLE temporary_expression_ranges;

@@ -434,6 +434,24 @@ impl<B: AsRef<[u64]>> ProgramImage<B> {
     pub fn program_words(&self) -> usize {
         self.layout.end
     }
+
+    pub fn node_count(&self) -> usize {
+        self.layout.nodes
+    }
+
+    pub fn input_count(&self) -> usize {
+        self.layout.inputs
+    }
+
+    pub fn filters(&self) -> &[u64] {
+        &self.backing.as_ref()[IMAGE_HEADER_WORDS + self.layout.filters_start
+            ..IMAGE_HEADER_WORDS + self.layout.projections_start]
+    }
+
+    pub fn projections(&self) -> &[u64] {
+        &self.backing.as_ref()[IMAGE_HEADER_WORDS + self.layout.projections_start
+            ..IMAGE_HEADER_WORDS + self.layout.end]
+    }
 }
 
 impl<B: AsRef<[u64]> + AsMut<[u64]>> Program<B> {

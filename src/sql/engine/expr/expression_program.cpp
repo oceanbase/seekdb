@@ -326,6 +326,14 @@ int report_program_error(const expression::RunStatus &status, const ObExpr *expr
   return ret;
 }
 
+int validate_temporary_shape(const ObTempExpr &temp, const expression::ProgramShape &shape)
+{
+  return shape.inputs == static_cast<size_t>(temp.program_inputs_.count())
+      && shape.nodes == static_cast<size_t>(temp.program_nodes_.count())
+      && shape.filters == 0 && shape.projections == 1
+      && shape.first_projection == temp.program_root_ ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+}
+
 int validate_temporary_metadata(const ObTempExpr &temp)
 {
   int ret = OB_SUCCESS;
@@ -447,8 +455,9 @@ int TemporaryExpressionProgram::validate(const ObTempExpr &temp)
   }
   if (OB_SUCC(ret)) {
     try {
-      expression::validate_image(rust::Slice<const uint64_t>(
+      const auto shape = expression::validate_image(rust::Slice<const uint64_t>(
           temp.program_image_.get_data(), temp.program_image_.count()));
+      ret = validate_temporary_shape(temp, shape);
     } catch (const rust::Error &error) {
       ret = OB_INVALID_ARGUMENT;
       SQL_ENG_LOG(WARN, "invalid Rust temporary expression image", K(ret), "error", error.what());
@@ -475,7 +484,10 @@ int TemporaryExpressionProgram::create(ObExecContext &exec_ctx, const ObTempExpr
       try {
         program->prepared_.emplace(expression::restore(rust::Slice<const uint64_t>(
             temp.program_image_.get_data(), temp.program_image_.count()), program));
-        program->runner_.emplace(expression::make_runner(**program->prepared_, program, 1));
+        ret = validate_temporary_shape(temp, expression::program_shape(**program->prepared_));
+        if (OB_SUCC(ret)) {
+          program->runner_.emplace(expression::make_runner(**program->prepared_, program, 1));
+        }
       } catch (const rust::Error &error) {
         ret = program->allocation_failed_ || std::strcmp(error.what(), "expression handle allocation failed") == 0
             ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;

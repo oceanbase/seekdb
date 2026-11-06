@@ -30,6 +30,8 @@ The compact program uses five u64 words per node plus argument and root words, a
 
 The caller fills input values and validity, calls `begin_batch(rows, skip)`, then `filter_project(&program, control)`. Filters run in order and only surviving rows reach projections. AND, OR and searched CASE request only needed rows and branches. Shared nodes reuse individual evaluated rows. Failed batches cannot be retried without rebinding. A new batch invalidates constants and intermediate caches, so parameter rebind and rescan cannot retain stale values.
 
+Public result, flag, and selection views are empty until execution completes successfully. Input mutation and a failed execution invalidate previous views. Invalid-program execution also poisons the batch until a new bind. Copied values remain independent of later binding or destruction.
+
 Execution construction initializes input validity to NULL. The backing must already contain initialized u64 values, as required by the native slice interface. The CXX allocation adapter supplies that initialization. Batch binding clears only the current rows of each node's flags; inaccessible capacity rows are reset when a later batch exposes them. Values remain unusable until the corresponding flags report evaluation.
 
 The adapter creates its runner with the first actual row count, clamped to one, instead of the plan maximum. Before a larger batch binds inputs, the CXX `reserve_rows` operation builds a fully initialized replacement execution in Rust and swaps it only after success. It preserves the runner handle, host and prepared-program identity. Allocation failure leaves the previous storage intact but fails the query without publishing old results or retrying in C++. All buffer borrows must end before reserve. Previously copied C++ results remain valid. Smaller batches retain capacity and rebind normally.
@@ -80,6 +82,28 @@ C++ receives stable copies of computed projection roots, so no Rust result point
 - The remote sysbench comparison includes input conversion, root consumption and compilation/binding. Standard OLTP and custom expression workloads are reported separately, with identical work and errors checked.
 
 No C++ arithmetic family can be deleted yet because unsupported types and non-operator expression consumers still use it. Family deletion requires migrating those callers and all supported signatures. This cohort removes their execution only for selected complete operator graphs.
+
+The [execution-owner and signature inventory](expression-execution-migration.md) identifies the remaining callers and the conditions for deleting C++ evaluators. It separates graph admission, removal of caller coordination, and whole-family retirement.
+
+## Temporary row programs
+
+`ObTempExpr::eval` is a second production owner of the same execution core. RANGE partition expressions and calculated query bounds use this entry outside the generic operator filter/project stage. The adapter admits a complete nullable-I64 graph and returns its single result. Generated-column wrappers with unsupported conversion or character metadata retain their complete C++ path.
+
+The shared C++ lowerer accepts explicit roots, constant frames, and a producer input policy. Operators retain their existing child-materialization rules. Temporary programs accept declared row cells and ordinary same-type runtime parameters. Neither adapter invokes C++ leaf evaluators during input gathering. Temporary programs read row cells and parameter objects directly and validate their indices and types.
+
+`gen_expr_with_row_desc` compiles eligible templates after code generation and input mapping. The template arena stores an opaque image and integer binding/node indices. It owns no Rust Box and needs no individual Rust destructor. Deep copy and UNIS serialization carry those values, never Rust addresses or execution state. Validation checks the image and its correspondence with the adapter's input count, node count, and single projection root.
+
+Native callers can compile the same representation with `compile_image_in(spec, backing)`, inspect its immutable `ProgramImage::words`, and validate received words with `ProgramImage::parse`. `Program::from_image_in(&image, backing)` copies the validated payload into an independently owned program with a fresh identity. Images add six metadata words to the existing packed payload. Native construction, image construction, and parsing share the operation validator and payload layout. C++ does not interpret instruction words.
+
+Each temporary execution context owns a restored Prepared and Runner through a query-allocator host. It retains no template pointer. Binding and diagnostic metadata are borrowed only during a synchronous call with the live template. Cached contexts check a local, nonserialized template incarnation to distinguish reused arena addresses. Copy and deserialization create fresh incarnations. Context creation, cache insertion failure, uncached errors, and destruction release initialized owners before their allocator. Native contexts allocate no legacy datum frames or expression-operator context store.
+
+For admitted templates, Rust replaces recursive flag clearing, row-to-frame conversion, execution-context pointer swapping, and root `ObExpr::eval`. The unsupported branch still needs those C++ helpers. No entire evaluator family is deleted by this extension. A successful integer or NULL result is copied into an `ObObj`; failed import, execution, or conversion leaves the caller's prior output unchanged and returns an error. There is no fallback after native execution starts.
+
+The execution cache is scoped to `ObExecContext`. Runtime traces show that the selected parameter-bound workload reconstructs contexts each SQL execution, while optimization-time partition evaluation can disable the cache entirely. Program restoration, validation, allocation, input conversion, and output consumption therefore belong in throughput measurements. The previous operator benchmark cannot establish the performance of this new owner.
+
+Separate `information_schema.GLOBAL_STATUS` fields expose `Rust_temporary_expression_prepares`, `Rust_temporary_expression_state_builds`, and `Rust_temporary_expression_executions`. They count successful image compilation, successful owner construction, and successful copied results respectively. A state build can precede a later cache insertion failure. Existing `Rust_expression_*` meanings remain unchanged. A range query returning 128 rows still evaluates its temporary range-bound programs as scalar roots; it is not evidence of a new batched temporary-expression API.
+
+The focused C++ suite covers whole-template execution without legacy frames, row and parameter rebinding, independent results, allocation failures, uncached error and cancellation cleanup, deep copy, serialization, reused template addresses, and inconsistent image/root metadata. `unittest/sql/temporary_expression_program.test` adds baseline-recorded SQL for partition boundaries, NULLs, prepared rebinding, lazy CASE errors, scalar execution, and unsupported generated-column wrappers.
 
 ## Running focused checks
 

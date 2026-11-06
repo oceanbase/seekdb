@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::{
-    Control, ErrorKind, Execution, Instruction, Opcode, Program, ProgramImage, ProgramSpec,
-    MAX_NODES,
+    Control, ErrorKind, Execution, Instruction, MAX_NODES, Opcode, Program, ProgramImage,
+    ProgramSpec,
 };
 use std::{ptr::NonNull, slice};
 
@@ -36,6 +36,14 @@ mod ffi {
         row: usize,
         left: i64,
         right: i64,
+    }
+
+    struct ProgramShape {
+        nodes: usize,
+        inputs: usize,
+        filters: usize,
+        projections: usize,
+        first_projection: usize,
     }
 
     unsafe extern "C++" {
@@ -64,7 +72,8 @@ mod ffi {
             inputs: u32,
             storage: &mut [u64],
         ) -> Result<()>;
-        fn validate_image(image: &[u64]) -> Result<()>;
+        fn validate_image(image: &[u64]) -> Result<ProgramShape>;
+        fn program_shape(program: &Prepared) -> ProgramShape;
         unsafe fn restore(image: &[u64], host: *mut IExecutionHost) -> Result<Box<Prepared>>;
         unsafe fn prepare(
             instructions: &[Instruction],
@@ -167,11 +176,7 @@ impl Control for HostControl {
     fn check(&mut self) -> Result<(), i32> {
         // SAFETY: execute is synchronous and the caller owns the live host.
         let code = unsafe { ffi::check_cancel(self.0.as_ptr()) };
-        if code == 0 {
-            Ok(())
-        } else {
-            Err(code)
-        }
+        if code == 0 { Ok(()) } else { Err(code) }
     }
 }
 
@@ -250,9 +255,25 @@ fn compile_image(
     Ok(())
 }
 
-fn validate_image(image: &[u64]) -> Result<(), &'static str> {
-    ProgramImage::parse(image).map_err(|_| "invalid expression image")?;
-    Ok(())
+fn validate_image(image: &[u64]) -> Result<ffi::ProgramShape, &'static str> {
+    let image = ProgramImage::parse(image).map_err(|_| "invalid expression image")?;
+    Ok(ffi::ProgramShape {
+        nodes: image.node_count(),
+        inputs: image.input_count(),
+        filters: image.filters().len(),
+        projections: image.projections().len(),
+        first_projection: image.projections().first().copied().unwrap_or(0) as usize,
+    })
+}
+
+fn program_shape(program: &Prepared) -> ffi::ProgramShape {
+    ffi::ProgramShape {
+        nodes: program.program.node_count(),
+        inputs: program.program.input_count(),
+        filters: program.program.filters().len(),
+        projections: program.program.projections().len(),
+        first_projection: program.program.projections().first().copied().unwrap_or(0) as usize,
+    }
 }
 
 // SAFETY: host owns every allocated region and outlives Prepared and Runner.
