@@ -59,16 +59,18 @@ def _parser_impl(ctx):
     lexer = ctx.outputs.lexer
     if ctx.attr.lexer_patch:
         lexer = ctx.actions.declare_file(ctx.label.name + "/" + lexer.basename)
+    flex_arguments = ctx.attr.flex_options + [
+        "--header-file=" + ctx.outputs.lexer_header.path,
+        "--outfile=" + lexer.path,
+        ctx.file.lexer_source.path,
+    ]
+    windows_flex = ctx.file._flex.extension == "exe"
     ctx.actions.run(
-        executable = ctx.file._flex,
-        inputs = [ctx.file.lexer_source],
-        tools = ctx.files._runtime,
+        executable = ctx.file._python if windows_flex else ctx.file._flex,
+        inputs = [ctx.file.lexer_source] + ([ctx.file._codegen] if windows_flex else []),
+        tools = ctx.files._runtime + ([ctx.file._flex] if windows_flex else []),
         outputs = [lexer, ctx.outputs.lexer_header],
-        arguments = ctx.attr.flex_options + [
-            "--header-file=" + ctx.outputs.lexer_header.path,
-            "--outfile=" + lexer.path,
-            ctx.file.lexer_source.path,
-        ],
+        arguments = ([ctx.file._codegen.path, "flex", ctx.file._flex.path] if windows_flex else []) + flex_arguments,
         mnemonic = "Flex",
     )
     if ctx.attr.lexer_patch:
