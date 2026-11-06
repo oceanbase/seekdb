@@ -17,7 +17,7 @@ SDK_HEADERS = {
         "includes": ["include"],
         "deps": [":gtest_archive"],
         "defines": ["_GLIBCXX_USE_CXX11_ABI=1"],
-        "linkopts": select({"@platforms//os:linux": ["-pthread"], "//conditions:default": []}),
+        "linkopts": select({"@platforms//os:linux": ["-pthread", "-lstdc++"], "//conditions:default": []}),
     },
     "sanity_headers": {"hdrs": ["devtools/include/sanity/**/*.h"], "includes": ["devtools/include"]},
     "absl_headers": _headers("absl"),
