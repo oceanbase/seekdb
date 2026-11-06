@@ -430,7 +430,8 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_STATUS:
       case T_SHOW_CREATE_TRIGGER:
       case T_SHOW_CHECK_TABLE:
-      case T_SHOW_CREATE_USER: {
+      case T_SHOW_CREATE_USER:
+      case T_SHOW_AI_COLUMNS: {
         REGISTER_STMT_RESOLVER(Show);
         break;
       }

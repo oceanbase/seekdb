@@ -88,6 +88,12 @@ join oceanbase.__all_table t on t.table_id = a.table_id
 join oceanbase.__all_database d on d.database_id = t.database_id
 where d.database_name = 'ai_column_p0_ddl' and t.table_name = 'alter_docs';
 
+# SHOW AI COLUMNS: the SQL surface of the AI column catalogue
+--replace_column 1 #
+show ai columns from ai_column_p0_ddl.docs;
+show ai columns from ai_column_p0_ddl.docs like 'tags';
+show ai columns from ai_column_p0_ddl.docs where `Column` = 'emb';
+
 --error 7600
 create table ai_column_p0_ddl.bad_dimension(
   content varchar(20),

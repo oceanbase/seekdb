@@ -1776,6 +1776,12 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_ACTIVATE_STANDBY);
       SET_STMT_TYPE(T_SHOW_CREATE_USER);
 #undef SET_STMT_TYPE
+      case T_SHOW_AI_COLUMNS: {
+        // reuses the SHOW COLUMNS statement type: the generated select and its
+        // privileges behave the same way, and no new stmt enum is needed
+        type = stmt::T_SHOW_COLUMNS;
+      }
+      break;
       case T_ROLLBACK:
       case T_COMMIT: {
         type = stmt::T_END_TRANS;
