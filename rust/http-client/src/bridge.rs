@@ -14,13 +14,79 @@
 
 use std::time::Duration;
 
+use crate::native::{collect, Collector};
 use crate::{
     Batch as HttpBatch, Client as HttpClient, ErrorKind, HttpError, Protocols, RequestOptions,
     Response,
 };
 
 #[cxx::bridge(namespace = "oceanbase::http")]
-mod ffi {
+pub(crate) mod ffi {
+    struct SdkOptions {
+        timeout_ms: u64,
+        connect_timeout_ms: u64,
+        https_only: bool,
+        follow_redirects: bool,
+        max_redirects: u32,
+        verify_peer: bool,
+        verify_host: bool,
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum EasyErrorKind {
+        Transport,
+        UrlMalformed,
+        Timeout,
+        PeerVerification,
+        Connect,
+        UnsupportedEncoding,
+    }
+
+    struct Completion {
+        available: bool,
+        index: usize,
+        code: i32,
+        multi_code: i32,
+    }
+
+    unsafe extern "C++" {
+        include!("rust/http-client/include/sdk.h");
+
+        type Easy;
+        type Multi;
+        fn initialize() -> i32;
+        fn new_easy(collector: Box<Collector>) -> UniquePtr<Easy>;
+        fn configure(self: Pin<&mut Easy>, options: &SdkOptions) -> i32;
+        fn set_url(self: Pin<&mut Easy>, url: &str) -> i32;
+        fn accept_encoding(self: Pin<&mut Easy>, encoding: &str) -> i32;
+        fn add_header(self: Pin<&mut Easy>, header: &str) -> i32;
+        fn set_body(self: Pin<&mut Easy>, body: &[u8]) -> i32;
+        fn perform(self: Pin<&mut Easy>) -> i32;
+        fn status(self: &Easy, status: &mut u32) -> i32;
+        fn collector(self: Pin<&mut Easy>) -> &mut Collector;
+        fn detach(self: Pin<&mut Easy>) -> i32;
+        #[allow(dead_code)]
+        fn trust_pem_file(self: Pin<&mut Easy>, path: &str) -> i32;
+
+        fn new_multi() -> UniquePtr<Multi>;
+        // The Rust Batch owns both handles and destroys Easy before Multi.
+        unsafe fn add(self: Pin<&mut Multi>, easy: Pin<&mut Easy>, index: usize) -> i32;
+        fn drive(self: Pin<&mut Multi>, running: &mut u32) -> i32;
+        fn wait(self: &Multi, timeout_ms: i32) -> i32;
+        fn next_completion(self: Pin<&mut Multi>) -> Completion;
+
+        fn easy_error_kind(code: i32) -> EasyErrorKind;
+        fn easy_error_message(code: i32) -> String;
+        fn multi_error_message(code: i32) -> String;
+        #[allow(dead_code)]
+        fn gzip_supported() -> bool;
+    }
+
+    extern "Rust" {
+        type Collector;
+        fn collect(collector: &mut Collector, data: &[u8]) -> usize;
+    }
+
     enum Code {
         Ok,
         InvalidArgument,

@@ -279,44 +279,6 @@ int ObBlockCipher::decrypt(const char *key, const int64_t key_len,
   return ret;
 }
 
-static void* ob_malloc_openssl(size_t nbyte, const char *, int)
-{
-  ObMemAttr attr;
-  attr.ctx_id_ = ObCtxIds::GLIBC;
-  attr.label_ = ObModIds::OB_BUFFER;
-  lib::ObMallocHookAttrGuard guard(attr);
-  return malloc(nbyte);
-}
-
-static void* ob_realloc_openssl(void *ptr, size_t nbyte, const char *, int)
-{
-  ObMemAttr attr;
-  attr.ctx_id_ = ObCtxIds::GLIBC;
-  attr.label_ = ObModIds::OB_BUFFER;
-  lib::ObMallocHookAttrGuard guard(attr);
-  return realloc(ptr, nbyte);
-}
-
-static void ob_free_openssl(void *ptr, const char *, int)
-{
-  free(ptr);
-}
-
-int ObEncryptionUtil::init_ssl_malloc()
-{
-  int ret = OB_SUCCESS;
-#ifdef _WIN32
-  // CRYPTO_set_mem_functions fails if OpenSSL has already allocated memory.
-#else
-  int tmp_ret = CRYPTO_set_mem_functions(ob_malloc_openssl, ob_realloc_openssl, ob_free_openssl);
-  if (OB_UNLIKELY(tmp_ret != 1)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to set crypto mem functions", K(tmp_ret), K(ret));
-  }
-#endif
-  return ret;
-}
-
 bool ObEncryptionUtil::is_aes_encryption(const ObCipherOpMode opmode) {
   return (opmode >= ObCipherOpMode::ob_aes_128_ecb && opmode <= ObCipherOpMode::ob_aes_256_ofb) ||
          (opmode >= ObCipherOpMode::ob_aes_128_gcm && opmode <= ObCipherOpMode::ob_aes_256_gcm);

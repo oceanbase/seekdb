@@ -12,33 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::os::raw::c_long;
 use std::time::Duration;
 
-use curl::easy::{Easy2, Handler, List, SslOpt, WriteError};
-use curl::multi::{Easy2Handle, Multi};
+use cxx::UniquePtr;
 
-#[path = "tls.rs"]
-mod tls;
-
+use crate::bridge::ffi;
 use crate::{BatchProgress, ErrorKind, HttpError, Protocols, RequestOptions, Response};
 
-struct Collector {
+pub(crate) struct Collector {
     body: Vec<u8>,
     discard: bool,
-    host_check: Option<Box<tls::HostCheck>>,
 }
 
-impl Handler for Collector {
-    fn write(&mut self, data: &[u8]) -> Result<usize, WriteError> {
-        if !self.discard {
-            if self.body.try_reserve(data.len()).is_err() {
-                return Ok(0);
-            }
-            self.body.extend_from_slice(data);
+pub(crate) fn collect(collector: &mut Collector, data: &[u8]) -> usize {
+    if !collector.discard {
+        if collector.body.try_reserve(data.len()).is_err() {
+            return 0;
         }
-        Ok(data.len())
+        collector.body.extend_from_slice(data);
     }
+    data.len()
 }
 
 #[derive(Clone)]
@@ -49,243 +42,217 @@ pub struct Client {
 
 impl Client {
     pub fn new(url: String, options: RequestOptions) -> Self {
-        curl::init();
         Self { url, options }
     }
 
     pub fn add_header(&mut self, header: &str) -> Result<(), HttpError> {
-        if header.as_bytes().contains(&0) {
-            return Err(HttpError::invalid("HTTP header contains a NUL byte"));
-        }
+        validate_text(header, "HTTP header")?;
         self.options.headers.push(header.to_owned());
         Ok(())
     }
 
     pub fn post(&self, body: &[u8]) -> Result<Response, HttpError> {
         let mut easy = self.build_easy(body)?;
-        easy.perform()
-            .map_err(|error| transfer_error(error, easy.get_ref()))?;
+        check_easy(easy.pin_mut().perform())?;
         response(&mut easy)
     }
 
     pub fn batch(&self) -> Batch {
+        let multi = check_easy(ffi::initialize()).and_then(|()| {
+            let multi = ffi::new_multi();
+            if multi.is_null() {
+                Err(HttpError::new(
+                    ErrorKind::Multi,
+                    0,
+                    "cannot allocate libcurl multi handle",
+                ))
+            } else {
+                Ok(multi)
+            }
+        });
         Batch {
             client: self.clone(),
-            multi: Multi::new(),
-            handles: Vec::new(),
-            replies: Vec::new(),
+            multi,
+            requests: Vec::new(),
         }
     }
 
-    fn build_easy(&self, body: &[u8]) -> Result<Easy2<Collector>, HttpError> {
+    fn build_easy(&self, body: &[u8]) -> Result<UniquePtr<ffi::Easy>, HttpError> {
         if self.url.is_empty() {
             return Err(HttpError::invalid("HTTP URL is empty"));
         }
-        let mut easy = Easy2::new(Collector {
+        validate_text(&self.url, "HTTP URL")?;
+        if let Some(encoding) = &self.options.accept_encoding {
+            validate_text(encoding, "HTTP encoding")?;
+        }
+        for header in &self.options.headers {
+            validate_text(header, "HTTP header")?;
+        }
+        check_easy(ffi::initialize())?;
+        let mut easy = ffi::new_easy(Box::new(Collector {
             body: Vec::new(),
             discard: self.options.discard_body,
-            host_check: None,
-        });
-        easy.url(&self.url).map_err(HttpError::from_easy)?;
-        easy.signal(false).map_err(HttpError::from_easy)?;
-        easy.tcp_nodelay(true).map_err(HttpError::from_easy)?;
-        easy.timeout(self.options.timeout)
-            .map_err(HttpError::from_easy)?;
-        easy.connect_timeout(self.options.connect_timeout)
-            .map_err(HttpError::from_easy)?;
-        easy.ssl_verify_peer(self.options.verify_peer)
-            .map_err(HttpError::from_easy)?;
-        easy.ssl_verify_host(self.options.verify_host)
-            .map_err(HttpError::from_easy)?;
-        if self.options.verify_peer {
-            easy.ssl_options(SslOpt::new().native_ca(true))
-                .map_err(HttpError::from_easy)?;
+        }));
+        if easy.is_null() {
+            return Err(HttpError::new(
+                ErrorKind::Transport,
+                0,
+                "cannot allocate libcurl easy handle",
+            ));
         }
-        easy.proxy_ssl_options(SslOpt::new().native_ca(true))
-            .map_err(HttpError::from_easy)?;
-        easy.follow_location(self.options.follow_redirects)
-            .map_err(HttpError::from_easy)?;
-        if self.options.follow_redirects {
-            easy.max_redirections(self.options.max_redirects)
-                .map_err(HttpError::from_easy)?;
-        }
+        let options = ffi::SdkOptions {
+            timeout_ms: millis(self.options.timeout)?,
+            connect_timeout_ms: millis(self.options.connect_timeout)?,
+            https_only: self.options.protocols == Protocols::HttpsOnly,
+            follow_redirects: self.options.follow_redirects,
+            max_redirects: self.options.max_redirects,
+            verify_peer: self.options.verify_peer,
+            verify_host: self.options.verify_host,
+        };
+        check_easy(easy.pin_mut().configure(&options))?;
+        check_easy(easy.pin_mut().set_url(&self.url))?;
         if let Some(encoding) = &self.options.accept_encoding {
-            easy.accept_encoding(encoding)
-                .map_err(HttpError::from_easy)?;
+            check_easy(easy.pin_mut().accept_encoding(encoding))?;
         }
-        let mut headers = List::new();
         for header in &self.options.headers {
-            headers.append(header).map_err(HttpError::from_easy)?;
+            check_easy(easy.pin_mut().add_header(header))?;
         }
-        easy.http_headers(headers).map_err(HttpError::from_easy)?;
-        easy.post(true).map_err(HttpError::from_easy)?;
-        easy.post_fields_copy(body).map_err(HttpError::from_easy)?;
-        set_protocols(&mut easy, self.options.protocols)?;
-        if !self.options.verify_peer && self.options.verify_host {
-            easy.get_mut().host_check = Some(tls::HostCheck::new(easy.raw()));
-            // The boxed state stays at one address as Easy2 moves into a Multi.
-            // Easy2 cleans up libcurl before dropping its Collector and state.
-            let state = easy.get_mut().host_check.as_mut().unwrap().as_mut() as *mut tls::HostCheck;
-            tls::install(easy.raw(), state).map_err(HttpError::from_easy)?;
-        }
+        check_easy(easy.pin_mut().set_body(body))?;
+        #[cfg(test)]
+        crate::tests::configure_trust(easy.pin_mut())?;
         Ok(easy)
     }
 }
 
-fn set_protocols<H>(easy: &mut Easy2<H>, protocols: Protocols) -> Result<(), HttpError> {
-    let allowed = match protocols {
-        Protocols::HttpAndHttps => curl_sys::CURLPROTO_HTTP | curl_sys::CURLPROTO_HTTPS,
-        Protocols::HttpsOnly => curl_sys::CURLPROTO_HTTPS,
-    } as c_long;
-    // SAFETY: `easy` is a live Easy2 handle and both options take a C long.
-    // The numeric bitmask is the stable CURLOPT_PROTOCOLS ABI also used by
-    // libcurl's newer string-based option for the HTTP/HTTPS-only case.
-    let protocol_result =
-        unsafe { curl_sys::curl_easy_setopt(easy.raw(), curl_sys::CURLOPT_PROTOCOLS, allowed) };
-    if protocol_result != curl_sys::CURLE_OK {
-        return Err(HttpError::from_easy(curl::Error::new(protocol_result)));
+fn validate_text(value: &str, name: &str) -> Result<(), HttpError> {
+    if value.as_bytes().contains(&0) {
+        Err(HttpError::invalid(format!("{name} contains a NUL byte")))
+    } else {
+        Ok(())
     }
-    // SAFETY: same handle and option contract as above.
-    let redirect_result = unsafe {
-        curl_sys::curl_easy_setopt(easy.raw(), curl_sys::CURLOPT_REDIR_PROTOCOLS, allowed)
-    };
-    if redirect_result != curl_sys::CURLE_OK {
-        return Err(HttpError::from_easy(curl::Error::new(redirect_result)));
-    }
-    Ok(())
 }
 
-fn response<H>(easy: &mut Easy2<H>) -> Result<Response, HttpError>
-where
-    H: ResponseBody,
-{
-    let status = easy.response_code().map_err(HttpError::from_easy)?;
+fn millis(duration: Duration) -> Result<u64, HttpError> {
+    let value = u64::try_from(duration.as_millis())
+        .map_err(|_| HttpError::invalid("HTTP timeout is too large"))?;
+    Ok(if duration.is_zero() { 0 } else { value.max(1) })
+}
+
+fn response(easy: &mut UniquePtr<ffi::Easy>) -> Result<Response, HttpError> {
+    let mut status = 0;
+    check_easy(easy.status(&mut status))?;
     Ok(Response {
         status,
-        body: easy.get_mut().take_body(),
+        body: std::mem::take(&mut easy.pin_mut().collector().body),
     })
 }
 
-fn handle_response(handle: &mut Easy2Handle<Collector>) -> Result<Response, HttpError> {
-    let status = handle.response_code().map_err(HttpError::from_easy)?;
-    Ok(Response {
-        status,
-        body: std::mem::take(&mut handle.get_mut().body),
-    })
-}
-
-trait ResponseBody {
-    fn take_body(&mut self) -> Vec<u8>;
-}
-
-impl ResponseBody for Collector {
-    fn take_body(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.body)
-    }
+enum Request {
+    Pending(UniquePtr<ffi::Easy>),
+    Complete(Result<Response, HttpError>),
 }
 
 pub struct Batch {
     client: Client,
-    multi: Multi,
-    handles: Vec<Option<Easy2Handle<Collector>>>,
-    replies: Vec<Option<Result<Response, HttpError>>>,
+    multi: Result<UniquePtr<ffi::Multi>, HttpError>,
+    requests: Vec<Request>,
 }
 
 impl Batch {
     pub fn add_post(&mut self, body: &[u8]) -> Result<usize, HttpError> {
-        let easy = self.client.build_easy(body)?;
-        let token = self.handles.len();
-        let mut handle = self.multi.add2(easy).map_err(HttpError::from_multi)?;
-        handle.set_token(token).map_err(HttpError::from_easy)?;
-        self.handles.push(Some(handle));
-        self.replies.push(None);
-        Ok(token)
+        let multi = self.multi.as_mut().map_err(|error| error.clone())?;
+        let mut easy = self.client.build_easy(body)?;
+        self.requests.try_reserve(1).map_err(|_| {
+            HttpError::new(ErrorKind::Multi, 0, "cannot allocate HTTP request slot")
+        })?;
+        let index = self.requests.len();
+        // SAFETY: Batch owns both handles. Easy detaches on destruction, and Drop
+        // clears every request before destroying Multi. No callback runs here.
+        check_multi(unsafe { multi.pin_mut().add(easy.pin_mut(), index) })?;
+        self.requests.push(Request::Pending(easy));
+        Ok(index)
     }
 
     pub fn perform(&mut self) -> Result<BatchProgress, HttpError> {
-        let running = self.multi.perform().map_err(HttpError::from_multi)?;
-        let multi = &self.multi;
-        let handles = &mut self.handles;
-        let replies = &mut self.replies;
-        let mut collection_error = None;
-        multi.messages(|message| {
-            let token = match message.token() {
-                Ok(token) => token,
-                Err(error) => {
-                    collection_error = Some(HttpError::from_easy(error));
-                    return;
-                }
-            };
-            let Some(handle) = handles.get_mut(token).and_then(Option::as_mut) else {
-                collection_error = Some(HttpError::new(
+        let multi = self.multi.as_mut().map_err(|error| error.clone())?;
+        let mut running = 0;
+        check_multi(multi.pin_mut().drive(&mut running))?;
+        loop {
+            let completion = multi.pin_mut().next_completion();
+            check_multi(completion.multi_code)?;
+            if !completion.available {
+                break;
+            }
+            let slot = self.requests.get_mut(completion.index).ok_or_else(|| {
+                HttpError::new(
                     ErrorKind::Multi,
                     0,
                     "libcurl returned an unknown request token",
-                ));
-                return;
+                )
+            })?;
+            let reply = match slot {
+                Request::Pending(easy) => {
+                    check_multi(easy.pin_mut().detach())?;
+                    check_easy(completion.code).and_then(|()| response(easy))
+                }
+                Request::Complete(_) => {
+                    return Err(HttpError::new(
+                        ErrorKind::Multi,
+                        0,
+                        "libcurl completed a request twice",
+                    ));
+                }
             };
-            let reply = match message.result_for2(handle) {
-                Some(Ok(())) => handle_response(handle),
-                Some(Err(error)) => Err(transfer_error(error, handle.get_ref())),
-                None => Err(HttpError::new(
-                    ErrorKind::Multi,
-                    0,
-                    "libcurl completion message does not match the request",
-                )),
-            };
-            replies[token] = Some(reply);
-        });
-        if let Some(error) = collection_error {
-            return Err(error);
+            *slot = Request::Complete(reply);
         }
         Ok(BatchProgress { running })
     }
 
     pub fn wait(&self, timeout: Duration) -> Result<(), HttpError> {
-        self.multi
-            .wait(&mut [], timeout)
-            .map_err(HttpError::from_multi)?;
-        Ok(())
+        let multi = self.multi.as_ref().map_err(|error| error.clone())?;
+        let timeout_ms = millis(timeout)?.min(i32::MAX as u64) as i32;
+        check_multi(multi.wait(timeout_ms))
     }
 
     pub fn result(&self, index: usize) -> Option<&Result<Response, HttpError>> {
-        self.replies.get(index).and_then(Option::as_ref)
+        match self.requests.get(index) {
+            Some(Request::Complete(reply)) => Some(reply),
+            _ => None,
+        }
     }
 
     pub fn result_count(&self) -> usize {
-        self.replies.len()
+        self.requests.len()
     }
 }
 
-fn transfer_error(error: curl::Error, collector: &Collector) -> HttpError {
-    if let Some(reason) = collector
-        .host_check
-        .as_ref()
-        .and_then(|check| check.failure())
-    {
-        HttpError::new(
-            ErrorKind::Transport,
-            curl_sys::CURLE_PEER_FAILED_VERIFICATION as i32,
-            reason,
-        )
+impl Drop for Batch {
+    fn drop(&mut self) {
+        // Easy detaches while the Multi handle and its connection cache are live.
+        self.requests.clear();
+    }
+}
+
+pub(crate) fn check_easy(code: i32) -> Result<(), HttpError> {
+    if code == 0 {
+        return Ok(());
+    }
+    let kind = match ffi::easy_error_kind(code) {
+        ffi::EasyErrorKind::UrlMalformed => ErrorKind::UrlMalformed,
+        ffi::EasyErrorKind::Timeout => ErrorKind::Timeout,
+        _ => ErrorKind::Transport,
+    };
+    Err(HttpError::new(kind, code, ffi::easy_error_message(code)))
+}
+
+fn check_multi(code: i32) -> Result<(), HttpError> {
+    if code == 0 {
+        Ok(())
     } else {
-        HttpError::from_easy(error)
-    }
-}
-
-impl HttpError {
-    fn from_easy(error: curl::Error) -> Self {
-        let kind = if error.is_url_malformed() {
-            ErrorKind::UrlMalformed
-        } else if error.is_operation_timedout() {
-            ErrorKind::Timeout
-        } else {
-            ErrorKind::Transport
-        };
-        Self::new(kind, error.code() as i32, error.to_string())
-    }
-
-    fn from_multi(error: curl::MultiError) -> Self {
-        Self::new(ErrorKind::Multi, error.code(), error.to_string())
+        Err(HttpError::new(
+            ErrorKind::Multi,
+            code,
+            ffi::multi_error_message(code),
+        ))
     }
 }

@@ -17,7 +17,17 @@ use std::net::{TcpListener, TcpStream};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::bridge::ffi;
 use crate::{Client, ErrorKind, Protocols, RequestOptions};
+
+pub(crate) fn configure_trust(easy: std::pin::Pin<&mut ffi::Easy>) -> Result<(), crate::HttpError> {
+    if std::env::var_os("HTTP_CLIENT_NATIVE_CA_TEST").is_some() {
+        let path =
+            std::env::var("SSL_CERT_FILE").expect("isolated TLS test requires its CA fixture");
+        crate::native::check_easy(easy.trust_pem_file(&path))?;
+    }
+    Ok(())
+}
 
 struct Reply {
     status: u16,
@@ -163,7 +173,7 @@ fn batch_progress_preserves_request_order() {
 }
 
 #[test]
-fn gzip_response_is_decoded_by_rust_zlib() {
+fn gzip_response_is_decoded_by_sdk_libcurl() {
     const GZIP: &[u8] = &[
         0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x4b, 0xce, 0xcf, 0x2d, 0x28,
         0x4a, 0x2d, 0x2e, 0x4e, 0x4d, 0x51, 0x00, 0x52, 0x05, 0xf9, 0x79, 0xc5, 0xa9, 0x00, 0xb1,
@@ -178,8 +188,15 @@ fn gzip_response_is_decoded_by_rust_zlib() {
     let mut request_options = options();
     request_options.accept_encoding = Some("gzip".to_owned());
     let client = Client::new(url, request_options);
-    let response = client.post(b"compression").unwrap();
-    assert_eq!(b"compressed response", response.body.as_slice());
+    let reply = client.post(b"compression");
+    if ffi::gzip_supported() {
+        assert_eq!(b"compressed response", reply.unwrap().body.as_slice());
+    } else {
+        assert_eq!(
+            ffi::EasyErrorKind::UnsupportedEncoding,
+            ffi::easy_error_kind(reply.unwrap_err().transport_code)
+        );
+    }
     let requests = server.join().unwrap();
     assert!(requests[0]
         .0
@@ -232,7 +249,7 @@ impl TlsServer {
     fn new(cert: &'static [u8], key: &'static [u8], redirects: Vec<Option<String>>) -> Self {
         use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
         use std::sync::{atomic::AtomicBool, atomic::AtomicUsize, Arc, Mutex};
-        let provider = rustls::crypto::aws_lc_rs::default_provider();
+        let provider = rustls::crypto::ring::default_provider();
         let config = rustls::ServerConfig::builder_with_provider(Arc::new(provider))
             .with_safe_default_protocol_versions()
             .unwrap()
@@ -297,8 +314,6 @@ impl TlsServer {
                     if request.is_empty() {
                         break;
                     }
-                    // Record incomplete request bytes too, so zero delivery is
-                    // stronger than failing to parse a complete POST.
                     let mut requests = received.lock().unwrap();
                     let index = requests.len();
                     requests.push(request);
@@ -362,8 +377,8 @@ fn hostname_only_tls_rejects_wrong_host_before_any_request_bytes() {
         .post(b"private POST body")
         .unwrap_err();
     assert_eq!(
-        curl_sys::CURLE_PEER_FAILED_VERIFICATION as i32,
-        error.transport_code
+        ffi::EasyErrorKind::PeerVerification,
+        ffi::easy_error_kind(error.transport_code)
     );
     assert!(bad.delivered().is_empty());
     let good = TlsServer::new(
@@ -461,8 +476,8 @@ fn hostname_only_tls_checks_redirects_and_batch_result_tokens() {
     assert_eq!(200, batch.result(0).unwrap().as_ref().unwrap().status);
     let error = batch.result(1).unwrap().as_ref().unwrap_err();
     assert_eq!(
-        curl_sys::CURLE_PEER_FAILED_VERIFICATION as i32,
-        error.transport_code
+        ffi::EasyErrorKind::PeerVerification,
+        ffi::easy_error_kind(error.transport_code)
     );
     assert!(bad.delivered().is_empty());
     assert_eq!(2, good.delivered().len());
@@ -503,11 +518,12 @@ fn disabled_host_verification_and_ordinary_tls_failures_keep_their_policy() {
     let error = Client::new(url, hostname_options())
         .post(b"connect error")
         .unwrap_err();
-    assert_eq!(curl_sys::CURLE_COULDNT_CONNECT as i32, error.transport_code);
+    assert_eq!(
+        ffi::EasyErrorKind::Connect,
+        ffi::easy_error_kind(error.transport_code)
+    );
 }
 
-// Linux's native verifier reads SSL_CERT_FILE. A fresh test process isolates
-// native root-store initialization and libcurl's proxy environment from other tests.
 #[cfg(target_os = "linux")]
 fn native_ca_test_process(name: &str) -> std::process::Command {
     let root_file = std::env::temp_dir().join(format!(
@@ -590,8 +606,8 @@ fn native_ca_trust_accepts_matching_names_and_rejects_wrong_names() {
         .post(b"must not be delivered")
         .unwrap_err();
     assert_eq!(
-        curl_sys::CURLE_PEER_FAILED_VERIFICATION as i32,
-        error.transport_code
+        ffi::EasyErrorKind::PeerVerification,
+        ffi::easy_error_kind(error.transport_code)
     );
     assert!(wrong_name.delivered().is_empty());
 
@@ -604,8 +620,8 @@ fn native_ca_trust_accepts_matching_names_and_rejects_wrong_names() {
         .post(b"untrusted leaf")
         .unwrap_err();
     assert_eq!(
-        curl_sys::CURLE_PEER_FAILED_VERIFICATION as i32,
-        error.transport_code
+        ffi::EasyErrorKind::PeerVerification,
+        ffi::easy_error_kind(error.transport_code)
     );
     assert!(untrusted.delivered().is_empty());
 }
@@ -624,7 +640,7 @@ impl HttpsProxy {
         use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
         use std::sync::{atomic::AtomicBool, atomic::AtomicUsize, atomic::Ordering, Arc};
         let config = rustls::ServerConfig::builder_with_provider(Arc::new(
-            rustls::crypto::aws_lc_rs::default_provider(),
+            rustls::crypto::ring::default_provider(),
         ))
         .with_safe_default_protocol_versions()
         .unwrap()
@@ -742,8 +758,8 @@ fn https_proxy_uses_native_ca_and_keeps_verification_with_unverified_origin() {
             assert_eq!(200, result.unwrap().status);
         } else {
             assert_eq!(
-                curl_sys::CURLE_PEER_FAILED_VERIFICATION as i32,
-                result.unwrap_err().transport_code
+                ffi::EasyErrorKind::PeerVerification,
+                ffi::easy_error_kind(result.unwrap_err().transport_code)
             );
         }
         return;

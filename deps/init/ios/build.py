@@ -11,10 +11,11 @@ import shlex
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_PACKAGES = ("openssl",)
+DEFAULT_PACKAGES = ("openssl", "curl")
 
 PACKAGES = {
-
+    "curl": ("8.12.1", "https://curl.se/download/curl-8.12.1.tar.gz",
+             "7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf"),
     "openssl": ("1.1.1u", "https://codeload.github.com/openssl/openssl/tar.gz/refs/tags/OpenSSL_1_1_1u",
                 "fafe27202bde4238dce258d82ec8a8592a657842e5431264620a933a0c9436b7"),
 }
@@ -88,9 +89,50 @@ def build_openssl(source, build, prefix, sdk, options, environment):
     run(["make", "install_dev"], build, environment)
 
 
+def build_curl(source, build, prefix, sdk, options, environment):
+    """Build libcurl against local OpenSSL and the Apple SDK system zlib."""
+    for library in ("libssl.a", "libcrypto.a"):
+        verify_archive(prefix / "lib" / library, options.simulator, environment)
+    environment = target_environment(sdk, options, environment, prefix)
+    run([source / "configure", "--host=aarch64-apple-darwin", "--disable-shared",
+         "--enable-static", "--disable-dependency-tracking", "--disable-ldap",
+         "--disable-ldaps", "--without-libpsl", "--without-libssh2", "--without-libssh",
+         "--without-wolfssh", "--without-nghttp2", "--without-nghttp3", "--without-ngtcp2",
+         "--without-zstd", "--without-brotli", "--without-libidn2", "--without-librtmp",
+         "--without-gssapi", "--without-apple-idn", "--without-secure-transport",
+         "--without-quiche", "--without-msh3", "--without-libuv", "--without-libgsasl",
+         "--with-openssl=" + str(prefix), "--with-zlib=" + str(Path(sdk) / "usr"),
+         "--prefix=" + str(prefix)], build, environment)
+    run(["make", "-C", "lib", "-j" + str(options.jobs)], build, environment)
+    verify_archive(build / "lib/.libs/libcurl.a", options.simulator, environment)
+    run(["make", "-C", "lib", "install"], build, environment)
+    run(["make", "-C", "include", "install"], build, environment)
+
+
+def target_environment(sdk, options, environment, prefix=None):
+    result = dict(environment)
+    sdk_name = "iphonesimulator" if options.simulator else "iphoneos"
+    triple = "arm64-apple-ios" + options.deployment_target
+    if options.simulator:
+        triple += "-simulator"
+    for variable, tool in (("CC", "clang"), ("CXX", "clang++"), ("AR", "ar"), ("RANLIB", "ranlib")):
+        result[variable] = subprocess.check_output(
+            ["xcrun", "--sdk", sdk_name, "--find", tool], env=environment, universal_newlines=True).strip()
+    flags = "-O2 -fPIC -target " + triple + " -isysroot " + shlex.quote(sdk)
+    result["CFLAGS"] = flags
+    result["CXXFLAGS"] = flags
+    result["LDFLAGS"] = "-target " + triple + " -isysroot " + shlex.quote(sdk)
+    result["PKG_CONFIG"] = "pkg-config"
+    result["PKG_CONFIG_LIBDIR"] = str(prefix / "lib/pkgconfig") if prefix else ""
+    result["PKG_CONFIG_PATH"] = ""
+    if prefix:
+        result["CPPFLAGS"] = "-I" + shlex.quote(str(prefix / "include"))
+        result["LDFLAGS"] += " -L" + shlex.quote(str(prefix / "lib"))
+    return result
 
 
 PACKAGE_OUTPUTS = {
+    "curl": ("lib/libcurl.a", "include/curl/curl.h"),
     "openssl": ("lib/libssl.a", "lib/libcrypto.a", "include/openssl/ssl.h"),
 }
 
@@ -187,7 +229,8 @@ def main():
             shutil.rmtree(build)
         source = source_package(name, environment)
         build.mkdir(parents=True, exist_ok=True)
-        build_openssl(source, build, prefix, sdk, options, environment)
+        {"openssl": build_openssl, "curl": build_curl}[name](
+            source, build, prefix, sdk, options, environment)
         outputs = installed_output_hashes(name, prefix)
         if outputs is None:
             raise RuntimeError("Missing installed dependency outputs: " + name)

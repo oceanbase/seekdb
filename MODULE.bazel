@@ -39,8 +39,14 @@ crate.annotation(
     additive_build_file = "//bazel:cxx_runtime.BUILD.bazel",
 )
 crate.annotation(
+    crate = "ring",
+    repositories = ["rust_crates"],
+    build_script_env = {"NUM_JOBS": "4"},
+)
+crate.annotation(
     crate = "libz-sys",
     repositories = ["rust_crates"],
+    build_script_env = {"NUM_JOBS": "4"},
     build_script_toolchains = ["@@//bazel:windows_build_script_environment"],
 )
 crate.annotation_select(
@@ -48,7 +54,6 @@ crate.annotation_select(
     repositories = ["rust_crates"],
     triples = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"],
     build_script_env = {
-        "CMAKE_GENERATOR": "Ninja",
         "PATH": "$(CARGO_BUILD_SCRIPT_PATH)",
     },
     build_script_env_files = ["@@//bazel:windows_build_script_environment"],
@@ -58,13 +63,6 @@ crate.annotation_select(
     repositories = ["rust_crates"],
     triples = ["wasm32-unknown-emscripten"],
     build_script_env = {"EM_FROZEN_CACHE": "1"},
-)
-crate.annotation(
-    crate = "aws-lc-sys",
-    version = "0.47.0",
-    repositories = ["rust_crates"],
-    additive_build_file = "//bazel:aws_lc_build_script.BUILD.bazel",
-    override_target_build_script = "@@rules_rust++crate+rust_crates__aws-lc-sys-0.47.0//:platform_build_script",
 )
 crate.annotation(
     crate = "spdlog-rs",

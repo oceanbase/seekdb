@@ -29,7 +29,15 @@ MODULES = {
     "xml-parser": {"bridge": "src/bridge.rs", "headers": ["include/callbacks.h"]},
     "compression": {"bridge": "src/bridge.rs"},
     "spatial-covering": {"bridge": "src/bridge.rs"},
-    "http-client": {"bridge": "src/bridge.rs", "exclude_platforms": ["emscripten"]},
+    "http-client": {
+        "bridge": "src/bridge.rs",
+        "headers": ["include/sdk.h"],
+        "deps": select({
+            "@platforms//os:emscripten": [],
+            "//conditions:default": ["//rust/http-client:sdk_headers"],
+        }),
+        "exclude_platforms": ["emscripten"],
+    },
     "uuid-generator": {"bridge": "src/bridge.rs"},
     "in-process": {
         "bridge": "src/bridge.rs",

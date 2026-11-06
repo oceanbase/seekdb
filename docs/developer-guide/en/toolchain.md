@@ -34,14 +34,14 @@ Windows 11 x64 uses `python build.py`; `init` selects the Windows dependency man
 ### RHEL-compatible systems
 
 ```bash
-sudo yum install git wget curl rpm-build rpm2cpio cpio make cmake glibc-devel glibc-headers binutils m4 libtool libaio python3
+sudo yum install git wget curl rpm-build rpm2cpio cpio make glibc-devel glibc-headers binutils m4 libtool libaio python3
 ```
 
 ### Debian-compatible systems
 
 ```bash
 sudo apt-get update
-sudo apt-get install git wget curl rpm rpm2cpio cpio make cmake build-essential binutils m4 file python3
+sudo apt-get install git wget curl rpm rpm2cpio cpio make build-essential binutils m4 file python3
 ```
 
 Ubuntu 24.04 and Debian 13 use the time64 libaio package:
@@ -53,27 +53,29 @@ sudo apt-get install libaio1t64
 ### SUSE-compatible systems
 
 ```bash
-sudo zypper install git wget curl rpm cpio make cmake glibc-devel binutils m4 python3
+sudo zypper install git wget curl rpm cpio make glibc-devel binutils m4 python3
 ```
 
 ## macOS host packages
 
 ```bash
-brew install git pkg-config cmake openssl@3 ncurses googletest
+brew install git pkg-config openssl@3 ncurses googletest
 brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
 See [Homebrew optimization](homebrew.md) if a mirror is required.
 
-The zlib-ng source build requires CMake and a build backend. Native Unix builds use Make by default. These are build-host tools, also used when cross-compiling for Android, iOS, or Wasm. Cargo provides the library sources and build scripts; it does not install these tools.
+The zlib crate compiles its bundled C sources directly with the selected compiler on Linux, macOS, Windows, iOS, and Wasm. Android uses the system `libz.so`, which does not need to be bundled with the application. The zlib build does not require CMake, Make, or Ninja.
+
+The Rust HTTP module wraps the existing target SDK libcurl through the repository's CXX integration. Rust owns client configuration, batch state, errors, and response buffers. A thin C++ adapter uses the SDK headers for libcurl options, callbacks, and resource management. The module has no `curl`, `curl-sys`, `openssl-sys`, vendored OpenSSL, AWS-LC, bindgen, or CMake dependency. The SDK retains ownership of libcurl's TLS backend, CA defaults, and supported content encodings. Existing SDK preparation and jemalloc have their own build requirements.
+
+On Windows, the existing SDK libcurl DLL and its zlib DLL dependency remain in the runtime package. Rust storage and SQL compression continue to use their separate stock-zlib build.
 
 ## Windows host packages
 
 Install Python 3 and Visual Studio 2022 Build Tools with the **Desktop development with C++** workload. The project dependency SDK includes LLVM 18.1.8; no separate LLVM installation is needed.
 
 The bundled jemalloc build also requires a POSIX shell, core utilities (including `chmod`), `awk`, `grep`, `sed`, and GNU Make. A full Git for Windows installation provides the shell and utilities; minimal Git distributions may omit required commands. GNU Make must also be available. MSYS2 can supply these tools with `pacman -S make coreutils gawk grep sed`. Add the required tool directories to the build process's `PATH`, keeping Visual Studio's compiler and linker directories first. These utilities run the build scripts; the library is compiled with clang-cl and the MSVC runtime.
-
-Install CMake and Ninja and add their executable directories to the build process's `PATH`. The zlib-ng crate invokes CMake; the Windows configuration selects Ninja as its build backend. The Rust `cmake` crate invokes an existing CMake executable and does not download it.
 
 Open **x64 Native Tools Command Prompt for VS 2022** in the repository root, check that the build utilities are available, then initialize the parser tools and dependency SDK:
 
@@ -84,8 +86,6 @@ where chmod
 where awk
 where grep
 where sed
-where cmake
-where ninja
 where lib
 python build.py init
 python build.py build seekdb

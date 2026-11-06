@@ -16,6 +16,7 @@
 
 use std::time::Duration;
 
+#[cfg(not(target_os = "emscripten"))]
 mod bridge;
 #[cfg(not(target_os = "emscripten"))]
 mod native;

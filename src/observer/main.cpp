@@ -717,8 +717,6 @@ int inner_main(int argc, char *argv[])
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(CONF_DIR))) {
     MPRINT("create log dir fail: ./etc/");
   } else if (FALSE_IT(create_observer_softlink())) {
-  } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
-    MPRINT("failed to init crypto malloc");
   }
   if (OB_FAIL(ret)) {
   } else if (!opts->nodaemon_ && !opts->initialize_) {

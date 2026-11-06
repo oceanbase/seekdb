@@ -20,6 +20,12 @@ SDK_HEADERS = {
     "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
+    "curl_headers": _headers("curl") | {
+        "linkopts": select({
+            "@platforms//os:ios": ["-lz"],
+            "//conditions:default": [],
+        }),
+    },
     "rapidjson_headers": _headers("rapidjson"),
     "roaring_headers": _headers("roaring"),
     "vsag_headers": _headers("vsag"),
@@ -38,6 +44,10 @@ SDK_IMPORTS = {
         "includes": ["include"],
     },
     "libssl": {"static_library": "lib/libssl.a"},
+    "curl": {
+        "static_library": "lib/libcurl.a",
+        "deps": [":curl_headers", ":libssl", ":libcrypto"],
+    },
 }
 
 SDK_FILEGROUPS = {
@@ -61,6 +71,8 @@ NATIVE_LINK_FILES = [
 _WINDOWS_SHARED = {
     "libcrypto": ("openssl/libcrypto.lib", "openssl_bin/libcrypto-3-x64.dll", []),
     "libssl": ("openssl/libssl.lib", "openssl_bin/libssl-3-x64.dll", [":libcrypto"]),
+    "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":curl_headers", ":curl_zlib_runtime"]),
+    "curl_zlib_runtime": ("lib/zlib.lib", "bin/zlib1.dll", []),
     "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),

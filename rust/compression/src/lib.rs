@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Seekdb compression and checksum primitives backed by static libz-sys.
+//! Compression and checksum primitives backed by libz-sys.
 //!
 //! One-shot operations borrow caller-owned buffers. Streaming objects own
 //! their compressor state and can be reset without retaining input or output
@@ -218,8 +218,8 @@ struct ZStream {
 impl ZStream {
     fn new_deflate(level: i32) -> Result<Self, DeflateError> {
         let mut raw = Box::new(empty_stream());
-        // SAFETY: raw is a fully initialized z_stream and the version and
-        // structure size come from the same libz-sys build.
+        // SAFETY: raw is initialized, the version comes from the linked zlib,
+        // and the supplied size matches libz-sys's z_stream layout.
         let code = unsafe {
             libz_sys::deflateInit2_(
                 &mut *raw,
@@ -245,8 +245,8 @@ impl ZStream {
 
     fn new_inflate() -> Result<Self, InflateError> {
         let mut raw = Box::new(empty_stream());
-        // SAFETY: raw is a fully initialized z_stream and the version and
-        // structure size come from the same libz-sys build.
+        // SAFETY: raw is initialized, the version comes from the linked zlib,
+        // and the supplied size matches libz-sys's z_stream layout.
         let code = unsafe {
             libz_sys::inflateInit2_(
                 &mut *raw,

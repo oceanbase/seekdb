@@ -102,7 +102,6 @@ class ObEncryptionUtil
 {
 public:
 
-  static int init_ssl_malloc();
   static bool is_aes_encryption(const ObCipherOpMode opmode);
   static bool is_sm4_encryption(const ObCipherOpMode opmode);
   static bool is_ecb_mode(const ObCipherOpMode opmode);
