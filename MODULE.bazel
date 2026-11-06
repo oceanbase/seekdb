@@ -173,17 +173,6 @@ third_party_headers_repository(name = "third_party_ios", platform = "iphoneos")
 third_party_headers_repository(name = "third_party_ios_simulator", platform = "iphonesimulator")
 third_party_headers_repository(name = "third_party_wasm", platform = "wasm")
 
-seekdb_deps_repository = use_repo_rule(
-    "//bazel/seekdb_deps:repositories.bzl",
-    "seekdb_deps_repository",
-)
-seekdb_deps_repository(
-    name = "seekdb_deps_gtest",
-    lock_file = "//:deps.lock.json",
-    package_name = "gtest",
-    target = "linux-x86_64-glibc217",
-)
-
 linux_cc_toolchain_repository = use_repo_rule(
     "//bazel/toolchains/cc:linux_cc_toolchain_repo.bzl",
     "linux_cc_toolchain_repository",

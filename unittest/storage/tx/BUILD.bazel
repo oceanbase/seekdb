@@ -8,7 +8,7 @@ cc_library(
     srcs = ["test_tx_replay_executor.cpp"],
     alwayslink = True,
     deps = [
-        "//bazel/seekdb_deps:gtest",
+        "//bazel/third_party:gtest",
         "//src/storage:tx_replay_test_headers",
     ],
 )
