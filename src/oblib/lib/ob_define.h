@@ -506,7 +506,7 @@ const int64_t OB_MINOR_FREEZE_TEAM_UP_INTERVAL = 2LL * 60 * 60 * 1000 * 1000; //
 const int64_t OB_MAX_TIME = 3020399000000;
 const int64_t OB_MAX_PACKET_FLY_TS = 100 * 1000L; // 100ms
 const int64_t OB_MAX_PACKET_DECODE_TS = 10 * 1000L;
-//Oceanbase network protocol
+//OceanBase network protocol
 /*  4bytes  4bytes  4bytes   4bytes
  * -----------------------------------
  * | flag |  dlen  | chid | reserved |

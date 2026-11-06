@@ -180,7 +180,7 @@ int ObService::init(common::ObMySQLProxy &sql_proxy)
 
   if (inited_) {
     ret = OB_INIT_TWICE;
-    FLOG_WARN("Oceanbase service has already init", KR(ret));
+    FLOG_WARN("OceanBase service has already init", KR(ret));
   } else if (!gctx_.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
     FLOG_WARN("gctx not init", "gctx inited", gctx_.is_inited(), KR(ret));
