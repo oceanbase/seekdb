@@ -62,6 +62,24 @@ rust::Box<Prepared> prepare_add(TestHost &host)
   return prepare(view(nodes), view(std::vector<uint32_t>{0, 1}),
                  view(std::vector<uint32_t>{}), view(std::vector<uint32_t>{2}), 1, &host);
 }
+
+std::vector<uint64_t> add_image()
+{
+  std::vector<Instruction> nodes(3);
+  nodes[0].opcode = 0;
+  nodes[1].opcode = 1;
+  nodes[1].value = 7;
+  nodes[2].opcode = 2;
+  nodes[2].argument_count = 2;
+  const std::vector<uint32_t> arguments{0, 1};
+  const std::vector<uint32_t> filters;
+  const std::vector<uint32_t> projections{2};
+  std::vector<uint64_t> image(image_words(view(nodes), view(arguments), view(filters),
+                                        view(projections), 1), 0);
+  compile_image(view(nodes), view(arguments), view(filters), view(projections), 1,
+                rust::Slice<uint64_t>(image.data(), image.size()));
+  return image;
+}
 }
 
 TEST(ExpressionProgramBridge, RebindNullSkipAndResultLifetime)
@@ -171,9 +189,11 @@ TEST(ExpressionProgramBridge, CapacityGrowthIsTransactional)
     host.fail_allocation_ = true;
     EXPECT_THROW(reserve_rows(*runner, *prepared, 65), rust::Error);
     EXPECT_EQ(3U, reserve_rows(*runner, *prepared, 0));
-    EXPECT_EQ(6U, input_storage(*runner).size());
     EXPECT_EQ(11, static_cast<int64_t>(node_values(*runner, 2)[0]));
     EXPECT_EQ(3U, node_flags(*runner, 2)[0]);
+    EXPECT_EQ(6U, input_storage(*runner).size());
+    EXPECT_EQ(0U, node_values(*runner, 2).size());
+    EXPECT_EQ(0U, node_flags(*runner, 2).size());
     EXPECT_EQ(2, host.allocations_);
     EXPECT_EQ(0, host.releases_);
     host.fail_allocation_ = false;
@@ -330,6 +350,122 @@ TEST(ExpressionProgramBridge, SharedPreparedHasIndependentConcurrentRunners)
     }
   }
   EXPECT_EQ(1, plan_host.releases_);
+}
+
+TEST(ExpressionProgramImage, RestoreOwnsItsProgramAndUsesFreshIdentity)
+{
+  TestHost host;
+  uint64_t copied_result = 0;
+  {
+    auto prepared = [&host]() {
+      auto image = add_image();
+      validate_image(view(image));
+      auto copied = image;
+      image.clear();
+      return restore(view(copied), &host);
+    }();
+    auto runner = make_runner(*prepared, &host, 1);
+    EXPECT_EQ(0U, node_values(*runner, 2).size());
+    input_storage(*runner)[0] = 4;
+    input_storage(*runner)[1] = 1;
+    ASSERT_EQ(0, execute(*runner, *prepared, 1, view(std::vector<uint8_t>{0})).code);
+    copied_result = node_values(*runner, 2)[0];
+    EXPECT_EQ(11U, copied_result);
+    EXPECT_EQ(0U, node_values(*runner, std::numeric_limits<size_t>::max()).size());
+    EXPECT_EQ(0U, node_flags(*runner, std::numeric_limits<size_t>::max()).size());
+    {
+      auto other_image = add_image();
+      auto other = restore(view(other_image), &host);
+      EXPECT_NE(0, execute(*runner, *other, 1, view(std::vector<uint8_t>{0})).code);
+      EXPECT_EQ(0U, node_values(*runner, 2).size());
+      EXPECT_EQ(0U, node_flags(*runner, 2).size());
+      EXPECT_EQ(0U, selection(*runner).size());
+    }
+    input_storage(*runner)[0] = 9;
+    EXPECT_EQ(0U, node_values(*runner, 2).size());
+    ASSERT_EQ(0, execute(*runner, *prepared, 1, view(std::vector<uint8_t>{0})).code);
+    EXPECT_EQ(16U, node_values(*runner, 2)[0]);
+    input_storage(*runner)[0] = std::numeric_limits<int64_t>::max();
+    EXPECT_EQ(1, execute(*runner, *prepared, 1, view(std::vector<uint8_t>{0})).code);
+    EXPECT_EQ(0U, node_values(*runner, 2).size());
+    EXPECT_EQ(0U, node_flags(*runner, 2).size());
+    EXPECT_EQ(0U, selection(*runner).size());
+    EXPECT_EQ(11U, copied_result);
+  }
+  EXPECT_EQ(3, host.allocations_);
+  EXPECT_EQ(host.allocations_, host.releases_);
+  EXPECT_EQ(11U, copied_result);
+}
+
+TEST(ExpressionProgramImage, InvalidImageDoesNotAllocateOrModifyStorage)
+{
+  TestHost host;
+  auto image = add_image();
+  EXPECT_THROW(restore(view(image), nullptr), rust::Error);
+  for (size_t length = 0; length < image.size(); ++length) {
+    const auto truncated = rust::Slice<const uint64_t>(image.data(), length);
+    EXPECT_THROW(validate_image(truncated), rust::Error);
+    EXPECT_THROW(restore(truncated, &host), rust::Error);
+  }
+  auto oversized = image;
+  oversized.push_back(0);
+  EXPECT_THROW(validate_image(view(oversized)), rust::Error);
+  EXPECT_THROW(restore(view(oversized), &host), rust::Error);
+  auto corrupt = image;
+  corrupt[0] = std::numeric_limits<uint64_t>::max();
+  EXPECT_THROW(validate_image(view(corrupt)), rust::Error);
+  EXPECT_THROW(restore(view(corrupt), &host), rust::Error);
+  EXPECT_EQ(0, host.allocations_);
+  EXPECT_EQ(0, host.releases_);
+
+  std::vector<Instruction> nodes(1);
+  nodes[0].opcode = 255;
+  const std::vector<uint32_t> empty;
+  const std::vector<uint32_t> roots{0};
+  const auto before = image;
+  EXPECT_THROW(image_words(view(nodes), view(empty), view(empty), view(roots), 1), rust::Error);
+  EXPECT_THROW(compile_image(view(nodes), view(empty), view(empty), view(roots), 1,
+      rust::Slice<uint64_t>(image.data(), image.size())), rust::Error);
+  EXPECT_EQ(before, image);
+  nodes[0].opcode = 0;
+  EXPECT_THROW(compile_image(view(nodes), view(empty), view(empty), view(roots), 1,
+      rust::Slice<uint64_t>(image.data(), 1)), rust::Error);
+  EXPECT_EQ(before, image);
+  EXPECT_THROW(compile_image(view(nodes), view(empty), view(empty), view(roots), 0,
+      rust::Slice<uint64_t>(image.data(), image.size())), rust::Error);
+  EXPECT_EQ(before, image);
+}
+
+TEST(ExpressionProgramImage, RestoreAndRunnerFailuresReleaseOwnedRegions)
+{
+  TestHost host;
+  auto image = add_image();
+  host.fail_allocation_ = true;
+  EXPECT_THROW(restore(view(image), &host), rust::Error);
+  EXPECT_EQ(0, host.allocations_);
+  EXPECT_EQ(0, host.releases_);
+  host.fail_allocation_ = false;
+  {
+    auto prepared = restore(view(image), &host);
+    host.fail_allocation_ = true;
+    EXPECT_THROW(make_runner(*prepared, &host, 1), rust::Error);
+    EXPECT_EQ(1, host.allocations_);
+    EXPECT_EQ(0, host.releases_);
+    host.fail_allocation_ = false;
+    auto runner = make_runner(*prepared, &host, 1);
+    input_storage(*runner)[0] = 2;
+    input_storage(*runner)[1] = 1;
+    ASSERT_EQ(0, execute(*runner, *prepared, 1, view(std::vector<uint8_t>{0})).code);
+    const auto copied = node_values(*runner, 2)[0];
+    host.cancellation_ = -4012;
+    EXPECT_EQ(-4012, execute(*runner, *prepared, 1, view(std::vector<uint8_t>{0})).code);
+    EXPECT_EQ(0U, node_values(*runner, 2).size());
+    EXPECT_EQ(0U, node_flags(*runner, 2).size());
+    EXPECT_EQ(0U, selection(*runner).size());
+    EXPECT_EQ(9U, copied);
+  }
+  EXPECT_EQ(2, host.allocations_);
+  EXPECT_EQ(2, host.releases_);
 }
 
 int main(int argc, char **argv)

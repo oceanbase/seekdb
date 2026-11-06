@@ -32,6 +32,8 @@ pub const MAX_NODES: usize = 256;
 pub const MAX_DEPTH: usize = 64;
 pub const MAX_ARGUMENTS: usize = 4096;
 const INSTRUCTION_WORDS: usize = 5;
+const IMAGE_HEADER_WORDS: usize = 6;
+const IMAGE_VERSION: u64 = 1;
 static NEXT_PROGRAM_ID: AtomicU64 = AtomicU64::new(1);
 pub const EVALUATED: u64 = 1;
 pub const VALID: u64 = 2;
@@ -202,6 +204,18 @@ impl EvalError {
 pub struct Program<B = Vec<u64>> {
     backing: B,
     id: u64,
+    layout: ProgramLayout,
+}
+
+/// Validated, pointer-free compiled words. Restoring copies the payload into a
+/// separate program, so the image storage need not outlive execution.
+pub struct ProgramImage<B> {
+    backing: B,
+    layout: ProgramLayout,
+}
+
+#[derive(Clone, Copy)]
+struct ProgramLayout {
     nodes: usize,
     inputs: usize,
     arguments_start: usize,
@@ -210,21 +224,55 @@ pub struct Program<B = Vec<u64>> {
     end: usize,
 }
 
+impl ProgramLayout {
+    fn new(
+        nodes: usize,
+        inputs: usize,
+        arguments: usize,
+        filters: usize,
+        projections: usize,
+    ) -> Result<Self, EvalError> {
+        if nodes == 0
+            || nodes > MAX_NODES
+            || inputs > MAX_NODES
+            || arguments > MAX_ARGUMENTS
+            || filters > MAX_NODES
+            || projections > MAX_NODES
+        {
+            return Err(invalid_program(0));
+        }
+        // All counts are bounded before these offsets are computed.
+        let arguments_start = nodes * INSTRUCTION_WORDS;
+        let filters_start = arguments_start + arguments;
+        let projections_start = filters_start + filters;
+        Ok(Self {
+            nodes,
+            inputs,
+            arguments_start,
+            filters_start,
+            projections_start,
+            end: projections_start + projections,
+        })
+    }
+
+    fn for_spec(spec: &ProgramSpec<'_>) -> Result<Self, EvalError> {
+        Self::new(
+            spec.instructions.len(),
+            spec.inputs as usize,
+            spec.arguments.len(),
+            spec.filters.len(),
+            spec.projections.len(),
+        )
+    }
+}
+
 fn invalid_program(node: NodeId) -> EvalError {
     EvalError::new(ErrorKind::InvalidProgram, node, 0)
 }
 
 /// Validates the whole program before any caller-owned storage is modified.
 pub fn program_words(spec: &ProgramSpec<'_>) -> Result<usize, EvalError> {
-    if spec.instructions.is_empty()
-        || spec.instructions.len() > MAX_NODES
-        || spec.inputs as usize > MAX_NODES
-        || spec.arguments.len() > MAX_ARGUMENTS
-        || spec.filters.len() > MAX_NODES
-        || spec.projections.len() > MAX_NODES
-    {
-        return Err(invalid_program(0));
-    }
+    let layout = ProgramLayout::for_spec(spec)?;
     let mut depths = [0usize; MAX_NODES];
     for (id, instruction) in spec.instructions.iter().enumerate() {
         let start = instruction.argument_start as usize;
@@ -244,7 +292,11 @@ pub fn program_words(spec: &ProgramSpec<'_>) -> Result<usize, EvalError> {
             And | Or => count > 0 && count <= MAX_NODES,
             Case => (2..=MAX_NODES * 2 + 1).contains(&count),
         };
-        if !valid_arity || (instruction.opcode == Input && instruction.input >= spec.inputs) {
+        if !valid_arity
+            || (instruction.opcode == Input && instruction.input >= spec.inputs)
+            || (instruction.is_null && instruction.opcode != Constant)
+            || (instruction.error_on_zero && instruction.opcode != Div)
+        {
             return Err(invalid_program(id));
         }
         let mut depth = 1;
@@ -264,10 +316,124 @@ pub fn program_words(spec: &ProgramSpec<'_>) -> Result<usize, EvalError> {
             return Err(invalid_program(root as usize));
         }
     }
-    Ok(spec.instructions.len() * INSTRUCTION_WORDS
-        + spec.arguments.len()
-        + spec.filters.len()
-        + spec.projections.len())
+    Ok(layout.end)
+}
+
+fn write_instructions(spec: &ProgramSpec<'_>, layout: ProgramLayout, data: &mut [u64]) {
+    for (id, instruction) in spec.instructions.iter().enumerate() {
+        let start = id * INSTRUCTION_WORDS;
+        data[start] = u64::from(instruction.opcode as u8)
+            | (u64::from(instruction.is_null) << 8)
+            | (u64::from(instruction.error_on_zero) << 9);
+        data[start + 1] = u64::from(instruction.input);
+        data[start + 2] = u64::from(instruction.argument_start);
+        data[start + 3] = u64::from(instruction.argument_count);
+        data[start + 4] = instruction.value as u64;
+    }
+    for (destination, &source) in data[layout.arguments_start..layout.end].iter_mut().zip(
+        spec.arguments
+            .iter()
+            .chain(spec.filters)
+            .chain(spec.projections),
+    ) {
+        *destination = u64::from(source);
+    }
+}
+
+fn next_program_id() -> Result<u64, EvalError> {
+    NEXT_PROGRAM_ID
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+        .map_err(|_| EvalError::new(ErrorKind::Memory, 0, 0))
+}
+
+/// Validates the complete specification and returns its image storage size.
+pub fn image_words(spec: &ProgramSpec<'_>) -> Result<usize, EvalError> {
+    program_words(spec).map(|words| IMAGE_HEADER_WORDS + words)
+}
+
+/// Compiles into initialized caller storage without allocating. Failure leaves
+/// storage unchanged; any excess capacity is outside the returned image words.
+pub fn compile_image_in<B: AsRef<[u64]> + AsMut<[u64]>>(
+    spec: ProgramSpec<'_>,
+    mut backing: B,
+) -> Result<ProgramImage<B>, EvalError> {
+    let words = image_words(&spec)?;
+    if backing.as_ref().len() < words {
+        return Err(EvalError::new(ErrorKind::Memory, 0, 0));
+    }
+    let layout = ProgramLayout::for_spec(&spec)?;
+    let data = backing.as_mut();
+    data[..IMAGE_HEADER_WORDS].copy_from_slice(&[
+        IMAGE_VERSION,
+        layout.nodes as u64,
+        layout.inputs as u64,
+        spec.arguments.len() as u64,
+        spec.filters.len() as u64,
+        spec.projections.len() as u64,
+    ]);
+    write_instructions(&spec, layout, &mut data[IMAGE_HEADER_WORDS..words]);
+    Ok(ProgramImage { backing, layout })
+}
+
+impl<B: AsRef<[u64]>> ProgramImage<B> {
+    /// Checks an exact image, including every instruction and dependency, before
+    /// returning a validated view. No storage is modified or allocated.
+    pub fn parse(backing: B) -> Result<Self, EvalError> {
+        let data = backing.as_ref();
+        let header = data
+            .get(..IMAGE_HEADER_WORDS)
+            .ok_or_else(|| invalid_program(0))?;
+        if header[0] != IMAGE_VERSION {
+            return Err(invalid_program(0));
+        }
+        let count = |index| usize::try_from(header[index]).map_err(|_| invalid_program(0));
+        let layout = ProgramLayout::new(count(1)?, count(2)?, count(3)?, count(4)?, count(5)?)?;
+        if data.len() != IMAGE_HEADER_WORDS + layout.end {
+            return Err(invalid_program(0));
+        }
+        let payload = &data[IMAGE_HEADER_WORDS..];
+        let mut instructions = [Instruction::default(); MAX_NODES];
+        for (id, target) in instructions[..layout.nodes].iter_mut().enumerate() {
+            let source = &payload[id * INSTRUCTION_WORDS..(id + 1) * INSTRUCTION_WORDS];
+            if source[0] & !0x3ff != 0 {
+                return Err(invalid_program(id));
+            }
+            *target = Instruction {
+                opcode: Opcode::try_from((source[0] & 0xff) as u8)
+                    .map_err(|_| invalid_program(id))?,
+                input: u32::try_from(source[1]).map_err(|_| invalid_program(id))?,
+                argument_start: u32::try_from(source[2]).map_err(|_| invalid_program(id))?,
+                argument_count: u32::try_from(source[3]).map_err(|_| invalid_program(id))?,
+                value: source[4] as i64,
+                is_null: source[0] & (1 << 8) != 0,
+                error_on_zero: source[0] & (1 << 9) != 0,
+            };
+        }
+        let mut references = [0u32; MAX_ARGUMENTS + MAX_NODES * 2];
+        let reference_words = &payload[layout.arguments_start..];
+        for (target, &source) in references.iter_mut().zip(reference_words) {
+            *target = u32::try_from(source).map_err(|_| invalid_program(0))?;
+        }
+        let filters = layout.filters_start - layout.arguments_start;
+        let projections = layout.projections_start - layout.arguments_start;
+        program_words(&ProgramSpec {
+            instructions: &instructions[..layout.nodes],
+            arguments: &references[..filters],
+            filters: &references[filters..projections],
+            projections: &references[projections..reference_words.len()],
+            inputs: layout.inputs as u32,
+        })?;
+        Ok(Self { backing, layout })
+    }
+
+    pub fn words(&self) -> &[u64] {
+        &self.backing.as_ref()[..IMAGE_HEADER_WORDS + self.layout.end]
+    }
+
+    /// Required destination storage for an independently owned runtime program.
+    pub fn program_words(&self) -> usize {
+        self.layout.end
+    }
 }
 
 impl<B: AsRef<[u64]> + AsMut<[u64]>> Program<B> {
@@ -276,59 +442,51 @@ impl<B: AsRef<[u64]> + AsMut<[u64]>> Program<B> {
         if backing.as_ref().len() < words {
             return Err(EvalError::new(ErrorKind::Memory, 0, 0));
         }
-        let id = NEXT_PROGRAM_ID
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
-            .map_err(|_| EvalError::new(ErrorKind::Memory, 0, 0))?;
-        let arguments_start = spec.instructions.len() * INSTRUCTION_WORDS;
-        let filters_start = arguments_start + spec.arguments.len();
-        let projections_start = filters_start + spec.filters.len();
-        let data = backing.as_mut();
-        for (id, instruction) in spec.instructions.iter().enumerate() {
-            let start = id * INSTRUCTION_WORDS;
-            data[start] = u64::from(instruction.opcode as u8)
-                | (u64::from(instruction.is_null) << 8)
-                | (u64::from(instruction.error_on_zero) << 9);
-            data[start + 1] = u64::from(instruction.input);
-            data[start + 2] = u64::from(instruction.argument_start);
-            data[start + 3] = u64::from(instruction.argument_count);
-            data[start + 4] = instruction.value as u64;
-        }
-        for (destination, &source) in data[arguments_start..words].iter_mut().zip(
-            spec.arguments
-                .iter()
-                .chain(spec.filters)
-                .chain(spec.projections),
-        ) {
-            *destination = u64::from(source);
-        }
+        let id = next_program_id()?;
+        let layout = ProgramLayout::for_spec(&spec)?;
+        write_instructions(&spec, layout, backing.as_mut());
         Ok(Self {
             backing,
             id,
-            nodes: spec.instructions.len(),
-            inputs: spec.inputs as usize,
-            arguments_start,
-            filters_start,
-            projections_start,
-            end: words,
+            layout,
+        })
+    }
+
+    /// Copies a validated image. The resulting program borrows neither its image
+    /// nor its source instructions, and receives a fresh execution identity.
+    pub fn from_image_in<I: AsRef<[u64]>>(
+        image: &ProgramImage<I>,
+        mut backing: B,
+    ) -> Result<Self, EvalError> {
+        let layout = image.layout;
+        if backing.as_ref().len() < layout.end {
+            return Err(EvalError::new(ErrorKind::Memory, 0, 0));
+        }
+        let id = next_program_id()?;
+        backing.as_mut()[..layout.end].copy_from_slice(&image.words()[IMAGE_HEADER_WORDS..]);
+        Ok(Self {
+            backing,
+            id,
+            layout,
         })
     }
 }
 
 impl<B: AsRef<[u64]>> Program<B> {
     pub fn node_count(&self) -> usize {
-        self.nodes
+        self.layout.nodes
     }
     pub fn input_count(&self) -> usize {
-        self.inputs
+        self.layout.inputs
     }
     pub fn filters(&self) -> &[u64] {
-        &self.backing.as_ref()[self.filters_start..self.projections_start]
+        &self.backing.as_ref()[self.layout.filters_start..self.layout.projections_start]
     }
     pub fn projections(&self) -> &[u64] {
-        &self.backing.as_ref()[self.projections_start..self.end]
+        &self.backing.as_ref()[self.layout.projections_start..self.layout.end]
     }
     pub fn storage_words(&self) -> usize {
-        self.end
+        self.layout.end
     }
 
     fn instruction(&self, node: NodeId) -> InstructionView<'_> {
@@ -337,7 +495,7 @@ impl<B: AsRef<[u64]>> Program<B> {
         let bits = data[start];
         let opcode = Opcode::try_from((bits & 0xff) as u8)
             .expect("prepared instruction opcode must remain valid");
-        let arguments = self.arguments_start + data[start + 2] as usize;
+        let arguments = self.layout.arguments_start + data[start + 2] as usize;
         let count = data[start + 3] as usize;
         InstructionView {
             opcode,
@@ -630,6 +788,7 @@ impl<B: AsRef<[u64]> + AsMut<[u64]>> Execution<B> {
         if program.id != self.program_id
             || !matches!(self.state, BatchState::Ready | BatchState::Complete)
         {
+            self.state = BatchState::Failed;
             return Err(EvalError::new(ErrorKind::InvalidBatch, 0, 0));
         }
         let result = self.run(program, control);
@@ -642,20 +801,28 @@ impl<B: AsRef<[u64]> + AsMut<[u64]>> Execution<B> {
     }
 
     pub fn selection(&self) -> &[u64] {
+        if self.state != BatchState::Complete {
+            return &[];
+        }
         let start = self.selection_start();
         &self.backing.as_ref()[start..start + self.rows]
     }
 
-    /// A node's result is usable exactly where its flags contain EVALUATED.
+    /// Results are visible only after the complete batch succeeds, and usable
+    /// exactly where the corresponding flags contain EVALUATED.
     /// Negative signed values are stored as their u64 bit patterns.
     pub fn node_values(&self, node: NodeId) -> &[u64] {
-        assert!(node < self.nodes);
+        if self.state != BatchState::Complete || node >= self.nodes {
+            return &[];
+        }
         let start = self.values_start() + node * self.capacity;
         &self.backing.as_ref()[start..start + self.rows]
     }
 
     pub fn node_flags(&self, node: NodeId) -> &[u64] {
-        assert!(node < self.nodes);
+        if self.state != BatchState::Complete || node >= self.nodes {
+            return &[];
+        }
         let start = self.flags_start() + node * self.capacity;
         &self.backing.as_ref()[start..start + self.rows]
     }

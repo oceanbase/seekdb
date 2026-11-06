@@ -784,6 +784,11 @@ fn execution_rejects_different_programs_and_requires_rebind_after_input_mutation
         execution.filter_project(&second, &mut ()).unwrap_err().kind,
         ErrorKind::InvalidBatch
     );
+    assert_eq!(
+        execution.filter_project(&first, &mut ()).unwrap_err().kind,
+        ErrorKind::InvalidBatch
+    );
+    execution.begin_batch(1, &[0]).unwrap();
     execution.filter_project(&first, &mut ()).unwrap();
     execution.input_values_mut()[0] = 8;
     assert_eq!(
@@ -1078,8 +1083,184 @@ fn batch_shared_fallible_node_is_demanded_by_disjoint_case_roots() {
         (error.kind, error.node, error.row),
         (ErrorKind::DivisionByZero, 2, 63)
     );
-    assert!(execution
-        .node_flags(6)
+    let flags = execution.flags_start() + 6 * execution.capacity();
+    assert!(execution.backing[flags..flags + 65]
         .iter()
         .all(|&flags| flags == EVALUATED | VALID));
+    assert!(execution.node_flags(6).is_empty());
+    assert!(execution.node_values(6).is_empty());
+    assert!(execution.selection().is_empty());
+}
+
+fn add_image() -> Vec<u64> {
+    let instructions = [
+        Instruction::default(),
+        Instruction {
+            opcode: Opcode::Constant,
+            value: 7,
+            ..Instruction::default()
+        },
+        Instruction {
+            opcode: Opcode::Add,
+            argument_count: 2,
+            ..Instruction::default()
+        },
+    ];
+    let spec = ProgramSpec {
+        instructions: &instructions,
+        arguments: &[0, 1],
+        filters: &[],
+        projections: &[2],
+        inputs: 1,
+    };
+    let mut words = vec![0; image_words(&spec).unwrap()];
+    compile_image_in(spec, &mut words).unwrap();
+    words
+}
+
+#[test]
+fn images_reject_truncation_trailing_words_and_corrupt_fields() {
+    let image = add_image();
+    for length in 0..image.len() {
+        assert!(matches!(
+            ProgramImage::parse(&image[..length]),
+            Err(EvalError {
+                kind: ErrorKind::InvalidProgram,
+                ..
+            })
+        ));
+    }
+    let mut oversized = image.clone();
+    oversized.push(0);
+    assert!(ProgramImage::parse(oversized).is_err());
+
+    let input = IMAGE_HEADER_WORDS;
+    let constant = input + INSTRUCTION_WORDS;
+    let add = constant + INSTRUCTION_WORDS;
+    let arguments = add + INSTRUCTION_WORDS;
+    let corruptions = [
+        (0, 0),
+        (0, u64::MAX),
+        (1, 0),
+        (1, MAX_NODES as u64 + 1),
+        (1, u64::MAX),
+        (2, 0),
+        (2, MAX_NODES as u64 + 1),
+        (3, MAX_ARGUMENTS as u64 + 1),
+        (3, u64::MAX),
+        (4, MAX_NODES as u64 + 1),
+        (5, MAX_NODES as u64 + 1),
+        (input, 255),
+        (input, 1 << 63),
+        (input, 1 << 8),
+        (constant, Opcode::Constant as u64 | (1 << 9)),
+        (input + 1, 1),
+        (input + 1, 1 << 32),
+        (input + 3, 1),
+        (add + 2, 1),
+        (add + 2, u64::MAX),
+        (add + 3, 0),
+        (add + 3, 1),
+        (add + 3, u64::MAX),
+        (arguments, 2),
+        (arguments, 3),
+        (arguments, 1 << 32),
+        (arguments + 2, 3),
+        (arguments + 2, u64::MAX),
+    ];
+    for (index, value) in corruptions {
+        let mut damaged = image.clone();
+        damaged[index] = value;
+        assert!(
+            matches!(
+                ProgramImage::parse(&damaged),
+                Err(EvalError {
+                    kind: ErrorKind::InvalidProgram,
+                    ..
+                })
+            ),
+            "image word {index} = {value}"
+        );
+    }
+    let mut filter = image;
+    filter[4] = 1;
+    filter[5] = 0;
+    *filter.last_mut().unwrap() = 3;
+    assert!(ProgramImage::parse(filter).is_err());
+}
+
+#[test]
+fn images_apply_the_native_graph_depth_limit() {
+    let mut instructions = vec![
+        Instruction {
+            opcode: Opcode::Identity,
+            argument_count: 1,
+            ..Instruction::default()
+        };
+        MAX_DEPTH + 1
+    ];
+    instructions[0] = Instruction {
+        opcode: Opcode::Constant,
+        value: 7,
+        ..Instruction::default()
+    };
+    for (id, instruction) in instructions.iter_mut().enumerate().skip(1) {
+        instruction.argument_start = (id - 1) as u32;
+    }
+    let mut arguments: Vec<u32> = (0..MAX_DEPTH as u32).collect();
+    arguments[MAX_DEPTH - 1] = 0;
+    let spec = ProgramSpec {
+        instructions: &instructions,
+        arguments: &arguments,
+        filters: &[],
+        projections: &[MAX_DEPTH as u32],
+        inputs: 0,
+    };
+    let image = compile_image_in(spec, vec![0; image_words(&spec).unwrap()]).unwrap();
+    let mut words = image.words().to_vec();
+    let last_reference =
+        IMAGE_HEADER_WORDS + instructions.len() * INSTRUCTION_WORDS + MAX_DEPTH - 1;
+    words[last_reference] = (MAX_DEPTH - 1) as u64;
+    assert!(matches!(
+        ProgramImage::parse(words),
+        Err(EvalError {
+            kind: ErrorKind::InvalidProgram,
+            node: MAX_DEPTH,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn image_construction_and_restore_leave_destination_unchanged_on_error() {
+    let instructions = [Instruction::default()];
+    let spec = ProgramSpec {
+        instructions: &instructions,
+        arguments: &[],
+        filters: &[],
+        projections: &[0],
+        inputs: 1,
+    };
+    let mut destination = [99; 32];
+    let before = destination;
+    assert!(compile_image_in(ProgramSpec { inputs: 0, ..spec }, &mut destination).is_err());
+    assert_eq!(before, destination);
+    assert!(compile_image_in(spec, &mut destination[..1]).is_err());
+    assert_eq!(before, destination);
+
+    let image = compile_image_in(spec, &mut destination).unwrap();
+    assert_eq!(image.words().len(), image_words(&spec).unwrap());
+    assert!(ProgramImage::parse(image.words()).is_ok());
+    let mut short_program = [42; 1];
+    assert!(matches!(
+        Program::from_image_in(&image, &mut short_program),
+        Err(EvalError {
+            kind: ErrorKind::Memory,
+            ..
+        })
+    ));
+    assert_eq!(short_program, [42]);
+    assert!(destination[image_words(&spec).unwrap()..]
+        .iter()
+        .all(|&word| word == 99));
 }

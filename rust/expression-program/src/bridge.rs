@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{Control, ErrorKind, Execution, Instruction, Opcode, Program, ProgramSpec};
+use crate::{
+    Control, ErrorKind, Execution, Instruction, Opcode, Program, ProgramImage, ProgramSpec,
+    MAX_NODES,
+};
 use std::{ptr::NonNull, slice};
 
 #[cxx::bridge(namespace = "oceanbase::expression")]
@@ -46,6 +49,23 @@ mod ffi {
     extern "Rust" {
         type Prepared;
         type Runner;
+        fn image_words(
+            instructions: &[Instruction],
+            arguments: &[u32],
+            filters: &[u32],
+            projections: &[u32],
+            inputs: u32,
+        ) -> Result<usize>;
+        fn compile_image(
+            instructions: &[Instruction],
+            arguments: &[u32],
+            filters: &[u32],
+            projections: &[u32],
+            inputs: u32,
+            storage: &mut [u64],
+        ) -> Result<()>;
+        fn validate_image(image: &[u64]) -> Result<()>;
+        unsafe fn restore(image: &[u64], host: *mut IExecutionHost) -> Result<Box<Prepared>>;
         unsafe fn prepare(
             instructions: &[Instruction],
             arguments: &[u32],
@@ -76,10 +96,10 @@ pub struct Prepared {
     program: Program<HostBacking>,
 }
 
-// SAFETY: preparation finishes all writes before the plan publishes Prepared.
+// SAFETY: preparation finishes all writes before the owner publishes Prepared.
 // Shared access reads only immutable program words; it never calls the allocation
-// host. The plan owner keeps the region and host alive through all borrowed
-// executions and cached-plan references, then drops Prepared after they retire.
+// host. The owner keeps the region and host alive through all borrowed
+// executions, then drops Prepared after they retire.
 // Send is intentionally absent because destruction calls the owning host.
 unsafe impl Sync for Prepared {}
 
@@ -88,8 +108,8 @@ pub struct Runner {
     host: NonNull<ffi::IExecutionHost>,
 }
 
-// Prepared and Runner each own one allocator-accounted region. Their respective
-// plan and query hosts outlive the owner. Datum frames receive result copies.
+// Prepared and Runner each own one allocator-accounted region. Their hosts
+// outlive the owner. Datum frames receive result copies.
 struct HostBacking {
     data: NonNull<u64>,
     words: usize,
@@ -155,25 +175,17 @@ impl Control for HostControl {
     }
 }
 
-// SAFETY: host owns every allocated region and outlives Prepared and Runner.
-unsafe fn prepare(
+fn native_spec<'a>(
     instructions: &[ffi::Instruction],
-    arguments: &[u32],
-    filters: &[u32],
-    projections: &[u32],
+    arguments: &'a [u32],
+    filters: &'a [u32],
+    projections: &'a [u32],
     inputs: u32,
-    host: *mut ffi::IExecutionHost,
-) -> Result<Box<Prepared>, &'static str> {
-    if instructions.len() > 256
-        || arguments.len() > 4096
-        || filters.len() > 256
-        || projections.len() > 256
-        || inputs > 256
-    {
+    native: &'a mut [Instruction; MAX_NODES],
+) -> Result<ProgramSpec<'a>, &'static str> {
+    if instructions.len() > MAX_NODES {
         return Err("expression program exceeds preparation limits");
     }
-    let host = NonNull::new(host).ok_or("missing execution host")?;
-    let mut native = [Instruction::default(); 256];
     for (target, source) in native.iter_mut().zip(instructions) {
         *target = Instruction {
             opcode: Opcode::try_from(source.opcode).map_err(|_| "invalid expression opcode")?,
@@ -185,13 +197,97 @@ unsafe fn prepare(
             error_on_zero: source.error_on_zero,
         };
     }
-    let spec = ProgramSpec {
+    Ok(ProgramSpec {
         instructions: &native[..instructions.len()],
         arguments,
         filters,
         projections,
         inputs,
-    };
+    })
+}
+
+fn image_words(
+    instructions: &[ffi::Instruction],
+    arguments: &[u32],
+    filters: &[u32],
+    projections: &[u32],
+    inputs: u32,
+) -> Result<usize, &'static str> {
+    let mut native = [Instruction::default(); MAX_NODES];
+    let spec = native_spec(
+        instructions,
+        arguments,
+        filters,
+        projections,
+        inputs,
+        &mut native,
+    )?;
+    crate::image_words(&spec).map_err(|_| "invalid expression image specification")
+}
+
+fn compile_image(
+    instructions: &[ffi::Instruction],
+    arguments: &[u32],
+    filters: &[u32],
+    projections: &[u32],
+    inputs: u32,
+    storage: &mut [u64],
+) -> Result<(), &'static str> {
+    let mut native = [Instruction::default(); MAX_NODES];
+    let spec = native_spec(
+        instructions,
+        arguments,
+        filters,
+        projections,
+        inputs,
+        &mut native,
+    )?;
+    let words = crate::image_words(&spec).map_err(|_| "invalid expression image specification")?;
+    if storage.len() != words {
+        return Err("expression image storage size mismatch");
+    }
+    crate::compile_image_in(spec, storage).map_err(|_| "invalid expression image")?;
+    Ok(())
+}
+
+fn validate_image(image: &[u64]) -> Result<(), &'static str> {
+    ProgramImage::parse(image).map_err(|_| "invalid expression image")?;
+    Ok(())
+}
+
+// SAFETY: host owns every allocated region and outlives Prepared and Runner.
+unsafe fn restore(
+    image: &[u64],
+    host: *mut ffi::IExecutionHost,
+) -> Result<Box<Prepared>, &'static str> {
+    let image = ProgramImage::parse(image).map_err(|_| "invalid expression image")?;
+    let host = NonNull::new(host).ok_or("missing execution host")?;
+    // SAFETY: the caller keeps host alive until the Prepared owner is dropped.
+    let backing = unsafe { HostBacking::allocate(host, image.program_words()) }?;
+    let program =
+        Program::from_image_in(&image, backing).map_err(|_| "expression restore failed")?;
+    try_box(Prepared { program })
+}
+
+// SAFETY: host owns every allocated region and outlives Prepared and Runner.
+unsafe fn prepare(
+    instructions: &[ffi::Instruction],
+    arguments: &[u32],
+    filters: &[u32],
+    projections: &[u32],
+    inputs: u32,
+    host: *mut ffi::IExecutionHost,
+) -> Result<Box<Prepared>, &'static str> {
+    let host = NonNull::new(host).ok_or("missing execution host")?;
+    let mut native = [Instruction::default(); MAX_NODES];
+    let spec = native_spec(
+        instructions,
+        arguments,
+        filters,
+        projections,
+        inputs,
+        &mut native,
+    )?;
     let words = crate::program_words(&spec).map_err(|_| "invalid expression program size")?;
     // SAFETY: the caller keeps host alive until the Prepared owner is dropped.
     let backing = unsafe { HostBacking::allocate(host, words) }?;
