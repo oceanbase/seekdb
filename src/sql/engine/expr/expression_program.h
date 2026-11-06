@@ -26,6 +26,11 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObObj;
+class ObNewRow;
+}
 namespace sql
 {
 class ObOperator;
@@ -33,6 +38,32 @@ struct ObExpr;
 
 class ObOpSpec;
 class ObPhysicalPlan;
+class ObExecContext;
+struct ObTempExpr;
+
+class TemporaryExpressionProgram final : public expression::IExecutionHost
+{
+public:
+  static int compile(ObTempExpr &temp);
+  static int validate(const ObTempExpr &temp);
+  static int create(ObExecContext &exec_ctx, const ObTempExpr &temp,
+                    TemporaryExpressionProgram *&result);
+  ~TemporaryExpressionProgram() override = default;
+  int execute(const ObTempExpr &temp, const common::ObNewRow &row, common::ObObj &result);
+  uint64_t *allocate(size_t words) override;
+  void release(uint64_t *data, size_t words) override;
+  int32_t check_cancel() override;
+
+private:
+  TemporaryExpressionProgram(ObExecContext &exec_ctx, uint64_t incarnation)
+    : exec_ctx_(exec_ctx), incarnation_(incarnation) {}
+  int import_inputs(const ObTempExpr &temp, const common::ObNewRow &row);
+  ObExecContext &exec_ctx_;
+  const uint64_t incarnation_;
+  std::optional<rust::Box<expression::Prepared>> prepared_;
+  std::optional<rust::Box<expression::Runner>> runner_;
+  bool allocation_failed_ = false;
+};
 
 class CompiledExpressionProgram final : public expression::IExecutionHost
 {
@@ -92,7 +123,6 @@ private:
   int ensure_capacity(int64_t rows);
   int import_inputs(int64_t rows, bool batch, const ObBitVector *skip);
   void export_root(const ObExpr &expr, size_t node, int64_t rows, bool batch);
-  int report_error(const expression::RunStatus &status);
 
   ObOperator &owner_;
   const CompiledExpressionProgram &compiled_;

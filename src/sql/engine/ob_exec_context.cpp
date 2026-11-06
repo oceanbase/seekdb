@@ -19,6 +19,7 @@
 #include "query/engine/ob_exec_context_access.h"
 #include "query/session/ob_session_access.h"
 #include "ob_exec_context.h"
+#include "sql/engine/expr/expression_program.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/ob_lob_access_utils.h"
 #include "share/ob_server_struct.h"
@@ -317,6 +318,16 @@ void ObExecContext::set_runtime_services(const RuntimeServices &services)
 ObExecContext::~ObExecContext()
 {
   row_id_list_array_.reset();
+  if (temp_expr_ctx_map_.created()) {
+    for (hash::ObHashMap<int64_t, int64_t>::iterator it = temp_expr_ctx_map_.begin();
+        it != temp_expr_ctx_map_.end();
+        ++it) {
+      auto *temp_expr_ctx = reinterpret_cast<ObTempExprCtx *>(it->second);
+      temp_expr_ctx->~ObTempExprCtx();
+      get_allocator().free(temp_expr_ctx);
+    }
+    temp_expr_ctx_map_.destroy();
+  }
   destroy_eval_allocator();
   reset_op_ctx();
   if (OB_NOT_NULL(exec_stat_collector_)) {
@@ -369,16 +380,6 @@ ObExecContext::~ObExecContext()
   if (OB_LIKELY(NULL != mem_context_)) {
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
-  }
-  if (!temp_expr_ctx_map_.created()) {
-  // do nothing
-  } else {
-    for (hash::ObHashMap<int64_t, int64_t>::iterator it = temp_expr_ctx_map_.begin();
-        it != temp_expr_ctx_map_.end();
-        ++it) {
-      (reinterpret_cast<ObTempExprCtx *>(it->second))->~ObTempExprCtx();
-    }
-    temp_expr_ctx_map_.destroy();
   }
   update_columns_ = nullptr;
   errcode_ = OB_SUCCESS;
@@ -523,69 +524,85 @@ void ObExecContext::destroy_eval_allocator()
 }
 
 int ObExecContext::get_temp_expr_eval_ctx(const ObTempExpr &temp_expr,
-                                          ObTempExprCtx *&temp_expr_ctx)
+                                        ObTempExprCtx *&temp_expr_ctx)
 {
   int ret = OB_SUCCESS;
-  if (use_temp_expr_ctx_cache_) {
+  temp_expr_ctx = nullptr;
+  if (!use_temp_expr_ctx_cache_) {
+    ret = build_temp_expr_ctx(temp_expr, temp_expr_ctx);
+  } else {
     if (!temp_expr_ctx_map_.created()) {
-      OZ(temp_expr_ctx_map_.create(8, ObMemAttr("TempExprCtx")));
+      ret = temp_expr_ctx_map_.create(8, ObMemAttr("TempExprCtx"));
     }
     if (OB_SUCC(ret)) {
+      const int64_t key = reinterpret_cast<int64_t>(&temp_expr);
       int64_t ctx_ptr = 0;
-      if (OB_FAIL(temp_expr_ctx_map_.get_refactored(reinterpret_cast<int64_t>(&temp_expr),
-                                                    ctx_ptr))) {
-        if (OB_HASH_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-          OZ(build_temp_expr_ctx(temp_expr, temp_expr_ctx));
-          CK(OB_NOT_NULL(temp_expr_ctx));
-          OZ(temp_expr_ctx_map_.set_refactored(reinterpret_cast<int64_t>(&temp_expr),
-                                               reinterpret_cast<int64_t>(temp_expr_ctx)));
-        } else {
+      ObTempExprCtx *previous = nullptr;
+      ret = temp_expr_ctx_map_.get_refactored(key, ctx_ptr);
+      if (ret == OB_HASH_NOT_EXIST) {
+        ret = OB_SUCCESS;
+      } else if (OB_SUCC(ret)) {
+        previous = reinterpret_cast<ObTempExprCtx *>(ctx_ptr);
+        if (previous->incarnation_ == temp_expr.incarnation_) {
+          temp_expr_ctx = previous;
         }
-      } else {
-        temp_expr_ctx = reinterpret_cast<ObTempExprCtx *>(ctx_ptr);
+      }
+      if (OB_SUCC(ret) && temp_expr_ctx == nullptr) {
+        ObTempExprCtx *created = nullptr;
+        if (OB_FAIL(build_temp_expr_ctx(temp_expr, created))) {
+        } else if (OB_FAIL(temp_expr_ctx_map_.set_refactored(key,
+                   reinterpret_cast<int64_t>(created), previous != nullptr))) {
+          created->~ObTempExprCtx();
+          get_allocator().free(created);
+        } else {
+          temp_expr_ctx = created;
+          if (previous != nullptr) {
+            previous->~ObTempExprCtx();
+            get_allocator().free(previous);
+          }
+        }
       }
     }
-  } else {
-    OZ(build_temp_expr_ctx(temp_expr, temp_expr_ctx));
   }
-
   return ret;
 }
 
 int ObExecContext::build_temp_expr_ctx(const ObTempExpr &temp_expr, ObTempExprCtx *&temp_expr_ctx)
 {
   int ret = OB_SUCCESS;
-  uint64_t frame_cnt = 0;
-  char **frames = NULL;
-  char *mem = static_cast<char*>(get_allocator().alloc(sizeof(ObTempExprCtx)));
-  ObArray<char *> tmp_param_frame_ptrs;
-  if (OB_ISNULL(mem)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  temp_expr_ctx = nullptr;
+  void *memory = get_allocator().alloc(sizeof(ObTempExprCtx));
+  if (memory == nullptr) {
+    return OB_ALLOCATE_MEMORY_FAILED;
   }
-  OX(temp_expr_ctx = new(mem)ObTempExprCtx(*this));
-  OZ(temp_expr.alloc_frame(get_allocator(), tmp_param_frame_ptrs, frame_cnt, frames));
-  OX(temp_expr_ctx->frames_ = frames);
-  OX(temp_expr_ctx->frame_cnt_ = frame_cnt);
-  // init expr_op_size_ and expr_op_ctx_store_
-  if (OB_SUCC(ret)) {
-    if (temp_expr.need_ctx_cnt_ > 0) {
-      int64_t ctx_store_size = static_cast<int64_t>(
-                               temp_expr.need_ctx_cnt_ * sizeof(ObExprOperatorCtx *));
-      if (OB_ISNULL(temp_expr_ctx->expr_op_ctx_store_
-                    = static_cast<ObExprOperatorCtx **>(allocator_.alloc(ctx_store_size)))) {
+  auto *created = new (memory) ObTempExprCtx(*this);
+  created->incarnation_ = temp_expr.incarnation_;
+  created->frames_ = nullptr;
+  if (temp_expr.has_native_program()) {
+    ret = TemporaryExpressionProgram::create(*this, temp_expr, created->native_program_);
+  } else {
+    ObArray<char *> tmp_param_frame_ptrs;
+    if (OB_FAIL(temp_expr.alloc_frame(get_allocator(), tmp_param_frame_ptrs,
+                                     created->frame_cnt_, created->frames_))) {
+    } else if (temp_expr.need_ctx_cnt_ > 0) {
+      const int64_t bytes = temp_expr.need_ctx_cnt_ * sizeof(ObExprOperatorCtx *);
+      created->expr_op_ctx_store_ = static_cast<ObExprOperatorCtx **>(allocator_.alloc(bytes));
+      if (created->expr_op_ctx_store_ == nullptr) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to alloc expr_op_ctx_store_ memory", K(ret), K(ctx_store_size));
       } else {
-        temp_expr_ctx->expr_op_size_ = temp_expr.need_ctx_cnt_;
-        MEMSET(temp_expr_ctx->expr_op_ctx_store_, 0, ctx_store_size);
+        created->expr_op_size_ = temp_expr.need_ctx_cnt_;
+        MEMSET(created->expr_op_ctx_store_, 0, bytes);
       }
     }
   }
-
+  if (OB_SUCC(ret)) {
+    temp_expr_ctx = created;
+  } else {
+    created->~ObTempExprCtx();
+    get_allocator().free(created);
+  }
   return ret;
 }
-
 
 
 ObIAllocator &ObExecContext::get_sche_allocator()

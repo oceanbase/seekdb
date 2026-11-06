@@ -1539,7 +1539,8 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
     OZ(temp_expr->idx_col_arr_.assign(idx_col_arr));
     OX(temp_expr->expr_idx_ = get_rt_expr(*expr) - &(temp_expr->rt_exprs_.at(0)));
     if (OB_SUCC(ret)) {
-      OB_ASSERT(temp_expr->expr_idx_ >= 0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
+      OB_ASSERT(temp_expr->expr_idx_ >= 0 && temp_expr->expr_idx_ < temp_expr->rt_exprs_.count());
+      OZ(temp_expr->prepare_native_program());
     }
   }
 

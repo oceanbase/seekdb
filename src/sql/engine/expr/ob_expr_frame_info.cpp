@@ -18,6 +18,8 @@
 #include "ob_expr_frame_info.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/px/ob_px_util.h"
+#include "sql/engine/expr/expression_program.h"
+#include <atomic>
 
 namespace oceanbase
 {
@@ -559,6 +561,11 @@ int ObPreCalcExprFrameInfo::eval_expect_err(ObExecContext &exec_ctx,
 
 ObTempExprCtx::~ObTempExprCtx()
 {
+  if (native_program_ != nullptr) {
+    native_program_->~TemporaryExpressionProgram();
+    exec_ctx_.get_allocator().free(native_program_);
+    native_program_ = nullptr;
+  }
   if (expr_op_ctx_store_ != NULL) {
     ObExprOperatorCtx **it = expr_op_ctx_store_;
     ObExprOperatorCtx **it_end = &expr_op_ctx_store_[expr_op_size_];
@@ -573,25 +580,45 @@ ObTempExprCtx::~ObTempExprCtx()
   }
 }
 
+uint64_t ObTempExpr::next_incarnation()
+{
+  static std::atomic<uint64_t> next{1};
+  return next.fetch_add(1, std::memory_order_relaxed);
+}
+
+int ObTempExpr::prepare_native_program()
+{
+  return TemporaryExpressionProgram::compile(*this);
+}
+
+int ObTempExpr::validate_native_program() const
+{
+  return TemporaryExpressionProgram::validate(*this);
+}
+
 int ObTempExpr::eval(ObExecContext &exec_ctx, const ObNewRow &row, ObObj &result) const
 {
   int ret = OB_SUCCESS;
-  ObDatum *res_datum = NULL;
-  char **frames = NULL;
-  ObTempExprCtx *temp_expr_ctx = NULL;
-  OZ(exec_ctx.get_temp_expr_eval_ctx(*this, temp_expr_ctx));
-  CK(OB_NOT_NULL(temp_expr_ctx));
-  OX(ObSQLUtils::clear_expr_eval_flags(rt_exprs_.at(expr_idx_), *temp_expr_ctx));
-  OZ(row_to_frame(row, *temp_expr_ctx));
-  if (OB_SUCC(ret)) {
-    ObTempExprCtxReplaceGuard exec_ctx_backup_guard(exec_ctx, *temp_expr_ctx);
-    OZ(rt_exprs_.at(expr_idx_).eval(*temp_expr_ctx, res_datum));
-    OZ(res_datum->to_obj(result, rt_exprs_.at(expr_idx_).obj_meta_));
-    if (!exec_ctx.use_temp_expr_ctx_cache()) {
-      temp_expr_ctx->~ObTempExprCtx();
+  ObTempExprCtx *temp_expr_ctx = nullptr;
+  if (OB_FAIL(exec_ctx.get_temp_expr_eval_ctx(*this, temp_expr_ctx))) {
+  } else if (temp_expr_ctx->native_program_ != nullptr) {
+    ret = temp_expr_ctx->native_program_->execute(*this, row, result);
+  } else {
+    ObDatum *res_datum = nullptr;
+    ObSQLUtils::clear_expr_eval_flags(rt_exprs_.at(expr_idx_), *temp_expr_ctx);
+    if (OB_FAIL(row_to_frame(row, *temp_expr_ctx))) {
+    } else {
+      ObTempExprCtxReplaceGuard exec_ctx_backup_guard(exec_ctx, *temp_expr_ctx);
+      if (OB_FAIL(rt_exprs_.at(expr_idx_).eval(*temp_expr_ctx, res_datum))) {
+      } else {
+        ret = res_datum->to_obj(result, rt_exprs_.at(expr_idx_).obj_meta_);
+      }
     }
   }
-
+  if (temp_expr_ctx != nullptr && !exec_ctx.use_temp_expr_ctx_cache()) {
+    temp_expr_ctx->~ObTempExprCtx();
+    exec_ctx.get_allocator().free(temp_expr_ctx);
+  }
   return ret;
 }
 
@@ -619,19 +646,59 @@ int ObTempExpr::row_to_frame(const ObNewRow &row, ObTempExprCtx &temp_expr_ctx) 
 int ObTempExpr::deep_copy(ObIAllocator &allocator, ObTempExpr *&dst) const
 {
   int ret = OB_SUCCESS;
-  char *buf = static_cast<char *>(allocator.alloc(sizeof(ObTempExpr)));
-  if (OB_ISNULL(buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  dst = nullptr;
+  void *memory = allocator.alloc(sizeof(ObTempExpr));
+  if (memory == nullptr) {
+    return OB_ALLOCATE_MEMORY_FAILED;
   }
-  OX(dst = new(buf)ObTempExpr(allocator));
-  OZ(dst->assign(*this, allocator));
-  OX(dst->expr_idx_ = expr_idx_);
-  OZ(dst->idx_col_arr_.assign(this->idx_col_arr_));
-
+  auto *copy = new (memory) ObTempExpr(allocator);
+  OZ(copy->assign(*this, allocator));
+  OX(copy->expr_idx_ = expr_idx_);
+  OZ(copy->idx_col_arr_.assign(idx_col_arr_));
+  OZ(copy->program_image_.assign(program_image_));
+  OZ(copy->program_inputs_.assign(program_inputs_));
+  OZ(copy->program_nodes_.assign(program_nodes_));
+  OX(copy->program_root_ = program_root_);
+  OZ(copy->validate_native_program());
+  if (OB_SUCC(ret)) {
+    dst = copy;
+  } else {
+    copy->~ObTempExpr();
+    allocator.free(copy);
+  }
   return ret;
 }
 
 OB_SERIALIZE_MEMBER(RowIdxColumnPair, idx_, expr_pos_);
-OB_SERIALIZE_MEMBER((ObTempExpr, ObExprFrameInfo), expr_idx_, idx_col_arr_);
+OB_DEF_SERIALIZE(ObTempExpr)
+{
+  int ret = ObExprFrameInfo::serialize(buf, buf_len, pos);
+  LST_DO_CODE(OB_UNIS_ENCODE, expr_idx_, idx_col_arr_, program_image_, program_inputs_, program_nodes_, program_root_);
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObTempExpr)
+{
+  incarnation_ = next_incarnation();
+  int ret = ObExprFrameInfo::deserialize(buf, data_len, pos);
+  LST_DO_CODE(OB_UNIS_DECODE, expr_idx_, idx_col_arr_, program_image_, program_inputs_, program_nodes_, program_root_);
+  if (OB_SUCC(ret)) {
+    ret = validate_native_program();
+  }
+  if (OB_FAIL(ret)) {
+    program_image_.reset();
+    program_inputs_.reset();
+    program_nodes_.reset();
+    program_root_ = 0;
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObTempExpr)
+{
+  int64_t len = ObExprFrameInfo::get_serialize_size();
+  LST_DO_CODE(OB_UNIS_ADD_LEN, expr_idx_, idx_col_arr_, program_image_, program_inputs_, program_nodes_, program_root_);
+  return len;
+}
 }
 }

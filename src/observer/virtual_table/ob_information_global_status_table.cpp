@@ -37,6 +37,9 @@ const char * const ObInfoSchemaGlobalStatusTable::variables_name[] =
   "Rust_expression_rows",
   "Rust_expression_batches",
   "Rust_expression_filter_rows",
+  "Rust_temporary_expression_prepares",
+  "Rust_temporary_expression_executions",
+  "Rust_temporary_expression_state_builds",
   NULL,
 };
 
@@ -91,13 +94,19 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
       case EXPRESSION_PROGRAMS:
       case EXPRESSION_ROWS:
       case EXPRESSION_BATCHES:
-      case EXPRESSION_FILTER_ROWS: {
+      case EXPRESSION_FILTER_ROWS:
+      case TEMPORARY_EXPRESSION_PREPARES:
+      case TEMPORARY_EXPRESSION_EXECUTIONS:
+      case TEMPORARY_EXPRESSION_STATE_BUILDS: {
           const int16_t events[] = {
             ObStatEventIds::RUST_EXPRESSION_PREPARES,
             ObStatEventIds::RUST_EXPRESSION_PROGRAMS,
             ObStatEventIds::RUST_EXPRESSION_ROWS,
             ObStatEventIds::RUST_EXPRESSION_BATCHES,
             ObStatEventIds::RUST_EXPRESSION_FILTER_ROWS,
+            ObStatEventIds::RUST_TEMPORARY_EXPRESSION_PREPARES,
+            ObStatEventIds::RUST_TEMPORARY_EXPRESSION_EXECUTIONS,
+            ObStatEventIds::RUST_TEMPORARY_EXPRESSION_STATE_BUILDS,
           };
           int64_t value = 0;
           if (OB_SUCC(ret) && OB_FAIL(runtime_info.get_stat(events[i - EXPRESSION_PREPARES], value))) {

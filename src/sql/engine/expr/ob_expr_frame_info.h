@@ -29,6 +29,7 @@ namespace sql
 class ObPhysicalPlanCtx;
 class ObDynExtReuseAlloc;
 class ObExprOperatorCtx;
+class TemporaryExpressionProgram;
 
 struct ObFrameInfo
 {
@@ -184,13 +185,16 @@ public:
 struct ObTempExprCtx : public ObEvalCtx
 {
   ObTempExprCtx(ObExecContext &exec_ctx)
-    : ObEvalCtx(exec_ctx), frame_cnt_(0), expr_op_ctx_store_(NULL), expr_op_size_(0)
+    : ObEvalCtx(exec_ctx), frame_cnt_(0), expr_op_ctx_store_(NULL), expr_op_size_(0),
+      native_program_(nullptr), incarnation_(0)
   {}
   ~ObTempExprCtx();
 public:
   uint64_t frame_cnt_;
   ObExprOperatorCtx **expr_op_ctx_store_;
   uint64_t expr_op_size_;
+  TemporaryExpressionProgram *native_program_;
+  uint64_t incarnation_;
 };
 
 struct RowIdxColumnPair
@@ -217,19 +221,34 @@ public:
   ObTempExpr(ObIAllocator &allocator)
     : ObExprFrameInfo(allocator),
       expr_idx_(OB_INVALID_INDEX),
-      idx_col_arr_(allocator)
+      idx_col_arr_(allocator),
+      program_image_(allocator),
+      program_inputs_(allocator),
+      program_nodes_(allocator),
+      program_root_(0),
+      incarnation_(next_incarnation())
   {
   }
+  bool has_native_program() const { return !program_image_.empty(); }
+  int prepare_native_program();
+  int validate_native_program() const;
   int eval(ObExecContext &exec_ctx, const common::ObNewRow &row, ObObj &result) const;
   int deep_copy(ObIAllocator &allocator, ObTempExpr *&dst) const;
   INHERIT_TO_STRING_KV("temp expr", ObExprFrameInfo, K_(expr_idx), K(idx_col_arr_));
 
 private:
+  static uint64_t next_incarnation();
   int row_to_frame(const ObNewRow &row, ObTempExprCtx &temp_expr_ctx) const;
 
 public:
   int64_t expr_idx_; // temp_expr idx in rt_exprs_
   ObFixedArray<RowIdxColumnPair, common::ObIAllocator> idx_col_arr_;
+  ObFixedArray<uint64_t, common::ObIAllocator> program_image_;
+  // Input slots use a row index, or -1 for an ordinary runtime parameter.
+  ObFixedArray<RowIdxColumnPair, common::ObIAllocator> program_inputs_;
+  ObFixedArray<int64_t, common::ObIAllocator> program_nodes_;
+  uint32_t program_root_;
+  uint64_t incarnation_;
 };
 
 } // end namespace sql
