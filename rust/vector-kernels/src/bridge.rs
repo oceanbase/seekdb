@@ -26,6 +26,13 @@ pub mod ffi {
         /// defect (inf / zero / subnormal) and falls back to the binary64
         /// reference for those inputs.
         fn l2_square_f32(a: &[f32], b: &[f32]) -> f64;
+
+        /// Internal f32-returning kernels (k-means, IVF re-rank and PQ table
+        /// preparation) so the index machinery shares the same implementation
+        /// as the SQL-visible path.
+        fn l2_square_flt_f32(a: &[f32], b: &[f32]) -> f32;
+        fn l2_norm_square_f32(a: &[f32]) -> f32;
+        fn fvec_madd_f32(a: &[f32], bf: f32, b: &[f32], c: &mut [f32]);
     }
 }
 
@@ -36,6 +43,26 @@ fn l2_square_f32(a: &[f32], b: &[f32]) -> f64 {
     f32::sqeuclidean(a, b)
         .map(|square| square as f64)
         .unwrap_or(f64::NAN)
+}
+
+fn l2_square_flt_f32(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() {
+        return f32::NAN;
+    }
+    // simsimd's f32 kernels return the Distance (f64) accumulator even for
+    // f32 inputs; the internal interface keeps the historical f32 result.
+    f32::sqeuclidean(a, b).map(|square| square as f32).unwrap_or(f32::NAN)
+}
+
+fn l2_norm_square_f32(a: &[f32]) -> f32 {
+    f32::dot(a, a).map(|norm| norm as f32).unwrap_or(f32::NAN)
+}
+
+fn fvec_madd_f32(a: &[f32], bf: f32, b: &[f32], c: &mut [f32]) {
+    let n = c.len().min(a.len()).min(b.len());
+    for i in 0..n {
+        c[i] = a[i] + bf * b[i];
+    }
 }
 
 #[cfg(test)]
@@ -81,7 +108,32 @@ mod tests {
     }
 
     #[test]
+    fn internal_kernels_match_scalar_loops() {
+        let a: Vec<f32> = (0..128).map(|i| (i as f32 * 0.01) - 0.64).collect();
+        let b: Vec<f32> = (0..128).map(|i| 0.5 - (i as f32 * 0.007)).collect();
+        let expected_square = {
+            let mut sum = 0.0f64;
+            for i in 0..a.len() {
+                let diff = a[i] as f64 - b[i] as f64;
+                sum += diff * diff;
+            }
+            sum
+        };
+        let square = l2_square_flt_f32(&a, &b);
+        assert!((square as f64 - expected_square).abs() <= 1e-5 * expected_square);
+        let norm = l2_norm_square_f32(&a);
+        let expected_norm: f64 = a.iter().map(|&x| (x as f64) * (x as f64)).sum();
+        assert!((norm as f64 - expected_norm).abs() <= 1e-5 * expected_norm);
+        let mut c = vec![0.0f32; a.len()];
+        fvec_madd_f32(&a, 2.0, &b, &mut c);
+        for i in 0..a.len() {
+            assert_eq!(c[i], a[i] + 2.0 * b[i]);
+        }
+    }
+
+    #[test]
     fn length_mismatch_is_nan() {
         assert!(l2_square_f32(&[1.0, 2.0], &[1.0]).is_nan());
+        assert!(l2_square_flt_f32(&[1.0, 2.0], &[1.0]).is_nan());
     }
 }

@@ -70,55 +70,32 @@ int ObVectorL2Distance<uint8_t>::l2_square_func(const uint8_t *a, const uint8_t 
 template <>
 float ObVectorL2Distance<float>::l2_square_flt_func(const float *a, const float *b, const int64_t len)
 {
-#if OB_USE_MULTITARGET_CODE
-    // AVX512 slower than AVX2, maybe using AVX512 lower CPU frequency which leads to worse performance.
-    if (common::is_arch_supported(ObTargetArch::AVX2)) {
-      return common::specific::avx2::l2_square_flt(a, b, len);
-    } else if (common::is_arch_supported(ObTargetArch::AVX)) {
-      return common::specific::avx::l2_square_flt(a, b, len);
-    } else if (common::is_arch_supported(ObTargetArch::SSE42)) {
-      return common::specific::sse42::l2_square_flt(a, b, len);
-    } else {
-      return common::specific::normal::l2_square_flt(a, b, len);
-    }
-#else
-    return common::specific::normal::l2_square_flt(a, b, len);
-#endif
+  float square = l2_square_flt_f32(rust::Slice<const float>(a, len),
+                                   rust::Slice<const float>(b, len));
+  // Same float32 range defect as the old per-ISA kernels, but internal callers
+  // only need a bounded value: redo the rare unsafe vector in binary64 and
+  // saturate instead of returning inf/zero, which would poison k-means or the
+  // IVF candidate heaps.
+  if (OB_UNLIKELY(!std::isfinite(square)
+                  || (square > 0 && square < FLT_MIN)
+                  || (0 == square && 0 != std::memcmp(a, b, len * sizeof(float))))) {
+    const double reference = l2_square_float_reference(a, b, len);
+    square = static_cast<float>(reference > static_cast<double>(FLT_MAX) ? FLT_MAX : reference);
+  }
+  return square;
 }
 
 template <>
 float ObVectorL2Distance<float>::l2_norm_square(const float *a, const int64_t len)
 {
-#if OB_USE_MULTITARGET_CODE
-    if (common::is_arch_supported(ObTargetArch::AVX512)) {
-      return common::specific::avx512::l2_norm_square(a, len);
-    } else if (common::is_arch_supported(ObTargetArch::AVX2)) {
-      return common::specific::avx2::l2_norm_square(a, len);
-    } else if (common::is_arch_supported(ObTargetArch::SSE42)) {
-      return common::specific::sse42::l2_norm_square(a, len);
-    } else {
-      return common::specific::normal::l2_norm_square(a, len);
-    }
-#else
-    return common::specific::normal::l2_norm_square(a, len);
-#endif
+  return l2_norm_square_f32(rust::Slice<const float>(a, len));
 }
 
 template<>
 void ObVectorL2Distance<float>::fvec_madd(size_t n, const float* a, float bf, const float* b, float* c)
 {
-#if OB_USE_MULTITARGET_CODE
-  // AVX512 slower than AVX2, maybe using AVX512 lower CPU frequency which leads to worse performance.
-  if (common::is_arch_supported(ObTargetArch::AVX2)) {
-    return common::specific::avx2::fvec_madd(n, a, bf, b, c);
-  } else if (common::is_arch_supported(ObTargetArch::SSE42)) {
-    return common::specific::sse42::fvec_madd(n, a, bf, b, c);
-  } else {
-    return common::specific::normal::fvec_madd(n, a, bf, b, c);
-  }
-#else
-  return common::specific::normal::fvec_madd(n, a, bf, b, c);
-#endif
+  fvec_madd_f32(rust::Slice<const float>(a, n), bf,
+                rust::Slice<const float>(b, n), rust::Slice<float>(c, n));
 }
 
 template<>
