@@ -8,7 +8,7 @@ cc_library(
     srcs = ["test_memtable_mutator.cpp"],
     alwayslink = True,
     deps = [
-        "//bazel/third_party:gtest",
+        "//bazel/seekdb_deps:gtest",
         "//src/storage:memtable_mutator_test_headers",
     ],
 )

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "gtest",
+      "version": "1.14.0",
+      "artifact_type": "binary",
+      "target": "linux-x86_64-glibc217",
+      "url": "https://github.com/oceanbase/seekdb-deps/releases/download/gtest-1.14.0/gtest-1.14.0-bin-linux-x86_64-glibc217-20261106-75e97b8357c0.tar.gz",
+      "sha256": "10aa4c2226cbbf48bd68eefbc50963c1aebede4c07bcefb867c5b8fb7329e783"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"], default_testonly = True)
+
+config_setting(
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+cc_library(
+    name = "gtest",
+    deps = select({
+        ":linux_x86_64": ["@seekdb_deps_gtest//:gtest"],
+        "//conditions:default": ["//bazel/third_party:gtest"],
+    }),
+)
