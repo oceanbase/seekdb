@@ -1,0 +1,37 @@
+﻿# AI_PROMPT enhancement regression tests
+
+# Basic template and repeated placeholders
+SELECT AI_PROMPT('{0}-{0}-{1}', 'hello', 'world');
+
+# JSON object argument
+SELECT AI_PROMPT('{0}', JSON_OBJECT('name', 'seekdb'));
+
+# JSON array argument
+SELECT AI_PROMPT('{0}', JSON_ARRAY('a', 'b', 'c'));
+
+# Nested AI_PROMPT
+SELECT AI_PROMPT('Outer: {0}', AI_PROMPT('Inner: {0}', 'hello'));
+
+# TEXT and LONGTEXT
+DROP TABLE IF EXISTS t_ai_prompt_enhancement;
+CREATE TABLE t_ai_prompt_enhancement (
+  id INT PRIMARY KEY,
+  template_text TEXT,
+  argument_text LONGTEXT
+);
+INSERT INTO t_ai_prompt_enhancement
+VALUES (1, 'Message: {0}', 'Hello seekdb');
+
+SELECT AI_PROMPT(template_text, argument_text)
+FROM t_ai_prompt_enhancement
+ORDER BY id;
+
+SELECT AI_PROMPT(argument_text)
+FROM t_ai_prompt_enhancement
+ORDER BY id;
+
+DROP TABLE t_ai_prompt_enhancement;
+
+# Unicode and escaping
+SELECT AI_PROMPT('你好，{0}！', '世界');
+SELECT AI_PROMPT('Literal braces: {{0}}', 'test');
