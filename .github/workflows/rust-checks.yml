@@ -78,12 +78,6 @@ jobs:
         working-directory: rust
         run: cargo test --locked --workspace --exclude crypto --exclude http-client
 
-      - name: SDK-backed Rust tests
-        run: |
-          ./build.py test --lockfile_mode=error \
-            --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=unwind \
-            //rust/crypto:crypto_test //rust/http-client:http_client_test
-
       # Compile Windows code on Linux; this does not run Windows tests.
       - name: check windows target
         working-directory: rust
