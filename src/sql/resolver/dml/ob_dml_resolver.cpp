@@ -3057,7 +3057,18 @@ int ObDMLResolver::resolve_table_column_expr(const ObQualifiedName &q_name, ObRa
       }
     }
   }
-
+  if (OB_SUCC(ret) && OB_NOT_NULL(real_ref_expr)
+      && real_ref_expr->is_column_ref_expr()) {
+    const ObColumnRefRawExpr *col_ref = static_cast<const ObColumnRefRawExpr *>(real_ref_expr);
+    const uint64_t tid = col_ref->get_table_id();
+    const uint64_t cid = col_ref->get_column_id();
+    const share::schema::ObColumnSchemaV2 *column_schema = NULL;
+    if (OB_SUCCESS == schema_checker_->get_column_schema(tid, cid, column_schema)
+        && NULL != column_schema && column_schema->has_column_flag(AI_COLUMN_RESULT_FLAG)) {
+      if (OB_FAIL(session_info_->add_ai_column_ref(tid, cid))) {
+      }
+    }
+  }
 
   return ret;
 }

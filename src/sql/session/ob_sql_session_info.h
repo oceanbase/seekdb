@@ -628,6 +628,28 @@ public:
   }
   inline bool is_in_ai_column_maintenance() const { return in_ai_column_maintenance_; }
   inline void set_in_ai_column_maintenance(const bool flag) { in_ai_column_maintenance_ = flag; }
+  struct ObAiColumnRef
+  {
+    ObAiColumnRef() : table_id_(common::OB_INVALID_ID), column_id_(common::OB_INVALID_ID) {}
+    ObAiColumnRef(const uint64_t table_id, const uint64_t column_id)
+      : table_id_(table_id), column_id_(column_id) {}
+    uint64_t table_id_;
+    uint64_t column_id_;
+  };
+  int add_ai_column_ref(const uint64_t table_id, const uint64_t column_id)
+  {
+    int ret = common::OB_SUCCESS;
+    bool found = false;
+    for (int64_t i = 0; !found && i < ai_column_refs_.count(); ++i) {
+      found = ai_column_refs_.at(i).table_id_ == table_id
+              && ai_column_refs_.at(i).column_id_ == column_id;
+    }
+    if (!found && OB_FAIL(ai_column_refs_.push_back(ObAiColumnRef(table_id, column_id)))) {
+    }
+    return ret;
+  }
+  const common::ObSEArray<ObAiColumnRef, 4> &get_ai_column_refs() const { return ai_column_refs_; }
+  void clear_ai_column_refs() { ai_column_refs_.reuse(); }
   void reset_audit_record(bool need_retry = false)
   {
     if (!need_retry) {
@@ -912,6 +934,7 @@ private:
 //  int64_t has_write_stmt_in_trans_;
   bool inner_flag_; // whether it is a virtual session for an internal request
   bool in_ai_column_maintenance_ = false;
+  common::ObSEArray<ObAiColumnRef, 4> ai_column_refs_;
   // After version 2.2, this variable is no longer used
   bool is_max_availability_mode_;
   typedef common::hash::ObHashMap<ObPsStmtId, ObPsSessionInfo *,

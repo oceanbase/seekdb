@@ -472,6 +472,44 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             }
             break;
           }
+        case T_AI_COLUMN_RETRY: {
+          if (node.num_child_ > 1) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                           "combining AI COLUMN RETRY with another ALTER action");
+          } else if (OB_ISNULL(action_node->children_[0])) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            const ParseNode *name_node = action_node->children_[0];
+            ObString col_name(name_node->str_len_, name_node->str_value_);
+            const ObColumnSchemaV2 *col = NULL;
+            if (OB_ISNULL(table_schema_)
+                || NULL == (col = table_schema_->get_column_schema(col_name))
+                || !col->has_column_flag(AI_COLUMN_RESULT_FLAG)) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                             "retrying a column that is not an AI column");
+            } else {
+              ObString col_name_copy;
+              if (OB_FAIL(ob_write_string(*allocator_, col_name, col_name_copy))) {
+              } else {
+                alter_table_stmt->set_ai_column_retry(true);
+                alter_table_stmt->set_retry_ai_column_name(col_name_copy);
+                alter_table_stmt->set_retry_ai_column_id(col->get_column_id());
+              }
+              ParseNode *where_node = action_node->children_[1];
+              if (NULL != where_node && NULL != where_node->str_value_) {
+                ObString predicate(where_node->str_len_, where_node->str_value_);
+                ObString predicate_copy;
+                if (OB_FAIL(ob_write_string(*allocator_, predicate, predicate_copy))) {
+                } else {
+                  alter_table_stmt->set_retry_ai_predicate(predicate_copy);
+                }
+              }
+            }
+          }
+          break;
+        }
         case T_ALTER_PARTITION_OPTION: {
             has_alter_partition = true;
             alter_table_stmt->set_alter_table_partition();

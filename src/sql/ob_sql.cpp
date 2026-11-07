@@ -3818,10 +3818,14 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
 
   ObIAllocator &allocator = THIS_WORKER.get_sql_arena_allocator();
   ObSQLSessionInfo &session = result.get_session();
+  session.clear_ai_column_refs();
   
   ObExecContext& ectx = result.get_exec_context();
   int get_plan_err = OB_SUCCESS; //used for judge whether add plan to plan cache
-  bool use_plan_cache = session.get_local_ob_enable_plan_cache();
+  bool ai_strict_read = false;
+  int strict_ret = session.get_sys_variable(SYS_VAR_AI_COLUMN_STRICT_READ, ai_strict_read);
+  bool use_plan_cache = session.get_local_ob_enable_plan_cache()
+                        && !(OB_SUCCESS == strict_ret && ai_strict_read);
   ObPlanCacheCtx *pc_ctx = NULL;
   bool is_begin_commit_stmt = false;
 

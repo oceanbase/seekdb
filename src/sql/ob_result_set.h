@@ -337,6 +337,7 @@ private:
   ObResultSet &operator=(const ObResultSet &other);
   // function members
   int execute();
+  int check_ai_column_strict_read();
   int open_plan();
   int open_cmd();
   int open_result();

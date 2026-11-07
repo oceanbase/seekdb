@@ -9924,13 +9924,26 @@ static struct VarsInit{
     ObSysVars[719].alias_ = "OB_SV_ENABLE_FILE_SQL" ;
     }();
 
+    [&] (){
+      ObSysVars[720].id_ = SYS_VAR_AI_COLUMN_STRICT_READ ;
+      cur_max_var_id = MAX(cur_max_var_id, static_cast<int64_t>(SYS_VAR_AI_COLUMN_STRICT_READ)) ;
+      ObSysVarsIdToArrayIdx[SYS_VAR_AI_COLUMN_STRICT_READ] = 720 ;
+      ObSysVars[720].name_ = "ai_column_strict_read" ;
+      ObSysVars[720].default_value_ = "0" ;
+      ObSysVars[720].base_value_ = "0" ;
+      ObSysVars[720].data_type_ = ObIntType ;
+      ObSysVars[720].info_ = "Reject reads of AI columns while any row of the column is not ready." ;
+      ObSysVars[720].flags_ = ObSysVarFlag::SESSION_SCOPE ;
+    ObSysVars[720].alias_ = "OB_SV_AI_COLUMN_STRICT_READ" ;
+    }();
+
     if (cur_max_var_id >= ObSysVarMeta::OB_MAX_SYS_VAR_ID) {
       HasInvalidSysVar = true;
     }
   }
 }vars_init;
 
-static int64_t var_amount = 720;
+static int64_t var_amount = 721;
 
 int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}
 ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}

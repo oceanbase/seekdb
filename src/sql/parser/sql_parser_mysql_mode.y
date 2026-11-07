@@ -333,7 +333,7 @@ END_P SET_VAR DELIMITER
         QUANTIFIER_TABLE QUARTER QUERY QUEUE_TIME QUICK
 
         RECOVER REDUNDANT REFRESH RELAY RELAYLOG RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMOVE
-        REPEATABLE RESET RESPECT RESTART RESTORE RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE
+        REPEATABLE RESET RESPECT RESTART RESTORE RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE RETRY
         REWRITE ROLLBACK ROLLUP ROUTINE ROW ROWID ROW_COUNT ROW_FORMAT ROWS RTREE
         RUN RECYCLEBIN REPLICATION ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS
         RANK READ_ONLY RECOVERY REJECT ROLE
@@ -14735,6 +14735,13 @@ opt_set table_option_list_space_seperated
 DROP CONSTRAINT constraint_name
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_DROP_CONSTRAINT, 1, $3); // drop foreign key or check constraint, to be compatible with mysql
+}
+| RETRY AI COLUMN column_name opt_where
+{
+  if (NULL != $5) {
+    dup_expr_string($5, result, @5.first_column, @5.last_column);
+  }
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_RETRY, 2, $4, $5);
 }
 | ALGORITHM opt_equal_mark algorithm_opt
 {

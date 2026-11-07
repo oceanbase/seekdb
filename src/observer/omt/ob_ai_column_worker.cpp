@@ -54,6 +54,7 @@ constexpr int64_t AI_TASK_PENDING = 1;
 constexpr int64_t AI_TASK_RUNNING = 2;
 constexpr int64_t AI_TASK_RETRY_WAIT = 3;
 constexpr int64_t AI_TASK_READY = 0;
+constexpr int64_t AI_TASK_FAILED = 4;
 constexpr int64_t AI_COLUMN_RETRY_DELAY_SEC = 1;
 
 int append_literal(const ObString &value, ObSqlString &sql)
@@ -521,7 +522,49 @@ int ObAiColumnWorker::process_group(ObIAllocator &alloc, ObIArray<TaskRow> &grou
         }
       }
     } else {
-      ret = delete_group_tasks(group.at(0).table_id_, group.at(0).request_id_);
+      // terminal failure: mark the AI columns FAILED and drop the task rows.
+      ObMySQLTransaction trans;
+      bool started = false;
+      const ObString &db_name = db_schema->get_database_name_str();
+      const ObString &table_name = table_schema->get_table_name_str();
+      const ObString &predicate = group.at(0).rowkey_predicate_;
+      if (OB_FAIL(trans.start(sql_proxy_))) {
+      } else if (FALSE_IT(started = true)) {
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < runtimes.count(); ++i) {
+          ObSqlString sql;
+          int64_t affected_rows = 0;
+          const AiColumnRuntime *rt = runtimes.at(i);
+          if (OB_FAIL(sql.append_fmt("UPDATE `%.*s`.`%.*s` SET `%.*s` = %ld WHERE %.*s AND `%.*s` = ",
+                                     db_name.length(), db_name.ptr(),
+                                     table_name.length(), table_name.ptr(),
+                                     rt->state_name_.length(), rt->state_name_.ptr(),
+                                     AI_TASK_FAILED,
+                                     predicate.length(), predicate.ptr(),
+                                     rt->request_name_.length(), rt->request_name_.ptr()))) {
+          } else if (OB_FAIL(append_literal(group.at(i).request_id_, sql))) {
+          } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ObSqlString delete_sql;
+          int64_t affected_rows = 0;
+          if (OB_FAIL(delete_sql.append_fmt("DELETE FROM %s WHERE table_id = %lu AND request_id = ",
+                                            OB_ALL_AI_COLUMN_TASK_TNAME, group.at(0).table_id_))) {
+          } else if (OB_FAIL(append_literal(group.at(0).request_id_, delete_sql))) {
+          } else if (OB_FAIL(trans.write(delete_sql.ptr(), affected_rows))) {
+          }
+        }
+      }
+      if (started) {
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(trans.end(true))) {
+          }
+        } else {
+          int tmp_ret = trans.end(false);
+          LOG_WARN("failed to rollback failed ai column group", K(tmp_ret));
+        }
+      }
     }
   } else if (OB_SUCC(ret) && !stale && !failed) {
     ObMySQLTransaction trans;
