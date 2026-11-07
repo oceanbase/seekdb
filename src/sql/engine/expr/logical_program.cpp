@@ -198,6 +198,7 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
   auto &allocator = guard.get_allocator();
   ObSEArray<const ObExpr *, 16, ObWrapperAllocator> nodes(sizeof(const ObExpr *), ObWrapperAllocator(allocator));
   ObSEArray<uint8_t, 16, ObWrapperAllocator> skipped(sizeof(uint8_t), ObWrapperAllocator(allocator));
+  int64_t active_rows = 0;
   if (OB_FAIL(nodes.prepare_allocate(count))) {
   } else if (OB_FAIL(skipped.prepare_allocate(rows))) {
   } else {
@@ -215,6 +216,7 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
     }
     for (int64_t row = 0; row < rows; ++row) {
       skipped.at(row) = skip != nullptr && skip->at(row);
+      active_rows += skipped.at(row) == 0;
     }
   }
   if (OB_SUCC(ret)) {
@@ -232,9 +234,11 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else {
           MEMSET(storage, 0, words * sizeof(uint64_t));
+          int64_t logical_nodes = 0;
           for (int64_t node = 0; node < count; ++node) {
             const ObExpr &source = *nodes.at(node);
             if (!is_logical(source)) { continue; }
+            ++logical_nodes;
             const ObEvalInfo &available = source.get_eval_info(ctx);
             for (int64_t row = 0; row < rows; ++row) {
               const int64_t index = batch ? row : ctx.get_batch_idx();
@@ -281,8 +285,8 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
           }
           if (OB_SUCC(ret)) {
             EVENT_ADD(RUST_LOGICAL_PROGRAM_CALLS, 1);
-            EVENT_ADD(RUST_LOGICAL_PROGRAM_ROWS, rows);
-            EVENT_ADD(RUST_LOGICAL_PROGRAM_NODES, count);
+            EVENT_ADD(RUST_LOGICAL_PROGRAM_ROWS, active_rows);
+            EVENT_ADD(RUST_LOGICAL_PROGRAM_NODES, logical_nodes);
             if (batch) { EVENT_ADD(RUST_LOGICAL_PROGRAM_BATCHES, 1); }
           }
         }
