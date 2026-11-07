@@ -286,32 +286,13 @@ pub fn program_words(spec: &ProgramSpec<'_>) -> Result<usize, EvalError> {
             .arguments
             .get(start..end)
             .ok_or_else(|| invalid_program(id))?;
-        use Opcode::*;
-        let valid_arity = match instruction.opcode {
-            Input | Constant => count == 0,
-            Add | Sub | Mul | Div | Eq | Ne | Lt | Le | Gt | Ge | NullSafeEq => count == 2,
-            Not | IsNull | IsNotNull | Identity | Truth => count == 1,
-            And | Or => count > 0 && count <= MAX_NODES,
-            Case => (2..=MAX_NODES * 2 + 1).contains(&count),
-        };
-        if !valid_arity
-            || (instruction.opcode == Input && instruction.input >= spec.inputs)
-            || (instruction.is_null && instruction.opcode != Constant)
-            || (instruction.error_on_zero && instruction.opcode != Div)
-        {
-            return Err(invalid_program(id));
-        }
-        let mut depth = 1;
-        for &reference in arguments {
-            if reference as usize >= id {
-                return Err(invalid_program(id));
-            }
-            depth = depth.max(depths[reference as usize] + 1);
-        }
-        if depth > MAX_DEPTH {
-            return Err(invalid_program(id));
-        }
-        depths[id] = depth;
+        validate_instruction(
+            id,
+            instruction,
+            spec.inputs,
+            arguments.iter().copied(),
+            &mut depths,
+        )?;
     }
     for &root in spec.filters.iter().chain(spec.projections) {
         if root as usize >= spec.instructions.len() {
@@ -319,6 +300,43 @@ pub fn program_words(spec: &ProgramSpec<'_>) -> Result<usize, EvalError> {
         }
     }
     Ok(layout.end)
+}
+
+fn validate_instruction(
+    id: NodeId,
+    instruction: &Instruction,
+    inputs: u32,
+    arguments: impl Iterator<Item = u32>,
+    depths: &mut [usize; MAX_NODES],
+) -> Result<(), EvalError> {
+    let count = instruction.argument_count as usize;
+    use Opcode::*;
+    let valid_arity = match instruction.opcode {
+        Input | Constant => count == 0,
+        Add | Sub | Mul | Div | Eq | Ne | Lt | Le | Gt | Ge | NullSafeEq => count == 2,
+        Not | IsNull | IsNotNull | Identity | Truth => count == 1,
+        And | Or => count > 0 && count <= MAX_NODES,
+        Case => (2..=MAX_NODES * 2 + 1).contains(&count),
+    };
+    if !valid_arity
+        || (instruction.opcode == Input && instruction.input >= inputs)
+        || (instruction.is_null && instruction.opcode != Constant)
+        || (instruction.error_on_zero && instruction.opcode != Div)
+    {
+        return Err(invalid_program(id));
+    }
+    let mut depth = 1;
+    for reference in arguments {
+        if reference as usize >= id {
+            return Err(invalid_program(id));
+        }
+        depth = depth.max(depths[reference as usize] + 1);
+    }
+    if depth > MAX_DEPTH {
+        return Err(invalid_program(id));
+    }
+    depths[id] = depth;
+    Ok(())
 }
 
 fn write_instructions(spec: &ProgramSpec<'_>, layout: ProgramLayout, data: &mut [u64]) {
@@ -394,13 +412,25 @@ impl<B: AsRef<[u64]>> ProgramImage<B> {
             return Err(invalid_program(0));
         }
         let payload = &data[IMAGE_HEADER_WORDS..];
-        let mut instructions = [Instruction::default(); MAX_NODES];
-        for (id, target) in instructions[..layout.nodes].iter_mut().enumerate() {
-            let source = &payload[id * INSTRUCTION_WORDS..(id + 1) * INSTRUCTION_WORDS];
+        let arguments = &payload[layout.arguments_start..layout.filters_start];
+        // Unused argument slots must also fit the canonical reference width.
+        if payload[layout.arguments_start..]
+            .iter()
+            .any(|&reference| reference > u64::from(u32::MAX))
+        {
+            return Err(invalid_program(0));
+        }
+        let mut depths = [0usize; MAX_NODES];
+        for (id, source) in payload[..layout.arguments_start]
+            .as_chunks::<INSTRUCTION_WORDS>()
+            .0
+            .iter()
+            .enumerate()
+        {
             if source[0] & !0x3ff != 0 {
                 return Err(invalid_program(id));
             }
-            *target = Instruction {
+            let instruction = Instruction {
                 opcode: Opcode::try_from((source[0] & 0xff) as u8)
                     .map_err(|_| invalid_program(id))?,
                 input: u32::try_from(source[1]).map_err(|_| invalid_program(id))?,
@@ -410,21 +440,26 @@ impl<B: AsRef<[u64]>> ProgramImage<B> {
                 is_null: source[0] & (1 << 8) != 0,
                 error_on_zero: source[0] & (1 << 9) != 0,
             };
+            let start = instruction.argument_start as usize;
+            let end = start
+                .checked_add(instruction.argument_count as usize)
+                .ok_or_else(|| invalid_program(id))?;
+            let references = arguments
+                .get(start..end)
+                .ok_or_else(|| invalid_program(id))?;
+            validate_instruction(
+                id,
+                &instruction,
+                layout.inputs as u32,
+                references.iter().map(|&reference| reference as u32),
+                &mut depths,
+            )?;
         }
-        let mut references = [0u32; MAX_ARGUMENTS + MAX_NODES * 2];
-        let reference_words = &payload[layout.arguments_start..];
-        for (target, &source) in references.iter_mut().zip(reference_words) {
-            *target = u32::try_from(source).map_err(|_| invalid_program(0))?;
+        for &root in &payload[layout.filters_start..] {
+            if root as usize >= layout.nodes {
+                return Err(invalid_program(root as usize));
+            }
         }
-        let filters = layout.filters_start - layout.arguments_start;
-        let projections = layout.projections_start - layout.arguments_start;
-        program_words(&ProgramSpec {
-            instructions: &instructions[..layout.nodes],
-            arguments: &references[..filters],
-            filters: &references[filters..projections],
-            projections: &references[projections..reference_words.len()],
-            inputs: layout.inputs as u32,
-        })?;
         Ok(Self { backing, layout })
     }
 

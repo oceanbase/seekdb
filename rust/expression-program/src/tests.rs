@@ -1190,6 +1190,35 @@ fn images_reject_truncation_trailing_words_and_corrupt_fields() {
 }
 
 #[test]
+fn images_validate_reference_width_even_for_unused_arguments() {
+    let instructions = [Instruction {
+        opcode: Opcode::Constant,
+        value: 7,
+        ..Instruction::default()
+    }];
+    let spec = ProgramSpec {
+        instructions: &instructions,
+        arguments: &[u32::MAX],
+        filters: &[],
+        projections: &[0],
+        inputs: 0,
+    };
+    let image = compile_image_in(spec, vec![0; image_words(&spec).unwrap()]).unwrap();
+    assert!(ProgramImage::parse(image.words()).is_ok());
+    for reference in [u64::from(u32::MAX) + 1, u64::MAX] {
+        let mut words = image.words().to_vec();
+        words[IMAGE_HEADER_WORDS + INSTRUCTION_WORDS] = reference;
+        assert!(matches!(
+            ProgramImage::parse(words),
+            Err(EvalError {
+                kind: ErrorKind::InvalidProgram,
+                ..
+            })
+        ));
+    }
+}
+
+#[test]
 fn images_apply_the_native_graph_depth_limit() {
     let mut instructions = vec![
         Instruction {
