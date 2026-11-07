@@ -1,0 +1,100 @@
+DROP TABLE IF EXISTS logical_program_values;
+CREATE TABLE logical_program_values(id BIGINT PRIMARY KEY,a BIGINT,b BIGINT,label VARCHAR(16));
+INSERT INTO logical_program_values VALUES(1,0,1,'zero'),(2,1,0,'one'),(3,NULL,1,'null'),(4,2,NULL,'two');
+SELECT id,label,(a AND (b OR NOT a)) AS p,(NOT (a OR b)) AS q FROM logical_program_values ORDER BY id;
+id	label	p	q
+1	zero	0	0
+2	one	0	0
+3	null	NULL	0
+4	two	NULL	0
+SELECT /*+ OPT_PARAM('ROWSETS_MAX_ROWS',0) */ id,label,(a AND (b OR NOT a)) AS p FROM logical_program_values ORDER BY id;
+id	label	p
+1	zero	0
+2	one	0
+3	null	NULL
+4	two	NULL
+SELECT /*+ PARALLEL(4) */ id,label,(a AND (b OR NOT a)) AS p FROM logical_program_values ORDER BY id;
+id	label	p
+1	zero	0
+2	one	0
+3	null	NULL
+4	two	NULL
+SELECT id,label,(a AND (b OR NOT a)) AS p FROM logical_program_values WHERE (a OR b) AND NOT (a IS NULL AND b IS NULL) ORDER BY id;
+id	label	p
+1	zero	0
+2	one	0
+3	null	NULL
+4	two	NULL
+SELECT id,label,((a>0 AND b IS NULL) OR (a IS NULL AND b>0)) AS p FROM logical_program_values ORDER BY id;
+id	label	p
+1	zero	0
+2	one	0
+3	null	1
+4	two	1
+SELECT id,label,(0 AND (a+9223372036854775807>0)) AS p,(1 OR (a+9223372036854775807>0)) AS q FROM logical_program_values ORDER BY id;
+id	label	p	q
+1	zero	0	1
+2	one	0	1
+3	null	0	1
+4	two	0	1
+SELECT id,label,(a IS NOT NULL OR a+9223372036854775807>0) AS p FROM logical_program_values ORDER BY id;
+id	label	p
+1	zero	1
+2	one	1
+3	null	NULL
+4	two	1
+SELECT id,label,(a<=1 OR a+9223372036854775807>0) AS p FROM logical_program_values ORDER BY id;
+ERROR 22003: BIGINT value is out of range in ''(2 + 9223372036854775807)''
+SELECT id,label,(a OR b) AS p FROM logical_program_values ORDER BY id;
+id	label	p
+1	zero	1
+2	one	1
+3	null	1
+4	two	1
+PREPARE logical_stmt FROM 'SELECT id,label,(? AND (a OR NOT b)) AS p FROM logical_program_values ORDER BY id';
+SET @logical_p=0;
+EXECUTE logical_stmt USING @logical_p;
+id	label	p
+1	zero	0
+2	one	0
+3	null	0
+4	two	0
+SET @logical_p=1;
+EXECUTE logical_stmt USING @logical_p;
+id	label	p
+1	zero	0
+2	one	1
+3	null	NULL
+4	two	1
+SET @logical_p=NULL;
+EXECUTE logical_stmt USING @logical_p;
+id	label	p
+1	zero	0
+2	one	NULL
+3	null	NULL
+4	two	NULL
+DEALLOCATE PREPARE logical_stmt;
+SELECT label, (a AND (b OR NOT a)) AS p FROM logical_program_values ORDER BY p,id;
+label	p
+null	NULL
+two	NULL
+zero	0
+one	0
+SELECT SUM((a AND b) OR NOT a) FROM logical_program_values;
+SUM((a AND b) OR NOT a)
+1
+SELECT id,label,((a OR b) AND (BENCHMARK(2,(a OR b))=0)) AS p FROM logical_program_values ORDER BY id;
+id	label	p
+1	zero	1
+2	one	1
+3	null	1
+4	two	1
+SELECT ('x' AND 1), (1 OR 'x');
+('x' AND 1)	(1 OR 'x')
+0	1
+Warnings:
+Warning	1292	Truncated incorrect DOUBLE value: 'x'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1292	Truncated incorrect DOUBLE value: 'x'
+DROP TABLE logical_program_values;
