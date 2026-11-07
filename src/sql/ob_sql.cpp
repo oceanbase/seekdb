@@ -901,7 +901,8 @@ static int fs_build_glob_subquery(ObSqlString &sql, const char *pattern, int64_t
       struct dirent *ent = NULL;
       while (OB_SUCC(ret) && NULL != (ent = ::readdir(d))) {
         const char *nm = ent->d_name;
-        if (0 == strcmp(nm, ".") || 0 == strcmp(nm, "..")) { continue; }
+        // skip "." / ".." and macOS AppleDouble side files ("._name")
+        if ('.' == nm[0]) { continue; }
         const int64_t nlen = static_cast<int64_t>(strlen(nm));
         // only support trailing '*'
         bool match = false;

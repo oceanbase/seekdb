@@ -2325,8 +2325,6 @@ int ObDDLResolver::resolve_ai_column_definition(ObColumnSchemaV2 &column,
                                                 ParseNode *attr_node)
 {
   int ret = OB_SUCCESS;
-  fprintf(stderr, "AI_DBG enter\n");
-  fflush(stderr);
   const ObTableSchema *table_schema = NULL;
   ObTableStmt *table_stmt = NULL;
   ParseNode *expr_node = NULL;
@@ -2412,8 +2410,7 @@ int ObDDLResolver::resolve_ai_column_definition(ObColumnSchemaV2 &column,
         if (duplicated) {
           continue;
         }
-        if (first && OB_FAIL(dep_buf.append(idents.at(i)))) {
-        } else if (!first && OB_FAIL(dep_buf.append(","))) {
+        if (!first && OB_FAIL(dep_buf.append(","))) {
         } else if (OB_FAIL(dep_buf.append(idents.at(i)))) {
         } else {
           first = false;
@@ -2508,8 +2505,6 @@ int ObDDLResolver::resolve_ai_column_definition(ObColumnSchemaV2 &column,
   if (OB_SUCC(ret)) {
     column.add_column_flag(AI_COLUMN_RESULT_FLAG);
   }
-  fprintf(stderr, "AI_DBG exit ret=%d seq=%ld\n", ret, ai_column_seq_);
-  fflush(stderr);
   return ret;
 }
 
@@ -2634,15 +2629,8 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
         break;
       }
       case T_AI_COLUMN_ATTR: {
-        fprintf(stderr, "AI_DBG attr case column=%s\n", column.get_column_name());
-        fflush(stderr);
         if (OB_FAIL(resolve_ai_column_definition(column, attr_node))) {
           SQL_RESV_LOG(WARN, "resolve ai column definition failed", K(ret));
-          fprintf(stderr, "AI_DBG resolve failed ret=%d\n", ret);
-          fflush(stderr);
-        } else {
-          fprintf(stderr, "AI_DBG resolve ok\n");
-          fflush(stderr);
         }
         break;
       }

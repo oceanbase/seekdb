@@ -65,7 +65,7 @@ int load_ai_column_defs(ObTableModifyOp &op,
                OB_ALL_AI_COLUMN_TNAME, table_schema.get_table_id()))) {
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      ObMySQLResult *result = NULL;
+      common::sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;

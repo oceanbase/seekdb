@@ -90,8 +90,6 @@ int insert_ai_column_metadata(const uint64_t table_id,
     SQL_ENG_LOG(WARN, "invalid table id for ai column metadata", K(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     SQL_ENG_LOG(WARN, "failed to start ai column metadata transaction", K(ret));
-    fprintf(stderr, "AI_DBG meta trans start failed ret=%d table=%lu\n", ret, table_id);
-    fflush(stderr);
   } else if (FALSE_IT(started = true)) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < defs.count(); ++i) {
@@ -106,9 +104,6 @@ int insert_ai_column_metadata(const uint64_t table_id,
       if (OB_INVALID_ID == result_id || OB_INVALID_ID == state_id
           || OB_INVALID_ID == request_id || OB_INVALID_ID == spec_id) {
         ret = OB_ERR_UNEXPECTED;
-        fprintf(stderr, "AI_DBG meta ids missing table=%lu result=%lu state=%lu req=%lu spec=%lu colcnt=%ld\n",
-                table_id, result_id, state_id, request_id, spec_id, table_schema.get_column_count());
-        fflush(stderr);
         SQL_ENG_LOG(WARN, "ai column ids are missing in schema", K(ret), K(table_id),
                     K(result_id), K(state_id), K(request_id), K(spec_id), K(def));
       } else if (OB_FAIL(splicer.add_pk_column("table_id", table_id))) {
@@ -127,8 +122,6 @@ int insert_ai_column_metadata(const uint64_t table_id,
       } else if (1 != affected_rows) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "insert ai column metadata affected_rows mismatch", K(ret), K(affected_rows));
-        fprintf(stderr, "AI_DBG meta affected=%ld table=%lu\n", affected_rows, table_id);
-        fflush(stderr);
       }
     }
   }
