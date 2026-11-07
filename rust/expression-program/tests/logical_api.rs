@@ -441,3 +441,115 @@ fn sizing_failures_and_mid_execution_cancellation_do_not_publish_results() {
     assert!(execution.execute(&[], &mut provider).is_err());
     assert!(execution.root_flags().is_empty());
 }
+
+#[test]
+fn completed_shared_nodes_are_published_before_reentrant_external_demand() {
+    struct ReentrantInputs {
+        published: bool,
+        order: Vec<&'static str>,
+    }
+    impl Control for ReentrantInputs {
+        fn check(&mut self) -> Result<(), i32> {
+            Ok(())
+        }
+    }
+    impl InputProvider for ReentrantInputs {
+        fn publish_snapshot(
+            &mut self,
+            values: &[u64],
+            flags: &[u64],
+            rows: usize,
+        ) -> Result<(), i32> {
+            assert_eq!(rows, 1);
+            assert_eq!(values.len(), 4);
+            assert_eq!(flags.len(), 4);
+            if flags[1] & EVALUATED != 0 {
+                assert_eq!(values[1], 1);
+                assert_eq!(flags[1], EVALUATED | VALID);
+                assert_eq!(flags[3] & EVALUATED, 0);
+                self.published = true;
+                self.order.push("publish-shared");
+            }
+            Ok(())
+        }
+        fn demand(
+            &mut self,
+            node: usize,
+            demand: &[u64],
+            values: &mut [u64],
+            flags: &mut [u64],
+        ) -> Result<(), i32> {
+            assert_eq!(demand, &[1]);
+            if node == 2 {
+                if !self.published {
+                    return Err(-4999);
+                }
+                self.order.push("reenter-shared");
+            }
+            values[0] = if node == 0 { 0 } else { 1 };
+            flags[0] = EVALUATED | VALID;
+            Ok(())
+        }
+    }
+    let program = image(
+        &[
+            instruction(Opcode::Input, 0, 0),
+            instruction(Opcode::Not, 0, 1),
+            instruction(Opcode::Input, 0, 0),
+            instruction(Opcode::And, 1, 2),
+        ],
+        &[0, 1, 2],
+    );
+    let mut execution = Execution::new(
+        &program,
+        1,
+        vec![0; logical::required_words(&program, 1).unwrap()],
+    )
+    .unwrap();
+    let mut provider = ReentrantInputs {
+        published: false,
+        order: vec![],
+    };
+    execution.execute(&[0], &mut provider).unwrap();
+    assert_eq!(provider.order, vec!["publish-shared", "reenter-shared"]);
+    assert_eq!(execution.root_values(), &[1]);
+}
+
+#[test]
+fn snapshot_error_prevents_external_effects_and_propagates_exact_code() {
+    struct FailedPublication;
+    impl Control for FailedPublication {
+        fn check(&mut self) -> Result<(), i32> {
+            Ok(())
+        }
+    }
+    impl InputProvider for FailedPublication {
+        fn publish_snapshot(&mut self, _: &[u64], _: &[u64], _: usize) -> Result<(), i32> {
+            Err(-4998)
+        }
+        fn demand(&mut self, _: usize, _: &[u64], _: &mut [u64], _: &mut [u64]) -> Result<(), i32> {
+            panic!("external effects must not execute after failed publication")
+        }
+    }
+    let program = image(
+        &[
+            instruction(Opcode::Input, 0, 0),
+            instruction(Opcode::Not, 0, 1),
+        ],
+        &[0],
+    );
+    let mut execution = Execution::new(
+        &program,
+        1,
+        vec![0; logical::required_words(&program, 1).unwrap()],
+    )
+    .unwrap();
+    assert_eq!(
+        execution
+            .execute(&[0], &mut FailedPublication)
+            .unwrap_err()
+            .host_code,
+        -4998
+    );
+    assert!(execution.root_values().is_empty());
+}

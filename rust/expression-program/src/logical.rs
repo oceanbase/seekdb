@@ -216,6 +216,17 @@ pub fn compile_in<B: AsRef<[u64]> + AsMut<[u64]>>(
 /// Supplies only demanded external values. Errors are returned unchanged.
 /// A successful callback marks every demanded row EVALUATED; VALID denotes non-NULL.
 pub trait InputProvider: Control {
+    /// Exposes completed values to a consumer before an external input may
+    /// reenter another program. The borrowed snapshots end before demand begins.
+    fn publish_snapshot(
+        &mut self,
+        _values: &[u64],
+        _flags: &[u64],
+        _rows: usize,
+    ) -> Result<(), i32> {
+        Ok(())
+    }
+
     fn demand(
         &mut self,
         node: usize,
@@ -395,6 +406,15 @@ impl<'a, P: AsRef<[u64]>, B: AsRef<[u64]> + AsMut<[u64]>> Execution<'a, P, B> {
                 }
             }
             if instruction.opcode == Opcode::Input {
+                {
+                    let data = self.backing.as_ref();
+                    provider
+                        .publish_snapshot(&data[..plane], &data[plane..plane * 2], rows)
+                        .map_err(|host_code| EvalError {
+                            host_code,
+                            ..EvalError::new(ErrorKind::InvalidBatch, node, 0)
+                        })?;
+                }
                 let (values, tail) = self.backing.as_mut().split_at_mut(plane);
                 let (flags, tail) = tail.split_at_mut(plane);
                 let demand = &tail[node * rows..][..rows];

@@ -30,6 +30,8 @@ public:
   virtual ~ILogicalHost() = default;
   virtual int32_t demand(size_t node, rust::Slice<const uint64_t> demand,
       rust::Slice<uint64_t> values, rust::Slice<uint64_t> flags) = 0;
+  virtual int32_t publish_snapshot(rust::Slice<const uint64_t> values,
+      rust::Slice<const uint64_t> flags, size_t rows) = 0;
   virtual int32_t check_cancel() = 0;
 };
 
@@ -38,6 +40,12 @@ inline int32_t demand_logical_input(ILogicalHost *host, size_t node,
     rust::Slice<uint64_t> flags)
 {
   return host->demand(node, demand, values, flags);
+}
+
+inline int32_t publish_logical_snapshot(ILogicalHost *host,
+    rust::Slice<const uint64_t> values, rust::Slice<const uint64_t> flags, size_t rows)
+{
+  return host->publish_snapshot(values, flags, rows);
 }
 
 inline int32_t check_logical_cancel(ILogicalHost *host)
