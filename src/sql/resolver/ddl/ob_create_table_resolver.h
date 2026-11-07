@@ -52,6 +52,7 @@ public:
   virtual ~ObCreateTableResolver();
 
   virtual int resolve(const ParseNode &parse_tree);
+  virtual uint64_t gen_ai_column_id() override { return gen_column_id(); }
   static int set_nullable_for_cta_column(ObSelectStmt *select_stmt,
                                   share::schema::ObColumnSchemaV2& column,
                                   const ObRawExpr *expr,

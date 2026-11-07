@@ -498,6 +498,7 @@ END_P SET_VAR DELIMITER
 %type <node> skip_index_type opt_skip_index_type_list
 %type <node> vec_index_params vec_index_param vec_index_param_value opt_with_vector_index_parameters
 %type <node> json_table_expr unnest_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def
+%type <node> opt_ai_column_with opt_ai_column_with_list ai_column_with_item
 %type <node> json_table_ordinality_column_def json_table_exists_column_def json_table_value_column_def json_table_nested_column_def
 %type <node> opt_value_on_empty_or_error_or_mismatch opt_on_mismatch
 %type <node> table_values_clause table_values_clause_with_order_by_and_limit values_row_list row_value
@@ -6206,6 +6207,12 @@ not NULLX
 | lob_chunk_size
 {
   $$ = $1;
+}
+| AI COLUMN '(' expr ')' opt_ai_column_with
+{
+  dup_expr_string($4, result, @4.first_column, @4.last_column);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_ATTR, 2, $4, $6);
+  $$->sql_str_off_ = @1.first_column;
 }
 | COLUMN_FORMAT DEFAULT
 {
@@ -17425,6 +17432,34 @@ JSON '(' column_name ')' STORE AS '(' lob_storage_parameters ')'
   ParseNode *params = NULL;
   merge_nodes(params, result, T_ARGUMENT_LIST, $8);
   malloc_non_terminal_node($$, result->malloc_pool_, T_LOB_STORAGE_CLAUSE, 3, type_node, $3, params);
+}
+;
+
+opt_ai_column_with:
+{
+  $$ = NULL;
+}
+| WITH '(' opt_ai_column_with_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_WITH, 1, $3);
+}
+;
+
+opt_ai_column_with_list:
+ai_column_with_item
+{
+  $$ = $1;
+}
+| opt_ai_column_with_list ',' ai_column_with_item
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+ai_column_with_item:
+NAME_OB COMP_EQ expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_WITH_ITEM, 2, $1, $3);
 }
 ;
 

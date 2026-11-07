@@ -55,6 +55,62 @@ private:
   array_array_t individual_subpart_values_exprs_; //for individual subpart values expr
 };
 
+// AI column definition carried from the resolver to the DDL executor.  The
+// executor uses it after the table schema has been committed to persist the
+// metadata row in __all_ai_column.
+struct ObAiColumnDef
+{
+public:
+  ObAiColumnDef() : max_retries_(0), result_type_(0), ai_func_type_(0), ai_seq_(0),
+                    result_column_id_(common::OB_INVALID_ID),
+                    state_column_id_(common::OB_INVALID_ID),
+                    request_column_id_(common::OB_INVALID_ID),
+                    result_spec_column_id_(common::OB_INVALID_ID) {}
+  void reset()
+  {
+    column_name_.reset();
+    normalized_expr_.reset();
+    sync_mode_.reset();
+    database_name_.reset();
+    table_name_.reset();
+    state_column_name_.reset();
+    request_column_name_.reset();
+    result_spec_column_name_.reset();
+    dep_column_names_.reset();
+    max_retries_ = 0;
+    result_type_ = 0;
+    ai_func_type_ = 0;
+    ai_seq_ = 0;
+    result_column_id_ = common::OB_INVALID_ID;
+    state_column_id_ = common::OB_INVALID_ID;
+    request_column_id_ = common::OB_INVALID_ID;
+    result_spec_column_id_ = common::OB_INVALID_ID;
+  }
+  TO_STRING_KV(K_(database_name), K_(table_name), K_(column_name),
+               K_(state_column_name), K_(request_column_name),
+               K_(result_spec_column_name), K_(max_retries),
+               K_(sync_mode), K_(result_type), K_(ai_func_type), K_(ai_seq),
+               K_(normalized_expr), K_(dep_column_names), K_(result_column_id),
+               K_(state_column_id), K_(request_column_id), K_(result_spec_column_id));
+  common::ObString database_name_;
+  common::ObString table_name_;
+  common::ObString column_name_;
+  common::ObString state_column_name_;
+  common::ObString request_column_name_;
+  common::ObString result_spec_column_name_;
+  common::ObString sync_mode_;
+  common::ObString normalized_expr_;
+  common::ObString dep_column_names_;
+  int64_t max_retries_;
+  int64_t result_type_;
+  int64_t ai_func_type_;
+  int64_t ai_seq_;
+  uint64_t result_column_id_;
+  uint64_t state_column_id_;
+  uint64_t request_column_id_;
+  uint64_t result_spec_column_id_;
+};
+
 class ObTableStmt : public ObPartitionedStmt
 {
   const static int OB_DEFAULT_ARRAY_SIZE = 16;
@@ -71,6 +127,9 @@ public:
   {
   }
   virtual ~ObTableStmt() {}
+  common::ObSArray<ObAiColumnDef> &get_ai_column_defs() { return ai_column_defs_; }
+  const common::ObSArray<ObAiColumnDef> &get_ai_column_defs() const { return ai_column_defs_; }
+  int add_ai_column_def(const ObAiColumnDef &def) { return ai_column_defs_.push_back(def); }
 
   share::schema::ObPartitionFuncType get_part_type() const
   {
@@ -83,6 +142,7 @@ public:
   TO_STRING_KV(K_(part_type));
 private:
   common::ObSArray<ObPartitionResolveResult> index_partition_resolve_results_;
+  common::ObSArray<ObAiColumnDef> ai_column_defs_;
   share::schema::ObPartitionFuncType part_type_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableStmt);

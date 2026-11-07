@@ -536,6 +536,11 @@ protected:
                                       bool &is_modify_column,
                                       bool &is_modify_column_visibility,
                                       const bool allow_has_default = true);
+  int resolve_ai_column_definition(share::schema::ObColumnSchemaV2 &column,
+                                   ParseNode *attr_node);
+  common::ObSEArray<share::schema::ObColumnSchemaV2, 8> &get_pending_ai_hidden_columns()
+  { return pending_ai_hidden_columns_; }
+  virtual uint64_t gen_ai_column_id() { return common::OB_INVALID_ID; }
   int resolve_normal_column_attribute_check_cons(ObColumnSchemaV2 &column,
                                                  ParseNode *attrs_node,
                                                  ObCreateTableStmt *create_table_stmt);
@@ -877,6 +882,8 @@ protected:
   bool have_generate_vec_arg_;
   int64_t auto_increment_cache_size_;
   common::ObString index_params_;
+  int64_t ai_column_seq_;
+  common::ObSEArray<share::schema::ObColumnSchemaV2, 8> pending_ai_hidden_columns_;
   ObTableOrganizationType table_organization_;
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;

@@ -3349,6 +3349,17 @@ bool ObSQLUtils::is_fk_nested_sql(ObExecContext *cur_ctx)
 }
 
 //this sql is triggered by online stat gathering
+bool ObSQLUtils::is_ai_column_nested_sql(ObExecContext *cur_ctx)
+{
+  bool bret = false;
+  if (NULL != cur_ctx
+      && NULL != cur_ctx->get_parent_ctx()
+      && cur_ctx->get_parent_ctx()->get_das_ctx().is_ai_column_cascading_) {
+    bret = true;
+  }
+  return bret;
+}
+
 bool ObSQLUtils::is_online_stat_gathering_nested_sql(ObExecContext *cur_ctx)
 {
   bool bret = false;
@@ -3373,7 +3384,8 @@ bool ObSQLUtils::is_iter_uncommitted_row(ObExecContext *cur_ctx)
 
 bool ObSQLUtils::is_nested_sql(ObExecContext *cur_ctx)
 {
-  return is_pl_nested_sql(cur_ctx) || is_fk_nested_sql(cur_ctx) || is_online_stat_gathering_nested_sql(cur_ctx);
+  return is_pl_nested_sql(cur_ctx) || is_fk_nested_sql(cur_ctx)
+      || is_ai_column_nested_sql(cur_ctx) || is_online_stat_gathering_nested_sql(cur_ctx);
 }
 
 //bind current execute context to my session,

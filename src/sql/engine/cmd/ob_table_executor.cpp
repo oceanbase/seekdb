@@ -42,6 +42,10 @@
 
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "share/ob_structured_event_logger.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "lib/utility/utility.h"
 namespace oceanbase
 {
 using namespace common;
@@ -50,6 +54,97 @@ using namespace share::schema;
 using namespace observer;
 namespace sql
 {
+
+
+namespace
+{
+uint64_t find_schema_column_id(const ObTableSchema &table_schema, const ObString &column_name)
+{
+  uint64_t column_id = OB_INVALID_ID;
+  for (int64_t i = 0; OB_INVALID_ID == column_id && i < table_schema.get_column_count(); ++i) {
+    const ObColumnSchemaV2 *column = table_schema.get_column_schema_by_idx(i);
+    if (NULL != column && column->get_column_name_str() == column_name) {
+      column_id = column->get_column_id();
+    }
+  }
+  if (OB_INVALID_ID == column_id) {
+    const ObColumnSchemaV2 *column = table_schema.get_column_schema(column_name);
+    if (NULL != column) {
+      column_id = column->get_column_id();
+    }
+  }
+  return column_id;
+}
+
+int insert_ai_column_metadata(const uint64_t table_id,
+                              const ObIArray<ObAiColumnDef> &defs,
+                              const ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  ObMySQLTransaction trans;
+  bool started = false;
+  if (defs.empty()) {
+    // nothing to do
+  } else if (OB_INVALID_ID == table_id) {
+    ret = OB_INVALID_ARGUMENT;
+    SQL_ENG_LOG(WARN, "invalid table id for ai column metadata", K(ret));
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    SQL_ENG_LOG(WARN, "failed to start ai column metadata transaction", K(ret));
+    fprintf(stderr, "AI_DBG meta trans start failed ret=%d table=%lu\n", ret, table_id);
+    fflush(stderr);
+  } else if (FALSE_IT(started = true)) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < defs.count(); ++i) {
+      const ObAiColumnDef &def = defs.at(i);
+      const uint64_t result_id = find_schema_column_id(table_schema, def.column_name_);
+      const uint64_t state_id = find_schema_column_id(table_schema, def.state_column_name_);
+      const uint64_t request_id = find_schema_column_id(table_schema, def.request_column_name_);
+      const uint64_t spec_id = find_schema_column_id(table_schema, def.result_spec_column_name_);
+      ObDMLSqlSplicer splicer;
+      ObSqlString sql;
+      int64_t affected_rows = 0;
+      if (OB_INVALID_ID == result_id || OB_INVALID_ID == state_id
+          || OB_INVALID_ID == request_id || OB_INVALID_ID == spec_id) {
+        ret = OB_ERR_UNEXPECTED;
+        fprintf(stderr, "AI_DBG meta ids missing table=%lu result=%lu state=%lu req=%lu spec=%lu colcnt=%ld\n",
+                table_id, result_id, state_id, request_id, spec_id, table_schema.get_column_count());
+        fflush(stderr);
+        SQL_ENG_LOG(WARN, "ai column ids are missing in schema", K(ret), K(table_id),
+                    K(result_id), K(state_id), K(request_id), K(spec_id), K(def));
+      } else if (OB_FAIL(splicer.add_pk_column("table_id", table_id))) {
+      } else if (OB_FAIL(splicer.add_pk_column("column_id", result_id))) {
+      } else if (OB_FAIL(splicer.add_column("column_name", ObHexEscapeSqlStr(def.column_name_)))) {
+      } else if (OB_FAIL(splicer.add_column("state_column_id", state_id))) {
+      } else if (OB_FAIL(splicer.add_column("request_column_id", request_id))) {
+      } else if (OB_FAIL(splicer.add_column("result_spec_column_id", spec_id))) {
+      } else if (OB_FAIL(splicer.add_column("max_retries", def.max_retries_))) {
+      } else if (OB_FAIL(splicer.add_column("sync_mode", ObHexEscapeSqlStr(def.sync_mode_)))) {
+      } else if (OB_FAIL(splicer.add_column("normalized_expr", ObHexEscapeSqlStr(def.normalized_expr_)))) {
+      } else if (OB_FAIL(splicer.add_column("dep_column_names", ObHexEscapeSqlStr(def.dep_column_names_)))) {
+      } else if (OB_FAIL(splicer.add_column("result_type", def.result_type_))) {
+      } else if (OB_FAIL(splicer.splice_insert_sql(OB_ALL_AI_COLUMN_TNAME, sql))) {
+      } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+      } else if (1 != affected_rows) {
+        ret = OB_ERR_UNEXPECTED;
+        SQL_ENG_LOG(WARN, "insert ai column metadata affected_rows mismatch", K(ret), K(affected_rows));
+        fprintf(stderr, "AI_DBG meta affected=%ld table=%lu\n", affected_rows, table_id);
+        fflush(stderr);
+      }
+    }
+  }
+  if (started) {
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(trans.end(true))) {
+        SQL_ENG_LOG(WARN, "failed to commit ai column metadata", K(ret), K(table_id));
+      }
+    } else {
+      int tmp_ret = trans.end(false);
+      SQL_ENG_LOG(WARN, "failed to rollback ai column metadata", K(tmp_ret));
+    }
+  }
+  return ret;
+}
+} // anonymous namespace
 
 ObCreateTableExecutor::ObCreateTableExecutor()
 {
@@ -486,6 +581,12 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
         if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(
             my_session, ctx.root_command_service(), "[parallel create table]",
                                                           create_table_arg, res))) {
+        } else if (!res.do_nothing_ && stmt.get_ai_column_defs().count() > 0) {
+          if (OB_FAIL(insert_ai_column_metadata(res.table_id_,
+                                                stmt.get_ai_column_defs(),
+                                                table_schema))) {
+            SQL_ENG_LOG(WARN, "insert ai column metadata failed", K(ret), K(res.table_id_));
+          }
         }
       }
     } else {
@@ -865,6 +966,16 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
             res.task_id_, res.ddl_need_retry_at_executor_, my_session,
             *ctx.get_query_runtime_environment(), ctx.local_command_service(), is_support_cancel))) {
         }
+      }
+    }
+    if (OB_SUCC(ret) && stmt.get_ai_column_defs().count() > 0) {
+      const uint64_t ai_table_id = OB_INVALID_ID == alter_table_arg.table_id_
+                                   ? alter_table_arg.alter_table_schema_.get_table_id()
+                                   : alter_table_arg.table_id_;
+      if (OB_FAIL(insert_ai_column_metadata(ai_table_id,
+                                            stmt.get_ai_column_defs(),
+                                            alter_table_arg.alter_table_schema_))) {
+        SQL_ENG_LOG(WARN, "insert ai column metadata failed", K(ret), K(ai_table_id));
       }
     }
     char table_info_buffer[256];
