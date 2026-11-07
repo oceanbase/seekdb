@@ -1078,6 +1078,9 @@ OB_INLINE int ObExpr::eval_batch(ObEvalCtx &ctx,
   const ObEvalInfo &info = get_eval_info(ctx);
   if (!is_batch_result()) {
     bool const_dry_run = skip.accumulate_bit_cnt(size) >= size;
+    if (const_dry_run && (type_ == T_OP_AND || type_ == T_OP_OR || type_ == T_OP_NOT)) {
+      return ret;
+    }
     common::ObDatum *datum = NULL;
     ret = eval(ctx, datum);
     if (!const_dry_run) {
