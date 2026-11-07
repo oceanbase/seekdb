@@ -302,7 +302,13 @@ int ObFileScanOp::get_next_list_row()
     }
     cells_.assign(file_spec().file_column_names_.count(), ObFileCell());
     cells_[0].is_null_ = false;
-    cells_[0].string_value_ = entry->d_name;
+    cells_[0].string_value_.assign(file_spec().file_path_.ptr(),
+                                   file_spec().file_path_.length());
+    if (cells_[0].string_value_.empty()
+        || '/' != cells_[0].string_value_.back()) {
+      cells_[0].string_value_.push_back('/');
+    }
+    cells_[0].string_value_.append(entry->d_name);
     break;
   }
   if (OB_SUCC(ret) && OB_ISNULL(entry)) {

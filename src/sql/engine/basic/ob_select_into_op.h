@@ -135,7 +135,8 @@ public:
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
       block_id_(0),
       need_commit_(true),
-      header_written_(false)
+      header_written_(false),
+      cleanup_output_on_error_(false)
   {
   }
 
@@ -303,6 +304,8 @@ private:
   uint32_t block_id_;
   bool need_commit_;
   bool header_written_;
+  // Only remove a failed COPY target that this operation reserved as absent.
+  bool cleanup_output_on_error_;
   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
 
 };

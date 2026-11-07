@@ -21,6 +21,7 @@
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "lib/utility/ob_smart_call.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/string/ob_sql_string.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/monitor/ob_sql_plan.h"
 namespace oceanbase

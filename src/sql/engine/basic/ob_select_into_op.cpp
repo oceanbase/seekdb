@@ -48,6 +48,9 @@ int ObSelectIntoOp::inner_open()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
+  header_written_ = false;
+  need_commit_ = true;
+  cleanup_output_on_error_ = false;
   if (OB_ISNULL(session = ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -330,7 +333,7 @@ int ObSelectIntoOp::inner_close()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(data_writer_) && OB_FAIL(data_writer_->close_data_writer())) {
   }
-  if (MY_SPEC.fail_if_exists_ && !need_commit_ && !basic_url_.empty()) {
+  if (cleanup_output_on_error_ && !need_commit_ && !basic_url_.empty()) {
     std::string output_path(basic_url_.ptr(), basic_url_.length());
     const int tmp_ret = FileDirectoryUtils::delete_file(output_path.c_str());
     if (OB_SUCCESS != tmp_ret) {
@@ -1290,6 +1293,8 @@ int ObSelectIntoOp::create_the_only_data_writer(ObExternalFileWriter *&data_writ
     } else if (output_exists) {
       ret = OB_FILE_ALREADY_EXIST;
       LOG_USER_ERROR(OB_FILE_ALREADY_EXIST);
+    } else {
+      cleanup_output_on_error_ = true;
     }
   }
   if (OB_FAIL(ret)) {

@@ -1011,9 +1011,14 @@ int decode_plain_values(const uint8_t *data, const size_t size, const size_t val
       case PT_INT32:
         if (size - consumed < 4) ret = OB_INVALID_DATA;
         else {
-          const int32_t value = static_cast<int32_t>(load_u32(data + consumed));
-          if (6 == schema.converted_type_ || LA_DATE == schema.logical_annotation_) cell.date_value_ = value;
-          else cell.int_value_ = value;
+          const uint32_t raw_value = load_u32(data + consumed);
+          if (6 == schema.converted_type_ || LA_DATE == schema.logical_annotation_) {
+            cell.date_value_ = static_cast<int32_t>(raw_value);
+          } else if (LA_INTEGER == schema.logical_annotation_ && !schema.integer_signed_) {
+            cell.int_value_ = static_cast<int64_t>(raw_value);
+          } else {
+            cell.int_value_ = static_cast<int32_t>(raw_value);
+          }
           consumed += 4;
         }
         break;

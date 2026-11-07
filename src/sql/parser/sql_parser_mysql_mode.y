@@ -8497,6 +8497,34 @@ COPY '(' select_stmt ')' TO STRING_VALUE opt_file_sql_copy_options
     $$ = $3;
   }
 }
+| COPY relation_factor TO STRING_VALUE opt_file_sql_copy_options
+{
+  ParseNode *relation_node = NULL;
+  ParseNode *star_node = NULL;
+  ParseNode *project_string = NULL;
+  ParseNode *project_list = NULL;
+  ParseNode *from_list = NULL;
+  ParseNode *select_node = NULL;
+  ParseNode *options_node = NULL;
+  ParseNode *into_node = NULL;
+  malloc_non_terminal_node(relation_node, result->malloc_pool_, T_ORG, 4, $2, NULL, NULL, NULL);
+  malloc_terminal_node(star_node, result->malloc_pool_, T_STAR);
+  malloc_non_terminal_node(project_string, result->malloc_pool_, T_PROJECT_STRING, 1, star_node);
+  dup_string_to_node(project_string, result->malloc_pool_, "*");
+  merge_nodes(project_list, result, T_PROJECT_LIST, project_string);
+  merge_nodes(from_list, result, T_FROM_LIST, relation_node);
+  malloc_select_node(select_node, result->malloc_pool_);
+  select_node->children_[PARSE_SELECT_SELECT] = project_list;
+  select_node->children_[PARSE_SELECT_FROM] = from_list;
+  merge_nodes(options_node, result, T_FILE_SQL_COPY_OPTIONS, $5);
+  if (NULL == options_node) {
+    malloc_non_terminal_node(options_node, result->malloc_pool_, T_FILE_SQL_COPY_OPTIONS, 0);
+  }
+  malloc_non_terminal_node(into_node, result->malloc_pool_, T_INTO_OUTFILE, 3, $4, options_node, NULL);
+  select_node->children_[PARSE_SELECT_INTO_EXTRA] = into_node;
+  setup_token_pos_info(select_node, @1.first_column - 1, 6);
+  $$ = select_node;
+}
 ;
 
 opt_file_sql_copy_options:

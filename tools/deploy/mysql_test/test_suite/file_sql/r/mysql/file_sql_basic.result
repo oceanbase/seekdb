@@ -16,6 +16,19 @@ id	name	score	active	day	note
 3	Chen	90	1	NULL	ok
 row_count
 3
+# cross-format INNER JOIN and LEFT JOIN
+id	name	note
+1	Alice	NULL
+2	Bob	NULL
+3	Chen	ok
+c1	name
+0	NULL
+1	Alice
+2	Bob
+3	Chen
+4	NULL
+5	NULL
+6	NULL
 # inferred CSV schema using DuckDB DESCRIBE syntax
 column_name	column_type	null	key	default	extra
 id	BIGINT	NO	NULL	NULL	NULL
@@ -26,6 +39,15 @@ day	DATE	YES	NULL	NULL	NULL
 created	DATETIME	YES	NULL	NULL	NULL
 note	VARCHAR	NO	NULL	NULL	NULL
 id__2	BIGINT	NO	NULL	NULL	NULL
+column_name	column_type	null	key	default	extra
+_c1	VARCHAR	NO	NULL	NULL	NULL
+_c2	VARCHAR	NO	NULL	NULL	NULL
+_c3	VARCHAR	NO	NULL	NULL	NULL
+_c4	VARCHAR	NO	NULL	NULL	NULL
+_c5	VARCHAR	YES	NULL	NULL	NULL
+_c6	VARCHAR	YES	NULL	NULL	NULL
+_c7	VARCHAR	NO	NULL	NULL	NULL
+_c8	VARCHAR	NO	NULL	NULL	NULL
 # Parquet scan and aggregate push through projected columns
 row_count	min_c1	max_c1	sum_c1
 7	0	6	21
@@ -42,3 +64,9 @@ id	name	score
 1	Alice	98.5
 2	Bob	87
 3	Chen	90.25
+row_count
+3
+# COPY table and read it back
+id	name
+4	Delta
+5	Echo
