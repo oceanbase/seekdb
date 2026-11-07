@@ -332,6 +332,7 @@ int ObSelectIntoOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(data_writer_) && OB_FAIL(data_writer_->close_data_writer())) {
+    need_commit_ = false;
   }
   if (cleanup_output_on_error_ && !need_commit_ && !basic_url_.empty()) {
     std::string output_path(basic_url_.ptr(), basic_url_.length());

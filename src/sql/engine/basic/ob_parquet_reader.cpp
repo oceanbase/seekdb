@@ -642,7 +642,8 @@ int map_schema(const FileMeta &meta, std::vector<ObFileColumnSchema> &columns)
     } else if (PT_BYTE_ARRAY == element.physical_type_
                || PT_FIXED_LEN_BYTE_ARRAY == element.physical_type_) {
       column.type_ = ObFileColumnType::VARCHAR;
-      column.max_length_ = std::max<int32_t>(element.type_length_, 65535);
+      column.max_length_ = PT_FIXED_LEN_BYTE_ARRAY == element.physical_type_
+                         ? element.type_length_ : 16L * 1024L * 1024L;
       if (PT_FIXED_LEN_BYTE_ARRAY == element.physical_type_) {
         column.source_type_name_ = "FIXED_LEN_BYTE_ARRAY(" + std::to_string(element.type_length_) + ")";
       } else if (0 == element.converted_type_ || LA_STRING == element.logical_annotation_) {

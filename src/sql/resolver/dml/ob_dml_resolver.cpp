@@ -190,12 +190,17 @@ int split_glob_path(const std::string &input,
 {
   int ret = OB_SUCCESS;
   directory = input;
+  const bool trailing_separator =
+      directory.length() > 1
+      && ('/' == directory.back() || '\\' == directory.back());
   while (directory.length() > 1
          && ('/' == directory.back() || '\\' == directory.back())) {
     directory.pop_back();
   }
   if (directory.empty()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (trailing_separator) {
+    pattern = "*";
   } else {
     const size_t separator = directory.find_last_of("/\\");
     if (std::string::npos == separator) {
@@ -4380,7 +4385,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
       } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "nullable", ObFileColumnType::BOOLEAN))) {
       }
     } else if (OB_SUCC(ret)) {
-      if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file", ObFileColumnType::VARCHAR, false, 1024))) {
+      if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file", ObFileColumnType::VARCHAR, false, 4096))) {
       }
     }
   }
