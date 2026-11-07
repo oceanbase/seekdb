@@ -10886,6 +10886,19 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html"
   },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Control whether file SQL functions (read_csv/read_json/read_parquet/glob) may be used.",
+    "flags": "SESSION ",
+    "publish_version": "",
+    "info_cn": "\u63a7\u5236\u662f\u5426\u5141\u8bb8\u4f7f\u7528\u6587\u4ef6 SQL \u51fd\u6570\uff08read_csv/read_json/read_parquet/glob\uff09",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "enable_optimizer_rowgoal": {
     "id": 10747,
     "name": "enable_optimizer_rowgoal",

@@ -258,7 +258,15 @@ int ObOllamaUtils::get_header(common::ObIAllocator &allocator,
                               common::ObArray<ObString> &headers) 
 {
   int ret = OB_SUCCESS;
-  // ollama header is empty, do nothing
+  // Ollama needs no auth header, but ObAIFuncClient::init rejects an empty header list,
+  // so always send the JSON content type.
+  ObString content_type_str("Content-Type: application/json");
+  ObString content_type_c_str;
+  if (OB_FAIL(ob_write_string(allocator, content_type_str, content_type_c_str, true))) {
+    LOG_WARN("failed to write content type header", K(ret));
+  } else if (OB_FAIL(headers.push_back(content_type_c_str))) {
+    LOG_WARN("failed to push content type header", K(ret));
+  }
   return ret;
 }
 
@@ -1061,6 +1069,8 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
       || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
       || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)) {
     complete_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIComplete, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    complete_provider = OB_NEWx(ObOllamaUtils::ObOllamaComplete, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     complete_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeComplete, &allocator);
   } else {
@@ -1084,6 +1094,8 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
       || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
       || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)) {
     embed_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIEmbed, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    embed_provider = OB_NEWx(ObOllamaUtils::ObOllamaEmbed, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     embed_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeEmbed, &allocator);
   } else {
@@ -1620,11 +1632,18 @@ int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &al
     char *result_buf = NULL;
     for (uint64_t i = 0; OB_SUCC(ret) && i < args_count; i++) {
       ObJsonNode *arg_node = args_array->get_value(i);
-      if (OB_NOT_NULL(arg_node) && arg_node->json_type() == ObJsonNodeType::J_STRING) {
+      if (OB_ISNULL(arg_node)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (arg_node->json_type() == ObJsonNodeType::J_STRING) {
         ObJsonString *arg_str = static_cast<ObJsonString *>(arg_node);
         max_result_len += arg_str->get_str().length();
       } else {
-        ret = OB_INVALID_ARGUMENT;
+        // 非字符串参数（例如 JSON 对象）序列化为文本参与替换
+        ObString arg_raw;
+        if (OB_FAIL(arg_node->get_raw_binary(arg_raw, &allocator))) {
+        } else {
+          max_result_len += arg_raw.length();
+        }
       }
     }
     if (OB_FAIL(ret)) {
@@ -1666,18 +1685,20 @@ int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &al
             
             if (valid_index && index >= 0 && static_cast<uint64_t>(index) < args_count) {
               ObJsonNode *arg_node = args_array->get_value(static_cast<uint64_t>(index));
-              if (OB_NOT_NULL(arg_node) && arg_node->json_type() == ObJsonNodeType::J_STRING) {
-                ObJsonString *arg_str = static_cast<ObJsonString *>(arg_node);
-                ObString arg_value = arg_str->get_str();
-                
+              ObString arg_value;
+              if (OB_ISNULL(arg_node)) {
+                ret = OB_INVALID_ARGUMENT;
+              } else if (arg_node->json_type() == ObJsonNodeType::J_STRING) {
+                arg_value = static_cast<ObJsonString *>(arg_node)->get_str();
+              } else if (OB_FAIL(arg_node->get_raw_binary(arg_value, &allocator))) {
+              }
+              if (OB_SUCC(ret) && !arg_value.empty()) {
                 if (result_pos + arg_value.length() <= max_result_len) {
                   MEMCPY(result_buf + result_pos, arg_value.ptr(), arg_value.length());
                   result_pos += arg_value.length();
                 } else {
                   ret = OB_BUF_NOT_ENOUGH;
                 }
-              } else {
-                //do nothing
               }
               
               i = end_pos;
