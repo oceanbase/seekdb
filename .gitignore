@@ -170,7 +170,7 @@ tools/deploy/lib
 tools/deploy/lib/
 tools/deploy/list
 tools/deploy/log/
-tools/deploy/mysql_test/r/*.reject
+unittest/mysql_test/r/*.reject
 tools/deploy/mytest.log*
 tools/deploy/nohup*
 tools/deploy/obclient

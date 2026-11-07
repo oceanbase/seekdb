@@ -139,7 +139,7 @@ MERGE TABLE agent_sandbox_42.memory INTO agent_state.memory STRATEGY THEIRS;
 DROP DATABASE agent_sandbox_42;
 ```
 
-<sub>Source: [`tools/deploy/mysql_test/test_suite/fork_table/`](tools/deploy/mysql_test/test_suite/fork_table/)</sub>
+<sub>Source: [`unittest/mysql_test/test_suite/fork_table/`](unittest/mysql_test/test_suite/fork_table/)</sub>
 
 ### 🔍 Hybrid Search in a Single SQL
 
