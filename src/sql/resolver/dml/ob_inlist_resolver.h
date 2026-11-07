@@ -99,6 +99,11 @@ public:
                                const bool is_root_condition,
                                const ParseNode *root_node,
                                const ParseNode *&ret_node);
+  // Remove duplicated literal values from an IN/NOT IN value list.
+  // The duplicated values do not change the semantics of the predicate, but they can
+  // make an otherwise compact IN predicate exceed the inlist-rewrite threshold and be
+  // rewritten into a values-table subquery, which changes the plan and the latency.
+  static int deduplicate_inlist_values(const ParseNode &in_list);
   int resolve_inlist(ObInListInfo &inlist_infos);
 private:
   static int get_inlist_rewrite_info(const ParseNode &in_list,
