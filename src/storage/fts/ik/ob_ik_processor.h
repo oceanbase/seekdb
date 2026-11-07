@@ -56,6 +56,25 @@ public:
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
 
+  /**
+   * Locate the first valid character of the buffer.
+   *
+   * The charset handler is cached in the context, so the charset is not looked
+   * up for every character of a document.
+   */
+  int first_valid_char(const char *buf, int64_t buf_size, int64_t &char_len);
+
+  /**
+   * Locate and classify the first valid character of the buffer.
+   *
+   * Locating and classifying a character are merged into one call, the
+   * character is decoded only once.
+   */
+  int classify_first_valid_char(const char *buf,
+                                int64_t buf_size,
+                                int64_t &char_len,
+                                ObFTCharUtil::CharType &type);
+
   int step_next();
 
   ObCollationType collation() const;
@@ -83,6 +102,14 @@ public:
 
 private:
   int prepare_next_char();
+  int init_charset();
+
+  typedef size_t (*well_formed_len_func_t)(const ObCharsetInfo *,
+                                           const char *b,
+                                           const char *e,
+                                           size_t nchars,
+                                           int *error);
+  typedef int (*classify_func_t)(const char *input, uint8_t char_len, ObFTCharUtil::CharType &type);
 
   ObCollationType coll_type_;
   const char *fulltext_;
@@ -94,6 +121,11 @@ private:
 
   uint32_t handle_size_;
   bool is_smart_;
+
+  // the charset of the context never changes, cache the handlers of it
+  const ObCharsetInfo *cs_info_;
+  well_formed_len_func_t well_formed_len_;
+  classify_func_t classify_func_;
 
   ObFTSortList token_list_;
   ObList<ObIKToken, ObIAllocator> result_list_;

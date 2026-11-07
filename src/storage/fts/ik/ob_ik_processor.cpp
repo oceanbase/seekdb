@@ -52,7 +52,8 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  int64_t fulltext_len,
                                  bool is_smart)
     : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
+      next_char_len_(0), handle_size_(0), is_smart_(is_smart), cs_info_(nullptr),
+      well_formed_len_(nullptr), classify_func_(nullptr), token_list_(allocator),
       result_list_(allocator)
 {
 }
@@ -63,7 +64,43 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(init_charset())) {
   } else if (OB_FAIL(prepare_next_char())) {
+  }
+  return ret;
+}
+
+int TokenizeContext::init_charset()
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(coll_type_ <= CS_TYPE_INVALID || coll_type_ >= CS_TYPE_MAX)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(cs_info_ = ObCharset::get_charset(coll_type_))) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_ISNULL(cs_info_->cset)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    well_formed_len_ = cs_info_->cset->well_formed_len;
+    switch (ObCharset::charset_type_by_coll(coll_type_)) {
+    case CHARSET_UTF8MB4: {
+      classify_func_ = &ObFTCharUtil::classify_char<CHARSET_UTF8MB4>;
+      break;
+    }
+    case CHARSET_UTF16: {
+      classify_func_ = &ObFTCharUtil::classify_char<CHARSET_UTF16>;
+      break;
+    }
+    case CHARSET_UTF16LE: {
+      classify_func_ = &ObFTCharUtil::classify_char<CHARSET_UTF16LE>;
+      break;
+    }
+    default: {
+      ret = OB_NOT_SUPPORTED;
+      STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(coll_type_));
+      break;
+    }
+    }
   }
   return ret;
 }
@@ -116,17 +153,45 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+int TokenizeContext::first_valid_char(const char *buf, int64_t buf_size, int64_t &char_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(OB_ISNULL(buf))) {
+    ret = OB_NOT_INIT;
+  } else if (buf_size <= 0) {
+    char_len = 0;
+  } else {
+    int error = 0;
+    int64_t len = static_cast<int64_t>(well_formed_len_(cs_info_, buf, buf + buf_size, 1, &error));
+    if (OB_LIKELY(0 == error)) {
+      char_len = len;
+    } else {
+      ret = OB_INVALID_ARGUMENT;
+      STORAGE_FTS_LOG(WARN, "invalid encoding found");
+    }
+  }
+  return ret;
+}
+
+int TokenizeContext::classify_first_valid_char(const char *buf,
+                                               int64_t buf_size,
+                                               int64_t &char_len,
+                                               ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(first_valid_char(buf, buf_size, char_len))) {
+  } else if (OB_FAIL(classify_func_(buf, static_cast<uint8_t>(char_len), type))) {
+  }
+  return ret;
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
+  if (OB_FAIL(classify_first_valid_char(fulltext_ + cursor_,
+                                        fulltext_len_ - cursor_,
+                                        next_char_len_,
+                                        next_char_type_))) {
   }
   return ret;
 }
