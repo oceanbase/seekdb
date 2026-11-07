@@ -1,0 +1,136 @@
+{
+  "status": "low_recall",
+  "started_at": "2026-11-07T05:09:13.469080+00:00",
+  "dataset": {
+    "kind": "synthetic-normal-fp32",
+    "seed": 20261107,
+    "rows": 20000,
+    "dim": 128,
+    "queries": 100,
+    "sha256": "ad9696d50efbd608394a0684c59f97f9352d765042b83161b7427386e08e1678"
+  },
+  "parameters": {
+    "m": 16,
+    "ef_construction": 200,
+    "ef_search": 200,
+    "k": 10
+  },
+  "timing_scope": "CREATE VECTOR INDEX + first APPROXIMATE query through the new index",
+  "runs": [
+    {
+      "library": "VSAG",
+      "round": 1,
+      "build_seconds": 5.47834937274456,
+      "recall_at_k": 0.6839999999999999,
+      "query_median_ms": 0.2750176936388016,
+      "query_p95_ms": 0.30162641778588295,
+      "explain_uses_index": true,
+      "gpu_evidence": []
+    },
+    {
+      "library": "HIPVS",
+      "round": 1,
+      "build_seconds": 2.6406347677111626,
+      "recall_at_k": 0.5550000000000002,
+      "query_median_ms": 0.32073166221380234,
+      "query_p95_ms": 0.3576153889298439,
+      "explain_uses_index": true,
+      "gpu_evidence": [
+        {
+          "gpu_compute": true,
+          "cpu_fallback": false,
+          "device": "backend=hipVS vendor=AMD arch=gfx1100 name=AMD Radeon Graphics gcnArch=gfx1100 device=0 hbm=48.0GiB",
+          "rows": 20000,
+          "dim": 128,
+          "m": 16,
+          "ef_construction": 200,
+          "gpu_graph_ms": 1116.28,
+          "hnsw_hierarchy_and_export_ms": 299.465,
+          "label_remap_ms": 158.423,
+          "backend_total_ms": 1574.169
+        }
+      ]
+    },
+    {
+      "library": "HIPVS",
+      "round": 2,
+      "build_seconds": 1.8612729702144861,
+      "recall_at_k": 0.5870000000000001,
+      "query_median_ms": 0.2813059836626053,
+      "query_p95_ms": 0.31120553612709045,
+      "explain_uses_index": true,
+      "gpu_evidence": [
+        {
+          "gpu_compute": true,
+          "cpu_fallback": false,
+          "device": "backend=hipVS vendor=AMD arch=gfx1100 name=AMD Radeon Graphics gcnArch=gfx1100 device=0 hbm=48.0GiB",
+          "rows": 20000,
+          "dim": 128,
+          "m": 16,
+          "ef_construction": 200,
+          "gpu_graph_ms": 648.858,
+          "hnsw_hierarchy_and_export_ms": 335.685,
+          "label_remap_ms": 103.604,
+          "backend_total_ms": 1088.147
+        }
+      ]
+    },
+    {
+      "library": "VSAG",
+      "round": 2,
+      "build_seconds": 5.3538229539990425,
+      "recall_at_k": 0.6839999999999999,
+      "query_median_ms": 0.27178507298231125,
+      "query_p95_ms": 0.29787980020046234,
+      "explain_uses_index": true,
+      "gpu_evidence": []
+    },
+    {
+      "library": "VSAG",
+      "round": 3,
+      "build_seconds": 5.351087220013142,
+      "recall_at_k": 0.6839999999999999,
+      "query_median_ms": 0.2715177834033966,
+      "query_p95_ms": 0.29818322509527206,
+      "explain_uses_index": true,
+      "gpu_evidence": []
+    },
+    {
+      "library": "HIPVS",
+      "round": 3,
+      "build_seconds": 1.9904054533690214,
+      "recall_at_k": 0.5790000000000001,
+      "query_median_ms": 0.2819523215293884,
+      "query_p95_ms": 0.31995074823498726,
+      "explain_uses_index": true,
+      "gpu_evidence": [
+        {
+          "gpu_compute": true,
+          "cpu_fallback": false,
+          "device": "backend=hipVS vendor=AMD arch=gfx1100 name=AMD Radeon Graphics gcnArch=gfx1100 device=0 hbm=48.0GiB",
+          "rows": 20000,
+          "dim": 128,
+          "m": 16,
+          "ef_construction": 200,
+          "gpu_graph_ms": 710.061,
+          "hnsw_hierarchy_and_export_ms": 303.923,
+          "label_remap_ms": 102.635,
+          "backend_total_ms": 1116.619
+        }
+      ]
+    }
+  ],
+  "medians": {
+    "build_seconds": {
+      "VSAG": 5.3538229539990425,
+      "HIPVS": 1.9904054533690214
+    },
+    "recall_at_k": {
+      "VSAG": 0.6839999999999999,
+      "HIPVS": 0.5790000000000001
+    }
+  },
+  "speedup": 2.6898152559504886,
+  "recall_ok": false,
+  "database_version": "5.7.25-OceanBase seekdb-v1.4.0.0"
+}

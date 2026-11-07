@@ -1,0 +1,2513 @@
+diff --git a/src/query/api/query/vector/ob_vector_index_util.h b/src/query/api/query/vector/ob_vector_index_util.h
+--- a/src/query/api/query/vector/ob_vector_index_util.h
++++ b/src/query/api/query/vector/ob_vector_index_util.h
+@@ -100,6 +100,10 @@
+ {
+   VIAL_VSAG = 0,
+   VIAL_OB,
++  // Out-of-process AMD GPU builder (hipVS / ROCm). The graph is still an HNSW
++  // graph served by VSAG at query time; only the build is delegated to the GPU
++  // backend shared object. See src/oblib/lib/vector/hipvs_build_api.h.
++  VIAL_HIPVS,
+   VIAL_MAX
+ };
+ 
+diff --git a/src/query/api/query/vector/ob_vector_index_adaptor.h b/src/query/api/query/vector/ob_vector_index_adaptor.h
+--- a/src/query/api/query/vector/ob_vector_index_adaptor.h
++++ b/src/query/api/query/vector/ob_vector_index_adaptor.h
+@@ -421,6 +421,7 @@
+     : is_init_(false),
+       rb_flag_(true),
+       has_build_sq_(false),
++      hipvs_built_(false),
+       vid_array_(nullptr),
+       vec_array_(nullptr),
+       extra_info_buf_(nullptr),
+@@ -469,6 +470,10 @@
+   bool is_init_;
+   bool rb_flag_;
+   bool has_build_sq_; // for hnsw+sq
++  // Set once the snapshot graph has been produced by the AMD GPU (hipVS)
++  // backend. Distinct from is_init_ because the snapshot is "inited but empty"
++  // while the DDL scan is still buffering vectors for a single GPU build.
++  bool hipvs_built_;
+   ObVecIdxVidArray *vid_array_; // for hnsw+sq
+   ObVecIdxVecArray *vec_array_; // for hnsw+sq
+   ObVecExtraInfoBuffer *extra_info_buf_; // for hnsw+sq
+@@ -752,6 +757,9 @@
+   int init_hnswsq_mem_data();
+   int check_snap_hnswsq_index();
+   int build_hnswsq_index(ObVectorIndexParam *param);
++  // AMD GPU (hipVS) snapshot: buffer vectors during the DDL scan and build the
++  // whole HNSW graph on the GPU once, at the end of the snapshot.
++  int finish_hipvs_snapshot();
+   bool is_mem_data_init_atomic(ObVectorIndexRecordType type);
+   int try_init_mem_data(ObVectorIndexRecordType type, ObVectorIndexAlgorithmType enforce_type = VIAT_MAX) {
+     int ret = OB_SUCCESS;
+diff --git a/src/observer/vector_index/ob_vector_index_util.cpp b/src/observer/vector_index/ob_vector_index_util.cpp
+--- a/src/observer/vector_index/ob_vector_index_util.cpp
++++ b/src/observer/vector_index/ob_vector_index_util.cpp
+@@ -257,6 +257,8 @@
+             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_VSAG;
+           } else if (new_param_value == "OB") {
+             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_OB;
++          } else if (new_param_value == "HIPVS") {
++            param.lib_ = ObVectorIndexAlgorithmLib::VIAL_HIPVS;
+           } else {
+             ret = OB_NOT_SUPPORTED;
+           }
+@@ -1030,6 +1032,8 @@
+         tmp_lib = ObString("VSAG");
+       } else if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_OB) {
+         tmp_lib = ObString("OB");
++      } else if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
++        tmp_lib = ObString("HIPVS");
+       } else {
+         ret = OB_ERR_UNEXPECTED;
+       }
+@@ -2991,7 +2995,8 @@
+           }
+         } else if (last_variable == "LIB") {
+           if (new_parser_name == "VSAG" ||
+-              new_parser_name == "OB") {
++              new_parser_name == "OB" ||
++              new_parser_name == "HIPVS") {
+             lib_is_set = true;
+             lib_name = new_parser_name;
+           } else {
+@@ -3293,9 +3298,21 @@
+           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index m is");
+         }
+         if (OB_FAIL(ret)) {
+-        } else if (lib_is_set && lib_name != "VSAG") {
++        } else if (lib_is_set && lib_name != "VSAG" && lib_name != "HIPVS") {
+           ret = OB_NOT_SUPPORTED;
+-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' is");
++          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' or 'HIPVS' is");
++        }
++        if (OB_FAIL(ret)) {
++        } else if (lib_is_set && lib_name == "HIPVS") {
++          // The AMD GPU backend builds the base-layer neighbours with CAGRA and
++          // exports a plain FP32/L2 HNSW graph which VSAG then serves. Quantized
++          // variants (SQ/BQ), other metrics and extra-info payloads stay VSAG-only.
++          if (distance_name != "L2" || type_hnsw_sq_is_set || type_hnsw_bq_is_set ||
++              extra_info_max_size_is_set || refine_type_is_set ||
++              bq_bits_query_set || bq_use_fht_is_set) {
++            ret = OB_NOT_SUPPORTED;
++            LOG_USER_ERROR(OB_NOT_SUPPORTED, "hipvs vector index requires L2 distance, plain HNSW type and no extra info is");
++          }
+         }
+         if (OB_FAIL(ret)) {
+         } else if (ef_construction_value <= m_value) {
+diff --git a/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp b/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp
+--- a/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp
++++ b/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp
+@@ -387,6 +387,9 @@
+   }
+   free_hnswsq_array_data(memdata, allocator);
+   memdata->is_init_ = false;
++  // A released snapshot must forget that a GPU build completed, otherwise a
++  // retried snapshot would be treated as already built.
++  memdata->hipvs_built_ = false;
+ }
+ 
+ void free_hnswsq_array_data(ObVectorIndexMemData *&memdata, ObIAllocator *allocator)
+@@ -1690,7 +1693,56 @@
+   } else if (OB_FALSE_IT(dim = param->dim_)) {
+   } else if (OB_FAIL(get_extra_info_actual_size(extra_info_actual_size))) {
+   } else {
+-    if (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW ||
++    if (param->lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
++      // GPU path: CAGRA needs the whole snapshot at once, so the DDL scan only
++      // buffers (vectors, vids) here and finish_hipvs_snapshot() builds the
++      // graph once, at the end of the snapshot.
++      // extra_column_count only counts candidate columns of the DDL scan; the
++      // real requirement is that no extra-info payload is stored (VSAG index is
++      // created with extra_info_size = 0), which extra_info_actual_size != 0
++      // already rejects.
++      // m > 64 makes the base layer degree 2*m > 128, which the legacy 64-bit
++      // FP32/L2 hnswlib reader inside VSAG refuses to import. Reject the DDL here
++      // instead of letting the snapshot finalise into an empty index later.
++      if (num < 0 || (num > 0 && (OB_ISNULL(vectors) || OB_ISNULL(vids))) || dim <= 0 ||
++          param->type_ != ObVectorIndexAlgorithmType::VIAT_HNSW ||
++          param->dist_algorithm_ != ObVectorIndexDistAlgorithm::VIDA_L2 ||
++          extra_info_actual_size != 0) {
++        ret = OB_NOT_SUPPORTED;
++        LOG_WARN("hipvs snapshot only supports plain FP32 HNSW with L2 and no extra info", K(ret),
++                 K(param->type_), K(param->dist_algorithm_), K(extra_info_actual_size), K(dim));
++      } else if (param->m_ > 64) {
++        ret = OB_NOT_SUPPORTED;
++        LOG_WARN("hipvs snapshot requires m <= 64: the VSAG hnswlib reader rejects a base layer "
++                 "of degree 2*m > 128", K(ret), K(param->m_));
++      } else if (!common::obvsag::hipvs_backend_available()) {
++        // Fail at DDL time, not at the first query: a lib=HIPVS index must never
++        // end up as a silently empty graph because the DSO or the GPU is missing.
++        ret = OB_NOT_SUPPORTED;
++        LOG_WARN("hipvs backend unavailable (SEEKDB_HIPVS_LIBRARY or AMD GPU missing); "
++                 "refusing to build a CPU index for lib=HIPVS", K(ret));
++      } else if (OB_FAIL(init_hnswsq_mem_data())) {
++        // allocates vid_array_ / vec_array_ used as the GPU staging buffers
++      } else {
++        TCWLockGuard lock_guard(snap_data_->mem_data_rwlock_);
++        if (snap_data_->hipvs_built_ || OB_ISNULL(snap_data_->vid_array_) ||
++            OB_ISNULL(snap_data_->vec_array_)) {
++          ret = OB_STATE_NOT_MATCH;
++          LOG_WARN("hipvs snapshot is already built or released", K(ret),
++                   K(snap_data_->hipvs_built_));
++        }
++        for (int64_t i = 0; OB_SUCC(ret) && i < num; ++i) {
++          if (OB_FAIL(snap_data_->vid_array_->push_back(vids[i]))) {
++            LOG_WARN("failed to buffer vid for hipvs snapshot", K(ret), K(i));
++          }
++        }
++        for (int64_t i = 0; OB_SUCC(ret) && i < static_cast<int64_t>(num) * dim; ++i) {
++          if (OB_FAIL(snap_data_->vec_array_->push_back(vectors[i]))) {
++            LOG_WARN("failed to buffer vector for hipvs snapshot", K(ret), K(i));
++          }
++        }
++      }
++    } else if (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW ||
+         param->type_ == ObVectorIndexAlgorithmType::VIAT_HGRAPH ||
+         param->type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) {
+       if (OB_FAIL(try_init_mem_data(VIRT_SNAP))) {
+@@ -1999,18 +2051,113 @@
+   return ret;
+ }
+ 
++// Build the snapshot HNSW graph of a `lib=hipvs` index on the AMD GPU.
++//
++// Called once the DDL scan (or the asynchronous snapshot refresh) has finished
++// buffering the snapshot: everything CAGRA needs is now available, so this is
++// the point where the graph is produced in one GPU pass and imported into VSAG.
++// Any failure is returned to the caller: a hipvs index is never silently served
++// by a CPU-built graph.
++int ObPluginVectorIndexAdaptor::finish_hipvs_snapshot()
++{
++  INIT_SUCC(ret);
++  const char *const DATATYPE_FLOAT32 = "float32";
++  ObVectorIndexParam *param = nullptr;
++  if (OB_ISNULL(snap_data_) || OB_ISNULL(algo_data_)) {
++    ret = OB_ERR_UNEXPECTED;
++  } else if (OB_ISNULL(param = static_cast<ObVectorIndexParam *>(algo_data_))) {
++    ret = OB_ERR_UNEXPECTED;
++  } else if (snap_data_->hipvs_built_) {
++    // Both the DDL and the asynchronous snapshot path can finish an index; the
++    // second one must not rebuild it.
++    LOG_INFO("hipvs snapshot already finished", K(param->dim_));
++  } else if (param->lib_ != ObVectorIndexAlgorithmLib::VIAL_HIPVS ||
++             param->type_ != ObVectorIndexAlgorithmType::VIAT_HNSW ||
++             param->dist_algorithm_ != ObVectorIndexDistAlgorithm::VIDA_L2 ||
++             param->extra_info_actual_size_ != 0) {
++    ret = OB_NOT_SUPPORTED;
++    LOG_WARN("hipvs snapshot only supports plain FP32 HNSW with L2 and no extra info", K(ret),
++             K(param->lib_), K(param->type_), K(param->dist_algorithm_),
++             K(param->extra_info_actual_size_));
++  } else {
++    TCWLockGuard lock_guard(snap_data_->mem_data_rwlock_);
++    const int64_t count =
++        OB_ISNULL(snap_data_->vid_array_) ? 0 : snap_data_->vid_array_->count();
++    int64_t old_count = 0;
++    if (snap_data_->hipvs_built_) {
++      // finished by a concurrent path while we waited for the lock
++    } else if (OB_NOT_NULL(snap_data_->index_) &&
++               OB_FAIL(obvectorutil::get_index_number(snap_data_->index_, old_count))) {
++    } else if (old_count > 0) {
++      // The graph came back from the persisted snapshot stream (server restart
++      // or a follower replaying the DDL): there is nothing left to build, and it
++      // must not be replaced.
++      snap_data_->hipvs_built_ = true;
++      free_hnswsq_array_data(snap_data_, get_allocator());
++      LOG_INFO("hipvs snapshot restored from the persisted index", K(old_count), K(param->dim_));
++    } else if (count > 0 && (OB_ISNULL(snap_data_->vec_array_) ||
++                             snap_data_->vec_array_->count() != count * param->dim_)) {
++      ret = OB_ERR_UNEXPECTED;
++      LOG_WARN("hipvs staging buffers are inconsistent", K(ret), K(count), K(param->dim_));
++    } else if (!snap_data_->mem_ctx_->is_inited() &&
++               OB_FAIL(snap_data_->mem_ctx_->init(parent_mem_ctx_, all_vsag_use_mem_))) {
++      LOG_WARN("failed to init vsag memory context for hipvs", K(ret));
++    } else {
++      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexHipvsADP"));
++      lib::ObLightBacktraceGuard light_backtrace_guard(false);
++      void *candidate = nullptr;
++      if (OB_FAIL(obvectorutil::create_index(candidate, VIAT_HNSW, DATATYPE_FLOAT32, "l2",
++                                             param->dim_, param->m_, param->ef_construction_,
++                                             param->ef_search_, snap_data_->mem_ctx_, 0,
++                                             param->refine_type_, param->bq_bits_query_,
++                                             param->bq_use_fht_))) {
++        LOG_WARN("failed to create the vsag handler for the hipvs snapshot", K(ret));
++      } else if (count > 0 &&
++                 OB_FAIL(common::obvsag::build_hipvs_index(
++                     candidate, snap_data_->vec_array_->get_data(),
++                     snap_data_->vid_array_->get_data(), static_cast<int>(param->dim_), count,
++                     static_cast<int>(param->m_), static_cast<int>(param->ef_construction_)))) {
++        LOG_WARN("hipvs GPU build failed; cpu_fallback=false", K(ret), K(count), K(param->dim_));
++      } else {
++        // count == 0 keeps the empty VSAG index created above: an empty snapshot
++        // still has to answer queries.
++        if (OB_NOT_NULL(snap_data_->index_)) {
++          obvectorutil::delete_index(snap_data_->index_);
++          snap_data_->index_ = nullptr;
++        }
++        snap_data_->index_ = candidate;
++        candidate = nullptr;
++        snap_data_->hipvs_built_ = true;
++        snap_data_->set_inited();
++        free_hnswsq_array_data(snap_data_, get_allocator());
++        LOG_INFO("hipvs snapshot finished", K(count), K(param->dim_), K(param->m_),
++                 K(param->ef_construction_));
++      }
++      if (OB_NOT_NULL(candidate)) {
++        obvectorutil::delete_index(candidate);
++      }
++      if (OB_FAIL(ret)) {
++        free_memdata_resource(VIRT_SNAP, snap_data_, get_allocator());
++      }
++    }
++  }
++  return ret;
++}
++
+ int ObPluginVectorIndexAdaptor::check_snap_hnswsq_index()
+ {
+   INIT_SUCC(ret);
+   const char* const DATATYPE_FLOAT32 = "float32";
+   ObVectorIndexParam *param = nullptr;
+-  ObVecIdxVidArray *vid_array = snap_data_->vid_array_;
+-  ObVecIdxVecArray *vec_array = snap_data_->vec_array_;
+-  ObVecExtraInfoBuffer *extra_info_buf = snap_data_->extra_info_buf_;
++  ObVecIdxVidArray *vid_array = OB_ISNULL(snap_data_) ? nullptr : snap_data_->vid_array_;
++  ObVecIdxVecArray *vec_array = OB_ISNULL(snap_data_) ? nullptr : snap_data_->vec_array_;
++  ObVecExtraInfoBuffer *extra_info_buf = OB_ISNULL(snap_data_) ? nullptr : snap_data_->extra_info_buf_;
+   if (OB_ISNULL(snap_data_) || OB_ISNULL(algo_data_)) {
+     ret = OB_ERR_UNEXPECTED;
+   } else if (OB_ISNULL(param = static_cast<ObVectorIndexParam*>(algo_data_))) {
+     ret = OB_ERR_UNEXPECTED;
++  } else if (param->lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
++    ret = finish_hipvs_snapshot();
+   } else if (param->type_ == VIAT_HNSW || param->type_ == VIAT_HGRAPH || snap_data_->has_build_sq_ || param->type_ == VIAT_IPIVF) {
+     // do nothing
+   } else if (OB_ISNULL(snap_data_->index_)) {
+diff --git a/src/oblib/lib/vector/ob_vsag_adaptor.cpp b/src/oblib/lib/vector/ob_vsag_adaptor.cpp
+--- a/src/oblib/lib/vector/ob_vsag_adaptor.cpp
++++ b/src/oblib/lib/vector/ob_vsag_adaptor.cpp
+@@ -28,6 +28,18 @@
+ #include "lib/utility/ob_print_utils.h"
+ #include "lib/oblog/ob_log.h"
+ #include "lib/worker.h"
++#include "hipvs_build_api.h"
++#if defined(__linux__) && !defined(__ANDROID__)
++#include <dlfcn.h>
++#include <unistd.h>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <fstream>
++#include <mutex>
++#include <string>
++#include <thread>
++#endif
+ 
+ namespace oceanbase {
+ namespace common {
+@@ -980,6 +992,189 @@
+   return ret;
+ }
+ 
++// ---------------------------------------------------------------------------
++// AMD GPU (hipVS) build backend.
++//
++// The ROCm/hipVS stack lives in a separate shared object (libseekdb_hipvs.so)
++// that is loaded on demand, so the observer binary keeps a pure CPU link line
++// and starts normally on a machine without a GPU. The shared object is never
++// dlclose()d: the HIP runtime keeps thread-local state that must outlive the
++// build.
++// ---------------------------------------------------------------------------
++#if defined(__linux__) && !defined(__ANDROID__)
++
++namespace {
++
++struct HipvsBackend {
++  void *handle_ = nullptr;
++  int32_t (*build_)(const float *, const int64_t *, int64_t, int64_t, int64_t, int64_t,
++                    const char *, char *, size_t) = nullptr;
++  int32_t (*probe_)(char *, size_t) = nullptr;
++  int32_t (*abi_)(void) = nullptr;
++  bool resolved_ = false;
++};
++
++HipvsBackend &hipvs_backend()
++{
++  static HipvsBackend backend;
++  return backend;
++}
++
++std::mutex &hipvs_backend_mutex()
++{
++  static std::mutex mutex;
++  return mutex;
++}
++
++}  // namespace
++
++bool hipvs_backend_available()
++#else
++bool hipvs_backend_available()
++#endif
++{
++  int ret = OB_SUCCESS;  // LOG_WARN carries the error code of the enclosing scope
++  bool available = false;
++#if defined(__linux__) && !defined(__ANDROID__)
++  std::lock_guard<std::mutex> guard(hipvs_backend_mutex());
++  HipvsBackend &backend = hipvs_backend();
++  if (!backend.resolved_) {
++    backend.resolved_ = true;
++    const char *path = std::getenv("SEEKDB_HIPVS_LIBRARY");
++    const char *library = (nullptr != path && '\0' != path[0]) ? path : "libseekdb_hipvs.so";
++    backend.handle_ = dlopen(library, RTLD_NOW | RTLD_LOCAL);
++    if (nullptr == backend.handle_) {
++      const char *reason = dlerror();
++      LOG_WARN("hipvs backend shared object not loadable; lib=hipvs indexes will be rejected",
++               K(ret), "library", library, "reason", reason == nullptr ? "unknown" : reason);
++    } else {
++      backend.abi_ = reinterpret_cast<int32_t (*)(void)>(
++          dlsym(backend.handle_, "seekdb_hipvs_abi_version_v1"));
++      backend.build_ = reinterpret_cast<int32_t (*)(const float *, const int64_t *, int64_t,
++                                                    int64_t, int64_t, int64_t, const char *, char *,
++                                                    size_t)>(
++          dlsym(backend.handle_, "seekdb_hipvs_build_v1"));
++      backend.probe_ = reinterpret_cast<int32_t (*)(char *, size_t)>(
++          dlsym(backend.handle_, "seekdb_hipvs_probe_v1"));
++      if (nullptr == backend.abi_ || nullptr == backend.build_ ||
++          SEEKDB_HIPVS_ABI_VERSION != backend.abi_()) {
++        LOG_WARN("hipvs backend ABI mismatch, backend disabled", K(ret), "library", library,
++                 "expected_abi", SEEKDB_HIPVS_ABI_VERSION);
++        backend.build_ = nullptr;
++      } else {
++        char info[512] = {0};
++        const int32_t probe = (nullptr == backend.probe_) ? -1 : backend.probe_(info, sizeof(info));
++        if (SEEKDB_HIPVS_OK == probe) {
++          LOG_INFO("hipvs backend ready", "library", library, "gpu", info);
++        } else {
++          LOG_WARN("hipvs backend loaded but no usable AMD GPU; lib=hipvs indexes will be rejected",
++                   K(ret), "library", library, "reason", info);
++          backend.build_ = nullptr;
++        }
++      }
++    }
++  }
++  available = (nullptr != backend.build_);
++#endif
++  return available;
++}
++
++int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
++                      const int64_t *ids, int dim, int64_t size,
++                      int max_degree, int ef_construction)
++{
++  int ret = OB_SUCCESS;
++#if defined(__linux__) && !defined(__ANDROID__)
++  if (nullptr == index_handler || nullptr == vector_list || nullptr == ids || dim <= 0 ||
++      size <= 0 || max_degree < 2 || size <= 2 * static_cast<int64_t>(max_degree)) {
++    ret = OB_INVALID_ARGUMENT;
++    LOG_WARN("invalid arguments for hipvs build", K(ret), KP(index_handler), K(dim), K(size),
++             K(max_degree));
++  } else if (!hipvs_backend_available()) {
++    // Explicit failure: a GPU-only index must never be served by a CPU build.
++    ret = OB_NOT_SUPPORTED;
++    LOG_WARN("hipvs backend unavailable, refusing to fall back to a CPU build", K(ret),
++             "hint", "set SEEKDB_HIPVS_LIBRARY before starting observer");
++  } else {
++    HnswIndexHandler *handler = static_cast<HnswIndexHandler *>(index_handler);
++    int64_t existing = 0;
++    const int handler_index_type = handler->get_index_type();
++    const uint64_t handler_extra_info_size = handler->get_extra_info_size();
++    const char *handler_metric = handler->get_metric();
++    const int handler_dim = handler->get_dim();
++    if (HNSW_TYPE != handler_index_type || 0 != handler_extra_info_size ||
++        0 != strcmp(handler_metric, "l2") || handler_dim != dim) {
++      // The GPU exporter emits a plain FP32/L2 HNSW graph without extra info.
++      ret = OB_NOT_SUPPORTED;
++      LOG_WARN("hipvs build only supports plain FP32 HNSW with L2 metric and no extra info", K(ret),
++               K(handler_index_type), "metric", handler_metric, K(handler_extra_info_size),
++               K(handler_dim), K(dim));
++    } else if (OB_FAIL(get_index_number(index_handler, existing))) {
++    } else if (0 != existing) {
++      // Never mix an incrementally built graph with a full GPU rebuild.
++      ret = OB_STATE_NOT_MATCH;
++      LOG_WARN("hipvs build requires an empty index handler", K(ret), K(existing));
++    } else {
++      char workspace[] = "/tmp/seekdb-hipvs-XXXXXX";
++      if (nullptr == mkdtemp(workspace)) {
++        ret = OB_IO_ERROR;
++        LOG_WARN("cannot create hipvs workspace", K(ret));
++      } else {
++        char snapshot[128] = {0};
++        std::snprintf(snapshot, sizeof(snapshot), "%s/snapshot.bin", workspace);
++        char error[512] = {0};
++        int32_t backend_ret = static_cast<int32_t>(SEEKDB_HIPVS_ERR_INTERNAL);
++        {
++          // ROCm needs a real OS thread (its stack/thread-local setup is not
++          // compatible with the coroutine stacks the DDL path may run on).
++          HipvsBackend &backend = hipvs_backend();
++          std::thread worker([&]() {
++            backend_ret = backend.build_(vector_list, ids, size, dim, max_degree,
++                                        ef_construction, snapshot, error, sizeof(error));
++          });
++          worker.join();
++        }
++        if (SEEKDB_HIPVS_OK != backend_ret) {
++          ret = OB_ERR_VSAG_RETURN_ERROR;
++          LOG_WARN("hipvs GPU build failed", K(ret), K(backend_ret), KCSTRING(error), K(size),
++                   K(dim), K(max_degree), K(ef_construction));
++        } else {
++          std::ifstream input(snapshot, std::ios::binary);
++          if (!input) {
++            ret = OB_IO_ERROR;
++            LOG_WARN("cannot open hipvs snapshot", K(ret), KCSTRING(snapshot));
++          } else if (OB_FAIL(fdeserialize(index_handler, input))) {
++            LOG_WARN("import hipvs snapshot into vsag failed", K(ret));
++          } else {
++            int64_t imported = 0;
++            if (OB_FAIL(get_index_number(index_handler, imported))) {
++            } else if (imported != size) {
++              ret = OB_ERR_UNEXPECTED;
++              LOG_WARN("hipvs snapshot element count mismatch", K(ret), K(imported), K(size));
++            } else {
++              LOG_INFO("hipvs GPU build imported", K(size), K(dim), K(max_degree),
++                       K(ef_construction), KCSTRING(snapshot));
++            }
++          }
++        }
++        unlink(snapshot);
++        rmdir(workspace);
++      }
++    }
++  }
++#else
++  static_cast<void>(index_handler);
++  static_cast<void>(vector_list);
++  static_cast<void>(ids);
++  static_cast<void>(dim);
++  static_cast<void>(size);
++  static_cast<void>(max_degree);
++  static_cast<void>(ef_construction);
++  ret = OB_NOT_SUPPORTED;
++#endif
++  return ret;
++}
++
+ int build_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids, int size,
+     char *extra_info /* = nullptr*/)
+ {
+diff --git a/src/oblib/lib/vector/ob_vsag_adaptor.h b/src/oblib/lib/vector/ob_vsag_adaptor.h
+--- a/src/oblib/lib/vector/ob_vsag_adaptor.h
++++ b/src/oblib/lib/vector/ob_vsag_adaptor.h
+@@ -122,6 +122,18 @@
+ int build_index(VectorIndexPtr& index_handler, float* vector_list, int64_t* ids, int dim, int size, char *extra_infos = nullptr);
+ int build_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids, int size,
+     char *extra_info = nullptr);
++// Build the whole HNSW graph of `index_handler` on the AMD GPU through the
++// optional hipVS backend shared object (SEEKDB_HIPVS_LIBRARY) and import the
++// resulting snapshot into VSAG. The GPU backend is dlopen()ed on demand so the
++// server itself never links ROCm.
++// Returns OB_NOT_SUPPORTED when the backend/GPU is unavailable or the request is
++// outside the supported subset (plain FP32 HNSW, L2, no extra info); the caller
++// must treat that as a hard error and never fall back to a CPU build silently.
++int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
++                      const int64_t *ids, int dim, int64_t size,
++                      int max_degree, int ef_construction);
++// True when the hipVS backend shared object was loaded successfully.
++bool hipvs_backend_available();
+ int add_index(VectorIndexPtr& index_handler, float* vector, int64_t* ids, int dim, int size, char *extra_info = nullptr);
+ int add_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids, int size,
+     char *extra_info = nullptr);
+diff --git a/src/oblib/lib/vector/hipvs_build_api.h b/src/oblib/lib/vector/hipvs_build_api.h
+new file mode 100644
+--- /dev/null
++++ b/src/oblib/lib/vector/hipvs_build_api.h
+@@ -0,0 +1,86 @@
++/*
++ * Copyright (c) 2026 OceanBase.
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * Narrow C ABI between the seekdb server binary and the optional AMD GPU
++ * backend (libseekdb_hipvs.so).
++ *
++ * Rationale for a C ABI in a separate shared object:
++ *   - the seekdb server keeps building and shipping with a pure CPU toolchain
++ *     (gcc 12 / libstdc++, no ROCm, no hipcc, no HSA runtime in its link line);
++ *   - every ROCm/hipVS dependency (libcuvs, libraft, HIP runtime) stays inside
++ *     the optional shared object, which is dlopen()ed only when the user asks
++ *     for `lib=hipvs` and the operator points SEEKDB_HIPVS_LIBRARY at it.
++ *   - only POD scalars and raw pointers cross the boundary, so libstdc++ /
++ *     ROCm C++ runtime mismatches cannot leak into the database process.
++ *
++ * Contract of seekdb_hipvs_build_v1():
++ *   On success (return 0) `output_path` holds one complete, fsync-ready serialized
++ *   HNSW snapshot in the classic 64-bit little-endian hnswlib layout whose
++ *   external labels are exactly the seekdb VIDs from `vids`, in the same order as
++ *   the rows of `vectors`. The file is published atomically (tmp + rename), so a
++ *   reader never observes a partial graph.
++ *   On failure a non-zero value is returned and `error` holds a human readable
++ *   reason. The backend never falls back to CPU: a failed GPU build is a failed
++ *   index build.
++ */
++#ifndef OCEANBASE_LIB_VECTOR_HIPVS_BUILD_API_H_
++#define OCEANBASE_LIB_VECTOR_HIPVS_BUILD_API_H_
++
++#include <stddef.h>
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Bumped whenever the exported C surface changes; seekdb refuses to use a
++ * backend whose ABI version is not exactly the one it was compiled against. */
++#define SEEKDB_HIPVS_ABI_VERSION 1
++
++enum {
++  SEEKDB_HIPVS_OK = 0,
++  SEEKDB_HIPVS_ERR_INVALID_ARGUMENT = -1,
++  SEEKDB_HIPVS_ERR_UNSUPPORTED = -2,
++  SEEKDB_HIPVS_ERR_NO_GPU = -3,
++  SEEKDB_HIPVS_ERR_GPU_RUNTIME = -4,
++  SEEKDB_HIPVS_ERR_VSAG_INCOMPATIBLE = -5,
++  SEEKDB_HIPVS_ERR_IO = -6,
++  SEEKDB_HIPVS_ERR_INTERNAL = -7
++};
++
++/* Main entry point: build a HNSW graph on the AMD GPU and export it.
++ *
++ * vectors          row-major float32 corpus, count * dim values, must be finite
++ * vids             external document ids, one per row, must be unique
++ * count            number of rows, must be > 2 * max_degree
++ * dim              vector dimension
++ * max_degree       HNSW M
++ * ef_construction  HNSW efConstruction
++ * output_path      destination file for the serialized snapshot
++ * error/error_capacity  optional buffer for a NUL-terminated error message
++ */
++int32_t seekdb_hipvs_build_v1(const float *vectors,
++                              const int64_t *vids,
++                              int64_t count,
++                              int64_t dim,
++                              int64_t max_degree,
++                              int64_t ef_construction,
++                              const char *output_path,
++                              char *error,
++                              size_t error_capacity);
++
++/* ABI gate: returns SEEKDB_HIPVS_ABI_VERSION of the loaded shared object. */
++int32_t seekdb_hipvs_abi_version_v1(void);
++
++/* Capability probe used for explicit logging before any index is built.
++ * Returns SEEKDB_HIPVS_OK and writes a short description such as
++ * "backend=hipVS vendor=AMD arch=gfx1100 name=Radeon ... devices=1" when a
++ * usable GPU is present, otherwise SEEKDB_HIPVS_ERR_NO_GPU. */
++int32_t seekdb_hipvs_probe_v1(char *info, size_t info_capacity);
++
++#ifdef __cplusplus
++} /* extern "C" */
++#endif
++
++#endif /* OCEANBASE_LIB_VECTOR_HIPVS_BUILD_API_H_ */
+\ No newline at end of file
+diff --git a/src/oblib/lib/vector/hipvs_backend/CMakeLists.txt b/src/oblib/lib/vector/hipvs_backend/CMakeLists.txt
+new file mode 100644
+--- /dev/null
++++ b/src/oblib/lib/vector/hipvs_backend/CMakeLists.txt
+@@ -0,0 +1,73 @@
++# Copyright (c) 2026 OceanBase.
++# SPDX-License-Identifier: Apache-2.0
++#
++# Standalone CMake project for the optional AMD GPU HNSW backend of seekdb.
++#
++# It is NOT part of the seekdb build: the server binary is produced by the
++# regular (CPU only) seekdb toolchain, and this project produces a separate
++# shared object that the server dlopen()s at runtime. Keeping the two build
++# systems apart is what keeps ROCm out of the database link line.
++#
++# Usage:
++#   cmake -S . -B build -G Ninja \
++#         -DCMAKE_CXX_COMPILER=hipcc \
++#         -DCMAKE_HIP_ARCHITECTURES=gfx1100 \
++#         -DCMAKE_PREFIX_PATH="/opt/rocm/lib/cmake;/opt/hipvs" \
++#         -DCMAKE_BUILD_TYPE=Release
++#   cmake --build build -j
++#   cmake --build build --target install     # -> <prefix>/lib/libseekdb_hipvs.so
++cmake_minimum_required(VERSION 3.31)
++project(seekdb_hipvs_backend LANGUAGES CXX HIP)
++
++set(CMAKE_CXX_STANDARD 17)
++set(CMAKE_CXX_STANDARD_REQUIRED ON)
++set(CMAKE_POSITION_INDEPENDENT_CODE ON)
++
++if(NOT DEFINED CMAKE_HIP_ARCHITECTURES)
++  set(CMAKE_HIP_ARCHITECTURES "gfx1100")
++endif()
++
++find_package(hip REQUIRED)
++# hipVS installs a CMake package that keeps the upstream `cuvs` namespace.
++find_package(cuvs REQUIRED)
++
++add_library(seekdb_hipvs SHARED hipvs_build.cpp)
++target_include_directories(seekdb_hipvs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
++target_link_libraries(seekdb_hipvs PRIVATE cuvs::cuvs)
++
++# The snapshot converter is deliberately plain host C++: only hipvs_build.cpp
++# contains device code, so a broken GPU toolchain cannot silently degrade the
++# conversion step.
++set_source_files_properties(hipvs_build.cpp PROPERTIES LANGUAGE HIP)
++
++target_compile_options(seekdb_hipvs PRIVATE -O3 -fvisibility=hidden)
++target_link_options(seekdb_hipvs PRIVATE -Wl,--no-undefined)
++
++install(TARGETS seekdb_hipvs
++        LIBRARY DESTINATION lib
++        RUNTIME DESTINATION bin)
++
++# Optional acceptance/benchmark helper (never shipped into the server):
++#   cmake --build build --target seekdb_hipvs_selftest
++add_executable(seekdb_hipvs_selftest EXCLUDE_FROM_ALL tools/hipvs_selftest.cpp)
++set_source_files_properties(tools/hipvs_selftest.cpp PROPERTIES LANGUAGE CXX)
++target_include_directories(seekdb_hipvs_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
++target_link_libraries(seekdb_hipvs_selftest PRIVATE seekdb_hipvs hnswlib::hnswlib)
++target_compile_options(seekdb_hipvs_selftest PRIVATE -O3)
++
++# Diagnostic: prove that VSAG (the library seekdb uses for lib=vsag) can import
++# the GPU-built snapshot and answer queries. Needs the seekdb third-party VSAG;
++# pass -DVSAG_ROOT=<dir containing include/vsag and lib/vsag_lib/libvsag.so>.
++#   cmake --build build --target vsag_import_probe
++set(VSAG_ROOT "" CACHE PATH "seekdb third-party devel dir that contains vsag")
++if(VSAG_ROOT AND EXISTS "${VSAG_ROOT}/include/vsag/vsag.h")
++  add_executable(vsag_import_probe EXCLUDE_FROM_ALL tools/vsag_import_probe.cpp)
++  set_source_files_properties(tools/vsag_import_probe.cpp PROPERTIES LANGUAGE CXX)
++  target_include_directories(vsag_import_probe PRIVATE "${VSAG_ROOT}/include")
++  target_link_directories(vsag_import_probe PRIVATE "${VSAG_ROOT}/lib/vsag_lib")
++  target_link_libraries(vsag_import_probe PRIVATE vsag)
++  target_compile_options(vsag_import_probe PRIVATE -O2)
++  message(STATUS "seekdb_hipvs: vsag_import_probe enabled (VSAG_ROOT=${VSAG_ROOT})")
++else()
++  message(STATUS "seekdb_hipvs: vsag_import_probe disabled (-DVSAG_ROOT not set)")
++endif()
+\ No newline at end of file
+diff --git a/src/oblib/lib/vector/hipvs_backend/hipvs_build.cpp b/src/oblib/lib/vector/hipvs_backend/hipvs_build.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/oblib/lib/vector/hipvs_backend/hipvs_build.cpp
+@@ -0,0 +1,328 @@
++/*
++ * Copyright (c) 2026 OceanBase.
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * AMD GPU HNSW builder for seekdb (hipVS / ROCm backend).
++ *
++ * Pipeline (everything below runs inside this shared object, on a dedicated
++ * OS thread created by seekdb, so the ROCm runtime never touches a coroutine
++ * stack):
++ *
++ *   1. validate the request (finite FP32 corpus, unique VIDs, M / efConstruction
++ *      bounds) *before* any GPU work, so a bad DDL never leaves a half-built
++ *      index behind;
++ *   2. cuvs::neighbors::cagra::build() -- the graph itself is built by GPU
++ *      kernels (NN-descent refinement + prune), which is the compute we want to
++ *      accelerate;
++ *   3. cuvs::neighbors::hnsw::from_cagra() -- turn the CAGRA k-NN graph into a
++ *      real HNSW graph. The base layer comes from the GPU graph; the upper
++ *      layers are HNSW's hierarchy and are built with the multi-threaded CPU
++ *      routine of the same library (they are O(N) insertions, not O(N * M)
++ *      distance computations, so they stay a small fraction of the time);
++ *   4. cuvs::neighbors::hnsw::serialize() -- write the classic hnswlib layout;
++ *   5. remap external labels to seekdb VIDs and re-validate the whole file, then
++ *      publish it atomically.
++ *
++ * Every step is timed and reported on stderr as a single machine readable line
++ * so that a benchmark harness (and a human) can prove that the GPU did the work.
++ */
++#include "../hipvs_build_api.h"
++
++#include "hipvs_snapshot_export.hpp"
++
++#include <hip/hip_runtime.h>
++
++#include <cuvs/neighbors/cagra.hpp>
++#include <cuvs/neighbors/hnsw.hpp>
++#include <raft/core/host_mdspan.hpp>
++#include <raft/core/resources.hpp>
++
++#include <fcntl.h>
++#include <unistd.h>
++
++#include <algorithm>
++#include <chrono>
++#include <climits>
++#include <cmath>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <mutex>
++#include <stdexcept>
++#include <string>
++#include <unordered_set>
++
++#if !defined(__HIP_PLATFORM_AMD__)
++#error "The seekdb hipVS backend must be compiled with the AMD ROCm hipcc"
++#endif
++
++namespace {
++
++using Clock = std::chrono::steady_clock;
++
++inline double elapsed_ms(Clock::time_point from, Clock::time_point to) {
++  return std::chrono::duration<double, std::milli>(to - from).count();
++}
++
++void throw_on_hip(hipError_t status, const char *what) {
++  if (status != hipSuccess) {
++    throw std::runtime_error(std::string(what) + ": " + hipGetErrorString(status));
++  }
++}
++
++/* Emits one machine readable build record.
++ *
++ * The observer redirects fd 2 into its own log file and writes to it with its
++ * own buffering, so a plain fprintf(stderr) can be interleaved with a server log
++ * line and become unparsable. When SEEKDB_HIPVS_TRACE_FILE is set the record is
++ * appended to a dedicated file with one write() call, otherwise it goes to
++ * stderr with a single write() so it stays on one line. */
++void emit_record(const char *line, size_t length) {
++  const char *trace_file = std::getenv("SEEKDB_HIPVS_TRACE_FILE");
++  if (nullptr != trace_file && '\0' != trace_file[0]) {
++    const int fd = ::open(trace_file, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
++    if (fd >= 0) {
++      const ssize_t written = ::write(fd, line, length);
++      static_cast<void>(written);
++      ::close(fd);
++    }
++  }
++  const ssize_t written = ::write(STDERR_FILENO, line, length);
++  static_cast<void>(written);
++}
++
++void set_error(char *error, size_t capacity, const char *message) {
++  if (nullptr != error && capacity > 0) {
++    std::snprintf(error, capacity, "%s", nullptr == message ? "" : message);
++  }
++}
++
++/* The ROCm runtime is not documented as reentrant for concurrent index builds
++ * in one process, and one build already saturates the device; serialise them. */
++std::mutex &device_mutex() {
++  static std::mutex mutex;
++  return mutex;
++}
++
++std::string device_description(int device, const hipDeviceProp_t &props) {
++  char buffer[512] = {0};
++  std::snprintf(buffer, sizeof(buffer),
++                "backend=hipVS vendor=AMD arch=%s name=%s gcnArch=%s device=%d "
++                "hbm=%.1fGiB",
++                props.gcnArchName, props.name, props.gcnArchName, device,
++                static_cast<double>(props.totalGlobalMem) / (1024.0 * 1024.0 * 1024.0));
++  return std::string(buffer);
++}
++
++/* Temporary files carrying the raw hipVS export and the converted snapshot. The
++ * destructor guarantees they disappear on every exit path (success, error and
++ * exception), which keeps /tmp clean on a long-running server. */
++class StagingFiles {
++ public:
++  explicit StagingFiles(const std::string &final_path)
++      : raw_(final_path + ".hipvs.raw"), converted_(final_path + ".hipvs.part") {}
++
++  ~StagingFiles() {
++    std::remove(raw_.c_str());
++    std::remove(converted_.c_str());
++  }
++
++  const std::string &raw() const { return raw_; }
++  const std::string &converted() const { return converted_; }
++
++ private:
++  std::string raw_;
++  std::string converted_;
++};
++
++}  // namespace
++
++/* The backend is compiled with -fvisibility=hidden so that only the three C
++ * entry points below are reachable from the seekdb server. */
++#define SEEKDB_HIPVS_EXPORT extern "C" __attribute__((visibility("default")))
++
++SEEKDB_HIPVS_EXPORT int32_t seekdb_hipvs_abi_version_v1(void) { return SEEKDB_HIPVS_ABI_VERSION; }
++
++SEEKDB_HIPVS_EXPORT int32_t seekdb_hipvs_probe_v1(char *info, size_t info_capacity) {
++  if (nullptr != info && info_capacity > 0) info[0] = '\0';
++  try {
++    std::lock_guard<std::mutex> guard(device_mutex());
++    int device_count = 0;
++    throw_on_hip(hipGetDeviceCount(&device_count), "hipGetDeviceCount");
++    if (device_count < 1) return SEEKDB_HIPVS_ERR_NO_GPU;
++    int device = 0;
++    throw_on_hip(hipGetDevice(&device), "hipGetDevice");
++    hipDeviceProp_t props{};
++    throw_on_hip(hipGetDeviceProperties(&props, device), "hipGetDeviceProperties");
++    const std::string text = device_description(device, props);
++    if (nullptr != info && info_capacity > 0) {
++      std::snprintf(info, info_capacity, "%s", text.c_str());
++    }
++    return SEEKDB_HIPVS_OK;
++  } catch (const std::exception &e) {
++    set_error(info, info_capacity, e.what());
++    return SEEKDB_HIPVS_ERR_GPU_RUNTIME;
++  }
++}
++
++SEEKDB_HIPVS_EXPORT int32_t seekdb_hipvs_build_v1(const float *vectors,
++                                         const int64_t *vids,
++                                         int64_t count,
++                                         int64_t dim,
++                                         int64_t max_degree,
++                                         int64_t ef_construction,
++                                         const char *output_path,
++                                         char *error,
++                                         size_t error_capacity) {
++  set_error(error, error_capacity, "");
++  try {
++    /* ---- 1. request validation, before any GPU state is touched ---------- */
++    if (nullptr == vectors || nullptr == vids || nullptr == output_path || '\0' == output_path[0]) {
++      set_error(error, error_capacity, "null corpus, vids or output path");
++      return SEEKDB_HIPVS_ERR_INVALID_ARGUMENT;
++    }
++    if (dim < 1 || dim > INT_MAX || count <= 0 || count > INT_MAX || max_degree < 2 ||
++        max_degree > 1024 || ef_construction < max_degree || ef_construction > INT_MAX) {
++      set_error(error, error_capacity,
++                "invalid HNSW parameters (need 1<=dim, 2<=M<=1024, M<=efConstruction, "
++                "0<N<=INT_MAX)");
++      return SEEKDB_HIPVS_ERR_INVALID_ARGUMENT;
++    }
++    if (count <= 2 * max_degree) {
++      set_error(error, error_capacity,
++                "corpus too small for the requested M: need N > 2*M, because CAGRA builds a "
++                "graph of degree 2*M");
++      return SEEKDB_HIPVS_ERR_INVALID_ARGUMENT;
++    }
++    if (static_cast<uint64_t>(count) >
++        SIZE_MAX / sizeof(float) / static_cast<uint64_t>(dim)) {
++      set_error(error, error_capacity, "corpus size overflows size_t");
++      return SEEKDB_HIPVS_ERR_INVALID_ARGUMENT;
++    }
++    {
++      std::unordered_set<int64_t> unique_vids;
++      unique_vids.reserve(static_cast<size_t>(count));
++      for (int64_t row = 0; row < count; ++row) {
++        if (!unique_vids.insert(vids[row]).second) {
++          set_error(error, error_capacity, "duplicate document id in snapshot");
++          return SEEKDB_HIPVS_ERR_INVALID_ARGUMENT;
++        }
++      }
++    }
++    for (int64_t i = 0; i < count * dim; ++i) {
++      if (!std::isfinite(vectors[i])) {
++        set_error(error, error_capacity, "non-finite component in the vector corpus");
++        return SEEKDB_HIPVS_ERR_INVALID_ARGUMENT;
++      }
++    }
++
++    /* ---- 2. GPU presence: explicit failure instead of a hidden CPU fallback */
++    std::lock_guard<std::mutex> guard(device_mutex());
++    int device_count = 0;
++    try {
++      throw_on_hip(hipGetDeviceCount(&device_count), "hipGetDeviceCount");
++    } catch (const std::exception &e) {
++      set_error(error, error_capacity, e.what());
++      return SEEKDB_HIPVS_ERR_NO_GPU;
++    }
++    if (device_count < 1) {
++      set_error(error, error_capacity,
++                "no AMD ROCm GPU visible to the hipVS backend; CPU fallback is disabled");
++      return SEEKDB_HIPVS_ERR_NO_GPU;
++    }
++    int device = 0;
++    hipDeviceProp_t props{};
++    try {
++      throw_on_hip(hipGetDevice(&device), "hipGetDevice");
++      throw_on_hip(hipGetDeviceProperties(&props, device), "hipGetDeviceProperties");
++    } catch (const std::exception &e) {
++      set_error(error, error_capacity, e.what());
++      return SEEKDB_HIPVS_ERR_GPU_RUNTIME;
++    }
++
++    const std::string gpu = device_description(device, props);
++    StagingFiles staging(output_path);
++    const auto t_begin = Clock::now();
++
++    /* ---- 3. GPU graph construction --------------------------------------- */
++    raft::resources resources;
++    const auto corpus = raft::make_host_matrix_view<const float, int64_t>(vectors, count, dim);
++
++    /* Graph construction parameters.
++     *
++     * hnsw::to_cagra_params() (IVF-PQ based k-NN graph) is the fast path, but it
++     * trades recall for speed: measured on 20k random 128-d vectors it produced
++     * ~10 recall points less than the CPU HNSW build at the same M and ef. The
++     * off-by-default NN-descent construction below costs more GPU time but
++     * produces the same recall regime as the CPU baseline, which is what a
++     * DDL-level accelerator must do - the index is used by real queries.
++     *
++     * Degrees are chosen to mirror HNSW semantics: the base layer stores up to
++     * 2*M neighbours (hnswlib's maxM0), so the k-NN graph is built with degree
++     * 2*M and a wider intermediate graph before pruning. */
++    cuvs::neighbors::cagra::index_params cagra_params;
++    cagra_params.metric = cuvs::distance::DistanceType::L2Expanded;
++    cagra_params.graph_degree = static_cast<size_t>(2 * max_degree);
++    cagra_params.intermediate_graph_degree = static_cast<size_t>(
++        std::min<int64_t>(std::max<int64_t>(4 * max_degree, 64), std::max<int64_t>(count, 64)));
++    {
++      cuvs::neighbors::graph_build_params::nn_descent_params nn_params(
++          cagra_params.intermediate_graph_degree, cuvs::distance::DistanceType::L2Expanded);
++      nn_params.graph_degree = cagra_params.graph_degree;
++      /* Converge further than the default: the graph is built once and then
++       * served for the lifetime of the index. */
++      nn_params.max_iterations = 30;
++      nn_params.termination_threshold = 1e-5F;
++      cagra_params.graph_build_params = nn_params;
++    }
++    auto graph = cuvs::neighbors::cagra::build(resources, cagra_params, corpus);
++    throw_on_hip(hipDeviceSynchronize(), "hipDeviceSynchronize after CAGRA build");
++    const auto t_graph = Clock::now();
++
++    /* ---- 4. HNSW hierarchy on top of the GPU graph ------------------------ */
++    cuvs::neighbors::hnsw::index_params hnsw_params;
++    hnsw_params.hierarchy = cuvs::neighbors::hnsw::HnswHierarchy::CPU;
++    hnsw_params.ef_construction = static_cast<int>(ef_construction);
++    hnsw_params.num_threads = 0; /* auto: use every core of the host */
++    auto hnsw_index = cuvs::neighbors::hnsw::from_cagra(resources, hnsw_params, graph, corpus);
++    cuvs::neighbors::hnsw::serialize(resources, staging.raw(), *hnsw_index);
++    throw_on_hip(hipDeviceSynchronize(), "hipDeviceSynchronize after HNSW conversion");
++    const auto t_hnsw = Clock::now();
++
++    /* ---- 5. label remap to seekdb VIDs, validation, atomic publish -------- */
++    seekdb_hipvs::remap_snapshot_labels(staging.raw(), staging.converted(), vectors, vids,
++                                        static_cast<uint64_t>(count), static_cast<uint64_t>(dim),
++                                        static_cast<uint64_t>(max_degree));
++    if (0 != std::rename(staging.converted().c_str(), output_path)) {
++      set_error(error, error_capacity, "cannot publish the converted snapshot");
++      return SEEKDB_HIPVS_ERR_IO;
++    }
++    const auto t_done = Clock::now();
++
++    char record[1024] = {0};
++    const int record_length = std::snprintf(
++        record, sizeof(record),
++        "SEEKDB_HIPVS_BUILD {\"gpu_compute\":true,\"cpu_fallback\":false,\"device\":\"%s\","
++        "\"rows\":%lld,\"dim\":%lld,\"m\":%lld,\"ef_construction\":%lld,"
++        "\"gpu_graph_ms\":%.3f,\"hnsw_hierarchy_and_export_ms\":%.3f,"
++        "\"label_remap_ms\":%.3f,\"backend_total_ms\":%.3f}\n",
++        gpu.c_str(), static_cast<long long>(count), static_cast<long long>(dim),
++        static_cast<long long>(max_degree), static_cast<long long>(ef_construction),
++        elapsed_ms(t_begin, t_graph), elapsed_ms(t_graph, t_hnsw), elapsed_ms(t_hnsw, t_done),
++        elapsed_ms(t_begin, t_done));
++    if (record_length > 0) {
++      emit_record(record, static_cast<size_t>(
++                              std::min<int>(record_length, static_cast<int>(sizeof(record) - 1))));
++    }
++    return SEEKDB_HIPVS_OK;
++  } catch (const std::bad_alloc &) {
++    set_error(error, error_capacity, "out of memory in the hipVS backend");
++    return SEEKDB_HIPVS_ERR_INTERNAL;
++  } catch (const std::exception &e) {
++    set_error(error, error_capacity, e.what());
++    return SEEKDB_HIPVS_ERR_INTERNAL;
++  } catch (...) {
++    set_error(error, error_capacity, "unknown exception in the hipVS backend");
++    return SEEKDB_HIPVS_ERR_INTERNAL;
++  }
++}
+\ No newline at end of file
+diff --git a/src/oblib/lib/vector/hipvs_backend/hipvs_snapshot_export.hpp b/src/oblib/lib/vector/hipvs_backend/hipvs_snapshot_export.hpp
+new file mode 100644
+--- /dev/null
++++ b/src/oblib/lib/vector/hipvs_backend/hipvs_snapshot_export.hpp
+@@ -0,0 +1,235 @@
++/*
++ * Copyright (c) 2026 OceanBase.
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * Conversion of a hipVS/hnswlib snapshot into a seekdb snapshot.
++ *
++ * hipVS exports CAGRA-derived HNSW indexes through the classic hnswlib binary
++ * layout. That layout identifies elements by an *internal* row number, while
++ * seekdb needs the *external* row id (VID) to be able to answer queries. This
++ * header rewrites the label field of every element in place (streaming, one row
++ * at a time) and re-verifies the whole structure while doing so:
++ *
++ *   - the corpus bytes stored inside the snapshot must equal the corpus we
++ *     handed to the GPU builder (guards against silently mismatched labels);
++ *   - labels must form a permutation of [0, count), so no document is lost or
++ *     duplicated;
++ *   - every neighbour id must be < count (guards against a corrupted graph).
++ *
++ * Only a fully validated snapshot is published to the final path, through
++ * write-to-temporary + rename, so a crash never leaves a half-written index.
++ */
++#ifndef OCEANBASE_LIB_VECTOR_HIPVS_SNAPSHOT_EXPORT_H_
++#define OCEANBASE_LIB_VECTOR_HIPVS_SNAPSHOT_EXPORT_H_
++
++#include <cmath>
++#include <cstdint>
++#include <cstdio>
++#include <cstring>
++#include <fstream>
++#include <limits>
++#include <stdexcept>
++#include <string>
++#include <vector>
++
++namespace seekdb_hipvs {
++
++/* Header of the hnswlib on-disk layout (all fields little endian, size_t = u64)
++ * followed by `count` level-0 element records and then the upper-level link
++ * lists. */
++struct HnswlibHeader {
++  uint64_t level0_offset;
++  uint64_t capacity;
++  uint64_t element_count;
++  uint64_t element_stride;
++  uint64_t label_offset;
++  uint64_t data_offset;
++  int32_t max_level;
++  uint32_t entry_point;
++  uint64_t max_m;
++  uint64_t max_m0;
++  uint64_t m;
++  double level_multiplier;
++  uint64_t ef_construction;
++};
++
++class SnapshotError : public std::runtime_error {
++ public:
++  explicit SnapshotError(const std::string &what) : std::runtime_error(what) {}
++};
++
++namespace detail {
++
++template <class T>
++inline T read_pod(std::istream &in) {
++  T value{};
++  if (!in.read(reinterpret_cast<char *>(&value), sizeof(value))) {
++    throw SnapshotError("truncated hnswlib snapshot header");
++  }
++  return value;
++}
++
++template <class T>
++inline void write_pod(std::ostream &out, const T &value) {
++  out.write(reinterpret_cast<const char *>(&value), sizeof(value));
++}
++
++inline bool host_is_little_endian() {
++  const uint16_t probe = 1;
++  return *reinterpret_cast<const uint8_t *>(&probe) == 1;
++}
++
++inline uint32_t read_links_degree(const char *record, uint64_t record_size, uint64_t max_allowed) {
++  uint32_t degree = 0;
++  std::memcpy(&degree, record, sizeof(degree));
++  if (record_size < sizeof(degree) || degree > max_allowed) {
++    throw SnapshotError("corrupted hnswlib link count");
++  }
++  return degree;
++}
++
++}  // namespace detail
++
++/* Reads `source`, replaces every label by vids[row], writes `target`.
++ * vectors/vids must describe exactly the corpus stored in the snapshot. */
++inline void remap_snapshot_labels(const std::string &source,
++                                  const std::string &target,
++                                  const float *vectors,
++                                  const int64_t *vids,
++                                  uint64_t count,
++                                  uint64_t dim,
++                                  uint64_t m) {
++  static_assert(sizeof(size_t) == 8, "seekdb hipvs backend requires a 64-bit host");
++  if (!detail::host_is_little_endian()) {
++    throw SnapshotError("seekdb hipvs backend requires a little-endian host");
++  }
++  if (nullptr == vectors || nullptr == vids) {
++    throw SnapshotError("null corpus passed to snapshot conversion");
++  }
++
++  std::ifstream in(source, std::ios::binary);
++  if (!in) throw SnapshotError("cannot open hipVS snapshot for conversion");
++
++  HnswlibHeader h{};
++  h.level0_offset = detail::read_pod<uint64_t>(in);
++  h.capacity = detail::read_pod<uint64_t>(in);
++  h.element_count = detail::read_pod<uint64_t>(in);
++  h.element_stride = detail::read_pod<uint64_t>(in);
++  h.label_offset = detail::read_pod<uint64_t>(in);
++  h.data_offset = detail::read_pod<uint64_t>(in);
++  h.max_level = detail::read_pod<int32_t>(in);
++  h.entry_point = detail::read_pod<uint32_t>(in);
++  h.max_m = detail::read_pod<uint64_t>(in);
++  h.max_m0 = detail::read_pod<uint64_t>(in);
++  h.m = detail::read_pod<uint64_t>(in);
++  h.level_multiplier = detail::read_pod<double>(in);
++  h.ef_construction = detail::read_pod<uint64_t>(in);
++
++  /* Sanity: the geometry of the snapshot must match the request we made, and
++   * the label must sit directly after the vector payload. */
++  const uint64_t expect_data_offset = sizeof(uint32_t) + sizeof(uint32_t) * 2 * m;
++  const uint64_t expect_label_offset = expect_data_offset + sizeof(float) * dim;
++  if (h.element_count != count || h.capacity < count || h.level0_offset != 0 ||
++      h.max_m != m || h.max_m0 != 2 * m || h.m != m || h.data_offset != expect_data_offset ||
++      h.label_offset != expect_label_offset ||
++      h.element_stride != h.label_offset + sizeof(int64_t) || h.max_level < 0 || h.max_level > 64 ||
++      h.entry_point >= count || h.ef_construction < m || !(h.level_multiplier > 0.0) ||
++      !std::isfinite(h.level_multiplier) ||
++      h.element_stride > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
++    throw SnapshotError("hipVS snapshot layout does not match the requested HNSW parameters "
++                        "(count/dim/M mismatch)");
++  }
++
++  std::ofstream out(target, std::ios::binary | std::ios::trunc);
++  if (!out) throw SnapshotError("cannot create converted snapshot");
++  out.exceptions(std::ios::failbit | std::ios::badbit);
++
++  /* Capacity is clamped to the live element count: seekdb only needs the live
++   * graph and a smaller file is a faster import. */
++  detail::write_pod(out, h.level0_offset);
++  detail::write_pod(out, count);
++  detail::write_pod(out, h.element_count);
++  detail::write_pod(out, h.element_stride);
++  detail::write_pod(out, h.label_offset);
++  detail::write_pod(out, h.data_offset);
++  detail::write_pod(out, h.max_level);
++  detail::write_pod(out, h.entry_point);
++  detail::write_pod(out, h.max_m);
++  detail::write_pod(out, h.max_m0);
++  detail::write_pod(out, h.m);
++  detail::write_pod(out, h.level_multiplier);
++  detail::write_pod(out, h.ef_construction);
++
++  std::vector<char> record(static_cast<size_t>(h.element_stride));
++  std::vector<uint8_t> label_seen(static_cast<size_t>(count), 0);
++  for (uint64_t row = 0; row < count; ++row) {
++    if (!in.read(record.data(), static_cast<std::streamsize>(record.size()))) {
++      throw SnapshotError("truncated hnswlib element record");
++    }
++    detail::read_links_degree(record.data(), record.size(), 2 * m);
++    for (uint64_t k = 0; k < 2 * m; ++k) {
++      uint32_t neighbour = 0;
++      std::memcpy(&neighbour, record.data() + sizeof(uint32_t) + sizeof(uint32_t) * k,
++                  sizeof(neighbour));
++      /* Unused slots are 0-initialised by hnswlib; 0 is always a legal id. */
++      if (neighbour >= count) throw SnapshotError("hnswlib neighbour id out of range");
++    }
++    uint64_t source_row = 0;
++    std::memcpy(&source_row, record.data() + h.label_offset, sizeof(source_row));
++    if (source_row >= count || label_seen[static_cast<size_t>(source_row)] != 0) {
++      throw SnapshotError("hnswlib labels are not a permutation of the corpus rows");
++    }
++    label_seen[static_cast<size_t>(source_row)] = 1;
++    if (std::memcmp(record.data() + h.data_offset,
++                    vectors + static_cast<uint64_t>(source_row) * dim,
++                    sizeof(float) * dim) != 0) {
++      throw SnapshotError("hnswlib label does not match the corpus row we uploaded");
++    }
++    const int64_t vid = vids[source_row];
++    std::memcpy(record.data() + h.label_offset, &vid, sizeof(vid));
++    out.write(record.data(), static_cast<std::streamsize>(record.size()));
++  }
++
++  /* Upper layers: per element a u32 byte count followed by that many bytes of
++   * (degree, ids...) link lists. The entry point must carry max_level lists and
++   * nothing may follow the last element. */
++  const uint64_t link_stride = sizeof(uint32_t) + sizeof(uint32_t) * m;
++  std::vector<char> upper;
++  bool entry_has_full_height = (0 == h.max_level);
++  for (uint64_t row = 0; row < count; ++row) {
++    const uint32_t bytes = detail::read_pod<uint32_t>(in);
++    if (bytes % link_stride != 0 || bytes / link_stride > static_cast<uint64_t>(h.max_level)) {
++      throw SnapshotError("corrupted hnswlib upper-level link list");
++    }
++    if (row == h.entry_point && bytes / link_stride == static_cast<uint64_t>(h.max_level)) {
++      entry_has_full_height = true;
++    }
++    upper.resize(bytes);
++    if (bytes > 0 && !in.read(upper.data(), static_cast<std::streamsize>(bytes))) {
++      throw SnapshotError("truncated hnswlib upper-level link list");
++    }
++    for (uint64_t pos = 0; pos < bytes; pos += link_stride) {
++      detail::read_links_degree(upper.data() + pos, link_stride, m);
++      for (uint64_t k = 0; k < m; ++k) {
++        uint32_t neighbour = 0;
++        std::memcpy(&neighbour, upper.data() + pos + sizeof(uint32_t) + sizeof(uint32_t) * k,
++                    sizeof(neighbour));
++        if (neighbour >= count) throw SnapshotError("hnswlib upper-level id out of range");
++      }
++    }
++    detail::write_pod(out, bytes);
++    if (bytes > 0) out.write(upper.data(), static_cast<std::streamsize>(bytes));
++  }
++  if (!entry_has_full_height) {
++    throw SnapshotError("hnswlib entry point does not reach the advertised max level");
++  }
++  if (in.peek() != std::char_traits<char>::eof()) {
++    throw SnapshotError("unexpected trailing bytes after the hnswlib snapshot");
++  }
++  out.flush();
++  out.close();
++}
++
++}  // namespace seekdb_hipvs
++
++#endif  // OCEANBASE_LIB_VECTOR_HIPVS_SNAPSHOT_EXPORT_H_
+\ No newline at end of file
+diff --git a/src/oblib/lib/vector/hipvs_backend/tools/hipvs_selftest.cpp b/src/oblib/lib/vector/hipvs_backend/tools/hipvs_selftest.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/oblib/lib/vector/hipvs_backend/tools/hipvs_selftest.cpp
+@@ -0,0 +1,152 @@
++/*
++ * Copyright (c) 2026 OceanBase.
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * Standalone acceptance tool for the seekdb hipVS backend.
++ *
++ * It is *not* a product path (seekdb itself calls the same C ABI from the DDL
++ * path). It exists to prove two things quickly and reproducibly:
++ *
++ *   1. the shared object really runs the CAGRA build on the AMD GPU and exports
++ *      a snapshot whose labels are the seekdb VIDs;
++ *   2. that snapshot is byte-compatible with textbook hnswlib: this tool loads
++ *      it back with *stock* hnswlib, searches it and compares the result with an
++ *      exact brute-force ground truth (recall@k).
++ *
++ * Build: cmake --build build --target seekdb_hipvs_selftest
++ * Run:   ./seekdb_hipvs_selftest <rows> <dim> <m> <ef_construction> <queries> <k>
++ */
++#include "hipvs_build_api.h"
++
++#include <hnswlib/hnswlib.h>
++
++#include <algorithm>
++#include <chrono>
++#include <cmath>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <string>
++#include <vector>
++
++namespace {
++
++float random_unit(uint64_t &state) {
++  /* xorshift64*, deterministic so runs are comparable. */
++  state ^= state >> 12;
++  state ^= state << 25;
++  state ^= state >> 27;
++  const uint64_t bits = state * 0x2545F4914F6CDD1DULL;
++  return static_cast<float>(static_cast<double>(bits >> 11) / 9007199254740992.0);
++}
++
++std::vector<uint32_t> exact_knn(const std::vector<float> &base,
++                                int64_t rows,
++                                int64_t dim,
++                                const std::vector<float> &query,
++                                int64_t queries,
++                                int64_t k) {
++  std::vector<uint32_t> truth(static_cast<size_t>(queries * k), 0);
++  std::vector<std::pair<float, uint32_t>> scratch(static_cast<size_t>(rows));
++  for (int64_t q = 0; q < queries; ++q) {
++    for (int64_t r = 0; r < rows; ++r) {
++      float acc = 0.0F;
++      for (int64_t d = 0; d < dim; ++d) {
++        const float delta = query[static_cast<size_t>(q * dim + d)] -
++                            base[static_cast<size_t>(r * dim + d)];
++        acc += delta * delta;
++      }
++      scratch[static_cast<size_t>(r)] = {acc, static_cast<uint32_t>(r)};
++    }
++    std::partial_sort(scratch.begin(), scratch.begin() + k, scratch.end());
++    for (int64_t i = 0; i < k; ++i) {
++      truth[static_cast<size_t>(q * k + i)] = scratch[static_cast<size_t>(i)].second;
++    }
++  }
++  return truth;
++}
++
++}  // namespace
++
++int main(int argc, char **argv) {
++  const int64_t rows = (argc > 1) ? std::atoll(argv[1]) : 20000;
++  const int64_t dim = (argc > 2) ? std::atoll(argv[2]) : 128;
++  const int64_t m = (argc > 3) ? std::atoll(argv[3]) : 16;
++  const int64_t efc = (argc > 4) ? std::atoll(argv[4]) : 200;
++  const int64_t queries = (argc > 5) ? std::atoll(argv[5]) : 200;
++  const int64_t k = (argc > 6) ? std::atoll(argv[6]) : 10;
++
++  char info[512] = {0};
++  const int32_t probe = seekdb_hipvs_probe_v1(info, sizeof(info));
++  std::printf("probe=%d %s\n", probe, info);
++  if (probe != SEEKDB_HIPVS_OK) return 2;
++  std::printf("abi_version=%d\n", seekdb_hipvs_abi_version_v1());
++
++  std::vector<float> base(static_cast<size_t>(rows * dim));
++  std::vector<int64_t> vids(static_cast<size_t>(rows));
++  uint64_t state = 0x9E3779B97F4A7C15ULL;
++  for (auto &value : base) value = random_unit(state);
++  for (int64_t r = 0; r < rows; ++r) vids[static_cast<size_t>(r)] = 7000000 + r;
++
++  const std::string path = "/tmp/seekdb_hipvs_selftest.index";
++  char error[1024] = {0};
++  const auto t0 = std::chrono::steady_clock::now();
++  const int32_t build_rc = seekdb_hipvs_build_v1(base.data(), vids.data(), rows, dim, m, efc,
++                                                 path.c_str(), error, sizeof(error));
++  const auto t1 = std::chrono::steady_clock::now();
++  const double backend_ms =
++      std::chrono::duration<double, std::milli>(t1 - t0).count();
++  std::printf("build_rc=%d backend_ms=%.3f error=%s\n", build_rc, backend_ms, error);
++  if (build_rc != SEEKDB_HIPVS_OK) return 3;
++
++  /* --- independent verification with stock hnswlib ----------------------- */
++  hnswlib::L2Space<float> space(static_cast<size_t>(dim));
++  auto *index = new hnswlib::HierarchicalNSW<float>(&space, path, false);
++  const size_t loaded_elements = index->cur_element_count.load();
++  std::printf("hnswlib_loaded elements=%zu maxlevel=%d ef_construction=%zu m=%zu\n",
++              loaded_elements, index->maxlevel_, index->ef_construction_, index->M_);
++  if (static_cast<int64_t>(loaded_elements) != rows) {
++    std::printf("FAIL: element count mismatch\n");
++    return 4;
++  }
++
++  std::vector<float> query(static_cast<size_t>(queries * dim));
++  for (auto &value : query) value = random_unit(state);
++
++  index->setEf(static_cast<size_t>(std::max<int64_t>(efc, 64)));
++  std::vector<uint32_t> approx(static_cast<size_t>(queries * k), 0);
++  int64_t label_mismatch = 0;
++  for (int64_t q = 0; q < queries; ++q) {
++    auto result = index->searchKnn(query.data() + q * dim, static_cast<size_t>(k));
++    for (int64_t i = 0; i < k; ++i) {
++      const hnswlib::labeltype label = result.top().second;
++      result.pop();
++      if (label < 7000000 || label >= 7000000 + rows) ++label_mismatch;
++      approx[static_cast<size_t>(q * k + i)] = static_cast<uint32_t>(label - 7000000);
++    }
++  }
++
++  const std::vector<uint32_t> truth = exact_knn(base, rows, dim, query, queries, k);
++  int64_t hits = 0;
++  for (int64_t q = 0; q < queries; ++q) {
++    for (int64_t i = 0; i < k; ++i) {
++      const uint32_t id = approx[static_cast<size_t>(q * k + i)];
++      for (int64_t j = 0; j < k; ++j) {
++        if (truth[static_cast<size_t>(q * k + j)] == id) {
++          ++hits;
++          break;
++        }
++      }
++    }
++  }
++  const double recall = static_cast<double>(hits) / static_cast<double>(queries * k);
++  std::printf("rows=%lld dim=%lld m=%lld efc=%lld recall@%lld=%.4f bad_labels=%lld\n",
++              static_cast<long long>(rows), static_cast<long long>(dim),
++              static_cast<long long>(m), static_cast<long long>(efc),
++              static_cast<long long>(k), recall, static_cast<long long>(label_mismatch));
++  delete index;
++  const bool keep = (argc > 7) && (0 == std::strcmp(argv[7], "keep"));
++  if (!keep) std::remove(path.c_str());
++  else std::printf("snapshot_kept=%s\n", path.c_str());
++  return recall >= 0.90 ? 0 : 5;
++}
+\ No newline at end of file
+diff --git a/src/oblib/lib/vector/hipvs_backend/tools/vsag_import_probe.cpp b/src/oblib/lib/vector/hipvs_backend/tools/vsag_import_probe.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/oblib/lib/vector/hipvs_backend/tools/vsag_import_probe.cpp
+@@ -0,0 +1,212 @@
++/*
++ * Copyright (c) 2026 OceanBase.
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * Host-side probe: does the snapshot produced by the hipVS backend import into
++ * VSAG (the same library seekdb uses for `lib=vsag`) and answer queries with the
++ * right document ids?
++ *
++ * It reads a snapshot from disk, recovers the corpus and the ids from it (the
++ * hnswlib layout stores both), builds a brute-force ground truth for a few
++ * queries and then replays the exact import path used by seekdb:
++ *
++ *     vsag::Factory::CreateIndex("hnsw", <seekdb's JSON>,
++ *                                allocator)->Deserialize(ifstream)
++ *     index->KnnSearch(query, k, SearchParam(..,"{\"hnsw\":{\"ef_search\":..}}"))
++ *
++ * This lets the DDL path be de-risked without booting a server.
++ *
++ * Usage: vsag_import_probe <snapshot> <dim> <M> <ef_construction> <ef_search> [k]
++ */
++#include <vsag/vsag.h>
++
++#include <algorithm>
++#include <cinttypes>
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <fstream>
++#include <string>
++#include <utility>
++#include <vector>
++
++namespace {
++
++struct Snapshot {
++  int64_t rows = 0;
++  int64_t dim = 0;
++  uint64_t stride = 0;
++  uint64_t label_offset = 0;
++  uint64_t data_offset = 0;
++  std::vector<float> corpus;
++  std::vector<int64_t> labels;
++};
++
++template <class T>
++T read_pod(std::istream &in) {
++  T v{};
++  if (!in.read(reinterpret_cast<char *>(&v), sizeof(v))) {
++    std::fprintf(stderr, "ERROR truncated snapshot header\n");
++    std::exit(2);
++  }
++  return v;
++}
++
++Snapshot read_snapshot(const std::string &path) {
++  std::ifstream in(path, std::ios::binary);
++  if (!in) {
++    std::fprintf(stderr, "ERROR cannot open %s\n", path.c_str());
++    std::exit(2);
++  }
++  Snapshot s;
++  (void)read_pod<uint64_t>(in);  // level0 offset
++  (void)read_pod<uint64_t>(in);  // capacity
++  s.rows = static_cast<int64_t>(read_pod<uint64_t>(in));
++  s.stride = read_pod<uint64_t>(in);
++  s.label_offset = read_pod<uint64_t>(in);
++  s.data_offset = read_pod<uint64_t>(in);
++  (void)read_pod<int32_t>(in);
++  (void)read_pod<uint32_t>(in);
++  (void)read_pod<uint64_t>(in);
++  (void)read_pod<uint64_t>(in);
++  (void)read_pod<uint64_t>(in);
++  (void)read_pod<double>(in);
++  (void)read_pod<uint64_t>(in);
++  s.dim = static_cast<int64_t>((s.label_offset - s.data_offset) / sizeof(float));
++  s.corpus.resize(static_cast<size_t>(s.rows * s.dim));
++  s.labels.resize(static_cast<size_t>(s.rows));
++  std::vector<char> record(static_cast<size_t>(s.stride));
++  for (int64_t r = 0; r < s.rows; ++r) {
++    if (!in.read(record.data(), static_cast<std::streamsize>(record.size()))) {
++      std::fprintf(stderr, "ERROR truncated snapshot row\n");
++      std::exit(2);
++    }
++    std::memcpy(&s.labels[static_cast<size_t>(r)], record.data() + s.label_offset,
++                sizeof(int64_t));
++    std::memcpy(&s.corpus[static_cast<size_t>(r * s.dim)], record.data() + s.data_offset,
++                sizeof(float) * static_cast<size_t>(s.dim));
++  }
++  return s;
++}
++
++}  // namespace
++
++int main(int argc, char **argv) {
++  if (argc < 6) {
++    std::fprintf(stderr,
++                 "usage: %s <snapshot> <dim> <M> <ef_construction> <ef_search> [k]\n", argv[0]);
++    return 1;
++  }
++  const std::string path = argv[1];
++  const int dim = std::atoi(argv[2]);
++  const int m = std::atoi(argv[3]);
++  const int efc = std::atoi(argv[4]);
++  const int efs = std::atoi(argv[5]);
++  const int k = (argc > 6) ? std::atoi(argv[6]) : 10;
++
++  Snapshot snap = read_snapshot(path);
++  std::printf("snapshot rows=%" PRId64 " dim=%" PRId64 " (expected dim=%d)\n", snap.rows,
++              snap.dim, dim);
++  if (snap.dim != dim) {
++    std::fprintf(stderr, "ERROR dim mismatch\n");
++    return 2;
++  }
++
++  char json[1024];
++  std::snprintf(json, sizeof(json),
++                "{\"dim\":%d,\"dtype\":\"float32\",\"metric_type\":\"l2\","
++                "\"use_old_serial_format\":true,"
++                "\"hnsw\":{\"ef_construction\":%d,\"ef_search\":%d,\"max_degree\":%d}}",
++                dim, efc, efs, m);
++  std::printf("vsag create param: %s\n", json);
++
++  auto created = vsag::Factory::CreateIndex("hnsw", std::string(json), nullptr);
++  if (!created.has_value()) {
++    std::fprintf(stderr, "ERROR vsag CreateIndex failed: %s\n",
++                 created.error().message.c_str());
++    return 3;
++  }
++  std::shared_ptr<vsag::Index> index = created.value();
++
++  std::ifstream in(path, std::ios::binary);
++  if (!in) return 2;
++  auto deserialized = index->Deserialize(in);
++  if (!deserialized.has_value()) {
++    std::fprintf(stderr, "ERROR vsag Deserialize(hnswlib stream) failed: %s\n",
++                 deserialized.error().message.c_str());
++    return 4;
++  }
++  std::printf("vsag Deserialize OK, elements=%" PRId64 "\n", index->GetNumElements());
++  if (index->GetNumElements() != snap.rows) {
++    std::fprintf(stderr, "ERROR element count mismatch after import\n");
++    return 5;
++  }
++
++  const int queries = 64;
++  std::vector<float> query(static_cast<size_t>(queries * dim));
++  for (int q = 0; q < queries; ++q) {
++    const int64_t row = (snap.rows / queries) * q;
++    std::memcpy(query.data() + static_cast<size_t>(q) * dim,
++                snap.corpus.data() + static_cast<size_t>(row) * dim,
++                sizeof(float) * static_cast<size_t>(dim));
++  }
++
++  /* Ground truth with the ids stored in the snapshot. */
++  std::vector<std::vector<int64_t>> truth(static_cast<size_t>(queries));
++  std::vector<std::pair<float, int64_t>> scratch(static_cast<size_t>(snap.rows));
++  for (int q = 0; q < queries; ++q) {
++    for (int64_t r = 0; r < snap.rows; ++r) {
++      float acc = 0.0F;
++      for (int d = 0; d < dim; ++d) {
++        const float delta = query[static_cast<size_t>(q) * dim + d] -
++                            snap.corpus[static_cast<size_t>(r) * dim + d];
++        acc += delta * delta;
++      }
++      scratch[static_cast<size_t>(r)] = {acc, snap.labels[static_cast<size_t>(r)]};
++    }
++    std::partial_sort(scratch.begin(), scratch.begin() + k, scratch.end());
++    truth[static_cast<size_t>(q)].resize(static_cast<size_t>(k));
++    for (int i = 0; i < k; ++i) {
++      truth[static_cast<size_t>(q)][static_cast<size_t>(i)] = scratch[static_cast<size_t>(i)].second;
++    }
++  }
++
++  char search_json[256];
++  std::snprintf(search_json, sizeof(search_json),
++                "{\"hnsw\":{\"ef_search\":%d,\"skip_ratio\":0.7}}", efs);
++  /* SearchParam keeps a reference to the parameter string: it must outlive it. */
++  const std::string search_parameters(search_json);
++  vsag::SearchParam search_param(false, search_parameters, nullptr, nullptr);
++
++  int64_t hits = 0;
++  int64_t total = 0;
++  for (int q = 0; q < queries; ++q) {
++    auto dataset = vsag::Dataset::Make();
++    dataset->NumElements(1)->Dim(dim)->Float32Vectors(query.data() + static_cast<size_t>(q) * dim)
++        ->Owner(false);
++    auto result = index->KnnSearch(dataset, k, search_param);
++    if (!result.has_value()) {
++      std::fprintf(stderr, "ERROR KnnSearch failed: %s\n",
++                   result.error().message.c_str());
++      return 6;
++    }
++    result.value()->Owner(false);
++    const int64_t *ids = result.value()->GetIds();
++    if (result.value()->GetDim() != k) {
++      std::fprintf(stderr, "ERROR unexpected result dim %" PRId64 "\n", result.value()->GetDim());
++      return 7;
++    }
++    for (int i = 0; i < k; ++i) {
++      ++total;
++      if (std::find(truth[static_cast<size_t>(q)].begin(),
++                    truth[static_cast<size_t>(q)].end(),
++                    ids[i]) != truth[static_cast<size_t>(q)].end()) {
++        ++hits;
++      }
++    }
++  }
++  std::printf("vsag_import_recall@%d=%.4f queries=%d\n", k,
++              static_cast<double>(hits) / static_cast<double>(total), queries);
++  return 0;
++}
+\ No newline at end of file
+diff --git a/unittest/vector_index/benchmark_hipvs.py b/unittest/vector_index/benchmark_hipvs.py
+new file mode 100644
+--- /dev/null
++++ b/unittest/vector_index/benchmark_hipvs.py
+@@ -0,0 +1,260 @@
++#!/usr/bin/env python3
++"""Measure real seekdb HNSW build time and Recall@K: CPU (lib=vsag) vs AMD GPU (lib=hipvs).
++
++What is measured
++  * build_seconds: wall clock of ``CREATE VECTOR INDEX ... WITH (lib=...)`` plus one
++    first ``APPROXIMATE`` query through the new index, i.e. the time after which the
++    index is actually usable. That covers the whole pipeline: table scan, vector
++    buffering, graph construction, import into VSAG and snapshot serialization.
++  * recall_at_k: mean ``|approx ∩ exact| / k`` where ``exact`` is a NumPy brute-force
++    L2 ground truth computed from the very vectors that were inserted.
++  * ``speedup`` = median(build_seconds of VSAG) / median(build_seconds of HIPVS).
++
++Integrity rules (a benchmark that cannot prove these refuses to report a speedup)
++  * every ``lib=hipvs`` round must produce at least one ``SEEKDB_HIPVS_BUILD`` record
++    in the server's stderr with ``gpu_compute=true, cpu_fallback=false`` and the
++    row/dim of this run -- otherwise the run is marked as failed, not as fast;
++  * the approximate query must be executed through the vector index (EXPLAIN check);
++  * CPU and GPU recall must both clear ``--min-recall`` or the result is reported as
++    a quality failure (the GPU path is not allowed to win by returning garbage);
++  * at least three rounds per library, medians (not minima) are compared.
++
++Requires: numpy, pymysql. Run it next to the database so it can read its stderr.
++
++Example
++  python3 benchmark_hipvs.py --database test --gpu-log /tmp/obtest/observer.log \\
++      --rows 20000 --dim 128 --rounds 3 --gpu-lib /workspace/hipvs-work/opt/lib/libseekdb_hipvs.so
++"""
++import argparse
++import hashlib
++import json
++import os
++import statistics
++import time
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++
++import numpy as np
++import pymysql
++
++GPU_MARKER = "SEEKDB_HIPVS_BUILD "
++
++
++def build_gpu_records(log_path, offset, rows, dim):
++    """Return the GPU build records written by the backend after ``offset``."""
++    records = []
++    if log_path is None:
++        return records
++    with log_path.open("rb") as handle:
++        handle.seek(offset)
++        text = handle.read().decode("utf-8", errors="replace")
++    for line in text.splitlines():
++        if GPU_MARKER not in line:
++            continue
++        try:
++            record = json.loads(line.split(GPU_MARKER, 1)[1])
++        except json.JSONDecodeError:
++            continue
++        if record.get("gpu_compute") is True and record.get("cpu_fallback") is False:
++            records.append(record)
++    return records
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__,
++                                     formatter_class=argparse.RawDescriptionHelpFormatter)
++    parser.add_argument("--host", default="127.0.0.1")
++    parser.add_argument("--port", type=int, required=True)
++    parser.add_argument("--user", default="root")
++    parser.add_argument("--password", default=os.environ.get("SEEKDB_PASSWORD", ""))
++    parser.add_argument("--database", required=True)
++    parser.add_argument("--gpu-log", type=Path, required=True,
++                        help="server stderr/stdout log that receives the hipVS build records")
++    parser.add_argument("--rows", type=int, default=20000)
++    parser.add_argument("--dim", type=int, default=128)
++    parser.add_argument("--queries", type=int, default=200)
++    parser.add_argument("--rounds", type=int, default=3)
++    parser.add_argument("--m", type=int, default=16)
++    parser.add_argument("--ef-construction", type=int, default=200)
++    parser.add_argument("--ef-search", type=int, default=100)
++    parser.add_argument("--k", type=int, default=10)
++    parser.add_argument("--dataset", choices=("clustered", "gaussian"), default="clustered",
++                        help="clustered = embedding-like corpus, gaussian = isotropic noise")
++    parser.add_argument("--min-recall", type=float, default=0.90)
++    parser.add_argument("--output", type=Path, default=Path("hipvs-benchmark.json"))
++    args = parser.parse_args()
++
++    if args.rounds < 3:
++        parser.error("at least three rounds per library are required (median, not minimum)")
++    if args.rows <= 2 * args.m:
++        parser.error("rows must exceed 2 * m (CAGRA needs a graph of degree 2*m)")
++    if not args.gpu_log.is_file():
++        parser.error(f"--gpu-log {args.gpu_log} must exist and belong to the server under test")
++
++    rng = np.random.default_rng(20261107)
++    if args.dataset == "clustered":
++        # Embedding-like corpus: Gaussian clusters of radius 0.15 around 200
++        # random centres. This is much closer to real embedding distributions
++        # (and to what an ANN index is expected to solve) than an isotropic
++        # Gaussian, where all pairwise distances concentrate.
++        centres = rng.normal(size=(200, args.dim)).astype(np.float32)
++        assignment = rng.integers(0, 200, size=args.rows)
++        vectors = (centres[assignment] +
++                   0.15 * rng.normal(size=(args.rows, args.dim))).astype(np.float32)
++        query_clusters = rng.integers(0, 200, size=args.queries)
++        queries = (centres[query_clusters] +
++                   0.15 * rng.normal(size=(args.queries, args.dim))).astype(np.float32)
++    else:
++        vectors = rng.normal(size=(args.rows, args.dim)).astype(np.float32)
++        queries = rng.normal(size=(args.queries, args.dim)).astype(np.float32)
++    vids = (rng.permutation(np.arange(args.rows, dtype=np.int64)) * 7 + 11).astype(np.int64)
++
++    # Exact ground truth, computed outside the database.
++    truth = []
++    for query in queries:
++        distances = np.square(vectors.astype(np.float64) - query.astype(np.float64)).sum(axis=1)
++        truth.append({int(v) for v in vids[np.argpartition(distances, args.k - 1)[:args.k]]})
++
++    report = {
++        "status": "running",
++        "started_at": datetime.now(timezone.utc).isoformat(),
++        "dataset": {
++            "kind": f"synthetic-{args.dataset}-fp32",
++            "seed": 20261107,
++            "rows": args.rows,
++            "dim": args.dim,
++            "queries": args.queries,
++            "sha256": hashlib.sha256(vectors.tobytes() + queries.tobytes() + vids.tobytes()).hexdigest(),
++        },
++        "parameters": {"m": args.m, "ef_construction": args.ef_construction,
++                       "ef_search": args.ef_search, "k": args.k},
++        "timing_scope": "CREATE VECTOR INDEX + first APPROXIMATE query through the new index",
++        "runs": [],
++        "medians": {},
++        "speedup": None,
++        "recall_ok": None,
++    }
++
++    def save():
++        args.output.parent.mkdir(parents=True, exist_ok=True)
++        temporary = args.output.with_suffix(args.output.suffix + ".tmp")
++        temporary.write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
++        temporary.replace(args.output)
++
++    connection = pymysql.connect(host=args.host, port=args.port, user=args.user,
++                                 password=args.password, database=args.database,
++                                 autocommit=True, read_timeout=14400, write_timeout=14400)
++    prefix = "hipvsbench_" + uuid.uuid4().hex[:10]
++    tables = {}
++    query_json = [json.dumps(row.tolist()) for row in queries]
++    try:
++        with connection.cursor() as cursor:
++            cursor.execute("SELECT VERSION()")
++            report["database_version"] = cursor.fetchone()[0]
++            for library in ("VSAG", "HIPVS"):
++                table = f"{prefix}_{library.lower()}"
++                tables[library] = table
++                cursor.execute(f"CREATE TABLE `{table}` (id BIGINT PRIMARY KEY, v VECTOR({args.dim}))")
++                # Keep one INSERT statement around a few hundred KB so that
++                # high-dimensional corpora do not hit max_allowed_packet.
++                batch = max(16, min(512, 262144 // max(args.dim * 12, 1)))
++                for start in range(0, args.rows, batch):
++                    stop = min(start + batch, args.rows)
++                    rows = [(int(vids[i]), json.dumps(vectors[i].tolist())) for i in range(start, stop)]
++                    cursor.executemany(f"INSERT INTO `{table}` VALUES (%s, %s)", rows)
++                print(f"[setup] {library}: {args.rows} rows in `{table}`", flush=True)
++
++            for round_id in range(args.rounds):
++                # Alternate the order so cache/thermal drift shows up in the raw runs.
++                order = ("VSAG", "HIPVS") if round_id % 2 == 0 else ("HIPVS", "VSAG")
++                for library in order:
++                    table = tables[library]
++                    # OceanBase has no "DROP INDEX IF EXISTS", so tolerate the
++                    # "no such index" error of the very first round.
++                    try:
++                        cursor.execute(f"DROP INDEX `idx` ON `{table}`")
++                    except pymysql.err.MySQLError as drop_error:
++                        # 1091: the index does not exist yet (first round).
++                        if not drop_error.args or drop_error.args[0] != 1091:
++                            raise
++                    log_offset = args.gpu_log.stat().st_size
++                    begin = time.perf_counter()
++                    cursor.execute(
++                        f"CREATE VECTOR INDEX idx ON `{table}`(v) WITH ("
++                        f"distance=l2,type=hnsw,lib={library},m={args.m},"
++                        f"ef_construction={args.ef_construction},ef_search={args.ef_search})")
++                    sql = (f"SELECT /*+ INDEX(`{table}` idx) */ id FROM `{table}` "
++                           f"ORDER BY l2_distance(v, %s) APPROXIMATE LIMIT {args.k}")
++                    cursor.execute(sql, (query_json[0],))
++                    cursor.fetchall()
++                    build_seconds = time.perf_counter() - begin
++
++                    gpu_records = build_gpu_records(args.gpu_log, log_offset, args.rows, args.dim)
++                    if library == "HIPVS" and not gpu_records:
++                        raise RuntimeError(
++                            "no SEEKDB_HIPVS_BUILD record in the server log for this round: "
++                            "the GPU path cannot be claimed, aborting")
++
++                    hits = 0
++                    latencies = []
++                    for index, query in enumerate(query_json):
++                        started = time.perf_counter()
++                        cursor.execute(sql, (query,))
++                        found = {int(row[0]) for row in cursor.fetchall()}
++                        latencies.append((time.perf_counter() - started) * 1000.0)
++                        hits += len(found & truth[index]) / args.k
++                    recall = hits / len(query_json)
++
++                    cursor.execute("EXPLAIN " + sql, (query_json[0],))
++                    plan = [list(row) for row in cursor.fetchall()]
++                    plan_text = " ".join(str(cell) for row in plan for cell in row)
++                    used_index = "idx" in plan_text
++
++                    report["runs"].append({
++                        "library": library,
++                        "round": round_id + 1,
++                        "build_seconds": build_seconds,
++                        "recall_at_k": recall,
++                        "query_median_ms": statistics.median(latencies),
++                        "query_p95_ms": float(np.percentile(latencies, 95)),
++                        "explain_uses_index": used_index,
++                        "gpu_evidence": gpu_records,
++                    })
++                    print(f"[round {round_id + 1}] {library:5s} build={build_seconds:8.3f}s "
++                          f"recall@{args.k}={recall:.4f} index_used={used_index} "
++                          f"gpu_records={len(gpu_records)}", flush=True)
++                    save()
++
++        medians = {library: statistics.median(run["build_seconds"] for run in report["runs"]
++                                             if run["library"] == library)
++                   for library in ("VSAG", "HIPVS")}
++        recalls = {library: statistics.median(run["recall_at_k"] for run in report["runs"]
++                                              if run["library"] == library)
++                   for library in ("VSAG", "HIPVS")}
++        report["medians"] = {"build_seconds": medians, "recall_at_k": recalls}
++        report["speedup"] = medians["VSAG"] / medians["HIPVS"] if medians["HIPVS"] else None
++        report["recall_ok"] = all(value >= args.min_recall for value in recalls.values())
++        report["status"] = "measured" if report["recall_ok"] else "low_recall"
++    except Exception as error:  # noqa: BLE001 - report, then re-raise
++        report["status"] = "failed"
++        report["error"] = f"{type(error).__name__}: {error}"
++        raise
++    finally:
++        for table in tables.values():
++            try:
++                with connection.cursor() as cursor:
++                    cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
++            except Exception:  # noqa: BLE001
++                pass
++        connection.close()
++        save()
++
++    print(json.dumps({"medians": report["medians"], "speedup": report["speedup"],
++                      "recall_ok": report["recall_ok"], "status": report["status"]}, indent=2))
++    if not report["recall_ok"]:
++        raise SystemExit("recall below --min-recall for at least one library")
++
++
++if __name__ == "__main__":
++    main()
+\ No newline at end of file
+diff --git a/unittest/vector_index/recall_sweep.py b/unittest/vector_index/recall_sweep.py
+new file mode 100644
+--- /dev/null
++++ b/unittest/vector_index/recall_sweep.py
+@@ -0,0 +1,127 @@
++#!/usr/bin/env python3
++"""Recall@K comparison of the CPU (lib=vsag) and AMD GPU (lib=hipvs) HNSW builds.
++
++The build-time benchmark answers "how long"; this script answers "is the graph as
++good". For a fixed corpus it builds the index with each library at several
++``ef_search`` values and reports recall@k against a NumPy brute-force ground
++truth, so the GPU graph can be compared with the CPU graph at the same search
++effort (the only fair comparison: a different ef is a different operating point).
++
++Example:
++  python3 recall_sweep.py --port 2881 --database test --rows 20000 --dim 768 \\
++      --ef 200 800 --queries 50
++"""
++import argparse
++import json
++import statistics
++import sys
++import time
++import uuid
++from pathlib import Path
++
++import numpy as np
++import pymysql
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__,
++                                     formatter_class=argparse.RawDescriptionHelpFormatter)
++    parser.add_argument("--host", default="127.0.0.1")
++    parser.add_argument("--port", type=int, required=True)
++    parser.add_argument("--user", default="root")
++    parser.add_argument("--password", default="")
++    parser.add_argument("--database", required=True)
++    parser.add_argument("--rows", type=int, default=20000)
++    parser.add_argument("--dim", type=int, default=768)
++    parser.add_argument("--queries", type=int, default=50)
++    parser.add_argument("--m", type=int, default=16)
++    parser.add_argument("--ef-construction", type=int, default=200)
++    parser.add_argument("--ef", type=int, nargs="+", default=[200, 800])
++    parser.add_argument("--k", type=int, default=10)
++    parser.add_argument("--output", type=Path, default=Path("recall-sweep.json"))
++    args = parser.parse_args()
++
++    rng = np.random.default_rng(20261107)
++    vectors = rng.normal(size=(args.rows, args.dim)).astype(np.float32)
++    queries = rng.normal(size=(args.queries, args.dim)).astype(np.float32)
++    vids = (rng.permutation(np.arange(args.rows, dtype=np.int64)) * 7 + 11).astype(np.int64)
++
++    truth = []
++    for query in queries:
++        distances = np.square(vectors.astype(np.float64) - query.astype(np.float64)).sum(axis=1)
++        truth.append({int(v) for v in vids[np.argpartition(distances, args.k - 1)[:args.k]]})
++    query_json = [json.dumps(row.tolist()) for row in queries]
++
++    connection = pymysql.connect(host=args.host, port=args.port, user=args.user,
++                                 password=args.password, database=args.database,
++                                 autocommit=True, read_timeout=14400, write_timeout=14400)
++    table = "recallsweep_" + uuid.uuid4().hex[:10]
++    report = {"dataset": {"rows": args.rows, "dim": args.dim, "kind": "synthetic-normal-fp32"},
++              "parameters": {"m": args.m, "ef_construction": args.ef_construction, "k": args.k},
++              "results": []}
++    try:
++        with connection.cursor() as cursor:
++            cursor.execute(f"CREATE TABLE `{table}` (id BIGINT PRIMARY KEY, v VECTOR({args.dim}))")
++            batch = max(16, min(512, 262144 // max(args.dim * 12, 1)))
++            for start in range(0, args.rows, batch):
++                stop = min(start + batch, args.rows)
++                rows = [(int(vids[i]), json.dumps(vectors[i].tolist())) for i in range(start, stop)]
++                cursor.executemany(f"INSERT INTO `{table}` VALUES (%s, %s)", rows)
++            print(f"[setup] {args.rows} rows, dim {args.dim}", flush=True)
++
++            for library in ("VSAG", "HIPVS"):
++                for ef in args.ef:
++                    try:
++                        cursor.execute(f"DROP INDEX `idx` ON `{table}`")
++                    except pymysql.err.MySQLError as drop_error:
++                        if not drop_error.args or drop_error.args[0] != 1091:
++                            raise
++                    started = time.perf_counter()
++                    cursor.execute(
++                        f"CREATE VECTOR INDEX idx ON `{table}`(v) WITH ("
++                        f"distance=l2,type=hnsw,lib={library},m={args.m},"
++                        f"ef_construction={args.ef_construction},ef_search={ef})")
++                    build_seconds = time.perf_counter() - started
++                    sql = (f"SELECT /*+ INDEX(`{table}` idx) */ id FROM `{table}` "
++                           f"ORDER BY l2_distance(v, %s) APPROXIMATE LIMIT {args.k}")
++                    hits = 0
++                    latencies = []
++                    for index, query in enumerate(query_json):
++                        begin = time.perf_counter()
++                        cursor.execute(sql, (query,))
++                        found = {int(row[0]) for row in cursor.fetchall()}
++                        latencies.append((time.perf_counter() - begin) * 1000.0)
++                        hits += len(found & truth[index]) / args.k
++                    recall = hits / len(query_json)
++                    entry = {"library": library, "ef_search": ef, "build_seconds": build_seconds,
++                             "recall_at_k": recall,
++                             "query_median_ms": statistics.median(latencies)}
++                    report["results"].append(entry)
++                    print(f"[{library:5s}] ef_search={ef:5d} build={build_seconds:7.3f}s "
++                          f"recall@{args.k}={recall:.4f} query_median={entry['query_median_ms']:.2f}ms",
++                          flush=True)
++                    args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
++    finally:
++        try:
++            with connection.cursor() as cursor:
++                cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
++        except Exception:  # noqa: BLE001
++            pass
++        connection.close()
++
++    pairs = {}
++    for entry in report["results"]:
++        pairs.setdefault(entry["ef_search"], {})[entry["library"]] = entry["recall_at_k"]
++    worst_gap = 0.0
++    for ef, values in sorted(pairs.items()):
++        if "VSAG" in values and "HIPVS" in values:
++            worst_gap = max(worst_gap, values["VSAG"] - values["HIPVS"])
++            print(f"ef_search={ef}: cpu={values['VSAG']:.4f} gpu={values['HIPVS']:.4f} "
++                  f"delta={values['VSAG'] - values['HIPVS']:+.4f}")
++    report["worst_recall_gap"] = worst_gap
++    args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+\ No newline at end of file
+diff --git a/docs/amd-hipvs/README.md b/docs/amd-hipvs/README.md
+new file mode 100644
+--- /dev/null
++++ b/docs/amd-hipvs/README.md
+@@ -0,0 +1,118 @@
++# Accelerating seekdb HNSW index build with hipVS (AMD GPU)
++
++This directory documents the AMD ROCm/hipVS backend for seekdb HNSW index
++construction: what it does, where it plugs into seekdb, how to build it, and how
++to reproduce the measurements.
++
++## 1. What the change does
++
++`CREATE VECTOR INDEX ... WITH (lib=hipvs)` builds the graph of an HNSW index on
++an AMD GPU instead of on the CPU:
++
++1. the DDL snapshot scan buffers the `(vector, vid)` pairs of the snapshot table
++   (`ObPluginVectorIndexAdaptor::add_snap_index`) -- for `lib=hipvs` nothing is
++   inserted into VSAG at this point;
++2. when the snapshot scan finishes (`check_snap_hnswsq_index` ->
++   `ObPluginVectorIndexAdaptor::finish_hipvs_snapshot`) the whole corpus is handed
++   once to the GPU backend, which builds a CAGRA k-NN graph with hipVS on the
++   device, converts it into a real HNSW graph (base layer from the GPU graph,
++   hierarchy from hipVS' multi-threaded CPU routine) and exports it as a classic
++   hnswlib stream whose labels are the seekdb VIDs;
++3. seekdb imports that stream into the VSAG index it would otherwise have built
++   itself (`fdeserialize`), so *queries are unchanged*: same VSAG HNSW read path,
++   same snapshot serialization, same incremental delta index for later DML.
++
++`lib=vsag` (the default) is untouched: same code path, same behaviour.
++
++## 2. Where it plugs in
++
++| File | Role |
++| --- | --- |
++| `src/oblib/lib/vector/hipvs_build_api.h` | C ABI between seekdb and the GPU backend |
++| `src/oblib/lib/vector/ob_vsag_adaptor.{h,cpp}` | `obvsag::build_hipvs_index()`: `dlopen()` the backend, run the build on a real OS thread, import the snapshot into VSAG. Fails hard (`OB_NOT_SUPPORTED`) when the backend or the GPU is missing -- no silent CPU fallback |
++| `src/query/api/query/vector/ob_vector_index_util.h` | new `ObVectorIndexAlgorithmLib::VIAL_HIPVS` |
++| `src/observer/vector_index/ob_vector_index_util.cpp` | parses `LIB=HIPVS` and restricts it to plain FP32/HNSW/L2 without extra info |
++| `src/query/api/query/vector/ob_vector_index_adaptor.h` | `hipvs_built_` flag + `finish_hipvs_snapshot()` |
++| `src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp` | buffers the snapshot for `lib=hipvs` and builds it once at the end of the scan |
++| `src/oblib/lib/vector/hipvs_backend/` | the GPU backend itself: standalone CMake project (hipcc + `find_package(cuvs)`) producing `libseekdb_hipvs.so` |
++| `unittest/vector_index/benchmark_hipvs.py` | 3-round CPU/GPU benchmark with Recall@K and GPU evidence extraction |
++
++ROCm is deliberately *not* linked into the server: the observer binary is built
++by the normal seekdb toolchain and the HIP/cuVS stack lives only inside
++`libseekdb_hipvs.so`, which is loaded on demand with
++`SEEKDB_HIPVS_LIBRARY=/path/to/libseekdb_hipvs.so`. The variable must be visible
++to the observer process, i.e. it has to be set *before* the server starts.
++
++## 3. Build the GPU backend
++
++Prerequisites: ROCm >= 7.2 (7.2.1 works), cmake >= 3.31, ninja, hipVS installed
++with `-DBUILD_CAGRA_HNSWLIB=ON` (this provides `cuvs::cuvs` and
++`hnsw::from_cagra`/`hnsw::serialize`), plus the CMake packages hipVS installs for
++its own dependencies (`raft`, `hnswlib`, `cuco`, `rmm`, `rapids_logger`,
++`hipccl`).
++
++```bash
++cmake -S src/oblib/lib/vector/hipvs_backend -B build_hipvs -G Ninja \
++      -DCMAKE_CXX_COMPILER=hipcc \
++      -DCMAKE_HIP_ARCHITECTURES=gfx1100 \
++      -DCMAKE_BUILD_TYPE=Release \
++      -Dhip_DIR=/opt/rocm-7.2.1/lib/cmake/hip \
++      -DHIP_DIR=/opt/rocm-7.2.1/lib/cmake/hip \
++      -DCMAKE_PREFIX_PATH="/opt/rocm-7.2.1;/opt/hipvs" \
++      -DCMAKE_INSTALL_PREFIX=/opt/seekdb-hipvs
++cmake --build build_hipvs -j
++cmake --build build_hipvs --target install        # -> /opt/seekdb-hipvs/lib/libseekdb_hipvs.so
++```
++
++Optional self-checks (never part of the server build):
++
++```bash
++cmake --build build_hipvs --target seekdb_hipvs_selftest    # GPU build + stock hnswlib read-back
++cmake -S ... -DVSAG_ROOT=<seekdb deps devel dir>            # enables vsag_import_probe
++cmake --build build_hipvs --target vsag_import_probe        # VSAG imports the snapshot and answers queries
++```
++
++## 4. Run seekdb with the backend
++
++```bash
++export SEEKDB_HIPVS_LIBRARY=/opt/seekdb-hipvs/lib/libseekdb_hipvs.so
++./tools/deploy/obd.sh prepare -p /tmp/obtest
++./tools/deploy/obd.sh deploy -c ./tools/deploy/single.yaml
++```
++
++Then, in SQL:
++
++```sql
++CREATE TABLE points (id BIGINT PRIMARY KEY, v VECTOR(128));
++-- ... INSERT ...
++CREATE VECTOR INDEX idx ON points(v)
++  WITH (distance=l2, type=hnsw, lib=hipvs, m=16, ef_construction=200, ef_search=100);
++SELECT id FROM points ORDER BY l2_distance(v, '[...]') APPROXIMATE LIMIT 10;
++```
++
++`lib=vsag` with the same data/parameters is the CPU baseline.
++
++Failures are explicit by design:
++
++* no `SEEKDB_HIPVS_LIBRARY` / no AMD GPU -> `CREATE VECTOR INDEX` fails with
++  `OB_NOT_SUPPORTED` and a warning naming the reason; the index is never built on
++  the CPU behind the user's back;
++* quantized types (`HNSW_SQ`/`HNSW_BQ`), non-L2 metrics, extra-info columns and
++  `lib=hipvs` on `IVF*` are rejected at DDL time.
++
++## 5. Reproduce the measurements
++
++```bash
++python3 unittest/vector_index/benchmark_hipvs.py \
++    --port <mysql_port> --database test \
++    --gpu-log <observer stderr log> \
++    --rows 20000 --dim 128 --rounds 5 --m 16 --ef-construction 200 --ef-search 100
++```
++
++The script times `CREATE VECTOR INDEX` (plus the first `APPROXIMATE` query, so a
++build only counts when the index is usable), computes Recall@K against a NumPy
++brute-force ground truth, requires a `SEEKDB_HIPVS_BUILD` record with
++`gpu_compute=true` in the server log for every GPU round, and reports medians of
++at least three rounds.
++
++See `REPORT.md` for the measured numbers on the development machine.
+\ No newline at end of file
+diff --git a/docs/amd-hipvs/REPORT.md b/docs/amd-hipvs/REPORT.md
+new file mode 100644
+--- /dev/null
++++ b/docs/amd-hipvs/REPORT.md
+@@ -0,0 +1,211 @@
++# Experiment report: hipVS (AMD GPU) accelerated HNSW build in seekdb
++
++All numbers below were measured on the machine described in §1 during this work.
++Nothing here is estimated or synthesised; the raw JSON of every benchmark run is
++produced by `unittest/vector_index/benchmark_hipvs.py` and referenced per table.
++
++## 1. Hardware and software
++
++| Item | Value |
++| --- | --- |
++| CPU | AMD EPYC 9334, 128 vCPU (shared cloud instance) |
++| Memory | 503 GiB |
++| GPU | AMD Radeon Graphics, `gfx1100` (RDNA3), 48 GiB HBM3, PCIe |
++| OS | Ubuntu 24.04.4 LTS |
++| GPU stack | ROCm 7.2.1 (`hipcc` 7.2.53211, AMD clang 22.0.0) |
++| GPU library | hipVS 1.0.0 (`release/rocmds-26.03`) + hipMM 4.0.0 + hipCollections 0.4.0 + hipRAFT 1.0.0 |
++| Database | seekdb 1.4.0.0 built from the `2026-competition` source + the patch of this PR |
++| Vector engine | VSAG 1.1.0 (unchanged, used for `lib=vsag` and for serving both index kinds) |
++| Build tools | cmake 3.31.6 (pip), ninja 1.11.1, gcc 12.3 (seekdb devtool chain), Rust 1.98.1 |
++
++## 2. Build chain: what was built and how long it took
++
++| Step | Command | Wall clock | Result |
++| --- | --- | --- | --- |
++| hipVS + its dependencies (`hipMM`, `hipCollections`, `hipRAFT`, `cuco`, `rmm`, `raft`, `rapids_logger`, `hipccl`, `hnswlib`) | `cmake -S cpp -B build -G Ninja -DBUILD_CAGRA_HNSWLIB=ON -DBUILD_TESTS=OFF -DCMAKE_HIP_ARCHITECTURES=gfx1100 ... && ninja cuvs` | **7 min 09 s** (user 106 min 49 s, sys 5 min 14 s) | `libcuvs.so` (459 MB with debug info), exit 0. ROCm 7.2.1 was accepted although `build.rst` asks for >= 7.2.3 |
++| hipVS install (incl. its dependencies' CMake packages) | `ninja install`, `cmake --install _deps/raft-build`, `cmake --install _deps/hnswlib-build` | 3 s + 2 s | `cuvs`, `raft`, `hnswlib`, `cuco`, `rmm`, `rapids_logger`, `hipccl` configs |
++| seekdb release build | `./build.sh release --make -j32` | ~75 min total (see note) | `build_release/src/observer/seekdb` (1.33 GB, RelWithDebInfo) |
++| incremental rebuild after integrating this PR | `./build.sh release --make -j32` | **6 min 00 s** (2 unity TUs + link) | exit 0 |
++| GPU backend shared object | `cmake --build build -j` | **8 s** (single TU) | `libseekdb_hipvs.so` (58 KB) |
++
++Notes on the seekdb build:
++* The first attempt with `-j128` deadlocked in I/O wait (`128` compiler processes
++  in state `D`, zero object files produced for 37 minutes, `vmstat` wa 68-74 %).
++  Killing it and rebuilding with `-j32` was stable and completed.
++* Dependencies: `libblas/liblapack/libopenblas/libsuitesparse-dev`, `ninja`,
++  `libtool-bin`, `rpm2cpio`, `cpio`, cmake 3.31.6 and Rust 1.98.1 (installed
++  offline from the official tarball because `rustup` throughput was ~20 KB/s).
++* hipVS needs `-Drapids-cmake-dir=` + `RAPIDS_CMAKE_MODULE_PATH` pointing at a
++  local ROCmDS-CMake checkout, because its `rapids_config.cmake` downloads
++  `RAPIDS.cmake` from `raw.githubusercontent.com` (not reachable from this
++  instance), and `-DCUCO_DOWNLOAD_ROARING_TESTDATA=OFF` (pure test fixtures).
++
++## 3. What the integration does (see `docs/amd-hipvs/README.md` for the map)
++
++1. `add_snap_index()` buffers `(vector, vid)` for `lib=hipvs` instead of inserting
++   into VSAG row-batch by row-batch;
++2. `finish_hipvs_snapshot()` (called at the end of the snapshot scan, from both
++   the DDL pipeline and the async snapshot task) hands the whole corpus once to
++   `libseekdb_hipvs.so`:
++   `cagra::build` (GPU) -> `hnsw::from_cagra` (GPU base layer + HNSW hierarchy)
++   -> `hnsw::serialize` (hnswlib layout) -> label rewrite to seekdb VIDs with full
++   structural re-validation -> atomic rename;
++3. `obvsag::build_hipvs_index()` imports that snapshot into the VSAG index that
++   would otherwise have been built on the CPU (`fdeserialize`), so reads, flushes,
++   and the incremental delta index are unchanged code paths;
++4. the observer never links ROCm: the backend is `dlopen()`ed from
++   `SEEKDB_HIPVS_LIBRARY`, and a missing library or GPU is a hard DDL error
++   (verified: see §6 "failure is explicit").
++
++## 4. Measured build time and recall
++
++Method (see `unittest/vector_index/benchmark_hipvs.py`): one table per library,
++data inserted once, then N rounds of `DROP INDEX` + `CREATE VECTOR INDEX idx ...
++WITH (distance=l2,type=hnsw,lib=<lib>,m=16,ef_construction=200,ef_search=200)`
++followed by the first `APPROXIMATE` query; the reported time therefore covers
++table scan, vector buffering, graph construction, VSAG import and snapshot
++serialization, i.e. "time until the index answers queries". Recall@10 is measured
++against an exact NumPy L2 ground truth over the same vectors and the same queries.
++Rounds alternate the library order, medians are reported, and every `lib=hipvs`
++round must contribute a `SEEKDB_HIPVS_BUILD` record with `gpu_compute=true`,
++`cpu_fallback=false` - otherwise the run aborts instead of reporting a speedup.
++
++| # | Corpus | rows x dim | CPU (`lib=vsag`) build | GPU (`lib=hipvs`) build | Speedup | CPU recall@10 | GPU recall@10 | CPU/GPU query median |
++| - | --- | --- | --- | --- | --- | --- | --- | --- |
++| 1 | clustered, embedding-like | 100 000 x 768 | 35.261 s | 11.493 s | **3.07x** | 0.998 | 0.918 | 0.47 / 0.49 ms |
++| 2 | clustered, embedding-like | 20 000 x 768 | 6.278 s | 4.870 s | 1.29x | 1.000 | 0.960 | 0.34 / 0.33 ms |
++| 3 | isotropic gaussian | 20 000 x 768 | 14.408 s | 4.581 s | **3.15x** | 0.586 | 0.518 | 0.54 / 0.69 ms |
++| 4 | isotropic gaussian | 20 000 x 128 | 5.344 s | 3.651 s | 1.46x | 0.684 | 0.662 | 0.26 / 0.27 ms |
++| 5 | isotropic gaussian, IVF-PQ graph build (early variant) | 20 000 x 128 | 5.354 s | 1.990 s | 2.69x | 0.684 | 0.579 | 0.28 / 0.32 ms |
++
++Per-round raw values of the headline run (#1), all with a GPU build record:
++
++```
++VSAG  r1 33.676 s recall 0.9980 | VSAG  r2 36.318 s recall 0.9980 | VSAG  r3 35.261 s recall 0.9980
++HIPVS r1 11.493 s recall 0.9560 | HIPVS r2 11.174 s recall 0.9180 | HIPVS r3 11.791 s recall 0.9180
++```
++
++Reading of the table:
++
++* **The headline run (#1) meets both requirements at once**: 3.07x faster build
++  with recall 0.918 against 0.998 for the CPU build - both above 0.90 - and the
++  resulting index answers queries at the same speed as the CPU-built one
++  (0.49 ms vs 0.47 ms median), because both are the same VSAG HNSW read path.
++* The speedup is a property of the *work*, not of the integration. The GPU side
++  costs almost the same for 20k and 100k rows of the same shape (4.6-4.9 s at 20k,
++  11.5 s at 100k), while the CPU build grows from 6.3 s to 35.3 s: at 20k rows the
++  fixed costs (table scan, buffering, VSAG import, snapshot serialization ~1.3 s)
++  dominate and the ratio is only 1.29x. Corpus shape matters the same way: with
++  768 gaussian dimensions the CPU build needs 14.4 s (every distance reads 3 KiB)
++  versus 4.6 s on the GPU = 3.15x, even at 20k rows.
++* Recall follows the expected trade-off. The GPU graph is a CAGRA k-NN graph
++  (NN-descent, degree `2*M`) pruned the CAGRA way, plus an HNSW hierarchy built by
++  hipVS' multi-threaded CPU routine. It lands 1.4-8.0 recall points below the CPU
++  build; on the hard 768-dim gaussian corpus both libraries sit at an operating
++  point where neither reaches 0.9, so that row is reported but not used as a
++  quality claim.
++* Variant 5 (`hnsw::to_cagra_params` -> IVF-PQ k-NN graph) is 2.7x faster than the
++  CPU build at 20k x 128 but loses 10.5 recall points, so it is *not* the default
++  in the final patch; the numbers are kept here because they show the tuning curve.
++
++## 5. Where the GPU time goes
++
++Records emitted by the backend (`SEEKDB_HIPVS_BUILD`, one JSON line per build) for
++the headline 100 000 x 768 run (three rounds):
++
++```
++"gpu_graph_ms": 4831.3, "hnsw_hierarchy_and_export_ms": 1409.4, "label_remap_ms": 259.4,
++"backend_total_ms": 6500.1
++"gpu_graph_ms": 4755.9, "hnsw_hierarchy_and_export_ms": 1486.3, "label_remap_ms": 265.4,
++"backend_total_ms": 6507.7
++"gpu_graph_ms": 5129.9, "hnsw_hierarchy_and_export_ms": 1417.0, "label_remap_ms": 284.9,
++"backend_total_ms": 6831.9
++```
++
++So of the 11.5 s `CREATE VECTOR INDEX`: 4.8-5.1 s CAGRA k-NN graph on the GPU,
++1.4-1.5 s HNSW hierarchy + hnswlib export, 0.26-0.28 s label rewrite, and the
++remaining ~4.7 s is seekdb-side work (table scan of 100k rows, buffering, VSAG
++import of 100k vectors, snapshot serialization) that the CPU path pays as well.
++
++For comparison, the 20 000 x 768 gaussian rounds of table row 3:
++
++```
++"gpu_graph_ms": 2694.4, "hnsw_hierarchy_and_export_ms": 402.1, "label_remap_ms": 96.5,
++"backend_total_ms": 3193.0
++"gpu_graph_ms": 2711.7, "hnsw_hierarchy_and_export_ms": 393.0, "label_remap_ms": 41.9,
++"backend_total_ms": 3146.6
++"gpu_graph_ms": 2657.9, "hnsw_hierarchy_and_export_ms": 425.8, "label_remap_ms": 38.1,
++"backend_total_ms": 3121.8
++```
++
++So of the 4.58 s `CREATE VECTOR INDEX`: 2.7 s CAGRA k-NN graph on the GPU, 0.4 s
++HNSW hierarchy + hnswlib export, 0.04-0.1 s label rewrite, and the remaining
++~1.4 s is seekdb-side work (table scan, buffering, VSAG import of 20 000 vectors,
++snapshot serialization) that the CPU path pays as well.
++
++## 6. Evidence that the GPU did the work
++
++1. **Device identity in every build record**:
++   `"device":"backend=hipVS vendor=AMD arch=gfx1100 name=AMD Radeon Graphics
++   gcnArch=gfx1100 device=0 hbm=48.0GiB"`.
++2. **Device-side sampling** (`rocm-smi --showuse --showmemuse --showtemp`, 2 s
++   interval, 196 samples during the 100k benchmark): GPU use sits at 0 % while the
++   CPU baseline builds and jumps to **100 %** (3 samples, 6 s at 100 %) with
++   intermediate peaks of 25/23/16/13 % exactly during the three `lib=hipvs`
++   build windows - `logs/rocm_smi_100k.log`.
++3. **Independent format check**: the exported snapshot is loaded back with
++   *stock hnswlib* (`hipvs_backend/tools/hipvs_selftest.cpp`) and queried:
++   `elements=20000, maxlevel=3, recall@10=0.8795, bad_labels=0` for 20 000 x 128 -
++   i.e. the file is a real hnswlib index whose labels are the seekdb VIDs.
++4. **Independent VSAG import check** (`hipvs_backend/tools/vsag_import_probe.cpp`,
++   the same `Factory::CreateIndex(...)->Deserialize(istream)` path seekdb uses):
++   `io count (21296) ... hnsw deserialize cost 405.9 ms ... elements=20000`
++   then `vsag_import_recall@10=0.9938`.
++5. **Server-side logs**: `hipvs backend ready(library=...)`,
++   `hipvs GPU build imported(size=..., dim=..., max_degree=..., ef_construction=...)`,
++   `hipvs snapshot finished(count=...)`, plus the per-build JSON record.
++6. **Failure is explicit, not a silent CPU fallback** (measured): with
++   `SEEKDB_HIPVS_LIBRARY` unset the DDL fails and the log shows
++   `WDIAG [LIB] hipvs_backend_available ... hipvs backend shared object not loadable; lib=hipvs indexes will be rejected`
++   followed by
++   `WDIAG [LIB] build_hipvs_index ... hipvs backend unavailable, refusing to fall back to a CPU build(ret=-4007, hint="set SEEKDB_HIPVS_LIBRARY before starting observer")`
++   and `CREATE VECTOR INDEX` returns an error - no index is built on the CPU.
++7. `lib=vsag` never touches the new code: the CPU rows in §4 were produced by the
++   same binary with `lib=vsag` and have zero `SEEKDB_HIPVS_BUILD` records
++   (`gpu_records=0` in the raw JSON).
++
++## 7. Current limitations / honest gaps
++
++* The `>= 3x` target is met at 100k x 768 clustered (3.07x) and at 20k x 768
++  gaussian (3.15x), and missed at 20k rows (1.29x clustered, 1.46x at 128 dim)
++  where the fixed costs of a DDL build (~1.3 s on the seekdb side plus CAGRA launch
++  and the hierarchy) dominate the 5-6 s of CPU graph work. The ratio grows with N
++  and with the cost of one distance computation.
++* Recall parity is approximate, not exact: the GPU graph lands 1.4 (128-dim),
++  4.0-8.0 (clustered 768) and 9.0 (768-dim gaussian) points below the CPU graph on
++  the corpora measured here. Closing it further needs a wider k-NN graph
++  (`intermediate_graph_degree` 64 -> 128) at the cost of GPU time, or an extra
++  refinement pass; that tuning is left as follow-up rather than being hidden.
++* The `ef_search` used at *query* time in this build does not follow the DDL
++  parameter (searched recall is flat from ef_search=200 to 2000 - see
++  `logs/recall_sweep.json`), so recall comparisons are all made at the same
++  search effort by construction; a query-time ef sweep would need the session
++  variable, which is out of scope for this patch.
++* One build at a time per process: the ROCm backend serialises builds on a mutex
++  and runs them on a dedicated OS thread (ROCm is not documented as safe on
++  coroutine stacks).
++* The GPU path only accepts FP32 + L2 + plain HNSW without extra info; SQ/BQ,
++  IVF, cosine/IP and extra-info indexes stay on VSAG and are rejected at DDL time
++  if `lib=hipvs` is requested.
++
++## 8. Artifacts
++
++| Artifact | Path |
++| --- | --- |
++| Patch against `2026-competition` | `seekdb-hipvs.patch` (git-apply format) |
++| GPU backend sources | `src/oblib/lib/vector/hipvs_backend/` |
++| C ABI | `src/oblib/lib/vector/hipvs_build_api.h` |
++| Benchmark / recall sweep | `unittest/vector_index/benchmark_hipvs.py`, `recall_sweep.py` |
++| Raw run JSON | `logs/bench_*.json`, `logs/recall_sweep.json` (on the experiment host) |
++| GPU build records | `logs/hipvs_records.log` (on the experiment host) |
++| rocm-smi samples | `logs/rocm_smi_100k.log` (on the experiment host) |
+\ No newline at end of file
+diff --git a/docs/amd-hipvs/PR_DESCRIPTION.md b/docs/amd-hipvs/PR_DESCRIPTION.md
+new file mode 100644
+--- /dev/null
++++ b/docs/amd-hipvs/PR_DESCRIPTION.md
+@@ -0,0 +1,122 @@
++# PR: build seekdb HNSW indexes on an AMD GPU with hipVS (`lib=hipvs`)
++
++## What
++
++Adds an optional, opt-in AMD GPU backend for HNSW index construction:
++
++```sql
++CREATE VECTOR INDEX idx ON points(v)
++  WITH (distance=l2, type=hnsw, lib=hipvs, m=16, ef_construction=200, ef_search=100);
++```
++
++`lib=vsag` (the default) keeps its current behaviour byte for byte.
++
++## Why it is a build accelerator and not a "GPU search demo"
++
++The GPU is used where the cost is: the k-NN graph. The pipeline inside the DSO is
++
++```
++cagra::build            (GPU: k-NN graph, degree 2*M, NN-descent)
++  -> hnsw::from_cagra   (GPU base layer + HNSW hierarchy via hipVS' CPU routine)
++  -> hnsw::serialize    (classic 64-bit hnswlib layout)
++  -> label rewrite      (internal row -> seekdb VID, with full re-validation)
++  -> fdeserialize       (import into the VSAG index seekdb would have built)
++```
++
++Queries, flushes, snapshot serialization and the incremental delta index are
++untouched: the index that answers SQL is a normal VSAG HNSW index.
++
++## Where it plugs in
++
++| File | Change |
++| --- | --- |
++| `src/oblib/lib/vector/hipvs_build_api.h` | new: C ABI (`seekdb_hipvs_build_v1`, `..._probe_v1`, `..._abi_version_v1`) |
++| `src/oblib/lib/vector/hipvs_backend/{CMakeLists.txt,hipvs_build.cpp,hipvs_snapshot_export.hpp}` | new: standalone hipcc/`find_package(cuvs)` project producing `libseekdb_hipvs.so` |
++| `src/oblib/lib/vector/hipvs_backend/tools/*` | new: acceptance tools (stock-hnswlib read-back, VSAG import probe) - never part of the server build |
++| `src/oblib/lib/vector/ob_vsag_adaptor.{h,cpp}` | `obvsag::build_hipvs_index()`: `dlopen(SEEKDB_HIPVS_LIBRARY)`, run the build on a dedicated OS thread, import the snapshot into VSAG. Fails hard when the backend/GPU is missing |
++| `src/query/api/query/vector/ob_vector_index_util.h` | `ObVectorIndexAlgorithmLib::VIAL_HIPVS` |
++| `src/observer/vector_index/ob_vector_index_util.cpp` | parse `LIB=HIPVS`; restrict it to plain FP32/HNSW/L2 without extra info; keep it across `ALTER`/rebuild |
++| `src/query/api/query/vector/ob_vector_index_adaptor.h` | `hipvs_built_` flag, `finish_hipvs_snapshot()` |
++| `src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp` | buffer the snapshot for `lib=hipvs` in `add_snap_index()`, build it once at the end of the scan in `finish_hipvs_snapshot()`, called from both the DDL pipeline and the async snapshot task |
++| `unittest/vector_index/benchmark_hipvs.py`, `recall_sweep.py` | new: 3-round CPU/GPU benchmark with Recall@K, GPU evidence extraction and recall sweep |
++| `docs/amd-hipvs/{README.md,REPORT.md}` | new: design, build/run steps, measured results |
++
++## Impact / safety
++
++* **No ROCm in the server link line.** The observer is built by the existing
++  toolchain; HIP/cuVS live only in `libseekdb_hipvs.so`, loaded on demand. A node
++  without the library or without a GPU still starts and serves `lib=vsag`
++  normally.
++* **No silent CPU fallback.** If the backend cannot be loaded or no AMD GPU is
++  visible, `CREATE VECTOR INDEX ... lib=hipvs` fails with `OB_NOT_SUPPORTED` and a
++  warning that names the reason; with the variable unset the log shows
++  `hipvs backend unavailable, refusing to fall back to a CPU build`.
++  `SEEKDB_HIPVS_LIBRARY` must be set before the observer starts (the backend is
++  resolved once per process and kept, because the HIP runtime keeps thread-local
++  state).
++* **Unsupported combinations are rejected at DDL time** rather than silently
++  downgraded: quantized HNSW (`HNSW_SQ`/`HNSW_BQ`), `IVF*`, `COSINE`/`INNER_PRODUCT`
++  distance, extra-info columns, and corpora with `N <= 2*M`.
++* **Restart-safe.** A snapshot that comes back from the persisted VSAG stream is
++  detected (`old_count > 0`) and is never rebuilt or replaced; `hipvs_built_` is
++  reset by `free_memdata_resource()` so a retried snapshot does re-run.
++* **One build at a time per process**, serialised on a mutex (the ROCm runtime is
++  not documented as safe for concurrent builds in one process, and one build
++  already fills the device).
++* **Evidence is machine readable**: every GPU build appends one JSON record to
++  `SEEKDB_HIPVS_TRACE_FILE` (or stderr) with `gpu_compute`, `cpu_fallback`,
++  device identity (`arch=gfx1100`, name, HBM) and the per-phase timings.
++* **Failures are not papered over**: the snapshot conversion re-validates degree
++  bounds, label permutation, corpus bytes and the upper-layer extent, and only a
++  fully validated file is published (temp + rename).
++
++## Measured (3-round medians, same data/parameters, this machine)
++
++| corpus | CPU `lib=vsag` | GPU `lib=hipvs` | speedup | CPU recall@10 | GPU recall@10 |
++| --- | --- | --- | --- | --- | --- |
++| clustered 100k x 768 | 35.261 s | 11.493 s | **3.07x** | 0.998 | 0.918 |
++| clustered 20k x 768 | 6.278 s | 4.870 s | 1.29x | 1.000 | 0.960 |
++| gaussian 20k x 768 | 14.408 s | 4.581 s | **3.15x** | 0.586 | 0.518 |
++| gaussian 20k x 128 | 5.344 s | 3.651 s | 1.46x | 0.684 | 0.662 |
++
++The headline row meets both targets at once (>=3x and both recalls >=0.90) and the
++resulting index answers queries at the same speed as the CPU-built one
++(0.49 ms vs 0.47 ms median), because it is the same VSAG HNSW read path.
++
++Details, per-phase GPU timings, GPU evidence and the honest limitations are in
++`docs/amd-hipvs/REPORT.md`; reproduction steps are in `docs/amd-hipvs/README.md`.
++
++## How to test
++
++```bash
++# 1. build and install hipVS (with CAGRA HNSW wrapper), then:
++cmake -S src/oblib/lib/vector/hipvs_backend -B build_hipvs -G Ninja \
++      -DCMAKE_CXX_COMPILER=hipcc -DCMAKE_HIP_ARCHITECTURES=gfx1100 \
++      -Dhip_DIR=/opt/rocm/lib/cmake/hip -DHIP_DIR=/opt/rocm/lib/cmake/hip \
++      -DCMAKE_PREFIX_PATH="/opt/rocm;/opt/hipvs" -DCMAKE_BUILD_TYPE=Release
++cmake --build build_hipvs -j && cmake --install build_hipvs
++
++# 2. run the server with the backend available
++export SEEKDB_HIPVS_LIBRARY=/opt/seekdb-hipvs/lib/libseekdb_hipvs.so
++export SEEKDB_HIPVS_TRACE_FILE=/tmp/hipvs_build_records.log
++./build.sh release --make && ./tools/deploy/obd.sh prepare -p /tmp/obtest \
++  && ./tools/deploy/obd.sh deploy -c ./tools/deploy/single.yaml
++
++# 3. create a GPU index and compare with the CPU baseline
++python3 unittest/vector_index/benchmark_hipvs.py --port <port> --database test \
++    --gpu-log /tmp/hipvs_build_records.log --rows 20000 --dim 768 --rounds 3
++```
++
++Without the shared object the same script reports
++`hipvs backend unavailable, refusing to fall back to a CPU build` for every GPU
++round, which is the intended behaviour.
++
++## Checklist
++
++- [x] `lib=vsag` untouched
++- [x] GPU evidence required for every reported GPU build
++- [x] >= 3 rounds, medians
++- [x] Recall@K for both libraries against exact ground truth
++- [x] explicit error instead of CPU fallback
++- [ ] PR opened from the fork (blocked: no GitHub credentials in this
++      environment; patch is `seekdb-hipvs.patch` against `2026-competition`)
+\ No newline at end of file

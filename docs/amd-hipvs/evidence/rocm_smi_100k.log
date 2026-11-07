@@ -1,0 +1,2310 @@
+--- 05:19:00
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 29.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:03
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:05
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:07
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:09
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:11
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:13
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 27.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:15
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:18
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:20
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:22
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:24
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:26
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:28
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:30
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:33
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:35
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:37
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:39
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:41
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:43
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:45
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:48
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:50
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:52
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:54
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:56
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:19:58
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:00
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:02
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:05
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:07
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:09
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:11
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:13
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:15
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:17
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:20
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:22
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:24
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:26
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:28
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:30
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:33
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:35
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:37
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:39
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:41
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:43
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:45
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:48
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:50
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:52
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:54
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:56
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:20:58
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:00
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:02
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:05
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:07
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:09
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:11
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:13
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:15
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 35.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 13
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:20
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 35.0
+GPU[0]		: Temperature (Sensor memory) (C): 33.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:22
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 33.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:24
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 29.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:26
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 36.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: GPU use (%): 100
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 9
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:30
+GPU[0]		: Temperature (Sensor edge) (C): 29.0
+GPU[0]		: Temperature (Sensor junction) (C): 37.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:32
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 36.0
+GPU[0]		: Temperature (Sensor memory) (C): 35.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:34
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 34.0
+GPU[0]		: Temperature (Sensor memory) (C): 35.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:36
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:39
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:41
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:43
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 29.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:45
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 34.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 16
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:48
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 36.0
+GPU[0]		: Temperature (Sensor memory) (C): 36.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:51
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 35.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:53
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:55
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:57
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:21:59
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:02
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:04
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:06
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:08
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 23
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:10
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:12
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:14
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:16
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:19
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:21
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 31.0
+GPU[0]		: GPU use (%): 25
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:24
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:26
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:28
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:30
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:32
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:34
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:36
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:39
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:41
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:43
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 27.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:45
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 27.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:47
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:49
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 35.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 100
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:53
+GPU[0]		: Temperature (Sensor edge) (C): 28.0
+GPU[0]		: Temperature (Sensor junction) (C): 36.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:56
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 35.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:22:58
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 34.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:00
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:03
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:05
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:07
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:09
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:11
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:13
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:15
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:17
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:20
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:22
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:24
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:26
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:28
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 27.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:30
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:32
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:35
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:37
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:39
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:41
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:43
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:45
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:47
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:50
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:52
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:54
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:56
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:23:58
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:00
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:02
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:05
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:07
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:09
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:11
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:13
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:15
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:17
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:19
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:22
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:24
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:26
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:28
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:30
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:32
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:34
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:37
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:39
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:41
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:43
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:45
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:47
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:49
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:52
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:54
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:56
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:24:58
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:00
+GPU[0]		: Temperature (Sensor edge) (C): 24.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:02
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:04
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:07
+GPU[0]		: Temperature (Sensor edge) (C): 24.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:09
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:11
+GPU[0]		: Temperature (Sensor edge) (C): 24.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:13
+GPU[0]		: Temperature (Sensor edge) (C): 24.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:15
+GPU[0]		: Temperature (Sensor edge) (C): 24.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:17
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:19
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:21
+GPU[0]		: Temperature (Sensor edge) (C): 24.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:24
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:26
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:28
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 34.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 100
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:31
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:33
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:35
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:37
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:39
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 27.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:42
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:44
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:46
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:48
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:50
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:52
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:54
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:57
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:25:59
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:01
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:03
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:05
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:07
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:09
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:11
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:14
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:16
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:18
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:20
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:22
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:24
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 27.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:26
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:29
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:31
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:33
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:35
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:37
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:39
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 29.0
+GPU[0]		: GPU use (%): 80
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:42
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 34.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:45
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 33.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:47
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 32.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:49
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:51
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:53
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:55
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:57
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:26:59
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:02
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:04
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:06
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:08
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:10
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:12
+GPU[0]		: Temperature (Sensor edge) (C): 25.0
+GPU[0]		: Temperature (Sensor junction) (C): 30.0
+GPU[0]		: Temperature (Sensor memory) (C): 26.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:15
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:17
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 33.0
+GPU[0]		: Temperature (Sensor memory) (C): 32.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:20
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 30.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:22
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0
+--- 05:27:24
+GPU[0]		: Temperature (Sensor edge) (C): 26.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 28.0
+GPU[0]		: GPU use (%): 0
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: N/A
+GPU[0]		: Avg. Memory Bandwidth: 0

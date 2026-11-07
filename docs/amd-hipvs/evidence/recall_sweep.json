@@ -1,0 +1,57 @@
+{
+  "dataset": {
+    "rows": 20000,
+    "dim": 768,
+    "kind": "synthetic-normal-fp32"
+  },
+  "parameters": {
+    "m": 16,
+    "ef_construction": 200,
+    "k": 10
+  },
+  "results": [
+    {
+      "library": "VSAG",
+      "ef_search": 200,
+      "build_seconds": 14.464230246841908,
+      "recall_at_k": 0.586,
+      "query_median_ms": 0.547981821000576
+    },
+    {
+      "library": "VSAG",
+      "ef_search": 800,
+      "build_seconds": 19.70011131837964,
+      "recall_at_k": 0.586,
+      "query_median_ms": 0.6267623975872993
+    },
+    {
+      "library": "VSAG",
+      "ef_search": 2000,
+      "build_seconds": 14.377121703699231,
+      "recall_at_k": 0.586,
+      "query_median_ms": 0.562937930226326
+    },
+    {
+      "library": "HIPVS",
+      "ef_search": 200,
+      "build_seconds": 4.713096467778087,
+      "recall_at_k": 0.49200000000000005,
+      "query_median_ms": 0.7332665845751762
+    },
+    {
+      "library": "HIPVS",
+      "ef_search": 800,
+      "build_seconds": 4.723569763824344,
+      "recall_at_k": 0.4799999999999999,
+      "query_median_ms": 0.6816089153289795
+    },
+    {
+      "library": "HIPVS",
+      "ef_search": 2000,
+      "build_seconds": 4.4828718192875385,
+      "recall_at_k": 0.49,
+      "query_median_ms": 0.7312726229429245
+    }
+  ],
+  "worst_recall_gap": 0.10600000000000004
+}

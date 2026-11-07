@@ -1,0 +1,36 @@
+{
+  "status": "failed",
+  "started_at": "2026-11-07T05:03:27.470413+00:00",
+  "dataset": {
+    "kind": "synthetic-normal-fp32",
+    "seed": 20261107,
+    "rows": 2000,
+    "dim": 32,
+    "queries": 20,
+    "sha256": "2754e317c5ad5ab5e946523c5ee1325f8166a19853a9ce8ef1392af079af1b10"
+  },
+  "parameters": {
+    "m": 16,
+    "ef_construction": 200,
+    "ef_search": 100,
+    "k": 10
+  },
+  "timing_scope": "CREATE VECTOR INDEX + first APPROXIMATE query through the new index",
+  "runs": [
+    {
+      "library": "VSAG",
+      "round": 1,
+      "build_seconds": 0.7440783455967903,
+      "recall_at_k": 0.9949999999999999,
+      "query_median_ms": 0.21294783800840378,
+      "query_p95_ms": 0.24718930944800385,
+      "explain_uses_index": true,
+      "gpu_evidence": []
+    }
+  ],
+  "medians": {},
+  "speedup": null,
+  "recall_ok": null,
+  "database_version": "5.7.25-OceanBase seekdb-v1.4.0.0",
+  "error": "RuntimeError: no SEEKDB_HIPVS_BUILD record in the server log for this round: the GPU path cannot be claimed, aborting"
+}

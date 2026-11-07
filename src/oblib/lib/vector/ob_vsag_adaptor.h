@@ -122,6 +122,18 @@ int create_index(VectorIndexPtr &index_handler, IndexType index_type, const char
 int build_index(VectorIndexPtr& index_handler, float* vector_list, int64_t* ids, int dim, int size, char *extra_infos = nullptr);
 int build_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids, int size,
     char *extra_info = nullptr);
+// Build the whole HNSW graph of `index_handler` on the AMD GPU through the
+// optional hipVS backend shared object (SEEKDB_HIPVS_LIBRARY) and import the
+// resulting snapshot into VSAG. The GPU backend is dlopen()ed on demand so the
+// server itself never links ROCm.
+// Returns OB_NOT_SUPPORTED when the backend/GPU is unavailable or the request is
+// outside the supported subset (plain FP32 HNSW, L2, no extra info); the caller
+// must treat that as a hard error and never fall back to a CPU build silently.
+int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
+                      const int64_t *ids, int dim, int64_t size,
+                      int max_degree, int ef_construction);
+// True when the hipVS backend shared object was loaded successfully.
+bool hipvs_backend_available();
 int add_index(VectorIndexPtr& index_handler, float* vector, int64_t* ids, int dim, int size, char *extra_info = nullptr);
 int add_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids, int size,
     char *extra_info = nullptr);
