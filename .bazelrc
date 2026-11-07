@@ -13,6 +13,8 @@ build --force_pic
 build --compilation_mode=opt
 build --@rules_rust//rust/settings:lto=thin
 build --@rules_rust//rust/settings:codegen_units=1
+build --@rules_rust//rust/settings:extra_exec_rustc_flag=-Copt-level=0
+build --@rules_rust//rust/settings:extra_exec_rustc_flag=-Cdebuginfo=0
 build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 build:clippy --output_groups=clippy_checks
 build:clippy --@rules_rust//rust/settings:clippy_flag=-Dwarnings
@@ -35,6 +37,7 @@ build:windows --features=compiler_param_file
 build:windows --features=-static_link_msvcrt
 build:O1 --compilation_mode=fastbuild
 build:O1 --copt=-O1
+build:O1 --@rules_rust//rust/settings:lto=off
 build:O2 --compilation_mode=opt
 # Apple's fastbuild/dbg DEBUG macro conflicts with seekdb's DEBUG log level.
 build:macos --copt=-UDEBUG
