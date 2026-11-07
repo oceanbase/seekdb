@@ -417,24 +417,32 @@ for step in agent.run():
 <summary><b>🗄️ SQL — スキーマ + ハイブリッド検索</b></summary>
 
 ```sql
--- ベクトル列、全文インデックス、HNSW ベクトルインデックスを持つテーブル
+-- ベクトル列と全文インデックスを持つテーブルを作成
 CREATE TABLE articles (
   id        INT PRIMARY KEY,
   title     TEXT,
   content   TEXT,
-  embedding VECTOR(384),
-  FULLTEXT INDEX idx_fts (content) WITH PARSER ik,
-  VECTOR   INDEX idx_vec (embedding) WITH (DISTANCE=l2, TYPE=hnsw, LIB=vsag)
+  embedding VECTOR(3),
+  FULLTEXT INDEX idx_fts (content) WITH PARSER ik
 ) ORGANIZATION = HEAP;
 
--- ハイブリッド検索：ベクトル類似度 + 全文マッチを 1 つのクエリで
+-- サンプルデータを挿入してから HNSW インデックスを作成
+INSERT INTO articles (id, title, content, embedding) VALUES
+  (1, 'Quarterly update', 'quarterly report', '[0.12, 0.34, 0.56]'),
+  (2, 'Meeting notes', 'planning notes', '[0.12, 0.34, 0.56]'),
+  (3, 'Quarterly archive', 'quarterly report archive', '[0.32, 0.34, 0.56]');
+CREATE VECTOR INDEX idx_vec ON articles (embedding) WITH (DISTANCE=l2, TYPE=hnsw, LIB=vsag);
+
+-- 全文検索と近似ベクトル検索を組み合わせる
 SELECT id, title,
-       l2_distance(embedding, '[0.12, 0.34, ...]') AS dist
+       l2_distance(embedding, '[0.12, 0.34, 0.56]') AS dist
 FROM articles
 WHERE MATCH(content) AGAINST('quarterly report')
 ORDER BY dist APPROXIMATE
 LIMIT 10;
 ```
+
+クエリは記事 `1`、`3` の順に返します。
 
 Python 開発者は SQLAlchemy や任意の MySQL ドライバーでアクセスできます。
 
