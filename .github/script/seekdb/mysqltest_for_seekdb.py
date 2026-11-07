@@ -318,6 +318,7 @@ def mysqltest_environment(args):
             "OBMYSQL_PWD": MYSQLTEST_PASSWORD,
             "OBMYSQL_USR": MYSQLTEST_USER,
             "OBSERVER_DIR": str(args.base_dir),
+            "FILE_SQL_REPO_ROOT": str(Path(__file__).resolve().parents[3]),
             "IS_BUSINESS": "0",
             "TENANT": "mysql",
         }
