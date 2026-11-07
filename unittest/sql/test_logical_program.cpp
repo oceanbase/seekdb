@@ -23,6 +23,10 @@
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/session/ob_sql_session_info.h"
 
+namespace oceanbase { namespace sql {
+int calc_bool_expr_for_integer_type(const ObExpr &, ObEvalCtx &, ObDatum &);
+}}
+
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 namespace {
@@ -56,6 +60,12 @@ int materialize_shared_and_return_true(const ObExpr &, ObEvalCtx &ctx, ObDatum &
 {
   reentry_shared->locate_datum_for_write(ctx).set_int(1);
   reentry_shared->get_eval_info(ctx).projected_ = true;
+  result.set_int(1);
+  return OB_SUCCESS;
+}
+int mutate_materialized_column(const ObExpr &, ObEvalCtx &ctx, ObDatum &result)
+{
+  reentry_leaf->locate_datum_for_write(ctx).set_int(0);
   result.set_int(1);
   return OB_SUCCESS;
 }
@@ -121,6 +131,18 @@ protected:
     for (int child : children) { args_[index].push_back(&exprs_[child]); }
     expr.args_ = args_[index].data();
     ASSERT_EQ(OB_SUCCESS, prepare_logical_program(expr, allocator_));
+  }
+  void integer_normalizer(int index, int column) {
+    exprs_[column].eval_func_ = nullptr;
+    exprs_[column].eval_batch_func_ = nullptr;
+    auto &expr = exprs_[index];
+    expr.type_ = T_OP_BOOL;
+    expr.datum_meta_.type_ = ObInt32Type;
+    expr.arg_cnt_ = 1;
+    args_[index] = {&exprs_[column]};
+    expr.args_ = args_[index].data();
+    expr.eval_func_ = calc_bool_expr_for_integer_type;
+    expr.eval_batch_func_ = expr_default_eval_batch_func;
   }
   ObArenaAllocator allocator_;
   ObSQLSessionInfo session_;
@@ -237,6 +259,61 @@ TEST_F(LogicalProgramTest, ExternalRefreshRecognizesNewMaterializedLogicalFronti
   ObDatum *result = nullptr;
   ASSERT_EQ(OB_SUCCESS, exprs_[4].eval(ctx, result));
   ASSERT_FALSE(result->is_null());
+  EXPECT_EQ(1, result->get_int());
+  EXPECT_EQ(0, inputs[0].calls);
+  EXPECT_EQ(0, inputs[1].calls);
+}
+TEST_F(LogicalProgramTest, IntegerNormalizerKeepsItsCacheWhenColumnChanges) {
+  integer_normalizer(1, 0);
+  exprs_[2].eval_func_ = mutate_materialized_column;
+  logical(3, T_OP_AND, {1, 2, 1});
+  reentry_leaf = &exprs_[0];
+  ObEvalCtx ctx(exec_);
+  exprs_[0].locate_datum_for_write(ctx).set_int(7);
+  ObDatum *result = nullptr;
+  ASSERT_EQ(OB_SUCCESS, exprs_[3].eval(ctx, result));
+  EXPECT_EQ(1, result->get_int());
+  EXPECT_TRUE(exprs_[1].get_eval_info(ctx).evaluated_);
+  EXPECT_EQ(1, exprs_[1].locate_expr_datum(ctx).get_int());
+  EXPECT_EQ(0, exprs_[0].locate_expr_datum(ctx).get_int());
+}
+TEST_F(LogicalProgramTest, IntegerNormalizerBatchRespectsNullAndSelection) {
+  integer_normalizer(1, 0);
+  for (int i = 0; i < 3; ++i) {
+    exprs_[i].batch_result_ = true;
+    exprs_[i].batch_idx_mask_ = UINT64_MAX;
+  }
+  logical(2, T_OP_NOT, {1});
+  ObEvalCtx ctx(exec_);
+  ObEvalCtx::BatchInfoScopeGuard batch(ctx);
+  batch.set_batch_size(4);
+  auto *column = exprs_[0].locate_datums_for_update(ctx, 4);
+  column[0].set_int(7);
+  column[1].set_null();
+  column[2].set_int(0);
+  column[3].set_int(9);
+  exprs_[1].locate_datums_for_update(ctx, 4);
+  uint64_t skip_storage = 0;
+  auto &skip = *to_bit_vector(&skip_storage);
+  skip.set(3);
+  ASSERT_EQ(OB_SUCCESS, exprs_[2].eval_batch(ctx, skip, 4));
+  EXPECT_EQ(0, exprs_[2].locate_expr_datum(ctx, 0).get_int());
+  EXPECT_TRUE(exprs_[2].locate_expr_datum(ctx, 1).is_null());
+  EXPECT_EQ(1, exprs_[2].locate_expr_datum(ctx, 2).get_int());
+  EXPECT_FALSE(exprs_[1].get_evaluated_flags(ctx).at(3));
+  EXPECT_FALSE(exprs_[2].get_evaluated_flags(ctx).at(3));
+}
+TEST_F(LogicalProgramTest, BoolTypeWithCustomEvaluatorStillRefreshesSharedCache) {
+  integer_normalizer(2, 6);
+  exprs_[2].eval_func_ = materialize_shared_and_return_true;
+  inputs[0].error = inputs[1].error = OB_DIVISION_BY_ZERO;
+  logical(3, T_OP_AND, {0, 1});
+  logical(4, T_OP_AND, {2, 3});
+  reentry_shared = &exprs_[3];
+  ObEvalCtx ctx(exec_);
+  exprs_[6].locate_datum_for_write(ctx).set_int(1);
+  ObDatum *result = nullptr;
+  ASSERT_EQ(OB_SUCCESS, exprs_[4].eval(ctx, result));
   EXPECT_EQ(1, result->get_int());
   EXPECT_EQ(0, inputs[0].calls);
   EXPECT_EQ(0, inputs[1].calls);

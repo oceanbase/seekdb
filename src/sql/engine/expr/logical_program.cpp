@@ -25,6 +25,7 @@
 
 namespace oceanbase { namespace sql {
 using namespace common;
+int calc_bool_expr_for_integer_type(const ObExpr &, ObEvalCtx &, ObDatum &);
 OB_SERIALIZE_MEMBER(LogicalProgramInfo, image_, parents_, ordinals_);
 
 int LogicalProgramInfo::deep_copy(ObIAllocator &allocator, ObExprOperatorType type,
@@ -48,6 +49,19 @@ namespace {
 bool is_logical(const ObExpr &expr)
 {
   return expr.type_ == T_OP_AND || expr.type_ == T_OP_OR || expr.type_ == T_OP_NOT;
+}
+
+bool is_materialized_integer_normalization(const ObExpr &expr)
+{
+  if (expr.type_ != T_OP_BOOL || expr.eval_func_ != calc_bool_expr_for_integer_type
+      || (expr.eval_batch_func_ != nullptr && expr.eval_batch_func_ != expr_default_eval_batch_func)
+      || expr.arg_cnt_ != 1 || expr.args_ == nullptr || expr.args_[0] == nullptr) {
+    return false;
+  }
+  const ObExpr &column = *expr.args_[0];
+  return column.type_ == T_REF_COLUMN && column.eval_func_ == nullptr
+      && column.eval_batch_func_ == nullptr
+      && (ob_is_int_uint_tc(column.datum_meta_.type_) || column.datum_meta_.type_ == ObBitType);
 }
 
 int poll_logical_status(ObEvalCtx &ctx, int64_t &visits)
@@ -195,12 +209,17 @@ public:
     uint64_t *flag_data = flags.data();
     const ObExpr &input = *nodes_.at(node);
     if (!is_logical(input)) {
-      if (OB_FAIL(publish_completed(
-          rust::Slice<const uint64_t>(value_data, value_count),
-          rust::Slice<const uint64_t>(flag_data, value_count), rows_, false))) {
-        return ret;
+      // This normalizer only reads a materialized column and writes its own cache.
+      // Every other evaluator may reenter or invalidate shared logical frames.
+      const bool handoff = !is_materialized_integer_normalization(input);
+      if (handoff) {
+        if (OB_FAIL(publish_completed(
+            rust::Slice<const uint64_t>(value_data, value_count),
+            rust::Slice<const uint64_t>(flag_data, value_count), rows_, false))) {
+          return ret;
+        }
+        publication_safe_ = false;
       }
-      publication_safe_ = false;
       if (batch_) {
         ObEvalCtx::TempAllocGuard guard(ctx_);
         const int64_t bytes = ObBitVector::memory_size(rows_);
@@ -220,7 +239,7 @@ public:
         ObDatum *datum = nullptr;
         ret = input.eval(ctx_, datum);
       }
-      for (size_t cached_node = 0; cached_node < count; ++cached_node) {
+      for (size_t cached_node = 0; handoff && cached_node < count; ++cached_node) {
         const ObExpr &cached = *nodes_.at(cached_node);
         const ObEvalInfo &available = cached.get_eval_info(ctx_);
         for (int64_t row = 0; row < rows_; ++row) {
