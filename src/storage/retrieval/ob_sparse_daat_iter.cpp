@@ -117,7 +117,10 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     k_way_primed_(false),
     k_way_int_ids_(false),
     k_way_id_unsigned_(false),
-    k_way_dim_cnt_(0)
+    k_way_dim_cnt_(0),
+    direct_project_(false),
+    direct_project_int_id_(false),
+    proj_id_datums_(nullptr)
 {
   for (int64_t i = 0; i < MAX_FAST_DIMS; ++i) {
     k_way_valid_[i] = false;
@@ -214,6 +217,14 @@ int ObSRDaaTIterImpl::init(
       const common::ObObjType id_type = iter_param_->id_proj_expr_->datum_meta_.type_;
       k_way_int_ids_ = (common::ObUInt64Type == id_type || common::ObIntType == id_type);
       k_way_id_unsigned_ = (common::ObUInt64Type == id_type);
+      // Fuse projection into the merge loops when the output batch is vectorized
+      // and no relevance column needs to be materialized.
+      direct_project_ = (two_way_fast_ || k_way_fast_)
+                        && iter_param_->eval_ctx_->is_vectorized()
+                        && !iter_param.need_project_relevance()
+                        && !iter_param.need_filter();
+      direct_project_int_id_ = (common::ObUInt64Type == id_type);
+      proj_id_datums_ = nullptr;
       for (int64_t i = 0; i < MAX_FAST_DIMS; ++i) {
         k_way_valid_[i] = false;
         k_way_ids_[i] = nullptr;
@@ -246,6 +257,7 @@ void ObSRDaaTIterImpl::reset()
   two_way_iter0_valid_ = false;
   two_way_iter1_valid_ = false;
   k_way_primed_ = false;
+  proj_id_datums_ = nullptr;
   for (int64_t i = 0; i < MAX_FAST_DIMS; ++i) {
     k_way_valid_[i] = false;
     k_way_ids_[i] = nullptr;
@@ -274,6 +286,7 @@ void ObSRDaaTIterImpl::reuse(const bool switch_tablet)
   two_way_iter0_valid_ = false;
   two_way_iter1_valid_ = false;
   k_way_primed_ = false;
+  proj_id_datums_ = nullptr;
   for (int64_t i = 0; i < MAX_FAST_DIMS; ++i) {
     k_way_valid_[i] = false;
     k_way_ids_[i] = nullptr;
@@ -341,6 +354,11 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
   } else {
     count = 0;
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
+    if (direct_project_ && real_capacity > 0) {
+      // Locate the whole output batch once; cache_result() writes datums directly.
+      proj_id_datums_ = iter_param_->id_proj_expr_->locate_datums_for_update(*iter_param_->eval_ctx_,
+                                                                             real_capacity);
+    }
     while (OB_SUCC(ret) && count < real_capacity) {
       if (k_way_fast_) {
         if (OB_FAIL(do_k_way_merge_round(count))) {
@@ -362,7 +380,13 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      if (count > 0 && OB_FAIL(project_results(count))) {
+      if (count > 0 && direct_project_) {
+        sql::ObBitVector &id_flags = iter_param_->id_proj_expr_->get_evaluated_flags(*iter_param_->eval_ctx_);
+        for (int64_t i = 0; i < count; ++i) {
+          id_flags.set(i);
+        }
+        iter_param_->id_proj_expr_->set_evaluated_projected(*iter_param_->eval_ctx_);
+      } else if (count > 0 && OB_FAIL(project_results(count))) {
         LOG_WARN("failed to project results", K(ret), K(count));
       }
     }
@@ -827,6 +851,18 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
   } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
+  } else if (direct_project_ && OB_NOT_NULL(proj_id_datums_)) {
+    // Fused projection: skip the ObDocIdExt round trip and write the output datum now.
+    if (direct_project_int_id_) {
+      proj_id_datums_[count].set_int(id_datum.get_int());
+    } else {
+      proj_id_datums_[count].set_datum(id_datum);
+    }
+    ++count;
+    ++output_row_cnt_;
+    if (limit_param->is_valid() && output_row_cnt_ >= limit) {
+      ret = OB_ITER_END;
+    }
   } else {
     buffered_domain_ids_[count].from_datum(id_datum);
     buffered_relevances_[count] = relevance;

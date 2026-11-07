@@ -154,6 +154,12 @@ protected:
   bool k_way_id_unsigned_;
   int64_t k_way_int_vals_[MAX_FAST_DIMS];
   int64_t k_way_dim_cnt_;
+  // Direct projection fast path for the two-way/k-way merge paths: write the
+  // output datum into the projection batch as rows are cached, instead of
+  // buffering an ObDocIdExt copy and re-locating datums in project_results().
+  bool direct_project_;
+  bool direct_project_int_id_;
+  ObDatum *proj_id_datums_;   // projection batch datums, located once per get_next_rows
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
 };

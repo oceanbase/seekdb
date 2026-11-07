@@ -140,6 +140,9 @@ int ObSPIVDaaTNaiveIter::inner_init(const ObSPIVDaaTParam &param)
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_, *param.allocator_, *param.relevance_collector_))) {
     LOG_WARN("failed to init spiv daat iter", K(ret));
   } else {
+    // SPIV iterators customize projection (doc-id pre-filtering), so keep the
+    // base-class fused projection disabled here.
+    direct_project_ = false;
     is_pre_filter_ = param.is_pre_filter_;
     is_use_docid_ = param.is_use_docid_;
     if (is_use_docid_) {
@@ -295,6 +298,9 @@ int ObSPIVBMWIter::init(const ObSPIVDaaTParam &param)
   } else if (OB_FAIL(ObSRBMWIterImpl::init(*param.base_param_, *param.dim_iters_, *param.allocator_, *param.relevance_collector_))) {
     LOG_WARN("failed to init spiv daat iter", K(ret));
   } else {
+    // SPIV iterators customize projection (doc-id pre-filtering), so keep the
+    // base-class fused projection disabled here.
+    direct_project_ = false;
     is_pre_filter_ = param.is_pre_filter_;
     is_use_docid_ = param.is_use_docid_;
     if (is_use_docid_) {
