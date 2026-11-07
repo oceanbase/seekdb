@@ -109,6 +109,7 @@ int TableItem::deep_copy_file_table_def(const ObFileTableDef &file_def, ObIAlloc
     } else {
       file_table_def_->kind_ = file_def.kind_;
       file_table_def_->format_ = file_def.format_;
+      file_table_def_->has_header_ = file_def.has_header_;
       file_table_def_->estimated_rows_ = file_def.estimated_rows_;
       file_table_def_->device_ = file_def.device_;
       file_table_def_->inode_ = file_def.inode_;

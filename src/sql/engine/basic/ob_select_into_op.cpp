@@ -1288,8 +1288,8 @@ int ObSelectIntoOp::create_the_only_data_writer(ObExternalFileWriter *&data_writ
     std::string output_path(basic_url_.ptr(), basic_url_.length());
     if (OB_FAIL(FileDirectoryUtils::is_exists(output_path.c_str(), output_exists))) {
     } else if (output_exists) {
-      ret = OB_FILE_EXIST;
-      LOG_USER_ERROR(OB_FILE_EXIST, output_path.length(), output_path.c_str());
+      ret = OB_FILE_ALREADY_EXIST;
+      LOG_USER_ERROR(OB_FILE_ALREADY_EXIST);
     }
   }
   if (OB_FAIL(ret)) {
@@ -1299,6 +1299,9 @@ int ObSelectIntoOp::create_the_only_data_writer(ObExternalFileWriter *&data_writ
     csv_data_writer = static_cast<ObCsvFileWriter*>(data_writer);
     if (OB_FAIL(csv_data_writer->alloc_buf(ctx_.get_allocator(), MY_SPEC.buffer_size_))) {
     }
+  }
+  if (OB_SUCC(ret) && MY_SPEC.with_header_ && OB_NOT_NULL(csv_data_writer)) {
+    ret = write_header(*csv_data_writer);
   }
   return ret;
 }
