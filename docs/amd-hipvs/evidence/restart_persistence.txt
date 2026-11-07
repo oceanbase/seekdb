@@ -1,0 +1,14 @@
+# Restart / persistence check (lib=hipvs index survives an observer restart)
+
+Setup: table `persist`, 5 000 x 128 FP32 rows, index built once with
+`lib=HIPVS, m=16, ef_construction=200, ef_search=64`. The observer was then
+stopped and restarted (same data dir), and the same query was replayed.
+
+before restart : [7, 84, 4325, 1772, 2300]
+after restart  : [7, 84, 4325, 1772, 2300]
+same_ids       : True
+plan           : VECTOR INDEX SCAN (index used, not a full scan)
+SEEKDB_HIPVS_BUILD records: 4 before restart, 4 after restart
+
+=> the index is restored from the persisted VSAG snapshot stream. No GPU build
+   is replayed on restart (record count unchanged) and query results are identical.
