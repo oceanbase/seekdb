@@ -130,6 +130,90 @@ fn handles_entities_and_preserves_references_when_requested() {
 }
 
 #[test]
+fn coalesces_text_and_references_through_fragment_end() {
+    for (input, expanded) in [
+        ("&lt;&#65;&amp;", "<A&"),
+        ("prefix&#65;中&#x1F600;tail", "prefixA中😀tail"),
+        ("&#10;\n&#13;", "\n\n\r"),
+    ] {
+        for preserve in [false, true] {
+            let actual = events(
+                input,
+                ParseMode::Content,
+                ParseOptions {
+                    preserve_entity_references: preserve,
+                    ..ParseOptions::default()
+                },
+            )
+            .unwrap();
+            let text = if preserve { input } else { expanded };
+            assert_eq!(
+                actual,
+                vec![
+                    OwnedEvent::StartDocument,
+                    OwnedEvent::Text(text.as_bytes().to_vec()),
+                    OwnedEvent::EndDocument,
+                ]
+            );
+        }
+    }
+}
+
+#[test]
+fn coalesces_text_after_reader_consumes_a_bom() {
+    for (content, expected) in [
+        ("abc", "abc"),
+        ("中&amp;😀", "中&😀"),
+        ("\u{feff}abc", "\u{feff}abc"),
+    ] {
+        let actual = events(
+            format!("\u{feff}\u{feff}{content}"),
+            ParseMode::Content,
+            ParseOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(actual[1], OwnedEvent::Text(expected.as_bytes().to_vec()));
+    }
+    let expected = events(
+        "<r>中&amp;😀</r>",
+        ParseMode::Document,
+        ParseOptions::default(),
+    )
+    .unwrap();
+    let mut utf16 = vec![0xff, 0xfe];
+    utf16.extend("\u{feff}<r>中&amp;😀</r>".encode_utf16().flat_map(u16::to_le_bytes));
+    for input in [
+        "\u{feff}\u{feff}<r>中&amp;😀</r>".as_bytes().to_vec(),
+        utf16,
+    ] {
+        assert_eq!(
+            events(input, ParseMode::Document, ParseOptions::default()).unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn rejects_duplicate_names_after_many_distinct_attributes() {
+    let attributes = (0..512)
+        .map(|index| format!(" a{index}='{index}'"))
+        .collect::<String>();
+    let actual = events(
+        format!("<r{attributes}/>"),
+        ParseMode::Document,
+        ParseOptions::default(),
+    )
+    .unwrap();
+    assert!(matches!(&actual[1], OwnedEvent::Start(_, attrs, true) if attrs.len() == 512));
+    assert!(events(
+        format!("<r{attributes} a511='duplicate'/>"),
+        ParseMode::Document,
+        ParseOptions::default(),
+    )
+    .is_err());
+}
+
+#[test]
 fn normalizes_xml_newlines_and_attribute_spaces() {
     let actual = events(
         "<r a='x\t\ny'>a\r\nb\rc</r>",
@@ -421,6 +505,7 @@ fn rejects_dtd_unknown_entities_and_document_fragments() {
     for input in [
         "<!DOCTYPE r><r/>",
         "<r>&custom;</r>",
+        "&#32;<r/>",
         "<a/><b/>",
         "text<r/>",
         "<r>]]></r>",
@@ -446,6 +531,18 @@ fn recover_returns_partial_events_but_does_not_hide_handler_errors() {
     )
     .unwrap();
     assert!(actual.contains(&OwnedEvent::Text(b"ok".to_vec())));
+    assert!(!actual.contains(&OwnedEvent::EndDocument));
+
+    let actual = events(
+        "<r>ok&amp;<broken",
+        ParseMode::Document,
+        ParseOptions {
+            recover: true,
+            ..ParseOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(actual.contains(&OwnedEvent::Text(b"ok&".to_vec())));
     assert!(!actual.contains(&OwnedEvent::EndDocument));
 }
 

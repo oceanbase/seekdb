@@ -256,8 +256,7 @@ impl<'a, H: EventHandler> Parser<'a, H> {
         self.emit(Event::Declaration(Cow::Owned(raw)))
     }
 
-    fn text(&mut self, value: &quick_xml::events::BytesText<'_>) -> ParseResult<(), H::Error> {
-        let raw = std::str::from_utf8(value)?;
+    fn text(&mut self, raw: &str) -> ParseResult<(), H::Error> {
         if raw.contains("]]>") {
             return Err(Error::Syntax("XML text contains the CDATA terminator").into());
         }
@@ -298,7 +297,8 @@ impl<'a, H: EventHandler> Parser<'a, H> {
                     empty: false,
                 })?;
             }
-            XmlEvent::Text(value) => self.text(&value)?,
+            // parse coalesces text and references before dispatching markup.
+            XmlEvent::Text(_) | XmlEvent::GeneralRef(_) => {}
             XmlEvent::CData(value) => {
                 if self.mode == ParseMode::Document && self.depth == 0 {
                     return Err(
@@ -367,8 +367,21 @@ pub fn parse<H: EventHandler>(
         config.allow_unmatched_ends = false;
         config.expand_empty_elements = false;
         config.trim_text(false);
+        let mut text_start = None;
         loop {
+            let position = input.len() - reader.get_ref().len();
+            if matches!(input.as_bytes().get(position), None | Some(b'<')) {
+                if let Some(start) = text_start.take() {
+                    parser.text(&input[start..position])?;
+                }
+            }
+            let event_start = reader.buffer_position();
             let event = reader.read_event()?;
+            if matches!(event, XmlEvent::Text(_) | XmlEvent::GeneralRef(_)) {
+                let end = input.len() - reader.get_ref().len();
+                let consumed = (reader.buffer_position() - event_start) as usize;
+                text_start.get_or_insert(end - consumed);
+            }
             if parser.finish_event(event)? {
                 break;
             }

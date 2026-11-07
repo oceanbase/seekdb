@@ -6,4 +6,4 @@ publish = false
 
 [dependencies]
 cxx = "=1.0.202"
-quick-xml = "=0.37.1"
+quick-xml = "=0.41.0"
