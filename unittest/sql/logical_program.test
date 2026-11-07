@@ -1,0 +1,22 @@
+--disable_warnings
+DROP TABLE IF EXISTS logical_program_values;
+--enable_warnings
+CREATE TABLE logical_program_values(id BIGINT PRIMARY KEY,a BIGINT,b BIGINT,label VARCHAR(16));
+INSERT INTO logical_program_values VALUES(1,0,1,'zero'),(2,1,0,'one'),(3,NULL,1,'null'),(4,2,NULL,'two');
+SELECT id,label,(a AND (b OR NOT a)) AS p,(NOT (a OR b)) AS q FROM logical_program_values ORDER BY id;
+SELECT id,label,(a AND (b OR NOT a)) AS p FROM logical_program_values WHERE (a OR b) AND NOT (a IS NULL AND b IS NULL) ORDER BY id;
+SELECT id,label,((a>0 AND b IS NULL) OR (a IS NULL AND b>0)) AS p FROM logical_program_values ORDER BY id;
+SELECT id,label,(0 AND (a+9223372036854775807>0)) AS p,(1 OR (a+9223372036854775807>0)) AS q FROM logical_program_values ORDER BY id;
+PREPARE logical_stmt FROM 'SELECT id,label,(? AND (a OR NOT b)) AS p FROM logical_program_values ORDER BY id';
+SET @logical_p=0;
+EXECUTE logical_stmt USING @logical_p;
+SET @logical_p=1;
+EXECUTE logical_stmt USING @logical_p;
+SET @logical_p=NULL;
+EXECUTE logical_stmt USING @logical_p;
+DEALLOCATE PREPARE logical_stmt;
+SELECT label, (a AND (b OR NOT a)) AS p FROM logical_program_values ORDER BY p,id;
+SELECT SUM((a AND b) OR NOT a) FROM logical_program_values;
+SELECT ('x' AND 1), (1 OR 'x');
+SHOW WARNINGS;
+DROP TABLE logical_program_values;

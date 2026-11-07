@@ -35,15 +35,6 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
-  static int eval_and_batch_exprN(const ObExpr &expr,
-                                  ObEvalCtx &ctx,
-                                  const ObBitVector &skip,
-                                  const int64_t batch_size);
-  enum EvalAndStage {
-    FIRST,
-    MIDDLE,
-    LAST
-  };
 
 private:
   //disallow copy

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_extra_info_factory.h"
+#include "sql/engine/expr/logical_program.h"
 #include "sql/engine/expr/ob_expr_autoinc_nextval.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/engine/expr/ob_expr_collection_construct.h"
@@ -74,6 +75,9 @@ int ObExprExtraInfoFactory::alloc(common::ObIAllocator &alloc,
 void ObExprExtraInfoFactory::register_expr_extra_infos()
 {
   MEMSET(ALLOC_FUNS_, 0, sizeof(ALLOC_FUNS_));
+  REG_EXTRA_INFO(T_OP_AND, LogicalProgramInfo);
+  REG_EXTRA_INFO(T_OP_OR, LogicalProgramInfo);
+  REG_EXTRA_INFO(T_OP_NOT, LogicalProgramInfo);
   // Add ObExpr extra info structure, need to register here
   REG_EXTRA_INFO(T_FUN_SYS_CALC_PARTITION_ID, CalcPartitionBaseInfo);
   REG_EXTRA_INFO(T_FUN_ENUM_TO_STR, ObEnumSetInfo);

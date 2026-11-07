@@ -7,6 +7,7 @@ cc_library(
     name = "expression_program_cases",
     srcs = [
         "test_expression_program.cpp",
+        "test_logical_program.cpp",
         "test_temporary_expression_program.cpp",
     ],
     alwayslink = True,

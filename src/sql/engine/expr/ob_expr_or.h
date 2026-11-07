@@ -36,8 +36,6 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
-  static int eval_or_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
-                                    const ObBitVector &skip, const int64_t batch_size);
 
   enum EvalOrStage {
     FIRST,

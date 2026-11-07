@@ -35,13 +35,6 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_not(const ObExpr &expr,
-                      ObEvalCtx &ctx,
-                      ObDatum &expr_datum);
-  static int eval_not_batch(const ObExpr &expr,
-                            ObEvalCtx &ctx,
-                            const ObBitVector &skip,
-                            const int64_t batch_size);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprNot) const;
 };

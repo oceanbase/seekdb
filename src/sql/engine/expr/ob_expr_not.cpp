@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_not.h"
+#include "sql/engine/expr/logical_program.h"
+#include "sql/code_generator/ob_static_engine_expr_cg.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -66,64 +68,7 @@ int ObExprNot::cg_expr(ObExprCGCtx &expr_cg_ctx,
       || OB_UNLIKELY(rt_expr.arg_cnt_ != 1)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    rt_expr.eval_func_ = &eval_not;
-    rt_expr.eval_batch_func_ = &eval_not_batch;
-  }
-  return ret;
-}
-
-int ObExprNot::eval_not(const ObExpr &expr,
-                        ObEvalCtx &ctx,
-                        ObDatum &expr_datum)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr.args_)
-      || OB_UNLIKELY(expr.arg_cnt_ != 1)
-      || OB_ISNULL(expr.args_[0])) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    // not indicates that the parameter has been added with a bool expression, so the logic reaches here
-    // The value of the parameter must be an int (0 or 1)
-    ObDatum *param = NULL;
-    if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
-    } else if (param->is_null()) {
-      expr_datum.set_null();
-    } else {
-      expr_datum.set_int(param->get_int() == 0);
-      LOG_DEBUG("expr not calc result", K(expr_datum.is_null()), K(expr_datum.get_int()));
-    }
-  }
-  return ret;
-}
-
-int ObExprNot::eval_not_batch(const ObExpr &expr,
-                            ObEvalCtx &ctx,
-                            const ObBitVector &skip,
-                            const int64_t batch_size)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr.args_)
-      || OB_UNLIKELY(expr.arg_cnt_ != 1)
-      || OB_ISNULL(expr.args_[0])) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-    if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    } else {
-      ObDatum *results = expr.locate_batch_datums(ctx);
-      for (int64_t i = 0; i < batch_size; ++i) {
-        if (skip.at(i) || eval_flags.at(i)) {
-          continue;
-        }
-        ObDatum &datum = expr.args_[0]->locate_expr_datum(ctx, i);
-        eval_flags.set(i);
-        if (datum.is_null()) {
-          results[i].set_null();
-        } else {
-          results[i].set_int(0 == datum.get_int());
-        }
-      }
-    }
+    ret = prepare_logical_program(rt_expr, *expr_cg_ctx.allocator_);
   }
   return ret;
 }
