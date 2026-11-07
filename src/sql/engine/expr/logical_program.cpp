@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/logical_program.h"
 #include "sql/engine/ob_exec_context.h"
-#include "lib/statistic_event/ob_stat_event.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/utility/ob_common_utility.h"
 #include "rust/expression_program.h"
 #include "rust/expression-program/include/host.h"
