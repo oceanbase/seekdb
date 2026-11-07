@@ -168,6 +168,7 @@ public:
 private:
   int save_relevances_and_docids();
   int save_docids();
+  const ObDatum &curr_id_datum() const;
   ObArenaAllocator *allocator_;
   ObTextRetrievalTokenIter *token_iter_;
   sql::ObEvalCtx *eval_ctx_;
@@ -178,6 +179,11 @@ private:
   int64_t count_;
   ObFixedArray<double, ObIAllocator> relevance_; // when ~ObFixedArray(), wikll destory itself
   ObFixedArray<ObDocIdExt, ObIAllocator> doc_id_;
+  // u64 fast lane: store raw doc ids instead of ObDocIdExt deep copies, and
+  // materialize the current id datum on demand in get_curr_id().
+  ObFixedArray<uint64_t, ObIAllocator> doc_id_vals_;
+  mutable ObDatum cur_id_datum_;
+  bool id_is_u64_;
   common::ObDatumCmpFuncType cmp_func_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObTextRetrievalDaaTTokenIter);

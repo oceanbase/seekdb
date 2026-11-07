@@ -693,6 +693,9 @@ ObTextRetrievalDaaTTokenIter::ObTextRetrievalDaaTTokenIter()
     count_(0),
     relevance_(),
     doc_id_(),
+    doc_id_vals_(),
+    cur_id_datum_(),
+    id_is_u64_(false),
     cmp_func_(nullptr),
     is_inited_(false)
 {
@@ -733,6 +736,12 @@ int ObTextRetrievalDaaTTokenIter::init(const ObTextRetrievalScanIterParam &iter_
         LOG_WARN("failed to init next batch iter idxes array", K(ret));
       } else if (OB_FAIL(doc_id_.prepare_allocate(max_batch_size_))) {
         LOG_WARN("failed to prepare allocate next batch iter idxes array", K(ret));
+      } else if (FALSE_IT(id_is_u64_ = (common::ObUInt64Type == inv_scan_domain_id_col_->datum_meta_.type_))) {
+      } else if (id_is_u64_ && FALSE_IT(doc_id_vals_.set_allocator(allocator_))) {
+      } else if (id_is_u64_ && OB_FAIL(doc_id_vals_.init(max_batch_size_))) {
+        LOG_WARN("failed to init doc id values array", K(ret));
+      } else if (id_is_u64_ && OB_FAIL(doc_id_vals_.prepare_allocate(max_batch_size_))) {
+        LOG_WARN("failed to prepare allocate doc id values array", K(ret));
       } else {
         is_inited_ = true;
       }
@@ -752,6 +761,7 @@ void ObTextRetrievalDaaTTokenIter::reset()
 {
   relevance_.reset();
   doc_id_.reset();
+  doc_id_vals_.reset();
   token_iter_->reset();
   cur_idx_ = -1;
   count_ = 0;
@@ -804,7 +814,9 @@ int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
         relevance_[i] = relevance_datum.at(i)->get_double();
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (id_is_u64_) {
+          doc_id_vals_[i] = doc_id_datum.at(i)->get_uint64();
+        } else if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
           LOG_WARN("failed to get doc id", K(ret), K(doc_id_datum.at(i)));
         }
       }
@@ -824,9 +836,11 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (id_is_u64_) {
+          doc_id_vals_[i] = doc_id_datum.at(i)->get_uint64();
+        } else if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
           LOG_WARN("failed to get doc id", K(ret));
-        };
+        }
       }
     }
   }
@@ -850,7 +864,7 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
   }
   while (OB_SUCC(ret) && !find) {
     if (cur_idx_ < count_) {
-      if (OB_FAIL(cmp_func_(id_datum, doc_id_[cur_idx_].get_datum(), result))) {
+      if (OB_FAIL(cmp_func_(id_datum, curr_id_datum(), result))) {
         LOG_WARN("failed to compare datum", K(ret));
       } else if (result <= 0) {
         find = true;
@@ -868,7 +882,7 @@ int ObTextRetrievalDaaTTokenIter::advance_to(const ObDatum &id_datum)
     } else if (cur_idx_ != 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected result", K(ret), K(result));
-    } else if (OB_FAIL(cmp_func_(id_datum, doc_id_[cur_idx_].get_datum(), result))) {
+    } else if (OB_FAIL(cmp_func_(id_datum, curr_id_datum(), result))) {
       LOG_WARN("failed to compare datum", K(ret));
     } else if (result <= 0) {
       find = true;
@@ -903,9 +917,19 @@ int ObTextRetrievalDaaTTokenIter::get_curr_id(const ObDatum *&id_datum) const
     ret = OB_ARRAY_OUT_OF_RANGE;
     LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
   } else {
-    id_datum = &doc_id_[cur_idx_].get_datum();
+    id_datum = &curr_id_datum();
   }
   return ret;
+}
+
+const ObDatum &ObTextRetrievalDaaTTokenIter::curr_id_datum() const
+{
+  if (id_is_u64_) {
+    cur_id_datum_.set_uint(doc_id_vals_[cur_idx_]);
+    return cur_id_datum_;
+  } else {
+    return doc_id_[cur_idx_].get_datum();
+  }
 }
 
 ObTextRetrievalBlockMaxIter::ObTextRetrievalBlockMaxIter()
