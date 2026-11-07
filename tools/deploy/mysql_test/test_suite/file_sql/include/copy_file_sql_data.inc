@@ -4,7 +4,7 @@ connection file_sql_setup;
 
 --disable_query_log
 let $FILE_SQL_DATA_DIR = $OBSERVER_DIR/data_for_mysqltest_file_sql;
-let $FILE_SQL_COPY_CMD = rm -rf "$FILE_SQL_DATA_DIR" && mkdir -p "$FILE_SQL_DATA_DIR" && cp $PWD/mysql_test/test_suite/file_sql/data/* "$FILE_SQL_DATA_DIR/" && base64 -d "$FILE_SQL_DATA_DIR/simple.parquet.b64" > "$FILE_SQL_DATA_DIR/simple.parquet" && rm -f "$FILE_SQL_DATA_DIR/simple.parquet.b64";
+let $FILE_SQL_COPY_CMD = rm -rf "$FILE_SQL_DATA_DIR" && mkdir -p "$FILE_SQL_DATA_DIR" && if [ -d "$PWD/mysql_test/test_suite/file_sql/data" ]; then FILE_SQL_DATA_SOURCE="$PWD/mysql_test/test_suite/file_sql/data"; else FILE_SQL_DATA_SOURCE="$PWD/tools/deploy/mysql_test/test_suite/file_sql/data"; fi && cp "$FILE_SQL_DATA_SOURCE"/* "$FILE_SQL_DATA_DIR/" && base64 -d "$FILE_SQL_DATA_DIR/simple.parquet.b64" > "$FILE_SQL_DATA_DIR/simple.parquet" && rm -f "$FILE_SQL_DATA_DIR/simple.parquet.b64";
 exec $FILE_SQL_COPY_CMD;
 --enable_query_log
 
