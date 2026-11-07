@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::{
-    Control, ErrorKind, Execution, Instruction, MAX_NODES, Opcode, Program, ProgramImage,
-    ProgramSpec,
+    Control, ErrorKind, Execution, Instruction, Opcode, Program, ProgramImage, ProgramSpec,
+    MAX_NODES,
 };
 use std::{ptr::NonNull, slice};
 
@@ -28,6 +28,12 @@ mod ffi {
         value: i64,
         is_null: bool,
         error_on_zero: bool,
+    }
+
+    struct LogicalInstruction {
+        opcode: u8,
+        argument_start: u32,
+        argument_count: u32,
     }
 
     struct RunStatus {
@@ -48,6 +54,15 @@ mod ffi {
 
     unsafe extern "C++" {
         include!("rust/expression-program/include/host.h");
+        type ILogicalHost;
+        unsafe fn demand_logical_input(
+            host: *mut ILogicalHost,
+            node: usize,
+            demand: &[u64],
+            values: &mut [u64],
+            flags: &mut [u64],
+        ) -> i32;
+        unsafe fn check_logical_cancel(host: *mut ILogicalHost) -> i32;
         type IExecutionHost;
         unsafe fn allocate_workspace(host: *mut IExecutionHost, words: usize) -> *mut u64;
         unsafe fn release_workspace(host: *mut IExecutionHost, data: *mut u64, words: usize);
@@ -55,6 +70,21 @@ mod ffi {
     }
 
     extern "Rust" {
+        fn logical_image_words(nodes: &[LogicalInstruction], arguments: &[u32]) -> Result<usize>;
+        fn compile_logical_image(
+            nodes: &[LogicalInstruction],
+            arguments: &[u32],
+            storage: &mut [u64],
+        ) -> Result<()>;
+        fn logical_node_count(image: &[u64]) -> Result<usize>;
+        fn logical_workspace_words(image: &[u64], rows: usize) -> Result<usize>;
+        unsafe fn execute_logical(
+            image: &[u64],
+            host: *mut ILogicalHost,
+            rows: usize,
+            skip: &[u8],
+            storage: &mut [u64],
+        ) -> RunStatus;
         type Prepared;
         type Runner;
         fn image_words(
@@ -176,7 +206,11 @@ impl Control for HostControl {
     fn check(&mut self) -> Result<(), i32> {
         // SAFETY: execute is synchronous and the caller owns the live host.
         let code = unsafe { ffi::check_cancel(self.0.as_ptr()) };
-        if code == 0 { Ok(()) } else { Err(code) }
+        if code == 0 {
+            Ok(())
+        } else {
+            Err(code)
+        }
     }
 }
 
@@ -416,4 +450,122 @@ fn node_values(runner: &Runner, node: usize) -> &[u64] {
 }
 fn node_flags(runner: &Runner, node: usize) -> &[u64] {
     runner.execution.node_flags(node)
+}
+
+fn logical_instruction(
+    instruction: &ffi::LogicalInstruction,
+) -> Result<crate::logical::Instruction, crate::EvalError> {
+    use crate::logical::Opcode;
+    let opcode = match instruction.opcode {
+        0 => Opcode::Input,
+        13 => Opcode::And,
+        14 => Opcode::Or,
+        15 => Opcode::Not,
+        _ => return Err(crate::EvalError::new(ErrorKind::InvalidProgram, 0, 0)),
+    };
+    Ok(crate::logical::Instruction {
+        opcode,
+        argument_start: instruction.argument_start,
+        argument_count: instruction.argument_count,
+    })
+}
+
+fn logical_image_words(
+    nodes: &[ffi::LogicalInstruction],
+    arguments: &[u32],
+) -> Result<usize, &'static str> {
+    crate::logical::image_words_iter(nodes.iter().map(logical_instruction), arguments)
+        .map_err(|_| "invalid logical program")
+}
+
+fn compile_logical_image(
+    nodes: &[ffi::LogicalInstruction],
+    arguments: &[u32],
+    storage: &mut [u64],
+) -> Result<(), &'static str> {
+    crate::logical::compile_iter(nodes.iter().map(logical_instruction), arguments, storage)
+        .map(|_| ())
+        .map_err(|_| "invalid logical image storage or specification")
+}
+
+fn logical_workspace_words(image: &[u64], rows: usize) -> Result<usize, &'static str> {
+    let image = crate::logical::ProgramImage::parse(image).map_err(|_| "invalid logical image")?;
+    crate::logical::required_words(&image, rows).map_err(|_| "logical workspace overflow")
+}
+
+struct LogicalHost(NonNull<ffi::ILogicalHost>);
+impl Control for LogicalHost {
+    fn check(&mut self) -> Result<(), i32> {
+        // SAFETY: the caller retains the host throughout synchronous execution.
+        let status = unsafe { ffi::check_logical_cancel(self.0.as_ptr()) };
+        if status == 0 {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+impl crate::logical::InputProvider for LogicalHost {
+    fn demand(
+        &mut self,
+        node: usize,
+        demand: &[u64],
+        values: &mut [u64],
+        flags: &mut [u64],
+    ) -> Result<(), i32> {
+        // SAFETY: these disjoint borrowed planes remain live for this callback;
+        // the host neither retains them nor reenters this execution scope.
+        let status =
+            unsafe { ffi::demand_logical_input(self.0.as_ptr(), node, demand, values, flags) };
+        if status == 0 {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+
+// SAFETY: host is live until return, does not retain workspace slices, and nested
+// callbacks use separate execution objects and backing allocations.
+unsafe fn execute_logical(
+    image: &[u64],
+    host: *mut ffi::ILogicalHost,
+    rows: usize,
+    skip: &[u8],
+    storage: &mut [u64],
+) -> ffi::RunStatus {
+    let result = (|| {
+        let image = crate::logical::ProgramImage::parse(image)?;
+        let host = NonNull::new(host)
+            .ok_or_else(|| crate::EvalError::new(ErrorKind::InvalidBatch, 0, 0))?;
+        crate::logical::Execution::new(&image, rows, storage)?.execute(skip, &mut LogicalHost(host))
+    })();
+    match result {
+        Ok(()) => ffi::RunStatus {
+            code: 0,
+            node: 0,
+            row: 0,
+            left: 0,
+            right: 0,
+        },
+        Err(error) => ffi::RunStatus {
+            code: if error.host_code != 0 {
+                error.host_code
+            } else if error.kind == ErrorKind::Memory {
+                3
+            } else {
+                4
+            },
+            node: error.node,
+            row: error.row,
+            left: 0,
+            right: 0,
+        },
+    }
+}
+
+fn logical_node_count(image: &[u64]) -> Result<usize, &'static str> {
+    crate::logical::ProgramImage::parse(image)
+        .map(|image| image.node_count())
+        .map_err(|_| "invalid logical image")
 }

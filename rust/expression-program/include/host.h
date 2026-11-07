@@ -16,9 +16,34 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "rust/cxx.h"
 
 namespace oceanbase {
 namespace expression {
+
+
+// The synchronous execution scope keeps this callback alive. A nested demand
+// uses a distinct workspace; callbacks must not retain any supplied slices.
+class ILogicalHost
+{
+public:
+  virtual ~ILogicalHost() = default;
+  virtual int32_t demand(size_t node, rust::Slice<const uint64_t> demand,
+      rust::Slice<uint64_t> values, rust::Slice<uint64_t> flags) = 0;
+  virtual int32_t check_cancel() = 0;
+};
+
+inline int32_t demand_logical_input(ILogicalHost *host, size_t node,
+    rust::Slice<const uint64_t> demand, rust::Slice<uint64_t> values,
+    rust::Slice<uint64_t> flags)
+{
+  return host->demand(node, demand, values, flags);
+}
+
+inline int32_t check_logical_cancel(ILogicalHost *host)
+{
+  return host->check_cancel();
+}
 
 // The synchronous caller owns this host until it destroys Prepared and Runner.
 // Rust exclusively owns the region between allocate and release. Neither side

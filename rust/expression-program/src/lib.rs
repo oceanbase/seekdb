@@ -19,6 +19,8 @@
 //! allocation. Native callers can supply a `Vec<u64>`; adapters can supply
 //! query-accounted storage implementing `AsRef<[u64]> + AsMut<[u64]>`.
 
+pub mod logical;
+
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(not(test))]
