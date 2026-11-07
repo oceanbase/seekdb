@@ -100,6 +100,10 @@ enum ObVectorIndexAlgorithmLib
 {
   VIAL_VSAG = 0,
   VIAL_OB,
+  // Out-of-process AMD GPU builder (hipVS / ROCm). The graph is still an HNSW
+  // graph served by VSAG at query time; only the build is delegated to the GPU
+  // backend shared object. See src/oblib/lib/vector/hipvs_build_api.h.
+  VIAL_HIPVS,
   VIAL_MAX
 };
 

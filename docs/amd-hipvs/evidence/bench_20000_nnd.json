@@ -1,0 +1,136 @@
+{
+  "status": "measured",
+  "started_at": "2026-11-07T05:12:25.967893+00:00",
+  "dataset": {
+    "kind": "synthetic-normal-fp32",
+    "seed": 20261107,
+    "rows": 20000,
+    "dim": 128,
+    "queries": 100,
+    "sha256": "ad9696d50efbd608394a0684c59f97f9352d765042b83161b7427386e08e1678"
+  },
+  "parameters": {
+    "m": 16,
+    "ef_construction": 200,
+    "ef_search": 200,
+    "k": 10
+  },
+  "timing_scope": "CREATE VECTOR INDEX + first APPROXIMATE query through the new index",
+  "runs": [
+    {
+      "library": "VSAG",
+      "round": 1,
+      "build_seconds": 5.478710010647774,
+      "recall_at_k": 0.6839999999999999,
+      "query_median_ms": 0.26419293135404587,
+      "query_p95_ms": 0.28860289603471756,
+      "explain_uses_index": true,
+      "gpu_evidence": []
+    },
+    {
+      "library": "HIPVS",
+      "round": 1,
+      "build_seconds": 4.732881247997284,
+      "recall_at_k": 0.662,
+      "query_median_ms": 0.26623718440532684,
+      "query_p95_ms": 0.3168990835547447,
+      "explain_uses_index": true,
+      "gpu_evidence": [
+        {
+          "gpu_compute": true,
+          "cpu_fallback": false,
+          "device": "backend=hipVS vendor=AMD arch=gfx1100 name=AMD Radeon Graphics gcnArch=gfx1100 device=0 hbm=48.0GiB",
+          "rows": 20000,
+          "dim": 128,
+          "m": 16,
+          "ef_construction": 200,
+          "gpu_graph_ms": 3157.201,
+          "hnsw_hierarchy_and_export_ms": 302.743,
+          "label_remap_ms": 191.348,
+          "backend_total_ms": 3651.292
+        }
+      ]
+    },
+    {
+      "library": "HIPVS",
+      "round": 2,
+      "build_seconds": 3.626484276726842,
+      "recall_at_k": 0.6490000000000002,
+      "query_median_ms": 0.27229078114032745,
+      "query_p95_ms": 0.30322540551424026,
+      "explain_uses_index": true,
+      "gpu_evidence": [
+        {
+          "gpu_compute": true,
+          "cpu_fallback": false,
+          "device": "backend=hipVS vendor=AMD arch=gfx1100 name=AMD Radeon Graphics gcnArch=gfx1100 device=0 hbm=48.0GiB",
+          "rows": 20000,
+          "dim": 128,
+          "m": 16,
+          "ef_construction": 200,
+          "gpu_graph_ms": 2429.209,
+          "hnsw_hierarchy_and_export_ms": 303.666,
+          "label_remap_ms": 103.267,
+          "backend_total_ms": 2836.143
+        }
+      ]
+    },
+    {
+      "library": "VSAG",
+      "round": 2,
+      "build_seconds": 5.343706468120217,
+      "recall_at_k": 0.6839999999999999,
+      "query_median_ms": 0.2606576308608055,
+      "query_p95_ms": 0.28185909613966936,
+      "explain_uses_index": true,
+      "gpu_evidence": []
+    },
+    {
+      "library": "VSAG",
+      "round": 3,
+      "build_seconds": 5.342027636244893,
+      "recall_at_k": 0.6839999999999999,
+      "query_median_ms": 0.2583879977464676,
+      "query_p95_ms": 0.2860642038285732,
+      "explain_uses_index": true,
+      "gpu_evidence": []
+    },
+    {
+      "library": "HIPVS",
+      "round": 3,
+      "build_seconds": 3.650531616061926,
+      "recall_at_k": 0.672,
+      "query_median_ms": 0.2688327804207802,
+      "query_p95_ms": 0.29930565506219864,
+      "explain_uses_index": true,
+      "gpu_evidence": [
+        {
+          "gpu_compute": true,
+          "cpu_fallback": false,
+          "device": "backend=hipVS vendor=AMD arch=gfx1100 name=AMD Radeon Graphics gcnArch=gfx1100 device=0 hbm=48.0GiB",
+          "rows": 20000,
+          "dim": 128,
+          "m": 16,
+          "ef_construction": 200,
+          "gpu_graph_ms": 2377.667,
+          "hnsw_hierarchy_and_export_ms": 302.449,
+          "label_remap_ms": 102.444,
+          "backend_total_ms": 2782.559
+        }
+      ]
+    }
+  ],
+  "medians": {
+    "build_seconds": {
+      "VSAG": 5.343706468120217,
+      "HIPVS": 3.650531616061926
+    },
+    "recall_at_k": {
+      "VSAG": 0.6839999999999999,
+      "HIPVS": 0.662
+    }
+  },
+  "speedup": 1.463815967134352,
+  "recall_ok": true,
+  "database_version": "5.7.25-OceanBase seekdb-v1.4.0.0"
+}

@@ -421,6 +421,7 @@ struct ObVectorIndexMemData
     : is_init_(false),
       rb_flag_(true),
       has_build_sq_(false),
+      hipvs_built_(false),
       vid_array_(nullptr),
       vec_array_(nullptr),
       extra_info_buf_(nullptr),
@@ -469,6 +470,10 @@ public:
   bool is_init_;
   bool rb_flag_;
   bool has_build_sq_; // for hnsw+sq
+  // Set once the snapshot graph has been produced by the AMD GPU (hipVS)
+  // backend. Distinct from is_init_ because the snapshot is "inited but empty"
+  // while the DDL scan is still buffering vectors for a single GPU build.
+  bool hipvs_built_;
   ObVecIdxVidArray *vid_array_; // for hnsw+sq
   ObVecIdxVecArray *vec_array_; // for hnsw+sq
   ObVecExtraInfoBuffer *extra_info_buf_; // for hnsw+sq
@@ -752,6 +757,9 @@ public:
   int init_hnswsq_mem_data();
   int check_snap_hnswsq_index();
   int build_hnswsq_index(ObVectorIndexParam *param);
+  // AMD GPU (hipVS) snapshot: buffer vectors during the DDL scan and build the
+  // whole HNSW graph on the GPU once, at the end of the snapshot.
+  int finish_hipvs_snapshot();
   bool is_mem_data_init_atomic(ObVectorIndexRecordType type);
   int try_init_mem_data(ObVectorIndexRecordType type, ObVectorIndexAlgorithmType enforce_type = VIAT_MAX) {
     int ret = OB_SUCCESS;

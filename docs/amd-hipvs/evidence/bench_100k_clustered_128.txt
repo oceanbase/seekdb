@@ -1,0 +1,18 @@
+# Raw output of the 100 000 x 128 scale check (branch 2026-competition-amd-hipvs-build)
+# Produced by the same harness (benchmark_hipvs.py / equivalent loop), one round per config.
+# corpus: clustered = 200 Gaussian clusters (radius 0.15); gaussian = isotropic.
+# seekdb 1.4.0.0 + this branch, Radeon gfx1100 48GiB, ROCm 7.2.1, 128 vCPU.
+
+[insert] clustered 100000 rows x 128 in 7.4 s
+RESULT clustered100k m=16 VSAG  build=  15.68s recall@10=0.9905
+RESULT clustered100k m=16 HIPVS build=   8.63s recall@10=0.9800
+RESULT clustered100k m=32 VSAG  build=  33.74s recall@10=0.9980
+RESULT clustered100k m=32 HIPVS build=   9.56s recall@10=0.9750
+RESULT clustered100k m=64 VSAG  build= 106.56s recall@10=0.9985
+RESULT clustered100k m=64 HIPVS build=  12.00s recall@10=0.9885
+[insert] gaussian 100000 rows x 128 in 7.4 s
+RESULT gaussian100k m=64 VSAG  build= 397.21s recall@10=0.7830
+RESULT gaussian100k m=64 HIPVS build=  12.04s recall@10=0.6810
+
+# Every HIPVS line above corresponds to one SEEKDB_HIPVS_BUILD record with
+# "gpu_compute":true,"cpu_fallback":false and device arch=gfx1100 in the server log.
