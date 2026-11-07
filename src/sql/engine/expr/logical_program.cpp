@@ -120,9 +120,54 @@ struct LogicalBuilder
 class LogicalHost final : public expression::ILogicalHost
 {
 public:
-  LogicalHost(ObEvalCtx &ctx, const ObIArray<const ObExpr *> &nodes, bool batch, int64_t rows)
-    : ctx_(ctx), nodes_(nodes), batch_(batch), rows_(rows) {}
+  LogicalHost(ObEvalCtx &ctx, const ObIArray<const ObExpr *> &nodes, bool batch, int64_t rows,
+              ObDatum *scalar_result)
+    : ctx_(ctx), nodes_(nodes), batch_(batch), rows_(rows), scalar_result_(scalar_result) {}
   int32_t check_cancel() override { return ctx_.exec_ctx_.check_status(); }
+  int32_t publish_snapshot(rust::Slice<const uint64_t> values,
+                           rust::Slice<const uint64_t> flags, size_t rows) override
+  {
+    return publish_completed(values, flags, rows, false);
+  }
+  int publish_completed(rust::Slice<const uint64_t> values,
+                        rust::Slice<const uint64_t> flags, size_t rows, bool include_root)
+  {
+    const int64_t count = nodes_.count();
+    if (rows != static_cast<size_t>(rows_) || values.size() != flags.size()
+        || values.size() != static_cast<size_t>(count) * rows) {
+      return OB_INVALID_ARGUMENT;
+    }
+    ObEvalCtx::BatchInfoScopeGuard batch_guard(ctx_);
+    for (int64_t node = 0; node < count; ++node) {
+      const ObExpr &target = *nodes_.at(node);
+      if (!is_logical(target) || (node == count - 1 && !include_root)) { continue; }
+      ObEvalInfo &published = target.get_eval_info(ctx_);
+      bool initialized = published.evaluated_ || published.projected_;
+      for (int64_t row = 0; row < rows_; ++row) {
+        const uint64_t state = flags[node * rows_ + row];
+        if ((state & 1) == 0) { continue; }
+        const int64_t index = batch_ ? row : ctx_.get_batch_idx();
+        const bool cached = published.projected_ || (published.evaluated_
+            && (!target.is_batch_result() || target.get_evaluated_flags(ctx_).at(index)));
+        if (cached) { continue; }
+        if (!initialized && target.is_batch_result()) {
+          target.get_evaluated_flags(ctx_).reset(batch_ ? rows_ : ctx_.get_batch_size());
+        }
+        initialized = true;
+        if (batch_) { batch_guard.set_batch_idx(row); }
+        ObDatum &datum = node == count - 1 && !batch_
+            ? *scalar_result_ : target.locate_datum_for_write(ctx_);
+        if ((state & 2) == 0) { datum.set_null(); }
+        else { datum.set_int(values[node * rows_ + row]); }
+        published.evaluated_ = true;
+        published.point_to_frame_ = true;
+        published.notnull_ = false;
+        published.cnt_ = batch_ ? rows_ : ctx_.get_batch_size();
+        if (target.is_batch_result()) { target.get_evaluated_flags(ctx_).set(index); }
+      }
+    }
+    return OB_SUCCESS;
+  }
   int32_t demand(size_t node, rust::Slice<const uint64_t> demand,
                  rust::Slice<uint64_t> values, rust::Slice<uint64_t> flags) override
   {
@@ -179,6 +224,7 @@ private:
   const ObIArray<const ObExpr *> &nodes_;
   bool batch_;
   int64_t rows_;
+  ObDatum *scalar_result_;
 };
 
 int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
@@ -248,41 +294,17 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
               }
             }
           }
-          LogicalHost host(ctx, nodes, batch, rows);
+          LogicalHost host(ctx, nodes, batch, rows, scalar_result);
           const auto status = expression::execute_logical(image, &host, rows,
               rust::Slice<const uint8_t>(skipped.get_data(), skipped.count()),
               rust::Slice<uint64_t>(storage, words));
           ret = status.code == 0 ? OB_SUCCESS : status.code < 0 ? status.code
               : status.code == 3 ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
-          ObEvalCtx::BatchInfoScopeGuard batch_guard(ctx);
-          for (int64_t node = 0; node < count; ++node) {
-            const ObExpr &target = *nodes.at(node);
-            if (!is_logical(target) || (node == count - 1 && ret != OB_SUCCESS)) { continue; }
-            ObEvalInfo &published = target.get_eval_info(ctx);
-            bool initialized = published.evaluated_ || published.projected_;
-            for (int64_t row = 0; row < rows; ++row) {
-              const uint64_t flags = storage[(count + node) * rows + row];
-              if ((flags & 1) == 0) { continue; }
-              const int64_t index = batch ? row : ctx.get_batch_idx();
-              const bool cached = published.projected_ || (published.evaluated_
-                  && (!target.is_batch_result() || target.get_evaluated_flags(ctx).at(index)));
-              if (cached) { continue; }
-              if (!initialized && target.is_batch_result()) {
-                target.get_evaluated_flags(ctx).reset(batch ? rows : ctx.get_batch_size());
-              }
-              initialized = true;
-              if (batch) { batch_guard.set_batch_idx(row); }
-              ObDatum &datum = node == count - 1 && !batch
-                  ? *scalar_result : target.locate_datum_for_write(ctx);
-              if ((flags & 2) == 0) { datum.set_null(); }
-              else { datum.set_int(storage[node * rows + row]); }
-              published.evaluated_ = true;
-              published.point_to_frame_ = true;
-              published.notnull_ = false;
-              published.cnt_ = batch ? rows : ctx.get_batch_size();
-              if (target.is_batch_result()) { target.get_evaluated_flags(ctx).set(index); }
-            }
-          }
+          const size_t plane_words = static_cast<size_t>(count) * rows;
+          const int publish_ret = host.publish_completed(
+              rust::Slice<const uint64_t>(storage, plane_words),
+              rust::Slice<const uint64_t>(storage + plane_words, plane_words), rows, ret == OB_SUCCESS);
+          if (OB_SUCC(ret)) { ret = publish_ret; }
           if (OB_SUCC(ret)) {
             EVENT_ADD(RUST_LOGICAL_PROGRAM_CALLS, 1);
             EVENT_ADD(RUST_LOGICAL_PROGRAM_ROWS, active_rows);
