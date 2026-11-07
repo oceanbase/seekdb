@@ -4345,6 +4345,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
     }
   }
   if (OB_SUCC(ret)) {
+    stmt->get_query_ctx()->has_file_sql_ = true;
     ObQueryHint &query_hint = stmt->get_query_ctx()->get_query_hint_for_update();
     ObGlobalHint &global_hint = const_cast<ObGlobalHint &>(query_hint.get_global_hint());
     global_hint.plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
@@ -7854,8 +7855,13 @@ int ObDMLResolver::resolve_file_scan_column_items(const TableItem &table_item,
     if (OB_SUCC(ret) && OB_ISNULL(col_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("file scan column item is null", K(ret), K(i));
-    } else if (OB_SUCC(ret) && OB_FAIL(col_items.push_back(*col_item))) {
-      LOG_WARN("failed to append file scan column item", K(ret), K(i));
+    } else if (OB_SUCC(ret)) {
+      if (!column.nullable_ && OB_NOT_NULL(col_item->expr_)) {
+        col_item->expr_->set_result_flag(NOT_NULL_FLAG);
+      }
+      if (OB_FAIL(col_items.push_back(*col_item))) {
+        LOG_WARN("failed to append file scan column item", K(ret), K(i));
+      }
     }
   }
   return ret;

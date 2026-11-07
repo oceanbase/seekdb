@@ -3528,7 +3528,8 @@ int ObSql::need_add_plan(const ObPlanCacheCtx &pc_ctx,
   } else if (OB_ISNULL(result.get_exec_context().get_stmt_factory())
              || OB_ISNULL(result.get_exec_context().get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_hybrid_search()) {
+  } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_file_sql_
+             || result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_hybrid_search()) {
     need_add_plan = false;
   }
   return ret;
