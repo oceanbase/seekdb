@@ -48,6 +48,7 @@ public:
     parameters_.reset();
     request_transform_fn_.reset();
     response_transform_fn_.reset();
+    max_concurrency_ = DEFAULT_MAX_CONCURRENCY;
     endpoint_id_ = OB_INVALID_ID;
   }
 
@@ -67,6 +68,7 @@ public:
   const ObString &get_parameters() const { return parameters_; }
   const ObString &get_request_transform_fn() const { return request_transform_fn_; }
   const ObString &get_response_transform_fn() const { return response_transform_fn_; }
+  int64_t get_max_concurrency() const { return max_concurrency_; }
   uint64_t get_endpoint_id() const { return endpoint_id_; }
   void set_endpoint_id(uint64_t endpoint_id) { endpoint_id_ = endpoint_id; }
 
@@ -80,9 +82,11 @@ public:
                K_(request_model_name),
                K_(parameters),
                K_(request_transform_fn),
-               K_(response_transform_fn));
+               K_(response_transform_fn),
+               K_(max_concurrency));
 private:
   static const ObString DEFAULT_SCOPE;
+  static const int64_t DEFAULT_MAX_CONCURRENCY = 1;
   static bool is_valid_provider(const ObString &provider);
   int encrypt_access_key_(common::ObIAllocator &allocator, const ObString &access_key, ObString &encrypted_access_key);
   int decrypt_access_key_(common::ObIAllocator &allocator, const ObString &encrypted_access_key, ObString &unencrypted_access_key) const;
@@ -98,6 +102,7 @@ private:
   ObString parameters_;
   ObString request_transform_fn_;
   ObString response_transform_fn_;
+  int64_t max_concurrency_;
 };
 
 } // namespace share

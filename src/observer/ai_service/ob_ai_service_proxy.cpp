@@ -32,12 +32,6 @@ using namespace oceanbase::common;
 using namespace oceanbase::sqlclient;
 using namespace oceanbase::transaction;
 
-// NULL strings become '' so that later reads never hit a NULL column value.
-static ObString empty_if_null(const ObString &s)
-{
-  return (NULL == s.ptr()) ? ObString(0, "") : s;
-}
-
 int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint)
 {
   int ret = OB_SUCCESS;
@@ -46,17 +40,18 @@ int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_
   ObSqlString buffer;
   
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
-  } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(empty_if_null(endpoint.scope_))))) {
+  } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
   } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
   } else if (OB_FAIL(sql.add_column("endpoint_name", endpoint.name_))) {
-  } else if (OB_FAIL(sql.add_column("ai_model_name", ObHexEscapeSqlStr(empty_if_null(endpoint.ai_model_name_))))) {
-  } else if (OB_FAIL(sql.add_column("url", ObHexEscapeSqlStr(empty_if_null(endpoint.url_))))) {
-  } else if (OB_FAIL(sql.add_column("access_key", ObHexEscapeSqlStr(empty_if_null(endpoint.access_key_))))) {
-  } else if (OB_FAIL(sql.add_column("request_model_name", ObHexEscapeSqlStr(empty_if_null(endpoint.request_model_name_))))) {
-  } else if (OB_FAIL(sql.add_column("provider", ObHexEscapeSqlStr(empty_if_null(endpoint.provider_))))) {
-  } else if (OB_FAIL(sql.add_column("parameters", ObHexEscapeSqlStr(empty_if_null(endpoint.parameters_))))) {
-  } else if (OB_FAIL(sql.add_column("request_transform_fn", ObHexEscapeSqlStr(empty_if_null(endpoint.request_transform_fn_))))) {
-  } else if (OB_FAIL(sql.add_column("response_transform_fn", ObHexEscapeSqlStr(empty_if_null(endpoint.response_transform_fn_))))) {
+  } else if (OB_FAIL(sql.add_column("ai_model_name", ObHexEscapeSqlStr(endpoint.ai_model_name_)))) {
+  } else if (OB_FAIL(sql.add_column("url", ObHexEscapeSqlStr(endpoint.url_)))) {
+  } else if (OB_FAIL(sql.add_column("access_key", ObHexEscapeSqlStr(endpoint.access_key_)))) {
+  } else if (OB_FAIL(sql.add_column("request_model_name", ObHexEscapeSqlStr(endpoint.request_model_name_)))) {
+  } else if (OB_FAIL(sql.add_column("provider", ObHexEscapeSqlStr(endpoint.provider_)))) {
+  } else if (OB_FAIL(sql.add_column("parameters", ObHexEscapeSqlStr(endpoint.parameters_)))) {
+  } else if (OB_FAIL(sql.add_column("request_transform_fn", ObHexEscapeSqlStr(endpoint.request_transform_fn_)))) {
+  } else if (OB_FAIL(sql.add_column("response_transform_fn", ObHexEscapeSqlStr(endpoint.response_transform_fn_)))) {
+  } else if (OB_FAIL(sql.add_column("max_concurrency", endpoint.max_concurrency_))) {
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
   } else if (1 != affected_rows) {
@@ -78,21 +73,35 @@ int ObAiServiceProxy::update_ai_endpoint(ObMySQLTransaction &trans, const int64_
   int64_t affected_rows = 0;
   
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
-  } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(empty_if_null(endpoint.scope_))))) {
+  } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
   } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
   } else if (OB_FAIL(sql.add_column("endpoint_name", endpoint.name_))) {
-  } else if (OB_FAIL(sql.add_column("ai_model_name", ObHexEscapeSqlStr(empty_if_null(endpoint.ai_model_name_))))) {
-  } else if (OB_FAIL(sql.add_column("url", ObHexEscapeSqlStr(empty_if_null(endpoint.url_))))) {
-  } else if (OB_FAIL(sql.add_column("access_key", ObHexEscapeSqlStr(empty_if_null(endpoint.access_key_))))) {
-  } else if (OB_FAIL(sql.add_column("request_model_name", ObHexEscapeSqlStr(empty_if_null(endpoint.request_model_name_))))) {
-  } else if (OB_FAIL(sql.add_column("provider", ObHexEscapeSqlStr(empty_if_null(endpoint.provider_))))) {
-  } else if (OB_FAIL(sql.add_column("parameters", ObHexEscapeSqlStr(empty_if_null(endpoint.parameters_))))) {
-  } else if (OB_FAIL(sql.add_column("request_transform_fn", ObHexEscapeSqlStr(empty_if_null(endpoint.request_transform_fn_))))) {
-  } else if (OB_FAIL(sql.add_column("response_transform_fn", ObHexEscapeSqlStr(empty_if_null(endpoint.response_transform_fn_))))) {
+  } else if (OB_FAIL(sql.add_column("ai_model_name", ObHexEscapeSqlStr(endpoint.ai_model_name_)))) {
+  } else if (OB_FAIL(sql.add_column("url", ObHexEscapeSqlStr(endpoint.url_)))) {
+  } else if (OB_FAIL(sql.add_column("access_key", ObHexEscapeSqlStr(endpoint.access_key_)))) {
+  } else if (OB_FAIL(sql.add_column("request_model_name", ObHexEscapeSqlStr(endpoint.request_model_name_)))) {
+  } else if (OB_FAIL(sql.add_column("provider", ObHexEscapeSqlStr(endpoint.provider_)))) {
+  } else if (OB_FAIL(sql.add_column("parameters", ObHexEscapeSqlStr(endpoint.parameters_)))) {
+  } else if (OB_FAIL(sql.add_column("request_transform_fn", ObHexEscapeSqlStr(endpoint.request_transform_fn_)))) {
+  } else if (OB_FAIL(sql.add_column("response_transform_fn", ObHexEscapeSqlStr(endpoint.response_transform_fn_)))) {
+  } else if (OB_FAIL(sql.add_column("max_concurrency", endpoint.max_concurrency_))) {
   } else if (OB_FAIL(sql.splice_update_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+// The endpoint table stores optional fields as NULL; copying a NULL ObString fails.
+static int safe_deep_copy_ob_string(oceanbase::common::ObIAllocator &allocator,
+                                    const oceanbase::common::ObString &src,
+                                    oceanbase::common::ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  if (src.empty()) {
+    dst.reset();
+  } else if (OB_FAIL(deep_copy_ob_string(allocator, src, dst))) {
   }
   return ret;
 }
@@ -206,24 +215,25 @@ int ObAiServiceProxy::build_ai_endpoint_(ObArenaAllocator &allocator, ObMySQLRes
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "endpoint_name", name);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "ai_model_name", ai_model_name);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "url", url);
-  EXTRACT_VARCHAR_FIELD_MYSQL(result, "access_key", access_key);
+  EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "access_key", access_key, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "provider", provider, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "request_model_name", request_model_name, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "parameters", arguments, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "request_transform_fn", request_transform_fn, true, false, ""/*wont be used*/);
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "response_transform_fn", response_transform_fn, true, false, ""/*wont be used*/);
+  EXTRACT_INT_FIELD_MYSQL(result, "max_concurrency", endpoint.max_concurrency_, int64_t);
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, scope, endpoint.scope_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, name, endpoint.name_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, ai_model_name, endpoint.ai_model_name_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, url, endpoint.url_))) {
-  } else if (OB_FAIL(deep_copy_ob_string(allocator, access_key, endpoint.access_key_))) {
+  } else if (OB_FAIL(safe_deep_copy_ob_string(allocator, access_key, endpoint.access_key_))) {
   } else if (OB_FAIL(deep_copy_ob_string(allocator, provider, endpoint.provider_))) {
-  } else if (OB_FAIL(deep_copy_ob_string(allocator, request_model_name, endpoint.request_model_name_))) {
-  } else if (OB_FAIL(deep_copy_ob_string(allocator, arguments, endpoint.parameters_))) {
-  } else if (OB_FAIL(deep_copy_ob_string(allocator, request_transform_fn, endpoint.request_transform_fn_))) {
-  } else if (OB_FAIL(deep_copy_ob_string(allocator, response_transform_fn, endpoint.response_transform_fn_))) {
+  } else if (OB_FAIL(safe_deep_copy_ob_string(allocator, request_model_name, endpoint.request_model_name_))) {
+  } else if (OB_FAIL(safe_deep_copy_ob_string(allocator, arguments, endpoint.parameters_))) {
+  } else if (OB_FAIL(safe_deep_copy_ob_string(allocator, request_transform_fn, endpoint.request_transform_fn_))) {
+  } else if (OB_FAIL(safe_deep_copy_ob_string(allocator, response_transform_fn, endpoint.response_transform_fn_))) {
   }
 
   if (OB_SUCC(ret)) {
