@@ -43,7 +43,7 @@ namespace sql
 namespace
 {
 
-int readonly_file_flags()
+int parquet_readonly_file_flags()
 {
   int flags = O_RDONLY;
 #ifdef O_CLOEXEC
@@ -693,7 +693,7 @@ int open_verified(const std::string &path, const uint64_t expected_device,
                   const int64_t expected_mtime_ns, int &fd)
 {
   int ret = OB_SUCCESS;
-  fd = ::open(path.c_str(), readonly_file_flags());
+  fd = ::open(path.c_str(), parquet_readonly_file_flags());
   struct stat st;
   if (fd < 0 || 0 != fstat(fd, &st) || !S_ISREG(st.st_mode)) {
     if (fd >= 0) ::close(fd);

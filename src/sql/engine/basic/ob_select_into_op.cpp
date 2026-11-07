@@ -338,7 +338,7 @@ int ObSelectIntoOp::inner_close()
     std::string output_path(basic_url_.ptr(), basic_url_.length());
     const int tmp_ret = FileDirectoryUtils::delete_file(output_path.c_str());
     if (OB_SUCCESS != tmp_ret) {
-      LOG_WARN("failed to remove incomplete COPY output", K(tmp_ret), K(output_path));
+      LOG_WARN("failed to remove incomplete COPY output", K(tmp_ret), K(output_path.c_str()));
     }
   }
   return ret;
