@@ -94,7 +94,28 @@ protected:
   // Fast path for queries with 3..MAX_FAST_DIMS dimensions and no relevance/filter.
   // Replaces the merge heap with a linear min scan over the sorted posting lists.
   static constexpr int64_t MAX_FAST_DIMS = 4;
+  // Advance one dimension iterator and cache its current doc id, so the merge
+  // round only re-reads the dims that actually moved instead of all of them.
+  int advance_k_way_dim(const int64_t dim_idx);
   int do_k_way_merge_round(int64_t &count);
+  // Integer doc-id comparison for the k-way fast path, avoiding the generic
+  // datum compare function pointer in the merge hot loop.
+  inline int cmp_k_way_int_id(const int64_t l_idx, const int64_t r_idx) const
+  {
+    int cmp_ret = 0;
+    if (OB_UNLIKELY(l_idx < 0 || r_idx < 0)) {
+      cmp_ret = 0;
+    } else if (k_way_id_unsigned_) {
+      const uint64_t l_val = static_cast<uint64_t>(k_way_int_vals_[l_idx]);
+      const uint64_t r_val = static_cast<uint64_t>(k_way_int_vals_[r_idx]);
+      cmp_ret = (l_val < r_val) ? -1 : ((l_val > r_val) ? 1 : 0);
+    } else {
+      const int64_t l_val = k_way_int_vals_[l_idx];
+      const int64_t r_val = k_way_int_vals_[r_idx];
+      cmp_ret = (l_val < r_val) ? -1 : ((l_val > r_val) ? 1 : 0);
+    }
+    return cmp_ret;
+  }
   int fill_merge_heap();
   virtual int collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id);
   virtual int process_collected_row(const ObDatum &id_datum, const double relevance);
@@ -126,6 +147,12 @@ protected:
   bool k_way_intersect_;
   bool k_way_primed_;
   bool k_way_valid_[MAX_FAST_DIMS];
+  const ObDatum *k_way_ids_[MAX_FAST_DIMS];
+  // Raw integer doc-id values, used only when k_way_int_ids_ is true (doc ids
+  // are never null in practice; any unexpected null disables this fast path).
+  bool k_way_int_ids_;
+  bool k_way_id_unsigned_;
+  int64_t k_way_int_vals_[MAX_FAST_DIMS];
   int64_t k_way_dim_cnt_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
