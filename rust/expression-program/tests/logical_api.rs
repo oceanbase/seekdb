@@ -49,8 +49,8 @@ impl InputProvider for Inputs {
         }
         for (row, &needed) in demand.iter().enumerate() {
             if needed != 0 {
-                values[row] = self.values[node][row].unwrap_or(0) as u64;
-                flags[row] = EVALUATED
+                values[node * demand.len() + row] = self.values[node][row].unwrap_or(0) as u64;
+                flags[node * demand.len() + row] = EVALUATED
                     | if self.values[node][row].is_some() {
                         VALID
                     } else {
@@ -443,35 +443,17 @@ fn sizing_failures_and_mid_execution_cancellation_do_not_publish_results() {
 }
 
 #[test]
-fn completed_shared_nodes_are_published_before_reentrant_external_demand() {
-    struct ReentrantInputs {
-        published: bool,
-        order: Vec<&'static str>,
+fn frontier_exposes_completed_values_before_reentry_and_reconciles_invalidation() {
+    struct Frontier {
+        changed: bool,
+        reads: usize,
     }
-    impl Control for ReentrantInputs {
+    impl Control for Frontier {
         fn check(&mut self) -> Result<(), i32> {
             Ok(())
         }
     }
-    impl InputProvider for ReentrantInputs {
-        fn publish_snapshot(
-            &mut self,
-            values: &[u64],
-            flags: &[u64],
-            rows: usize,
-        ) -> Result<(), i32> {
-            assert_eq!(rows, 1);
-            assert_eq!(values.len(), 4);
-            assert_eq!(flags.len(), 4);
-            if flags[1] & EVALUATED != 0 {
-                assert_eq!(values[1], 1);
-                assert_eq!(flags[1], EVALUATED | VALID);
-                assert_eq!(flags[3] & EVALUATED, 0);
-                self.published = true;
-                self.order.push("publish-shared");
-            }
-            Ok(())
-        }
+    impl InputProvider for Frontier {
         fn demand(
             &mut self,
             node: usize,
@@ -480,14 +462,23 @@ fn completed_shared_nodes_are_published_before_reentrant_external_demand() {
             flags: &mut [u64],
         ) -> Result<(), i32> {
             assert_eq!(demand, &[1]);
-            if node == 2 {
-                if !self.published {
-                    return Err(-4999);
-                }
-                self.order.push("reenter-shared");
+            assert_eq!(values.len(), 4);
+            assert_eq!(flags.len(), 4);
+            if node == 0 {
+                self.reads += 1;
+                values[0] = u64::from(self.changed);
+            } else {
+                assert_eq!(node, 2);
+                assert_eq!(values[1], 1);
+                assert_eq!(flags[1], EVALUATED | VALID);
+                assert_eq!(values[3], 1);
+                assert_eq!(flags[3], logical::IN_PROGRESS | VALID);
+                self.changed = true;
+                flags[0] = 0;
+                flags[1] = 0;
+                values[2] = 1;
             }
-            values[0] = if node == 0 { 0 } else { 1 };
-            flags[0] = EVALUATED | VALID;
+            flags[node] = EVALUATED | VALID;
             Ok(())
         }
     }
@@ -496,9 +487,9 @@ fn completed_shared_nodes_are_published_before_reentrant_external_demand() {
             instruction(Opcode::Input, 0, 0),
             instruction(Opcode::Not, 0, 1),
             instruction(Opcode::Input, 0, 0),
-            instruction(Opcode::And, 1, 2),
+            instruction(Opcode::And, 1, 3),
         ],
-        &[0, 1, 2],
+        &[0, 1, 2, 1],
     );
     let mut execution = Execution::new(
         &program,
@@ -506,37 +497,66 @@ fn completed_shared_nodes_are_published_before_reentrant_external_demand() {
         vec![0; logical::required_words(&program, 1).unwrap()],
     )
     .unwrap();
-    let mut provider = ReentrantInputs {
-        published: false,
-        order: vec![],
+    let mut provider = Frontier {
+        changed: false,
+        reads: 0,
     };
     execution.execute(&[0], &mut provider).unwrap();
-    assert_eq!(provider.order, vec!["publish-shared", "reenter-shared"]);
-    assert_eq!(execution.root_values(), &[1]);
+    assert_eq!(provider.reads, 2);
+    assert_eq!(execution.root_values(), &[0]);
+    assert_eq!(execution.root_flags(), &[EVALUATED | VALID]);
 }
 
 #[test]
-fn snapshot_error_prevents_external_effects_and_propagates_exact_code() {
-    struct FailedPublication;
-    impl Control for FailedPublication {
+fn frontier_imports_new_materialization_and_preserves_in_progress_null_prefix() {
+    struct Frontier {
+        calls: Vec<usize>,
+    }
+    impl Control for Frontier {
         fn check(&mut self) -> Result<(), i32> {
             Ok(())
         }
     }
-    impl InputProvider for FailedPublication {
-        fn publish_snapshot(&mut self, _: &[u64], _: &[u64], _: usize) -> Result<(), i32> {
-            Err(-4998)
-        }
-        fn demand(&mut self, _: usize, _: &[u64], _: &mut [u64], _: &mut [u64]) -> Result<(), i32> {
-            panic!("external effects must not execute after failed publication")
+    impl InputProvider for Frontier {
+        fn demand(
+            &mut self,
+            node: usize,
+            demand: &[u64],
+            values: &mut [u64],
+            flags: &mut [u64],
+        ) -> Result<(), i32> {
+            assert_eq!(demand, &[1]);
+            self.calls.push(node);
+            match node {
+                0 => panic!("new materialization must hide stale descendant"),
+                2 => {
+                    values[2] = 0;
+                    flags[2] = EVALUATED;
+                }
+                3 => {
+                    assert_eq!(flags[4], logical::IN_PROGRESS);
+                    flags[1] = logical::MATERIALIZED_PENDING;
+                    values[3] = 1;
+                    flags[3] = EVALUATED | VALID;
+                }
+                1 => {
+                    values[1] = 1;
+                    flags[1] = EVALUATED | VALID;
+                }
+                _ => unreachable!(),
+            }
+            Ok(())
         }
     }
     let program = image(
         &[
             instruction(Opcode::Input, 0, 0),
             instruction(Opcode::Not, 0, 1),
+            instruction(Opcode::Input, 0, 0),
+            instruction(Opcode::Input, 0, 0),
+            instruction(Opcode::And, 1, 3),
         ],
-        &[0],
+        &[0, 2, 3, 1],
     );
     let mut execution = Execution::new(
         &program,
@@ -544,12 +564,8 @@ fn snapshot_error_prevents_external_effects_and_propagates_exact_code() {
         vec![0; logical::required_words(&program, 1).unwrap()],
     )
     .unwrap();
-    assert_eq!(
-        execution
-            .execute(&[0], &mut FailedPublication)
-            .unwrap_err()
-            .host_code,
-        -4998
-    );
-    assert!(execution.root_values().is_empty());
+    let mut provider = Frontier { calls: vec![] };
+    execution.execute(&[0], &mut provider).unwrap();
+    assert_eq!(provider.calls, vec![2, 3, 1]);
+    assert_eq!(execution.root_flags(), &[EVALUATED]);
 }

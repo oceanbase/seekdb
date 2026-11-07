@@ -18,6 +18,8 @@ use crate::{Control, ErrorKind, EvalError, EVALUATED, VALID};
 
 /// Availability is known, but its datum must only be read if demanded.
 pub const MATERIALIZED_PENDING: u64 = 4;
+/// An unfinished logical accumulator. External reconciliation preserves it.
+pub const IN_PROGRESS: u64 = 8;
 
 const VERSION: u64 = 1;
 const HEADER: usize = 3;
@@ -213,20 +215,16 @@ pub fn compile_in<B: AsRef<[u64]> + AsMut<[u64]>>(
     )
 }
 
-/// Supplies only demanded external values. Errors are returned unchanged.
-/// A successful callback marks every demanded row EVALUATED; VALID denotes non-NULL.
+/// Supplies demanded inputs and reconciles consumer snapshots at one frontier.
+/// Values and flags are complete column-major node planes, each with `rows =
+/// demand.len()` slots per node. Before external evaluation, completed logical
+/// values can be published for reentry. After evaluation, refresh non-running
+/// cache flags to MATERIALIZED_PENDING or zero and fill demanded input rows last.
+/// IN_PROGRESS rows retain both their accumulator values and flags unchanged.
+/// For a pending logical node this callback only copies its demanded cached
+/// values; it must not evaluate children or refresh other nodes.
+/// Every demanded row must return EVALUATED; VALID denotes non-NULL.
 pub trait InputProvider: Control {
-    /// Exposes completed values to a consumer before an external input may
-    /// reenter another program. The borrowed snapshots end before demand begins.
-    fn publish_snapshot(
-        &mut self,
-        _values: &[u64],
-        _flags: &[u64],
-        _rows: usize,
-    ) -> Result<(), i32> {
-        Ok(())
-    }
-
     fn demand(
         &mut self,
         node: usize,
@@ -377,12 +375,7 @@ impl<'a, P: AsRef<[u64]>, B: AsRef<[u64]> + AsMut<[u64]>> Execution<'a, P, B> {
                     let (flags, tail) = tail.split_at_mut(plane);
                     let demand = &tail[plane..][..rows];
                     provider
-                        .demand(
-                            node,
-                            demand,
-                            &mut values[node * rows..][..rows],
-                            &mut flags[node * rows..][..rows],
-                        )
+                        .demand(node, demand, values, flags)
                         .map_err(|host_code| EvalError {
                             host_code,
                             ..EvalError::new(ErrorKind::InvalidBatch, node, 0)
@@ -406,25 +399,11 @@ impl<'a, P: AsRef<[u64]>, B: AsRef<[u64]> + AsMut<[u64]>> Execution<'a, P, B> {
                 }
             }
             if instruction.opcode == Opcode::Input {
-                {
-                    let data = self.backing.as_ref();
-                    provider
-                        .publish_snapshot(&data[..plane], &data[plane..plane * 2], rows)
-                        .map_err(|host_code| EvalError {
-                            host_code,
-                            ..EvalError::new(ErrorKind::InvalidBatch, node, 0)
-                        })?;
-                }
                 let (values, tail) = self.backing.as_mut().split_at_mut(plane);
                 let (flags, tail) = tail.split_at_mut(plane);
                 let demand = &tail[node * rows..][..rows];
                 provider
-                    .demand(
-                        node,
-                        demand,
-                        &mut values[node * rows..][..rows],
-                        &mut flags[node * rows..][..rows],
-                    )
+                    .demand(node, demand, values, flags)
                     .map_err(|host_code| EvalError {
                         host_code,
                         ..EvalError::new(ErrorKind::InvalidBatch, node, 0)
@@ -444,7 +423,7 @@ impl<'a, P: AsRef<[u64]>, B: AsRef<[u64]> + AsMut<[u64]>> Execution<'a, P, B> {
                     if self.backing.as_ref()[demand_base + node * rows + row] != 0 {
                         self.backing.as_mut()[node * rows + row] =
                             u64::from(instruction.opcode == Opcode::And);
-                        self.backing.as_mut()[plane + node * rows + row] = VALID;
+                        self.backing.as_mut()[plane + node * rows + row] = VALID | IN_PROGRESS;
                     }
                 }
             } else {
@@ -490,7 +469,9 @@ impl<'a, P: AsRef<[u64]>, B: AsRef<[u64]> + AsMut<[u64]>> Execution<'a, P, B> {
                 for row in 0..rows {
                     poll(&mut visits, provider, node, row)?;
                     if self.backing.as_ref()[demand_base + node * rows + row] != 0 {
-                        self.backing.as_mut()[plane + node * rows + row] |= EVALUATED;
+                        self.backing.as_mut()[plane + node * rows + row] =
+                            (self.backing.as_ref()[plane + node * rows + row] & !IN_PROGRESS)
+                                | EVALUATED;
                     }
                 }
                 depth -= 1;

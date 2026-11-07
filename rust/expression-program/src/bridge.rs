@@ -62,12 +62,6 @@ mod ffi {
             values: &mut [u64],
             flags: &mut [u64],
         ) -> i32;
-        unsafe fn publish_logical_snapshot(
-            host: *mut ILogicalHost,
-            values: &[u64],
-            flags: &[u64],
-            rows: usize,
-        ) -> i32;
         unsafe fn check_logical_cancel(host: *mut ILogicalHost) -> i32;
         type IExecutionHost;
         unsafe fn allocate_workspace(host: *mut IExecutionHost, words: usize) -> *mut u64;
@@ -512,17 +506,6 @@ impl Control for LogicalHost {
     }
 }
 impl crate::logical::InputProvider for LogicalHost {
-    fn publish_snapshot(&mut self, values: &[u64], flags: &[u64], rows: usize) -> Result<(), i32> {
-        // SAFETY: this immutable snapshot borrow ends before the mutable input
-        // callback. The host copies completed values and retains no slice.
-        let status = unsafe { ffi::publish_logical_snapshot(self.0.as_ptr(), values, flags, rows) };
-        if status == 0 {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-
     fn demand(
         &mut self,
         node: usize,
@@ -530,8 +513,8 @@ impl crate::logical::InputProvider for LogicalHost {
         values: &mut [u64],
         flags: &mut [u64],
     ) -> Result<(), i32> {
-        // SAFETY: these disjoint borrowed planes remain live for this callback;
-        // the host neither retains them nor reenters this execution scope.
+        // SAFETY: the demand mask is disjoint from the complete value/flag
+        // planes. The host retains no slices; nested demand uses another scope.
         let status =
             unsafe { ffi::demand_logical_input(self.0.as_ptr(), node, demand, values, flags) };
         if status == 0 {
