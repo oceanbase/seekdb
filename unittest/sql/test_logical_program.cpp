@@ -33,6 +33,17 @@ struct InputState {
   int calls = 0;
 };
 thread_local InputState inputs[4];
+thread_local ObExpr *reentry_leaf = nullptr;
+thread_local ObExpr *reentry_shared = nullptr;
+int mutate_leaf_and_demand_shared(const ObExpr &, ObEvalCtx &ctx, ObDatum &result)
+{
+  inputs[0].value = 0;
+  reentry_leaf->get_eval_info(ctx).clear_evaluated_flag();
+  ObDatum *cached = nullptr;
+  const int ret = reentry_shared->eval(ctx, cached);
+  if (ret == OB_SUCCESS) { result.set_int(cached->get_int()); }
+  return ret;
+}
 int input_scalar(const ObExpr &expr, ObEvalCtx &, ObDatum &result)
 {
   auto &input = inputs[expr.extra_];
@@ -60,6 +71,8 @@ protected:
   LogicalProgramTest() : exec_(allocator_) {}
   void SetUp() override {
     for (auto &input : inputs) { input = InputState{}; }
+    reentry_leaf = nullptr;
+    reentry_shared = nullptr;
     exec_.set_my_session(&session_);
     ASSERT_EQ(OB_SUCCESS, exec_.create_physical_plan_ctx());
     exec_.get_physical_plan_ctx()->set_timeout_timestamp(INT64_MAX);
@@ -153,6 +166,22 @@ TEST_F(LogicalProgramTest, PublishesSharedInternalNodeForLaterIndependentDemand)
   EXPECT_EQ(0, result->get_int());
   EXPECT_EQ(1, inputs[0].calls);
   EXPECT_EQ(1, inputs[1].calls);
+}
+TEST_F(LogicalProgramTest, ExternalReentrySeesAlreadyCompletedSharedLogicalSnapshot) {
+  inputs[0].value = inputs[1].value = 1;
+  logical(3, T_OP_AND, {0, 1});
+  exprs_[2].eval_func_ = mutate_leaf_and_demand_shared;
+  logical(4, T_OP_AND, {3, 2});
+  reentry_leaf = &exprs_[0];
+  reentry_shared = &exprs_[3];
+  ObEvalCtx ctx(exec_);
+  ObDatum *result = nullptr;
+  ASSERT_EQ(OB_SUCCESS, exprs_[4].eval(ctx, result));
+  EXPECT_EQ(1, result->get_int());
+  EXPECT_EQ(1, inputs[0].calls);
+  EXPECT_EQ(1, inputs[1].calls);
+  EXPECT_EQ(0, inputs[0].value);
+  EXPECT_EQ(1, exprs_[3].locate_expr_datum(ctx).get_int());
 }
 TEST_F(LogicalProgramTest, BatchMasksShortCircuitAndAllSkipAvoidsInputs) {
   inputs[0].value = 0;
