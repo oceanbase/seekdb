@@ -138,10 +138,13 @@ public:
     if (!publication_safe_) { return OB_SUCCESS; }
     int64_t visits = 0;
     const int64_t count = nodes_.count();
-    if (rows != static_cast<size_t>(rows_) || values.size() != flags.size()
-        || values.size() != static_cast<size_t>(count) * rows) {
+    const size_t value_count = values.size();
+    if (rows != static_cast<size_t>(rows_) || value_count != flags.size()
+        || value_count != static_cast<size_t>(count) * rows) {
       return OB_INVALID_ARGUMENT;
     }
+    const uint64_t *value_data = values.data();
+    const uint64_t *flag_data = flags.data();
     ObEvalCtx::BatchInfoScopeGuard batch_guard(ctx_);
     for (int64_t node = 0; node < count; ++node) {
       const ObExpr &target = *nodes_.at(node);
@@ -151,7 +154,7 @@ public:
       for (int64_t row = 0; row < rows_; ++row) {
         const int poll_ret = poll_logical_status(ctx_, visits);
         if (poll_ret != OB_SUCCESS) { return poll_ret; }
-        const uint64_t state = flags[node * rows_ + row];
+        const uint64_t state = flag_data[node * rows_ + row];
         if ((state & 1) == 0) { continue; }
         const int64_t index = batch_ ? row : ctx_.get_batch_idx();
         const bool cached = published.projected_ || (published.evaluated_
@@ -165,7 +168,7 @@ public:
         ObDatum &datum = node == count - 1 && !batch_
             ? *scalar_result_ : target.locate_datum_for_write(ctx_);
         if ((state & 2) == 0) { datum.set_null(); }
-        else { datum.set_int(values[node * rows_ + row]); }
+        else { datum.set_int(value_data[node * rows_ + row]); }
         published.evaluated_ = true;
         published.point_to_frame_ = true;
         published.notnull_ = false;
@@ -181,15 +184,20 @@ public:
     int ret = OB_SUCCESS;
     int64_t visits = 0;
     const size_t count = nodes_.count();
-    if (node >= count || demand.size() != static_cast<size_t>(rows_)
-        || values.size() != count * demand.size() || flags.size() != values.size()) {
+    const size_t demand_count = demand.size();
+    const size_t value_count = values.size();
+    if (node >= count || demand_count != static_cast<size_t>(rows_)
+        || value_count != count * demand_count || flags.size() != value_count) {
       return OB_INVALID_ARGUMENT;
     }
+    const uint64_t *demand_data = demand.data();
+    uint64_t *value_data = values.data();
+    uint64_t *flag_data = flags.data();
     const ObExpr &input = *nodes_.at(node);
     if (!is_logical(input)) {
       if (OB_FAIL(publish_completed(
-          rust::Slice<const uint64_t>(values.data(), values.size()),
-          rust::Slice<const uint64_t>(flags.data(), flags.size()), rows_, false))) {
+          rust::Slice<const uint64_t>(value_data, value_count),
+          rust::Slice<const uint64_t>(flag_data, value_count), rows_, false))) {
         return ret;
       }
       publication_safe_ = false;
@@ -205,7 +213,7 @@ public:
         for (int64_t row = 0; row < rows_; ++row) {
           const int poll_ret = poll_logical_status(ctx_, visits);
           if (poll_ret != OB_SUCCESS) { return poll_ret; }
-          if (demand[row] == 0) { skip.set(row); }
+          if (demand_data[row] == 0) { skip.set(row); }
         }
         ret = input.eval_batch(ctx_, skip, rows_);
       } else {
@@ -219,14 +227,14 @@ public:
           const int poll_ret = poll_logical_status(ctx_, visits);
           if (poll_ret != OB_SUCCESS) { return ret == OB_SUCCESS ? poll_ret : ret; }
           const size_t slot = cached_node * rows_ + row;
-          if ((flags[slot] & 8) != 0 || (cached_node == node && demand[row] != 0)) {
+          if ((flag_data[slot] & 8) != 0 || (cached_node == node && demand_data[row] != 0)) {
             continue;
           }
           const int64_t index = batch_ ? row : ctx_.get_batch_idx();
           const bool ready = available.projected_ || cached.eval_func_ == nullptr
               || (available.evaluated_ && (!cached.is_batch_result()
                   || cached.get_evaluated_flags(ctx_).at(index)));
-          flags[slot] = ready ? 4 : 0;
+          flag_data[slot] = ready ? 4 : 0;
         }
       }
       publication_safe_ = true;
@@ -234,7 +242,7 @@ public:
     for (int64_t row = 0; OB_SUCC(ret) && row < rows_; ++row) {
       const int poll_ret = poll_logical_status(ctx_, visits);
       if (poll_ret != OB_SUCCESS) { return poll_ret; }
-      if (demand[row] == 0) { continue; }
+      if (demand_data[row] == 0) { continue; }
       const int64_t index = batch_ ? row : ctx_.get_batch_idx();
       if (is_logical(input)) {
         const ObEvalInfo &available = input.get_eval_info(ctx_);
@@ -245,8 +253,8 @@ public:
       }
       const ObDatum &datum = input.locate_expr_datum(ctx_, index);
       const size_t slot = node * rows_ + row;
-      flags[slot] = datum.is_null() ? 1 : 3;
-      values[slot] = datum.is_null() ? 0 : static_cast<uint64_t>(datum.get_int());
+      flag_data[slot] = datum.is_null() ? 1 : 3;
+      value_data[slot] = datum.is_null() ? 0 : static_cast<uint64_t>(datum.get_int());
     }
     return ret;
   }
