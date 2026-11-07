@@ -341,6 +341,10 @@ int eval_logical_program(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
 int eval_logical_program_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                const ObBitVector &skip, int64_t rows)
 {
-  return run_logical(expr, ctx, &skip, rows, true, nullptr);
+  const int ret = run_logical(expr, ctx, &skip, rows, true, nullptr);
+  if (ret != OB_SUCCESS && rows >= 0 && expr.is_batch_result()) {
+    expr.get_evaluated_flags(ctx).reset(rows);
+  }
+  return ret;
 }
 } }

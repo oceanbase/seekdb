@@ -198,6 +198,26 @@ TEST_F(LogicalProgramTest, CompletedInternalSnapshotSurvivesLaterRootFailure) {
   EXPECT_EQ(0, result->get_int());
   EXPECT_EQ(1, inputs[0].calls);
 }
+TEST_F(LogicalProgramTest, BatchFailureInvalidatesPreviouslyCachedRootRows) {
+  inputs[0].value = 1;
+  inputs[1].error = OB_DIVISION_BY_ZERO;
+  for (int i = 0; i < 3; ++i) {
+    exprs_[i].batch_result_ = true;
+    exprs_[i].batch_idx_mask_ = UINT64_MAX;
+  }
+  logical(2, T_OP_AND, {0, 1});
+  ObEvalCtx ctx(exec_);
+  ObEvalCtx::BatchInfoScopeGuard batch(ctx);
+  batch.set_batch_size(2);
+  exprs_[2].locate_datum_for_write(ctx).set_int(1);
+  exprs_[2].get_eval_info(ctx).evaluated_ = true;
+  exprs_[2].get_evaluated_flags(ctx).set(0);
+  uint64_t skip_storage = 0;
+  const auto &skip = *to_bit_vector(&skip_storage);
+  EXPECT_EQ(OB_DIVISION_BY_ZERO, exprs_[2].eval_batch(ctx, skip, 2));
+  EXPECT_FALSE(exprs_[2].get_evaluated_flags(ctx).at(0));
+  EXPECT_FALSE(exprs_[2].get_evaluated_flags(ctx).at(1));
+}
 TEST_F(LogicalProgramTest, ScalarLogicalDryBatchDoesNotDemandErrorLeaf) {
   inputs[0].error = OB_DIVISION_BY_ZERO;
   logical(1, T_OP_NOT, {0});
