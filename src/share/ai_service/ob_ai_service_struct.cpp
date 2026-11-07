@@ -30,6 +30,8 @@ namespace share
 {
 const ObString ObAiModelEndpointInfo::DEFAULT_SCOPE = "ALL";
 
+static const char *const OLLAMA_PROVIDER = "OLLAMA";
+
 const char *VALID_PROVIDERS[] = {
   "ALIYUN-OPENAI",
   "ALIYUN-DASHSCOPE",
@@ -37,7 +39,8 @@ const char *VALID_PROVIDERS[] = {
   "SILICONFLOW",
   "COHERE",
   "HUNYUAN-OPENAI",
-  "OPENAI"
+  "OPENAI",
+  "OLLAMA"
 };
 
 #define EXTRACT_JSON_ELEM_STR(json_key, member) \
@@ -73,6 +76,18 @@ int ObAiModelEndpointInfo::parse_from_json_base(common::ObArenaAllocator &alloca
   return ret;
 }
 
+static int safe_write_string(common::ObIAllocator &allocator,
+                             const common::ObString &src,
+                             common::ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  if (src.empty()) {
+    dst.reset();
+  } else if (OB_FAIL(ob_write_string(allocator, src, dst))) {
+  }
+  return ret;
+}
+
 int ObAiModelEndpointInfo::deep_copy(
     common::ObIAllocator &allocator,
     const ObAiModelEndpointInfo &other)
@@ -80,16 +95,17 @@ int ObAiModelEndpointInfo::deep_copy(
   int ret = OB_SUCCESS;
   reset();
   endpoint_id_ = other.endpoint_id_;
-  if (OB_FAIL(ob_write_string(allocator, other.name_, name_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.scope_, scope_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.ai_model_name_, ai_model_name_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.url_, url_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.access_key_, access_key_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.provider_, provider_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.request_model_name_, request_model_name_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.parameters_, parameters_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.request_transform_fn_, request_transform_fn_))) {
-  } else if (OB_FAIL(ob_write_string(allocator, other.response_transform_fn_, response_transform_fn_))) {
+  if (OB_FAIL(safe_write_string(allocator, other.name_, name_))) {
+  } else if (OB_FAIL(safe_write_string(allocator, other.scope_, scope_))) {
+  } else if (OB_FAIL(safe_write_string(allocator, other.ai_model_name_, ai_model_name_))) {
+  } else if (OB_FAIL(safe_write_string(allocator, other.url_, url_))) {
+  } else if (!other.access_key_.empty()
+             && OB_FAIL(safe_write_string(allocator, other.access_key_, access_key_))) {
+  } else if (OB_FAIL(safe_write_string(allocator, other.provider_, provider_))) {
+  } else if (OB_FAIL(safe_write_string(allocator, other.request_model_name_, request_model_name_))) {
+  } else if (OB_FAIL(safe_write_string(allocator, other.parameters_, parameters_))) {
+  } else if (OB_FAIL(safe_write_string(allocator, other.request_transform_fn_, request_transform_fn_))) {
+  } else if (OB_FAIL(safe_write_string(allocator, other.response_transform_fn_, response_transform_fn_))) {
   }
   return ret;
 }
@@ -112,7 +128,8 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (url_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("url"), "url");
-  } else if (access_key_.empty()) {
+  } else if (access_key_.empty() && 0 != provider_.case_compare(OLLAMA_PROVIDER)) {
+    // Ollama serves models locally and does not take an API key, so access_key may be empty.
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
     LOG_WARN("access_key is empty", K(ret), K(*this));
@@ -192,7 +209,10 @@ int ObAiModelEndpointInfo::encrypt_access_key_(ObIAllocator &allocator, const Ob
 int ObAiModelEndpointInfo::decrypt_access_key_(ObIAllocator &allocator, const ObString &encrypted_access_key, ObString &unencrypted_access_key) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ob_write_string(allocator, encrypted_access_key, unencrypted_access_key))) {
+  if (encrypted_access_key.empty()) {
+    // Providers such as Ollama take no API key; an empty key stays empty.
+    unencrypted_access_key.reset();
+  } else if (OB_FAIL(ob_write_string(allocator, encrypted_access_key, unencrypted_access_key))) {
   }
   return ret;
 }
