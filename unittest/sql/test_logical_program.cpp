@@ -355,6 +355,20 @@ TEST_F(LogicalProgramTest, WideProgramHasNoPrototypeNodeLimit) {
   exec_.set_frames(frames_.data());
   exec_.set_frame_cnt(frames_.size());
 }
+TEST_F(LogicalProgramTest, ExpiredQueryPreservesTimeoutWithoutDemandOrPublication) {
+  inputs[0].value = inputs[1].value = 1;
+  logical(2, T_OP_AND, {0, 1});
+  ObEvalCtx ctx(exec_);
+  exprs_[2].locate_datum_for_write(ctx).set_int(41);
+  exec_.get_physical_plan_ctx()->set_timeout_timestamp(1);
+  ObDatum *result = nullptr;
+  EXPECT_EQ(OB_TIMEOUT, exprs_[2].eval(ctx, result));
+  EXPECT_EQ(0, inputs[0].calls);
+  EXPECT_EQ(0, inputs[1].calls);
+  EXPECT_FALSE(exprs_[2].get_eval_info(ctx).evaluated_);
+  ASSERT_NE(nullptr, result);
+  EXPECT_TRUE(result->is_null());
+}
 TEST_F(LogicalProgramTest, DeepCopyAndSerializationRetainNoRuntimePointers) {
   logical(2, T_OP_AND, {0, 1});
   const auto &original = *static_cast<LogicalProgramInfo *>(exprs_[2].extra_info_);
