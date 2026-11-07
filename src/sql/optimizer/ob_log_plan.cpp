@@ -6869,6 +6869,7 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
       select_into->set_cs_type(into_item->cs_type_);
       select_into->set_external_properties(into_item->external_properties_);
       select_into->set_with_header(into_item->with_header_);
+      select_into->set_fail_if_exists(into_item->fail_if_exists_);
       select_into->set_null_string(into_item->null_string_);
       select_into->set_child(ObLogicalOperator::first_child, old_top);
       // compute property

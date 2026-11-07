@@ -18,8 +18,10 @@
 
 #include <cmath>
 #include <memory>
+#include <string>
 
 #include "ob_select_into_op.h"
+#include "lib/file/file_directory_utils.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -37,8 +39,8 @@ namespace sql
 OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
-    escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_, with_header_, null_string_,
-    header_names_,
+    escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_, with_header_,
+    fail_if_exists_, null_string_, header_names_,
     external_properties_);
 
 
@@ -327,6 +329,13 @@ int ObSelectIntoOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(data_writer_) && OB_FAIL(data_writer_->close_data_writer())) {
+  }
+  if (MY_SPEC.fail_if_exists_ && !need_commit_ && !basic_url_.empty()) {
+    std::string output_path(basic_url_.ptr(), basic_url_.length());
+    const int tmp_ret = FileDirectoryUtils::delete_file(output_path.c_str());
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("failed to remove incomplete COPY output", K(tmp_ret), K(output_path));
+    }
   }
   return ret;
 }
@@ -1266,12 +1275,22 @@ int ObSelectIntoOp::create_the_only_data_writer(ObExternalFileWriter *&data_writ
 {
   int ret = OB_SUCCESS;
   ObCsvFileWriter *csv_data_writer = NULL;
+  bool output_exists = false;
   if (OB_FAIL(new_data_writer(data_writer))) {
   } else if (OB_ISNULL(data_writer)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     data_writer->url_ = basic_url_;
     data_writer_ = data_writer;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (MY_SPEC.fail_if_exists_) {
+    std::string output_path(basic_url_.ptr(), basic_url_.length());
+    if (OB_FAIL(FileDirectoryUtils::is_exists(output_path.c_str(), output_exists))) {
+    } else if (output_exists) {
+      ret = OB_FILE_EXIST;
+      LOG_USER_ERROR(OB_FILE_EXIST, output_path.length(), output_path.c_str());
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (T_INTO_OUTFILE == MY_SPEC.into_type_ && MY_SPEC.is_single_

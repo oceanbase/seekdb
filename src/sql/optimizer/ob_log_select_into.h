@@ -45,6 +45,7 @@ public:
         cs_type_(CS_TYPE_INVALID),
         is_overwrite_(false),
         with_header_(false),
+        fail_if_exists_(false),
         null_string_(),
         external_properties_()
   {
@@ -117,6 +118,14 @@ public:
   inline bool get_with_header() const
   {
     return with_header_;
+  }
+  inline void set_fail_if_exists(bool fail_if_exists)
+  {
+    fail_if_exists_ = fail_if_exists;
+  }
+  inline bool get_fail_if_exists() const
+  {
+    return fail_if_exists_;
   }
   inline void set_null_string(const common::ObString &null_string)
   {
@@ -206,6 +215,7 @@ private:
   common::ObCollationType cs_type_;
   bool is_overwrite_;
   bool with_header_;
+  bool fail_if_exists_;
   common::ObString null_string_;
   common::ObString external_properties_;
 };

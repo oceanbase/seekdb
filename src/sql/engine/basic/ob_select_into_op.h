@@ -72,6 +72,7 @@ public:
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
       with_header_(false),
+      fail_if_exists_(false),
       null_string_(),
       header_names_(alloc),
       external_properties_(alloc)
@@ -94,6 +95,7 @@ public:
   int64_t buffer_size_;
   bool is_overwrite_;
   bool with_header_;
+  bool fail_if_exists_;
   common::ObString null_string_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> header_names_;
   ObExternalFileFormat::StringData external_properties_;

@@ -3010,10 +3010,18 @@ int ObSelectResolver::resolve_file_sql_copy_options(
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL is disabled");
   } else {
+    into_item.fail_if_exists_ = true;
     into_item.field_str_.set_varchar(",");
     into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
     into_item.line_str_.set_varchar("\n");
     into_item.line_str_.set_collation_type(ObCharset::get_system_collation());
+    static const char quote_char = '"';
+    into_item.closed_cht_.meta_.set_char();
+    into_item.closed_cht_.set_char_value(&quote_char, 1);
+    into_item.closed_cht_.set_collation_type(ObCharset::get_system_collation());
+    into_item.escaped_cht_.meta_.set_char();
+    into_item.escaped_cht_.set_char_value(&quote_char, 1);
+    into_item.escaped_cht_.set_collation_type(ObCharset::get_system_collation());
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < node.num_child_; ++i) {
     const ParseNode *option = node.children_[i];
@@ -3055,6 +3063,34 @@ int ObSelectResolver::resolve_file_sql_copy_options(
           } else if (OB_FAIL(ob_write_string(*allocator_,
                                              ObString(value->str_len_, value->str_value_),
                                              into_item.null_string_))) {
+          }
+        } else if (key.case_compare("delimiter") == 0) {
+          ObString delimiter;
+          if (OB_ISNULL(value) || OB_ISNULL(value->str_value_) || value->str_len_ <= 0) {
+            ret = OB_ERR_PARSE_SQL;
+          } else if (OB_FAIL(ob_write_string(
+                       *allocator_,
+                       ObString(value->str_len_, value->str_value_),
+                       delimiter))) {
+          } else {
+            into_item.field_str_.set_varchar(delimiter);
+            into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
+          }
+        } else if (key.case_compare("quote") == 0
+                   || key.case_compare("escape") == 0) {
+          char *copied_char = NULL;
+          if (OB_ISNULL(value)
+              || OB_ISNULL(value->str_value_)
+              || 1 != value->str_len_
+              || OB_ISNULL(copied_char = static_cast<char *>(allocator_->alloc(1)))) {
+            ret = OB_ERR_PARSE_SQL;
+          } else {
+            copied_char[0] = value->str_value_[0];
+            ObObj &target = key.case_compare("quote") == 0
+                ? into_item.closed_cht_ : into_item.escaped_cht_;
+            target.meta_.set_char();
+            target.set_char_value(copied_char, 1);
+            target.set_collation_type(ObCharset::get_system_collation());
           }
         } else {
           LOG_USER_ERROR(OB_ERR_PARSE_SQL, "invalid COPY option", 10, "COPY", 1);

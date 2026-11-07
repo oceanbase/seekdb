@@ -5489,6 +5489,7 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       spec.parallel_ = op.get_parallel();
       spec.is_overwrite_ = op.get_is_overwrite();
       spec.with_header_ = op.get_with_header();
+      spec.fail_if_exists_ = op.get_fail_if_exists();
       if (!op.get_null_string().empty()
           && OB_FAIL(ob_write_string(alloc, op.get_null_string(), spec.null_string_))) {
       } else if (spec.with_header_ && op.get_stmt() != nullptr && op.get_stmt()->is_select_stmt()) {
