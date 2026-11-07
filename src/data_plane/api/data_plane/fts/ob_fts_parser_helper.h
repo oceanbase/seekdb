@@ -165,7 +165,9 @@ public:
   /**
    * Initialize the helper for a new call. The cached token iterator is kept if
    * the parser configuration did not change, so that the parser instance is
-   * reused between the documents.
+   * reused between the documents. The reuse of the tokenizer instance is
+   * enabled by this call, it can be disabled again with
+   * set_reuse_token_iter().
    *
    * @param[in] allocator the allocator used to build the word list
    * @param[in] parser_name, which consists of two parts name and version.
@@ -176,6 +178,20 @@ public:
       common::ObIAllocator *allocator,
       const common::ObString &parser_name,
       const common::ObString &parser_properties);
+  /**
+   * Enable or disable the reuse of the tokenizer instance.
+   *
+   * When the reuse is enabled, the tokenizer instance is kept between the
+   * calls of segment(), so that the dictionaries of the parser are not loaded
+   * again for every call.  The instance is allocated from an own arena, so
+   * that it survives the reset of the allocator of the caller.
+   *
+   * When the reuse is disabled, a tokenizer instance is created for every call
+   * of segment() and it is destroyed when the call returns.
+   *
+   * @param[in] reuse true to reuse the tokenizer instance
+   */
+  void set_reuse_token_iter(bool reuse) { reuse_token_iter_ = reuse; }
   /**
    * Split document into multiple words
    *
@@ -247,9 +263,10 @@ private:
   ObFTParserProperty parser_property_;
   bool is_inited_;
 
-  // The token iterator is reused between the documents. It is allocated from
-  // its own arena, so that it survives the reset of the allocator of the
-  // caller.
+  // The token iterator is reused between the calls when the reuse is enabled.
+  // It is allocated from its own arena, so that it survives the reset of the
+  // allocator of the caller.
+  bool reuse_token_iter_;
   mutable ObITokenIterator *token_iter_;
   mutable ObFTParserParam token_iter_param_;
   mutable const ObIFTParserDesc *token_iter_desc_;

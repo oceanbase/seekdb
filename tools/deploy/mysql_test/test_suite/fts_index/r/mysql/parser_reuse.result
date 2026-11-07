@@ -212,4 +212,17 @@ select tokenize('filler document 5', 'ngram');
 | ["oc", "le", "me", "ll", "il", "er", "nt", "fi", "en", "um", "cu", "do"] |
 +--------------------------------------------------------------------------+
 
+select count(*) from (select tokenize(concat('filler document ', id), 'ik') as t from t_reuse) x;
++----------+
+| count(*) |
++----------+
+|      302 |
++----------+
+select count(*) from (select tokenize(concat('filler document ', id), 'beng') as t from t_reuse) x;
++----------+
+| count(*) |
++----------+
+|      302 |
++----------+
+
 drop database fts;

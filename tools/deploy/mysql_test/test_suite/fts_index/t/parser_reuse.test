@@ -1,10 +1,12 @@
 #owner: oceanbase
 #owner group: storage
 # description: regression test of the reuse of the tokenizer parser.  The parser
-#              instance is reused for the documents of one index build and it is
-#              recycled after a fixed number of documents, the tokens of a
-#              document must never be affected by the documents that were
-#              segmented before it.
+#              instance is reused for the calls of the tokenize function of one
+#              thread and it is recycled after a fixed number of calls, the
+#              tokens of a document must never be affected by the documents
+#              that were segmented before it.  The index build creates a
+#              tokenizer instance for every document, the tokens of the index
+#              must not change either.
 
 --disable_warnings
 drop database if exists fts;
@@ -32,8 +34,8 @@ from (select 0 as n union all select 1 union all select 2 union all select 3 uni
       union all select 25 union all select 26 union all select 27 union all select 28 union all select 29) b;
 insert into t_reuse values (302, 'wwvvmfinalmarker');
 
-# the index is built with one scan, the parser of the tokenizer is reused for
-# every document of the build
+# the index is built with one scan, a tokenizer instance is created for every
+# document of the build
 alter table t_reuse add fulltext index i1(detail) with parser ik;
 
 create table t_reuse_beng(
@@ -67,8 +69,7 @@ select count(*) from t_reuse_beng;
 select id from t_reuse where match (detail) against ("qqzzxmarker");
 select count(*) from t_reuse where match (detail) against ("qqzzxmarker");
 
-# the marker of the last document is only found in the last document, the
-# parser was recycled several times while the index was built
+# the marker of the last document is only found in the last document
 select id from t_reuse where match (detail) against ("wwvvmfinalmarker");
 select count(*) from t_reuse where match (detail) against ("wwvvmfinalmarker");
 
@@ -101,6 +102,11 @@ select tokenize('qqzzxmarker', 'ngram');
 select tokenize('', 'ngram');
 select tokenize('filler document 5', 'ngram');
 select tokenize('filler document 5', 'ngram');
+
+# the tokenizer instance is recycled after a fixed number of calls, the result
+# of the calls does not change
+select count(*) from (select tokenize(concat('filler document ', id), 'ik') as t from t_reuse) x;
+select count(*) from (select tokenize(concat('filler document ', id), 'beng') as t from t_reuse) x;
 
 --disable_warnings
 drop database fts;
