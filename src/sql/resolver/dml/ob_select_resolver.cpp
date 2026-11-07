@@ -1651,6 +1651,19 @@ int ObSelectResolver::expand_target_list(
   } else if (table_item.is_function_table()) {
     if (OB_FAIL(resolve_all_function_table_columns(table_item, &column_items))) {
     }
+  } else if (table_item.is_file_table()) {
+    ObDMLStmt *stmt = get_stmt();
+    if (OB_ISNULL(stmt)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_column_size(); ++i) {
+        const ColumnItem *column = stmt->get_column_item(i);
+        if (OB_NOT_NULL(column) && column->table_id_ == table_item.table_id_
+            && OB_FAIL(column_items.push_back(*column))) {
+          LOG_WARN("failed to append file table column", K(ret), K(i));
+        }
+      }
+    }
   } else if (table_item.is_json_table()) {
     if (OB_FAIL(resolve_all_json_table_columns(table_item, &column_items))) {
     }
