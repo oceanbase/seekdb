@@ -325,8 +325,21 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
           ret = OB_ERR_UNEXPECTED;
         }
         if (OB_SUCC(ret)) {
+          ObString source_path = def.canonical_path_;
+          ObSqlString glob_path;
+          if (ObFileTableKind::LIST == def.kind_ && !def.pattern_.empty()) {
+            if (!def.canonical_path_.empty()
+                && '/' != def.canonical_path_.ptr()[def.canonical_path_.length() - 1]) {
+              OZ (glob_path.append(def.canonical_path_));
+              OZ (glob_path.append("/"));
+            } else {
+              OZ (glob_path.append(def.canonical_path_));
+            }
+            OZ (glob_path.append(def.pattern_));
+            source_path = glob_path.string();
+          }
           ObObj path_obj;
-          path_obj.set_varchar(def.canonical_path_);
+          path_obj.set_varchar(source_path);
           OZ (path_obj.print_sql_literal(buf_, buf_len_, *pos_, print_params_));
           if (OB_SUCC(ret) && ObFileTableKind::SCAN == def.kind_) {
             const char *format = ObFileFormat::CSV == def.format_ ? "csv"

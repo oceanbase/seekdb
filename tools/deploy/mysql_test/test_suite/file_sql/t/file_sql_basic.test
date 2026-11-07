@@ -39,6 +39,8 @@ eval select count(*) AS row_count, sum(id) AS id_sum,
 eval select id, name, score, active, day, note
        from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
       order by id;
+eval select count(*) AS row_count
+       from read_ndjson('$FILE_SQL_DATA_DIR/basic.jsonl') f;
 
 --echo # inferred CSV schema using DuckDB DESCRIBE syntax
 eval describe select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv');
@@ -51,6 +53,9 @@ eval select count(*) AS row_count, min(c1) AS min_c1,
 --echo # DuckDB glob returns one file column
 eval select substring_index(file, '/', -1) AS file
        from glob('$FILE_SQL_DATA_DIR/*')
+      order by file;
+eval select substring_index(file, '/', -1) AS file
+       from glob('$FILE_SQL_DATA_DIR/*.csv')
       order by file;
 
 --echo # COPY query to CSV and read it back

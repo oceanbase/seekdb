@@ -5583,6 +5583,8 @@ int ObStaticEngineCG::generate_spec(ObLogFileScan &op, ObFileScanSpec &spec,
     LOG_WARN("failed to copy file scan path", K(ret));
   } else if (OB_FAIL(ob_write_string(alloc, file_def->secure_file_priv_, spec.secure_file_priv_))) {
     LOG_WARN("failed to copy secure file privilege", K(ret));
+  } else if (OB_FAIL(ob_write_string(alloc, file_def->pattern_, spec.pattern_))) {
+    LOG_WARN("failed to copy file scan pattern", K(ret));
   } else {
     spec.kind_ = static_cast<int32_t>(file_def->kind_);
     spec.file_format_ = static_cast<int32_t>(file_def->format_);

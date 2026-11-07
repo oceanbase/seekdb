@@ -183,6 +183,37 @@ int resolve_file_scan_header(const ParseNode *node, bool &has_header)
   }
   return ret;
 }
+
+int split_glob_path(const std::string &input,
+                    std::string &directory,
+                    std::string &pattern)
+{
+  int ret = OB_SUCCESS;
+  directory = input;
+  while (directory.length() > 1
+         && ('/' == directory.back() || '\\' == directory.back())) {
+    directory.pop_back();
+  }
+  if (directory.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const size_t separator = directory.find_last_of("/\\");
+    if (std::string::npos == separator) {
+      pattern = directory;
+      directory = ".";
+    } else if (0 == separator) {
+      pattern = directory.substr(1);
+      directory = directory.substr(0, 1);
+    } else {
+      pattern = directory.substr(separator + 1);
+      directory.resize(separator);
+    }
+    if (pattern.empty()) {
+      pattern = "*";
+    }
+  }
+  return ret;
+}
 } // namespace
 
 ObDMLResolver::ObDMLResolver(ObResolverParams &params)
@@ -4198,6 +4229,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   ObString secure_file_priv;
   ObString alias_name;
   std::string canonical_path;
+  std::string list_pattern("*");
   std::vector<ObFileColumnSchema> columns;
   ObFileFormat requested_format = ObFileFormat::AUTO;
   ObFileFormat actual_format = ObFileFormat::INVALID;
@@ -4266,13 +4298,9 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   } else {
     std::string requested_path(path.ptr(), path.length());
     if (T_FILE_LIST_TABLE == parse_tree.type_
-        && requested_path.length() >= 2
-        && ('/' == requested_path[requested_path.length() - 2]
-            || '\\' == requested_path[requested_path.length() - 2])
-        && '*' == requested_path.back()) {
-      requested_path.resize(requested_path.length() - 2);
-    }
-    if (OB_FAIL(ObFileScanUtils::canonicalize_path(requested_path, canonical_path))) {
+        && OB_FAIL(split_glob_path(requested_path, requested_path, list_pattern))) {
+      LOG_WARN("failed to split glob path", K(ret), K(path));
+    } else if (OB_FAIL(ObFileScanUtils::canonicalize_path(requested_path, canonical_path))) {
       LOG_WARN("failed to canonicalize file table path", K(ret), K(path));
     }
   }
@@ -4333,6 +4361,11 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
       LOG_WARN("failed to copy canonical file path", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator_, secure_file_priv, file_def->secure_file_priv_))) {
       LOG_WARN("failed to copy secure file privilege", K(ret));
+    } else if (OB_FAIL(ob_write_string(
+                 *allocator_,
+                 ObString(static_cast<int32_t>(list_pattern.length()), list_pattern.data()),
+                 file_def->pattern_))) {
+      LOG_WARN("failed to copy glob pattern", K(ret));
     }
     if (OB_SUCC(ret) && ObFileTableKind::SCAN == table_kind) {
       ret = append_inferred_file_columns(*allocator_, columns, file_def->columns_);

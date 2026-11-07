@@ -285,7 +285,7 @@ END_P SET_VAR DELIMITER
         ERROR_CODE ERROR_P ERRORS ESCAPE EXCHANGE EXCLUDING EXECUTE EXPANSION EXPORT OUTLINE
         EXTENDED EXCLUSIVE EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN
 
-        FAIL FAILOVER FAST FAULTS FIELDS FILEX FILE_SCAN FILE_LIST FILE_SCHEMA READ_CSV READ_JSON READ_PARQUET GLOB FIRST FIRST_VALUE FIXED FLUSH FORMAT
+        FAIL FAILOVER FAST FAULTS FIELDS FILEX FILE_SCAN FILE_LIST FILE_SCHEMA READ_CSV READ_JSON READ_NDJSON READ_PARQUET GLOB FIRST FIRST_VALUE FIXED FLUSH FORMAT
         FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
@@ -512,7 +512,7 @@ END_P SET_VAR DELIMITER
 %type <node> column_list_with_boost with_param_column_ref
 %type <node> es_sql_opt
 %type <node> hybrid_search_expr hybrid_search_param
-%type <node> file_scan_expr file_list_expr file_schema_expr read_csv_expr read_json_expr read_parquet_expr glob_expr
+%type <node> file_scan_expr file_list_expr file_schema_expr read_csv_expr read_json_expr read_ndjson_expr read_parquet_expr glob_expr
 %type <node> file_scan_options file_scan_option_list file_scan_option
 %type <node> vector_similarity_expr vector_similarity_metric
 %type <node> algorithm_opt lock_opt
@@ -10932,6 +10932,10 @@ tbl_name
 {
   $$ = $1;
 }
+| read_ndjson_expr
+{
+  $$ = $1;
+}
 | read_parquet_expr
 {
   $$ = $1;
@@ -17688,6 +17692,33 @@ READ_JSON '(' literal file_scan_options ')' %prec LOWER_PARENS
 }
 ;
 
+read_ndjson_expr:
+READ_NDJSON '(' literal file_scan_options ')' %prec LOWER_PARENS
+{
+  ParseNode *format = NULL;
+  malloc_terminal_node(format, result->malloc_pool_, T_VARCHAR);
+  format->str_value_ = "jsonl";
+  format->str_len_ = 5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 4, $3, format, $4, NULL);
+}
+| READ_NDJSON '(' literal file_scan_options ')' relation_name
+{
+  ParseNode *format = NULL;
+  malloc_terminal_node(format, result->malloc_pool_, T_VARCHAR);
+  format->str_value_ = "jsonl";
+  format->str_len_ = 5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 4, $3, format, $4, $6);
+}
+| READ_NDJSON '(' literal file_scan_options ')' AS relation_name
+{
+  ParseNode *format = NULL;
+  malloc_terminal_node(format, result->malloc_pool_, T_VARCHAR);
+  format->str_value_ = "jsonl";
+  format->str_len_ = 5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SCAN_TABLE, 4, $3, format, $4, $7);
+}
+;
+
 read_parquet_expr:
 READ_PARQUET '(' literal file_scan_options ')' %prec LOWER_PARENS
 {
@@ -18467,6 +18498,7 @@ ACCOUNT
 |       FILE_SCHEMA
 |       READ_CSV
 |       READ_JSON
+|       READ_NDJSON
 |       READ_PARQUET
 |       GLOB
 ;

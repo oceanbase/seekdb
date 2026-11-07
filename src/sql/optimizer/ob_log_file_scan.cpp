@@ -102,6 +102,7 @@ uint64_t ObLogFileScan::hash(uint64_t seed) const
     seed = do_hash(file_table_def_->inode_, seed);
     seed = do_hash(file_table_def_->file_size_, seed);
     seed = do_hash(file_table_def_->modified_time_ns_, seed);
+    seed = do_hash(file_table_def_->pattern_, seed);
   }
   return ObLogicalOperator::hash(seed);
 }

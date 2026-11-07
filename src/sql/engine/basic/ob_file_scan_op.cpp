@@ -23,13 +23,95 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
 
+namespace
+{
+
+bool match_character_class(const char *pattern,
+                           const size_t pattern_len,
+                           const char value,
+                           size_t &consumed)
+{
+  bool matched = false;
+  bool negate = false;
+  size_t pos = 1;
+  if (pos < pattern_len && ('!' == pattern[pos] || '^' == pattern[pos])) {
+    negate = true;
+    ++pos;
+  }
+  bool closed = false;
+  for (bool first = true; pos < pattern_len; first = false) {
+    if (']' == pattern[pos] && !first) {
+      closed = true;
+      ++pos;
+      break;
+    }
+    char low = pattern[pos++];
+    char high = low;
+    if (pos + 1 < pattern_len && '-' == pattern[pos]
+        && ']' != pattern[pos + 1]) {
+      high = pattern[pos + 1];
+      pos += 2;
+    }
+    if (value >= low && value <= high) {
+      matched = true;
+    }
+  }
+  if (!closed) {
+    return false;
+  }
+  consumed = pos;
+  return negate ? !matched : matched;
+}
+
+bool match_glob(const char *value, const char *pattern)
+{
+  while ('\0' != *pattern) {
+    if ('*' == *pattern) {
+      while ('*' == *pattern) {
+        ++pattern;
+      }
+      if ('\0' == *pattern) {
+        return true;
+      }
+      for (const char *cursor = value; ; ++cursor) {
+        if (match_glob(cursor, pattern)) {
+          return true;
+        }
+        if ('\0' == *cursor) {
+          return false;
+        }
+      }
+    } else if ('\0' == *value) {
+      return false;
+    } else if ('?' == *pattern) {
+      ++value;
+      ++pattern;
+    } else if ('[' == *pattern) {
+      size_t consumed = 0;
+      if (!match_character_class(pattern, strlen(pattern), *value, consumed)) {
+        return false;
+      }
+      pattern += consumed;
+      ++value;
+    } else if (*value != *pattern) {
+      return false;
+    } else {
+      ++value;
+      ++pattern;
+    }
+  }
+  return '\0' == *value;
+}
+
+} // namespace
+
 namespace oceanbase
 {
 using namespace common;
 namespace sql
 {
 OB_SERIALIZE_MEMBER((ObFileScanSpec, ObOpSpec), kind_, file_path_, secure_file_priv_, file_format_,
-                    has_header_, device_, inode_, file_size_, modified_time_ns_,
+                    has_header_, pattern_, device_, inode_, file_size_, modified_time_ns_,
                     file_column_names_, file_column_types_, source_column_names_,
                     source_original_names_, source_type_names_, source_column_types_, source_column_nullable_,
                     output_column_idxs_, column_exprs_);
@@ -205,11 +287,17 @@ int ObFileScanOp::get_next_list_row()
   int ret = OB_SUCCESS;
   struct dirent *entry = nullptr;
   struct stat entry_stat;
+  const std::string pattern(
+    file_spec().pattern_.empty() ? "*" : std::string(
+      file_spec().pattern_.ptr(), file_spec().pattern_.length()));
   while (OB_SUCC(ret) && OB_NOT_NULL(entry = readdir(directory_))) {
     if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
       continue;
     }
     if (0 != fstatat(dirfd(directory_), entry->d_name, &entry_stat, AT_SYMLINK_NOFOLLOW)) {
+      continue;
+    }
+    if (!S_ISREG(entry_stat.st_mode) || !match_glob(entry->d_name, pattern.c_str())) {
       continue;
     }
     cells_.assign(file_spec().file_column_names_.count(), ObFileCell());

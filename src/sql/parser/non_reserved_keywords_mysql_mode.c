@@ -963,6 +963,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"file_schema", FILE_SCHEMA},
   {"read_csv", READ_CSV},
   {"read_json", READ_JSON},
+  {"read_ndjson", READ_NDJSON},
   {"read_parquet", READ_PARQUET},
   {"glob", GLOB},
 };
