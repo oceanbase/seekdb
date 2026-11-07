@@ -323,6 +323,11 @@ class ObValuesTableAccessSpec;
 class ObValuesTableAccessOp;
 REGISTER_OPERATOR(ObLogValuesTableAccess, PHY_VALUES_TABLE_ACCESS, ObValuesTableAccessSpec, ObValuesTableAccessOp, NOINPUT);
 
+class ObLogFileTable;
+class ObFileTableSpec;
+class ObFileTableOp;
+REGISTER_OPERATOR(ObLogFileTable, PHY_FILE_TABLE, ObFileTableSpec, ObFileTableOp, NOINPUT);
+
 class ObLogDelete;
 class ObTableDeleteSpec;
 class ObTableDeleteOp;

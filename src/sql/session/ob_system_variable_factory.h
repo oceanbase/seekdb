@@ -5209,6 +5209,14 @@ public:
   inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(718); }
 };
 
+class ObSysVarEnableFileSql : public ObBoolSysVar
+{
+public:
+  ObSysVarEnableFileSql() : ObBoolSysVar(NULL, NULL, NULL, NULL, NULL) {}
+  inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_ENABLE_FILE_SQL; }
+  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(719); }
+};
+
 
 class ObSysVarFactory
 {

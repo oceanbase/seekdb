@@ -1,0 +1,228 @@
+drop database if exists fts;
+create database fts;
+use fts;
+create table t_reuse(
+id int primary key,
+detail varchar(4096));
+insert into t_reuse values (1, 'qqzzxmarker');
+insert into t_reuse(id, detail)
+select a.n * 30 + b.n + 2,
+concat('filler document ', a.n * 30 + b.n + 2, ' distributed database oceanbase')
+from (select 0 as n union all select 1 union all select 2 union all select 3 union all select 4
+union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) a,
+(select 0 as n union all select 1 union all select 2 union all select 3 union all select 4
+union all select 5 union all select 6 union all select 7 union all select 8 union all select 9
+union all select 10 union all select 11 union all select 12 union all select 13 union all select 14
+union all select 15 union all select 16 union all select 17 union all select 18 union all select 19
+union all select 20 union all select 21 union all select 22 union all select 23 union all select 24
+union all select 25 union all select 26 union all select 27 union all select 28 union all select 29) b;
+insert into t_reuse values (302, 'wwvvmfinalmarker');
+alter table t_reuse add fulltext index i1(detail) with parser ik;
+create table t_reuse_beng(
+id int primary key,
+detail varchar(4096));
+insert into t_reuse_beng values (1, 'qqzzxmarker');
+insert into t_reuse_beng(id, detail)
+select a.n * 30 + b.n + 2,
+concat('filler document ', a.n * 30 + b.n + 2, ' distributed database oceanbase')
+from (select 0 as n union all select 1 union all select 2 union all select 3 union all select 4
+union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) a,
+(select 0 as n union all select 1 union all select 2 union all select 3 union all select 4
+union all select 5 union all select 6 union all select 7 union all select 8 union all select 9
+union all select 10 union all select 11 union all select 12 union all select 13 union all select 14
+union all select 15 union all select 16 union all select 17 union all select 18 union all select 19
+union all select 20 union all select 21 union all select 22 union all select 23 union all select 24
+union all select 25 union all select 26 union all select 27 union all select 28 union all select 29) b;
+insert into t_reuse_beng values (302, 'wwvvmfinalmarker');
+alter table t_reuse_beng add fulltext index i1(detail) with parser beng;
+result_format: 4
+select count(*) from t_reuse;
++----------+
+| count(*) |
++----------+
+|      302 |
++----------+
+select count(*) from t_reuse_beng;
++----------+
+| count(*) |
++----------+
+|      302 |
++----------+
+
+select id from t_reuse where match (detail) against ("qqzzxmarker");
++----+
+| id |
++----+
+|  1 |
++----+
+select count(*) from t_reuse where match (detail) against ("qqzzxmarker");
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+
+select id from t_reuse where match (detail) against ("wwvvmfinalmarker");
++-----+
+| id  |
++-----+
+| 302 |
++-----+
+select count(*) from t_reuse where match (detail) against ("wwvvmfinalmarker");
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+
+select count(*) from t_reuse where match (detail) against ("oceanbase");
++----------+
+| count(*) |
++----------+
+|      300 |
++----------+
+select count(*) from t_reuse where match (detail) against ("filler");
++----------+
+| count(*) |
++----------+
+|      300 |
++----------+
+
+select id from t_reuse_beng where match (detail) against ("qqzzxmarker");
++----+
+| id |
++----+
+|  1 |
++----+
+select count(*) from t_reuse_beng where match (detail) against ("qqzzxmarker");
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+select id from t_reuse_beng where match (detail) against ("wwvvmfinalmarker");
++-----+
+| id  |
++-----+
+| 302 |
++-----+
+select count(*) from t_reuse_beng where match (detail) against ("wwvvmfinalmarker");
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+select count(*) from t_reuse_beng where match (detail) against ("oceanbase");
++----------+
+| count(*) |
++----------+
+|      300 |
++----------+
+select count(*) from t_reuse_beng where match (detail) against ("filler");
++----------+
+| count(*) |
++----------+
+|      300 |
++----------+
+
+select tokenize('qqzzxmarker', 'ik');
++-------------------------------+
+| tokenize('qqzzxmarker', 'ik') |
++-------------------------------+
+| ["qqzzxmarker"]               |
++-------------------------------+
+select tokenize('', 'ik');
++--------------------+
+| tokenize('', 'ik') |
++--------------------+
+| []                 |
++--------------------+
+select tokenize('filler document 5', 'ik');
++-------------------------------------+
+| tokenize('filler document 5', 'ik') |
++-------------------------------------+
+| ["5", "filler", "document"]         |
++-------------------------------------+
+select tokenize('filler document 5', 'ik');
++-------------------------------------+
+| tokenize('filler document 5', 'ik') |
++-------------------------------------+
+| ["5", "filler", "document"]         |
++-------------------------------------+
+select tokenize('分布式数据库', 'ik');
++--------------------------------------+
+| tokenize('分布式数据库', 'ik')       |
++--------------------------------------+
+| ["分布式数据库"]                     |
++--------------------------------------+
+select tokenize('filler document 5', 'ik');
++-------------------------------------+
+| tokenize('filler document 5', 'ik') |
++-------------------------------------+
+| ["5", "filler", "document"]         |
++-------------------------------------+
+
+select tokenize('qqzzxmarker', 'beng');
++---------------------------------+
+| tokenize('qqzzxmarker', 'beng') |
++---------------------------------+
+| ["qqzzxmarker"]                 |
++---------------------------------+
+select tokenize('', 'beng');
++----------------------+
+| tokenize('', 'beng') |
++----------------------+
+| []                   |
++----------------------+
+select tokenize('filler document 5', 'beng');
++---------------------------------------+
+| tokenize('filler document 5', 'beng') |
++---------------------------------------+
+| ["filler", "document"]                |
++---------------------------------------+
+select tokenize('filler document 5', 'beng');
++---------------------------------------+
+| tokenize('filler document 5', 'beng') |
++---------------------------------------+
+| ["filler", "document"]                |
++---------------------------------------+
+
+select tokenize('qqzzxmarker', 'ngram');
++--------------------------------------------------------------+
+| tokenize('qqzzxmarker', 'ngram')                             |
++--------------------------------------------------------------+
+| ["ke", "zx", "ma", "xm", "qz", "ar", "er", "rk", "qq", "zz"] |
++--------------------------------------------------------------+
+select tokenize('', 'ngram');
++-----------------------+
+| tokenize('', 'ngram') |
++-----------------------+
+| []                    |
++-----------------------+
+select tokenize('filler document 5', 'ngram');
++--------------------------------------------------------------------------+
+| tokenize('filler document 5', 'ngram')                                   |
++--------------------------------------------------------------------------+
+| ["oc", "le", "me", "ll", "il", "er", "nt", "fi", "en", "um", "cu", "do"] |
++--------------------------------------------------------------------------+
+select tokenize('filler document 5', 'ngram');
++--------------------------------------------------------------------------+
+| tokenize('filler document 5', 'ngram')                                   |
++--------------------------------------------------------------------------+
+| ["oc", "le", "me", "ll", "il", "er", "nt", "fi", "en", "um", "cu", "do"] |
++--------------------------------------------------------------------------+
+
+select count(*) from (select tokenize(concat('filler document ', id), 'ik') as t from t_reuse) x;
++----------+
+| count(*) |
++----------+
+|      302 |
++----------+
+select count(*) from (select tokenize(concat('filler document ', id), 'beng') as t from t_reuse) x;
++----------+
+| count(*) |
++----------+
+|      302 |
++----------+
+
+drop database fts;

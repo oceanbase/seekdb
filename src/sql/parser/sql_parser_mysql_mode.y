@@ -52,6 +52,58 @@
   } \
   malloc_non_terminal_node(explain_stmt, result->malloc_pool_, T_EXPLAIN, 5, \
                            type_node, display_node, into_table, set_statement_id, stmt);
+
+/*
+ * The flag of the value of a file table expression that marks the describe
+ * mode. A file table in the describe mode returns the description of the
+ * columns of the file instead of the rows of the file.
+ *
+ * Keep it in sync with OB_FILE_TABLE_DESCRIBE_FLAG of ob_file_table_def.h.
+ */
+#define OB_PARSER_FILE_TABLE_DESCRIBE_FLAG 0x100
+
+/*
+ * Check whether the statement selects all the columns of a file table, e.g.
+ * "select * from read_csv('a.csv')". When it does, the file table is marked so
+ * that it describes the columns of the file, this is the way the DESCRIBE
+ * statement of a file table is implemented.
+ *
+ * @return 0 when the file table was marked, -1 when the statement is not such
+ *         a select
+ */
+static int ob_parser_mark_describe_file_table(ParseNode *select_node)
+{
+  int ret = -1;
+  ParseNode *project_list_node = NULL;
+  ParseNode *project_node = NULL;
+  ParseNode *from_list_node = NULL;
+  ParseNode *file_table_node = NULL;
+  if (NULL == select_node || T_SELECT != select_node->type_ || NULL == select_node->children_) {
+    /* the statement is not a select */
+  } else if (NULL == (project_list_node = select_node->children_[PARSE_SELECT_SELECT])
+             || T_PROJECT_LIST != project_list_node->type_
+             || 1 != project_list_node->num_child_
+             || NULL == project_list_node->children_
+             || NULL == (project_node = project_list_node->children_[0])
+             || T_PROJECT_STRING != project_node->type_
+             || 1 != project_node->num_child_
+             || NULL == project_node->children_
+             || NULL == project_node->children_[0]
+             || T_STAR != project_node->children_[0]->type_) {
+    /* the select does not select all the columns */
+  } else if (NULL == (from_list_node = select_node->children_[PARSE_SELECT_FROM])
+             || T_FROM_LIST != from_list_node->type_
+             || 1 != from_list_node->num_child_
+             || NULL == from_list_node->children_
+             || NULL == (file_table_node = from_list_node->children_[0])
+             || T_FILE_TABLE_EXPRESSION != file_table_node->type_) {
+    /* the select does not read a single file table */
+  } else {
+    file_table_node->value_ |= OB_PARSER_FILE_TABLE_DESCRIBE_FLAG;
+    ret = 0;
+  }
+  return ret;
+}
 %}
 
 %destructor {destroy_tree($$);}<node>
@@ -290,7 +342,7 @@ END_P SET_VAR DELIMITER
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GROUP_CONCAT GROUPING
-        GLOBAL_ALIAS
+        GLOBAL_ALIAS GLOB
 
         HASH HEAP HELP HISTOGRAM HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH
 
@@ -335,6 +387,7 @@ END_P SET_VAR DELIMITER
         RECOVER REDUNDANT REFRESH RELAY RELAYLOG RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMOVE
         REPEATABLE RESET RESPECT RESTART RESTORE RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE
         REWRITE ROLLBACK ROLLUP ROUTINE ROW ROWID ROW_COUNT ROW_FORMAT ROWS RTREE
+        READ_CSV READ_JSON READ_NDJSON READ_PARQUET
         RUN RECYCLEBIN REPLICATION ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS
         RANK READ_ONLY RECOVERY REJECT ROLE
 
@@ -498,6 +551,9 @@ END_P SET_VAR DELIMITER
 %type <node> skip_index_type opt_skip_index_type_list
 %type <node> vec_index_params vec_index_param vec_index_param_value opt_with_vector_index_parameters
 %type <node> json_table_expr unnest_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def
+%type <node> file_table_expr file_table_func file_table_option_list file_table_option
+%type <node> file_table_option_name file_table_option_value
+%type <node> copy_stmt copy_option_list copy_option_list_inner copy_option copy_option_value copy_format_value
 %type <node> json_table_ordinality_column_def json_table_exists_column_def json_table_value_column_def json_table_nested_column_def
 %type <node> opt_value_on_empty_or_error_or_mismatch opt_on_mismatch
 %type <node> table_values_clause table_values_clause_with_order_by_and_limit values_row_list row_value
@@ -556,6 +612,7 @@ opt_end_p:
 /* only preparable statement will set question mark size */
 stmt:
     select_stmt             { $$ = $1; question_mark_issue($$, result); }
+  | copy_stmt               { $$ = $1; question_mark_issue($$, result); }
   | insert_stmt             { $$ = $1; question_mark_issue($$, result); }
   | create_table_stmt       {
     $$ = $1;
@@ -10848,6 +10905,10 @@ tbl_name
 {
   $$ = $1;
 }
+| file_table_expr
+{
+  $$ = $1;
+}
 ;
 
 tbl_name:
@@ -12265,7 +12326,15 @@ explain_or_desc relation_factor opt_desc_column_option
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS, 4, $$, $2, NULL, $3);
 }
 
-| explain_or_desc explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);}
+| explain_or_desc explainable_stmt
+{
+  if (NULL != $1 && 0 != $1->value_ && 0 == ob_parser_mark_describe_file_table($2)) {
+    /* "describe select * from read_csv(...)" describes the columns of the file */
+    $$ = $2;
+  } else {
+    GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);
+  }
+}
 | explain_or_desc PRETTY explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY, $3, NULL, NULL);}
 | explain_or_desc PRETTY_COLOR explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY_COLOR, $3, NULL, NULL);}
 
@@ -12305,9 +12374,9 @@ explain_or_desc relation_factor opt_desc_column_option
 ;
 
 explain_or_desc:
-EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+EXPLAIN { malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 0; }
+| DESCRIBE { malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 1; }
+| DESC  { malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 2; }
 ;
 
 explainable_stmt:
@@ -16654,6 +16723,249 @@ JSON_TABLE '(' simple_expr ',' literal mock_jt_on_error_on_empty COLUMNS '(' jt_
 }
 ;
 
+/*
+ * The file table functions: read_csv(), read_json(), read_ndjson(),
+ * read_parquet() and glob(). They read a file as if it were a base table,
+ * the columns of the table are inferred from the content of the file.
+ *
+ * The first argument is the path of the file, the other arguments are the
+ * named options of the reader. Only the named options are accepted, a
+ * positional argument is a syntax error.
+ */
+file_table_expr:
+file_table_func '(' literal ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, NULL);
+  $$->value_ = $1->value_;
+  $$->is_tree_not_param_ = 1;
+}
+| file_table_func '(' literal ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, $5);
+  $$->value_ = $1->value_;
+  $$->is_tree_not_param_ = 1;
+}
+| file_table_func '(' literal ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, $6);
+  $$->value_ = $1->value_;
+  $$->is_tree_not_param_ = 1;
+}
+| file_table_func '(' literal ',' file_table_option_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $5, NULL);
+  $$->value_ = $1->value_;
+  $$->is_tree_not_param_ = 1;
+}
+| file_table_func '(' literal ',' file_table_option_list ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $5, $7);
+  $$->value_ = $1->value_;
+  $$->is_tree_not_param_ = 1;
+}
+| file_table_func '(' literal ',' file_table_option_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $5, $8);
+  $$->value_ = $1->value_;
+  $$->is_tree_not_param_ = 1;
+}
+;
+
+file_table_func:
+READ_CSV
+{
+  ParseNode *func_node = NULL;
+  malloc_terminal_node(func_node, result->malloc_pool_, T_FILE_TABLE_FUNC);
+  func_node->value_ = 0; // ObFileScanFormat::CSV
+  $$ = func_node;
+}
+| READ_JSON
+{
+  ParseNode *func_node = NULL;
+  malloc_terminal_node(func_node, result->malloc_pool_, T_FILE_TABLE_FUNC);
+  func_node->value_ = 1; // ObFileScanFormat::JSON
+  $$ = func_node;
+}
+| READ_NDJSON
+{
+  ParseNode *func_node = NULL;
+  malloc_terminal_node(func_node, result->malloc_pool_, T_FILE_TABLE_FUNC);
+  func_node->value_ = 1; // ObFileScanFormat::JSON
+  $$ = func_node;
+}
+| READ_PARQUET
+{
+  ParseNode *func_node = NULL;
+  malloc_terminal_node(func_node, result->malloc_pool_, T_FILE_TABLE_FUNC);
+  func_node->value_ = 2; // ObFileScanFormat::PARQUET
+  $$ = func_node;
+}
+| GLOB
+{
+  ParseNode *func_node = NULL;
+  malloc_terminal_node(func_node, result->malloc_pool_, T_FILE_TABLE_FUNC);
+  func_node->value_ = 3; // ObFileScanFormat::GLOB
+  $$ = func_node;
+}
+;
+
+file_table_option_list:
+file_table_option
+{
+  $$ = $1;
+}
+| file_table_option_list ',' file_table_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+file_table_option:
+file_table_option_name COMP_EQ file_table_option_value
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_OPTION, 2, $1, $3);
+}
+;
+
+/*
+ * The name of an option of a file table function. Only the words that are not
+ * reserved keywords are accepted, so that the option list cannot be confused
+ * with the rest of the grammar.
+ */
+file_table_option_name:
+NAME_OB
+{
+  $$ = $1;
+}
+| FORMAT
+{
+  get_non_reserved_node($$, result->malloc_pool_, @1.first_column, @1.last_column);
+}
+| ESCAPE
+{
+  get_non_reserved_node($$, result->malloc_pool_, @1.first_column, @1.last_column);
+}
+;
+
+/*
+ * The value of an option of a file table function. Only the constants are
+ * accepted, the value of an option cannot be an expression.
+ */
+file_table_option_value:
+literal
+{
+  $$ = $1;
+}
+| '-' INTNUM
+{
+  ParseNode *num_node = NULL;
+  malloc_terminal_node(num_node, result->malloc_pool_, T_INT);
+  num_node->value_ = -$2->value_;
+  num_node->str_value_ = $2->str_value_;
+  num_node->str_len_ = $2->str_len_;
+  $$ = num_node;
+}
+;
+
+/*
+ * The copy statement: copy (select ...) to 'path' (format csv, header, nullstr 'NULL').
+ * The query is a select statement, the result of the query is written to the file
+ * as a csv file. The options of the copy statement are the options of the csv
+ * writer, they are parsed by the resolver.
+ */
+copy_stmt:
+COPY select_with_parens TO STRING_VALUE copy_option_list
+{
+  ParseNode *into_node = NULL;
+  malloc_non_terminal_node(into_node, result->malloc_pool_, T_INTO_COPY, 2, $4, $5);
+  // The path of the file and the options of the writer are needed when the
+  // statement is resolved, a parameter is not a constant at that time, so the
+  // subtree of the copy statement is not parameterized.
+  into_node->is_tree_not_param_ = 1;
+  $$ = $2;
+  if (NULL != $$->children_[PARSE_SELECT_INTO_EXTRA]) {
+    yyerror(&@4, result, "");
+    YYERROR;
+  } else {
+    $$->children_[PARSE_SELECT_INTO_EXTRA] = into_node;
+  }
+}
+;
+
+/*
+ * The options of a copy statement, they are optional.
+ */
+copy_option_list:
+/* EMPTY */
+{
+  $$ = NULL;
+}
+| '(' copy_option_list_inner ')'
+{
+  $$ = $2;
+}
+;
+
+copy_option_list_inner:
+copy_option
+{
+  $$ = $1;
+}
+| copy_option_list_inner ',' copy_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+/*
+ * One option of a copy statement. The name of the option is a word that is not
+ * a reserved keyword, the value of an option is a constant. The option without
+ * a value is a flag, such as "header".
+ */
+copy_option:
+FORMAT copy_format_value
+{
+  // the name of the option is the text of the keyword, the value of the token
+  // of a keyword is not the text of the keyword
+  ParseNode *name_node = NULL;
+  get_non_reserved_node(name_node, result->malloc_pool_, @1.first_column, @1.last_column);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COPY_OPTION, 2, name_node, $2);
+}
+| NAME_OB opt_equal_mark copy_option_value
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COPY_OPTION, 2, $1, $3);
+}
+| NAME_OB
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COPY_OPTION, 1, $1);
+}
+;
+
+/*
+ * The value of the format option, only the name of the format is accepted.
+ */
+copy_format_value:
+NAME_OB
+{
+  $$ = $1;
+}
+| literal
+{
+  $$ = $1;
+}
+;
+
+/*
+ * The value of an option of a copy statement, only the constants are accepted.
+ */
+copy_option_value:
+literal
+{
+  $$ = $1;
+}
+;
+
 mock_jt_on_error_on_empty:
 {
   ParseNode *emp_node = NULL;
@@ -17710,6 +18022,7 @@ ACCOUNT
 |       GEOMCOLLECTION
 |       GEOMETRYCOLLECTION
 |       GET_FORMAT
+|       GLOB
 |       GLOBAL %prec LOWER_PARENS
 |       GRANTS
 |       GROUPING
@@ -17937,6 +18250,10 @@ ACCOUNT
 |       QUICK
 |       RANK
 |       READ_ONLY
+|       READ_CSV
+|       READ_JSON
+|       READ_NDJSON
+|       READ_PARQUET
 |       RECOVER
 |       RECOVERY
 |       RECURSIVE

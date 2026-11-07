@@ -24,6 +24,7 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
+#include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "object/ob_object.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -39,6 +40,51 @@ namespace oceanbase
 {
 namespace sql
 {
+
+/**
+ * The parser instance of the tokenize function is kept in the thread local
+ * storage, so that the dictionaries of the parser are not loaded again for
+ * every call. The helper is not reentrant, the caller falls back to its own
+ * helper when the cached one is in use.
+ */
+class ObTokenizeParserHolder
+{
+public:
+  ObTokenizeParserHolder() : helper_(), is_in_use_(false) {}
+  ~ObTokenizeParserHolder() {}
+
+public:
+  /**
+   * Get the helper of the current thread.
+   *
+   * @return the cached helper, nullptr if it is already in use
+   */
+  storage::ObFTParseHelper *acquire()
+  {
+    if (is_in_use_) {
+      return nullptr;
+    }
+    is_in_use_ = true;
+    return &helper_;
+  }
+  void release() { is_in_use_ = false; }
+
+private:
+  storage::ObFTParseHelper helper_;
+  bool is_in_use_;
+
+  DISALLOW_COPY_AND_ASSIGN(ObTokenizeParserHolder);
+};
+
+static ObTokenizeParserHolder *get_tokenize_parser_holder()
+{
+  ObTokenizeParserHolder *holder = nullptr;
+  if (!common::is_thread_in_exit) {
+    holder = GET_TSI(ObTokenizeParserHolder);
+  }
+  return holder;
+}
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -81,7 +127,17 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
                                       ObIJsonBase *&result)
 {
   int ret = OB_SUCCESS;
-  storage::ObFTParseHelper tokenize_helper;
+  storage::ObFTParseHelper local_helper;
+  storage::ObFTParseHelper *tokenize_helper = &local_helper;
+  // The parser instance is reused between the calls of the same thread, so
+  // that the dictionaries of the parser are not loaded again for every call.
+  ObTokenizeParserHolder *holder = get_tokenize_parser_holder();
+  if (OB_NOT_NULL(holder)) {
+    storage::ObFTParseHelper *cached_helper = holder->acquire();
+    if (OB_NOT_NULL(cached_helper)) {
+      tokenize_helper = cached_helper;
+    }
+  }
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
   storage::ObFTWordMap token_map;
@@ -90,11 +146,11 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
+  } else if (OB_FAIL(tokenize_helper->reinit(&allocator, param.parser_name_, param.properties_))) {
   } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
   } else if (
       (0 != param.fulltext_.length())
-      && OB_FAIL(tokenize_helper.segment(
+      && OB_FAIL(tokenize_helper->segment(
                      param.meta_,
                      param.fulltext_.ptr(),
                      param.fulltext_.length(),
@@ -103,14 +159,14 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   } else {
     switch (param.output_mode_) {
     case TokenizeParam::OUTPUT_MODE::DEFAULT: {
-      if (OB_FAIL(tokenize_helper.make_token_array_json(token_map, result))) {
+      if (OB_FAIL(tokenize_helper->make_token_array_json(token_map, result))) {
       } else {
         // pass
       }
       break;
     }
     case TokenizeParam::OUTPUT_MODE::ALL: {
-      if (OB_FAIL(tokenize_helper.make_detail_json(token_map, doc_len, result))) {
+      if (OB_FAIL(tokenize_helper->make_detail_json(token_map, doc_len, result))) {
       } else {
         // pass
       }
@@ -119,6 +175,9 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
     default:
       ret = OB_INVALID_ARGUMENT;
     }
+  }
+  if (OB_NOT_NULL(holder) && tokenize_helper != &local_helper) {
+    holder->release();
   }
   return ret;
 }

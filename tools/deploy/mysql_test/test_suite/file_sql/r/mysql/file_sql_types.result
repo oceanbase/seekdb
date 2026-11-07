@@ -1,0 +1,30 @@
+# the type of a column is inferred from all the values of the file, the
+# integer column is widened to bigint, the column of the mixed numbers is
+# widened to double and the column that holds only nulls keeps the null type
+column_name	column_type	null	key	default	extra
+id	BIGINT	NO	NULL	NULL	NULL
+big	BIGINT	NO	NULL	NULL	NULL
+small	BIGINT	NO	NULL	NULL	NULL
+flag	BOOLEAN	NO	NULL	NULL	NULL
+ratio	DOUBLE	NO	NULL	NULL	NULL
+day	DATE	NO	NULL	NULL	NULL
+ts	DATETIME	NO	NULL	NULL	NULL
+empty	NULL	YES	NULL	NULL	NULL
+note	VARCHAR	YES	NULL	NULL	NULL
+# the values of the file are returned, the boundary values are not lost
+id	big	small	flag	ratio	day	ts	empty	note
+1	1	1	1	1	2026-01-01	2026-01-01 00:00:00	NULL	alpha
+2	2147483647	-2147483648	0	1.5	2026-01-02	2026-01-02 10:20:30	NULL	NULL
+3	9223372036854775807	0	1	2.5	2026-01-03	2026-01-03 11:22:33	NULL	gamma
+# the type of a json column that holds values of different types is the
+# type that can hold all of them
+column_name	column_type	null	key	default	extra
+id	BIGINT	NO	NULL	NULL	NULL
+value	VARCHAR	NO	NULL	NULL	NULL
+# a record of a csv file that has another number of fields than the
+# header is reported, the query fails and the server stays alive
+# a json object that holds a nested object is not supported
+# a json object that holds an array is not supported
+# the server is still alive after the malformed files
+alive
+1

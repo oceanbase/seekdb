@@ -45,6 +45,7 @@
 #include "ob_del_upd_log_plan.h"
 #include "ob_log_values_table_access.h"
 #include "ob_log_expand.h"
+#include "ob_log_file_table.h"
 using namespace oceanbase;
 using namespace oceanbase::sql;
 using namespace oceanbase::sql::log_op_def;
@@ -304,6 +305,13 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     ptr = allocator_.alloc(sizeof(ObLogExpand));
     if (NULL != ptr) {
       ret_op = new (ptr) ObLogExpand(plan);
+    }
+    break;
+  }
+  case LOG_FILE_TABLE: {
+    ptr = allocator_.alloc(sizeof(ObLogFileTable));
+    if (NULL != ptr) {
+      ret_op = new (ptr) ObLogFileTable(plan);
     }
     break;
   }

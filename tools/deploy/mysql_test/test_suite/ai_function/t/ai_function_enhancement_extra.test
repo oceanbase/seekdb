@@ -1,0 +1,74 @@
+#owner: oceanbase
+#owner group: shenzhen
+
+connection default;
+
+# AI_PROMPT: the template, the placeholders, the json arguments and the lob
+# arguments are handled by the expression itself, no model is needed
+select ai_prompt('{0}/{0}/{1}', json_array(1,true), json_object('k',2));
+select ai_prompt('{0}+{1}', 'a', 'b');
+select ai_prompt('1+1=?','');
+select ai_prompt('1+1=?{0}','');
+
+--disable_warnings
+drop table if exists ai_extra_prompt;
+--enable_warnings
+create table ai_extra_prompt(t longtext, a text);
+insert into ai_extra_prompt values('{0}-ok', 'lob');
+select ai_prompt(t, a) from ai_extra_prompt;
+drop table ai_extra_prompt;
+
+# the invalid arguments are rejected
+--error 5083
+select ai_prompt(1);
+--error 5083
+select ai_prompt(null);
+--error 1210
+select ai_prompt('');
+
+# the ollama provider needs no access key and the name of the provider is case
+# insensitive
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('extra_ollama', '{"type":"dense_embedding","model_name":"nomic-embed-text"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('extra_ollama_ep', '{"ai_model_name":"extra_ollama","scope":"all","url":"http://0.0.0.0:8000/api/embed","access_key":"","provider":"OLLAMA"}');
+select provider from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where endpoint_name = 'extra_ollama_ep';
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('extra_ollama_ep', '{"provider":"Ollama"}');
+select provider from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where endpoint_name = 'extra_ollama_ep';
+select json_valid(ai_embed('extra_ollama', 'hello')) as ollama_embed_ok;
+
+# the rows of a batch are merged into one request, a null row is neither sent
+# to the model nor does it shift the results of the other rows
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('extra_embed', '{"type":"dense_embedding","model_name":"text-embedding-v1"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('extra_embed_ep', '{"ai_model_name":"extra_embed","scope":"all","url":"http://0.0.0.0:8000/compatible-mode/v1/embeddings","access_key":"mock-key","provider":"openai"}');
+
+--disable_warnings
+drop table if exists ai_extra_batch;
+--enable_warnings
+create table ai_extra_batch(id int primary key, content text);
+insert into ai_extra_batch values(1,'first'),(2,null),(3,'third');
+select id, json_length(ai_embed('extra_embed', content)) as dimension from ai_extra_batch order by id;
+select json_length(ai_embed('extra_embed', 'single-row')) as dimension;
+select json_length(ai_embed('extra_embed', 'dimension-row', 768)) as dimension;
+drop table ai_extra_batch;
+
+# a batch that is larger than the maximum number of the inputs of one request
+# is split into several requests, the result of every row is kept
+with recursive extra_seq(n) as (select 1 union all select n+1 from extra_seq where n < 100)
+select count(*) as rows, sum(json_length(ai_embed('extra_embed', concat('row', n)))) as dims from extra_seq;
+
+# the rerank returns one result for every document, the documents with the
+# higher score come first and the id of the document is kept
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('extra_rerank', '{"type":"rerank","model_name":"BAAI/bge-reranker-v2-m3"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('extra_rerank_ep', '{"ai_model_name":"extra_rerank","scope":"all","url":"http://0.0.0.0:8000/v1/rerank","access_key":"mock-key","provider":"siliconflow"}');
+select json_length(ai_rerank('extra_rerank','apple','["apple","banana","fruit","vegetable"]', null)) as rerank_count;
+select json_unquote(json_extract(r, '$[0].id')) as first_id, json_length(r) as rerank_count from (select ai_rerank('extra_rerank','apple','[{"id":"a","text":"apple"},{"id":"b","text":"banana"}]','text') as r) x;
+
+# the documents of one row are split into several requests when there are more
+# of them than the maximum number of the documents of one request
+select json_length(ai_rerank('extra_rerank','apple','["apple","banana","fruit","vegetable","carrot","potato","onion","garlic","pepper","tomato","cucumber","lettuce","cabbage","broccoli","spinach","corn","pea","bean","rice","wheat","oat","rye","barley","millet","quinoa"]', null)) as rerank_count;
+
+call DBMS_AI_SERVICE.DROP_AI_MODEL('extra_ollama');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('extra_ollama_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('extra_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('extra_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('extra_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('extra_rerank_ep');

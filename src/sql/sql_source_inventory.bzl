@@ -265,6 +265,29 @@ SQL_UNITY_GROUPS = [
         external_srcs = [],
     ),
     struct(
+        name = "ob_sql_file_table_0",
+        language = "c++",
+        srcs = [
+            "src/sql/engine/basic/ob_file_table_op.cpp",
+            "src/sql/engine/basic/ob_file_scan_utils.cpp",
+            "src/sql/engine/basic/ob_file_scan_reader.cpp",
+        ],
+        generated_srcs = [],
+        external_srcs = [],
+    ),
+    struct(
+        name = "ob_sql_file_table_1",
+        language = "c++",
+        srcs = [
+            "src/sql/engine/basic/ob_glob_reader.cpp",
+            "src/sql/engine/basic/ob_parquet_reader.cpp",
+            "src/sql/optimizer/ob_log_file_table.cpp",
+            "src/sql/resolver/dml/ob_file_table_def.cpp",
+        ],
+        generated_srcs = [],
+        external_srcs = [],
+    ),
+    struct(
         name = "ob_sql_engine_cmd_0",
         language = "c++",
         srcs = [

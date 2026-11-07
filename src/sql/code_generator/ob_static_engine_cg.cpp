@@ -31,6 +31,7 @@
 #include "sql/optimizer/ob_log_function_table.h"
 #include "sql/optimizer/ob_log_json_table.h"
 #include "sql/optimizer/ob_log_values.h"
+#include "sql/optimizer/ob_log_file_table.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
 #include "sql/optimizer/ob_log_subplan_scan.h"
 #include "sql/optimizer/ob_log_distinct.h"
@@ -102,6 +103,7 @@
 #include "sql/engine/expand/ob_expand_vec_op.h"
 #include "sql/optimizer/ob_log_values_table_access.h"
 #include "sql/engine/basic/ob_values_table_access_op.h"
+#include "sql/engine/basic/ob_file_table_op.h"
 
 namespace oceanbase
 {
@@ -1737,6 +1739,61 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
       } else if (OB_FAIL(mark_expr_self_produced(op.get_output_exprs()))) {
       } else {
         spec.rows_ = table_def->row_cnt_;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObStaticEngineCG::generate_spec(ObLogFileTable &op,
+                                    ObFileTableSpec &spec,
+                                    const bool in_root_job)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(in_root_job);
+  const ObFileTableDef *table_def = op.get_file_table_def();
+  if (OB_ISNULL(table_def) || OB_UNLIKELY(op.get_column_exprs().empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("the file table is not described", K(ret));
+  } else {
+    const ObFileScanOptions &options = table_def->options_;
+    spec.path_ = options.path_;
+    spec.format_ = options.format_;
+    spec.header_ = options.header_;
+    spec.delimiter_ = options.delimiter_;
+    spec.quote_ = options.quote_;
+    spec.escape_ = options.escape_;
+    spec.null_str_ = options.null_str_;
+    spec.json_format_ = options.json_format_;
+    spec.union_by_name_ = options.union_by_name_;
+    spec.file_size_ = options.file_size_;
+    spec.file_mtime_ = options.file_mtime_;
+    spec.describe_ = table_def->describe_;
+    const int64_t col_cnt = op.get_column_exprs().count();
+    if (OB_FAIL(spec.column_exprs_.prepare_allocate(col_cnt))) {
+      LOG_WARN("cannot allocate the column expressions of the file table", K(ret), K(col_cnt));
+    } else if (OB_FAIL(spec.column_names_.prepare_allocate(col_cnt))) {
+      LOG_WARN("cannot allocate the column names of the file table", K(ret), K(col_cnt));
+    } else if (OB_FAIL(spec.column_types_.prepare_allocate(col_cnt))) {
+      LOG_WARN("cannot allocate the column types of the file table", K(ret), K(col_cnt));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < col_cnt; ++i) {
+        ObColumnRefRawExpr *col_expr = op.get_column_exprs().at(i);
+        ObExpr *expr = NULL;
+        if (OB_ISNULL(col_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(mark_expr_self_produced(col_expr))) {
+        } else if (OB_FAIL(generate_rt_expr(*col_expr, expr))) {
+        } else if (OB_ISNULL(expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          spec.column_exprs_.at(i) = expr;
+        }
+        if (OB_SUCC(ret) && i < table_def->columns_.count()) {
+          const ObFileColumnDef &column = table_def->columns_.at(i);
+          spec.column_names_.at(i) = column.name_;
+          spec.column_types_.at(i) = column.type_;
+        }
       }
     }
   }
@@ -5460,6 +5517,7 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {
+  } else if (OB_FAIL(spec.select_expr_names_.init(op.get_select_expr_names().count()))) {
   } else {
     ObString var;
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_user_vars().count(); ++i) {
@@ -5477,6 +5535,13 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       } else if (OB_FAIL(spec.select_exprs_.push_back(rt_expr))) {
       }
     }
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_select_expr_names().count(); ++i) {
+      ObString name;
+      name.reset();
+      if (OB_FAIL(ob_write_string(alloc, op.get_select_expr_names().at(i), name))) {
+      } else if (OB_FAIL(spec.select_expr_names_.push_back(name))) {
+      }
+    }
     if (OB_SUCC(ret)) {
       spec.into_type_ = op.get_into_type();
       spec.is_optional_ = op.get_is_optional();
@@ -5486,6 +5551,10 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       spec.cs_type_ = op.get_cs_type();
       spec.parallel_ = op.get_parallel();
       spec.is_overwrite_ = op.get_is_overwrite();
+      spec.is_copy_ = op.get_is_copy();
+      spec.has_header_ = op.get_has_header();
+      if (OB_FAIL(ob_write_string(alloc, op.get_null_str(), spec.null_str_))) {
+      }
       spec.plan_->need_drive_dml_query_ = true;
     }
   }
@@ -6149,6 +6218,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_VALUES_TABLE_ACCESS: {
       type = PHY_VALUES_TABLE_ACCESS;
+      break;
+    }
+    case log_op_def::LOG_FILE_TABLE: {
+      type = PHY_FILE_TABLE;
       break;
     }
     case log_op_def::LOG_EXPAND: {

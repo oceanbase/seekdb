@@ -49,7 +49,8 @@ int ObBEngFTParser::get_next_token(
     }
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
+  } else if (OB_ISNULL(word_allocator_)
+             || OB_ISNULL(buf = static_cast<char *>(word_allocator_->alloc(token.len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(buf, token.ptr_, token.len_);
@@ -58,6 +59,26 @@ int ObBEngFTParser::get_next_token(
     char_len = token.len_;
     word_freq = token_freq;
     LOG_DEBUG("succeed to add word", K(ObString(word_len, word)), K(word_freq));
+  }
+  return ret;
+}
+
+int ObBEngFTParser::reset_for_reuse(ObFTParserParam *param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(UINT32_MAX < param->ft_length_)) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_UNLIKELY(analysis_ctx_.cs_ != param->cs_)) {
+    // the charset changed, the analyzer cannot be reused
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    word_allocator_ = param->word_allocator_;
+    doc_.set_string(param->fulltext_, param->ft_length_);
+    ret = segment(doc_, token_stream_);
   }
   return ret;
 }
@@ -72,6 +93,7 @@ int ObBEngFTParser::init(ObFTParserParam *param)
   } else if (OB_UNLIKELY(UINT32_MAX < param->ft_length_)) {
     ret = OB_NOT_SUPPORTED;
   } else {
+    word_allocator_ = param->word_allocator_;
     doc_.set_string(param->fulltext_, param->ft_length_);
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
@@ -110,6 +132,7 @@ void ObBEngFTParser::reset()
   english_analyzer_.reset();
   doc_.reset();
   token_stream_ = nullptr;
+  word_allocator_ = nullptr;
   is_inited_ = false;
 }
 

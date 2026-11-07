@@ -66,7 +66,7 @@ int ObIKQuantifierProcessor::process_CN_number(TokenizeContext &ctx,
     quan_char_cnt_++;
   } else if (OB_FAIL(output_num_token(ctx))) {
   } else {
-    reset();
+    reset_state();
   }
 
   if (OB_SUCC(ret)) {
@@ -75,10 +75,10 @@ int ObIKQuantifierProcessor::process_CN_number(TokenizeContext &ctx,
       }
     }
     if (ctx.is_last()) {
-      reset();
+      reset_state();
     }
   } else {
-    reset();
+    reset_state();
   }
   return ret;
 }
@@ -191,7 +191,14 @@ int ObIKQuantifierProcessor::output_num_token(TokenizeContext &ctx)
   return ret;
 }
 
-void ObIKQuantifierProcessor::reset()
+int ObIKQuantifierProcessor::reset()
+{
+  reset_state();
+  count_hits_.reset();
+  return OB_SUCCESS;
+}
+
+void ObIKQuantifierProcessor::reset_state()
 {
   start_ = -1;
   end_ = -1;

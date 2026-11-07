@@ -34,6 +34,8 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type) override;
 
+  int reset() override;
+
 private:
   int process_english_letter(TokenizeContext &ctx,
                              const char *ch,

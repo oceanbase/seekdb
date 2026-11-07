@@ -74,7 +74,8 @@ public:
                K_(scope),
                K_(endpoint_id),
                K_(url),
-               K_(access_key),
+               // the access key is a credential, it must not be written to the log
+               "access_key", "[REDACTED]",
                K_(ai_model_name),
                K_(provider),
                K_(request_model_name),

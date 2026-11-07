@@ -2000,6 +2000,8 @@ int ObTransformUtils::is_column_expr_not_null(ObNotNullContext &ctx,
     }
   } else if (table->is_values_table()) {
     // It is temporarily considered that the values table is not satisfied.
+  } else if (table->is_file_table()) {
+    // It is temporarily considered that the file table is not satisfied.
   } else {
     // do nothing
   }
