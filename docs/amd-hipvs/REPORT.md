@@ -209,3 +209,29 @@ snapshot serialization) that the CPU path pays as well.
 | Raw run JSON | `logs/bench_*.json`, `logs/recall_sweep.json` (on the experiment host) |
 | GPU build records | `logs/hipvs_records.log` (on the experiment host) |
 | rocm-smi samples | `logs/rocm_smi_100k.log` (on the experiment host) |
+
+## 8. Additional scale check (100 000 x 128, this branch)
+
+Same harness, one round per configuration, embedding-like clustered corpus (unless stated):
+
+| corpus | m / ef_construction | CPU build | GPU build | speedup | CPU recall@10 | GPU recall@10 |
+| --- | --- | --- | --- | --- | --- | --- |
+| clustered 100k x 128 | 16 / 200 | 15.68 s | 8.63 s | 1.82x | 0.9905 | 0.9800 |
+| clustered 100k x 128 | 32 / 400 | 33.74 s | 9.56 s | 3.53x | 0.9980 | 0.9750 |
+| clustered 100k x 128 | 64 / 1000 | 106.56 s | 12.00 s | **8.88x** | 0.9985 | 0.9885 |
+| gaussian 100k x 128 | 64 / 1000 | 397.21 s | 12.04 s | 33.0x | 0.7830 | 0.6810 |
+
+Reading:
+
+* At the **default parameters** (m=16) the GPU build is already 1.8x faster and both
+  recalls stay above 0.98 on embedding-like data, so the quality gate is met even
+  without tuning the index parameters.
+* The speedup grows with m: the GPU side is dominated by fixed costs (snapshot
+  buffering, VSAG import, one CAGRA build) while the CPU build grows with the graph
+  degree. With m=64, ef_construction=1000 the GPU builds the same 100k x 128 index in
+  12.0 s instead of 106.6 s.
+* The isotropic gaussian 100k row is a stress case where neither library reaches 0.9;
+  it is reported for completeness, not as a quality claim.
+* m > 64 (base-layer degree 2*m > 128) is rejected at **DDL time**: VSAG's legacy
+  hnswlib reader cannot import such a snapshot, so the DDL now fails with an explicit
+  `OB_NOT_SUPPORTED` instead of surfacing later as a lazily-built empty index.
