@@ -52,6 +52,13 @@ int invalidate_shared_and_restore_leaf(const ObExpr &, ObEvalCtx &ctx, ObDatum &
   result.set_int(1);
   return OB_SUCCESS;
 }
+int materialize_shared_and_return_true(const ObExpr &, ObEvalCtx &ctx, ObDatum &result)
+{
+  reentry_shared->locate_datum_for_write(ctx).set_int(1);
+  reentry_shared->get_eval_info(ctx).projected_ = true;
+  result.set_int(1);
+  return OB_SUCCESS;
+}
 int input_scalar(const ObExpr &expr, ObEvalCtx &, ObDatum &result)
 {
   auto &input = inputs[expr.extra_];
@@ -205,6 +212,34 @@ TEST_F(LogicalProgramTest, ExternalInvalidationRefreshesLaterSharedLogicalDemand
   EXPECT_EQ(2, inputs[0].calls);
   EXPECT_EQ(1, inputs[1].calls);
   EXPECT_EQ(0, exprs_[3].locate_expr_datum(ctx).get_int());
+}
+TEST_F(LogicalProgramTest, ExternalRefreshPreservesParentAccumulatedPrefix) {
+  inputs[0].value = 1;
+  exprs_[1].eval_func_ = invalidate_shared_and_restore_leaf;
+  logical(2, T_OP_AND, {0, 1});
+  reentry_leaf = &exprs_[0];
+  reentry_shared = &exprs_[0];
+  ObEvalCtx ctx(exec_);
+  ObDatum *result = nullptr;
+  ASSERT_EQ(OB_SUCCESS, exprs_[2].eval(ctx, result));
+  ASSERT_FALSE(result->is_null());
+  EXPECT_EQ(1, result->get_int());
+  EXPECT_EQ(1, inputs[0].calls);
+  EXPECT_EQ(0, inputs[0].value);
+}
+TEST_F(LogicalProgramTest, ExternalRefreshRecognizesNewMaterializedLogicalFrontier) {
+  inputs[0].error = inputs[1].error = OB_DIVISION_BY_ZERO;
+  logical(3, T_OP_AND, {0, 1});
+  exprs_[2].eval_func_ = materialize_shared_and_return_true;
+  logical(4, T_OP_AND, {2, 3});
+  reentry_shared = &exprs_[3];
+  ObEvalCtx ctx(exec_);
+  ObDatum *result = nullptr;
+  ASSERT_EQ(OB_SUCCESS, exprs_[4].eval(ctx, result));
+  ASSERT_FALSE(result->is_null());
+  EXPECT_EQ(1, result->get_int());
+  EXPECT_EQ(0, inputs[0].calls);
+  EXPECT_EQ(0, inputs[1].calls);
 }
 TEST_F(LogicalProgramTest, BatchMasksShortCircuitAndAllSkipAvoidsInputs) {
   inputs[0].value = 0;

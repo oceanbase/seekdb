@@ -21,6 +21,7 @@
 #include "lib/utility/ob_common_utility.h"
 #include "rust/expression_program.h"
 #include "rust/expression-program/include/host.h"
+#include <algorithm>
 
 namespace oceanbase { namespace sql {
 using namespace common;
@@ -47,6 +48,13 @@ namespace {
 bool is_logical(const ObExpr &expr)
 {
   return expr.type_ == T_OP_AND || expr.type_ == T_OP_OR || expr.type_ == T_OP_NOT;
+}
+
+int poll_logical_status(ObEvalCtx &ctx, int64_t &visits)
+{
+  if (++visits < 4096) { return OB_SUCCESS; }
+  visits = 0;
+  return ctx.exec_ctx_.check_status();
 }
 
 struct LogicalBuilder
@@ -122,16 +130,13 @@ class LogicalHost final : public expression::ILogicalHost
 public:
   LogicalHost(ObEvalCtx &ctx, const ObIArray<const ObExpr *> &nodes, bool batch, int64_t rows,
               ObDatum *scalar_result)
-    : ctx_(ctx), nodes_(nodes), batch_(batch), rows_(rows), scalar_result_(scalar_result) {}
+    : ctx_(ctx), nodes_(nodes), batch_(batch), rows_(rows), scalar_result_(scalar_result), publication_safe_(true) {}
   int32_t check_cancel() override { return ctx_.exec_ctx_.check_status(); }
-  int32_t publish_snapshot(rust::Slice<const uint64_t> values,
-                           rust::Slice<const uint64_t> flags, size_t rows) override
-  {
-    return publish_completed(values, flags, rows, false);
-  }
   int publish_completed(rust::Slice<const uint64_t> values,
                         rust::Slice<const uint64_t> flags, size_t rows, bool include_root)
   {
+    if (!publication_safe_) { return OB_SUCCESS; }
+    int64_t visits = 0;
     const int64_t count = nodes_.count();
     if (rows != static_cast<size_t>(rows_) || values.size() != flags.size()
         || values.size() != static_cast<size_t>(count) * rows) {
@@ -144,6 +149,8 @@ public:
       ObEvalInfo &published = target.get_eval_info(ctx_);
       bool initialized = published.evaluated_ || published.projected_;
       for (int64_t row = 0; row < rows_; ++row) {
+        const int poll_ret = poll_logical_status(ctx_, visits);
+        if (poll_ret != OB_SUCCESS) { return poll_ret; }
         const uint64_t state = flags[node * rows_ + row];
         if ((state & 1) == 0) { continue; }
         const int64_t index = batch_ ? row : ctx_.get_batch_idx();
@@ -172,50 +179,74 @@ public:
                  rust::Slice<uint64_t> values, rust::Slice<uint64_t> flags) override
   {
     int ret = OB_SUCCESS;
-    if (node >= static_cast<size_t>(nodes_.count()) || demand.size() != static_cast<size_t>(rows_)
-        || values.size() != demand.size() || flags.size() != demand.size()) {
+    int64_t visits = 0;
+    const size_t count = nodes_.count();
+    if (node >= count || demand.size() != static_cast<size_t>(rows_)
+        || values.size() != count * demand.size() || flags.size() != values.size()) {
       return OB_INVALID_ARGUMENT;
     }
     const ObExpr &input = *nodes_.at(node);
-    if (is_logical(input)) {
-      const ObEvalInfo &available = input.get_eval_info(ctx_);
-      for (int64_t row = 0; row < rows_; ++row) {
-        if (demand[row] == 0) { continue; }
-        const int64_t index = batch_ ? row : ctx_.get_batch_idx();
+    if (!is_logical(input)) {
+      if (OB_FAIL(publish_completed(
+          rust::Slice<const uint64_t>(values.data(), values.size()),
+          rust::Slice<const uint64_t>(flags.data(), flags.size()), rows_, false))) {
+        return ret;
+      }
+      publication_safe_ = false;
+      if (batch_) {
+        ObEvalCtx::TempAllocGuard guard(ctx_);
+        const int64_t bytes = ObBitVector::memory_size(rows_);
+        auto *memory = guard.get_allocator().alloc(bytes);
+        if (memory == nullptr) {
+          return OB_ALLOCATE_MEMORY_FAILED;
+        }
+        auto &skip = *to_bit_vector(memory);
+        skip.reset(rows_);
+        for (int64_t row = 0; row < rows_; ++row) {
+          const int poll_ret = poll_logical_status(ctx_, visits);
+          if (poll_ret != OB_SUCCESS) { return poll_ret; }
+          if (demand[row] == 0) { skip.set(row); }
+        }
+        ret = input.eval_batch(ctx_, skip, rows_);
+      } else {
+        ObDatum *datum = nullptr;
+        ret = input.eval(ctx_, datum);
+      }
+      for (size_t cached_node = 0; cached_node < count; ++cached_node) {
+        const ObExpr &cached = *nodes_.at(cached_node);
+        const ObEvalInfo &available = cached.get_eval_info(ctx_);
+        for (int64_t row = 0; row < rows_; ++row) {
+          const int poll_ret = poll_logical_status(ctx_, visits);
+          if (poll_ret != OB_SUCCESS) { return ret == OB_SUCCESS ? poll_ret : ret; }
+          const size_t slot = cached_node * rows_ + row;
+          if ((flags[slot] & 8) != 0 || (cached_node == node && demand[row] != 0)) {
+            continue;
+          }
+          const int64_t index = batch_ ? row : ctx_.get_batch_idx();
+          const bool ready = available.projected_ || cached.eval_func_ == nullptr
+              || (available.evaluated_ && (!cached.is_batch_result()
+                  || cached.get_evaluated_flags(ctx_).at(index)));
+          flags[slot] = ready ? 4 : 0;
+        }
+      }
+      publication_safe_ = true;
+    }
+    for (int64_t row = 0; OB_SUCC(ret) && row < rows_; ++row) {
+      const int poll_ret = poll_logical_status(ctx_, visits);
+      if (poll_ret != OB_SUCCESS) { return poll_ret; }
+      if (demand[row] == 0) { continue; }
+      const int64_t index = batch_ ? row : ctx_.get_batch_idx();
+      if (is_logical(input)) {
+        const ObEvalInfo &available = input.get_eval_info(ctx_);
         if (!available.projected_ && !(available.evaluated_
             && (!input.is_batch_result() || input.get_evaluated_flags(ctx_).at(index)))) {
           return OB_ERR_UNEXPECTED;
         }
-        const ObDatum &datum = input.locate_expr_datum(ctx_, index);
-        flags[row] = datum.is_null() ? 1 : 3;
-        values[row] = datum.is_null() ? 0 : static_cast<uint64_t>(datum.get_int());
       }
-      return OB_SUCCESS;
-    }
-    if (batch_) {
-      ObEvalCtx::TempAllocGuard guard(ctx_);
-      const int64_t bytes = ObBitVector::memory_size(rows_);
-      auto *memory = guard.get_allocator().alloc(bytes);
-      if (memory == nullptr) {
-        return OB_ALLOCATE_MEMORY_FAILED;
-      }
-      auto &skip = *to_bit_vector(memory);
-      skip.reset(rows_);
-      for (int64_t row = 0; row < rows_; ++row) {
-        if (demand[row] == 0) { skip.set(row); }
-      }
-      ret = input.eval_batch(ctx_, skip, rows_);
-    } else {
-      ObDatum *datum = nullptr;
-      ret = input.eval(ctx_, datum);
-    }
-    for (int64_t row = 0; OB_SUCC(ret) && row < rows_; ++row) {
-      if (demand[row] != 0) {
-        const int64_t index = batch_ ? row : ctx_.get_batch_idx();
-        const ObDatum &datum = input.locate_expr_datum(ctx_, index);
-        flags[row] = datum.is_null() ? 1 : 3;
-        values[row] = datum.is_null() ? 0 : static_cast<uint64_t>(datum.get_int());
-      }
+      const ObDatum &datum = input.locate_expr_datum(ctx_, index);
+      const size_t slot = node * rows_ + row;
+      flags[slot] = datum.is_null() ? 1 : 3;
+      values[slot] = datum.is_null() ? 0 : static_cast<uint64_t>(datum.get_int());
     }
     return ret;
   }
@@ -225,6 +256,8 @@ private:
   bool batch_;
   int64_t rows_;
   ObDatum *scalar_result_;
+  // External evaluation can invalidate frames before reconciliation completes.
+  bool publication_safe_;
 };
 
 int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
@@ -245,11 +278,13 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
   ObSEArray<const ObExpr *, 16, ObWrapperAllocator> nodes(sizeof(const ObExpr *), ObWrapperAllocator(allocator));
   ObSEArray<uint8_t, 16, ObWrapperAllocator> skipped(sizeof(uint8_t), ObWrapperAllocator(allocator));
   int64_t active_rows = 0;
+  int64_t visits = 0;
   if (OB_FAIL(nodes.prepare_allocate(count))) {
   } else if (OB_FAIL(skipped.prepare_allocate(rows))) {
   } else {
     nodes.at(count - 1) = &expr;
     for (int64_t i = count - 2; OB_SUCC(ret) && i >= 0; --i) {
+      if (OB_FAIL(poll_logical_status(ctx, visits))) { break; }
       const int64_t parent = info.parents_.at(i);
       const int64_t ordinal = info.ordinals_.at(i);
       if (parent <= i || parent >= count || nodes.at(parent) == nullptr
@@ -260,7 +295,8 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
         nodes.at(i) = nodes.at(parent)->args_[ordinal];
       }
     }
-    for (int64_t row = 0; row < rows; ++row) {
+    for (int64_t row = 0; OB_SUCC(ret) && row < rows; ++row) {
+      if (OB_FAIL(poll_logical_status(ctx, visits))) { break; }
       skipped.at(row) = skip != nullptr && skip->at(row);
       active_rows += skipped.at(row) == 0;
     }
@@ -279,14 +315,19 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
         if (storage == nullptr) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else {
-          MEMSET(storage, 0, words * sizeof(uint64_t));
+          for (size_t offset = 0; offset < words; offset += 4096) {
+            if (OB_FAIL(ctx.exec_ctx_.check_status())) { return ret; }
+            const size_t chunk = std::min<size_t>(4096, words - offset);
+            MEMSET(storage + offset, 0, chunk * sizeof(uint64_t));
+          }
           int64_t logical_nodes = 0;
-          for (int64_t node = 0; node < count; ++node) {
+          for (int64_t node = 0; OB_SUCC(ret) && node < count; ++node) {
             const ObExpr &source = *nodes.at(node);
             if (!is_logical(source)) { continue; }
             ++logical_nodes;
             const ObEvalInfo &available = source.get_eval_info(ctx);
-            for (int64_t row = 0; row < rows; ++row) {
+            for (int64_t row = 0; OB_SUCC(ret) && row < rows; ++row) {
+              if (OB_FAIL(poll_logical_status(ctx, visits))) { break; }
               const int64_t index = batch ? row : ctx.get_batch_idx();
               if (available.projected_ || (available.evaluated_ && (!source.is_batch_result()
                   || source.get_evaluated_flags(ctx).at(index)))) {
@@ -294,6 +335,7 @@ int run_logical(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector *skip,
               }
             }
           }
+          if (OB_FAIL(ret)) { return ret; }
           LogicalHost host(ctx, nodes, batch, rows, scalar_result);
           const auto status = expression::execute_logical(image, &host, rows,
               rust::Slice<const uint8_t>(skipped.get_data(), skipped.count()),
