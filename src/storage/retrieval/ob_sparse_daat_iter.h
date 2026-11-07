@@ -91,6 +91,10 @@ protected:
   // Bypasses the generic merge heap and relevance collector with a direct two-pointer
   // merge over the two sorted posting lists (intersection for AND, union for OR).
   int do_two_way_merge_round(int64_t &count);
+  // Fast path for queries with 3..MAX_FAST_DIMS dimensions and no relevance/filter.
+  // Replaces the merge heap with a linear min scan over the sorted posting lists.
+  static constexpr int64_t MAX_FAST_DIMS = 4;
+  int do_k_way_merge_round(int64_t &count);
   int fill_merge_heap();
   virtual int collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id);
   virtual int process_collected_row(const ObDatum &id_datum, const double relevance);
@@ -117,6 +121,12 @@ protected:
   bool two_way_primed_;     // whether both dim iters have been advanced to first row
   bool two_way_iter0_valid_;// whether dim iter 0 has a current row
   bool two_way_iter1_valid_;// whether dim iter 1 has a current row
+  // K-way fast-path state (3..MAX_FAST_DIMS dims, no relevance, no filter)
+  bool k_way_fast_;
+  bool k_way_intersect_;
+  bool k_way_primed_;
+  bool k_way_valid_[MAX_FAST_DIMS];
+  int64_t k_way_dim_cnt_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
 };

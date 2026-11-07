@@ -1242,11 +1242,10 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
       case share::schema::ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
-        // FTS aux builds are CPU-bound (tokenization). Use DOP 2 to overlap
-        // tokenize with I/O. Capped at 2 per task so the three concurrently
-        // built aux tables (doc_rowkey / fts_index / fts_doc_word) stay within
-        // the CI's parallel_servers_target (>= 4 needed for producer+consumer).
-        decided_parallelism = MAX(original_parallelism / 3, 2L);
+        // Keep DOP 1 for the FTS aux builds. Forcing DOP >= 2 here oversubscribes
+        // the tenant's parallel_servers_target on CI (three aux tables are built
+        // concurrently) and fails the DDL with error 5307.
+        decided_parallelism = MAX(original_parallelism / 3, 1L);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:
