@@ -1143,7 +1143,8 @@ cc_library(
         "//bazel/third_party:libaio",
         "//bazel/third_party:libcrypto",
         "//bazel/third_party:libssl",
-        "//bazel/third_party:libunwind",
+        "//rust:compression",
+        "//rust:xml_parser",
     ] + select({
         "@platforms//os:linux": ["//deps/external:jemalloc_library"],
         "@platforms//os:macos": ["//deps/external:jemalloc_library"],

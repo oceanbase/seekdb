@@ -222,16 +222,29 @@ impl<'a, H: EventHandler> Parser<'a, H> {
         {
             return Err(Error::Syntax("misplaced XML declaration").into());
         }
-        let version = declaration.version()?;
-        if self.mode == ParseMode::Document && version.as_ref() != b"1.0" {
+        let fields = BytesStart::from_content(std::str::from_utf8(declaration)?, 3);
+        validate_attribute_separators(fields.attributes_raw())?;
+        let mut attributes = fields.attributes();
+        let version = attributes
+            .next()
+            .transpose()?
+            .ok_or(Error::Syntax("missing XML version"))?;
+        if version.key.0 != b"version" {
+            return Err(Error::Syntax("XML version must be the first declaration field").into());
+        }
+        if self.mode == ParseMode::Document && version.value.as_ref() != b"1.0" {
             return Err(Error::Syntax("unsupported XML version").into());
         }
-        if let Some(encoding) = declaration.encoding() {
-            encoding?;
-        }
-        if let Some(standalone) = declaration.standalone() {
-            let standalone = standalone?;
-            if standalone.as_ref() != b"yes" && standalone.as_ref() != b"no" {
+        let mut optional_fields = [b"encoding".as_slice(), b"standalone".as_slice()].into_iter();
+        for attribute in attributes {
+            let attribute = attribute?;
+            if !optional_fields.by_ref().any(|name| name == attribute.key.0) {
+                return Err(Error::Syntax("invalid XML declaration field order").into());
+            }
+            if attribute.key.0 == b"standalone"
+                && attribute.value.as_ref() != b"yes"
+                && attribute.value.as_ref() != b"no"
+            {
                 return Err(Error::Syntax("invalid XML standalone value").into());
             }
         }

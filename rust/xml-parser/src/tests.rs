@@ -287,6 +287,104 @@ fn retains_declaration_bytes_and_ignores_encoding_for_memory_input() {
 }
 
 #[test]
+fn rejects_malformed_xml_declaration_fields() {
+    for declaration in [
+        "<?xml version='1.0'encoding='UTF-8'?>",
+        "<?xml version=\"1.0\"standalone=\"yes\"?>",
+        "<?xml version='1.0' encoding='UTF-8'standalone='no'?>",
+        "<?xml version='1.0'\u{a0}encoding='UTF-8'?>",
+        "<?xml version='1.0' bogus='x'?>",
+        "<?xml version='1.0' encoding='UTF-8' bogus='x'?>",
+        "<?xml version='1.0' standalone='yes' bogus='x'?>",
+        "<?xml version='1.0' version='1.1'?>",
+        "<?xml version='1.0' encoding='UTF-8' encoding='unknown'?>",
+        "<?xml version='1.0' standalone='yes' standalone='no'?>",
+        "<?xml version='1.0' standalone='yes' encoding='UTF-8'?>",
+        "<?xml encoding='UTF-8' version='1.0'?>",
+        "<?xml standalone='yes' version='1.0'?>",
+        "<?xml encoding='UTF-8'?>",
+        "<?xml version='1.0' standalone='maybe'?>",
+    ] {
+        let input = format!("{declaration}<r/>");
+        for mode in [ParseMode::Document, ParseMode::Content] {
+            for content_allow_xml_decl in [false, true] {
+                for syntax_check in [false, true] {
+                    let options = ParseOptions {
+                        content_allow_xml_decl,
+                        syntax_check,
+                        ..ParseOptions::default()
+                    };
+                    let mut collector = Collector::default();
+                    let result = parse(input.as_bytes(), mode, options, &mut collector);
+                    assert!(
+                        matches!(result, Err(ParseError::Xml(_))),
+                        "input: {input}, mode: {mode:?}, options: {options:?}, result: {result:?}"
+                    );
+                    assert!(
+                        collector
+                            .0
+                            .iter()
+                            .all(|event| !matches!(event, OwnedEvent::Declaration(_))),
+                        "input: {input}, mode: {mode:?}, options: {options:?}, events: {:?}",
+                        collector.0
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn accepts_ordered_xml_declaration_fields_with_xml_whitespace() {
+    for separator in [" ", "\t", "\n", "\r", "\r\n", " \t\r\n "] {
+        for quote in ['\'', '\"'] {
+            for optional_fields in [
+                String::new(),
+                format!("{separator}encoding={quote}unknown{quote}"),
+                format!("{separator}standalone={quote}yes{quote}"),
+                format!(
+                    "{separator}encoding={quote}UTF-8{quote}{separator}standalone={quote}no{quote}"
+                ),
+            ] {
+                let declaration = format!(
+                    "<?xml{separator}version = {quote}1.0{quote}{optional_fields}{separator}?>"
+                );
+                let input = format!("{declaration}<r/>");
+                for mode in [ParseMode::Document, ParseMode::Content] {
+                    for syntax_check in [false, true] {
+                        let options = ParseOptions {
+                            content_allow_xml_decl: true,
+                            syntax_check,
+                            ..ParseOptions::default()
+                        };
+                        let actual = events(&input, mode, options).unwrap_or_else(|error| {
+                            panic!("input: {input}, mode: {mode:?}, options: {options:?}, error: {error:?}")
+                        });
+                        let normalized_declaration =
+                            declaration.replace("\r\n", "\n").replace('\r', "\n");
+                        let expected = if syntax_check {
+                            vec![]
+                        } else {
+                            vec![
+                                OwnedEvent::StartDocument,
+                                OwnedEvent::Declaration(normalized_declaration.into_bytes()),
+                                OwnedEvent::Start("r".into(), vec![], true),
+                                OwnedEvent::End(true),
+                                OwnedEvent::EndDocument,
+                            ]
+                        };
+                        assert_eq!(
+                            actual, expected,
+                            "input: {input}, mode: {mode:?}, options: {options:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn supports_utf16_bom_input() {
     for (name, mut input) in [("little", vec![0xff, 0xfe]), ("big", vec![0xfe, 0xff])] {
         let encoded: Vec<u8> = if name == "little" {

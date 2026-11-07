@@ -265,7 +265,6 @@ OperationResult sdk_des(rust::Slice<const std::uint8_t> password, bool has_passw
     OPENSSL_cleanse(keys, sizeof(keys));
     std::memset(iv, 0, sizeof(iv));
   }
-  // The default is three all-zero schedules, which differs from scheduling zero keys.
   DES_ede3_cbc_encrypt(buffer.data(), buffer.data(), static_cast<long>(buffer.size()),
                       &schedules[0], &schedules[1], &schedules[2], &iv, encrypt ? DES_ENCRYPT : DES_DECRYPT);
   OPENSSL_cleanse(schedules, sizeof(schedules));
