@@ -63,3 +63,9 @@ The next unit must remove a complete execution responsibility and prove a reusab
 A storage black-filter group is another complete owner and may cover predicates that scan residual filtering misses. It requires its own preparation and storage-mask contract. Source occurrence counts do not determine which candidate is hotter.
 
 Selection requires actual eligible SQL, a complete ownership design, and a named portion of C++ coordination to remove. Existing performance evidence applies only to the measured implementation and workload. Each new production entry needs fresh hit evidence and identical-work comparisons against the accepted 1% throughput-regression limit. Standard OLTP without native hits remains regression coverage.
+
+## Logical-family retirement
+
+The subsequent retirement unit closes scalar and batch AND/OR/NOT control execution across generic expression consumers. Its C++ execution definitions and old bindings are deleted; resolution and type deduction remain. The native logical program treats resolved nonlogical truth-producing subgraphs as lazy masked capabilities, so arbitrary child conversions do not require retaining a C++ logical fallback. Existing numeric operator/temporary programs remain native callers with their own admitted graphs. See the [retired logical execution contract](expression-program.md#retired-logical-execution-family).
+
+This changes the earlier inventory's control-flow frontier for AND/OR/NOT only. CASE result ownership, nonlogical conversions, arithmetic signatures, storage-specific predicate orchestration, aggregate transitions and other listed responsibilities are still separate migration work. Generic C++ datum snapshots and evaluator gateways remain compatibility infrastructure; they no longer contain the retired logical computation. The native masks, logical intermediates and traversal state have one lexical owner, with explicit snapshot handoff at mutable external boundaries.
