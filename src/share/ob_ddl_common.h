@@ -503,6 +503,14 @@ public:
 class ObDDLUtil
 {
 public:
+  // Escape the identifier escape character by doubling it. Shared DDL code
+  // needs this helper, and Share must stay independent of the upper SQL
+  // module, so the implementation lives here instead of in ObSQLUtils.
+  static int generate_new_name_with_escape_character(
+      common::ObIAllocator &allocator,
+      const common::ObString &src,
+      common::ObString &dest);
+
   struct ObReplicaKey final
   {
   public:
