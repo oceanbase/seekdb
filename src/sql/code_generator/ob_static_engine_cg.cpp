@@ -5586,6 +5586,7 @@ int ObStaticEngineCG::generate_spec(ObLogFileScan &op, ObFileScanSpec &spec,
   } else {
     spec.kind_ = static_cast<int32_t>(file_def->kind_);
     spec.file_format_ = static_cast<int32_t>(file_def->format_);
+    spec.has_header_ = file_def->has_header_;
     spec.device_ = file_def->device_;
     spec.inode_ = file_def->inode_;
     spec.file_size_ = file_def->file_size_;

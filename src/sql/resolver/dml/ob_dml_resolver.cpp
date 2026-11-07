@@ -121,15 +121,22 @@ int validate_file_scan_options(const ParseNode *node)
     const ParseNode *value_node = node->children_[1];
     const ObString name(static_cast<int32_t>(name_node->str_len_), name_node->str_value_);
     if (name.case_compare("header") == 0) {
-      if (nullptr == value_node || T_BOOL != value_node->type_ || 0 == value_node->value_) {
+      if (nullptr == value_node || T_BOOL != value_node->type_) {
         ret = OB_NOT_SUPPORTED;
       }
     } else if (name.case_compare("sample_size") == 0) {
       // The parser folds small negative integer literals (including -1) into
       // a T_INT node, while larger numeric expressions retain T_OP_NEG.
-      if (nullptr == value_node
-          || (T_OP_NEG != value_node->type_
-              && (T_INT != value_node->type_ || value_node->value_ >= 0))) {
+      const bool is_minus_one =
+          nullptr != value_node
+          && ((T_INT == value_node->type_ && -1 == value_node->value_)
+              || (T_OP_NEG == value_node->type_
+                  && 1 == value_node->num_child_
+                  && nullptr != value_node->children_
+                  && nullptr != value_node->children_[0]
+                  && T_INT == value_node->children_[0]->type_
+                  && 1 == value_node->children_[0]->value_));
+      if (!is_minus_one) {
         ret = OB_NOT_SUPPORTED;
       }
     } else if (name.case_compare("format") == 0) {
@@ -147,6 +154,32 @@ int validate_file_scan_options(const ParseNode *node)
     }
   } else if (OB_FAIL(validate_file_scan_options(node->children_[0]))) {
   } else if (OB_FAIL(validate_file_scan_options(node->children_[1]))) {
+  }
+  return ret;
+}
+
+int resolve_file_scan_header(const ParseNode *node, bool &has_header)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == node) {
+  } else if (T_LINK_NODE != node->type_ || 2 != node->num_child_ || nullptr == node->children_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const ParseNode *name_node = node->children_[0];
+    if (nullptr != name_node && T_IDENT == name_node->type_) {
+      const ObString name(static_cast<int32_t>(name_node->str_len_), name_node->str_value_);
+      if (name.case_compare("header") == 0) {
+        const ParseNode *value_node = node->children_[1];
+        if (nullptr != value_node && T_BOOL == value_node->type_) {
+          has_header = value_node->value_ != 0;
+        }
+      }
+    } else if (OB_SUCC(ret)) {
+      ret = resolve_file_scan_header(node->children_[0], has_header);
+      if (OB_SUCC(ret)) {
+        ret = resolve_file_scan_header(node->children_[1], has_header);
+      }
+    }
   }
   return ret;
 }
@@ -4175,6 +4208,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   int64_t file_size = 0;
   int64_t modified_time_ns = 0;
   bool enable_file_sql = false;
+  bool file_has_header = true;
   const int64_t expected_child_count = T_FILE_SCAN_TABLE == parse_tree.type_ ? 4 : 2;
   const ParseNode *alias_node = nullptr;
 
@@ -4203,6 +4237,9 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   } else if (T_FILE_SCAN_TABLE == parse_tree.type_
              && OB_FAIL(validate_file_scan_options(parse_tree.children_[2]))) {
     LOG_WARN("unsupported file scan option", K(ret));
+  } else if (T_FILE_SCAN_TABLE == parse_tree.type_
+             && OB_FAIL(resolve_file_scan_header(parse_tree.children_[2], file_has_header))) {
+    LOG_WARN("failed to resolve file scan header option", K(ret));
   } else if (T_CHAR != parse_tree.children_[0]->type_
              && T_VARCHAR != parse_tree.children_[0]->type_) {
     ret = OB_INVALID_ARGUMENT;
@@ -4268,7 +4305,8 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
                                                 device,
                                                 inode,
                                                 file_size,
-                                                modified_time_ns))) {
+                                                modified_time_ns,
+                                                file_has_header))) {
         LOG_WARN("failed to infer file table schema", K(ret), K(path), K(format_name));
       } else if (columns.empty()) {
         ret = OB_INVALID_DATA;
@@ -4284,6 +4322,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
     file_def = new (file_def) ObFileTableDef();
     file_def->kind_ = table_kind;
     file_def->format_ = actual_format;
+    file_def->has_header_ = file_has_header;
     file_def->estimated_rows_ = row_count;
     file_def->device_ = device;
     file_def->inode_ = inode;
@@ -4309,11 +4348,6 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
       }
     } else if (OB_SUCC(ret)) {
       if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file", ObFileColumnType::VARCHAR, false, 1024))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_path", ObFileColumnType::VARCHAR, false, 4096))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_format", ObFileColumnType::VARCHAR, false, 16))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "file_size", ObFileColumnType::BIGINT))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "modified_time", ObFileColumnType::DATETIME))) {
-      } else if (OB_FAIL(append_file_column(*allocator_, file_def->columns_, "queryable", ObFileColumnType::BOOLEAN))) {
       }
     }
   }

@@ -29,7 +29,7 @@ using namespace common;
 namespace sql
 {
 OB_SERIALIZE_MEMBER((ObFileScanSpec, ObOpSpec), kind_, file_path_, secure_file_priv_, file_format_,
-                    device_, inode_, file_size_, modified_time_ns_,
+                    has_header_, device_, inode_, file_size_, modified_time_ns_,
                     file_column_names_, file_column_types_, source_column_names_,
                     source_original_names_, source_type_names_, source_column_types_, source_column_nullable_,
                     output_column_idxs_, column_exprs_);
@@ -57,7 +57,7 @@ int ObFileScanOp::open_scan()
         std::string(file_spec().file_path_.ptr(), file_spec().file_path_.length()),
         static_cast<ObFileFormat>(file_spec().file_format_), columns,
         file_spec().device_, file_spec().inode_, file_spec().file_size_,
-        file_spec().modified_time_ns_, projected_column_idxs))) {
+        file_spec().modified_time_ns_, projected_column_idxs, file_spec().has_header_))) {
     LOG_WARN("failed to open file scan reader", K(ret), K(file_spec().file_path_));
   }
   return ret;
@@ -212,24 +212,9 @@ int ObFileScanOp::get_next_list_row()
     if (0 != fstatat(dirfd(directory_), entry->d_name, &entry_stat, AT_SYMLINK_NOFOLLOW)) {
       continue;
     }
-    const std::string directory_path(file_spec().file_path_.ptr(), file_spec().file_path_.length());
-    const std::string full_path = directory_path + "/" + entry->d_name;
-    ObFileFormat format = ObFileFormat::INVALID;
-    const bool queryable = S_ISREG(entry_stat.st_mode)
-                           && OB_SUCCESS == ObFileScanUtils::detect_format(full_path, format);
-    cells_.assign(6, ObFileCell());
+    cells_.assign(file_spec().file_column_names_.count(), ObFileCell());
     cells_[0].is_null_ = false;
     cells_[0].string_value_ = entry->d_name;
-    cells_[1].is_null_ = false;
-    cells_[1].string_value_ = full_path;
-    cells_[2].is_null_ = false;
-    cells_[2].string_value_ = queryable ? ObFileScanUtils::format_name(format) : "unknown";
-    cells_[3].is_null_ = false;
-    cells_[3].int_value_ = static_cast<int64_t>(entry_stat.st_size);
-    cells_[4].is_null_ = false;
-    cells_[4].datetime_value_ = static_cast<int64_t>(entry_stat.st_mtime) * 1000000L;
-    cells_[5].is_null_ = false;
-    cells_[5].bool_value_ = queryable;
     break;
   }
   if (OB_SUCC(ret) && OB_ISNULL(entry)) {

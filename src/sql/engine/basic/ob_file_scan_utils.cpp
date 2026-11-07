@@ -175,6 +175,7 @@ struct SchemaCacheEntry
   uint64_t inode_;
   int64_t size_;
   int64_t mtime_ns_;
+  bool has_header_;
   std::vector<ObFileColumnSchema> columns_;
   int64_t row_count_;
 };
@@ -185,6 +186,7 @@ public:
   bool get(const std::string &path, const ObFileFormat format,
            const uint64_t device, const uint64_t inode,
            const int64_t size, const int64_t mtime_ns,
+           const bool has_header,
            std::vector<ObFileColumnSchema> &columns, int64_t &row_count)
   {
     bool found = false;
@@ -192,7 +194,8 @@ public:
     for (auto it = entries_.begin(); !found && it != entries_.end(); ++it) {
       if (it->path_ == path && it->format_ == format
           && it->device_ == device && it->inode_ == inode
-          && it->size_ == size && it->mtime_ns_ == mtime_ns) {
+          && it->size_ == size && it->mtime_ns_ == mtime_ns
+          && it->has_header_ == has_header) {
         columns = it->columns_;
         row_count = it->row_count_;
         entries_.splice(entries_.begin(), entries_, it);
@@ -205,6 +208,7 @@ public:
   void put(const std::string &path, const ObFileFormat format,
            const uint64_t device, const uint64_t inode,
            const int64_t size, const int64_t mtime_ns,
+           const bool has_header,
            const std::vector<ObFileColumnSchema> &columns, const int64_t row_count)
   {
     SchemaCacheEntry entry;
@@ -214,13 +218,15 @@ public:
     entry.inode_ = inode;
     entry.size_ = size;
     entry.mtime_ns_ = mtime_ns;
+    entry.has_header_ = has_header;
     entry.columns_ = columns;
     entry.row_count_ = row_count;
     std::lock_guard<std::mutex> guard(lock_);
     for (auto it = entries_.begin(); it != entries_.end();) {
       if (it->path_ == path && it->format_ == format
           && it->device_ == device && it->inode_ == inode
-          && it->size_ == size && it->mtime_ns_ == mtime_ns) {
+          && it->size_ == size && it->mtime_ns_ == mtime_ns
+          && it->has_header_ == has_header) {
         it = entries_.erase(it);
       } else {
         ++it;
@@ -662,7 +668,8 @@ int convert_value(const ParsedValue &value, const ObFileColumnType target_type, 
 
 int infer_csv_schema(const std::string &path,
                      std::vector<ObFileColumnSchema> &columns,
-                     int64_t &row_count)
+                     int64_t &row_count,
+                     const bool has_header)
 {
   int ret = OB_SUCCESS;
   std::unique_ptr<std::streambuf> stream_buffer;
@@ -676,6 +683,16 @@ int infer_csv_schema(const std::string &path,
   } else if (OB_FAIL(read_csv_record(*stream, fields, has_record))) {
     if (OB_ITER_END == ret) {
       ret = OB_INVALID_DATA;
+    }
+  } else if (!has_header) {
+    for (size_t i = 0; i < fields.size(); ++i) {
+      ObFileColumnSchema column;
+      column.source_name_ = "";
+      column.column_name_ = make_unique_column_name("", i, columns);
+      columns.push_back(column);
+      if (columns.size() > static_cast<size_t>(MAX_COLUMN_COUNT)) {
+        ret = OB_SIZE_OVERFLOW;
+      }
     }
   } else {
     for (size_t i = 0; i < fields.size(); ++i) {
@@ -695,9 +712,13 @@ int infer_csv_schema(const std::string &path,
     }
   }
   while (OB_SUCC(ret)) {
-    fields.clear();
-    has_record = false;
-    ret = read_csv_record(*stream, fields, has_record);
+    if (has_header || row_count > 0) {
+      fields.clear();
+      has_record = false;
+      ret = read_csv_record(*stream, fields, has_record);
+    } else {
+      ret = OB_SUCCESS;
+    }
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
       break;
@@ -933,12 +954,13 @@ int ObFileScanUtils::infer_schema(const std::string &path,
                                   std::string &canonical_path,
                                   ObFileFormat &actual_format,
                                   int64_t &file_size,
-                                  int64_t &modified_time_ns)
+                                  int64_t &modified_time_ns,
+                                  const bool has_header)
 {
   uint64_t device = 0;
   uint64_t inode = 0;
   return infer_schema(path, requested_format, columns, row_count, canonical_path,
-                      actual_format, device, inode, file_size, modified_time_ns);
+                      actual_format, device, inode, file_size, modified_time_ns, has_header);
 }
 
 int ObFileScanUtils::infer_schema(const std::string &path,
@@ -950,7 +972,8 @@ int ObFileScanUtils::infer_schema(const std::string &path,
                                   uint64_t &device,
                                   uint64_t &inode,
                                   int64_t &file_size,
-                                  int64_t &modified_time_ns)
+                                  int64_t &modified_time_ns,
+                                  const bool has_header)
 {
   int ret = OB_SUCCESS;
   uint64_t initial_device = 0;
@@ -976,11 +999,11 @@ int ObFileScanUtils::infer_schema(const std::string &path,
     }
     if ((cache_hit = schema_cache().get(
            canonical_path, actual_format, initial_device, initial_inode,
-           initial_file_size, initial_modified_time_ns, columns, row_count))) {
+           initial_file_size, initial_modified_time_ns, has_header, columns, row_count))) {
       // bounded process-local cache hit
     } else switch (actual_format) {
       case ObFileFormat::CSV:
-        ret = infer_csv_schema(canonical_path, columns, row_count);
+        ret = infer_csv_schema(canonical_path, columns, row_count, has_header);
         break;
       case ObFileFormat::JSONL:
         ret = infer_jsonl_schema(canonical_path, columns, row_count);
@@ -1009,7 +1032,7 @@ int ObFileScanUtils::infer_schema(const std::string &path,
       inode = verified_inode;
       if (!cache_hit) {
         schema_cache().put(canonical_path, actual_format, device, inode,
-                           file_size, modified_time_ns, columns, row_count);
+                           file_size, modified_time_ns, has_header, columns, row_count);
       }
     }
   }
@@ -1049,7 +1072,8 @@ ObFileScanReader::ObFileScanReader()
   : path_(), format_(ObFileFormat::INVALID), columns_(), projected_columns_(),
     stream_buffer_(), stream_(), current_row_number_(0),
     csv_header_read_(false), expected_device_(0), expected_inode_(0),
-    expected_file_size_(0), expected_modified_time_ns_(0), end_verified_(false), parquet_reader_()
+    expected_file_size_(0), expected_modified_time_ns_(0), has_header_(true),
+    end_verified_(false), parquet_reader_()
 {}
 
 ObFileScanReader::~ObFileScanReader()
@@ -1064,24 +1088,7 @@ int ObFileScanReader::open(const std::string &path,
                            const int64_t expected_modified_time_ns)
 {
   return open(path, format, columns, 0, 0,
-              expected_file_size, expected_modified_time_ns);
-}
-
-int ObFileScanReader::open(const std::string &path,
-                           const ObFileFormat format,
-                           const std::vector<ObFileColumnSchema> &columns,
-                           const uint64_t expected_device,
-                           const uint64_t expected_inode,
-                           const int64_t expected_file_size,
-                           const int64_t expected_modified_time_ns)
-{
-  std::vector<int64_t> projected_column_idxs;
-  projected_column_idxs.reserve(columns.size());
-  for (size_t i = 0; i < columns.size(); ++i) {
-    projected_column_idxs.push_back(static_cast<int64_t>(i));
-  }
-  return open(path, format, columns, expected_device, expected_inode,
-              expected_file_size, expected_modified_time_ns, projected_column_idxs);
+              expected_file_size, expected_modified_time_ns, true);
 }
 
 int ObFileScanReader::open(const std::string &path,
@@ -1091,7 +1098,26 @@ int ObFileScanReader::open(const std::string &path,
                            const uint64_t expected_inode,
                            const int64_t expected_file_size,
                            const int64_t expected_modified_time_ns,
-                           const std::vector<int64_t> &projected_column_idxs)
+                           const bool has_header)
+{
+  std::vector<int64_t> projected_column_idxs;
+  projected_column_idxs.reserve(columns.size());
+  for (size_t i = 0; i < columns.size(); ++i) {
+    projected_column_idxs.push_back(static_cast<int64_t>(i));
+  }
+  return open(path, format, columns, expected_device, expected_inode,
+              expected_file_size, expected_modified_time_ns, projected_column_idxs, has_header);
+}
+
+int ObFileScanReader::open(const std::string &path,
+                           const ObFileFormat format,
+                           const std::vector<ObFileColumnSchema> &columns,
+                           const uint64_t expected_device,
+                           const uint64_t expected_inode,
+                           const int64_t expected_file_size,
+                           const int64_t expected_modified_time_ns,
+                           const std::vector<int64_t> &projected_column_idxs,
+                           const bool has_header)
 {
   int ret = OB_SUCCESS;
   path_ = path;
@@ -1110,6 +1136,7 @@ int ObFileScanReader::open(const std::string &path,
   expected_inode_ = expected_inode;
   expected_file_size_ = expected_file_size;
   expected_modified_time_ns_ = expected_modified_time_ns;
+  has_header_ = has_header;
   if (OB_SUCC(ret)) ret = open_inner();
   return ret;
 }
@@ -1171,7 +1198,9 @@ int ObFileScanReader::open_inner()
   } else if (ObFileFormat::CSV == format_) {
     std::vector<std::string> header;
     bool has_record = false;
-    if (OB_FAIL(read_csv_record(*stream_, header, has_record))) {
+    if (!has_header_) {
+      csv_header_read_ = true;
+    } else if (OB_FAIL(read_csv_record(*stream_, header, has_record))) {
       LOG_WARN("failed to read csv header", K(ret));
     } else if (header.size() != columns_.size()) {
       ret = OB_INVALID_DATA;
