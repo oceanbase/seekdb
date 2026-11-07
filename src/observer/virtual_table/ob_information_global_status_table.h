@@ -44,7 +44,11 @@ class ObInfoSchemaGlobalStatusTable : public common::ObVirtualTableScannerIterat
     EXPRESSION_FILTER_ROWS,
     TEMPORARY_EXPRESSION_PREPARES,
     TEMPORARY_EXPRESSION_EXECUTIONS,
-    TEMPORARY_EXPRESSION_STATE_BUILDS
+    TEMPORARY_EXPRESSION_STATE_BUILDS,
+    LOGICAL_PROGRAM_CALLS,
+    LOGICAL_PROGRAM_BATCHES,
+    LOGICAL_PROGRAM_ROWS,
+    LOGICAL_PROGRAM_NODES
   };
 
   typedef common::hash::ObHashMap<common::ObString, common::ObObj> AllStatus;

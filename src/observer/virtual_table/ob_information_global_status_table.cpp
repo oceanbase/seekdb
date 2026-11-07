@@ -40,6 +40,10 @@ const char * const ObInfoSchemaGlobalStatusTable::variables_name[] =
   "Rust_temporary_expression_prepares",
   "Rust_temporary_expression_executions",
   "Rust_temporary_expression_state_builds",
+  "Rust_logical_program_calls",
+  "Rust_logical_program_batches",
+  "Rust_logical_program_rows",
+  "Rust_logical_program_nodes",
   NULL,
 };
 
@@ -97,7 +101,11 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
       case EXPRESSION_FILTER_ROWS:
       case TEMPORARY_EXPRESSION_PREPARES:
       case TEMPORARY_EXPRESSION_EXECUTIONS:
-      case TEMPORARY_EXPRESSION_STATE_BUILDS: {
+      case TEMPORARY_EXPRESSION_STATE_BUILDS:
+      case LOGICAL_PROGRAM_CALLS:
+      case LOGICAL_PROGRAM_BATCHES:
+      case LOGICAL_PROGRAM_ROWS:
+      case LOGICAL_PROGRAM_NODES: {
           const int16_t events[] = {
             ObStatEventIds::RUST_EXPRESSION_PREPARES,
             ObStatEventIds::RUST_EXPRESSION_PROGRAMS,
@@ -107,6 +115,10 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
             ObStatEventIds::RUST_TEMPORARY_EXPRESSION_PREPARES,
             ObStatEventIds::RUST_TEMPORARY_EXPRESSION_EXECUTIONS,
             ObStatEventIds::RUST_TEMPORARY_EXPRESSION_STATE_BUILDS,
+            ObStatEventIds::RUST_LOGICAL_PROGRAM_CALLS,
+            ObStatEventIds::RUST_LOGICAL_PROGRAM_BATCHES,
+            ObStatEventIds::RUST_LOGICAL_PROGRAM_ROWS,
+            ObStatEventIds::RUST_LOGICAL_PROGRAM_NODES,
           };
           int64_t value = 0;
           if (OB_SUCC(ret) && OB_FAIL(runtime_info.get_stat(events[i - EXPRESSION_PREPARES], value))) {
