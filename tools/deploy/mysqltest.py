@@ -260,7 +260,7 @@ def selection_values(values):
 def discover_cases(repo_root, suites=(), test_set=(), include_excluded=False,
                    check_results=True):
     config_path = repo_root / "tools" / "deploy" / "mysqltest_config.yaml"
-    mysql_test_dir = repo_root / "tools" / "deploy" / "mysql_test"
+    mysql_test_dir = repo_root / "unittest" / "mysql_test"
     test_dir = mysql_test_dir / "t"
     result_dir = mysql_test_dir / "r" / "mysql"
     suite_dir = mysql_test_dir / "test_suite"
