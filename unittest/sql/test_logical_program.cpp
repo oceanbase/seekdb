@@ -44,6 +44,14 @@ int mutate_leaf_and_demand_shared(const ObExpr &, ObEvalCtx &ctx, ObDatum &resul
   if (ret == OB_SUCCESS) { result.set_int(cached->get_int()); }
   return ret;
 }
+int invalidate_shared_and_restore_leaf(const ObExpr &, ObEvalCtx &ctx, ObDatum &result)
+{
+  inputs[0].value = 0;
+  reentry_leaf->get_eval_info(ctx).clear_evaluated_flag();
+  reentry_shared->get_eval_info(ctx).clear_evaluated_flag();
+  result.set_int(1);
+  return OB_SUCCESS;
+}
 int input_scalar(const ObExpr &expr, ObEvalCtx &, ObDatum &result)
 {
   auto &input = inputs[expr.extra_];
@@ -182,6 +190,21 @@ TEST_F(LogicalProgramTest, ExternalReentrySeesAlreadyCompletedSharedLogicalSnaps
   EXPECT_EQ(1, inputs[1].calls);
   EXPECT_EQ(0, inputs[0].value);
   EXPECT_EQ(1, exprs_[3].locate_expr_datum(ctx).get_int());
+}
+TEST_F(LogicalProgramTest, ExternalInvalidationRefreshesLaterSharedLogicalDemand) {
+  inputs[0].value = inputs[1].value = 1;
+  logical(3, T_OP_AND, {0, 1});
+  exprs_[2].eval_func_ = invalidate_shared_and_restore_leaf;
+  logical(4, T_OP_AND, {3, 2, 3});
+  reentry_leaf = &exprs_[0];
+  reentry_shared = &exprs_[3];
+  ObEvalCtx ctx(exec_);
+  ObDatum *result = nullptr;
+  ASSERT_EQ(OB_SUCCESS, exprs_[4].eval(ctx, result));
+  EXPECT_EQ(0, result->get_int());
+  EXPECT_EQ(2, inputs[0].calls);
+  EXPECT_EQ(1, inputs[1].calls);
+  EXPECT_EQ(0, exprs_[3].locate_expr_datum(ctx).get_int());
 }
 TEST_F(LogicalProgramTest, BatchMasksShortCircuitAndAllSkipAvoidsInputs) {
   inputs[0].value = 0;
