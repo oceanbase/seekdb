@@ -87,7 +87,11 @@ public:
 protected:
   virtual int pre_process();
   virtual int do_one_merge_round(int64_t &count);
-  virtual int fill_merge_heap();
+  // Fast path for queries with exactly 2 dimensions and no relevance/filter.
+  // Bypasses the generic merge heap and relevance collector with a direct two-pointer
+  // merge over the two sorted posting lists (intersection for AND, union for OR).
+  int do_two_way_merge_round(int64_t &count);
+  int fill_merge_heap();
   virtual int collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id);
   virtual int process_collected_row(const ObDatum &id_datum, const double relevance);
   virtual int filter_on_demand(const int64_t count, const double relevance, bool &need_project);
@@ -107,6 +111,12 @@ protected:
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  // Two-way fast-path state (2 dims, no relevance, no filter)
+  bool two_way_fast_;       // true iff dim_cnt==2, no relevance/filter
+  bool two_way_intersect_;  // true for AND (should_match>=dim_cnt), false for OR (union)
+  bool two_way_primed_;     // whether both dim iters have been advanced to first row
+  bool two_way_iter0_valid_;// whether dim iter 0 has a current row
+  bool two_way_iter1_valid_;// whether dim iter 1 has a current row
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
 };

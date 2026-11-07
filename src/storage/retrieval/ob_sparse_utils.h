@@ -35,6 +35,10 @@ struct ObSRDaaTRelevanceCollector
   virtual void reuse() = 0;
   virtual int collect_one_dim(const int64_t dim_idx, const double relevance) = 0;
   virtual int get_result(double &relevance, bool &is_valid) = 0;
+  // Returns the minimum number of dimensions a document must match to be valid.
+  // For pure-AND inner-product collectors this equals the dimension count, so the
+  // merge layer can short-circuit validity from the popped-item count alone.
+  virtual int64_t get_should_match() const { return 0; }
 };
 
 struct ObSRDaaTInnerProductRelevanceCollector : ObSRDaaTRelevanceCollector
@@ -50,6 +54,7 @@ struct ObSRDaaTInnerProductRelevanceCollector : ObSRDaaTRelevanceCollector
   virtual void reuse() override;
   virtual int collect_one_dim(const int64_t dim_idx, const double) override;
   virtual int get_result(double &relevance, bool &is_valid) override;
+  virtual int64_t get_should_match() const override { return should_match_; }
 private:
   double total_relevance_;
   int64_t matched_cnt_;
