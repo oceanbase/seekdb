@@ -335,6 +335,12 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
     ret_bool = true;
   } else if (T_EXTERNAL_FILE_FORMAT == tree->type_) {
     ret_bool = true;
+  } else if (T_FILE_SCAN_TABLE == tree->type_
+             || T_FILE_LIST_TABLE == tree->type_
+             || T_FILE_SCHEMA_TABLE == tree->type_) {
+    // File SQL resolves paths and options before optimization. Replacing these
+    // literals with plan-cache parameters makes the parse tree unresolvable.
+    ret_bool = true;
   } else if (T_CHAR_CHARSET == tree->type_) {
     ret_bool = true;
   } else if (T_WIN_NAMED_WINDOWS == tree->type_) {//name window cannot be parameterized because the order of parameterization cannot be guaranteed
