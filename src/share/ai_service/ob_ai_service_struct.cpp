@@ -37,6 +37,7 @@ const char *VALID_PROVIDERS[] = {
   "SILICONFLOW",
   "COHERE",
   "HUNYUAN-OPENAI",
+  "OLLAMA",
   "OPENAI"
 };
 
@@ -115,7 +116,8 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (!url_.prefix_match_ci("http://") && !url_.prefix_match_ci("https://")) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("url"), "url");
-  } else if (access_key_.empty()) {
+  } else if (access_key_.empty() && provider_.case_compare("OLLAMA") != 0) {
+    // Ollama deployed locally does not require an access key.
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
     LOG_WARN("access_key is empty", K(ret), K(*this));

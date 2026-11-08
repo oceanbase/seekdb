@@ -18,6 +18,9 @@
 #include "ob_expr_ai_embed.h"
 #include "query/ai/ob_ai_endpoint_resolver.h"
 #include "share/rc/ob_server_runtime.h"
+#include "common/json_type/ob_json_common.h"
+#include "sql/engine/expr/ob_expr_json_func_helper.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -55,9 +58,15 @@ int ObExprAIEmbed::calc_result_typeN(ObExprResType &type,
   } else {
     types_stack[MODEL_IDX].set_calc_type(ObVarcharType);
     types_stack[MODEL_IDX].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-    types_stack[CONTENT_IDX].set_calc_type(ObVarcharType);
-    types_stack[CONTENT_IDX].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-    if (param_num == 3) {
+    if (ob_is_string_tc(types_stack[CONTENT_IDX].get_type())) {
+      types_stack[CONTENT_IDX].set_calc_type(ObVarcharType);
+      types_stack[CONTENT_IDX].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+    } else if (ob_is_text_tc(types_stack[CONTENT_IDX].get_type())) {
+      // TEXT/LONGTEXT input keeps its type so the whole lob can be read at eval.
+    } else {
+      ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    }
+    if (param_num == 3 && OB_SUCC(ret)) {
       if (ob_is_integer_type(types_stack[DIM_IDX].get_type())) {
         types_stack[DIM_IDX].set_calc_type(ObIntType);
         types_stack[DIM_IDX].set_precision(10);
@@ -67,9 +76,10 @@ int ObExprAIEmbed::calc_result_typeN(ObExprResType &type,
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, dimension parameter must be an integer, not a decimal or float");
       }
     }
-    type.set_varchar();
-    type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-    type.set_collation_level(CS_LEVEL_COERCIBLE);
+    if (OB_SUCC(ret)) {
+      type.set_json();
+      type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
+    }
   }
   return ret;
 }
@@ -97,8 +107,14 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     query::ObIAiEndpointResolver *endpoint_resolver =
         ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
     ObString model_id = arg_model_id->get_string();
-    ObString content = arg_content->get_string();
-    if (model_id.empty() || content.empty()) {
+    ObString content;
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_,
+                                                          temp_allocator,
+                                                          *arg_content,
+                                                          expr.args_[CONTENT_IDX]->datum_meta_,
+                                                          expr.args_[CONTENT_IDX]->obj_meta_.has_lob_header(),
+                                                          content))) {
+    } else if (model_id.empty() || content.empty()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model id or input is empty");
       res.set_null();
@@ -128,7 +144,7 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
       ObAIFuncModel model(temp_allocator, *info, *endpoint_info);
       ObString result;
       if (OB_FAIL(model.call_dense_embedding(content, config, result))) {
-      } else if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx, res, result))) {
+      } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, result))) {
       }
     }
   }
