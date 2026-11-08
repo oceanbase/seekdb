@@ -1,0 +1,65 @@
+#owner: oceanbase
+#owner group: shenzhen
+
+connection default;
+
+# The rerank function scores every document and returns them ordered by their
+# score.
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_rerank');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_rerank_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'ai_rerank', '{"type":"rerank","model_name":"BAAI/bge-reranker-v2-m3"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+  'ai_rerank_ep', '{"ai_model_name":"ai_rerank","scope":"all","url":"http://0.0.0.0:8000/v1/rerank","access_key":"mock-key","provider":"siliconflow"}');
+
+# A doc key that is null selects the plain string documents. The score of the
+# mock service is the number of words a document shares with the query, so the
+# document that holds the query word comes first.
+select json_length(ai_rerank('ai_rerank','apple',
+       '["apple","banana","fruit","vegetable"]', null)) as rerank_count;
+select json_unquote(json_extract(ai_rerank('ai_rerank','apple',
+       '["apple","banana","fruit","vegetable"]', null), '$[0].document')) as first_document;
+select json_unquote(json_extract(ai_rerank('ai_rerank','apple',
+       '["apple","banana","fruit","vegetable"]', null), '$[0].index')) as first_index;
+select json_unquote(json_extract(ai_rerank('ai_rerank','apple',
+       '["apple","banana","fruit","vegetable"]', null), '$[1].document')) as second_document;
+select json_unquote(json_extract(ai_rerank('ai_rerank','apple',
+       '["apple","banana","fruit","vegetable"]', null), '$[3].document')) as last_document;
+
+# With a doc key the documents are returned as they were written, every
+# document carries its score.
+select json_unquote(json_extract(r,'$[0].id')) as first_id,
+       json_unquote(json_extract(r,'$[0].text')) as first_text,
+       json_length(r) as rerank_count
+  from (select ai_rerank('ai_rerank','apple',
+         '[{"id":"a","text":"apple"},{"id":"b","text":"banana"}]',
+         'text') as r) x;
+select json_unquote(json_extract(r,'$[1].id')) as second_id,
+       json_unquote(json_extract(r,'$[1].text')) as second_text
+  from (select ai_rerank('ai_rerank','apple',
+         '[{"id":"a","text":"apple"},{"id":"b","text":"banana"}]',
+         'text') as r) x;
+
+# An empty document list is rejected.
+--error 1210
+select ai_rerank('ai_rerank','apple','[]', null);
+# A document that is not a string is rejected.
+--error 1210
+select ai_rerank('ai_rerank','apple','[1,2]', null);
+# A document that is not an object is rejected when a doc key is used.
+--error 1210
+select ai_rerank('ai_rerank','apple','["apple"]', 'text');
+# A document without the doc key is rejected.
+--error 1210
+select ai_rerank('ai_rerank','apple','[{"id":"a"}]', 'text');
+# An empty doc key is rejected.
+--error 1210
+select ai_rerank('ai_rerank','apple','[{"id":"a","text":"apple"}]', '');
+# An unknown model is reported.
+--error 1210
+select ai_rerank('ai_no_such_model','apple','["apple"]', null);
+
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_rerank_ep');
