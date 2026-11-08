@@ -2331,7 +2331,7 @@ int ObSqlPlan::restore_session(ObSQLSessionInfo *session,
       if (OB_ISNULL(txs)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("can not acquire server TransService", KR(ret));
-        data_plane::dump_tx_desc_trace(new_tx_desc);
+        data_plane::dump_tx_desc_state(new_tx_desc);
       } else if (OB_FAIL(txs->release_tx(*new_tx_desc))) {
       }
     }
