@@ -18,13 +18,11 @@
 #define OB_SPARSE_UTILS_H_
 
 #include "ob_i_sparse_retrieval_iter.h"
+#include "sql/das/ob_das_ir_define.h"
+#include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
 
 namespace oceanbase
 {
-namespace sql
-{
-struct ObFtsEvalNode;
-}
 namespace storage
 {
 
@@ -37,6 +35,10 @@ struct ObSRDaaTRelevanceCollector
   virtual void reuse() = 0;
   virtual int collect_one_dim(const int64_t dim_idx, const double relevance) = 0;
   virtual int get_result(double &relevance, bool &is_valid) = 0;
+  // Returns the minimum number of dimensions a document must match to be valid.
+  // For pure-AND inner-product collectors this equals the dimension count, so the
+  // merge layer can short-circuit validity from the popped-item count alone.
+  virtual int64_t get_should_match() const { return 0; }
 };
 
 struct ObSRDaaTInnerProductRelevanceCollector : ObSRDaaTRelevanceCollector
@@ -52,6 +54,7 @@ struct ObSRDaaTInnerProductRelevanceCollector : ObSRDaaTRelevanceCollector
   virtual void reuse() override;
   virtual int collect_one_dim(const int64_t dim_idx, const double) override;
   virtual int get_result(double &relevance, bool &is_valid) override;
+  virtual int64_t get_should_match() const override { return should_match_; }
 private:
   double total_relevance_;
   int64_t matched_cnt_;
@@ -64,7 +67,7 @@ struct ObSRDaaTBooleanRelevanceCollector : ObSRDaaTRelevanceCollector
       allocator_(nullptr), dim_cnt_(0), boolean_compute_node_(nullptr), boolean_relevances_() {}
   virtual ~ObSRDaaTBooleanRelevanceCollector() {};
 
-  int init(ObIAllocator *allocator, const int64_t dim_cnt, sql::ObFtsEvalNode *node);
+  int init(ObIAllocator *allocator, const int64_t dim_cnt, ObFtsEvalNode *node);
   virtual void reset() override;
   virtual void reuse() override;
   virtual int collect_one_dim(const int64_t dim_idx, const double) override;
@@ -72,7 +75,7 @@ struct ObSRDaaTBooleanRelevanceCollector : ObSRDaaTRelevanceCollector
 private:
   ObIAllocator *allocator_;
   int64_t dim_cnt_;
-  sql::ObFtsEvalNode *boolean_compute_node_;
+  ObFtsEvalNode *boolean_compute_node_;
   ObFixedArray<double, ObIAllocator> boolean_relevances_;
 };
 

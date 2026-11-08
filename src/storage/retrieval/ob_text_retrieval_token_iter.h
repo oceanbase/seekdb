@@ -18,15 +18,13 @@
 #define OB_TEXT_RETRIEVAL_TOKEN_ITER_H_
 
 #include "lib/container/ob_se_array.h"
-#include "query/engine/expr/ob_expr.h"
+#include "sql/engine/expr/ob_expr.h"
+#include "sql/das/iter/ob_das_scan_iter.h"
+#include "sql/das/ob_das_ir_define.h"
 #include "ob_block_max_iter.h"
 #include "ob_i_sparse_retrieval_iter.h"
 namespace oceanbase
 {
-namespace sql
-{
-class ObDASScanIter;
-}
 namespace storage
 {
 class ObTableScanParam;
@@ -38,9 +36,12 @@ struct ObTextRetrievalScanIterParam
       mem_context_(nullptr),
       inv_idx_scan_param_(nullptr),
       inv_idx_agg_param_(nullptr),
+      fwd_idx_scan_param_(nullptr),
       inv_idx_scan_iter_(nullptr),
       inv_idx_agg_iter_(nullptr),
+      fwd_idx_agg_iter_(nullptr),
       inv_idx_agg_expr_(nullptr),
+      fwd_idx_agg_expr_(nullptr),
       eval_ctx_(nullptr),
       relevance_expr_(nullptr),
       inv_scan_doc_length_col_(nullptr),
@@ -52,9 +53,12 @@ struct ObTextRetrievalScanIterParam
   lib::MemoryContext mem_context_;
   ObTableScanParam *inv_idx_scan_param_;
   ObTableScanParam *inv_idx_agg_param_;
+  ObTableScanParam *fwd_idx_scan_param_;
   sql::ObDASScanIter *inv_idx_scan_iter_;
   sql::ObDASScanIter *inv_idx_agg_iter_;
+  sql::ObDASScanIter *fwd_idx_agg_iter_;
   sql::ObExpr *inv_idx_agg_expr_;
+  sql::ObExpr *fwd_idx_agg_expr_;
   sql::ObEvalCtx *eval_ctx_;
   sql::ObExpr *relevance_expr_;
   sql::ObExpr *inv_scan_doc_length_col_;
@@ -85,30 +89,48 @@ private:
   int init_calc_exprs_in_relevance_expr();
   void clear_batch_wise_evaluated_flag(const int64_t count);
   void clear_row_wise_evaluated_flag();
+  int get_next_doc_token_cnt(const bool use_fwd_idx_agg);
+  int get_inv_idx_scan_doc_id(ObDocIdExt &doc_id);
+  int gen_fwd_idx_scan_range(const ObDocIdExt &doc_id, ObNewRange &scan_range);
+  int do_token_cnt_agg(const ObDocIdExt &doc_id);
+  int fill_token_cnt_with_doc_len();
+  int batch_fill_token_cnt_with_doc_len(const int64_t count);
   int fill_token_doc_cnt();
   int fill_token_weight();
   int eval_relevance_expr();
   int batch_eval_relevance_expr(const int64_t count);
   int estimate_token_doc_cnt();
   inline bool need_inv_idx_agg() { return inv_idx_agg_iter_ != nullptr; }
+  inline bool need_fwd_idx_agg() { return fwd_idx_agg_iter_ != nullptr; }
   inline bool need_calc_relevance() { return inv_idx_agg_iter_ != nullptr; }
+  inline bool need_fill_token_cnt() { return nullptr != relevance_expr_ && !sql::ObExprBM25::use_new_version(*relevance_expr_); }
+  inline bool need_fill_token_weight() { return !need_fill_token_cnt(); }
+  // tools method
+  // In ivector2.0, need use the size which is created by precision to alloc the memeory.
+  static int set_decimal_int_by_precision(ObDatum &result_datum, const uint64_t decint, const ObPrecision precision);
 public:
+  static const int64_t FWD_IDX_ROWKEY_COL_CNT = 2;
   static const int64_t INV_IDX_ROWKEY_COL_CNT = 2;
 private:
   lib::MemoryContext mem_context_;
   ObArenaAllocator *allocator_;
   ObTableScanParam *inv_idx_scan_param_;
   ObTableScanParam *inv_idx_agg_param_;
+  ObTableScanParam *fwd_idx_scan_param_;
   sql::ObDASScanIter *inv_idx_scan_iter_;
   sql::ObDASScanIter *inv_idx_agg_iter_;
+  sql::ObDASScanIter *fwd_idx_agg_iter_;
   sql::ObExpr *inv_idx_agg_expr_;
+  sql::ObExpr *fwd_idx_agg_expr_;
   sql::ObEvalCtx *eval_ctx_;
   sql::ObExpr *relevance_expr_;
   sql::ObExpr *inv_scan_doc_length_col_; // read from inv_scan_table
   sql::ObExpr *inv_scan_domain_id_col_; // read from inv_scan_table
+  sql::ObExpr *doc_token_cnt_expr_; // fill the expr from another expr, and use the expr to calc the relevance_expr_
   sql::ObExpr *token_weight_expr_; // fill the expr from with max_token_relevance_
   common::ObSEArray<sql::ObExpr *, 2> relevance_calc_exprs_;
   sql::ObBitVector *skip_;
+  ObObj *fwd_range_objs_;
   int64_t max_batch_size_;
   int64_t token_doc_cnt_;
   double max_token_relevance_;
@@ -139,12 +161,14 @@ public:
     score = token_iter_->get_max_token_relevance();
     if (OB_UNLIKELY(score < 0.0)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected max token relevance", K(ret), K(score));
     }
     return ret;
   }
 private:
   int save_relevances_and_docids();
   int save_docids();
+  const ObDatum &curr_id_datum() const;
   ObArenaAllocator *allocator_;
   ObTextRetrievalTokenIter *token_iter_;
   sql::ObEvalCtx *eval_ctx_;
@@ -155,6 +179,11 @@ private:
   int64_t count_;
   ObFixedArray<double, ObIAllocator> relevance_; // when ~ObFixedArray(), wikll destory itself
   ObFixedArray<ObDocIdExt, ObIAllocator> doc_id_;
+  // u64 fast lane: store raw doc ids instead of ObDocIdExt deep copies, and
+  // materialize the current id datum on demand in get_curr_id().
+  ObFixedArray<uint64_t, ObIAllocator> doc_id_vals_;
+  mutable ObDatum cur_id_datum_;
+  bool id_is_u64_;
   common::ObDatumCmpFuncType cmp_func_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObTextRetrievalDaaTTokenIter);
