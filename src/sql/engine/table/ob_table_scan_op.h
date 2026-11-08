@@ -18,7 +18,7 @@
 #define OCEANBASE_TABLE_OB_TABLE_SCAN_OP_H_
 
 #include "share/ob_i_tablet_scan.h"
-#include "lib/allocator/ob_arena_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/ob_operator_reg.h"
 #include "storage/access/ob_dml_param.h"
