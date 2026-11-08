@@ -402,12 +402,7 @@ cc_library(
 cc_library(
     name = "oblib_compression",
     hdrs = [
-        "lib/compress/none/ob_none_compressor.h",
         "lib/compress/ob_compress_util.h",
-        "lib/compress/ob_compressor.h",
-        "lib/compress/ob_compressor_pool.h",
-        "lib/compress/zlib/ob_zlib_compressor.h",
-        "lib/compress/zstd_compressor.h",
     ],
     deps = [
         ":oblib_base",
@@ -910,24 +905,6 @@ grouped_unity_cc_library(
 )
 
 cc_library(
-    name = "_oblib_compression_impl",
-    srcs = standalone_sources(
-        OBLIB_STANDALONE_CXX_SOURCES,
-        "src/oblib/lib/compress:compress",
-    ),
-    implementation_deps = [
-        ":_oblib_implementation_headers",
-        ":oblib_foundation",
-        "//rust:compression_headers",
-        "//rust:compression",
-    ],
-    copts = OBLIB_CXX_COPTS,
-    local_defines = OBLIB_LOCAL_DEFINES,
-    features = ["layering_check"],
-    tags = ["manual"],
-)
-
-cc_library(
     name = "_oblib_restore_impl",
     srcs = standalone_sources(
         OBLIB_STANDALONE_CXX_SOURCES,
@@ -986,12 +963,12 @@ cc_library(
         ":_oblib_bitmap_impl",
         ":_oblib_common_impl",
         ":_oblib_common_standalone_impl",
-        ":_oblib_compression_impl",
         ":_oblib_foundation_c_impl",
         ":_oblib_foundation_impl",
         ":_oblib_restore_impl",
         ":_oblib_rpc_impl",
         ":_oblib_vector_impl",
+        "//rust:compression",
     ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
@@ -1036,7 +1013,6 @@ cc_library(
         ":_oblib_bitmap_impl",
         ":_oblib_common_impl",
         ":_oblib_common_standalone_impl",
-        ":_oblib_compression_impl",
         ":_oblib_foundation_c_impl",
         ":_oblib_foundation_impl",
         ":_oblib_restore_impl",

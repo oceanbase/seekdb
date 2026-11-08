@@ -18,7 +18,9 @@
 #define OB_COMPRESSOR_UTIL_H_
 #include "lib/ob_define.h"
 #include "lib/utility/ob_template_utils.h"
-#include "lib/allocator/ob_allocator.h"
+#include "lib/ob_errno.h"
+#include "lib/string/ob_string.h"
+#include "rust/compression.h"
 
 namespace oceanbase
 {
@@ -62,8 +64,53 @@ const char *const sql_temp_store_compress_funcs[] =
   "zstd",
 };
 
+inline int get_compressor_type(const ObString &compressor_name,
+                               ObCompressorType &compressor_type)
+{
+  int ret = OB_SUCCESS;
+  if (compressor_name.ptr() == nullptr || compressor_name.length() == 0) {
+    compressor_type = NONE_COMPRESSOR;
+  } else if (compressor_name.case_compare("none") == 0) {
+    compressor_type = NONE_COMPRESSOR;
+  } else if (compressor_name.case_compare("zstd") == 0) {
+    compressor_type = ZSTD_COMPRESSOR;
+  } else if (compressor_name.case_compare("zlib_1.0") == 0) {
+    compressor_type = ZLIB_COMPRESSOR;
+  } else {
+    ret = OB_NOT_SUPPORTED;
+  }
+  return ret;
+}
+
+inline int get_compressor_type(const char *compressor_name,
+                               ObCompressorType &compressor_type)
+{
+  if (compressor_name == nullptr) {
+    return OB_INVALID_ARGUMENT;
+  } else if (compressor_name[0] == '\0') {
+    return OB_NOT_SUPPORTED;
+  }
+  return get_compressor_type(ObString::make_string(compressor_name), compressor_type);
+}
+
+inline int compression_error_code(compression::Code code)
+{
+  switch (code) {
+    case compression::Code::Ok: return OB_SUCCESS;
+    case compression::Code::InvalidArgument: return OB_INVALID_ARGUMENT;
+    case compression::Code::OutputTooSmall: return OB_BUF_NOT_ENOUGH;
+    case compression::Code::InvalidData: return OB_ERR_COMPRESS_DECOMPRESS_DATA;
+    case compression::Code::OutOfMemory:
+    case compression::Code::AllocationFailed: return OB_ALLOCATE_MEMORY_FAILED;
+    case compression::Code::InvalidState: return OB_STATE_NOT_MATCH;
+    case compression::Code::ResourceLimit: return OB_EXCEED_MEM_LIMIT;
+    case compression::Code::Unsupported: return OB_NOT_SUPPORTED;
+    case compression::Code::SizeOverflow: return OB_SIZE_OVERFLOW;
+    default: return OB_ERR_UNEXPECTED;
+  }
+}
+
 } /* namespace common */
 } /* namespace oceanbase */
 
-using oceanbase::common::ObIAllocator;
 #endif /* OB_COMPRESSOR_UTIL_H_ */

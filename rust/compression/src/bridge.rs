@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    crc32, zlib_compress_bound, DeflateError, Error, GzipEncoder, InflateError, StreamDecoder,
-    StreamProgress,
+use crate::zlib::{
+    self, crc32, DeflateError, Error, GzipEncoder, InflateError, StreamDecoder, StreamProgress,
 };
 use crate::zstd::{
-    self, Decoder as ZstdDecoder, Directive, Encoder as ZstdEncoder, Error as ZstdError,
-    ErrorKind,
+    self, Decoder as ZstdDecoder, Directive, Encoder as ZstdEncoder, Error as ZstdError, ErrorKind,
 };
 use std::{mem::MaybeUninit, ptr::NonNull, slice};
 use zstd_safe::WriteBuf;
@@ -36,6 +34,7 @@ mod ffi {
         InvalidState,
         ResourceLimit,
         Unsupported,
+        SizeOverflow,
     }
 
     struct OperationResult {
@@ -53,9 +52,25 @@ mod ffi {
     }
 
     extern "Rust" {
-        fn zlib_compress_bound(source_len: usize) -> usize;
-        fn zlib_compress(input: &[u8], output: &mut [u8], level: i32) -> OperationResult;
-        fn zlib_decompress(input: &[u8], output: &mut [u8]) -> OperationResult;
+        fn compress_bound(algorithm: u8, source_len: i64) -> OperationResult;
+        /// Input and output must satisfy the buffer contracts documented on
+        /// borrowed_buffers. Their lengths must be nonnegative.
+        unsafe fn compress(
+            algorithm: u8,
+            input: *const u8,
+            input_size: i64,
+            output: *mut u8,
+            output_capacity: i64,
+        ) -> OperationResult;
+        /// Input and output must satisfy the buffer contracts documented on
+        /// borrowed_buffers. Their lengths must be nonnegative.
+        unsafe fn decompress(
+            algorithm: u8,
+            input: *const u8,
+            input_size: i64,
+            output: *mut u8,
+            output_capacity: i64,
+        ) -> OperationResult;
         fn crc32(input: &[u8]) -> u32;
 
         type GzipEncoder;
@@ -75,22 +90,6 @@ mod ffi {
             input: &[u8],
             output: &mut [u8],
         ) -> BridgeProgress;
-
-        fn zstd_compress_bound(source_len: usize) -> usize;
-        /// Output must be one writable allocation, exclusively held during the
-        /// call and disjoint from input. Its bytes may be uninitialized.
-        unsafe fn zstd_compress(
-            input: &[u8],
-            output: *mut u8,
-            output_capacity: usize,
-        ) -> OperationResult;
-        /// Output must be one writable allocation, exclusively held during the
-        /// call and disjoint from input. Its bytes may be uninitialized.
-        unsafe fn zstd_decompress(
-            input: &[u8],
-            output: *mut u8,
-            output_capacity: usize,
-        ) -> OperationResult;
 
         type ZstdEncoder;
         fn new_zstd_encoder() -> Box<ZstdEncoder>;
@@ -119,6 +118,26 @@ mod ffi {
     }
 }
 
+#[repr(u8)]
+enum Algorithm {
+    None = 1,
+    Zstd = 2,
+    Zlib = 3,
+}
+
+impl TryFrom<u8> for Algorithm {
+    type Error = ffi::Code;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::None),
+            2 => Ok(Self::Zstd),
+            3 => Ok(Self::Zlib),
+            _ => Err(ffi::Code::Unsupported),
+        }
+    }
+}
+
 fn code(error: Error) -> ffi::Code {
     match error {
         Error::InvalidCompressionLevel => ffi::Code::InvalidArgument,
@@ -130,25 +149,14 @@ fn code(error: Error) -> ffi::Code {
     }
 }
 
-fn operation(result: Result<usize, Error>) -> ffi::OperationResult {
+fn operation_code(result: Result<usize, ffi::Code>) -> ffi::OperationResult {
     match result {
         Ok(size) => ffi::OperationResult {
             code: ffi::Code::Ok,
             size,
         },
-        Err(error) => ffi::OperationResult {
-            code: code(error),
-            size: 0,
-        },
+        Err(code) => ffi::OperationResult { code, size: 0 },
     }
-}
-
-pub fn zlib_compress(input: &[u8], output: &mut [u8], level: i32) -> ffi::OperationResult {
-    operation(crate::zlib_compress(input, output, level))
-}
-
-pub fn zlib_decompress(input: &[u8], output: &mut [u8]) -> ffi::OperationResult {
-    operation(crate::zlib_decompress(input, output))
 }
 
 fn progress(result: Result<StreamProgress, Error>) -> ffi::BridgeProgress {
@@ -208,14 +216,16 @@ struct BorrowedOutput<'a> {
     initialized: usize,
 }
 
+struct BufferError;
+
 impl<'a> BorrowedOutput<'a> {
     /// # Safety
     /// Unless validation rejects the arguments, `output` must designate one
     /// writable allocation of at least `capacity` bytes for the duration of the
     /// call. That range must be exclusively borrowed, including against other
     /// C++ accesses. No initialized output bytes are required on entry.
-    unsafe fn new(input: &[u8], output: *mut u8, capacity: usize) -> Result<Self, ZstdError> {
-        let invalid = || ZstdError::new(ErrorKind::InvalidArgument);
+    unsafe fn new(input: &[u8], output: *mut u8, capacity: usize) -> Result<Self, BufferError> {
+        let invalid = || BufferError;
         if capacity > isize::MAX as usize || (output.is_null() && capacity != 0) {
             return Err(invalid());
         }
@@ -240,6 +250,12 @@ impl<'a> BorrowedOutput<'a> {
             storage,
             initialized: 0,
         })
+    }
+}
+
+impl From<BufferError> for ZstdError {
+    fn from(_: BufferError) -> Self {
+        Self::new(ErrorKind::InvalidArgument)
     }
 }
 
@@ -280,19 +296,6 @@ fn zstd_code(error: ZstdError) -> ffi::Code {
     }
 }
 
-fn zstd_operation(result: Result<usize, ZstdError>) -> ffi::OperationResult {
-    match result {
-        Ok(size) => ffi::OperationResult {
-            code: ffi::Code::Ok,
-            size,
-        },
-        Err(error) => ffi::OperationResult {
-            code: zstd_code(error),
-            size: 0,
-        },
-    }
-}
-
 fn zstd_progress(result: Result<zstd::Progress, ZstdError>) -> ffi::BridgeProgress {
     match result {
         Ok(progress) => ffi::BridgeProgress {
@@ -314,38 +317,125 @@ fn zstd_progress(result: Result<zstd::Progress, ZstdError>) -> ffi::BridgeProgre
     }
 }
 
-fn zstd_compress_bound(source_len: usize) -> usize {
-    zstd::compress_bound(source_len)
+fn buffer_len(len: i64) -> Result<usize, ffi::Code> {
+    let len = usize::try_from(len).map_err(|_| ffi::Code::InvalidArgument)?;
+    if len > isize::MAX as usize {
+        Err(ffi::Code::InvalidArgument)
+    } else {
+        Ok(len)
+    }
+}
+
+fn compress_bound(algorithm: u8, source_len: i64) -> ffi::OperationResult {
+    let result = buffer_len(source_len).and_then(|source_len| {
+        let bound = match Algorithm::try_from(algorithm)? {
+            Algorithm::None => source_len,
+            Algorithm::Zstd => zstd::compress_bound(source_len),
+            Algorithm::Zlib => zlib::zlib_compress_bound(source_len),
+        };
+        if bound < source_len || bound as u128 > i64::MAX as u128 {
+            Err(ffi::Code::SizeOverflow)
+        } else {
+            Ok(bound)
+        }
+    });
+    operation_code(result)
 }
 
 /// # Safety
-/// Output must satisfy BorrowedOutput::new's writable allocation and exclusive
-/// borrowing contract for this call. It need not contain initialized bytes.
-unsafe fn zstd_compress(
-    input: &[u8],
+/// A non-null input must designate one readable allocation of input_size
+/// bytes. Output must satisfy BorrowedOutput::new's writable allocation and
+/// exclusive borrowing contract. Both ranges must remain live for this call.
+unsafe fn borrowed_buffers<'a>(
+    input: *const u8,
+    input_size: i64,
     output: *mut u8,
-    output_capacity: usize,
-) -> ffi::OperationResult {
-    // SAFETY: the CXX caller supplies the documented writable allocation.
-    zstd_operation(
-        unsafe { BorrowedOutput::new(input, output, output_capacity) }
-            .and_then(|mut output| zstd::compress(input, &mut output)),
-    )
+    output_capacity: i64,
+) -> Result<(&'a [u8], BorrowedOutput<'a>), ffi::Code> {
+    let input_size = buffer_len(input_size)?;
+    let output_capacity = buffer_len(output_capacity)?;
+    if input.is_null() && input_size != 0 {
+        return Err(ffi::Code::InvalidArgument);
+    }
+    let input_start = input as usize;
+    input_start
+        .checked_add(input_size)
+        .ok_or(ffi::Code::InvalidArgument)?;
+    let input_pointer = NonNull::new(input.cast_mut()).unwrap_or_else(NonNull::dangling);
+    // SAFETY: the caller supplies a readable allocation, and the range was
+    // checked for null, overflow and excessive length above.
+    let input = unsafe { slice::from_raw_parts(input_pointer.as_ptr(), input_size) };
+    // SAFETY: the caller supplies the output allocation; this checks its range
+    // and verifies that it does not overlap input.
+    let output = unsafe { BorrowedOutput::new(input, output, output_capacity) }
+        .map_err(|_| ffi::Code::InvalidArgument)?;
+    Ok((input, output))
+}
+
+fn copy_input(input: &[u8], output: &mut BorrowedOutput<'_>) -> Result<usize, ffi::Code> {
+    if input.len() > output.storage.len() {
+        return Err(ffi::Code::OutputTooSmall);
+    }
+    // SAFETY: BorrowedOutput validated capacity, exclusive access and lack of
+    // overlap. The input slice is readable for its full length.
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            input.as_ptr(),
+            output.storage.as_mut_ptr().cast::<u8>(),
+            input.len(),
+        );
+    }
+    output.initialized = input.len();
+    Ok(input.len())
 }
 
 /// # Safety
-/// Output must satisfy BorrowedOutput::new's writable allocation and exclusive
-/// borrowing contract for this call. It need not contain initialized bytes.
-unsafe fn zstd_decompress(
-    input: &[u8],
+/// The pointers must satisfy borrowed_buffers' contracts.
+unsafe fn compress(
+    algorithm: u8,
+    input: *const u8,
+    input_size: i64,
     output: *mut u8,
-    output_capacity: usize,
+    output_capacity: i64,
 ) -> ffi::OperationResult {
-    // SAFETY: the CXX caller supplies the documented writable allocation.
-    zstd_operation(
-        unsafe { BorrowedOutput::new(input, output, output_capacity) }
-            .and_then(|mut output| zstd::decompress(input, &mut output)),
-    )
+    let result = (|| {
+        let algorithm = Algorithm::try_from(algorithm)?;
+        // SAFETY: forwarded from this function's caller contract.
+        let (input, mut output) =
+            unsafe { borrowed_buffers(input, input_size, output, output_capacity) }?;
+        match algorithm {
+            Algorithm::None => copy_input(input, &mut output),
+            Algorithm::Zstd => zstd::compress(input, &mut output).map_err(zstd_code),
+            Algorithm::Zlib => {
+                zlib::zlib_compress_uninit(input, output.storage, zlib::DEFAULT_COMPRESSION_LEVEL)
+                    .map_err(code)
+            }
+        }
+    })();
+    operation_code(result)
+}
+
+/// # Safety
+/// The pointers must satisfy borrowed_buffers' contracts.
+unsafe fn decompress(
+    algorithm: u8,
+    input: *const u8,
+    input_size: i64,
+    output: *mut u8,
+    output_capacity: i64,
+) -> ffi::OperationResult {
+    let result = (|| {
+        let algorithm = Algorithm::try_from(algorithm)?;
+        // SAFETY: forwarded from this function's caller contract.
+        let (input, mut output) =
+            unsafe { borrowed_buffers(input, input_size, output, output_capacity) }?;
+        match algorithm {
+            Algorithm::None => copy_input(input, &mut output),
+            Algorithm::Zstd => zstd::decompress(input, &mut output).map_err(zstd_code),
+            Algorithm::Zlib => zlib::zlib_decompress_uninit(input, output.storage).map_err(code),
+        }
+    })();
+    operation_code(result)
 }
 
 fn new_zstd_encoder() -> Box<ZstdEncoder> {
@@ -370,6 +460,7 @@ unsafe fn zstd_encode(
     // SAFETY: the CXX caller supplies the documented writable allocation.
     zstd_progress(
         unsafe { BorrowedOutput::new(input, output, output_capacity) }
+            .map_err(ZstdError::from)
             .and_then(|mut output| stream.process(input, &mut output, directive)),
     )
 }
@@ -394,6 +485,7 @@ unsafe fn zstd_decode(
     // SAFETY: the CXX caller supplies the documented writable allocation.
     zstd_progress(
         unsafe { BorrowedOutput::new(input, output, output_capacity) }
+            .map_err(ZstdError::from)
             .and_then(|mut output| stream.process(input, &mut output)),
     )
 }

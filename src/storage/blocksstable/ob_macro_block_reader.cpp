@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_macro_block_reader.h"
-#include "lib/compress/ob_compressor_pool.h"
 #include "ob_macro_block_bare_iterator.h"
 #include "index_block/ob_index_block_row_struct.h"
 
@@ -32,8 +31,7 @@ namespace blocksstable
 class ObIndexBlockRowParser;
 
 ObMacroBlockReader::ObMacroBlockReader()
-    :compressor_(NULL),
-     uncomp_buf_(NULL),
+    :uncomp_buf_(NULL),
      uncomp_buf_size_(0),
      allocator_(ObModIds::OB_CS_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
@@ -97,11 +95,6 @@ int ObMacroBlockReader::decompress_data_buf(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(header.deserialize(header_buf, header_size, pos))) {
   } else {
-    if (nullptr == compressor_ || compressor_->get_compressor_type() != compressor_type) {
-      if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(compressor_type, compressor_))) {
-      }
-    }
-
     const int64_t data_length = header.data_length_;
     uncomp_size = header_size + data_length;
     int64_t pos = 0;
@@ -111,10 +104,14 @@ int ObMacroBlockReader::decompress_data_buf(
       char *ext_uncomp_buf = nullptr;
       if (OB_FAIL(alloc_buf(*ext_allocator, uncomp_size, ext_uncomp_buf))) {
       } else {
-        if (OB_FAIL(compressor_->decompress(data_buf, data_buf_size,
-            ext_uncomp_buf + header_size, data_length, uncomp_size))) {
+        const auto result = compression::decompress(
+            static_cast<uint8_t>(compressor_type),
+            reinterpret_cast<const uint8_t *>(data_buf), data_buf_size,
+            reinterpret_cast<uint8_t *>(ext_uncomp_buf + header_size), data_length);
+        if (OB_FAIL(compression_error_code(result.code))) {
         } else if (OB_FAIL(header.deep_copy(ext_uncomp_buf, header_size, pos, copied_header))) {
         } else {
+          uncomp_size = static_cast<int64_t>(result.size);
           uncomp_buf = ext_uncomp_buf;
           uncomp_size += header_size;
         }
@@ -124,10 +121,14 @@ int ObMacroBlockReader::decompress_data_buf(
         ext_allocator->free(ext_uncomp_buf);
       }
     } else if (OB_FAIL(alloc_buf(uncomp_size, uncomp_buf_, uncomp_buf_size_))) {
-    } else if (OB_FAIL(compressor_->decompress(data_buf, data_buf_size,
-        uncomp_buf_ + header_size, data_length, uncomp_size))) {
+    } else if (const auto result = compression::decompress(
+                   static_cast<uint8_t>(compressor_type),
+                   reinterpret_cast<const uint8_t *>(data_buf), data_buf_size,
+                   reinterpret_cast<uint8_t *>(uncomp_buf_ + header_size), data_length);
+               OB_FAIL(compression_error_code(result.code))) {
     } else if (OB_FAIL(header.deep_copy(uncomp_buf_, header_size, pos, copied_header))) {
     } else {
+      uncomp_size = static_cast<int64_t>(result.size);
       uncomp_buf = uncomp_buf_;
       uncomp_size += header_size;
     }
@@ -195,23 +196,19 @@ int ObMacroBlockReader::decompress_data_with_prealloc_buf(
 {
   int ret = OB_SUCCESS;
   int64_t uncomp_size = 0;
-  ObCompressorPool &comp_pool = ObCompressorPool::get_instance();
-  ObCompressorType cur_type = ObCompressorType::INVALID_COMPRESSOR;
   if (OB_ISNULL(buf) || OB_UNLIKELY(size <= 0) || OB_ISNULL(uncomp_buf)
       || OB_UNLIKELY(uncomp_buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (size == uncomp_buf_size) {
     MEMCPY(uncomp_buf, buf, size);
   } else {
-    if (OB_NOT_NULL(compressor_)
-        && OB_FAIL(comp_pool.get_compressor_type(compressor_->get_compressor_name(), cur_type))) {
-    } else if (OB_ISNULL(compressor_) || cur_type != compressor_type) {
-      if (OB_FAIL(comp_pool.get_instance().get_compressor(compressor_type, compressor_))) {
-      }
-    }
-
-    if (FAILEDx(compressor_->decompress(buf, size, uncomp_buf, uncomp_buf_size, uncomp_size))) {
+    const auto result = compression::decompress(
+        static_cast<uint8_t>(compressor_type),
+        reinterpret_cast<const uint8_t *>(buf), size,
+        reinterpret_cast<uint8_t *>(uncomp_buf), uncomp_buf_size);
+    if (OB_FAIL(compression_error_code(result.code))) {
     } else {
+      uncomp_size = static_cast<int64_t>(result.size);
       if (OB_UNLIKELY(uncomp_size != uncomp_buf_size)) {
         ret = OB_ERR_UNEXPECTED;
       }

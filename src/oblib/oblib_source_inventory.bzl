@@ -420,13 +420,6 @@ OBLIB_STANDALONE_CXX_SOURCES = {
     "src/oblib/common:oblib_common": [
         "src/oblib/common/timezone/ob_timezone_util.cpp",
     ],
-    "src/oblib/lib/compress:compress": [
-        "src/oblib/lib/compress/none/ob_none_compressor.cpp",
-        "src/oblib/lib/compress/ob_compressor.cpp",
-        "src/oblib/lib/compress/ob_compressor_pool.cpp",
-        "src/oblib/lib/compress/zlib/ob_zlib_compressor.cpp",
-        "src/oblib/lib/compress/zstd_compressor.cpp",
-    ],
     "src/oblib/lib/restore:restore": [
         "src/oblib/lib/restore/ob_io_device.cpp",
     ],

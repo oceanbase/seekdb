@@ -18,7 +18,7 @@
 
 #include "ob_select_into_basic.h"
 #include "lib/compress/ob_compress_util.h"
-#include "lib/compress/zstd_compressor.h"
+#include "rust/compression.h"
 #include <algorithm>
 #include <limits>
 
@@ -235,7 +235,7 @@ void ObOutfileZstdStreamCompressor::reset()
 int ObOutfileZstdStreamCompressor::reuse()
 {
   return encoder_.has_value()
-      ? zstd_error_code(compression::zstd_encoder_reset(**encoder_)) : OB_NOT_INIT;
+      ? compression_error_code(compression::zstd_encoder_reset(**encoder_)) : OB_NOT_INIT;
 }
 
 int ObOutfileZstdStreamCompressor::compress(const char *src,
@@ -260,7 +260,7 @@ int ObOutfileZstdStreamCompressor::compress(const char *src,
         rust::Slice<const uint8_t>(input, static_cast<size_t>(src_size)),
         reinterpret_cast<uint8_t *>(dest), static_cast<size_t>(dest_capacity),
         is_file_end);
-    if (OB_SUCC(ret = zstd_error_code(result.code))) {
+    if (OB_SUCC(ret = compression_error_code(result.code))) {
       progress.consumed = static_cast<int64_t>(result.consumed);
       progress.produced = static_cast<int64_t>(result.produced);
       progress.finished = result.finished;

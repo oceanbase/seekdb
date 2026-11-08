@@ -20,8 +20,8 @@
 #include "rpc/obmysql/ob_i_cs_mem_pool.h"
 #include "rpc/obmysql/packet/ompk_local_infile.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "lib/compress/zstd_compressor.h"
 #include "lib/compress/ob_compress_util.h"
+#include "rust/compression.h"
 #include "sql/engine/ob_exec_context.h"
 #include <algorithm>
 #include <limits>
@@ -718,7 +718,7 @@ int ObZstdDecompressor::decompress(const char *src, int64_t src_size, int64_t &c
     const auto result = compression::zstd_decode(**decoder_,
         rust::Slice<const uint8_t>(input, static_cast<size_t>(src_size)),
         reinterpret_cast<uint8_t *>(dest), static_cast<size_t>(dest_capacity));
-    if (OB_SUCC(ret = common::zstd_error_code(result.code))) {
+    if (OB_SUCC(ret = common::compression_error_code(result.code))) {
       consumed_size = static_cast<int64_t>(result.consumed);
       decompressed_size = static_cast<int64_t>(result.produced);
     }
@@ -729,7 +729,7 @@ int ObZstdDecompressor::decompress(const char *src, int64_t src_size, int64_t &c
 int ObZstdDecompressor::finish()
 {
   return decoder_.has_value()
-      ? common::zstd_error_code(compression::zstd_decoder_finish(**decoder_)) : OB_NOT_INIT;
+      ? common::compression_error_code(compression::zstd_decoder_finish(**decoder_)) : OB_NOT_INIT;
 }
 
 } // namespace sql

@@ -29,12 +29,26 @@ fn batch_writes_uninitialized_cpp_style_allocations() {
     // SAFETY: each destination is a disjoint live array exclusively held for
     // this call. Only successful result prefixes are subsequently read.
     unsafe {
-        let compressed = zstd_compress(source, encoded.as_mut_ptr().cast(), encoded.len());
-        assert_eq!(compressed.code, ffi::Code::Ok);
-        let input = written(&encoded, compressed.size);
-        let decompressed = zstd_decompress(input, decoded.as_mut_ptr().cast(), decoded.len());
-        assert_eq!(decompressed.code, ffi::Code::Ok);
-        assert_eq!(written(&decoded, decompressed.size), source);
+        for algorithm in [2, 3] {
+            let compressed = compress(
+                algorithm,
+                source.as_ptr(),
+                source.len() as i64,
+                encoded.as_mut_ptr().cast(),
+                encoded.len() as i64,
+            );
+            assert_eq!(compressed.code, ffi::Code::Ok);
+            let input = written(&encoded, compressed.size);
+            let decompressed = decompress(
+                algorithm,
+                input.as_ptr(),
+                input.len() as i64,
+                decoded.as_mut_ptr().cast(),
+                decoded.len() as i64,
+            );
+            assert_eq!(decompressed.code, ffi::Code::Ok);
+            assert_eq!(written(&decoded, decompressed.size), source);
+        }
     }
 }
 
@@ -101,11 +115,11 @@ fn rejected_pointer_ranges_do_not_touch_sessions() {
     // constructed or native code is invoked; valid retry output is disjoint.
     unsafe {
         assert_eq!(
-            zstd_compress(source, null, 1).code,
+            compress(2, source.as_ptr(), source.len() as i64, null, 1).code,
             ffi::Code::InvalidArgument
         );
         assert_eq!(
-            zstd_decompress(&encoded, null, 1).code,
+            decompress(2, encoded.as_ptr(), encoded.len() as i64, null, 1).code,
             ffi::Code::InvalidArgument
         );
         let result = zstd_encode(&mut encoder, source, null, 1, true);
@@ -123,11 +137,25 @@ fn rejected_pointer_ranges_do_not_touch_sessions() {
 
         let overlapping = encoded.as_ptr().cast_mut();
         assert_eq!(
-            zstd_compress(&encoded, overlapping, encoded.len()).code,
+            compress(
+                2,
+                encoded.as_ptr(),
+                encoded.len() as i64,
+                overlapping,
+                encoded.len() as i64
+            )
+            .code,
             ffi::Code::InvalidArgument
         );
         assert_eq!(
-            zstd_decompress(&encoded, overlapping, encoded.len()).code,
+            decompress(
+                2,
+                encoded.as_ptr(),
+                encoded.len() as i64,
+                overlapping,
+                encoded.len() as i64
+            )
+            .code,
             ffi::Code::InvalidArgument
         );
         assert_eq!(
@@ -139,16 +167,25 @@ fn rejected_pointer_ranges_do_not_touch_sessions() {
             ffi::Code::InvalidArgument
         );
         assert_eq!(
-            zstd_compress(
-                source,
+            compress(
+                2,
+                source.as_ptr(),
+                source.len() as i64,
                 NonNull::<u8>::dangling().as_ptr(),
-                isize::MAX as usize + 1
+                -1
             )
             .code,
             ffi::Code::InvalidArgument
         );
         assert_eq!(
-            zstd_compress(source, usize::MAX as *mut u8, 1).code,
+            compress(
+                2,
+                source.as_ptr(),
+                source.len() as i64,
+                usize::MAX as *mut u8,
+                1
+            )
+            .code,
             ffi::Code::InvalidArgument
         );
 
@@ -185,10 +222,22 @@ fn null_zero_capacity_is_valid_and_does_not_consume_input() {
     // SAFETY: a null output pointer is permitted when capacity is zero, and
     // the later retry uses an exclusively held, disjoint destination.
     unsafe {
-        let result = zstd_compress(source, std::ptr::null_mut(), 0);
+        let result = compress(
+            2,
+            source.as_ptr(),
+            source.len() as i64,
+            std::ptr::null_mut(),
+            0,
+        );
         assert_eq!(result.code, ffi::Code::OutputTooSmall);
         assert_eq!(result.size, 0);
-        let result = zstd_decompress(&encoded, std::ptr::null_mut(), 0);
+        let result = decompress(
+            2,
+            encoded.as_ptr(),
+            encoded.len() as i64,
+            std::ptr::null_mut(),
+            0,
+        );
         assert_eq!(result.code, ffi::Code::OutputTooSmall);
         assert_eq!(result.size, 0);
         let result = zstd_encode(&mut encoder, source, std::ptr::null_mut(), 0, true);
