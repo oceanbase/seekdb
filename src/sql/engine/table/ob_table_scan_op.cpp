@@ -764,6 +764,11 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     in_rescan_(false),
     domain_index_(),
     fts_index_(),
+    fts_word_segment_expr_(nullptr),
+    fts_doc_id_expr_(nullptr),
+    fts_word_count_expr_(nullptr),
+    fts_doc_length_expr_(nullptr),
+    fts_string_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE),
     output_   (nullptr),
     fold_iter_(nullptr),
     iter_tree_(nullptr),
@@ -4088,9 +4093,9 @@ int ObTableScanOp::fetch_next_fts_index_rows()
       if (OB_ITER_END != ret) {
         LOG_WARN("fail to get next row implement", K(ret));
       }
-    } else if (OB_FAIL(get_output_fts_col_expr_by_type(T_FUN_SYS_DOC_ID, doc_id_expr))) {
+    } else if (OB_FAIL(get_cached_fts_col_expr_by_type(T_FUN_SYS_DOC_ID, doc_id_expr))) {
       LOG_WARN("fail to get doc id column expr from output", K(ret));
-    } else if (OB_FAIL(get_output_fts_col_expr_by_type(T_FUN_SYS_WORD_SEGMENT, ft_expr))) {
+    } else if (OB_FAIL(get_cached_fts_col_expr_by_type(T_FUN_SYS_WORD_SEGMENT, ft_expr))) {
       LOG_WARN("fail to get word segment column expr from output", K(ret));
     } else if (OB_ISNULL(ft_expr) || OB_ISNULL(doc_id_expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -4104,8 +4109,8 @@ int ObTableScanOp::fetch_next_fts_index_rows()
       LOG_WARN("unexpeted error, ft or doc id datum is nullptr", K(ret), KP(ft_datum), KP(doc_id_datum));
     } else {
       ObString ft = ft_datum->get_string();
-      ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+      fts_string_allocator_.reuse();
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(fts_string_allocator_,
                                                             *ft_datum,
                                                             ft_expr->datum_meta_,
                                                             ft_expr->obj_meta_.has_lob_header(),
@@ -4135,7 +4140,7 @@ int ObTableScanOp::fill_generated_fts_cols(blocksstable::ObDatumRow *row)
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT; ++i) {
       ObExpr *expr = nullptr;
-      if (OB_FAIL(get_output_fts_col_expr_by_type(expr_types[i], expr))) {
+      if (OB_FAIL(get_cached_fts_col_expr_by_type(expr_types[i], expr))) {
         LOG_WARN("fail to get fts column expr", K(ret), K(i), K(expr_types[i]));
       } else {
         ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
@@ -4194,6 +4199,44 @@ int ObTableScanOp::get_output_fts_col_expr_by_type(
   if (OB_SUCC(ret) && OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, fts column expr isn't found", K(ret), "type", get_type_name(type), K(MY_SPEC.output_));
+  }
+  return ret;
+}
+
+int ObTableScanOp::get_cached_fts_col_expr_by_type(
+    const ObExprOperatorType &type,
+    ObExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  ObExpr **cached = nullptr;
+  expr = nullptr;
+  switch (type) {
+    case T_FUN_SYS_WORD_SEGMENT:
+      cached = &fts_word_segment_expr_;
+      break;
+    case T_FUN_SYS_DOC_ID:
+      cached = &fts_doc_id_expr_;
+      break;
+    case T_FUN_SYS_WORD_COUNT:
+      cached = &fts_word_count_expr_;
+      break;
+    case T_FUN_SYS_DOC_LENGTH:
+      cached = &fts_doc_length_expr_;
+      break;
+    default:
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid fts column expr type", K(ret), "type", get_type_name(type));
+      break;
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(*cached)) {
+      if (OB_FAIL(get_output_fts_col_expr_by_type(type, *cached))) {
+        LOG_WARN("fail to get fts column expr from output", K(ret), "type", get_type_name(type));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      expr = *cached;
+    }
   }
   return ret;
 }
