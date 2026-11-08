@@ -67,6 +67,7 @@ private:
                               ObIArray<ObExprConstraint> &constraints);
   int inner_remove_dummy_expr(common::ObIArray<ObRawExpr*> &exprs,
                               ObIArray<ObExprConstraint> &constraints);
+  int remove_neutral_literal_operands(ObRawExpr *&expr, bool &normalized);
                               
   int is_valid_transform_type(ObRawExpr *expr,
                               bool &is_valid);
