@@ -1,0 +1,49 @@
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_ollama_complete');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_ollama_complete_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ai_ollama_complete', '{"type":"completion","model_name":"qwen2.5"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+'ai_ollama_complete_ep', '{"ai_model_name":"ai_ollama_complete","scope":"all","url":"http://0.0.0.0:8000/api/generate","access_key":"","provider":"ollama"}');
+select provider from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS
+where endpoint_name = 'ai_ollama_complete_ep';
+provider
+ollama
+select length(ai_complete('ai_ollama_complete', 'hello')) > 0 as complete_ok;
+complete_ok
+1
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT(
+'ai_ollama_complete_ep', '{"provider":"Ollama"}');
+select provider from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS
+where endpoint_name = 'ai_ollama_complete_ep';
+provider
+Ollama
+select length(ai_complete('ai_ollama_complete', 'hello')) > 0 as complete_ok;
+complete_ok
+1
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_ollama_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_ollama_embed_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ai_ollama_embed', '{"type":"dense_embedding","model_name":"nomic-embed-text"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+'ai_ollama_embed_ep', '{"ai_model_name":"ai_ollama_embed","scope":"all","url":"http://0.0.0.0:8000/api/embed","access_key":"","provider":"OLLAMA"}');
+select json_valid(ai_embed('ai_ollama_embed', 'hello')) as embed_ok;
+embed_ok
+1
+select json_length(ai_embed('ai_ollama_embed', 'hello')) as embed_dimension;
+embed_dimension
+768
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_openai_complete');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_openai_complete_ep');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ai_openai_complete', '{"type":"completion","model_name":"qwen3-32b"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+'ai_openai_complete_ep', '{"ai_model_name":"ai_openai_complete","scope":"all","url":"http://0.0.0.0:8000/compatible-mode/v1/chat/completions","access_key":"","provider":"openai"}');
+ERROR HY000: The param 'access_key' is empty or null
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT(
+'ai_unknown_provider_ep', '{"ai_model_name":"ai_openai_complete","scope":"all","url":"http://0.0.0.0:8000/api/generate","access_key":"mock-key","provider":"no_such_provider"}');
+ERROR HY000: The value of param 'provider' is invalid
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_ollama_complete');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_ollama_complete_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_ollama_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ai_ollama_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_openai_complete');
