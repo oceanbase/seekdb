@@ -148,7 +148,7 @@ private:
   virtual int inner_init(const ObCharsetInfo *cs, ObITokenStream &in_stream) override;
   int build_grouping_map();
 private:
-  static const int64_t DEFAULT_HASH_MAP_BUCKET_CNT = 128;
+  static const int64_t DEFAULT_HASH_MAP_BUCKET_CNT = 997;
   ObArenaAllocator token_allocator_;
   common::hash::ObHashMap<ObString, int64_t> grouping_map_;
   common::hash::ObHashMap<ObString, int64_t>::const_iterator map_iter_;

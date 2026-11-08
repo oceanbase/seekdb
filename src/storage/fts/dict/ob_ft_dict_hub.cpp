@@ -30,10 +30,12 @@ namespace storage
 {
 int ObFTDictHub::init()
 {
-  static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
+  static constexpr int K_MAX_DICT_BUCKET = 397;
   int ret = OB_SUCCESS;
   if (OB_FAIL(dict_map_.create(K_MAX_DICT_BUCKET, "dict_map"))) {
+    LOG_WARN("init dict map failed", K(ret));
   } else if (OB_FAIL(rw_dict_lock_.init(K_MAX_DICT_BUCKET))) {
+    LOG_WARN("init dict lock failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -55,6 +57,7 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
   } else {
     ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
 
@@ -64,18 +67,22 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
         // dict not exist, make new one, by caller
         ret = OB_ENTRY_NOT_EXIST;
       } else {
+        LOG_WARN("Failed to get dict info", K(ret));
       }
     } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
       } else {
+        LOG_WARN("Failed to load cache", K(ret));
       }
     }
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+          LOG_WARN("Failed to build cache", K(ret));
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
+          LOG_WARN("Failed to put dict info", K(ret));
         }
       }
     }
@@ -91,6 +98,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
   } else {
     {
       ObBucketHashRLockGuard guard(rw_dict_lock_, key.hash());
@@ -99,6 +107,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
           // dict not exist, make new one, by caller
           ret = OB_ENTRY_NOT_EXIST;
         } else {
+          LOG_WARN("Failed to get dict info", K(ret));
         }
       }
     }
@@ -107,6 +116,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
       if (OB_ENTRY_NOT_EXIST == ret) {
         // dict not exist, make new one, by caller
       } else {
+        LOG_WARN("Failed to load cache", K(ret));
       }
     }
   }
@@ -121,6 +131,7 @@ int ObFTDictHub::get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info)
 
   if (OB_FAIL(dict_map_.get_refactored(key, info))) {
     if (OB_HASH_NOT_EXIST != ret) {
+      LOG_WARN("get dict info failed", K(ret));
     }
   }
 
@@ -132,6 +143,7 @@ int ObFTDictHub::put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &i
   int ret = OB_SUCCESS;
   const int cover_exist_flag = 1;
   if (OB_FAIL(dict_map_.set_refactored(key, info, cover_exist_flag))) {
+    LOG_WARN("put dict info failed", K(ret));
   }
 
   return ret;

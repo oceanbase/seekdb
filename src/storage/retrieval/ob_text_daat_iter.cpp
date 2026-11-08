@@ -28,9 +28,16 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   if (OB_ISNULL(param.base_param_) || OB_ISNULL(param.dim_iters_) || OB_ISNULL(param.allocator_)
       || OB_ISNULL(param.relevance_collector_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("unexpected null pointer in param", K(ret), KP_(param.base_param),
+             KP_(param.dim_iters), KP_(param.allocator), KP_(param.relevance_collector));
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_,
                                             *param.allocator_, *param.relevance_collector_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+    LOG_WARN("failed to init sr daat iter", K(ret));
+    // The BM25 estimator is only consumed when the relevance column is projected;
+    // with relevance scoring disabled the estimation context is not initialized.
+  } else if (param.base_param_->need_project_relevance()
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+    LOG_WARN("failed to init bm25 param estimator", K(ret));
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
@@ -72,6 +79,7 @@ int ObTextDaaTIter::pre_process()
     ret = OB_ITER_END;
   } else if (iter_param_->need_project_relevance()) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
+      LOG_WARN("failed to do bm25 param estimation", K(ret));
     }
   }
   return ret;
@@ -109,9 +117,14 @@ int ObTextBMWIter::init(const ObTextDaaTParam &param)
   if (OB_ISNULL(param.base_param_) || OB_ISNULL(param.dim_iters_) || OB_ISNULL(param.allocator_)
       || OB_ISNULL(param.relevance_collector_)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("unexpected null pointer in param", K(ret), KP_(param.base_param),
+             KP_(param.dim_iters), KP_(param.allocator), KP_(param.relevance_collector));
   } else if (OB_FAIL(ObSRBMWIterImpl::init(*param.base_param_, *param.dim_iters_,
                                            *param.allocator_, *param.relevance_collector_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+    LOG_WARN("failed to init sr bmw iter", K(ret));
+  } else if (param.base_param_->need_project_relevance()
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+    LOG_WARN("failed to init bm25 param estimator", K(ret));
   }
   return ret;
 }
@@ -121,13 +134,17 @@ int ObTextBMWIter::get_next_rows(const int64_t capacity, int64_t &count)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
+    LOG_WARN("not inited", K(ret));
   } else if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
+  } else if (iter_param_->need_project_relevance()
+             && OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
+    LOG_WARN("failed to do bm25 param estimation", K(ret));
   }
 
   if (FAILEDx(ObSRBMWIterImpl::get_next_rows(capacity, count))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
+      LOG_WARN("failed to get next rows", K(ret));
     }
   }
   return ret;
@@ -138,12 +155,14 @@ int ObTextBMWIter::init_before_wand_process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!bm25_param_estimator_.is_estimated())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("bm25 param not estimated", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
     ObTextRetrievalBlockMaxIter *block_max_iter = static_cast<ObTextRetrievalBlockMaxIter *>(dim_iters_->at(i));
     if (OB_FAIL(block_max_iter->init_block_max_iter(
         bm25_param_estimator_.get_total_doc_cnt(), bm25_param_estimator_.get_avg_doc_token_cnt()))) {
+      LOG_WARN("failed to init block max iter", K(ret));
     }
   }
   return ret;
