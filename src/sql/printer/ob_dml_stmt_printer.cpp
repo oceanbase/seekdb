@@ -21,6 +21,7 @@
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "lib/utility/ob_smart_call.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/string/ob_sql_string.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/monitor/ob_sql_plan.h"
 namespace oceanbase
@@ -307,6 +308,50 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
       OZ (expr_printer_.do_print(table_item->function_table_expr_, T_FROM_SCOPE));
       DATA_PRINTF(") ");
       PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
+      break;
+    }
+    case TableItem::FILE_TABLE: {
+      if (OB_ISNULL(table_item->file_table_def_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("file table definition is null", K(ret));
+      } else {
+        const ObFileTableDef &def = *table_item->file_table_def_;
+        if (ObFileTableKind::SCAN == def.kind_) {
+          DATA_PRINTF("FILE_SCAN(");
+        } else if (ObFileTableKind::LIST == def.kind_) {
+          DATA_PRINTF("FILE_LIST(");
+        } else if (ObFileTableKind::SCHEMA == def.kind_) {
+          DATA_PRINTF("FILE_SCHEMA(");
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+        }
+        if (OB_SUCC(ret)) {
+          ObString source_path = def.canonical_path_;
+          ObSqlString glob_path;
+          if (ObFileTableKind::LIST == def.kind_ && !def.pattern_.empty()) {
+            if (!def.canonical_path_.empty()
+                && '/' != def.canonical_path_.ptr()[def.canonical_path_.length() - 1]) {
+              OZ (glob_path.append(def.canonical_path_));
+              OZ (glob_path.append("/"));
+            } else {
+              OZ (glob_path.append(def.canonical_path_));
+            }
+            OZ (glob_path.append(def.pattern_));
+            source_path = glob_path.string();
+          }
+          ObObj path_obj;
+          path_obj.set_varchar(source_path);
+          OZ (path_obj.print_sql_literal(buf_, buf_len_, *pos_, print_params_));
+          if (OB_SUCC(ret) && ObFileTableKind::SCAN == def.kind_) {
+            const char *format = ObFileFormat::CSV == def.format_ ? "csv"
+                               : ObFileFormat::JSONL == def.format_ ? "jsonl"
+                               : ObFileFormat::PARQUET == def.format_ ? "parquet" : "auto";
+            DATA_PRINTF(", '%s'", format);
+          }
+          DATA_PRINTF(") ");
+          PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
+        }
+      }
       break;
     }
     case TableItem::JSON_TABLE: {

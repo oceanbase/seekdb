@@ -128,6 +128,9 @@ struct ObSelectIntoItem
         max_file_size_(DEFAULT_MAX_FILE_SIZE),
         escaped_cht_(),
         buffer_size_(DEFAULT_BUFFER_SIZE),
+        with_header_(false),
+        fail_if_exists_(false),
+        null_string_(),
         external_properties_()
   {
     field_str_.set_varchar(DEFAULT_FIELD_TERM_STR);
@@ -154,6 +157,9 @@ struct ObSelectIntoItem
     escaped_cht_ = other.escaped_cht_;
     cs_type_ = other.cs_type_;
     buffer_size_ = other.buffer_size_;
+    with_header_ = other.with_header_;
+    fail_if_exists_ = other.fail_if_exists_;
+    null_string_ = other.null_string_;
     external_properties_ = other.external_properties_;
     return user_vars_.assign(other.user_vars_);
   }
@@ -171,6 +177,9 @@ struct ObSelectIntoItem
                K_(escaped_cht),
                K_(cs_type),
                K_(buffer_size),
+               K_(with_header),
+               K_(fail_if_exists),
+               K_(null_string),
                K_(external_properties));
   ObItemType into_type_;
   common::ObObj outfile_name_;
@@ -185,6 +194,9 @@ struct ObSelectIntoItem
   common::ObObj escaped_cht_;
   common::ObCollationType cs_type_;
   int64_t buffer_size_;
+  bool with_header_;
+  bool fail_if_exists_;
+  common::ObString null_string_;
   common::ObString external_properties_;
 
   static const char* const DEFAULT_FIELD_TERM_STR;

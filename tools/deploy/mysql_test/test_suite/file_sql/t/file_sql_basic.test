@@ -34,14 +34,33 @@ eval select id, name, score, active, day, created,
 eval select count(*) AS row_count, sum(id) AS id_sum,
             round(avg(score), 2) AS score_avg, sum(active) AS active_count
        from read_csv('$FILE_SQL_DATA_DIR/basic.csv', header = true, sample_size = -1) f;
+eval select active, count(*) AS row_count, sum(id) AS id_sum
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+      group by active
+     having sum(id) >= 2
+      order by active desc
+      limit 2;
 
 --echo # JSONL union schema and missing fields
 eval select id, name, score, active, day, note
        from read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') f
       order by id;
+eval select count(*) AS row_count
+       from read_ndjson('$FILE_SQL_DATA_DIR/basic.jsonl') f;
+
+--echo # cross-format INNER JOIN and LEFT JOIN
+eval select c.id, c.name, j.note
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') c
+       join read_json('$FILE_SQL_DATA_DIR/basic.jsonl') j on c.id = j.id
+      order by c.id;
+eval select p.c1, c.name
+       from read_parquet('$FILE_SQL_DATA_DIR/simple.parquet') p
+       left join read_csv('$FILE_SQL_DATA_DIR/basic.csv') c on p.c1 = c.id
+      order by p.c1;
 
 --echo # inferred CSV schema using DuckDB DESCRIBE syntax
 eval describe select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv');
+eval describe select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', header = false);
 
 --echo # Parquet scan and aggregate push through projected columns
 eval select count(*) AS row_count, min(c1) AS min_c1,
@@ -51,6 +70,9 @@ eval select count(*) AS row_count, min(c1) AS min_c1,
 --echo # DuckDB glob returns one file column
 eval select substring_index(file, '/', -1) AS file
        from glob('$FILE_SQL_DATA_DIR/*')
+      order by file;
+eval select substring_index(file, '/', -1) AS file
+       from glob('$FILE_SQL_DATA_DIR/*.csv')
       order by file;
 
 --echo # COPY query to CSV and read it back
@@ -62,8 +84,28 @@ eval copy (select id, name, score
 eval select id, name, score
        from read_csv('$FILE_SQL_DATA_DIR/export.csv')
       order by id;
+--error 1086
+eval copy (select id from read_csv('$FILE_SQL_DATA_DIR/basic.csv'))
+       to '$FILE_SQL_DATA_DIR/export.csv'
+       (format csv, header);
+eval select count(*) AS row_count
+       from read_csv('$FILE_SQL_DATA_DIR/export.csv');
+
+--echo # COPY table and read it back
+--disable_query_log
+--disable_warnings
+drop table if exists file_sql_copy_source;
+--enable_warnings
+create table file_sql_copy_source (id bigint, name varchar(32));
+insert into file_sql_copy_source values (4, 'Delta'), (5, 'Echo');
+eval copy file_sql_copy_source
+       to '$FILE_SQL_DATA_DIR/table_export.csv'
+       (format csv, header, nullstr 'NULL');
+eval select id, name
+       from read_csv('$FILE_SQL_DATA_DIR/table_export.csv')
+      order by id;
+drop table file_sql_copy_source;
 
 set session enable_file_sql = OFF;
---enable_query_log
 
 --source mysql_test/test_suite/file_sql/include/remove_file_sql_data.inc

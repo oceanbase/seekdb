@@ -71,6 +71,10 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
+      with_header_(false),
+      fail_if_exists_(false),
+      null_string_(),
+      header_names_(alloc),
       external_properties_(alloc)
   {
   }
@@ -90,6 +94,10 @@ public:
   int64_t parallel_;
   int64_t buffer_size_;
   bool is_overwrite_;
+  bool with_header_;
+  bool fail_if_exists_;
+  common::ObString null_string_;
+  common::ObFixedArray<common::ObString, common::ObIAllocator> header_names_;
   ObExternalFileFormat::StringData external_properties_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
@@ -126,7 +134,9 @@ public:
       external_properties_(),
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
       block_id_(0),
-      need_commit_(true)
+      need_commit_(true),
+      header_written_(false),
+      cleanup_output_on_error_(false)
   {
   }
 
@@ -211,6 +221,7 @@ private:
                          ObString &str,
                          ObCollationType coll_type);
   int print_field(const ObObj &obj, ObCsvFileWriter &data_writer);
+  int write_header(ObCsvFileWriter &data_writer);
   int print_lob_field(const ObObj &obj,
                       const ObExpr &expr,
                       const ObDatum &datum,
@@ -292,6 +303,9 @@ private:
   ObExternalFileFormat::FormatType format_type_;
   uint32_t block_id_;
   bool need_commit_;
+  bool header_written_;
+  // Only remove a failed COPY target that this operation reserved as absent.
+  bool cleanup_output_on_error_;
   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
 
 };
