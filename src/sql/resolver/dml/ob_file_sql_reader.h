@@ -78,9 +78,10 @@ struct FileSqlOptions
   char escape_;
   common::ObString null_str_;
   int64_t sample_size_;
+  int32_t json_format_; // 0: auto, 1: array, 2: newline delimited
   FileSqlOptions()
     : header_(true), delimiter_(','), quote_('"'), escape_('"'),
-      null_str_(), sample_size_(-1) {}
+      null_str_(), sample_size_(-1), json_format_(0) {}
 };
 
 // Reads a local file into an in-memory table. The values are stored with their

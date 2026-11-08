@@ -3549,7 +3549,8 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_node,
           options.header_ = (0 != int_value);
         }
       } else if (0 == option_name.case_compare("delimiter") ||
-                 0 == option_name.case_compare("delim")) {
+                 0 == option_name.case_compare("delim") ||
+                 0 == option_name.case_compare("sep")) {
         if (is_string && str_value.length() > 0) {
           options.delimiter_ = str_value[0];
         } else if (!is_string && int_value > 0) {
@@ -3589,6 +3590,23 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_node,
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file table, sample_size only supports -1");
         } else {
           options.sample_size_ = int_value;
+        }
+      } else if (0 == option_name.case_compare("format")) {
+        if (!is_string) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file table, invalid format");
+        } else if (0 == str_value.case_compare("auto")) {
+          options.json_format_ = 0;
+        } else if (0 == str_value.case_compare("array")) {
+          options.json_format_ = 1;
+        } else if (0 == str_value.case_compare("newline_delimited") ||
+                   0 == str_value.case_compare("ndjson") ||
+                   0 == str_value.case_compare("jsonl") ||
+                   0 == str_value.case_compare("lines")) {
+          options.json_format_ = 2;
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file table, unsupported format");
         }
       } else {
         ret = OB_INVALID_ARGUMENT;
@@ -3690,7 +3708,8 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_node,
   } else if (OB_FAIL(params_.stmt_factory_->create_stmt(child_stmt))) {
   } else {
     child_stmt->set_query_ctx(params_.query_ctx_);
-    if (OB_FAIL(ObResolverUtils::create_values_table_query(session_info_, allocator_,
+    if (OB_FAIL(child_stmt->set_stmt_id())) {
+    } else if (OB_FAIL(ObResolverUtils::create_values_table_query(session_info_, allocator_,
                                                            params_.expr_factory_,
                                                            params_.query_ctx_,
                                                            child_stmt, table_def))) {

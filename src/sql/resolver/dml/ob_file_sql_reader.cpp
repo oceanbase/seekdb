@@ -1100,6 +1100,1491 @@ static int parse_json_array_rows(const ObString &content, ObIAllocator &allocato
   return ret;
 }
 
+// ---------------------------------------------------------------------------
+// Parquet reader helpers
+// ---------------------------------------------------------------------------
+
+const int32_t PQ_PHYS_BOOLEAN = 0;
+const int32_t PQ_PHYS_INT32 = 1;
+const int32_t PQ_PHYS_INT64 = 2;
+const int32_t PQ_PHYS_FLOAT = 4;
+const int32_t PQ_PHYS_DOUBLE = 5;
+const int32_t PQ_PHYS_BYTE_ARRAY = 6;
+const int32_t PQ_PHYS_FLBA = 7;
+
+const int32_t PQ_REP_REQUIRED = 0;
+
+const int32_t PQ_CODEC_UNCOMPRESSED = 0;
+const int32_t PQ_CODEC_SNAPPY = 1;
+
+const int32_t PQ_PAGE_DATA_V1 = 0;
+const int32_t PQ_PAGE_DICTIONARY = 2;
+const int32_t PQ_PAGE_DATA_V2 = 3;
+
+const int32_t PQ_ENC_PLAIN = 0;
+const int32_t PQ_ENC_PLAIN_DICTIONARY = 2;
+const int32_t PQ_ENC_RLE = 3;
+const int32_t PQ_ENC_RLE_DICTIONARY = 8;
+
+const int32_t PQ_CONVERTED_DATE = 6;
+const int32_t PQ_CONVERTED_TIMESTAMP_MILLIS = 9;
+const int32_t PQ_CONVERTED_TIMESTAMP_MICROS = 10;
+
+struct PqThriftReader
+{
+  const char *data_;
+  int64_t size_;
+  int64_t pos_;
+  int16_t last_field_id_;
+  PqThriftReader(const char *data, const int64_t size, const int64_t pos)
+    : data_(data), size_(size), pos_(pos), last_field_id_(0) {}
+  int read_byte(uint8_t &value)
+  {
+    int ret = OB_SUCCESS;
+    if (pos_ < 0 || pos_ + 1 > size_) {
+      ret = OB_IO_ERROR;
+    } else {
+      value = static_cast<uint8_t>(data_[pos_]);
+      ++pos_;
+    }
+    return ret;
+  }
+  int read_varint(uint64_t &value)
+  {
+    int ret = OB_SUCCESS;
+    value = 0;
+    int64_t shift = 0;
+    bool done = false;
+    for (int64_t i = 0; OB_SUCC(ret) && !done; ++i) {
+      uint8_t byte = 0;
+      if (i >= 10 || shift > 63) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_FAIL(read_byte(byte))) {
+      } else {
+        value |= static_cast<uint64_t>(byte & 0x7f) << shift;
+        done = (0 == (byte & 0x80));
+        shift += 7;
+      }
+    }
+    return ret;
+  }
+  int read_zigzag(int64_t &value)
+  {
+    int ret = OB_SUCCESS;
+    uint64_t raw = 0;
+    if (OB_FAIL(read_varint(raw))) {
+    } else {
+      value = static_cast<int64_t>(raw >> 1) ^ -static_cast<int64_t>(raw & 1);
+    }
+    return ret;
+  }
+  int read_binary(const char *&ptr, int64_t &len)
+  {
+    int ret = OB_SUCCESS;
+    uint64_t var_len = 0;
+    ptr = nullptr;
+    len = 0;
+    if (OB_FAIL(read_varint(var_len))) {
+    } else if (static_cast<int64_t>(var_len) > size_ - pos_) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ptr = data_ + pos_;
+      len = static_cast<int64_t>(var_len);
+      pos_ += len;
+    }
+    return ret;
+  }
+  int read_list_begin(uint8_t &elem_type, int64_t &count)
+  {
+    int ret = OB_SUCCESS;
+    uint8_t byte = 0;
+    elem_type = 0;
+    count = 0;
+    if (OB_FAIL(read_byte(byte))) {
+    } else {
+      elem_type = byte & 0x0f;
+      count = (byte >> 4) & 0x0f;
+      if (15 == count) {
+        uint64_t var_count = 0;
+        if (OB_FAIL(read_varint(var_count))) {
+        } else if (var_count > static_cast<uint64_t>(size_)) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          count = static_cast<int64_t>(var_count);
+        }
+      }
+    }
+    return ret;
+  }
+  int read_struct_field(uint8_t &type, int16_t &id, bool &stop)
+  {
+    int ret = OB_SUCCESS;
+    uint8_t byte = 0;
+    type = 0;
+    stop = false;
+    if (OB_FAIL(read_byte(byte))) {
+    } else if (0 == byte) {
+      stop = true;
+    } else {
+      type = byte & 0x0f;
+      const int16_t delta = static_cast<int16_t>((byte >> 4) & 0x0f);
+      if (0 == delta) {
+        int64_t zigzag_id = 0;
+        if (OB_FAIL(read_zigzag(zigzag_id))) {
+        } else {
+          id = static_cast<int16_t>(zigzag_id);
+        }
+      } else {
+        id = static_cast<int16_t>(last_field_id_ + delta);
+      }
+      last_field_id_ = id;
+    }
+    return ret;
+  }
+  int skip_value(uint8_t type)
+  {
+    int ret = OB_SUCCESS;
+    switch (type) {
+      case 1: // boolean true, value encoded in the field type
+      case 2: // boolean false
+        break;
+      case 3: {
+        uint8_t byte = 0;
+        ret = read_byte(byte);
+        break;
+      }
+      case 4:
+      case 5:
+      case 6: {
+        int64_t value = 0;
+        ret = read_zigzag(value);
+        break;
+      }
+      case 7: {
+        if (size_ - pos_ < 8) {
+          ret = OB_IO_ERROR;
+        } else {
+          pos_ += 8;
+        }
+        break;
+      }
+      case 8: {
+        const char *ptr = nullptr;
+        int64_t len = 0;
+        ret = read_binary(ptr, len);
+        break;
+      }
+      case 9:
+      case 10: {
+        uint8_t elem_type = 0;
+        int64_t count = 0;
+        if (OB_FAIL(read_list_begin(elem_type, count))) {
+        } else {
+          for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+            ret = skip_value(elem_type);
+          }
+        }
+        break;
+      }
+      case 11: {
+        uint8_t byte = 0;
+        int64_t count = 0;
+        if (OB_FAIL(read_byte(byte))) {
+        } else {
+          count = (byte >> 4) & 0x0f;
+          if (0 == count) {
+            uint64_t var_count = 0;
+            if (OB_FAIL(read_varint(var_count))) {
+            } else {
+              count = static_cast<int64_t>(var_count);
+            }
+          }
+          uint8_t types = 0;
+          if (OB_SUCC(ret) && OB_FAIL(read_byte(types))) {
+          }
+          for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+            if (OB_FAIL(skip_value(types >> 4))) {
+            } else if (OB_FAIL(skip_value(types & 0x0f))) {
+            }
+          }
+        }
+        break;
+      }
+      case 12: {
+        const int16_t saved_field_id = last_field_id_;
+        last_field_id_ = 0;
+        bool stop = false;
+        while (OB_SUCC(ret) && !stop) {
+          uint8_t field_type = 0;
+          int16_t field_id = 0;
+          if (OB_FAIL(read_struct_field(field_type, field_id, stop))) {
+          } else if (!stop) {
+            ret = skip_value(field_type);
+          }
+        }
+        last_field_id_ = saved_field_id;
+        break;
+      }
+      default:
+        ret = OB_INVALID_ARGUMENT;
+        break;
+    }
+    return ret;
+  }
+};
+
+struct PqSchemaElement
+{
+  int32_t physical_type_;
+  int32_t type_length_;
+  int32_t repetition_;
+  int32_t converted_type_;
+  int32_t num_children_;
+  std::string name_;
+  PqSchemaElement()
+    : physical_type_(-1), type_length_(0), repetition_(0), converted_type_(-1),
+      num_children_(0) {}
+};
+
+struct PqColumnMeta
+{
+  int32_t physical_type_;
+  int32_t codec_;
+  int64_t num_values_;
+  int64_t data_page_offset_;
+  int64_t dictionary_page_offset_;
+  int64_t total_compressed_size_;
+  PqColumnMeta()
+    : physical_type_(-1), codec_(0), num_values_(0), data_page_offset_(0),
+      dictionary_page_offset_(0), total_compressed_size_(0) {}
+};
+
+struct PqRowGroup
+{
+  std::vector<PqColumnMeta> columns_;
+  int64_t num_rows_;
+  PqRowGroup() : columns_(), num_rows_(0) {}
+};
+
+struct PqPageHeader
+{
+  int32_t type_;
+  int32_t uncompressed_page_size_;
+  int32_t compressed_page_size_;
+  int32_t num_values_;
+  int32_t encoding_;
+  int32_t num_nulls_;
+  int32_t def_levels_byte_length_;
+  int32_t rep_levels_byte_length_;
+  bool is_compressed_;
+  PqPageHeader()
+    : type_(-1), uncompressed_page_size_(0), compressed_page_size_(0), num_values_(0),
+      encoding_(PQ_ENC_PLAIN), num_nulls_(0), def_levels_byte_length_(0),
+      rep_levels_byte_length_(0), is_compressed_(true) {}
+};
+
+static int pq_parse_schema_element(PqThriftReader &reader, PqSchemaElement &element)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (1 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        element.physical_type_ = static_cast<int32_t>(value);
+      }
+    } else if (2 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        element.type_length_ = static_cast<int32_t>(value);
+      }
+    } else if (3 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        element.repetition_ = static_cast<int32_t>(value);
+      }
+    } else if (4 == id) {
+      const char *ptr = nullptr;
+      int64_t len = 0;
+      if (OB_FAIL(reader.read_binary(ptr, len))) {
+      } else {
+        element.name_.assign(ptr, static_cast<size_t>(len));
+      }
+    } else if (5 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        element.num_children_ = static_cast<int32_t>(value);
+      }
+    } else if (6 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        element.converted_type_ = static_cast<int32_t>(value);
+      }
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_parse_column_meta(PqThriftReader &reader, PqColumnMeta &meta)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (1 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        meta.physical_type_ = static_cast<int32_t>(value);
+      }
+    } else if (4 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        meta.codec_ = static_cast<int32_t>(value);
+      }
+    } else if (5 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        meta.num_values_ = value;
+      }
+    } else if (7 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        meta.total_compressed_size_ = value;
+      }
+    } else if (9 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        meta.data_page_offset_ = value;
+      }
+    } else if (11 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        meta.dictionary_page_offset_ = value;
+      }
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_parse_column_chunk(PqThriftReader &reader, PqColumnMeta &meta)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (3 == id) {
+      PqThriftReader meta_reader(reader.data_, reader.size_, reader.pos_);
+      meta_reader.last_field_id_ = 0;
+      if (OB_FAIL(pq_parse_column_meta(meta_reader, meta))) {
+      } else {
+        reader.pos_ = meta_reader.pos_;
+      }
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_parse_row_group(PqThriftReader &reader, PqRowGroup &row_group)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (1 == id) {
+      uint8_t elem_type = 0;
+      int64_t count = 0;
+      if (OB_FAIL(reader.read_list_begin(elem_type, count))) {
+      } else if (12 != elem_type) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+          PqColumnMeta meta;
+          PqThriftReader chunk_reader(reader.data_, reader.size_, reader.pos_);
+          chunk_reader.last_field_id_ = 0;
+          if (OB_FAIL(pq_parse_column_chunk(chunk_reader, meta))) {
+          } else {
+            reader.pos_ = chunk_reader.pos_;
+            row_group.columns_.push_back(meta);
+          }
+        }
+      }
+    } else if (3 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        row_group.num_rows_ = value;
+      }
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_parse_data_page_header(PqThriftReader &reader, PqPageHeader &header)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (1 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.num_values_ = static_cast<int32_t>(value);
+      }
+    } else if (2 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.encoding_ = static_cast<int32_t>(value);
+      }
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_parse_dictionary_page_header(PqThriftReader &reader, PqPageHeader &header)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (1 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.num_values_ = static_cast<int32_t>(value);
+      }
+    } else if (2 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.encoding_ = static_cast<int32_t>(value);
+      }
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_parse_data_page_header_v2(PqThriftReader &reader, PqPageHeader &header)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (1 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.num_values_ = static_cast<int32_t>(value);
+      }
+    } else if (2 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.num_nulls_ = static_cast<int32_t>(value);
+      }
+    } else if (4 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.encoding_ = static_cast<int32_t>(value);
+      }
+    } else if (5 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.def_levels_byte_length_ = static_cast<int32_t>(value);
+      }
+    } else if (6 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.rep_levels_byte_length_ = static_cast<int32_t>(value);
+      }
+    } else if (7 == id) {
+      header.is_compressed_ = (1 == type);
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_parse_page_header(PqThriftReader &reader, PqPageHeader &header)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (1 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.type_ = static_cast<int32_t>(value);
+      }
+    } else if (2 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.uncompressed_page_size_ = static_cast<int32_t>(value);
+      }
+    } else if (3 == id) {
+      int64_t value = 0;
+      if (OB_FAIL(reader.read_zigzag(value))) {
+      } else {
+        header.compressed_page_size_ = static_cast<int32_t>(value);
+      }
+    } else if (5 == id) {
+      PqThriftReader sub_reader(reader.data_, reader.size_, reader.pos_);
+      sub_reader.last_field_id_ = 0;
+      if (OB_FAIL(pq_parse_data_page_header(sub_reader, header))) {
+      } else {
+        reader.pos_ = sub_reader.pos_;
+      }
+    } else if (7 == id) {
+      PqThriftReader sub_reader(reader.data_, reader.size_, reader.pos_);
+      sub_reader.last_field_id_ = 0;
+      if (OB_FAIL(pq_parse_dictionary_page_header(sub_reader, header))) {
+      } else {
+        reader.pos_ = sub_reader.pos_;
+      }
+    } else if (8 == id) {
+      PqThriftReader sub_reader(reader.data_, reader.size_, reader.pos_);
+      sub_reader.last_field_id_ = 0;
+      if (OB_FAIL(pq_parse_data_page_header_v2(sub_reader, header))) {
+      } else {
+        reader.pos_ = sub_reader.pos_;
+      }
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_parse_file_metadata(PqThriftReader &reader,
+                                  std::vector<PqSchemaElement> &schema,
+                                  std::vector<PqRowGroup> &row_groups)
+{
+  int ret = OB_SUCCESS;
+  const int16_t saved_field_id = reader.last_field_id_;
+  reader.last_field_id_ = 0;
+  bool stop = false;
+  while (OB_SUCC(ret) && !stop) {
+    uint8_t type = 0;
+    int16_t id = 0;
+    if (OB_FAIL(reader.read_struct_field(type, id, stop))) {
+    } else if (stop) {
+    } else if (2 == id) {
+      uint8_t elem_type = 0;
+      int64_t count = 0;
+      if (OB_FAIL(reader.read_list_begin(elem_type, count))) {
+      } else if (12 != elem_type) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+          PqSchemaElement element;
+          PqThriftReader element_reader(reader.data_, reader.size_, reader.pos_);
+          element_reader.last_field_id_ = 0;
+          if (OB_FAIL(pq_parse_schema_element(element_reader, element))) {
+          } else {
+            reader.pos_ = element_reader.pos_;
+            schema.push_back(element);
+          }
+        }
+      }
+    } else if (4 == id) {
+      uint8_t elem_type = 0;
+      int64_t count = 0;
+      if (OB_FAIL(reader.read_list_begin(elem_type, count))) {
+      } else if (12 != elem_type) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+          PqRowGroup row_group;
+          PqThriftReader group_reader(reader.data_, reader.size_, reader.pos_);
+          group_reader.last_field_id_ = 0;
+          if (OB_FAIL(pq_parse_row_group(group_reader, row_group))) {
+          } else {
+            reader.pos_ = group_reader.pos_;
+            row_groups.push_back(row_group);
+          }
+        }
+      }
+    } else if (OB_FAIL(reader.skip_value(type))) {
+    }
+  }
+  reader.last_field_id_ = saved_field_id;
+  return ret;
+}
+
+static int pq_snappy_uncompress(const char *src, const int64_t src_len, std::string &out)
+{
+  int ret = OB_SUCCESS;
+  out.clear();
+  int64_t pos = 0;
+  uint64_t expected = 0;
+  int64_t shift = 0;
+  bool done = false;
+  while (OB_SUCC(ret) && !done) {
+    if (pos >= src_len || shift > 63) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      const uint8_t byte = static_cast<uint8_t>(src[pos]);
+      ++pos;
+      expected |= static_cast<uint64_t>(byte & 0x7f) << shift;
+      shift += 7;
+      done = (0 == (byte & 0x80));
+    }
+  }
+  if (OB_SUCC(ret) && expected > static_cast<uint64_t>(MAX_FILE_SIZE)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_SUCC(ret)) {
+    out.reserve(static_cast<size_t>(expected));
+    while (OB_SUCC(ret) && pos < src_len && out.size() < expected) {
+      const uint8_t tag = static_cast<uint8_t>(src[pos]);
+      ++pos;
+      const int32_t type = tag & 0x03;
+      if (0 == type) {
+        int64_t len = static_cast<int64_t>(tag >> 2);
+        if (len >= 60) {
+          const int64_t extra = len - 59;
+          if (pos + extra > src_len) {
+            ret = OB_INVALID_ARGUMENT;
+          } else {
+            uint64_t raw_len = 0;
+            for (int64_t i = 0; i < extra; ++i) {
+              raw_len |= static_cast<uint64_t>(static_cast<uint8_t>(src[pos + i])) << (8 * i);
+            }
+            pos += extra;
+            len = static_cast<int64_t>(raw_len) + 1;
+          }
+        } else {
+          len += 1;
+        }
+        if (OB_FAIL(ret)) {
+        } else if (pos + len > src_len) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          out.append(src + pos, static_cast<size_t>(len));
+          pos += len;
+        }
+      } else {
+        int64_t len = 0;
+        int64_t offset = 0;
+        if (1 == type) {
+          len = ((tag >> 2) & 0x07) + 4;
+          if (pos + 1 > src_len) {
+            ret = OB_INVALID_ARGUMENT;
+          } else {
+            offset = (static_cast<int64_t>(tag >> 5) << 8) | static_cast<uint8_t>(src[pos]);
+            pos += 1;
+          }
+        } else if (2 == type) {
+          len = static_cast<int64_t>(tag >> 2) + 1;
+          if (pos + 2 > src_len) {
+            ret = OB_INVALID_ARGUMENT;
+          } else {
+            offset = static_cast<uint8_t>(src[pos]) |
+                     (static_cast<int64_t>(static_cast<uint8_t>(src[pos + 1])) << 8);
+            pos += 2;
+          }
+        } else {
+          len = static_cast<int64_t>(tag >> 2) + 1;
+          if (pos + 4 > src_len) {
+            ret = OB_INVALID_ARGUMENT;
+          } else {
+            offset = static_cast<uint8_t>(src[pos]) |
+                     (static_cast<int64_t>(static_cast<uint8_t>(src[pos + 1])) << 8) |
+                     (static_cast<int64_t>(static_cast<uint8_t>(src[pos + 2])) << 16) |
+                     (static_cast<int64_t>(static_cast<uint8_t>(src[pos + 3])) << 24);
+            pos += 4;
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (offset <= 0 || static_cast<int64_t>(out.size()) < offset) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          for (int64_t i = 0; i < len; ++i) {
+            out.push_back(out[out.size() - static_cast<size_t>(offset)]);
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && static_cast<int64_t>(out.size()) != static_cast<int64_t>(expected)) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  return ret;
+}
+
+struct PqRleDecoder
+{
+  const char *data_;
+  int64_t size_;
+  int64_t pos_;
+  int32_t bit_width_;
+  const char *packed_ptr_;
+  int64_t packed_index_;
+  int64_t packed_remaining_;
+  int64_t rle_remaining_;
+  int32_t rle_value_;
+  PqRleDecoder(const char *data, const int64_t size, const int32_t bit_width)
+    : data_(data), size_(size), pos_(0), bit_width_(bit_width), packed_ptr_(nullptr),
+      packed_index_(0), packed_remaining_(0), rle_remaining_(0), rle_value_(0) {}
+  int read_run_header()
+  {
+    int ret = OB_SUCCESS;
+    uint64_t header = 0;
+    int64_t shift = 0;
+    bool done = false;
+    while (OB_SUCC(ret) && !done) {
+      if (pos_ >= size_ || shift > 63) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const uint8_t byte = static_cast<uint8_t>(data_[pos_]);
+        ++pos_;
+        header |= static_cast<uint64_t>(byte & 0x7f) << shift;
+        shift += 7;
+        done = (0 == (byte & 0x80));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (header & 1) {
+        const int64_t groups = static_cast<int64_t>(header >> 1);
+        const int64_t bytes = groups * bit_width_;
+        if (groups <= 0 || bytes < 0 || pos_ + bytes > size_) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          packed_ptr_ = data_ + pos_;
+          pos_ += bytes;
+          packed_index_ = 0;
+          packed_remaining_ = groups * 8;
+        }
+      } else {
+        const int64_t run_len = static_cast<int64_t>(header >> 1);
+        const int64_t bytes = (bit_width_ + 7) / 8;
+        if (run_len <= 0 || pos_ + bytes > size_) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          uint32_t raw = 0;
+          for (int64_t i = 0; i < bytes; ++i) {
+            raw |= static_cast<uint32_t>(static_cast<uint8_t>(data_[pos_ + i])) << (8 * i);
+          }
+          pos_ += bytes;
+          rle_value_ = static_cast<int32_t>(raw);
+          rle_remaining_ = run_len;
+        }
+      }
+    }
+    return ret;
+  }
+  int next_value(int32_t &value)
+  {
+    int ret = OB_SUCCESS;
+    bool ready = false;
+    while (OB_SUCC(ret) && !ready) {
+      if (rle_remaining_ > 0) {
+        value = rle_value_;
+        --rle_remaining_;
+        ready = true;
+      } else if (packed_remaining_ > 0) {
+        const int64_t bit_pos = packed_index_ * bit_width_;
+        const int64_t byte_pos = bit_pos / 8;
+        const int32_t bit_off = static_cast<int32_t>(bit_pos % 8);
+        const int64_t need_bytes = (bit_width_ + bit_off + 7) / 8;
+        uint64_t raw = 0;
+        for (int64_t i = 0; i < need_bytes; ++i) {
+          raw |= static_cast<uint64_t>(static_cast<uint8_t>(packed_ptr_[byte_pos + i])) << (8 * i);
+        }
+        const uint64_t mask = (bit_width_ >= 32) ? 0xffffffffULL : ((1ULL << bit_width_) - 1);
+        value = static_cast<int32_t>((raw >> bit_off) & mask);
+        ++packed_index_;
+        --packed_remaining_;
+        ready = true;
+      } else if (OB_FAIL(read_run_header())) {
+      }
+    }
+    return ret;
+  }
+};
+
+static int64_t pq_floor_div(const int64_t value, const int64_t divisor)
+{
+  int64_t quotient = value / divisor;
+  if (0 != value % divisor && ((value < 0) != (divisor < 0))) {
+    --quotient;
+  }
+  return quotient;
+}
+
+static void pq_format_date_days(const int64_t days, std::string &out)
+{
+  const int64_t z = days + 719468;
+  const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+  const int64_t doe = z - era * 146097;
+  const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  int64_t year = yoe + era * 400;
+  const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const int64_t mp = (5 * doy + 2) / 153;
+  const int64_t day = doy - (153 * mp + 2) / 5 + 1;
+  int64_t month = mp + (mp < 10 ? 3 : -9);
+  if (month <= 2) {
+    ++year;
+  }
+  char buffer[32];
+  snprintf(buffer, sizeof(buffer), "%04lld-%02lld-%02lld",
+           static_cast<long long>(year),
+           static_cast<long long>(month),
+           static_cast<long long>(day));
+  out.assign(buffer);
+}
+
+static void pq_format_timestamp_value(const int64_t raw,
+                                      const int32_t converted_type,
+                                      std::string &out)
+{
+  const bool is_millis = (PQ_CONVERTED_TIMESTAMP_MILLIS == converted_type);
+  const int64_t units_per_second = is_millis ? 1000 : 1000000;
+  const int32_t digits = is_millis ? 3 : 6;
+  const int64_t seconds = pq_floor_div(raw, units_per_second);
+  const int32_t fraction = static_cast<int32_t>(raw - seconds * units_per_second);
+  const int64_t days = pq_floor_div(seconds, 86400);
+  const int64_t second_of_day = seconds - days * 86400;
+  std::string date;
+  pq_format_date_days(days, date);
+  char buffer[48];
+  const int hour = static_cast<int>(second_of_day / 3600);
+  const int minute = static_cast<int>((second_of_day % 3600) / 60);
+  const int second = static_cast<int>(second_of_day % 60);
+  if (fraction > 0) {
+    snprintf(buffer, sizeof(buffer), " %02d:%02d:%02d.%0*d",
+             hour, minute, second, static_cast<int>(digits), static_cast<int>(fraction));
+  } else {
+    snprintf(buffer, sizeof(buffer), " %02d:%02d:%02d", hour, minute, second);
+  }
+  out = date;
+  out.append(buffer);
+}
+
+static int32_t pq_read_int32(const char *ptr)
+{
+  const uint32_t raw = static_cast<uint32_t>(static_cast<uint8_t>(ptr[0])) |
+                       (static_cast<uint32_t>(static_cast<uint8_t>(ptr[1])) << 8) |
+                       (static_cast<uint32_t>(static_cast<uint8_t>(ptr[2])) << 16) |
+                       (static_cast<uint32_t>(static_cast<uint8_t>(ptr[3])) << 24);
+  return static_cast<int32_t>(raw);
+}
+
+static int64_t pq_read_int64(const char *ptr)
+{
+  const uint64_t raw = static_cast<uint64_t>(static_cast<uint8_t>(ptr[0])) |
+                       (static_cast<uint64_t>(static_cast<uint8_t>(ptr[1])) << 8) |
+                       (static_cast<uint64_t>(static_cast<uint8_t>(ptr[2])) << 16) |
+                       (static_cast<uint64_t>(static_cast<uint8_t>(ptr[3])) << 24) |
+                       (static_cast<uint64_t>(static_cast<uint8_t>(ptr[4])) << 32) |
+                       (static_cast<uint64_t>(static_cast<uint8_t>(ptr[5])) << 40) |
+                       (static_cast<uint64_t>(static_cast<uint8_t>(ptr[6])) << 48) |
+                       (static_cast<uint64_t>(static_cast<uint8_t>(ptr[7])) << 56);
+  return static_cast<int64_t>(raw);
+}
+
+static int pq_decode_plain(const PqSchemaElement &element,
+                           const char *data,
+                           const int64_t size,
+                           int64_t &pos,
+                           const int64_t count,
+                           std::vector<std::string> &out)
+{
+  int ret = OB_SUCCESS;
+  char buffer[64];
+  if (count < 0 || pos < 0 || pos > size) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (PQ_PHYS_BOOLEAN == element.physical_type_) {
+    const int64_t bytes = (count + 7) / 8;
+    if (pos + bytes > size) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      for (int64_t i = 0; i < count; ++i) {
+        const uint8_t byte = static_cast<uint8_t>(data[pos + i / 8]);
+        const bool bit = (0 != ((byte >> (i % 8)) & 0x01));
+        out.push_back(bit ? "true" : "false");
+      }
+      pos += bytes;
+    }
+  } else if (PQ_PHYS_INT32 == element.physical_type_) {
+    if (pos + count * 4 > size) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      for (int64_t i = 0; i < count; ++i) {
+        const int32_t value = pq_read_int32(data + pos);
+        pos += 4;
+        if (PQ_CONVERTED_DATE == element.converted_type_) {
+          std::string text;
+          pq_format_date_days(value, text);
+          out.push_back(text);
+        } else {
+          snprintf(buffer, sizeof(buffer), "%lld", static_cast<long long>(value));
+          out.push_back(buffer);
+        }
+      }
+    }
+  } else if (PQ_PHYS_INT64 == element.physical_type_) {
+    if (pos + count * 8 > size) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      for (int64_t i = 0; i < count; ++i) {
+        const int64_t value = pq_read_int64(data + pos);
+        pos += 8;
+        if (PQ_CONVERTED_TIMESTAMP_MILLIS == element.converted_type_ ||
+            PQ_CONVERTED_TIMESTAMP_MICROS == element.converted_type_) {
+          std::string text;
+          pq_format_timestamp_value(value, element.converted_type_, text);
+          out.push_back(text);
+        } else {
+          snprintf(buffer, sizeof(buffer), "%lld", static_cast<long long>(value));
+          out.push_back(buffer);
+        }
+      }
+    }
+  } else if (PQ_PHYS_FLOAT == element.physical_type_) {
+    if (pos + count * 4 > size) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      for (int64_t i = 0; i < count; ++i) {
+        float value = 0.0f;
+        MEMCPY(&value, data + pos, 4);
+        pos += 4;
+        snprintf(buffer, sizeof(buffer), "%.9g", static_cast<double>(value));
+        out.push_back(buffer);
+      }
+    }
+  } else if (PQ_PHYS_DOUBLE == element.physical_type_) {
+    if (pos + count * 8 > size) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      for (int64_t i = 0; i < count; ++i) {
+        double value = 0.0;
+        MEMCPY(&value, data + pos, 8);
+        pos += 8;
+        snprintf(buffer, sizeof(buffer), "%.17g", value);
+        out.push_back(buffer);
+      }
+    }
+  } else if (PQ_PHYS_BYTE_ARRAY == element.physical_type_) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      if (pos + 4 > size) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const int32_t len = pq_read_int32(data + pos);
+        pos += 4;
+        if (len < 0 || pos + len > size) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          out.push_back(std::string(data + pos, static_cast<size_t>(len)));
+          pos += len;
+        }
+      }
+    }
+  } else if (PQ_PHYS_FLBA == element.physical_type_) {
+    if (element.type_length_ <= 0 || pos + count * element.type_length_ > size) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      for (int64_t i = 0; i < count; ++i) {
+        out.push_back(std::string(data + pos, static_cast<size_t>(element.type_length_)));
+        pos += element.type_length_;
+      }
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "read_parquet, unsupported physical type");
+  }
+  return ret;
+}
+
+static int pq_decode_values(const PqSchemaElement &element,
+                            const std::vector<std::string> &dictionary,
+                            const bool has_dictionary,
+                            const int32_t encoding,
+                            const char *data,
+                            const int64_t size,
+                            const int64_t count,
+                            std::vector<std::string> &out)
+{
+  int ret = OB_SUCCESS;
+  if (0 == count) {
+  } else if (count < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (PQ_ENC_PLAIN == encoding) {
+    int64_t pos = 0;
+    ret = pq_decode_plain(element, data, size, pos, count, out);
+  } else if (PQ_ENC_PLAIN_DICTIONARY == encoding || PQ_ENC_RLE_DICTIONARY == encoding) {
+    if (!has_dictionary || size < 1) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      const int32_t bit_width = static_cast<uint8_t>(data[0]);
+      if (bit_width > 32) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        PqRleDecoder decoder(data + 1, size - 1, bit_width);
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+          int32_t index = 0;
+          if (OB_FAIL(decoder.next_value(index))) {
+          } else if (index < 0 || static_cast<size_t>(index) >= dictionary.size()) {
+            ret = OB_INVALID_ARGUMENT;
+          } else {
+            out.push_back(dictionary[static_cast<size_t>(index)]);
+          }
+        }
+      }
+    }
+  } else if (PQ_ENC_RLE == encoding && PQ_PHYS_BOOLEAN == element.physical_type_) {
+    PqRleDecoder decoder(data, size, 1);
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      int32_t value = 0;
+      if (OB_FAIL(decoder.next_value(value))) {
+      } else {
+        out.push_back(0 != value ? "true" : "false");
+      }
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "read_parquet, unsupported value encoding");
+  }
+  return ret;
+}
+
+static int pq_decompress(const int32_t codec,
+                         const char *src,
+                         const int64_t src_len,
+                         std::string &storage,
+                         const char *&out,
+                         int64_t &out_len)
+{
+  int ret = OB_SUCCESS;
+  storage.clear();
+  out = src;
+  out_len = src_len;
+  if (PQ_CODEC_UNCOMPRESSED == codec) {
+  } else if (PQ_CODEC_SNAPPY == codec) {
+    if (OB_FAIL(pq_snappy_uncompress(src, src_len, storage))) {
+    } else {
+      out = storage.data();
+      out_len = static_cast<int64_t>(storage.size());
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "read_parquet, unsupported compression codec");
+  }
+  return ret;
+}
+
+static int pq_decode_column_chunk(const char *file,
+                                  const int64_t file_size,
+                                  const PqSchemaElement &element,
+                                  const PqColumnMeta &meta,
+                                  const int64_t num_rows,
+                                  std::vector<std::string> &texts,
+                                  std::vector<bool> &nulls)
+{
+  int ret = OB_SUCCESS;
+  texts.assign(static_cast<size_t>(num_rows), std::string());
+  nulls.assign(static_cast<size_t>(num_rows), true);
+  int64_t chunk_start = meta.data_page_offset_;
+  if (meta.dictionary_page_offset_ > 0 &&
+      (chunk_start <= 0 || meta.dictionary_page_offset_ < chunk_start)) {
+    chunk_start = meta.dictionary_page_offset_;
+  }
+  const int64_t chunk_end = chunk_start + meta.total_compressed_size_;
+  if (chunk_start <= 0 || meta.total_compressed_size_ <= 0 || chunk_end > file_size) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const int32_t max_definition = (PQ_REP_REQUIRED == element.repetition_) ? 0 : 1;
+    int64_t filled = 0;
+    std::vector<std::string> dictionary;
+    bool has_dictionary = false;
+    PqThriftReader reader(file, chunk_end, chunk_start);
+    while (OB_SUCC(ret) && filled < num_rows && reader.pos_ < chunk_end) {
+      PqPageHeader header;
+      if (OB_FAIL(pq_parse_page_header(reader, header))) {
+      } else if (header.compressed_page_size_ < 0 ||
+                 reader.pos_ + header.compressed_page_size_ > chunk_end) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const int64_t body_pos = reader.pos_;
+        const char *body = file + body_pos;
+        const int64_t body_size = header.compressed_page_size_;
+        if (PQ_PAGE_DICTIONARY == header.type_) {
+          std::string storage;
+          const char *raw = nullptr;
+          int64_t raw_size = 0;
+          if (OB_FAIL(pq_decompress(meta.codec_, body, body_size, storage, raw, raw_size))) {
+          } else {
+            dictionary.clear();
+            int64_t page_pos = 0;
+            if (OB_FAIL(pq_decode_plain(element, raw, raw_size, page_pos,
+                                        header.num_values_, dictionary))) {
+            } else {
+              has_dictionary = true;
+            }
+          }
+        } else if (PQ_PAGE_DATA_V1 == header.type_) {
+          std::string storage;
+          const char *raw = nullptr;
+          int64_t raw_size = 0;
+          if (OB_FAIL(pq_decompress(meta.codec_, body, body_size, storage, raw, raw_size))) {
+          } else {
+            int64_t page_pos = 0;
+            std::vector<int32_t> def_levels;
+            def_levels.reserve(static_cast<size_t>(header.num_values_));
+            if (max_definition > 0) {
+              if (page_pos + 4 > raw_size) {
+                ret = OB_INVALID_ARGUMENT;
+              } else {
+                const int32_t level_bytes = pq_read_int32(raw + page_pos);
+                page_pos += 4;
+                if (level_bytes < 0 || page_pos + level_bytes > raw_size) {
+                  ret = OB_INVALID_ARGUMENT;
+                } else {
+                  PqRleDecoder decoder(raw + page_pos, level_bytes, 1);
+                  for (int64_t i = 0; OB_SUCC(ret) && i < header.num_values_; ++i) {
+                    int32_t level = 0;
+                    if (OB_FAIL(decoder.next_value(level))) {
+                    } else {
+                      def_levels.push_back(level);
+                    }
+                  }
+                  page_pos += level_bytes;
+                }
+              }
+            }
+            if (OB_SUCC(ret)) {
+              int64_t non_null = 0;
+              for (int64_t i = 0; i < header.num_values_; ++i) {
+                if (0 == max_definition ||
+                    (static_cast<size_t>(i) < def_levels.size() &&
+                     max_definition == def_levels[static_cast<size_t>(i)])) {
+                  ++non_null;
+                }
+              }
+              std::vector<std::string> values;
+              values.reserve(static_cast<size_t>(non_null));
+              if (OB_FAIL(pq_decode_values(element, dictionary, has_dictionary,
+                                           header.encoding_,
+                                           raw + page_pos, raw_size - page_pos,
+                                           non_null, values))) {
+              } else if (static_cast<int64_t>(values.size()) != non_null) {
+                ret = OB_INVALID_ARGUMENT;
+              } else {
+                int64_t value_index = 0;
+                for (int64_t i = 0; OB_SUCC(ret) && i < header.num_values_ && filled < num_rows; ++i) {
+                  const bool is_null = (max_definition > 0 &&
+                      (static_cast<size_t>(i) >= def_levels.size() ||
+                       max_definition != def_levels[static_cast<size_t>(i)]));
+                  if (is_null) {
+                    texts[static_cast<size_t>(filled)].clear();
+                    nulls[static_cast<size_t>(filled)] = true;
+                  } else {
+                    texts[static_cast<size_t>(filled)].swap(values[static_cast<size_t>(value_index)]);
+                    nulls[static_cast<size_t>(filled)] = false;
+                    ++value_index;
+                  }
+                  ++filled;
+                }
+              }
+            }
+          }
+        } else if (PQ_PAGE_DATA_V2 == header.type_) {
+          const int64_t rep_len = header.rep_levels_byte_length_;
+          const int64_t def_len = header.def_levels_byte_length_;
+          if (rep_len < 0 || def_len < 0 || rep_len + def_len > body_size) {
+            ret = OB_INVALID_ARGUMENT;
+          } else {
+            std::vector<int32_t> def_levels;
+            def_levels.reserve(static_cast<size_t>(header.num_values_));
+            if (max_definition > 0) {
+              PqRleDecoder decoder(body + rep_len, def_len, 1);
+              for (int64_t i = 0; OB_SUCC(ret) && i < header.num_values_; ++i) {
+                int32_t level = 0;
+                if (OB_FAIL(decoder.next_value(level))) {
+                } else {
+                  def_levels.push_back(level);
+                }
+              }
+            }
+            if (OB_SUCC(ret)) {
+              const char *values_ptr = body + rep_len + def_len;
+              int64_t values_size = body_size - rep_len - def_len;
+              std::string storage;
+              if (header.is_compressed_ && PQ_CODEC_UNCOMPRESSED != meta.codec_) {
+                const char *raw = nullptr;
+                int64_t raw_size = 0;
+                if (OB_FAIL(pq_decompress(meta.codec_, values_ptr, values_size,
+                                          storage, raw, raw_size))) {
+                } else {
+                  values_ptr = raw;
+                  values_size = raw_size;
+                }
+              }
+              if (OB_SUCC(ret)) {
+                const int64_t non_null = static_cast<int64_t>(header.num_values_) - header.num_nulls_;
+                std::vector<std::string> values;
+                if (non_null < 0) {
+                  ret = OB_INVALID_ARGUMENT;
+                } else if (OB_FAIL(pq_decode_values(element, dictionary, has_dictionary,
+                                                    header.encoding_, values_ptr, values_size,
+                                                    non_null, values))) {
+                } else if (static_cast<int64_t>(values.size()) != non_null) {
+                  ret = OB_INVALID_ARGUMENT;
+                } else {
+                  int64_t value_index = 0;
+                  for (int64_t i = 0; OB_SUCC(ret) && i < header.num_values_ && filled < num_rows; ++i) {
+                    const bool is_null = (max_definition > 0 &&
+                        (static_cast<size_t>(i) >= def_levels.size() ||
+                         max_definition != def_levels[static_cast<size_t>(i)]));
+                    if (is_null) {
+                      texts[static_cast<size_t>(filled)].clear();
+                      nulls[static_cast<size_t>(filled)] = true;
+                    } else {
+                      texts[static_cast<size_t>(filled)].swap(values[static_cast<size_t>(value_index)]);
+                      nulls[static_cast<size_t>(filled)] = false;
+                      ++value_index;
+                    }
+                    ++filled;
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          reader.pos_ = body_pos + body_size;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && filled != num_rows) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  return ret;
+}
+
+} // namespace
+
+static bool pq_map_file_type(const PqSchemaElement &element, FileSqlType &type)
+{
+  bool supported = true;
+  switch (element.physical_type_) {
+    case PQ_PHYS_BOOLEAN:
+      type = FILE_SQL_BOOLEAN;
+      break;
+    case PQ_PHYS_INT32:
+      type = (PQ_CONVERTED_DATE == element.converted_type_) ? FILE_SQL_DATE : FILE_SQL_BIGINT;
+      break;
+    case PQ_PHYS_INT64:
+      type = ((PQ_CONVERTED_TIMESTAMP_MILLIS == element.converted_type_ ||
+               PQ_CONVERTED_TIMESTAMP_MICROS == element.converted_type_))
+             ? FILE_SQL_DATETIME : FILE_SQL_BIGINT;
+      break;
+    case PQ_PHYS_FLOAT:
+    case PQ_PHYS_DOUBLE:
+      type = FILE_SQL_DOUBLE;
+      break;
+    case PQ_PHYS_BYTE_ARRAY:
+    case PQ_PHYS_FLBA:
+      if (PQ_CONVERTED_DATE == element.converted_type_) {
+        type = FILE_SQL_DATE;
+      } else if (PQ_CONVERTED_TIMESTAMP_MILLIS == element.converted_type_ ||
+                 PQ_CONVERTED_TIMESTAMP_MICROS == element.converted_type_) {
+        type = FILE_SQL_DATETIME;
+      } else {
+        type = FILE_SQL_VARCHAR;
+      }
+      break;
+    default:
+      supported = false;
+      break;
+  }
+  return supported;
+}
+
+static int read_parquet_table(const ObString &path,
+                              const ObSQLSessionInfo *session_info,
+                              ObIAllocator &allocator,
+                              FileSqlTable &table)
+{
+  int ret = OB_SUCCESS;
+  ObString content;
+  if (OB_FAIL(read_whole_file(path, allocator, content))) {
+    LOG_WARN("failed to read parquet file", K(ret), K(path));
+  } else if (content.length() < 12 ||
+             0 != MEMCMP(content.ptr(), "PAR1", 4) ||
+             0 != MEMCMP(content.ptr() + content.length() - 4, "PAR1", 4)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "read_parquet, invalid parquet file");
+  } else {
+    const char *file = content.ptr();
+    const int64_t file_size = content.length();
+    const int64_t footer_size =
+        static_cast<int64_t>(static_cast<uint32_t>(pq_read_int32(file + file_size - 8)));
+    const int64_t footer_pos = file_size - 8 - footer_size;
+    if (footer_size <= 0 || footer_pos < 4) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "read_parquet, invalid footer");
+    } else {
+      PqThriftReader reader(file, file_size - 8, footer_pos);
+      std::vector<PqSchemaElement> schema;
+      std::vector<PqRowGroup> row_groups;
+      if (OB_FAIL(pq_parse_file_metadata(reader, schema, row_groups))) {
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "read_parquet, corrupt metadata");
+      } else if (schema.size() < 2) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const int64_t column_cnt = static_cast<int64_t>(schema.size()) - 1;
+        bool flat = true;
+        for (int64_t i = 1; flat && i < static_cast<int64_t>(schema.size()); ++i) {
+          if (schema[i].num_children_ > 0 || schema[i].physical_type_ < 0) {
+            flat = false;
+          }
+        }
+        if (!flat) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "read_parquet, nested schema");
+        }
+        for (int64_t i = 1; OB_SUCC(ret) && i < static_cast<int64_t>(schema.size()); ++i) {
+          FileSqlType column_type = FILE_SQL_VARCHAR;
+          if (!pq_map_file_type(schema[i], column_type)) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "read_parquet, unsupported column type");
+          } else {
+            FileSqlColumn column;
+            ObString column_name;
+            if (schema[i].name_.empty()) {
+              char name_buffer[64];
+              snprintf(name_buffer, sizeof(name_buffer), "column_%lld",
+                       static_cast<long long>(i));
+              column_name.assign_ptr(name_buffer, static_cast<int32_t>(strlen(name_buffer)));
+            } else {
+              column_name.assign_ptr(schema[i].name_.data(),
+                                     static_cast<int32_t>(schema[i].name_.size()));
+            }
+            column.type_ = column_type;
+            column.length_ = 1;
+            column.nullable_ = (PQ_REP_REQUIRED != schema[i].repetition_);
+            if (OB_FAIL(copy_string(column_name, allocator, column.name_))) {
+            } else if (OB_FAIL(table.columns_.push_back(column))) {
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          table.column_cnt_ = table.columns_.count();
+          for (int64_t g = 0; OB_SUCC(ret) && g < static_cast<int64_t>(row_groups.size()); ++g) {
+            const PqRowGroup &group = row_groups[static_cast<size_t>(g)];
+            if (group.num_rows_ <= 0) {
+              continue;
+            }
+            if (static_cast<int64_t>(group.columns_.size()) != column_cnt) {
+              ret = OB_INVALID_ARGUMENT;
+              break;
+            }
+            std::vector<std::vector<std::string> > column_texts(static_cast<size_t>(column_cnt));
+            std::vector<std::vector<bool> > column_nulls(static_cast<size_t>(column_cnt));
+            for (int64_t c = 0; OB_SUCC(ret) && c < column_cnt; ++c) {
+              if (OB_FAIL(pq_decode_column_chunk(file, file_size, schema[static_cast<size_t>(c + 1)],
+                                                 group.columns_[static_cast<size_t>(c)],
+                                                 group.num_rows_,
+                                                 column_texts[static_cast<size_t>(c)],
+                                                 column_nulls[static_cast<size_t>(c)]))) {
+              }
+            }
+            for (int64_t r = 0; OB_SUCC(ret) && r < group.num_rows_; ++r) {
+              for (int64_t c = 0; OB_SUCC(ret) && c < column_cnt; ++c) {
+                const std::string &text = column_texts[static_cast<size_t>(c)][static_cast<size_t>(r)];
+                ObObjParam value;
+                if (OB_FAIL(build_value(table.columns_.at(c).type_,
+                                        ObString(static_cast<int32_t>(text.size()), text.data()),
+                                        column_nulls[static_cast<size_t>(c)][static_cast<size_t>(r)],
+                                        session_info, value))) {
+                } else if (OB_FAIL(table.values_.push_back(value))) {
+                }
+              }
+              if (OB_SUCC(ret)) {
+                ++table.row_cnt_;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int read_file_table(const FileSqlFormat format,
                     const ObString &path,
                     const FileSqlOptions &options,
@@ -1114,8 +2599,7 @@ int read_file_table(const FileSqlFormat format,
   } else if (FILE_SQL_GLOB == format) {
     ret = glob_files(path, allocator, table);
   } else if (FILE_SQL_PARQUET == format) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "read_parquet");
+    ret = read_parquet_table(path, session_info, allocator, table);
   } else {
     ObString content;
     if (OB_FAIL(read_whole_file(path, allocator, content))) {
@@ -1132,8 +2616,14 @@ int read_file_table(const FileSqlFormat format,
       int64_t pos = 0;
       int64_t line = 1;
       bool is_array = false;
-      skip_json_space(content.ptr(), content.length(), pos, line);
-      is_array = (pos < content.length() && '[' == content.ptr()[pos]);
+      if (1 == options.json_format_) {
+        is_array = true;
+      } else if (2 == options.json_format_) {
+        is_array = false;
+      } else {
+        skip_json_space(content.ptr(), content.length(), pos, line);
+        is_array = (pos < content.length() && '[' == content.ptr()[pos]);
+      }
       if (FILE_SQL_JSON == format && is_array) {
         if (OB_FAIL(parse_json_array_rows(content, allocator, rows))) {
         }
