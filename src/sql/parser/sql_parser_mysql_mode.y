@@ -10847,6 +10847,27 @@ tbl_name
 {
   $$ = $1;
 }
+| relation_factor '(' expr_list ')' %prec LOWER_PARENS
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_TABLE, 2, $1, $3);
+  $$->sql_str_off_ = @1.first_column;
+}
+| relation_factor '(' expr_list ')' AS relation_name %prec LOWER_PARENS
+{
+  ParseNode *file_table_node = NULL;
+  malloc_non_terminal_node(file_table_node, result->malloc_pool_, T_FILE_SQL_TABLE, 2, $1, $3);
+  file_table_node->sql_str_off_ = @1.first_column;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALIAS, 5, file_table_node, $5, NULL, NULL, NULL);
+  $$->sql_str_off_ = @1.first_column;
+}
+| relation_factor '(' expr_list ')' relation_name %prec LOWER_PARENS
+{
+  ParseNode *file_table_node = NULL;
+  malloc_non_terminal_node(file_table_node, result->malloc_pool_, T_FILE_SQL_TABLE, 2, $1, $3);
+  file_table_node->sql_str_off_ = @1.first_column;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALIAS, 5, file_table_node, $4, NULL, NULL, NULL);
+  $$->sql_str_off_ = @1.first_column;
+}
 ;
 
 tbl_name:

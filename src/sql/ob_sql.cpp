@@ -3530,6 +3530,11 @@ int ObSql::need_add_plan(const ObPlanCacheCtx &pc_ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_hybrid_search()) {
     need_add_plan = false;
+  } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_file_table()) {
+    // File contents are materialized during resolve, so the plan depends on the
+    // file snapshot. Never cache such plans, otherwise later queries would keep
+    // reading stale rows after the underlying file changed.
+    need_add_plan = false;
   }
   return ret;
 }
