@@ -101,15 +101,11 @@ insert into file_sql_copy_source values (4, 'Delta'), (5, 'Echo');
 eval copy file_sql_copy_source
        to '$FILE_SQL_DATA_DIR/table_export.csv'
        (format csv, header, nullstr 'NULL');
---enable_query_log
 eval select id, name
        from read_csv('$FILE_SQL_DATA_DIR/table_export.csv')
       order by id;
---disable_query_log
 drop table file_sql_copy_source;
---enable_query_log
 
 set session enable_file_sql = OFF;
---enable_query_log
 
 --source mysql_test/test_suite/file_sql/include/remove_file_sql_data.inc
