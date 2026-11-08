@@ -1,0 +1,34 @@
+drop table if exists inlist_dup_compact;
+create table inlist_dup_compact(id int primary key, c int);
+insert into inlist_dup_compact values (1,1),(2,2),(3,3),(4,4),(5,null);
+explain basic select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c in (1,2,1,2,1,2);
+Query Plan
+=======================================
+|ID|OPERATOR       |NAME              |
+---------------------------------------
+|0 |TABLE FULL SCAN|inlist_dup_compact|
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_dup_compact.id]), filter([inlist_dup_compact.c IN (1, 2)]), rowset=16
+      access([inlist_dup_compact.id], [inlist_dup_compact.c]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([inlist_dup_compact.id]), range(MIN ; MAX)always true
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c in (1,2,1,2,1,2) order by id;
+id
+1
+2
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c not in (1,2,1,2,1,2) order by id;
+id
+3
+4
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c in (1,1,1,1) order by id;
+id
+1
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_dup_compact where c in (1,2,3,4,1,2) order by id;
+id
+1
+2
+3
+4
+drop table inlist_dup_compact;
