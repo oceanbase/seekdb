@@ -128,7 +128,7 @@ MERGE TABLE agent_sandbox_42.memory INTO agent_state.memory STRATEGY THEIRS;
 DROP DATABASE agent_sandbox_42;
 ```
 
-<sub>源码: [`tools/deploy/mysql_test/test_suite/fork_table/`](tools/deploy/mysql_test/test_suite/fork_table/)</sub>
+<sub>源码: [`unittest/mysql_test/test_suite/fork_table/`](unittest/mysql_test/test_suite/fork_table/)</sub>
 
 ### 🔍 一条 SQL 完成混合搜索
 

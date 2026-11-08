@@ -39,9 +39,9 @@ class MysqltestTest(unittest.TestCase):
     def add_case(self, name, result=True):
         if "." in name:
             suite, name = name.split(".", 1)
-            directory = self.deploy / "mysql_test/test_suite" / suite
+            directory = self.root / "unittest/mysql_test/test_suite" / suite
         else:
-            directory = self.deploy / "mysql_test"
+            directory = self.root / "unittest/mysql_test"
         test_file = directory / "t" / (name + ".test")
         result_file = directory / "r/mysql" / (name + ".result")
         test_file.parent.mkdir(parents=True, exist_ok=True)
