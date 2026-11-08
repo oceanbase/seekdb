@@ -84,7 +84,7 @@ eval copy (select id, name, score
 eval select id, name, score
        from read_csv('$FILE_SQL_DATA_DIR/export.csv')
       order by id;
---error 58000
+--error 1086
 eval copy (select id from read_csv('$FILE_SQL_DATA_DIR/basic.csv'))
        to '$FILE_SQL_DATA_DIR/export.csv'
        (format csv, header);
