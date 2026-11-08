@@ -625,6 +625,14 @@ public:
       const bool with_alias_name,
       const bool with_comma,
       ObSqlString &sql_string);
+  // Append `identifier` quoted with backticks, doubling every backtick that the identifier
+  // itself contains. A non-empty prefix (for example "__SHADOW_") is emitted inside the
+  // quotes. Keeping the escaping here means DDL identifier quoting never needs to include
+  // the upper sql module, so `share` stays a terminal module (see issue #1469).
+  static int append_quoted_identifier(
+      ObSqlString &sql_string,
+      const char *prefix,
+      const common::ObString &identifier);
   static int reshape_ddl_column_obj(
       common::ObDatum &datum,
       const ObObjMeta &obj_meta);
