@@ -180,6 +180,40 @@ private:
   int remove_duplicate_exprs(ObQueryCtx* query_ctx, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
   int recursive_remove_duplicate_exprs(ObQueryCtx &query_ctx, ObRawExpr* &expr, bool &trans_happened);
   int do_remove_duplicate_exprs(ObQueryCtx &query_ctx, ObIArray<ObRawExpr*> &exprs);
+
+  // Maximum conjunct count considered by remove_subsumed_range_predicates(). The scan is
+  // O(n^2), so a hard cap keeps an adversarially large filter list from burning compile time.
+  static constexpr int64_t MAX_SUBSUMED_RANGE_PREDICATE_CNT = 512;
+  // A normalized "column <cmp> constant" predicate. The column is always the left-hand side and
+  // the constant always the right-hand side, so `10 > c` is stored with `op_ == T_OP_LT`.
+  struct RangeCmpPredicate
+  {
+    RangeCmpPredicate()
+      : expr_(NULL), column_expr_(NULL), op_(T_INVALID), const_value_(), pos_(-1)
+    { const_value_.set_null(); }
+    void reset()
+    {
+      expr_ = NULL;
+      column_expr_ = NULL;
+      op_ = T_INVALID;
+      const_value_.set_null();
+      pos_ = -1;
+    }
+    bool is_valid() const { return NULL != expr_ && NULL != column_expr_ && T_INVALID != op_; }
+
+    ObRawExpr *expr_;        // the original predicate
+    ObRawExpr *column_expr_; // the column side
+    ObItemType op_;          // T_OP_EQ / T_OP_LT / T_OP_LE / T_OP_GT / T_OP_GE
+    ObObj const_value_;      // the constant side
+    int64_t pos_;            // position in the original conjunct list, -1 means "not in the list"
+  };
+  int remove_subsumed_range_predicates(ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
+  int recursive_remove_subsumed_range_predicates(ObRawExpr* &expr, bool &trans_happened);
+  int do_remove_subsumed_range_predicates(ObIArray<ObRawExpr*> &exprs, bool &trans_happened);
+  int extract_range_cmp_predicate(ObRawExpr *expr, int64_t pos, RangeCmpPredicate &range_pred);
+  int check_range_cmp_implies(const RangeCmpPredicate &strong,
+                              const RangeCmpPredicate &weak,
+                              bool &implied) const;
   int pull_similar_expr(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
   int recursive_pull_similar(ObDMLStmt *stmt, ObRawExpr* &expr, bool &trans_happened);
   int do_pull_similar(ObDMLStmt *stmt,
