@@ -28,6 +28,10 @@ cxxbridge_repository = use_repo_rule("//bazel:rust_repositories.bzl", "cxxbridge
 cxxbridge_repository(name = "cxxbridge_source")
 
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.render_config(
+    repositories = ["cxxbridge_deps"],
+    generate_cargo_toml_env_vars = False,
+)
 crate.annotation(
     crate = "*",
     repositories = ["rust_crates", "external_crates"],
@@ -37,6 +41,11 @@ crate.annotation(
     crate = "cxx",
     repositories = ["rust_crates"],
     additive_build_file = "//bazel:cxx_runtime.BUILD.bazel",
+)
+crate.annotation(
+    crate = "ring",
+    repositories = ["rust_crates"],
+    build_script_env = {"NUM_JOBS": "4"},
 )
 crate.annotation(
     crate = "spdlog-rs",

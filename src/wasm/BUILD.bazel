@@ -70,7 +70,6 @@ final_link(
         "--emit-symbol-map",
         "-pthread",
         "-msimd128",
-        "-sUSE_ZLIB=1",
         "-sPROXY_TO_PTHREAD=1",
         "-sMODULARIZE=1",
         "-sEXPORT_ES6=1",

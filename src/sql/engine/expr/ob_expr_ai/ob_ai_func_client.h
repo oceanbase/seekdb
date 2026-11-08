@@ -18,7 +18,10 @@
 #define OB_AI_FUNC_CLIENT_H_
 
 #include <atomic>
-#include <curl/curl.h>
+#ifndef __EMSCRIPTEN__
+#include <optional>
+#include "rust/http_client.h"
+#endif
 #include "ob_ai_func.h"
 
 namespace oceanbase 
@@ -50,22 +53,21 @@ public:
   bool check_batch_finished();
   int get_batch_result(ObArray<ObJsonObject *> &responses);
 private:
-  int error_handle(CURLcode res);
+#ifndef __EMSCRIPTEN__
+  int error_handle(const oceanbase::http::Result &result);
+  int add_http_request(ObJsonObject *data);
+#endif
   int send_post(ObJsonObject *data, ObJsonObject *&response);
   int send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray<ObJsonObject *> &responses);
-  int init_easy_handle(CURL *curl, ObJsonObject *data, ObStringBuffer &response_buf);
-  static size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp);
   bool is_retryable_status_code(int64_t http_code);
   bool is_timeout();
 private:
   static const int64_t CURL_MAX_TIMEOUT_SEC;
   common::ObIAllocator *allocator_;
-  char *url_;
-  struct curl_slist *header_list_;
-  CURLM *curlm_;
-  CURL *curl_;
-  ObArray<CURL *> curl_handles_;
-  ObArray<ObStringBuffer *> response_buffers_;
+#ifndef __EMSCRIPTEN__
+  std::optional<rust::Box<oceanbase::http::HttpClient>> http_client_;
+  std::optional<rust::Box<oceanbase::http::HttpBatch>> http_batch_;
+#endif
   // atomic boolean value, used to check if the batch task is finished
   std::atomic<bool> is_finished_;
   int64_t max_retry_times_;

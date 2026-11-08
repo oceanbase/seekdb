@@ -87,7 +87,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "share/ob_ddl_sim_point.h"
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
 #include "observer/ob_server_utils.h"
-#include "common/xml/ob_libxml2_sax_handler.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/composition/retrieval/ob_das_legacy_tr_merge_iter.h"
@@ -1089,10 +1088,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy sql engine");
     sql_engine_.destroy();
     FLOG_INFO("sql engine destroyed");
-
-    FLOG_INFO("begin to destroy xml ctx");
-    ObLibXml2SaxHandler::destroy();
-    FLOG_INFO("xml ctx destroyed");
 
     FLOG_INFO("begin to destroy pl engine");
     pl_engine_.destory();
@@ -2426,10 +2421,6 @@ int ObServer::init_sql()
       LOG_ERROR("allocate DTL service fail", KR(ret));
     } else if (OB_FAIL(DTL.init())) {
     }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObLibXml2SaxHandler::init();
   }
 
   if (OB_SUCC(ret)) {

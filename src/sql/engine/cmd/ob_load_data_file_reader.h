@@ -24,6 +24,8 @@
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "query/protocol/ob_client_protocol.h"
+#include "rust/compression.h"
+#include <optional>
 
 namespace oceanbase
 {
@@ -273,8 +275,7 @@ public:
   ObCSVGeneralFormat::ObCSVCompression compression_format() const override { return compression_format_; }
 
 private:
-  void *zlib_stream_ptr_    = nullptr;
-  bool  zstream_need_reset_ = false; // the zstreamptr should be reset if we got Z_STREAM_END
+  std::optional<rust::Box<compression::StreamDecoder>> decoder_;
 
   ObCSVGeneralFormat::ObCSVCompression compression_format_;
 };

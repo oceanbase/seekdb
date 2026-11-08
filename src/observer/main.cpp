@@ -62,7 +62,6 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #include "observer/ob_signal_handle.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_version.h"
-#include <curl/curl.h>
 #include <stdlib.h>
 #ifndef _WIN32
 #include <getopt.h>
@@ -718,8 +717,6 @@ int inner_main(int argc, char *argv[])
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(CONF_DIR))) {
     MPRINT("create log dir fail: ./etc/");
   } else if (FALSE_IT(create_observer_softlink())) {
-  } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
-    MPRINT("failed to init crypto malloc");
   }
   if (OB_FAIL(ret)) {
   } else if (!opts->nodaemon_ && !opts->initialize_) {
@@ -737,9 +734,6 @@ int inner_main(int argc, char *argv[])
   if (OB_FAIL(ret)) {
   } else {
     ObCurTraceId::set("Y0-0000000000000001-0-0");
-    CURLcode curl_code = curl_global_init(CURL_GLOBAL_ALL);
-    OB_ASSERT(CURLE_OK == curl_code);
-
     const char *syslog_file_info = ObServerUtils::build_syslog_file_info();
     OB_LOGGER.set_log_level(opts->log_level_);
     OB_LOGGER.set_max_file_size(LOG_FILE_SIZE);
@@ -794,7 +788,6 @@ int inner_main(int argc, char *argv[])
       }
       observer.destroy();
     }
-    curl_global_cleanup();
     unlink(PID_FILE_NAME);
   }
 

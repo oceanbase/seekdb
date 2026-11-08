@@ -252,32 +252,24 @@ int ObOutfileZstdStreamCompressor::compress(const char *src,
 int ObOutfileGzipStreamCompressor::init()
 {
   int ret = OB_SUCCESS;
-  zstr_.zalloc = ob_zlib_alloc;
-  zstr_.zfree = ob_zlib_free;
-  zstr_.opaque = static_cast<voidpf>(&allocator_);
-  int zlib_ret = deflateInit2(&zstr_, 5/* compression level */, Z_DEFLATED,
-                              15 + 16/* for gzip */, 8/* memLevel default value */,
-                              Z_DEFAULT_STRATEGY);
-  if (Z_OK != zlib_ret) {
-    ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-    LOG_WARN("zlib failed to deflateInit2", K(zlib_ret));
+  if (encoder_.has_value()) {
+    ret = OB_INIT_TWICE;
   } else {
-    z_stream_ended_ = false;
+    encoder_.emplace(compression::new_gzip_encoder());
   }
   return ret;
 }
 
 void ObOutfileGzipStreamCompressor::reset()
 {
-  if (!z_stream_ended_) {
-    deflateEnd(&zstr_);
-    z_stream_ended_ = true;
-  }
+  encoder_.reset();
 }
 
 void ObOutfileGzipStreamCompressor::reuse()
 {
-  deflateReset(&zstr_);
+  if (encoder_.has_value()) {
+    compression::gzip_reset(*encoder_.value());
+  }
 }
 
 int ObOutfileGzipStreamCompressor::compress(const char *src,
@@ -291,23 +283,29 @@ int ObOutfileGzipStreamCompressor::compress(const char *src,
 {
   int ret = OB_SUCCESS;
   if (NULL == dest
-      || 0 >= dest_capacity) {
+      || 0 >= dest_capacity
+      || !encoder_.has_value()
+      || src_size < 0
+      || consumed_size > static_cast<size_t>(src_size)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    zstr_.next_in = (Bytef *)(src + consumed_size);
-    zstr_.avail_in = src_size - consumed_size;
-    zstr_.avail_out = dest_capacity;
-    zstr_.next_out = (Bytef *)dest;
-    int flush_flag = is_file_end ? Z_FINISH : Z_NO_FLUSH;
-    int zlib_ret = deflate(&zstr_, flush_flag);
-    if (zlib_ret == Z_STREAM_ERROR) {
-      ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+    static const uint8_t EMPTY_INPUT = 0;
+    const uint8_t *input = src_size == consumed_size
+        ? &EMPTY_INPUT
+        : reinterpret_cast<const uint8_t *>(src) + consumed_size;
+    const auto progress = compression::gzip_process(
+        *encoder_.value(),
+        rust::Slice<const uint8_t>(input, src_size - consumed_size),
+        rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(dest), dest_capacity),
+        is_file_end);
+    if (compression::Code::Ok != progress.code) {
+      ret = compression::Code::OutOfMemory == progress.code
+          ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_COMPRESS_DECOMPRESS_DATA;
       LOG_WARN("failed to deflate", KP(src), K(src_size), K(dest_capacity));
-    }
-    if (OB_SUCC(ret)) {
-      compressed_size = dest_capacity - zstr_.avail_out;
-      consumed_size = zstr_.next_in - (Bytef *)src;
-      compress_ended = is_file_end ? (zlib_ret == Z_STREAM_END) : (zstr_.avail_in == 0 && zstr_.avail_out > 0);
+    } else {
+      compressed_size = progress.produced;
+      consumed_size += progress.consumed;
+      compress_ended = is_file_end ? progress.stream_end : progress.drained;
     }
   }
   return ret;

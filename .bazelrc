@@ -13,17 +13,21 @@ build --force_pic
 build --compilation_mode=opt
 build --@rules_rust//rust/settings:lto=thin
 build --@rules_rust//rust/settings:codegen_units=1
+build --@rules_rust//rust/settings:extra_exec_rustc_flag=-Copt-level=0
+build --@rules_rust//rust/settings:extra_exec_rustc_flag=-Cdebuginfo=0
 build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 build:clippy --output_groups=clippy_checks
 build:clippy --@rules_rust//rust/settings:clippy_flag=-Dwarnings
+build:clippy --@rules_rust//rust/settings:clippy_flag=-Cpanic=unwind
 # SLP spends most of this generated parser's compile time on location copies.
 build:linux --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
 build:macos --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
 build:windows --per_file_copt=sql_parser_mysql_mode_tab[.]c$@/clang:-fno-slp-vectorize
 # Allow developers to modify build outputs in place.
 build --experimental_writable_outputs
-# Windows generators use the installed SDK/Python utility paths.
+# Native generators and Cargo build scripts use installed SDK utilities.
 build:windows --action_env=PATH
+build:macos --action_env=PATH
 build:windows --repo_env=BAZEL_WIN32_WINNT=/D_WIN32_WINNT=0x0A00
 build:windows --platforms=//bazel/platforms:windows_x86_64
 build:windows --host_platform=//bazel/platforms:windows_x86_64
@@ -33,6 +37,7 @@ build:windows --features=compiler_param_file
 build:windows --features=-static_link_msvcrt
 build:O1 --compilation_mode=fastbuild
 build:O1 --copt=-O1
+build:O1 --@rules_rust//rust/settings:lto=off
 build:O2 --compilation_mode=opt
 # Apple's fastbuild/dbg DEBUG macro conflicts with seekdb's DEBUG log level.
 build:macos --copt=-UDEBUG
