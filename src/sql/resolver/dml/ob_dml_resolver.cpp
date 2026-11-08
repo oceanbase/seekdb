@@ -56,6 +56,7 @@ ObDMLResolver::ObDMLResolver(ObResolverParams &params)
       current_scope_(T_NONE_SCOPE),
       current_level_(0),
       field_list_first_(false),
+      has_approx_clause_(false),
       parent_namespace_resolver_(NULL),
       column_namespace_checker_(params),
       gen_col_exprs_(),
@@ -988,6 +989,7 @@ int ObDMLResolver::resolve_sql_expr(const ParseNode &node, ObRawExpr *&expr,
     ctx.is_extract_param_type_ = !params_.is_prepare_protocol_; //when prepare do not extract
     ctx.external_param_info_ = params_.external_param_info_.need_clear_ ? nullptr : &params_.external_param_info_;
     ctx.current_scope_ = current_scope_;
+    ctx.has_approx_clause_ = has_approx_clause_;
     ctx.stmt_ = static_cast<ObStmt*>(get_stmt());
     ctx.schema_checker_ = schema_checker_;
     ctx.session_info_ = session_info_;
