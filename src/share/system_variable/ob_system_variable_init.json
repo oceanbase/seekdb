@@ -2471,6 +2471,19 @@
     "background_cn": "默认关闭，避免本地文件被任意 SQL 读取",
     "ref_url": ""
   },
+  "ai_column_strict_read": {
+    "id": 10755,
+    "name": "ai_column_strict_read",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "whether reading AI columns requires all rows to be ready",
+    "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
+    "publish_version": "",
+    "info_cn": "严格读取 AI 列，存在未就绪数据时直接报错",
+    "background_cn": "默认关闭，未完成的结果以 NULL 返回",
+    "ref_url": ""
+  },
   "_enable_parallel_query": {
     "id": 10104,
     "name": "_enable_parallel_query",

@@ -34,7 +34,7 @@ ObExprAIEmbed::ObExprAIEmbed(common::ObIAllocator &alloc)
                         T_FUN_SYS_AI_EMBED, 
                         N_AI_EMBED, 
                         MORE_THAN_ZERO,
-                        NOT_VALID_FOR_GENERATED_COL, 
+                        VALID_FOR_GENERATED_COL, 
                         NOT_ROW_DIMENSION) 
 {
 }

@@ -4848,6 +4848,28 @@ column_definition_ref data_type opt_column_attribute_list opt_column_reference o
   merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $10);
   malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $7, $9, $12, $4);
 }
+| column_definition_ref data_type AI COLUMN '(' expr ')' WITH '(' expr_list ')' opt_generated_column_attribute_list opt_column_reference opt_position_column
+{
+  (void)($13);
+  ParseNode *attributes = NULL;
+  ParseNode *storage_type = NULL;
+  set_data_type_collation($2, NULL, true, false);
+  dup_expr_string($6, result, @6.first_column, @6.last_column);
+  merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $12);
+  malloc_terminal_node(storage_type, result->malloc_pool_, T_STORED_COLUMN);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $6, storage_type, $14, NULL);
+}
+| column_definition_ref data_type AI COLUMN '(' expr ')' opt_generated_column_attribute_list opt_column_reference opt_position_column
+{
+  (void)($9);
+  ParseNode *attributes = NULL;
+  ParseNode *storage_type = NULL;
+  set_data_type_collation($2, NULL, true, false);
+  dup_expr_string($6, result, @6.first_column, @6.last_column);
+  merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $8);
+  malloc_terminal_node(storage_type, result->malloc_pool_, T_STORED_COLUMN);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $6, storage_type, $10, NULL);
+}
 | column_definition_ref SERIAL opt_column_attribute_list opt_position_column 
 {
   ParseNode *unsigned_bigint_type = NULL;

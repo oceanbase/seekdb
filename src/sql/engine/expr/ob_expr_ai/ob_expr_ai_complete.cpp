@@ -31,7 +31,7 @@ ObExprAIComplete::ObExprAIComplete(common::ObIAllocator &alloc)
                         T_FUN_SYS_AI_COMPLETE, 
                         N_AI_COMPLETE,
                         MORE_THAN_ZERO, 
-                        NOT_VALID_FOR_GENERATED_COL,
+                        VALID_FOR_GENERATED_COL,
                         NOT_ROW_DIMENSION) 
 {
 }

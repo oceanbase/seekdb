@@ -3651,6 +3651,22 @@ int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
         expr_with_implicit_cast = expr;
         if (OB_FAIL(expr_with_implicit_cast->formalize(session_info, true))) {
         }
+      } else if (ob_is_collection_sql_type(cast_dst_type.get_type()) &&
+                 ObJsonType == expr->get_result_type().get_type()) {
+        // JSON values (e.g. ai_embed results) reach a collection column through
+        // a string intermediate, json -> collection cast is not supported.
+        ObRawExprResType string_type;
+        string_type.set_type(ObVarcharType);
+        string_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+        string_type.set_collation_level(CS_LEVEL_IMPLICIT);
+        string_type.set_accuracy(ObAccuracy::MAX_ACCURACY[ObVarcharType]);
+        ObRawExpr *string_expr = NULL;
+        if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(expr_factory, session_info,
+                                                            *expr, string_type, string_expr))) {
+        } else if (OB_FAIL(string_expr->formalize(session_info))) {
+        } else if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(expr_factory, session_info,
+                            *string_expr, cast_dst_type, expr_with_implicit_cast))) {
+        }
       } else if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(expr_factory, session_info,
                           *expr, cast_dst_type, expr_with_implicit_cast))) {
       } else if (OB_FAIL(expr_with_implicit_cast->formalize(session_info, true))) {
