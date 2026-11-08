@@ -1910,10 +1910,6 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
           && T_INSERT_SCOPE != current_scope_) {
         int add_ret = session_info_->add_ai_column_ref(table_item.ref_id_,
                                                        col_schema->get_column_id());
-        fprintf(stderr, "AI_STRICT basic ref tid=%lu cid=%lu ret=%d count=%ld\n",
-                table_item.ref_id_, col_schema->get_column_id(), add_ret,
-                session_info_->get_ai_column_ref_count());
-        fflush(stderr);
         if (OB_FAIL(add_ret)) {
           ret = add_ret;
         }
@@ -3045,9 +3041,6 @@ int ObDMLResolver::transfer_to_inner_joined(const ParseNode &parse_node, JoinedT
 //select&update&delete stmt can access joined table column, generated table column or base table column
 int ObDMLResolver::resolve_table_column_expr(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr)
 {
-  fprintf(stderr, "AI_STRICT resolve_table_column_expr col=%.*s\n",
-          q_name.col_name_.length(), q_name.col_name_.ptr());
-  fflush(stderr);
   //search order
   //1. joined table column
   //2. basic table column or generated table column
@@ -3080,14 +3073,8 @@ int ObDMLResolver::resolve_table_column_expr(const ObQualifiedName &q_name, ObRa
     const uint64_t cid = col_ref->get_column_id();
     const share::schema::ObColumnSchemaV2 *column_schema = NULL;
     int schema_ret = schema_checker_->get_column_schema(tid, cid, column_schema);
-    fprintf(stderr, "AI_STRICT ref tid=%lu cid=%lu schema_ret=%d schema=%p flag=%d\n",
-            tid, cid, schema_ret, column_schema,
-            NULL == column_schema ? -1 : column_schema->has_column_flag(AI_COLUMN_RESULT_FLAG));
-    fflush(stderr);
     if (OB_SUCCESS == schema_ret
         && NULL != column_schema && column_schema->has_column_flag(AI_COLUMN_RESULT_FLAG)) {
-      fprintf(stderr, "AI_STRICT resolver ref tid=%lu cid=%lu\n", tid, cid);
-      fflush(stderr);
       if (OB_FAIL(session_info_->add_ai_column_ref(tid, cid))) {
       }
     }

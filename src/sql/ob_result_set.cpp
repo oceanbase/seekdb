@@ -180,12 +180,8 @@ int ObResultSet::check_ai_column_strict_read()
   ObSQLSessionInfo &session = get_session();
   const int64_t ref_count = session.get_ai_column_ref_count();
   bool strict_read = false;
-  fprintf(stderr, "AI_STRICT result refs=%ld\n", ref_count);
-  fflush(stderr);
   if (0 == ref_count) {
   } else if (OB_FAIL(session.get_sys_variable(SYS_VAR_AI_COLUMN_STRICT_READ, strict_read))) {
-  } else if (FALSE_IT(fprintf(stderr, "AI_STRICT sysvar=%d\n", strict_read))) {
-  } else if (FALSE_IT(fflush(stderr))) {
   } else if (!strict_read) {
     session.clear_ai_column_refs();
   } else {

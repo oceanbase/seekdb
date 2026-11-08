@@ -1125,9 +1125,6 @@ int ObAlterTableExecutor::execute_ai_column_retry(ObExecContext &ctx,
                                                   ObAlterTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  fprintf(stderr, "AI_RETRY exec enter table=%lu col=%lu\n",
-          stmt.get_alter_table_arg().table_id_, stmt.get_retry_ai_column_id());
-  fflush(stderr);
   const uint64_t table_id = OB_INVALID_ID != stmt.get_alter_table_arg().table_id_
                             ? stmt.get_alter_table_arg().table_id_
                             : stmt.get_alter_table_arg().alter_table_schema_.get_table_id();
@@ -1155,16 +1152,10 @@ int ObAlterTableExecutor::execute_ai_column_retry(ObExecContext &ctx,
     request_column_id = stmt.get_retry_ai_request_column_id();
     spec_column_id = stmt.get_retry_ai_spec_column_id();
   }
-  fprintf(stderr, "AI_RETRY after schema ret=%d table_schema=%p db=%p result_col=%p ids=%lu/%lu/%lu\n",
-          ret, table_schema, db_schema, result_column, state_column_id,
-          request_column_id, spec_column_id);
-  fflush(stderr);
 
   const ObColumnSchemaV2 *state_column = NULL;
   const ObColumnSchemaV2 *request_column = NULL;
   const ObColumnSchemaV2 *spec_column = NULL;
-  fprintf(stderr, "AI_RETRY exec stage2 ret=%d\n", ret);
-  fflush(stderr);
   if (OB_FAIL(ret)) {
   } else if (NULL == (state_column = table_schema->get_column_schema(state_column_id))
              || NULL == (request_column = table_schema->get_column_schema(request_column_id))
@@ -1246,10 +1237,6 @@ int ObAlterTableExecutor::execute_ai_column_retry(ObExecContext &ctx,
                                           predicate.string().length(), predicate.string().ptr()))) {
   }
 
-  fprintf(stderr, "AI_RETRY exec pred=%.*s rowkey=%.*s\n",
-          predicate.string().length(), predicate.string().ptr(),
-          rowkey_expr.string().length(), rowkey_expr.string().ptr());
-  fflush(stderr);
   if (OB_SUCC(ret)) {
     ObMySQLTransaction trans;
     bool started = false;

@@ -477,8 +477,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             break;
           }
         case T_AI_COLUMN_RETRY: {
-          fprintf(stderr, "AI_RETRY resolver enter\n");
-          fflush(stderr);
           if (node.num_child_ > 1) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED,
@@ -488,8 +486,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
           } else {
             const ParseNode *name_node = action_node->children_[0];
             ObString col_name(name_node->str_len_, name_node->str_value_);
-            fprintf(stderr, "AI_RETRY col=%.*s\n", col_name.length(), col_name.ptr());
-            fflush(stderr);
             const ObColumnSchemaV2 *col = NULL;
             if (OB_ISNULL(table_schema_)
                 || NULL == (col = table_schema_->get_column_schema(col_name))
@@ -555,8 +551,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
                 if (OB_FAIL(ob_write_string(*allocator_, predicate, predicate_copy))) {
                 } else {
                   alter_table_stmt->set_retry_ai_predicate(predicate_copy);
-                  fprintf(stderr, "AI_RETRY pred=%.*s\n", predicate_copy.length(), predicate_copy.ptr());
-                  fflush(stderr);
                 }
               }
             }

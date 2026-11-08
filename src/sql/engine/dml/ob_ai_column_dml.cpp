@@ -300,8 +300,6 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
                            const DmlEvent event)
 {
   int ret = OB_SUCCESS;
-  fprintf(stderr, "AI_DML process event=%d\n", static_cast<int>(event));
-  fflush(stderr);
   ObExecContext &exec_ctx = op.get_exec_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
   ObSqlCtx *sql_ctx = exec_ctx.get_sql_ctx();
@@ -338,8 +336,6 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(load_ai_column_defs(op, *table_schema, alloc, defs))) {
-    fprintf(stderr, "AI_DML load defs failed ret=%d\n", ret);
-    fflush(stderr);
   } else if (defs.empty()) {
     // metadata is missing
   } else if (AI_DML_UPDATE == event) {
@@ -353,8 +349,6 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
 
   if (OB_FAIL(ret) || skip) {
   } else {
-    fprintf(stderr, "AI_DML building sql defs=%ld\n", defs.count());
-    fflush(stderr);
     common::ObSqlString predicate;
     common::ObSqlString update_sql;
     common::ObSqlString task_sql;
@@ -367,8 +361,6 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
     const ExprFixedArray &rowkey_row = (AI_DML_DELETE == event)
                                        ? ctdef.old_row_ : ctdef.new_row_;
     if (OB_FAIL(build_rowkey_predicate(op, ctdef, rowkey_row, *table_schema, predicate))) {
-      fprintf(stderr, "AI_DML predicate failed ret=%d\n", ret);
-      fflush(stderr);
     } else if (AI_DML_DELETE == event) {
       if (OB_FAIL(clean_sql.append_fmt(
                     "DELETE FROM oceanbase.%s WHERE table_id = %lu AND rowkey_predicate = ",
@@ -436,9 +428,6 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
       }
     }
 
-    fprintf(stderr, "AI_DML sql built ret=%d update_len=%ld task_len=%ld\n",
-            ret, update_sql.length(), task_sql.length());
-    fflush(stderr);
     if (OB_SUCC(ret)) {
       session->set_in_ai_column_maintenance(true);
       exec_ctx.get_das_ctx().is_ai_column_cascading_ = true;
