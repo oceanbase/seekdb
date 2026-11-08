@@ -318,7 +318,10 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   int ret = OB_SUCCESS;
   static int64_t FT_WORD_DOC_COL_CNT = 4;
   static constexpr int64_t FT_MAX_WORD_BUCKET = 1999;
-  const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 3, 3), FT_MAX_WORD_BUCKET);
+  // Word map is reused across rows, so size it once for the longest expected
+  // text. ObHashMap does not auto-extend (EXTEND_RATIO=1), so a too-small
+  // bucket count would degrade to O(n) chaining on word-heavy rows.
+  const int64_t ft_word_bkt_cnt = FT_MAX_WORD_BUCKET;
   int64_t doc_length = 0;
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
