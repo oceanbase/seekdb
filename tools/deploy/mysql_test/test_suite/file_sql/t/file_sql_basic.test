@@ -34,6 +34,12 @@ eval select id, name, score, active, day, created,
 eval select count(*) AS row_count, sum(id) AS id_sum,
             round(avg(score), 2) AS score_avg, sum(active) AS active_count
        from read_csv('$FILE_SQL_DATA_DIR/basic.csv', header = true, sample_size = -1) f;
+eval select active, count(*) AS row_count, sum(id) AS id_sum
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+      group by active
+     having sum(id) >= 2
+      order by active desc
+      limit 2;
 
 --echo # JSONL union schema and missing fields
 eval select id, name, score, active, day, note

@@ -9,6 +9,9 @@ id	name	score	active	day	created	note	id__2
 3	Chen	90.25	1	2026-08-03	2026-08-03 12:13:14	say "hi"	103
 row_count	id_sum	score_avg	active_count
 3	6	91.92	2
+active	row_count	id_sum
+1	2	4
+0	1	2
 # JSONL union schema and missing fields
 id	name	score	active	day	note
 1	Alice	98.5	1	NULL	NULL
