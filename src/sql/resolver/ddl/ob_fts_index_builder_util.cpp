@@ -1045,9 +1045,18 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
         decided_parallelism = MAX(original_parallelism, 1L);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
+        decided_parallelism = MAX(original_parallelism / 3, 1L);
+        break;
       case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
-        decided_parallelism = MAX(original_parallelism / 3, 1L);
+        // The inverted index and the doc-word auxiliary table are the two
+        // CPU-heavy legs of an FTS DDL.  A plain ALTER TABLE without an
+        // explicit PARALLEL clause otherwise reaches this branch with
+        // original_parallelism == 1, serialising the whole tokenize/sort
+        // pipeline.  Give these two legs a small floor so a default DDL can
+        // use the available cores; unlike data redistribution, tokenizing
+        // disjoint macro blocks has no ordering dependency.
+        decided_parallelism = MAX(original_parallelism, 4L);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:
