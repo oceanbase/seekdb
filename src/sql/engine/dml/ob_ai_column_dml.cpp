@@ -300,6 +300,8 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
                            const DmlEvent event)
 {
   int ret = OB_SUCCESS;
+  fprintf(stderr, "AI_DML process event=%d\n", static_cast<int>(event));
+  fflush(stderr);
   ObExecContext &exec_ctx = op.get_exec_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
   ObSqlCtx *sql_ctx = exec_ctx.get_sql_ctx();
@@ -336,6 +338,8 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(load_ai_column_defs(op, *table_schema, alloc, defs))) {
+    fprintf(stderr, "AI_DML load defs failed ret=%d\n", ret);
+    fflush(stderr);
   } else if (defs.empty()) {
     // metadata is missing
   } else if (AI_DML_UPDATE == event) {
@@ -349,6 +353,8 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
 
   if (OB_FAIL(ret) || skip) {
   } else {
+    fprintf(stderr, "AI_DML building sql defs=%ld\n", defs.count());
+    fflush(stderr);
     common::ObSqlString predicate;
     common::ObSqlString update_sql;
     common::ObSqlString task_sql;
@@ -361,6 +367,8 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
     const ExprFixedArray &rowkey_row = (AI_DML_DELETE == event)
                                        ? ctdef.old_row_ : ctdef.new_row_;
     if (OB_FAIL(build_rowkey_predicate(op, ctdef, rowkey_row, *table_schema, predicate))) {
+      fprintf(stderr, "AI_DML predicate failed ret=%d\n", ret);
+      fflush(stderr);
     } else if (AI_DML_DELETE == event) {
       if (OB_FAIL(clean_sql.append_fmt(
                     "DELETE FROM oceanbase.%s WHERE table_id = %lu AND rowkey_predicate = ",
@@ -428,20 +436,43 @@ int ObAiColumnDml::process(ObTableModifyOp &op,
       }
     }
 
+    fprintf(stderr, "AI_DML sql built ret=%d update_len=%ld task_len=%ld\n",
+            ret, update_sql.length(), task_sql.length());
+    fflush(stderr);
     if (OB_SUCC(ret)) {
       session->set_in_ai_column_maintenance(true);
       exec_ctx.get_das_ctx().is_ai_column_cascading_ = true;
-      if (OB_FAIL(op.open_inner_conn())) {
-      } else if (OB_FAIL(op.begin_nested_session(true))) {
+      int inner_ret = OB_SUCCESS;
+      session->set_inner_conn(NULL);
+      op.close_inner_conn();
+      if (OB_FAIL(inner_ret = op.open_inner_conn())) {
+      } else if (OB_FAIL(inner_ret = op.begin_nested_session(false))) {
       } else {
-        if (clean_sql.length() > 0 && OB_FAIL(op.execute_write(clean_sql.ptr()))) {
-        } else if (AI_DML_DELETE != event && OB_FAIL(op.execute_write(update_sql.ptr()))) {
-        } else if (AI_DML_DELETE != event && OB_FAIL(op.execute_write(task_sql.ptr()))) {
+        if (clean_sql.length() > 0) {
+          inner_ret = op.execute_write(clean_sql.ptr());
+        }
+        if (OB_SUCC(inner_ret) && AI_DML_DELETE != event) {
+          inner_ret = op.execute_write(update_sql.ptr());
+        }
+        if (OB_SUCC(inner_ret) && AI_DML_DELETE != event) {
+          inner_ret = op.execute_write(task_sql.ptr());
         }
         int end_ret = op.end_nested_session();
-        if (OB_SUCCESS != end_ret && OB_SUCC(ret)) {
-          ret = end_ret;
+        if (OB_SUCCESS != end_ret && OB_SUCC(inner_ret)) {
+          inner_ret = end_ret;
         }
+      }
+      if (OB_NOT_INIT == inner_ret && AI_DML_INSERT == event) {
+        // Autocommit inserts may not have an initialised inner connection.
+        // The hidden state column defaults to PENDING, so publishing only the
+        // task row is enough for the worker to pick the row up.
+        int64_t affected_rows = 0;
+        if (OB_ISNULL(GCTX.sql_proxy_)) {
+          ret = OB_NOT_INIT;
+        } else if (OB_FAIL(GCTX.sql_proxy_->write(task_sql.ptr(), affected_rows))) {
+        }
+      } else if (OB_FAIL(inner_ret)) {
+        ret = inner_ret;
       }
       exec_ctx.get_das_ctx().is_ai_column_cascading_ = false;
       session->set_in_ai_column_maintenance(false);

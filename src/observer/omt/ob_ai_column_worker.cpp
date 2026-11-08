@@ -433,7 +433,8 @@ int ObAiColumnWorker::process_group(ObIAllocator &alloc, ObIArray<TaskRow> &grou
           } else {
             ObString current_request;
             if (OB_FAIL(result->get_varchar(static_cast<int64_t>(0), current_request))) {
-            } else if (current_request != group.at(i).request_id_) {
+            } else if (!current_request.empty()
+                       && current_request != group.at(i).request_id_) {
               stale = true;
             }
           }

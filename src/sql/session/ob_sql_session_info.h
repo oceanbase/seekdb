@@ -640,16 +640,24 @@ public:
   {
     int ret = common::OB_SUCCESS;
     bool found = false;
-    for (int64_t i = 0; !found && i < ai_column_refs_.count(); ++i) {
-      found = ai_column_refs_.at(i).table_id_ == table_id
-              && ai_column_refs_.at(i).column_id_ == column_id;
+    for (int64_t i = 0; !found && i < ai_column_ref_count_; ++i) {
+      found = ai_column_refs_[i].table_id_ == table_id
+              && ai_column_refs_[i].column_id_ == column_id;
     }
-    if (!found && OB_FAIL(ai_column_refs_.push_back(ObAiColumnRef(table_id, column_id)))) {
+    if (!found) {
+      if (ai_column_ref_count_ >= MAX_AI_COLUMN_REFS) {
+        ret = common::OB_SIZE_OVERFLOW;
+      } else {
+        ai_column_refs_[ai_column_ref_count_].table_id_ = table_id;
+        ai_column_refs_[ai_column_ref_count_].column_id_ = column_id;
+        ++ai_column_ref_count_;
+      }
     }
     return ret;
   }
-  const common::ObSEArray<ObAiColumnRef, 4> &get_ai_column_refs() const { return ai_column_refs_; }
-  void clear_ai_column_refs() { ai_column_refs_.reuse(); }
+  int64_t get_ai_column_ref_count() const { return ai_column_ref_count_; }
+  const ObAiColumnRef &get_ai_column_ref(const int64_t i) const { return ai_column_refs_[i]; }
+  void clear_ai_column_refs() { ai_column_ref_count_ = 0; }
   void reset_audit_record(bool need_retry = false)
   {
     if (!need_retry) {
@@ -934,7 +942,9 @@ private:
 //  int64_t has_write_stmt_in_trans_;
   bool inner_flag_; // whether it is a virtual session for an internal request
   bool in_ai_column_maintenance_ = false;
-  common::ObSEArray<ObAiColumnRef, 4> ai_column_refs_;
+  static const int64_t MAX_AI_COLUMN_REFS = 16;
+  ObAiColumnRef ai_column_refs_[MAX_AI_COLUMN_REFS];
+  int64_t ai_column_ref_count_ = 0;
   // After version 2.2, this variable is no longer used
   bool is_max_availability_mode_;
   typedef common::hash::ObHashMap<ObPsStmtId, ObPsSessionInfo *,

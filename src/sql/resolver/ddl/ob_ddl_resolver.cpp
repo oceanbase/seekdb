@@ -2490,6 +2490,10 @@ int ObDDLResolver::resolve_ai_column_definition(ObColumnSchemaV2 &column,
         if (0 == role) {
           hidden.set_data_type(ObIntType);
           hidden.set_accuracy(ObAccuracy(11, 0));
+          ObObj pending_default;
+          pending_default.set_int(1);
+          if (OB_FAIL(hidden.set_cur_default_value(pending_default, false))) {
+          }
         } else {
           hidden.set_data_type(ObVarcharType);
           hidden.set_accuracy(ObAccuracy(1 == role ? 1024 : 4096));

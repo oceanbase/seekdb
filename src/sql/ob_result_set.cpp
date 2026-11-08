@@ -178,11 +178,14 @@ int ObResultSet::check_ai_column_strict_read()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo &session = get_session();
-  const common::ObSEArray<ObSQLSessionInfo::ObAiColumnRef, 4> &refs =
-      session.get_ai_column_refs();
+  const int64_t ref_count = session.get_ai_column_ref_count();
   bool strict_read = false;
-  if (refs.empty()) {
+  fprintf(stderr, "AI_STRICT result refs=%ld\n", ref_count);
+  fflush(stderr);
+  if (0 == ref_count) {
   } else if (OB_FAIL(session.get_sys_variable(SYS_VAR_AI_COLUMN_STRICT_READ, strict_read))) {
+  } else if (FALSE_IT(fprintf(stderr, "AI_STRICT sysvar=%d\n", strict_read))) {
+  } else if (FALSE_IT(fflush(stderr))) {
   } else if (!strict_read) {
     session.clear_ai_column_refs();
   } else {
@@ -191,11 +194,11 @@ int ObResultSet::check_ai_column_strict_read()
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < refs.count(); ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < ref_count; ++i) {
       const ObTableSchema *table_schema = NULL;
       const ObDatabaseSchema *db_schema = NULL;
-      const uint64_t table_id = refs.at(i).table_id_;
-      const uint64_t column_id = refs.at(i).column_id_;
+      const uint64_t table_id = session.get_ai_column_ref(i).table_id_;
+      const uint64_t column_id = session.get_ai_column_ref(i).column_id_;
       ObSqlString meta_sql;
       uint64_t state_column_id = OB_INVALID_ID;
       if (OB_FAIL(guard.get_table_schema(table_id, table_schema))) {
