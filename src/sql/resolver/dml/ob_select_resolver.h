@@ -47,6 +47,7 @@ protected:
   int64_t parent_aggr_level_;
 };
 
+struct ObExternalFileFormat;
 class ObSelectResolver: public ObDMLResolver, public ObChildStmtResolver
 {
 public:
@@ -171,6 +172,12 @@ protected:
   int resolve_into_file_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_without_format(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item);
+  int resolve_copy_options(const ParseNode *node,
+                           ObExternalFileFormat &format,
+                           bool &has_format_type);
+  int apply_copy_option(const ParseNode *node,
+                        ObExternalFileFormat &format,
+                        bool &has_format_type);
   // resolve_star related functions
   int resolve_star_for_table_groups();
   int find_joined_table_group_for_table(const uint64_t table_id, int64_t &jt_idx);

@@ -3438,7 +3438,7 @@ static int get_file_table_option_value(const ParseNode *value_node,
       case T_BOOL:
         int_value = value_node->value_;
         break;
-      case T_NEG: {
+      case T_OP_NEG: {
         const ParseNode *child = (NULL == value_node->children_) ? NULL : value_node->children_[0];
         if (OB_ISNULL(child) || T_INT != child->type_) {
           ret = OB_INVALID_ARGUMENT;
@@ -3519,8 +3519,8 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_node,
     const ParseNode *name = NULL;
     if (OB_ISNULL(arg_node) || T_OP_EQ != arg_node->type_ || 2 != arg_node->num_child_ ||
         OB_ISNULL(arg_node->children_) || OB_ISNULL(arg_node->children_[0])) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file table, options must be specified as name = value");
+      ret = OB_ERR_PARSE_SQL;
+      LOG_WARN("file table options must be specified as name = value", K(ret));
     } else if (T_IDENT == arg_node->children_[0]->type_) {
       name = arg_node->children_[0];
     } else if (T_COLUMN_REF == arg_node->children_[0]->type_ &&
@@ -3535,7 +3535,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_node,
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file table, options must be specified as name = value");
     }
     if (OB_SUCC(ret)) {
-      ObString option_name(name->str_value_, static_cast<int32_t>(name->str_len_));
+      ObString option_name(static_cast<int64_t>(name->str_len_), name->str_value_);
       int64_t int_value = 0;
       ObString str_value;
       bool is_string = false;

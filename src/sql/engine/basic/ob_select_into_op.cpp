@@ -38,7 +38,7 @@ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+    external_properties_, header_names_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -921,25 +921,50 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
   char char_n = 'N';
-  const bool need_enclose = has_enclose_ && !obj.is_null()
-                            && (!is_optional_ || obj.is_string_type() || obj.is_collection_sql_type()
-                                || obj.is_json() || obj.is_geometry() || obj.is_date()
-                                || obj.is_time() || obj.is_timestamp() || obj.is_datetime()
-                                || obj.is_mysql_date() || obj.is_mysql_datetime());
-  if (need_enclose) {
-    OZ(write_single_char_to_file(&char_enclose_, data_writer));
-  }
-  if (!has_escape_) {
-    OZ(write_obj_to_file(obj, data_writer, false));
-  } else if (obj.is_null()) {
-    OZ(write_single_char_to_file(&char_escape_, data_writer));
-    OZ(write_single_char_to_file(&char_n, data_writer));
+  if (obj.is_null() && external_properties_.csv_format_.null_if_.count() > 0) {
+    ObObj null_obj;
+    null_obj.set_varchar(external_properties_.csv_format_.null_if_.at(0));
+    null_obj.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+    OZ(write_obj_to_file(null_obj, data_writer, false));
   } else {
-    OZ(write_obj_to_file(obj, data_writer, true));
+    const bool need_enclose = has_enclose_ && !obj.is_null()
+                              && (!is_optional_ || obj.is_string_type() || obj.is_collection_sql_type()
+                                  || obj.is_json() || obj.is_geometry() || obj.is_date()
+                                  || obj.is_time() || obj.is_timestamp() || obj.is_datetime()
+                                  || obj.is_mysql_date() || obj.is_mysql_datetime());
+    if (need_enclose) {
+      OZ(write_single_char_to_file(&char_enclose_, data_writer));
+    }
+    if (!has_escape_) {
+      OZ(write_obj_to_file(obj, data_writer, false));
+    } else if (obj.is_null()) {
+      OZ(write_single_char_to_file(&char_escape_, data_writer));
+      OZ(write_single_char_to_file(&char_n, data_writer));
+    } else {
+      OZ(write_obj_to_file(obj, data_writer, true));
+    }
+    if (need_enclose) {
+      OZ(write_single_char_to_file(&char_enclose_, data_writer));
+    }
   }
-  if (need_enclose) {
-    OZ(write_single_char_to_file(&char_enclose_, data_writer));
+  return ret;
+}
+
+int ObSelectIntoOp::write_header_line(ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<ObString> &header_names = MY_SPEC.header_names_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < header_names.count(); ++i) {
+    ObObj name_obj;
+    name_obj.set_varchar(header_names.at(i));
+    name_obj.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+    // Header names are written as-is, DuckDB does not enclose them.
+    OZ(write_obj_to_file(name_obj, data_writer, false));
+    if (OB_SUCC(ret) && i != header_names.count() - 1) {
+      OZ(write_obj_to_file(field_str_, data_writer));
+    }
   }
+  OZ(write_obj_to_file(line_str_, data_writer));
   return ret;
 }
 
@@ -952,6 +977,11 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
   ObCsvFileWriter *csv_data_writer = NULL;
   if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (!header_written_ && MY_SPEC.header_names_.count() > 0) {
+    if (OB_FAIL(write_header_line(*csv_data_writer))) {
+    } else {
+      header_written_ = true;
+    }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
     if (OB_ISNULL(select_exprs.at(i))) {
@@ -995,6 +1025,14 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
     if (OB_FAIL(select_exprs.at(i)->eval_batch(eval_ctx_, *brs.skip_, brs.size_))) {
     } else if (OB_FAIL(datum_vectors.push_back(select_exprs.at(i)->locate_expr_datumvector(eval_ctx_)))) {
+    }
+  }
+  if (OB_SUCC(ret) && !header_written_ && MY_SPEC.header_names_.count() > 0) {
+    if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(write_header_line(*csv_data_writer))) {
+    } else {
+      header_written_ = true;
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < brs.size_; ++i) {
@@ -1215,7 +1253,7 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 #endif
     ret = OB_FILE_NOT_EXIST;
   } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
-                                                                SYS_VAR_SECURE_FILE_PRIV,
+                                                                share::SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
   } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
