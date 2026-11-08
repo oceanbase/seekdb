@@ -1,0 +1,20 @@
+CREATE DATABASE ddl_column_identifier_escaping;
+USE ddl_column_identifier_escaping;
+CREATE TABLE c2_backtick_column (id INT PRIMARY KEY, `value``key` INT);
+INSERT INTO c2_backtick_column VALUES (1,10),(2,20);
+CREATE UNIQUE INDEX c2_plain_idx ON c2_backtick_column (`value``key`);
+SELECT id, `value``key` AS column_value FROM c2_backtick_column FORCE INDEX (c2_plain_idx) ORDER BY id;
+id	column_value
+1	10
+2	20
+DROP TABLE c2_backtick_column;
+CREATE TABLE c2_backtick_types (id INT PRIMARY KEY, `enum``value` ENUM('a','b'), `set````value` SET('x','y'), n INT);
+INSERT INTO c2_backtick_types VALUES (1,'a','x',10),(2,'b','y',20);
+CREATE UNIQUE INDEX c2_type_idx ON c2_backtick_types (`enum``value`,`set````value`,n);
+SELECT id, CAST(`enum``value` AS UNSIGNED) AS enum_value, CAST(`set````value` AS UNSIGNED) AS set_value, n FROM c2_backtick_types FORCE INDEX (c2_type_idx) ORDER BY id;
+id	enum_value	set_value	n
+1	1	1	10
+2	2	2	20
+DROP TABLE c2_backtick_types;
+USE test;
+DROP DATABASE ddl_column_identifier_escaping;
