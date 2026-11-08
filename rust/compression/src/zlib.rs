@@ -337,6 +337,14 @@ impl StreamDecoder {
     }
 
     pub fn process(&mut self, input: &[u8], output: &mut [u8]) -> Result<StreamProgress, Error> {
+        if self.needs_reset && input.is_empty() {
+            return Ok(StreamProgress {
+                consumed: 0,
+                produced: 0,
+                drained: !output.is_empty(),
+                stream_end: true,
+            });
+        }
         if self.needs_reset {
             // Inflate::reset(true) selects zlib-only mode rather than autodetection.
             self.stream = Inflate::new(true, AUTO_WINDOW_BITS);
