@@ -55,6 +55,7 @@ private:
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
+  storage::ObFTWordMap reusable_word_map_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);
@@ -182,6 +183,7 @@ public:
                                          const ObDatum &doc_id_datum,
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
+                                         storage::ObFTWordMap &word_map,
                                          ObDomainIndexRow &word_rows);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
@@ -340,6 +342,7 @@ public:
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(),
     ft_parse_helper_(),
+    reusable_word_map_(),
     is_inited_(false)
   {
     ObDomainDMLIterator::mode_ = mode;
@@ -372,6 +375,7 @@ private:
   const ObFTDocWordInfo *doc_word_info_;
   storage::ObFTDocWordScanIterator ft_doc_word_iter_;
   storage::ObFTParseHelper ft_parse_helper_;
+  storage::ObFTWordMap reusable_word_map_;
   bool is_inited_;
 };
 

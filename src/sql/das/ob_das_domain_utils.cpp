@@ -96,6 +96,7 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
                                                                    doc_id_datum,
                                                                    fulltext,
                                                                    is_fts_index_aux_,
+                                                                   reusable_word_map_,
                                                                    rows_))) {
     LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
   } else {
@@ -311,6 +312,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
                                                              const ObDatum &doc_id_datum,
                                                              const ObString &fulltext,
                                                              const bool is_fts_index_aux,
+                                                             storage::ObFTWordMap &ft_word_map,
                                                              ObDomainIndexRow &word_rows)
 {
   int ret = OB_SUCCESS;
@@ -318,7 +320,6 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   static constexpr int64_t FT_MAX_WORD_BUCKET = 1999;
   const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 3, 3), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
-  ObFTWordMap ft_word_map;
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
@@ -326,7 +327,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+  } else if (!ft_word_map.created() && OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
     LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
@@ -1126,6 +1127,7 @@ int ObFTDMLIterator::generate_ft_word_rows(const ObChunkDatumStore::StoredRow *s
                                                                    doc_id_datum,
                                                                    ft,
                                                                    is_fts_index_aux,
+                                                                   reusable_word_map_,
                                                                    rows_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("fail to generate fulltext word rows",
@@ -1219,6 +1221,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     ObString ft;
     common::ObObjMeta ft_meta;
     ObDomainIndexRow rows;
+    storage::ObFTWordMap local_word_map;
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
     if (OB_FAIL(ft_parse_helper.init(&allocator, parser_str, parser_property_str))) {
       LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
@@ -1232,6 +1235,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
                                                                      check_id_datum,
                                                                      ft,
                                                                      is_fts_index_aux,
+                                                                     local_word_map,
                                                                      rows))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("fail to generate fulltext word rows",

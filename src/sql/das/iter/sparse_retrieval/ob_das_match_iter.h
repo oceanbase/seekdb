@@ -65,6 +65,7 @@ private:
 private:
   common::ObDatumCmpFuncType cmp_func_;
   const ObFixedArray<ObDocIdExt, ObIAllocator> *iter_ids_;
+  bool is_uint64_;
   bool is_inited_;
 };
 

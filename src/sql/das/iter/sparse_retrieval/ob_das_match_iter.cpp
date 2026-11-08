@@ -661,6 +661,7 @@ int ObDasBestfieldCollector::get_result(double &relevance, bool &is_valid)
 ObDASMatchMergeCmp::ObDASMatchMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    is_uint64_(false),
     is_inited_(false)
 {
 }
@@ -673,11 +674,16 @@ int ObDASMatchMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<ObDocIdExt,
     LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids));
   } else {
     iter_ids_ = iter_ids;
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
-    cmp_func_ = basic_funcs->null_first_cmp_;
-    if (OB_ISNULL(cmp_func_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
+    is_uint64_ = (ObUInt64Type == id_meta.type_);
+    if (!is_uint64_) {
+      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
+      cmp_func_ = basic_funcs->null_first_cmp_;
+      if (OB_ISNULL(cmp_func_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
+      } else {
+        is_inited_ = true;
+      }
     } else {
       is_inited_ = true;
     }
@@ -694,6 +700,10 @@ int ObDASMatchMergeCmp::cmp(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
+  } else if (is_uint64_) {
+    const uint64_t lv = get_id_datum(l.iter_idx_).get_uint64();
+    const uint64_t rv = get_id_datum(r.iter_idx_).get_uint64();
+    cmp_ret = (lv < rv) ? -1 : (lv > rv) ? 1 : 0;
   } else {
     int tmp_ret = 0;
     if (OB_FAIL(cmp_func_(get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret))) {
