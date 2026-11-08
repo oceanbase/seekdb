@@ -1,0 +1,38 @@
+CREATE TABLE ddl_column_quoting (
+  `pk``id` INT PRIMARY KEY,
+  `tick````value` INT,
+  `en``um` ENUM('red', 'green'),
+  `s``et` SET('x', 'y')
+);
+INSERT INTO ddl_column_quoting VALUES
+  (1, 100, 'red', 'x'), (2, 200, 'green', 'y'),
+  (3, NULL, NULL, NULL), (4, NULL, NULL, NULL);
+CREATE UNIQUE INDEX idx_tick ON ddl_column_quoting (`tick````value`);
+CREATE UNIQUE INDEX idx_enum ON ddl_column_quoting (`en``um`);
+CREATE UNIQUE INDEX idx_set ON ddl_column_quoting (`s``et`);
+SELECT `pk``id`, `tick````value`, `en``um`, `s``et`,
+       CAST(`en``um` AS UNSIGNED) AS enum_ordinal,
+       CAST(`s``et` AS UNSIGNED) AS set_bits
+FROM ddl_column_quoting ORDER BY `pk``id`;
+pk`id	tick``value	en`um	s`et	enum_ordinal	set_bits
+1	100	red	x	1	1
+2	200	green	y	2	2
+3	NULL	NULL	NULL	NULL	NULL
+4	NULL	NULL	NULL	NULL	NULL
+SELECT `pk``id` FROM ddl_column_quoting FORCE INDEX (idx_tick)
+WHERE `tick````value` = 200;
+pk`id
+2
+SELECT `pk``id` FROM ddl_column_quoting FORCE INDEX (idx_enum)
+WHERE `en``um` = 'green';
+pk`id
+2
+SELECT `pk``id` FROM ddl_column_quoting FORCE INDEX (idx_set)
+WHERE `s``et` = 'y';
+pk`id
+2
+SELECT COUNT(*) AS null_rows FROM ddl_column_quoting FORCE INDEX (idx_tick)
+WHERE `tick````value` IS NULL;
+null_rows
+2
+DROP TABLE ddl_column_quoting;
