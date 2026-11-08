@@ -67,6 +67,7 @@ id	name	score
 1	Alice	98.5
 2	Bob	87
 3	Chen	90.25
+ERROR 58000: File already exist
 row_count
 3
 # COPY table and read it back

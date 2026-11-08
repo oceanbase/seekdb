@@ -7913,6 +7913,8 @@ int ObDMLResolver::resolve_file_scan_column_items(const TableItem &table_item,
           meta.set_collation_type(session_info_->get_local_collation_connection());
           meta.set_collation_level(CS_LEVEL_IMPLICIT);
           accuracy.set_length(static_cast<ObLength>(std::max<int64_t>(1, column.max_length_)));
+        } else if (ObDateTimeType == obj_type) {
+          accuracy.set_scale(0);
         }
         if (OB_FAIL(resolve_function_table_column_item(table_item,
                                                        meta,

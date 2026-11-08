@@ -93,7 +93,9 @@ eval select count(*) AS row_count
 
 --echo # COPY table and read it back
 --disable_query_log
+--disable_warnings
 drop table if exists file_sql_copy_source;
+--enable_warnings
 create table file_sql_copy_source (id bigint, name varchar(32));
 insert into file_sql_copy_source values (4, 'Delta'), (5, 'Echo');
 eval copy file_sql_copy_source
