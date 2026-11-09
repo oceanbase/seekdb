@@ -645,12 +645,13 @@ jobs:
           $vsPath = & $vswhere -latest -products * `
             -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (-not $vsPath) { throw "No Visual Studio installation with the MSVC C++ toolset was found." }
-          $msvcVersion = (Get-ChildItem -Path (Join-Path $vsPath "VC\Tools\MSVC") -Directory |
+          $msvcRedistRoot = Join-Path $vsPath "VC\Redist\MSVC"
+          if (-not (Test-Path $msvcRedistRoot)) { throw "MSVC redistributables root not found: $msvcRedistRoot" }
+          $redistVersion = (Get-ChildItem -Path $msvcRedistRoot -Directory |
+            Where-Object { Test-Path (Join-Path $_.FullName "x64") } |
             Sort-Object Name -Descending | Select-Object -First 1).Name
-          $redist = Join-Path $vsPath "VC\Redist\MSVC\$msvcVersion"
-          if (-not (Test-Path (Join-Path $redist "x64"))) {
-            throw "MSVC x64 redistributables not found under $redist"
-          }
+          if (-not $redistVersion) { throw "No MSVC redistributable version with an x64 directory under $msvcRedistRoot" }
+          $redist = Join-Path $msvcRedistRoot $redistVersion
           "VCToolsRedistDir=$redist" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "VCToolsRedistDir=$redist"
 

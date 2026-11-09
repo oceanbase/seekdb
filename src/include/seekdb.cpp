@@ -34,7 +34,6 @@
 #include "lib/string/ob_string.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/alloc/alloc_func.h"
-#include "lib/resource/ob_resource_mgr.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "observer/ob_inner_sql_result.h"
 #include "observer/ob_server.h"
@@ -886,19 +885,13 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
     // even in Node.js worker processes where the library is loaded via dlopen
     // before seekdb_open() is called.
     
-    // CRITICAL: Explicitly initialize memory allocator and resource manager after fork
+    // CRITICAL: Explicitly initialize the memory allocator after fork.
     // In fork scenarios, the child process inherits the parent's memory state,
-    // but the memory allocator and resource manager may need explicit initialization to function correctly.
-    // Calling get_instance() ensures the singletons are initialized.
+    // but the memory allocator may need explicit initialization to function correctly.
+    // Calling get_instance() ensures the singleton is initialized.
     // This must be done BEFORE any memory allocations (including thread stack allocations).
     try {
         oceanbase::lib::ObMallocAllocator::get_instance();
-    } catch (const std::exception& e) {
-        return SEEKDB_ERROR_MEMORY_ALLOC;
-    }
-    
-    try {
-        oceanbase::lib::ObResourceMgr::get_instance();
     } catch (const std::exception& e) {
         return SEEKDB_ERROR_MEMORY_ALLOC;
     }
