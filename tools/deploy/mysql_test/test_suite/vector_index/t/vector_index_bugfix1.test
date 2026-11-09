@@ -663,3 +663,65 @@ order by p.cardinality, p.plan_id;
 drop table t_issue1439_or_selectivity;
 
 alter system set vector_memory_limit = 0;
+
+# issue #1535: ANN WHERE predicates must obey boolean absorption.
+--disable_warnings
+drop table if exists t_ann_absorb;
+--enable_warnings
+create table t_ann_absorb (
+  id int primary key, category int, parity varchar(8), v vector(3),
+  key idx_category(category),
+  vector key idx_v(v) with (distance=l2, type=hnsw, lib=vsag,
+    m=16, ef_construction=128, sync_mode=immediate)
+) organization heap;
+insert into t_ann_absorb values
+  (1,1,'even','[1,0,0]'), (2,1,null,'[2,0,0]'),
+  (3,2,'even','[3,0,0]'), (4,null,'even','[4,0,0]'),
+  (5,null,null,'[5,0,0]'), (6,2,'odd','[6,0,0]'),
+  (7,1,'odd','[7,0,0]');
+
+select id from t_ann_absorb where category = 1
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+select id from t_ann_absorb
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+
+# Build the same balanced 1024-branch AND tree as the issue.
+--let $branch = (category = 1 or parity = 'even')
+--let $doublings = 10
+while ($doublings)
+{
+  --let $branch = ($branch) and ($branch)
+  --dec $doublings
+}
+--disable_query_log
+eval select id from t_ann_absorb where category = 1 and ($branch)
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+# BASIC avoids unstable cost estimates; the filter must contain no redundant OR.
+--replace_regex / +$//
+eval explain basic select id from t_ann_absorb where category = 1 and ($branch)
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+--enable_query_log
+
+# NULL must retain SQL three-valued boolean semantics.
+select id from t_ann_absorb
+where category = 1 or (category = 1 and parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+select id from t_ann_absorb
+where not (category = 1 and (category = 1 or parity = 'even'))
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+
+# Different parameter values must not reuse an invalid absorption plan.
+select id from t_ann_absorb
+where category = 1 and (category = 2 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+select id from t_ann_absorb
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+select id from t_ann_absorb
+where category = 1 and (category = 2 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 10;
+select id from t_ann_absorb
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(v, '[0,0,0]') approximate limit 1,1;
+drop table t_ann_absorb;

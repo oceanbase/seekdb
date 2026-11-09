@@ -538,6 +538,11 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else {
     if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+      if (func.contain_vec_index_approx_
+          && !func.contain_geometry_values_ && !func.contain_fulltext_search_) {
+        // Only simplify predicates; structural rewrites remain disabled for ANN.
+        disable_list &= ~(1ULL << SIMPLIFY_EXPR);
+      }
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
