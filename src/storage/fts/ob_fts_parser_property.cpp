@@ -957,8 +957,9 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (FAILEDx(databuff_printf(buf,
                                   buf_len,
                                   pos,
-                                  "%s=\"%s\"",
+                                  "%s=\"%.*s\"",
                                   ObFTSLiteral::CONFIG_NAME_IK_MODE,
+                                  static_cast<int>(ik_mode.length()),
                                   ik_mode.ptr()))) {
       }
     }
