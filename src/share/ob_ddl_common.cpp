@@ -19,6 +19,7 @@
 #include "rust/config.h"
 #include "lib/compress/ob_compress_util.h"
 #include "ob_ddl_common.h"
+#include "share/ddl/identifier_quote.h"
 #include <inttypes.h>
 #include "common/datum/ob_datum.h"  // ObDatum complete type(previously hidden behind the block_sstable_struct include chain)
 #include "share/ob_rpc_struct.h"
@@ -549,32 +550,23 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
-  // append comma
-  if (with_comma) {
-    if (OB_FAIL(sql_string.append_fmt(", "))) {
-    }
-  }
-  // append original column name
+  const auto append_identifier = [&](bool shadow) {
+    const ObString &name = column_name_info.column_name_;
+    return append_quoted_identifier(std::string_view(name.ptr(), name.length()),
+        shadow ? "__SHADOW_" : "", [&](const char *data, size_t length) {
+          return sql_string.append(data, length);
+        });
+  };
+  if (with_comma) { ret = sql_string.append(", "); }
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
-      // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
-      }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
-    }
+      if (OB_FAIL(sql_string.append("cast("))) {
+      } else if (OB_FAIL(append_identifier(false))) {
+      } else { ret = sql_string.append(" as unsigned)"); }
+    } else { ret = append_identifier(false); }
   }
-  // append AS
-  if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt(" AS "))) {
-    }
-  }
-  // append alias column name
-  if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
-    }
-  }
+  if (OB_SUCC(ret) && with_origin_name && with_alias_name) { ret = sql_string.append(" AS "); }
+  if (OB_SUCC(ret) && with_alias_name) { ret = append_identifier(column_name_info.is_shadow_column_); }
   return ret;
 }
 
