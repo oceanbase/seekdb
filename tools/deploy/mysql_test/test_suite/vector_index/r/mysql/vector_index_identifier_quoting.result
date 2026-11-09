@@ -325,3 +325,38 @@ id	v
 2	[0,1,0]
 3	[0,0,1]
 USE `seekdb_identifier_quoting`;
+USE `seekdb_identifier_quoting`;
+CREATE TABLE ddl_enum_quoted (id INT PRIMARY KEY, `e``n` ENUM('a','b'));
+INSERT INTO ddl_enum_quoted VALUES (1,'a'),(2,'b'),(3,NULL);
+CREATE UNIQUE INDEX ddl_enum_quoted_idx ON ddl_enum_quoted(`e``n`);
+SELECT id, `e``n` FROM ddl_enum_quoted ORDER BY id;
+id	e`n
+1	a
+2	b
+3	NULL
+INSERT INTO ddl_enum_quoted VALUES (4,'a');
+ERROR 23000: Duplicate entry '1' for key 'ddl_enum_quoted_idx'
+INSERT INTO ddl_enum_quoted VALUES (4,NULL);
+SELECT COUNT(*) AS rows_after_null FROM ddl_enum_quoted;
+rows_after_null
+4
+DROP TABLE ddl_enum_quoted;
+CREATE TABLE ddl_set_quoted (id INT PRIMARY KEY, `set````value` SET('a','b'));
+INSERT INTO ddl_set_quoted VALUES (1,'a'),(2,'a,b'),(3,NULL);
+CREATE UNIQUE INDEX ddl_set_quoted_idx ON ddl_set_quoted(`set````value`);
+SELECT id, `set````value` FROM ddl_set_quoted ORDER BY id;
+id	set``value
+1	a
+2	a,b
+3	NULL
+INSERT INTO ddl_set_quoted VALUES (4,'a,b');
+ERROR 23000: Duplicate entry '3' for key 'ddl_set_quoted_idx'
+DROP TABLE ddl_set_quoted;
+CREATE TABLE ddl_unicode_quoted (id INT PRIMARY KEY, `列``名` ENUM('a','b'));
+INSERT INTO ddl_unicode_quoted VALUES (1,'a'),(2,'b');
+CREATE UNIQUE INDEX ddl_unicode_quoted_idx ON ddl_unicode_quoted(`列``名`);
+SELECT id, `列``名` FROM ddl_unicode_quoted ORDER BY id;
+id	列`名
+1	a
+2	b
+DROP TABLE ddl_unicode_quoted;
