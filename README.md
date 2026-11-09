@@ -47,6 +47,7 @@
     </a>
 </p>
 
+
 MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · COW Sandbox
 
 ⚡ 1,523 QPS streaming write+search (10× Milvus, 3× Elasticsearch)<br>
@@ -593,3 +594,4 @@ If seekdb is useful to you, **a star helps others find it.** ⭐
 ## 📄 License
 
 seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same database engine running in production at Alipay, Taobao, DiDi, Xiaomi, and more. Fully open-source under the [Apache License, Version 2.0](LICENSE).
+OB-P:qxK4yp03ZAcElqPxa6pwRQ
