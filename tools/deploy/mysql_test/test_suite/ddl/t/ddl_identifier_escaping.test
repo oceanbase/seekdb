@@ -1,0 +1,34 @@
+--disable_warnings
+DROP DATABASE IF EXISTS ddl_identifier_escaping;
+--enable_warnings
+CREATE DATABASE ddl_identifier_escaping;
+USE ddl_identifier_escaping;
+
+CREATE TABLE quoted_columns (
+  id INT PRIMARY KEY,
+  `plain``tick` INT NOT NULL,
+  `enum``tick` ENUM('red', 'blue') NOT NULL,
+  `set``tick` SET('read', 'write') NOT NULL
+);
+INSERT INTO quoted_columns VALUES
+  (1, 10, 'red', 'read'),
+  (2, 20, 'blue', 'read,write');
+
+CREATE UNIQUE INDEX uq_quoted
+  ON quoted_columns (`plain``tick`, `enum``tick`, `set``tick`);
+
+SELECT id,
+       `plain``tick` AS plain_value,
+       CAST(`enum``tick` AS UNSIGNED) AS enum_ordinal,
+       CAST(`set``tick` AS UNSIGNED) AS set_bits
+FROM quoted_columns
+ORDER BY id;
+
+SELECT COLUMN_NAME
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'quoted_columns'
+ORDER BY ordinal_position;
+
+USE test;
+DROP DATABASE ddl_identifier_escaping;
