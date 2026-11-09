@@ -37,14 +37,31 @@ public:
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
   static int eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  // Vectorized evaluation: one request carries the input of a whole batch of
+  // rows, the responses are mapped back to their original row order.
+  static int eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
+                                 const ObBitVector &skip, const int64_t size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, 
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
 private:
+  static int embed_one_row(common::ObIAllocator &allocator,
+                           const common::ObString &model_id,
+                           const common::ObString &content,
+                           common::ObJsonObject *config,
+                           common::ObString &result);
+  static int embed_multi_rows(common::ObIAllocator &allocator,
+                              const common::ObString &model_id,
+                              common::ObArray<common::ObString> &contents,
+                              common::ObJsonObject *config,
+                              common::ObArray<common::ObString> &results);
+  static int build_dim_config(common::ObIAllocator &allocator, const int64_t dim,
+                              common::ObJsonObject *&config);
   static constexpr int MODEL_IDX = 0;
   static constexpr int CONTENT_IDX = 1;
   static constexpr int DIM_IDX = 2;
+  static constexpr int EMBED_BATCH_SIZE = 100;
   DISALLOW_COPY_AND_ASSIGN(ObExprAIEmbed);
 };
 
