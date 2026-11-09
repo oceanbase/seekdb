@@ -52,8 +52,8 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  int64_t fulltext_len,
                                  bool is_smart)
     : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart),
-      is_utf8mb4_(ObCharset::charset_type_by_coll(coll_type) == CHARSET_UTF8MB4),
+      next_char_len_(0), is_utf8mb4_(ObCharset::charset_type_by_coll(coll_type) == CHARSET_UTF8MB4),
+      handle_size_(0), is_smart_(is_smart),
       token_list_(allocator), result_list_(allocator)
 {
 }
