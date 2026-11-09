@@ -1,0 +1,27 @@
+# Shared DDL must quote identifiers without depending on the SQL module.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS ddl_identifier_escaping;
+--enable_warnings
+CREATE TABLE ddl_identifier_escaping (
+  `key``id` INT PRIMARY KEY,
+  `enum``value` ENUM('alpha','beta'),
+  `set``value` SET('x','y'),
+  `值``列` VARCHAR(20)
+);
+INSERT INTO ddl_identifier_escaping VALUES
+  (1,'alpha','x','甲'),(2,'beta','y','乙'),(3,'alpha','x,y','丙');
+CREATE INDEX idx_text ON ddl_identifier_escaping(`值``列`);
+CREATE INDEX idx_enum ON ddl_identifier_escaping(`enum``value`);
+CREATE INDEX idx_set ON ddl_identifier_escaping(`set``value`);
+CREATE UNIQUE INDEX idx_unique ON ddl_identifier_escaping(`值``列`);
+--enable_query_log
+SELECT `key``id` AS id, `enum``value` AS enum_value,
+       `set``value` AS set_value, `值``列` AS text_value
+  FROM ddl_identifier_escaping ORDER BY `key``id`;
+SELECT COUNT(*) AS row_count FROM ddl_identifier_escaping FORCE INDEX(idx_enum);
+SELECT `key``id` AS id FROM ddl_identifier_escaping FORCE INDEX(idx_unique)
+  WHERE `值``列` = '乙';
+--disable_query_log
+DROP TABLE ddl_identifier_escaping;
+--enable_query_log

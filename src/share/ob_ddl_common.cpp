@@ -39,6 +39,33 @@ using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::blocksstable;
 
+namespace
+{
+// Keep shared DDL independent of the SQL layer. Quote the prefix and column
+// name as one identifier, doubling each embedded backtick in the original name.
+int append_ddl_column_identifier(ObSqlString &sql, const ObString &name, const bool shadow)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql.append("`"))) {
+  } else if (shadow && OB_FAIL(sql.append("__SHADOW_"))) {
+  } else {
+    int64_t start = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i <= name.length(); ++i) {
+      if (i == name.length() || name.ptr()[i] == '`') {
+        if (i > start && OB_FAIL(sql.append(name.ptr() + start, i - start))) {
+        } else if (i < name.length() && OB_FAIL(sql.append("``"))) {
+        }
+        start = i + 1;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = sql.append("`");
+    }
+  }
+  return ret;
+}
+} // namespace
+
 ObDDLTaskSerializeField::ObDDLTaskSerializeField()
 {
   reset();
@@ -549,7 +576,6 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
   // append comma
   if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
@@ -557,11 +583,9 @@ int ObDDLUtil::generate_column_name_str(
   }
   // append original column name
   if (OB_SUCC(ret) && with_origin_name) {
-    if (column_name_info.is_enum_set_need_cast_) {
-      // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
-      }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (column_name_info.is_enum_set_need_cast_ && OB_FAIL(sql_string.append("cast("))) {
+    } else if (OB_FAIL(append_ddl_column_identifier(sql_string, column_name_info.column_name_, false))) {
+    } else if (column_name_info.is_enum_set_need_cast_ && OB_FAIL(sql_string.append(" as unsigned)"))) {
     }
   }
   // append AS
@@ -571,8 +595,8 @@ int ObDDLUtil::generate_column_name_str(
   }
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_ddl_column_identifier(
+            sql_string, column_name_info.column_name_, column_name_info.is_shadow_column_))) {
     }
   }
   return ret;
