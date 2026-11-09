@@ -1,5 +1,4 @@
 {
-  "schema_version": 2,
   "platforms": {
     "linux-aarch64-glibc217": {
       "gtest": {

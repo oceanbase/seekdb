@@ -106,9 +106,6 @@ def locked_packages(lock_file, system, architecture):
     if not lock_file.is_file():
         return []
     lock = json.loads(lock_file.read_text(encoding="utf-8"))
-    if lock.get("schema_version") != 2:
-        raise ValueError("Unsupported dependency lock schema: " + str(lock_file))
-
     platforms = lock.get("platforms", {})
     if not isinstance(platforms, dict):
         raise ValueError("Invalid dependency lock platforms: " + str(lock_file))
