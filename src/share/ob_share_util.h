@@ -41,6 +41,11 @@ public:
   static int get_server_ip(const common::ObAddr &self_addr,
                            common::ObIAllocator &allocator,
                            common::ObString &ip_string);
+  // Double embedded backticks so the result can be placed between backticks.
+  static int generate_escaped_identifier(
+      common::ObIAllocator &allocator,
+      const common::ObString &src,
+      common::ObString &dst);
   // priority to set timeout_ctx: ctx > worker > default_timeout
   static int set_default_timeout_ctx(common::ObTimeoutCtx &ctx, const int64_t default_timeout);
   // moved up from rootserver::ObRootUtils(body uses only config::rpc_timeout() + set_default_timeout_ctx, share-clean)
