@@ -857,6 +857,38 @@ int ObDASHNSWScanIter::inner_process_adaptor_state(bool is_vectorized)
   return ret;
 }
 
+// Record per-scan ANN diagnostics into the plan statistic. The ANN filter path
+// (pre-filter versus iterative-filter) is chosen from an estimated selectivity,
+// so when two equivalent predicates produce very different latencies there is
+// no way to tell afterwards how much work each path actually performed. These
+// counters keep that evidence: how many candidate vectors the pre-filter path
+// evaluated and how many vectors the iterative-filter path scanned.
+// This is best effort only: recording must never fail or change the query.
+void ObDASHNSWScanIter::record_vec_index_scan_stat(const int64_t candidate_cnt,
+                                                   const int64_t scanned_cnt)
+{
+  ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(*exec_ctx_);
+  // A remote DAS scan has no local physical plan, so there is no local plan
+  // statistic to update. The trace below is emitted either way, otherwise a
+  // filtered ANN query whose leader sits on another observer would leave no
+  // diagnostics at all.
+  ObPlanStat *plan_stat = (OB_NOT_NULL(plan_ctx) && OB_NOT_NULL(plan_ctx->get_phy_plan()))
+                              ? const_cast<ObPlanStat *>(&(plan_ctx->get_phy_plan()->stat_))
+                              : nullptr;
+  if (OB_NOT_NULL(plan_stat)) {
+    ATOMIC_INC(&(plan_stat->vec_index_exec_ctx_.search_cnt_));
+    ATOMIC_AAF(&(plan_stat->vec_index_exec_ctx_.pre_filter_candidate_cnt_), candidate_cnt);
+    ATOMIC_AAF(&(plan_stat->vec_index_exec_ctx_.iter_filter_scanned_cnt_), scanned_cnt);
+  }
+  LOG_TRACE("record vec index scan stat", K(candidate_cnt), K(scanned_cnt),
+            "has_local_plan_stat", OB_NOT_NULL(plan_stat),
+            "total_search_cnt", OB_NOT_NULL(plan_stat) ? plan_stat->vec_index_exec_ctx_.search_cnt_ : 0,
+            "total_pre_filter_candidate_cnt",
+            OB_NOT_NULL(plan_stat) ? plan_stat->vec_index_exec_ctx_.pre_filter_candidate_cnt_ : 0,
+            "total_iter_filter_scanned_cnt",
+            OB_NOT_NULL(plan_stat) ? plan_stat->vec_index_exec_ctx_.iter_filter_scanned_cnt_ : 0);
+}
+
 int ObDASHNSWScanIter::process_adaptor_state_hnsw(ObIAllocator &allocator, bool is_vectorized)
 {
   int ret = OB_SUCCESS;
@@ -1351,6 +1383,7 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter(
   int ret = OB_SUCCESS;
   int64_t *brute_vids = nullptr;
   int brute_cnt = 0;
+  pre_filter_produced_cnt_ = 0;
   if (is_primary_pre_with_rowkey_with_filter_) {
     if (OB_FAIL(process_adaptor_state_pre_filter_with_rowkey(ada_ctx, adaptor, brute_vids, brute_cnt, is_vectorized))) {
     }
@@ -1398,6 +1431,14 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter(
       }
     }
   }
+  // Record the work unconditionally, including an attempt that ends in an
+  // adaptive retry: the abandoned pre-filter scan is exactly the cost that can
+  // explain a slow query, so it must not be dropped.
+  // pre_filter_produced_cnt_ counts every candidate the pre-filter handed over,
+  // whether it was staged for brute force or overflowed into the bitmap. Unlike
+  // brute_cnt it keeps counting past MAX_HNSW_BRUTE_FORCE_SIZE, and it is not
+  // stuck at zero for IPIVF, where brute force is disabled up front.
+  record_vec_index_scan_stat(pre_filter_produced_cnt_, 0);
   return ret;
 }
 
@@ -1515,6 +1556,7 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
             } else if (go_brute_force_ && add_brute && brute_cnt < MAX_HNSW_BRUTE_FORCE_SIZE) {
               vids[brute_cnt] = vid;
               ++brute_cnt;
+              ++pre_filter_produced_cnt_;
             } else if (ada_ctx->is_range_prefilter()) {
               is_pre_filter_end = true;
               go_brute_force_ = false;
@@ -1531,6 +1573,8 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
               }
               if (OB_FAIL(ret)) {
               } else if (OB_FAIL(adaptor->add_extra_valid_vid(ada_ctx, vid))) {
+              } else {
+                ++pre_filter_produced_cnt_;
               }
             }
           }
@@ -1558,6 +1602,7 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
                 int64_t vid = vid_datum[i].get_int();
                 vids[brute_cnt] = vid;
                 ++brute_cnt;
+                ++pre_filter_produced_cnt_;
               }
             } else if (ada_ctx->is_range_prefilter()) {
               is_pre_filter_end = true;
@@ -1577,6 +1622,8 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
               for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
                 int64_t vid = vid_datum[i].get_int();
                 if (OB_FAIL(adaptor->add_extra_valid_vid_without_malloc_guard(ada_ctx, vid))) {
+                } else {
+                  ++pre_filter_produced_cnt_;
                 }
               }
             }
@@ -1865,6 +1912,7 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
         } else if (go_brute_force_ && brute_cnt + batch_row_count < MAX_HNSW_BRUTE_FORCE_SIZE) {
           vids[brute_cnt] = vid;
           brute_cnt++;
+          ++pre_filter_produced_cnt_;
         } else {
           // brute_cnt + batch_row_count already > MAX_HNSW_BRUTE_FORCE_SIZE
           // do not choose brue force, just add vids to bitmap
@@ -1879,6 +1927,8 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
 
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(adaptor->add_extra_valid_vid(ada_ctx, vid))) {
+          } else {
+            ++pre_filter_produced_cnt_;
           }
         }
       } // end for
@@ -1909,6 +1959,7 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
             int64_t vid = vid_datum[i].get_int();
             vids[brute_cnt] = vid;
             brute_cnt++;
+            ++pre_filter_produced_cnt_;
             if (if_add_relevance && i >= relevance_record.count()) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected vid count", K(vec_aux_ctdef_->relevance_col_cnt_), K(relevance_record.count()), K(scan_row_cnt));
@@ -1936,6 +1987,8 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected vid count", K(vec_aux_ctdef_->relevance_col_cnt_), K(relevance_record.count()), K(scan_row_cnt));
             } else if (if_add_relevance && OB_FAIL(add_one_relevance(vid, relevance_record.at(i)))) {
+            } else {
+              ++pre_filter_produced_cnt_;
             }
           }
         }
@@ -2002,6 +2055,7 @@ int ObDASHNSWScanIter::get_pk_increment_from_idx_filter(
         } else if (go_brute_force_ && brute_cnt + 1 < MAX_HNSW_BRUTE_FORCE_SIZE) {
           vids[brute_cnt] = vid;
           brute_cnt++;
+          ++pre_filter_produced_cnt_;
           if (if_add_relevance && i >= relevance_record.count()) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected vid count", K(vec_aux_ctdef_->relevance_col_cnt_), K(relevance_record.count()));
@@ -2025,6 +2079,8 @@ int ObDASHNSWScanIter::get_pk_increment_from_idx_filter(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected vid count", K(vec_aux_ctdef_->relevance_col_cnt_), K(relevance_record.count()));
           } else if (if_add_relevance && OB_FAIL(add_one_relevance(vid, relevance_record.at(i)))) {
+          } else {
+            ++pre_filter_produced_cnt_;
           }
         }
       }
@@ -2052,6 +2108,7 @@ int ObDASHNSWScanIter::get_pk_increment_from_idx_filter(
           } else if (go_brute_force_ && brute_cnt + scan_row_cnt < MAX_HNSW_BRUTE_FORCE_SIZE) {
             vids[brute_cnt] = vid;
             brute_cnt++;
+            ++pre_filter_produced_cnt_;
             if (if_add_relevance && i >= relevance_record.count()) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected vid count", K(vec_aux_ctdef_->relevance_col_cnt_), K(relevance_record.count()), K(scan_row_cnt));
@@ -2075,6 +2132,8 @@ int ObDASHNSWScanIter::get_pk_increment_from_idx_filter(
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected vid count", K(vec_aux_ctdef_->relevance_col_cnt_), K(relevance_record.count()), K(scan_row_cnt));
             } else if (if_add_relevance && OB_FAIL(add_one_relevance(vid, relevance_record.at(i)))) {
+            } else {
+              ++pre_filter_produced_cnt_;
             }
           }
         }
@@ -2238,6 +2297,10 @@ int ObDASHNSWScanIter::process_adaptor_state_post_filter(
       end_search = true;
     }
   }
+  // Record the scanned vectors unconditionally, including an attempt that ends
+  // in an adaptive retry: that attempt already added candidates to
+  // iter_scan_total_num, and dropping it would hide the abandoned work.
+  record_vec_index_scan_stat(0, iter_scan_total_num);
   return ret;
 }
 
