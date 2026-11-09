@@ -631,11 +631,50 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
 
+      # The Bazel Windows SDK repository rule bundles the MSVC runtime DLLs from
+      # VCToolsRedistDir, and the seekdb-jemalloc-sys Cargo build script shells
+      # out to a GNU make. Both are prepared here so the build step can run from
+      # a plain PowerShell shell instead of a Developer Command Prompt.
+      - name: Prepare MSVC and MinGW toolchain
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found: $vswhere" }
+          $vsPath = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsPath) { throw "No Visual Studio installation with the MSVC C++ toolset was found." }
+          $msvcVersion = (Get-ChildItem -Path (Join-Path $vsPath "VC\Tools\MSVC") -Directory |
+            Sort-Object Name -Descending | Select-Object -First 1).Name
+          $redist = Join-Path $vsPath "VC\Redist\MSVC\$msvcVersion"
+          if (-not (Test-Path (Join-Path $redist "x64"))) {
+            throw "MSVC x64 redistributables not found under $redist"
+          }
+          "VCToolsRedistDir=$redist" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "VCToolsRedistDir=$redist"
+
+          choco install mingw -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "choco install mingw failed with exit code $LASTEXITCODE" }
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("Path","User")
+          if (-not (Get-Command make -ErrorAction SilentlyContinue)) {
+            $mingwMake = Get-Command mingw32-make -ErrorAction SilentlyContinue
+            if (-not $mingwMake) { throw "Neither make nor mingw32-make is available after installing MinGW." }
+            $shimDir = Join-Path $env:RUNNER_TEMP "gnu-make-shim"
+            New-Item -ItemType Directory -Force -Path $shimDir | Out-Null
+            Copy-Item -Path $mingwMake.Source -Destination (Join-Path $shimDir "make.exe") -Force
+            Add-Content -Path $env:GITHUB_PATH -Value $shimDir -Encoding utf8
+          }
+          Get-Command make -ErrorAction SilentlyContinue | Out-Host
+
       - name: Build libseekdb
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("Path","User") + ";" + $env:Path
           $ws = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
           python ./build.py init
           if ($LASTEXITCODE -ne 0) { throw "build.py init failed with exit code $LASTEXITCODE" }
@@ -689,9 +728,9 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Install MinGW and Maven (Go CGO + Java)
+      - name: Install Maven (Java)
         shell: pwsh
-        run: choco install mingw maven -y --no-progress
+        run: choco install maven -y --no-progress
 
       # One job step per language: if something hangs, the in-progress step name in the Actions UI shows
       # whether the stall is in Python, npm, node-gyp, cargo, go, or Java (not “whole binding” vs global timeout).
