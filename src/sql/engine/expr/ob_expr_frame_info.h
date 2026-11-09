@@ -137,8 +137,9 @@ public:
 
   int choose_native_i64_layout(const ObExecContext &exec_ctx, bool &compact) const;
 
-  // Native I64 layout pointers are local plan metadata. Validate them when a
-  // plan publishes or clones that metadata; execution only checks the mark.
+  // Native I64 layout pointers, the frame directory, and parameter aliases are
+  // immutable plan metadata. Validate them when a plan publishes or clones
+  // that metadata; execution only checks the mark and runtime parameter pages.
   int validate_native_i64_layout() const;
   int validate_and_mark_native_i64_layout();
 

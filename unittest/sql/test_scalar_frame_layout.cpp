@@ -1172,6 +1172,33 @@ TEST_F(NativeI64ExprFrames, malformed_cg_lane_regions_reject_public_allocation_a
   }
 }
 
+TEST_F(NativeI64ExprFrames, publication_validates_static_frame_directory_and_parameter_aliases)
+{
+  NativePointCoreFixture fixture;
+  ASSERT_NO_FATAL_FAILURE(fixture.prepare(4));
+  ObExprFrameInfo &info = fixture.info();
+  ASSERT_TRUE(info.native_i64_layout_validated_);
+  ASSERT_GT(info.param_frame_.count(), 0);
+
+  const uint32_t old_index = info.param_frame_.at(0).frame_idx_;
+  info.param_frame_.at(0).frame_idx_ = info.native_i64_point_layout_->frames[0].index;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, info.validate_and_mark_native_i64_layout());
+  EXPECT_FALSE(info.native_i64_layout_validated_);
+  info.param_frame_.at(0).frame_idx_ = old_index;
+  ASSERT_EQ(OB_SUCCESS, info.validate_and_mark_native_i64_layout());
+  ASSERT_TRUE(info.native_i64_layout_validated_);
+
+  ObExpr *parameter = fixture.lane(3).args_[1];
+  ASSERT_NE(nullptr, parameter);
+  ASSERT_TRUE(parameter->native_parameter_alias_);
+  parameter->native_parameter_alias_ = false;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, info.validate_and_mark_native_i64_layout());
+  EXPECT_FALSE(info.native_i64_layout_validated_);
+  parameter->native_parameter_alias_ = true;
+  ASSERT_EQ(OB_SUCCESS, info.validate_and_mark_native_i64_layout());
+  EXPECT_TRUE(info.native_i64_layout_validated_);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

@@ -53,6 +53,88 @@ const NativeI64PointLayout::Frame *find_native_i64_frame(
   return result;
 }
 
+int validate_wire_frame(const ObFrameInfo &info, int64_t frame_count);
+
+int validate_parameter_alias_metadata(const ObExprFrameInfo &expressions,
+    const ObIArray<ObFrameInfo> &group, int64_t parameter_count = -1,
+    int64_t original_count = -1, bool allow_missing_aliases = false)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
+    for (int64_t j = 0; OB_SUCC(ret) && j < expressions.rt_exprs_.count(); ++j) {
+      const ObExpr &expr = expressions.rt_exprs_.at(j);
+      if (expr.frame_idx_ != group.at(i).frame_idx_ || expr.sql_type_ == nullptr) { continue; }
+      const int64_t slot = expr.datum_off_ / ScalarFrameLayout::slot_size();
+      if ((!allow_missing_aliases && !expr.native_parameter_alias_)
+          || expr.type_ != T_QUESTIONMARK || expr.is_batch_result() || expr.eval_func_ != nullptr
+          || expr.datum_off_ != ScalarFrameLayout::datum_offset(slot)
+          || expr.eval_info_off_ != ScalarFrameLayout::eval_info_offset(slot)
+          || slot >= group.at(i).expr_cnt_) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (parameter_count >= 0) {
+        int64_t actual_page = 0, actual_slot = 0;
+        if (expr.extra_ >= static_cast<uint64_t>(parameter_count)) { ret = OB_INVALID_ARGUMENT; }
+        else {
+          ScalarFrameLayout::locate_parameter(original_count, expr.extra_, actual_page, actual_slot);
+          if (actual_page != i || actual_slot != slot) { ret = OB_INVALID_ARGUMENT; }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int validate_parameter_pages(const ObIArray<ObFrameInfo> &group,
+    const ObIArray<char *> &pages)
+{
+  int ret = OB_SUCCESS;
+  if (pages.count() < group.count()) { ret = OB_INVALID_ARGUMENT; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
+    if (pages.at(i) == nullptr
+        || ParameterValuePage::from_handle(pages.at(i)).capacity() < group.at(i).expr_cnt_) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  return ret;
+}
+
+int validate_execution_frame_directory(const ObExprFrameInfo &expressions)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<ObFrameInfo> *groups[] = {&expressions.const_frame_, &expressions.param_frame_,
+                                          &expressions.dynamic_frame_, &expressions.datum_frame_};
+  int64_t count = 0;
+  for (int64_t group = 0; OB_SUCC(ret) && group < 4; ++group) {
+    if (groups[group]->count() > INT64_MAX - count) { ret = OB_INVALID_ARGUMENT; }
+    else { count += groups[group]->count(); }
+  }
+  if (expressions.const_frame_ptrs_.count() != expressions.const_frame_.count()
+      || count > INT64_MAX / static_cast<int64_t>(sizeof(char *))) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t group = 0; OB_SUCC(ret) && group < 4; ++group) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < groups[group]->count(); ++i) {
+      const ObFrameInfo &info = groups[group]->at(i);
+      if (OB_FAIL(validate_wire_frame(info, count))) {
+      } else if (group == 0 && expressions.const_frame_ptrs_.at(i) == nullptr) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+      for (int64_t previous_group = 0; OB_SUCC(ret) && previous_group <= group; ++previous_group) {
+        const int64_t limit = previous_group == group ? i : groups[previous_group]->count();
+        for (int64_t previous = 0; OB_SUCC(ret) && previous < limit; ++previous) {
+          if (groups[previous_group]->at(previous).frame_idx_ == info.frame_idx_) {
+            ret = OB_INVALID_ARGUMENT;
+          }
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ret = validate_parameter_alias_metadata(expressions, expressions.param_frame_);
+  }
+  return ret;
+}
+
 int validate_native_i64_layout_impl(const ObExprFrameInfo &expressions)
 {
   const NativeI64PointLayout *layout = expressions.native_i64_point_layout_;
@@ -143,7 +225,7 @@ int validate_native_i64_layout_impl(const ObExprFrameInfo &expressions)
       return OB_ERR_UNEXPECTED;
     }
   }
-  return OB_SUCCESS;
+  return validate_execution_frame_directory(expressions);
 }
 
 void initialize_native_i64_frame(const ObExprFrameInfo &expressions,
@@ -281,31 +363,10 @@ int prepare_parameter_aliases(const ObExprFrameInfo &expressions,
     int64_t parameter_count = -1, int64_t original_count = -1,
     bool restore_private_aliases = false)
 {
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
-    if (i >= pages.count() || pages.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
-    else if (ParameterValuePage::from_handle(pages.at(i)).capacity() < group.at(i).expr_cnt_) {
-      ret = OB_INVALID_ARGUMENT;
-    }
-    for (int64_t j = 0; OB_SUCC(ret) && j < expressions.rt_exprs_.count(); ++j) {
-      const ObExpr &expr = expressions.rt_exprs_.at(j);
-      if (expr.frame_idx_ != group.at(i).frame_idx_ || expr.sql_type_ == nullptr) { continue; }
-      const int64_t slot = expr.datum_off_ / ScalarFrameLayout::slot_size();
-      if ((!restore_private_aliases && !expr.native_parameter_alias_)
-          || expr.type_ != T_QUESTIONMARK || expr.is_batch_result() || expr.eval_func_ != nullptr
-          || expr.datum_off_ != ScalarFrameLayout::datum_offset(slot)
-          || expr.eval_info_off_ != ScalarFrameLayout::eval_info_offset(slot)
-          || slot >= group.at(i).expr_cnt_) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (parameter_count >= 0) {
-        int64_t actual_page = 0, actual_slot = 0;
-        if (expr.extra_ >= static_cast<uint64_t>(parameter_count)) { ret = OB_INVALID_ARGUMENT; }
-        else {
-          ScalarFrameLayout::locate_parameter(original_count, expr.extra_, actual_page, actual_slot);
-          if (actual_page != i || actual_slot != slot) { ret = OB_INVALID_ARGUMENT; }
-        }
-      }
-    }
+  int ret = validate_parameter_pages(group, pages);
+  if (OB_SUCC(ret)) {
+    ret = validate_parameter_alias_metadata(expressions, group, parameter_count, original_count,
+        restore_private_aliases);
   }
   // Only a newly decoded, unpublished receiver plan may restore legacy wire
   // flags. Ordinary allocation validates shared cached expressions read-only.
@@ -1145,35 +1206,43 @@ int ObExprFrameInfo::alloc_frame_after_layout_validation(ObIAllocator &exec_allo
                                   uint64_t &frame_cnt, char **&frames, bool compact_i64) const
 {
   int ret = OB_SUCCESS;
+  const bool trusted_native_layout = native_i64_layout_validated_;
   if (compact_i64 && native_i64_point_layout_ == nullptr) { return OB_INVALID_ARGUMENT; }
   const uint64_t count = const_frame_.count() + param_frame_.count()
       + dynamic_frame_.count() + datum_frame_.count();
   char **candidate = nullptr;
   if (const_frame_ptrs_.count() != const_frame_.count() || param_frame_ptrs.count() < param_frame_.count()
       || count > INT64_MAX / sizeof(char *)) { return OB_INVALID_ARGUMENT; }
+  if (trusted_native_layout && OB_FAIL(validate_parameter_pages(param_frame_, param_frame_ptrs))) {
+    return ret;
+  }
   if (count > 0) {
     candidate = static_cast<char **>(exec_allocator.alloc(count * sizeof(char *)));
     if (candidate == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-    else { MEMSET(candidate, 0, count * sizeof(char *)); }
+    else if (!trusted_native_layout) { MEMSET(candidate, 0, count * sizeof(char *)); }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < const_frame_.count(); ++i) {
     const ObFrameInfo &info = const_frame_.at(i);
-    if (OB_FAIL(validate_wire_frame(info, count))) {
-    } else if (candidate[info.frame_idx_] != nullptr || const_frame_ptrs_.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
-    else { candidate[info.frame_idx_] = const_frame_ptrs_.at(i); }
+    if (!trusted_native_layout && OB_FAIL(validate_wire_frame(info, count))) {
+    } else if (!trusted_native_layout
+        && (candidate[info.frame_idx_] != nullptr || const_frame_ptrs_.at(i) == nullptr)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else { candidate[info.frame_idx_] = const_frame_ptrs_.at(i); }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < param_frame_.count(); ++i) {
     const ObFrameInfo &info = param_frame_.at(i);
-    if (OB_FAIL(validate_wire_frame(info, count))) {
-    } else if (candidate[info.frame_idx_] != nullptr || param_frame_ptrs.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
-    else { candidate[info.frame_idx_] = param_frame_ptrs.at(i); }
+    if (!trusted_native_layout && OB_FAIL(validate_wire_frame(info, count))) {
+    } else if (!trusted_native_layout
+        && (candidate[info.frame_idx_] != nullptr || param_frame_ptrs.at(i) == nullptr)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else { candidate[info.frame_idx_] = param_frame_ptrs.at(i); }
   }
   const ObIArray<ObFrameInfo> *groups[] = {&dynamic_frame_, &datum_frame_};
   for (int64_t group = 0; OB_SUCC(ret) && group < 2; ++group) {
     for (int64_t i = 0; OB_SUCC(ret) && i < groups[group]->count(); ++i) {
       const ObFrameInfo &info = groups[group]->at(i);
-      if (OB_FAIL(validate_wire_frame(info, count))) {
-      } else if (candidate[info.frame_idx_] != nullptr) { ret = OB_INVALID_ARGUMENT; }
+      if (!trusted_native_layout && OB_FAIL(validate_wire_frame(info, count))) {
+      } else if (!trusted_native_layout && candidate[info.frame_idx_] != nullptr) { ret = OB_INVALID_ARGUMENT; }
       else {
         const auto *description = find_native_i64_frame(*this, info.frame_idx_);
         const int64_t bytes = description != nullptr && compact_i64
@@ -1189,7 +1258,9 @@ int ObExprFrameInfo::alloc_frame_after_layout_validation(ObIAllocator &exec_allo
       }
     }
   }
-  if (OB_SUCC(ret)) { ret = prepare_parameter_aliases(*this, param_frame_, param_frame_ptrs); }
+  if (OB_SUCC(ret) && !trusted_native_layout) {
+    ret = prepare_parameter_aliases(*this, param_frame_, param_frame_ptrs);
+  }
   if (OB_SUCC(ret)) { frames = candidate; frame_cnt = count; }
   return ret;
 }
