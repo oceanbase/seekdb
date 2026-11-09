@@ -75,6 +75,11 @@ public:
   static int get_header(common::ObIAllocator &allocator,
                         common::ObString &api_key,
                         common::ObArray<ObString> &headers);
+  // Reorder the embedding vectors by their response index, so that the n-th
+  // output always belongs to the n-th input of the request.
+  static int restore_embedding_order(ObArray<ObJsonNode *> &embeddings,
+                                     ObArray<int64_t> &indexes,
+                                     ObJsonArray &result_array);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObOpenAIUtils);
 };
@@ -377,10 +382,13 @@ public:
   ObAIFuncPromptObjectUtils() {}
   virtual ~ObAIFuncPromptObjectUtils() {}
   static bool is_valid_prompt_object(ObJsonObject* prompt_object);
-  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str);
+  static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str,
+                                             const int64_t depth = 0);
   static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";
+  // Guards against a self referencing / deeply nested prompt object.
+  static constexpr int64_t MAX_PROMPT_NEST_DEPTH = 32;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncPromptObjectUtils);
 };
