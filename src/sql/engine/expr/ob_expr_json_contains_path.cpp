@@ -125,6 +125,7 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
       LOG_WARN("fail to parse JSON for path query", K(ret), K((*query)->byte_offset()));
     }
   }
+  bool is_contains = false;
   if (OB_SUCC(ret) && !is_null_result) {
     // get one_or_all flag
     bool one_flag;
@@ -147,7 +148,6 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
       }
     }
 
-    bool is_contains = false;
     if ((OB_SUCC(ret)) && !is_null_result) {
       JsonPathCache ctx_cache;
       JsonPathCache* path_cache = get_native_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
@@ -185,14 +185,14 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
       }
     }
 
-    // set result
-    if (OB_FAIL(ret)) {
-    } else if (is_null_result) {
-      res.set_null();
-    } else {
-      res.set_int(static_cast<int64_t>(is_contains));
-    }
+  }
 
+  // set result
+  if (OB_FAIL(ret)) {
+  } else if (is_null_result) {
+    res.set_null();
+  } else {
+    res.set_int(static_cast<int64_t>(is_contains));
   }
 
   return ret;

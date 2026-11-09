@@ -113,14 +113,19 @@ pub type Result<T> = std::result::Result<T, ParseError>;
 
 pub fn parse(input: &[u8], options: ParseOptions) -> Result<Document> {
     let input = normalized_input(input);
-    parse_normalized(input.as_ref(), options)
+    run_on_deep_stack(input.as_ref(), || parse_inline(input.as_ref(), options))
+        .unwrap_or_else(|| Err(thread_failure()))
 }
 
 pub fn parse_binary(input: &[u8], options: ParseOptions) -> Result<Vec<u8>> {
-    parse(input, options).map(binary::serialize)
+    let input = normalized_input(input);
+    run_on_deep_stack(input.as_ref(), || {
+        parse_inline(input.as_ref(), options).map(binary::serialize)
+    })
+    .unwrap_or_else(|| Err(thread_failure()))
 }
 
-fn parse_normalized(input: &[u8], options: ParseOptions) -> Result<Document> {
+fn parse_inline(input: &[u8], options: ParseOptions) -> Result<Document> {
     let mut deserializer = serde_json::Deserializer::from_slice(input);
     deserializer.disable_recursion_limit();
     let result = DocumentSeed { depth: 0, options }
@@ -133,6 +138,12 @@ pub fn validate(input: &[u8], options: ParseOptions) -> Result<()> {
     if options.schema || options.duplicate_policy != DuplicatePolicy::Overwrite {
         return parse(input, options).map(|_| ());
     }
+    let input = normalized_input(input);
+    run_on_deep_stack(input.as_ref(), || validate_inline(input.as_ref(), options))
+        .unwrap_or_else(|| Err(thread_failure()))
+}
+
+fn validate_inline(input: &[u8], options: ParseOptions) -> Result<()> {
     let mut deserializer = serde_json::Deserializer::from_slice(input);
     deserializer.disable_recursion_limit();
     let result = ValidateSeed {
@@ -142,6 +153,67 @@ pub fn validate(input: &[u8], options: ParseOptions) -> Result<()> {
     .deserialize(&mut deserializer)
     .and_then(|()| deserializer.end());
     result.map_err(|error| convert_error(input, error))
+}
+
+// Deeply nested documents exceed the stack available to server threads because
+// serde builds the document recursively. Parse those on a dedicated stack and
+// keep shallow documents on the caller's thread.
+const DEEP_PARSE_NESTING_LIMIT: usize = 256;
+const DEEP_PARSE_STACK_SIZE: usize = 64 * 1024 * 1024;
+const DEEP_PARSE_FAILURE: &str = "unable to allocate a stack for JSON parsing";
+
+fn nesting_exceeds(input: &[u8], limit: usize) -> bool {
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for byte in input {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if *byte == b'\\' {
+                escaped = true;
+            } else if *byte == b'"' {
+                in_string = false;
+            }
+        } else {
+            match byte {
+                b'"' => in_string = true,
+                b'[' | b'{' => {
+                    depth += 1;
+                    if depth > limit {
+                        return true;
+                    }
+                }
+                b']' | b'}' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+    }
+    false
+}
+
+fn run_on_deep_stack<T: Send>(
+    input: &[u8],
+    operation: impl FnOnce() -> T + Send,
+) -> Option<T> {
+    if !nesting_exceeds(input, DEEP_PARSE_NESTING_LIMIT) {
+        return Some(operation());
+    }
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .stack_size(DEEP_PARSE_STACK_SIZE)
+            .spawn_scoped(scope, operation)
+            .ok()
+            .and_then(|handle| handle.join().ok())
+    })
+}
+
+fn thread_failure() -> ParseError {
+    ParseError {
+        kind: ErrorKind::Syntax,
+        byte_offset: 0,
+        message: DEEP_PARSE_FAILURE.to_owned(),
+    }
 }
 
 pub(crate) fn normalized_input(input: &[u8]) -> Cow<'_, [u8]> {

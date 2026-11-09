@@ -15,6 +15,7 @@
 use crate::{
     binary, BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, CompareResult, JsonType, ParseOptions,
 };
+use std::collections::HashSet;
 use std::fmt;
 use crate::ValueRef;
 
@@ -359,7 +360,7 @@ impl Path {
     pub fn query<'a>(&self, root: BinaryValue<'a>, options: QueryOptions) -> BinaryResult<Vec<BinaryValue<'a>>> {
         let mut matches = Vec::new();
         evaluate(root, &self.steps, 0, options, &mut |value, _: &Trace| matches.push(value), &mut Trace::default())?;
-        Ok(matches)
+        Ok(deduplicate(matches))
     }
 
     pub(crate) fn query_read<'a>(&self, root: ValueRef<'a>, options: QueryOptions) -> BinaryResult<Vec<ValueRef<'a>>> {
@@ -464,6 +465,14 @@ impl Trace {
         if self.locations { self.location.truncate(mark.0); }
         if self.coordinates { self.indices.truncate(mark.1); }
     }
+}
+
+fn deduplicate<'a, V: QueryRead<'a>>(matches: Vec<V>) -> Vec<V> {
+    let mut seen = HashSet::with_capacity(matches.len());
+    matches
+        .into_iter()
+        .filter(|value| seen.insert(value.identity()))
+        .collect()
 }
 
 fn evaluate<'a, V: QueryRead<'a>, F: FnMut(V, &Trace)>(
