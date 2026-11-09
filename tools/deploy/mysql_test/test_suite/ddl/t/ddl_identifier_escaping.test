@@ -1,0 +1,47 @@
+# description: Escape DDL column identifiers without depending on the SQL module.
+
+--disable_warnings
+DROP TABLE IF EXISTS ddl_identifier_escaping;
+DROP TABLE IF EXISTS ddl_identifier_redefinition;
+--enable_warnings
+
+CREATE TABLE ddl_identifier_escaping (
+  id INT PRIMARY KEY,
+  `a``b` INT,
+  `e``num` ENUM('one', 'two'),
+  `s``et` SET('one', 'two')
+);
+INSERT INTO ddl_identifier_escaping VALUES
+  (1, 10, 'one', 'one'), (2, 20, 'two', 'one,two'), (3, NULL, NULL, NULL);
+
+# Existing rows force the index-build path to generate and execute column SQL.
+CREATE UNIQUE INDEX uq_id ON ddl_identifier_escaping (id);
+CREATE UNIQUE INDEX uq_plain ON ddl_identifier_escaping (`a``b`);
+CREATE UNIQUE INDEX uq_enum ON ddl_identifier_escaping (`e``num`);
+CREATE UNIQUE INDEX uq_set ON ddl_identifier_escaping (`s``et`);
+
+SELECT id, `a``b`, `e``num`, `s``et`
+FROM ddl_identifier_escaping FORCE INDEX (uq_enum) ORDER BY id;
+
+# The unique indexes must retain both NULL and duplicate-key semantics.
+INSERT INTO ddl_identifier_escaping VALUES (4, NULL, NULL, NULL);
+--error ER_DUP_ENTRY
+INSERT INTO ddl_identifier_escaping VALUES (5, 10, NULL, NULL);
+--error ER_DUP_ENTRY
+INSERT INTO ddl_identifier_escaping VALUES (6, 30, 'one', NULL);
+--error ER_DUP_ENTRY
+INSERT INTO ddl_identifier_escaping VALUES (7, 30, NULL, 'one');
+SELECT COUNT(*) AS row_count FROM ddl_identifier_escaping;
+
+DROP TABLE ddl_identifier_escaping;
+
+# Changing the primary key uses the offline DDL column-copy path.
+CREATE TABLE ddl_identifier_redefinition (
+  `key``id` INT PRIMARY KEY,
+  `v``alue` VARCHAR(20),
+  new_key INT NOT NULL
+);
+INSERT INTO ddl_identifier_redefinition VALUES (1, 'first', 11), (2, 'second', 22);
+ALTER TABLE ddl_identifier_redefinition DROP PRIMARY KEY, ADD PRIMARY KEY (new_key);
+SELECT `key``id`, `v``alue`, new_key FROM ddl_identifier_redefinition ORDER BY new_key;
+DROP TABLE ddl_identifier_redefinition;
