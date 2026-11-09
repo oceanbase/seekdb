@@ -478,7 +478,16 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
   int ret = OB_SUCCESS;
   ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
 
-  switch (cs_type) {
+  if (CHARSET_UTF8MB4 == cs_type && 1 == char_len) {
+    const unsigned char c = static_cast<unsigned char>(*input);
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+      type = CharType::ENGLISH_LETTER;
+    } else if (c >= '0' && c <= '9') {
+      type = CharType::ARABIC_LETTER;
+    } else {
+      type = CharType::USELESS;
+    }
+  } else switch (cs_type) {
   case CHARSET_UTF8MB4: {
     ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
     break;
@@ -503,3 +512,4 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
 } // namespace oceanbase
 
 #endif // _OCEANBASE_STORAGE_FTS_IK_OB_IK_CHAR_UTIL_H_
+
