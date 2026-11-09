@@ -14,7 +14,7 @@ def _windows_sdk(repository_ctx):
     for directory in ["vcpkg/x64-windows/include", "openssl/include", "vsag/include"]:
         for child in repository_ctx.path(sdk + "/" + directory).readdir():
             headers[child.basename] = child
-    locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt"
+    locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/native"
     locked_headers = locked_sdk + "/include"
     if repository_ctx.path(locked_headers).exists:
         for child in repository_ctx.path(locked_headers).readdir():
@@ -81,9 +81,9 @@ def _third_party_headers_repository_impl(repository_ctx):
         headers = prefix + "/include"
         libraries = prefix + "/lib"
         libraries64 = libraries
-    locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt"
+    locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/native"
     if platform == "android":
-        locked_sdk = str(repository_ctx.workspace_root) + "/deps/android-prebuilt"
+        locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/android"
     source_headers = [
         "absl", "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
         "omp.h", "ompx.h", "omp-tools.h", "ompt.h", "lapack.h", "lapacke.h",

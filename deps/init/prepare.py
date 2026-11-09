@@ -188,6 +188,25 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
+def locked_cache_directory(system, cache_directory):
+    if cache_directory is not None:
+        return cache_directory / "pkg"
+    if system == "Windows":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if not local_appdata or not Path(local_appdata).is_absolute():
+            raise ValueError("LOCALAPPDATA is missing or invalid; set DEP_CACHE_DIR for dependency packages")
+        cache_home = Path(local_appdata)
+    elif system == "Darwin":
+        cache_home = Path.home() / "Library" / "Caches"
+    else:
+        xdg_cache = os.environ.get("XDG_CACHE_HOME")
+        if xdg_cache and Path(xdg_cache).is_absolute():
+            cache_home = Path(xdg_cache)
+        else:
+            cache_home = Path.home() / ".cache"
+    return cache_home / "seekdb" / "deps" / "pkg"
+
+
 def locked_archive(package, archive_directory):
     url = package.get("url")
     checksum = package.get("sha256", "").lower()
@@ -291,7 +310,7 @@ def install(profile, destination, cache_directory):
     print("Dependencies ready: " + str(destination), flush=True)
 
 
-def install_locked(lock_file, destination, cache_directory, system, architecture):
+def install_locked(lock_file, destination, archive_directory, system, architecture):
     packages = locked_packages(lock_file, system, architecture)
     key = hashlib.sha256(json.dumps(packages, sort_keys=True).encode("utf-8")).hexdigest()
     if ready(destination, key):
@@ -299,17 +318,11 @@ def install_locked(lock_file, destination, cache_directory, system, architecture
         return
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    archive_directory = cache_directory / "pkg" if cache_directory else destination / "pkg"
     with tempfile.TemporaryDirectory(prefix=".deps-", dir=destination.parent) as temporary:
         stage = Path(temporary) / "prebuilt"
         stage.mkdir()
         for package in packages:
             archive = locked_archive(package, archive_directory)
-            if cache_directory is None:
-                (stage / "pkg").mkdir(exist_ok=True)
-                staged_archive = stage / "pkg" / archive.name
-                shutil.copyfile(archive, staged_archive)
-                archive = staged_archive
             print("Preparing locked package " + package["name"], flush=True)
             unpack(archive, stage, ignore_owner=platform.system() == "Linux")
         (stage / key).touch()
@@ -378,14 +391,15 @@ def main(arguments):
     prepare_rust(rust_target)
     cache = os.environ.get("DEP_CACHE_DIR")
     cache_directory = Path(cache).expanduser().resolve() if cache else None
+    archive_directory = locked_cache_directory(system, cache_directory)
     install(profile, ROOT / "deps/3rd", cache_directory if os.name != "nt" else None)
-    install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt", cache_directory,
+    install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/native", archive_directory,
                    system, architecture)
     if options.wasm:
         subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
     if options.android:
         install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android", None)
-        install_locked(ROOT / "deps.lock.json", ROOT / "deps/android-prebuilt", cache_directory,
+        install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/android", archive_directory,
                        "Android", "arm64")
     if options.ios:
         subprocess.run([
