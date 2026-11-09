@@ -541,6 +541,28 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+static int append_escaped_column_name(
+    ObSqlString &sql_string,
+    const ObString &column_name,
+    const char *name_prefix = NULL)
+{
+  int ret = OB_SUCCESS;
+  const char escape_character = '`';
+  if (OB_FAIL(sql_string.append(&escape_character, 1))) {
+  } else if (NULL != name_prefix && OB_FAIL(sql_string.append(name_prefix))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && NULL != column_name.ptr() && i < column_name.length(); ++i) {
+    if (escape_character == column_name[i]) {
+      if (OB_FAIL(sql_string.append("``", 2))) {
+      }
+    } else if (OB_FAIL(sql_string.append(column_name.ptr() + i, 1))) {
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(sql_string.append(&escape_character, 1))) {
+  }
+  return ret;
+}
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -549,7 +571,6 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
   // append comma
   if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
@@ -559,9 +580,11 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast("))) {
+      } else if (OB_FAIL(append_escaped_column_name(sql_string, column_name_info.column_name_))) {
+      } else if (OB_FAIL(sql_string.append_fmt(" as unsigned)"))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(append_escaped_column_name(sql_string, column_name_info.column_name_))) {
     }
   }
   // append AS
@@ -571,8 +594,8 @@ int ObDDLUtil::generate_column_name_str(
   }
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_escaped_column_name(sql_string, column_name_info.column_name_,
+        column_name_info.is_shadow_column_ ? "__SHADOW_" : NULL))) {
     }
   }
   return ret;
