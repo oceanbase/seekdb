@@ -563,7 +563,7 @@ private:
                              const share::SCN replay_scn = share::SCN::invalid_scn());
   int submit_rollback_to_log_(const ObTxSEQ from_scn,
                               const ObTxSEQ to_scn);
-  int submit_redo_log_for_freeze_(bool &try_submit, const uint32_t freeze_clock);
+  int submit_redo_log_for_freeze_(const uint32_t freeze_clock);
   void print_first_mvcc_callback_();
 
   void set_target_state(ObTxState state) { target_state_ = state; }
