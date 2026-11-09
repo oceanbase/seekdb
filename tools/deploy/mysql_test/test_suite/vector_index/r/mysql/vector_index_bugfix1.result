@@ -752,4 +752,71 @@ operator	cardinality	hit_count
 VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
+drop table if exists t_issue1512_inlist;
+create table t_issue1512_inlist(id int primary key, category bigint);
+insert into t_issue1512_inlist values (1,1),(2,2),(3,3),(4,4),(5,NULL);
+set @issue1512_plan_cache = @@ob_enable_plan_cache;
+set ob_enable_plan_cache = 1;
+alter system flush plan cache;
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (1,2,3,1,2,3,1,2,3);
+ids
+1,2,3
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (2,3,4,2,3,4,2,3,4);
+ids
+2,3,4
+select count(*) as values_table_accesses
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1512_inlist') > 0
+and p.operator = 'VALUES TABLE ACCESS';
+values_table_accesses
+0
+alter system flush plan cache;
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (1,2,3,4,1,2,3,4,1);
+ids
+1,2,3,4
+select count(*) as values_table_accesses
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1512_inlist') > 0
+and p.operator = 'VALUES TABLE ACCESS';
+values_table_accesses
+1
+set ob_enable_plan_cache = 0;
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (1,2,3,1,2,3,1,2,3);
+ids
+1,2,3
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category not in (1,2,3,1,2,3,1,2,3);
+ids
+4
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (1,1,NULL,1,1,NULL);
+ids
+1
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category not in (1,1,NULL,1,1,NULL);
+ids
+NULL
+set ob_enable_plan_cache = 1;
+prepare issue1512_ps from "select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids from t_issue1512_inlist where category in (?,?,?,?,?,?,?,?,?)";
+set @p1=1,@p2=2,@p3=3;
+execute issue1512_ps using @p1,@p2,@p3,@p1,@p2,@p3,@p1,@p2,@p3;
+ids
+1,2,3
+set @p1=2,@p2=3,@p3=4;
+execute issue1512_ps using @p1,@p2,@p3,@p1,@p2,@p3,@p1,@p2,@p3;
+ids
+2,3,4
+set @p1=4,@p2=4,@p3=NULL;
+execute issue1512_ps using @p1,@p2,@p3,@p1,@p2,@p3,@p1,@p2,@p3;
+ids
+4
+deallocate prepare issue1512_ps;
+set ob_enable_plan_cache = @issue1512_plan_cache;
+drop table t_issue1512_inlist;
 alter system set vector_memory_limit = 0;

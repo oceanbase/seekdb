@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -263,6 +264,62 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+// Keep every original member and parameter position for subsequent resolution and plan reuse.
+// Only signed integers have an unambiguous equality relation here; other types keep the rewrite.
+static bool has_fewer_distinct_int_values(const ParseNode &in_list,
+                                         const ParamStore *param_store,
+                                         const int64_t threshold)
+{
+  int ret = OB_SUCCESS;
+  bool is_valid = true;
+  typedef hash::HashSetTypes<int64_t>::AllocType HashAllocType;
+  hash::ObHashSet<int64_t,
+                  hash::NoPthreadDefendMode,
+                  hash::hash_func<int64_t>,
+                  hash::equal_to<int64_t>,
+                  hash::SimpleAllocer<HashAllocType>,
+                  hash::NormalPointer,
+                  ObMalloc,
+                  2> distinct_values;
+  const int64_t max_initial_bucket_cnt = 1024;
+  const int64_t bucket_cnt = MIN(MIN(static_cast<int64_t>(in_list.num_child_), threshold),
+                                 max_initial_bucket_cnt);
+  if (OB_ISNULL(in_list.children_) || bucket_cnt <= 0) {
+    is_valid = false;
+  } else if (OB_FAIL(distinct_values.create(bucket_cnt, "InListDistinct", "InListDistinct"))) {
+    // Counting is optional: allocation failure must not introduce a query error.
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && is_valid && distinct_values.size() < threshold
+                        && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      int64_t value = 0;
+      if (OB_ISNULL(node) || 0 != node->num_child_) {
+        is_valid = false;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_QUESTIONMARK == node->type_ && NULL != param_store
+                 && node->value_ >= 0 && node->value_ < param_store->count()) {
+        const ObObjParam &param = param_store->at(node->value_);
+        if (ObIntType == param.get_type() && ObIntType == param.get_param_meta().get_type()
+            && !param.is_batch_parameters()) {
+          value = param.get_int();
+        } else {
+          is_valid = false;
+        }
+      } else {
+        is_valid = false;
+      }
+      if (is_valid) {
+        const int hash_ret = distinct_values.set_refactored(value, 0);
+        if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
+          ret = hash_ret;
+        }
+      }
+    }
+  }
+  return OB_SUCC(ret) && is_valid && distinct_values.size() < threshold;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +407,10 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt && !is_prepare_stmt && threshold > 1
+          && has_fewer_distinct_int_values(in_list, param_store, threshold)) {
+        is_enable = false;
+      }
     }
   }
   return ret;

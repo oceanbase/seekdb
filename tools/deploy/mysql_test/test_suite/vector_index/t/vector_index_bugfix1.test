@@ -662,4 +662,59 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1512: use the number of distinct integers for IN-list rewriting.
+--disable_warnings
+drop table if exists t_issue1512_inlist;
+--enable_warnings
+create table t_issue1512_inlist(id int primary key, category bigint);
+insert into t_issue1512_inlist values (1,1),(2,2),(3,3),(4,4),(5,NULL);
+set @issue1512_plan_cache = @@ob_enable_plan_cache;
+set ob_enable_plan_cache = 1;
+alter system flush plan cache;
+
+# Automatic parameters must retain their positions when repeated values change.
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (1,2,3,1,2,3,1,2,3);
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (2,3,4,2,3,4,2,3,4);
+select count(*) as values_table_accesses
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1512_inlist') > 0
+and p.operator = 'VALUES TABLE ACCESS';
+
+# Isolate the threshold boundary from the earlier parameterized cached plan.
+alter system flush plan cache;
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (1,2,3,4,1,2,3,4,1);
+select count(*) as values_table_accesses
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1512_inlist') > 0
+and p.operator = 'VALUES TABLE ACCESS';
+
+# Also exercise literal resolution and SQL three-valued logic without the cache.
+set ob_enable_plan_cache = 0;
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (1,2,3,1,2,3,1,2,3);
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category not in (1,2,3,1,2,3,1,2,3);
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category in (1,1,NULL,1,1,NULL);
+select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids
+from t_issue1512_inlist where category not in (1,1,NULL,1,1,NULL);
+
+# Explicit prepared statements must keep every parameter, including NULL values.
+set ob_enable_plan_cache = 1;
+prepare issue1512_ps from "select /*+ opt_param('inlist_rewrite_threshold' 4) */ group_concat(id order by id) as ids from t_issue1512_inlist where category in (?,?,?,?,?,?,?,?,?)";
+set @p1=1,@p2=2,@p3=3;
+execute issue1512_ps using @p1,@p2,@p3,@p1,@p2,@p3,@p1,@p2,@p3;
+set @p1=2,@p2=3,@p3=4;
+execute issue1512_ps using @p1,@p2,@p3,@p1,@p2,@p3,@p1,@p2,@p3;
+set @p1=4,@p2=4,@p3=NULL;
+execute issue1512_ps using @p1,@p2,@p3,@p1,@p2,@p3,@p1,@p2,@p3;
+deallocate prepare issue1512_ps;
+set ob_enable_plan_cache = @issue1512_plan_cache;
+drop table t_issue1512_inlist;
+
 alter system set vector_memory_limit = 0;
