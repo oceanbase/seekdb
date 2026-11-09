@@ -1,0 +1,33 @@
+--disable_query_log
+--disable_warnings
+drop table if exists redundant_integer_bounds;
+--enable_warnings
+create table redundant_integer_bounds (id int primary key, age int, index idx_age(age));
+insert into redundant_integer_bounds values (1,NULL),(2,-1),(3,0),(4,9),(5,10),(6,19),(7,20);
+--echo # Balanced 129-predicate conjunction, including a nullable column
+select group_concat(id order by id) as ids from redundant_integer_bounds where (((((((age < 10) AND (age < 20)) AND ((age < 25) AND (age < 30))) AND (((age < 35) AND (age < 40)) AND ((age < 45) AND (age < 50)))) AND ((((age < 55) AND (age < 60)) AND ((age < 65) AND (age < 70))) AND (((age < 75) AND (age < 80)) AND ((age < 85) AND (age < 90))))) AND (((((age < 95) AND (age < 100)) AND ((age < 105) AND (age < 110))) AND (((age < 115) AND (age < 120)) AND ((age < 125) AND (age < 130)))) AND ((((age < 135) AND (age < 140)) AND ((age < 145) AND (age < 150))) AND (((age < 155) AND (age < 160)) AND ((age < 165) AND (age < 170)))))) AND ((((((age < 175) AND (age < 180)) AND ((age < 185) AND (age < 190))) AND (((age < 195) AND (age < 200)) AND ((age < 205) AND (age < 210)))) AND ((((age < 215) AND (age < 220)) AND ((age < 225) AND (age < 230))) AND (((age < 235) AND (age < 240)) AND ((age < 245) AND (age < 250))))) AND (((((age < 255) AND (age < 260)) AND ((age < 265) AND (age < 270))) AND (((age < 275) AND (age < 280)) AND ((age < 285) AND (age < 290)))) AND ((((age < 295) AND (age < 300)) AND ((age < 305) AND (age < 310))) AND (((age < 315) AND (age < 320)) AND ((age < 325) AND (age < 330))))))) AND (((((((age < 335) AND (age < 340)) AND ((age < 345) AND (age < 350))) AND (((age < 355) AND (age < 360)) AND ((age < 365) AND (age < 370)))) AND ((((age < 375) AND (age < 380)) AND ((age < 385) AND (age < 390))) AND (((age < 395) AND (age < 400)) AND ((age < 405) AND (age < 410))))) AND (((((age < 415) AND (age < 420)) AND ((age < 425) AND (age < 430))) AND (((age < 435) AND (age < 440)) AND ((age < 445) AND (age < 450)))) AND ((((age < 455) AND (age < 460)) AND ((age < 465) AND (age < 470))) AND (((age < 475) AND (age < 480)) AND ((age < 485) AND (age < 490)))))) AND ((((((age < 495) AND (age < 500)) AND ((age < 505) AND (age < 510))) AND (((age < 515) AND (age < 520)) AND ((age < 525) AND (age < 530)))) AND ((((age < 535) AND (age < 540)) AND ((age < 545) AND (age < 550))) AND (((age < 555) AND (age < 560)) AND ((age < 565) AND (age < 570))))) AND (((((age < 575) AND (age < 580)) AND ((age < 585) AND (age < 590))) AND (((age < 595) AND (age < 600)) AND ((age < 605) AND (age < 610)))) AND ((((age < 615) AND (age < 620)) AND ((age < 625) AND (age < 630))) AND (((age < 635) AND (age < 640)) AND ((age < 645) AND ((age < 650) AND (age < 655))))))));
+--echo # Strongest bound comes last
+select group_concat(id order by id) as ids from redundant_integer_bounds where age < 20 and age < 10;
+--echo # Inclusive upper bounds
+select group_concat(id order by id) as ids from redundant_integer_bounds where age <= 20 and age <= 10;
+--echo # Lower bounds
+select group_concat(id order by id) as ids from redundant_integer_bounds where age > 0 and age > 9;
+select group_concat(id order by id) as ids from redundant_integer_bounds where age >= 0 and age >= 9;
+--echo # Mixed operators and OR must preserve semantics
+select group_concat(id order by id) as ids from redundant_integer_bounds where age <= 10 and age < 10;
+select group_concat(id order by id) as ids from redundant_integer_bounds where age < 10 or age < 20;
+--echo # NULL bound must not be discarded
+select count(*) as cnt from redundant_integer_bounds where age < 10 and age < NULL;
+--echo # Cached parameterized queries must change the retained bound
+prepare bounds_stmt from 'select group_concat(id order by id) as ids from redundant_integer_bounds where age < ? and age < ?';
+set @a=10, @b=20;
+execute bounds_stmt using @a,@b;
+set @a=20, @b=10;
+execute bounds_stmt using @a,@b;
+set @a=20, @b=20;
+execute bounds_stmt using @a,@b;
+set @a=NULL, @b=20;
+execute bounds_stmt using @a,@b;
+deallocate prepare bounds_stmt;
+drop table redundant_integer_bounds;
+--enable_query_log
