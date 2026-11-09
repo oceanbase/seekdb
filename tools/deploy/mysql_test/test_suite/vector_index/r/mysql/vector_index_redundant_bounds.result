@@ -1,0 +1,126 @@
+DROP TABLE IF EXISTS ann_bounds;
+CREATE TABLE ann_bounds (
+id INT PRIMARY KEY, age BIGINT, v VECTOR(3),
+VECTOR INDEX idx(v) WITH (distance=l2,type=hnsw,lib=vsag)
+);
+INSERT INTO ann_bounds VALUES
+(1,NULL,'[1,0,0]'), (2,-1,'[2,0,0]'), (3,0,'[3,0,0]'),
+(4,9,'[4,0,0]'), (5,10,'[5,0,0]'), (6,11,'[6,0,0]'),
+(7,19,'[7,0,0]'), (8,20,'[8,0,0]'), (9,30,'[9,0,0]');
+# Only the tightest upper bound should remain in the ANN plan.
+EXPLAIN SELECT id FROM ann_bounds WHERE age < N AND age < N AND age < N
+ORDER BY lN_distance(v,'[N,N,N]') APPROXIMATE LIMIT N;
+Query Plan
+=============================================================================
+|ID|OPERATOR                               |NAME      |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------------------
+|N |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|ann_bounds|N       |N           |
+=============================================================================
+Outputs & filters:
+-------------------------------------
+  N - output([ann_bounds.id]), filter([ann_bounds.age < N]), rowset=N
+      access([ann_bounds.id], [ann_bounds.age]), partitions(pN)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([ann_bounds.id]), range(MIN ; MAX)always true
+SELECT id FROM ann_bounds WHERE age < 10 AND age < 20 AND age < 30
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+SELECT id FROM ann_bounds WHERE age < 20 AND age < 10 AND age < 30
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+SELECT id FROM ann_bounds WHERE age <= 10 AND age < 10
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+SELECT id FROM ann_bounds WHERE age < 10 AND age <= 10
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+SELECT id FROM ann_bounds WHERE age > 0 AND age >= 0 AND age > -1
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+4
+5
+6
+7
+8
+9
+SELECT id FROM ann_bounds WHERE age > 0 AND age < 20 AND age < 30 AND age >= -1
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+4
+5
+6
+7
+SELECT id FROM ann_bounds WHERE age < 10 AND age < 10
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+SELECT id FROM ann_bounds WHERE (age < 10 OR age > 20) AND age < 30
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+SELECT id FROM ann_bounds WHERE age < 10 AND age < NULL
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+SELECT id FROM ann_bounds WHERE age < 10.5 AND age < 20
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+5
+SELECT id FROM ann_bounds WHERE age < 20 AND age < 30
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+5
+6
+7
+SELECT id FROM ann_bounds WHERE age < 30 AND age < 10
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 20;
+id
+2
+3
+4
+# Prepared executions must reconsider which parameter is strongest.
+PREPARE bounds_stmt FROM 'SELECT id FROM ann_bounds WHERE age < ? AND age < ? ORDER BY l2_distance(v,''[0,0,0]'') APPROXIMATE LIMIT 20';
+SET @a=10, @b=30;
+EXECUTE bounds_stmt USING @a,@b;
+id
+2
+3
+4
+SET @a=30, @b=20;
+EXECUTE bounds_stmt USING @a,@b;
+id
+2
+3
+4
+5
+6
+7
+SET @a=30, @b=10;
+EXECUTE bounds_stmt USING @a,@b;
+id
+2
+3
+4
+DEALLOCATE PREPARE bounds_stmt;
+DROP TABLE ann_bounds;
