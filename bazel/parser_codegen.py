@@ -1,6 +1,10 @@
 from pathlib import Path
+import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 
 
 def patch_lexer(source, kind):
@@ -35,7 +39,26 @@ def type_names(source):
     )
 
 
+def run_flex(tool, output, arguments):
+    # Old WinFlex uses non-atomic temporary names shared by concurrent actions.
+    directory = tempfile.mkdtemp(prefix=".flex-", dir=Path(output).resolve().parent)
+    environment = os.environ.copy()
+    environment.update({name: directory for name in ("TMP", "TEMP", "FLEX_TMP_DIR")})
+    try:
+        result = subprocess.run([tool] + arguments, env=environment).returncode
+        if result != 0:
+            print(f"Flex failed ({result}); temporary files retained: {directory}", file=sys.stderr)
+            return result
+        shutil.rmtree(directory)
+    except BaseException:
+        print(f"Flex temporary files retained: {directory}", file=sys.stderr)
+        raise
+    return 0
+
+
 def main():
+    if sys.argv[1] == "flex":
+        return run_flex(sys.argv[2], sys.argv[3], sys.argv[4:])
     kind, source, output = sys.argv[1:]
     text = Path(source).read_text(encoding="utf-8")
     text = type_names(text) if kind == "type_names" else patch_lexer(text, kind)
@@ -44,4 +67,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
