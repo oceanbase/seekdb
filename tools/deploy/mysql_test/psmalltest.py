@@ -61,6 +61,7 @@ psmall_test=[
 'expr.func_equal',
 'expr.func_length',
 'expr.func_regexp',
+'expr.inlist_duplicate_rewrite',
 'expr.mul',
 'fin',
 'foreign_key.dml_147',
