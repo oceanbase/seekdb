@@ -1,0 +1,55 @@
+#owner: a3
+#owner group: shenzhen
+--echo # Redundant comparison predicates must not be evaluated by the vector index scan
+--echo # (issue 1534: equivalent filters must not slow down an approximate search)
+
+alter system set vector_memory_limit = 0;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1(c1 int primary key, c2 int, c3 vector(3), index idx_c2(c2));
+insert into t1 values
+  (1,1,'[0.10,0.20,0.30]'),
+  (2,2,'[0.20,0.30,0.40]'),
+  (3,3,'[0.30,0.40,0.50]'),
+  (4,4,'[0.40,0.50,0.60]'),
+  (5,5,'[0.50,0.60,0.70]'),
+  (6,6,'[0.60,0.70,0.80]'),
+  (7,7,'[0.70,0.80,0.90]'),
+  (8,8,'[0.80,0.90,1.00]'),
+  (9,9,'[0.90,1.00,0.10]'),
+  (10,10,'[1.00,0.10,0.20]'),
+  (11,11,'[0.11,0.21,0.31]'),
+  (12,12,'[0.21,0.31,0.41]'),
+  (13,13,'[0.31,0.41,0.51]'),
+  (14,14,'[0.41,0.51,0.61]'),
+  (15,15,'[0.51,0.61,0.71]'),
+  (16,16,'[0.61,0.71,0.81]'),
+  (17,17,'[0.71,0.81,0.91]'),
+  (18,18,'[0.81,0.91,0.01]'),
+  (19,19,'[0.91,0.01,0.11]'),
+  (20,20,'[0.01,0.11,0.21]');
+create vector index idxv on t1(c3) with (distance=l2, type=hnsw, lib=vsag, m=10, ef_construction=12);
+analyze table t1;
+
+--echo # weaker upper bounds are implied by c2 < 5 and must be dropped
+explain select c1 from t1 where c2 < 5 and c2 < 10 and c2 < 20 order by l2_distance(c3, '[0.1,0.2,0.3]') approximate limit 3;
+
+--echo # weaker lower bounds are implied by c2 > 15 and must be dropped
+explain select c1 from t1 where c2 > 15 and c2 > 10 and c2 > 1 order by l2_distance(c3, '[0.1,0.2,0.3]') approximate limit 3;
+
+--echo # c2 < 5 implies c2 <= 5, the inclusive bound must be dropped
+explain select c1 from t1 where c2 < 5 and c2 <= 5 order by l2_distance(c3, '[0.1,0.2,0.3]') approximate limit 3;
+
+--echo # bounds in the other direction must be kept
+explain select c1 from t1 where c2 < 5 and c2 > 1 and c2 < 20 order by l2_distance(c3, '[0.1,0.2,0.3]') approximate limit 3;
+
+--echo # the same filter with the literals swapped must still return the right rows
+select c1 from t1 where c2 < 5 and c2 < 10 order by c1;
+select c1 from t1 where c2 < 10 and c2 < 5 order by c1;
+select c1 from t1 where c2 > 15 and c2 > 10 order by c1;
+select c1 from t1 where c2 > 10 and c2 > 15 order by c1;
+
+drop table t1;
