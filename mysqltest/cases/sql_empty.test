@@ -1,0 +1,4 @@
+CREATE TABLE docs (id BIGINT PRIMARY KEY, category VARCHAR(8), content VARCHAR(16));
+SELECT id FROM docs ORDER BY id LIMIT 5;
+DELETE FROM docs WHERE id > 0;
+SELECT id FROM docs;

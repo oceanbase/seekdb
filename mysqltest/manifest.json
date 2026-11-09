@@ -1,0 +1,31 @@
+{
+  "version": "minivectordb-public-basic-v1",
+  "scope": "public-samples",
+  "cases": [
+    {
+      "id": "sql_crud",
+      "group": "sql",
+      "statements": 9
+    },
+    {
+      "id": "sql_comparisons",
+      "group": "sql",
+      "statements": 7
+    },
+    {
+      "id": "sql_ordering",
+      "group": "sql",
+      "statements": 7
+    },
+    {
+      "id": "sql_empty",
+      "group": "sql",
+      "statements": 4
+    },
+    {
+      "id": "vector_euclidean",
+      "group": "vector",
+      "statements": 5
+    }
+  ]
+}
