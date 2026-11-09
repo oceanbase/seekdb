@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "rust/config.h"
 #include "ob_log_plan.h"
+#include "lib/hash/ob_hashset.h"
+#include "lib/objectpool/ob_pooled_allocator.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_log_table_scan.h"
@@ -12800,15 +12802,35 @@ int ObLogPlan::remove_duplicate_constraints()
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret) && OB_NOT_NULL(get_optimizer_context().get_query_ctx())) {
     ObQueryCtx *query_ctx = get_optimizer_context().get_query_ctx();
-    for (int64_t i = query_ctx->all_equal_param_constraints_.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
-      bool find_duplicate = false;
-      for (int64_t j = 0; OB_SUCC(ret) && !find_duplicate && j < i; j++) {
-        if (query_ctx->all_equal_param_constraints_.at(i) == query_ctx->all_equal_param_constraints_.at(j)) {
-          find_duplicate = true;
+    ObIArray<ObPCParamEqualInfo> &equal_constraints = query_ctx->all_equal_param_constraints_;
+    if (equal_constraints.count() > 1) {
+      typedef ObPooledAllocator<hash::HashSetTypes<ObPCParamEqualInfo>::AllocType,
+                               ObWrapperAllocator> ParamEqualSetAllocator;
+      ObWrapperAllocator allocator(&get_allocator());
+      ParamEqualSetAllocator node_allocator(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator);
+      hash::ObHashSet<ObPCParamEqualInfo, hash::NoPthreadDefendMode,
+                     hash::hash_func<ObPCParamEqualInfo>, hash::equal_to<ObPCParamEqualInfo>,
+                     ParamEqualSetAllocator, hash::NormalPointer, ObWrapperAllocator> seen;
+      ObSEArray<int64_t, 16, ObWrapperAllocator> first_positions(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator);
+      if (OB_FAIL(seen.create(equal_constraints.count(), &node_allocator, &allocator))) {
+      } else if (OB_FAIL(first_positions.reserve(equal_constraints.count()))) {
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < equal_constraints.count(); ++i) {
+        if (OB_HASH_EXIST == (ret = seen.set_refactored(equal_constraints.at(i), 0))) {
+          ret = OB_SUCCESS;
+        } else if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(first_positions.push_back(i))) {
         }
       }
-      if (OB_SUCC(ret) && find_duplicate &&
-          OB_FAIL(query_ctx->all_equal_param_constraints_.remove(i))) {
+      // Do not change the original guards until all fallible work succeeds.
+      // Ascending source positions preserve the first occurrence and its orientation.
+      if (OB_SUCC(ret)) {
+        for (int64_t i = 0; i < first_positions.count(); ++i) {
+          equal_constraints.at(i) = equal_constraints.at(first_positions.at(i));
+        }
+        while (equal_constraints.count() > first_positions.count()) {
+          equal_constraints.pop_back();
+        }
       }
     }
     for (int64_t i = query_ctx->all_plan_const_param_constraints_.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
