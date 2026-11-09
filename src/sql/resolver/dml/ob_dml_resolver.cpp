@@ -5344,8 +5344,18 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
-        stmt->set_has_vec_approx(true);
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid) {
+        if (T_FUN_SYS_INNER_PRODUCT == tmp_expr->get_expr_type()) {
+          // inner_product(...) DESC APPROXIMATE parses fine, but the ANN scan returns
+          // candidates in ascending distance order, which is what
+          // negative_inner_product(...) ASC expresses. Keep such a query working with an
+          // exact scan, but tell the user that APPROXIMATE will not be honored instead of
+          // silently ignoring it.
+          LOG_USER_WARN(OB_NOT_SUPPORTED,
+                        "Using vector index for inner_product with APPROXIMATE is");
+        } else {
+          stmt->set_has_vec_approx(true);
+        }
       }
       if (OB_SUCC(ret) && !has_const) {
         // if has vector expr, but no const param, not support use vector index
