@@ -1,6 +1,51 @@
 --- a/build.rs
 +++ b/build.rs
-@@ -180,6 +180,19 @@
+@@ -56,12 +56,41 @@
+     .is_some()
+ }
+ 
++fn report_tail(label: &str, bytes: &[u8], keep: usize, drop_include_notes: bool) {
++    let text = String::from_utf8_lossy(bytes);
++    let lines: Vec<&str> = text
++        .lines()
++        .filter(|line| {
++            !(drop_include_notes && line.trim_start().starts_with("Note: including file:"))
++        })
++        .collect();
++    let start = lines.len().saturating_sub(keep);
++    if start < lines.len() {
++        eprintln!(
++            "--- {label}: last {} of {} lines ---",
++            lines.len() - start,
++            lines.len()
++        );
++        for line in &lines[start..] {
++            eprintln!("{line}");
++        }
++    }
++}
++
+ fn run(command: &mut Command) {
+     eprintln!("running: {command:?}");
+-    let status = command
+-        .status()
++    let output = command
++        .output()
+         .unwrap_or_else(|error| panic!("cannot start {command:?}: {error}"));
+-    assert!(status.success(), "command failed: {command:?}");
++    if !output.status.success() {
++        // Bazel discards action output above --experimental_ui_max_stdouterr_bytes,
++        // and configure/make can emit megabytes of /showIncludes notes before the
++        // real error. Report only the tail of each stream so the failure stays
++        // visible in CI logs.
++        report_tail("stderr", &output.stderr, 120, false);
++        report_tail("stdout", &output.stdout, 120, true);
++        panic!("command failed: {command:?} ({})", output.status);
++    }
+ }
+ 
+ fn absolute_from(base: &Path, path: impl AsRef<Path>) -> PathBuf {
+@@ -180,6 +209,19 @@
      (output_library, output_header)
  }
  
@@ -20,7 +65,7 @@
  fn shell_path(path: &Path, target_os: &str) -> String {
      let path = path.to_string_lossy();
      if target_os == "windows" {
-@@ -223,6 +236,21 @@
+@@ -223,6 +265,21 @@
          fs::remove_dir_all(&build_dir).unwrap();
      }
      fs::create_dir_all(&build_dir).unwrap();
