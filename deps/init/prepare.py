@@ -188,24 +188,30 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
-def locked_archive(package, archive_directory, staging_directory):
+def locked_archive(package, archive_directory):
     url = package.get("url")
     checksum = package.get("sha256", "").lower()
     if not url or not re.fullmatch(r"[0-9a-f]{64}", checksum):
         raise ValueError("Incomplete locked dependency: " + str(package.get("name")))
 
+    archive_directory.mkdir(parents=True, exist_ok=True)
     cached = archive_directory / checksum
-    archive = staging_directory / checksum
     if cached.is_file() and sha256_file(cached) == checksum:
-        shutil.copyfile(cached, archive)
-        return archive
-    if cached.is_file():
-        cached.unlink()
-    download(locked_download_url(url), archive)
-    if sha256_file(archive) != checksum:
-        archive.unlink()
-        raise ValueError("SHA256 mismatch for " + url.rsplit("/", 1)[-1])
-    return archive
+        return cached
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix="." + checksum + ".", suffix=".tmp", dir=archive_directory)
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        download(locked_download_url(url), temporary)
+        if sha256_file(temporary) != checksum:
+            raise ValueError("SHA256 mismatch for " + url.rsplit("/", 1)[-1])
+        temporary.replace(cached)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    return cached
 
 
 def unpack(archive, destination, *, ignore_owner=False):
@@ -250,35 +256,25 @@ def populate_profile(profile, stage, archive_directory):
         unpack(archive, stage)
 
 
-def populate_lock(lock_file, stage, archive_directory, system, architecture):
-    for package in locked_packages(lock_file, system, architecture):
-        archive = locked_archive(package, archive_directory, stage / "pkg")
-        print("Preparing locked package " + package["name"], flush=True)
-        unpack(archive, stage, ignore_owner=system == "Linux")
-
-
-def populate(profile, destination, key, archive_directory, lock_file, system, architecture):
+def populate(profile, destination, key, archive_directory):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".deps-", dir=destination.parent) as temporary:
         stage = Path(temporary) / "3rd"
         (stage / "pkg").mkdir(parents=True)
         populate_profile(profile, stage, archive_directory)
-        populate_lock(lock_file, stage, archive_directory, system, architecture)
         (stage / key).touch()
         (stage / "DONE").touch()
         remove_directory(destination)
         stage.rename(destination)
 
 
-def install(profile, destination, cache_directory, lock_file, system, architecture):
-    lock_packages = locked_packages(lock_file, system, architecture)
-    identity = profile.read_bytes() + json.dumps(lock_packages, sort_keys=True).encode("utf-8")
-    key = hashlib.sha256(identity).hexdigest()
+def install(profile, destination, cache_directory):
+    key = hashlib.sha256(profile.read_bytes()).hexdigest()
     if ready(destination, key):
         print("Dependencies ready: " + str(destination), flush=True)
         return
     if cache_directory is None:
-        populate(profile, destination, key, destination / "pkg", lock_file, system, architecture)
+        populate(profile, destination, key, destination / "pkg")
         return
 
     import fcntl
@@ -288,11 +284,39 @@ def install(profile, destination, cache_directory, lock_file, system, architectu
     with (cache_directory / (key + ".lock")).open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if not ready(cached, key):
-            populate(profile, cached, key, destination / "pkg", lock_file, system, architecture)
+            populate(profile, cached, key, destination / "pkg")
     destination.parent.mkdir(parents=True, exist_ok=True)
     remove_directory(destination)
     destination.symlink_to(cached, target_is_directory=True)
     print("Dependencies ready: " + str(destination), flush=True)
+
+
+def install_locked(lock_file, destination, cache_directory, system, architecture):
+    packages = locked_packages(lock_file, system, architecture)
+    key = hashlib.sha256(json.dumps(packages, sort_keys=True).encode("utf-8")).hexdigest()
+    if ready(destination, key):
+        print("Locked dependencies ready: " + str(destination), flush=True)
+        return
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    archive_directory = cache_directory / "pkg" if cache_directory else destination / "pkg"
+    with tempfile.TemporaryDirectory(prefix=".deps-", dir=destination.parent) as temporary:
+        stage = Path(temporary) / "prebuilt"
+        stage.mkdir()
+        for package in packages:
+            archive = locked_archive(package, archive_directory)
+            if cache_directory is None:
+                (stage / "pkg").mkdir(exist_ok=True)
+                staged_archive = stage / "pkg" / archive.name
+                shutil.copyfile(archive, staged_archive)
+                archive = staged_archive
+            print("Preparing locked package " + package["name"], flush=True)
+            unpack(archive, stage, ignore_owner=platform.system() == "Linux")
+        (stage / key).touch()
+        (stage / "DONE").touch()
+        remove_directory(destination)
+        stage.rename(destination)
+    print("Locked dependencies ready: " + str(destination), flush=True)
 
 
 def prepare_rust(target=None):
@@ -352,15 +376,17 @@ def main(arguments):
     elif options.ios:
         rust_target = "aarch64-apple-ios-sim" if options.simulator else "aarch64-apple-ios"
     prepare_rust(rust_target)
-    cache = os.environ.get("DEP_CACHE_DIR") if os.name != "nt" else None
+    cache = os.environ.get("DEP_CACHE_DIR")
     cache_directory = Path(cache).expanduser().resolve() if cache else None
-    install(profile, ROOT / "deps/3rd", cache_directory, ROOT / "deps.lock.json",
-            system, architecture)
+    install(profile, ROOT / "deps/3rd", cache_directory if os.name != "nt" else None)
+    install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt", cache_directory,
+                   system, architecture)
     if options.wasm:
         subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
     if options.android:
-        install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android", None,
-                ROOT / "deps.lock.json", "Android", "arm64")
+        install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android", None)
+        install_locked(ROOT / "deps.lock.json", ROOT / "deps/android-prebuilt", cache_directory,
+                       "Android", "arm64")
     if options.ios:
         subprocess.run([
             sys.executable, str(PROFILES / "ios/build.py"), "--reuse", "--jobs", str(os.cpu_count() or 1),
