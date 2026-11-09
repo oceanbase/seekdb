@@ -283,6 +283,23 @@ int ObMicroBlockHeader::deserialize(const char *buf, int64_t buf_len, int64_t &p
                 || buf_len < pos + header->header_size_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid header to deserialize", K(ret), K(buf_len), K(pos), KPC(header));
+#ifdef _WIN32
+      if (nullptr == header) {
+        LOG_INFO("seek1243 post-io callback failure detail", K(ret),
+                 "diagnostic_stage", "micro_header.deserialize.null", K(buf_len), K(pos));
+      } else {
+        LOG_INFO("seek1243 post-io callback failure detail", K(ret),
+                 "diagnostic_stage", "micro_header.deserialize.invalid", K(buf_len), K(pos),
+                 "header_magic", static_cast<int64_t>(header->magic_),
+                 "header_version", static_cast<int64_t>(header->version_),
+                 "header_bytes", static_cast<int64_t>(header->header_size_),
+                 "column_count", static_cast<int64_t>(header->column_count_),
+                 "rowkey_column_count", static_cast<int64_t>(header->rowkey_column_count_),
+                 "row_store_type", static_cast<int64_t>(header->row_store_type_),
+                 "has_column_checksum", static_cast<int64_t>(header->has_column_checksum_),
+                 "expected_header_bytes", static_cast<int64_t>(header->get_serialize_size()));
+      }
+#endif
     } else {
       *this = *header;
       new_pos += COLUMN_CHECKSUM_PTR_OFFSET ;

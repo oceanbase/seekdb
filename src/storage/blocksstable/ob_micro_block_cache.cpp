@@ -424,15 +424,27 @@ int ObIMicroBlockIOCallback::process_block(
   int64_t pos = 0;
   int64_t payload_size = 0;
   const char *payload_buf = nullptr;
+#ifdef _WIN32
+  const char *diagnostic_stage = "none";
+#endif
   if (OB_UNLIKELY(NULL == reader || NULL == buffer || offset < 0 || size < 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(header.deserialize(buffer, size, pos))) {
+#ifdef _WIN32
+    diagnostic_stage = "micro_header.deserialize";
+#endif
   } else if (OB_FAIL(header.check_and_get_record(
         buffer, size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
+#ifdef _WIN32
+    diagnostic_stage = "micro_header.check_and_get_record";
+#endif
   } else {
     if (OB_UNLIKELY(!use_block_cache_)) {
       // Won't put in cache
       if (OB_FAIL(read_block_and_copy(header, *reader, buffer, size, block_data, micro_block, cache_handle))) {
+#ifdef _WIN32
+        diagnostic_stage = "read_block_and_copy";
+#endif
       }
     } else {
       ObIMicroBlockCache::BaseBlockCache *kvcache = nullptr;
@@ -440,10 +452,16 @@ int ObIMicroBlockIOCallback::process_block(
       logic_micro_id.is_valid() ? key.set(logic_micro_id, data_checksum) :
                                   key.set(block_id_, offset, size);
       if (OB_FAIL(cache_->get_cache(kvcache))) {
+#ifdef _WIN32
+        diagnostic_stage = "cache.get_cache";
+#endif
       } else if (OB_UNLIKELY(OB_SUCCESS == (ret = kvcache->get(key, micro_block, cache_handle)))) {
         // entry exist, no need to put
       } else if (OB_FAIL(cache_->put_cache_block(
           block_des_meta_, buffer, size, key, *reader, *allocator_, micro_block, cache_handle, table_read_info_))) {
+#ifdef _WIN32
+        diagnostic_stage = "cache.put_cache_block";
+#endif
       }
     }
 
@@ -451,6 +469,12 @@ int ObIMicroBlockIOCallback::process_block(
     // the block not be full transformed here and left to be part transformed in
     // cs micro block decoder.
   }
+#ifdef _WIN32
+  if (OB_ERR_UNEXPECTED == ret || OB_DESERIALIZE_ERROR == ret) {
+    LOG_INFO("seek1243 post-io callback failure detail", K(ret), K(diagnostic_stage),
+             "block_id", block_id_, K(offset), K(size));
+  }
+#endif
   return ret;
 }
 
@@ -553,6 +577,10 @@ int ObAsyncSingleMicroBlockIOCallback::process(
   ObTimeGuard time_guard("AsyncSingle_Callback_Process", 100000); //100ms
   if (OB_ISNULL(cache_)) {
     ret = OB_ERR_UNEXPECTED;
+#ifdef _WIN32
+    LOG_INFO("seek1243 post-io callback failure detail", K(ret),
+             "diagnostic_stage", "async.cache_null", "block_id", block_id_, K_(offset), K(size));
+#endif
   } else if (OB_UNLIKELY(size <= 0 || data_buffer == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -774,26 +802,45 @@ int ObSyncSingleMicroBLockIOCallback::inner_process(const char *data_buffer, con
 {
   int ret = OB_SUCCESS;
   bool is_compressed = false;
+#ifdef _WIN32
+  const char *diagnostic_stage = "none";
+#endif
   ObTimeGuard time_guard("SyncSingle_Callback_Process", 100000); //100ms
   if (OB_UNLIKELY(size <= 0 || data_buffer == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (OB_UNLIKELY(nullptr == macro_reader_ || nullptr == block_data_ || nullptr == allocator_)) {
       ret = OB_ERR_UNEXPECTED;
+#ifdef _WIN32
+      diagnostic_stage = "sync.null_dependency";
+#endif
     } else {
       const char *src_block_buf = data_buffer;
       const int64_t src_buf_size = size;
       ObMicroBlockHeader header;
       if (OB_FAIL(header.deserialize_and_check_header(src_block_buf, src_buf_size))) {
+#ifdef _WIN32
+        diagnostic_stage = "sync.deserialize_and_check_header";
+#endif
       } else {
         if (OB_FAIL(macro_reader_->do_decompress_data(
             header, block_des_meta_, src_block_buf, src_buf_size, block_data_->get_buf(),
             block_data_->get_buf_size(), is_compressed, true /* need_deep_copy */, allocator_))) {
+#ifdef _WIN32
+          diagnostic_stage = "sync.do_decompress_data";
+#endif
         }
       }
     }
   }
 
+#ifdef _WIN32
+  if (OB_ERR_UNEXPECTED == ret || OB_DESERIALIZE_ERROR == ret) {
+    LOG_INFO("seek1243 post-io callback failure detail", K(ret), K(diagnostic_stage),
+             K_(offset), K(size), "reader_present", nullptr != macro_reader_,
+             "block_data_present", nullptr != block_data_, "allocator_present", nullptr != allocator_);
+  }
+#endif
   return ret;
 }
 
