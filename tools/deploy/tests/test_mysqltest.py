@@ -5,6 +5,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -164,8 +165,8 @@ class MysqltestTest(unittest.TestCase):
         with mock.patch.dict(runner.sdb.os.environ, inherited, clear=True), \
                 mock.patch.object(runner.sdb.sys, "platform", "linux"):
             environment = runner.sdb.client_environment(client)
-        self.assertEqual(environment["PATH"], str(client.parent) + ":/existing/bin")
-        self.assertEqual(environment["LD_LIBRARY_PATH"], ":".join([
+        self.assertEqual(environment["PATH"], str(client.parent) + os.pathsep + "/existing/bin")
+        self.assertEqual(environment["LD_LIBRARY_PATH"], os.pathsep.join([
             str(client.parent.parent / "lib"), str(client.parent.parent / "lib64"),
             "/existing/lib",
         ]))
