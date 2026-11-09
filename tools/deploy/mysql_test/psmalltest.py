@@ -453,6 +453,7 @@ psmall_test=[
 'vector_index.rebuild_vector_index',
 'vector_index.vector_calc_gbk_mysql',
 'vector_index.vector_calc_utf8_mysql',
+'vector_index.vector_index_ann_filter_simplify',
 'vector_index.vector_index_basic',
 'vector_index.vector_index_bugfix1',
 'vector_index.vector_index_ivfflat_basic',

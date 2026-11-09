@@ -1,0 +1,73 @@
+# Regression for issue #1535.
+#
+# Approximate vector index scans keep structural rewrites disabled, but the
+# predicate simplification pass must still run.  The filter below is the
+# equivalent form P AND (P OR Q) repeated 1024 times.  Without predicate
+# simplification the adaptive scan keeps every expanded branch in its filter
+# and evaluates them for each candidate row.
+
+--disable_query_log
+--disable_result_log
+SET @saved_plan_cache = @@ob_enable_plan_cache;
+SET ob_enable_plan_cache = 1;
+
+--disable_warnings
+DROP TABLE IF EXISTS t_ann_absorb;
+--enable_warnings
+CREATE TABLE t_ann_absorb (
+  id INT PRIMARY KEY,
+  c INT NOT NULL,
+  d INT NOT NULL,
+  embedding VECTOR(3) NOT NULL
+) ORGANIZATION HEAP;
+INSERT INTO t_ann_absorb VALUES
+  (1,1,1,'[1,0,0]'), (2,2,1,'[0,1,0]'), (3,1,2,'[0,0,1]'),
+  (4,2,2,'[1,1,0]'), (5,1,3,'[1,0,1]'), (6,2,3,'[0,1,1]');
+CREATE VECTOR INDEX idx_ann_absorb ON t_ann_absorb(embedding)
+  WITH (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
+ANALYZE TABLE t_ann_absorb;
+ALTER SYSTEM FLUSH PLAN CACHE;
+
+let $i = 0;
+let $filter = c + d > 0;
+while ($i < 1024)
+{
+  let $filter = $filter AND ((c + d > 0) OR (c = 1));
+  inc $i;
+}
+eval SELECT id FROM t_ann_absorb WHERE $filter
+  ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 3;
+
+# With predicate simplification enabled the adaptive scan filter is the single
+# predicate P (well under 400 bytes).  Without it the plan-cache entry is
+# truncated at 4000 bytes because all 1024 expanded branches are retained.
+let $plan_sql = SELECT IF(LENGTH(p.filter_predicates) < 400, 'simplified', 'expanded') AS result FROM oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s JOIN oceanbase.__all_virtual_sql_plan p ON p.plan_id = s.plan_id WHERE instr(s.statement, 't_ann_absorb') > 0 AND p.operator LIKE 'VECTOR INDEX ADAPTIVE SCAN%' ORDER BY p.plan_id, p.id LIMIT 1;
+let $result = query_get_value("$plan_sql", result, 1);
+
+# ANN + ENUM: the enum/set restriction must stay in effect.
+--echo # enum + ANN
+CREATE TABLE t_ann_enum (
+  id INT PRIMARY KEY,
+  status ENUM('a','b','c') NOT NULL,
+  embedding VECTOR(3) NOT NULL
+) ORGANIZATION HEAP;
+INSERT INTO t_ann_enum VALUES
+  (1,'a','[1,0,0]'), (2,'b','[0,1,0]'),
+  (3,'a','[0,0,1]'), (4,'c','[1,1,0]');
+CREATE VECTOR INDEX idx_ann_enum ON t_ann_enum(embedding)
+  WITH (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, sync_mode=immediate);
+ANALYZE TABLE t_ann_enum;
+--enable_result_log
+SELECT id FROM (
+  SELECT id FROM t_ann_enum WHERE IFNULL(status,'b') = 'a'
+  ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 3
+) t ORDER BY id;
+--disable_result_log
+DROP TABLE t_ann_enum;
+
+DROP TABLE t_ann_absorb;
+SET ob_enable_plan_cache = @saved_plan_cache;
+--enable_result_log
+--enable_query_log
+
+--echo filter_predicates: $result
