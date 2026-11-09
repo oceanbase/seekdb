@@ -145,6 +145,14 @@ fn numeric_classification_and_boundaries() {
 }
 
 #[test]
+fn long_fraction_rounds_to_nearest_f64() {
+    assert_eq!(
+        parse(b"123456789123456789.12345", ParseOptions::default()).unwrap(),
+        Document::Number(Number::F64(f64::from_bits(0x437b_69b4_bacd_05f1)))
+    );
+}
+
+#[test]
 fn exponent_signs_are_not_rewritten_as_negative_zero() {
     for text in [
         &b"1e-0"[..],

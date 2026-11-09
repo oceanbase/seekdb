@@ -9,4 +9,4 @@ cxx = "=1.0.202"
 memchr = "=2.8.3"
 ryu = "=1.0.23"
 serde = "=1.0.229"
-serde_json = { version = "=1.0.151", features = ["unbounded_depth"] }
+serde_json = { version = "=1.0.151", features = ["float_roundtrip", "unbounded_depth"] }
