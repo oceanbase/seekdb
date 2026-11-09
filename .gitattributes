@@ -10,3 +10,9 @@
 *.i filter=codeformat
 *.ic filter=codeformat
 *.js filter=codeformat
+
+# Shell scripts are executed by Linux containers, WSL and CI. Git for Windows
+# defaults to core.autocrlf=true, which checks them out with CRLF and makes the
+# shell reject them ("bash: $'\r': command not found"). Pin LF so a checkout on
+# Windows keeps the tracked scripts runnable.
+*.sh text eol=lf
