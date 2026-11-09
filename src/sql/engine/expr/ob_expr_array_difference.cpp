@@ -20,6 +20,9 @@
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
+#include "common/udt/ob_map_type.h"
+#include "lib/profile/ob_trace_id.h"
+#include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -100,7 +103,8 @@ int ObExprArrayDifference::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayDifference::calc_difference(ObIArrayType *src_arr, ObIArrayType *res_arr)
+int ObExprArrayDifference::calc_difference(const ObExpr &expr, ObEvalCtx &ctx,
+                                           ObIArrayType *src_arr, ObIArrayType *res_arr)
 {
   int ret = OB_SUCCESS;
   ObObj this_elem;
@@ -118,6 +122,55 @@ int ObExprArrayDifference::calc_difference(ObIArrayType *src_arr, ObIArrayType *
                       this_elem.get_int() - last_elem.get_int(), 
                       this_elem.get_int(), 
                       last_elem.get_int()))) {
+        // This branch is already taken only for a reported BIGINT overflow.
+        // Keep diagnostics off the successful element path and avoid evaluating
+        // the potentially overflowing subtraction a second time.
+        const int64_t lhs = this_elem.get_int();
+        const int64_t rhs = last_elem.get_int();
+        const bool mathematical_overflow =
+            (rhs > 0 && lhs < INT64_MIN + rhs) ||
+            (rhs < 0 && lhs > INT64_MAX + rhs);
+        const ObExpr *component_expr = expr.arg_cnt_ > 0 ? expr.args_[0] : NULL;
+        const ObExpr *map_expr = OB_NOT_NULL(component_expr) && component_expr->arg_cnt_ == 1
+                                     ? component_expr->args_[0] : NULL;
+        const char *component = "other";
+        if (OB_NOT_NULL(component_expr) && component_expr->type_ == T_FUN_SYS_MAP_KEYS) {
+          component = "map_keys";
+        } else if (OB_NOT_NULL(component_expr) && component_expr->type_ == T_FUN_SYS_MAP_VALUES) {
+          component = "map_values";
+        }
+
+        ObObjType map_key_type = ObMaxType;
+        ObObjType map_value_type = ObMaxType;
+        int map_meta_ret = OB_ERR_UNEXPECTED;
+        if (OB_NOT_NULL(map_expr)) {
+          ObCollectionTypeBase *map_collection_type = NULL;
+          map_meta_ret = ObArrayExprUtils::get_coll_type_by_subschema_id(
+              &ctx.exec_ctx_, map_expr->obj_meta_.get_subschema_id(), map_collection_type);
+          if (OB_SUCC(map_meta_ret) && OB_NOT_NULL(map_collection_type) &&
+              map_collection_type->type_id_ == ObNestedType::OB_MAP_TYPE) {
+            const ObCollectionMapType *map_type =
+                static_cast<const ObCollectionMapType *>(map_collection_type);
+            uint32_t key_depth = 0;
+            uint32_t value_depth = 0;
+            map_key_type = map_type->get_key_meta(key_depth).get_obj_type();
+            map_value_type = map_type->get_basic_meta(value_depth).get_obj_type();
+          } else if (OB_SUCC(map_meta_ret)) {
+            map_meta_ret = OB_ERR_UNEXPECTED;
+          }
+        }
+
+        ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
+        const uint32_t session_id = OB_NOT_NULL(session) ? session->get_sid() : 0;
+        const char *trace_id = OB_NOT_NULL(ObCurTraceId::get_trace_id())
+                                   ? ObCurTraceId::get_trace_id_str() : "";
+        LOG_WARN("array_difference BIGINT overflow context",
+                 K(ret), K(component), K(i), K(src_arr->size()), K(obj_type),
+                 "array_element_type", ob_obj_type_str(obj_type), K(lhs), K(rhs),
+                 K(mathematical_overflow), K(map_meta_ret), K(map_key_type), K(map_value_type),
+                 "map_key_type_name", ob_obj_type_str(map_key_type),
+                 "map_value_type_name", ob_obj_type_str(map_value_type),
+                 K(session_id), K(trace_id));
       } else if (OB_FAIL(array_obj->push_back(this_elem.get_int() - last_elem.get_int()))) {
       }
     } else if (ob_is_float_tc(obj_type)) {
@@ -162,7 +215,7 @@ int ObExprArrayDifference::eval_array_difference(const ObExpr &expr, ObEvalCtx &
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_difference with array contains null element");
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, res_subschema_id, res_arr, false))) {
-  } else if (OB_FAIL(calc_difference(src_arr, res_arr))) {
+  } else if (OB_FAIL(calc_difference(expr, ctx, src_arr, res_arr))) {
   } else {
     ObString res_str;
     if (OB_FAIL(ObArrayExprUtils::set_array_res(res_arr, res_arr->get_raw_binary_len(), expr, ctx, res_str))) {
@@ -202,7 +255,7 @@ int ObExprArrayDifference::eval_array_difference_batch(const ObExpr &expr, ObEva
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_difference with array contains null element");
       } else if (OB_NOT_NULL(res_arr) && OB_FALSE_IT(res_arr->clear())) {
       } else if (OB_ISNULL(res_arr) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, res_subschema_id, res_arr, false))) {
-      } else if (OB_FAIL(calc_difference(src_arr, res_arr))) {
+      } else if (OB_FAIL(calc_difference(expr, ctx, src_arr, res_arr))) {
       } else {
         int32_t res_size = res_arr->get_raw_binary_len();
         char *res_buf = nullptr;
