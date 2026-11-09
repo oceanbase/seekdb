@@ -70,7 +70,7 @@ def _parser_impl(ctx):
     if flex.basename.endswith(".exe"):
         flex_arguments = [ctx.file._codegen.path, "flex", flex.path, lexer.path] + flex_arguments
         flex_inputs += [ctx.file._codegen]
-        flex_tools += [flex]
+        flex_tools = flex_tools + [flex]
         flex = ctx.file._python
     ctx.actions.run(
         executable = flex,
