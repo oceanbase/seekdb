@@ -2687,24 +2687,31 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
   CK(OB_NOT_NULL(session) && OB_NOT_NULL(expr_factory));
   OZ(ObRawExprUtils::check_need_cast_expr(src_type, dst_type, need_cast, ignore_dup_cast_error));
   if (OB_SUCC(ret) && need_cast) {
-    if (T_FUN_SYS_CAST == expr.get_expr_type()
+    // A boolean scalar subquery forces the same predicate through type deduction
+    // more than once, so an implicit cast may already sit above this expression when
+    // another cast is requested. Stacking casts is valid SQL semantics
+    // (CAST(CAST(x AS t1) AS t2)), therefore it must not abort the query with an
+    // internal error. A cast to the result type that is already present is redundant
+    // and is skipped; any other cast is added on top of the existing one.
+    const bool duplicated_implicit_cast =
+        T_FUN_SYS_CAST == expr.get_expr_type()
         && expr.has_flag(IS_OP_OPERAND_IMPLICIT_CAST)
         && !ignore_dup_cast_error
         && !((src_type.is_collection_sql_type()
                   && (dst_type.is_character_type() || dst_type.is_null()))
-            || (src_type.is_character_type() && dst_type.is_character_type())))
-      {
-      ret = OB_ERR_UNEXPECTED;
-#ifdef DEBUG
-      LOG_ERROR("try to add implicit cast again, check if type deduction is correct",
-                K(ret), K(expr), K(dst_type),
-                K(session->get_current_query_string()));
-#else
-      LOG_WARN("try to add implicit cast again, check if type deduction is correct",
-                K(ret), K(expr), K(dst_type), K(src_type), K(ignore_dup_cast_error),
-                K(session->get_current_query_string()));
-#endif
+            || (src_type.is_character_type() && dst_type.is_character_type()));
+    const bool target_type_matched =
+        src_type.get_type() == dst_type.get_type()
+        && src_type.get_collation_type() == dst_type.get_collation_type();
+    if (duplicated_implicit_cast && target_type_matched) {
+      LOG_DEBUG("skip redundant implicit cast above an existing implicit cast",
+                K(expr), K(src_type), K(dst_type));
     } else {
+      if (duplicated_implicit_cast) {
+        LOG_DEBUG("add implicit cast above an existing implicit cast",
+                  K(expr), K(src_type), K(dst_type),
+                  K(session->get_current_query_string()));
+      }
       //setup implicit cast charset convert ignore error
       ObCastMode cm_zf = cm;
       if ((cm_zf & CM_COLUMN_CONVERT) != 0) {
