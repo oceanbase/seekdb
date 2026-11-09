@@ -450,6 +450,7 @@ psmall_test=[
 'vector_index.create_table_with_vector_index',
 'vector_index.drop_vector_index',
 'vector_index.fix_rebuild_or_post_create_hung',
+'vector_index.inner_product_desc_approx',
 'vector_index.rebuild_vector_index',
 'vector_index.vector_calc_gbk_mysql',
 'vector_index.vector_calc_utf8_mysql',
