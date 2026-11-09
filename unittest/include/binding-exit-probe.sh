@@ -158,6 +158,14 @@ run_with_binding_exit_probe() {
   fi
   rm -f "$probe" 2>/dev/null || true
   rc="$wait_rc"
+  # A child killed by a signal (>=128) never wrote an exit probe, so report the
+  # ordered checkpoints and the engine's own log; a bare "Segmentation fault"
+  # line in CI says nothing about how far startup got.
+  if (( rc >= 128 )); then
+    echo "::error::[seekdb-bind] binding test pid=${pid} died from a signal (rc=${rc}): $*" >&2
+    dump_hang_probe_log "$pid"
+    dump_seekdb_startup_logs
+  fi
   ((_restore_m)) && set -m || true
   ((_restore_e)) && set -e
   return "$rc"
