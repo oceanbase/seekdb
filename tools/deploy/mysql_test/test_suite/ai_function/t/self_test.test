@@ -1,0 +1,200 @@
+# SeekDB AI 函数 60 分自测（需先启动 ai_mock_service/mock_ai_service.py）
+#
+# 覆盖评分标准的 6 类：
+#   1. AI_PROMPT   类型与模板增强
+#   2. AI_EMBED    单行语义
+#   3. AI_COMPLETE 请求与响应
+#   4. Ollama Provider
+#   5. AI_RERANK   结果正确性
+#   6. AI_EMBED    跨行批量
+#
+# 运行方式（同 ai_prompt.test）：
+#   python3 tools/deploy/mysqltest.py run --base-dir <base> --work-dir <work> \
+#       --record --test-set <本文件>  （或按你跑 ai_function 套件时的参数）
+
+connection default;
+
+# ---------- 清理旧对象（幂等） ----------
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_gpt');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_ollama');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_embed');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_ollama_embed');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_rerank');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_gpt_bad');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_gpt');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_gpt_bad');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_ollama');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_embed');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_ollama_embed');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_rerank');
+
+# ---------- 建 model + endpoint（指向 mock 服务） ----------
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('mock_gpt', '{"type":"completion","model_name":"mock-gpt"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('mock_gpt_bad', '{"type":"completion","model_name":"mock-gpt-bad"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('mock_ollama', '{"type":"completion","model_name":"mock-ollama"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('mock_embed', '{"type":"dense_embedding","model_name":"mock-embed"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('mock_ollama_embed', '{"type":"dense_embedding","model_name":"mock-ollama-embed"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('mock_rerank', '{"type":"rerank","model_name":"mock-reranker"}');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'mock_ep_gpt', '{
+    "ai_model_name": "mock_gpt",
+    "url": "http://127.0.0.1:8000/openai/chat",
+    "access_key": "sk-test",
+    "provider": "openai"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'mock_ep_ollama', '{
+    "ai_model_name": "mock_ollama",
+    "url": "http://127.0.0.1:8000/ollama/chat",
+    "provider": "ollama"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'mock_ep_embed', '{
+    "ai_model_name": "mock_embed",
+    "url": "http://127.0.0.1:8000/openai/embed",
+    "access_key": "sk-test",
+    "provider": "openai"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'mock_ep_ollama_embed', '{
+    "ai_model_name": "mock_ollama_embed",
+    "url": "http://127.0.0.1:8000/ollama/embed",
+    "provider": "ollama"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'mock_ep_rerank', '{
+    "ai_model_name": "mock_rerank",
+    "url": "http://127.0.0.1:8000/rerank",
+    "access_key": "sk-test",
+    "provider": "siliconflow"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'mock_ep_gpt_bad', '{
+    "ai_model_name": "mock_gpt_bad",
+    "url": "http://127.0.0.1:8000/openai/chat/bad",
+    "access_key": "sk-test",
+    "provider": "openai"
+  }');
+
+
+# =====================================================================
+# 1. AI_PROMPT  类型与模板增强（10 分）
+# =====================================================================
+--echo ### 1.1 JSON Array/Object 参数
+select ai_prompt('hello {0}', 'world') as prompt_string_arg;
+--error 1235
+select ai_prompt('obj {0}', json_object('k','v')) as prompt_json_object_arg;
+select ai_prompt('arr {0}', json_array('a','b')) as prompt_json_array_arg;
+
+--echo ### 1.2 重复占位符替换（经 ai_complete 端到端验证，期望 OK:xxx）
+select ai_complete('mock_gpt', ai_prompt('{0}{0}{0}', 'x')) as complete_repeated_placeholder;
+
+--echo ### 1.3 LONGTEXT / TEXT 模板与参数
+create table t_prompt (id int, tmpl text, arg longtext);
+insert into t_prompt values (1, 'hi {0}', 'world');
+select ai_prompt(tmpl, arg) as prompt_text_longtext from t_prompt;
+drop table t_prompt;
+
+
+# =====================================================================
+# 2. AI_EMBED  单行语义（10 分）
+# =====================================================================
+--echo ### 2.1 默认维度（期望 JSON 长度 4）
+select ai_embed('mock_embed', 'hello') as embed_default_dim;
+select json_length(ai_embed('mock_embed', 'hello')) as embed_default_dim_len;
+
+--echo ### 2.2 显式 dimension 参数（期望 JSON 长度 3）
+select ai_embed('mock_embed', 'hello', 3) as embed_explicit_dim;
+select json_length(ai_embed('mock_embed', 'hello', 3)) as embed_explicit_dim_len;
+
+--echo ### 2.3 返回 JSON 及向量维度校验（期望首个元素为 1.0）
+select cast(json_extract(ai_embed('mock_embed', 'hello'), '$[0]') as double) as embed_first_elem;
+
+
+# =====================================================================
+# 3. AI_COMPLETE  请求与响应（10 分）
+# =====================================================================
+--echo ### 3.1 基础调用（期望 OK:hello）
+select ai_complete('mock_gpt', 'hello') as complete_basic;
+
+--echo ### 3.2 NULL 配置（期望 OK:hello，不报错）
+select ai_complete('mock_gpt', 'hello', NULL) as complete_null_config;
+
+--echo ### 3.3 temperature / max_tokens 配置（期望 OK:hello，不报错）
+select ai_complete('mock_gpt', 'hello', '{"temperature":0.5,"max_tokens":100}') as complete_with_config;
+
+--echo ### 3.4 响应非空校验（空响应应报错 4070 = OB_INVALID_DATA）
+--error 4070
+select ai_complete('mock_gpt_bad', 'hello');
+
+
+# =====================================================================
+# 4. Ollama Provider（10 分）
+# =====================================================================
+--echo ### 4.1 空 access key 兼容 + 原生 Completion 协议（期望 OK:hello）
+select ai_complete('mock_ollama', 'hello') as ollama_complete;
+
+--echo ### 4.2 原生 Embedding 协议（期望 JSON 长度 4）
+select ai_embed('mock_ollama_embed', 'hello') as ollama_embed;
+select json_length(ai_embed('mock_ollama_embed', 'hello')) as ollama_embed_len;
+
+
+# =====================================================================
+# 5. AI_RERANK  结果正确性（10 分）
+# =====================================================================
+--echo ### 5.1 字符串数组输入（期望按相关性降序：index 0,1,2）
+select ai_rerank('mock_rerank', 'q', json_array('d0','d1','d2')) as rerank_str;
+select cast(json_extract(ai_rerank('mock_rerank','q',json_array('d0','d1','d2')), '$[0].index') as unsigned) as rerank_first_index;
+select cast(json_extract(ai_rerank('mock_rerank','q',json_array('d0','d1','d2')), '$[2].index') as unsigned) as rerank_last_index;
+
+--echo ### 5.2 对象数组及文本字段选择（doc_key，期望按 id 序 d0,d1,d2）
+select ai_rerank('mock_rerank','q',
+       json_array(json_object('id','d0','text','aaa'),
+                  json_object('id','d1','text','bbb'),
+                  json_object('id','d2','text','ccc')),
+       'text') as rerank_dockey;
+select json_unquote(json_extract(ai_rerank('mock_rerank','q',
+       json_array(json_object('id','d0','text','aaa'),
+                  json_object('id','d1','text','bbb'),
+                  json_object('id','d2','text','ccc')),
+       'text'), '$[0].id')) as rerank_dockey_first_id;
+
+
+# =====================================================================
+# 6. AI_EMBED  跨行批量（10 分）
+# =====================================================================
+--echo ### 6.1 表扫描多行 + NULL 传播 + 顺序/维度映射（跨行批量：多行合并为一次请求）
+--echo ###     (期望 row1->[1.0,0,0], row2->[2.0,0,0], row3->NULL)
+create table t_embed (id int, c varchar(20));
+insert into t_embed values (1,'a'),(2,'b'),(3,NULL);
+select ai_embed('mock_embed', c, 3) as emb from t_embed order by id;
+drop table t_embed;
+
+
+# ---------- 清理 ----------
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_gpt');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_ollama');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_ollama_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_rerank');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('mock_ep_gpt_bad');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_gpt');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_gpt_bad');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_ollama');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_ollama_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('mock_rerank');
+
