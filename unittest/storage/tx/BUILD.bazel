@@ -4,6 +4,12 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "transaction_trace_footprint",
+    srcs = ["test_transaction_trace_footprint.cpp"],
+    deps = ["//src/storage:tx_replay_test_headers"],
+)
+
+cc_library(
     name = "tx_replay_executor_cases",
     srcs = ["test_tx_replay_executor.cpp"],
     alwayslink = True,
