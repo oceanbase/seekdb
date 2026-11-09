@@ -541,6 +541,39 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+namespace
+{
+// MySQL identifier quoting belongs to the DDL generator, not the SQL layer.
+// Append length-delimited spans so embedded backticks are doubled without
+// interpreting identifier bytes as a format string or a C string.
+int append_ddl_column_identifier(
+    const ObString &name,
+    const bool is_shadow_column,
+    ObSqlString &sql_string)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql_string.append("`"))) {
+  } else if (is_shadow_column && OB_FAIL(sql_string.append("__SHADOW_"))) {
+  }
+  int64_t span_begin = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && i < name.length(); ++i) {
+    if ('`' == name.ptr()[i]) {
+      if (OB_FAIL(sql_string.append(name.ptr() + span_begin, i - span_begin + 1))) {
+      } else if (OB_FAIL(sql_string.append("`"))) {
+      }
+      span_begin = i + 1;
+    }
+  }
+  if (OB_SUCC(ret) && span_begin < name.length()) {
+    ret = sql_string.append(name.ptr() + span_begin, name.length() - span_begin);
+  }
+  if (OB_SUCC(ret)) {
+    ret = sql_string.append("`");
+  }
+  return ret;
+}
+} // namespace
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -549,7 +582,6 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
   // append comma
   if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
@@ -559,9 +591,11 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append("cast("))) {
+      } else if (OB_FAIL(append_ddl_column_identifier(column_name_info.column_name_, false, sql_string))) {
+      } else if (OB_FAIL(sql_string.append(" as unsigned)"))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(append_ddl_column_identifier(column_name_info.column_name_, false, sql_string))) {
     }
   }
   // append AS
@@ -571,8 +605,8 @@ int ObDDLUtil::generate_column_name_str(
   }
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_ddl_column_identifier(
+        column_name_info.column_name_, column_name_info.is_shadow_column_, sql_string))) {
     }
   }
   return ret;
