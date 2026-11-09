@@ -55,6 +55,9 @@ public:
   int append(const char *str);
   int append(const char *str, const int64_t len);
   int append(const ObString &str);
+  // Double embedded backticks without adding the surrounding identifier quotes.
+  // Input may be a slice of this string; bytes after its length are not read.
+  int append_escaped_identifier(const ObString &identifier);
   int append_fmt(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
   int assign(const char *str);

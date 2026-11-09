@@ -1,0 +1,38 @@
+--echo # DDL identifier escaping: ordinary names remain unchanged.
+CREATE TABLE ddl_identifier_plain (id INT PRIMARY KEY, e ENUM('a','b'), s SET('x','y'));
+INSERT INTO ddl_identifier_plain VALUES (1, 'a', 'x'), (2, 'b', 'y');
+CREATE UNIQUE INDEX idx_plain_e ON ddl_identifier_plain(e);
+CREATE UNIQUE INDEX idx_plain_s ON ddl_identifier_plain(s);
+SELECT id, e, s FROM ddl_identifier_plain ORDER BY id;
+DROP TABLE ddl_identifier_plain;
+
+--echo # ENUM/SET casts must quote embedded backticks and shadow aliases.
+CREATE TABLE ddl_identifier_escaped (
+  `p``k` INT PRIMARY KEY,
+  `e``n` ENUM('a','b'),
+  `s``t` SET('x','y')
+);
+INSERT INTO ddl_identifier_escaped VALUES (1, 'a', 'x'), (2, 'b', 'y');
+CREATE UNIQUE INDEX idx_escaped_e ON ddl_identifier_escaped(`e``n`);
+CREATE UNIQUE INDEX idx_escaped_s ON ddl_identifier_escaped(`s``t`);
+SELECT `p``k`, `e``n` FROM ddl_identifier_escaped FORCE INDEX(idx_escaped_e) WHERE `e``n`='a';
+SELECT `p``k`, `s``t` FROM ddl_identifier_escaped FORCE INDEX(idx_escaped_s) WHERE `s``t`='y';
+--error ER_DUP_ENTRY
+INSERT INTO ddl_identifier_escaped VALUES (3, 'a', 'x');
+DROP TABLE ddl_identifier_escaped;
+
+--echo # Leading, trailing, consecutive backticks and UTF-8 names.
+CREATE TABLE ddl_identifier_boundaries (
+  id INT PRIMARY KEY,
+  ```start` ENUM('a','b'),
+  `end``` ENUM('a','b'),
+  `two````ticks` ENUM('a','b'),
+  `列``名` SET('x','y')
+);
+INSERT INTO ddl_identifier_boundaries VALUES (1, 'a', 'a', 'a', 'x');
+CREATE UNIQUE INDEX idx_start ON ddl_identifier_boundaries(```start`);
+CREATE UNIQUE INDEX idx_end ON ddl_identifier_boundaries(`end```);
+CREATE UNIQUE INDEX idx_two ON ddl_identifier_boundaries(`two````ticks`);
+CREATE UNIQUE INDEX idx_unicode ON ddl_identifier_boundaries(`列``名`);
+SELECT id, ```start`, `end```, `two````ticks`, `列``名` FROM ddl_identifier_boundaries;
+DROP TABLE ddl_identifier_boundaries;

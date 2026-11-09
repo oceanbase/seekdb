@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 
+#include <limits>
 #include "lib/string/ob_sql_string.h"
 #include "lib/utility/ob_printf.h"
 namespace oceanbase
@@ -78,6 +79,51 @@ int ObSqlString::append(const char *str, const int64_t len)
 int ObSqlString::append(const ObString &str)
 {
   return append(str.ptr(), str.length());
+}
+
+int ObSqlString::append_escaped_identifier(const ObString &identifier)
+{
+  int ret = OB_SUCCESS;
+  const char *source = identifier.ptr();
+  const int64_t source_length = identifier.length();
+  int64_t escaped_length = source_length;
+  int64_t source_offset = -1;
+  if (source_length < 0 || (source_length > 0 && OB_ISNULL(source))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (source_length > 0) {
+    const uintptr_t source_address = reinterpret_cast<uintptr_t>(source);
+    const uintptr_t data_address = reinterpret_cast<uintptr_t>(data_);
+    if (nullptr != data_ && source_address >= data_address
+        && source_address - data_address < static_cast<uintptr_t>(data_size_)) {
+      source_offset = source_address - data_address;
+      if (source_offset > len_ || source_length > len_ - source_offset) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < source_length; ++i) {
+      if ('`' == source[i]) {
+        ++escaped_length;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (escaped_length > std::numeric_limits<int64_t>::max() - len_ - 1) {
+      ret = OB_SIZE_OVERFLOW;
+    } else if (OB_FAIL(reserve(len_ + escaped_length))) {
+    } else {
+      // reserve() may move the buffer. Rebind input borrowed from this string.
+      if (source_offset >= 0) {
+        source = data_ + source_offset;
+      }
+      for (int64_t i = 0; i < source_length; ++i) {
+        data_[len_++] = source[i];
+        if ('`' == source[i]) {
+          data_[len_++] = '`';
+        }
+      }
+      data_[len_] = '\0';
+    }
+  }
+  return ret;
 }
 
 int ObSqlString::append_fmt(const char *fmt, ...)

@@ -22,3 +22,25 @@ cc_test(
     linkstatic = True,
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
+
+cc_library(
+    name = "sql_identifier_cases",
+    srcs = ["test_sql_identifier.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_base",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_sql_identifier",
+    linkstatic = True,
+    # The string test does not use OBLib's server-side networking objects.
+    linkopts = select({
+        "@platforms//os:linux": ["-Wl,--gc-sections"],
+        "@platforms//os:macos": ["-Wl,-dead_strip"],
+        "//conditions:default": [],
+    }),
+    deps = [":sql_identifier_cases", "//src/oblib:oblib_test_runtime"],
+)
