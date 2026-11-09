@@ -85,7 +85,13 @@ run_with_binding_exit_probe() {
   local wait_rc=0
   local rc=1
 
-  "${preload_prefix[@]}" "$@" &
+  # Bash 3.2 (macOS /bin/bash) and 4.2 raise "unbound variable" for an empty
+  # array expansion under `set -u`, so expand only when a preload is needed.
+  if (( ${#preload_prefix[@]} > 0 )); then
+    "${preload_prefix[@]}" "$@" &
+  else
+    "$@" &
+  fi
   pid=$!
   # Do not disown: a disowned job is dropped from the job table, so `wait` below
   # returns 0 instead of the child's status. A test binary that dies while the
