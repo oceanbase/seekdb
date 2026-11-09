@@ -18,6 +18,7 @@
 #include "ob_trans_define_v4.h"
 #include "ob_trans_functor.h"
 #include "lib/allocator/ob_malloc.h"
+#include "lib/ob_lib_config.h"
 
 #define USING_LOG_PREFIX TRANS
 namespace oceanbase
@@ -467,15 +468,15 @@ ObTxDesc::~ObTxDesc()
 void ObTxDesc::reset()
 {
 #ifndef NDEBUG
-  FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
+  print_trace_();
 #else
   if (state_ == State::IDLE || state_ == State::COMMITTED) {
     if (finish_ts_ - commit_ts_ > 5 * 1000 * 1000) {
-      FORCE_PRINT_TRACE(&tlog_, "[tx slow commit][tx desc trace]");
+      print_trace_(true);
     }
   } else if (flags_.SHADOW_) { /* skip clone's destory */}
   else {
-    FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
+    print_trace_();
   }
 #endif
 
@@ -527,7 +528,6 @@ void ObTxDesc::reset()
   cb_tid_ = -1;
   exec_info_reap_ts_ = 0;
   commit_task_.reset();
-  tlog_.reset();
 }
 
 void ObTxDesc::set_tx_id(const ObTransID &tx_id)
@@ -560,9 +560,15 @@ const ObString &ObTxDesc::get_tx_state_str() const {
   return TxStateName[state];
 }
 
-void ObTxDesc::print_trace_() const
+void ObTxDesc::print_trace_(const bool slow_commit) const
 {
-  FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
+  if (::oceanbase::lib::is_trace_log_enabled()) {
+    if (slow_commit) {
+      TRANS_LOG(INFO, "[tx slow commit][tx desc trace]", "tx", *this);
+    } else {
+      TRANS_LOG(INFO, "[tx desc trace]", "tx", *this);
+    }
+  }
 }
 
 void ObTxDesc::print_trace()
@@ -572,7 +578,7 @@ void ObTxDesc::print_trace()
   if (!self_locked && OB_FAIL(lock_.lock())) {
     TRANS_LOG(WARN, "lock failed", K(ret));
   } else {
-    FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
+    print_trace_();
   }
   if (!self_locked && OB_SUCC(ret)) {
     lock_.unlock();
@@ -909,10 +915,6 @@ bool ObTxDesc::execute_commit_cb()
         ATOMIC_STORE_REL(&cb_tid_, GETTID());
         // NOTE: it is required add trace event before callback,
         // because txDesc may be released after callback called
-        REC_TRANS_TRACE_EXT(&tlog_, exec_commit_cb,
-                            OB_ID(arg), (void*)cb,
-                            OB_ID(ref), get_ref(),
-                            OB_ID(thread_id), GETTID());
         commit_cb_lock_.unlock();
         cb->callback(commit_out_);
       } else {
