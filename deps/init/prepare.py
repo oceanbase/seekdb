@@ -209,22 +209,28 @@ def locked_cache_directory(system, cache_directory):
 
 def locked_archive(package, archive_directory):
     url = package.get("url")
-    checksum = package.get("sha256", "").lower()
-    if not url or not re.fullmatch(r"[0-9a-f]{64}", checksum):
+    checksum = package.get("sha256", "")
+    if checksum is None:
+        checksum = ""
+    if not isinstance(url, str) or not url or not isinstance(checksum, str):
+        raise ValueError("Incomplete locked dependency: " + str(package.get("name")))
+    checksum = checksum.lower()
+    if checksum and not re.fullmatch(r"[0-9a-f]{64}", checksum):
         raise ValueError("Incomplete locked dependency: " + str(package.get("name")))
 
+    cache_key = checksum or "url-" + hashlib.sha256(url.encode("utf-8")).hexdigest()
     archive_directory.mkdir(parents=True, exist_ok=True)
-    cached = archive_directory / checksum
-    if cached.is_file() and sha256_file(cached) == checksum:
+    cached = archive_directory / cache_key
+    if cached.is_file() and (not checksum or sha256_file(cached) == checksum):
         return cached
 
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix="." + checksum + ".", suffix=".tmp", dir=archive_directory)
+        prefix="." + cache_key + ".", suffix=".tmp", dir=archive_directory)
     os.close(descriptor)
     temporary = Path(temporary_name)
     try:
         download(locked_download_url(url), temporary)
-        if sha256_file(temporary) != checksum:
+        if checksum and sha256_file(temporary) != checksum:
             raise ValueError("SHA256 mismatch for " + url.rsplit("/", 1)[-1])
         temporary.replace(cached)
     finally:
