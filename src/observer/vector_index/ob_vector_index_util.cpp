@@ -5871,7 +5871,22 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
+    // Pre-filtering first materializes the rows that pass the filter and then runs the
+    // vector search on that candidate set. While the candidate set stays inside
+    // MAX_HNSW_BRUTE_FORCE_SIZE the search is executed as a brute-force distance
+    // computation over every candidate instead of an HNSW graph search. A predicate
+    // that keeps (almost) every row therefore turns the graph search into a full scan,
+    // so pre-filtering only pays off when the predicate actually shrinks the candidate
+    // set. The larger-table branches below already enforce that rule through the
+    // selectivity limits; apply the same rule to the small-candidate branch instead of
+    // deciding on the absolute candidate count alone.
+    const double pre_filter_rate_limit = is_primary_idx
+                                        ? ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY
+                                        : ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX;
+    const bool pre_filter_shrinks_candidate_set = vc_info.row_count_ <= 0
+                                                  || vc_info.selectivity_ <= pre_filter_rate_limit;
+    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE
+        && pre_filter_shrinks_candidate_set) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY

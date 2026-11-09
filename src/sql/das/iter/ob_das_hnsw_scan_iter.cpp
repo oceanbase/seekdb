@@ -723,7 +723,18 @@ int ObDASHNSWScanIter::check_pre_filter_need_retry()
   int ret = OB_SUCCESS;
   double pre_selectivity = double(adaptive_ctx_.pre_scan_row_cnt_) / double(adaptive_ctx_.row_count_);
   if (adaptive_ctx_.pre_scan_row_cnt_ <= MAX_HNSW_BRUTE_FORCE_SIZE) {
-    /*do nothing*/
+    // The candidate set still fits into the brute-force budget, but the vector search
+    // degenerates into a brute-force scan over every candidate. When the predicate kept
+    // (almost) every row of the table the pre-filter path is slower than the iterative
+    // path, so retry with it. The ipivf path keeps the selectivity rule below.
+    if (!is_ipivf() && adaptive_ctx_.row_count_ > 0) {
+      const double pre_filter_rate_limit = adaptive_ctx_.is_primary_index_
+                                           ? ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY
+                                           : ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX;
+      if (pre_selectivity > pre_filter_rate_limit) {
+        ret = OB_VECTOR_INDEX_ADAPTIVE_NEED_RETRY;
+      }
+    }
   } else if (is_ipivf() && pre_selectivity > ObVecIdxExtraInfo::DEFAULT_SINDI_SELECTIVITY_RATE) {
     ret = OB_VECTOR_INDEX_ADAPTIVE_NEED_RETRY;
   } else if (is_parallel_with_block_granule()) {
