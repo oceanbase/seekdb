@@ -29,6 +29,8 @@
 #include "sql/optimizer/ob_log_update.h"
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
+#include "sql/engine/basic/ob_file_table_op.h"
+#include "sql/optimizer/ob_log_file_table.h"
 #include "sql/optimizer/ob_log_json_table.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"

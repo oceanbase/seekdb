@@ -9909,6 +9909,19 @@ static struct VarsInit{
       ObSysVarsIdToArrayIdx[SYS_VAR_OB_SPARSE_DROP_RATIO_SEARCH] = 718 ;
       ObSysVars[718].base_value_ = "0" ;
     ObSysVars[718].alias_ = "OB_SV_SPARSE_DROP_RATIO_SEARCH" ;
+    [&] (){
+      ObSysVars[719].default_value_ = "0" ;
+      ObSysVars[719].info_ = "Control whether the file table functions read_csv, read_json, read_ndjson, read_parquet and glob can be used." ;
+      ObSysVars[719].name_ = "enable_file_sql" ;
+      ObSysVars[719].data_type_ = ObIntType ;
+      ObSysVars[719].flags_ = ObSysVarFlag::GLOBAL_SCOPE | ObSysVarFlag::SESSION_SCOPE | ObSysVarFlag::NEED_SERIALIZE ;
+      ObSysVars[719].id_ = SYS_VAR_ENABLE_FILE_SQL ;
+      cur_max_var_id = MAX(cur_max_var_id, static_cast<int64_t>(SYS_VAR_ENABLE_FILE_SQL)) ;
+      ObSysVarsIdToArrayIdx[SYS_VAR_ENABLE_FILE_SQL] = 719 ;
+      ObSysVars[719].base_value_ = "0" ;
+    ObSysVars[719].alias_ = "OB_SV_ENABLE_FILE_SQL" ;
+    }();
+
     }();
 
     if (cur_max_var_id >= ObSysVarMeta::OB_MAX_SYS_VAR_ID) {
@@ -9917,7 +9930,7 @@ static struct VarsInit{
   }
 }vars_init;
 
-static int64_t var_amount = 719;
+static int64_t var_amount = 720;
 
 int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}
 ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}

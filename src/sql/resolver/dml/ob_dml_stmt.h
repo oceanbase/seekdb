@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_STMT_H_
 #define OCEANBASE_SQL_STMT_H_
 #include "data_plane/access/ob_tablet_scan.h"
+#include "sql/engine/basic/ob_file_scan_utils.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_mod_define.h"
@@ -129,6 +130,41 @@ struct ObValuesTableDef {
                        K(access_type_), K(is_const_), K(column_types_));
 };
 
+/// The definition of a file backed table, resolved from read_csv()/read_json()/glob().
+struct ObFileTableDef
+{
+  ObFileTableDef()
+    : format_(FILE_SCAN_FORMAT_CSV),
+      has_header_(true),
+      field_delim_(','),
+      quote_char_('"'),
+      escape_char_('"'),
+      sample_size_(-1),
+      column_cnt_(0),
+      file_size_(-1),
+      is_glob_(false),
+      is_describe_(false)
+  {}
+  common::ObString file_path_;
+  FileScanFormat format_;
+  bool has_header_;
+  char field_delim_;
+  char quote_char_;
+  char escape_char_;
+  common::ObString null_str_;
+  int64_t sample_size_;
+  int64_t column_cnt_;
+  int64_t file_size_;
+  bool is_glob_;
+  // DESCRIBE SELECT describes the file instead of returning its rows
+  bool is_describe_;
+  common::ObArray<common::ObString, common::ModulePageAllocator, true> column_names_;
+  common::ObArray<FileScanType, common::ModulePageAllocator, true> column_types_;
+  // The expressions of the columns. The statement may drop its column items while
+  // it is rewritten, so the file table keeps its own copy.
+  common::ObArray<ObRawExpr *, common::ModulePageAllocator, true> column_exprs_;
+};
+
 struct TableItem
 {
   TableItem()
@@ -155,6 +191,7 @@ struct TableItem
     json_table_def_ = nullptr;
     table_type_ = MAX_TABLE_TYPE;
     values_table_def_ = NULL;
+    file_table_def_ = NULL;
     sample_info_ = nullptr;
   }
 
@@ -190,6 +227,7 @@ struct TableItem
     JSON_TABLE,
     VALUES_TABLE,
     LATERAL_TABLE,
+    FILE_TABLE,
   };
 
   /**
@@ -226,6 +264,7 @@ struct TableItem
   bool is_values_table() const { return VALUES_TABLE == type_; }//used to mark values statement: values row(1,2), row(3,4);
 
   bool is_lateral_table() const { return LATERAL_TABLE == type_; }
+  bool is_file_table() const { return FILE_TABLE == type_; }
   bool is_extended_all_or_user_sys_view() const
   {
     return (is_extended_sys_view_table(ref_id_) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
@@ -303,6 +342,8 @@ struct TableItem
   ObJsonTableDef *json_table_def_;
   // values table
   ObValuesTableDef *values_table_def_;
+  // file table
+  ObFileTableDef *file_table_def_;
   // sample scan infos
   SampleInfo *sample_info_;
 };

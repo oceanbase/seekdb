@@ -26,11 +26,12 @@ const static int64_t EXPLAIN_DISPLAY_OPTION = 1;
 const static int64_t EXPLAIN_INTO_TABLE = 2;
 const static int64_t EXPLAIN_STMT_ID = 3;
 const static int64_t EXPLAIN_CHILD_STMT = 4;
+const static int64_t EXPLAIN_SOURCE = 5;
 int ObExplainResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObExplainStmt *explain_stmt = NULL;
-  if (!(T_EXPLAIN == parse_tree.type_  && 5 == parse_tree.num_child_)) {
+  if (!(T_EXPLAIN == parse_tree.type_  && 6 == parse_tree.num_child_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid EXPLAIN syntax",
              "type", parse_tree.type_,

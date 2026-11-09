@@ -341,6 +341,9 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
     ret_bool = true;
   } else if (T_VEC_INDEX_PARAMS == tree->type_) {
     ret_bool = true;
+  } else if (T_FILE_TABLE_EXPRESSION == tree->type_) {
+    // the file path identifies the data source, it must stay in the plan cache key
+    ret_bool = true;
   } else {
     // do nothing
   }

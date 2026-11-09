@@ -44,7 +44,9 @@ public:
         escaped_cht_(),
         cs_type_(CS_TYPE_INVALID),
         is_overwrite_(false),
-        external_properties_()
+        external_properties_(),
+        null_str_(),
+        has_header_(false)
   {
   }
   virtual ~ObLogSelectInto() {}
@@ -164,6 +166,22 @@ public:
   {
     return external_properties_;
   }
+  inline void set_null_str(const common::ObString &null_str)
+  {
+    null_str_ = null_str;
+  }
+  inline common::ObString get_null_str() const
+  {
+    return null_str_;
+  }
+  inline void set_has_header(const bool has_header)
+  {
+    has_header_ = has_header;
+  }
+  inline bool get_has_header() const
+  {
+    return has_header_;
+  }
   const common::ObIArray<ObRawExpr*> &get_select_exprs() const { return select_exprs_; }
   common::ObIArray<ObRawExpr*> &get_select_exprs() { return select_exprs_; }
   virtual int est_cost() override;
@@ -188,6 +206,8 @@ private:
   common::ObCollationType cs_type_;
   bool is_overwrite_;
   common::ObString external_properties_;
+  common::ObString null_str_;
+  bool has_header_;
 };
 }
 }

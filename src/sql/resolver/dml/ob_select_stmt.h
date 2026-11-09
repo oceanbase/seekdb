@@ -128,7 +128,9 @@ struct ObSelectIntoItem
         max_file_size_(DEFAULT_MAX_FILE_SIZE),
         escaped_cht_(),
         buffer_size_(DEFAULT_BUFFER_SIZE),
-        external_properties_()
+        external_properties_(),
+        null_str_(),
+        has_header_(false)
   {
     field_str_.set_varchar(DEFAULT_FIELD_TERM_STR);
     field_str_.set_collation_type(ObCharset::get_system_collation());
@@ -155,6 +157,8 @@ struct ObSelectIntoItem
     cs_type_ = other.cs_type_;
     buffer_size_ = other.buffer_size_;
     external_properties_ = other.external_properties_;
+    null_str_ = other.null_str_;
+    has_header_ = other.has_header_;
     return user_vars_.assign(other.user_vars_);
   }
   int deep_copy(ObIAllocator &allocator,
@@ -171,7 +175,9 @@ struct ObSelectIntoItem
                K_(escaped_cht),
                K_(cs_type),
                K_(buffer_size),
-               K_(external_properties));
+               K_(external_properties),
+               K_(null_str),
+               K_(has_header));
   ObItemType into_type_;
   common::ObObj outfile_name_;
   common::ObObj field_str_; // field terminated str
@@ -186,6 +192,10 @@ struct ObSelectIntoItem
   common::ObCollationType cs_type_;
   int64_t buffer_size_;
   common::ObString external_properties_;
+  // the text of a null value in an exported file
+  common::ObString null_str_;
+  // the exported file starts with the names of the columns
+  bool has_header_;
 
   static const char* const DEFAULT_FIELD_TERM_STR;
   static const char* const DEFAULT_LINE_TERM_STR;
@@ -371,6 +381,8 @@ public:
   bool is_view_stmt() const { return is_view_stmt_; }
   uint64_t get_view_ref_id() const { return view_ref_id_; }
   bool has_select_into() const { return into_item_ != NULL; }
+  bool is_select_into_file_copy() const { return has_select_into() &&
+      into_item_->into_type_ == T_INTO_FILE_COPY; }
   bool is_select_into_outfile() const { return has_select_into() &&
                                                into_item_->into_type_ == T_INTO_OUTFILE; }
   // check if the stmt is a Select-Project-Join(SPJ) query
