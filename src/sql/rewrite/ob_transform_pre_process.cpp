@@ -1468,13 +1468,80 @@ int ObTransformPreProcess::add_row_type_to_array_no_dup(
   return ret;
 }
 
+int ObTransformPreProcess::remove_duplicate_in_values(ObRawExprFactory &expr_factory,
+                                                      const ObSQLSessionInfo &session,
+                                                      ObRawExpr *&in_expr,
+                                                      bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  ObRawExpr *value_expr = NULL;
+  ObOpRawExpr *row_expr = NULL;
+  bool all_const = true;
+  ObSEArray<ObRawExpr *, 8> unique_values;
+  if (OB_ISNULL(in_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (T_OP_IN != in_expr->get_expr_type() && T_OP_NOT_IN != in_expr->get_expr_type()) {
+    // do nothing
+  } else if (2 != in_expr->get_param_count() ||
+             OB_ISNULL(value_expr = in_expr->get_param_expr(1))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (T_OP_ROW != value_expr->get_expr_type()) {
+    // `expr IN (subquery)` has already been rewritten into ANY/ALL and a
+    // single value list has been rewritten into an equality, so there is no
+    // value list to compact here.
+  } else if (OB_ISNULL(row_expr = static_cast<ObOpRawExpr *>(value_expr))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (row_expr->get_param_count() < 2) {
+    // do nothing
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && all_const && i < row_expr->get_param_count(); ++i) {
+      ObRawExpr *value = row_expr->get_param_expr(i);
+      bool is_duplicate = false;
+      if (OB_ISNULL(value)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!value->is_const_raw_expr() || T_QUESTIONMARK == value->get_expr_type()) {
+        // Only plain literals are deduplicated. Parameters have different
+        // values for every execution, and deduplicating anything else
+        // (columns, casts, ...) could change the comparison semantics once
+        // the implicit casts of the value list are added.
+        all_const = false;
+      } else {
+        for (int64_t j = 0; OB_SUCC(ret) && !is_duplicate && j < unique_values.count(); ++j) {
+          is_duplicate = value->same_as(*unique_values.at(j));
+        }
+        if (OB_SUCC(ret) && !is_duplicate &&
+            OB_FAIL(unique_values.push_back(value))) {
+        }
+      }
+    }
+    if (OB_FAIL(ret) || !all_const || unique_values.count() == row_expr->get_param_count()) {
+      // nothing to do
+    } else {
+      ObOpRawExpr *new_row_expr = NULL;
+      if (OB_FAIL(expr_factory.create_raw_expr(T_OP_ROW, new_row_expr))) {
+      } else if (OB_ISNULL(new_row_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(new_row_expr->set_param_exprs(unique_values))) {
+      } else if (OB_FAIL(new_row_expr->formalize(&session))) {
+      } else {
+        in_expr->get_param_expr(1) = new_row_expr;
+        trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTransformPreProcess::check_and_transform_in_or_notin(ObRawExprFactory &expr_factory,
                                                            const ObSQLSessionInfo &session,
                                                            ObRawExpr *&in_expr,
                                                            bool &trans_happened)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(2 != in_expr->get_param_count())) {
+  bool dedup_happened = false;
+  if (OB_FAIL(remove_duplicate_in_values(expr_factory, session, in_expr, dedup_happened))) {
+  } else if (OB_UNLIKELY(2 != in_expr->get_param_count())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(in_expr->get_param_expr(0)) ||
              OB_ISNULL(in_expr->get_param_expr(1))) {
@@ -1490,6 +1557,9 @@ int ObTransformPreProcess::check_and_transform_in_or_notin(ObRawExprFactory &exp
     // x in (x0, x1, ...)
     ret = transform_in_or_notin_expr_without_row(
         expr_factory, session, T_OP_IN == in_expr->get_expr_type(), in_expr, trans_happened);
+  }
+  if (OB_SUCC(ret)) {
+    trans_happened = trans_happened || dedup_happened;
   }
   if (OB_SUCC(ret)) {
     ObOpRawExpr *op_raw_expr = dynamic_cast<ObOpRawExpr *>(in_expr);
