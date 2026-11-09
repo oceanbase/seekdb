@@ -1,0 +1,12 @@
+[
+  {},
+  {
+    "error": "unsupported_sql"
+  },
+  {
+    "columns": [
+      "id"
+    ],
+    "rows": []
+  }
+]

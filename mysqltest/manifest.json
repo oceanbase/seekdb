@@ -1,30 +1,145 @@
 {
-  "version": "minivectordb-public-basic-v1",
+  "version": "minivectordb-public-v4",
   "scope": "public-samples",
   "cases": [
     {
       "id": "sql_crud",
       "group": "sql",
-      "statements": 9
+      "test": "cases/sql_crud.test",
+      "result": "cases/sql_crud.result",
+      "statements": 7
     },
     {
       "id": "sql_comparisons",
       "group": "sql",
-      "statements": 7
+      "test": "cases/sql_comparisons.test",
+      "result": "cases/sql_comparisons.result",
+      "statements": 4
     },
     {
       "id": "sql_ordering",
       "group": "sql",
-      "statements": 7
+      "test": "cases/sql_ordering.test",
+      "result": "cases/sql_ordering.result",
+      "statements": 4
     },
     {
       "id": "sql_empty",
       "group": "sql",
+      "test": "cases/sql_empty.test",
+      "result": "cases/sql_empty.result",
+      "statements": 3
+    },
+    {
+      "id": "sql_primary_key",
+      "group": "sql",
+      "test": "cases/sql_primary_key.test",
+      "result": "cases/sql_primary_key.result",
       "statements": 4
+    },
+    {
+      "id": "sql_unicode",
+      "group": "sql",
+      "test": "cases/sql_unicode.test",
+      "result": "cases/sql_unicode.result",
+      "statements": 3
+    },
+    {
+      "id": "sql_bigint",
+      "group": "sql",
+      "test": "cases/sql_bigint.test",
+      "result": "cases/sql_bigint.result",
+      "statements": 3
+    },
+    {
+      "id": "sql_unsupported",
+      "group": "sql",
+      "test": "cases/sql_unsupported.test",
+      "result": "cases/sql_unsupported.result",
+      "statements": 3
+    },
+    {
+      "id": "storage_restart",
+      "group": "storage",
+      "test": "cases/storage_restart.test",
+      "result": "cases/storage_restart.result",
+      "statements": 3
     },
     {
       "id": "vector_euclidean",
       "group": "vector",
+      "test": "cases/vector_euclidean.test",
+      "result": "cases/vector_euclidean.result",
+      "statements": 3
+    },
+    {
+      "id": "transaction_commit",
+      "group": "transaction",
+      "test": "cases/transaction_commit.test",
+      "result": "cases/transaction_commit.result",
+      "statements": 6
+    },
+    {
+      "id": "transaction_rollback",
+      "group": "transaction",
+      "test": "cases/transaction_rollback.test",
+      "result": "cases/transaction_rollback.result",
+      "statements": 6
+    },
+    {
+      "id": "storage_mutations",
+      "group": "storage",
+      "test": "cases/storage_mutations.test",
+      "result": "cases/storage_mutations.result",
+      "statements": 6
+    },
+    {
+      "id": "storage_multiple_tables",
+      "group": "storage",
+      "test": "cases/storage_multiple_tables.test",
+      "result": "cases/storage_multiple_tables.result",
+      "statements": 6
+    },
+    {
+      "id": "vector_ties_and_filter",
+      "group": "vector",
+      "test": "cases/vector_ties_and_filter.test",
+      "result": "cases/vector_ties_and_filter.result",
+      "statements": 5
+    },
+    {
+      "id": "vector_float32",
+      "group": "vector",
+      "test": "cases/vector_float32.test",
+      "result": "cases/vector_float32.result",
+      "statements": 3
+    },
+    {
+      "id": "vector_index_maintenance",
+      "group": "vector",
+      "test": "cases/vector_index_maintenance.test",
+      "result": "cases/vector_index_maintenance.result",
+      "statements": 9
+    },
+    {
+      "id": "transaction_failed_insert",
+      "group": "transaction",
+      "test": "cases/transaction_failed_insert.test",
+      "result": "cases/transaction_failed_insert.result",
+      "statements": 8
+    },
+    {
+      "id": "transaction_autocommit_atomic",
+      "group": "transaction",
+      "test": "cases/transaction_autocommit_atomic.test",
+      "result": "cases/transaction_autocommit_atomic.result",
+      "statements": 4
+    },
+    {
+      "id": "transaction_shutdown_rollback",
+      "group": "transaction",
+      "test": "cases/transaction_shutdown_rollback.test",
+      "result": "cases/transaction_shutdown_rollback.result",
       "statements": 5
     }
   ]

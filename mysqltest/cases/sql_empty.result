@@ -8,11 +8,5 @@
   },
   {
     "affected_rows": 0
-  },
-  {
-    "columns": [
-      "id"
-    ],
-    "rows": []
   }
 ]

@@ -1,0 +1,16 @@
+[
+  {},
+  {
+    "affected_rows": 1
+  },
+  {
+    "columns": [
+      "content"
+    ],
+    "rows": [
+      [
+        "中文"
+      ]
+    ]
+  }
+]

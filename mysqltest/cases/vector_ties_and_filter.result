@@ -1,0 +1,41 @@
+[
+  {},
+  {
+    "affected_rows": 4
+  },
+  {
+    "columns": [
+      "id",
+      "distance"
+    ],
+    "rows": [
+      [
+        3,
+        1.0
+      ]
+    ]
+  },
+  {
+    "columns": [
+      "id",
+      "distance"
+    ],
+    "rows": [
+      [
+        3,
+        1.0
+      ],
+      [
+        8,
+        1.0
+      ]
+    ]
+  },
+  {
+    "columns": [
+      "id",
+      "distance"
+    ],
+    "rows": []
+  }
+]

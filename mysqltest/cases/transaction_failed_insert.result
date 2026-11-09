@@ -1,0 +1,50 @@
+[
+  {},
+  {
+    "affected_rows": 3
+  },
+  {},
+  {
+    "affected_rows": 1
+  },
+  {
+    "error": "duplicate_key"
+  },
+  {
+    "columns": [
+      "id"
+    ],
+    "rows": [
+      [
+        1
+      ],
+      [
+        2
+      ],
+      [
+        3
+      ]
+    ]
+  },
+  {},
+  {
+    "columns": [
+      "id",
+      "content"
+    ],
+    "rows": [
+      [
+        1,
+        "保留"
+      ],
+      [
+        2,
+        "二"
+      ],
+      [
+        3,
+        "三"
+      ]
+    ]
+  }
+]

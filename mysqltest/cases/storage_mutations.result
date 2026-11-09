@@ -1,0 +1,44 @@
+[
+  {},
+  {
+    "affected_rows": 3
+  },
+  {
+    "affected_rows": 1
+  },
+  {
+    "affected_rows": 1
+  },
+  {
+    "columns": [
+      "id",
+      "content"
+    ],
+    "rows": [
+      [
+        1,
+        "修改"
+      ],
+      [
+        3,
+        "三"
+      ]
+    ]
+  },
+  {
+    "columns": [
+      "id",
+      "distance"
+    ],
+    "rows": [
+      [
+        3,
+        2.0
+      ],
+      [
+        1,
+        5.0
+      ]
+    ]
+  }
+]

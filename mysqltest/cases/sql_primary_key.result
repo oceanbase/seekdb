@@ -1,0 +1,21 @@
+[
+  {},
+  {
+    "affected_rows": 1
+  },
+  {
+    "error": "duplicate_key"
+  },
+  {
+    "columns": [
+      "id",
+      "content"
+    ],
+    "rows": [
+      [
+        1,
+        "初始"
+      ]
+    ]
+  }
+]

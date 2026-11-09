@@ -1,0 +1,25 @@
+[
+  {},
+  {
+    "affected_rows": 3
+  },
+  {
+    "error": "dimension_mismatch"
+  },
+  {
+    "columns": [
+      "id"
+    ],
+    "rows": [
+      [
+        1
+      ],
+      [
+        2
+      ],
+      [
+        3
+      ]
+    ]
+  }
+]

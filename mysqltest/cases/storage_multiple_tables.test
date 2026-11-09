@@ -1,0 +1,7 @@
+CREATE TABLE docs (id BIGINT PRIMARY KEY, category VARCHAR(8), content VARCHAR(16));
+INSERT INTO docs VALUES (3, '乙', '三'), (1, '甲', '一'), (2, '甲', '二');
+CREATE TABLE tags (id BIGINT PRIMARY KEY, tag VARCHAR(8));
+INSERT INTO tags VALUES (1, '独立');
+--restart
+SELECT id, tag FROM tags;
+SELECT id FROM docs ORDER BY id;

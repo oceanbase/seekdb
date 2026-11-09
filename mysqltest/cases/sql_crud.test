@@ -1,9 +1,7 @@
-CREATE TABLE docs (id BIGINT PRIMARY KEY, category VARCHAR(8), content VARCHAR(16));
-INSERT INTO docs VALUES (3, '乙', '三'), (1, '甲', '一'), (2, '甲', '二');
-SELECT * FROM docs ORDER BY id;
-UPDATE docs SET content = '已更新' WHERE category = '甲';
-SELECT id, content FROM docs WHERE category = '甲' ORDER BY id;
-DELETE FROM docs WHERE id >= 2;
+CREATE TABLE docs (id BIGINT PRIMARY KEY, content VARCHAR(16));
+INSERT INTO docs VALUES (1, '初始');
+SELECT id, content FROM docs;
+UPDATE docs SET content = '更新' WHERE id = 1;
+SELECT content FROM docs;
+DELETE FROM docs WHERE id = 1;
 SELECT id FROM docs;
-UPDATE docs SET content = '无' WHERE id = 99;
-DELETE FROM docs WHERE id = 99;

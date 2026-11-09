@@ -1,7 +1,4 @@
-CREATE TABLE docs (id BIGINT PRIMARY KEY, category VARCHAR(8), content VARCHAR(16));
-INSERT INTO docs VALUES (3, '乙', '三'), (1, '甲', '一'), (2, '甲', '二');
-SELECT id FROM docs ORDER BY category LIMIT 3;
-SELECT id FROM docs ORDER BY category DESC LIMIT 2;
-SELECT id FROM docs ORDER BY id DESC LIMIT 20;
-SELECT id FROM docs ORDER BY id LIMIT 0;
-SELECT category FROM docs;
+CREATE TABLE docs (id BIGINT PRIMARY KEY, value BIGINT);
+INSERT INTO docs VALUES (3, 30), (1, 10), (2, 20);
+SELECT id FROM docs ORDER BY value;
+SELECT id FROM docs ORDER BY value DESC LIMIT 2;

@@ -1,0 +1,7 @@
+CREATE TABLE docs (id BIGINT PRIMARY KEY, category VARCHAR(8), content VARCHAR(16), embedding VECTOR(2));
+INSERT INTO docs VALUES (3, '乙', '三', '[0, 2]'), (1, '甲', '一', '[0, 0]'), (2, '甲', '二', '[1, 0]');
+UPDATE docs SET embedding = '[3,4]', content = '修改' WHERE id = 1;
+DELETE FROM docs WHERE id = 2;
+--restart
+SELECT id, content FROM docs ORDER BY id;
+SELECT id, L2_DISTANCE(embedding, '[0, 0]') AS distance FROM docs ORDER BY distance LIMIT 10;

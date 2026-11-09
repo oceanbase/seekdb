@@ -1,0 +1,6 @@
+CREATE TABLE docs (id BIGINT PRIMARY KEY, content VARCHAR(16));
+INSERT INTO docs VALUES (1, '初始');
+BEGIN;
+UPDATE docs SET content = '修改' WHERE id = 1;
+ROLLBACK;
+SELECT id, content FROM docs;

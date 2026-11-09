@@ -1,0 +1,4 @@
+CREATE TABLE docs (id BIGINT PRIMARY KEY, content VARCHAR(16));
+INSERT INTO docs VALUES (1, '初始');
+--restart
+SELECT id, content FROM docs;
