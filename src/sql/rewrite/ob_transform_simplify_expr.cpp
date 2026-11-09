@@ -2172,6 +2172,28 @@ int ObTransformSimplifyExpr::remove_false_true(ObRawExpr *expr,
   }
   return ret;
 }
+int ObTransformSimplifyExpr::canonicalize_ann_conditions(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool transformation_enabled = true;
+  bool need_trans = false;
+  ObQueryCtx *query_ctx = NULL;
+  trans_happened = false;
+  set_transformer_type(SIMPLIFY_EXPR);
+  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)
+      || OB_ISNULL(query_ctx = stmt->get_query_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!stmt->has_vec_approx()) {
+    // Only normalize the ANN query block visited by preprocessing.
+  } else if (OB_FAIL(ctx_->session_info_->is_transformation_enabled(transformation_enabled))) {
+  } else if (!transformation_enabled || query_ctx->get_global_hint().disable_query_transform()) {
+    // Keep the same opt-outs as the main rewrite pipeline.
+  } else if (OB_FAIL(check_hint_status(*stmt, need_trans))) {
+  } else if (need_trans && OB_FAIL(canonicalize_conditions(stmt, trans_happened))) {
+  }
+  return ret;
+}
+
 int ObTransformSimplifyExpr::canonicalize_conditions(ObDMLStmt *stmt, bool &trans_happened)
 {
   int ret = OB_SUCCESS;
