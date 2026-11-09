@@ -625,6 +625,13 @@ public:
       const bool with_alias_name,
       const bool with_comma,
       ObSqlString &sql_string);
+
+  // Escape an identifier with the quote character the DDL macro blocks use.
+  // Kept inside share so shared DDL code does not depend on the sql module.
+  static int escape_identifier(
+      const common::ObString &identifier,
+      ObSqlString &escaped_identifier);
+
   static int reshape_ddl_column_obj(
       common::ObDatum &datum,
       const ObObjMeta &obj_meta);
