@@ -9,12 +9,7 @@ def _headers(directory, includes = ["include"]):
     return {"hdrs": ["include/" + directory + "/**/*." + extension for extension in _HEADER_EXTENSIONS], "includes": includes}
 
 SDK_HEADERS = {
-    "gtest": {
-        "hdrs": [
-            "include/gtest/**/*.h",
-            "include/gmock/**/*.h",
-        ],
-        "includes": ["include"],
+    "gtest": _headers("gtest") | {
         "deps": [":gtest_archive"],
         "defines": ["_GLIBCXX_USE_CXX11_ABI=1"],
         "linkopts": select({"@platforms//os:linux": ["-pthread"], "//conditions:default": []}),
