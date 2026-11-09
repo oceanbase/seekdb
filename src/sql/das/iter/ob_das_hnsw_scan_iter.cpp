@@ -722,7 +722,12 @@ int ObDASHNSWScanIter::check_pre_filter_need_retry()
 {
   int ret = OB_SUCCESS;
   double pre_selectivity = double(adaptive_ctx_.pre_scan_row_cnt_) / double(adaptive_ctx_.row_count_);
-  if (adaptive_ctx_.pre_scan_row_cnt_ <= MAX_HNSW_BRUTE_FORCE_SIZE) {
+  // A small survivor count is cheap to rank, but only when the pre-filter really produced a
+  // smaller set. If the predicate kept every row it scanned, the scan bought nothing and
+  // ranking that set costs about as much as ranking the table, so let the checks below see
+  // the observation instead of accepting the path on absolute size alone.
+  if (adaptive_ctx_.pre_scan_row_cnt_ <= MAX_HNSW_BRUTE_FORCE_SIZE
+      && pre_selectivity <= ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY) {
     /*do nothing*/
   } else if (is_ipivf() && pre_selectivity > ObVecIdxExtraInfo::DEFAULT_SINDI_SELECTIVITY_RATE) {
     ret = OB_VECTOR_INDEX_ADAPTIVE_NEED_RETRY;

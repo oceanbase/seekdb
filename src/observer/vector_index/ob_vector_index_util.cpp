@@ -5871,7 +5871,26 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
+    // Pre-filtering only pays off when the predicate actually shrinks the candidate set:
+    // it costs a scan over the table that has to evaluate the predicate and materialize the
+    // surviving vids before the vector search even starts. The brute-force shortcut below
+    // used to be taken on the estimated survivor count alone, so a predicate that keeps
+    // (nearly) every row still triggered that full scan and then ranked (nearly) the whole
+    // table. That is strictly more work than searching the vector index directly, because a
+    // query without the predicate already runs the ordinary vector search.
+    //
+    // Keep the shortcut only while the survivor set is small enough for a brute-force pass
+    // to stay cheap. A survivor set that already fills more than half of the brute-force
+    // budget is not a reduction, so fall through to the checks below, which prefer the
+    // iterative path for a predicate that keeps that many rows.
+    const double pre_filter_rate = is_primary_idx ?
+                                   ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY :
+                                   ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX;
+    const bool brute_force_is_cheap =
+        output_row_count <= static_cast<double>(ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE / 2);
+    if (brute_force_is_cheap ||
+        (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE
+         && vc_info.selectivity_ <= pre_filter_rate)) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
