@@ -25,6 +25,8 @@
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_local_management_service.h"
 #include "common/ob_timeout_ctx.h"
+#include "lib/allocator/page_arena.h"
+#include "sql/ob_sql_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -85,22 +87,29 @@ int ObCheckConstraintValidationTask::process()
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       ObSqlString ddl_schema_hint_str;
+      ObArenaAllocator allocator("ObDDLCheckTmp");
+      ObString escaped_database_name;
+      ObString escaped_table_name;
       if (check_expr_str.empty()) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(table_name, table_schema->get_schema_version(), ddl_schema_hint_str))) {
+      } else if (OB_FAIL(oceanbase::sql::ObSQLUtils::generate_new_name_with_escape_character(
+                   allocator, database_name, escaped_database_name))) {
+      } else if (OB_FAIL(oceanbase::sql::ObSQLUtils::generate_new_name_with_escape_character(
+                   allocator, table_name, escaped_table_name))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(escaped_table_name, table_schema->get_schema_version(), ddl_schema_hint_str))) {
       } else if (OB_FAIL(ddl_schema_hint_str.append_fmt(
                   " INDEX(`%.*s`.`%.*s` PRIMARY)",
-            static_cast<int>(database_name.length()),
-            database_name.ptr(),
-            static_cast<int>(table_name.length()),
-            table_name.ptr()))) {
+            static_cast<int>(escaped_database_name.length()),
+            escaped_database_name.ptr(),
+            static_cast<int>(escaped_table_name.length()),
+            escaped_table_name.ptr()))) {
       } else if (OB_FAIL(sql_string.assign_fmt(
                 "SELECT /*+ %.*s */ 1 FROM `%.*s`.`%.*s` WHERE NOT (%.*s) LIMIT 1", // for mysql mode
                  static_cast<int>(ddl_schema_hint_str.length()), ddl_schema_hint_str.ptr(),
-                 static_cast<int>(database_name.length()), database_name.ptr(),
-                 static_cast<int>(table_name.length()), table_name.ptr(),
+                 static_cast<int>(escaped_database_name.length()), escaped_database_name.ptr(),
+                 static_cast<int>(escaped_table_name.length()), escaped_table_name.ptr(),
                  static_cast<int>(check_expr_str.length()), check_expr_str.ptr()))) {
       }
 
@@ -317,22 +326,35 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
       common::sqlclient::ObMySQLResult *result = NULL;
       ObSqlString child_ddl_schema_hint_str;
       ObSqlString parent_ddl_schema_hint_str;
+      ObArenaAllocator allocator("ObDDLFkCheckTmp");
+      ObString escaped_child_database_name;
+      ObString escaped_child_table_name;
+      ObString escaped_parent_database_name;
+      ObString escaped_parent_table_name;
       const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
       // print str like "select c1, c2 from db.t2 where c1 is not null and c2 is not null minus select c3, c4 from db.t1"
       if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(child_table_schema.get_table_name_str(), child_table_schema.get_schema_version(), child_ddl_schema_hint_str))) {
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(parent_table_schema.get_table_name_str(), parent_table_schema.get_schema_version(), parent_ddl_schema_hint_str))) {
+      } else if (OB_FAIL(oceanbase::sql::ObSQLUtils::generate_new_name_with_escape_character(
+                   allocator, child_database_schema.get_database_name_str(), escaped_child_database_name))) {
+      } else if (OB_FAIL(oceanbase::sql::ObSQLUtils::generate_new_name_with_escape_character(
+                   allocator, child_table_schema.get_table_name_str(), escaped_child_table_name))) {
+      } else if (OB_FAIL(oceanbase::sql::ObSQLUtils::generate_new_name_with_escape_character(
+                   allocator, parent_database_schema.get_database_name_str(), escaped_parent_database_name))) {
+      } else if (OB_FAIL(oceanbase::sql::ObSQLUtils::generate_new_name_with_escape_character(
+                   allocator, parent_table_schema.get_table_name_str(), escaped_parent_table_name))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(escaped_child_table_name, child_table_schema.get_schema_version(), child_ddl_schema_hint_str))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(escaped_parent_table_name, parent_table_schema.get_schema_version(), parent_ddl_schema_hint_str))) {
       } else if (OB_FAIL(child_ddl_schema_hint_str.append_fmt(" INDEX(`%.*s`.`%.*s` PRIMARY)",
-            static_cast<int>(child_database_schema.get_database_name_str().length()),
-            child_database_schema.get_database_name_str().ptr(),
-            static_cast<int>(child_table_schema.get_table_name_str().length()),
-            child_table_schema.get_table_name_str().ptr()))) {
+            static_cast<int>(escaped_child_database_name.length()),
+            escaped_child_database_name.ptr(),
+            static_cast<int>(escaped_child_table_name.length()),
+            escaped_child_table_name.ptr()))) {
       } else if (OB_FAIL(parent_ddl_schema_hint_str.append_fmt(" INDEX(`%.*s`.`%.*s` PRIMARY)",
-            static_cast<int>(parent_database_schema.get_database_name_str().length()),
-            parent_database_schema.get_database_name_str().ptr(),
-            static_cast<int>(parent_table_schema.get_table_name_str().length()),
-            parent_table_schema.get_table_name_str().ptr()))) {
+            static_cast<int>(escaped_parent_database_name.length()),
+            escaped_parent_database_name.ptr(),
+            static_cast<int>(escaped_parent_table_name.length()),
+            escaped_parent_table_name.ptr()))) {
       }
       if (OB_SUCC(ret)) {
         // print "select "
@@ -351,10 +373,10 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
           if (OB_FAIL(sql_string.append_fmt("`%.*s` FROM `%.*s`.`%.*s` WHERE ",
                   static_cast<int>(child_column_names.at(i).length()),
                   child_column_names.at(i).ptr(),
-                  static_cast<int>(child_database_schema.get_database_name_str().length()),
-                  child_database_schema.get_database_name_str().ptr(),
-                  static_cast<int>(child_table_schema.get_table_name_str().length()),
-                  child_table_schema.get_table_name_str().ptr()))) {
+                  static_cast<int>(escaped_child_database_name.length()),
+                  escaped_child_database_name.ptr(),
+                  static_cast<int>(escaped_child_table_name.length()),
+                  escaped_child_table_name.ptr()))) {
           }
         }
         // print "c1 is not null and "
@@ -383,10 +405,10 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
           if (OB_FAIL(sql_string.append_fmt("`%.*s` FROM `%.*s`.`%.*s`",
                   static_cast<int>(parent_column_names.at(i).length()),
                   parent_column_names.at(i).ptr(),
-                  static_cast<int>(parent_database_schema.get_database_name_str().length()),
-                  parent_database_schema.get_database_name_str().ptr(),
-                  static_cast<int>(parent_table_schema.get_table_name_str().length()),
-                  parent_table_schema.get_table_name_str().ptr()))) {
+                  static_cast<int>(escaped_parent_database_name.length()),
+                  escaped_parent_database_name.ptr(),
+                  static_cast<int>(escaped_parent_table_name.length()),
+                  escaped_parent_table_name.ptr()))) {
           }
         }
       }
