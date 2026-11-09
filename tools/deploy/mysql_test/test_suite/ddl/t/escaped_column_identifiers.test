@@ -1,0 +1,40 @@
+# Regression for #1469: shared DDL must quote identifiers without SQL dependencies.
+# These index builds exercise original names, enum/set casts and shadow aliases.
+connect (ddl_escaped,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+connection ddl_escaped;
+--disable_query_log
+set ob_query_timeout = 10000000;
+set names utf8mb4;
+--disable_warnings
+drop table if exists ddl_escaped_columns;
+--enable_warnings
+create table ddl_escaped_columns (
+  `row``key` int primary key,
+  `state``code` enum('alpha', 'beta') not null,
+  `set``flags` set('red', 'blue') not null,
+  `中``文` varchar(20),
+  ```start` int,
+  `end``` int,
+  `two````ticks` int
+);
+insert into ddl_escaped_columns values
+  (1, 'alpha', 'red', 'first', 11, 12, 13),
+  (2, 'beta', 'blue', 'second', 21, 22, 23);
+create unique index escaped_enum_idx on ddl_escaped_columns (`state``code`);
+create unique index escaped_set_idx on ddl_escaped_columns (`set``flags`);
+create index escaped_utf8_idx on ddl_escaped_columns (`中``文`);
+create index escaped_edges_idx on ddl_escaped_columns (```start`, `end```, `two````ticks`);
+--enable_query_log
+select `row``key` as id from ddl_escaped_columns force index(escaped_enum_idx)
+  where `state``code` = 'beta';
+select `row``key` as id from ddl_escaped_columns force index(escaped_set_idx)
+  where `set``flags` = 'red';
+select `row``key` as id from ddl_escaped_columns force index(escaped_utf8_idx)
+  where `中``文` = 'second';
+select `row``key` as id from ddl_escaped_columns force index(escaped_edges_idx)
+  where ```start` = 11 and `end``` = 12 and `two````ticks` = 13;
+--disable_query_log
+drop table ddl_escaped_columns;
+--enable_query_log
+disconnect ddl_escaped;
+connection default;
