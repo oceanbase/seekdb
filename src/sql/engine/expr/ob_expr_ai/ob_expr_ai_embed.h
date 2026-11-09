@@ -53,4 +53,3 @@ private:
 } // namespace sql
 } // namespace oceanbase
 #endif // OCEANBASE_SQL_OB_EXPR_AI_EMBED_H_
-
