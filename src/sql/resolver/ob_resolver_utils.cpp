@@ -1703,6 +1703,8 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_OPTIMIZE_TABLE);
       // view
       SET_STMT_TYPE(T_CREATE_VIEW);
+      SET_STMT_TYPE(T_CREATE_PROPERTY_GRAPH);
+      SET_STMT_TYPE(T_DROP_PROPERTY_GRAPH);
       SET_STMT_TYPE(T_ALTER_VIEW);
       SET_STMT_TYPE(T_DROP_VIEW);
       // index
@@ -1734,6 +1736,7 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_SHOW_VARIABLES);
       SET_STMT_TYPE(T_SHOW_SCHEMA);
       SET_STMT_TYPE(T_SHOW_CREATE_DATABASE);
+      case T_SHOW_CREATE_PROPERTY_GRAPH: type = stmt::T_SELECT; break;
       SET_STMT_TYPE(T_SHOW_CREATE_TABLE);
       SET_STMT_TYPE(T_SHOW_CREATE_VIEW);
       SET_STMT_TYPE(T_SHOW_WARNINGS);

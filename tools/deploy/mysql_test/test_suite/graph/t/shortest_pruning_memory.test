@@ -1,0 +1,43 @@
+--disable_query_log
+CREATE TABLE gpm_d(n INT PRIMARY KEY);
+INSERT INTO gpm_d VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE gpm_v(k VARBINARY(2048) PRIMARY KEY);
+CREATE TABLE gpm_e(id INT PRIMARY KEY,src VARBINARY(2048),dst VARBINARY(2048));
+INSERT INTO gpm_v VALUES('seed');
+INSERT INTO gpm_e SELECT a.n+10*b.n+100*c.n+1000*d.n+1,'seed',
+ CONCAT(LPAD(a.n+10*b.n+100*c.n+1000*d.n+1,4,'0'),REPEAT('x',1996))
+ FROM gpm_d a,gpm_d b,gpm_d c,gpm_d d WHERE a.n+10*b.n+100*c.n+1000*d.n<3000;
+INSERT INTO gpm_v SELECT dst FROM gpm_e;
+CREATE PROPERTY GRAPH gpm VERTEX TABLES(gpm_v KEY(k) LABEL v PROPERTIES(k))
+ EDGE TABLES(gpm_e KEY(id) SOURCE KEY(src) REFERENCES gpm_v(k)
+ DESTINATION KEY(dst) REFERENCES gpm_v(k) LABEL e PROPERTIES(id));
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='admission_limit'
+SELECT COUNT(*) FROM GRAPH_TABLE(gpm MATCH ANY SHORTEST
+ (a IS v WHERE a.k='seed')-[e IS e WHERE e.id<=3000]-{0,1}(b IS v)
+ COLUMNS(b.k AS endpoint,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*) AS fallback_pruning FROM plan_table
+ WHERE statement_id='admission_limit' AND operator='GRAPH FEEDBACK LOOP'
+ AND special_predicates LIKE '%runtime=fallback, states=binding_vertex_hop%';
+let $saved_hash_area_size=query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name='_hash_area_size', value, 1);
+SET @saved_timeout=@@ob_query_timeout;
+# This is a resource-rejection test, not a latency acceptance test.
+SET ob_query_timeout=60000000;
+ALTER SYSTEM SET _hash_area_size='4M';
+sleep 6;
+PREPARE gpm_stmt FROM 'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(gpm MATCH ANY SHORTEST (a IS v WHERE a.k=''seed'')-[e IS e WHERE e.id<=?]-{0,1}(b IS v) COLUMNS(b.k AS endpoint,COUNT(e.id) AS hops)) g';
+--echo fallback_membership_limit_and_same_handle_recovery
+SET @edges=3000;
+--error 11049
+EXECUTE gpm_stmt USING @edges;
+SET @edges=2;
+EXECUTE gpm_stmt USING @edges;
+DEALLOCATE PREPARE gpm_stmt;
+eval ALTER SYSTEM SET _hash_area_size='$saved_hash_area_size';
+sleep 6;
+SET ob_query_timeout=@saved_timeout;
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH gpm;
+DROP TABLE gpm_e,gpm_v,gpm_d;

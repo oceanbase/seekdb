@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_JO
 #include "rust/config.h"
 #include "ob_join_order.h"
+#include "sql/optimizer/graph_feedback_loop_log_op.h"
 #include "sql/optimizer/ob_skyline_prunning.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -45,6 +46,31 @@ class QueryRangeInfo;
 #define OPT_CTX (get_plan()->get_optimizer_context())
 
 ERRSIM_POINT_DEF(EN_FORCE_INDEX_MERGE_PLAN, "Force to use index merge if it is possible");
+
+namespace
+{
+
+int get_subquery_cardinality_filters(const ObLogicalOperator &root,
+                                     const ObIArray<ObRawExpr *> &filters,
+                                     ObIArray<ObRawExpr *> &cardinality_filters)
+{
+  int ret = cardinality_filters.assign(filters);
+  if (OB_SUCC(ret) && root.get_type() == log_op_def::LOG_GRAPH_FEEDBACK_LOOP) {
+    const GraphFeedbackLoopLogOp &graph =
+        static_cast<const GraphFeedbackLoopLogOp &>(root);
+    for (int64_t i = cardinality_filters.count() - 1;
+         OB_SUCC(ret) && i >= 0; --i) {
+      if (cardinality_filters.at(i) != nullptr
+          && graph.is_implied_output_filter(*cardinality_filters.at(i))
+          && OB_FAIL(cardinality_filters.remove(i))) {
+        LOG_WARN("failed to remove implied graph output filter", K(ret), K(i));
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace
 
 ObJoinOrder::~ObJoinOrder()
 {
@@ -4876,9 +4902,12 @@ int ObJoinOrder::estimate_size_and_width_for_subquery(uint64_t table_id,
   int ret = OB_SUCCESS;
   const ObDMLStmt *stmt = NULL;
   double selectivity = 0;
+  ObSEArray<ObRawExpr *, 4> cardinality_filters;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(init_est_sel_info_for_subquery(table_id, root))) {
+  } else if (OB_FAIL(get_subquery_cardinality_filters(
+                 *root, get_restrict_infos(), cardinality_filters))) {
   } else if (OB_FAIL(ObOptEstCost::estimate_width_for_table(get_plan()->get_basic_table_metas(),
                                                             get_plan()->get_selectivity_ctx(),
                                                             stmt->get_column_items(),
@@ -4887,7 +4916,7 @@ int ObJoinOrder::estimate_size_and_width_for_subquery(uint64_t table_id,
   } else if (FALSE_IT(get_plan()->get_selectivity_ctx().init_op_ctx(NULL, root->get_card()))) {
   } else if (OB_FAIL(ObOptSelectivity::calculate_selectivity(get_plan()->get_basic_table_metas(),
                                                              get_plan()->get_selectivity_ctx(),
-                                                             get_restrict_infos(),
+                                                             cardinality_filters,
                                                              selectivity,
                                                              get_plan()->get_predicate_selectivities()))) {
   } else {
@@ -4897,7 +4926,7 @@ int ObJoinOrder::estimate_size_and_width_for_subquery(uint64_t table_id,
                                                          get_plan()->get_selectivity_ctx(),
                                                          table_id,
                                                          output_rows_,
-                                                         get_restrict_infos(),
+                                                         cardinality_filters,
                                                          get_plan()->get_predicate_selectivities()))) {
     }
     LOG_TRACE("estimate rows for subquery", K(output_rows_), K(get_plan()->get_basic_table_metas()));

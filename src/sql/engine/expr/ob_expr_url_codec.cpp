@@ -301,7 +301,13 @@ int ObExprURLCODEC::calc_result_type1(ObExprResType &type, ObExprResType &type_1
   int ret = OB_SUCCESS;
 
   type_1.set_calc_type(ObVarcharType);
-  type_1.set_calc_collation_type(CS_TYPE_UTF8MB4_ZH_0900_AS_CS);
+  // URL escaping operates on UTF-8 bytes, not linguistic ordering. Preserve
+  // an existing UTF-8 collation: forcing a different one inserts a cast whose
+  // metadata would change the result collation on subsequent type deduction.
+  // Other inputs use the supported binary UTF-8 collation for conversion.
+  type_1.set_calc_collation_type(
+      ObCharset::charset_type_by_coll(type_1.get_collation_type()) == CHARSET_UTF8MB4
+          ? type_1.get_collation_type() : CS_TYPE_UTF8MB4_BIN);
   type.set_varchar();
   // If the input is a string, output the same collation as the input. Otherwise, output current
   // session collation

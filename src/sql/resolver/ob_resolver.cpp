@@ -42,6 +42,8 @@
 #include "sql/resolver/ddl/ob_use_database_resolver.h"
 #include "sql/resolver/ddl/ob_drop_database_resolver.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
+#include "sql/resolver/ddl/graph_ddl_resolver.h"
+#include "sql/resolver/dml/graph_show_resolver.h"
 #include "sql/resolver/ddl/ob_explain_resolver.h"
 #include "sql/resolver/ddl/ob_create_outline_resolver.h"
 #include "sql/resolver/ddl/ob_alter_outline_resolver.h"
@@ -186,6 +188,15 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_CREATE_INDEX: {
         REGISTER_STMT_RESOLVER(CreateIndex);
+        break;
+      }
+      case T_SHOW_CREATE_PROPERTY_GRAPH: {
+        ret = stmt_resolver_func<GraphShowResolver>(params_, *real_parse_tree, stmt);
+        break;
+      }
+      case T_CREATE_PROPERTY_GRAPH:
+      case T_DROP_PROPERTY_GRAPH: {
+        ret = stmt_resolver_func<GraphDDLResolver>(params_, *real_parse_tree, stmt);
         break;
       }
       case T_CREATE_VIEW: {

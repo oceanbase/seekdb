@@ -1,0 +1,133 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+CREATE TABLE composition_expected AS
+SELECT a.id AS seed,a.id AS middle,c.id AS endpoint,0 AS hops,
+       CAST(NULL AS CHAR(200)) AS edges,f.id AS suffix,1 AS is_trail
+FROM graph_person a JOIN graph_knows f ON f.dst=a.id
+JOIN graph_person c ON c.id=f.src WHERE a.id=1
+UNION ALL
+SELECT a.id,b.id,c.id,1,CAST(JSON_ARRAY(e.id) AS CHAR(200)),f.id,e.id<>f.id
+FROM graph_person a JOIN graph_knows e ON e.src=a.id
+JOIN graph_person b ON b.id=e.dst JOIN graph_knows f ON f.dst=b.id
+JOIN graph_person c ON c.id=f.src WHERE a.id=1
+UNION ALL
+SELECT a.id,b.id,c.id,2,CAST(JSON_ARRAY(e.id,h.id) AS CHAR(200)),f.id,
+       e.id<>h.id AND e.id<>f.id AND h.id<>f.id
+FROM graph_person a JOIN graph_knows e ON e.src=a.id
+JOIN graph_person v ON v.id=e.dst JOIN graph_knows h ON h.src=v.id
+JOIN graph_person b ON b.id=h.dst JOIN graph_knows f ON f.dst=b.id
+JOIN graph_person c ON c.id=f.src WHERE a.id=1;
+--enable_query_log
+--echo full_scan_path_multiset_matches_independent_joins
+SELECT COUNT(*) AS mismatched_groups FROM (
+ SELECT seed,middle,endpoint,hops,edges,suffix FROM (
+ SELECT seed,middle,endpoint,hops,edges,suffix,1 AS weight FROM composition_expected
+ UNION ALL
+ SELECT seed,middle,endpoint,hops,CAST(edges AS CHAR(200)),suffix,-1 FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)<-[f IS knows]-(c IS person)
+ COLUMNS(a.id AS seed,b.id AS middle,c.id AS endpoint,COUNT(e.id) AS hops,
+ JSON_ARRAYAGG(e.id) AS edges,f.id AS suffix)) g
+ ) bags GROUP BY seed,middle,endpoint,hops,edges,suffix HAVING SUM(weight)<>0
+) differences;
+--echo quantified_suffix_walk
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)<-[f IS knows]-(c IS person)
+ COLUMNS(a.id AS seed,b.id AS middle,c.id AS endpoint,COUNT(e.id) AS hops,
+ JSON_ARRAYAGG(e.id) AS edges,f.id AS final_edge)) g ORDER BY hops,edges,final_edge;
+--echo quantified_suffix_trail
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)<-[f IS knows]-(c IS person)
+ COLUMNS(a.id AS seed,b.id AS middle,c.id AS endpoint,COUNT(e.id) AS hops,
+ JSON_ARRAYAGG(e.id) AS edges,f.id AS final_edge)) g ORDER BY hops,edges,final_edge;
+--echo fixed_prefix
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[f IS knows]->(b IS person)-[e IS knows]->{0,1}(c IS person)
+ COLUMNS(a.id AS seed,f.id AS first_edge,b.id AS middle,c.id AS endpoint,
+ COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY first_edge,hops;
+--echo fixed_both_sides
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+ (a IS person WHERE a.id=1)-[f IS knows]->(b IS person)-[e IS knows]->{0,1}(c IS person)
+ <-[h IS knows]-(d IS person)
+ COLUMNS(f.id AS first_edge,d.id AS endpoint,COUNT(e.id) AS hops,h.id AS last_edge)) g
+ ORDER BY first_edge,hops,last_edge;
+--echo heterogeneous_quantified_segment
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=2)<-[f IS knows]-(b IS person)-[e IS works]->{0,2}(c IS company)
+ COLUMNS(a.id AS seed,f.id AS first_edge,c.id AS endpoint,
+ COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY first_edge,hops;
+--echo fixed_heterogeneous_suffix
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=3)-[e IS knows]->{0,2}(b IS person)-[f IS works]->(c IS company)
+ COLUMNS(c.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges,f.id AS final_edge)) g;
+--echo graph_variable_must_not_be_captured_as_outer_alias
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person)-[f IS knows]->(b IS person)-[e IS knows WHERE e.since>a.id]->{0,1}(c IS person)
+ COLUMNS(c.id AS endpoint)) g;
+--echo repeated_lateral_seeds_and_correlated_fixed_filters
+WITH seeds AS (SELECT 1 AS binding_id,1 AS seed,2020 AS cutoff
+ UNION ALL SELECT 2,1,2021)
+SELECT s.binding_id,g.* FROM seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed)-[f IS knows WHERE f.since>=s.cutoff]->(b IS person)
+ -[e IS knows]->{0,1}(c IS person)
+ COLUMNS(f.id AS first_edge,c.id AS endpoint,COUNT(e.id) AS hops)) q
+) g ORDER BY binding_id,first_edge,hops;
+--echo indexed_composition
+CREATE INDEX composition_src ON graph_knows(src,since,dst);
+CREATE INDEX composition_dst ON graph_knows(dst,since,src);
+--echo indexed_trail_multiset_matches_independent_joins
+SELECT COUNT(*) AS mismatched_groups FROM (
+ SELECT seed,middle,endpoint,hops,edges,suffix FROM (
+ SELECT seed,middle,endpoint,hops,edges,suffix,1 AS weight FROM composition_expected WHERE is_trail=1
+ UNION ALL
+ SELECT seed,middle,endpoint,hops,CAST(edges AS CHAR(200)),suffix,-1 FROM GRAPH_TABLE(graph_social MATCH TRAIL
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)<-[f IS knows]-(c IS person)
+ COLUMNS(a.id AS seed,b.id AS middle,c.id AS endpoint,COUNT(e.id) AS hops,
+ JSON_ARRAYAGG(e.id) AS edges,f.id AS suffix)) g
+ ) bags GROUP BY seed,middle,endpoint,hops,edges,suffix HAVING SUM(weight)<>0
+) differences;
+SELECT COUNT(*) AS paths,COUNT(DISTINCT match_no) AS distinct_matches
+ FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)<-[f IS knows]-(c IS person)
+ COLUMNS(MATCHNUM() AS match_no,COUNT(e.id) AS hops)) g;
+PREPARE composed_cached FROM 'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=?)-[e IS knows]->{0,2}(b IS person)<-[f IS knows WHERE f.since>=?]-(c IS person) COLUMNS(COUNT(e.id) AS hops)) g';
+SET @seed=1,@cutoff=2020;
+EXECUTE composed_cached USING @seed,@cutoff;
+SET @seed=1,@cutoff=2022;
+EXECUTE composed_cached USING @seed,@cutoff;
+DEALLOCATE PREPARE composed_cached;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person)-[e IS knows]->{16}(b IS person)-[f IS knows]->(c IS person)
+ COLUMNS(c.id AS endpoint)) g;
+--echo internal_aliases_do_not_capture_lateral_bindings
+SELECT __g_prefix_0_0.id,g.* FROM (SELECT 1 AS id) __g_prefix_0_0,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=__g_prefix_0_0.id)-[f IS knows]->(b IS person)
+ -[e IS knows]->{0}(c IS person)
+ COLUMNS(a.id AS start_id,f.id AS first_edge)) q
+) g ORDER BY start_id,first_edge;
+SELECT __g_fixed_0_4.id,g.* FROM (SELECT 1 AS id) __g_fixed_0_4,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,1}(b IS person)<-[f IS knows]-(c IS person WHERE c.id=__g_fixed_0_4.id)
+ COLUMNS(c.id AS endpoint,f.id AS last_edge,COUNT(e.id) AS hops)) q
+) g ORDER BY endpoint,last_edge,hops;
+--echo step_alias_case_and_successive_candidates
+SELECT g.* FROM (SELECT 1 AS id) __G_PREFIX_0_0,(SELECT 1 AS id) __g_prefix_1_0,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=__G_PREFIX_0_0.id AND a.id=__g_prefix_1_0.id)
+ -[f IS knows]->(b IS person)-[e IS knows]->{0}(c IS person)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(v1.id AS src,se.id AS edge_id,v2.id AS dst,ELEMENT_NUMBER(se) AS n)) q
+) g ORDER BY edge_id;
+--echo heterogeneous_alias_scope
+SELECT COUNT(*) AS paths FROM (SELECT 2 AS id) __g_fixed_0_0,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=__g_fixed_0_0.id)-[f IS knows]->(b IS person)
+ -[e IS works]->{0,2}(c IS company)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(v1.id AS src,se.id AS edge_id,v2.id AS dst)) q
+) g;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE composition_expected,graph_works,graph_knows,graph_company,graph_person;

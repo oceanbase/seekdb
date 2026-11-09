@@ -1,0 +1,444 @@
+SELECT COUNT(*) AS native_provenance_loops FROM plan_table
+WHERE statement_id='tp_evidence' AND special_predicates LIKE '%runtime=native%';
+native_provenance_loops
+1
+SELECT COUNT(*) AS fallback_provenance_loops FROM plan_table
+WHERE statement_id='tp_fallback' AND special_predicates LIKE '%runtime=fallback%';
+fallback_provenance_loops
+1
+DROP TABLE plan_table;
+baseline_versioned_evidence
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+reverse_fullscan_identity_and_original_trail_scan
+SELECT s.binding,g.endpoint,g.hops,g.edges FROM tp_seed s,LATERAL (
+SELECT * FROM GRAPH_TABLE(tp_graph MATCH
+(a IS entity WHERE a.tenant=s.tenant AND a.id=3)
+<-[e IS fact WHERE e.kind='depends' AND e.valid_from<=2024
+AND (e.valid_to IS NULL OR e.valid_to>2024)]-{0,2}(b IS entity)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+ORDER BY s.binding,g.hops;
+binding	endpoint	hops	edges
+1	3	0	NULL
+1	2	1	[11]
+1	1	2	[11, 10]
+2	3	0	NULL
+2	2	1	[11]
+2	1	2	[11, 10]
+SELECT COUNT(*) AS trail_original_scan_paths FROM tp_seed s,LATERAL (
+SELECT * FROM GRAPH_TABLE(tp_graph MATCH TRAIL
+(a IS entity WHERE a.tenant=s.tenant AND a.id=s.entity_id)
+-[e IS fact WHERE e.kind='depends' AND e.valid_from<=2024
+AND (e.valid_to IS NULL OR e.valid_to>2024)]->{0,2}(b IS entity)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g;
+trail_original_scan_paths
+6
+own_version_update_and_second_hop_expiry_then_rollback
+START TRANSACTION;
+INSERT INTO tp_document VALUES(1,1001,2,'doc://vault/v2',0);
+UPDATE tp_chunk SET version=2 WHERE tenant=1 AND id=101;
+UPDATE tp_edge SET valid_to=2024 WHERE tenant=1 AND id=11;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	2	doc://vault/v2
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	2	doc://vault/v2
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	2	doc://vault/v2
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	2	doc://vault/v2
+ROLLBACK;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+deleting_middle_vertex_removes_descendant_paths_then_rollback
+START TRANSACTION;
+DELETE FROM tp_vertex WHERE tenant=1 AND id=2;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+ROLLBACK;
+document_tombstone_hides_evidence_but_does_not_stop_traversal
+START TRANSACTION;
+UPDATE tp_document SET deleted=1 WHERE tenant=1 AND id=1001 AND version=1;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+DELETE FROM tp_chunk WHERE tenant=1 AND id=102;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+ROLLBACK;
+reader_keeps_one_snapshot_across_atomic_provenance_replacement
+SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+START TRANSACTION;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+START TRANSACTION;
+INSERT INTO tp_document VALUES(1,1001,2,'doc://vault/v2',0);
+UPDATE tp_chunk SET version=2 WHERE tenant=1 AND id=101;
+DELETE FROM tp_document WHERE tenant=1 AND id=1001 AND version=1;
+DELETE FROM tp_edge WHERE tenant=1 AND id=11;
+INSERT INTO tp_edge VALUES(1,20,2,4,'depends',2020,NULL);
+COMMIT;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+COMMIT;
+new_snapshot_sees_new_version_and_replacement_path_together
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	2	doc://vault/v2
+1	1	10	4	2	[10, 20]	103	1003	1	doc://audit/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	2	doc://vault/v2
+2	1	20	4	2	[10, 20]	103	1003	1	doc://audit/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	2	doc://vault/v2
+1	1	10	4	2	[10, 20]	103	1003	1	doc://audit/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	2	doc://vault/v2
+2	1	20	4	2	[10, 20]	103	1003	1	doc://audit/v1
+committed_source_deletion_does_not_reuse_previous_statement_results
+START TRANSACTION;
+DELETE FROM tp_chunk WHERE tenant=1 AND id=101;
+DELETE FROM tp_document WHERE tenant=1 AND id=1001 AND version=2;
+DELETE FROM tp_edge WHERE tenant=1 AND id=10;
+COMMIT;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+START TRANSACTION;
+INSERT INTO tp_document VALUES(1,1001,1,'doc://vault/v1',0);
+INSERT INTO tp_chunk VALUES(1,101,2,1001,1);
+DELETE FROM tp_edge WHERE tenant=1 AND id=20;
+INSERT INTO tp_edge VALUES(1,10,1,2,'depends',2020,NULL),(1,11,2,3,'depends',2020,NULL);
+COMMIT;
+CREATE INDEX tp_adjacency ON tp_edge(tenant,src,kind,valid_from,dst);
+SELECT COUNT(*) AS native_provenance_loops FROM plan_table
+WHERE statement_id='tp_evidence' AND special_predicates LIKE '%runtime=native%';
+native_provenance_loops
+1
+SELECT COUNT(*) AS fallback_provenance_loops FROM plan_table
+WHERE statement_id='tp_fallback' AND special_predicates LIKE '%runtime=fallback%';
+fallback_provenance_loops
+1
+DROP TABLE plan_table;
+baseline_versioned_evidence
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+reverse_fullscan_identity_and_original_trail_scan
+SELECT s.binding,g.endpoint,g.hops,g.edges FROM tp_seed s,LATERAL (
+SELECT * FROM GRAPH_TABLE(tp_graph MATCH
+(a IS entity WHERE a.tenant=s.tenant AND a.id=3)
+<-[e IS fact WHERE e.kind='depends' AND e.valid_from<=2024
+AND (e.valid_to IS NULL OR e.valid_to>2024)]-{0,2}(b IS entity)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+ORDER BY s.binding,g.hops;
+binding	endpoint	hops	edges
+1	3	0	NULL
+1	2	1	[11]
+1	1	2	[11, 10]
+2	3	0	NULL
+2	2	1	[11]
+2	1	2	[11, 10]
+SELECT COUNT(*) AS trail_original_scan_paths FROM tp_seed s,LATERAL (
+SELECT * FROM GRAPH_TABLE(tp_graph MATCH TRAIL
+(a IS entity WHERE a.tenant=s.tenant AND a.id=s.entity_id)
+-[e IS fact WHERE e.kind='depends' AND e.valid_from<=2024
+AND (e.valid_to IS NULL OR e.valid_to>2024)]->{0,2}(b IS entity)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g;
+trail_original_scan_paths
+6
+own_version_update_and_second_hop_expiry_then_rollback
+START TRANSACTION;
+INSERT INTO tp_document VALUES(1,1001,2,'doc://vault/v2',0);
+UPDATE tp_chunk SET version=2 WHERE tenant=1 AND id=101;
+UPDATE tp_edge SET valid_to=2024 WHERE tenant=1 AND id=11;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	2	doc://vault/v2
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	2	doc://vault/v2
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	2	doc://vault/v2
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	2	doc://vault/v2
+ROLLBACK;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+deleting_middle_vertex_removes_descendant_paths_then_rollback
+START TRANSACTION;
+DELETE FROM tp_vertex WHERE tenant=1 AND id=2;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+ROLLBACK;
+document_tombstone_hides_evidence_but_does_not_stop_traversal
+START TRANSACTION;
+UPDATE tp_document SET deleted=1 WHERE tenant=1 AND id=1001 AND version=1;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+DELETE FROM tp_chunk WHERE tenant=1 AND id=102;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+ROLLBACK;
+reader_keeps_one_snapshot_across_atomic_provenance_replacement
+SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+START TRANSACTION;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+START TRANSACTION;
+INSERT INTO tp_document VALUES(1,1001,2,'doc://vault/v2',0);
+UPDATE tp_chunk SET version=2 WHERE tenant=1 AND id=101;
+DELETE FROM tp_document WHERE tenant=1 AND id=1001 AND version=1;
+DELETE FROM tp_edge WHERE tenant=1 AND id=11;
+INSERT INTO tp_edge VALUES(1,20,2,4,'depends',2020,NULL);
+COMMIT;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	1	doc://vault/v1
+1	1	10	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	1	doc://vault/v1
+2	1	20	3	2	[10, 11]	102	1002	1	doc://rotation/v1
+COMMIT;
+new_snapshot_sees_new_version_and_replacement_path_together
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	2	doc://vault/v2
+1	1	10	4	2	[10, 20]	103	1003	1	doc://audit/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	2	doc://vault/v2
+2	1	20	4	2	[10, 20]	103	1003	1	doc://audit/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+1	1	10	2	1	[10]	101	1001	2	doc://vault/v2
+1	1	10	4	2	[10, 20]	103	1003	1	doc://audit/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	2	1	[10]	101	1001	2	doc://vault/v2
+2	1	20	4	2	[10, 20]	103	1003	1	doc://audit/v1
+committed_source_deletion_does_not_reuse_previous_statement_results
+START TRANSACTION;
+DELETE FROM tp_chunk WHERE tenant=1 AND id=101;
+DELETE FROM tp_document WHERE tenant=1 AND id=1001 AND version=2;
+DELETE FROM tp_edge WHERE tenant=1 AND id=10;
+COMMIT;
+path_bag_mismatches
+0
+native_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+fallback_evidence
+binding	tenant	score	endpoint	hops	edges	chunk_id	doc_id	version	source_uri
+1	1	10	1	0	NULL	100	1000	1	doc://seed/v1
+2	1	20	1	0	NULL	100	1000	1	doc://seed/v1
+START TRANSACTION;
+INSERT INTO tp_document VALUES(1,1001,1,'doc://vault/v1',0);
+INSERT INTO tp_chunk VALUES(1,101,2,1001,1);
+DELETE FROM tp_edge WHERE tenant=1 AND id=20;
+INSERT INTO tp_edge VALUES(1,10,1,2,'depends',2020,NULL),(1,11,2,3,'depends',2020,NULL);
+COMMIT;
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+DROP PROPERTY GRAPH tp_graph;
+DROP TABLE tp_seed,tp_chunk,tp_document,tp_edge,tp_vertex;

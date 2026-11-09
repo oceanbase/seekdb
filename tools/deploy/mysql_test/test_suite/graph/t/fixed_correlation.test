@@ -1,0 +1,128 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+CREATE TABLE fc_seeds(binding_id INT PRIMARY KEY,seed BIGINT,score INT,cutoff BIGINT,min_age BIGINT);
+INSERT INTO fc_seeds VALUES(1,1,10,2020,20),(2,1,20,2022,0),(3,1,30,2020,20),
+ (4,1,40,NULL,0),(5,5,50,2020,0),(6,4,60,2024,30);
+CREATE TABLE fc_expected AS
+ SELECT s.binding_id,s.score,e.id AS e1,f.id AS e2,c.id AS endpoint
+ FROM fc_seeds s JOIN graph_person a ON a.id=s.seed
+ JOIN graph_knows e ON e.src=a.id AND e.since>=s.cutoff
+ JOIN graph_person b ON b.id=e.dst
+ JOIN graph_knows f ON f.src=b.id AND f.since>=s.cutoff
+ JOIN graph_person c ON c.id=f.dst AND c.age>=s.min_age;
+--enable_query_log
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX fc_src ON graph_knows(src,since,dst);
+    CREATE INDEX fc_dst ON graph_knows(dst,since,src);
+  }
+  SELECT COUNT(*) AS mismatched_path_bags FROM (
+   SELECT binding_id,score,e1,e2,endpoint,SUM(n) AS difference FROM (
+    SELECT binding_id,score,e1,e2,endpoint,1 AS n FROM fc_expected
+    UNION ALL
+    SELECT s.binding_id,s.score,g.e1,g.e2,g.endpoint,-1 AS n
+    FROM fc_seeds s,LATERAL (
+     SELECT * FROM GRAPH_TABLE(graph_social MATCH
+      (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->
+      (b IS person)-[f IS knows WHERE f.since>=s.cutoff]->
+      (c IS person WHERE c.age>=s.min_age)
+      COLUMNS(e.id AS e1,f.id AS e2,c.id AS endpoint)) p) g
+   ) bags GROUP BY binding_id,score,e1,e2,endpoint HAVING SUM(n)<>0
+  ) differences;
+  SELECT s.binding_id,s.score,g.* FROM fc_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->
+    (b IS person)-[f IS knows WHERE f.since>=s.cutoff]->
+    (c IS person WHERE c.age>=s.min_age)
+    COLUMNS(e.id AS e1,f.id AS e2,c.id AS endpoint)) p) g
+   ORDER BY s.binding_id,g.e1,g.e2;
+  SELECT s.binding_id,g.e1,g.e2,g.endpoint FROM fc_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->
+    (b IS person)<-[f IS knows WHERE f.since>=s.cutoff]-(c IS person)
+    COLUMNS(e.id AS e1,f.id AS e2,c.id AS endpoint)) p) g
+   ORDER BY s.binding_id,g.e1,g.e2;
+  SELECT s.binding_id,g.endpoint FROM fc_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->
+    (b IS person)-[f IS knows]->(c IS person)
+    COLUMNS(c.id AS endpoint)) p) g ORDER BY s.binding_id,g.endpoint;
+  # Left join must retain seeds whose graph query has no matching path.
+  SELECT s.binding_id,g.endpoint FROM fc_seeds s LEFT JOIN LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->(b IS person)
+    COLUMNS(b.id AS endpoint)) p) g ON TRUE ORDER BY s.binding_id,g.endpoint;
+  PREPARE fc_cached FROM 'SELECT s.binding_id,g.endpoint FROM fc_seeds s,LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since>=?]->(b IS person) COLUMNS(b.id AS endpoint)) p) g ORDER BY s.binding_id,g.endpoint';
+  SET @cutoff=2020;
+  EXECUTE fc_cached USING @cutoff;
+  SET @cutoff=2022;
+  EXECUTE fc_cached USING @cutoff;
+  START TRANSACTION;
+  DELETE FROM graph_person WHERE id=2;
+  EXECUTE fc_cached USING @cutoff;
+  ROLLBACK;
+  DEALLOCATE PREPARE fc_cached;
+  --dec $passes
+}
+WITH seeds AS (SELECT * FROM fc_seeds WHERE binding_id IN (1,3))
+SELECT s.binding_id,g.endpoint FROM seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=s.seed) COLUMNS(a.id AS endpoint)) p) g ORDER BY s.binding_id;
+# Aliases of mapped tables and graph properties must not capture outer names.
+SELECT s.binding_id,g.endpoint FROM
+ (SELECT binding_id,seed AS id,cutoff AS since FROM fc_seeds) s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=s.id)-[e IS knows WHERE e.since>=s.since]->(b IS person)
+  COLUMNS(b.id AS endpoint)) p) g ORDER BY s.binding_id,g.endpoint;
+# The graph namespace wins over a same-named outer alias.
+SELECT a.binding_id,g.endpoint FROM fc_seeds a,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=4) COLUMNS(a.id AS endpoint)) p) g ORDER BY a.binding_id;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM fc_seeds a,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=a.seed) COLUMNS(a.id AS endpoint)) p) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM fc_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=seed) COLUMNS(a.id AS endpoint)) p) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM fc_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=s.seed) COLUMNS(s.score AS score)) p) g;
+--error ER_BAD_FIELD_ERROR
+SELECT * FROM fc_seeds s,GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.seed) COLUMNS(a.id AS endpoint)) g;
+--error ER_BAD_FIELD_ERROR
+SELECT * FROM fc_seeds s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=missing.seed) COLUMNS(a.id AS endpoint)) p) g;
+DROP TABLE fc_expected,fc_seeds;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+--disable_query_log
+CREATE TABLE fc_vertex(tenant INT,id BIGINT,PRIMARY KEY(tenant,id));
+CREATE TABLE fc_edge(tenant INT,id BIGINT,src BIGINT,dst BIGINT,since BIGINT,PRIMARY KEY(tenant,id));
+CREATE TABLE fc_bindings(binding_id INT PRIMARY KEY,tenant INT,seed BIGINT,cutoff BIGINT);
+INSERT INTO fc_vertex VALUES(1,1),(1,2),(2,1),(2,2);
+INSERT INTO fc_edge VALUES(1,10,1,2,2020),(1,11,1,2,2024),(2,10,1,2,2025);
+INSERT INTO fc_bindings VALUES(1,1,1,2020),(2,2,1,2020),(3,1,1,2023),(4,1,1,2020);
+CREATE PROPERTY GRAPH fc_graph
+ VERTEX TABLES(fc_vertex KEY(tenant,id) LABEL person PROPERTIES(tenant,id))
+ EDGE TABLES(fc_edge KEY(tenant,id) SOURCE KEY(tenant,src) REFERENCES fc_vertex(tenant,id)
+ DESTINATION KEY(tenant,dst) REFERENCES fc_vertex(tenant,id) LABEL knows PROPERTIES(tenant,id,since));
+--enable_query_log
+SELECT s.binding_id,g.tenant,g.eid,g.endpoint FROM fc_bindings s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(fc_graph MATCH
+  (a IS person WHERE a.tenant=s.tenant AND a.id=s.seed)
+  -[e IS knows WHERE e.tenant=s.tenant AND e.since>=s.cutoff]->(b IS person)
+  COLUMNS(e.tenant AS tenant,e.id AS eid,b.id AS endpoint)) p) g ORDER BY s.binding_id,g.eid;
+SELECT s.binding_id,e.tenant,e.id AS eid,b.id AS endpoint FROM fc_bindings s
+ JOIN fc_vertex a ON a.tenant=s.tenant AND a.id=s.seed
+ JOIN fc_edge e ON e.tenant=a.tenant AND e.src=a.id AND e.tenant=s.tenant AND e.since>=s.cutoff
+ JOIN fc_vertex b ON b.tenant=e.tenant AND b.id=e.dst ORDER BY s.binding_id,e.id;
+DROP PROPERTY GRAPH fc_graph;
+DROP TABLE fc_bindings,fc_edge,fc_vertex;

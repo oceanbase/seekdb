@@ -91,6 +91,7 @@ fn supports_long_data(mysql_type: u16) -> bool {
         mysql_type,
         MYSQL_TYPE_VARCHAR
             | MYSQL_TYPE_JSON
+            | MYSQL_TYPE_DECIMAL
             | MYSQL_TYPE_NEWDECIMAL
             | MYSQL_TYPE_TINY_BLOB
             | MYSQL_TYPE_MEDIUM_BLOB

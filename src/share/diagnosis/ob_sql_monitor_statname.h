@@ -81,6 +81,17 @@ SQL_MONITOR_STATNAME_DEF(SSSTORE_READ_BYTES, sql_monitor_statname::CAPACITY, "to
 SQL_MONITOR_STATNAME_DEF(SSSTORE_READ_ROW_COUNT, sql_monitor_statname::INT, "total rows processed by ssstore", "total rows processed by ssstore")
 SQL_MONITOR_STATNAME_DEF(MEMSTORE_READ_ROW_COUNT, sql_monitor_statname::INT, "total rows processed by memstore", "total rows processed by memstore")
 
+// Graph feedback loop stat
+SQL_MONITOR_STATNAME_DEF(GRAPH_EXPANDED_HOP_COUNT, sql_monitor_statname::INT, "graph expanded hop count", "total graph hops completed by the feedback loop")
+SQL_MONITOR_STATNAME_DEF(GRAPH_INPUT_STATE_COUNT, sql_monitor_statname::INT, "graph input state count", "total input path states across completed graph hops")
+SQL_MONITOR_STATNAME_DEF(GRAPH_DISTINCT_SOURCE_COUNT, sql_monitor_statname::INT, "graph distinct source count", "total distinct source groups across completed graph hops")
+SQL_MONITOR_STATNAME_DEF(GRAPH_DISTINCT_SOURCE_EXACT, sql_monitor_statname::INT, "graph source count exact", "whether graph distinct source count is exact for every completed hop")
+SQL_MONITOR_STATNAME_DEF(GRAPH_SCANNED_EDGE_COUNT, sql_monitor_statname::INT, "graph scanned edge count", "total edge rows delivered by DAS across completed graph hops")
+SQL_MONITOR_STATNAME_DEF(GRAPH_LOOKED_UP_VERTEX_COUNT, sql_monitor_statname::INT, "graph looked up vertex count", "total target vertex identities looked up across completed graph hops")
+SQL_MONITOR_STATNAME_DEF(GRAPH_ORPHAN_EDGE_COUNT, sql_monitor_statname::INT, "graph orphan edge count", "total scanned graph edges whose target vertex was missing")
+SQL_MONITOR_STATNAME_DEF(GRAPH_OUTPUT_PATH_COUNT, sql_monitor_statname::INT, "graph output path count", "total path states accepted across completed graph hops")
+SQL_MONITOR_STATNAME_DEF(GRAPH_PEAK_PATH_MEMORY, sql_monitor_statname::CAPACITY, "graph peak path memory", "peak in-memory graph path and expansion state in bytes")
+
 //end
 SQL_MONITOR_STATNAME_DEF(MONITOR_STATNAME_END, sql_monitor_statname::INVALID, "monitor end", "monitor stat name end")
 #endif

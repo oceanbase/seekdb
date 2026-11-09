@@ -1,0 +1,328 @@
+CREATE TABLE graph_pa_vertex (id INT PRIMARY KEY);
+CREATE TABLE graph_pa_edge (
+tenant INT, edge_id VARCHAR(32), src INT, dst INT,
+weight DECIMAL(18,3), note VARCHAR(128), doc JSON,
+PRIMARY KEY (tenant,edge_id)
+);
+INSERT INTO graph_pa_vertex VALUES (1),(2),(3);
+INSERT INTO graph_pa_edge VALUES
+(1,'first',1,2,1.250,'alpha',JSON_OBJECT('n',1)),
+(1,'parallel',1,2,2.500,NULL,JSON_ARRAY(1,2)),
+(2,'next',2,3,NULL,'beta',NULL),
+(2,'cycle',3,1,3.750,'gamma',JSON_OBJECT('n',3)),
+(2,'orphan',1,99,9.000,'ignored',JSON_OBJECT('n',99));
+CREATE PROPERTY GRAPH graph_path_arrays
+VERTEX TABLES (graph_pa_vertex KEY (id) LABEL node PROPERTIES (id))
+EDGE TABLES (graph_pa_edge KEY (tenant,edge_id)
+SOURCE KEY (src) REFERENCES graph_pa_vertex (id)
+DESTINATION KEY (dst) REFERENCES graph_pa_vertex (id)
+LABEL link PROPERTIES (tenant,edge_id,weight,note,doc));
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='path_arrays'
+  SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,4}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.edge_id) AS hops,
+JSON_ARRAYAGG(e.edge_id) AS ids,JSON_ARRAYAGG(e.weight) AS weights,
+JSON_ARRAYAGG(e.note) AS notes,JSON_ARRAYAGG(e.doc) AS docs,
+JSON_ARRAYAGG(EDGE_ID(e)) AS identities)) g;
+SELECT COUNT(*)=1 AS uses_native_path_arrays FROM plan_table
+WHERE statement_id='path_arrays' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+uses_native_path_arrays
+1
+SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,4}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.edge_id) AS hops,
+JSON_ARRAYAGG(e.edge_id) AS ids,JSON_ARRAYAGG(e.weight) AS weights,
+JSON_ARRAYAGG(e.note) AS notes,JSON_ARRAYAGG(e.doc) AS docs)) g
+ORDER BY hops,ids;
+destination	hops	ids	weights	notes	docs
+1	0	NULL	NULL	NULL	NULL
+2	1	["first"]	[1.250]	["alpha"]	[{"n": 1}]
+2	1	["parallel"]	[2.500]	[null]	[[1, 2]]
+3	2	["first", "next"]	[1.250, null]	["alpha", "beta"]	[{"n": 1}, null]
+3	2	["parallel", "next"]	[2.500, null]	[null, "beta"]	[[1, 2], null]
+1	3	["first", "next", "cycle"]	[1.250, null, 3.750]	["alpha", "beta", "gamma"]	[{"n": 1}, null, {"n": 3}]
+1	3	["parallel", "next", "cycle"]	[2.500, null, 3.750]	[null, "beta", "gamma"]	[[1, 2], null, {"n": 3}]
+2	4	["first", "next", "cycle", "first"]	[1.250, null, 3.750, 1.250]	["alpha", "beta", "gamma", "alpha"]	[{"n": 1}, null, {"n": 3}, {"n": 1}]
+2	4	["first", "next", "cycle", "parallel"]	[1.250, null, 3.750, 2.500]	["alpha", "beta", "gamma", null]	[{"n": 1}, null, {"n": 3}, [1, 2]]
+2	4	["parallel", "next", "cycle", "first"]	[2.500, null, 3.750, 1.250]	[null, "beta", "gamma", "alpha"]	[[1, 2], null, {"n": 3}, {"n": 1}]
+2	4	["parallel", "next", "cycle", "parallel"]	[2.500, null, 3.750, 2.500]	[null, "beta", "gamma", null]	[[1, 2], null, {"n": 3}, [1, 2]]
+SELECT destination,hops,
+JSON_VALUE(identities,'$[0].GRAPH_NAME') AS graph_name,
+JSON_VALUE(identities,'$[0].KEY_VALUE.tenant') AS first_tenant,
+JSON_VALUE(identities,'$[0].KEY_VALUE.edge_id') AS first_edge,
+JSON_VALUE(identities,'$[1].KEY_VALUE.tenant') AS second_tenant,
+JSON_VALUE(identities,'$[1].KEY_VALUE.edge_id') AS second_edge
+FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.edge_id) AS hops,
+JSON_ARRAYAGG(EDGE_ID(e)) AS identities)) g
+ORDER BY hops,first_edge;
+destination	hops	graph_name	first_tenant	first_edge	second_tenant	second_edge
+1	0	NULL	NULL	NULL	NULL	NULL
+2	1	graph_path_arrays	1	first	NULL	NULL
+2	1	graph_path_arrays	1	parallel	NULL	NULL
+3	2	graph_path_arrays	1	first	2	next
+3	2	graph_path_arrays	1	parallel	2	next
+SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=3)<-[e IS link]-{1,3}(b IS node)
+COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.edge_id) AS ids)) g
+ORDER BY ids;
+destination	ids
+3	["next", "first", "cycle"]
+1	["next", "first"]
+3	["next", "parallel", "cycle"]
+1	["next", "parallel"]
+2	["next"]
+PREPARE graph_pa_cached FROM
+'SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH (a IS node WHERE a.id=?)-[e IS link]->{0,2}(b IS node) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.edge_id) AS ids)) g ORDER BY ids,destination';
+SET @seed=1;
+EXECUTE graph_pa_cached USING @seed;
+destination	ids
+1	NULL
+3	["first", "next"]
+2	["first"]
+3	["parallel", "next"]
+2	["parallel"]
+SET @seed=3;
+EXECUTE graph_pa_cached USING @seed;
+destination	ids
+3	NULL
+2	["cycle", "first"]
+2	["cycle", "parallel"]
+1	["cycle"]
+DEALLOCATE PREPARE graph_pa_cached;
+separate_seed_paths_keep_their_own_arrays
+SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id IN (1,3))-[e IS link]->{0,2}(b IS node)
+COLUMNS(a.id AS seed,b.id AS destination,JSON_ARRAYAGG(e.edge_id) AS ids)) g
+ORDER BY seed,ids,destination;
+seed	destination	ids
+1	1	NULL
+1	3	["first", "next"]
+1	2	["first"]
+1	3	["parallel", "next"]
+1	2	["parallel"]
+3	3	NULL
+3	2	["cycle", "first"]
+3	2	["cycle", "parallel"]
+3	1	["cycle"]
+repeated_lateral_seeds_keep_their_scores
+SELECT s.seed,s.score,p.destination,p.ids
+FROM (SELECT 1 AS seed,10 AS score UNION ALL SELECT 1,20 UNION ALL SELECT 3,30) s,
+LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=s.seed)-[e IS link]->{0,2}(b IS node)
+COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.edge_id) AS ids)) g
+) p
+ORDER BY s.score,p.ids,p.destination;
+seed	score	destination	ids
+1	10	1	NULL
+1	10	3	["first", "next"]
+1	10	2	["first"]
+1	10	3	["parallel", "next"]
+1	10	2	["parallel"]
+1	20	1	NULL
+1	20	3	["first", "next"]
+1	20	2	["first"]
+1	20	3	["parallel", "next"]
+1	20	2	["parallel"]
+3	30	3	NULL
+3	30	2	["cycle", "first"]
+3	30	2	["cycle", "parallel"]
+3	30	1	["cycle"]
+CREATE INDEX graph_pa_out ON graph_pa_edge(src,tenant,edge_id);
+CREATE INDEX graph_pa_in ON graph_pa_edge(dst,tenant,edge_id);
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='path_arrays'
+  SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,4}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.edge_id) AS hops,
+JSON_ARRAYAGG(e.edge_id) AS ids,JSON_ARRAYAGG(e.weight) AS weights,
+JSON_ARRAYAGG(e.note) AS notes,JSON_ARRAYAGG(e.doc) AS docs,
+JSON_ARRAYAGG(EDGE_ID(e)) AS identities)) g;
+SELECT COUNT(*)=1 AS uses_native_path_arrays FROM plan_table
+WHERE statement_id='path_arrays' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+uses_native_path_arrays
+1
+SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,4}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.edge_id) AS hops,
+JSON_ARRAYAGG(e.edge_id) AS ids,JSON_ARRAYAGG(e.weight) AS weights,
+JSON_ARRAYAGG(e.note) AS notes,JSON_ARRAYAGG(e.doc) AS docs)) g
+ORDER BY hops,ids;
+destination	hops	ids	weights	notes	docs
+1	0	NULL	NULL	NULL	NULL
+2	1	["first"]	[1.250]	["alpha"]	[{"n": 1}]
+2	1	["parallel"]	[2.500]	[null]	[[1, 2]]
+3	2	["first", "next"]	[1.250, null]	["alpha", "beta"]	[{"n": 1}, null]
+3	2	["parallel", "next"]	[2.500, null]	[null, "beta"]	[[1, 2], null]
+1	3	["first", "next", "cycle"]	[1.250, null, 3.750]	["alpha", "beta", "gamma"]	[{"n": 1}, null, {"n": 3}]
+1	3	["parallel", "next", "cycle"]	[2.500, null, 3.750]	[null, "beta", "gamma"]	[[1, 2], null, {"n": 3}]
+2	4	["first", "next", "cycle", "first"]	[1.250, null, 3.750, 1.250]	["alpha", "beta", "gamma", "alpha"]	[{"n": 1}, null, {"n": 3}, {"n": 1}]
+2	4	["first", "next", "cycle", "parallel"]	[1.250, null, 3.750, 2.500]	["alpha", "beta", "gamma", null]	[{"n": 1}, null, {"n": 3}, [1, 2]]
+2	4	["parallel", "next", "cycle", "first"]	[2.500, null, 3.750, 1.250]	[null, "beta", "gamma", "alpha"]	[[1, 2], null, {"n": 3}, {"n": 1}]
+2	4	["parallel", "next", "cycle", "parallel"]	[2.500, null, 3.750, 2.500]	[null, "beta", "gamma", null]	[[1, 2], null, {"n": 3}, [1, 2]]
+SELECT destination,hops,
+JSON_VALUE(identities,'$[0].GRAPH_NAME') AS graph_name,
+JSON_VALUE(identities,'$[0].KEY_VALUE.tenant') AS first_tenant,
+JSON_VALUE(identities,'$[0].KEY_VALUE.edge_id') AS first_edge,
+JSON_VALUE(identities,'$[1].KEY_VALUE.tenant') AS second_tenant,
+JSON_VALUE(identities,'$[1].KEY_VALUE.edge_id') AS second_edge
+FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+COLUMNS(b.id AS destination,COUNT(e.edge_id) AS hops,
+JSON_ARRAYAGG(EDGE_ID(e)) AS identities)) g
+ORDER BY hops,first_edge;
+destination	hops	graph_name	first_tenant	first_edge	second_tenant	second_edge
+1	0	NULL	NULL	NULL	NULL	NULL
+2	1	graph_path_arrays	1	first	NULL	NULL
+2	1	graph_path_arrays	1	parallel	NULL	NULL
+3	2	graph_path_arrays	1	first	2	next
+3	2	graph_path_arrays	1	parallel	2	next
+SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=3)<-[e IS link]-{1,3}(b IS node)
+COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.edge_id) AS ids)) g
+ORDER BY ids;
+destination	ids
+3	["next", "first", "cycle"]
+1	["next", "first"]
+3	["next", "parallel", "cycle"]
+1	["next", "parallel"]
+2	["next"]
+PREPARE graph_pa_cached FROM
+'SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH (a IS node WHERE a.id=?)-[e IS link]->{0,2}(b IS node) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.edge_id) AS ids)) g ORDER BY ids,destination';
+SET @seed=1;
+EXECUTE graph_pa_cached USING @seed;
+destination	ids
+1	NULL
+3	["first", "next"]
+2	["first"]
+3	["parallel", "next"]
+2	["parallel"]
+SET @seed=3;
+EXECUTE graph_pa_cached USING @seed;
+destination	ids
+3	NULL
+2	["cycle", "first"]
+2	["cycle", "parallel"]
+1	["cycle"]
+DEALLOCATE PREPARE graph_pa_cached;
+separate_seed_paths_keep_their_own_arrays
+SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id IN (1,3))-[e IS link]->{0,2}(b IS node)
+COLUMNS(a.id AS seed,b.id AS destination,JSON_ARRAYAGG(e.edge_id) AS ids)) g
+ORDER BY seed,ids,destination;
+seed	destination	ids
+1	1	NULL
+1	3	["first", "next"]
+1	2	["first"]
+1	3	["parallel", "next"]
+1	2	["parallel"]
+3	3	NULL
+3	2	["cycle", "first"]
+3	2	["cycle", "parallel"]
+3	1	["cycle"]
+repeated_lateral_seeds_keep_their_scores
+SELECT s.seed,s.score,p.destination,p.ids
+FROM (SELECT 1 AS seed,10 AS score UNION ALL SELECT 1,20 UNION ALL SELECT 3,30) s,
+LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=s.seed)-[e IS link]->{0,2}(b IS node)
+COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.edge_id) AS ids)) g
+) p
+ORDER BY s.score,p.ids,p.destination;
+seed	score	destination	ids
+1	10	1	NULL
+1	10	3	["first", "next"]
+1	10	2	["first"]
+1	10	3	["parallel", "next"]
+1	10	2	["parallel"]
+1	20	1	NULL
+1	20	3	["first", "next"]
+1	20	2	["first"]
+1	20	3	["parallel", "next"]
+1	20	2	["parallel"]
+3	30	3	NULL
+3	30	2	["cycle", "first"]
+3	30	2	["cycle", "parallel"]
+3	30	1	["cycle"]
+payloads_survive_edge_pages_and_expression_reuse
+TRUNCATE TABLE graph_pa_edge;
+CREATE TABLE graph_pa_digit (d INT PRIMARY KEY);
+INSERT INTO graph_pa_digit VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+INSERT INTO graph_pa_edge
+SELECT 1,LPAD(n,5,'0'),1,2,n/1000,CONCAT('edge-',n),JSON_OBJECT('n',n)
+FROM (SELECT 1+a.d+10*b.d+100*c.d+1000*d.d AS n
+FROM graph_pa_digit a,graph_pa_digit b,graph_pa_digit c,graph_pa_digit d) numbers
+WHERE n<=4105;
+SELECT COUNT(*) AS paths,
+SUM(CAST(JSON_VALUE(docs,'$[0].n') AS UNSIGNED)) AS sum_ids,
+SUM(JSON_VALUE(notes,'$[0]')=CONCAT('edge-',JSON_VALUE(docs,'$[0].n'))) AS matching_notes
+FROM GRAPH_TABLE(graph_path_arrays MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+COLUMNS(JSON_ARRAYAGG(e.note) AS notes,JSON_ARRAYAGG(e.doc) AS docs)) g;
+paths	sum_ids	matching_notes
+4105	8427565	4105
+large_json_payloads_obey_the_graph_work_area_limit
+DELETE FROM graph_pa_edge WHERE CAST(edge_id AS UNSIGNED)>64;
+UPDATE graph_pa_edge SET doc=JSON_OBJECT('payload',REPEAT('x',65536));
+SET @saved_optimizer_dynamic_sampling=@@optimizer_dynamic_sampling;
+SET optimizer_dynamic_sampling=0;
+PREPARE graph_pa_large FROM
+'SELECT COUNT(*) AS paths,MIN(LENGTH(JSON_UNQUOTE(JSON_EXTRACT(docs,''$[0].payload'')))) AS min_payload_length FROM GRAPH_TABLE(graph_path_arrays MATCH (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node) COLUMNS(JSON_ARRAYAGG(e.doc) AS docs)) g';
+EXECUTE graph_pa_large;
+ERROR HY000: Exceed query memory limit
+EXECUTE graph_pa_large;
+paths	min_payload_length
+64	65536
+DEALLOCATE PREPARE graph_pa_large;
+SET optimizer_dynamic_sampling=@saved_optimizer_dynamic_sampling;
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_path_arrays;
+DROP TABLE graph_pa_edge,graph_pa_vertex,graph_pa_digit;

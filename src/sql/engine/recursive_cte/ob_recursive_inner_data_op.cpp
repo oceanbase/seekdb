@@ -112,7 +112,10 @@ int ObRecursiveInnerDataOp::get_all_data_from_right_child()
     ret = OB_ERR_UNEXPECTED;
   } else {
     while (OB_SUCC(ret) && OB_SUCC(right_op_->get_next_row())) {
-      if (OB_ITER_END == ret) {
+      bool accepted = true;
+      if (row_admission_ != nullptr && OB_FAIL(row_admission_->admit(
+              right_op_->get_spec().output_, eval_ctx_, accepted))) {
+      } else if (!accepted) {
       } else if (OB_SUCC(ret) && SearchStrategyType::BREADTH_FIRST_BULK == search_type_) {
         if (OB_FAIL(bfs_bulk_pump_.add_row(right_op_->get_spec().output_, eval_ctx_))) {
         }
@@ -147,7 +150,10 @@ int ObRecursiveInnerDataOp::get_all_data_from_right_batch()
           continue;
         }
         guard.set_batch_idx(i);
-        if (OB_FAIL(pump->add_row(right_op_->get_spec().output_, eval_ctx_))) {
+        bool accepted = true;
+        if (row_admission_ != nullptr && OB_FAIL(row_admission_->admit(
+                right_op_->get_spec().output_, eval_ctx_, accepted))) {
+        } else if (accepted && OB_FAIL(pump->add_row(right_op_->get_spec().output_, eval_ctx_))) {
         }
       }
 

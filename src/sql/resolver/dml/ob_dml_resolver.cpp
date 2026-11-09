@@ -2712,6 +2712,10 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         }
         break;
       }
+      case T_GRAPH_TABLE: {
+        ret = resolve_graph_table(*table_node, table_item);
+        break;
+      }
       case T_HYBRID_SEARCH_EXPRESSION: {
         if (OB_ISNULL(session_info_)) {
           ret = OB_INVALID_ARGUMENT;

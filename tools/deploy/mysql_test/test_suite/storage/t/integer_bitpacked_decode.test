@@ -1,0 +1,48 @@
+# Wide integer and temporal deltas must survive encoded batch decoding.
+CREATE TABLE bitpacked_int_rows (
+  id INT PRIMARY KEY,
+  v26 BIGINT,
+  v35 BIGINT,
+  v57 BIGINT,
+  v64 BIGINT UNSIGNED,
+  created DATETIME
+) ROW_FORMAT=DYNAMIC;
+SET @row_id=0;
+INSERT INTO bitpacked_int_rows
+SELECT /*+ NO_MERGE(seq_rows) */ i,
+       MOD(i*49000007,67108864)-33554432,
+       MOD(i*32452843873,34359738368)-17179869184,
+       IF(MOD(i,11)=0,NULL,
+          MOD(CAST(i AS DECIMAL(30,0))*72057594037927897,144115188075855872)-72057594037927936),
+       CASE MOD(i,4) WHEN 0 THEN 18446744073709551615 WHEN 1 THEN 0
+            ELSE MOD(CAST(i AS DECIMAL(30,0))*9223372036854775783,18446744073709551616) END,
+       TIMESTAMPADD(SECOND,MOD(i*7919,31536000),'2000-01-01 00:00:00')
+FROM (SELECT (@row_id:=@row_id+1) AS i FROM TABLE(GENERATOR(4097))) seq_rows;
+--let $previous_scn = `SELECT last_scn FROM oceanbase.DBA_OB_MAJOR_COMPACTION`
+ALTER SYSTEM MAJOR FREEZE;
+--let $wait_timeout = 180
+--let $wait_condition = SELECT COUNT(*)=1 FROM oceanbase.DBA_OB_MAJOR_COMPACTION WHERE status='IDLE' AND last_scn>$previous_scn
+--source mysql_test/include/wait_condition.inc
+
+SELECT COUNT(*),SUM(v26),SUM(v35),SUM(CAST(v57 AS DECIMAL(40,0))),
+       SUM(CAST(v64 AS DECIMAL(40,0))),MIN(created),MAX(created)
+FROM bitpacked_int_rows;
+SELECT id,v26,v35,v57,v64,created FROM bitpacked_int_rows
+WHERE id>=2037 AND MOD(id+v35,5)=2 ORDER BY id DESC LIMIT 9;
+SELECT id,v26,v35,v57,v64,created FROM bitpacked_int_rows
+WHERE id IN (1,2,3,17,513,1024,4097) ORDER BY id DESC;
+SELECT id,v57,v64 FROM bitpacked_int_rows
+ORDER BY v57 DESC,id ASC LIMIT 9 OFFSET 5;
+SELECT COUNT(*),SUM(v26),SUM(CAST(v64 AS DECIMAL(40,0)))
+FROM bitpacked_int_rows WHERE MOD(v26+v35,7)=3;
+
+PREPARE bitpacked_scan FROM
+  'SELECT id,v35,v57,v64 FROM bitpacked_int_rows WHERE MOD(id+v35,5)=? ORDER BY v35,id LIMIT 9';
+SET @remainder=2;
+EXECUTE bitpacked_scan USING @remainder;
+SET @remainder=4;
+EXECUTE bitpacked_scan USING @remainder;
+SET @remainder=2;
+EXECUTE bitpacked_scan USING @remainder;
+DEALLOCATE PREPARE bitpacked_scan;
+DROP TABLE bitpacked_int_rows;

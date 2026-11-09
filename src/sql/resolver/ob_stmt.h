@@ -246,6 +246,8 @@ public:
             || stmt_type == stmt::T_FORK_TABLE
             || stmt_type == stmt::T_ALTER_TABLE
             || stmt_type == stmt::T_SET_TABLE_COMMENT
+            || stmt_type == stmt::T_CREATE_PROPERTY_GRAPH
+            || stmt_type == stmt::T_DROP_PROPERTY_GRAPH
             // column
             || stmt_type == stmt::T_SET_COLUMN_COMMENT
             // analyze needs special handling before it can be treated as DDL here

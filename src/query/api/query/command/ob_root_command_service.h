@@ -26,6 +26,8 @@ namespace sql
 class ObSQLSessionInfo;
 }
 
+namespace share { namespace schema { class GraphSchema; } }
+
 namespace query
 {
 
@@ -39,6 +41,10 @@ public:
   virtual ~ObIRootCommandService() = default;
 
   // Schema and DDL commands.
+  virtual int create_property_graph(const share::schema::GraphSchema &definition,
+                                    const common::ObString &ddl) = 0;
+  virtual int drop_property_graph(uint64_t database_id, const common::ObString &name,
+                                  bool if_exists, const common::ObString &ddl) = 0;
   virtual int modify_system_variable(const obcall::ObModifySysVarArg &arg) = 0;
   virtual int create_database(const obcall::ObCreateDatabaseArg &arg, obcall::UInt64 &db_id) = 0;
   virtual int parallel_create_table(const obcall::ObCreateTableArg &arg, obcall::ObCreateTableRes &res) = 0;

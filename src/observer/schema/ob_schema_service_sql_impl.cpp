@@ -198,6 +198,7 @@ ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl(
       schema_info_(),
       sys_variable_service_(*this),
       ai_model_service_(*this),
+      graph_service_(*this),
       cluster_schema_status_(ObClusterSchemaStatus::NORMAL_STATUS),
       schema_service_(NULL),
       max_id_cache_(max_id_cache),
@@ -1166,6 +1167,7 @@ GET_ALL_SCHEMA_FUNC_DEFINE(trigger, ObSimpleTriggerSchema);
 GET_ALL_SCHEMA_FUNC_DEFINE(sys_priv, ObSysPriv);
 GET_ALL_SCHEMA_FUNC_DEFINE(obj_priv, ObObjPriv);
 GET_ALL_SCHEMA_FUNC_DEFINE(ai_model, ObAiModelSchema);
+GET_ALL_SCHEMA_FUNC_DEFINE(graph, GraphSchema);
 
 int ObSchemaServiceSQLImpl::get_all_db_privs(ObISQLClient &client,
     const ObRefreshSchemaStatus &schema_status,
@@ -2692,6 +2694,7 @@ GET_BATCH_SCHEMAS_FUNC_DEFINE(obj_priv, ObObjPriv);
 GET_BATCH_SCHEMAS_FUNC_DEFINE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
 GET_BATCH_SCHEMAS_FUNC_DEFINE(obj_mysql_priv, ObObjMysqlPriv);
 GET_BATCH_SCHEMAS_FUNC_DEFINE(ai_model, ObAiModelSchema);
+GET_BATCH_SCHEMAS_FUNC_DEFINE(graph, GraphSchema);
 
 int ObSchemaServiceSQLImpl::sql_append_pure_ids(
     const ObRefreshSchemaStatus &schema_status,
@@ -6290,6 +6293,72 @@ int ObSchemaServiceSQLImpl::get_obj_priv_with_obj_id(
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_obj_priv_schema(*result, obj_privs))) {
     }
     } // smart var end
+  }
+  return ret;
+}
+
+int ObSchemaServiceSQLImpl::fetch_graphs(ObISQLClient &sql_client,
+    const ObRefreshSchemaStatus &schema_status, const int64_t schema_version,
+    ObIArray<GraphSchema> &schema_array, const SchemaKey *schema_keys,
+    const int64_t schema_key_size)
+{
+  int ret = OB_SUCCESS;
+  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+    ObSqlString sql;
+    ObMySQLResult *result = nullptr;
+    if (OB_FAIL(sql.append_fmt("SELECT graph_id, database_id, define_user_id, name, "
+        "schema_version, is_deleted, definition FROM %s WHERE schema_version <= %ld",
+        OB_ALL_PROPERTY_GRAPH_HISTORY_TNAME, schema_version))) {
+    } else if (schema_keys != nullptr && schema_key_size > 0) {
+      if (OB_FAIL(sql.append(" AND graph_id IN "))) {
+      } else if (OB_FAIL(SQL_APPEND_SCHEMA_ID(graph, schema_keys, schema_key_size, sql))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, schema_status.snapshot_timestamp_);
+      if (OB_FAIL(sql.append(" ORDER BY graph_id DESC, schema_version DESC"))) {
+      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+      } else if ((result = res.get_result()) == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        int64_t previous_id = -1;
+        while (OB_SUCC(ret) && OB_SUCC(ret = result->next())) {
+          int64_t id = -1;
+          int64_t deleted = 0;
+          if (OB_FAIL(result->get_int("graph_id", id))) {
+          } else if (id <= 0) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (id == previous_id) {
+            // Rows are newest first. A tombstone also masks all older versions.
+          } else if (FALSE_IT(previous_id = id)) {
+          } else if (OB_FAIL(result->get_int("is_deleted", deleted))) {
+          } else if (deleted != 0 && deleted != 1) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (deleted == 0) {
+            GraphSchema graph;
+            ObString definition;
+            ObString name;
+            int64_t database_id = -1;
+            int64_t define_user_id = -1;
+            int64_t version = OB_INVALID_VERSION;
+            if (OB_FAIL(result->get_varchar("definition", definition))) {
+            } else if (OB_FAIL(result->get_varchar("name", name))) {
+            } else if (OB_FAIL(result->get_int("database_id", database_id))) {
+            } else if (OB_FAIL(result->get_int("define_user_id", define_user_id))) {
+            } else if (OB_FAIL(result->get_int("schema_version", version))) {
+            } else if (OB_FAIL(graph.from_catalog_definition(definition))) {
+            } else if (graph.get_graph_id() != id
+                       || graph.get_database_id() != database_id || graph.get_define_user_id() != define_user_id
+                       || graph.get_name() != name || graph.get_schema_version() != version) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("inconsistent graph catalog definition", K(ret), K(id), K(version));
+            } else if (OB_FAIL(schema_array.push_back(graph))) {
+            }
+          }
+        }
+        if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+      }
+    }
   }
   return ret;
 }

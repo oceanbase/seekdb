@@ -1,0 +1,155 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+CREATE TABLE pr_seeds(binding_id INT PRIMARY KEY,seed BIGINT,cutoff BIGINT,ceiling BIGINT);
+INSERT INTO pr_seeds VALUES(1,1,2020,2030),(2,1,2022,2030),(3,1,2020,2030),
+ (4,1,NULL,2030),(5,1,2020,2020),(6,5,2020,2030),(7,1,2020,2030);
+CREATE TABLE pr_expected AS
+ SELECT s.binding_id,a.id AS endpoint,0 AS hops,CAST(NULL AS CHAR(200)) AS edges
+ FROM pr_seeds s JOIN graph_person a ON a.id=s.seed
+ UNION ALL
+ SELECT s.binding_id,b.id,1,CAST(JSON_ARRAY(e.id) AS CHAR(200))
+ FROM pr_seeds s JOIN graph_person a ON a.id=s.seed
+ JOIN graph_knows e ON e.src=a.id AND e.since>=s.cutoff AND e.since<=s.ceiling
+ JOIN graph_person b ON b.id=e.dst
+ UNION ALL
+ SELECT s.binding_id,c.id,2,CAST(JSON_ARRAY(e.id,f.id) AS CHAR(200))
+ FROM pr_seeds s JOIN graph_person a ON a.id=s.seed
+ JOIN graph_knows e ON e.src=a.id AND e.since>=s.cutoff AND e.since<=s.ceiling
+ JOIN graph_person b ON b.id=e.dst
+ JOIN graph_knows f ON f.src=b.id AND f.since>=s.cutoff AND f.since<=s.ceiling
+ JOIN graph_person c ON c.id=f.dst;
+--enable_query_log
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX pr_src ON graph_knows(src,since,dst);
+    CREATE INDEX pr_dst ON graph_knows(dst,since,src);
+  }
+  --source mysql_test/include/create_plan_table.inc
+  --disable_result_log
+  EXPLAIN INTO plan_table SET statement_id='parameter_reuse'
+  SELECT s.binding_id,g.endpoint FROM pr_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,2}
+    (b IS person) COLUMNS(b.id AS endpoint)) p) g;
+  --enable_result_log
+  SELECT COUNT(*)=1 AS parameter_reuse_eligible FROM plan_table
+   WHERE statement_id='parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+  DROP TABLE plan_table;
+  # Plain SELECT, not CTAS: exercise reuse and compare complete path bags.
+  SELECT COUNT(*) AS mismatched_bag_groups FROM (
+   SELECT binding_id,endpoint,hops,edges,SUM(n) AS difference FROM (
+    SELECT binding_id,endpoint,hops,edges,1 AS n FROM pr_expected
+    UNION ALL
+    SELECT s.binding_id,g.endpoint,g.hops,CAST(g.edges AS CHAR(200)),-1 AS n
+    FROM pr_seeds s,LATERAL (
+     SELECT * FROM GRAPH_TABLE(graph_social MATCH
+      (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,2}
+      (b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+   ) bags GROUP BY binding_id,endpoint,hops,edges HAVING SUM(n)<>0
+  ) differences;
+  SELECT s.binding_id,g.endpoint,g.hops,g.edges FROM pr_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]->{0,4}
+    (b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p) g
+   ORDER BY s.binding_id,g.hops,CAST(g.edges AS CHAR);
+  SELECT s.binding_id,g.hops,g.sn,g.eid,g.dst FROM pr_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)<-[e IS knows WHERE e.since>=s.cutoff AND e.since<=s.ceiling]-{0,2}
+    (b IS person) ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(COUNT(e.id) AS hops,ELEMENT_NUMBER(se) AS sn,se.id AS eid,v2.id AS dst)) p) g
+   ORDER BY s.binding_id,g.hops,g.sn,g.eid,g.dst;
+  PREPARE pr_cached FROM 'SELECT s.binding_id,COUNT(*) AS paths FROM pr_seeds s,LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff AND e.since>=?]->{0,2}(b IS person) COLUMNS(b.id AS endpoint)) p) g GROUP BY s.binding_id ORDER BY s.binding_id';
+  SET @cutoff=2020;
+  EXECUTE pr_cached USING @cutoff;
+  SET @cutoff=2022;
+  EXECUTE pr_cached USING @cutoff;
+  START TRANSACTION;
+  DELETE FROM graph_person WHERE id=2;
+  SET @cutoff=2020;
+  EXECUTE pr_cached USING @cutoff;
+  ROLLBACK;
+  EXECUTE pr_cached USING @cutoff;
+  DEALLOCATE PREPARE pr_cached;
+  --dec $passes
+}
+DROP TABLE pr_expected,pr_seeds;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+
+--disable_query_log
+CREATE TABLE pr_vertex(id BIGINT PRIMARY KEY);
+CREATE TABLE pr_edge(id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT,
+ tenant VARCHAR(40) COLLATE utf8mb4_bin,valid_at DATE,weight DECIMAL(8,2));
+CREATE TABLE pr_bindings(id INT PRIMARY KEY,tenant VARCHAR(40) COLLATE utf8mb4_bin,
+ since DATE,weight DECIMAL(8,2));
+INSERT INTO pr_vertex VALUES(1),(2),(3);
+INSERT INTO pr_edge VALUES(10,1,2,'a','2024-01-01',1.25),
+ (11,1,3,'b','2025-01-01',2.50),(12,1,2,CONCAT('a',CHAR(0),'b'),'2024-01-01',1.50);
+INSERT INTO pr_bindings VALUES(1,'a','2024-01-01',1.25),
+ (2,'a','2024-01-01',1.26),(3,'b','2025-01-01',2.50),
+ (4,'a','2024-01-01',1.25),(5,NULL,'2024-01-01',1.25),
+ (6,CONCAT('a',CHAR(0),'b'),'2024-01-01',1.50),
+ (7,'a','2025-01-01',1.25),(8,'a','2024-01-01',1.25);
+CREATE PROPERTY GRAPH pr_graph VERTEX TABLES(pr_vertex KEY(id) LABEL person PROPERTIES(id))
+ EDGE TABLES(pr_edge KEY(id) SOURCE KEY(src) REFERENCES pr_vertex(id)
+ DESTINATION KEY(dst) REFERENCES pr_vertex(id) LABEL knows PROPERTIES(id,tenant,valid_at,weight));
+--enable_query_log
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX pr_typed_src ON pr_edge(src,tenant,dst);
+  }
+  --disable_query_log
+  --source mysql_test/include/create_plan_table.inc
+  --disable_result_log
+  EXPLAIN INTO plan_table SET statement_id='typed_parameter_reuse'
+  SELECT s.id,g.eid FROM pr_bindings s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(pr_graph MATCH
+    (a IS person WHERE a.id=1)-[e IS knows WHERE e.tenant=s.tenant
+     AND e.valid_at>=s.since AND e.weight>=s.weight]->{1}(b IS person)
+    COLUMNS(JSON_ARRAYAGG(e.id) AS eid)) p) g;
+  --enable_result_log
+  --enable_query_log
+  SELECT COUNT(*)=1 AS typed_parameter_reuse_eligible FROM plan_table
+   WHERE statement_id='typed_parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+  --disable_query_log
+  DROP TABLE plan_table;
+  --enable_query_log
+  --echo typed_contexts_preserve_binary_strings_dates_decimals_and_nulls
+  SELECT s.id,g.eid FROM pr_bindings s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(pr_graph MATCH
+    (a IS person WHERE a.id=1)-[e IS knows WHERE e.tenant=s.tenant
+     AND e.valid_at>=s.since AND e.weight>=s.weight]->{1}(b IS person)
+    COLUMNS(JSON_ARRAYAGG(e.id) AS eid)) p) g ORDER BY s.id,CAST(g.eid AS CHAR);
+  --dec $passes
+}
+# Many large distinct parameter tuples exhaust only the optional reuse budget.
+# The complete scan and each outer binding must still finish without truncation.
+--disable_query_log
+ALTER TABLE pr_bindings MODIFY tenant VARCHAR(10000) COLLATE utf8mb4_bin;
+CREATE TABLE pr_digit(n INT PRIMARY KEY);
+INSERT INTO pr_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+INSERT INTO pr_bindings
+ SELECT 100+10*a.n+b.n,CONCAT(REPEAT('x',6000),10*a.n+b.n),'2024-01-01',0
+ FROM pr_digit a,pr_digit b;
+let $saved_hash_area_size=query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name='_hash_area_size', value, 1);
+ALTER SYSTEM SET _hash_area_size='4M';
+sleep 6;
+--enable_query_log
+SELECT COUNT(*) AS complete_bindings_after_cache_pressure FROM pr_bindings s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(pr_graph MATCH
+  (a IS person WHERE a.id=1)-[e IS knows WHERE e.tenant<s.tenant]->{0,1}(b IS person)
+  COLUMNS(b.id AS endpoint)) p) g WHERE s.id>=100;
+--disable_query_log
+eval ALTER SYSTEM SET _hash_area_size='$saved_hash_area_size';
+sleep 6;
+--enable_query_log
+DROP PROPERTY GRAPH pr_graph;
+DROP TABLE pr_digit,pr_bindings,pr_edge,pr_vertex;

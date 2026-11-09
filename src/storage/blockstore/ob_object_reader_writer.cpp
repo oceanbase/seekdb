@@ -690,10 +690,6 @@ int ObObjectReaderWriter::ensure_data_buffer_for_write_(ObObjectWriteSession &wr
   int ret = OB_SUCCESS;
   if (!write_session.data_.is_valid()
       && OB_FAIL(write_session.data_.ensure_space(OB_DEFAULT_MACRO_BLOCK_SIZE))) {
-  } else if (OB_SUCC(ret)
-      && OB_DEFAULT_MACRO_BLOCK_SIZE == write_session.data_.capacity()
-      && 0 == write_session.data_.pos()
-      && OB_FAIL(write_session.data_.clean())) {
   } else if (0 == offset_) {
     if (OB_FAIL(reserve_header(write_session))) {
     }
@@ -884,7 +880,6 @@ int ObObjectReaderWriter::reserve_header(ObObjectWriteSession &write_session)
     offset_ = 0;
     hanging_ = false;
     write_session.data_.reuse();
-    write_session.data_.clean();
   }
   return ret;
 }
@@ -900,6 +895,9 @@ int ObObjectReaderWriter::switch_object(ObObjectWriteSession &write_session,
     write_info.buffer_ = write_session.data_.data() + align_offset_;
     write_info.offset_ = align_offset_;
     write_info.size_ = upper_align(offset_ - align_offset_, write_align_size_);
+    // Only the aligned tail is not covered by serialized headers and payloads.
+    MEMSET(write_session.data_.data() + offset_, 0,
+           align_offset_ + write_info.size_ - offset_);
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sealed();
 
@@ -926,7 +924,6 @@ int ObObjectReaderWriter::do_switch(ObObjectWriteSession &write_session,
   offset_ = 0;
   align_offset_ = 0;
   if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(opt, object_handle_))) {
-  } else if (OB_FAIL(write_session.data_.clean())) {
   }
   return ret;
 }
@@ -1012,6 +1009,10 @@ int ObObjectReaderWriter::inner_write_block(
     if (write_args.with_header_ && OB_FAIL(header.serialize(write_session.data_.current(), header.header_size_, pos))) {
     } else {
       MEMCPY(write_session.data_.current() + pos, write_info.buffer_, write_info.size_);
+      // Sessions start at an aligned offset; unflushed batch payloads remain in
+      // this session. Initialize only the padding that can reach the IO layer.
+      MEMSET(write_session.data_.current() + blk_size, 0,
+             align_offset_ + align_store_size - offset_ - blk_size);
       ObStorageObjectWriteInfo object_info;
       object_info.buffer_ = write_session.data_.data() + align_offset_;
       object_info.offset_ = align_offset_;
