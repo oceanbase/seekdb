@@ -536,8 +536,20 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // Approximate vector search used to disable every rewrite rule, so
+      // logically equivalent but redundant filters (for example
+      // "P AND (P OR Q)") were passed to the vector index scan unchanged and
+      // were re-evaluated for every candidate row. Enable only the expression
+      // simplifier, which folds constants and removes duplicate/absorbed
+      // predicates and unused columns. All structural rewrites stay disabled
+      // so the approximate ORDER BY and LIMIT are not moved to another query
+      // block.
+      uint64_t vec_approx_enable_list = 0;
+      ObTransformRule::add_trans_type(vec_approx_enable_list, SIMPLIFY_EXPR);
+      disable_list = ObTransformRule::ALL_TRANSFORM_RULES & (~vec_approx_enable_list);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
