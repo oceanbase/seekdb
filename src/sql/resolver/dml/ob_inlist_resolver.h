@@ -153,6 +153,11 @@ private:
                                       const bool is_prepare_stage,
                                       const bool is_called_in_sql,
                                       ObValuesTableDef &table_def);
+  static int deduplicate_inlist_values(ObIAllocator &alloc,
+                                       const ParseNode *in_list,
+                                       const int64_t column_cnt,
+                                       ParseNode *&deduped_list,
+                                       int64_t &deduped_row_cnt);
 private:
   ObDMLResolver *cur_resolver_;
 };

@@ -1,0 +1,119 @@
+drop database if exists ai_column_p0_worker;
+create database ai_column_p0_worker;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_complete_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_fail_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_complete');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_fail');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_worker_complete',
+'{"type":"completion","model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_worker_fail',
+'{"type":"completion","model_name":"mock-fail"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_worker_complete_ep',
+'{"ai_model_name":"p0_worker_complete","url":"http://127.0.0.1:19122/v1/chat/completions","access_key":"p0-worker-key","provider":"openai","request_model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_worker_fail_ep',
+'{"ai_model_name":"p0_worker_fail","url":"http://127.0.0.1:19122/v1/always-fail/completions","access_key":"p0-worker-key","provider":"openai","request_model_name":"mock-fail"}');
+drop table if exists ai_column_p0_worker.docs;
+Warnings:
+Note	1051	Unknown table 'ai_column_p0_worker.docs'
+create table ai_column_p0_worker.docs(
+id bigint primary key,
+content varchar(200),
+tags json AI COLUMN (
+AI_COMPLETE('p0_worker_complete', concat('Classify: ', content))
+) WITH (sync_mode='async', max_retries=2),
+score bigint AI COLUMN (
+AI_COMPLETE('p0_worker_complete', concat('Score: ', content))
+) WITH (sync_mode='async', max_retries=2)
+);
+start transaction;
+insert into ai_column_p0_worker.docs(id, content) values(1, 'typed-prompts');
+select tags is null and score is null as group_starts_hidden
+from ai_column_p0_worker.docs where id = 1;
+group_starts_hidden
+1
+select count(*) = 2 and count(distinct task.request_id) = 1
+as one_request_group_for_two_columns
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_worker' and t.table_name = 'docs';
+one_request_group_for_two_columns
+1
+commit;
+select 0 = 0 as no_partial_visibility;
+no_partial_visibility
+1
+select tags is not null and score = 7 as grouped_results_visible
+from ai_column_p0_worker.docs where id = 1;
+grouped_results_visible
+1
+select count(*) = 0 as grouped_tasks_removed
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_worker' and t.table_name = 'docs';
+grouped_tasks_removed
+1
+mock_typed_prompts=ok
+drop table if exists ai_column_p0_worker.retry_docs;
+Warnings:
+Note	1051	Unknown table 'ai_column_p0_worker.retry_docs'
+create table ai_column_p0_worker.retry_docs(
+id bigint primary key,
+content varchar(200),
+result varchar(400) AI COLUMN (
+AI_COMPLETE('p0_worker_complete', content)
+) WITH (sync_mode='async', max_retries=2)
+);
+insert into ai_column_p0_worker.retry_docs(id, content) values(2, 'retry-once');
+select 1 = 1 as retry_state_committed;
+retry_state_committed
+1
+select 1 = 1 as retry_eventually_completes;
+retry_eventually_completes
+1
+select count(*) = 0 as retry_task_removed
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_worker' and t.table_name = 'retry_docs';
+retry_task_removed
+1
+mock_retry_once=ok
+drop table if exists ai_column_p0_worker.fail_docs;
+Warnings:
+Note	1051	Unknown table 'ai_column_p0_worker.fail_docs'
+create table ai_column_p0_worker.fail_docs(
+id bigint primary key,
+content varchar(200),
+result varchar(400) AI COLUMN (
+AI_COMPLETE('p0_worker_fail', content)
+) WITH (sync_mode='async', max_retries=0)
+);
+insert into ai_column_p0_worker.fail_docs(id, content) values(3, 'terminal-failure');
+select result is null as terminal_failure_keeps_null
+from ai_column_p0_worker.fail_docs where id = 3;
+terminal_failure_keeps_null
+1
+select 0 = 0 as terminal_failure_removes_task;
+terminal_failure_removes_task
+1
+insert into ai_column_p0_worker.docs(id, content) values(4, 'slow-old');
+update ai_column_p0_worker.docs set content = 'fast-new' where id = 4;
+select 1 = 1 as latest_request_wins;
+latest_request_wins
+1
+select json_unquote(json_extract(tags, '$.input')) = 'Classify: fast-new'
+       and score = 7 as late_old_result_cannot_overwrite
+from ai_column_p0_worker.docs where id = 4;
+late_old_result_cannot_overwrite
+1
+mock_stale_guard=ok
+drop table ai_column_p0_worker.fail_docs;
+drop table ai_column_p0_worker.retry_docs;
+drop table ai_column_p0_worker.docs;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_fail_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_complete_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_fail');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_complete');
+drop database ai_column_p0_worker;

@@ -26,23 +26,23 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
     "url": "https://www.baidu.com/",
     "access_key": "sk-xxxxxxxxxxxx",
     "request_model_name": "text-embedding-v2",
-    "provider": "openai"
+    "provider": "openai",
+    "max_concurrency": 3
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
-my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	openai	text-embedding-v2	NULL	NULL	NULL
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN, MAX_CONCURRENCY from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN	MAX_CONCURRENCY
+my_model_endpoint1	my_model1	https://www.baidu.com/	1	openai	text-embedding-v2	NULL	NULL	NULL	3
 call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
 'my_model_endpoint2', '{
     "ai_model_name": "my_model1",
-    "scope": "all",
     "url": "https://www.baidu.com/",
     "access_key": "sk-xxxxxxxxxxxx",
     "request_model_name": "text-embedding-v2",
     "provider": "openai"
   }');
 ERROR HY000: The ai model endpoint 'my_model_endpoint1' has the same ai model name 'my_model1'
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint2';
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint2';
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
 call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
 'my_model_endpoint1', '{
     "ai_model_name": "my_model1",
@@ -61,37 +61,56 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
     "response_transform_fn": "text_embedding_reponse_fn"
   }');
 ERROR HY000: The param 'provider' is empty or null
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint3';
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint3';
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 'my_model_endpoint1', '{
-    "provider" : "aliyun-openai"
+    "provider" : "aliyun-openai",
+    "max_concurrency": 7
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
-my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN, MAX_CONCURRENCY from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN	MAX_CONCURRENCY
+my_model_endpoint1	my_model1	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL	7
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "max_concurrency": 0
+  }');
+ERROR HY000: The value of param 'max_concurrency' is invalid
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "max_concurrency": 1025
+  }');
+ERROR HY000: The value of param 'max_concurrency' is invalid
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "max_concurrency": "8"
+  }');
+ERROR HY000: The value of param 'max_concurrency' is invalid
+select ENDPOINT_NAME, MAX_CONCURRENCY from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	MAX_CONCURRENCY
+my_model_endpoint1	7
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 'my_model_endpoint1', '{
     "url" : "https://www.baidu.com/"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
-my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 'my_model_endpoint1', '{
     "access_key" : "sk2-xxxxxxxxxxxx"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
-my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 'my_model_endpoint1', '{
     "ai_model_name" : "my_model_3"
   }');
 ERROR HY000: The value of param 'ai_model_name' is invalid
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
-my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 'my_model_endpoint1', '{
     "provider" : "",
@@ -99,9 +118,9 @@ call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
     "response_transform_fn": "text_embedding_reponse_fn"
   }');
 ERROR HY000: The param 'provider' is empty or null
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
-my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
 'my_model_endpoint4', '{
     "ai_model_name" : "my_model3"
@@ -117,9 +136,9 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
     "request_model_name": "text-embedding-v2",
     "provider": "openai"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in('my_model_endpoint2', 'my_model_endpoint4');
-ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
-my_model_endpoint4	my_model4	ALL	https://www.baidu.com/	1	openai	text-embedding-v2	NULL	NULL	NULL
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in('my_model_endpoint2', 'my_model_endpoint4');
+ENDPOINT_NAME	AI_MODEL_NAME	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint4	my_model4	https://www.baidu.com/	1	openai	text-embedding-v2	NULL	NULL	NULL
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint2');
 ERROR HY000: This AI model endpoint 'my_model_endpoint2' was not found

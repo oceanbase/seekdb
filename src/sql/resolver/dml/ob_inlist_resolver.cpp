@@ -68,25 +68,39 @@ int ObInListResolver::resolve_inlist(ObInListInfo &inlist_info)
     ObResolverParams &params = cur_resolver_->params_;
     if (OB_ISNULL(params.session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(resolve_values_table_from_inlist(list_node,
-                                                        column_cnt,
-                                                        row_cnt,
-                                                        inlist_info.is_question_mark_,
-                                                        params.is_prepare_stage_,
-                                                        NULL == params.session_info_->get_pl_context(),
-                                                        params.param_list_,
-                                                        params.session_info_,
-                                                        params.allocator_,
-                                                        table_def))) {
-    } else if (OB_FAIL(resolve_subquery_from_values_table(params.stmt_factory_,
-                                                          params.session_info_,
-                                                          params.allocator_,
-                                                          params.query_ctx_,
-                                                          params.expr_factory_,
-                                                          table_def,
-                                                          params.is_prepare_protocol_ && params.is_prepare_stage_,
-                                                          column_cnt,
-                                                          inlist_info.in_list_expr_))) {
+    } else {
+      // Deduplicate IN list values to avoid performance degradation
+      // when IN list contains many duplicate values (e.g., IN (1,2,3,1,2,3,...))
+      ParseNode *deduped_list = NULL;
+      int64_t deduped_row_cnt = row_cnt;
+      ObIAllocator &alloc = params.expr_factory_->get_allocator();
+      
+      if (OB_FAIL(deduplicate_inlist_values(alloc, list_node, column_cnt, deduped_list, deduped_row_cnt))) {
+        // If deduplication fails, fall back to original list
+        deduped_list = const_cast<ParseNode*>(list_node);
+        deduped_row_cnt = row_cnt;
+      }
+      
+      if (OB_FAIL(resolve_values_table_from_inlist(deduped_list,
+                                                   column_cnt,
+                                                   deduped_row_cnt,
+                                                   inlist_info.is_question_mark_,
+                                                   params.is_prepare_stage_,
+                                                   NULL == params.session_info_->get_pl_context(),
+                                                   params.param_list_,
+                                                   params.session_info_,
+                                                   params.allocator_,
+                                                   table_def))) {
+      } else if (OB_FAIL(resolve_subquery_from_values_table(params.stmt_factory_,
+                                                            params.session_info_,
+                                                            params.allocator_,
+                                                            params.query_ctx_,
+                                                            params.expr_factory_,
+                                                            table_def,
+                                                            params.is_prepare_protocol_ && params.is_prepare_stage_,
+                                                            column_cnt,
+                                                            inlist_info.in_list_expr_))) {
+      }
     }
   }
   return ret;
@@ -133,7 +147,6 @@ int ObInListResolver::resolve_values_table_from_inlist(const ParseNode *in_list,
   }
   return ret;
 }
-
 int ObInListResolver::resolve_subquery_from_values_table(ObStmtFactory *stmt_factory,
                                                          ObSQLSessionInfo *session_info,
                                                          ObIAllocator *allocator,
@@ -791,6 +804,108 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
     if (OB_FAIL(do_merge_inlists(alloc, helper, root_node, ret_node))) {
     }
   }
+  return ret;
+}
+
+int ObInListResolver::deduplicate_inlist_values(ObIAllocator &alloc,
+                                                const ParseNode *in_list,
+                                                const int64_t column_cnt,
+                                                ParseNode *&deduped_list,
+                                                int64_t &deduped_row_cnt)
+{
+  int ret = OB_SUCCESS;
+  int parser_ret = OB_SUCCESS;
+  deduped_row_cnt = 0;
+  deduped_list = NULL;
+  
+  if (OB_ISNULL(in_list) || OB_UNLIKELY(in_list->num_child_ <= 0) || OB_UNLIKELY(column_cnt <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(deduped_list = new_node(&alloc, in_list->type_, 0))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, in_list, deduped_list))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    deduped_list->num_child_ = 0;
+    deduped_list->value_ = 0;
+    
+    // Use a simple array to track unique values for deduplication
+    // For each row, we compare all column values
+    ObSEArray<bool, 64> is_duplicate;
+    int64_t row_cnt = in_list->num_child_;
+    
+    if (OB_FAIL(is_duplicate.init(row_cnt))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
+        is_duplicate.push_back(false);
+      }
+    }
+    
+    // Mark duplicates: for each row, check if it matches any previous row
+    for (int64_t i = 1; OB_SUCC(ret) && i < row_cnt; ++i) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
+        if (is_duplicate.at(j)) {
+          continue; // Skip already marked duplicates
+        }
+        
+        bool is_same = true;
+        for (int64_t k = 0; OB_SUCC(ret) && k < column_cnt; ++k) {
+          const ParseNode *node_i = (column_cnt == 1) ? in_list->children_[i] : in_list->children_[i]->children_[k];
+          const ParseNode *node_j = (column_cnt == 1) ? in_list->children_[j] : in_list->children_[j]->children_[k];
+          
+          if (OB_ISNULL(node_i) || OB_ISNULL(node_j)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (!parsenode_equal(node_i, node_j, NULL)) {
+            is_same = false;
+            break;
+          }
+        }
+        
+        if (OB_FAIL(ret)) {
+        } else if (is_same) {
+          is_duplicate.at(i) = true;
+          break;
+        }
+      }
+    }
+    
+    // Build deduplicated list
+    for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
+      if (is_duplicate.at(i)) {
+        continue;
+      }
+      
+      ParseNode *row_node = NULL;
+      if (column_cnt == 1) {
+        // Single column: shallow copy the value node
+        row_node = in_list->children_[i];
+      } else {
+        // Multi-column: deep copy the row node
+        if (OB_ISNULL(row_node = new_node(&alloc, in_list->children_[i]->type_, 0))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, in_list->children_[i], row_node))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          row_node->num_child_ = 0;
+          row_node->value_ = 0;
+          for (int64_t k = 0; OB_SUCC(ret) && k < column_cnt; ++k) {
+            if (OB_ISNULL(row_node = push_back_child(&alloc, &parser_ret, row_node, in_list->children_[i]->children_[k]))
+                || OB_FAIL(parser_ret)) {
+              ret = OB_SUCCESS == parser_ret ? OB_ERR_UNEXPECTED : parser_ret;
+            }
+          }
+        }
+      }
+      
+      if (OB_FAIL(ret)) {
+      } else if (OB_ISNULL(deduped_list = push_back_child(&alloc, &parser_ret, deduped_list, row_node))
+                 || OB_FAIL(parser_ret)) {
+        ret = OB_SUCCESS == parser_ret ? OB_ERR_UNEXPECTED : parser_ret;
+      } else {
+        ++deduped_row_cnt;
+      }
+    }
+  }
+  
   return ret;
 }
 
