@@ -218,24 +218,47 @@ def locked_archive(package, archive_directory):
     if checksum and not re.fullmatch(r"[0-9a-f]{64}", checksum):
         raise ValueError("Incomplete locked dependency: " + str(package.get("name")))
 
-    cache_key = checksum or "url-" + hashlib.sha256(url.encode("utf-8")).hexdigest()
     archive_directory.mkdir(parents=True, exist_ok=True)
-    cached = archive_directory / cache_key
-    if cached.is_file() and (not checksum or sha256_file(cached) == checksum):
-        return cached
+    index = None
+    if checksum:
+        cached = archive_directory / checksum
+        if cached.is_file() and sha256_file(cached) == checksum:
+            return cached
+    else:
+        index = archive_directory / "urls" / hashlib.sha256(url.encode("utf-8")).hexdigest()
+        if index.is_file():
+            cached_checksum = index.read_text(encoding="ascii").strip()
+            if re.fullmatch(r"[0-9a-f]{64}", cached_checksum):
+                cached = archive_directory / cached_checksum
+                if cached.is_file():
+                    return cached
 
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix="." + cache_key + ".", suffix=".tmp", dir=archive_directory)
+        prefix=".package.", suffix=".tmp", dir=archive_directory)
     os.close(descriptor)
     temporary = Path(temporary_name)
     try:
         download(locked_download_url(url), temporary)
-        if checksum and sha256_file(temporary) != checksum:
+        actual_checksum = sha256_file(temporary)
+        if checksum and actual_checksum != checksum:
             raise ValueError("SHA256 mismatch for " + url.rsplit("/", 1)[-1])
+        cached = archive_directory / actual_checksum
         temporary.replace(cached)
     finally:
         if temporary.exists():
             temporary.unlink()
+
+    if index is not None:
+        index.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(prefix=".url.", suffix=".tmp", dir=index.parent)
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="ascii") as output:
+                output.write(actual_checksum + "\n")
+            temporary.replace(index)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
     return cached
 
 
