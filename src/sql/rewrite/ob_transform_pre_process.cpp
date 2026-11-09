@@ -57,6 +57,13 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
       }
     }  
     if (OB_SUCC(ret)) {
+      if (OB_FAIL(transform_or_equal_to_in(stmt, is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+        OPT_TRACE("transform or equal to in:", is_happened);
+      }
+    }
+    if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
       } else {
         trans_happened |= is_happened;
@@ -3784,6 +3791,252 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
   } else if (trans_happened) {
     trans_happened =  flatten_happend ;
     OPT_TRACE("   flatten_happend:", flatten_happend);
+  }
+  return ret;
+}
+
+// Rewrite a disjunction of equalities between one integer column and constants,
+//   c = 1 OR c = 2 OR ... OR c = 64
+// into
+//   c IN (1, 2, ..., 64)
+// An IN list with more than two constants is probed through a hash set, while every
+// OR branch is compared one by one for each row. Pre-process also runs for statements
+// whose rule-based rewrites are disabled, such as approximate vector index queries,
+// so their filters benefit as well. Branches on other columns or of other shapes keep
+// their original form, and `c = NULL` behaves the same inside IN as inside OR.
+int ObTransformPreProcess::transform_or_equal_to_in(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  trans_happened = false;
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null stmt", K(ret));
+  } else if (OB_FAIL(do_transform_or_equal_to_in(stmt->get_condition_exprs(), is_happened))) {
+    LOG_WARN("failed to transform where conditions", K(ret));
+  } else {
+    trans_happened |= is_happened;
+  }
+  if (OB_SUCC(ret) && stmt->is_select_stmt()) {
+    if (OB_FAIL(do_transform_or_equal_to_in(static_cast<ObSelectStmt*>(stmt)->get_having_exprs(),
+                                            is_happened))) {
+      LOG_WARN("failed to transform having conditions", K(ret));
+    } else {
+      trans_happened |= is_happened;
+    }
+  }
+  if (OB_SUCC(ret) && !stmt->is_insert_stmt()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_semi_infos().count(); ++i) {
+      if (OB_ISNULL(stmt->get_semi_infos().at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null semi info", K(ret));
+      } else if (OB_FAIL(do_transform_or_equal_to_in(stmt->get_semi_infos().at(i)->semi_conditions_,
+                                                     is_happened))) {
+        LOG_WARN("failed to transform semi conditions", K(ret));
+      } else {
+        trans_happened |= is_happened;
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_joined_tables().count(); ++i) {
+      is_happened = false;
+      if (OB_FAIL(recursive_transform_join_or_equal_to_in(stmt->get_joined_tables().at(i),
+                                                          is_happened))) {
+        LOG_WARN("failed to transform join conditions", K(ret));
+      } else {
+        trans_happened |= is_happened;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::recursive_transform_join_or_equal_to_in(TableItem *table,
+                                                                   bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  JoinedTable *joined_table = NULL;
+  bool is_happened = false;
+  if (OB_ISNULL(table)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null table", K(ret));
+  } else if (!table->is_joined_table()) {
+    // do nothing
+  } else if (OB_ISNULL(joined_table = static_cast<JoinedTable*>(table))
+             || OB_ISNULL(joined_table->left_table_)
+             || OB_ISNULL(joined_table->right_table_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null joined table", K(ret));
+  } else if (OB_FAIL(do_transform_or_equal_to_in(joined_table->join_conditions_, is_happened))) {
+    LOG_WARN("failed to transform join conditions", K(ret));
+  } else if (FALSE_IT(trans_happened |= is_happened)) {
+  } else if (OB_FAIL(SMART_CALL(recursive_transform_join_or_equal_to_in(joined_table->left_table_,
+                                                                        trans_happened)))) {
+    LOG_WARN("failed to transform left table", K(ret));
+  } else if (OB_FAIL(SMART_CALL(recursive_transform_join_or_equal_to_in(joined_table->right_table_,
+                                                                        trans_happened)))) {
+    LOG_WARN("failed to transform right table", K(ret));
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::do_transform_or_equal_to_in(ObIArray<ObRawExpr*> &conditions,
+                                                       bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+    if (OB_FAIL(recursive_transform_or_equal_to_in(conditions.at(i), trans_happened))) {
+      LOG_WARN("failed to transform condition", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::recursive_transform_or_equal_to_in(ObRawExpr *&expr,
+                                                              bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret));
+  } else if (T_OP_AND != expr->get_expr_type() && T_OP_OR != expr->get_expr_type()) {
+    // only equalities reachable through AND / OR are rewritten
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(recursive_transform_or_equal_to_in(expr->get_param_expr(i),
+                                                                trans_happened)))) {
+        LOG_WARN("failed to transform child expr", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && T_OP_OR == expr->get_expr_type()
+        && OB_FAIL(merge_or_equal_to_in(expr, trans_happened))) {
+      LOG_WARN("failed to merge or equal to in", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::merge_or_equal_to_in(ObRawExpr *&or_expr, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  // column / constant of each OR branch, NULL when the branch is not a candidate
+  ObSEArray<ObRawExpr*, 16> column_exprs;
+  ObSEArray<ObRawExpr*, 16> const_exprs;
+  ObSEArray<ObRawExpr*, 4> merged_columns;
+  ObSEArray<ObRawExpr*, 4> in_exprs;
+  if (OB_ISNULL(or_expr) || OB_ISNULL(ctx_)
+      || OB_ISNULL(ctx_->expr_factory_) || OB_ISNULL(ctx_->session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(or_expr), K(ctx_));
+  } else if (or_expr->get_param_count() < OR_EQUAL_TO_IN_MIN_BRANCHES) {
+    // do nothing
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < or_expr->get_param_count(); ++i) {
+      ObRawExpr *column_expr = NULL;
+      ObRawExpr *const_expr = NULL;
+      if (OB_FAIL(get_column_equal_const(or_expr->get_param_expr(i), column_expr, const_expr))) {
+        LOG_WARN("failed to get column equal const", K(ret));
+      } else if (OB_FAIL(column_exprs.push_back(column_expr))
+                 || OB_FAIL(const_exprs.push_back(const_expr))) {
+        LOG_WARN("failed to push back", K(ret));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_exprs.count(); ++i) {
+      ObRawExpr *column_expr = column_exprs.at(i);
+      ObSEArray<ObRawExpr*, 16> values;
+      if (NULL == column_expr || ObOptimizerUtil::find_item(merged_columns, column_expr)) {
+        // not a candidate or already merged
+      } else {
+        for (int64_t j = i; OB_SUCC(ret) && j < column_exprs.count(); ++j) {
+          if (column_exprs.at(j) == column_expr && OB_FAIL(values.push_back(const_exprs.at(j)))) {
+            LOG_WARN("failed to push back", K(ret));
+          }
+        }
+        if (OB_FAIL(ret) || values.count() < OR_EQUAL_TO_IN_MIN_BRANCHES) {
+        } else if (OB_FAIL(create_partial_expr(*ctx_->expr_factory_, *ctx_->session_info_,
+                                               column_expr, values, true, in_exprs))) {
+          LOG_WARN("failed to create in expr", K(ret));
+        } else if (OB_FAIL(merged_columns.push_back(column_expr))) {
+          LOG_WARN("failed to push back", K(ret));
+        }
+      }
+    }
+    if (OB_SUCC(ret) && !merged_columns.empty()) {
+      ObSEArray<ObRawExpr*, 16> new_params;
+      ObSEArray<ObRawExpr*, 4> emitted_columns;
+      ObOpRawExpr *new_or_expr = NULL;
+      for (int64_t i = 0; OB_SUCC(ret) && i < column_exprs.count(); ++i) {
+        ObRawExpr *column_expr = column_exprs.at(i);
+        int64_t idx = -1;
+        if (NULL == column_expr || !ObOptimizerUtil::find_item(merged_columns, column_expr, &idx)) {
+          if (OB_FAIL(new_params.push_back(or_expr->get_param_expr(i)))) {
+            LOG_WARN("failed to push back", K(ret));
+          }
+        } else if (ObOptimizerUtil::find_item(emitted_columns, column_expr)) {
+          // folded into the IN expr emitted at its first branch
+        } else if (OB_FAIL(new_params.push_back(in_exprs.at(idx)))
+                   || OB_FAIL(emitted_columns.push_back(column_expr))) {
+          LOG_WARN("failed to push back", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (1 == new_params.count()) {
+        or_expr = new_params.at(0);
+        trans_happened = true;
+      } else if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_OR, new_or_expr))) {
+        LOG_WARN("failed to create or expr", K(ret));
+      } else if (OB_ISNULL(new_or_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null or expr", K(ret));
+      } else if (OB_FAIL(new_or_expr->set_param_exprs(new_params))) {
+        LOG_WARN("failed to set param exprs", K(ret));
+      } else if (OB_FAIL(new_or_expr->formalize(ctx_->session_info_))) {
+        LOG_WARN("failed to formalize or expr", K(ret));
+      } else {
+        or_expr = new_or_expr;
+        trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::get_column_equal_const(ObRawExpr *expr,
+                                                  ObRawExpr *&column_expr,
+                                                  ObRawExpr *&const_expr)
+{
+  int ret = OB_SUCCESS;
+  ObRawExpr *left = NULL;
+  ObRawExpr *right = NULL;
+  column_expr = NULL;
+  const_expr = NULL;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret));
+  } else if (T_OP_EQ != expr->get_expr_type() || 2 != expr->get_param_count()) {
+    // not an equality
+  } else if (OB_ISNULL(left = expr->get_param_expr(0)) || OB_ISNULL(right = expr->get_param_expr(1))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null param", K(ret));
+  } else {
+    if (left->is_column_ref_expr() && right->is_static_scalar_const_expr()) {
+      column_expr = left;
+      const_expr = right;
+    } else if (right->is_column_ref_expr() && left->is_static_scalar_const_expr()) {
+      column_expr = right;
+      const_expr = left;
+    }
+    // Restrict to integers of the column's own type class: integer equality has no
+    // collation, scale or implicit string conversion, so `c = v` and the IN probe
+    // compare exactly the same way.
+    if (NULL != column_expr
+        && (const_expr->has_flag(CNT_SUB_QUERY)
+            || column_expr->get_type_class() != const_expr->get_type_class()
+            || (ObIntTC != column_expr->get_type_class()
+                && ObUIntTC != column_expr->get_type_class()))) {
+      column_expr = NULL;
+      const_expr = NULL;
+    }
   }
   return ret;
 }
