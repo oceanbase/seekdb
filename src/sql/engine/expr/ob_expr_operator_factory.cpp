@@ -417,6 +417,7 @@
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
+#include "sql/engine/expr/ob_expr_file_sql/ob_expr_read_csv.h"
 #include "sql/engine/expr/ob_expr_vector_similarity.h"
 #include "sql/engine/expr/ob_expr_lock_func.h"
 
@@ -1046,6 +1047,8 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprAIEmbed);
     REG_OP(ObExprAIRerank);
     REG_OP(ObExprAIPrompt);
+    // File SQL functions
+    REG_OP(ObExprReadCSV);
   }();
 }
 

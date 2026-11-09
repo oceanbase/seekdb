@@ -364,6 +364,7 @@ public:
     bool get_enable_mysql_compatible_dates() const { return enable_mysql_compatible_dates_; }
     bool get_ob_sqlstat_enable() const { return _ob_sqlstat_enable_; }
     bool enable_immediate_row_conflict_check() const { return ATOMIC_LOAD(&enable_immediate_row_conflict_check_); }
+    bool get_enable_file_sql() const { return enable_file_sql_; }
   private:
     // Cache frequently read runtime settings in the session.
     bool enable_batched_multi_statement_;
@@ -378,6 +379,7 @@ public:
     int64_t _query_record_size_limit_;
     bool enable_decimal_int_type_;
     bool enable_mysql_compatible_dates_;
+    bool enable_file_sql_;
     // for record sys config print_sample_ppm
     int64_t print_sample_ppm_;
     int64_t last_check_ec_ts_;

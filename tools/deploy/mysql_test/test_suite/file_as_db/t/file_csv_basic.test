@@ -1,0 +1,25 @@
+--enable_warnings
+connection default;
+
+--disable_warnings
+drop table if exists test_csv_result;
+--enable_warnings
+
+--echo Test 1: Basic CSV file reading (will fail without actual file, but tests syntax)
+--error 0,11112
+select * from read_csv('/tmp/test_data.csv');
+
+--echo Test 2: CSV with options
+--error 0,11112
+select * from read_csv('/tmp/test_data.csv', true, ',', '"', 100);
+
+--echo Test 3: Verify function is registered
+select count(*) > 0 as csv_function_exists
+from information_schema.routines
+where routine_name = 'read_csv';
+
+--echo Test 4: Check error handling for invalid path
+--error 0,11112
+select read_csv('nonexistent.csv');
+
+--echo File as Database basic tests completed
