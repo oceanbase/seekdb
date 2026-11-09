@@ -46,10 +46,11 @@ jobs:
         if [[ -f ~/.bashrc ]]; then
           source ~/.bashrc
         fi
-        ./build.sh release --init
-        cd build_release && make -j3
-        test -x src/observer/seekdb
-        test -x src/observer/observer
+        ./build.py init
+        export PATH="$PWD/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
+        python3 ./build.py build --batch --jobs=3 --spawn_strategy=local \
+          --nouse_action_cache --noremote_accept_cached --noremote_upload_local_results --disk_cache= //src/observer:seekdb
+        test -x build/bin/src/observer/seekdb
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2

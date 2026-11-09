@@ -1,0 +1,64 @@
+# Copyright (c) 2026 OceanBase.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Community PR label
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  community-label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Only use PR metadata; never check out or execute PR code here.
+      - name: Label community-authored pull requests
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            // author_association is a heuristic, not an organization membership lookup.
+            if (['MEMBER', 'OWNER'].includes(pr.author_association) || pr.user.type === 'Bot') {
+              return;
+            }
+
+            const label = 'community';
+            try {
+              await github.rest.issues.getLabel({ ...context.repo, name: label });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              try {
+                await github.rest.issues.createLabel({
+                  ...context.repo,
+                  name: label,
+                  color: '0E8A16',
+                  description: 'Community-authored pull requests',
+                });
+              } catch (error) {
+                if (error.status !== 422) throw error;
+                // Another run may have created it; verify that the label now exists.
+                await github.rest.issues.getLabel({ ...context.repo, name: label });
+              }
+            }
+
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: pr.number,
+              labels: [label],
+            });
