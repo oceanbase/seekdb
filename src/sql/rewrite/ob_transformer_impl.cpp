@@ -536,8 +536,19 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // An approximate vector search is executed by a dedicated vector index scan, so
+      // the transforms that may reshape the plan (e.g. OR_EXPANSION) must stay disabled.
+      // Expression simplification is safe: it only folds the predicates of the query
+      // and never changes the shape of the plan.  It is needed here because otherwise
+      // duplicated or implied terms survive into the vector index scan and are
+      // evaluated once for every row the scan produces, e.g. the equivalent filters
+      // `c1 = 1` and `c1 = 1 or c1 = 1 or ...` are executed with very different cost.
+      uint64_t vec_approx_enable_list = 0;
+      ObTransformRule::add_trans_type(vec_approx_enable_list, SIMPLIFY_EXPR);
+      disable_list |= (~vec_approx_enable_list);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
