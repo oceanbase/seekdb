@@ -231,6 +231,40 @@ jobs:
           chmod +x package/libseekdb/test-packed-artifact-smoke.sh
           package/libseekdb/test-packed-artifact-smoke.sh "package/libseekdb/libseekdb-${{ matrix.platform }}.zip"
 
+      # TEMPORARY: the packed smoke test dies with SIGSEGV on Linux inside
+      # seekdb_open. Capture the faulting stack and the engine log so the crash
+      # can be diagnosed from CI instead of guessed at. Remove once fixed.
+      - name: Debug packed artifact crash
+        if: failure()
+        continue-on-error: true
+        run: |
+          ZIP="package/libseekdb/libseekdb-${{ matrix.platform }}.zip"
+          if [ ! -f "$ZIP" ]; then
+            exit 0
+          fi
+          UNPACK="$(mktemp -d)"
+          unzip -q "$ZIP" -d "$UNPACK"
+          echo "== libseekdb.so identity"
+          sha256sum "$UNPACK/libseekdb.so" build_release/src/include/libseekdb.so || true
+          readelf -d "$UNPACK/libseekdb.so" | head -25 || true
+          ( cd package/libseekdb/smoke-loader && npx node-gyp rebuild --pack_dir="$UNPACK" ) || exit 0
+          if ! command -v gdb >/dev/null 2>&1; then
+            sudo apt-get install -y -qq gdb || exit 0
+          fi
+          cd "$UNPACK"
+          gdb -batch \
+            -ex "set environment LD_PRELOAD=$UNPACK/libseekdb.so" \
+            -ex "set environment SEEKDB_NODE_BINDING_PROBE=1" \
+            -ex "handle SIGSEGV stop print nopass" \
+            -ex run \
+            -ex "thread apply all bt 40" \
+            -ex "info registers rip rsp" \
+            --args node "$GITHUB_WORKSPACE/package/libseekdb/smoke-loader/smoke-vsag.js" "$UNPACK/gdb-seekdb.db" || true
+          if [ -f gdb-seekdb.db/log/seekdb.log ]; then
+            echo "== tail of gdb-seekdb.db/log/seekdb.log"
+            tail -n 200 gdb-seekdb.db/log/seekdb.log
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
