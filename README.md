@@ -456,6 +456,74 @@ Python developers can access this via SQLAlchemy or any MySQL driver.
 
 </details>
 
+<details>
+<summary><b>⚖️ SQL — Hybrid Search with Normalization and Weights</b></summary>
+
+The query above uses full-text matching as a filter and ranks the survivors by vector distance. When a document may be a good hit on only one of the two signals, you usually want to score both of them and combine the scores. Raw scores are not directly comparable: `MATCH ... AGAINST` yields a relevance score where larger is better, while `l2_distance` yields a distance where smaller is better. Min-max normalize both signals over the candidate set, flip the distance, then apply weights:
+
+```sql
+-- 1) Candidates: top-k of each branch; UNION deduplicates
+-- 2) Score both signals for every candidate
+-- 3) Min-max normalize: distances are inverted so that larger is always better
+-- 4) Weighted sum; tune w_fts / w_vec for your workload (here 0.3 / 0.7)
+WITH candidates AS (
+  SELECT id FROM (
+    SELECT id FROM articles
+    ORDER BY l2_distance(embedding, '[0.12, 0.34, ...]') APPROXIMATE
+    LIMIT 20
+  ) AS vec_hits
+  UNION
+  SELECT id FROM (
+    SELECT id FROM articles
+    WHERE MATCH(content) AGAINST('quarterly report')
+    LIMIT 20
+  ) AS fts_hits
+),
+scored AS (
+  SELECT a.id,
+         a.title,
+         MATCH(a.content) AGAINST('quarterly report') AS fts_score,
+         l2_distance(a.embedding, '[0.12, 0.34, ...]') AS vec_distance
+  FROM articles AS a
+  JOIN candidates AS c ON c.id = a.id
+),
+normalized AS (
+  SELECT id, title,
+         COALESCE((fts_score - MIN(fts_score) OVER ())
+                  / NULLIF(MAX(fts_score) OVER () - MIN(fts_score) OVER (), 0), 0) AS fts_norm,
+         COALESCE((MAX(vec_distance) OVER () - vec_distance)
+                  / NULLIF(MAX(vec_distance) OVER () - MIN(vec_distance) OVER (), 0), 0) AS vec_norm
+  FROM scored
+)
+SELECT id, title,
+       ROUND(fts_norm, 3) AS fts_norm,
+       ROUND(vec_norm, 3) AS vec_norm,
+       ROUND(0.3 * fts_norm + 0.7 * vec_norm, 3) AS score
+FROM normalized
+ORDER BY score DESC
+LIMIT 5;
+```
+
+On a five-row table this ranks a document that is strong on both signals first, a purely semantic hit second, and a keyword-only hit third:
+
+```text
+id  fts_norm  vec_norm  score   title
+1   0.911     0.809     0.839   Quarterly report 2026Q2
+2   0.0       1.0       0.7     Hybrid search explained
+5   1.0       0.005     0.303   Quarterly report archive
+3   0.0       0.1       0.07    Vector index deep dive
+4   0.0       0.0       0.0     Bison parser notes
+```
+
+Three things to keep in mind:
+
+- The per-branch `LIMIT` bounds the candidate set and therefore the normalization window. Raise it when recall matters more than latency.
+- `NULLIF` guards the division when the candidate set has a single row or a signal is constant; `COALESCE` then scores that signal as `0` instead of `NULL`.
+- Weights are absolute only because normalization made both signals `[0, 1]`. If you prefer rank-based fusion, use `1 / (k + rank)` per branch (RRF, `k = 60`) instead of a weighted sum, which needs no score normalization at all.
+
+</details>
+
+
 
 ## 📚 Use Cases
 
