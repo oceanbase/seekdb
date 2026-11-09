@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SHARE_OB_DDL_COMMON_H
 #define OCEANBASE_SHARE_OB_DDL_COMMON_H
 
-namespace oceanbase { namespace common { struct ObDatum; } }
+namespace oceanbase { namespace common { struct ObDatum; class ObString; class ObIAllocator; } }
 #include "rust/config.h"
 #include "lib/allocator/page_arena.h"
 #include "share/config/ob_server_config.h"
@@ -498,6 +498,17 @@ public:
   char target_[common::MAX_LONG_OPS_TARGET_LENGTH];
   char message_[common::MAX_LONG_OPS_MESSAGE_LENGTH];
 };
+
+/**
+ * @brief Copy @p src into @p dst, doubling every backtick it contains.
+ *
+ * DDL statements quote identifiers with backticks, so an identifier holding a
+ * backtick has to escape it before it is quoted. The helper lives in the shared
+ * layer so that shared DDL code does not have to reach into the SQL layer.
+ */
+int generate_new_name_with_escape_character(common::ObIAllocator &allocator,
+                                            const common::ObString &src,
+                                            common::ObString &dst);
 
 class ObDDLUtil
 {
