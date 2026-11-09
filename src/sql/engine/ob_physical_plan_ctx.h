@@ -99,6 +99,7 @@ public:
              common::ObIAllocator &owner);
   int read(int64_t slot, common::Datum &value) const;
   bool read_i64(int64_t slot, int64_t &value) const;
+  bool read_i64(int64_t slot, int64_t &value, common::Datum::State &state) const;
   bool matches_layout(int64_t slot, const common::SqlType &type) const;
   common::Datum::State state(int64_t slot) const;
   ObEvalInfo &eval_info(int64_t slot) const;
@@ -292,6 +293,10 @@ public:
   // Read a present signed BIGINT without exposing its execution slot.
   // A rejected binding leaves value unchanged.
   bool read_native_bigint_parameter(int64_t index, int64_t &value) const;
+  // Read one validated signed BIGINT binding, including a typed SQL NULL,
+  // through a single page lookup. Failure leaves both outputs unchanged.
+  bool read_native_bigint_parameter(
+      int64_t index, int64_t &value, common::Datum::State &state) const;
   const common::DatumParameter *get_group_parameter_input(int64_t index) const;
   int capture_native_parameter(int64_t index, common::NativeTypedDatum &value,
       common::DatumParameterMetadata &attributes) const;

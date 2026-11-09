@@ -126,10 +126,25 @@ int ParameterValuePage::read(int64_t slot, Datum &value) const
 
 bool ParameterValuePage::read_i64(int64_t slot, int64_t &value) const
 {
-  const bool supported = slot >= 0 && slot < capacity_
-      && states()[slot] == (INLINE_I64 | static_cast<uint8_t>(Datum::State::Present));
-  if (supported) { MEMCPY(&value, words() + slot, sizeof(value)); }
-  return supported;
+  Datum::State state = Datum::State::Null;
+  return read_i64(slot, value, state) && state == Datum::State::Present;
+}
+
+bool ParameterValuePage::read_i64(int64_t slot, int64_t &value, Datum::State &state) const
+{
+  if (slot < 0 || slot >= capacity_) { return false; }
+  const uint8_t encoded = states()[slot];
+  const uint8_t present = INLINE_I64 | static_cast<uint8_t>(Datum::State::Present);
+  const uint8_t null = INLINE_I64 | static_cast<uint8_t>(Datum::State::Null);
+  if (encoded != present && encoded != null) { return false; }
+  int64_t candidate = 0;
+  const Datum::State candidate_state = encoded == present ? Datum::State::Present : Datum::State::Null;
+  if (candidate_state == Datum::State::Present) {
+    MEMCPY(&candidate, words() + slot, sizeof(candidate));
+    value = candidate;
+  }
+  state = candidate_state;
+  return true;
 }
 
 bool ParameterValuePage::matches_layout(int64_t slot, const SqlType &type) const
@@ -723,12 +738,28 @@ int ObPhysicalPlanCtx::read_native_parameter(int64_t index, Datum &value) const
 
 bool ObPhysicalPlanCtx::read_native_bigint_parameter(int64_t index, int64_t &value) const
 {
-  const SqlType *type = get_native_parameter_type(index);
+  Datum::State state = Datum::State::Null;
+  return read_native_bigint_parameter(index, value, state) && state == Datum::State::Present;
+}
+
+bool ObPhysicalPlanCtx::read_native_bigint_parameter(
+    int64_t index, int64_t &value, Datum::State &state) const
+{
+  if (!native_parameters_ready_ || index < 0 || index >= native_parameter_metadata_.count()
+      || index >= param_frame_capacity_ || index >= native_parameter_types_.count()) {
+    return false;
+  }
+  const SqlType *type = native_parameter_types_.at(index);
   if (type == nullptr || type->kind() != ObIntType
-      || type->canonical_representation() != DatumRepresentation::Inline64) { return false; }
+      || type->canonical_representation() != DatumRepresentation::Inline64) {
+    return false;
+  }
   int64_t frame = 0, slot = 0;
   ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
-  return ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).read_i64(slot, value);
+  if (frame < 0 || frame >= param_frame_ptrs_.count() || param_frame_ptrs_.at(frame) == nullptr) {
+    return false;
+  }
+  return ParameterValuePage::from_handle(param_frame_ptrs_.at(frame)).read_i64(slot, value, state);
 }
 
 int ObPhysicalPlanCtx::materialize_parameter_for_expr(int64_t index, Datum *&value)

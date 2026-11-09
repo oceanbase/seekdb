@@ -773,15 +773,9 @@ struct NativeI64Operand
     int ret = OB_SUCCESS;
     if (expr.native_parameter_alias_) {
       const ObPhysicalPlanCtx *plan = ctx.exec_ctx_.get_physical_plan_ctx();
-      const SqlType *type = plan == nullptr ? nullptr : plan->get_native_parameter_type(expr.extra_);
       if (expr.type_ != T_QUESTIONMARK || expr.is_batch_result() || expr.eval_func_ != nullptr
-          || type == nullptr || type->kind() != ObIntType
-          || type->canonical_representation() != DatumRepresentation::Inline64
-          || !plan->read_native_parameter_state(expr.extra_, scalar_state_)
-          || (scalar_state_ != Datum::State::Null && scalar_state_ != Datum::State::Present)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (scalar_state_ == Datum::State::Present
-                 && !plan->read_native_bigint_parameter(expr.extra_, scalar_)) {
+          || plan == nullptr
+          || !plan->read_native_bigint_parameter(expr.extra_, scalar_, scalar_state_)) {
         ret = OB_ERR_UNEXPECTED;
       } else { parameter_ = true; }
     } else if (expr.type_ != T_REF_COLUMN || expr.sql_type_ == nullptr

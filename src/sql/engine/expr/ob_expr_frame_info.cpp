@@ -1153,12 +1153,9 @@ int ObExprFrameInfo::choose_native_i64_layout(const ObExecContext &exec_ctx, boo
       && !sql_ctx->is_cursor_ && !sql_ctx->is_from_pl_;
   for (int64_t i = 0; candidate && i < NativeI64PointLayout::KEY_COUNT; ++i) {
     const int64_t index = native_i64_point_layout_->parameter_indexes[i];
-    const SqlType *type = plan->get_native_parameter_type(index);
+    int64_t value = 0;
     Datum::State state = Datum::State::Null;
-    candidate = type != nullptr && type->kind() == ObIntType
-        && type->canonical_representation() == DatumRepresentation::Inline64
-        && plan->read_native_parameter_state(index, state)
-        && (state == Datum::State::Present || state == Datum::State::Null);
+    candidate = plan->read_native_bigint_parameter(index, value, state);
   }
   compact = candidate;
   return ret;

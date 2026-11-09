@@ -2583,6 +2583,10 @@ TEST_F(NativeExecutionParameters, typed_bigint_null_init_rejects_point_at_every_
       int64_t extracted = 101 + null_index;
       EXPECT_FALSE(plan().read_native_bigint_parameter(null_index, extracted));
       EXPECT_EQ(101 + null_index, extracted);
+      Datum::State state = Datum::State::Present;
+      EXPECT_TRUE(plan().read_native_bigint_parameter(null_index, extracted, state));
+      EXPECT_EQ(Datum::State::Null, state);
+      EXPECT_EQ(101 + null_index, extracted);
       // This exercises the real bound graph and its existing independent
       // 101/102/103 sentinels, including NULL after a valid prefix.
       ASSERT_NO_FATAL_FAILURE(expect_no_point());
@@ -2623,6 +2627,11 @@ TEST_F(NativeExecutionParameters, ready_bigint_null_rebind_preserves_point_outpu
     replacement.set_int(0);
     ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(null_index, replacement, *type, attributes));
     EXPECT_TRUE(plan().read_native_bigint_parameter(null_index, extracted));
+    EXPECT_EQ(0, extracted);
+    Datum::State state = Datum::State::Null;
+    extracted = 101 + null_index;
+    EXPECT_TRUE(plan().read_native_bigint_parameter(null_index, extracted, state));
+    EXPECT_EQ(Datum::State::Present, state);
     EXPECT_EQ(0, extracted);
     EXPECT_EQ(slot, materialized_parameter(plan(), null_index));
     ASSERT_TRUE(slot->is_present());
