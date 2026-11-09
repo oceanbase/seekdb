@@ -45,6 +45,7 @@ int ObSqcCtx::add_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type,
   int ret = OB_SUCCESS;
   if (OB_FAIL(provider.init(op_id, msg_type))) {
   } else if (OB_FAIL(whole_msg_provider_list_.push_back(&provider))) {
+    provider.sqc_level_sync_cond_.destroy();
   }
   return ret;
 }
