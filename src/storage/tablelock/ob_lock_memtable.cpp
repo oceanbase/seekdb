@@ -24,6 +24,8 @@
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "lib/worker.h"
+#include "lib/utility/seek1243_drop_event.h"
 
 namespace oceanbase
 {
@@ -118,6 +120,24 @@ int ObLockMemtable::lock_(
   const bool is_two_phase_lock = param.is_two_phase_lock_;
   int64_t input_status_check_counter = -1;
   int64_t output_status_check_counter = -1;
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  const bool diagnose_runtime_lock = lock_op.lock_id_.obj_type_ == ObLockOBJType::OBJ_TYPE_RUNTIME
+      && lock_op.lock_id_.obj_id_ == 1UL && THIS_WORKER.seek1243_drop_key().active
+      && THIS_WORKER.seek1243_drop_key().request_key_available;
+  int64_t diagnostic_entry_us = 0;
+  int64_t diagnostic_start_us = 0;
+  int64_t diagnostic_retry_no = 0;
+  int diagnostic_attempt_ret = OB_SUCCESS;
+  const char *diagnostic_return_site = "none";
+  if (diagnose_runtime_lock) {
+    diagnostic_entry_us = ObTimeUtility::current_monotonic_raw_time();
+    common::seek1243::mark(THIS_WORKER.seek1243_drop_key(), "runtime ddl lock", "edge", "begin",
+        "entry_raw_us", diagnostic_entry_us, "lock_object_id", lock_op.lock_id_.obj_id_,
+        "lock_mode", static_cast<int64_t>(lock_op.lock_mode_),
+        "waiter_tx_id", static_cast<int64_t>(lock_op.create_trans_id_), "deadline_us", param.expired_time_);
+    diagnostic_start_us = ObTimeUtility::current_monotonic_raw_time();
+  }
+#endif
 
   // 1. record lock myself(check conflict).
   // 2. record lock at memtable ctx.
@@ -126,6 +146,13 @@ int ObLockMemtable::lock_(
   do {
     // retry if there is lock conflict at part trans ctx.
     need_retry = false;
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+    if (diagnose_runtime_lock) {
+      ++diagnostic_retry_no;
+      diagnostic_attempt_ret = OB_SUCCESS;
+      diagnostic_return_site = "none";
+    }
+#endif
     {
       succ_step = STEP_BEGIN;
       lock_exist = false;
@@ -152,11 +179,23 @@ int ObLockMemtable::lock_(
             ret = OB_OBJ_LOCK_EXIST;
           }
         } else if (OB_FAIL(obj_lock_map_.lock(param, ctx, lock_op, lock_mode_cnt_in_same_trans, conflict_tx_set))) {
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+          if (diagnose_runtime_lock) {
+            diagnostic_attempt_ret = ret;
+            diagnostic_return_site = "object lock map";
+          }
+#endif
           if (ret != OB_TRY_LOCK_ROW_CONFLICT &&
               ret != OB_OBJ_LOCK_EXIST) {
           }
         } else if (FALSE_IT(succ_step = STEP_IN_LOCK_MGR)) {
         } else if (OB_FAIL(mem_ctx->add_lock_record(lock_op))) {
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+          if (diagnose_runtime_lock) {
+            diagnostic_attempt_ret = ret;
+            diagnostic_return_site = "mem context record";
+          }
+#endif
           if (OB_EAGAIN == ret) {
             need_retry = true;
           }
@@ -214,8 +253,26 @@ int ObLockMemtable::lock_(
       }
     }
     if (need_retry) {
-      conflict_tx_set.reset();
-      ob_usleep(USLEEP_TIME);
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+      if (diagnose_runtime_lock) {
+        // The set already exists for this business lock check. Read one ID only,
+        // outside ObMvccWriteGuard, before the original retry clears the set.
+        const int64_t conflict_count = conflict_tx_set.count();
+        const int64_t first_conflict_tx_id = conflict_count == 0
+            ? 0 : static_cast<int64_t>(*conflict_tx_set.begin());
+        common::seek1243::mark(THIS_WORKER.seek1243_drop_key(), "runtime ddl lock retry",
+            "retry_no", diagnostic_retry_no, K(ret), "attempt_ret", diagnostic_attempt_ret,
+            "return_site", diagnostic_return_site, K(conflict_count), K(first_conflict_tx_id));
+        common::seek1243::Call retry_wait(THIS_WORKER.seek1243_drop_key(), "runtime ddl lock retry wait");
+        conflict_tx_set.reset();
+        ob_usleep(USLEEP_TIME);
+        retry_wait.finish_unavailable();
+      } else
+#endif
+      {
+        conflict_tx_set.reset();
+        ob_usleep(USLEEP_TIME);
+      }
     }
   } while (need_retry);
   if (OB_UNLIKELY(register_to_deadlock)) {
@@ -267,6 +324,20 @@ int ObLockMemtable::lock_(
       // do nothing
     }
   }
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  if (diagnose_runtime_lock) {
+    const int64_t diagnostic_end_us = ObTimeUtility::current_monotonic_raw_time();
+    const int64_t conflict_count = conflict_tx_set.count();
+    const int64_t first_conflict_tx_id = conflict_count == 0
+        ? 0 : static_cast<int64_t>(*conflict_tx_set.begin());
+    common::seek1243::mark(THIS_WORKER.seek1243_drop_key(), "runtime ddl lock", "edge", "end", K(ret),
+        "entry_raw_us", diagnostic_entry_us, "call_start_raw_us", diagnostic_start_us,
+        "call_end_raw_us", diagnostic_end_us, "begin_log_interval_us", diagnostic_start_us - diagnostic_entry_us,
+        "call_elapsed_us", diagnostic_end_us - diagnostic_start_us,
+        "attempts", diagnostic_retry_no, "attempt_ret", diagnostic_attempt_ret,
+        "return_site", diagnostic_return_site, K(conflict_count), K(first_conflict_tx_id));
+  }
+#endif
   return ret;
 }
 

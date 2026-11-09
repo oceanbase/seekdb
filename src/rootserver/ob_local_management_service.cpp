@@ -58,6 +58,7 @@
 #include "rootserver/ob_ai_model_ddl_service.h"
 #include "lib/utility/ob_print_utils.h"     // databuff_printf
 #include "share/ob_ex_rpc.h"
+#include "share/seek1243_drop_diagnostic.h"
 
 namespace oceanbase
 {
@@ -1274,6 +1275,19 @@ int ObLocalManagementService::drop_table(const obcall::ObDropTableArg &arg, obca
 int ObLocalManagementService::parallel_drop_table(const ObDropTableArg &arg, ObDropTableRes &res)
 {
   int ret = OB_SUCCESS;
+#ifdef OB_SEEK1243_DROP_DIAGNOSTIC
+  const auto drop_key = share::seek1243::stage_event_key(0, arg.table_type_, arg.session_id_, 0);
+  lib::Seek1243ContextGuard drop_request_context(THIS_WORKER, drop_key);
+  common::seek1243::Scope drop_request_scope(drop_key, "outer parallel_drop_table", ret);
+#ifdef _WIN32
+  FILETIME created = {}, exited = {}, kernel = {}, user = {};
+  const bool thread_birth_available = GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user) != 0;
+  const uint64_t thread_birth_filetime_100ns =
+      (static_cast<uint64_t>(created.dwHighDateTime) << 32) | created.dwLowDateTime;
+  common::seek1243::mark(drop_key, "drop request native thread", K(thread_birth_available),
+                         K(thread_birth_filetime_100ns));
+#endif
+#endif
 
   int64_t begin_time = ObTimeUtility::current_time();
   if (OB_UNLIKELY(!inited_)) {
