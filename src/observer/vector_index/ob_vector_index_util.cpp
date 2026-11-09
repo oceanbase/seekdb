@@ -5871,7 +5871,22 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
+    // issue #1472: do not start a pre-filter whose materialization is provably
+    // more expensive than an iterative graph search. The pre-filter first
+    // scans the chosen index (the whole base table when the predicate is a
+    // residual filter) and then resolves one rowkey -> vid lookup per matching
+    // row, so its cost grows with the candidate count and with the rows read,
+    // while the iterative filter is bounded by the HNSW search effort.
+    // A filter that is fully covered by the rowkey extra info is answered from
+    // the vector index itself (VEC_INDEX_IN_FILTER) and keeps the old rules.
+    const double pre_filter_scan_row_cnt =
+        vc_info.can_extract_range_ ? output_row_count : vc_info.row_count_;
+    const bool rowkey_range_pushdown = vc_info.with_extra_info_ && vc_info.can_use_vec_pri_opt_;
+    if (!rowkey_range_pushdown
+        && (output_row_count > ObVecIdxExtraInfo::MAX_HNSW_PRE_FILTER_ROW_CNT
+            || pre_filter_scan_row_cnt > ObVecIdxExtraInfo::MAX_HNSW_PRE_FILTER_SCAN_ROW_CNT)) {
+      vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
+    } else if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
