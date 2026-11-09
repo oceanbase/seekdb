@@ -1,0 +1,34 @@
+# Regression for #1469: shared DDL must quote identifiers without SQL-layer dependencies.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS quoted_column_identifier;
+DROP TABLE IF EXISTS quoted_enum_identifier;
+--enable_warnings
+
+CREATE TABLE quoted_column_identifier (
+  id INT PRIMARY KEY,
+  `a``b` INT,
+  ```edge``` VARCHAR(32)
+);
+INSERT INTO quoted_column_identifier VALUES
+  (1, 10, 'first'), (2, 20, 'second'), (3, NULL, 'third'), (4, NULL, 'fourth');
+CREATE UNIQUE INDEX uq_quoted_value ON quoted_column_identifier (`a``b`);
+CREATE INDEX idx_quoted_edge ON quoted_column_identifier (```edge```);
+--enable_query_log
+SELECT id, `a``b`, ```edge``` FROM quoted_column_identifier ORDER BY id;
+--disable_query_log
+
+CREATE TABLE quoted_enum_identifier (
+  id INT PRIMARY KEY,
+  `e``num` ENUM('red', 'blue'),
+  `s``et` SET('x', 'y')
+);
+INSERT INTO quoted_enum_identifier VALUES (1, 'red', 'x'), (2, 'blue', 'x,y');
+CREATE INDEX idx_quoted_enum ON quoted_enum_identifier (`e``num`);
+CREATE INDEX idx_quoted_set ON quoted_enum_identifier (`s``et`);
+--enable_query_log
+SELECT id, `e``num`, `s``et` FROM quoted_enum_identifier ORDER BY id;
+--disable_query_log
+DROP TABLE quoted_column_identifier;
+DROP TABLE quoted_enum_identifier;
+--enable_query_log
