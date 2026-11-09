@@ -20,7 +20,7 @@
 #include "storage/ob_dml_running_ctx.h"
 #include "storage/ob_table_dml_param.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "storage/tx/ob_tx_ctx.h"
