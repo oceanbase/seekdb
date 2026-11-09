@@ -79,14 +79,18 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
   } else if (OB_FAIL(do_get_sql(search_arg_.search_params_, query_sql, true))) {
   } else if (OB_ISNULL(sql_proxy = ctx_->get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null, hybrid search can not build inner sql connection",
+             K(ret), KP(ctx_));
   } else if (OB_FAIL(
                  query::ObInnerSQLConnectionAccess::
                      create_spi_connection_with_external_session(
                          session_info_, conn_guard))) {
   } else if (OB_ISNULL(base_conn = conn_guard.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("spi connection handle is null after create", K(ret), KP(session_info_));
   } else if (OB_ISNULL(conn = sql::as_inner_sql_connection(base_conn))) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to cast spi connection to inner sql connection", K(ret), KP(base_conn));
   } else {
     // This connection runs user search SQL on the caller's external session.
     // Nested-session state isolation does not provide SELECT authorization.
@@ -121,6 +125,12 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
             ret = OB_SUCCESS;
           } else {
           }
+        } else {
+          // execute_read() reported success but returned no result handle.
+          // Return an explicit NULL instead of leaving query_res untouched,
+          // otherwise the caller forwards an unset Obj to PL as a JSON value.
+          LOG_WARN("inner sql result is null", K(ret), K(query_sql));
+          query_res.set_null();
         }
       }
 
@@ -173,7 +183,21 @@ int ObHybridSearchExecutor::do_get_sql(const ObString &search_params_str,
         } else if (OB_SIZE_OVERFLOW == ret) {
           // retry
           ret = OB_SUCCESS;
+          // Release the buffer of the failed attempt before allocating a larger
+          // one. Nothing else frees it before the statement ends, so keeping it
+          // alive multiplies the peak memory of a single hybrid search under a
+          // tight memory budget.
+          alloc.free(buf);
+          buf = NULL;
         }
+      }
+      if (OB_SUCC(ret) && OB_UNLIKELY(!is_complete)) {
+        // Growth stopped without producing a complete SQL text. Report it
+        // instead of handing an empty statement to the inner SQL, where the
+        // failure would only surface as a broken invariant further downstream.
+        ret = OB_SIZE_OVERFLOW;
+        LOG_WARN("failed to translate hybrid search params into sql, sql text is too long",
+                 K(ret), K(OB_MAX_SQL_LENGTH));
       }
     }
   }
