@@ -32,6 +32,7 @@ psmall_test=[
 'datatype.null2',
 'datatype.replace',
 'datatype.type_varchar_2',
+'ddl.ddl_identifier_quoting',
 'ddlrollback',
 'deadlock_detector.trans_deadlock_basic',
 'delete.delete',
