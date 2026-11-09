@@ -106,63 +106,56 @@ def locked_packages(lock_file, system, architecture):
     if not lock_file.is_file():
         return []
     lock = json.loads(lock_file.read_text(encoding="utf-8"))
-    if lock.get("schema_version") != 1:
+    if lock.get("schema_version") != 2:
         raise ValueError("Unsupported dependency lock schema: " + str(lock_file))
 
+    platforms = lock.get("platforms", {})
+    if not isinstance(platforms, dict):
+        raise ValueError("Invalid dependency lock platforms: " + str(lock_file))
     platform_name = {"Darwin": "macos", "Windows": "windows"}.get(system, system.lower())
     prefix = "%s-%s" % (platform_name, architecture)
-    matches = [package for package in lock.get("packages", [])
-               if package.get("artifact_type") == "binary" and
-               package.get("target", "").startswith(prefix)]
+    pattern = None
+    version = None
     if system == "Linux":
         libc = platform.libc_ver()[1]
-        version = re.match(r"(\d+)\.(\d+)", libc)
-        if version:
-            libc_version = int(version.group(1)) * 100 + int(version.group(2))
-            compatible = []
-            for package in matches:
-                target = re.fullmatch(r"linux-[^-]+-glibc(\d+)", package["target"])
-                if target and int(target.group(1)) <= libc_version:
-                    compatible.append((int(target.group(1)), package))
-            if compatible:
-                best = max(version for version, _ in compatible)
-                matches = [package for version, package in compatible if version == best]
-            else:
-                matches = [package for package in matches
-                           if package["target"] == prefix]
+        found = re.match(r"(\d+)\.(\d+)", libc)
+        if found:
+            version = int(found.group(1)) * 100 + int(found.group(2))
+        pattern = re.escape(prefix) + r"-glibc(\d+)"
     elif system == "Darwin":
-        version = re.match(r"(\d+)", platform.mac_ver()[0])
-        if version:
-            compatible = []
-            for package in matches:
-                target = re.fullmatch(r"macos-[^-]+-min(\d+)", package["target"])
-                if target and int(target.group(1)) <= int(version.group(1)):
-                    compatible.append((int(target.group(1)), package))
-            if compatible:
-                best = max(minimum for minimum, _ in compatible)
-                matches = [package for minimum, package in compatible if minimum == best]
-            else:
-                matches = [package for package in matches if package["target"] == prefix]
+        found = re.match(r"(\d+)", platform.mac_ver()[0])
+        if found:
+            version = int(found.group(1))
+        pattern = re.escape(prefix) + r"-min(\d+)"
     elif system == "Android":
-        compatible = []
-        for package in matches:
-            target = re.fullmatch(r"android-[^-]+-v8a-api(\d+)", package["target"])
-            if target and int(target.group(1)) <= 26:
-                compatible.append((int(target.group(1)), package))
-        if compatible:
-            best = max(api for api, _ in compatible)
-            matches = [package for api, package in compatible if api == best]
-        else:
-            matches = [package for package in matches if package["target"] == prefix]
-    elif system == "Windows":
-        matches = [package for package in matches if package["target"] == prefix + "-md"]
-    else:
-        matches = [package for package in matches if package["target"] == prefix]
+        version = 26
+        pattern = re.escape(prefix) + r"-v8a-api(\d+)"
 
-    names = [package.get("name") for package in matches]
-    if len(names) != len(set(names)):
-        raise ValueError("Multiple locked binary packages match this host: " + str(lock_file))
-    return matches
+    target = prefix + "-md" if system == "Windows" else prefix
+    if pattern:
+        candidates = []
+        for name in platforms:
+            match = re.fullmatch(pattern, name)
+            if match:
+                candidates.append((int(match.group(1)), name))
+        if candidates:
+            if version is None:
+                raise ValueError("Cannot determine platform version for locked dependencies: " + prefix)
+            compatible = [candidate for candidate in candidates if candidate[0] <= version]
+            if compatible:
+                target = max(compatible)[1]
+            elif target not in platforms:
+                raise ValueError("No compatible locked dependency platform: " + prefix)
+
+    packages = platforms.get(target, {})
+    if not isinstance(packages, dict):
+        raise ValueError("Invalid dependency lock platform: " + target)
+    result = []
+    for name, package in sorted(packages.items()):
+        if not isinstance(package, dict):
+            raise ValueError("Invalid locked dependency: " + name)
+        result.append(dict(package, name=name))
+    return result
 
 
 def download(url, archive):
@@ -198,7 +191,7 @@ def sha256_file(path):
 def locked_archive(package, archive_directory, staging_directory):
     url = package.get("url")
     checksum = package.get("sha256", "").lower()
-    if not url or not re.fullmatch(r"[0-9a-f]{64}", checksum) or not package.get("version"):
+    if not url or not re.fullmatch(r"[0-9a-f]{64}", checksum):
         raise ValueError("Incomplete locked dependency: " + str(package.get("name")))
 
     cached = archive_directory / checksum
@@ -260,7 +253,7 @@ def populate_profile(profile, stage, archive_directory):
 def populate_lock(lock_file, stage, archive_directory, system, architecture):
     for package in locked_packages(lock_file, system, architecture):
         archive = locked_archive(package, archive_directory, stage / "pkg")
-        print("Preparing locked package " + package["name"] + " " + package["version"], flush=True)
+        print("Preparing locked package " + package["name"], flush=True)
         unpack(archive, stage, ignore_owner=system == "Linux")
 
 
