@@ -87,3 +87,18 @@
  
      let mut args = vec![
          "--with-version=VERSION".to_owned(),
+@@ -268,6 +325,14 @@
+         .arg(format!("-j{jobs}"))
+         .arg("build_lib_static")
+         .envs(&build_env);
++    if target_os == "windows" {
++        // The caller's absolute shell path (for example
++        // "C:/Program Files/Git/bin/sh.exe") reaches make through SHELL, and
++        // jemalloc's recipes expand $(SHELL) without quoting, so the space in
++        // "Program Files" truncates the command and make fails with 127. Pin a
++        // PATH-resolved shell name for the recipes instead.
++        build.arg("SHELL=sh");
++    }
+     run(&mut build);
+ 
+     let (library, public_header) = built_artifacts(&build_dir);
