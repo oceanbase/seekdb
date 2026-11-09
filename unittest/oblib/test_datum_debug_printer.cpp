@@ -114,11 +114,9 @@ TEST(DatumDebugPrinter, renders_text_lob_and_json)
       debug_json(native_view(datum, meta)));
 
   ObArenaAllocator owner;
-  ObJsonNode *tree = nullptr;
-  ASSERT_EQ(OB_SUCCESS, ObJsonParser::get_tree(&owner, ObString::make_string("{\"a\":1}"), tree));
-  ObJsonBinSerializer serializer(&owner);
   ObString json_bin;
-  ASSERT_EQ(OB_SUCCESS, serializer.serialize(tree, json_bin));
+  ASSERT_EQ(OB_SUCCESS, ObJsonParser::get_binary(
+      &owner, "{\"a\":1}", sizeof("{\"a\":1}") - 1, json_bin));
   datum.set_string(json_bin);
   meta.set_type(ObJsonType);
   EXPECT_EQ("{\"JSON\":{\"a\": 1}}", debug_json(native_view(datum, meta)));

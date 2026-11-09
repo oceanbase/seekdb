@@ -314,7 +314,7 @@ int print_json(const DatumValue &value, char *buffer, int64_t length, int64_t &p
   ObIJsonBase *base = nullptr;
   if (OB_FAIL(ret) || str.empty()) {
   } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&owner, str,
-      ObJsonInType::JSON_BIN, ObJsonInType::JSON_BIN, base, 0))) {
+      ObJsonInType::JSON_BIN, base, 0))) {
   } else if (OB_FAIL(base->print(json, false, str.length()))) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "'"))) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "%.*s",
@@ -544,7 +544,7 @@ int print_json_text(const DatumValue &value, char *buffer, int64_t length,
   ObIJsonBase *base = nullptr;
   if (OB_FAIL(ret) || str.empty()) {
   } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&owner, str,
-      ObJsonInType::JSON_BIN, ObJsonInType::JSON_BIN, base, 0))) {
+      ObJsonInType::JSON_BIN, base, 0))) {
   } else if (OB_FAIL(base->print(json, false, str.length()))) {
   } else if (params.use_memcpy_) {
     ret = databuff_memcpy(buffer, length, pos, json.length(), json.ptr());

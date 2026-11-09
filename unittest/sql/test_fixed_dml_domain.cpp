@@ -17,7 +17,7 @@
 #include "sql/das/ob_das_domain_utils.h"
 #include "data_plane/blocksstable/ob_datum_row.h"
 #include "common/datum/datum_parameter_codec.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/json_builder.h"
 #include "lib/charset/ob_charset.h"
 #include "share/ob_i_lob_read_service.h"
 #include "share/ob_lob_access_utils.h"
@@ -245,8 +245,9 @@ protected:
       ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(value, type, payload.data(), size, pos));
     }
     ASSERT_EQ(size, pos);
-    ObJsonOpaque opaque(ObString(size, payload.data()), ObUserDefinedSQLType);
-    ASSERT_EQ(OB_SUCCESS, opaque.get_raw_binary(result, &arena_));
+    ASSERT_EQ(OB_SUCCESS, encode_json_opaque(
+        arena_, ObString(size, payload.data()),
+        static_cast<uint16_t>(ObUserDefinedSQLType), result));
   }
   ObArenaAllocator arena_;
   ObDASInsCtDef ctdef_;

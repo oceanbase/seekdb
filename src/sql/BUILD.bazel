@@ -226,6 +226,7 @@ _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
     "//rust:uuid_generator_headers",
     "//rust:compression_headers",
     "//rust:config_headers",
+    "//rust:json",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
     ":sql_runtime_internal_headers",

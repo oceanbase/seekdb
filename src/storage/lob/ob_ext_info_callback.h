@@ -63,24 +63,6 @@ public:
 
 };
 
-class ObJsonDiffLog
-{
-public:
-  ObJsonDiffLog():
-    diff_header_(),
-    diffs_()
-  {}
-
-  ~ObJsonDiffLog();
-  TO_STRING_KV(K(diff_header_), K(diffs_));
-
-private:
-  ObJsonDiffHeader diff_header_;
-
-  ObJsonDiffArray diffs_;
-  
-};
-
 class ObExtInfoCallback : public memtable::ObITransCallback
 {
 public:

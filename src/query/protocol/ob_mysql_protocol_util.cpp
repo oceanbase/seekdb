@@ -27,6 +27,7 @@
 #include "common/timezone/ob_time_convert.h"
 #include "common/datum/datum_value.h"
 #include "lib/allocator/ob_allocator.h"
+#include "lib/utility/ob_fast_convert.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/geometry/ob_geo_wkb_define.h"
 
@@ -777,7 +778,6 @@ static int build_typed_cell_value(const DatumValue &obj, MYSQL_PROTOCOL_TYPE typ
         ObJsonBin json_bin(value.ptr(), value.length(), &allocator);
         ObIJsonBase *json_base = &json_bin;
         ObJsonBuffer json_buf(&allocator);
-        json_bin.set_seek_flag(true);
         if (OB_FAIL(json_bin.reset_iter())) {
         } else if (OB_FAIL(json_base->print(json_buf, true, value.length()))) {
         } else {

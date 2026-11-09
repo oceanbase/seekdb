@@ -43,6 +43,7 @@ MODULES = {
         }),
         "exclude_platforms": ["emscripten"],
     },
+    "json": {"bridge": "src/bridge.rs", "headers": ["include/binary_source.h", "include/schema_pattern.h", "include/read.h"], "deps": ["//rust/json:schema_pattern"]},
     "uuid-generator": {"bridge": "src/bridge.rs"},
     "in-process": {
         "bridge": "src/bridge.rs",

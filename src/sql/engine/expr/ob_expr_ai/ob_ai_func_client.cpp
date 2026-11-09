@@ -51,19 +51,19 @@ int ObAIFuncClient::init(common::ObIAllocator &, const ObString &, ObArray<ObStr
 }
 
 int ObAIFuncClient::send_post(common::ObIAllocator &, const ObString &,
-                              ObArray<ObString> &, ObJsonObject *, ObJsonObject *&)
+                              ObArray<ObString> &, ObIJsonBase *, ObIJsonBase *&)
 {
   return OB_NOT_SUPPORTED;
 }
 
 int ObAIFuncClient::send_post_batch(common::ObIAllocator &, const ObString &,
-                                    ObArray<ObString> &, ObArray<ObJsonObject *> &,
-                                    ObArray<ObJsonObject *> &)
+                                    ObArray<ObString> &, ObArray<ObIJsonBase *> &,
+                                    ObArray<ObIJsonBase *> &)
 {
   return OB_NOT_SUPPORTED;
 }
 
-int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObJsonObject *> &)
+int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObIJsonBase *> &)
 {
   return OB_NOT_SUPPORTED;
 }
@@ -73,7 +73,7 @@ bool ObAIFuncClient::check_batch_finished()
   return true;
 }
 
-int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &)
+int ObAIFuncClient::get_batch_result(ObArray<ObIJsonBase *> &)
 {
   return OB_NOT_SUPPORTED;
 }
@@ -154,7 +154,7 @@ int ObAIFuncClient::error_handle(const oceanbase::http::Result &result)
   return ret;
 }
 
-int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
+int ObAIFuncClient::send_post(ObIJsonBase *data, ObIJsonBase *&response)
 {
   int ret = OB_SUCCESS;
   ObJsonBuffer json(allocator_);
@@ -196,11 +196,10 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
       const auto body_bytes = oceanbase::http::http_reply_body(*reply.value());
       const ObString response_string = response_body(body_bytes);
       if (OB_FAIL(ObJsonBaseFactory::get_json_base(
-              allocator_, response_string, ObJsonInType::JSON_TREE,
-              ObJsonInType::JSON_TREE, tree))) {
+              allocator_, response_string, ObJsonInType::JSON_TEXT, tree))) {
         ret = OB_ERR_INVALID_JSON_TEXT;
       } else {
-        response = static_cast<ObJsonObject *>(tree);
+        response = static_cast<ObIJsonBase *>(tree);
       }
     }
   }
@@ -208,8 +207,8 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
 }
 
 int ObAIFuncClient::send_post(common::ObIAllocator &allocator, const common::ObString &url,
-                              ObArray<ObString> &headers, ObJsonObject *data,
-                              ObJsonObject *&response)
+                              ObArray<ObString> &headers, ObIJsonBase *data,
+                              ObIJsonBase *&response)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(data)) {
@@ -223,7 +222,7 @@ int ObAIFuncClient::send_post(common::ObIAllocator &allocator, const common::ObS
   return ret;
 }
 
-int ObAIFuncClient::add_http_request(ObJsonObject *data)
+int ObAIFuncClient::add_http_request(ObIJsonBase *data)
 {
   int ret = OB_SUCCESS;
   ObJsonBuffer json(allocator_);
@@ -243,8 +242,8 @@ int ObAIFuncClient::add_http_request(ObJsonObject *data)
   return ret;
 }
 
-int ObAIFuncClient::send_post_batch(ObArray<ObJsonObject *> &data_array,
-                                    ObArray<ObJsonObject *> &responses)
+int ObAIFuncClient::send_post_batch(ObArray<ObIJsonBase *> &data_array,
+                                    ObArray<ObIJsonBase *> &responses)
 {
   int ret = OB_SUCCESS;
   if (data_array.empty() || !http_client_.has_value()) {
@@ -284,8 +283,8 @@ int ObAIFuncClient::send_post_batch(ObArray<ObJsonObject *> &data_array,
 
 int ObAIFuncClient::send_post_batch(common::ObIAllocator &allocator,
                                     const common::ObString &url, ObArray<ObString> &headers,
-                                    ObArray<ObJsonObject *> &data_array,
-                                    ObArray<ObJsonObject *> &responses)
+                                    ObArray<ObIJsonBase *> &data_array,
+                                    ObArray<ObIJsonBase *> &responses)
 {
   int ret = OB_SUCCESS;
   if (data_array.empty()) {
@@ -308,7 +307,7 @@ int ObAIFuncClient::send_post_batch(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObJsonObject *> &data_array)
+int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObIJsonBase *> &data_array)
 {
   int ret = OB_SUCCESS;
   if (data_array.empty() || !http_client_.has_value()) {
@@ -348,7 +347,7 @@ bool ObAIFuncClient::check_batch_finished()
   return is_finished_.load();
 }
 
-int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &responses)
+int ObAIFuncClient::get_batch_result(ObArray<ObIJsonBase *> &responses)
 {
   int ret = OB_SUCCESS;
   if (!is_finished_.load() || !http_batch_.has_value()) {
@@ -366,10 +365,9 @@ int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &responses)
       const auto body = oceanbase::http::http_batch_body(*http_batch_.value(), i);
       const ObString response_string = response_body(body);
       if (OB_FAIL(ObJsonBaseFactory::get_json_base(
-              allocator_, response_string, ObJsonInType::JSON_TREE,
-              ObJsonInType::JSON_TREE, tree))) {
+              allocator_, response_string, ObJsonInType::JSON_TEXT, tree))) {
         ret = OB_ERR_INVALID_JSON_TEXT;
-      } else if (OB_FAIL(responses.push_back(static_cast<ObJsonObject *>(tree)))) {
+      } else if (OB_FAIL(responses.push_back(static_cast<ObIJsonBase *>(tree)))) {
       }
     }
   }

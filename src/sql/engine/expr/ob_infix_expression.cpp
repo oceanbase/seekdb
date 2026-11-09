@@ -18,7 +18,6 @@
 
 
 #include "ob_infix_expression.h"
-#include "common/json_type/ob_json_tree.h"
 #include "sql/engine/expr/ob_expr_operator_factory.h"
 #include "sql/engine/expr/ob_expr_regexp.h"
 #include "share/ob_unique_index_row_transformer.h"

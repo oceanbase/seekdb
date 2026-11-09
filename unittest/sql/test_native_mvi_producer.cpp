@@ -19,6 +19,7 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "common/datum/datum_parameter_codec.h"
+#include "common/json_type/json_builder.h"
 #include "common/json_type/ob_json_parse.h"
 #include <gtest/gtest.h>
 #include <memory>
@@ -110,12 +111,20 @@ struct MviProducerState {
 int produce(MviProducerState &state, const char *json_text, SqlValueType type,
     ObAccuracy accuracy, bool array, std::string &packed, Datum **scalar = nullptr) {
   state.set_type(type, accuracy.get_length(), accuracy.get_precision(), accuracy.get_scale());
-  ObJsonNode *tree = nullptr;
+  ObString binary_data;
+  std::unique_ptr<ObJsonBin> binary;
   int ret = state.prepare_output(array, type, accuracy, CS_TYPE_UTF8MB4_BIN);
-  if (ret == OB_SUCCESS) { ret = ObJsonParser::get_tree(&state.arena, ObString::make_string(json_text), tree); }
+  if (ret == OB_SUCCESS) {
+    ret = ObJsonParser::get_binary(
+        &state.arena, json_text, STRLEN(json_text), binary_data);
+  }
+  if (ret == OB_SUCCESS) {
+    binary.reset(new ObJsonBin(binary_data.ptr(), binary_data.length(), &state.arena));
+    ret = binary->reset_iter();
+  }
   Datum &result = state.output.locate_datum_for_write(*state.eval);
   if (ret == OB_SUCCESS) {
-    ret = JsonQueryMultivalueAccess::run(array, *state.eval, state.arena, tree,
+    ret = JsonQueryMultivalueAccess::run(array, *state.eval, state.arena, binary.get(),
         state.output, CS_TYPE_UTF8MB4_BIN, accuracy, type, result);
   }
   if (ret == OB_SUCCESS && array) {
@@ -211,10 +220,16 @@ TEST(NativeMviProducer, json_scalar_result_owns_stack_and_source_bytes_and_faile
   ObArenaAllocator owner;
   DatumValue integer, text, replacement;
   ObAccuracy accuracy; accuracy.set_precision(20); accuracy.set_scale(0); accuracy.set_length(64);
-  ObJsonInt original(918);
+  ObString original_bytes;
+  ASSERT_EQ(OB_SUCCESS, encode_json_integer(owner, 918, original_bytes));
+  ObJsonBin original(original_bytes.ptr(), original_bytes.length(), &owner);
+  ASSERT_EQ(OB_SUCCESS, original.reset_iter());
   ASSERT_EQ(OB_SUCCESS, ObJsonUtil::cast_json_scalar_to_sql_value(owner, *state.eval,
       &original, CS_TYPE_BINARY, accuracy, ObIntType, 0, integer));
-  ObJsonInt later(456);
+  ObString later_bytes;
+  ASSERT_EQ(OB_SUCCESS, encode_json_integer(owner, 456, later_bytes));
+  ObJsonBin later(later_bytes.ptr(), later_bytes.length(), &owner);
+  ASSERT_EQ(OB_SUCCESS, later.reset_iter());
   ASSERT_EQ(OB_SUCCESS, ObJsonUtil::cast_json_scalar_to_sql_value(owner, *state.eval,
       &later, CS_TYPE_BINARY, accuracy, ObIntType, 0, replacement));
   EXPECT_EQ(918, integer.get_int()); EXPECT_EQ(456, replacement.get_int());
@@ -224,14 +239,22 @@ TEST(NativeMviProducer, json_scalar_result_owns_stack_and_source_bytes_and_faile
   text_accuracy.set_length_semantics(LS_BYTE);
   {
     std::string source = "customer_客户";
-    ObJsonString string(source.data(), source.size());
+    ObString string_bytes;
+    ASSERT_EQ(OB_SUCCESS, encode_json_text(
+        owner, ObString(source.size(), source.data()), string_bytes));
+    ObJsonBin string(string_bytes.ptr(), string_bytes.length(), &owner);
+    ASSERT_EQ(OB_SUCCESS, string.reset_iter());
     ASSERT_EQ(OB_SUCCESS, ObJsonUtil::cast_json_scalar_to_sql_value(owner, *state.eval,
         &string, CS_TYPE_UTF8MB4_BIN, text_accuracy, ObVarcharType, -1, text));
     source.assign(source.size(), 'x');
   }
   EXPECT_EQ(ObString::make_string("customer_客户"), text.get_string());
   const Datum previous = integer.datum_;
-  ObJsonString failed_text("replacement", 11);
+  ObString failed_text_bytes;
+  ASSERT_EQ(OB_SUCCESS, encode_json_text(
+      owner, ObString::make_string("replacement"), failed_text_bytes));
+  ObJsonBin failed_text(failed_text_bytes.ptr(), failed_text_bytes.length(), &owner);
+  ASSERT_EQ(OB_SUCCESS, failed_text.reset_iter());
   RejectingMviOwner reject;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObJsonUtil::cast_json_scalar_to_sql_value(reject,
       *state.eval, &failed_text, CS_TYPE_UTF8MB4_BIN, text_accuracy, ObVarcharType, -1, integer));
@@ -240,14 +263,20 @@ TEST(NativeMviProducer, json_scalar_result_owns_stack_and_source_bytes_and_faile
 TEST(NativeMviProducer, decimal_scalar_coefficient_and_null_metadata_are_native) {
   MviProducerState state;
   ObAccuracy accuracy; accuracy.set_precision(8); accuracy.set_scale(2);
-  ObJsonDouble input(123.456);
+  ObString input_bytes;
+  ASSERT_EQ(OB_SUCCESS, encode_json_real(state.arena, 123.456, input_bytes));
+  ObJsonBin input(input_bytes.ptr(), input_bytes.length(), &state.arena);
+  ASSERT_EQ(OB_SUCCESS, input.reset_iter());
   DatumValue decimal;
   ASSERT_EQ(OB_SUCCESS, ObJsonUtil::cast_json_scalar_to_sql_value(state.arena, *state.eval,
       &input, CS_TYPE_BINARY, accuracy, ObDecimalIntType, 2, decimal));
   ASSERT_EQ(sizeof(int32_t), decimal.get_int_bytes());
   EXPECT_EQ(12346, *reinterpret_cast<const int32_t *>(decimal.get_decimal_int()));
   EXPECT_EQ(2, decimal.get_scale());
-  ObJsonNull null;
+  ObString null_bytes;
+  ASSERT_EQ(OB_SUCCESS, encode_json_null(state.arena, null_bytes));
+  ObJsonBin null(null_bytes.ptr(), null_bytes.length(), &state.arena);
+  ASSERT_EQ(OB_SUCCESS, null.reset_iter());
   ASSERT_EQ(OB_SUCCESS, ObJsonUtil::cast_json_scalar_to_sql_value(state.arena, *state.eval,
       &null, CS_TYPE_BINARY, accuracy, ObDecimalIntType, 2, decimal));
   EXPECT_TRUE(decimal.is_null()); EXPECT_EQ(ObNullType, decimal.get_type()); EXPECT_EQ(2, decimal.get_scale());
@@ -320,13 +349,18 @@ TEST(NativeMviProducer, matches_immutable_old_producer_full_wire_fixture) {
     ObAccuracy accuracy;
     if (ob_is_string_tc(type)) { accuracy.set_length(length); }
     else { accuracy.set_precision(precision); accuracy.set_scale(scale); }
-    ObJsonNode *tree = nullptr;
-    int ret = json == "@absent" ? OB_SUCCESS : ObJsonParser::get_tree(
-        &state.arena, json.data(), json.size(), tree);
+    ObString binary_data;
+    std::unique_ptr<ObJsonBin> binary;
+    int ret = json == "@absent" ? OB_SUCCESS : ObJsonParser::get_binary(
+        &state.arena, json.data(), json.size(), binary_data);
+    if (ret == OB_SUCCESS && json != "@absent") {
+      binary.reset(new ObJsonBin(binary_data.ptr(), binary_data.length(), &state.arena));
+      ret = binary->reset_iter();
+    }
     if (ret == OB_SUCCESS) { ret = state.prepare_output(array, type, accuracy, collation); }
     Datum &result = state.output.locate_datum_for_write(*state.eval);
     if (ret == OB_SUCCESS) {
-      ret = JsonQueryMultivalueAccess::run(array, *state.eval, state.arena, tree,
+      ret = JsonQueryMultivalueAccess::run(array, *state.eval, state.arena, binary.get(),
           state.output, collation, accuracy, type, result);
     }
     EXPECT_EQ(expected_ret, ret);

@@ -19,7 +19,6 @@
 
 #include "lib/json/ob_json.h"
 #include "common/json_type/ob_json_parse.h"
-#include "common/json_type/ob_json_tree.h"
 #include "common/json_type/ob_json_base.h"
 #include "lib/allocator/ob_allocator.h"
 
@@ -33,7 +32,6 @@ using json::Value;
 using json::Pair;
 using json::Parser;
 using json::Tidy;
-using common::ObJsonNode;
 using common::ObIJsonBase;
 using common::ObJsonParser;
 using common::ObString;
@@ -71,7 +69,7 @@ public:
   explicit ObJsonReaderHelper(ObIAllocator &allocator);
   ~ObJsonReaderHelper();
 
-  int parse(const char *json_str, size_t json_len, ObJsonNode *&root);
+  int parse(const char *json_str, size_t json_len, ObIJsonBase *&root);
 
   int get_object_value(const ObIJsonBase *obj, const ObString &key, ObIJsonBase *&value);
 

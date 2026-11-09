@@ -25,19 +25,6 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-class ObJsonSchemaReportItem
-{
-public:
-  static constexpr char* RESULT = const_cast<char*>("valid");
-  static constexpr char* REASON = const_cast<char*>("reason");
-  static constexpr char* REASON_BEGIN = const_cast<char*>("The JSON document location '");
-  static constexpr char* REASON_MID = const_cast<char*>("' failed requirement '");
-  static constexpr char* REASON_END = const_cast<char*>("' at JSON Schema location '");
-  static constexpr char* SCHEMA_LOCATION = const_cast<char*>("schema-location");
-  static constexpr char* DOC_LOCATION = const_cast<char*>("document-location");
-  static constexpr char* FAILED_KEYWORD = const_cast<char*>("schema-failed-keyword");
-};
-
 OB_SERIALIZE_MEMBER((ObExprJsonSchemaValidationReport, ObFuncExprOperator), json_schema_);
 
 ObExprJsonSchemaValidationReport::ObExprJsonSchemaValidationReport(common::ObIAllocator &alloc)
@@ -101,96 +88,45 @@ int ObExprJsonSchemaValidationReport::eval_json_schema_validation_report(const O
   INIT_SUCC(ret);
   const ObExprJsonSchemaValidInfo *info
                   = static_cast<ObExprJsonSchemaValidInfo *>(expr.extra_info_);
-  ObIJsonBase* j_schema = nullptr;
+  ObJsonSchemaCache* j_schema = nullptr;
   ObIJsonBase* j_doc = nullptr;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
-  ObJsonBin j_schema_bin;
+
   if (OB_ISNULL(info)) {
     // schema is not const
     if (OB_FAIL(ObJsonExprHelper::get_json_schema(expr, ctx, temp_allocator, 0,
                                                   j_schema, is_null_result))) {
     }
   } else {
-    // schema is const
-    new (&j_schema_bin) ObJsonBin(info->json_schema_.ptr(), info->json_schema_.length(), &temp_allocator);
-    if (OB_FAIL(j_schema_bin.reset_iter())) {
-    } else {
-      // schema validation only seek, do not need reserve parent stack
-      j_schema_bin.set_seek_flag(true);
-      j_schema = &j_schema_bin;
+    j_schema = ObJsonExprHelper::get_schema_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
+    if (OB_ISNULL(j_schema)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(j_schema->prepare(info->json_schema_, 1, ObJsonInType::JSON_BIN, true))) {
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (!is_null_result && OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 1,
-                                             j_doc, is_null_result, false, false, true))) {
+                                             j_doc, is_null_result, true))) {
   } else if (is_null_result) {
     res.set_null();
   } else {
-    ObJsonSchemaValidator validator(&temp_allocator, j_schema);
-    ObIJsonBase* validation_report = nullptr;
-    bool is_valid = false;
-    if (OB_FAIL(validator.schema_validator(j_doc, is_valid))) {
-    } else if (OB_FAIL(raise_validation_report(temp_allocator, validator, is_valid, validation_report))){
+    ObString binary;
+    if (OB_FAIL(j_doc->get_raw_binary(binary, &temp_allocator))) {
     } else {
-      ObString raw_bin;
-      if (OB_FAIL(validation_report->get_raw_binary(raw_bin, &temp_allocator))) {
-      } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
+      bool valid = false;
+      ObString report;
+      if (OB_FAIL(j_schema->validate(binary, 1, true, valid, report, temp_allocator))) {
+      } else {
+        ret = ObJsonExprHelper::pack_json_str_res(expr, ctx, res, report);
       }
     }
   }
   return ret;
-}
-
-int ObExprJsonSchemaValidationReport::raise_validation_report(ObIAllocator &allocator, 
-                                                              ObJsonSchemaValidator& validator, 
-                                                              const bool& is_valid, 
-                                                              ObIJsonBase*& validation_report)
-{
-  INIT_SUCC(ret);
-  ObJsonObject* report_obj = nullptr;
-  ObJsonBoolean* schema_result = nullptr;
-  if (OB_ISNULL(report_obj = OB_NEWx(ObJsonObject, &allocator, &allocator))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("fail to init schema report.", K(ret));
-  } else if (OB_FALSE_IT(validation_report = report_obj)) { 
-  } else if (OB_ISNULL(schema_result = OB_NEWx(ObJsonBoolean, &allocator, is_valid))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("fail to init schema report result.", K(ret));
-  } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::RESULT, schema_result, false, true, false))) {
-  } else if (!is_valid) { // if not valid, need to describe the reason in detail
-    // reason
-    ObJsonBuffer reason(&allocator);
-    ObJsonBuffer json_pointer(&allocator);
-    ObJsonBuffer schema_pointer(&allocator);
-    ObJsonString* reason_str = nullptr;
-    ObJsonString* schema_loc_str = nullptr;
-    ObJsonString* doc_loc_str = nullptr;
-    ObJsonString* failed_keyword_str = nullptr;
-    if (OB_FAIL(validator.get_json_or_schema_point(json_pointer, false))) {
-    } else if (OB_FAIL(validator.get_json_or_schema_point(schema_pointer, true))) {
-    } else if (OB_FAIL(reason.append(ObJsonSchemaReportItem::REASON_BEGIN))
-             || OB_FAIL(reason.append(json_pointer.ptr(), json_pointer.length()))
-             || OB_FAIL(reason.append(ObJsonSchemaReportItem::REASON_MID))
-             || OB_FAIL(reason.append(validator.get_failed_keyword()))
-             || OB_FAIL(reason.append(ObJsonSchemaReportItem::REASON_END))
-             || OB_FAIL(reason.append(schema_pointer.ptr(), schema_pointer.length()))) {
-    } else if (OB_ISNULL(reason_str = OB_NEWx(ObJsonString, &allocator, reason.ptr(), reason.length()))
-            || OB_ISNULL(schema_loc_str = OB_NEWx(ObJsonString, &allocator, schema_pointer.ptr(), schema_pointer.length()))
-            || OB_ISNULL(doc_loc_str = OB_NEWx(ObJsonString, &allocator, json_pointer.ptr(), json_pointer.length()))
-            || OB_ISNULL(failed_keyword_str = OB_NEWx(ObJsonString, &allocator, validator.get_failed_keyword()))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::REASON, reason_str, false, true, false))) {
-    } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::SCHEMA_LOCATION, schema_loc_str, false, true, false))) {
-    } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::DOC_LOCATION, doc_loc_str, false, true, false))) {
-    } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::FAILED_KEYWORD, failed_keyword_str, false, true, false))) {
-    }
-  }
-  return ret;  
 }
 
 } /* sql */

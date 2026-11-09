@@ -20,7 +20,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "common/json_type/ob_json_base.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
@@ -136,7 +136,7 @@ int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)
 {
   int ret = OB_SUCCESS;
   ObString str;
-  ObIJsonBase *val;
+  ObIJsonBase *val = nullptr;
 
   if (OB_UNLIKELY(nullptr == obj)) {
     ret = OB_INVALID_ARGUMENT;
@@ -187,7 +187,7 @@ int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)
   } else {
     ret = OB_INVALID_ARGUMENT;
     ObSqlString message;
-    message.append_fmt("config: %s", str.ptr());
+    message.append_fmt("config: %.*s", str.length(), str.ptr());
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, message.ptr());
   }
   return ret;

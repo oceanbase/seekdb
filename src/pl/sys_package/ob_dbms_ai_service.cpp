@@ -217,7 +217,7 @@ int ObDBMSAiService::get_json_base_(
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(
                  *ctx.exec_ctx_, &allocator, params.at(1), j_str))) {
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, in_type, in_type, j_base, parse_flag))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, in_type, j_base, parse_flag))) {
   } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_TYPE_INVALID, (int)strlen("PARAMS"), "PARAMS", (int)strlen("JSON_OBJECT"), "JSON_OBJECT");

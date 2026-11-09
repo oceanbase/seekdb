@@ -60,9 +60,9 @@ OBLIB_UNITY_GROUPS = {
             language = "c++",
             srcs = [
                 "src/oblib/common/json_type/ob_json_path.cpp",
-                "src/oblib/common/json_type/ob_json_tree.cpp",
                 "src/oblib/common/json_type/ob_json_bin.cpp",
                 "src/oblib/common/json_type/ob_json_base.cpp",
+                "src/oblib/common/json_type/json_builder.cpp",
                 "src/oblib/common/json_type/ob_json_parse.cpp",
                 "src/oblib/common/json_type/ob_json_schema.cpp",
                 "src/oblib/common/json_type/ob_json_diff.cpp",
@@ -138,7 +138,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/common/xml/ob_multi_mode_bin.cpp",
                 "src/oblib/common/xml/ob_multi_mode_interface.cpp",
                 "src/oblib/common/xml/ob_path_parser.cpp",
-                "src/oblib/common/xml/ob_binary_aggregate.cpp",
             ],
         ),
         struct(

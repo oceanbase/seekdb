@@ -655,7 +655,6 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         deps = [
             ":core_types",
             "//src/oblib:oblib_foundation",
-            "//bazel/third_party:rapidjson_headers",
         ],
     ),
     "worker_runtime": struct(

@@ -22,7 +22,6 @@
 #include "share/object/ob_obj_cast.h"
 #include "query/parser/ob_item_type.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "common/json_type/ob_json_tree.h"
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_bin.h"
 #include "common/json_type/ob_json_path.h"
@@ -161,10 +160,6 @@ public:
                                          ObScale scale,
                                          common::DatumValue &result);
 
-  typedef int (*ObItemMethodValid)(ObIJsonBase*& in, 
-                                  bool &is_null_result,
-                                  common::ObIAllocator *allocator, 
-                                  uint8_t &is_type_mismatch);
   typedef int (*ObJsonCastSqlDatum)(common::ObIAllocator *allocator,
                                     ObEvalCtx &ctx,
                                     ObIJsonBase *j_base,
@@ -200,9 +195,6 @@ public:
   static int mdatetime_scale_check(const common::ObAccuracy &accuracy,
                                   ObMySQLDateTime &value,
                                   bool strict = false);
-  static ObJsonUtil::ObItemMethodValid get_item_method_cast_res_func(ObJsonPath* j_path,
-                                          ObIJsonBase* j_base);
-  static ObJsonUtil::ObJsonCastSqlDatum get_json_datum_cast_func(SqlValueType dst_type);
   static ObJsonUtil::ObJsonCastSqlScalar get_json_cast_func(SqlValueType dst_type);
   static int get_json_path(ObExpr* expr,
                           ObEvalCtx &ctx, 
@@ -214,8 +206,7 @@ public:
                           ObEvalCtx &ctx,
                           MultimodeAlloctor &allocator,
                           ObIJsonBase*& j_base,
-                          bool &is_null, bool & is_cover_by_error,
-                          bool relax = false);
+                          bool &is_null, bool & is_cover_by_error);
   static bool is_number_item_method(ObJsonPath* j_path);
   static int bit_length_check(const ObAccuracy &accuracy,
                               uint64_t &value);

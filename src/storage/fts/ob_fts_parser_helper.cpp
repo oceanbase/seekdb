@@ -16,12 +16,14 @@
 
 #include "object/ob_object.h"
 #include "storage/fts/ob_fts_struct.h"
+#include "common/json_type/json_builder.h"
+
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_parser_helper.h"
 #include <cinttypes>
 
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 #include "share/ob_force_print_log.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/ob_beng_ft_parser.h"
@@ -425,55 +427,25 @@ int ObFTParseHelper::make_detail_json(
     const int64_t doc_length,
     common::ObIJsonBase *&json_root)
 {
- int ret = OB_SUCCESS;
-
- ObJsonObject *root_obj = nullptr;
-
- ObJsonInt *cnt = nullptr;
-
- ObJsonArray *token_array = nullptr;
-
- if (OB_ISNULL(root_obj = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
-   ret = OB_ALLOCATE_MEMORY_FAILED;
- } else if (OB_ISNULL(cnt = OB_NEWx(ObJsonInt, allocator_, doc_length))) {
-   ret = OB_ALLOCATE_MEMORY_FAILED;
- } else if (OB_ISNULL(token_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
-   ret = OB_ALLOCATE_MEMORY_FAILED;
- } else {
-   for (ObFTWordMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
-     ObString key = it->first.get_word().get_string();
-     ObJsonObject *node = nullptr;
-     ObJsonInt *token_cnt_node = nullptr;
-     if (OB_ISNULL(node = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
-       ret = OB_ALLOCATE_MEMORY_FAILED;
-     } else if (OB_ISNULL(token_cnt_node = OB_NEWx(ObJsonInt, allocator_, it->second))) {
-       ret = OB_ALLOCATE_MEMORY_FAILED;
-     } else if (OB_FAIL(node->add(key, token_cnt_node))) {
-     } else if (OB_FAIL(token_array->append(node))) {
-     } else {
-       // pass
-     }
-
-     if (OB_FAIL(ret)) {
-       OB_DELETEx(ObJsonObject, allocator_, node);
-       OB_DELETEx(ObJsonInt, allocator_, token_cnt_node);
-     }
-   } // for
-
-   if (OB_SUCC(ret)) {
-     if (OB_FAIL(root_obj->add(ENTRY_NAME_TOKENS, token_array))) {
-     } else if (OB_FAIL(root_obj->add(ENTRY_NAME_DOC_LEN, cnt))) {
-     }
-   }
- }
-  if (OB_SUCC(ret)) {
-    json_root = root_obj;
-  } else {
-    OB_DELETEx(ObJsonObject, allocator_, root_obj);
-    OB_DELETEx(ObJsonInt, allocator_, cnt);
-    OB_DELETEx(ObJsonArray, allocator_, token_array);
+  int ret = OB_SUCCESS;
+  JsonContainerBuilder root(true);
+  JsonContainerBuilder tokens(false);
+  for (ObFTWordMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
+    JsonContainerBuilder entry(true);
+    ObString binary;
+    if (OB_FAIL(entry.append_integer(it->first.get_word().get_string(), it->second))) {
+    } else if (OB_FAIL(entry.finish(binary))) {
+    } else if (OB_FAIL(tokens.append(ObString(), binary))) {
+    }
   }
-
+  ObString binary;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(tokens.finish(binary))) {
+  } else if (OB_FAIL(root.append(ENTRY_NAME_TOKENS, binary))) {
+  } else if (OB_FAIL(root.append_integer(ENTRY_NAME_DOC_LEN, doc_length))) {
+  } else if (OB_FAIL(root.finish(binary))) {
+  } else if (OB_FAIL(copy_json_binary(*allocator_, binary, json_root))) {
+  }
   return ret;
 }
 
@@ -482,27 +454,14 @@ int ObFTParseHelper::make_token_array_json(
     common::ObIJsonBase *&json_root)
 {
   int ret = OB_SUCCESS;
-  ObJsonArray *token_array = nullptr;
-  if (OB_UNLIKELY(OB_ISNULL(token_array = OB_NEWx(ObJsonArray, allocator_, allocator_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    for (ObFTWordMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
-      ObString key = it->first.get_word().get_string();
-      ObJsonString *token = nullptr;
-      if (OB_UNLIKELY(OB_ISNULL(token = OB_NEWx(ObJsonString, allocator_, key)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        if (OB_FAIL(token_array->append(token))) {
-          OB_DELETEx(ObJsonString, allocator_, token);
-        } else {
-        }
-      }
-    } // for
+  JsonContainerBuilder tokens(false);
+  for (ObFTWordMap::const_iterator it = words.begin(); OB_SUCC(ret) && it != words.end(); ++it) {
+    ret = tokens.append_string(ObString(), it->first.get_word().get_string());
   }
-  if (OB_SUCC(ret)) {
-    json_root = token_array;
-  } else {
-    OB_DELETEx(ObJsonArray, allocator_, token_array);
+  ObString binary;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(tokens.finish(binary))) {
+  } else if (OB_FAIL(copy_json_binary(*allocator_, binary, json_root))) {
   }
   return ret;
 }
