@@ -24,6 +24,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/system_variable/ob_system_variable_alias.h"
 #include "lib/worker.h"
+#include "lib/allocator/page_arena.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/ob_server_struct.h"
@@ -541,6 +542,52 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+// Escape an identifier so that it can be wrapped by backticks in the DDL text
+// generated below. A backtick inside the name has to be doubled, otherwise the
+// quoted identifier would be terminated early and the generated SQL would be
+// invalid, e.g. a column created as `key``id` would render as `key`id`.
+//
+// The helper is intentionally kept in the share layer instead of reusing
+// sql::ObSQLUtils: share is a terminal module and must not depend on sql.
+static int escape_ddl_column_name(
+    common::ObIAllocator &allocator,
+    const common::ObString &column_name,
+    common::ObString &escaped_name)
+{
+  int ret = OB_SUCCESS;
+  const int64_t name_len = column_name.length();
+  int64_t escaped_len = name_len;
+  char *buf = NULL;
+  escaped_name.assign(NULL, 0);
+  if (OB_ISNULL(column_name.ptr()) || name_len <= 0) {
+    // Nothing to escape. An empty name is still rendered as an empty identifier.
+  } else {
+    for (int64_t i = 0; i < name_len; ++i) {
+      if ('`' == column_name[i]) {
+        ++escaped_len;
+      }
+    }
+    if (escaped_len == name_len) {
+      // No backtick in the name, share the input buffer instead of copying it.
+      escaped_name = column_name;
+    } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(escaped_len + 1)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for escaped column name", K(ret), K(escaped_len));
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; i < name_len; ++i) {
+        if ('`' == column_name[i]) {
+          buf[pos++] = '`';
+        }
+        buf[pos++] = column_name[i];
+      }
+      buf[escaped_len] = '\0';
+      escaped_name.assign_ptr(buf, static_cast<ObString::obstr_size_t>(escaped_len));
+    }
+  }
+  return ret;
+}
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -550,8 +597,11 @@ int ObDDLUtil::generate_column_name_str(
 {
   int ret = OB_SUCCESS;
   const char *split_char = "`";
+  ObArenaAllocator allocator("ObDDLColumnName");
+  ObString escaped_column_name;
   // append comma
-  if (with_comma) {
+  if (OB_FAIL(escape_ddl_column_name(allocator, column_name_info.column_name_, escaped_column_name))) {
+  } else if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
     }
   }
@@ -559,9 +609,9 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   // append AS
@@ -572,7 +622,7 @@ int ObDDLUtil::generate_column_name_str(
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+        escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   return ret;
