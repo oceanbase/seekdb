@@ -53,6 +53,92 @@ int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
 
 }
 
+// Only compare signed INT columns against signed INT literals. Other types,
+// parameter markers, casts and expressions are intentionally left unchanged:
+// their comparison semantics can depend on implicit conversions or collation.
+static bool get_ann_int_bound(ObRawExpr *expr,
+                              ObRawExpr *&column,
+                              int64_t &bound,
+                              bool &is_upper,
+                              bool &is_strict)
+{
+  bool supported = false;
+  column = nullptr;
+  bound = 0;
+  is_upper = false;
+  is_strict = false;
+  if (OB_NOT_NULL(expr) && expr->get_param_count() == 2 &&
+      (expr->get_expr_type() == T_OP_LT || expr->get_expr_type() == T_OP_LE ||
+       expr->get_expr_type() == T_OP_GT || expr->get_expr_type() == T_OP_GE)) {
+    ObRawExpr *left = expr->get_param_expr(0);
+    ObRawExpr *right = expr->get_param_expr(1);
+    if (OB_NOT_NULL(left) && OB_NOT_NULL(right) &&
+        left->get_expr_type() == T_REF_COLUMN &&
+        left->get_result_type().get_type() == ObIntType &&
+        right->get_expr_type() == T_INT &&
+        right->get_result_type().get_type() == ObIntType) {
+      const oceanbase::common::ObObj &value = static_cast<ObConstRawExpr *>(right)->get_value();
+      if (value.get_type() == ObIntType) {
+        column = left;
+        bound = value.get_int();
+        is_upper = expr->get_expr_type() == T_OP_LT || expr->get_expr_type() == T_OP_LE;
+        is_strict = expr->get_expr_type() == T_OP_LT || expr->get_expr_type() == T_OP_GT;
+        supported = true;
+      }
+    }
+  }
+  return supported;
+}
+
+// In a conjunction, a tighter bound implies a weaker bound on the same
+// column. Remove only provably redundant bounds; leave other predicates alone.
+static int remove_ann_redundant_int_bounds(oceanbase::common::ObIArray<ObRawExpr *> &conditions,
+                                            bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  // Avoid quadratic optimizer work on unusually large predicate lists.
+  if (conditions.count() <= 1 || conditions.count() > 256) {
+    // no-op
+  } else {
+    for (int64_t i = conditions.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+      ObRawExpr *column_i = nullptr;
+      int64_t bound_i = 0;
+      bool upper_i = false;
+      bool strict_i = false;
+      if (!get_ann_int_bound(conditions.at(i), column_i, bound_i, upper_i, strict_i)) {
+        continue;
+      }
+      bool redundant = false;
+      for (int64_t j = 0; !redundant && j < conditions.count(); ++j) {
+        if (j == i) {
+          continue;
+        }
+        ObRawExpr *column_j = nullptr;
+        int64_t bound_j = 0;
+        bool upper_j = false;
+        bool strict_j = false;
+        if (get_ann_int_bound(conditions.at(j), column_j, bound_j, upper_j, strict_j) &&
+            upper_i == upper_j && column_i->same_as(*column_j)) {
+          // A strict bound at the same value is stronger than a non-strict one.
+          // Identical bounds keep the earliest occurrence.
+          redundant = (upper_i ? (bound_j < bound_i) : (bound_j > bound_i)) ||
+                      (bound_j == bound_i &&
+                       ((strict_j && !strict_i) || (strict_j == strict_i && j < i)));
+        }
+      }
+      if (redundant) {
+        if (OB_FAIL(conditions.remove(i))) {
+          LOG_WARN("failed to remove redundant ANN integer bound", K(ret));
+        } else {
+          trans_happened = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                 ObDMLStmt *&stmt,
                                                 bool &trans_happened)
@@ -2262,6 +2348,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   int ret = OB_SUCCESS;
   trans_happened = false;
   bool push_not_happend = false;
+  bool remove_ann_bounds_happened = false;
   bool remove_duplicate_happend = false;
   bool pull_similar_happend = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
@@ -2269,12 +2356,15 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   } else if (conditions.count() == 0) {
     //do nothing
   } else if (OB_FAIL(push_not(conditions, push_not_happend))) {
+  } else if (stmt->has_vec_approx() &&
+             OB_FAIL(remove_ann_redundant_int_bounds(conditions, remove_ann_bounds_happened))) {
   } else if (OB_FAIL(remove_duplicate_exprs(stmt->get_query_ctx(),
                                             conditions,
                                             remove_duplicate_happend))) {
   } else if (OB_FAIL(pull_similar_expr(stmt, conditions, pull_similar_happend))) {
   } else {
-    trans_happened =  push_not_happend | remove_duplicate_happend | pull_similar_happend;
+    trans_happened = push_not_happend | remove_ann_bounds_happened |
+                     remove_duplicate_happend | pull_similar_happend;
     if (trans_happened) {
       for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
         if (OB_ISNULL(conditions.at(i))) {
