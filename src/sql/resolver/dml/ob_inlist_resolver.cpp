@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "lib/utility/ob_sort.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -263,6 +264,51 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+// The values table rewrite materializes every element of a big IN list, so it is
+// only worth doing when the list really carries many different values. An IN
+// list may repeat the same value any number of times, e.g.
+//   c1 IN (1, 2, 3, 1, 2, 3, ...)
+// and such a list is not "big" for the purpose of this rewrite: the rewritten
+// plan has to build the values table and run a hash distinct on it at runtime,
+// which costs much more than evaluating the plain IN expression.
+//
+// Count the distinct integer literals of the list so that a list carrying very
+// few of them can keep the plain IN expression. `supported` is set to false when
+// the list contains anything else than plain integer literals (parameters,
+// strings, decimal numbers, ...), and the caller then keeps the legacy behavior.
+static int count_distinct_int_literals(const ParseNode &in_list,
+                                       bool &supported,
+                                       int64_t &distinct_cnt)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<int64_t, 8> values;
+  supported = false;
+  distinct_cnt = 0;
+  if (OB_ISNULL(in_list.children_) || OB_UNLIKELY(in_list.num_child_ <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    supported = true;
+    for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_; ++i) {
+      const ParseNode *element = in_list.children_[i];
+      if (OB_ISNULL(element) ||
+          OB_UNLIKELY(T_INT != element->type_ && T_UINT64 != element->type_)) {
+        supported = false;
+      } else if (OB_FAIL(values.push_back(element->value_))) {
+        LOG_WARN("failed to push back inlist element", K(ret));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && supported) {
+    lib::ob_sort(values.begin(), values.end());
+    for (int64_t i = 0; i < values.count(); ++i) {
+      if (0 == i || values.at(i) != values.at(i - 1)) {
+        ++distinct_cnt;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -309,6 +355,22 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       if (in_list.num_child_ < threshold) {
       } else {
         is_enable = true;
+      }
+    }
+    // A big IN list may be nothing but a few literals repeated many times, which
+    // does not benefit from the values table rewrite. Keep the plain IN
+    // expression when the list carries much fewer distinct values than the
+    // threshold that triggers the rewrite.
+    if (OB_SUCC(ret) && is_enable) {
+      const int64_t column_cnt = T_OP_ROW == left_expr.get_expr_type() ?
+                                 left_expr.get_param_count() : 1;
+      if (1 == column_cnt) {
+        bool is_int_literals = false;
+        int64_t distinct_cnt = 0;
+        if (OB_FAIL(count_distinct_int_literals(in_list, is_int_literals, distinct_cnt))) {
+        } else if (is_int_literals && distinct_cnt < threshold) {
+          is_enable = false;
+        }
       }
     }
   }
