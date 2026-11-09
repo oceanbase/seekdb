@@ -131,8 +131,6 @@ def _windows_libraries():
 def sdk_targets(windows = False):
     native.exports_files(HOST_FILES + native.glob(["lib/**/*.a", "lib/**/*.so", "lib/**/*.so.*", "lib64/**/*.a", "lib64/**/*.so", "lib64/**/*.so.*"], allow_empty = True))
     for name, attributes in SDK_HEADERS.items():
-        if windows and name == "gtest":
-            continue
         if windows and name in _WINDOWS_HEADER_LIBRARIES:
             attributes = attributes | {"deps": _WINDOWS_HEADER_LIBRARIES[name]}
         if windows and name == "absl_headers":
