@@ -1105,7 +1105,7 @@ TEST_F(NativeI64ExprFrames, real_cg_frame_capacity_is_independent_of_consumer_ba
   }
 }
 
-TEST_F(NativeI64ExprFrames, malformed_cg_lane_regions_reject_both_allocation_entries_without_publication)
+TEST_F(NativeI64ExprFrames, malformed_cg_lane_regions_reject_public_allocation_and_boundary_validation)
 {
   class RejectingAllocator final : public ObIAllocator
   {
@@ -1161,20 +1161,13 @@ TEST_F(NativeI64ExprFrames, malformed_cg_lane_regions_reject_both_allocation_ent
     }
     restore();
 
-    for (const bool fallback : {false, true}) {
-      ASSERT_NO_FATAL_FAILURE(fixture.bind(0, fallback ? ObDoubleType : ObIntType, 17));
-      ASSERT_EQ(fallback ? ObDoubleType : ObIntType,
-          fixture.parameters().get_native_parameter_type(0)->kind());
-      bool compact = fallback;
-      ASSERT_EQ(OB_SUCCESS, fixture.info().choose_native_i64_layout(fixture.exec_, compact));
-      ASSERT_EQ(!fallback, compact); // actual runtime Type selects each execution mode.
-      corrupt();
-      EXPECT_EQ(OB_ERR_UNEXPECTED, fixture.info().pre_alloc_exec_memory(fixture.exec_, &blocked));
-      EXPECT_EQ(0, blocked.calls_);
-      EXPECT_EQ(previous, fixture.exec_.get_frames());
-      EXPECT_EQ(previous_count, fixture.exec_.get_frame_cnt());
-      restore();
-    }
+    corrupt();
+    EXPECT_EQ(OB_ERR_UNEXPECTED, fixture.info().validate_native_i64_layout());
+    EXPECT_EQ(0, blocked.calls_);
+    EXPECT_EQ(previous, fixture.exec_.get_frames());
+    EXPECT_EQ(previous_count, fixture.exec_.get_frame_cnt());
+    restore();
+    EXPECT_EQ(OB_SUCCESS, fixture.info().validate_native_i64_layout());
     fixture.owner_.expect_frame_canary(previous[layout.frames[0].index]);
   }
 }

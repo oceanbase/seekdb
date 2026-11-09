@@ -53,7 +53,7 @@ const NativeI64PointLayout::Frame *find_native_i64_frame(
   return result;
 }
 
-int validate_native_i64_layout(const ObExprFrameInfo &expressions)
+int validate_native_i64_layout_impl(const ObExprFrameInfo &expressions)
 {
   const NativeI64PointLayout *layout = expressions.native_i64_point_layout_;
   if (layout == nullptr) {
@@ -522,7 +522,7 @@ int NativeFrameCodec::group_size(bool plan_part, const ObIArray<ObFrameInfo> &gr
     const ObExprFrameInfo &expressions, char *const *frames, int64_t frame_count,
     bool no_data, int64_t &size)
 {
-  int ret = validate_native_i64_layout(expressions);
+  int ret = expressions.validate_native_i64_layout();
   int64_t candidate = 5;
   if (OB_SUCC(ret) && plan_part) {
     int64_t bytes = 0;
@@ -609,7 +609,7 @@ int NativeFrameCodec::initialize_frame(const ObFrameInfo &info,
     const ObExprFrameInfo &expressions, char *frame)
 {
   int64_t unused = 0;
-  int ret = validate_native_i64_layout(expressions);
+  int ret = expressions.validate_native_i64_layout();
   if (OB_SUCC(ret)) { ret = wire_record_count(info, expressions, true, unused); }
   if (OB_SUCC(ret) && (info.frame_size_ > INT64_MAX || (info.frame_size_ > 0 && frame == nullptr))) {
     ret = OB_INVALID_ARGUMENT;
@@ -948,6 +948,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
   int ret = OB_SUCCESS;
   need_ctx_cnt_ = other.need_ctx_cnt_;
   native_i64_point_layout_ = nullptr;
+  native_i64_layout_validated_ = false;
 
   if (OB_FAIL(rt_exprs_.assign(other.rt_exprs_))) {
   } else if (OB_FAIL(const_frame_.assign(other.const_frame_))) {
@@ -1045,7 +1046,7 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
   } // end for
 
   if (OB_SUCC(ret) && other.native_i64_point_layout_ != nullptr) {
-    if (OB_FAIL(validate_native_i64_layout(other))) {
+    if (OB_FAIL(other.validate_native_i64_layout())) {
     } else {
       auto *copy = static_cast<NativeI64PointLayout *>(allocator.alloc(sizeof(NativeI64PointLayout)));
       if (copy == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
@@ -1055,17 +1056,34 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
           rt_exprs_.at(copy->expr_indexes[i]).native_i64_layout_ = &copy->lanes[i];
         }
         native_i64_point_layout_ = copy;
-        ret = validate_native_i64_layout(*this);
+        ret = validate_and_mark_native_i64_layout();
       }
     }
   }
   return ret;
 }
 
+int ObExprFrameInfo::validate_native_i64_layout() const
+{
+  return validate_native_i64_layout_impl(*this);
+}
+
+int ObExprFrameInfo::validate_and_mark_native_i64_layout()
+{
+  native_i64_layout_validated_ = false;
+  const int ret = validate_native_i64_layout_impl(*this);
+  if (ret == OB_SUCCESS && native_i64_point_layout_ != nullptr) {
+    native_i64_layout_validated_ = true;
+  }
+  return ret;
+}
+
 int ObExprFrameInfo::choose_native_i64_layout(const ObExecContext &exec_ctx, bool &compact) const
 {
-  int ret = validate_native_i64_layout(*this);
-  if (OB_FAIL(ret)) { return ret; }
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(native_i64_point_layout_ != nullptr && !native_i64_layout_validated_)) {
+    return OB_ERR_UNEXPECTED;
+  }
   bool candidate = native_i64_point_layout_ != nullptr;
   const ObPhysicalPlanCtx *plan = exec_ctx.get_physical_plan_ctx();
   const ObSqlCtx *sql_ctx = exec_ctx.get_sql_ctx();
@@ -1114,7 +1132,7 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
                                  const ObIArray<char *> &param_frame_ptrs,
                                  uint64_t &frame_cnt, char **&frames, bool compact_i64) const
 {
-  int ret = validate_native_i64_layout(*this);
+  int ret = validate_native_i64_layout();
   if (OB_SUCC(ret)) {
     ret = alloc_frame_after_layout_validation(exec_allocator, param_frame_ptrs,
                                               frame_cnt, frames, compact_i64);
@@ -1232,6 +1250,7 @@ OB_DEF_DESERIALIZE(ObExprFrameInfo)
 {
   int ret = OB_SUCCESS;
   native_i64_point_layout_ = nullptr;
+  native_i64_layout_validated_ = false;
   int32_t expr_cnt = 0;
   OB_UNIS_DECODE(need_ctx_cnt_);
   ObIArray<ObExpr> &exprs = const_cast<ObArray<ObExpr> &>(rt_exprs_);

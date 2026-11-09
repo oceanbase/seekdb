@@ -497,6 +497,7 @@ int ObStaticEngineExprCG::finalize_native_i64_point(ObPhysicalPlan &plan, const 
     }
     if (graph.pack != nullptr) { publish_native_point_offsets(*graph.pack, pack); }
     info.native_i64_point_layout_ = owned;
+    ret = info.validate_and_mark_native_i64_layout();
   }
   return ret;
 }

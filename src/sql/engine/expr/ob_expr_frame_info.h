@@ -101,6 +101,7 @@ public:
       datum_frame_(allocator),
       ser_expr_marks_(allocator),
       native_i64_point_layout_(nullptr),
+      native_i64_layout_validated_(false),
       allocator_(allocator)
   {
   }
@@ -116,6 +117,7 @@ public:
       datum_frame_(allocator),
       ser_expr_marks_(allocator),
       native_i64_point_layout_(nullptr),
+      native_i64_layout_validated_(false),
       allocator_(allocator)
   {
   }
@@ -135,6 +137,11 @@ public:
 
   int choose_native_i64_layout(const ObExecContext &exec_ctx, bool &compact) const;
 
+  // Native I64 layout pointers are local plan metadata. Validate them when a
+  // plan publishes or clones that metadata; execution only checks the mark.
+  int validate_native_i64_layout() const;
+  int validate_and_mark_native_i64_layout();
+
   int get_expr_idx_in_frame(ObExpr *expr, int64_t &expr_idx) const;
 
   bool is_mark_serialize() const { return &_rt_exprs_ != &rt_exprs_; }
@@ -146,13 +153,14 @@ public:
                K_(param_frame),
                K_(dynamic_frame),
                K_(datum_frame),
-               K_(ser_expr_marks));
+               K_(ser_expr_marks),
+               K_(native_i64_layout_validated));
 
 
 private:
-  // Only entered after choose_native_i64_layout() or alloc_frame() has checked
-  // this same plan layout. Execution mode selection and frame initialization
-  // remain per execution; no validation result is cached on the shared plan.
+  // Only entered after choose_native_i64_layout() has checked the immutable
+  // plan mark, or alloc_frame() has defensively validated an external caller.
+  // Execution mode selection and frame initialization remain per execution.
   int alloc_frame_after_layout_validation(common::ObIAllocator &exec_allocator,
                   const ObIArray<char *> &param_frame_ptrs,
                   uint64_t &frame_cnt, char **&frames, bool compact_i64) const;
@@ -178,6 +186,9 @@ public:
   common::ObFixedArray<bool, common::ObIAllocator> ser_expr_marks_;
   // Immutable plan metadata only; no alternate execution pages are retained.
   const NativeI64PointLayout *native_i64_point_layout_;
+  // Set only after the complete layout has passed validation at a plan
+  // construction or clone boundary. A null layout does not require the mark.
+  bool native_i64_layout_validated_;
   common::ObIAllocator &allocator_;
 };
 
