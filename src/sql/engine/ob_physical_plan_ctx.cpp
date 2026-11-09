@@ -393,21 +393,6 @@ int ObPhysicalPlanCtx::assign_parameter_inputs(const ParamStore &parameters)
   return ret;
 }
 
-int ObPhysicalPlanCtx::assign_parameter_input_views(
-    const ObIArray<const DatumParameter *> &inputs)
-{
-  int ret = native_parameters_ready_ || !param_store_.empty() ? OB_STATE_NOT_MATCH : OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
-    if (inputs.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
-  }
-  if (OB_SUCC(ret) && OB_FAIL(param_store_.reserve(inputs.count()))) {
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
-    ret = param_store_.push_back(*inputs.at(i));
-  }
-  return ret;
-}
-
 int ObPhysicalPlanCtx::truncate_runtime_parameters(int64_t count)
 {
   int ret = OB_SUCCESS;
@@ -501,10 +486,27 @@ int ObPhysicalPlanCtx::init_datum_param_store()
   return initialize_runtime_parameters();
 }
 
-int ObPhysicalPlanCtx::initialize_runtime_parameters()
+int ObPhysicalPlanCtx::init_datum_param_store(
+    const ObIArray<const DatumParameter *> &inputs)
+{
+  int ret = native_parameters_ready_ || !param_store_.empty() ? OB_STATE_NOT_MATCH : OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
+    if (inputs.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
+  }
+  if (OB_SUCC(ret)) {
+    const int64_t previous_original_count = original_param_cnt_;
+    original_param_cnt_ = inputs.count();
+    ret = initialize_runtime_parameters(&inputs);
+    if (OB_FAIL(ret)) { original_param_cnt_ = previous_original_count; }
+  }
+  return ret;
+}
+
+int ObPhysicalPlanCtx::initialize_runtime_parameters(
+    const ObIArray<const DatumParameter *> *inputs)
 {
   int ret = OB_SUCCESS;
-  const int64_t count = param_store_.count();
+  const int64_t count = inputs == nullptr ? param_store_.count() : inputs->count();
   native_parameter_metadata_.reuse();
   native_parameter_types_.reuse();
   native_group_inputs_.reuse();
@@ -517,7 +519,7 @@ int ObPhysicalPlanCtx::initialize_runtime_parameters()
   } else if (OB_FAIL(reserve_param_frame(count))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    const DatumParameter &input = param_store_.at(i);
+    const DatumParameter &input = inputs == nullptr ? param_store_.at(i) : *inputs->at(i);
     Datum value;
     const SqlType *type = nullptr;
     DatumParameterMetadata attributes = input.get_metadata();

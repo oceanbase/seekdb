@@ -357,17 +357,10 @@ int ObPlanCacheValue::prepare_lookup_parameters(ObPlanCacheCtx &pc_ctx)
       && !pc_ctx.sql_ctx_.is_batch_params_execute()
       && !pc_ctx.exec_ctx_.has_dynamic_values_table();
   if (direct_protocol_inputs) {
-    // PS/PL values are already resolved producer inputs. Bind their borrowed
-    // directory into the PlanCtx construction store so the hot lookup path
-    // avoids its temporary arena and duplicate descriptor copy. Keeping this
-    // one contiguous copy also preserves locality while final pages are built.
+    // PS/PL values are already resolved producer inputs. Consume their borrowed
+    // directory synchronously; final pages own every value that survives bind.
     destination->reset_datum_param_store();
-    if (OB_FAIL(destination->assign_parameter_input_views(
-        pc_ctx.fp_result_.parameterized_params_))) {
-      return ret;
-    }
-    destination->set_original_param_cnt(destination->get_parameter_count());
-    return destination->init_datum_param_store();
+    return destination->init_datum_param_store(pc_ctx.fp_result_.parameterized_params_);
   }
 
   ObArenaAllocator staged_owner("PCParamBuild");

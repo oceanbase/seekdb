@@ -1834,7 +1834,7 @@ TEST_F(NativeExecutionParameters, ordinary_lookup_and_miss_parser_consume_origin
   EXPECT_DOUBLE_EQ(7.0, read_parameter_value(plan(), 2).get_double());
 }
 
-TEST_F(NativeExecutionParameters, ordinary_protocol_single_copy_bind_owns_mixed_values_and_retries_failure)
+TEST_F(NativeExecutionParameters, ordinary_protocol_direct_bind_owns_mixed_values_and_retries_failure)
 {
   ASSERT_EQ(OB_SUCCESS, oceanbase::share::ObSysVariables::init_default_values());
   ObSQLSessionInfo session;
@@ -1870,7 +1870,8 @@ TEST_F(NativeExecutionParameters, ordinary_protocol_single_copy_bind_owns_mixed_
       (cache_value.*access(LookupParameterPreparationTag{}))(lookup));
   EXPECT_GT(owner_.calls_for(4), 0);
   EXPECT_FALSE(plan().native_parameters_ready());
-  EXPECT_EQ(5, plan().get_parameter_count());
+  EXPECT_EQ(0, plan().get_parameter_count());
+  EXPECT_EQ(0, plan().get_original_param_cnt());
   EXPECT_EQ(std::string("n\0ul", 4),
       std::string(original.at(4).get_string().ptr(), original.at(4).get_string().length()));
   for (int64_t i = 0; i < original.count(); ++i) {
@@ -1903,9 +1904,20 @@ TEST_F(NativeExecutionParameters, ordinary_protocol_single_copy_bind_owns_mixed_
   plan().reset_datum_param_store();
   ObSEArray<const DatumParameter *, 1> malformed;
   ASSERT_EQ(OB_SUCCESS, malformed.push_back(nullptr));
-  EXPECT_EQ(OB_INVALID_ARGUMENT, plan().assign_parameter_input_views(malformed));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, plan().init_datum_param_store(malformed));
   EXPECT_FALSE(plan().native_parameters_ready());
   EXPECT_EQ(0, plan().get_parameter_count());
+
+  DatumParameter changed;
+  ASSERT_EQ(OB_SUCCESS, changed.set_double(3.25, request_arena_));
+  changed.set_accuracy(ObAccuracy(15, 4)); changed.set_param_meta();
+  ObSEArray<const DatumParameter *, 1> changed_inputs;
+  ASSERT_EQ(OB_SUCCESS, changed_inputs.push_back(&changed));
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store(changed_inputs));
+  ASSERT_TRUE(plan().native_parameters_ready());
+  EXPECT_EQ(1, plan().get_original_param_cnt());
+  EXPECT_EQ(ObDoubleType, plan().get_native_parameter_type(0)->kind());
+  EXPECT_DOUBLE_EQ(3.25, read_parameter_value(plan(), 0).get_double());
 }
 
 TEST_F(NativeExecutionParameters, protocol_batch_lookup_consumes_actual_first_row_and_fixed_slots_from_source)
