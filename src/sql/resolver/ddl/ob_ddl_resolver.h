@@ -519,6 +519,7 @@ protected:
       const bool is_create_table_as = false,
       const bool allow_has_default = true);
   int drop_not_null_constraint(const share::schema::ObColumnSchemaV2 &column);
+  int resolve_ai_column_attribute(ObColumnSchemaV2 &column, ParseNode *attr_node);
   int resolve_normal_column_attribute_constr_not_null(ObColumnSchemaV2 &column,
                                                       ParseNode *attrs_node,
                                                       ObColumnResolveStat &resolve_stat);

@@ -193,6 +193,7 @@ void ObPhysicalPlan::reset()
   data_complement_gen_doc_id_ = false;
   insertup_can_do_gts_opt_ = false;
   px_worker_share_plan_enabled_ = false;
+  ai_column_refs_.reset();
 }
 void ObPhysicalPlan::destroy()
 {
@@ -218,6 +219,20 @@ int ObPhysicalPlan::set_vars(const common::ObIArray<ObVarInfo> &vars)
     if (OB_FAIL(var_info.deep_copy(allocator_, clone_var_info))) {
     } else if (OB_FAIL(vars_.push_back(clone_var_info))) {
     }
+  }
+  return ret;
+}
+
+int ObPhysicalPlan::add_ai_column_ref(const uint64_t table_id, const uint64_t column_id)
+{
+  int ret = OB_SUCCESS;
+  bool found = false;
+  for (int64_t i = 0; !found && i < ai_column_refs_.count(); ++i) {
+    found = (ai_column_refs_.at(i).table_id_ == table_id
+             && ai_column_refs_.at(i).column_id_ == column_id);
+  }
+  if (!found && OB_FAIL(ai_column_refs_.push_back(ObAiColumnRef(table_id, column_id)))) {
+    OB_LOG(WARN, "fail to remember ai column of the plan", K(ret), K(table_id), K(column_id));
   }
   return ret;
 }

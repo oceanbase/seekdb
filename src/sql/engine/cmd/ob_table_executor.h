@@ -123,6 +123,9 @@ private:
       ObString first_stmt,
       const bool need_modify_notnull_validate);
 
+  // ALTER TABLE ... RETRY AI COLUMN: no schema change, only a re-queue update.
+  int execute_retry_ai_column(ObExecContext &ctx, ObAlterTableStmt &stmt);
+
   int alter_table_rpc_v2(
       obcall::ObAlterTableArg &alter_table_arg,
       obcall::ObAlterTableRes &res,

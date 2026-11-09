@@ -16,6 +16,7 @@
 
 #ifndef _OB_EXPLAIN_RESOLVER_H
 #define _OB_EXPLAIN_RESOLVER_H
+#include "lib/string/ob_sql_string.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/resolver/ddl/ob_explain_stmt.h"
@@ -33,6 +34,10 @@ namespace sql
     virtual ~ObExplainResolver() {}
     virtual int resolve(const ParseNode &parse_tree);
     ObExplainStmt *get_explain_stmt();
+    // DESCRIBE <query> : render the output schema of the query the way DuckDB
+    // does (column_name/column_type/null/key/default/extra).
+    int resolve_describe_query(ObSelectStmt &sel);
+    int build_describe_sql(const ObSelectStmt &sel, common::ObSqlString &sql);
     int resolve_columns(ObRawExpr *&expr, common::ObArray<ObQualifiedName> &columns)
     {
       UNUSED(expr);

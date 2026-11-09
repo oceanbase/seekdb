@@ -71,6 +71,8 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateTableResolver);
   // function members
   uint64_t gen_column_id();
+  int add_ai_column_hidden_columns(ObTableSchema &table_schema);
+  int collect_ai_column_defs(ObTableSchema &table_schema);
   uint64_t gen_udt_set_id();
   int64_t get_primary_key_size() const;
   int add_primary_key_part(const common::ObString &column_name, common::ObArray<ObColumnResolveStat> &stats, int64_t &pk_data_length);

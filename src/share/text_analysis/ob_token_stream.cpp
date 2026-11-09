@@ -18,11 +18,25 @@
 
 #include "share/text_analysis/ob_token_stream.h"
 #include "share/rc/ob_server_runtime.h"
+#include "lib/charset/ob_ctype.h"
 
 namespace oceanbase
 {
 namespace share
 {
+
+namespace
+{
+OB_INLINE int64_t next_char_len(const ObCharsetInfo *cs, const char *ptr, const char *end)
+{
+  // English benchmark documents are overwhelmingly ASCII.  Avoid entering
+  // the charset multibyte decoder for those bytes while preserving the
+  // existing decoder for every non-ASCII character.
+  return cs->mbminlen == 1 && static_cast<unsigned char>(*ptr) < 0x80
+      ? 1
+      : ob_mbcharlen_ptr(cs, ptr, end);
+}
+}
 
 ObTextTokenizer::ObTextTokenizer()
   : ObITokenStream(),
@@ -55,6 +69,8 @@ int ObTextTokenizer::open(const ObDatum &document, const ObCharsetInfo *cs)
     cs_ = cs;
     if (document.is_null() || 0 == document.len_) {
       iter_end_ = true;
+      // An empty document is a valid input with an empty token stream.
+      is_inited_ = true;
     } else if (OB_FAIL(inner_open(document, cs_))) {
     } else {
       is_inited_ = true;
@@ -98,7 +114,7 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
     int64_t token_len = 0;
     // to next non-whitespace pos
     while (OB_SUCC(ret) && found_delimiter()) {
-      const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
+      const int64_t c_len = next_char_len(cs_, doc + trav_pos_, doc + doc_len);
       trav_pos_ += c_len;
       if (trav_pos_ >= doc_len || 0 == c_len) {// if char is invalid, just skip the rest of document
         iter_end_ = true;
@@ -112,7 +128,7 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
 
     // to next whitespace pos
     while (OB_SUCC(ret) && !found_delimiter()) {
-      const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
+      const int64_t c_len = next_char_len(cs_, doc + trav_pos_, doc + doc_len);
       trav_pos_ += c_len;
       token_len += c_len;
       if (trav_pos_ >= doc_len || 0 == c_len) {
@@ -136,10 +152,14 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
 
 bool ObTextWhitespaceTokenizer::found_delimiter()
 {
-  bool found = false;
-  const char *curr_char = input_doc_->ptr_ + trav_pos_;
-  found = ob_isspace(cs_, *curr_char) || ob_iscntrl(cs_, *curr_char) || ob_ispunct(cs_, *curr_char);
-  return found;
+  const unsigned char curr_char = static_cast<unsigned char>(input_doc_->ptr_[trav_pos_]);
+  if (OB_NOT_NULL(cs_->ctype)) {
+    // ob_isspace/ob_iscntrl/ob_ispunct each repeat the ctype-table null
+    // check.  The combined mask keeps the same charset semantics with one
+    // table lookup on the tokenizer hot path.
+    return 0 != ((cs_->ctype + 1)[curr_char] & (_MY_SPC | _MY_CTR | _MY_PNT));
+  }
+  return ob_isspace(cs_, curr_char) || ob_iscntrl(cs_, curr_char) || ob_ispunct(cs_, curr_char);
 }
 
 ObTokenNormalizer::ObTokenNormalizer()
@@ -294,10 +314,21 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
       ret = OB_ERR_UNEXPECTED;
     } else {
       ObString norm_alnum_token(norm_token_len, norm_token_ptr);
-      ObString norm_lower_token;
-      if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
+      bool already_lower_ascii = true;
+      for (uint32_t i = 0; already_lower_ascii && i < norm_token_len; ++i) {
+        const unsigned char c = static_cast<unsigned char>(norm_token_ptr[i]);
+        already_lower_ascii = c < 0x80 && !(c >= 'A' && c <= 'Z');
+      }
+      if (already_lower_ascii) {
+        // The input document remains alive for the duration of this parse.
+        // Reuse it directly when lowercasing would be a no-op.
+        next_token.set_string(norm_alnum_token);
       } else {
-        next_token.set_string(norm_lower_token);
+        ObString norm_lower_token;
+        if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
+        } else {
+          next_token.set_string(norm_lower_token);
+        }
       }
     }
   }
@@ -408,3 +439,4 @@ int ObTextTokenGroupNormalizer::build_grouping_map()
 
 } // namespace share
 } // namespace oceanbase
+

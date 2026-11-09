@@ -3032,6 +3032,21 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
       } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
       }
     }
+    if (OB_SUCC(ret)) {
+      // COPY ... (header) asks for a header line; carry it to the writer
+      into_item.with_header_ = external_format.csv_format_.parse_header_;
+      if (1 == node->value_) {
+        // COPY follows the DuckDB CSV defaults: comma separated and every field
+        // optionally double quoted, unless the statement says otherwise.
+        if (external_format.origin_file_format_str_.origin_field_term_str_.empty()) {
+          external_format.csv_format_.field_term_str_ = ObString::make_string(",");
+        }
+        if (external_format.origin_file_format_str_.origin_field_enclosed_str_.empty()) {
+          external_format.csv_format_.field_enclosed_char_ = '"';
+          external_format.csv_format_.is_optional_ = true;
+        }
+      }
+    }
     if (OB_SUCC(ret)
         && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
     }

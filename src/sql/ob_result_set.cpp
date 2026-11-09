@@ -26,6 +26,7 @@
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 #include "sql/engine/table/ob_table_scan_op.h"
+#include "sql/engine/cmd/ob_ai_column_util.h"
 #include "share/ob_ddl_checksum.h"
 
 using namespace oceanbase::sql;
@@ -137,7 +138,9 @@ OB_INLINE int ObResultSet::open_plan()
   } else {
     has_top_limit_ = physical_plan_->has_top_limit();
     // PX admission is done in do_open_plan (right before execute_plan), not here.
-    if (OB_SUCC(ret)) {
+    if (OB_FAIL(check_ai_column_strict_read(*physical_plan_))) {
+      LOG_WARN("ai column strict read rejected the statement", K(ret));
+    } else if (OB_SUCC(ret)) {
       if (THIS_WORKER.is_timeout()) {
         // packet may have stayed in the queue for too long, by here it has already timed out,
         // If here is not checked, it will continue to run, likely entering other modules,
@@ -161,6 +164,47 @@ OB_INLINE int ObResultSet::open_plan()
     }
   }
 
+  return ret;
+}
+
+
+// An AI column is readable only once every row of it has a result.  Strictness is
+// a property of the column, not of the rows a statement happens to select, so a
+// statement that reads a column with a single unfinished row is rejected even if
+// it selects a ready row.  Columns the statement does not mention are ignored.
+int ObResultSet::check_ai_column_strict_read(ObPhysicalPlan &physical_plan)
+{
+  int ret = OB_SUCCESS;
+  // the readiness read below is a statement of its own and must not be checked
+  static thread_local bool in_check = false;
+  int64_t strict_read = 0;
+  const common::ObIArray<ObAiColumnRef> &refs = physical_plan.get_ai_column_refs();
+  if (in_check || refs.empty()) {
+    // nothing to guard
+  } else if (OB_FAIL(my_session_.get_sys_variable(share::SYS_VAR_AI_COLUMN_STRICT_READ,
+                                                 strict_read))) {
+  } else if (0 == strict_read) {
+  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    in_check = true;
+    for (int64_t i = 0; OB_SUCC(ret) && i < refs.count(); ++i) {
+      const ObAiColumnRef &ref = refs.at(i);
+      bool unfinished = false;
+      const int tmp_ret = ai_column::has_unfinished_task(*GCTX.sql_proxy_, ref.table_id_,
+                                                         ref.column_id_, unfinished);
+      if (OB_SUCCESS != tmp_ret) {
+        // the queue is metadata: a read failure must not break user statements
+        LOG_WARN("read ai column readiness failed", K(tmp_ret), K(ref));
+      } else if (unfinished) {
+        LOG_USER_ERROR(OB_ERR_AI_COLUMN_NOT_READY,
+                       static_cast<int64_t>(ref.table_id_),
+                       static_cast<int64_t>(ref.column_id_));
+        ret = OB_ERR_AI_COLUMN_NOT_READY;
+      }
+    }
+    in_check = false;
+  }
   return ret;
 }
 

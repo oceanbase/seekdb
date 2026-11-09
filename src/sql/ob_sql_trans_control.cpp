@@ -975,8 +975,6 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
   }
   if (!ObSQLUtils::is_nested_sql(&exec_ctx) && OB_NOT_NULL(session)) {
     int tmp_ret = session->set_end_stmt();
-    if (OB_SUCCESS != tmp_ret) {
-    }
     ret = COVER_SUCC(tmp_ret);
   }
 
