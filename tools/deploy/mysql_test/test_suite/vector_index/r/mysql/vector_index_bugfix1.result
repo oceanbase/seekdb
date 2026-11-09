@@ -753,3 +753,90 @@ VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
 VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
 drop table t_issue1439_or_selectivity;
 alter system set vector_memory_limit = 0;
+drop table if exists t_issue1535_ann_simplify;
+create table t_issue1535_ann_simplify(
+id int primary key,
+embedding vector(3) not null,
+category int,
+parity varchar(8),
+key idx_category(category))
+organization heap;
+insert into t_issue1535_ann_simplify values
+(1, '[1,0,0]', 1, 'odd'),
+(2, '[2,0,0]', 2, 'even'),
+(3, '[3,0,0]', 1, 'even'),
+(4, '[4,0,0]', null, 'even'),
+(5, '[5,0,0]', 1, null),
+(6, '[6,0,0]', null, null),
+(7, '[7,0,0]', 2, 'odd');
+create vector index idx_embedding on t_issue1535_ann_simplify(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=64, ef_search=64,
+sync_mode=immediate);
+alter system flush plan cache;
+select id as simplified_id from t_issue1535_ann_simplify
+where category = 1
+and (category = 1 or parity = 'even')
+and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+simplified_id
+1
+3
+5
+select id as simplified_id from t_issue1535_ann_simplify
+where category = 1 or (category = 1 and parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+simplified_id
+1
+3
+5
+select count(*) > 0 as has_ann_plan,
+max(instr(p.filter_predicates, ' OR ')) = 0 as redundant_or_removed,
+max(instr(p.access_predicates, '.parity')) = 0 as unused_column_removed
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_ann_simplify') > 0
+and instr(s.statement, 'simplified_id') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+has_ann_plan	redundant_or_removed	unused_column_removed
+1	1	1
+select id as parameter_id from t_issue1535_ann_simplify
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+parameter_id
+1
+3
+5
+select id as parameter_id from t_issue1535_ann_simplify
+where category = 2 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+parameter_id
+2
+select id as parameter_id from t_issue1535_ann_simplify
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+parameter_id
+1
+3
+5
+select id as parameter_id from t_issue1535_ann_simplify
+where category = 2 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+parameter_id
+2
+select /*+ NO_REWRITE */ id as unsimplified_id from t_issue1535_ann_simplify
+where category = 1 and (category = 1 or parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+unsimplified_id
+1
+3
+5
+select count(*) > 0 as has_ann_plan,
+max(instr(p.filter_predicates, ' OR ')) > 0 as no_rewrite_respected
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_ann_simplify') > 0
+and instr(s.statement, 'unsimplified_id') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+has_ann_plan	no_rewrite_respected
+1	1
+drop table t_issue1535_ann_simplify;
