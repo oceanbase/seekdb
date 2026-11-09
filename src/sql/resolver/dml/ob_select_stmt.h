@@ -155,7 +155,12 @@ struct ObSelectIntoItem
     cs_type_ = other.cs_type_;
     buffer_size_ = other.buffer_size_;
     external_properties_ = other.external_properties_;
-    return user_vars_.assign(other.user_vars_);
+    int ret = common::OB_SUCCESS;
+    if (OB_FAIL(header_names_.assign(other.header_names_))) {
+    } else {
+      ret = user_vars_.assign(other.user_vars_);
+    }
+    return ret;
   }
   int deep_copy(ObIAllocator &allocator,
                 ObIRawExprCopier &copier,
@@ -186,6 +191,8 @@ struct ObSelectIntoItem
   common::ObCollationType cs_type_;
   int64_t buffer_size_;
   common::ObString external_properties_;
+  // column names printed in the header line, only used by COPY ... WITH (HEADER)
+  common::ObSEArray<common::ObString, 8> header_names_;
 
   static const char* const DEFAULT_FIELD_TERM_STR;
   static const char* const DEFAULT_LINE_TERM_STR;

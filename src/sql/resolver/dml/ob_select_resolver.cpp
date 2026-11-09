@@ -2993,7 +2993,44 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
   } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
   }
   if (OB_SUCC(ret) && NULL != (format_node = node->children_[1])) { // format
-    for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+    if (T_EXTERNAL_FILE_FORMAT != format_node->type_) {
+      // COPY ... (FORMAT CSV, HEADER, NULLSTR '...', ...)
+      ObExternalFileFormat check_format;
+      if (OB_FAIL(resolve_copy_options(format_node, check_format, has_format_type))) {
+        LOG_WARN("failed to resolve copy options", K(ret));
+      } else if (!has_format_type) {
+        ret = OB_ERR_PARSE_SQL;
+        LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX), 0, NULL, 1);
+      } else if (ObExternalFileFormat::CSV_FORMAT != check_format.format_type_) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
+      } else {
+        ObCollationType file_cs_type = ObCharset::get_system_collation();
+        if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
+        } else {
+          // COPY defaults are the DuckDB/CSV ones: comma separated, double quoted.
+          external_format.csv_format_.field_term_str_ = ObString::make_string(",");
+          external_format.csv_format_.line_term_str_ = ObString::make_string("\n");
+          external_format.csv_format_.field_enclosed_char_ = '"';
+          external_format.csv_format_.field_escaped_char_ = '\\';
+          if (OB_FAIL(resolve_copy_options(format_node, external_format, has_format_type))) {
+            LOG_WARN("failed to resolve copy options", K(ret));
+          } else if (OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_,
+                                                                 *allocator_, true))) {
+          } else if (external_format.csv_format_.parse_header_) {
+            const ObIArray<SelectItem> &select_items = get_select_stmt()->get_select_items();
+            for (int64_t i = 0; OB_SUCC(ret) && i < select_items.count(); ++i) {
+              ObString name = select_items.at(i).alias_name_.empty()
+                              ? select_items.at(i).expr_name_ : select_items.at(i).alias_name_;
+              if (OB_FAIL(into_item.header_names_.push_back(name))) {
+                LOG_WARN("failed to push header name", K(ret));
+              }
+            }
+          }
+        }
+      }
+    } else {
+      for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
       if (OB_ISNULL(option_node = format_node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
       } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
@@ -3030,9 +3067,103 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
         && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
     }
   }
+  }
   // file: single, max_file_size, buffer_size
   if (OB_SUCC(ret) && NULL != node->children_[2]) {
     if (OB_FAIL(resolve_into_file_node(node->children_[2], into_item))) {
+    }
+  }
+  return ret;
+}
+
+int ObSelectResolver::resolve_copy_options(const ParseNode *node,
+                                           ObExternalFileFormat &format,
+                                           bool &has_format_type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(node)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (T_LINK_NODE == node->type_) {
+    if (OB_ISNULL(node->children_) || 2 != node->num_child_) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(SMART_CALL(resolve_copy_options(node->children_[0], format, has_format_type)))) {
+    } else if (OB_FAIL(SMART_CALL(resolve_copy_options(node->children_[1], format, has_format_type)))) {
+    }
+  } else if (OB_FAIL(apply_copy_option(node, format, has_format_type))) {
+  }
+  return ret;
+}
+
+int ObSelectResolver::apply_copy_option(const ParseNode *node,
+                                        ObExternalFileFormat &format,
+                                        bool &has_format_type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(node) || T_OP_EQ != node->type_ || 2 != node->num_child_
+      || OB_ISNULL(node->children_) || OB_ISNULL(node->children_[0])
+      || OB_ISNULL(node->children_[1]) || OB_ISNULL(allocator_)) {
+    ret = OB_ERR_PARSE_SQL;
+    LOG_WARN("invalid copy option", K(ret));
+  } else {
+    const ParseNode *name_node = node->children_[0];
+    const ParseNode *value_node = node->children_[1];
+    ObString name(name_node->str_len_, name_node->str_value_);
+    ObString value;
+    if (T_CHAR == value_node->type_ || T_VARCHAR == value_node->type_
+        || T_IDENT == value_node->type_ || T_HEX_STRING == value_node->type_) {
+      value.assign_ptr(value_node->str_value_, value_node->str_len_);
+    }
+    if (OB_SUCC(ret) && 0 == name.case_compare("format")) {
+      if (0 != value.case_compare("csv")) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "COPY format other than CSV");
+      } else {
+        format.format_type_ = ObExternalFileFormat::CSV_FORMAT;
+        has_format_type = true;
+      }
+    } else if (OB_SUCC(ret) && 0 == name.case_compare("header")) {
+      format.csv_format_.parse_header_ = true;
+    } else if (OB_SUCC(ret) && 0 == name.case_compare("nullstr")) {
+      char *buf = NULL;
+      if (0 == value.length()) {
+        // empty null string is allowed and needs no buffer
+      } else if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(value.length())))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        MEMCPY(buf, value.ptr(), value.length());
+      }
+      if (OB_SUCC(ret) && 0 == format.csv_format_.null_if_.count()
+          && OB_FAIL(format.csv_format_.null_if_.allocate_array(*allocator_, 1))) {
+        LOG_WARN("failed to allocate null_if array", K(ret));
+      } else if (OB_SUCC(ret)) {
+        format.csv_format_.null_if_.at(0) = ObString(value.length(), buf);
+      }
+    } else if (OB_SUCC(ret) && (0 == name.case_compare("delimiter")
+                                || 0 == name.case_compare("delim")
+                                || 0 == name.case_compare("sep"))) {
+      format.csv_format_.field_term_str_ = value;
+    } else if (OB_SUCC(ret) && (0 == name.case_compare("line_delimiter")
+                                || 0 == name.case_compare("line_sep"))) {
+      format.csv_format_.line_term_str_ = value;
+    } else if (OB_SUCC(ret) && 0 == name.case_compare("quote")) {
+      if (value.length() > 1) {
+        ret = OB_WRONG_FIELD_TERMINATORS;
+      } else {
+        format.csv_format_.field_enclosed_char_ =
+            0 == value.length() ? INT64_MAX : static_cast<unsigned char>(value[0]);
+      }
+    } else if (OB_SUCC(ret) && 0 == name.case_compare("escape")) {
+      if (value.length() > 1) {
+        ret = OB_WRONG_FIELD_TERMINATORS;
+      } else {
+        format.csv_format_.field_escaped_char_ =
+            0 == value.length() ? INT64_MAX : static_cast<unsigned char>(value[0]);
+      }
+    } else if (OB_SUCC(ret)) {
+      ret = OB_ERR_PARSE_SQL;
+      LOG_WARN("unsupported copy option", K(ret), K(name));
+      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
+                     name.length(), name.ptr(), 1);
     }
   }
   return ret;
@@ -3102,7 +3233,9 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
         if (is_in_set_query()) {
           ret = OB_INAPPROPRIATE_INTO;
         } else if (node->num_child_ == 3 && NULL != node->children_[1]
-            && T_EXTERNAL_FILE_FORMAT == node->children_[1]->type_) { // Handle with `FORMAT`
+            && (T_EXTERNAL_FILE_FORMAT == node->children_[1]->type_
+                || T_LINK_NODE == node->children_[1]->type_
+                || T_OP_EQ == node->children_[1]->type_)) { // Handle with `FORMAT` or `COPY options`
           if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item))) {
           }
         } else { // Be compatible with grammar before

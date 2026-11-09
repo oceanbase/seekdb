@@ -1394,6 +1394,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/dml/ob_delete_stmt.cpp",
             "src/sql/resolver/dml/ob_dml_resolver.cpp",
             "src/sql/resolver/dml/ob_dml_stmt.cpp",
+            "src/sql/resolver/dml/ob_file_sql_reader.cpp",
         ],
     ),
     struct(

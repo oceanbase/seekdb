@@ -45,7 +45,11 @@ namespace sql
       UNUSED(order_item);
       return common::OB_SUCCESS;
     }
-  };
+  private:
+    int resolve_describe_select(const ParseNode &child_node);
+    int build_describe_stmt(const ObSelectStmt &described_stmt, ObSelectStmt &result_stmt);
+    int make_describe_string(const ObString &src, common::ObObjParam &obj);
+};
 
 }
 }

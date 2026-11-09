@@ -3651,6 +3651,29 @@ int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
         expr_with_implicit_cast = expr;
         if (OB_FAIL(expr_with_implicit_cast->formalize(session_info, true))) {
         }
+      } else if (ob_is_collection_sql_type(cast_dst_type.get_type()) &&
+                 ObJsonType == expr->get_result_type().get_type()) {
+        // AI functions such as ai_embed return json, while json -> collection
+        // cast is not supported. Convert the json value to its text form via
+        // json_unquote first, the converted expression is persisted as the
+        // generated column expression so that dml can rebuild it and cast
+        // varchar to collection.
+        ObSysFunRawExpr *unquote_expr = NULL;
+        if (OB_FAIL(expr_factory->create_raw_expr(T_FUN_SYS_JSON_UNQUOTE, unquote_expr))) {
+        } else if (OB_ISNULL(unquote_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          unquote_expr->set_func_name(ObString::make_string("json_unquote"));
+          if (OB_FAIL(unquote_expr->set_param_expr(expr))) {
+          } else if (OB_FAIL(unquote_expr->formalize(session_info))) {
+          } else {
+            expr = unquote_expr;
+          }
+        }
+        if (OB_SUCC(ret) && OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(expr_factory, session_info,
+                            *expr, cast_dst_type, expr_with_implicit_cast))) {
+        } else if (OB_SUCC(ret) && OB_FAIL(expr_with_implicit_cast->formalize(session_info, true))) {
+        }
       } else if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(expr_factory, session_info,
                           *expr, cast_dst_type, expr_with_implicit_cast))) {
       } else if (OB_FAIL(expr_with_implicit_cast->formalize(session_info, true))) {

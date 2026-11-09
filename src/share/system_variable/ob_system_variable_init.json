@@ -2458,6 +2458,32 @@
     "background_cn": "导入导出功能未限制文件访问可能存在漏洞",
     "ref_url": ""
   },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "whether to enable querying local files directly through read_csv/read_json/read_ndjson/read_parquet/glob",
+    "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
+    "publish_version": "",
+    "info_cn": "是否允许通过表函数直接查询本地文件",
+    "background_cn": "默认关闭，避免本地文件被任意 SQL 读取",
+    "ref_url": ""
+  },
+  "ai_column_strict_read": {
+    "id": 10755,
+    "name": "ai_column_strict_read",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "whether reading AI columns requires all rows to be ready",
+    "flags": "GLOBAL | SESSION | NEED_SERIALIZE",
+    "publish_version": "",
+    "info_cn": "严格读取 AI 列，存在未就绪数据时直接报错",
+    "background_cn": "默认关闭，未完成的结果以 NULL 返回",
+    "ref_url": ""
+  },
   "_enable_parallel_query": {
     "id": 10104,
     "name": "_enable_parallel_query",

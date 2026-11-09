@@ -2055,6 +2055,7 @@ typedef enum ObItemType
   T_SWITCHOVER_TO_PRIMARY = 4572, // ALTER SYSTEM SWITCHOVER TO PRIMARY
 
   T_LOB_STORAGE_CLAUSE = 4562,
+  T_FILE_SQL_TABLE = 4563, // file table function, e.g. read_csv(...) in FROM clause
   T_VALUES_TABLE_EXPRESSION = 4568,//used to values statement
   T_VALUES_ROW_LIST = 4569,//used to values statement
   T_LOB_INROW_THRESHOLD = 4570,

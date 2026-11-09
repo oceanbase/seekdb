@@ -71,7 +71,8 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
-      external_properties_(alloc)
+      external_properties_(alloc),
+      header_names_(alloc)
   {
   }
 
@@ -91,6 +92,7 @@ public:
   int64_t buffer_size_;
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
+  common::ObFixedArray<common::ObString, common::ObIAllocator> header_names_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
 };
@@ -126,7 +128,8 @@ public:
       external_properties_(),
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
       block_id_(0),
-      need_commit_(true)
+      need_commit_(true),
+      header_written_(false)
   {
   }
 
@@ -245,6 +248,7 @@ private:
                         const ObDatum &datum,
                         ObCsvFileWriter &data_writer);
   int into_varlist();
+  int write_header_line(ObCsvFileWriter &data_writer);
   int calc_next_file_path(ObExternalFileWriter &data_writer);
   int calc_first_file_path(ObString &path);
   int check_csv_file_size(ObCsvFileWriter &data_writer);
@@ -292,6 +296,7 @@ private:
   ObExternalFileFormat::FormatType format_type_;
   uint32_t block_id_;
   bool need_commit_;
+  bool header_written_;
   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
 
 };

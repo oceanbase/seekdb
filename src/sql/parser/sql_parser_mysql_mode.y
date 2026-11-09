@@ -42,11 +42,12 @@
 #include "sql/parser/sql_parser_base.h"
 
 #define GEN_EXPLAN_STMT(no_use, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
-  (void)(no_use); \
   ParseNode *type_node = NULL; \
   ParseNode *display_node = NULL; \
   if (0 != explain_type) { \
     malloc_terminal_node(type_node, result->malloc_pool_, explain_type); \
+  } else { \
+    type_node = (no_use); \
   } \
   if (0 != display_type) { \
     malloc_terminal_node(display_node, result->malloc_pool_, display_type); \
@@ -375,6 +376,7 @@ END_P SET_VAR DELIMITER
 %type <node> sql_stmt stmt_list stmt opt_end_p
 %type <node> select_stmt update_stmt delete_stmt
 %type <node> insert_stmt single_table_insert values_clause dml_table_name
+%type <node> copy_stmt opt_copy_options copy_option_list copy_option opt_copy_option_value copy_option_value
 %type <node> create_table_stmt create_table_like_stmt fork_table_stmt fork_database_stmt diff_table_stmt merge_table_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
 %type <node> index_or_heap
 %type <node> create_database_stmt drop_database_stmt alter_database_stmt use_database_stmt
@@ -556,6 +558,7 @@ opt_end_p:
 /* only preparable statement will set question mark size */
 stmt:
     select_stmt             { $$ = $1; question_mark_issue($$, result); }
+  | copy_stmt               { $$ = $1; question_mark_issue($$, result); }
   | insert_stmt             { $$ = $1; question_mark_issue($$, result); }
   | create_table_stmt       {
     $$ = $1;
@@ -4847,6 +4850,28 @@ column_definition_ref data_type opt_column_attribute_list opt_column_reference o
   dup_expr_string($7, result, @7.first_column, @7.last_column);
   merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $10);
   malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $7, $9, $12, $4);
+}
+| column_definition_ref data_type AI COLUMN '(' expr ')' WITH '(' expr_list ')' opt_generated_column_attribute_list opt_column_reference opt_position_column
+{
+  (void)($13);
+  ParseNode *attributes = NULL;
+  ParseNode *storage_type = NULL;
+  set_data_type_collation($2, NULL, true, false);
+  dup_expr_string($6, result, @6.first_column, @6.last_column);
+  merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $12);
+  malloc_terminal_node(storage_type, result->malloc_pool_, T_STORED_COLUMN);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $6, storage_type, $14, NULL);
+}
+| column_definition_ref data_type AI COLUMN '(' expr ')' opt_generated_column_attribute_list opt_column_reference opt_position_column
+{
+  (void)($9);
+  ParseNode *attributes = NULL;
+  ParseNode *storage_type = NULL;
+  set_data_type_collation($2, NULL, true, false);
+  dup_expr_string($6, result, @6.first_column, @6.last_column);
+  merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $8);
+  malloc_terminal_node(storage_type, result->malloc_pool_, T_STORED_COLUMN);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $6, storage_type, $10, NULL);
 }
 | column_definition_ref SERIAL opt_column_attribute_list opt_position_column 
 {
@@ -10847,6 +10872,27 @@ tbl_name
 {
   $$ = $1;
 }
+| NAME_OB '(' expr_list ')' %prec LOWER_PARENS
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_TABLE, 2, $1, $3);
+  $$->sql_str_off_ = @1.first_column;
+}
+| NAME_OB '(' expr_list ')' AS relation_name %prec LOWER_PARENS
+{
+  ParseNode *file_table_node = NULL;
+  malloc_non_terminal_node(file_table_node, result->malloc_pool_, T_FILE_SQL_TABLE, 2, $1, $3);
+  file_table_node->sql_str_off_ = @1.first_column;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALIAS, 5, file_table_node, $6, NULL, NULL, NULL);
+  $$->sql_str_off_ = @1.first_column;
+}
+| NAME_OB '(' expr_list ')' relation_name %prec LOWER_PARENS
+{
+  ParseNode *file_table_node = NULL;
+  malloc_non_terminal_node(file_table_node, result->malloc_pool_, T_FILE_SQL_TABLE, 2, $1, $3);
+  file_table_node->sql_str_off_ = @1.first_column;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALIAS, 5, file_table_node, $5, NULL, NULL, NULL);
+  $$->sql_str_off_ = @1.first_column;
+}
 ;
 
 tbl_name:
@@ -12252,6 +12298,93 @@ $$ = NULL;
 
 /*****************************************************************************
  *
+ *	COPY grammar
+ *
+ *****************************************************************************/
+copy_stmt:
+COPY '(' select_stmt ')' TO STRING_VALUE opt_copy_options
+{
+  ParseNode *into_node = NULL;
+  if (NULL == $3) {
+    yyerror(&@1, result, "empty statement in COPY\n");
+    YYERROR;
+  } else if (NULL != $3->children_[PARSE_SELECT_INTO_EXTRA]) {
+    yyerror(&@1, result, "duplicate INTO clause in COPY\n");
+    YYERROR;
+  } else {
+    malloc_non_terminal_node(into_node, result->malloc_pool_, T_INTO_OUTFILE, 3, $6, $7, NULL);
+    $3->children_[PARSE_SELECT_INTO_EXTRA] = into_node;
+    $$ = $3;
+  }
+}
+;
+
+opt_copy_options:
+/* EMPTY */
+{
+  ParseNode *name_node = NULL;
+  ParseNode *value_node = NULL;
+  make_name_node(name_node, result->malloc_pool_, "format");
+  make_name_node(value_node, result->malloc_pool_, "csv");
+  malloc_non_terminal_node($$, result->malloc_pool_, T_OP_EQ, 2, name_node, value_node);
+}
+| '(' copy_option_list ')'
+{
+  $$ = $2;
+}
+;
+
+copy_option_list:
+copy_option
+{
+  $$ = $1;
+}
+| copy_option_list ',' copy_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+copy_option:
+column_name opt_copy_option_value
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_OP_EQ, 2, $1, $2);
+}
+;
+
+opt_copy_option_value:
+/* EMPTY */
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1;
+}
+| COMP_EQ copy_option_value
+{
+  $$ = $2;
+}
+| copy_option_value
+{
+  $$ = $1;
+}
+;
+
+copy_option_value:
+STRING_VALUE
+{
+  $$ = $1;
+}
+| column_name
+{
+  $$ = $1;
+}
+| INTNUM
+{
+  $$ = $1;
+}
+;
+
+/*****************************************************************************
+ *
  *	explain grammar
  *
  *****************************************************************************/
@@ -12305,8 +12438,8 @@ explain_or_desc relation_factor opt_desc_column_option
 
 explain_or_desc:
 EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+| DESCRIBE { malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 1; }
+| DESC  { malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 1; }
 ;
 
 explainable_stmt:
