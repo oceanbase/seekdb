@@ -28,7 +28,9 @@
 #include "standby/control/standby_state_store.h"
 #include "standby/standby_host.h"
 #include "share/rc/ob_server_runtime.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx/ob_id_service.h"
+#include "storage/tx/ob_timestamp_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -101,21 +103,27 @@ int prepare_primary_id_services(const int64_t deadline_us)
   int ret = OB_SUCCESS;
   static const int64_t RETRY_INTERVAL_US = 1000;
   transaction::ObIDService *trans_id_service = nullptr;
-  transaction::ObIDService *timestamp_service = nullptr;
+  transaction::ObTimestampService *timestamp_service =
+      share::server_service<transaction::ObTimestampService>();
+  storage::ObLSService *ls_service = nullptr;
+  storage::ObLS *ls = nullptr;
+  share::SCN durable_scn;
   bool trans_id_ready = false;
-  bool timestamp_ready = false;
   if (OB_FAIL(transaction::ObIDService::get_id_service(
       transaction::ObIDService::TransIDService, trans_id_service))) {
     LOG_WARN("failed to get transaction id service", KR(ret));
-  } else if (OB_FAIL(transaction::ObIDService::get_id_service(
-      transaction::ObIDService::TimestampService, timestamp_service))) {
-    LOG_WARN("failed to get timestamp service", KR(ret));
+  } else if (OB_FAIL(get_ls_service(ls_service))) {
   } else if (OB_ISNULL(trans_id_service) || OB_ISNULL(timestamp_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("primary id service is null", KR(ret), KP(trans_id_service), KP(timestamp_service));
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
+  } else if (OB_ISNULL(ls)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ls->get_end_scn(durable_scn))) {
+  } else if (OB_FAIL(timestamp_service->recover(durable_scn))) {
   }
 
-  while (OB_SUCC(ret) && (!trans_id_ready || !timestamp_ready)) {
+  while (OB_SUCC(ret) && !trans_id_ready) {
     if (!trans_id_ready) {
       const int tmp_ret = trans_id_service->prepare_next_number(0);
       if (OB_SUCCESS == tmp_ret) {
@@ -125,21 +133,10 @@ int prepare_primary_id_services(const int64_t deadline_us)
         LOG_WARN("failed to prepare primary transaction id service", KR(ret));
       }
     }
-    if (OB_SUCC(ret) && !timestamp_ready) {
-      const int tmp_ret = timestamp_service->prepare_next_number(
-          common::ObTimeUtility::current_time_ns());
-      if (OB_SUCCESS == tmp_ret) {
-        timestamp_ready = true;
-      } else if (OB_EAGAIN != tmp_ret) {
-        ret = tmp_ret;
-        LOG_WARN("failed to prepare primary timestamp service", KR(ret));
-      }
-    }
-    if (OB_SUCC(ret) && (!trans_id_ready || !timestamp_ready)) {
+    if (OB_SUCC(ret) && !trans_id_ready) {
       if (common::ObTimeUtility::current_time() >= deadline_us) {
         ret = OB_TIMEOUT;
-        LOG_WARN("timed out preparing primary id services", KR(ret),
-            K(trans_id_ready), K(timestamp_ready), K(deadline_us));
+        LOG_WARN("timed out preparing primary id services", KR(ret), K(trans_id_ready), K(deadline_us));
       } else {
         ob_usleep(RETRY_INTERVAL_US);
       }
