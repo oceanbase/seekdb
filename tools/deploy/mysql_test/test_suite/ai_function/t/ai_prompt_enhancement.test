@@ -1,0 +1,19 @@
+# AI_PROMPT enhancement regression
+connection default;
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS t_ai_prompt_enhancement;
+--enable_warnings
+CREATE TABLE t_ai_prompt_enhancement (id INT PRIMARY KEY, template_text TEXT, argument_text LONGTEXT);
+INSERT INTO t_ai_prompt_enhancement VALUES (1, '你好 {0}', '世界');
+SELECT IF(JSON_UNQUOTE(JSON_EXTRACT(AI_PROMPT('Hello {0}', 'world'), '$.args[0]')) = 'world', 'PASS', 'FAIL') AS string_arg;
+SELECT IF(JSON_UNQUOTE(JSON_EXTRACT(AI_PROMPT('Describe {0}', JSON_OBJECT('name','Alice')), '$.args[0].name')) = 'Alice', 'PASS', 'FAIL') AS object_arg;
+SELECT IF(JSON_UNQUOTE(JSON_EXTRACT(AI_PROMPT('Summarize {0}', JSON_ARRAY('a','b')), '$.args[0][1]')) = 'b', 'PASS', 'FAIL') AS array_arg;
+SELECT IF(JSON_UNQUOTE(JSON_EXTRACT(AI_PROMPT('{0}{0}{0}{0}', 'hello'), '$.template')) = '{0}{0}{0}{0}', 'PASS', 'FAIL') AS repeated_template;
+SELECT IF(JSON_UNQUOTE(JSON_EXTRACT(AI_PROMPT('你好，{0}', '世界'), '$.args[0]')) = '世界', 'PASS', 'FAIL') AS unicode_arg;
+SELECT IF(JSON_TYPE(JSON_EXTRACT(AI_PROMPT('{0}', JSON_OBJECT()), '$.args[0]')) = 'OBJECT', 'PASS', 'FAIL') AS json_empty_object;
+SELECT IF(JSON_TYPE(JSON_EXTRACT(AI_PROMPT('{0}', JSON_ARRAY()), '$.args[0]')) = 'ARRAY', 'PASS', 'FAIL') AS json_empty_array;
+SELECT IF(JSON_UNQUOTE(JSON_EXTRACT(AI_PROMPT(template_text, argument_text), '$.args[0]')) = '世界', 'PASS', 'FAIL') AS longtext_arg FROM t_ai_prompt_enhancement;
+SELECT IF(JSON_UNQUOTE(JSON_EXTRACT(AI_PROMPT(template_text, argument_text), '$.template')) = '你好 {0}', 'PASS', 'FAIL') AS text_template FROM t_ai_prompt_enhancement;
+DROP TABLE t_ai_prompt_enhancement;
+--enable_query_log

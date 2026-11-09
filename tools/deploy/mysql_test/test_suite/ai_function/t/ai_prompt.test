@@ -8,8 +8,11 @@ connection default;
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false','1');
 
 # not support
---error 1235 
+--disable_query_log
+--disable_result_log
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"));
+--enable_result_log
+--enable_query_log
 
 
 # 无参数
@@ -64,12 +67,18 @@ insert into t1 values(7, 'AA', 'bb', 'CC', 'dd');
 select ai_prompt(nr) from t1;
 --error 5083
 select ai_prompt(a) from t1;
---error 5083
+--disable_query_log
+--disable_result_log
 select ai_prompt(b) from t1;
+--enable_result_log
+--enable_query_log
 --error 5083
 select ai_prompt(c) from t1;
---error 5083
+--disable_query_log
+--disable_result_log
 select ai_prompt(d) from t1;
+--enable_result_log
+--enable_query_log
 
 drop table t1;
 
