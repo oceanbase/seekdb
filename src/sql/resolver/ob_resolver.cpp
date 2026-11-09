@@ -146,7 +146,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
 
 #define REGISTER_SELECT_STMT_RESOLVER(name)                                   \
   do {                                                                        \
-    ret = select_stmt_resolver_func<Ob##name##Resolver>(params_, parse_tree, stmt); \
+    ret = select_stmt_resolver_func<Ob##name##Resolver>(params_, *real_parse_tree, stmt); \
   } while (0)
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_resolve);
   int ret = OB_SUCCESS;
@@ -163,16 +163,26 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
     real_parse_tree = &parse_tree;
   }
 
+  // DESCRIBE SELECT returns the schema of the select, EXPLAIN returns its plan
+  if (OB_SUCC(ret) && T_EXPLAIN == real_parse_tree->type_ && 6 == real_parse_tree->num_child_) {
+    const ParseNode *source_node = real_parse_tree->children_[5];
+    const ParseNode *child_node = real_parse_tree->children_[4];
+    if (OB_NOT_NULL(source_node) && OB_NOT_NULL(child_node) && T_SELECT == child_node->type_) {
+      params_.is_file_sql_describe_ = true;
+      real_parse_tree = child_node;
+    }
+  }
+
   if (OB_SUCC(ret)) {
-    params_.resolver_scope_stmt_type_ = parse_tree.type_;
+    params_.resolver_scope_stmt_type_ = real_parse_tree->type_;
     params_.session_info_->set_stmt_type(
-      ObResolverUtils::get_stmt_type_by_item_type(parse_tree.type_));
+      ObResolverUtils::get_stmt_type_by_item_type(real_parse_tree->type_));
     ObExecContext *exec_ctx = params_.session_info_->get_cur_exec_ctx();
     if (exec_ctx != nullptr && exec_ctx->get_sql_ctx() != nullptr) {
       //save the current stmt type on my context,
       //some other modules may need to get the current SQL stmt type through its context
       ObSqlCtx *sql_ctx = exec_ctx->get_sql_ctx();
-      sql_ctx->stmt_type_ = ObResolverUtils::get_stmt_type_by_item_type(parse_tree.type_);
+      sql_ctx->stmt_type_ = ObResolverUtils::get_stmt_type_by_item_type(real_parse_tree->type_);
     }
 
     switch (real_parse_tree->type_) {

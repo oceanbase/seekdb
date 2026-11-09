@@ -67,6 +67,7 @@ namespace share
   static const char* const OB_SV_QUERY_CACHE_SIZE = "query_cache_size";
   static const char* const OB_SV_QUERY_CACHE_TYPE = "query_cache_type";
   static const char* const OB_SV_SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
+static const char* const OB_SV_ENABLE_FILE_SQL = "enable_file_sql";
   static const char* const OB_SV_MAX_SP_RECURSION_DEPTH = "max_sp_recursion_depth";
   static const char* const OB_SV_SQL_SAFE_UPDATES = "sql_safe_updates";
   static const char* const OB_SV_CONCURRENT_INSERT = "concurrent_insert";

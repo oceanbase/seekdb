@@ -71,7 +71,10 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
-      external_properties_(alloc)
+      external_properties_(alloc),
+      header_names_(alloc),
+      null_str_(),
+      has_header_(false)
   {
   }
 
@@ -91,6 +94,12 @@ public:
   int64_t buffer_size_;
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
+  // the names of the exported columns
+  common::ObFixedArray<common::ObString, common::ObIAllocator> header_names_;
+  // the text of a null value in an exported file
+  common::ObString null_str_;
+  // the exported file starts with the names of the columns
+  bool has_header_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
 };
@@ -232,6 +241,7 @@ private:
                            int64_t &pos,
                            int64_t str_len);
   int write_obj_to_file(const ObObj &obj, ObCsvFileWriter &data_writer, bool need_escape = false);
+  int write_copy_header(ObCsvFileWriter *data_writer);
   int print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWriter &data_writer);
   int print_normal_obj_without_escape(const ObObj &obj, ObCsvFileWriter &data_writer);
   int print_json_to_json_buf(const ObObj &obj,

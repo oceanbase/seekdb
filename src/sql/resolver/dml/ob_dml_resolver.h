@@ -226,6 +226,7 @@ public:
                                 ObString& path_str,
                                 MulModeTableType table_type);
   int resolve_str_const(const ParseNode &parse_tree, ObString& path_str);
+  int resolve_file_table_item(const ParseNode &table_node, TableItem *&table_item);
   int resolve_json_table_column_name_and_path(const ParseNode *name_node,
                                            const ParseNode *path_node,
                                            ObIAllocator* allocator,

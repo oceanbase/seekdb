@@ -274,6 +274,8 @@ private:
 
   int generate_spec(ObLogMaterial &op, ObMaterialSpec &spec, const bool in_root_job);
 
+  int generate_spec(ObLogFileTable &op, ObFileTableSpec &spec, const bool in_root_job);
+
   int generate_spec(ObLogSort &op, ObSortSpec &spec, const bool in_root_job);
 
   int generate_spec(ObLogValues &op, ObValuesSpec &spec, const bool in_root_job);
