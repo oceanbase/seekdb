@@ -171,12 +171,12 @@ int LogEngine::load(share::LocalStore &store, const char *base_dir,
                        ,
                        redo_warm_snapshot
 #endif
-                       )))) {
+                       ))) {
       PALF_LOG(ERROR, "LogStorage load failed", K(ret), K(base_dir));
     } else if (OB_FAIL(integrity_verify_(meta_exists, last_group_entry_header_lsn, is_integrity))) {
     } else if (meta_exists && 0 != log_storage_block_size
                    && OB_FAIL(try_clear_up_holes_and_check_storage_integrity_(
-                       last_group_entry_header_lsn, expected_next_block_id, entry_header)))) {
+                       last_group_entry_header_lsn, expected_next_block_id, entry_header))) {
       PALF_LOG(ERROR, "the last block may be deleted by human, restart failed!!!", K(ret),
           K_(is_inited));
     } else {
