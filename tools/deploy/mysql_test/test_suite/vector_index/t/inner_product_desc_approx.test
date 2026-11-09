@@ -1,0 +1,52 @@
+#owner: seekdb
+# Regression for positive inner product ordering on an IP vector index.
+--disable_warnings
+drop table if exists ip_desc_ann;
+drop table if exists ip_desc_no_index;
+--enable_warnings
+
+create table ip_desc_ann (id int primary key, v vector(2),
+  vector index idx_v(v) with (distance=inner_product, type=hnsw));
+insert into ip_desc_ann values (1, [1,0]), (2, [2,0]), (3, [0,1]), (4, null);
+
+# DESC APPROXIMATE must have the same ordering and projected score as the
+# established negative_inner_product ASC ANN form.
+select id, inner_product(v, [1,0]) as score from ip_desc_ann
+  order by inner_product(v, [1,0]) desc approximate limit 3;
+select id from ip_desc_ann
+  order by negative_inner_product(v, [1,0]) asc approximate limit 3;
+
+# A non-equivalent direction and a missing index retain exact ordering.
+select id from ip_desc_ann
+  order by inner_product(v, [1,0]) asc approximate limit 3;
+# NULLS FIRST must use the exact path, even with a compatible IP index.
+select id from ip_desc_ann
+  order by inner_product(v, [1,0]) desc nulls first approximate limit 3;
+create table ip_desc_no_index (id int primary key, v vector(2));
+insert into ip_desc_no_index values (1, [1,0]), (2, [2,0]), (3, null);
+# Check that explicit NULL placement also works for ordinary MySQL sorts.
+select id from ip_desc_no_index order by inner_product(v, [1,0]) asc;
+select id from ip_desc_no_index order by inner_product(v, [1,0]) asc nulls last;
+select id from ip_desc_no_index order by inner_product(v, [1,0]) desc nulls first;
+select id from ip_desc_no_index order by inner_product(v, [1,0]) desc;
+select id from ip_desc_no_index
+  order by inner_product(v, [1,0]) desc approximate limit 3;
+
+# Verify the compatible descending path and each exact fallback in the plan.
+--replace_regex /_[0-9]+/_0/g /, $/,/g
+explain select id, inner_product(v, [1,0]) as score from ip_desc_ann
+  order by inner_product(v, [1,0]) desc nulls last approximate limit 3;
+select id, inner_product(v, [1,0]) as score from ip_desc_ann
+  order by inner_product(v, [1,0]) desc nulls last approximate limit 3;
+--replace_regex /, $/,/g
+explain select id from ip_desc_ann
+  order by inner_product(v, [1,0]) desc nulls first approximate limit 3;
+--replace_regex /, $/,/g
+explain select id from ip_desc_ann
+  order by inner_product(v, [1,0]) asc approximate limit 3;
+--replace_regex /, $/,/g
+explain select id from ip_desc_no_index
+  order by inner_product(v, [1,0]) desc approximate limit 3;
+
+drop table ip_desc_ann;
+drop table ip_desc_no_index;
