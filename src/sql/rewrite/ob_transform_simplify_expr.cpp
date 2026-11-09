@@ -2383,6 +2383,15 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
       if (OB_FAIL(ObRawExprUtils::try_create_bool_expr(cur, temp, *expr_factory))) {
       } else if (OB_ISNULL(temp)) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (temp == cur) {
+        // `try_create_bool_expr` returns the source expression unchanged when it is
+        // already a boolean expression (e.g. `LIKE`), so `temp` has already been
+        // formalized during resolve. Formalizing it a second time re-runs type
+        // deduction on the same subtree and adds implicit casts that already exist,
+        // which trips the duplicate implicit cast check and reports -4016.
+        expr = temp;
+        is_valid = false;
+        trans_happened = true;
       } else if (OB_FAIL(temp->formalize(ctx_->session_info_))) {
       } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(
                             *expr_factory, expr, temp, ctx_->session_info_))) {
