@@ -653,7 +653,7 @@
           "FILE:@@//bazel/rust_cargo_config.toml ff15707954031fbc938be84c1024f7cbc7a4e5d6aae92de8cfa3c5365477910f",
           "FILE:@@//Cargo.toml 7a7487f94a57ddc6e9f6a2affd0902a2d821b1746a4bbc1583afc5b791dcef6a",
           "FILE:@@//bazel/cxx_runtime.BUILD.bazel 5fb17c151863631008e8e309b48bb19d4877db1efaf3ff6ff81c249467c03123",
-          "FILE:@@//rust/seekdb-rust/Cargo.toml 97b2127a14f936da21c2903b44eb817c09627b8e6f64d229bb1ad7e9d39fc6a8",
+          "FILE:@@//rust/seekdb-rust/Cargo.toml 58c120a9b5b4cb24583290fa54386b0922fb06c02c8996c72471d2ea17f9c008",
           "FILE:@@//rust/compression/Cargo.toml a7882629dd72892c90eeddc8a343654c46c0b66a25fd905c3f5387ed6001d367",
           "FILE:@@//rust/config/Cargo.toml 47f11c6f488733e4dcbef6422b17d6105d8d8033106ed7295db1c87fe9f3d608",
           "FILE:@@//rust/kv/Cargo.toml 63d68637f112043355b1b7abe51eaf5bf79a11d304314720e2e1e254385e5740",
