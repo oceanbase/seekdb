@@ -536,8 +536,17 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    } else if (func.contain_vec_index_approx_) {
+      // Approximate vector index scans rely on the shape of the query, so the rules that
+      // reshape a statement (OR expansion, view merge, join elimination, ...) stay disabled.
+      // Statement-local expression simplification, however, is semantics preserving for an
+      // ANN scan and removes the duplicated / absorbed predicates that otherwise force the
+      // executor to filter every candidate row.  Allow only that rule family.
+      uint64_t ann_enable_list = 0;
+      ObTransformRule::add_trans_type(ann_enable_list, SIMPLIFY_EXPR);
+      disable_list |= (~ann_enable_list);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
