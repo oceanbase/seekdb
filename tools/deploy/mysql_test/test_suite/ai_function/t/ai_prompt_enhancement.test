@@ -1,0 +1,36 @@
+#owner: fengsun.cx
+#owner group: shenzhen
+
+### AI_PROMPT 增强用例
+### 1. 模板支持 TEXT / LONGTEXT
+### 2. 参数支持 JSON 对象 / JSON 数组
+### 3. 同一个占位符可以在模板中重复出现
+### 这里只校验语句可以正常执行，具体取值不做逐行比对
+
+connection default;
+
+--disable_warnings
+drop table if exists t_ai_prompt_enhancement;
+--enable_warnings
+create table t_ai_prompt_enhancement (id int primary key, template_text text, argument_text longtext);
+insert into t_ai_prompt_enhancement values(1, '你好 {0}', '世界');
+
+--disable_query_log
+--disable_result_log
+# text / longtext 模板与参数
+select ai_prompt(template_text, argument_text) from t_ai_prompt_enhancement;
+# json 对象参数
+select ai_prompt('Describe {0}', json_object('name','Alice'));
+# json 数组参数
+select ai_prompt('Summarize {0}', json_array('a','b'));
+# 空 json 对象 / 空 json 数组
+select ai_prompt('{0}', json_object());
+select ai_prompt('{0}', json_array());
+# 同一个占位符重复出现
+select ai_prompt('{0}{0}{0}{0}', 'hello');
+# json 参数与普通字符串参数混用
+select ai_prompt('{0} and {1}', json_object('k','v'), 'text');
+--enable_result_log
+--enable_query_log
+
+drop table t_ai_prompt_enhancement;
