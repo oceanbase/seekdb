@@ -114,6 +114,13 @@ static int do_major_freeze_(const ObMemstoreFreezeArg &arg)
       if (OB_FAIL(
               major_freeze_coordinator
                   ->trigger_memstore_pressure_major_freeze())) {
+        if (is_major_freeze_in_flight(ret)) {
+          // The in-flight major freeze already covers frozen_scn_val and will
+          // finish on its own, so there is nothing left to retry. Keeping the
+          // retry record here re-launches a database-wide major freeze on
+          // every freezer timer tick.
+          retry_major_info.reset();
+        }
       } else {
         retry_major_info.reset();
       }
