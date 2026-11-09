@@ -662,4 +662,35 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# Issue #1471: a filter matching every row must not choose a table-scanning
+# pre-filter solely because its estimated output fits the brute-force buffer.
+--disable_query_log
+--disable_result_log
+drop table if exists t_issue1471_all_match;
+create table t_issue1471_all_match(
+  id bigint not null primary key,
+  embedding vector(3) not null,
+  category5 int not null,
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128));
+--let $row = 0
+while ($row < 100)
+{
+  eval insert into t_issue1471_all_match values ($row, '[$row,0,0]', 1);
+  --inc $row
+}
+call dbms_stats.gather_table_stats('TEST', 'T_ISSUE1471_ALL_MATCH', estimate_percent=>100,
+                                   method_opt=>'FOR COLUMNS category5 SIZE 1', no_invalidate=>FALSE);
+alter system flush plan cache;
+select id from t_issue1471_all_match where category5 between 1 and 5
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select distinct p.operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1471_all_match') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+drop table t_issue1471_all_match;
+
 alter system set vector_memory_limit = 0;
