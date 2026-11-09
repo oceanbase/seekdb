@@ -55,7 +55,16 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         trans_happened |= is_happened;
         OPT_TRACE("flatten condition:", is_happened);
       }
-    }  
+    }
+    if (OB_SUCC(ret) && stmt->has_vec_approx()) {
+      if (OB_FAIL(ObTransformUtils::convert_equal_or_to_in(ctx_,
+                                                           stmt->get_condition_exprs(),
+                                                           is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+        OPT_TRACE("convert equal-or predicate to in:", is_happened);
+      }
+    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
       } else {

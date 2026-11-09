@@ -2263,6 +2263,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   trans_happened = false;
   bool push_not_happend = false;
   bool remove_duplicate_happend = false;
+  bool convert_equal_or_happend = false;
   bool pull_similar_happend = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2272,9 +2273,13 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   } else if (OB_FAIL(remove_duplicate_exprs(stmt->get_query_ctx(),
                                             conditions,
                                             remove_duplicate_happend))) {
+  } else if (OB_FAIL(ObTransformUtils::convert_equal_or_to_in(ctx_,
+                                                              conditions,
+                                                              convert_equal_or_happend))) {
   } else if (OB_FAIL(pull_similar_expr(stmt, conditions, pull_similar_happend))) {
   } else {
-    trans_happened =  push_not_happend | remove_duplicate_happend | pull_similar_happend;
+    trans_happened = push_not_happend | remove_duplicate_happend |
+                     convert_equal_or_happend | pull_similar_happend;
     if (trans_happened) {
       for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
         if (OB_ISNULL(conditions.at(i))) {
@@ -2284,6 +2289,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
       }
       OPT_TRACE("   push_not_happend:", push_not_happend);
       OPT_TRACE("   remove_duplicate_happend:", remove_duplicate_happend);
+      OPT_TRACE("   convert_equal_or_happend:", convert_equal_or_happend);
       OPT_TRACE("   pull_similar_happend:", pull_similar_happend);
     }
   }

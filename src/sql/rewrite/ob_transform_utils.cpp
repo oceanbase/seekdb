@@ -18,6 +18,7 @@
 
 #include "ob_transform_utils.h"
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
+#include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/rewrite/ob_equal_analysis.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
@@ -1599,6 +1600,193 @@ int ObTransformUtils::flatten_and_or_xor(ObRawExpr* expr, bool *trans_happened)
           *trans_happened = true;
         }
       }
+    }
+  }
+  return ret;
+}
+
+namespace
+{
+int collect_equal_or_leaves(ObRawExpr *expr,
+                            ObIArray<ObRawExpr *> &leaves,
+                            bool &is_valid)
+{
+  int ret = OB_SUCCESS;
+  bool is_stack_overflow = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
+  } else if (is_stack_overflow) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (!is_valid) {
+  } else if (T_OP_OR == expr->get_expr_type()) {
+    for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(collect_equal_or_leaves(expr->get_param_expr(i),
+                                                     leaves,
+                                                     is_valid)))) {
+      }
+    }
+  } else if (T_OP_EQ != expr->get_expr_type()) {
+    is_valid = false;
+  } else if (OB_FAIL(leaves.push_back(expr))) {
+  }
+  return ret;
+}
+
+int get_equal_column_and_const(ObRawExpr *expr,
+                               ObRawExpr *&column_expr,
+                               ObRawExpr *&const_expr,
+                               bool &is_valid)
+{
+  int ret = OB_SUCCESS;
+  column_expr = NULL;
+  const_expr = NULL;
+  is_valid = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (T_OP_EQ != expr->get_expr_type() || 2 != expr->get_param_count()) {
+  } else if (OB_ISNULL(expr->get_param_expr(0)) || OB_ISNULL(expr->get_param_expr(1))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (expr->get_param_expr(0)->is_column_ref_expr() &&
+             expr->get_param_expr(1)->is_const_raw_expr()) {
+    column_expr = expr->get_param_expr(0);
+    const_expr = expr->get_param_expr(1);
+    is_valid = true;
+  } else if (expr->get_param_expr(1)->is_column_ref_expr() &&
+             expr->get_param_expr(0)->is_const_raw_expr()) {
+    column_expr = expr->get_param_expr(1);
+    const_expr = expr->get_param_expr(0);
+    is_valid = true;
+  }
+  return ret;
+}
+
+int recursive_convert_equal_or_to_in(ObTransformerCtx *ctx,
+                                     ObRawExpr *&expr,
+                                     bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  bool is_stack_overflow = false;
+  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->expr_factory_) ||
+      OB_ISNULL(ctx->session_info_) || OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
+  } else if (is_stack_overflow) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (T_OP_OR != expr->get_expr_type()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      bool child_happened = false;
+      if (OB_ISNULL(expr->get_param_expr(i))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(SMART_CALL(recursive_convert_equal_or_to_in(
+                                      ctx,
+                                      expr->get_param_expr(i),
+                                      child_happened)))) {
+      } else {
+        trans_happened |= child_happened;
+      }
+    }
+  }
+
+  if (OB_SUCC(ret) && T_OP_OR == expr->get_expr_type()) {
+    ObSEArray<ObRawExpr *, 8> equal_exprs;
+    bool is_valid = true;
+    // Keep short disjunctions unchanged; compact larger lists where repeated
+    // equality evaluation becomes more expensive than membership lookup.
+    if (OB_FAIL(collect_equal_or_leaves(expr, equal_exprs, is_valid))) {
+    } else if (!is_valid || equal_exprs.count() <= 3) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+        bool child_happened = false;
+        if (OB_ISNULL(expr->get_param_expr(i))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(SMART_CALL(recursive_convert_equal_or_to_in(
+                                        ctx,
+                                        expr->get_param_expr(i),
+                                        child_happened)))) {
+        } else {
+          trans_happened |= child_happened;
+        }
+      }
+      is_valid = false;
+    }
+
+    ObRawExpr *column_expr = NULL;
+    ObRawExpr *first_const_expr = NULL;
+    ObSEArray<ObRawExpr *, 8> const_exprs;
+    ObQuestionmarkEqualCtx equal_ctx(false);
+    for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < equal_exprs.count(); ++i) {
+      ObRawExpr *cur_column_expr = NULL;
+      ObRawExpr *cur_const_expr = NULL;
+      bool is_duplicate = false;
+      if (OB_FAIL(get_equal_column_and_const(equal_exprs.at(i),
+                                             cur_column_expr,
+                                             cur_const_expr,
+                                             is_valid))) {
+      } else if (!is_valid) {
+      } else if (0 == i) {
+        column_expr = cur_column_expr;
+        first_const_expr = cur_const_expr;
+      } else if (!column_expr->same_as(*cur_column_expr) ||
+                 first_const_expr->get_result_type().get_obj_meta() !=
+                     cur_const_expr->get_result_type().get_obj_meta()) {
+        is_valid = false;
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && is_valid && !is_duplicate &&
+                          j < const_exprs.count(); ++j) {
+        equal_ctx.equal_pairs_.reuse();
+        is_duplicate = cur_const_expr == const_exprs.at(j) ||
+                       cur_const_expr->same_as(*const_exprs.at(j), &equal_ctx);
+        if (OB_UNLIKELY(OB_SUCCESS != equal_ctx.err_code_)) {
+          ret = equal_ctx.err_code_;
+        } else if (is_duplicate &&
+                   OB_FAIL(append(ctx->equal_param_constraints_, equal_ctx.equal_pairs_))) {
+        }
+      }
+      if (OB_SUCC(ret) && is_valid && !is_duplicate &&
+          OB_FAIL(const_exprs.push_back(cur_const_expr))) {
+      }
+    }
+
+    if (OB_SUCC(ret) && is_valid) {
+      ObOpRawExpr *in_list_expr = NULL;
+      ObOpRawExpr *in_expr = NULL;
+      if (OB_FAIL(ctx->expr_factory_->create_raw_expr(T_OP_ROW, in_list_expr))) {
+      } else if (OB_FAIL(ctx->expr_factory_->create_raw_expr(T_OP_IN, in_expr))) {
+      } else if (OB_ISNULL(in_list_expr) || OB_ISNULL(in_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(in_list_expr->set_param_exprs(const_exprs))) {
+      } else if (OB_FAIL(in_expr->set_param_exprs(column_expr, in_list_expr))) {
+      } else if (OB_FAIL(in_expr->formalize(ctx->session_info_))) {
+      } else {
+        OPT_TRACE("convert equal-or predicate to in", expr, in_expr);
+        expr = in_expr;
+        trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+}
+
+int ObTransformUtils::convert_equal_or_to_in(ObTransformerCtx *ctx,
+                                              ObIArray<ObRawExpr *> &conditions,
+                                              bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+    bool is_happened = false;
+    if (OB_ISNULL(conditions.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(recursive_convert_equal_or_to_in(ctx,
+                                                        conditions.at(i),
+                                                        is_happened))) {
+    } else {
+      trans_happened |= is_happened;
     }
   }
   return ret;
