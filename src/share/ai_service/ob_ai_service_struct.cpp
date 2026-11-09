@@ -280,4 +280,3 @@ OB_SERIALIZE_MEMBER(ObAiServiceModelInfo, name_, type_, model_name_);
 
 } // namespace share
 } // namespace oceanbase
-
