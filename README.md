@@ -553,6 +553,7 @@ seekdb's hybrid retrieval + multi-model engine also fits classic AI workloads:
 ## 🛠️ Development
 
 ### Build from Source
+OB-P:rFKZb24StSUHCb_tPr-Sfg
 
 Before building, please install the required toolchain and dependencies for your operating system. See [Install Toolchain](docs/developer-guide/en/toolchain.md) for detailed instructions.
 
@@ -593,3 +594,4 @@ If seekdb is useful to you, **a star helps others find it.** ⭐
 ## 📄 License
 
 seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same database engine running in production at Alipay, Taobao, DiDi, Xiaomi, and more. Fully open-source under the [Apache License, Version 2.0](LICENSE).
+OB-P:rFKZb24StSUHCb_tPr-Sfg
