@@ -257,6 +257,11 @@ public:
   int append_parameter_input(const DatumParameter &parameter);
   int set_parameter_input(int64_t index, const DatumParameter &parameter);
   int assign_parameter_inputs(const ParamStore &parameters);
+  // Copy request-owned descriptors once into the PlanCtx construction store.
+  // The final Datum values and Types still take execution ownership during
+  // init_datum_param_store().
+  int assign_parameter_input_views(
+      const common::ObIArray<const common::DatumParameter *> &inputs);
   int rebuild_runtime_parameters(const ParamStore &parameters);
   int truncate_runtime_parameters(int64_t count);
   void mark_batch_parameters();
@@ -649,6 +654,7 @@ private:
   { OB_ASSERT(!native_parameters_ready_); return param_store_; }
   const ParamStore &pl_variable_store() const
   { OB_ASSERT(!native_parameters_ready_); return param_store_; }
+  int initialize_runtime_parameters();
   int clone_construction_parameter(const DatumParameter &source, DatumParameter &output);
   int prepare_runtime_parameter(const DatumParameter &source, common::Datum &value,
       const common::SqlType *&type, int64_t index);

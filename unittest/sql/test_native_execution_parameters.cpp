@@ -1797,6 +1797,8 @@ TEST_F(NativeExecutionParameters, ordinary_lookup_and_miss_parser_consume_origin
   ObPlanCacheValue cache_value;
   ASSERT_EQ(OB_SUCCESS, (cache_value.*access(LookupParameterPreparationTag{}))(lookup));
   ASSERT_TRUE(plan().native_parameters_ready());
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(plan()));
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_bytes(plan()));
   for (int64_t i = 0; i < 3; ++i) {
     EXPECT_DOUBLE_EQ(keys[i], read_parameter_value(plan(), i).get_double());
     EXPECT_EQ(ObDoubleType, plan().get_native_parameter_type(i)->kind());
@@ -1830,6 +1832,80 @@ TEST_F(NativeExecutionParameters, ordinary_lookup_and_miss_parser_consume_origin
   }
   ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
   EXPECT_DOUBLE_EQ(7.0, read_parameter_value(plan(), 2).get_double());
+}
+
+TEST_F(NativeExecutionParameters, ordinary_protocol_single_copy_bind_owns_mixed_values_and_retries_failure)
+{
+  ASSERT_EQ(OB_SUCCESS, oceanbase::share::ObSysVariables::init_default_values());
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ResolverInputSessionGuard registration(session, exec_);
+  ObArenaAllocator descriptors("ProtoDirectDesc");
+  ParamStore original((ObWrapperAllocator(&descriptors)));
+  DatumParameter first, second, typed_null, distinct_accuracy, text;
+  ASSERT_EQ(OB_SUCCESS, first.set_int(INT64_MIN, request_arena_));
+  ASSERT_EQ(OB_SUCCESS, second.set_int(7, request_arena_));
+  ASSERT_EQ(OB_SUCCESS, typed_null.set_int(0, request_arena_));
+  ASSERT_EQ(OB_SUCCESS, distinct_accuracy.set_int(9, request_arena_));
+  for (DatumParameter *input : {&first, &second, &typed_null}) {
+    input->set_accuracy(ObAccuracy(20, 0)); input->set_param_meta();
+  }
+  typed_null.set_null();
+  distinct_accuracy.set_accuracy(ObAccuracy(19, 0)); distinct_accuracy.set_param_meta();
+  const char text_bytes[] = {'n', '\0', 'u', 'l'};
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString(4, text_bytes), request_arena_));
+  text.set_collation_type(CS_TYPE_BINARY); text.set_collation_level(CS_LEVEL_COERCIBLE);
+  text.set_length(4); text.set_length_semantics(LS_BYTE); text.set_param_meta();
+  for (const DatumParameter *input : {&first, &second, &typed_null, &distinct_accuracy, &text}) {
+    ASSERT_EQ(OB_SUCCESS, original.push_back(*input));
+  }
+
+  ObPlanCacheCtx lookup(ObString("SELECT ?,?,?,?,?"), PC_PS_MODE, owner_, sql_ctx_, exec_);
+  lookup.fp_result_.parameter_context_ = &plan();
+  ASSERT_EQ(OB_SUCCESS, ObSql::construct_parameterized_params(original, lookup));
+  owner_.clear_calls(); owner_.fail_size_ = 4;
+  ObPlanCacheValue cache_value;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,
+      (cache_value.*access(LookupParameterPreparationTag{}))(lookup));
+  EXPECT_GT(owner_.calls_for(4), 0);
+  EXPECT_FALSE(plan().native_parameters_ready());
+  EXPECT_EQ(5, plan().get_parameter_count());
+  EXPECT_EQ(std::string("n\0ul", 4),
+      std::string(original.at(4).get_string().ptr(), original.at(4).get_string().length()));
+  for (int64_t i = 0; i < original.count(); ++i) {
+    EXPECT_EQ(&original.at(i), lookup.fp_result_.parameterized_params_.at(i));
+  }
+
+  owner_.fail_size_ = 0;
+  ASSERT_EQ(OB_SUCCESS, (cache_value.*access(LookupParameterPreparationTag{}))(lookup));
+  ASSERT_TRUE(plan().native_parameters_ready());
+  ASSERT_EQ(5, plan().get_parameter_count());
+  EXPECT_EQ(INT64_MIN, read_parameter_value(plan(), 0).get_int());
+  EXPECT_EQ(7, read_parameter_value(plan(), 1).get_int());
+  EXPECT_TRUE(read_parameter_value(plan(), 2).is_null());
+  EXPECT_EQ(9, read_parameter_value(plan(), 3).get_int());
+  EXPECT_EQ(std::string("n\0ul", 4),
+      std::string(read_parameter_value(plan(), 4).get_string().ptr(), 4));
+  EXPECT_NE(original.at(4).get_datum().get_reference(),
+      read_parameter_value(plan(), 4).get_reference());
+  EXPECT_EQ(plan().get_native_parameter_type(0), plan().get_native_parameter_type(1));
+  EXPECT_EQ(plan().get_native_parameter_type(1), plan().get_native_parameter_type(2));
+  EXPECT_NE(plan().get_native_parameter_type(2), plan().get_native_parameter_type(3));
+  EXPECT_EQ(20, plan().get_native_parameter_type(2)->precision());
+  EXPECT_EQ(19, plan().get_native_parameter_type(3)->precision());
+  for (int64_t i = 0; i < original.count(); ++i) {
+    expect_resolver_attributes(original.at(i).get_metadata(), *plan().get_parameter_metadata(i));
+  }
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(plan()));
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_bytes(plan()));
+
+  plan().reset_datum_param_store();
+  ObSEArray<const DatumParameter *, 1> malformed;
+  ASSERT_EQ(OB_SUCCESS, malformed.push_back(nullptr));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, plan().assign_parameter_input_views(malformed));
+  EXPECT_FALSE(plan().native_parameters_ready());
+  EXPECT_EQ(0, plan().get_parameter_count());
 }
 
 TEST_F(NativeExecutionParameters, protocol_batch_lookup_consumes_actual_first_row_and_fixed_slots_from_source)

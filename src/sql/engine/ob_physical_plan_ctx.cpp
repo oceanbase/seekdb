@@ -53,6 +53,16 @@ bool same_parameter_type(const SqlType &left, const SqlType &right)
   }
   return same;
 }
+
+bool is_same_signed_bigint_declaration(
+    const SqlType &type, const SqlTypeMeta &meta, const ObAccuracy &accuracy)
+{
+  const ObDataType &attributes = type.attributes();
+  return type.form() == SqlTypeForm::Scalar && type.kind() == ObIntType
+      && meta.get_type() == ObIntType && attributes.meta_ == meta
+      && attributes.meta_.get_scale() == meta.get_scale()
+      && attributes.accuracy_.get_accuracy() == accuracy.get_accuracy();
+}
 // Physical graph cloning deliberately has no Type ownership. The explicit
 // PlanCtx construction edit domain additionally carries whatever real producer
 // declarations were supplied; absent historical declarations remain absent.
@@ -383,6 +393,21 @@ int ObPhysicalPlanCtx::assign_parameter_inputs(const ParamStore &parameters)
   return ret;
 }
 
+int ObPhysicalPlanCtx::assign_parameter_input_views(
+    const ObIArray<const DatumParameter *> &inputs)
+{
+  int ret = native_parameters_ready_ || !param_store_.empty() ? OB_STATE_NOT_MATCH : OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
+    if (inputs.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(param_store_.reserve(inputs.count()))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
+    ret = param_store_.push_back(*inputs.at(i));
+  }
+  return ret;
+}
+
 int ObPhysicalPlanCtx::truncate_runtime_parameters(int64_t count)
 {
   int ret = OB_SUCCESS;
@@ -473,6 +498,11 @@ int ObPhysicalPlanCtx::merge_resolution_parameter_flags(const ParamStore &inputs
 int ObPhysicalPlanCtx::init_datum_param_store()
 {
   if (native_parameters_ready_) { return OB_SUCCESS; }
+  return initialize_runtime_parameters();
+}
+
+int ObPhysicalPlanCtx::initialize_runtime_parameters()
+{
   int ret = OB_SUCCESS;
   const int64_t count = param_store_.count();
   native_parameter_metadata_.reuse();
@@ -566,19 +596,24 @@ int ObPhysicalPlanCtx::prepare_runtime_parameter(const DatumParameter &source,
       && !meta.is_collection_sql_type() && meta.get_type() != ObExtendType
       && meta.get_type() != ObUserDefinedSQLType;
   if (scalar) {
-    SqlType resolved;
-    if (OB_FAIL(SqlType::from_legacy(meta, source.get_accuracy(), resolved))) {
+    const SqlType *previous = index >= 0 && index < native_parameter_types_.count()
+        ? native_parameter_types_.at(index) : nullptr;
+    const SqlType *adjacent = index > 0 && index - 1 < native_parameter_types_.count()
+        ? native_parameter_types_.at(index - 1) : nullptr;
+    if (previous != nullptr && is_same_signed_bigint_declaration(
+        *previous, meta, source.get_accuracy())) {
+      candidate_type = previous;
+    } else if (adjacent != nullptr && is_same_signed_bigint_declaration(
+        *adjacent, meta, source.get_accuracy())) {
+      candidate_type = adjacent;
     } else {
-      // Share an already prepared declaration within this execution context.
-      // Ordinary scalar preparation needs neither a temporary arena nor one
-      // heap allocation per repeated BIGINT key in the same parameter list.
-      const SqlType *previous = index >= 0 && index < native_parameter_types_.count()
-          ? native_parameter_types_.at(index) : nullptr;
-      const SqlType *adjacent = index > 0 && index - 1 < native_parameter_types_.count()
-          ? native_parameter_types_.at(index - 1) : nullptr;
-      if (previous != nullptr && same_parameter_type(*previous, resolved)) { candidate_type = previous; }
-      else if (adjacent != nullptr && same_parameter_type(*adjacent, resolved)) { candidate_type = adjacent; }
-      if (candidate_type == nullptr) { ret = resolved.clone_to(allocator_, candidate_type); }
+      SqlType resolved;
+      if (OB_FAIL(SqlType::from_legacy(meta, source.get_accuracy(), resolved))) {
+      } else {
+        if (previous != nullptr && same_parameter_type(*previous, resolved)) { candidate_type = previous; }
+        else if (adjacent != nullptr && same_parameter_type(*adjacent, resolved)) { candidate_type = adjacent; }
+        if (candidate_type == nullptr) { ret = resolved.clone_to(allocator_, candidate_type); }
+      }
     }
   } else {
     ObArenaAllocator temporary("ParamTypePrep");
@@ -610,7 +645,6 @@ int ObPhysicalPlanCtx::prepare_runtime_parameter(const DatumParameter &source,
     }
   }
   if (OB_SUCC(ret)) {
-    const DatumCopyPlan plan(*candidate_type);
     Datum imported;
     Datum owned;
     alignas(8) char source_scratch[64];
@@ -621,33 +655,37 @@ int ObPhysicalPlanCtx::prepare_runtime_parameter(const DatumParameter &source,
         && candidate_type->kind() == ObIntType
         && candidate_type->canonical_representation() == DatumRepresentation::Inline64) {
       // Generic and semantic signed BIGINT share the canonical inline word.
-      // Match import's descriptor normalization, then keep its checked final
-      // copy; all other physical/state domains use the original bridge below.
+      // Match import's descriptor normalization without building a legacy copy
+      // plan for an inline word. All other states and representations retain
+      // the checked bridge below.
       imported.set_int(source.datum_.get_int());
-      ret = plan.deep_copy(imported, owned, allocator_);
-    } else if (OB_FAIL(source.export_legacy(source_view, source_scratch, sizeof(source_scratch)))) {
-    } else if (OB_FAIL(plan.import_legacy(source_view, imported))) {
-    } else if (candidate_type->legacy_meta().is_ext_sql_array()) {
-      NativeTypedDatum borrowed, snapshot;
-      borrowed.datum_ = imported;
-      borrowed.type_ = candidate_type;
-      ret = clone_native_parameter_value(borrowed, allocator_, snapshot);
-      if (OB_SUCC(ret)) { owned = snapshot.datum_; candidate_type = snapshot.type_; }
-    } else if (candidate_type->requires_resource_clone()) {
-      // PL addresses retain their lvalue identity and existing PL-domain
-      // owner. Own only the execution wrapper; cloning the pointee here
-      // would redirect OUT/INOUT and object-field writes to a different object.
-      int64_t bytes = 0;
-      if (OB_FAIL(plan.carrier_span_size(imported, bytes))) {
-      } else {
-        char *buffer = bytes == 0 ? nullptr : static_cast<char *>(allocator_.alloc(bytes));
-        if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-        else {
-          int64_t position = 0;
-          ret = plan.copy_carrier_span_borrowing_resources(imported, owned, buffer, bytes, position);
+      owned = imported;
+    } else {
+      const DatumCopyPlan plan(*candidate_type);
+      if (OB_FAIL(source.export_legacy(source_view, source_scratch, sizeof(source_scratch)))) {
+      } else if (OB_FAIL(plan.import_legacy(source_view, imported))) {
+      } else if (candidate_type->legacy_meta().is_ext_sql_array()) {
+        NativeTypedDatum borrowed, snapshot;
+        borrowed.datum_ = imported;
+        borrowed.type_ = candidate_type;
+        ret = clone_native_parameter_value(borrowed, allocator_, snapshot);
+        if (OB_SUCC(ret)) { owned = snapshot.datum_; candidate_type = snapshot.type_; }
+      } else if (candidate_type->requires_resource_clone()) {
+        // PL addresses retain their lvalue identity and existing PL-domain
+        // owner. Own only the execution wrapper; cloning the pointee here
+        // would redirect OUT/INOUT and object-field writes to a different object.
+        int64_t bytes = 0;
+        if (OB_FAIL(plan.carrier_span_size(imported, bytes))) {
+        } else {
+          char *buffer = bytes == 0 ? nullptr : static_cast<char *>(allocator_.alloc(bytes));
+          if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+          else {
+            int64_t position = 0;
+            ret = plan.copy_carrier_span_borrowing_resources(imported, owned, buffer, bytes, position);
+          }
         }
-      }
-    } else { ret = plan.deep_copy(imported, owned, allocator_); }
+      } else { ret = plan.deep_copy(imported, owned, allocator_); }
+    }
     if (OB_SUCC(ret)) { value = owned; type = candidate_type; }
   }
   return ret;
