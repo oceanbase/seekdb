@@ -84,8 +84,6 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   if (expr.arg_cnt_ == 3 ? OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_content, arg_dim))
                          : OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_content))) {
   } else if (arg_model_id->is_null() || arg_content->is_null()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model id or content is null");
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -175,7 +173,7 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
         } else {
           if (!resolved) {
             model_id = model;
-            if (expr.arg_cnt_ == 3) {
+            if (expr.arg_cnt_ == 3 && !dim_vec.at(j)->is_null()) {
               dim = dim_vec.at(j)->get_int();
             }
             resolved = true;
@@ -194,7 +192,10 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
           ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
       ObJsonObject *config = nullptr;
       ObJsonInt *dim_json = nullptr;
-      if (dim > 0) {
+      if (expr.arg_cnt_ == 3 && dim <= 0) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, dimension parameter must be a positive integer");
+      } else if (dim > 0) {
         if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(temp_allocator, config))) {
         } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_int(temp_allocator, dim, dim_json))) {
         } else if (OB_FAIL(config->add("dimensions", dim_json))) {
