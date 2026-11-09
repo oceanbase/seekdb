@@ -171,7 +171,7 @@ static lib::Seek1243DropKey seek1243_transaction_key(ObInnerSQLConnection &conn)
   key.inner_tx_id = key.observed_inner_tx_id;
   if (key.active) {
     key.span = THIS_WORKER.next_seek1243_span();
-    key.span_owner_tid = common::ob_syscall_gettid();
+    key.span_owner_tid = ::ob_syscall_gettid();
     const uint64_t *trace = ObCurTraceId::get();
     for (int i = 0; i < 4; ++i) { key.trace[i] = NULL == trace ? 0 : trace[i]; }
     const ObTimeoutCtx &ctx = ObTimeoutCtx::get_ctx();
@@ -206,7 +206,7 @@ int run_seek1243_inner_timed(ObInnerSQLConnection &conn, const char *event, Fn &
     key.query_abs_timeout_us = 0;
     key.query_deadline_selected = false;
     key.span = THIS_WORKER.next_seek1243_span();
-    key.span_owner_tid = common::ob_syscall_gettid();
+    key.span_owner_tid = ::ob_syscall_gettid();
     key.pending_query_entry = true;
     const uint64_t *trace = ObCurTraceId::get();
     for (int i = 0; i < 4; ++i) { key.trace[i] = NULL == trace ? 0 : trace[i]; }
@@ -763,12 +763,13 @@ int ObInnerSQLConnection::process_record(sql::ObResultSet &result_set,
   ret = process_audit_record(result_set, sql_ctx, session, last_ret, execution_id,
             ps_stmt_id, ps_sql, is_from_pl);
 #ifdef OB_SEEK1243_DROP_DIAGNOSTIC
-  uint64_t drop_table_id = 0;
-  int64_t drop_table_type = 0;
-  uint64_t drop_session_id = 0;
-  int64_t drop_inner_tx_id = 0;
-  if (get_seek1243_drop_context(drop_table_id, drop_table_type,
-                               drop_session_id, drop_inner_tx_id)) {
+  const auto &drop_key = THIS_WORKER.seek1243_drop_key();
+  if (drop_key.active) {
+    const uint64_t drop_table_id = drop_key.drop_table_id;
+    const int64_t drop_table_type = drop_key.drop_table_type;
+    const uint64_t drop_session_id = session.get_server_sid();
+    const transaction::ObTxDesc *tx_desc = session.get_tx_desc();
+    const int64_t drop_inner_tx_id = NULL == tx_desc ? 0 : data_plane::tx_desc_id(tx_desc).get_id();
     const ObString drop_sql_id(static_cast<int32_t>(sizeof(sql_ctx.sql_id_) - 1), sql_ctx.sql_id_);
     const ObString statement_prefix(sql_ctx.cur_sql_.length() < 256 ? sql_ctx.cur_sql_.length() : 256,
                                     sql_ctx.cur_sql_.ptr());
@@ -983,7 +984,7 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
     query_key.ctx_abs_deadline_us = query_ctx.is_timeout_set() ? query_ctx.get_abs_timeout() : 0;
     if (!query_key.pending_query_entry) {
       query_key.span = THIS_WORKER.next_seek1243_span();
-      query_key.span_owner_tid = common::ob_syscall_gettid();
+      query_key.span_owner_tid = ::ob_syscall_gettid();
     }
   }
   query_key.pending_query_entry = false;
