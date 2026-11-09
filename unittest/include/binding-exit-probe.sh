@@ -9,13 +9,41 @@
 BINDING_TEST_TIMEOUT_MS="${SEEKDB_BINDING_TEST_TIMEOUT_MS:-300000}"
 BINDING_EXIT_PROBE_GRACE_MS="${SEEKDB_BINDING_EXIT_PROBE_GRACE_MS:-15000}"
 
-# libseekdb is whole-archive linked; loading it via dlopen/ctypes/JNI after the
-# interpreter starts can exceed glibc's static TLS block on Linux.
-apply_linux_libseekdb_preload() {
-  local lib_path="${1:?lib path required}"
-  if [[ "$(uname -s)" == "Linux" && -f "$lib_path" ]]; then
-    export LD_PRELOAD="${lib_path}${LD_PRELOAD:+:$LD_PRELOAD}"
+# A timed-out child leaves no console output when the embedded engine hangs inside
+# seekdb_open, so collect the state the process cannot print itself.
+sample_hung_process() {
+  local pid="${1:?pid required}"
+  [[ "$(uname -s)" == "Darwin" ]] || return 0
+  command -v sample >/dev/null 2>&1 || return 0
+  local out="${TMPDIR:-/tmp}/seekdb_binding_sample_${pid}.txt"
+  sample "$pid" 1 -file "$out" >/dev/null 2>&1 || true
+  if [[ -f "$out" ]]; then
+    # The "Call graph" section summarizes every thread; the per-thread details
+    # that follow repeat the same frames and bury the blocked thread's stack.
+    echo "::group::[seekdb-bind] stack sample of timed-out pid=${pid}"
+    sed -n '/^Call graph:/,/^Total number in stack/p' "$out" | head -n 300 || true
+    echo "::endgroup::"
   fi
+  rm -f "$out" 2>/dev/null || true
+}
+
+dump_hang_probe_log() {
+  local pid="${1:?pid required}"
+  local probe_file="${TMPDIR:-/tmp}/seekdb_binding_hang_probe_${pid}.log"
+  [[ -f "$probe_file" ]] || return 0
+  echo "::group::[seekdb-bind] hang probe of timed-out pid=${pid}"
+  cat "$probe_file" || true
+  echo "::endgroup::"
+}
+
+dump_seekdb_startup_logs() {
+  local log
+  while IFS= read -r log; do
+    [[ -n "$log" && -f "$log" ]] || continue
+    echo "::group::[seekdb-bind] tail of ${log}"
+    tail -n 150 "$log" || true
+    echo "::endgroup::"
+  done < <(find . -maxdepth 5 -name 'seekdb.log' -path '*/log/*' 2>/dev/null | head -10)
 }
 
 run_with_binding_exit_probe() {
@@ -30,11 +58,18 @@ run_with_binding_exit_probe() {
   shift 2
   [[ "${1:-}" == "--" ]] && shift
 
-  if [[ -n "${SEEKDB_LIB_PATH:-}" ]]; then
-    apply_linux_libseekdb_preload "${SEEKDB_LIB_PATH}"
+  # Preload libseekdb into the launched process only. Exporting it here would
+  # also reach the probe's own children (sleep, tail, find); a library that fails
+  # to resolve its symbols would then kill them and hide the real failure.
+  local -a preload_prefix=()
+  if [[ "$(uname -s)" == "Linux" && -n "${SEEKDB_LIB_PATH:-}" && -f "${SEEKDB_LIB_PATH}" ]]; then
+    preload_prefix=(env "LD_PRELOAD=${SEEKDB_LIB_PATH}${LD_PRELOAD:+:$LD_PRELOAD}")
   fi
 
   export SEEKDB_BINDING_EXIT_PROBE=1
+  # Python records ordered checkpoints (SEEKDB_PROBE_LOG, named after the child
+  # pid) so a timeout points at the exact ctypes call that never returned.
+  export SEEKDB_BINDING_HANG_PROBE=1
 
   local probe_dir="${TMPDIR:-/tmp}"
   local probe=""
@@ -50,9 +85,12 @@ run_with_binding_exit_probe() {
   local wait_rc=0
   local rc=1
 
-  "$@" &
+  "${preload_prefix[@]}" "$@" &
   pid=$!
-  disown "$pid" 2>/dev/null || true
+  # Do not disown: a disowned job is dropped from the job table, so `wait` below
+  # returns 0 instead of the child's status. A test binary that dies while the
+  # loader resolves symbols (for example a missing symbol in libseekdb) would then
+  # be reported as a pass.
   probe="${probe_dir}/seekdb_binding_exit_probe_${pid}.log"
   rm -f "$probe" 2>/dev/null || true
 
@@ -60,6 +98,9 @@ run_with_binding_exit_probe() {
     poll=$((poll + 1))
     if (( poll > max_polls )); then
       echo "::error::binding test exceeded ${timeout_ms}ms; killing pid=${pid} ($*)" >&2
+      dump_hang_probe_log "$pid"
+      sample_hung_process "$pid"
+      dump_seekdb_startup_logs
       kill -9 "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
       rc=124

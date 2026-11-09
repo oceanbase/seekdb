@@ -12,7 +12,6 @@ case "$(uname -s)" in
     *)       SEEKDB_LIB_EXT=".so" ;;
 esac
 export SEEKDB_LIB_PATH="${SEEKDB_LIB_DIR}/libseekdb${SEEKDB_LIB_EXT}"
-apply_linux_libseekdb_preload "${SEEKDB_LIB_PATH}"
 
 echo "=== Testing Python FFI Binding ==="
 echo "SEEKDB_LIB_PATH: $SEEKDB_LIB_PATH"

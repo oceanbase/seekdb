@@ -13,6 +13,7 @@ exports_files([
     "build_settings.bzl",
     "final_link.bzl",
     "localized_partial_link.bzl",
+    "seekdb-jemalloc-sys-windows-long-paths.diff",
 ])
 
 cargo_build_script_environment(

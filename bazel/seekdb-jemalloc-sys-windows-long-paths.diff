@@ -1,0 +1,44 @@
+--- a/build.rs
++++ b/build.rs
+@@ -180,6 +180,19 @@
+     (output_library, output_header)
+ }
+ 
++fn copy_tree(from: &Path, to: &Path) {
++    fs::create_dir_all(to).unwrap();
++    for entry in fs::read_dir(from).unwrap() {
++        let entry = entry.unwrap();
++        let target = to.join(entry.file_name());
++        if entry.file_type().unwrap().is_dir() {
++            copy_tree(&entry.path(), &target);
++        } else {
++            fs::copy(entry.path(), &target).unwrap();
++        }
++    }
++}
++
+ fn shell_path(path: &Path, target_os: &str) -> String {
+     let path = path.to_string_lossy();
+     if target_os == "windows" {
+@@ -223,6 +236,21 @@
+         fs::remove_dir_all(&build_dir).unwrap();
+     }
+     fs::create_dir_all(&build_dir).unwrap();
++    // Windows still enforces MAX_PATH for most processes. Bazel stages this crate
++    // in a runfiles tree whose absolute path already exceeds that limit, so
++    // configure and the generated MSVC make file cannot address the vendored
++    // sources in place. Copy them next to the build directory, whose path Bazel
++    // keeps much shorter.
++    let source_dir = if target_os == "windows" {
++        let staged = out_dir.join("jemalloc-source");
++        if staged.exists() {
++            fs::remove_dir_all(&staged).unwrap();
++        }
++        copy_tree(&source_dir, &staged);
++        staged
++    } else {
++        source_dir
++    };
+ 
+     let mut args = vec![
+         "--with-version=VERSION".to_owned(),

@@ -1164,7 +1164,11 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         
         // Continue with observer.start() if init succeeded (or OB_INIT_TWICE was ignored)
         t_start_call = ObTimeUtility::current_time();
-        if (OB_SUCC(ret) && OB_FAIL(OBSERVER.start())) {
+        if (OB_FAIL(ret)) {
+            // Initialization failed and the error is already recorded. Skip start() and the
+            // serving wait below: the server was never started, so its service time stays 0
+            // forever and the wait would turn a startup error into an unexplained hang.
+        } else if (OB_FAIL(OBSERVER.start())) {
             // stdout already restored above
             LOG_WARN("observer start failed", K(ret));
             const char* err_msg = ob_strerror(ret);

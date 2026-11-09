@@ -517,8 +517,7 @@ cc_library(
 )
 
 cc_library(
-    name = "_unittest_in_process_entry",
-    testonly = True,
+    name = "in_process_server",
     srcs = ["in_process/in_process_server.cpp"],
     copts = MODULE_CXX_COPTS + ["-include", "$(location :_ios_build_config)"],
     additional_compiler_inputs = [":_ios_build_config"],
@@ -554,7 +553,7 @@ final_link(
     ) + select({
         # The shared test runtime retains the Rust in-process bridge, including
         # its reference to run_server. Supply the real implementation on Linux.
-        "@platforms//os:linux": [":_unittest_in_process_entry", ":in_process_api"],
+        "@platforms//os:linux": [":in_process_server", ":in_process_api"],
         "//conditions:default": [],
     }),
     ordered_link_files = _ORDERED_LINK_FILES,
@@ -610,6 +609,10 @@ _LIBSEEKDB_LINKOPTS = select({
         "-Wl,-framework,SystemConfiguration",
         "-liconv",
         "-Wl,-exported_symbols_list,$(location //src/include:seekdb_macos_exports)",
+        # Consumers (Node N-API addon, Java JNI) link against the dylib and embed
+        # its install name. The default is the relative Bazel output path, which
+        # dyld cannot resolve at runtime; route it through the consumer rpaths.
+        "-Wl,-install_name,@rpath/libseekdb.dylib",
     ],
     "@platforms//os:windows": [
         "/DEF:$(location //src/include:seekdb_windows_def)",
@@ -629,7 +632,14 @@ _LIBSEEKDB_LINKOPTS = select({
 
 final_link(
     name = "_libseekdb_link",
-    direct_object_deps = [":seekdb_c_api"],
+    direct_object_deps = [":seekdb_c_api"] + select({
+        # ELF shared libraries keep the whole-archived Rust in-process bridge,
+        # which references run_server, so the C++ implementation must be part
+        # of the library or every consumer fails to load it.
+        "@platforms//os:linux": [":in_process_server"],
+        "@platforms//os:android": [":in_process_server"],
+        "//conditions:default": [],
+    }),
     whole_group_deps = (
         _OBSERVER_RETRIEVAL_COMPOSITION_OBJECT_TARGETS +
         _CORE_LINK_DEPS +
