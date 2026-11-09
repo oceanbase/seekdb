@@ -43,7 +43,7 @@ public:
       const share::ObDDLType &ddl_type,
       const share::schema::ObTableSchema *src_table_schema,
       const share::schema::ObTableSchema *dst_table_schema,
-      const int64_t schema_version,
+      const int64_t source_schema_version,
       const int64_t snapshot_version,
       const obcall::ObForkTableArg &fork_table_arg,
       const int64_t parent_task_id = 0);

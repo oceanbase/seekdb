@@ -1006,6 +1006,7 @@ int check_will_be_having_domain_index_operation(
               const share::schema::ObDatabaseSchema &dst_db_schema,
               const common::ObString &dst_table_name,
               const int64_t fork_snapshot_version,
+              const int64_t fork_snapshot_schema_version,
               const uint64_t session_id,
               const common::ObString &ddl_stmt_str,
               share::schema::ObSchemaGetterGuard &schema_guard,
