@@ -43,6 +43,29 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+// The utf8mb4_bin collation compares the raw bytes, do it inline to keep the
+// charset call out of the tokenize hot path.
+inline int fts_bin_cmp(const ObString &lhs, const ObString &rhs)
+{
+  if (lhs.empty()) {
+    return rhs.empty() ? 0 : -1;
+  }
+  if (rhs.empty()) {
+    return 1;
+  }
+  const int32_t len = MIN(lhs.length(), rhs.length());
+  for (int32_t i = 0; i < len; ++i) {
+    const int diff = static_cast<int>(static_cast<unsigned char>(lhs.ptr()[i]))
+                     - static_cast<int>(static_cast<unsigned char>(rhs.ptr()[i]));
+    if (diff != 0) {
+      return diff;
+    }
+  }
+  return lhs.length() - rhs.length();
+}
+} // namespace
 
 
 int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
@@ -383,14 +406,8 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
   int ret = OB_SUCCESS;
   bool found = false;
   for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
+    if (fts_bin_cmp(range_dicts_[i].start_.get_word(), single_word) <= 0
+        && fts_bin_cmp(range_dicts_[i].end_.get_word(), single_word) >= 0) {
       dict = range_dicts_[i].dict_;
       found = true;
     }

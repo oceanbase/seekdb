@@ -18,6 +18,8 @@
 
 #include "storage/fts/dict/ob_ft_dat_dict.h"
 
+#include <atomic>
+
 #include "lib/utility/alloc_assist.h"
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/ob_allocator.h"
@@ -31,6 +33,69 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+// The dat block is immutable while it is pinned by the dict cache, so the char
+// to code mapping of a dat never changes. Remember the looked up chars to skip
+// the hash lookup on the tokenize hot path.
+constexpr int64_t DAT_CODE_CACHE_SIZE = 512; // must be a power of two
+constexpr int64_t DAT_CODE_CACHE_MAX_WORD_LEN = 5; // sizeof(ObFTSingleWord::word)
+
+struct DatCodeCacheEntry
+{
+  uint64_t instance_id_;
+  uint64_t word_key_;
+  int32_t code_; // a negative code means the char is not in the dict
+  int32_t reserved_;
+};
+
+thread_local DatCodeCacheEntry g_dat_code_cache[DAT_CODE_CACHE_SIZE];
+
+uint64_t next_dat_instance_id()
+{
+  static std::atomic<uint64_t> instance_id{0};
+  return instance_id.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
+inline uint64_t make_word_key(const ObFTSingleWord &word)
+{
+  uint64_t key = 0;
+  MEMCPY(&key, word.word, word.word_len);
+  key |= static_cast<uint64_t>(word.word_len) << 40;
+  return key;
+}
+
+// find the code of a single char in the dat
+int find_char_code(ObFTDAT *dat, const ObFTSingleWord &word, ObFTWordCode &code)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(dat->instance_id_ == 0 || word.word_len == 0
+                  || word.word_len > DAT_CODE_CACHE_MAX_WORD_LEN)) {
+    ret = dat->get_map()->find(word, code);
+  } else {
+    const uint64_t word_key = make_word_key(word);
+    const uint64_t instance_id = dat->instance_id_;
+    const uint64_t mixed = (word_key * 0x9E3779B97F4A7C15ULL) ^ (instance_id * 0xC2B2AE3D27D4EB4FULL);
+    const int64_t slot = static_cast<int64_t>((mixed >> 55) & (DAT_CODE_CACHE_SIZE - 1));
+    DatCodeCacheEntry &entry = g_dat_code_cache[slot];
+    if (entry.instance_id_ == instance_id && entry.word_key_ == word_key) {
+      if (entry.code_ < 0) {
+        ret = OB_ENTRY_NOT_EXIST;
+      } else {
+        code = entry.code_;
+      }
+    } else {
+      ret = dat->get_map()->find(word, code);
+      if (OB_SUCC(ret) || OB_ENTRY_NOT_EXIST == ret) {
+        entry.instance_id_ = instance_id;
+        entry.word_key_ = word_key;
+        entry.code_ = OB_SUCC(ret) ? code : -1;
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
 template <typename DATA_TYPE>
 int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
 {
@@ -183,6 +248,9 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
       // already logged
     } else if (OB_FAIL(trie.get_start_word(dat_->start_word_))) {
     } else if (OB_FAIL(trie.get_end_word(dat_->end_word_))) {
+    } else {
+      // the dat is complete now, give it a new id
+      dat_->instance_id_ = next_dat_instance_id();
     }
     LOG_INFO("build dat finished", K(dat_->start_word_.get_word()), K(dat_->end_word_.get_word()));
 
@@ -260,7 +328,7 @@ int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
 
   ObFTSingleWord word;
   word.set_word(ft_char.ptr(), ft_char.length());
-  if (OB_FAIL(dat_->get_map()->find(word, code)) && OB_ENTRY_NOT_EXIST != ret) {
+  if (OB_FAIL(find_char_code(dat_, word, code)) && OB_ENTRY_NOT_EXIST != ret) {
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     hit.set_unmatch();

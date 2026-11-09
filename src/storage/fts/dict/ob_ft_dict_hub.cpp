@@ -43,74 +43,82 @@ int ObFTDictHub::init()
 int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
+  for (int64_t i = 0; i < MAX_DICT_TYPE_CNT; ++i) {
+    ObFTSharedDict &shared = shared_dicts_[i];
+    if (OB_NOT_NULL(shared.dict_)) {
+      // the dict reads the pinned kv cache blocks, release it before the handles
+      shared.dict_->~ObIFTDict();
+      shared.dict_ = nullptr;
+    }
+    if (OB_NOT_NULL(shared.container_)) {
+      shared.container_->~ObFTCacheRangeContainer();
+      shared.container_ = nullptr;
+    }
+  }
   is_inited_ = false;
   return ret;
 }
-int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
+int ObFTDictHub::get_dict(const ObFTDictDesc &desc, const ObIFTDict *&dict)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
-  ObFTDictInfo info;
-  container.reset();
-
+  dict = nullptr;
+  const int64_t type_idx = static_cast<int64_t>(desc.type_);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+  } else if (type_idx <= static_cast<int64_t>(ObFTDictType::DICT_TYPE_INVALID) || type_idx >= MAX_DICT_TYPE_CNT) {
+    ret = OB_NOT_SUPPORTED;
   } else {
-    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
-
-    // try if valid with no recursive lock
-    if (OB_FAIL(get_dict_info(key, info))) {
-      if (OB_HASH_NOT_EXIST == ret) {
-        // dict not exist, make new one, by caller
-        ret = OB_ENTRY_NOT_EXIST;
-      } else {
-      }
-    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
-      if (OB_ENTRY_NOT_EXIST == ret) {
-      } else {
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-      if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
-        } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
-        } else if (OB_FAIL(put_dict_info(key, info))) {
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
-{
-  int ret = OB_SUCCESS;
-  ObFTDictInfo info;
-  container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else {
+    ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+    ObFTDictInfo info;
+    ObFTSharedDict &shared = shared_dicts_[type_idx];
     {
+      // the dict is shared and read-only, the common case only needs a read lock
       ObBucketHashRLockGuard guard(rw_dict_lock_, key.hash());
-      if (OB_FAIL(get_dict_info(key, info))) {
-        if (OB_HASH_NOT_EXIST == ret) {
-          // dict not exist, make new one, by caller
-          ret = OB_ENTRY_NOT_EXIST;
-        } else {
+      if (OB_NOT_NULL(shared.dict_)) {
+        dict = shared.dict_;
+        return OB_SUCCESS;
+      }
+    }
+    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+    if (OB_ISNULL(shared.dict_)) {
+      ObFTCacheRangeContainer *container = OB_NEWx(ObFTCacheRangeContainer, &dict_alloc_, dict_alloc_);
+      if (OB_ISNULL(container)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        // try the kv cache first, build the dictionary on the first miss
+        if (OB_FAIL(get_dict_info(key, info))) {
+          if (OB_HASH_NOT_EXIST == ret) {
+            ret = OB_ENTRY_NOT_EXIST;
+          }
+        } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, *container))) {
+          if (OB_ENTRY_NOT_EXIST == ret) {
+            ret = OB_ENTRY_NOT_EXIST;
+          }
+        }
+        if (OB_ENTRY_NOT_EXIST == ret) {
+          container->reset();
+          if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, *container))) {
+          } else if (FALSE_IT(info.range_count_ = container->get_handles().size())) {
+          } else if (OB_FAIL(put_dict_info(key, info))) {
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ObIFTDict *new_dict = OB_NEWx(ObFTRangeDict, &dict_alloc_, dict_alloc_, container, desc);
+          if (OB_ISNULL(new_dict)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else if (OB_FAIL(new_dict->init())) {
+            OB_DELETEx(ObIFTDict, &dict_alloc_, new_dict);
+          } else {
+            shared.container_ = container;
+            shared.dict_ = new_dict;
+          }
         }
       }
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
-      if (OB_ENTRY_NOT_EXIST == ret) {
-        // dict not exist, make new one, by caller
-      } else {
-      }
+    if (OB_SUCC(ret)) {
+      dict = shared.dict_;
     }
   }
-
   return ret;
 }
 

@@ -83,6 +83,9 @@ public:
   static constexpr int32_t FIRST_INDEX = 1;
   // all size in bytes
   int64_t mem_block_size_ = 0;
+  // a unique id of this dat instance, it changes on every rebuild so that a
+  // stale char code cache entry can never be applied to another dat
+  uint64_t instance_id_ = 0;
   // node_num_: number of nodes in the trie.
   size_t node_num_ = 0;
   // word_num_: number of words in the trie.

@@ -93,6 +93,9 @@ tokenize('OceanBase是一款非常稳定数据库，在110个星球上都非常�
 select tokenize('人际关系', 'ik');
 tokenize('人际关系', 'ik')
 ["人际关系"]
+select tokenize('人际关系', 'ik');
+tokenize('人际关系', 'ik')
+["人际关系"]
 select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
 tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]')
 ["人民大会堂", "中华人民共和国"]

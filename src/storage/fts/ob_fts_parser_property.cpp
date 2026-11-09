@@ -19,6 +19,7 @@
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_parse.h"
 #include "common/json_type/ob_json_tree.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
@@ -34,6 +35,24 @@ namespace oceanbase
 {
 namespace storage
 {
+
+namespace
+{
+// The parsed property only depends on the parser name and the property json,
+// cache it to avoid rebuilding a json tree on every tokenize or index build.
+constexpr int64_t FTS_PARSER_PROPERTY_CACHE_SIZE = 4;
+struct FtsParserPropertyCacheEntry
+{
+  FtsParserPropertyCacheEntry() : valid_(false) {}
+  common::ObArenaAllocator allocator_;
+  common::ObString parser_name_;
+  common::ObString json_str_;
+  ObFTParserProperty property_;
+  bool valid_;
+};
+thread_local FtsParserPropertyCacheEntry g_fts_parser_property_cache[FTS_PARSER_PROPERTY_CACHE_SIZE];
+thread_local int64_t g_fts_parser_property_cache_idx = 0;
+} // namespace
 
 
 int ObFTParserJsonProps::init()
@@ -1017,6 +1036,15 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
+  const ObFTParserName &parser_name = parser.get_parser_name();
+  const ObString name_str(parser_name.len(), parser_name.str());
+  for (int64_t i = 0; i < FTS_PARSER_PROPERTY_CACHE_SIZE; ++i) {
+    FtsParserPropertyCacheEntry &entry = g_fts_parser_property_cache[i];
+    if (entry.valid_ && entry.parser_name_ == name_str && entry.json_str_ == json_str) {
+      *this = entry.property_;
+      return OB_SUCCESS;
+    }
+  }
   if (OB_FAIL(props.init())) {
   } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
   } else {
@@ -1062,6 +1090,17 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
       } else if (OB_FAIL(props.config_get_min_ngram_token_size(min_ngram_token_size_))) {
       } else if (OB_FAIL(props.config_get_max_ngram_token_size(max_ngram_token_size_))) {
       }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    FtsParserPropertyCacheEntry &entry = g_fts_parser_property_cache[g_fts_parser_property_cache_idx];
+    g_fts_parser_property_cache_idx = (g_fts_parser_property_cache_idx + 1) % FTS_PARSER_PROPERTY_CACHE_SIZE;
+    entry.allocator_.reset();
+    entry.valid_ = false;
+    if (OB_SUCC(ob_write_string(entry.allocator_, name_str, entry.parser_name_))
+        && OB_SUCC(ob_write_string(entry.allocator_, json_str, entry.json_str_))) {
+      entry.property_ = *this;
+      entry.valid_ = true;
     }
   }
   return ret;
