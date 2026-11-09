@@ -112,11 +112,35 @@ def download(url, archive):
             partial.unlink()
 
 
+RPM_UNPACK_TOOLS = ("rpm2cpio", "cpio")
+RPM_UNPACK_HINT = (
+    "  Debian/Ubuntu : sudo apt-get install -y rpm2cpio cpio\n"
+    "  RHEL/Fedora   : sudo dnf install -y rpm cpio\n"
+    "  macOS         : brew install rpm cpio"
+)
+
+
+def require_rpm_unpack_tools():
+    """rpm2cpio and cpio are required to unpack dependency .rpm archives.
+
+    Without this check a missing tool surfaces as a bare
+    ``FileNotFoundError: [Errno 2] No such file or directory: 'rpm2cpio'``,
+    which does not tell the user what to install.
+    """
+    missing = [tool for tool in RPM_UNPACK_TOOLS if shutil.which(tool) is None]
+    if missing:
+        raise RuntimeError(
+            "%s not found in PATH, but is required to unpack dependency .rpm archives.\n"
+            "Install it and re-run, for example:\n%s"
+            % (" and ".join(missing), RPM_UNPACK_HINT))
+
+
 def unpack(archive, destination):
     if archive.suffix != ".rpm":
         subprocess.run(["tar", "-xf", str(archive), "-C", str(destination),
                         "--strip-components=1"], check=True)
     else:
+        require_rpm_unpack_tools()
         with subprocess.Popen(["rpm2cpio", str(archive)], stdout=subprocess.PIPE) as rpm:
             try:
                 subprocess.run(["cpio", "-di", "-u", "--quiet"], cwd=destination,
