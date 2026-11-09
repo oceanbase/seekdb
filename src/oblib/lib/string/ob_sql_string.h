@@ -26,6 +26,10 @@ namespace oceanbase
 namespace common
 {
 
+// Double embedded backticks without adding enclosing identifier quotes.
+// Unchanged input is borrowed; escaped output is allocated from allocator.
+int escape_sql_identifier(ObIAllocator &allocator, const ObString &src, ObString &dst);
+
 // ObSqlString only used to concatenate SQL strings, for example:
 //
 //   ObSqlString sql;
