@@ -55,6 +55,46 @@ struct InListRewriteInfo {
   }
 };
 
+// Large IN lists are rewritten to a VALUES table.  Do not make that rewrite
+// depend on the number of repeated spellings of the same literal: a list such
+// as IN (1, 2, 3, 1, 2, 3, ...) has the same semantics as its compact form,
+// but the VALUES-table plan adds a materialization and a distinct operation.
+// Keep this check deliberately limited to single-column literal lists.  Row
+// constructors and prepared parameters have comparison/type semantics that
+// must continue through the existing resolver path.
+static bool has_small_distinct_literal_count(const ParseNode &in_list,
+                                             const int64_t threshold)
+{
+  bool is_small = false;
+  ObSEArray<ObString, 8> distinct_values;
+  if (threshold > 0 && OB_NOT_NULL(in_list.children_)) {
+    is_small = true;
+    for (int64_t i = 0; i < in_list.num_child_ && is_small; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      if (OB_ISNULL(node) || T_QUESTIONMARK == node->type_
+          || OB_ISNULL(node->raw_text_) || node->text_len_ <= 0) {
+        is_small = false;
+      } else {
+        ObString value(node->text_len_, node->raw_text_);
+        bool found = false;
+        for (int64_t j = 0; j < distinct_values.count() && !found; ++j) {
+          found = value == distinct_values.at(j);
+        }
+        if (!found) {
+          if (distinct_values.count() + 1 >= threshold) {
+            is_small = false;
+          } else if (OB_SUCCESS != distinct_values.push_back(value)) {
+            // A bookkeeping failure must not change the existing rewrite
+            // decision or make a valid statement fail.
+            is_small = false;
+          }
+        }
+      }
+    }
+  }
+  return is_small;
+}
+
 int ObInListResolver::resolve_inlist(ObInListInfo &inlist_info)
 {
   int ret = OB_SUCCESS;
@@ -350,6 +390,15 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      // A repeated single-column literal list should retain the regular IN
+      // expression when its distinct value count is below the rewrite
+      // threshold.  This avoids the VALUES-table/subquery plan regression
+      // while leaving unique lists, row IN lists and prepared statements on
+      // their existing paths.
+      if (OB_SUCC(ret) && is_enable && column_cnt == 1 && !is_question_mark
+          && has_small_distinct_literal_count(in_list, threshold)) {
+        is_enable = false;
+      }
     }
   }
   return ret;
