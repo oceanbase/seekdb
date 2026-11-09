@@ -209,7 +209,8 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
     CK(OB_NOT_NULL(table_node));
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
-      } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid delete target
+      } else if (table_item->is_function_table() || table_item->is_file_table()
+                 || table_item->is_json_table()) { // invalid delete target
         ret = OB_WRONG_TABLE_NAME;
       } else if (OB_FAIL(column_namespace_checker_.add_reference_table(table_item))) {
       } else if (OB_FAIL(delete_stmt->add_from_item(table_item->table_id_,
