@@ -8,6 +8,11 @@ os=8
 arch=x86_64
 repo=http://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/
 
+[target-sanity]
+os=8
+arch=x86_64
+repo=http://mirrors.oceanbase.com/oceanbase/community/stable/al/8/x86_64/
+
 
 [deps]
 devdeps-gtest-1.8.0-312026021311.el8.x86_64.rpm
@@ -31,6 +36,7 @@ obdevtools-bison-2.4.1-12022100413.el8.x86_64.rpm
 obdevtools-flex-2.5.35-12022100417.el8.x86_64.rpm
 obdevtools-gcc-12.3.0-32024122017.el8.x86_64.rpm
 obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm
+ob-sanity-abiv1-1.0.0-272026041615.al8.x86_64.rpm target=sanity
 
 [tools-deps]
 obshell-4.4.1.1-32026031914.el8.x86_64.rpm target=community
