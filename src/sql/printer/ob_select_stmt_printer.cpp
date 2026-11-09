@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "sql/printer/ob_select_stmt_printer.h"
+#include <inttypes.h>
 namespace oceanbase
 {
 using namespace common;
@@ -416,7 +417,7 @@ int ObSelectStmtPrinter::print_order_by()
           }
         }
         if (found) {
-          DATA_PRINTF(" %ld", sel_item_pos);
+          DATA_PRINTF(" %" PRId64 "", sel_item_pos);
         } else {
           DATA_PRINTF(" ");
           if (FAILEDx(print_expr_except_const_number(order_item.expr_, T_ORDER_SCOPE))) {

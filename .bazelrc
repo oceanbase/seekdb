@@ -36,6 +36,8 @@ build:windows --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows-cla
 build:windows --noforce_pic
 build:windows --features=compiler_param_file
 build:windows --features=-static_link_msvcrt
+# Embed CodeView in each object so parallel compiles need no shared compiler PDB.
+build:windows --copt=/Z7
 build:O1 --compilation_mode=fastbuild
 build:O1 --copt=-O1
 build:O1 --@rules_rust//rust/settings:lto=off

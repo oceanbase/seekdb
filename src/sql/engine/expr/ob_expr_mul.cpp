@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_mul.h"
+#include <inttypes.h>
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -194,7 +195,7 @@ int ObExprMul::mul_int(ObObj &res,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld * %ld)'",
+                      "'(%" PRId64 " * %" PRId64 ")'",
                       left_i,
                       right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
@@ -209,7 +210,7 @@ int ObExprMul::mul_int(ObObj &res,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld * %lu)'",
+                      "'(%" PRId64 " * %" PRIu64 ")'",
                       left_i,
                       right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
@@ -239,7 +240,7 @@ int ObExprMul::mul_uint(ObObj &res,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%lu * %lu)'",
+                      "'(%" PRIu64 " * %" PRIu64 ")'",
                       left_i,
                       right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
@@ -255,7 +256,7 @@ int ObExprMul::mul_uint(ObObj &res,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%lu * %ld)'",
+                      "'(%" PRIu64 " * %" PRId64 ")'",
                       left_i,
                       right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
@@ -358,7 +359,7 @@ struct ObIntIntBatchMulRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld * %ld)'", l, r);
+                      "'(%" PRId64 " * %" PRId64 ")'", l, r);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
     }
     return ret;
@@ -393,7 +394,7 @@ struct ObIntUIntBatchMulRaw : public ObArithOpRawType<uint64_t, int64_t, uint64_
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld * %lu)'", l, r);
+                      "'(%" PRId64 " * %" PRIu64 ")'", l, r);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
     return ret;
@@ -428,7 +429,7 @@ struct ObUIntIntBatchMulRaw : public ObArithOpRawType<uint64_t, uint64_t, int64_
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%lu * %ld)'", l, r);
+                      "'(%" PRIu64 " * %" PRId64 ")'", l, r);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
     return ret;
@@ -463,7 +464,7 @@ struct ObUIntUIntBatchMulRaw : public ObArithOpRawType<uint64_t, uint64_t, uint6
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%lu * %lu)'", l, r);
+                      "'(%" PRIu64 " * %" PRIu64 ")'", l, r);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
     return ret;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_dml_resolver.h"
 #include "sql/resolver/dml/ob_view_table_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -11471,7 +11472,7 @@ int ObDMLResolver::gen_values_table_column_items(const int64_t column_cnt,
         // compatible Mysql8.0, column name is column_0, column_1, ...
         ObSqlString tmp_col_name;
         char *buf = NULL;
-        if (OB_FAIL(tmp_col_name.append_fmt("column_%ld", i))) {
+        if (OB_FAIL(tmp_col_name.append_fmt("column_%" PRId64 "", i))) {
         } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(tmp_col_name.length())))) {
           ret = common::OB_ALLOCATE_MEMORY_FAILED;
         } else {

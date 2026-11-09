@@ -15,6 +15,7 @@
  */
 
 #include "ob_tx_data_define.h"
+#include <inttypes.h>
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -229,7 +230,7 @@ void ObUndoStatusList::dump_2_text(FILE *fd) const
   }
   while (OB_NOT_NULL(node)) {
     for (int64_t i = node->size_ - 1; i >= 0; i--) {
-      fprintf(fd, "{from:%ld, to:%ld}", node->undo_actions_[i].undo_from_.cast_to_int(), node->undo_actions_[i].undo_to_.cast_to_int());
+      fprintf(fd, "{from:%" PRId64 ", to:%" PRId64 "}", node->undo_actions_[i].undo_from_.cast_to_int(), node->undo_actions_[i].undo_to_.cast_to_int());
     }
     node = node->next_;
   }
@@ -640,7 +641,7 @@ void ObTxData::print_to_stderr(const ObTxData &tx_data)
 {
   ObCStringHelper helper;
   fprintf(stderr,
-          "TX_DATA:{tx_id=%-20ld start_log_scn=%-20s end_log_scn=%-20s commit_version=%-20s "
+          "TX_DATA:{tx_id=%-20" PRId64 " start_log_scn=%-20s end_log_scn=%-20s commit_version=%-20s "
           "state=%s",
           tx_data.tx_id_.get_id(),
           helper.convert(tx_data.start_scn_),
@@ -661,7 +662,7 @@ void ObTxData::dump_2_text(FILE *fd) const
 
   ObCStringHelper helper;
   fprintf(fd,
-          "TX_DATA:\n{\n    tx_id=%-20ld\n    start_log_scn=%-20s\n    end_log_scn=%-20s\n  "
+          "TX_DATA:\n{\n    tx_id=%-20" PRId64 "\n    start_log_scn=%-20s\n    end_log_scn=%-20s\n  "
           "  commit_version=%-20s\n    state=%s\n",
           tx_id_.get_id(),
           helper.convert(start_scn_),

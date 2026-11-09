@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_stat_item.h"
+#include <inttypes.h>
 #include "sql/optimizer/stat/ob_hybrid_hist_estimator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 namespace oceanbase
@@ -225,7 +226,7 @@ int ObStatTopKHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
     double err_rate = 1.0 / get_window_size(bkt_num);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                  " TOP_K_FRE_HIST(%lf, `%.*s`, %ld, %ld)",
+                                  " TOP_K_FRE_HIST(%lf, `%.*s`, %" PRId64 ", %" PRId64 ")",
                                   err_rate,
                                   col_param_->column_name_.length(),
                                   col_param_->column_name_.ptr(),
@@ -420,7 +421,7 @@ int ObPartitionId::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
                                 calc_partition_id_str_.length(),
                                 calc_partition_id_str_.ptr()))) {
     } else {/*do nothing*/}
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%ld", partition_id_))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%" PRId64 "", partition_id_))) {
   } else {/*do nothing*/}
   return ret;
 }
@@ -652,7 +653,7 @@ int ObStatHybridHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   if (OB_ISNULL(col_param_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                     " HYBRID_HIST(`%.*s`, %ld)",
+                                     " HYBRID_HIST(`%.*s`, %" PRId64 ")",
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr(),
                                      col_param_->bucket_num_))) {

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_scn_to_timestamp.h"
+#include <inttypes.h>
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -84,7 +85,7 @@ int calc_scn_to_timestamp_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
         databuff_printf(expr_str,
                         OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                         pos,
-                        "'scn_to_timestamp(%lu)'", in_value);
+                        "'scn_to_timestamp(%" PRIu64 ")'", in_value);
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DATE", expr_str);
       } else {
         res_datum.set_datetime(dt_value);

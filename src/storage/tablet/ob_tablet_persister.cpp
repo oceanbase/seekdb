@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_persister.h"
@@ -160,7 +161,7 @@ int64_t ObMultiTimeStats::TimeStats::to_string(char *buf, const int64_t buf_len)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   int64_t i = 0;
-  ret = databuff_printf(buf, buf_len, pos, "owner:'%s' total=%ld%s",
+  ret = databuff_printf(buf, buf_len, pos, "owner:'%s' total=%" PRId64 "%s",
       owner_, last_ts_ - start_ts_, click_count_ > 0 ? ", time_dist: " : "");
 
   if (OB_SUCC(ret) && click_count_ > 0) {
@@ -231,7 +232,7 @@ int64_t ObMultiTimeStats::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
   J_OBJ_START();
   for (int64_t i = 0; i < stats_count_; i++) {
-    databuff_printf(buf, buf_len, pos, "stats[%ld]: ", i);
+    databuff_printf(buf, buf_len, pos, "stats[%" PRId64 "]: ", i);
     BUF_PRINTO(stats_[i]);
     if (i != stats_count_-1) {
       J_NEWLINE();
@@ -1076,7 +1077,7 @@ int ObTabletPersister::fetch_and_persist_sstable(
     }
   }
 
-  if (FAILEDx(time_stats->set_extra_info("%s:%ld",
+  if (FAILEDx(time_stats->set_extra_info("%s:%" PRId64 "",
       "normal_sst_cnt", sstable_persist_ctx.normal_sstable_cnt_))) {
   } else if (FALSE_IT(time_stats->click("fill_all_sstable_write_info"))) {
   } else if (OB_FAIL(convert_macro_info_map(

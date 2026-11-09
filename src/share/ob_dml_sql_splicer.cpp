@@ -49,7 +49,7 @@ int ObDMLSqlSplicer::append_value(const uint64_t value, bool &is_null)
 {
   return append_value(static_cast<int64_t>(value), is_null);
   //is_null = false;
-  //return values_.append_fmt("%lu", value);
+  //return values_.append_fmt("%llu", value);
 }
 
 int ObDMLSqlSplicer::append_value(const int64_t value, bool &is_null)

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_pl_ddl_operator.h"
+#include <inttypes.h>
 #include "share/schema/ob_routine_sql_service.h"
 #include "share/schema/ob_trigger_sql_service.h"
 #include "share/schema/ob_user_sql_service.h"
@@ -797,13 +798,13 @@ int ObPLDDLOperator::build_recyclebin_restore_object_name(const SchemaType &obje
   OV (OB_NOT_NULL(buf = static_cast<char *>(allocator.alloc(buf_len))),
       OB_ALLOCATE_MEMORY_FAILED, buf_len);
   if (OB_NOT_NULL(data_table_prefix)) {
-    OZ (BUF_PRINTF("%s_%lu_", data_table_prefix, object_schema.get_data_table_id()));
+    OZ (BUF_PRINTF("%s_%" PRIu64 "_", data_table_prefix, object_schema.get_data_table_id()));
   }
   OZ (BUF_PRINTF("%s_%s_", RECYCLE, object_type_prefix));
   OX (saved_pos = pos);
   while (OB_SUCC(ret) && object_exist) {
     OX (pos = saved_pos);
-    OZ (BUF_PRINTF("%ld", ObTimeUtility::current_time()));
+    OZ (BUF_PRINTF("%" PRId64 "", ObTimeUtility::current_time()));
     OX (object_name.assign(buf, static_cast<int32_t>(pos)));
     OZ (schema_guard.check_recyclebin_restore_object_exist(object_schema, object_name, object_exist));
   }

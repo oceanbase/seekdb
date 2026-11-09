@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_session_variables.h"
+#include <inttypes.h>
 #include "observer/ob_server_runtime_access.h"
 #include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_plan_cache.h"
@@ -157,21 +158,21 @@ int ObSessionVariables::set_pc_conf(const ObBasicSysVar *sys_var, ObObj &cell)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SERVER_LOG(ERROR, "fail to alloc mem for plan cache conf", K(ret));
     } else if (share::SYS_VAR_OB_PLAN_CACHE_PERCENTAGE == sys_var->get_type()) {
-      if (OB_FAIL(databuff_printf(buff, OB_MAX_CONFIG_VALUE_LEN, pos, "%ld", pc->get_mem_limit_pct()))) {
+      if (OB_FAIL(databuff_printf(buff, OB_MAX_CONFIG_VALUE_LEN, pos, "%" PRId64 "", pc->get_mem_limit_pct()))) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "fail to transform plan cache conf from int to varchar", K(ret));
       } else {
         cell.set_varchar(buff, static_cast<int>(pos));
       }
     } else if (share::SYS_VAR_OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE == sys_var->get_type()) {
-      if (OB_FAIL(databuff_printf(buff, OB_MAX_CONFIG_VALUE_LEN, pos, "%ld", pc->get_mem_high_pct()))) {
+      if (OB_FAIL(databuff_printf(buff, OB_MAX_CONFIG_VALUE_LEN, pos, "%" PRId64 "", pc->get_mem_high_pct()))) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "fail to transform plan cache conf from int to varchar", K(ret));
       } else {
         cell.set_varchar(buff, static_cast<int>(pos));
       }
     } else if (share::SYS_VAR_OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE == sys_var->get_type()) {
-      if (OB_FAIL(databuff_printf(buff, OB_MAX_CONFIG_VALUE_LEN, pos, "%ld", pc->get_mem_low_pct()))) {
+      if (OB_FAIL(databuff_printf(buff, OB_MAX_CONFIG_VALUE_LEN, pos, "%" PRId64 "", pc->get_mem_low_pct()))) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "fail to transform plan cache conf from int to varchar", K(ret));
       } else {

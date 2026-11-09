@@ -1793,6 +1793,7 @@ grouped_unity_cc_library(
     split_unity_groups = True,
     implementation_deps = [
         ":_share_implementation_headers",
+        ":math_compat",
         "//rust:config_headers",
         "//rust:mvt_headers",
         "//rust:json",

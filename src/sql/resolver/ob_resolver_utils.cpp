@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "share/config/ob_config_helper.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 
@@ -27,6 +28,7 @@
 #include "query/resolver/ob_partition_type_policy.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "lib/utility/utility.h"
+#include "lib/utility/ob_platform_io.h"
 #include "sql/parser/parse_malloc.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
@@ -444,7 +446,7 @@ int ObResolverUtils::resolve_vector_type_info(const ParseNode &type_node, ObStri
   } else if (type_node.children_[0]->value_ <= 0 || type_node.children_[0]->value_ > 16000) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector column dim less or equal to zero or larger than 16000 is");
-  } else if (OB_FAIL(databuff_printf(tmp, MAX_LEN, pos, "%ld", type_node.children_[0]->value_))) {
+  } else if (OB_FAIL(databuff_printf(tmp, MAX_LEN, pos, "%" PRId64 "", type_node.children_[0]->value_))) {
   } else if (OB_FAIL(buf.append(tmp, pos))) {
   } else if (type_node.type_ == T_COLLECTION && OB_FAIL(buf.append(")"))) {
   }
@@ -6063,7 +6065,8 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     MEMCPY(buf, secure_file_priv.ptr(), secure_file_priv.length());
 
     struct stat path_stat;
-    if (0 != stat(buf, &path_stat) || 0 == S_ISDIR(path_stat.st_mode)) {
+    if (0 != stat(buf, &path_stat)
+        || 0 == ob_stat_is_dir(static_cast<uint32_t>(path_stat.st_mode))) {
       ret = OB_ERR_NO_PRIVILEGE;
     } else {
       MEMSET(buf, 0, sizeof(buf));
@@ -6118,7 +6121,7 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
       const char * const secure_file_path = server_secure_path_allowlist[i];
       struct stat path_stat;
       stat(secure_file_path, &path_stat);
-      if (0 == S_ISDIR(path_stat.st_mode)) {
+      if (0 == ob_stat_is_dir(static_cast<uint32_t>(path_stat.st_mode))) {
         // continue
       } else {
         MEMSET(buf, 0, sizeof(buf));
@@ -7030,7 +7033,7 @@ int ObResolverUtils::create_values_table_query(ObSQLSessionInfo *session_info,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN(("value desc is null"), K(ret));
         } else if (OB_FAIL(column_expr->add_flag(IS_COLUMN))) {
-        } else if (OB_FAIL(tmp_col_name.append_fmt("column_%ld", i))) {
+        } else if (OB_FAIL(tmp_col_name.append_fmt("column_%" PRId64 "", i))) {
         } else if (OB_ISNULL(buf = static_cast<char*>(allocator->alloc(tmp_col_name.length())))) {
           ret = common::OB_ALLOCATE_MEMORY_FAILED;
         } else {

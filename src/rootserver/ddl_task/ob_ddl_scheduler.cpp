@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_scheduler.h"
+#include <inttypes.h>
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
 #include "rootserver/ddl_task/ob_drop_vec_index_task.h"
@@ -2373,7 +2374,7 @@ int ObDDLScheduler::recover_task()
 void ObDDLScheduler::add_event_info(const ObDDLTaskRecord &ddl_record, const ObString &ddl_event_stmt)
 {
   char object_id_buffer[256];
-  snprintf(object_id_buffer, sizeof(object_id_buffer), "%ld %ld", ddl_record.object_id_, ddl_record.target_object_id_);
+  snprintf(object_id_buffer, sizeof(object_id_buffer), "%" PRIu64 " %" PRIu64, ddl_record.object_id_, ddl_record.target_object_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
     "ret", ddl_record.ret_code_,
     "trace_id", ddl_record.trace_id_,

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "sql/printer/ob_schema_printer.h"
+#include <inttypes.h>
 #include "share/ob_autoincrement_service.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 
@@ -821,7 +822,7 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
         const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value().get_int();
         if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
         } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                           is_last ? "(%ld))" : "(%ld), ", const_value))) {
+                                           is_last ? "(%" PRId64 "))" : "(%" PRId64 "), ", const_value))) {
         }
       }
     }
@@ -1239,9 +1240,9 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
       if (table_schema.get_auto_increment() > auto_increment) {
         auto_increment = table_schema.get_auto_increment();
       }
-      if (OB_FAIL(databuff_printf(buf, buf_len, pos, "AUTO_INCREMENT = %lu ", auto_increment))) {
+      if (OB_FAIL(databuff_printf(buf, buf_len, pos, "AUTO_INCREMENT = %" PRIu64 " ", auto_increment))) {
       } else if (!strict_compat_ && table_schema.get_auto_increment_cache_size() > 0 &&
-                   OB_FAIL(databuff_printf(buf, buf_len, pos, "AUTO_INCREMENT_CACHE_SIZE = %ld ",
+                   OB_FAIL(databuff_printf(buf, buf_len, pos, "AUTO_INCREMENT_CACHE_SIZE = %" PRId64 " ",
                       table_schema.get_auto_increment_cache_size()))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print table auto increment cache size", K(ret),
                          K(table_schema));
@@ -1278,7 +1279,7 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
   if (OB_SUCCESS == ret && !strict_compat_ && table_schema.get_block_size() >= 0
       && !is_no_key_options(sql_mode) && !is_no_table_options(sql_mode)) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                is_index_tbl ? "BLOCK_SIZE %ld " : "BLOCK_SIZE = %ld ",
+                                is_index_tbl ? "BLOCK_SIZE %" PRId64 " " : "BLOCK_SIZE = %" PRId64 " ",
                                 table_schema.get_block_size()))) {
     }
   }
@@ -1296,25 +1297,25 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
     }
   }
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl && !is_no_table_options(sql_mode)) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "TABLET_SIZE = %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "TABLET_SIZE = %" PRId64 " ",
                                 table_schema.get_tablet_size()))) {
     }
   }
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl && !is_no_table_options(sql_mode)) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PCTFREE = %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PCTFREE = %" PRId64 " ",
                                 table_schema.get_pctfree()))) {
     }
   }
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl && table_schema.get_dop() > 1
       && !is_no_table_options(sql_mode)) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PARALLEL %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PARALLEL %" PRId64 " ",
                                 table_schema.get_dop()))) {
     }
   }
   if (OB_SUCCESS == ret && !strict_compat_
       && !is_index_tbl && table_schema.get_progressive_merge_num() > 0
       && !is_no_table_options(sql_mode)) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PROGRESSIVE_MERGE_NUM = %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PROGRESSIVE_MERGE_NUM = %" PRId64 " ",
             table_schema.get_progressive_merge_num()))) {
     }
   }
@@ -1495,9 +1496,9 @@ int ObSchemaPrinter::print_table_definition_table_options(
       if (table_schema.get_auto_increment() > auto_increment) {
         auto_increment = table_schema.get_auto_increment();
       }
-      if (OB_FAIL(databuff_printf(buf, buf_len, pos, "AUTO_INCREMENT = %lu ", auto_increment))) {
+      if (OB_FAIL(databuff_printf(buf, buf_len, pos, "AUTO_INCREMENT = %" PRIu64 " ", auto_increment))) {
       } else if (table_schema.get_auto_increment_cache_size() > 0 &&
-                   OB_FAIL(databuff_printf(buf, buf_len, pos, "AUTO_INCREMENT_CACHE_SIZE = %ld ",
+                   OB_FAIL(databuff_printf(buf, buf_len, pos, "AUTO_INCREMENT_CACHE_SIZE = %" PRId64 " ",
                       table_schema.get_auto_increment_cache_size()))) {
         OB_LOG(WARN, "fail to print table auto increment cache size", K(ret), K(table_schema));
       }
@@ -1534,7 +1535,7 @@ int ObSchemaPrinter::print_table_definition_table_options(
   if (OB_SUCC(ret) && !strict_compat_
       && table_schema.get_block_size() >= 0 && !is_index_tbl) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                "BLOCK_SIZE = %ld ",
+                                "BLOCK_SIZE = %" PRId64 " ",
                                 table_schema.get_block_size()))) {
     }
   }
@@ -1546,29 +1547,29 @@ int ObSchemaPrinter::print_table_definition_table_options(
     }
   }
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "TABLET_SIZE = %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "TABLET_SIZE = %" PRId64 " ",
                                 table_schema.get_tablet_size()))) {
     }
   }
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PCTFREE = %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PCTFREE = %" PRId64 " ",
                                 table_schema.get_pctfree()))) {
     }
   }
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl && table_schema.get_dop() > 1) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PARALLEL %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PARALLEL %" PRId64 " ",
                                 table_schema.get_dop()))) {
     }
   }
   if (OB_SUCC(ret) && !strict_compat_  
       && !is_index_tbl && table_schema.get_progressive_merge_num() > 0) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PROGRESSIVE_MERGE_NUM = %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PROGRESSIVE_MERGE_NUM = %" PRId64 " ",
             table_schema.get_progressive_merge_num()))) {
     }
   }
 
   if (OB_SUCC(ret) && !strict_compat_ && is_agent_mode) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PROGRESSIVE_MERGE_ROUND = %ld ",
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "PROGRESSIVE_MERGE_ROUND = %" PRId64 " ",
             table_schema.get_progressive_merge_round()))) {
     }
   }
@@ -1714,7 +1715,7 @@ int ObSchemaPrinter::print_index_definition_columns(
                   } else {
                     const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value().get_int();
                     if (OB_FAIL(print_identifier(buf, buf_len, pos, column_name))) {
-                    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "(%ld)", const_value))) {
+                    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "(%" PRId64 ")", const_value))) {
                     }
                   }
                 }
@@ -3067,12 +3068,12 @@ int ObSchemaPrinter::print_user_definition(const ObUserInfo &user_info,
     if (0 != user_info.get_max_connections() || 0 != user_info.get_max_user_connections()) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, " WITH"))) {
       } else if (0 != user_info.get_max_connections() &&
-                 OB_FAIL(databuff_printf(buf, buf_len, pos, " MAX_CONNECTIONS_PER_HOUR %lu",
+                 OB_FAIL(databuff_printf(buf, buf_len, pos, " MAX_CONNECTIONS_PER_HOUR %" PRIu64 "",
                                          user_info.get_max_connections()))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print get max_connections",
                          K(user_info.get_max_connections()), K(ret));
       } else if (0 != user_info.get_max_user_connections() &&
-                 OB_FAIL(databuff_printf(buf, buf_len, pos, " MAX_USER_CONNECTIONS %lu",
+                 OB_FAIL(databuff_printf(buf, buf_len, pos, " MAX_USER_CONNECTIONS %" PRIu64 "",
                                          user_info.get_max_user_connections()))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print get_max_user_connections",
                          K(user_info.get_max_user_connections()), K(ret));
@@ -3098,7 +3099,7 @@ int ObSchemaPrinter::print_hash_partition_elements(const ObPartitionSchema *&sch
     if (OB_ISNULL(part_array)) {
       if (is_virtual_table(schema->get_table_id())) {
         // virtual table
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, " partitions %ld\n",
+        if (OB_FAIL(databuff_printf(buf, buf_len, pos, " partitions %" PRId64 "\n",
                     schema->get_first_part_num()))) {
         }
       } else {
@@ -3348,7 +3349,7 @@ int ObSchemaPrinter::print_column_lob_params(const ObColumnSchemaV2 &column_sche
     // do nothing
   } else if (column_schema.get_lob_chunk_size() == OB_DEFAULT_LOB_CHUNK_SIZE) {
     // default value not display
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, " CHUNK '%ldKB'", column_schema.get_lob_chunk_size()/ObLobDataOutRowCtx::OUTROW_LOB_CHUNK_SIZE_UNIT))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, " CHUNK '%" PRId64 "KB'", column_schema.get_lob_chunk_size()/ObLobDataOutRowCtx::OUTROW_LOB_CHUNK_SIZE_UNIT))) {
   }
   return ret;
 }
@@ -3365,7 +3366,7 @@ int ObSchemaPrinter::print_table_definition_lob_params(const ObTableSchema &tabl
   } else if (table_schema.get_lob_inrow_threshold() == OB_SYS_VAR_DEFAULT_LOB_INROW_THRESHOLD) {
     // if lob_inrow_threshold is OB_SYS_VAR_DEFAULT_LOB_INROW_THRESHOLD in new version, not display
     SHARE_SCHEMA_LOG(INFO, "new default inrow threashold not display", K(ret), "lob inrow threshold", table_schema.get_lob_inrow_threshold());
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "LOB_INROW_THRESHOLD=%ld ", table_schema.get_lob_inrow_threshold()))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "LOB_INROW_THRESHOLD=%" PRId64 " ", table_schema.get_lob_inrow_threshold()))) {
   }
   return ret;
 }

@@ -18,6 +18,7 @@
 #define OCEANBASE_TRANSACTION_OB_TX_STAT_
 
 #include "ob_trans_define.h"
+#include <inttypes.h>
 #include "common/ob_range.h"
 #include "lib/utility/ob_print_utils.h"
 
@@ -37,7 +38,7 @@ struct ObTxCallbackListStat
   DECLARE_TO_STRING
   {
     int64_t pos = 0;
-    BUF_PRINTF("[%d,%d,%d,%d,%d,%ld]",
+    BUF_PRINTF("[%d,%d,%d,%d,%d,%" PRId64 "]",
                id_,
                length_,
                logged_,

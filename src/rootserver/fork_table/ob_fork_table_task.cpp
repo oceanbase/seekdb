@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "rootserver/fork_table/ob_fork_table_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_ddl_service.h"
@@ -547,7 +548,7 @@ int ObForkTableTask::cleanup_impl()
       } else {
         ObSqlString sql_string;
         int64_t affected_rows = 0;
-        if (OB_FAIL(sql_string.assign_fmt(" DELETE FROM %s WHERE task_id=%ld",
+        if (OB_FAIL(sql_string.assign_fmt(" DELETE FROM %s WHERE task_id=%" PRId64 "",
             share::OB_ALL_DDL_TASK_STATUS_TNAME, task_id_))) {
         } else if (OB_FAIL(DDL_SIM(task_id_, TASK_STATUS_OPERATOR_SLOW))) {
         } else if (OB_FAIL(DDL_SIM(task_id_, DELETE_TASK_RECORD_FAILED))) {

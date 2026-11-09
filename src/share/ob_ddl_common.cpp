@@ -1310,7 +1310,7 @@ int ObDDLTaskStatInfo::init(const char *&ddl_type_str, const uint64_t table_id)
   MEMSET(op_name_, 0, common::MAX_LONG_OPS_NAME_LENGTH);
   MEMSET(target_, 0, common::MAX_LONG_OPS_TARGET_LENGTH);
   if (OB_FAIL(databuff_printf(op_name_, common::MAX_LONG_OPS_NAME_LENGTH, "%s", ddl_type_str))) {
-  } else if (OB_FAIL(databuff_printf(target_, common::MAX_LONG_OPS_TARGET_LENGTH, "%lu", table_id))) {
+  } else if (OB_FAIL(databuff_printf(target_, common::MAX_LONG_OPS_TARGET_LENGTH, "%" PRIu64 "", table_id))) {
   } else {
     start_time_ = ObTimeUtility::current_time();
   }

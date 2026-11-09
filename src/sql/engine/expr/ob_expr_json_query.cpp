@@ -157,7 +157,7 @@ int ObExprJsonQuery::check_data_type_allowed(const ObExprResType* types_stack, c
   bool is_asis = types_stack[JSN_QUE_ASIS].get_param().get_int() > 0;
   bool is_multivalue = types_stack[JSN_QUE_MULTIVALUE].get_param().get_int() > 0;
 
-  // multivalue genreated column __mvi_%ld
+  // multivalue genreated column __mvi_%lld
   if (!is_asis && data_type.get_type() != ObVarcharType 
     && data_type.get_type() != ObLongTextType 
     && data_type.get_type() != ObJsonType) {

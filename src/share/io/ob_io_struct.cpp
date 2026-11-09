@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_struct.h"
+#include <inttypes.h>
 #include "share/ob_io_device_helper.h"
 #include "share/ob_force_print_log.h"
 #include "lib/objectpool/ob_concurrency_objpool.h"
@@ -1339,17 +1340,20 @@ void ObDeviceChannel::destroy()
     ch->wait();
   }
   for (int64_t i = 0; i < async_channels_.count(); ++i) {
-    ObIOChannel *ch = async_channels_.at(i);
+    ObAsyncIOChannel *ch = static_cast<ObAsyncIOChannel *>(async_channels_.at(i));
     if (nullptr != allocator_ && nullptr != ch) {
-      ch->~ObIOChannel();
+      // Call the concrete destructor: an explicit ~ObIOChannel() only runs the
+      // base class and would skip the derived members (e.g. the sync channel's
+      // ObThreadCond, which owns an OS condition variable).
+      ch->~ObAsyncIOChannel();
       allocator_->free(ch);
     }
   }
   async_channels_.destroy();
   for (int64_t i = 0; i < sync_channels_.count(); ++i) {
-    ObIOChannel *ch = sync_channels_.at(i);
+    ObSyncIOChannel *ch = static_cast<ObSyncIOChannel *>(sync_channels_.at(i));
     if (nullptr != allocator_ && nullptr != ch) {
-      ch->~ObIOChannel();
+      ch->~ObSyncIOChannel();
       allocator_->free(ch);
     }
   }
@@ -1404,7 +1408,7 @@ void ObDeviceChannel::print_status()
     ObIOChannel *channel = async_channels_.at(i);
     if (OB_NOT_NULL(channel)) {
       int64_t cnt = channel->get_queue_count();
-      common::databuff_printf(buf, sizeof(buf), pos, " %ld", cnt);
+      common::databuff_printf(buf, sizeof(buf), pos, " %" PRId64 "", cnt);
       async_total += cnt;
     }
   }
@@ -1413,12 +1417,12 @@ void ObDeviceChannel::print_status()
     ObIOChannel *channel = sync_channels_.at(i);
     if (OB_NOT_NULL(channel)) {
       int64_t cnt = max(channel->get_queue_count(), 0);
-      common::databuff_printf(buf, sizeof(buf), pos, " %ld", cnt);
+      common::databuff_printf(buf, sizeof(buf), pos, " %" PRId64 "", cnt);
       sync_total += cnt;
     }
   }
   if (0 != pos) {
-    _LOG_INFO("[IO STATUS CHANNEL] device_id=%p, req_in_channel, async_total=%ld, sync_total=%ld%s", this, async_total, sync_total, buf);
+    _LOG_INFO("[IO STATUS CHANNEL] device_id=%p, req_in_channel, async_total=%" PRId64 ", sync_total=%" PRId64 "%s", this, async_total, sync_total, buf);
   }
 }
 
@@ -1613,7 +1617,7 @@ int64_t ObIOCallbackManager::to_string(char *buf, const int64_t len) const
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (OB_FAIL(databuff_printf(buf, len, pos,
-                              "IO_CALLBACK: thread_count=%ld, queue_count=%ld",
+                              "IO_CALLBACK: thread_count=%" PRId64 ", queue_count=%" PRId64 "",
                               config_thread_count_, get_queue_num()))) {
     // do nothing
   }
@@ -2102,13 +2106,13 @@ int64_t ObIOTracer::to_string(char *buf, const int64_t len) const
     } else if (OB_FAIL(counter.bt_count_.foreach_refactored(store_fn))) {
     } else {
       lib::ob_sort(trace_array.begin(), trace_array.end(), sort_fn);
-      databuff_printf(buf, len, pos, "trace_request_count: %ld, distinct_backtrace_count: %ld; ", counter.req_count_, trace_array.count());
+      databuff_printf(buf, len, pos, "trace_request_count: %" PRId64 ", distinct_backtrace_count: %" PRId64 "; ", counter.req_count_, trace_array.count());
       const int64_t print_count = min(5, trace_array.count());
       for (int64_t i = 0; OB_SUCC(ret) && i < print_count; ++i) {
         const TraceItem &item = trace_array.at(i);
 	{
           ObCStringHelper helper;
-          databuff_printf(buf, len, pos, "top: %ld, count: %ld, ref_log: %s, backtrace: %s; ", i + 1, item.count_, helper.convert(item.trace_info_.ref_log_), item.trace_info_.bt_str_);
+          databuff_printf(buf, len, pos, "top: %" PRId64 ", count: %" PRId64 ", ref_log: %s, backtrace: %s; ", i + 1, item.count_, helper.convert(item.trace_info_.ref_log_), item.trace_info_.bt_str_);
         }
       }
     }

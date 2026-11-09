@@ -15,6 +15,7 @@
  */
 
 #include "ob_local_device.h"
+#include "lib/utility/ob_platform_io.h"
 #include "rust/config.h"
 #ifdef __EMSCRIPTEN__
 #include "lib/file/wasm_file.h"
@@ -45,7 +46,12 @@
 #endif
 
 #ifdef _WIN32
-#include "share/ob_statvfs_win32.h"
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
 #endif
 #if defined(__APPLE__)
 #ifndef FALLOC_FL_KEEP_SIZE
@@ -54,6 +60,104 @@
 #ifndef FALLOC_FL_PUNCH_HOLE
 #define FALLOC_FL_PUNCH_HOLE 0x02
 #endif
+#endif
+// libaio emulation: synchronous pread/pwrite with event queue
+static inline int io_setup(int maxevents, io_context_t *ctxp) {
+  (void)maxevents;
+  io_event_queue *q = new (std::nothrow) io_event_queue();
+  if (q == nullptr) return -ENOMEM;
+  *ctxp = (io_context_t)q;
+  return 0;
+}
+static inline int io_destroy(io_context_t ctx) {
+  io_event_queue *q = (io_event_queue *)ctx;
+  if (q != nullptr) {
+    delete q;
+  }
+  return 0;
+}
+static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
+  iocb->aio_fildes = fd;
+  iocb->aio_buf = buf;
+  iocb->aio_nbytes = count;
+  iocb->aio_offset = offset;
+  iocb->aio_lio_opcode = 1; // IOCB_CMD_PWRITE
+}
+static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
+  iocb->aio_fildes = fd;
+  iocb->aio_buf = buf;
+  iocb->aio_nbytes = count;
+  iocb->aio_offset = offset;
+  iocb->aio_lio_opcode = 0; // IOCB_CMD_PREAD
+}
+static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
+  io_event_queue *q = (io_event_queue *)ctx;
+  if (q == nullptr) return -EINVAL;
+
+  int completed = 0;
+  for (long i = 0; i < nr; ++i) {
+    struct iocb *iocb = iocbpp[i];
+    ssize_t res = 0;
+#ifdef _WIN32
+    if (iocb->aio_lio_opcode == 1) { // PWRITE
+      res = static_cast<ssize_t>(oceanbase::common::ob_pwrite_fd(
+          iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset));
+    } else if (iocb->aio_lio_opcode == 0) { // PREAD
+      res = static_cast<ssize_t>(oceanbase::common::ob_pread_fd(
+          iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset));
+    }
+#else
+    if (iocb->aio_lio_opcode == 1) { // PWRITE
+      res = pwrite(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
+    } else if (iocb->aio_lio_opcode == 0) { // PREAD
+      res = pread(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
+    }
+#endif
+
+    struct io_event ev;
+    ev.data = iocb->data;
+    ev.obj = iocb;
+    ev.res = (res >= 0) ? res : -errno;
+    ev.res2 = 0;
+
+    {
+      std::lock_guard<std::mutex> lock(q->mtx);
+      q->events.push_back(ev);
+    }
+    q->cv.notify_one();
+    completed++;
+  }
+  return completed;
+}
+static inline int io_cancel(io_context_t ctx, struct iocb *iocb, struct io_event *result) {
+  (void)ctx; (void)iocb; (void)result;
+  return 0;
+}
+static inline int io_getevents(io_context_t ctx, long min_nr, long nr, struct io_event *events, struct timespec *timeout) {
+  io_event_queue *q = (io_event_queue *)ctx;
+  if (q == nullptr) return -EINVAL;
+
+  std::unique_lock<std::mutex> lock(q->mtx);
+  std::function<bool()> wait_condition = [&] { return q->events.size() >= (size_t)min_nr; };
+
+  if (min_nr > 0 && (size_t)q->events.size() < (size_t)min_nr) {
+    if (timeout != nullptr) {
+      std::chrono::nanoseconds duration = std::chrono::seconds(timeout->tv_sec) + std::chrono::nanoseconds(timeout->tv_nsec);
+      if (!q->cv.wait_for(lock, duration, wait_condition)) {
+        // Timeout
+      }
+    } else {
+      q->cv.wait(lock, wait_condition);
+    }
+  }
+
+  int count = 0;
+  while (count < nr && !q->events.empty()) {
+    events[count++] = q->events.front();
+    q->events.erase(q->events.begin());
+  }
+  return count;
+}
 #endif
 using namespace oceanbase::common;
 
@@ -376,7 +480,8 @@ int ObLocalDevice::rename(const char *oldpath, const char *newpath)
   return ret;
 }
 
-int ObLocalDevice::scan_dir(const char *dir_name, int (*func)(const dirent *entry))
+int ObLocalDevice::scan_dir(const char *dir_name,
+                            int (*func)(const common::ObPlatformDirEntry &entry))
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::scan_dir(dir_name, func))) {
@@ -1110,7 +1215,8 @@ int64_t ObLocalDevice::get_max_block_count(int64_t reserved_size) const
 int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
 {
   int ret = OB_SUCCESS;
-  struct statvfs svfs;
+  int64_t total_space = 0;
+  int64_t available_space = 0;
 
   const int64_t config_max_file_size = config::datafile_maxsize();
   const int64_t current_size = get_total_block_size();
@@ -1121,11 +1227,11 @@ int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
   } else if (OB_ISNULL(sstable_dir_)) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "Failed to get max block size", K(ret), K(sstable_dir_));
-  } else if (OB_UNLIKELY(0 != statvfs(sstable_dir_, &svfs))) {
+  } else if (OB_UNLIKELY(0 != ob_get_disk_space_utf8(sstable_dir_, total_space, available_space))) {
     ret = ObIODeviceLocalFileOp::convert_sys_errno();
     SHARE_LOG(WARN, "Failed to get disk space", K(ret), K(sstable_dir_));
   } else {
-    const int64_t free_space = std::max(static_cast<int64_t>(0), (int64_t)(svfs.f_bavail * svfs.f_bsize));
+    const int64_t free_space = std::max(static_cast<int64_t>(0), available_space);
     const int64_t max_file_size = std::max(current_size, current_size + free_space - reserved_size);
     /* when datafile_maxsize is large than current datafile_size, we should return
        the Maximun left space that can be extend. */

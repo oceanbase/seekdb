@@ -94,6 +94,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "lib/utility/ob_target_specific.h"
+#include "lib/utility/ob_platform_io.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "data_plane/fts/ob_fts_parser_helper.h"
 #include "rpc/ob_request.h"
@@ -442,8 +443,8 @@ static int create_redo_path(const char *redo_dir, bool &created_leaf)
   } else {
     // A trailing separator must not cause the parent creation to create the
     // leaf first and lose its provenance. Normalize before splitting the path.
-    char absolute_dir[PATH_MAX] = {0};
-    if (NULL == _fullpath(absolute_dir, redo_dir, sizeof(absolute_dir))) {
+    char absolute_dir[4096] = {0};
+    if (0 != ob_absolute_path_utf8(redo_dir, absolute_dir, sizeof(absolute_dir))) {
       return OB_IO_ERROR;
     }
     size_t length = strlen(absolute_dir);
@@ -460,7 +461,7 @@ static int create_redo_path(const char *redo_dir, bool &created_leaf)
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(parent_dir.assign(redo_dir, separator - redo_dir + (separator == redo_dir + 2 && ':' == redo_dir[1] ? 1 : 0)))) {
     } else if (OB_FAIL(FileDirectoryUtils::create_full_path(parent_dir.ptr()))) {
-    } else if (0 == _mkdir(redo_dir)) {
+    } else if (0 == ob_mkdir_utf8(redo_dir, 0755)) {
       created_leaf = true;
     } else if (EEXIST != errno) {
       ret = OB_IO_ERROR;
@@ -483,24 +484,19 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
   ObSqlString redo_file_path;
   if (OB_FAIL(data_file_path.assign_fmt("%s/%s/%s", data_dir, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
   }
-#ifdef _WIN32
   if (OB_FAIL(ret)) {
   } else {
-    const DWORD attributes = GetFileAttributesA(data_file_path.ptr());
-    if (INVALID_FILE_ATTRIBUTES != attributes) {
+    ObPlatformFileStat data_file_info;
+    if (0 == ob_stat_utf8(data_file_path.ptr(), data_file_info)) {
       data_file_exists = true;
+    } else if (ENOENT == errno) {
+      data_file_exists = false;
     } else {
-      const DWORD error = GetLastError();
-      if (ERROR_FILE_NOT_FOUND != error && ERROR_PATH_NOT_FOUND != error) {
-        ret = OB_IO_ERROR;
-        LOG_WARN("Failed to query data file", K(data_file_path), K(error), K(ret));
-      }
+      ret = OB_IO_ERROR;
+      LOG_WARN("Failed to query data file", K(data_file_path), K(errno), K(ret));
     }
   }
   if (OB_FAIL(ret)) {
-#else
-  if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
-#endif
 #ifdef _WIN32
   } else if (OB_FAIL(create_redo_path(redo_dir, created_redo_leaf))) {
     LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
@@ -1908,11 +1904,11 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
   rust::String configured_redo_dir = config::redo_dir();
 
   // remove current_directory prefix of data_dir and redo_dir if exists
-  char current_dir[PATH_MAX] = {0};
-  if (nullptr == getcwd(current_dir, sizeof(current_dir))) {
+  char current_dir[4096] = {0};
+  if (0 != ob_getcwd_utf8(current_dir, sizeof(current_dir))) {
     LOG_ERROR("failed to get current directory", K(ret), KCSTRING(strerror(errno)));
   } else if (current_dir[strlen(current_dir) - 1] == '/') {
-  } else if (strlen(current_dir) + 2 >= PATH_MAX) {
+  } else if (strlen(current_dir) + 2 >= sizeof(current_dir)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_ERROR("current directory is too long", K(ret), KCSTRING(current_dir));
   } else {

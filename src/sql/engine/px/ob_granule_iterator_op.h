@@ -125,8 +125,6 @@ public:
   int add_tablet_access_keys(common::ObIArray<const ObTableScanSpec*> &tscs);
   int64_t get_rf_max_wait_time() { return rf_max_wait_time_; }
   void set_rf_max_wait_time(int64_t rf_max_wait_time) { rf_max_wait_time_ = rf_max_wait_time; }
-  int init_task_rebalancer(ObExecContext *ctx, int64_t parallelism, int64_t split_gi_task_cost,
-                           int64_t initial_task_count, int64_t op_id);
 
 private:
 public:

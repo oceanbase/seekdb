@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_table_redefinition_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -31,9 +32,9 @@ using namespace oceanbase::rootserver;
 
 ObTableRedefinitionTask::ObTableRedefinitionTask()
   : ObDDLRedefinitionTask(ObDDLType::DDL_TABLE_REDEFINITION),
-    has_rebuild_index_(false), has_rebuild_constraint_(false), has_rebuild_foreign_key_(false), 
+    has_rebuild_index_(false), has_rebuild_constraint_(false), has_rebuild_foreign_key_(false),
     allocator_(lib::ObLabel("RedefTask")),
-    is_copy_indexes_(true), is_copy_triggers_(true), is_copy_constraints_(true), is_copy_foreign_keys_(true), 
+    is_copy_indexes_(true), is_copy_triggers_(true), is_copy_constraints_(true), is_copy_foreign_keys_(true),
     is_ignore_errors_(false), is_do_finish_(false), use_heap_table_ddl_plan_(false),
     is_ddl_retryable_(true), has_rebuild_domain_indexes_(false)
 {
@@ -62,9 +63,9 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
   } else if (OB_ISNULL(src_table_schema) || OB_ISNULL(dst_table_schema)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY( !src_table_schema->is_valid()
-                        || !dst_table_schema->is_valid() 
+                        || !dst_table_schema->is_valid()
                         || task_id <= 0  || snapshot_version < 0 || data_format_version <= 0
-                        || task_status < ObDDLTaskStatus::PREPARE || task_status > ObDDLTaskStatus::SUCCESS 
+                        || task_status < ObDDLTaskStatus::PREPARE || task_status > ObDDLTaskStatus::SUCCESS
                         || (snapshot_version > 0 && task_status < ObDDLTaskStatus::WAIT_TRANS_END))) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, alter_table_arg, alter_table_arg_))) {
@@ -80,7 +81,7 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
 
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);
     snapshot_version_ = snapshot_version;
-    
+
     task_version_ = OB_TABLE_REDEFINITION_TASK_VERSION;
     parent_task_id_ = parent_task_id;
     task_id_ = task_id;
@@ -88,9 +89,9 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
     data_format_version_ = data_format_version;
     start_time_ = ObTimeUtility::current_time();
     dst_schema_version_ = dst_table_schema->get_schema_version();
-    
+
     alter_table_arg_.alter_table_schema_.set_schema_version(schema_version_);
-    
+
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
     } else if (OB_FAIL(check_ddl_can_retry(ddl_need_retry_at_executor, dst_table_schema))) {
     } else {
@@ -105,8 +106,8 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
 int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
-  
-  
+
+
   int64_t src_schema_version = 0;
   int64_t dst_schema_version = 0;
   const uint64_t data_table_id = task_record.object_id_;
@@ -121,7 +122,7 @@ int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
   } else if (OB_FAIL(set_ddl_stmt_str(task_record.ddl_stmt_str_))) {
   } else if (FALSE_IT(src_schema_version = alter_table_arg_.alter_table_schema_.get_schema_version())) {
   } else if (FALSE_IT(dst_schema_version = task_record.schema_version_)) {
-  } else if (OB_UNLIKELY(src_schema_version <= 0 
+  } else if (OB_UNLIKELY(src_schema_version <= 0
                       || dst_schema_version <= 0)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(src_schema_version != dst_schema_version)) {
@@ -135,10 +136,10 @@ int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     snapshot_version_ = task_record.snapshot_version_;
     execution_id_ = task_record.execution_id_;
-    
+
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
-    
+
     dst_schema_version_ = dst_schema_version;
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
     } else {
@@ -419,7 +420,7 @@ int ObTableRedefinitionTask::copy_table_indexes()
           ret = OB_ERR_UNEXPECTED;
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < index_ids.count(); ++i) {
-          const uint64_t index_id = index_ids.at(i);	
+          const uint64_t index_id = index_ids.at(i);
           const ObTableSchema *index_schema = nullptr;
           ObDDLTaskRecord task_record;
           bool need_rebuild_index = true;
@@ -756,7 +757,7 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
     }
   }
   char object_id_buffer[256];
-  snprintf(object_id_buffer, sizeof(object_id_buffer), "object_id:%ld, target_object_id:%ld", 
+  snprintf(object_id_buffer, sizeof(object_id_buffer), "object_id:%" PRIu64 ", target_object_id:%" PRIu64,
             object_id_, target_object_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", "table redefinition task take effect",
     "ret", ret,
@@ -1006,7 +1007,7 @@ int ObTableRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %" PRId64 ", ", task_id_);
   switch (status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(databuff_printf(stat_info_.message_,
@@ -1021,14 +1022,14 @@ int ObTableRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %ld",
+                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %" PRId64 "",
                                     snapshot_version_))) {
         }
       } else {
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %ld",
+                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %" PRId64 "",
                                     wait_trans_ctx_.get_pending_tx_id().get_id()))) {
         }
       }

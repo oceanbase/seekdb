@@ -225,6 +225,7 @@ _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
     "//rust:compression_headers",
     "//rust:config_headers",
     "//rust:json",
+    "//src/share:math_compat",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
     ":sql_runtime_internal_headers",

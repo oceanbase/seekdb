@@ -1243,7 +1243,7 @@ inline int obj_print_plain_str<ObHexStringType>(const ObObj &obj, char *buffer,
       if (OB_SUCC(ret) && params.refine_range_max_value_) {                                 \
         int64_t tails = 0;                                                                  \
         while (pos > 0 && (char)(0xff) == buffer[pos-1]) { pos--; tails++; }                \
-        if (tails > 0) { ret = databuff_printf(buffer, length, pos, "<FF><repeat %ld times>", tails); } \
+        if (tails > 0) { ret = databuff_printf(buffer, length, pos, "<FF><repeat %" PRId64 " times>", tails); } \
       }                                                                                     \
     } else {                                                                                \
       uint32_t result_len = 0;                                                              \
@@ -1371,7 +1371,7 @@ DEF_VARCHAR_FUNCS(ObCharType, char, ObString);
       ObEnumSetInnerValue inner_value;                                  \
       if (OB_FAIL(obj.get_enumset_inner_value(inner_value))) {         \
       } else {                                                          \
-        ret = databuff_printf(buffer, length, pos, "%.*s; %ld", inner_value.string_value_.length(),\
+        ret = databuff_printf(buffer, length, pos, "%.*s; %" PRId64 "", inner_value.string_value_.length(),\
                               inner_value.string_value_.ptr(), inner_value.numberic_value_);  \
       }                                                                 \
     }                                                                     \
@@ -1403,7 +1403,7 @@ DEF_VARCHAR_FUNCS(ObCharType, char, ObString);
       ObEnumSetInnerValue inner_value;                                  \
       if (OB_FAIL(obj.get_enumset_inner_value(inner_value))) {         \
       } else {                                                          \
-        ret = databuff_printf(buf, buf_len, pos, "%.*s; %ld", inner_value.string_value_.length(),\
+        ret = databuff_printf(buf, buf_len, pos, "%.*s; %" PRId64 "", inner_value.string_value_.length(),\
                               inner_value.string_value_.ptr(), inner_value.numberic_value_);  \
       }                                                                 \
     }                                                                   \
@@ -1922,7 +1922,7 @@ template <>
       ret = databuff_printf(buffer, length, pos, "'%s'", N_UPPERCASE_CUR_TIMESTAMP);
       break;
     default:
-      _OB_LOG(WARN, "ext %ld should not be print as sql varchar literal", obj.get_ext());
+      _OB_LOG(WARN, "ext %" PRId64 " should not be print as sql varchar literal", obj.get_ext());
       ret = OB_INVALID_ARGUMENT;
       break;
   }
@@ -1949,7 +1949,7 @@ template <>
       ret = databuff_printf(buffer, length, pos, "%s", N_UPPERCASE_CUR_TIMESTAMP);
       break;
     default:
-      _OB_LOG(WARN, "ext %ld should not be print as sql", obj.get_ext());
+      _OB_LOG(WARN, "ext %" PRId64 " should not be print as sql", obj.get_ext());
       ret = OB_INVALID_ARGUMENT;
       break;
   }

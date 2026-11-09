@@ -18,6 +18,7 @@
 #define _OCEANBASE_ROOTSERVER_OB_DDL_SERVICE_H_
 
 #include "lib/ob_define.h"
+#include <inttypes.h>
 #include "share/ob_define.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/string/ob_string.h"
@@ -2141,7 +2142,7 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
       // Process each partition with an empty partition name
       char part_name[OB_MAX_PARTITION_NAME_LENGTH];
       int64_t pos = 0;
-      if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH, pos, "P%ld", max_part_id))) {
+      if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH, pos, "P%" PRId64 "", max_part_id))) {
       } else {
         part_name_str.assign(part_name, static_cast<int32_t>(pos));
         bool is_valid = false;

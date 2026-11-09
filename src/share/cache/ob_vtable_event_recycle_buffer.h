@@ -18,6 +18,7 @@
 #define SHARE_CACHE_OB_VTABLE_EVENT_RECYCLE_BUFFER_H
 
 #include "lib/allocator/ob_allocator.h"
+#include <inttypes.h>
 #include "lib/ob_define.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -153,12 +154,12 @@ public:
         int64_t write_number = 0;
         int64_t recycle_number = 0;
         buffer_bkt_[idx].cache_.get_statistics(write_pos, recycle_pos, write_number, recycle_number, buffer_size);
-        databuff_printf(info, stack_buffer_size, pos, "[%ld: total_write_size:", idx);
+        databuff_printf(info, stack_buffer_size, pos, "[%" PRId64 ": total_write_size:", idx);
         databuff_printf(info, stack_buffer_size, pos, ObSizeLiteralPrettyPrinter(write_pos));
         databuff_printf(info, stack_buffer_size, pos, ", total_recycle_size:");
         databuff_printf(info, stack_buffer_size, pos, ObSizeLiteralPrettyPrinter(recycle_pos));
         databuff_printf(info, stack_buffer_size, pos, 
-            ", total_write_num:%ld, total_recycle_num:%ld]", write_number, recycle_number);
+            ", total_write_num:%" PRId64 ", total_recycle_num:%" PRId64 "]", write_number, recycle_number);
       }
       databuff_printf(info, stack_buffer_size, pos, ", buffer_size_each:");
       databuff_printf(info, stack_buffer_size, pos, ObSizeLiteralPrettyPrinter(buffer_size));

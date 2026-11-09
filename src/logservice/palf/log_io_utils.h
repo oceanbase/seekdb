@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_LOGSERVICE_LOG_IO_UTILS_
 #define OCEANBASE_LOGSERVICE_LOG_IO_UTILS_
-#include <dirent.h>                                      // dirent
 #include "share/log/palf/log_define.h"
 namespace oceanbase
 {
@@ -25,11 +24,6 @@ namespace palf
 
 int open_directory(const char *dir_path);
 
-int openat_with_retry(const int dir_fd,
-                      const char *block_path,
-                      const int flag,
-                      const int mode,
-                      int &fd);
 int close_with_ret(const int fd);
 
 int rename_with_retry(const char *src_name, const char *dest_name);
@@ -42,15 +36,12 @@ int fsync_with_retry(const int dir_fd);
 class ObBaseDirFunctor
 {
 public:
-  virtual int func(const dirent *entry) = 0;
+  // `entry_name` is the UTF-8 name of a directory entry; it is never "." or
+  // ".." and stays valid for the duration of the call.
+  virtual int func(const char *entry_name) = 0;
 };
 
 int scan_dir(const char *dir_name, ObBaseDirFunctor &functor);
-
-// On Windows, confirm wildcard enumeration results with an exact-name lookup.
-// Missing names are not directory members; lookup errors and reparse entries
-// must not be interpreted as an empty log directory.
-int check_log_directory_entry(const char *dir_name, const char *entry_name, bool &exists);
 
 class GetBlockCountFunctor : public ObBaseDirFunctor
 {
@@ -61,7 +52,7 @@ public:
   }
   virtual ~GetBlockCountFunctor() = default;
 
-  int func(const dirent *entry) override final;
+  int func(const char *entry_name) override final;
 	int64_t get_block_count() {return count_;}
 private:
   const char *dir_;
@@ -82,7 +73,7 @@ public:
   }
   virtual ~TrimLogDirectoryFunctor() = default;
 
-  int func(const dirent *entry) override final;
+  int func(const char *entry_name) override final;
   block_id_t get_min_block_id() const { return min_block_id_; }
   block_id_t get_max_block_id() const { return max_block_id_; }
 private:
@@ -94,7 +85,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(TrimLogDirectoryFunctor);
 };
 
-int reuse_block_at(const int fd, const char *block_path);
 bool check_rename_success(const char *src_name,
                           const char *dest_name);
 bool check_renameat_success(const int src_dir_fd,

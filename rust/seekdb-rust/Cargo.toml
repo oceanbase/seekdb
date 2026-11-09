@@ -31,3 +31,5 @@ http-client = { path = "../http-client", optional = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 standby-rpc = { path = "../standby-rpc" }
+math = { path = "../math" }
+vector-kernels = { path = "../vector-kernels" }

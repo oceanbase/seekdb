@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_index_stats_estimator.h"
+#include <inttypes.h>
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 namespace oceanbase
@@ -179,7 +180,7 @@ int ObIndexStatsEstimator::fill_partition_condition(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (param.stat_level_ == PARTITION_LEVEL || param.stat_level_ == SUBPARTITION_LEVEL) {
-    const char *fmt_str = "WHERE CALC_PARTITION_ID(`%.*s`, `%.*s`, %.*s) = %ld";
+    const char *fmt_str = "WHERE CALC_PARTITION_ID(`%.*s`, `%.*s`, %.*s) = %" PRId64 "";
     char *buf = NULL;
     ObString type_str;
     if (param.stat_level_ == PARTITION_LEVEL) {

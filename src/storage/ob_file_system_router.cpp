@@ -18,6 +18,7 @@
 #include "ob_file_system_router.h"
 #include "share/ob_io_device_helper.h"
 #include "lib/file/file_directory_utils.h"
+#include "lib/utility/ob_platform_io.h"
 #include "lib/string/ob_sql_string.h"
 
 namespace oceanbase {
@@ -106,7 +107,7 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
   int pret = 0;
 
   char work_directory[MAX_PATH_SIZE] = {0};
-  if (nullptr == getcwd(work_directory, MAX_PATH_SIZE)) {
+  if (0 != ob_getcwd_utf8(work_directory, MAX_PATH_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get work directory failed", K(ret), KCSTRING(strerror(errno)));
   }

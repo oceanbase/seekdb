@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_macro_block_id.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -46,7 +47,7 @@ MacroBlockId::MacroBlockId(const MacroBlockId &id)
 
 void MacroBlockId::first_id_to_string(char *buf, const int64_t buf_len, int64_t &pos) const
 {
-  databuff_printf(buf, buf_len, pos, "{[ver=%lu,seq=%lu]",
+  databuff_printf(buf, buf_len, pos, "{[ver=%" PRIu64 ",seq=%" PRIu64 "]",
                   static_cast<uint64_t>(version_), static_cast<uint64_t>(write_seq_));
 }
 
@@ -62,7 +63,7 @@ int64_t MacroBlockId::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   first_id_to_string(buf, buf_len, pos);
-  databuff_printf(buf, buf_len, pos, "[2nd=%lu][3rd=%lu]}",
+  databuff_printf(buf, buf_len, pos, "[2nd=%" PRIu64 "][3rd=%" PRIu64 "]}",
                   static_cast<uint64_t>(second_id_), static_cast<uint64_t>(third_id_));
   return pos;
 }

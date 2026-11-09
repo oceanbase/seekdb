@@ -18,6 +18,7 @@
 #define OCEANBASE_DATA_PLANE_BLOCKSSTABLE_OB_STORAGE_DATUM_H_
 
 #include <algorithm>
+#include <inttypes.h>
 #include <cctype>
 #include <cstdint>
 
@@ -305,7 +306,7 @@ OB_INLINE int64_t ObStorageDatum::storage_to_string(
         } else {
           // maybe ObIntTC
           if (sizeof(int64_t) == len_) {
-            BUF_PRINTF(", int: %ld", *int_);
+            BUF_PRINTF(", int: %" PRId64 "", *int_);
             // maybe number with one digit
             if (1 == num_->desc_.len_) {
               BUF_PRINTF(", num_digit0: %u", num_->digits_[0]);

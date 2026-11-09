@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_meta_obj_struct.h"
+#include <inttypes.h>
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
@@ -166,13 +167,13 @@ int64_t ObMetaDiskAddr::to_string(char *buf, const int64_t buf_len) const
   switch (type_) {
     case LOCAL:
       databuff_printf(buf, buf_len, pos,
-                      "[tablet_id=%ld,offset=%lu,size=%lu,type=%lu,seq=%lu]}",
+                      "[tablet_id=%" PRId64 ",offset=%" PRIu64 ",size=%" PRIu64 ",type=%" PRIu64 ",seq=%" PRIu64 "]}",
                       second_id_, static_cast<uint64_t>(offset_), static_cast<uint64_t>(size_),
                       static_cast<uint64_t>(type_), seq_);
       break;
     default:
       databuff_printf(buf, buf_len, pos,
-                      "[2nd=%ld][3rd=%ld][offset=%lu,size=%lu,type=%lu,seq=%lu]}",
+                      "[2nd=%" PRId64 "][3rd=%" PRId64 "][offset=%" PRIu64 ",size=%" PRIu64 ",type=%" PRIu64 ",seq=%" PRIu64 "]}",
                       second_id_, third_id_, static_cast<uint64_t>(offset_), static_cast<uint64_t>(size_),
                       static_cast<uint64_t>(type_), seq_);
       break;

@@ -17,6 +17,7 @@
 #ifndef _OB_TRACE_EVENT_H
 #define _OB_TRACE_EVENT_H 1
 #include "lib/json/ob_yson.h"  // for yson::databuff_print_elements
+#include <inttypes.h>
 #include "lib/ob_name_id_def.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/trace/ob_seq_event_recorder.h"
@@ -71,15 +72,15 @@ public:
       const ObTraceEvent &ev = this->events_[i];
       event_name = NAME(ev.id_);
       if (prev_ts == 0) {
-        (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "begin_ts=%ld ", ev.timestamp_);
+        (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "begin_ts=%" PRId64 " ", ev.timestamp_);
         common::trace_event_datetime_to_str(ev.timestamp_, buf, buf_len, pos);
         prev_ts = ev.timestamp_;
       }
       if (NULL == event_name) {
-        (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "|[%hu] u=%ld ",
+        (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "|[%hu] u=%" PRId64 " ",
                                                    ev.id_, ev.timestamp_ - prev_ts);
       } else {
-        (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "|[%s] u=%ld ",
+        (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "|[%s] u=%" PRId64 " ",
                                                    event_name, ev.timestamp_ - prev_ts);
       }
       if (ev.yson_end_pos_ > ev.yson_beg_pos_ && ev.yson_beg_pos_ >= 0) {
@@ -90,9 +91,9 @@ public:
       total_time += ev.timestamp_ - prev_ts;
       prev_ts = ev.timestamp_;
     }
-    (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "|total_timeu=%ld", total_time);
+    (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "|total_timeu=%" PRId64 "", total_time);
     if (this->dropped_events_ > 0) {
-      (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, " DROPPED_EVENTS=%ld", this->dropped_events_);
+      (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, " DROPPED_EVENTS=%" PRId64 "", this->dropped_events_);
     }
     return pos;
   }

@@ -951,6 +951,57 @@ int ObRangeGenerator::get_result_value(const int64_t val_idx,
   return ret;
 }
 
+// INNER_IS_TRUE nodes are generated to derive range bounds; their evaluation
+// probes the predicate and does not own user-visible warnings. Ordinary bound
+// expressions retain their diagnostics. Failures preserve the original owner.
+namespace {
+class RangeBoundDiagnosticScope
+{
+public:
+  RangeBoundDiagnosticScope()
+      : saved_(ob_get_tsi_warning_buffer()), ret_(OB_SUCCESS)
+  {
+    tmp_.reset();
+    ob_setup_tsi_warning_buffer(&tmp_);
+  }
+  ~RangeBoundDiagnosticScope()
+  {
+    ob_setup_tsi_warning_buffer(saved_);
+    // Successful generated-bound evaluation leaves the owner untouched:
+    // warnings produced while computing scan ranges are not user-visible.
+    // On failure carry the complete error metadata back to the owner.
+    if (NULL != saved_
+        && OB_SUCCESS != ret_
+        && OB_MAX_ERROR_CODE != tmp_.get_err_code()
+        && OB_MAX_ERROR_CODE == saved_->get_err_code()) {
+      saved_->set_error(tmp_.get_err_msg(), tmp_.get_err_code());
+      saved_->set_error_line_column(tmp_.get_error_line(), tmp_.get_error_column());
+      saved_->set_sql_state(tmp_.get_sql_state());
+    }
+  }
+  void set_ret(int ret) { ret_ = ret; }
+private:
+  ObWarningBuffer tmp_;
+  ObWarningBuffer *saved_;
+  int ret_;
+};
+
+int evaluate_range_bound(ObTempExpr &expr,
+                     ObExecContext &exec_ctx,
+                     ObNewRow &row,
+                     ObObj &result)
+{
+  if (expr.expr_idx_ < 0 || expr.expr_idx_ >= expr.rt_exprs_.count()
+      || expr.rt_exprs_.at(expr.expr_idx_).type_ != T_FUNC_SYS_INNER_IS_TRUE) {
+    return expr.eval(exec_ctx, row, result);
+  }
+  RangeBoundDiagnosticScope scope;
+  const int ret = expr.eval(exec_ctx, row, result);
+  scope.set_ret(ret);
+  return ret;
+}
+}  // namespace
+
 int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
                                         const ObRangeMap &range_map,
                                         const int64_t val_idx,
@@ -1004,7 +1055,7 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
       ObObj result;
       if (OB_ISNULL(temp_expr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(temp_expr->eval(exec_ctx, tmp_row, result))) {
+      } else if (OB_FAIL(evaluate_range_bound(*temp_expr, exec_ctx, tmp_row, result))) {
       } else if (OB_UNLIKELY(result.is_nop_value())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (result.is_lob_storage() && !result.is_inrow()) {

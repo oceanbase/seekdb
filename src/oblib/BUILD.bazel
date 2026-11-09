@@ -496,6 +496,7 @@ cc_library(
         "lib/utility/ob_backtrace.h",
         "lib/utility/ob_defer.h",
         "lib/utility/ob_macro_utils.h",
+        "lib/utility/ob_platform_io.h",
         "lib/utility/ob_platform_utils.h",
         "lib/utility/ob_template_utils.h",
         "lib/utility/ob_tracepoint_def.h",

@@ -16,6 +16,7 @@
 #ifndef OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
 #define OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
 #include "rust/config.h"
+#include <inttypes.h>
 #include "share/leak_checker/ob_leak_checker.h"
 #include "share/rc/ob_server_runtime.h"
 #include "common/ob_tablet_id.h"
@@ -168,14 +169,14 @@ struct ObReadOnlyTxDiagnoseFunctor
     UNUSED(k);
     bool bool_ret = true;
     int ret = OB_SUCCESS;
-    if (OB_FAIL(databuff_printf(buf_, len_, pos_, "{tablet_id:%ld",
+    if (OB_FAIL(databuff_printf(buf_, len_, pos_, "{tablet_id:%" PRId64 "",
                                 v.tablet_id_.id()))){
       bool_ret = false;
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(v.extra_)) {
       if (OB_SUCC(ret) && v.extra_->type_ >= ObReadExInfo::WITH_PLAN) {
         ObReadExInfoPlan *info = static_cast<ObReadExInfoPlan *>(v.extra_);
-        if (OB_FAIL(databuff_printf(buf_, len_, pos_, ", plan_id:%ld",
+        if (OB_FAIL(databuff_printf(buf_, len_, pos_, ", plan_id:%" PRId64 "",
                                     info->plan_id_))){
           bool_ret = false;
         }
