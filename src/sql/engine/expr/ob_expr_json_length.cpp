@@ -79,11 +79,8 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
   } else {
     j_doc = data1.get_string();
     j_in_type = ObJsonExprHelper::get_json_internal_type(type1);
-    if (j_doc.length() == 0) {
-      ret = OB_ERR_INVALID_JSON_TEXT;
-      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                   ctx.exec_ctx_, *allocator, data1, meta1, has_lob_header1, j_doc))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+            ctx.exec_ctx_, *allocator, data1, meta1, has_lob_header1, j_doc))) {
     }
   }
 
