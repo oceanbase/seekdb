@@ -2257,6 +2257,75 @@ int ObTransformSimplifyExpr::recursive_canonicalize_join_conditions(ObDMLStmt *s
   return ret;
 }
 
+namespace
+{
+// Only rewrite plain `column < integer literal` predicates. Keeping this
+// narrow avoids changing comparison semantics for casts or parameters.
+bool get_integer_upper_bound(ObRawExpr *expr,
+                             ObRawExpr *&column,
+                             int64_t &bound)
+{
+  bool valid = false;
+  column = NULL;
+  if (OB_NOT_NULL(expr) && T_OP_LT == expr->get_expr_type()
+      && 2 == expr->get_param_count()) {
+    ObRawExpr *left = expr->get_param_expr(0);
+    ObRawExpr *right = expr->get_param_expr(1);
+    if (OB_NOT_NULL(left) && left->is_column_ref_expr()
+        && ObIntType == left->get_result_type().get_type()
+        && OB_NOT_NULL(right) && right->is_const_raw_expr()
+        && static_cast<ObConstRawExpr *>(right)->get_value().is_int()) {
+      column = left;
+      bound = static_cast<ObConstRawExpr *>(right)->get_value().get_int();
+      valid = true;
+    }
+  }
+  return valid;
+}
+
+// For AND, `column < a AND column < b` only needs the smaller bound.
+// Walk backwards to preserve the earliest strictest predicate and ordering.
+int remove_redundant_integer_upper_bounds(ObIArray<ObRawExpr *> &conditions,
+                                          bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  // A quadratic comparison is intentionally bounded at optimization time.
+  if (conditions.count() > 512) {
+    // Leave unusually large predicates unchanged.
+  } else {
+    for (int64_t i = conditions.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+      ObRawExpr *column = NULL;
+      int64_t bound = 0;
+      bool redundant = false;
+      if (!get_integer_upper_bound(conditions.at(i), column, bound)) {
+        // Not a supported integer upper bound.
+      } else {
+        for (int64_t j = 0; !redundant && j < conditions.count(); ++j) {
+          ObRawExpr *other_column = NULL;
+          int64_t other_bound = 0;
+          if (i == j || !get_integer_upper_bound(conditions.at(j),
+                                                 other_column, other_bound)) {
+            // Not a comparable predicate.
+          } else if (column->same_as(*other_column)
+                     && (other_bound < bound || (other_bound == bound && j < i))) {
+            redundant = true;
+          }
+        }
+      }
+      if (redundant) {
+        if (OB_FAIL(conditions.remove(i))) {
+          LOG_WARN("failed to remove redundant integer upper bound", K(ret));
+        } else {
+          trans_happened = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+
 int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened)
 {
   int ret = OB_SUCCESS;
@@ -2264,6 +2333,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   bool push_not_happend = false;
   bool remove_duplicate_happend = false;
   bool pull_similar_happend = false;
+  bool remove_upper_bound_happened = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (conditions.count() == 0) {
@@ -2272,9 +2342,12 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   } else if (OB_FAIL(remove_duplicate_exprs(stmt->get_query_ctx(),
                                             conditions,
                                             remove_duplicate_happend))) {
+  } else if (OB_FAIL(remove_redundant_integer_upper_bounds(conditions,
+                                                          remove_upper_bound_happened))) {
   } else if (OB_FAIL(pull_similar_expr(stmt, conditions, pull_similar_happend))) {
   } else {
-    trans_happened =  push_not_happend | remove_duplicate_happend | pull_similar_happend;
+    trans_happened = push_not_happend | remove_duplicate_happend |
+                     remove_upper_bound_happened | pull_similar_happend;
     if (trans_happened) {
       for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
         if (OB_ISNULL(conditions.at(i))) {
