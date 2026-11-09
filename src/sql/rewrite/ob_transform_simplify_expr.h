@@ -177,7 +177,28 @@ private:
                                          bool is_left);
 
   int get_opposite_op(ObItemType type, ObItemType& opposit_type);
-  int remove_duplicate_exprs(ObQueryCtx* query_ctx, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
+  int remove_duplicate_exprs(ObDMLStmt *stmt,
+                             ObQueryCtx* query_ctx,
+                             ObIArray<ObRawExpr*> &conditions,
+                             bool &trans_happened);
+  // A simple upper or lower bound of a column, e.g. `c1 < 10` or `c1 >= ?`.
+  struct ColumnBound
+  {
+    ColumnBound()
+      : column_(NULL), value_(), is_unsigned_(false), is_upper_(false), is_inclusive_(false) {}
+    ObRawExpr *column_;
+    common::ObObj value_;
+    bool is_unsigned_;
+    bool is_upper_;
+    bool is_inclusive_;
+  };
+  int get_column_bound_value(ObRawExpr *expr, bool &is_valid, common::ObObj &value);
+  int extract_column_bound(ObRawExpr *expr, ColumnBound &bound, bool &is_bound);
+  int compare_column_bounds(const ColumnBound &lhs,
+                            const ColumnBound &rhs,
+                            bool &comparable,
+                            int64_t &cmp);
+  int remove_subsumed_column_bounds(ObIArray<ObRawExpr*> &exprs, bool &trans_happened);
   int recursive_remove_duplicate_exprs(ObQueryCtx &query_ctx, ObRawExpr* &expr, bool &trans_happened);
   int do_remove_duplicate_exprs(ObQueryCtx &query_ctx, ObIArray<ObRawExpr*> &exprs);
   int pull_similar_expr(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);

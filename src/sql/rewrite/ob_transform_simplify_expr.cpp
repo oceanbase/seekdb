@@ -26,6 +26,11 @@ using namespace oceanbase::sql;
 
 namespace
 {
+const int64_t MAX_DUPLICATE_EXPR_COUNT = 100;
+// The conditions of an approximate vector scan filter are compared pairwise,
+// which is quadratic. Condition lists longer than this are left untouched.
+const int64_t MAX_VEC_FILTER_BOUND_COUNT = 256;
+
 int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
 {
   int ret = OB_SUCCESS;
@@ -2269,7 +2274,8 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   } else if (conditions.count() == 0) {
     //do nothing
   } else if (OB_FAIL(push_not(conditions, push_not_happend))) {
-  } else if (OB_FAIL(remove_duplicate_exprs(stmt->get_query_ctx(),
+  } else if (OB_FAIL(remove_duplicate_exprs(stmt,
+                                            stmt->get_query_ctx(),
                                             conditions,
                                             remove_duplicate_happend))) {
   } else if (OB_FAIL(pull_similar_expr(stmt, conditions, pull_similar_happend))) {
@@ -2600,7 +2606,8 @@ int ObTransformSimplifyExpr::get_opposite_op(ObItemType type, ObItemType& opposi
   return ret;
 }
 
-int ObTransformSimplifyExpr::remove_duplicate_exprs(ObQueryCtx* query_ctx,
+int ObTransformSimplifyExpr::remove_duplicate_exprs(ObDMLStmt *stmt,
+                                                    ObQueryCtx* query_ctx,
                                                     ObIArray<ObRawExpr*> &conditions,
                                                     bool &trans_happened)
 {
@@ -2610,6 +2617,11 @@ int ObTransformSimplifyExpr::remove_duplicate_exprs(ObQueryCtx* query_ctx,
   */
   int ret = OB_SUCCESS;
   const int64_t param_count = conditions.count();
+  // Redundant bounds are only removed for approximate vector index scans, where
+  // the scan filter is evaluated for every candidate row of the pre-filter.
+  // Removing a bound pins the constant parameters that decided the removal, so
+  // the rewrite is intentionally not applied to every statement.
+  const bool is_vec_approx = OB_NOT_NULL(stmt) && stmt->has_vec_approx();
   for (int64_t i = 0; OB_SUCC(ret) && i < param_count; i++) {
     if (OB_FAIL(recursive_remove_duplicate_exprs(*query_ctx, conditions.at(i), trans_happened))) {
     }
@@ -2618,13 +2630,22 @@ int ObTransformSimplifyExpr::remove_duplicate_exprs(ObQueryCtx* query_ctx,
     //select * from t1 where c1 > 1 and c1 > 1
     //like above stmt, and expr in level 0 is process here
     ObSEArray<ObRawExpr *, 4> param_conds;
-    if (param_count <= 1 || param_count > 100) {
-      /* use too much resource and need add lots of constraints */
+    bool need_update = false;
+    if (param_count <= 1) {
+      /* do nothing */
     } else if (OB_FAIL(param_conds.assign(conditions))) {
-    } else if (OB_FAIL(do_remove_duplicate_exprs(*query_ctx, param_conds))) {
-    } else if (param_conds.count() == conditions.count()) {
-      //do nothing
     } else {
+      if (param_count > MAX_DUPLICATE_EXPR_COUNT) {
+        /* use too much resource and need add lots of constraints */
+      } else if (OB_FAIL(do_remove_duplicate_exprs(*query_ctx, param_conds))) {
+      }
+      if (OB_SUCC(ret) && is_vec_approx
+          && OB_FAIL(remove_subsumed_column_bounds(param_conds, trans_happened))) {
+      } else if (OB_SUCC(ret) && param_conds.count() != conditions.count()) {
+        need_update = true;
+      }
+    }
+    if (OB_SUCC(ret) && need_update) {
       OPT_TRACE("before remove duplicate exprs", conditions);
       OPT_TRACE("after duplicate exprs happened", param_conds);
       if (OB_FAIL(conditions.assign(param_conds))) {
@@ -2715,6 +2736,174 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
         } else if (!cmp_ctx.equal_pairs_.empty()) {
           cmp_ctx.equal_pairs_.reset();
         }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::get_column_bound_value(ObRawExpr *expr, bool &is_valid, ObObj &value)
+{
+  int ret = OB_SUCCESS;
+  is_valid = false;
+  ObPhysicalPlanCtx *plan_ctx = NULL;
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->exec_ctx_) ||
+      OB_ISNULL(plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx())) {
+    // the parameter values are not available, keep the condition as it is
+  } else if (T_QUESTIONMARK == expr->get_expr_type()) {
+    ObConstRawExpr *const_expr = static_cast<ObConstRawExpr *>(expr);
+    const int64_t param_idx = const_expr->get_value().get_unknown();
+    if (param_idx < 0 || param_idx >= plan_ctx->get_param_store().count()) {
+      // the parameter is not bound yet, its value cannot be compared
+    } else {
+      value = plan_ctx->get_param_store().at(param_idx);
+      is_valid = true;
+    }
+  } else if (expr->is_const_raw_expr() && !expr->is_param_expr()) {
+    value = static_cast<ObConstRawExpr *>(expr)->get_value();
+    is_valid = true;
+  }
+  if (OB_SUCC(ret) && is_valid && (value.is_null() || !value.is_integer_type())) {
+    // only integer bounds can be ordered without changing the comparison result
+    is_valid = false;
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::extract_column_bound(ObRawExpr *expr,
+                                                  ColumnBound &bound,
+                                                  bool &is_bound)
+{
+  int ret = OB_SUCCESS;
+  is_bound = false;
+  ObRawExpr *left_expr = NULL;
+  ObRawExpr *right_expr = NULL;
+  bool is_valid = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null condition", K(ret));
+  } else if (2 != expr->get_param_count()) {
+    // not a binary comparison
+  } else if (T_OP_LT != expr->get_expr_type() && T_OP_LE != expr->get_expr_type() &&
+             T_OP_GT != expr->get_expr_type() && T_OP_GE != expr->get_expr_type()) {
+    // not a range comparison
+  } else if (OB_ISNULL(left_expr = expr->get_param_expr(0)) ||
+             OB_ISNULL(right_expr = expr->get_param_expr(1))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null comparison parameter", K(ret));
+  } else if (!left_expr->is_column_ref_expr()) {
+    // the bound must be a plain column reference, casts and expressions are skipped
+  } else if (OB_FAIL(get_column_bound_value(right_expr, is_valid, bound.value_))) {
+    LOG_WARN("failed to get the bound value", K(ret));
+  } else if (!is_valid) {
+    // the bound is not a comparable integer constant
+  } else {
+    bound.column_ = left_expr;
+    bound.is_unsigned_ = bound.value_.is_unsigned_integer();
+    bound.is_upper_ = T_OP_LT == expr->get_expr_type() || T_OP_LE == expr->get_expr_type();
+    bound.is_inclusive_ = T_OP_LE == expr->get_expr_type() || T_OP_GE == expr->get_expr_type();
+    is_bound = true;
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::compare_column_bounds(const ColumnBound &lhs,
+                                                   const ColumnBound &rhs,
+                                                   bool &comparable,
+                                                   int64_t &cmp)
+{
+  int ret = OB_SUCCESS;
+  comparable = false;
+  cmp = 0;
+  if (OB_ISNULL(lhs.column_) || OB_ISNULL(rhs.column_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null bound column", K(ret));
+  } else if (lhs.is_upper_ != rhs.is_upper_ || lhs.is_unsigned_ != rhs.is_unsigned_) {
+    // opposite directions or different value domains, both bounds are needed
+  } else if (!lhs.column_->same_as(*rhs.column_)) {
+    // bounds of different columns do not subsume each other
+  } else {
+    int64_t value_cmp = 0;
+    if (lhs.is_unsigned_) {
+      value_cmp = lhs.value_.get_uint64() < rhs.value_.get_uint64() ? -1 :
+                  (lhs.value_.get_uint64() > rhs.value_.get_uint64() ? 1 : 0);
+    } else {
+      value_cmp = lhs.value_.get_int() < rhs.value_.get_int() ? -1 :
+                  (lhs.value_.get_int() > rhs.value_.get_int() ? 1 : 0);
+    }
+    comparable = true;
+    // a smaller upper bound and a larger lower bound are the tighter ones
+    cmp = lhs.is_upper_ ? value_cmp : -value_cmp;
+    if (0 == cmp && lhs.is_inclusive_ != rhs.is_inclusive_) {
+      // with the same value the exclusive bound is the tighter one
+      cmp = lhs.is_inclusive_ ? 1 : -1;
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::remove_subsumed_column_bounds(ObIArray<ObRawExpr *> &exprs,
+                                                           bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  const int64_t param_count = exprs.count();
+  if (param_count <= 1 || param_count > MAX_VEC_FILTER_BOUND_COUNT) {
+    // a single condition cannot subsume another one, and very long condition
+    // lists are not worth the quadratic comparison
+  } else {
+    ObSEArray<ObRawExpr *, 8> kept_exprs;
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
+      ObRawExpr *cur_expr = exprs.at(i);
+      ColumnBound cur_bound;
+      bool cur_is_bound = false;
+      bool is_subsumed = false;
+      if (OB_ISNULL(cur_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null condition", K(ret));
+      } else if (OB_FAIL(extract_column_bound(cur_expr, cur_bound, cur_is_bound))) {
+        LOG_WARN("failed to extract the column bound", K(ret));
+      } else {
+        for (int64_t j = 0; OB_SUCC(ret) && !is_subsumed && j < kept_exprs.count(); ++j) {
+          ColumnBound kept_bound;
+          bool kept_is_bound = false;
+          bool comparable = false;
+          int64_t cmp = 0;
+          if (OB_FAIL(extract_column_bound(kept_exprs.at(j), kept_bound, kept_is_bound))) {
+            LOG_WARN("failed to extract the column bound", K(ret));
+          } else if (!cur_is_bound || !kept_is_bound) {
+            // at least one of the conditions is not a simple column bound
+          } else if (OB_FAIL(compare_column_bounds(kept_bound, cur_bound, comparable, cmp))) {
+            LOG_WARN("failed to compare the column bounds", K(ret));
+          } else if (!comparable) {
+            // the two conditions cannot be ordered, keep both of them
+          } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(kept_exprs.at(j),
+                                                                           ctx_))) {
+            LOG_WARN("failed to add the const param constraints", K(ret));
+          } else if (OB_FAIL(ObTransformUtils::add_const_param_constraints(cur_expr, ctx_))) {
+            LOG_WARN("failed to add the const param constraints", K(ret));
+          } else if (cmp <= 0) {
+            // the kept bound implies the current one, drop the current one
+            is_subsumed = true;
+          } else if (OB_FAIL(kept_exprs.remove(j))) {
+            LOG_WARN("failed to remove the subsumed condition", K(ret));
+          } else {
+            --j;
+          }
+        }
+        if (OB_SUCC(ret) && !is_subsumed) {
+          if (OB_FAIL(kept_exprs.push_back(cur_expr))) {
+            LOG_WARN("failed to keep the condition", K(ret));
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && kept_exprs.count() != param_count) {
+      OPT_TRACE("before remove subsumed column bounds", exprs);
+      OPT_TRACE("after remove subsumed column bounds", kept_exprs);
+      if (OB_FAIL(exprs.assign(kept_exprs))) {
+        LOG_WARN("failed to assign the conditions", K(ret));
+      } else {
+        trans_happened = true;
       }
     }
   }
