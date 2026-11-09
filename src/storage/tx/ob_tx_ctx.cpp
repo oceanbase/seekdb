@@ -112,14 +112,8 @@ int ObTxCtx::init(const uint32_t session_id,
 
     mt_ctx_.set_trans_ctx(this);
     mt_ctx_.set_for_replay(is_for_replay());
-    if (!config::enable_record_trace_log()) {
-      tlog_ = NULL;
-    } else {
-      tlog_ = &trace_log_;
-    }
-#ifdef ENABLE_DEBUG_LOG
-    tlog_ = &trace_log_;
-#endif
+    // Per-transaction TraceLog state was removed; never point at a recorder.
+    tlog_ = NULL;
     is_inited_ = true;
   } else {
     // reset immediately
@@ -260,7 +254,6 @@ void ObTxCtx::default_init_()
   is_submitting_redo_log_for_freeze_ = false;
   reserve_allocator_.reset();
   elr_handler_.reset();
-  trace_log_.reset();
   has_async_index_redo_ = false;
 }
 
