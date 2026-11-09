@@ -18,7 +18,7 @@
 #include "common/datum/ob_datum.h"
 #include "share/schema/ob_col_desc.h"  // ObColDesc complete type(previously hidden behind the ddl_common include chain)
 #include "ob_table_schema.h"
-#include "lib/compress/ob_compressor_pool.h"
+#include "lib/compress/ob_compress_util.h"
 #include "share/schema/ob_partition_array_utils.h"
 #include "share/schema/ob_part_mgr_util.h"
 namespace oceanbase
@@ -1572,14 +1572,14 @@ int ObTableSchema::set_compress_func_name(const char *compressor)
     ret = OB_INVALID_ARGUMENT;
   } else if (strlen(compressor) == 0) {
     compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor_type(compressor, compressor_type_))) {
+  } else if (OB_FAIL(common::get_compressor_type(compressor, compressor_type_))) {
   }
   return ret;
 }
 
 int ObTableSchema::set_compress_func_name(const ObString &compressor)
 {
-  return ObCompressorPool::get_instance().get_compressor_type(compressor, compressor_type_);
+  return common::get_compressor_type(compressor, compressor_type_);
 }
 
 int ObTableSchema::set_row_store_type(const ObString &row_store)

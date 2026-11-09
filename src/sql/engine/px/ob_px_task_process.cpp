@@ -29,7 +29,6 @@
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/ob_sql.h"
 #include "sql/engine/window_function/ob_window_function_op.h"
-#include "lib/signal/ob_signal_struct.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -111,9 +110,7 @@ int ObPxTaskProcess::process()
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(session->store_query_string(ObString::make_string("PX DFO EXECUTING")))) {
   } else {
-    // Set diagnostic function environment
     ObPxInitSqcArgs &arg = arg_.sqc_handler_->get_sqc_init_arg();
-    SQL_INFO_GUARD(arg.sqc_.get_monitoring_info().cur_sql_, session->get_cur_sql_id());
     const bool enable_sqlstat = session->is_sqlstat_enabled();
     ObAuditRecordData &audit_record = session->get_raw_audit_record();
     ObWorkerSessionGuard worker_session_guard(session);

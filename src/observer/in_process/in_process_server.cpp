@@ -17,7 +17,6 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
-#include <curl/curl.h>
 #include "lib/oblog/ob_log.h"
 #include "lib/thread/protected_stack_allocator.h"
 #include "lib/worker.h"
@@ -50,10 +49,7 @@ int32_t run_server(rust::Str directory, rust::Slice<const rust::String> paramete
   for (size_t i = 0; OB_SUCC(ret) && i + 1 < storage.size(); i += 2) {
     ret = options.parameters_.push_back(std::make_pair(ObString(storage[i].c_str()), ObString(storage[i + 1].c_str())));
   }
-  if (OB_FAIL(ret)) {
-  } else if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
+  if (OB_SUCC(ret)) {
     lib::ObStackHeaderGuard stack_header_guard;
     lib::Worker worker;
     lib::Worker::set_worker_to_thread_local(&worker);

@@ -2304,7 +2304,6 @@ int ObLSTabletService::delete_rows(
   int ret = OB_SUCCESS;
   NG_TRACE(S_delete_rows_begin);
   const ObTabletID &data_tablet_id = ctx.tablet_id_;
-  ObRowReshape *row_reshape = nullptr;
   int64_t afct_num = 0;
 
   if (OB_UNLIKELY(!is_inited_)) {

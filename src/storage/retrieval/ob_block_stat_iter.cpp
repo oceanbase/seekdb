@@ -429,9 +429,36 @@ int ObBlockStatIterator::prepare_scan_tables()
   return ret;
 }
 
+int ObBlockStatIterator::prepare_memtable_scan_range(ObDatumRange &range)
+{
+  int ret = OB_SUCCESS;
+  const ObTableIterParam &iter_param = main_table_param_.iter_param_;
+  const ObITableReadInfo *read_info = iter_param.rowkey_read_info_;
+  const ObColDescIArray *columns = iter_param.get_out_col_descs();
+  if (OB_ISNULL(read_info) || OB_ISNULL(columns)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null memtable read info", K(ret), KP(read_info), KP(columns));
+  } else {
+    const int64_t rowkey_count = read_info->get_schema_rowkey_count();
+    ObDatumRange logical_range = curr_scan_range_;
+    logical_range.start_key_.datum_cnt_ = MIN(rowkey_count, logical_range.start_key_.get_datum_cnt());
+    logical_range.end_key_.datum_cnt_ = MIN(rowkey_count, logical_range.end_key_.get_datum_cnt());
+    logical_range.start_key_.hash_ = 0;
+    logical_range.end_key_.hash_ = 0;
+    if (OB_FAIL(range.deep_copy(logical_range, allocator_))) {
+      LOG_WARN("failed to copy memtable scan range", K(ret), K(logical_range));
+    } else if (OB_FAIL(range.prepare_memtable_readable(*columns, allocator_))) {
+      LOG_WARN("failed to prepare memtable scan range", K(ret), K(range));
+    }
+  }
+  return ret;
+}
+
 int ObBlockStatIterator::construct_iters()
 {
   int ret = OB_SUCCESS;
+  ObDatumRange memtable_range;
+  bool memtable_range_prepared = false;
 
   if (OB_UNLIKELY(0 != memtable_iters_.count() || 0 != sstable_iters_.count() || nullptr == iter_allocator_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -443,7 +470,14 @@ int ObBlockStatIterator::construct_iters()
       ret = OB_ERR_UNEXPECTED;
     } else if (table->is_memtable()) {
       ObStoreRowIterator *iter = nullptr;
-      if (OB_FAIL(table->scan(main_table_param_.iter_param_, main_table_ctx_, curr_scan_range_, iter))) {
+      if (!memtable_range_prepared) {
+        if (OB_FAIL(prepare_memtable_scan_range(memtable_range))) {
+        } else {
+          memtable_range_prepared = true;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(table->scan(main_table_param_.iter_param_, main_table_ctx_, memtable_range, iter))) {
       } else if (OB_FAIL(memtable_iters_.push_back(MemTableIter(iter)))) {
       }
     } else if (table->is_sstable()) {
@@ -809,22 +843,10 @@ int ObBlockStatIterator::check_rowkey_in_range(const ObDatumRowkey &rowkey, bool
 int ObBlockStatIterator::shrink_scan_range(const ObDatumRowkey &start_key)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(rowkey_read_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr to rowkey read info", K(ret), KP_(rowkey_read_info));
+  if (OB_FAIL(start_key.deep_copy(curr_scan_start_key_, allocator_))) {
+    LOG_WARN("failed to deep copy start key", K(ret), K(start_key));
   } else {
-    // Strip multi-version extra rowkey columns
-    int64_t schema_rowkey_cnt = rowkey_read_info_->get_schema_rowkey_count();
-    ObDatumRowkey new_start_key = start_key;
-    new_start_key.datum_cnt_ = MIN(schema_rowkey_cnt, start_key.get_datum_cnt());
-    if (OB_FAIL(new_start_key.deep_copy(curr_scan_start_key_, allocator_))) {
-      LOG_WARN("failed to deep copy start key", K(ret), K(start_key));
-    } else if (OB_FAIL(curr_scan_start_key_.prepare_memtable_readable(
-        rowkey_read_info_->get_columns_desc(), allocator_))) {
-      LOG_WARN("failed to prepare memtable readable", K(ret), K(curr_scan_start_key_));
-    } else {
-      curr_scan_range_.start_key_ = curr_scan_start_key_;
-    }
+    curr_scan_range_.start_key_ = curr_scan_start_key_;
   }
   return ret;
 }

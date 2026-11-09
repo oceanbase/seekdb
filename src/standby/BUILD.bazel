@@ -17,8 +17,7 @@ config_setting(
 _STANDBY_DEPS = [
     "//src/logservice:append_callback_interface",
     "//src/logservice:logservice",
-    "//src/oblib/grpc:grpc_runtime",
-    "//src/oblib/grpc:standby_proto",
+    "//rust:standby_rpc_headers",
     "//src/oblib:oblib_foundation",
     "//src/oblib:oblib_base",
     "//src/oblib:oblib_common",

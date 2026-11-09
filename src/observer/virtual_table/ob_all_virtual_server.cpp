@@ -145,10 +145,16 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
       logservice::ObLogService *log_service =
           share::server_service<logservice::ObLogService>();
       share::SCN replay_scn;
-      if (OB_ISNULL(log_service) || OB_ISNULL(log_service->get_log_replay_service())) {
+      if (OB_ISNULL(log_service)) {
         ret = OB_NOT_INIT;
-      } else if (OB_FAIL(log_service->get_log_replay_service()->get_max_replayed_scn(replay_scn))) {
       } else {
+        ret = log_service->get_max_replayed_scn(replay_scn);
+        if (OB_STATE_NOT_MATCH == ret && log_service->is_replay_handoff_complete()) {
+          // Promotion retires replay before committing the server role to PRIMARY.
+          ret = log_service->get_log_apply_service()->get_max_applied_scn(replay_scn);
+        }
+      }
+      if (OB_SUCC(ret)) {
         const share::SCN readable_scn = share::SCN::min(
             replay_scn, ls->get_ls_wrs_handler()->get_ls_weak_read_ts());
         sync_scn_val = replay_scn.get_val_for_inner_table_field();

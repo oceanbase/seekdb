@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include <cmath>
 #include "common/json_type/ob_json_parse.h"
 #include "ob_query_parse.h"
 
@@ -340,9 +341,69 @@ int ObESQueryParser::parse_rrf(ObIJsonBase &req_node)
     } else if (key.case_compare("rank_window_size") == 0) {
       if (OB_FAIL(parse_const(*sub_node, fusion_config_.size, true))) {
       }
+    } else if (key.case_compare("weights") == 0) {
+      if (OB_FAIL(parse_rrf_weights(*sub_node))) {
+      }
     } else {
       ret = OB_ERR_PARSER_SYNTAX;
     }
+  }
+  return ret;
+}
+
+int ObESQueryParser::parse_rrf_weights(ObIJsonBase &req_node)
+{
+  int ret = OB_SUCCESS;
+  if (!fusion_config_.weights.empty()) {
+    // duplicated weights
+    ret = OB_ERR_PARSER_SYNTAX;
+  } else if (req_node.json_type() != ObJsonNodeType::J_ARRAY) {
+    ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
+  } else if (req_node.element_count() < 1) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    bool has_positive_weight = false;
+    for (uint64_t i = 0; OB_SUCC(ret) && i < req_node.element_count(); i++) {
+      ObIJsonBase *element = NULL;
+      ObReqConstExpr *weight = NULL;
+      if (OB_FAIL(req_node.get_array_element(i, element))) {
+      } else if (OB_FAIL(parse_const(*element, weight, true))) {
+      } else if (OB_ISNULL(weight)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!std::isfinite(weight->get_numeric_value()) || weight->get_numeric_value() < 0.0) {
+        // a route weight must be a finite non-negative number
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        has_positive_weight = has_positive_weight || weight->get_numeric_value() > 0.0;
+        if (OB_FAIL(fusion_config_.weights.push_back(weight))) {
+        }
+      }
+    }
+    if (OB_SUCC(ret) && !has_positive_weight) {
+      // at least one route must contribute to the fused score
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  return ret;
+}
+
+int ObESQueryParser::get_rrf_route_weights(ObReqConstExpr *&fts_weight, ObReqConstExpr *&knn_weight)
+{
+  int ret = OB_SUCCESS;
+  fts_weight = NULL;
+  knn_weight = NULL;
+  // RRF is applied by the hybrid search only, which fuses exactly two routes: the
+  // full-text route and the vector (KNN) route, in this order. An absent weights
+  // array keeps the unit weights that preserve the existing RRF behavior.
+  if (fusion_config_.weights.empty()) {
+    // use the default unit weights
+  } else if (2 != fusion_config_.weights.count()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("rrf weights must provide exactly one weight per fused route",
+             K(fusion_config_.weights.count()));
+  } else {
+    fts_weight = fusion_config_.weights.at(0);
+    knn_weight = fusion_config_.weights.at(1);
   }
   return ret;
 }
@@ -355,7 +416,12 @@ int ObESQueryParser::knn_fusion(const ObIArray<ObQueryReqFromJson*> &knn_queries
   ObReqColumnExpr *rowkey_expr = NULL;
   const ObString rowkey = ROWKEY_NAME;
   const ObString rowkey_hint = HIDDEN_COLUMN_VISIBLE_HINT;
-  if (OB_ISNULL(multi_set_table = OB_NEWx(ObMultiSetTable, &alloc_))) {
+  if (!fusion_config_.weights.empty()) {
+    // multiple KNN requests are fused by summing their scores; per-route RRF weights
+    // have no defined mapping there, so reject them instead of silently ignoring them
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("rrf weights are only supported by hybrid search");
+  } else if (OB_ISNULL(multi_set_table = OB_NEWx(ObMultiSetTable, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(res = OB_NEWx(ObQueryReqFromJson, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -705,10 +771,13 @@ int ObESQueryParser::construct_hybrid_query(ObQueryReqFromJson *fts, ObQueryReqF
     ObString empty_str = "";
     ObString fts_rank_alias = FTS_RANK_NAME;
     ObString vs_rank_alias = VS_RANK_NAME;
-    if (OB_FAIL(construct_rank_query(empty_str, fts_score, fts_rank_alias, fts))) {
+    ObReqConstExpr *fts_weight = NULL;
+    ObReqConstExpr *knn_weight = NULL;
+    if (OB_FAIL(get_rrf_route_weights(fts_weight, knn_weight))) {
+    } else if (OB_FAIL(construct_rank_query(empty_str, fts_score, fts_rank_alias, fts))) {
     } else if (OB_FAIL(construct_rank_query(empty_str, knn_score, vs_rank_alias, knn))) {
-    } else if (OB_FAIL(construct_rank_score(fts_alias, fts_rank_alias, fts_score))) {
-    } else if (OB_FAIL(construct_rank_score(knn_alias, vs_rank_alias, knn_score))) {
+    } else if (OB_FAIL(construct_rank_score(fts_alias, fts_rank_alias, fts_weight, fts_score))) {
+    } else if (OB_FAIL(construct_rank_score(knn_alias, vs_rank_alias, knn_weight, knn_score))) {
     }
   } else if (FALSE_IT(static_cast<ObReqColumnExpr *>(fts_score)->table_name = fts_alias)) {
   } else if (FALSE_IT(static_cast<ObReqColumnExpr *>(knn_score)->table_name = knn_alias)) {
@@ -741,7 +810,8 @@ int ObESQueryParser::construct_rank_query(ObString &sub_query_name, ObReqExpr *o
   return ret;
 }
 
-int ObESQueryParser::construct_rank_score(const ObString &table_name, const ObString &rank_alias, ObReqExpr *&rank_score)
+int ObESQueryParser::construct_rank_score(const ObString &table_name, const ObString &rank_alias,
+                                           ObReqConstExpr *weight, ObReqExpr *&rank_score)
 {
   int ret = OB_SUCCESS;
   ObReqOpExpr *div_expr = NULL;
@@ -750,7 +820,12 @@ int ObESQueryParser::construct_rank_score(const ObString &table_name, const ObSt
   ObReqColumnExpr *ref_expr = NULL;
 
   if (OB_FAIL(ObReqColumnExpr::construct_column_expr(ref_expr, alloc_, rank_alias, table_name))) {
+  } else if (OB_NOT_NULL(weight)) {
+    // the route weight replaces the unit numerator of this route's rank contribution
+    const_expr = weight;
   } else if (OB_FAIL(ObReqConstExpr::construct_const_numeric_expr(const_expr, alloc_, 1.0, ObIntType))) {
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(add_expr, alloc_, T_OP_ADD, ref_expr, fusion_config_.rank_const))) {
   } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(div_expr, alloc_, T_OP_DIV, const_expr, add_expr))) {
   } else {

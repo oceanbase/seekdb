@@ -4088,9 +4088,6 @@ SqlValueType ObExprOperator::get_enumset_calc_type(const SqlValueType expected_t
   return calc_type;
 }
 
-OB_SERIALIZE_MEMBER(ObIterExprOperator, expr_id_, expr_type_);
-
-
 int ObRelationalExprOperator::is_equal_transitive(const common::SqlTypeMeta &meta1,
                                                   const common::SqlTypeMeta &meta2,
                                                   bool &result)

@@ -141,7 +141,7 @@ public:
   }
   // Compatibility reader for the accepted 1d6 Linux x86-64 image only.
   // Offsets are relative to image, never native process addresses. This is not
-  // the unmodified-master ObObj image, despite both old envelopes using v1.
+  // the unmodified-master legacy value image, despite both old envelopes using v1.
   static int read_legacy_1d6_value(const char *image, int64_t image_length,
       int64_t descriptor_offset, ObIAllocator &owner, DatumValue &output)
   {

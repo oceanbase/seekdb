@@ -16,25 +16,12 @@
  
 #ifndef SRC_SQL_ENGINE_EXPR_OB_EXPR_ENCRYPT_H_
 #define SRC_SQL_ENGINE_EXPR_OB_EXPR_ENCRYPT_H_
-//#include <openssl/sha.h>
-#include <openssl/opensslv.h>
-#include <openssl/des.h>
 #include "lib/random/ob_mysql_random.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 namespace oceanbase
 {
 namespace sql
 {
-struct DesKeyBlock
-{
-  DES_cblock key1, key2, key3;
-};
-
-struct DesKeySchedule
-{
-  DES_key_schedule ks1, ks2, ks3;
-};
-
 class ObExprDesEncrypt : public ObFuncExprOperator 
 {
 public:
@@ -53,7 +40,6 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 private:
-  static int ob_des_encrypt(ObEvalCtx &ctx, const ObString &src, struct DesKeySchedule &keyschedule, uint key_number, char *res_buf);
   DISALLOW_COPY_AND_ASSIGN(ObExprDesEncrypt);
 };
 

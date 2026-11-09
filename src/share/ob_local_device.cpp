@@ -14,24 +14,6 @@
  * limitations under the License.
  */
 
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
-// Define AIO types before including ob_local_device.h, which uses them in class members.
-// Also suppress dummy stubs from the header via OB_LIBAIO_STUB_DEFINED --
-// this translation unit provides working AIO emulation below.
-#define OB_LIBAIO_STUB_DEFINED
-#include <stddef.h>
-#include <stdint.h>
-typedef uintptr_t io_context_t;
-struct iocb {
-  void *data;
-  short aio_lio_opcode;
-  int aio_fildes;
-  void *aio_buf;
-  size_t aio_nbytes;
-  long long aio_offset;
-};
-struct io_event { void *data; struct iocb *obj; long res; long res2; };
-#endif
 #include "ob_local_device.h"
 #include "rust/config.h"
 #ifdef __EMSCRIPTEN__
@@ -62,29 +44,9 @@ struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #include <libaio.h>
 #endif
 
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
-#include <stdlib.h>
-#include <functional>
-#include <mutex>
-#include <vector>
-#include <condition_variable>
-
 #ifdef _WIN32
-#ifndef O_LARGEFILE
-#define O_LARGEFILE 0
-#endif
-#ifndef O_DIRECT
-#define O_DIRECT 0
-#endif
 #include "share/ob_statvfs_win32.h"
 #endif
-
-struct io_event_queue {
-  std::mutex mtx;
-  std::condition_variable cv;
-  std::vector<struct io_event> events;
-};
-
 #if defined(__APPLE__)
 #ifndef FALLOC_FL_KEEP_SIZE
 #define FALLOC_FL_KEEP_SIZE 0x01
@@ -92,123 +54,6 @@ struct io_event_queue {
 #ifndef FALLOC_FL_PUNCH_HOLE
 #define FALLOC_FL_PUNCH_HOLE 0x02
 #endif
-#endif
-
-// libaio emulation: synchronous pread/pwrite with event queue
-static inline int io_setup(int maxevents, io_context_t *ctxp) {
-  (void)maxevents;
-  io_event_queue *q = new (std::nothrow) io_event_queue();
-  if (q == nullptr) return -ENOMEM;
-  *ctxp = (io_context_t)q;
-  return 0;
-}
-static inline int io_destroy(io_context_t ctx) {
-  io_event_queue *q = (io_event_queue *)ctx;
-  if (q != nullptr) {
-    delete q;
-  }
-  return 0;
-}
-static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
-  iocb->aio_fildes = fd;
-  iocb->aio_buf = buf;
-  iocb->aio_nbytes = count;
-  iocb->aio_offset = offset;
-  iocb->aio_lio_opcode = 1; // IOCB_CMD_PWRITE
-}
-static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
-  iocb->aio_fildes = fd;
-  iocb->aio_buf = buf;
-  iocb->aio_nbytes = count;
-  iocb->aio_offset = offset;
-  iocb->aio_lio_opcode = 0; // IOCB_CMD_PREAD
-}
-static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
-  io_event_queue *q = (io_event_queue *)ctx;
-  if (q == nullptr) return -EINVAL;
-
-  int completed = 0;
-  for (long i = 0; i < nr; ++i) {
-    struct iocb *iocb = iocbpp[i];
-    ssize_t res = 0;
-#ifdef _WIN32
-    HANDLE h = (HANDLE)_get_osfhandle(iocb->aio_fildes);
-    if (h == INVALID_HANDLE_VALUE) {
-      res = -EIO;
-    } else {
-      OVERLAPPED ov = {};
-      ov.Offset = (DWORD)((uint64_t)iocb->aio_offset & 0xFFFFFFFF);
-      ov.OffsetHigh = (DWORD)((uint64_t)iocb->aio_offset >> 32);
-      DWORD bytes = 0;
-      BOOL ok;
-      if (iocb->aio_lio_opcode == 1) {
-        ok = WriteFile(h, iocb->aio_buf, (DWORD)iocb->aio_nbytes, &bytes, &ov);
-      } else {
-        ok = ReadFile(h, iocb->aio_buf, (DWORD)iocb->aio_nbytes, &bytes, &ov);
-      }
-      if (ok) {
-        res = (ssize_t)bytes;
-      } else {
-        DWORD err = GetLastError();
-        if (err == ERROR_HANDLE_EOF) {
-          res = (ssize_t)bytes;
-        } else {
-          res = -EIO;
-        }
-      }
-    }
-#else
-    if (iocb->aio_lio_opcode == 1) { // PWRITE
-      res = pwrite(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
-    } else if (iocb->aio_lio_opcode == 0) { // PREAD
-      res = pread(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
-    }
-#endif
-
-    struct io_event ev;
-    ev.data = iocb->data;
-    ev.obj = iocb;
-    ev.res = (res >= 0) ? res : -errno;
-    ev.res2 = 0;
-
-    {
-      std::lock_guard<std::mutex> lock(q->mtx);
-      q->events.push_back(ev);
-    }
-    q->cv.notify_one();
-    completed++;
-  }
-  return completed;
-}
-static inline int io_cancel(io_context_t ctx, struct iocb *iocb, struct io_event *result) {
-  (void)ctx; (void)iocb; (void)result;
-  return 0;
-}
-static inline int io_getevents(io_context_t ctx, long min_nr, long nr, struct io_event *events, struct timespec *timeout) {
-  io_event_queue *q = (io_event_queue *)ctx;
-  if (q == nullptr) return -EINVAL;
-
-  std::unique_lock<std::mutex> lock(q->mtx);
-  std::function<bool()> wait_condition = [&] { return q->events.size() >= (size_t)min_nr; };
-
-  if (min_nr > 0 && (size_t)q->events.size() < (size_t)min_nr) {
-    if (timeout != nullptr) {
-      std::chrono::nanoseconds duration = std::chrono::seconds(timeout->tv_sec) + std::chrono::nanoseconds(timeout->tv_nsec);
-      if (!q->cv.wait_for(lock, duration, wait_condition)) {
-        // Timeout
-      }
-    } else {
-      q->cv.wait(lock, wait_condition);
-    }
-  }
-
-  int count = 0;
-  while (count < nr && !q->events.empty()) {
-    events[count++] = q->events.front();
-    q->events.erase(q->events.begin());
-  }
-  return count;
-}
 #endif
 using namespace oceanbase::common;
 
@@ -220,6 +65,7 @@ const char *BLOCK_SSTBALE_FILE_NAME = "block_file";
 /**
  * ---------------------------------------------ObLocalIOEvents---------------------------------------------------
  */
+#if defined(__linux__) && !defined(__ANDROID__)
 ObLocalIOEvents::ObLocalIOEvents()
   : complete_io_cnt_(0),
   io_events_(nullptr)
@@ -270,6 +116,8 @@ void *ObLocalIOEvents::get_ith_data(const int64_t i) const
 /**
  * ---------------------------------------------ObLocalDevice---------------------------------------------------
  */
+#endif
+
 ObLocalDevice::ObLocalDevice()
   : is_inited_(false),
     is_marked_(false),
@@ -285,7 +133,9 @@ ObLocalDevice::ObLocalDevice()
     free_block_array_(nullptr),
     block_bitmap_(nullptr),
     allocator_(),
+#if defined(__linux__) && !defined(__ANDROID__)
     iocb_pool_(),
+#endif
     is_fs_support_punch_hole_(true),
     space_provider_(nullptr)
 {
@@ -302,17 +152,8 @@ ObLocalDevice::~ObLocalDevice()
 
 int ObLocalDevice::init(
     const common::ObIODOpts &opts,
-    const ObILocalDeviceSpaceProvider &space_provider)
-{
-  space_provider_ = &space_provider;
-  const int ret = init(opts);
-  if (OB_SUCCESS != ret) {
-    space_provider_ = nullptr;
-  }
-  return ret;
-}
-
-int ObLocalDevice::init(const common::ObIODOpts &opts)
+    const LocalIOConfig &io_config,
+    const ObILocalDeviceSpaceProvider *space_provider)
 {
   int ret = OB_SUCCESS;
   const ObMemAttr mem_attr = ObMemAttr("LDIOSetup");
@@ -320,7 +161,9 @@ int ObLocalDevice::init(const common::ObIODOpts &opts)
     ret = OB_INIT_TWICE;
     SHARE_LOG(WARN, "The local device has been inited, ", K(ret));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, default_blk_alloc, mem_attr))) {
+#if defined(__linux__) && !defined(__ANDROID__)
   } else if (OB_FAIL(iocb_pool_.init(allocator_))) {
+#endif
   } else if (0 == opts.opt_cnt_) {
     // Log devices share the local-device implementation but do not own the
     // data block file, so LogIODeviceWrapper intentionally supplies no
@@ -367,9 +210,13 @@ int ObLocalDevice::init(const common::ObIODOpts &opts)
       }
     }
   }
-  SHARE_LOG(INFO, "init local device", K(ret), KP(this), K(lbt()));
+  SHARE_LOG(INFO, "init local device", K(ret), KP(this),
+            "direct_io", io_config.direct_io,
+            "native_aio", io_config.backend == LocalIOBackend::NATIVE_AIO);
 
   if (OB_SUCC(ret)) {
+    io_config_ = io_config;
+    space_provider_ = space_provider;
     is_inited_ = true;
   }
 
@@ -442,7 +289,7 @@ int ObLocalDevice::start(const common::ObIODOpts &opts)
       block_fd_, block_file_size_, block_size_, total_block_cnt_, free_block_array_, block_bitmap_,
       free_block_cnt_, free_block_push_pos_, free_block_pop_pos_, "LDBlockBitMap");
     ret = ObIODeviceLocalFileOp::open_block_file(store_dir_, sstable_dir_, block_size_,
-        block_file_size_, disk_percentage_, opts.opts_[0].value_.value_int64, block_file_attr);
+        block_file_size_, disk_percentage_, opts.opts_[0].value_.value_int64, io_config_, block_file_attr);
   }
   return ret;
 }
@@ -457,7 +304,9 @@ void ObLocalDevice::destroy()
     ob_free(free_block_array_);
     free_block_array_ = nullptr;
   }
+#if defined(__linux__) && !defined(__ANDROID__)
   iocb_pool_.reset();
+#endif
   allocator_.destroy();
   total_block_cnt_ = 0;
   free_block_cnt_ = 0;
@@ -482,7 +331,7 @@ void ObLocalDevice::destroy()
 int ObLocalDevice::open(const char *pathname, const int flags, const mode_t mode, ObIOFd &fd, common::ObIODOpts *opts)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::open(pathname, flags, mode, fd, opts))) {
+  if (OB_FAIL(ObIODeviceLocalFileOp::open(pathname, io_config_.file_flags(flags), mode, fd, opts))) {
   }
   return ret;
 }
@@ -917,7 +766,9 @@ int ObLocalDevice::write(
   return ret;
 }
 
-//async io interfaces
+// Native Linux AIO implementation.
+#if defined(__linux__) && !defined(__ANDROID__)
+
 int ObLocalDevice::io_setup(
     uint32_t max_events,
     common::ObIOContext *&io_context)
@@ -1233,6 +1084,8 @@ void ObLocalDevice::free_io_events(common::ObIOEvents *io_event)
     allocator_.free(io_event);
   }
 }
+
+#endif
 
 int64_t ObLocalDevice::get_total_block_size() const
 {

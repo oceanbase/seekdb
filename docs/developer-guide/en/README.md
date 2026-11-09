@@ -24,21 +24,11 @@ This section helps you set up the development environment and get OceanBase seek
 
 Once you have the environment set up, these guides will help you develop effectively:
 
-1. [Coding Conventions](coding-convention.md) - Learn OceanBase seekdb's programming habits and conventions
-2. [Coding Standard](coding-standard.md) - Detailed C++ coding standards and constraints
-3. [Write and run unit tests](unittest.md) - How to write and execute unit tests
-4. [Running MySQL test](mysqltest.md) - How to run MySQL compatibility tests
-5. [Debug](debug.md) - Debugging techniques and tools
+1. [Rust refactoring guidelines](rust-refactoring.md) - Design, implementation, and acceptance requirements for Rust migrations and refactors
+2. [Write and run unit tests](unittest.md) - How to write and execute unit tests
+3. [Running MySQL test](mysqltest.md) - How to run MySQL compatibility tests
 
-### 3. Understanding the Codebase
-
-Before you start developing a big feature, it's recommended to read these documents to better understand OceanBase seekdb's internals:
-
-1. [Logging System](logging.md) - How logging works in OceanBase seekdb
-2. [Memory Management](memory.md) - Memory management strategies and best practices
-3. [Basic Data Structures](container.md) - Core data structures used in the codebase
-
-### 4. Contribute to OceanBase seekdb
+### 3. Contribute to OceanBase seekdb
 
 Ready to contribute? This guide will help you get involved in the OceanBase community:
 

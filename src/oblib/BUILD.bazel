@@ -1,9 +1,7 @@
 load("//bazel:compile_config.bzl", "sanity_linkopts")
-load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load(
     ":oblib_source_inventory.bzl",
     "OBLIB_STANDALONE_CXX_SOURCES",
-    "OBLIB_STANDALONE_C_SOURCES",
     "OBLIB_UNITY_GROUPS",
 )
 load(
@@ -16,7 +14,6 @@ load(
     "OBLIB_CXX_COPTS",
     "OBLIB_C_COPTS",
     "OBLIB_LOCAL_DEFINES",
-    "localized_partial_link",
     "openmp_copts",
     "grouped_unity_cc_library",
     "cc_library",
@@ -47,7 +44,6 @@ cc_library(
     name = "oblib_base",
     hdrs = [
         "lib/alloc/alloc_struct.h",
-        "lib/alloc/ob_ctx_define.h",
         "lib/alloc/ob_iallocator.h",
         "lib/alloc/ob_malloc_allocator.h",
         "lib/allocator/ob_allocator.h",
@@ -207,8 +203,6 @@ cc_library(
         "lib/rc/ob_rc.h",
         "lib/resource/ob_cache_washer.h",
         "lib/runtime.h",
-        "lib/signal/ob_signal_struct.h",
-        "lib/signal/ob_signal_utils.h",
         "lib/stat/ob_di_tls.h",
         "lib/stat/ob_diagnose_info.h",
         "lib/stat/ob_diagnostic_info_guard.h",
@@ -361,7 +355,6 @@ cc_library(
         "common/ob_field.h",
         "common/ob_hex_utils_base.h",
         "common/ob_range.h",
-        "common/ob_record_header.h",
         "common/ob_role.h",
         "common/ob_role_mgr.h",
         "common/ob_simple_iterator.h",
@@ -405,7 +398,6 @@ cc_library(
         "common/wide_integer/ob_wide_integer_impl.h",
         "common/wide_integer/ob_wide_integer_str_funcs.h",
         "common/xml/ob_binary_aggregate.h",
-        "common/xml/ob_libxml2_sax_handler.h",
         "common/xml/ob_mul_mode_reader.h",
         "common/xml/ob_multi_mode_bin.h",
         "common/xml/ob_multi_mode_interface.h",
@@ -421,7 +413,6 @@ cc_library(
         ":oblib_base",
         ":oblib_encoding_primitives",
         ":oblib_foundation",
-        "//bazel/third_party:libxml2_headers",
         "//bazel/third_party:rapidjson_headers",
     ],
     includes = ["."],
@@ -433,18 +424,12 @@ cc_library(
 cc_library(
     name = "oblib_compression",
     hdrs = [
-        "lib/compress/none/ob_none_compressor.h",
         "lib/compress/ob_compress_util.h",
-        "lib/compress/ob_compressor.h",
-        "lib/compress/ob_compressor_pool.h",
-        "lib/compress/zlib/ob_zlib_compressor.h",
-        "lib/compress/zstd_1_3_8/ob_zstd_compressor_1_3_8.h",
-        "lib/compress/zstd_1_3_8/ob_zstd_wrapper.h",
     ],
     deps = [
         ":oblib_base",
         ":oblib_foundation",
-        "//bazel/third_party:zlib_headers",
+        "//rust:compression_headers",
     ],
     includes = ["."],
     features = ["layering_check"],
@@ -464,25 +449,6 @@ cc_library(
         "lib/thread/ob_thread_name.h",
     ],
     deps = [],
-    includes = ["."],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = _OBLIB_INTERFACE_VISIBILITY,
-)
-
-cc_library(
-    name = "oblib_db_log",
-    hdrs = [
-        "common/log/ob_log_constants.h",
-        "common/log/ob_log_cursor.h",
-        "common/log/ob_log_data_writer.h",
-        "common/log/ob_log_entry.h",
-        "common/log/ob_log_generator.h",
-    ],
-    deps = [
-        ":oblib_base",
-        ":oblib_common",
-    ],
     includes = ["."],
     features = ["layering_check"],
     tags = ["manual"],
@@ -532,7 +498,7 @@ cc_library(
     hdrs = [
         "lib/charset/ob_config.h",
         "lib/charset/ob_template_helper.h",
-        "lib/checksum/ob_parity_check.h",
+        "lib/checksum/ob_checksum_utils.h",
         "lib/encode/ob_base64_encode.h",
     ],
     deps = [],
@@ -703,17 +669,11 @@ cc_library(
 
 _OBLIB_PRIVATE_HEADERS = [
     "common/cell/ob_cell_reader.h",
-    "common/log/ob_log_dir_scanner.h",
-    "common/log/ob_log_reader.h",
-    "common/log/ob_single_log_reader.h",
-    "common/ob_file_common_header.h",
-    "common/row/ob_row_checksum.h",
     "common/timezone/ob_time_format.h",
     "common/timezone/ob_timezone_util.h",
     "common/timezone/private.h",
     "common/timezone/tzfile.h",
     "common/xml/ob_path_parser.h",
-    "lib/allocator/ob_delay_free_allocator.h",
     "lib/allocator/ob_simple_fifo_alloc.h",
     "lib/charset/ob_byteorder.h",
     "lib/charset/ob_ctype_bin_tab.h",
@@ -722,71 +682,20 @@ _OBLIB_PRIVATE_HEADERS = [
     "lib/charset/ob_uctype.h",
     "lib/charset/str_uca_type.h",
     "lib/checksum/ob_crc16.h",
-    "lib/codec/ob_bp_helpers.h",
-    "lib/codec/ob_bp_util.h",
-    "lib/codec/ob_codecs.h",
-    "lib/codec/ob_composite_codec.h",
-    "lib/codec/ob_delta_zigzag_pfor.h",
-    "lib/codec/ob_delta_zigzag_rle.h",
-    "lib/codec/ob_double_delta_zigzag_pfor.h",
-    "lib/codec/ob_double_delta_zigzag_rle.h",
-    "lib/codec/ob_fast_bp_func.h",
-    "lib/codec/ob_fast_delta.h",
-    "lib/codec/ob_generated_scalar_bp_func.h",
-    "lib/codec/ob_generated_unalign_simd_bp_func.h",
-    "lib/codec/ob_simd_fixed_pfor.h",
-    "lib/codec/ob_sse_to_neon.h",
-    "lib/codec/ob_tiered_codec.h",
-    "lib/codec/ob_universal_compression.h",
-    "lib/codec/ob_xor_fixed_pfor.h",
-    "lib/compress/zstd_1_3_8/zstd_src/bitstream.h",
-    "lib/compress/zstd_1_3_8/zstd_src/compiler.h",
-    "lib/compress/zstd_1_3_8/zstd_src/cpu.h",
-    "lib/compress/zstd_1_3_8/zstd_src/debug.h",
-    "lib/compress/zstd_1_3_8/zstd_src/error_private.h",
-    "lib/compress/zstd_1_3_8/zstd_src/fse.h",
-    "lib/compress/zstd_1_3_8/zstd_src/hist.h",
-    "lib/compress/zstd_1_3_8/zstd_src/huf.h",
-    "lib/compress/zstd_1_3_8/zstd_src/mem.h",
-    "lib/compress/zstd_1_3_8/zstd_src/pool.h",
-    "lib/compress/zstd_1_3_8/zstd_src/threading.h",
-    "lib/compress/zstd_1_3_8/zstd_src/xxhash.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_compress_internal.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_ddict.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_decompress_block.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_decompress_internal.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_double_fast.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_errors.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_fast.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_internal.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_lazy.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_ldm.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstd_opt.h",
-    "lib/compress/zstd_1_3_8/zstd_src/zstdmt_compress.h",
     "lib/container/ob_mask_set2.h",
     "lib/container/ob_paringheap.h",
     "lib/container/ob_ring_array.h",
     "lib/container/ob_ring_buffer.h",
-    "lib/encode/ob_quoted_printable_encode.h",
-    "lib/encode/ob_uuencode.h",
     "lib/file/config.h",
     "lib/hash/ob_multi_mod_ref_mgr.h",
     "lib/hash/ob_refered_map.h",
     "lib/lds/ob_lds_constructor.hpp",
     "lib/list/ob_link.h",
-    "lib/lock/ob_bucket_qsync_lock.h",
     "lib/metrics/ob_accumulator.h",
     "lib/metrics/ob_ema_v2.h",
     "lib/oblog/ob_log_module.ipp",
-    "lib/queue/ob_co_seq_queue.h",
-    "lib/queue/ob_ms_queue.h",
-    "lib/signal/ob_libunwind.h",
     "lib/stat/ob_di_list.h",
     "lib/string/ob_sensitive_string.h",
-    "lib/thread/ob_map_queue.h",
-    "lib/thread/ob_map_queue_thread_pool.h",
-    "lib/thread_local/thread_buffer.h",
     "lib/utility/ob_printf.h",
     "rpc/frame/ob_rpc_checksum.h",
     "rpc/obmysql/ob_mysql_packet_storage.h",
@@ -806,7 +715,6 @@ cc_library(
         ":oblib_common",
         ":oblib_compression",
         ":oblib_concurrency_primitives",
-        ":oblib_db_log",
         ":oblib_db_meta",
         ":oblib_diagnostics_primitives",
         ":oblib_encoding_primitives",
@@ -817,14 +725,11 @@ cc_library(
         ":oblib_restore",
         ":oblib_rpc",
         ":oblib_vector",
-        "//bazel/third_party:curl_headers",
         "//bazel/third_party:libaio_headers",
-        "//bazel/third_party:libxml2_headers",
         "//bazel/third_party:mariadb_headers",
-        "//bazel/third_party:openssl_headers",
+        "//rust:crypto_headers",
         "//bazel/third_party:rapidjson_headers",
         "//bazel/third_party:vsag_headers",
-        "//bazel/third_party:zlib_headers",
         "//src/oblib/easy:easy",
     ],
     includes = ["."],
@@ -845,7 +750,6 @@ cc_library(
 _COMMON_GROUP_NAMES = [
     "oblib_common_common_0",
     "oblib_common_common_mixed_0",
-    "oblib_common_log_0",
     "oblib_common_reloc_datum_0",
     "oblib_common_reloc_enumset_0",
     "oblib_common_reloc_json_type_0",
@@ -868,14 +772,12 @@ _FOUNDATION_CXX_GROUP_NAMES = [
     "oblib_lib_downsink_qt_0",
     "oblib_lib_lock_0",
     "oblib_lib_oblog_0",
-    "oblib_lib_signal_0",
     "oblib_lib_thread_0",
     "oblib_lib_utility_0",
 ]
 
 _FOUNDATION_C_GROUP_NAMES = [
     "oblib_lib_common_mixed_0",
-    "oblib_lib_signal_0",
 ]
 
 _RPC_GROUP_NAMES = [
@@ -896,8 +798,9 @@ grouped_unity_cc_library(
     implementation_deps = [
         ":_oblib_implementation_headers",
         ":oblib_foundation",
+        "//rust:crypto_headers",
         "//rust:logger",
-        "//bazel/third_party:fast_float_headers",
+        "//rust:number_parser",
     ],
     copts = OBLIB_CXX_COPTS + openmp_copts(),
     local_defines = OBLIB_LOCAL_DEFINES,
@@ -917,7 +820,6 @@ grouped_unity_cc_library(
         ":_oblib_implementation_headers",
         ":oblib_foundation",
         "//src/oblib/easy:easy",
-        "//bazel/third_party:libunwind_headers",
     ],
     copts = OBLIB_C_COPTS + openmp_copts(),
     local_defines = OBLIB_LOCAL_DEFINES,
@@ -933,42 +835,6 @@ grouped_unity_cc_library(
         ":oblib_foundation",
     ],
     copts = OBLIB_CXX_COPTS,
-    local_defines = OBLIB_LOCAL_DEFINES,
-    features = ["layering_check"],
-    tags = ["manual"],
-)
-
-grouped_unity_cc_library(
-    name = "_oblib_codec_scalar_impl",
-    unity_groups = select_unity_groups(
-        OBLIB_UNITY_GROUPS["src/oblib/lib:oblib_lib"],
-        ["oblib_lib_codec_0"],
-    ),
-    implementation_deps = [
-        ":_oblib_implementation_headers",
-        ":oblib_foundation",
-    ],
-    copts = OBLIB_CXX_COPTS + openmp_copts(),
-    local_defines = OBLIB_LOCAL_DEFINES,
-    features = ["layering_check"],
-    tags = ["manual"],
-)
-
-grouped_unity_cc_library(
-    name = "_oblib_codec_simd_impl",
-    unity_groups = OBLIB_UNITY_GROUPS["src/oblib/lib:oblib_lib_simd"],
-    implementation_deps = [
-        ":_oblib_implementation_headers",
-        ":oblib_foundation",
-    ],
-    copts = OBLIB_CXX_COPTS + select({
-        "@platforms//cpu:x86_64": [
-            "-mavx2",
-            "-mssse3",
-        ],
-        "@platforms//cpu:wasm32": ["-msse4.1"],
-        "//conditions:default": [],
-    }),
     local_defines = OBLIB_LOCAL_DEFINES,
     features = ["layering_check"],
     tags = ["manual"],
@@ -1016,7 +882,7 @@ grouped_unity_cc_library(
         ":_oblib_implementation_headers",
         ":common_sql_mode",
         ":oblib_foundation",
-        "//bazel/third_party:libxml2_headers",
+        "//rust:xml_parser_headers",
         "//bazel/third_party:mariadb_headers",
         "//bazel/third_party:rapidjson_headers",
     ],
@@ -1052,92 +918,7 @@ grouped_unity_cc_library(
         ":_oblib_implementation_headers",
         ":oblib_foundation",
         "//src/oblib/easy:easy",
-        "//rust:sql_nio_headers",
-    ],
-    copts = OBLIB_CXX_COPTS,
-    local_defines = OBLIB_LOCAL_DEFINES,
-    features = ["layering_check"],
-    tags = ["manual"],
-)
-
-cc_library(
-    name = "_zstd_1_3_8_c_impl",
-    srcs = standalone_sources(
-        OBLIB_STANDALONE_C_SOURCES,
-        "src/oblib/lib/compress/zstd_1_3_8:zstd_1_3_8_objs",
-    ),
-    implementation_deps = [":_oblib_implementation_headers"],
-    copts = OBLIB_C_COPTS + ["-fvisibility=hidden"],
-    local_defines = OBLIB_LOCAL_DEFINES + [
-        "ZDICTLIB_VISIBILITY=",
-        "ZSTDERRORLIB_VISIBILITY=",
-        "ZSTDLIB_VISIBILITY=",
-    ] + select({
-        # Wasm objcopy does not isolate the bundled xxHash symbols the way
-        # ELF --localize-hidden does. Use xxHash's supported symbol prefix.
-        "@platforms//os:emscripten": ["XXH_NAMESPACE=seekdb_zstd_1_3_8_"],
-        "//conditions:default": [],
-    }),
-    features = ["layering_check"],
-    tags = ["manual"],
-)
-
-cc_library(
-    name = "_zstd_1_3_8_cxx_impl",
-    srcs = standalone_sources(
-        OBLIB_STANDALONE_CXX_SOURCES,
-        "src/oblib/lib/compress/zstd_1_3_8:zstd_1_3_8_objs",
-    ),
-    implementation_deps = [
-        ":_oblib_implementation_headers",
-    ],
-    copts = OBLIB_CXX_COPTS + ["-fvisibility=hidden"],
-    local_defines = OBLIB_LOCAL_DEFINES + [
-        "ZDICTLIB_VISIBILITY=",
-        "ZSTDERRORLIB_VISIBILITY=",
-        "ZSTDLIB_VISIBILITY=",
-    ] + select({
-        "@platforms//os:emscripten": ["XXH_NAMESPACE=seekdb_zstd_1_3_8_"],
-        "//conditions:default": [],
-    }),
-    features = ["layering_check"],
-    tags = ["manual"],
-)
-
-localized_partial_link(
-    name = "_zstd_1_3_8_partial_link_object",
-    deps = [
-        ":_zstd_1_3_8_c_impl",
-        ":_zstd_1_3_8_cxx_impl",
-    ],
-    out = "native_zstd_1_3_8_objs.o",
-)
-
-cc_import(
-    name = "_zstd_1_3_8_unix_objects",
-    objects = [":_zstd_1_3_8_partial_link_object"],
-    pic_objects = [":_zstd_1_3_8_partial_link_object"],
-)
-
-cc_library(
-    name = "_zstd_1_3_8_objects",
-    deps = select({
-        "@platforms//os:windows": [":_zstd_1_3_8_c_impl", ":_zstd_1_3_8_cxx_impl"],
-        "//conditions:default": [":_zstd_1_3_8_unix_objects"],
-    }),
-)
-
-cc_library(
-    name = "_oblib_compression_impl",
-    srcs = standalone_sources(
-        OBLIB_STANDALONE_CXX_SOURCES,
-        "src/oblib/lib/compress:compress",
-    ),
-    implementation_deps = [
-        ":_oblib_implementation_headers",
-        ":_zstd_1_3_8_objects",
-        ":oblib_foundation",
-        "//bazel/third_party:zlib_headers",
+        "//rust:sql_nio",
     ],
     copts = OBLIB_CXX_COPTS,
     local_defines = OBLIB_LOCAL_DEFINES,
@@ -1154,8 +935,7 @@ cc_library(
     implementation_deps = [
         ":_oblib_implementation_headers",
         ":oblib_foundation",
-        "//bazel/third_party:curl_headers",
-        "//bazel/third_party:openssl_headers",
+        "//rust:crypto_headers",
     ],
     copts = OBLIB_CXX_COPTS,
     local_defines = OBLIB_LOCAL_DEFINES,
@@ -1166,13 +946,12 @@ cc_library(
 cc_library(
     name = "_malloc_hook_impl",
     srcs = select({
-        # The hook interposes glibc allocation symbols and has never been part
-        # of the native macOS build.
-        "@platforms//os:macos": [],
-        "//conditions:default": standalone_sources(
+        # Only glibc builds interpose process-wide allocation symbols.
+        "@platforms//os:linux": standalone_sources(
             OBLIB_STANDALONE_CXX_SOURCES,
             "src/oblib/lib:malloc_hook",
         ),
+        "//conditions:default": [],
     }),
     implementation_deps = [
         ":_oblib_implementation_headers",
@@ -1204,17 +983,14 @@ cc_library(
     name = "oblib_objects",
     implementation_deps = [
         ":_oblib_bitmap_impl",
-        ":_oblib_codec_scalar_impl",
-        ":_oblib_codec_simd_impl",
         ":_oblib_common_impl",
         ":_oblib_common_standalone_impl",
-        ":_oblib_compression_impl",
         ":_oblib_foundation_c_impl",
         ":_oblib_foundation_impl",
         ":_oblib_restore_impl",
         ":_oblib_rpc_impl",
         ":_oblib_vector_impl",
-        ":_zstd_1_3_8_objects",
+        "//rust:compression",
     ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
@@ -1254,29 +1030,26 @@ cc_library(
     name = "oblib_test_runtime",
     testonly = True,
     deps = [
-        "//rust:sql_nio_test_runtime",
         ":_malloc_hook_impl",
         ":_ob_malloc_impl",
         ":_oblib_bitmap_impl",
-        ":_oblib_codec_scalar_impl",
-        ":_oblib_codec_simd_impl",
         ":_oblib_common_impl",
         ":_oblib_common_standalone_impl",
-        ":_oblib_compression_impl",
         ":_oblib_foundation_c_impl",
         ":_oblib_foundation_impl",
         ":_oblib_restore_impl",
         ":_oblib_rpc_impl",
         ":_oblib_vector_impl",
-        ":_zstd_1_3_8_objects",
         "//bazel/third_party:libaio",
         "//bazel/third_party:libcrypto",
         "//bazel/third_party:libssl",
-        "//bazel/third_party:libunwind",
-        "//bazel/third_party:zlib",
+        "//rust:compression",
+        "//rust:xml_parser",
     ] + select({
         "@platforms//os:linux": ["//deps/external:jemalloc_library"],
         "@platforms//os:macos": ["//deps/external:jemalloc_library"],
+        "@platforms//os:windows": ["//deps/external:jemalloc_library"],
+        "@platforms//os:android": ["//deps/external:jemalloc_library"],
         "//conditions:default": [],
     }),
     linkopts = sanity_linkopts(),

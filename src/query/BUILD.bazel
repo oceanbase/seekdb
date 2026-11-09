@@ -179,7 +179,7 @@ cc_library(
         "//src/share:json_access",
         "//src/share:runtime_context",
         "//src/share:tenant_runtime",
-        "//bazel/third_party:curl_headers",
+        "//rust:http_client_headers",
     ],
     includes = ["api"],
     features = ["layering_check"],

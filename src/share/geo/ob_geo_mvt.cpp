@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+
 #define USING_LOG_PREFIX LIB
 #include "ob_geo_mvt.h"
+#include "rust/mvt.h"
 #include "share/ob_lob_access_utils.h"
-#include "share/object/ob_obj_cast.h"
 #include "share/datum/datum_value_cast.h"
 #include "common/ob_hex_utils_base.h"
 #include "lib/geometry/ob_geo_wkb_define.h"
@@ -25,90 +26,98 @@
 #include "share/geo/ob_geo_utils.h"
 #include "share/geo/ob_geo_mvt_encode_visitor.h"
 #include "common/json_type/ob_json_bin.h"
+#include <limits>
 
 namespace oceanbase {
 namespace common {
+namespace {
+rust::Slice<const uint8_t> bytes(const ObString &value)
+{
+  return {reinterpret_cast<const uint8_t *>(value.ptr()), static_cast<size_t>(value.length())};
+}
+}
 
+mvt_agg_result::mvt_agg_result(ObIAllocator &alloc, ObILobReadService &lob_read_service)
+    : allocator_(alloc), temp_allocator_(nullptr), lob_read_service_(lob_read_service),
+      inited_(false), lay_name_("default"), geom_name_(), geom_idx_(UINT32_MAX),
+      feature_id_name_(), feat_id_idx_(UINT32_MAX), builder_(mvt::new_builder()),
+      extent_(4096), column_offset_(0)
+{}
+
+mvt_agg_result::~mvt_agg_result() = default;
 
 int mvt_agg_result::init_layer()
 {
-  int ret = OB_SUCCESS;
-  vector_tile__tile__layer__init(&layer_);
-  layer_.version = 2;
-  layer_.name = lay_name_.ptr();
-  values_map_.create(DEFAULT_BUCKET_NUM, "MvtValues", "MvtValues");
-  layer_.extent = extent_;
-  return ret;
+  builder_->configure(bytes(lay_name_), extent_);
+  return builder_->error_code();
 }
 
-int mvt_agg_result::generate_feature(const DatumValue *values, uint32_t obj_cnt)
+int mvt_agg_result::add_key(const ObString &key)
+{
+  builder_->seed_key(bytes(key));
+  return builder_->error_code();
+}
+
+int mvt_agg_result::generate_feature(const DatumValue *values, uint32_t value_cnt)
 {
   int ret = OB_SUCCESS;
-  if (geom_idx_ >= obj_cnt) {
+  if (OB_FAIL(builder_->error_code())) {
+  } else if (geom_idx_ >= value_cnt) {
     ret = OB_ERR_GIS_UNSUPPORTED_ARGUMENT;
   } else if (values[geom_idx_].is_null()) {
-    // geometry column is null. do nothing
   } else if (!values[geom_idx_].get_meta().is_geometry()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    feature_ = static_cast<VectorTile__Tile__Feature *>(allocator_.alloc(sizeof(VectorTile__Tile__Feature)));
-    if (OB_ISNULL(feature_)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      const SqlTypeMeta& meta = values[geom_idx_].get_meta();
-      ObString str = values[geom_idx_].get_string();
-      ObGeometry *geo = NULL;
-      vector_tile__tile__feature__init(feature_);
-      if (OB_FAIL(features_.push_back(feature_))) {
-      } else if (meta.is_null()) {
-        str.reset();
-      } else if (is_lob_storage(meta.get_type())) {
-        ObTextStringIter str_iter(meta.get_type(), meta.get_collation_type(), str, meta.has_lob_header());
-        const ObLobReadOptions read_options(lob_read_service_);
-        if (OB_FAIL(str_iter.init(0, &read_options, temp_allocator_))) {
-        } else if (OB_FAIL(str_iter.get_full_data(str))) {
-        } else if (OB_FAIL(ObGeoTypeUtil::construct_geometry(*temp_allocator_, str, NULL, geo, true, !str_iter.is_outrow_lob()))) {
-        } else if (ObGeoTypeUtil::is_3d_geo_type(geo->type())
-                  && OB_FAIL(ObGeoTypeUtil::convert_geometry_3D_to_2D(NULL, allocator_, geo, ObGeoBuildFlag::GEO_ALL_DISABLE, geo))) {
-        } else if (OB_FAIL(transform_geom(*geo))) {
-        } else if (OB_FAIL(transform_other_column(values, obj_cnt))) {
-        } else {
-          feature_->n_tags = tags_.size();
-          feature_->tags = static_cast<uint32_t *>(allocator_.alloc(feature_->n_tags * sizeof(*(feature_->tags))));
-          if (OB_ISNULL(feature_->tags) && tags_.size()) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          }
-          for (uint32_t i = 0; i < tags_.size() && OB_SUCC(ret); i++) {
-            feature_->tags[i] = tags_.at(i);
-          }
-          tags_.clear();
-        }
+    const SqlTypeMeta &meta = values[geom_idx_].get_meta();
+    ObString str = values[geom_idx_].get_string();
+    ObGeometry *geo = nullptr;
+    bool is_outrow = false;
+    if (is_lob_storage(meta.get_type())) {
+      ObTextStringIter str_iter(meta.get_type(), meta.get_collation_type(), str,
+                               values[geom_idx_].has_lob_header());
+      const ObLobReadOptions read_options(lob_read_service_);
+      if (OB_FAIL(str_iter.init(0, &read_options, temp_allocator_))) {
+      } else if (OB_FAIL(str_iter.get_full_data(str))) {
+      } else {
+        is_outrow = str_iter.is_outrow_lob();
       }
     }
+    if (OB_SUCC(ret)
+        && OB_FAIL(ObGeoTypeUtil::construct_geometry(*temp_allocator_, str, nullptr,
+                                                    geo, true, !is_outrow))) {
+    } else if (OB_SUCC(ret) && ObGeoTypeUtil::is_3d_geo_type(geo->type())
+               && OB_FAIL(ObGeoTypeUtil::convert_geometry_3D_to_2D(
+                   nullptr, allocator_, geo, ObGeoBuildFlag::GEO_ALL_DISABLE, geo))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(transform_geom(*geo))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(transform_other_column(values, value_cnt))) {
+    } else if (OB_SUCC(ret)) {
+      builder_->commit_feature();
+      ret = builder_->error_code();
+    }
   }
-
   return ret;
 }
 
 int mvt_agg_result::transform_geom(const ObGeometry &geo)
 {
   int ret = OB_SUCCESS;
-  switch(geo.type()) {
-    case ObGeoType::POINT :
-    case ObGeoType::MULTIPOINT :
-      feature_->type = VECTOR_TILE__TILE__GEOM_TYPE__POINT;
+  uint32_t kind = 0;
+  switch (geo.type()) {
+    case ObGeoType::POINT:
+    case ObGeoType::MULTIPOINT:
+      kind = 1;
       break;
-    case ObGeoType::LINESTRING :
-    case ObGeoType::MULTILINESTRING :
-      feature_->type = VECTOR_TILE__TILE__GEOM_TYPE__LINESTRING;
+    case ObGeoType::LINESTRING:
+    case ObGeoType::MULTILINESTRING:
+      kind = 2;
       break;
-    case ObGeoType::POLYGON :
-    case ObGeoType::MULTIPOLYGON :
-      feature_->type = VECTOR_TILE__TILE__GEOM_TYPE__POLYGON;
+    case ObGeoType::POLYGON:
+    case ObGeoType::MULTIPOLYGON:
+      kind = 3;
       break;
-    default :
+    default:
       ret = OB_ERR_UNEXPECTED_GEOMETRY_TYPE;
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, ObGeoTypeUtil::get_geo_name_by_type(geo.type()), 
+      LOG_USER_ERROR(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, ObGeoTypeUtil::get_geo_name_by_type(geo.type()),
           ObGeoTypeUtil::get_geo_name_by_type(geo.type()), "_st_asmvt");
   }
   if (OB_SUCC(ret)) {
@@ -116,15 +125,8 @@ int mvt_agg_result::transform_geom(const ObGeometry &geo)
     if (OB_FAIL(const_cast<ObGeometry &>(geo).do_visit(visitor))) {
     } else {
       ObVector<uint32_t> &buf = visitor.get_encode_buffer();
-      feature_->n_geometry = buf.size();
-      feature_->geometry = static_cast<uint32_t *>(allocator_.alloc(sizeof(uint32_t) * feature_->n_geometry));
-      if (OB_ISNULL(feature_->geometry)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        for (uint32_t i = 0; i < feature_->n_geometry; i++) {
-          feature_->geometry[i] = buf.at(i);
-        }
-      }
+      builder_->begin_feature(kind, {buf.size() == 0 ? nullptr : &buf.at(0), static_cast<size_t>(buf.size())});
+      ret = builder_->error_code();
     }
   }
   return ret;
@@ -170,17 +172,9 @@ int mvt_agg_result::geometry_to_varchar(const DatumValue &value, ObIAllocator &s
 
 int mvt_agg_result::get_key_id(ObString col_name, uint32_t &key_id)
 {
-  int ret = OB_SUCCESS;
-  key_id = UINT32_MAX;
-  for (uint32_t i = 0; i < keys_.size() && key_id == UINT32_MAX; i++) {
-    if (col_name.case_compare(keys_.at(i)) == 0) {
-      key_id = i;
-    }
-  }
-  if (key_id == UINT32_MAX) {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  return ret;
+  key_id = builder_->find_key(bytes(col_name));
+  const int ret = builder_->error_code();
+  return ret != OB_SUCCESS ? ret : (key_id == UINT32_MAX ? OB_ERR_UNEXPECTED : OB_SUCCESS);
 }
 
 int mvt_agg_result::transform_json_column(const DatumValue &json)
@@ -197,297 +191,126 @@ int mvt_agg_result::transform_json_column(const DatumValue &json)
     ObIJsonBase *j_base = &j_bin;
     if (OB_FAIL(j_bin.reset_iter())) {
     } else if (j_base->json_type() == ObJsonNodeType::J_OBJECT) {
-      uint64_t count = j_base->element_count();
-      for (uint64_t i = 0; OB_SUCC(ret) && i < count; i++) {
-        uint32_t key_id;
+      const uint64_t count = j_base->element_count();
+      for (uint64_t i = 0; OB_SUCC(ret) && builder_->error_code() == OB_SUCCESS && i < count; ++i) {
         ObString key;
-        ObString key_name;
         if (OB_FAIL(j_base->get_key(i, key))) {
-        } else if (OB_FAIL(get_key_id(key, key_id))) {
-          if (OB_FAIL(ob_write_string(allocator_, key, key_name, true))) {
-          } else if (OB_FAIL(keys_.push_back(key_name))) {
-          } else {
-            key_id = keys_.size() - 1;
-          }
-        }
-        if (OB_SUCC(ret)) {
-          ObIJsonBase *jb_ptr = NULL;
+        } else {
+          const uint32_t key_id = builder_->intern_key(bytes(key));
           ObJsonBin j_val(temp_allocator_);
-          jb_ptr = &j_val;
-          if (OB_FAIL(j_base->get_object_value(i, jb_ptr))) {
-          } else { // value
-            bool ignore_type = false;
-            ObTileValue tile_value;
-            VectorTile__Tile__Value value;
-            vector_tile__tile__value__init(&value);
-            ObJsonNodeType j_type = jb_ptr->json_type();
-            switch(j_type) {
-              case ObJsonNodeType::J_BOOLEAN: {
-                bool v = jb_ptr->get_boolean();
-                value.bool_value = v;
-                value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_BOOL_VALUE;
-                tile_value.ptr_ = &value.bool_value;
-                tile_value.len_ = sizeof(value.bool_value);
+          ObIJsonBase *value = &j_val;
+          if (OB_FAIL(j_base->get_object_value(i, value))) {
+          } else {
+            switch (value->json_type()) {
+              case ObJsonNodeType::J_BOOLEAN:
+                builder_->add_bool(key_id, value->get_boolean());
                 break;
-              }
-              case ObJsonNodeType::J_DOUBLE: {
-                double v = jb_ptr->get_double();
-                value.double_value = v;
-                value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_DOUBLE_VALUE;
-                tile_value.ptr_ = &value.double_value;
-                tile_value.len_ = sizeof(value.double_value);
+              case ObJsonNodeType::J_DOUBLE:
+                builder_->add_double(key_id, value->get_double());
                 break;
-              }
               case ObJsonNodeType::J_INT: {
-                int64_t v = jb_ptr->get_int();
-                if (v >= 0) {
-                  value.uint_value = v;
-                  value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_UINT_VALUE;
-                  tile_value.ptr_ = &value.uint_value;
-                  tile_value.len_ = sizeof(value.uint_value);
-                } else {
-                  value.int_value = v;
-                  value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_SINT_VALUE;
-                  tile_value.ptr_ = &value.int_value;
-                  tile_value.len_ = sizeof(value.int_value);
-                }
+                const int64_t v = value->get_int();
+                if (v >= 0) builder_->add_uint(key_id, static_cast<uint64_t>(v));
+                else builder_->add_sint(key_id, v);
                 break;
               }
-              case ObJsonNodeType::J_UINT: {
-                int64_t v = jb_ptr->get_uint();
-                value.uint_value = v;
-                value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_UINT_VALUE;
-                tile_value.ptr_ = &value.uint_value;
-                tile_value.len_ = sizeof(value.uint_value);
+              case ObJsonNodeType::J_UINT:
+                builder_->add_uint(key_id, value->get_uint());
                 break;
-              }
-              case ObJsonNodeType::J_STRING: {
-                uint64_t data_len = jb_ptr->get_data_length();
-                const char *data = jb_ptr->get_data();
-                ObString str_val;
-                if (OB_FAIL(ob_write_string(allocator_, ObString(data_len, data), str_val, true))) {
-                } else {
-                  value.string_value = str_val.ptr();
-                  value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_STRING_VALUE;
-                  tile_value.ptr_ = value.string_value;
-                  tile_value.len_ = str_val.length();
-                }
+              case ObJsonNodeType::J_STRING:
+                builder_->add_string(key_id, {reinterpret_cast<const uint8_t *>(value->get_data()),
+                    static_cast<size_t>(value->get_data_length())});
                 break;
-              }
               default:
-                // ignore other type, do nothing
-                ignore_type = true;
                 break;
-            }
-            if (OB_SUCC(ret) && !ignore_type) {
-              tile_value.value_ = value;
-              uint32_t tag_id;
-              if (OB_FAIL(values_map_.get_refactored(tile_value, tag_id))) {
-                if (OB_HASH_NOT_EXIST == ret) {
-                  tag_id = values_map_.size();
-                  if (OB_FAIL(values_map_.set_refactored(tile_value, tag_id))) {
-                  }
-                }
-              }
-              if (OB_SUCC(ret)) {
-                if (OB_FAIL(tags_.push_back(key_id))) {
-                } else if (OB_FAIL(tags_.push_back(tag_id))) {
-                }
-              }
             }
           }
         }
       }
     }
   }
-  return ret;
+  return ret == OB_SUCCESS ? builder_->error_code() : ret;
 }
 
-int mvt_agg_result::transform_other_column(const DatumValue *values, uint32_t obj_cnt)
+int mvt_agg_result::transform_other_column(const DatumValue *values, uint32_t value_cnt)
 {
   int ret = OB_SUCCESS;
-  for (uint32_t i = column_offset_; i < obj_cnt && OB_SUCC(ret); i += 2) {
-    SqlTypeClass tc = values[i].get_type_class();
-    SqlValueType type = values[i].get_type();
-    uint32_t key_id;
+  for (uint32_t i = column_offset_;
+       i < value_cnt && OB_SUCC(ret) && builder_->error_code() == OB_SUCCESS;
+       i += 2) {
+    const SqlValueType type = values[i].get_type();
+    uint32_t key_id = UINT32_MAX;
     if (i == geom_idx_) {
-      // do nothing
     } else if (i == feat_id_idx_) {
-      // feature id
       if (values[i].is_null()) {
-        // do nothing, ignore null
       } else if (!ob_is_int_tc(type) && !ob_is_uint_tc(type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
       } else {
-        int64_t v = values[i].get_int();
-        if (v >= 0) {
-          feature_->has_id = true;
-          feature_->id = v;
-        }
+        const int64_t v = values[i].get_int();
+        if (v >= 0) builder_->set_id(static_cast<uint64_t>(v));
       }
     } else if (!values[i].is_null() && ob_is_json(type)) {
-      if (OB_FAIL(transform_json_column(values[i]))) {
-      }
-    } else if (values[i].is_null()
-              || ob_is_enum_or_set_type(type)) { // enum/set type mvt encode isn't supported
-      // do nothing
+      ret = transform_json_column(values[i]);
+    } else if (values[i].is_null() || ob_is_enum_or_set_type(type)) {
+    } else if (i + 1 >= value_cnt) {
+      ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(get_key_id(values[i + 1].get_string(), key_id))) {
+    } else if (type == ObTinyIntType) {
+      builder_->add_bool(key_id, values[i].get_int() != 0);
+    } else if (ob_is_int_tc(type)) {
+      const int64_t v = values[i].get_int();
+      if (v >= 0) builder_->add_uint(key_id, static_cast<uint64_t>(v));
+      else builder_->add_sint(key_id, v);
+    } else if (ob_is_uint_tc(type)) {
+      builder_->add_uint(key_id, values[i].get_uint64());
+    } else if (ob_is_float_tc(type)) {
+      builder_->add_float(key_id, values[i].get_float());
+    } else if (ob_is_double_tc(type)) {
+      builder_->add_double(key_id, values[i].get_double());
     } else {
-      ObTileValue tile_value;
-      VectorTile__Tile__Value value;
-      vector_tile__tile__value__init(&value);
-      if (type == ObTinyIntType) {
-        // bool type
-        bool v = (0 == values[i].get_int()) ? false : true;
-        value.bool_value = v;
-        value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_BOOL_VALUE;
-        tile_value.ptr_ = &value.bool_value;
-        tile_value.len_ = sizeof(value.bool_value);
-      } else if (ob_is_int_tc(type)) {
-        int64_t v = values[i].get_int();
-        if (v >= 0) {
-          value.uint_value = v;
-          value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_UINT_VALUE;
-          tile_value.ptr_ = &value.uint_value;
-          tile_value.len_ = sizeof(value.uint_value);
-        } else {
-          value.int_value = v;
-          value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_SINT_VALUE;
-          tile_value.ptr_ = &value.int_value;
-          tile_value.len_ = sizeof(value.int_value);
+      ObString str;
+      if (ob_is_geometry(type)) {
+        ObString cast_string;
+        if (OB_FAIL(geometry_to_varchar(values[i], *temp_allocator_, cast_string))) {
+        } else if (OB_FAIL(ObHexUtilsBase::hex(str, allocator_, cast_string.ptr(),
+                                             cast_string.length()))) {
         }
-      } else if (ob_is_uint_tc(type)) {
-        uint64_t v = values[i].get_uint64();
-        value.uint_value = v;
-        value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_UINT_VALUE;
-        tile_value.ptr_ = &value.uint_value;
-        tile_value.len_ = sizeof(value.uint_value);
-      } else if (ob_is_float_tc(type)) {
-        float v = values[i].get_float();
-        value.float_value = v;
-        value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_FLOAT_VALUE;
-        tile_value.ptr_ = &value.float_value;
-        tile_value.len_ = sizeof(value.float_value);
-      } else if (ob_is_double_tc(type)) {
-        double v = values[i].get_double();
-        value.double_value = v;
-        value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_DOUBLE_VALUE;
-        tile_value.ptr_ = &value.double_value;
-        tile_value.len_ = sizeof(value.double_value);
-      } else if (ob_is_enum_or_set_type(type)) {
-        // do nothing, enum/set type mvt encode isn't supported
       } else {
-        // other type cast to varchar
-        ObString str;
-        DatumCastParams cast_ctx(temp_allocator_, nullptr, CM_NONE, ObCharset::get_system_collation());
+        DatumCastParams cast_ctx(temp_allocator_, nullptr, CM_NONE,
+                                 ObCharset::get_system_collation());
         DatumValue varchar_value;
-        if (ob_is_geometry(type)) {
-          ObString hex_string;
-          ObString cast_string;
-          if (OB_FAIL(geometry_to_varchar(values[i], *temp_allocator_, cast_string))) {
-          } else if (OB_FAIL(ObHexUtilsBase::hex(hex_string, allocator_, cast_string.ptr(), cast_string.length()))) {
-          } else if (OB_FAIL(ob_write_string(allocator_, hex_string, str, true))) {
-          }
-        } else if (OB_FAIL(DatumValueCaster::to_type(ObVarcharType,
-                                                      cast_ctx,
-                                                      values[i], allocator_, varchar_value))) {
-        } else if (OB_FAIL(ob_write_string(allocator_, varchar_value.get_string(), str, true))) {
+        if (OB_FAIL(DatumValueCaster::to_type(ObVarcharType, cast_ctx, values[i],
+                                             allocator_, varchar_value))) {
         } else {
-          value.string_value = str.ptr();
-          value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_STRING_VALUE;
-          tile_value.ptr_ = value.string_value;
-          tile_value.len_ = str.length();
+          str = varchar_value.get_string();
         }
       }
       if (OB_SUCC(ret)) {
-        tile_value.value_ = value;
-        uint32_t tag_id;
-        if (OB_FAIL(values_map_.get_refactored(tile_value, tag_id))) {
-          if (OB_HASH_NOT_EXIST == ret) {
-            tag_id = values_map_.size();
-            if (OB_FAIL(values_map_.set_refactored(tile_value, tag_id))) {
-            }
-          } else {
-          }
-        }
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(tags_.push_back(key_id))) {
-          } else if (OB_FAIL(tags_.push_back(tag_id))) {
-          }
-        }
+        builder_->add_string(key_id, bytes(str));
       }
     }
   }
-  
-  return ret;
+  return ret == OB_SUCCESS ? builder_->error_code() : ret;
 }
 
 int mvt_agg_result::mvt_pack(ObString &blob_res)
 {
   int ret = OB_SUCCESS;
-  if (tile_ == NULL) {
-    tile_ = static_cast<VectorTile__Tile *>(allocator_.alloc(sizeof(VectorTile__Tile)));
-    if (OB_ISNULL(tile_)) {
+  const size_t encoded_size = builder_->encoded_len();
+  if (OB_FAIL(builder_->error_code())) {
+  } else if (encoded_size > static_cast<size_t>(std::numeric_limits<ObString::obstr_size_t>::max())) {
+    ret = OB_SIZE_OVERFLOW;
+  } else {
+    char *buf = static_cast<char *>(allocator_.alloc(encoded_size));
+    if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (!builder_->encode_to({reinterpret_cast<uint8_t *>(buf), encoded_size})) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      vector_tile__tile__init(tile_);
-      tile_->layers = static_cast<VectorTile__Tile__Layer **>(allocator_.alloc(sizeof(VectorTile__Tile__Layer *)));
-      if (OB_ISNULL(tile_->layers)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        tile_->layers[0] = &layer_;
-        tile_->n_layers = 1;
-        layer_.features = static_cast<VectorTile__Tile__Feature **>(allocator_.alloc(sizeof(VectorTile__Tile__Feature *) * features_.size()));
-        if (OB_ISNULL(layer_.features) && features_.size()) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          for (uint32_t i = 0; i < features_.size(); i++) {
-            layer_.features[i] = features_.at(i);
-          }
-          layer_.n_features = features_.size();
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    // add keys to layer
-    layer_.n_keys = keys_.size();
-    layer_.keys = static_cast<char **>(allocator_.alloc(sizeof(char *) * keys_.size()));
-    if (OB_ISNULL(layer_.keys) && keys_.size()) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    }
-    for (uint32_t i = 0; i < keys_.size() && OB_SUCC(ret); i++) {
-      layer_.keys[i] = keys_.at(i).ptr();
-    }
-
-    if (OB_SUCC(ret)) {
-      // add values to layer
-      layer_.n_values = values_map_.size();
-      layer_.values = static_cast<VectorTile__Tile__Value **>(allocator_.alloc(sizeof(*layer_.values) * values_map_.size()));
-      if (OB_ISNULL(layer_.values) && !values_map_.empty()) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-      AttributeMap::iterator lt = values_map_.begin();
-      while (OB_SUCC(ret) && lt != values_map_.end()) {
-        uint32_t i = lt->second;
-        layer_.values[i] = &(lt->first.value_);
-        ++lt;
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      size_t total_len =  vector_tile__tile__get_packed_size(tile_);
-      uint8_t *buf = static_cast<uint8_t *>(allocator_.alloc(total_len));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        vector_tile__tile__pack(tile_, buf);
-        blob_res.assign_ptr(reinterpret_cast<char *>(buf), static_cast<ObString::obstr_size_t>(total_len));
-      }
+      blob_res.assign_ptr(buf, static_cast<ObString::obstr_size_t>(encoded_size));
     }
   }
   return ret;
-
 }
 
 bool mvt_agg_result::is_upper_char_exist(const ObString &str)

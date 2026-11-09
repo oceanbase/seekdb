@@ -32,9 +32,8 @@ namespace blocksstable
  * -------------------------------------------------------------------ObMicroBlockCompressor-------------------------------------------------------------------
  */
 ObMicroBlockCompressor::ObMicroBlockCompressor()
-  : is_none_(false),
-    micro_block_size_(0),
-    compressor_(NULL),
+  : micro_block_size_(0),
+    compressor_type_(INVALID_COMPRESSOR),
     comp_buf_("MicroBlkComp"),
     decomp_buf_("MicroBlkDecomp")
 {
@@ -46,11 +45,8 @@ ObMicroBlockCompressor::~ObMicroBlockCompressor()
 
 void ObMicroBlockCompressor::reset()
 {
-  is_none_ = false;
   micro_block_size_ = 0;
-  if (compressor_ != nullptr) {
-    compressor_ = nullptr;
-  }
+  compressor_type_ = INVALID_COMPRESSOR;
   comp_buf_.reuse();
   decomp_buf_.reuse();
 }
@@ -63,12 +59,10 @@ int ObMicroBlockCompressor::init(const int64_t micro_block_size, const ObCompres
   if (OB_UNLIKELY(micro_block_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument, ", K(ret), K(micro_block_size), K(comptype));
-  } else if (comptype == NONE_COMPRESSOR) {
-    is_none_ = true;
-    micro_block_size_ = micro_block_size;
-  } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(comptype, compressor_))) {
+  } else if (comptype <= INVALID_COMPRESSOR || comptype >= MAX_COMPRESSOR) {
+    ret = OB_NOT_SUPPORTED;
   } else {
-    is_none_ = false;
+    compressor_type_ = comptype;
     micro_block_size_ = micro_block_size;
   }
   return ret;
@@ -78,21 +72,26 @@ int ObMicroBlockCompressor::compress(const char *in, const int64_t in_size, cons
                                      int64_t &out_size)
 {
   int ret = OB_SUCCESS;
-  int64_t max_overflow_size = 0;
-  if (is_none_) {
+  if (compressor_type_ == NONE_COMPRESSOR) {
     out = in;
     out_size = in_size;
-  } else if (OB_ISNULL(compressor_)) {
+  } else if (compressor_type_ == INVALID_COMPRESSOR) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "compressor is unexpected null", K(ret), K_(compressor));
-  } else if (OB_FAIL(compressor_->get_max_overflow_size(in_size, max_overflow_size))) {
+    STORAGE_LOG(WARN, "compressor is not initialized", K(ret));
   } else {
+    const auto bound = compression::compress_bound(
+        static_cast<uint8_t>(compressor_type_), in_size);
     int64_t comp_size = 0;
-    int64_t max_comp_size = max_overflow_size + in_size;
+    const int64_t max_comp_size = static_cast<int64_t>(bound.size);
     int64_t need_size = std::max(max_comp_size, micro_block_size_ * 2);
-    if (OB_FAIL(comp_buf_.ensure_space(need_size))) {
-    } else if (OB_FAIL(compressor_->compress(in, in_size, comp_buf_.data(), max_comp_size, comp_size))) {
-    } else if (comp_size >= in_size) {
+    if (OB_FAIL(compression_error_code(bound.code))) {
+    } else if (OB_FAIL(comp_buf_.ensure_space(need_size))) {
+    } else if (const auto result = compression::compress(
+                   static_cast<uint8_t>(compressor_type_),
+                   reinterpret_cast<const uint8_t *>(in), in_size,
+                   reinterpret_cast<uint8_t *>(comp_buf_.data()), max_comp_size);
+               OB_FAIL(compression_error_code(result.code))) {
+    } else if ((comp_size = static_cast<int64_t>(result.size)) >= in_size) {
       out = in;
       out_size = in_size;
     } else {
@@ -111,13 +110,19 @@ int ObMicroBlockCompressor::decompress(const char *in, const int64_t in_size,
   int ret = OB_SUCCESS;
   int64_t decomp_size = 0;
   decomp_buf_.reuse();
-  if (is_none_ || in_size == uncomp_size) {
+  if (compressor_type_ == NONE_COMPRESSOR || in_size == uncomp_size) {
     out = in;
     out_size = in_size;
+  } else if (compressor_type_ == INVALID_COMPRESSOR) {
+    ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(decomp_buf_.ensure_space(uncomp_size))) {
-  } else if (OB_FAIL(compressor_->decompress(in, in_size, decomp_buf_.data(), uncomp_size,
-                                             decomp_size))) {
+  } else if (const auto result = compression::decompress(
+                 static_cast<uint8_t>(compressor_type_),
+                 reinterpret_cast<const uint8_t *>(in), in_size,
+                 reinterpret_cast<uint8_t *>(decomp_buf_.data()), uncomp_size);
+             OB_FAIL(compression_error_code(result.code))) {
   } else {
+    decomp_size = static_cast<int64_t>(result.size);
     out = decomp_buf_.data();
     out_size = decomp_size;
   }

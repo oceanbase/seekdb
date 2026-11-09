@@ -30,6 +30,7 @@
 #include "share/ob_lob_access_utils.h"
 #include "share/lob/ob_lob_text_iter_context.h"
 #include "query/engine/expr/ob_expr_util.h"
+#include "lib/utility/utility.h"
 
 namespace oceanbase
 {
@@ -602,7 +603,7 @@ int ObLobManager::compare(ObLobAccessParam& param_left,
 
 void ObLobManager::transform_lob_id(uint64_t src, uint64_t &dst)
 {
-  dst = htonll(src << 1);
+  dst = ob_htonll(src << 1);
   char *bytes = reinterpret_cast<char*>(&dst);
   bytes[7] |= 0x01;
 }

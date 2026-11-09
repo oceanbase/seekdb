@@ -36,8 +36,6 @@ namespace common
 {
 extern bool g_enable_backtrace;
 const int64_t LBT_BUFFER_LENGTH = 1024;
-int light_backtrace(void **buffer, int size);
-int light_backtrace(void **buffer, int size, int64_t rbp);
 #if defined(_WIN32) || defined(__EMSCRIPTEN__)
 int _ob_backtrace(void** buffer, int size);
 #define ob_backtrace(buffer, size)                                \
@@ -61,9 +59,7 @@ int _ob_backtrace(void** buffer, int size);
 #endif
 char *lbt();
 char *lbt(char *buf, int32_t len);
-char *parray(int64_t *array, int size);
 char *parray(char *buf, int64_t len, int64_t *array, int size);
-void addrs_to_offsets(void **buffer, int size);
 } // end namespace common
 } // end namespace oceanbase
 

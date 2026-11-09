@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("//bazel:cxx.bzl", "config_generate")
+
+package(default_visibility = ["//rust:__subpackages__"])
+
+exports_files(["include/check_callback.h"], visibility = ["//rust:__pkg__"])
+
+config_generate(
+    name = "sources",
+    script = "generate.py",
+    parameters = "parameters.yaml",
+    internal_state = "internal_state.yaml",
+    default_log_level = select({
+        "//bazel:rpm_logging_enabled": "OB_LOG_LEVEL_DBA_WARN",
+        "//conditions:default": "OB_LOG_LEVEL_ERROR",
+    }),
+    rust = "generated_config.rs",
+    checkers = "config_checkers.h",
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "config",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["generated_config.rs"],
+    rustc_env = {"CONFIG_RS": "$(execpath generated_config.rs)"},
+    edition = crate_edition(),
+    version = "0.1.0",
+    deps = all_crate_deps(normal = True) + ["//rust/kv", "//rust/local"],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    aliases = aliases(),
+    tags = ["no-remote"],
+)

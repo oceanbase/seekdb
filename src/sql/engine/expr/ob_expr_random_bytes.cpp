@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include <openssl/rand.h>
+#include "rust/crypto.h"
 #include "sql/engine/expr/ob_expr_random_bytes.h"
 
 
@@ -51,7 +51,6 @@ int ObExprRandomBytes::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-
 int ObExprRandomBytes::generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx, 
                                              Datum &expr_datum)
 {
@@ -68,9 +67,14 @@ int ObExprRandomBytes::generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx,
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else {
-          RAND_bytes((unsigned char*)buf, length);
-          ObString rand_str(length, length, buf);
-          expr_datum.set_string(rand_str);
+          const auto random = crypto::random_fill(
+              rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(buf), length));
+          if (crypto::Code::Ok != random.code) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            ObString rand_str(length, length, buf);
+            expr_datum.set_string(rand_str);
+          }
         }
       } else { 
         ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;

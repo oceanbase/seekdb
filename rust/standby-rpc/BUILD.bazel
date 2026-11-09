@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("//bazel:prost.bzl", "prost_generate")
+
+package(default_visibility = ["//rust:__subpackages__"])
+
+exports_files(["src/bridge.rs", "include/service.h"], visibility = ["//rust:__pkg__"])
+
+prost_generate(
+    name = "protocol",
+    src = "standbyservice.proto",
+    out = "generated/standbyservice.rs",
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "standby_rpc",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["generated/standbyservice.rs"],
+    rustc_env = {"STANDBY_PROTO_RS": "$(execpath generated/standbyservice.rs)"},
+    edition = crate_edition(),
+    version = "0.1.0",
+    deps = all_crate_deps(normal = True) + ["//rust/rpc"],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    aliases = aliases(),
+    tags = ["no-remote"],
+)

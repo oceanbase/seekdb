@@ -48,7 +48,7 @@ jobs:
         fi
         ./build.py init
         export PATH="$PWD/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
-        python3 ./build.py build --batch --jobs=3 --spawn_strategy=local \
+        python3 ./build.py build --batch --jobs=3 --spawn_strategy=local --lockfile_mode=error \
           --nouse_action_cache --noremote_accept_cached --noremote_upload_local_results --disk_cache= //src/observer:seekdb
         test -x build/bin/src/observer/seekdb
 

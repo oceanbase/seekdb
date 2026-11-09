@@ -20,9 +20,9 @@
 #include <stdarg.h>
 #include <algorithm>
 #include "lib/allocator/ob_fixed_size_block_allocator.h"
+#include "lib/ob_define.h"
 #include "lib/utility/utility.h"
 #include "share/ob_define.h"
-#include "common/log/ob_log_constants.h"
 
 namespace oceanbase
 {
@@ -342,7 +342,7 @@ protected:
  */
 class ObSelfBufferWriter : public ObBufferWriter
 {
-  static const int64_t BUFFER_ALIGN_SIZE = common::ObLogConstants::LOG_FILE_ALIGN_SIZE;
+  static const int64_t BUFFER_ALIGN_SIZE = common::OB_DIRECT_IO_ALIGN;
 public:
   virtual int expand(const int64_t size)
   {

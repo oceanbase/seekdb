@@ -18,8 +18,6 @@
 
 #include "ob_inner_sql_result.h"
 #include "share/datum/typed_datum_compare.h"
-#include "lib/signal/ob_signal_struct.h"
-#include "observer/omt/ob_server_runtime_controller.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "omt/ob_server_runtime.h"
@@ -124,7 +122,6 @@ int ObInnerSQLResult::open()
     ret = OB_NOT_INIT;
   } else {
     result_set().get_exec_context().set_plan_start_time(execute_start_ts_);
-    SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     bool is_select = ObStmt::is_select_stmt(result_set_->get_stmt_type());
     WITH_CONTEXT(mem_context_) {
@@ -132,8 +129,6 @@ int ObInnerSQLResult::open()
         ret = OB_INIT_TWICE;
       } else if (OB_FAIL(result_set_->open())) {
         result_set_->get_exec_context().get_das_ctx().record_access_error(ret);
-        // move after precess_retry().
-//        result_set_->close();
       } else if (is_read_&& is_select) {
         //prefetch 1 row for throwing error code and retry
         opened_ = true;
@@ -183,7 +178,6 @@ int ObInnerSQLResult::force_close()
 int ObInnerSQLResult::inner_close()
 {
   int ret = OB_SUCCESS;
-  SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
   ObInnerSQLSessionGuard sess_guard(&session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
 
@@ -216,7 +210,6 @@ int ObInnerSQLResult::next()
   } else {
     row_ = NULL;
     native_row_ = ResultRowView();
-    SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     WITH_CONTEXT(mem_context_) {
       if (OB_FAIL(native_result_ ? result_set_->get_next_native_result_row(native_row_)

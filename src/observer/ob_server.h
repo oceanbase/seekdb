@@ -73,6 +73,7 @@
 #include "storage/ob_disk_usage_reporter.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "logservice/ob_server_log_block_mgr.h"
+#include "logservice/palf/log_io_adapter.h"
 
 
 
@@ -264,6 +265,7 @@ public:
   int wait_until_refreshed(
       common::ObMySQLProxy &mysql_proxy,
       int64_t timeout_us) override;
+  int get_min_dep_lsn(palf::LSN &min_dep_lsn) override;
 
 public:
   //Refer to ObPurgeCompletedMonitorInfoTask
@@ -493,6 +495,8 @@ private:
   sql::ObConnectResourceMgr conn_res_mgr_;
   ObDiskUsageReportTask disk_usage_report_task_;
 
+  palf::LogIODeviceWrapper log_device_;
+  share::StartupResult startup_result_;
   logservice::ObServerLogBlockMgr log_block_mgr_;
 
   // This handler is used to process tasks during startup. it can speed up the startup process.
@@ -653,6 +657,10 @@ public:
   query::ObIActiveSnapshotService * active_snapshot_service()
   {
     return &session_mgr_;
+  }
+  query::ObIChangeStreamService * change_stream_service()
+  {
+    return this;
   }
   oceanbase::common::ObOptStatMonitorManager * opt_stat_monitor_manager() { return mods_opt_stat_monitor_manager_; }
   omt::ObSrsService * srs_service() { return mods_srs_service_; }

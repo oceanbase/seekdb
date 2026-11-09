@@ -18,8 +18,13 @@
 
 ## Rust–C++ Interoperability
 
+- Before designing, implementing, or reviewing a Rust migration or refactor, read and follow [Rust refactoring guidelines](docs/developer-guide/en/rust-refactoring.md). This includes changes to C++ callers, CXX bridges, and build integration within that task.
 - Use CXX (`#[cxx::bridge]`) for Rust–C++ interoperability in both directions.
 - Extend the repository's existing CXX bridges and build integration; do not add handwritten C ABI bridges or another FFI framework for Rust–C++ calls.
+
+## Product Compatibility and Design
+
+- Unless a task explicitly states otherwise, all features target newly deployed clusters and do not require backward compatibility with previous product versions. This applies to persisted data and indexes, storage formats, interfaces, protocols, configuration, and observable behavior. Do not preserve legacy designs solely for compatibility or treat the absence of backward compatibility alone as a defect or migration blocker; evaluate new designs on their own correctness, simplicity, and maintainability.
 
 ## Code Review
 
