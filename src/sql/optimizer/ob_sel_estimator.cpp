@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_sel_estimator.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
+#include "sql/resolver/ob_stmt.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 
 using namespace oceanbase::common;
@@ -3032,6 +3034,63 @@ int ObUniformRangeSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
   return ret;
 }
 
+// Only use column statistics when every addition is an exact signed-integer + 0.
+// Keep the original expression in the estimator for all other purposes.
+static int get_zero_add_stats_expr(const OptSelectivityCtx &ctx,
+                                   const ObRawExpr *expr,
+                                   const ObRawExpr *&stats_expr,
+                                   ObIArray<int64_t> &zero_param_idxs)
+{
+  int ret = OB_SUCCESS;
+  const ObRawExpr *current = expr;
+  bool has_zero_add = false;
+  const ParamStore *params = ctx.get_params();
+  stats_expr = expr;
+  while (OB_SUCC(ret) && OB_NOT_NULL(current) &&
+         T_OP_ADD == current->get_expr_type() &&
+         ObIntTC == current->get_type_class() &&
+         2 == current->get_param_count()) {
+    const ObRawExpr *left = current->get_param_expr(0);
+    const ObRawExpr *right = current->get_param_expr(1);
+    if (OB_ISNULL(left) || OB_ISNULL(right)) {
+      break;
+    } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(left, left))) {
+    } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(right, right))) {
+    } else {
+      const ObRawExpr *zero = left->is_const_raw_expr() ? left : right;
+      const ObRawExpr *next = left->is_const_raw_expr() ? right : left;
+      if (!zero->is_const_raw_expr() || ObIntTC != zero->get_type_class() ||
+          ObIntTC != next->get_type_class()) {
+        break;
+      }
+      const ObConstRawExpr *zero_const = static_cast<const ObConstRawExpr *>(zero);
+      if (T_QUESTIONMARK == zero->get_expr_type()) {
+        const int64_t idx = zero_const->get_value().get_unknown();
+        if (OB_ISNULL(params) || idx < 0 || idx >= params->count() ||
+            !params->at(idx).is_int() || 0 != params->at(idx).get_int()) {
+          break;
+        } else if (OB_FAIL(zero_param_idxs.push_back(idx))) {
+        }
+      } else if (!zero->is_immutable_const_expr() ||
+                 !zero_const->get_value().is_int() ||
+                 0 != zero_const->get_value().get_int()) {
+        break;
+      }
+      if (OB_SUCC(ret)) {
+        has_zero_add = true;
+        current = next;
+      }
+    }
+  }
+  if (OB_SUCC(ret) && has_zero_add && OB_NOT_NULL(current) &&
+      current->is_column_ref_expr() && ObIntTC == current->get_type_class()) {
+    stats_expr = current;
+  } else {
+    zero_param_idxs.reset();
+  }
+  return ret;
+}
+
 int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
                                         const OptSelectivityCtx &ctx,
                                         double &selectivity,
@@ -3051,6 +3110,8 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
   double not_null_sel = 1.0; // todo
   bool dummy = false;
   bool discrete = (expr_->get_type_class() != ObFloatTC) && (expr_->get_type_class() != ObDoubleTC);
+  const ObRawExpr *stats_expr = expr_;
+  ObSEArray<int64_t, 2> zero_param_idxs;
   ObBorderFlag border_flag;
   if (range_.inclusive_start_){
     border_flag.set_inclusive_start();
@@ -3058,9 +3119,27 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
   if (range_.inclusive_end_) {
     border_flag.set_inclusive_end();
   }
-  if (!range_.is_valid_range()) {
+  if (OB_FAIL(get_zero_add_stats_expr(ctx, expr_, stats_expr, zero_param_idxs))) {
+  } else if (stats_expr != expr_ && !zero_param_idxs.empty() &&
+             OB_ISNULL(ctx.get_opt_ctx().get_query_ctx())) {
+    stats_expr = expr_;
+  } else if (stats_expr != expr_ && !zero_param_idxs.empty()) {
+    ObPCConstParamInfo param_info;
+    const ParamStore *params = ctx.get_params();
+    for (int64_t i = 0; OB_SUCC(ret) && i < zero_param_idxs.count(); ++i) {
+      const int64_t idx = zero_param_idxs.at(i);
+      if (OB_FAIL(param_info.const_idx_.push_back(idx))) {
+      } else if (OB_FAIL(param_info.const_params_.push_back(params->at(idx)))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ctx.get_opt_ctx().get_query_ctx()->
+                               all_plan_const_param_constraints_.push_back(param_info))) {
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!range_.is_valid_range()) {
     selectivity = 0.0;
-  } else if (OB_FAIL(ObOptSelectivity::calc_expr_min_max(table_metas, ctx, expr_,
+  } else if (OB_FAIL(ObOptSelectivity::calc_expr_min_max(table_metas, ctx, stats_expr,
                                                          expr_min, expr_max))) {
   } else if (expr_min.is_min_value() || expr_min.is_max_value() || expr_min.is_null() ||
              expr_max.is_min_value() || expr_max.is_max_value() || expr_max.is_null()) {
@@ -3073,7 +3152,7 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
                                                                   &range_.start_, &range_.end_,
                                                                   &min_scalar, &max_scalar,
                                                                   &start_scalar, &end_scalar))) {
-  } else if (OB_FAIL(ObOptSelectivity::calculate_distinct(table_metas, ctx, *expr_, ctx.get_current_rows(), ndv))) {
+  } else if (OB_FAIL(ObOptSelectivity::calculate_distinct(table_metas, ctx, *stats_expr, ctx.get_current_rows(), ndv))) {
   } else if (OB_FAIL(ObOptSelectivity::do_calc_range_selectivity(min_scalar.get_double(),
                                                                  max_scalar.get_double(),
                                                                  start_scalar,
