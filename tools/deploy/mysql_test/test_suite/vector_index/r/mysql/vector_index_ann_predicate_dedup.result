@@ -1,0 +1,66 @@
+# Baseline and 128 duplicate OR terms return the same ordered IDs.
+id
+50
+49
+48
+47
+46
+45
+44
+43
+42
+41
+id
+50
+49
+48
+47
+46
+45
+44
+43
+42
+41
+# The cached ANN filter contains only one age comparison.
+cached_filter	duplicates_removed
+1	1
+# Different bind values must not reuse invalid deduplication constraints.
+id
+100
+99
+98
+97
+96
+95
+94
+93
+92
+91
+id
+50
+49
+48
+47
+46
+45
+44
+43
+42
+41
+# NO_REWRITE preserves the original filter and query results.
+id
+50
+49
+48
+47
+46
+45
+44
+43
+42
+41
+# Distinct terms beyond the comparison window must be retained (AND/OR).
+id
+150
+id
+150

@@ -1,0 +1,93 @@
+# Regression for #1489: simplify duplicate predicates in ANN queries.
+--disable_query_log
+--disable_result_log
+alter system set vector_memory_limit = 0;
+--disable_warnings
+drop table if exists t_ann_predicate_dedup;
+--enable_warnings
+create table t_ann_predicate_dedup(
+  id int primary key,
+  embedding vector(3) not null,
+  category int,
+  age int,
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16,
+          ef_construction=128, ef_search=128));
+--let $row = 1
+while ($row <= 100)
+{
+  eval insert into t_ann_predicate_dedup
+    values ($row, '[$row,0,0]', if($row <= 50, 1, 2), $row);
+  --inc $row
+}
+insert into t_ann_predicate_dedup values (101, '[101,0,0]', null, null);
+insert into t_ann_predicate_dedup values (150, '[150,0,0]', 2, 150);
+analyze table t_ann_predicate_dedup;
+call dbms_stats.set_table_stats('TEST', 'T_ANN_PREDICATE_DEDUP', numrows=>200000);
+
+--let $duplicate_filter = (category = 1)
+--let $different_filter = (category = 1)
+--let $loop = 0
+while ($loop < 128)
+{
+  --let $duplicate_filter = $duplicate_filter OR (age > 1000)
+  if ($loop == 0)
+  {
+    --let $different_filter = $different_filter OR (age > 50)
+  }
+  if ($loop > 0)
+  {
+    --let $different_filter = $different_filter OR (age > 1000)
+  }
+  --inc $loop
+}
+alter system flush plan cache;
+--enable_result_log
+
+--echo # Baseline and 128 duplicate OR terms return the same ordered IDs.
+select id from t_ann_predicate_dedup where category = 1
+order by l2_distance(embedding, '[100,0,0]') approximate limit 10;
+eval select id from t_ann_predicate_dedup where $duplicate_filter
+order by l2_distance(embedding, '[100,0,0]') approximate limit 10;
+
+--echo # The cached ANN filter contains only one age comparison.
+select count(*) > 0 as cached_filter,
+       max((length(p.filter_predicates) -
+            length(replace(p.filter_predicates, '.age', ''))) / 4) = 1
+         as duplicates_removed
+from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_ann_predicate_dedup') > 0
+  and p.filter_predicates like '%.age%';
+
+--echo # Different bind values must not reuse invalid deduplication constraints.
+eval select id from t_ann_predicate_dedup where $different_filter
+order by l2_distance(embedding, '[100,0,0]') approximate limit 10;
+eval select id from t_ann_predicate_dedup where $duplicate_filter
+order by l2_distance(embedding, '[100,0,0]') approximate limit 10;
+
+--echo # NO_REWRITE preserves the original filter and query results.
+eval select /*+ NO_REWRITE */ id from t_ann_predicate_dedup where $duplicate_filter
+order by l2_distance(embedding, '[100,0,0]') approximate limit 10;
+
+--disable_result_log
+--let $wide_and = (id <> 0)
+--let $wide_or = (id = -1)
+--let $loop = 1
+while ($loop <= 128)
+{
+  --let $wide_and = $wide_and AND (id <> $loop)
+  --let $wide_or = $wide_or OR (id = -$loop)
+  --inc $loop
+}
+--let $wide_or = $wide_or OR (id = 150)
+--enable_result_log
+--echo # Distinct terms beyond the comparison window must be retained (AND/OR).
+eval select id from t_ann_predicate_dedup where $wide_and order by id;
+eval select id from t_ann_predicate_dedup where $wide_or order by id;
+
+--disable_result_log
+drop table t_ann_predicate_dedup;
+alter system set vector_memory_limit = 0;
+--enable_result_log
+--enable_query_log
