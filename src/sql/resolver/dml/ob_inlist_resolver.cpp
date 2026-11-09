@@ -18,6 +18,8 @@
 
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
+#include "lib/allocator/page_arena.h"
+#include "lib/hash/ob_hashset.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 
@@ -350,6 +352,237 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+    }
+  }
+  return ret;
+}
+
+namespace {
+
+struct InListMemberKey {
+  static bool measure_cell(const ParseNode &node,
+                           const ParamStore *param_store,
+                           int64_t &size,
+                           bool &is_question_mark)
+  {
+    bool applicable = true;
+    if (T_QUESTIONMARK == node.type_) {
+      is_question_mark = true;
+      if (NULL == param_store || node.value_ < 0 || node.value_ >= param_store->count()) {
+        applicable = false;
+      } else {
+        size += sizeof(int32_t) + param_store->at(node.value_).get_serialize_size();
+      }
+    } else if (!IS_DATATYPE_OP(node.type_) || node.str_len_ < 0) {
+      applicable = false;
+    } else {
+      size += sizeof(int32_t) + sizeof(int64_t) + sizeof(uint32_t) + sizeof(int64_t);
+      if (node.str_len_ > 0 && NULL != node.str_value_) {
+        size += node.str_len_;
+      }
+    }
+    return applicable;
+  }
+
+  static bool encode_cell(const ParseNode &node,
+                          const ParamStore *param_store,
+                          char *buf,
+                          const int64_t cap,
+                          int64_t &pos)
+  {
+    bool applicable = true;
+    if (T_QUESTIONMARK == node.type_) {
+      if (NULL == param_store || node.value_ < 0 || node.value_ >= param_store->count()) {
+        applicable = false;
+      } else {
+        const int32_t tag = static_cast<int32_t>(T_QUESTIONMARK);
+        if (pos + static_cast<int64_t>(sizeof(tag)) > cap) {
+          applicable = false;
+        } else {
+          MEMCPY(buf + pos, &tag, sizeof(tag));
+          pos += sizeof(tag);
+          if (OB_SUCCESS != param_store->at(node.value_).serialize(buf, cap, pos)) {
+            applicable = false;
+          }
+        }
+      }
+    } else if (!IS_DATATYPE_OP(node.type_) || node.str_len_ < 0) {
+      applicable = false;
+    } else {
+      const int32_t type = static_cast<int32_t>(node.type_);
+      const int64_t value = node.value_;
+      const uint32_t flag = node.flag_;
+      const int64_t str_len = (node.str_len_ > 0 && NULL != node.str_value_) ? node.str_len_ : 0;
+      const int64_t need = sizeof(type) + sizeof(value) + sizeof(flag) + sizeof(str_len) + str_len;
+      if (pos + need > cap) {
+        applicable = false;
+      } else {
+        MEMCPY(buf + pos, &type, sizeof(type));
+        pos += sizeof(type);
+        MEMCPY(buf + pos, &value, sizeof(value));
+        pos += sizeof(value);
+        MEMCPY(buf + pos, &flag, sizeof(flag));
+        pos += sizeof(flag);
+        MEMCPY(buf + pos, &str_len, sizeof(str_len));
+        pos += sizeof(str_len);
+        if (str_len > 0) {
+          MEMCPY(buf + pos, node.str_value_, str_len);
+          pos += str_len;
+        }
+      }
+    }
+    return applicable;
+  }
+
+  // A member is one scalar constant, or one row constructor of scalar constants.
+  static bool measure(const ParseNode &member,
+                      const ParamStore *param_store,
+                      int64_t &size,
+                      bool &is_question_mark)
+  {
+    bool applicable = true;
+    if (T_EXPR_LIST == member.type_) {
+      if (member.num_child_ <= 0 || NULL == member.children_) {
+        applicable = false;
+      } else {
+        size += sizeof(int32_t);
+        for (int64_t i = 0; applicable && i < member.num_child_; ++i) {
+          if (OB_ISNULL(member.children_[i])) {
+            applicable = false;
+          } else {
+            applicable = measure_cell(*member.children_[i], param_store, size, is_question_mark);
+          }
+        }
+      }
+    } else {
+      applicable = measure_cell(member, param_store, size, is_question_mark);
+    }
+    return applicable;
+  }
+
+  static bool encode(const ParseNode &member,
+                     const ParamStore *param_store,
+                     char *buf,
+                     const int64_t cap,
+                     int64_t &pos)
+  {
+    bool applicable = true;
+    if (T_EXPR_LIST == member.type_) {
+      const int32_t cell_cnt = static_cast<int32_t>(member.num_child_);
+      if (pos + static_cast<int64_t>(sizeof(cell_cnt)) > cap) {
+        applicable = false;
+      } else {
+        MEMCPY(buf + pos, &cell_cnt, sizeof(cell_cnt));
+        pos += sizeof(cell_cnt);
+        for (int64_t i = 0; applicable && i < member.num_child_; ++i) {
+          applicable = encode_cell(*member.children_[i], param_store, buf, cap, pos);
+        }
+      }
+    } else {
+      applicable = encode_cell(member, param_store, buf, cap, pos);
+    }
+    return applicable;
+  }
+};
+
+} // namespace
+
+int ObInListResolver::dedup_const_inlist(common::ObIAllocator &alloc,
+                                         const ParseNode &in_list,
+                                         const ParamStore *param_store,
+                                         bool &contains_question_mark,
+                                         const ParseNode *&out_list)
+{
+  int ret = OB_SUCCESS;
+  out_list = NULL;
+  contains_question_mark = false;
+  const int64_t row_cnt = in_list.num_child_;
+  if (T_EXPR_LIST != in_list.type_ || row_cnt <= 1 || NULL == in_list.children_) {
+    // not a list that can contain duplicated constants
+  } else {
+    bool applicable = true;
+    for (int64_t i = 0; applicable && i < row_cnt; ++i) {
+      int64_t key_size = 0;
+      if (OB_ISNULL(in_list.children_[i])) {
+        ret = OB_ERR_UNEXPECTED;
+        applicable = false;
+      } else if (!InListMemberKey::measure(*in_list.children_[i], param_store, key_size,
+                                           contains_question_mark)) {
+        applicable = false;
+      }
+    }
+    hash::ObHashSet<ObString, hash::NoPthreadDefendMode> seen;
+    ObSEArray<const ParseNode *, 64> kept;
+    ObArenaAllocator key_alloc("InListDedup");
+    if (OB_FAIL(ret) || !applicable) {
+      contains_question_mark = false;
+    } else if (OB_FAIL(seen.create(row_cnt, "InLstDedupBkt", "InLstDedupNod"))) {
+      // Keep the original list when the distinct-set cannot be built.
+      LOG_WARN("failed to create inlist dedup set", K(ret), K(row_cnt));
+      ret = OB_SUCCESS;
+      contains_question_mark = false;
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && applicable && i < row_cnt; ++i) {
+        int64_t key_size = 0;
+        char *key_buf = NULL;
+        if (!InListMemberKey::measure(*in_list.children_[i], param_store, key_size,
+                                      contains_question_mark)
+            || key_size <= 0 || key_size > INT32_MAX) {
+          applicable = false;
+        } else if (OB_ISNULL(key_buf = static_cast<char *>(key_alloc.alloc(key_size)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate inlist dedup key", K(ret), K(key_size));
+        } else {
+          int64_t pos = 0;
+          if (!InListMemberKey::encode(*in_list.children_[i], param_store, key_buf, key_size, pos)
+              || pos != key_size) {
+            applicable = false;
+          } else {
+            ObString key(static_cast<int32_t>(key_size), key_buf);
+            const int exist_ret = seen.exist_refactored(key);
+            if (OB_HASH_EXIST == exist_ret) {
+              // duplicated constant, drop it
+            } else if (OB_HASH_NOT_EXIST != exist_ret) {
+              ret = exist_ret;
+              LOG_WARN("failed to probe inlist dedup set", K(ret));
+            } else if (OB_FAIL(seen.set_refactored(key, 0))) {
+              LOG_WARN("failed to insert inlist dedup key", K(ret));
+            } else if (OB_FAIL(kept.push_back(in_list.children_[i]))) {
+              LOG_WARN("failed to keep inlist member", K(ret));
+            }
+          }
+        }
+      }
+      if (OB_FAIL(ret) || !applicable || kept.count() == row_cnt) {
+        if (!applicable) {
+          contains_question_mark = false;
+        }
+      } else if (kept.count() <= 0 || kept.count() > INT32_MAX) {
+        contains_question_mark = false;
+      } else {
+        ParseNode *deduped_list = NULL;
+        if (OB_ISNULL(deduped_list = new_node(&alloc, T_EXPR_LIST, static_cast<int>(kept.count())))
+            || OB_ISNULL(deduped_list->children_)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate deduped inlist", K(ret), K(kept.count()));
+        } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, &in_list, deduped_list))) {
+          LOG_WARN("failed to copy inlist node", K(ret));
+        } else {
+          // deep_copy_parse_node_base overwrites num_child_ with the source
+          // count, while children_ was allocated for the distinct members only.
+          deduped_list->num_child_ = static_cast<int32_t>(kept.count());
+          deduped_list->value_ = kept.count();
+          deduped_list->str_value_ = NULL;
+          deduped_list->str_len_ = 0;
+          deduped_list->raw_text_ = NULL;
+          deduped_list->text_len_ = 0;
+          for (int64_t i = 0; i < kept.count(); ++i) {
+            deduped_list->children_[i] = const_cast<ParseNode *>(kept.at(i));
+          }
+          out_list = deduped_list;
+        }
+      }
+      seen.destroy();
     }
   }
   return ret;

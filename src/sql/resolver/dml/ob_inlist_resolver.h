@@ -90,6 +90,16 @@ public:
                                          common::ObIAllocator &alloc,
                                          bool &is_question_mark,
                                          bool &is_enable);
+  // Drop duplicated const members before the values-table rewrite.
+  // out_list stays NULL when dedup does not apply or removes nothing.
+  // contains_question_mark is true when the members are parameterized
+  // constants. A shortened question-mark list is not contiguous, so the
+  // caller can use it only as a direct IN/NOT IN predicate.
+  static int dedup_const_inlist(common::ObIAllocator &alloc,
+                                const ParseNode &in_list,
+                                const ParamStore *param_store,
+                                bool &contains_question_mark,
+                                const ParseNode *&out_list);
   // try to merge IN nodes under root_node (which is an AND/OR node)
   // if merge does not happen, the ret_node is root_node
   // if merge happened, the merged node will be a new node with merged children, and if:
