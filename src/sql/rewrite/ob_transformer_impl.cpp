@@ -536,8 +536,21 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    }
+    if (func.contain_vec_index_approx_) {
+      uint64_t vec_enable_list = 0;
+      // Simplify scalar predicates within one base-table ANN query, without
+      // crossing query blocks or rewriting the approximate ORDER BY / LIMIT.
+      if (stmt->has_vec_approx()
+          && stmt->get_table_items().count() == 1
+          && OB_NOT_NULL(stmt->get_table_items().at(0))
+          && stmt->get_table_items().at(0)->is_basic_table()
+          && stmt->get_subquery_expr_size() == 0) {
+        ObTransformRule::add_trans_type(vec_enable_list, SIMPLIFY_EXPR);
+      }
+      disable_list |= (ObTransformRule::ALL_TRANSFORM_RULES & ~vec_enable_list);
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;

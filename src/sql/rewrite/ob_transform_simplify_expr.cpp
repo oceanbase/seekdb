@@ -26,6 +26,59 @@ using namespace oceanbase::sql;
 
 namespace
 {
+// Restrict bound absorption to signed integer columns and literal/parameter
+// operands. Other types may have collation, rounding, or cast side effects.
+bool get_signed_integer_bound(ObRawExpr *expr, ObRawExpr *&column,
+                              ObRawExpr *&bound, bool &upper, bool &strict)
+{
+  bool valid = false;
+  column = NULL;
+  bound = NULL;
+  if (NULL != expr && 2 == expr->get_param_count()) {
+    ObItemType type = expr->get_expr_type();
+    if (T_OP_LT == type || T_OP_LE == type || T_OP_GT == type || T_OP_GE == type) {
+      ObRawExpr *left = expr->get_param_expr(0);
+      ObRawExpr *right = expr->get_param_expr(1);
+      if (NULL != left && NULL != right) {
+        if (left->is_column_ref_expr() && right->is_const_raw_expr()) {
+          column = left;
+          bound = right;
+        } else if (right->is_column_ref_expr() && left->is_const_raw_expr()) {
+          column = right;
+          bound = left;
+          type = T_OP_LT == type ? T_OP_GT : T_OP_LE == type ? T_OP_GE
+               : T_OP_GT == type ? T_OP_LT : T_OP_LE;
+        }
+        valid = NULL != column && NULL != bound && bound->is_static_const_expr()
+             && ob_is_int_tc(column->get_data_type()) && ob_is_int_tc(bound->get_data_type());
+        upper = T_OP_LT == type || T_OP_LE == type;
+        strict = T_OP_LT == type || T_OP_GT == type;
+      }
+    }
+  }
+  return valid;
+}
+
+int integer_bound_implies(ObTransformerCtx *ctx, ObRawExpr &stronger,
+                          const bool stronger_strict, ObRawExpr &weaker,
+                          const bool weaker_strict, const bool upper, bool &implies)
+{
+  int ret = OB_SUCCESS;
+  const bool allow_equal = stronger_strict || !weaker_strict;
+  const ObItemType compare = upper ? (allow_equal ? T_OP_LE : T_OP_LT)
+                                  : (allow_equal ? T_OP_GE : T_OP_GT);
+  ObRawExpr *constraint = NULL;
+  if (OB_FAIL(ObTransformUtils::compare_const_expr_result(ctx, stronger, compare, weaker, implies))) {
+  } else if (!implies || (!stronger.has_flag(CNT_STATIC_PARAM) && !weaker.has_flag(CNT_STATIC_PARAM))) {
+    // NULL/unknown comparisons cannot justify dropping a predicate.
+  } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(
+                       *ctx->expr_factory_, compare, &stronger, &weaker, constraint))) {
+  } else if (OB_FAIL(constraint->formalize(ctx->session_info_))) {
+  } else if (OB_FAIL(ObTransformUtils::add_param_bool_constraint(ctx, constraint, true))) {
+  }
+  return ret;
+}
+
 int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
 {
   int ret = OB_SUCCESS;
@@ -62,6 +115,14 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
   UNUSED(parent_stmts);
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+  }
+  if (OB_SUCC(ret) && stmt->has_vec_approx()) {
+    // ANN queries only enable bound absorption here. Keep the remaining scalar
+    // rewrites disabled, as well as all structural rewrites of their top-K.
+    if (OB_FAIL(simplify_ann_integer_bounds(*stmt, trans_happened))) {
+    } else if (trans_happened && OB_FAIL(add_transform_hint(*stmt))) {
+    }
+    return ret;
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(flatten_stmt_exprs(stmt, is_happened))) {
@@ -134,6 +195,54 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
   }
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_FAIL(add_transform_hint(*stmt))) {
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::simplify_ann_integer_bounds(ObDMLStmt &stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  ObIArray<ObRawExpr *> &conditions = stmt.get_condition_exprs();
+  for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+    ObRawExpr *column = NULL;
+    ObRawExpr *bound = NULL;
+    bool upper = false;
+    bool strict = false;
+    if (!get_signed_integer_bound(conditions.at(i), column, bound, upper, strict)) {
+      continue;
+    }
+    for (int64_t j = i + 1; OB_SUCC(ret) && j < conditions.count();) {
+      ObRawExpr *other_column = NULL;
+      ObRawExpr *other_bound = NULL;
+      bool other_upper = false;
+      bool other_strict = false;
+      bool drop_other = false;
+      bool drop_current = false;
+      if (!get_signed_integer_bound(conditions.at(j), other_column, other_bound,
+                                      other_upper, other_strict)
+          || upper != other_upper || !column->same_as(*other_column)) {
+        ++j;
+      } else if (OB_FAIL(integer_bound_implies(ctx_, *bound, strict, *other_bound,
+                                                other_strict, upper, drop_other))) {
+      } else if (drop_other) {
+        if (OB_FAIL(conditions.remove(j))) {
+        } else {
+          trans_happened = true;
+        }
+      } else if (OB_FAIL(integer_bound_implies(ctx_, *other_bound, other_strict, *bound,
+                                                strict, upper, drop_current))) {
+      } else if (drop_current) {
+        if (OB_FAIL(conditions.remove(i))) {
+        } else {
+          trans_happened = true;
+          --i;
+        }
+        break;
+      } else {
+        ++j;
+      }
     }
   }
   return ret;
