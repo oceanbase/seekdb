@@ -1,0 +1,32 @@
+# owner: competition
+# owner group: storage
+# description: generated DDL quotes embedded backticks in column identifiers
+
+--result_format 4
+--disable_warnings
+drop table if exists column_identifier_backtick;
+--enable_warnings
+
+create table column_identifier_backtick (
+  id bigint primary key,
+  `plain``name` int,
+  ```leading` enum('one', 'two'),
+  `trailing``` set('red', 'blue'),
+  `中文``列` varchar(20),
+  unique key `uk``quoted` (`plain``name`)
+);
+
+insert into column_identifier_backtick values
+  (1, 10, 'one', 'red,blue', 'value');
+
+alter table column_identifier_backtick add unique key `uk``enum` (```leading`);
+alter table column_identifier_backtick add unique key `uk``set` (`trailing```);
+alter table column_identifier_backtick add unique key `uk``utf8` (`中文``列`);
+
+select id,
+       `plain``name` as plain_name,
+       ```leading` as leading_value,
+       `trailing``` as trailing_value
+  from column_identifier_backtick;
+
+drop table column_identifier_backtick;
