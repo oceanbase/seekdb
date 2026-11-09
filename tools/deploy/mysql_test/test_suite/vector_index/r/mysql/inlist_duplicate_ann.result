@@ -1,0 +1,45 @@
+DROP TABLE IF EXISTS inlist_duplicate_ann, inlist_duplicate_ann_digits;
+CREATE TABLE inlist_duplicate_ann_digits (n INT);
+INSERT INTO inlist_duplicate_ann_digits VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE inlist_duplicate_ann (
+id BIGINT PRIMARY KEY,
+category5 INT NOT NULL,
+embedding VECTOR(3),
+KEY idx_category5(category5)
+) ORGANIZATION HEAP;
+INSERT INTO inlist_duplicate_ann
+SELECT a.n+10*b.n+100*c.n,
+MOD(a.n+10*b.n+100*c.n,5)+1,
+CONCAT('[',COS(a.n+10*b.n+100*c.n),',',SIN(a.n+10*b.n+100*c.n),',0]')
+FROM inlist_duplicate_ann_digits a,
+inlist_duplicate_ann_digits b,
+inlist_duplicate_ann_digits c;
+CREATE VECTOR INDEX inlist_duplicate_ann_hnsw ON inlist_duplicate_ann(embedding)
+WITH (distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=128,sync_mode=immediate);
+ANALYZE TABLE inlist_duplicate_ann;
+SET @old_inlist_ann_ef_search=@@ob_hnsw_ef_search;
+SET ob_hnsw_ef_search=16;
+# Both equivalent filters have 600 eligible rows.
+SELECT COUNT(*) FROM inlist_duplicate_ann WHERE category5 IN (1,2,3);
+COUNT(*)
+600
+SELECT COUNT(*) FROM inlist_duplicate_ann WHERE category5 IN (1,2,3,1,2,3);
+COUNT(*)
+600
+# Duplicate membership must not filter an already limited ANN result.
+SELECT COUNT(*) AS compact_count FROM (
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_duplicate_ann WHERE category5 IN (1,2,3)
+ORDER BY l2_distance(embedding,'[1,0,0]') APPROXIMATE LIMIT 10
+) q;
+compact_count
+10
+SELECT COUNT(*) AS duplicate_count FROM (
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id
+FROM inlist_duplicate_ann WHERE category5 IN (1,2,3,1,2,3)
+ORDER BY l2_distance(embedding,'[1,0,0]') APPROXIMATE LIMIT 10
+) q;
+duplicate_count
+10
+SET ob_hnsw_ef_search=@old_inlist_ann_ef_search;
+DROP TABLE inlist_duplicate_ann, inlist_duplicate_ann_digits;
