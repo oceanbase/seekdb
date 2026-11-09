@@ -281,7 +281,23 @@ OB_INLINE int ObBitStream::get<ObBitStream::DEFAULT>(
     const int64_t bs_len,
     int64_t &value)
 {
-  UNUSED(bs_len);
+#if CHAR_BIT == 8 && defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) \
+    && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  constexpr int64_t WORD_BITS = sizeof(uint64_t) * CHAR_BIT;
+  if (offset >= 0 && cnt > 0 && bs_len >= WORD_BITS) {
+    const int64_t byte_offset = offset / CHAR_BIT;
+    const int64_t bit_offset = offset % CHAR_BIT;
+    // Some callers supply conservative bit lengths. Use that bound only to
+    // permit a whole-word load; retain the byte loop for short or unknown tails.
+    if (cnt <= WORD_BITS - bit_offset
+        && byte_offset <= bs_len / CHAR_BIT - static_cast<int64_t>(sizeof(uint64_t))) {
+      uint64_t word = 0;
+      MEMCPY(&word, buf + byte_offset, sizeof(word));
+      value = static_cast<int64_t>((word >> bit_offset) & (UINT64_MAX >> (WORD_BITS - cnt)));
+      return common::OB_SUCCESS;
+    }
+  }
+#endif
   return get(buf, offset, cnt, value);
 }
 

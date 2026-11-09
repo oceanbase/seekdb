@@ -586,6 +586,15 @@ cc_library(
 )
 
 cc_library(
+    name = "bit_stream_test_headers",
+    testonly = True,
+    hdrs = ["blocksstable/encoding/ob_bit_stream.h"],
+    deps = [":storage_runtime_internal_headers"],
+    tags = ["manual"],
+    visibility = ["//unittest/storage/blocksstable:__pkg__"],
+)
+
+cc_library(
     name = "tx_replay_test_headers",
     testonly = True,
     hdrs = ["tx/ob_tx_replay_executor.h"],
