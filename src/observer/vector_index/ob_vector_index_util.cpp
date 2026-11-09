@@ -5871,7 +5871,8 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
+    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE
+        && vc_info.selectivity_ <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SELECTIVITY) {
       vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     } else if (is_primary_idx) {
       vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
