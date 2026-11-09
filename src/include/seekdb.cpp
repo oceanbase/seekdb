@@ -911,9 +911,11 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
     opts.use_ipv6_ = false;
     
     
-    // Set default parameters
+    // Set default parameters. The instance parameter catalog keeps the logical
+    // memory budget under "memory_budget"; "memory_limit" is not a known
+    // parameter and would make observer init fail with OB_INVALID_CONFIG.
     const char* params[][2] = {
-        {"memory_limit", "1G"},
+        {"memory_budget", "1G"},
         {"log_disk_size", "2G"}
     };
     try {
