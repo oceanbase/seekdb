@@ -2500,13 +2500,16 @@ public:
   {
     int ret = OB_SUCCESS;
     common::ObLobDiff *lob_diffs = diff_header->get_diff_ptr();
-    const int64_t diff_offset = reinterpret_cast<char *>(lob_diffs) - buf;
     if (OB_ISNULL(lob_diffs)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (buf_len < 0 || diff_offset < 0 || diff_offset > buf_len
-               || diff_header->diff_cnt_ > (buf_len - diff_offset) / sizeof(common::ObLobDiff)) {
-      ret = OB_DESERIALIZE_ERROR;
     } else {
+      const int64_t diff_offset = reinterpret_cast<char *>(lob_diffs) - buf;
+      if (buf_len < 0 || diff_offset < 0 || diff_offset > buf_len
+          || diff_header->diff_cnt_ > (buf_len - diff_offset) / sizeof(common::ObLobDiff)) {
+        ret = OB_DESERIALIZE_ERROR;
+      }
+    }
+    if (OB_SUCC(ret)) {
       common::ObSEArray<common::BinaryDiff, 10> physical;
       for (int64_t i = 0; OB_SUCC(ret) && i < diff_header->diff_cnt_; ++i) {
         ret = physical.push_back(common::BinaryDiff{

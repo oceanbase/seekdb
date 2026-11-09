@@ -337,6 +337,10 @@ impl<'a> BinaryValue<'a> {
         Ok(self.container()?.map_or(1, |container| container.count))
     }
 
+    pub fn is_empty(&self) -> BinaryResult<bool> {
+        Ok(self.len()? == 0)
+    }
+
     pub fn value(&self, index: u64) -> BinaryResult<BinaryValue<'a>> {
         let container = self
             .container()?
@@ -1806,7 +1810,7 @@ pub(crate) fn set_var(output: &mut [u8], position: usize, value: u64, kind: u8) 
 
 fn vi64_len(value: u64) -> u64 {
     let bits = 64 - value.leading_zeros() as u64;
-    ((bits.max(1) + 6) / 7).min(10)
+    bits.max(1).div_ceil(7).min(10)
 }
 
 pub(crate) fn push_vi64(output: &mut Vec<u8>, mut value: u64) {

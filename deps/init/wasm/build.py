@@ -66,8 +66,7 @@ def copy_headers(source, prefix, manifest):
     patches += manifest["boost_numeric_backport"]["headers"]
     patches += manifest["boost_geometry_math"]["headers"]
     patched = {patch["path"]: patch for patch in patches}
-    trees = [(name, name) for name in (
-        "rapidjson", "boost")]
+    trees = [("boost", "boost")]
     for source_tree, target_tree in trees:
         tree = source / source_tree
         if not tree.is_dir():

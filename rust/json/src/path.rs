@@ -828,7 +828,7 @@ impl<'a> Parser<'a> {
                 .checked_mul(10)
                 .and_then(|value| value.checked_add(u64::from(self.input[self.position] - b'0')))
                 .filter(|value| *value <= MAX_ARRAY_INDEX)
-                .ok_or_else(|| PathError {
+                .ok_or(PathError {
                     kind: PathErrorKind::Syntax,
                     byte_offset: start,
                 })?;

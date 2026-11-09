@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_JSON_FUNC_HELPER_H_
 #define OCEANBASE_SQL_OB_EXPR_JSON_FUNC_HELPER_H_
 
+#include <memory>
+
 #include "sql/engine/expr/ob_expr_util.h"
 #include "share/object/ob_obj_cast_util.h"  // ObJsonZeroVal moved down to
 #include "sql/engine/expr/ob_expr_lob_utils.h"

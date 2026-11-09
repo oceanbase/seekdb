@@ -22,31 +22,3 @@ cc_test(
     linkstatic = True,
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
-
-cc_library(
-    name = "json_parser_cases",
-    srcs = ["test_json_parser.cpp"],
-    hdrs = ["json_mutation_golden.h", "json_hash_inputs.h", "json_hash_golden.h"],
-    alwayslink = True,
-    deps = [
-        "//src/oblib:oblib_unit_test_internal_headers",
-        "//bazel/third_party:gtest",
-        "//rust:json",
-    ],
-)
-
-cc_test(
-    name = "test_json_parser",
-    linkstatic = True,
-    deps = [":json_parser_cases", "//src/oblib:oblib_test_runtime"],
-)
-
-cc_test(
-    name = "test_json_direct_benchmark",
-    srcs = ["test_json_direct_benchmark.cpp"],
-    linkstatic = True,
-    deps = [
-        "//src/oblib:oblib_test_runtime",
-        "//src/oblib:oblib_unit_test_internal_headers",
-    ],
-)

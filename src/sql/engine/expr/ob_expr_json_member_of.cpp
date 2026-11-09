@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_func_helper.h"
+#include <optional>
 #include "ob_expr_json_member_of.h"
 #include "ob_expr_json_native_path.h"
 

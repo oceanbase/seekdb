@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "common/json_type/json_builder.h"
+#include <optional>
 #include "ob_expr_json_query.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
 #include "ob_expr_json_value.h"

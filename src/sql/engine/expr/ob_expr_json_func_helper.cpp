@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "rust/config.h"
 #include "rust/json.h"
+#include <memory>
+#include <optional>
+#include <string>
 #include "ob_expr_json_func_helper.h"
 #include "common/json_type/json_builder.h"
 #include "ob_expr_json_native_path.h"

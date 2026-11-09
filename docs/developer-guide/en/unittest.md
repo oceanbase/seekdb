@@ -30,17 +30,3 @@ List the checked-in test targets with:
 Place module tests under `unittest/<module>/`, name the source `test_*.cpp`, and declare its dependencies explicitly in `BUILD.bazel`. Reuse the module's test interfaces and runtime; do not add dependencies on another module's private implementation. Each executable needs one Google Test main. Use `ASSERT_*` when subsequent checks cannot proceed after failure and `EXPECT_*` when they can.
 
 SQL integration tests use the separate [mysqltest workflow](mysqltest.md). Record the exact build or test targets used in the pull-request description.
-
-## Run native Rust tests
-
-```bash
-./build.py test //rust/json:test --test_output=errors
-```
-
-Native `test` commands compile the Rust test executable and its target dependencies with `panic=unwind`. The standard Rust test runner catches assertion failures and reports the failed test. Ordinary `build` commands retain `panic=abort`. The Wasm configuration retains its existing abort policy.
-
-To compile a native Rust test executable without running it, apply the test policy explicitly to the build command.
-
-```bash
-./build.py build //rust/json:test --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=unwind
-```

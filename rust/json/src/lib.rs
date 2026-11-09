@@ -173,7 +173,12 @@ pub(crate) fn normalized_input(input: &[u8]) -> Cow<'_, [u8]> {
             None => true,
             Some(byte) => matches!(*byte, b',' | b']' | b'}' | b' ' | b'\t' | b'\r' | b'\n'),
         };
-        if input.get(position + 1) == Some(&b'0') && integer_zero_terminator {
+        let value_start = position == 0
+            || matches!(
+                input[position - 1],
+                b'{' | b'[' | b',' | b':' | b' ' | b'\t' | b'\r' | b'\n'
+            );
+        if value_start && input.get(position + 1) == Some(&b'0') && integer_zero_terminator {
             let bytes = normalized.get_or_insert_with(|| input.to_vec());
             bytes[position] = b' ';
         }

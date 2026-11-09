@@ -905,13 +905,12 @@ impl State<'_> {
                 })
             }
             b"pattern" if string_type(kind) => {
-                let bytes;
-                if kind == JsonType::String {
-                    bytes = value.string_bytes()?.to_vec();
+                let bytes = if kind == JsonType::String {
+                    value.string_bytes()?.to_vec()
                 } else {
                     let scalar = binary::serialize_value(value)?;
-                    bytes = scalar.get(1..2).unwrap_or_default().to_vec();
-                }
+                    scalar.get(1..2).unwrap_or_default().to_vec()
+                };
                 let count = if self.arena().is_array(rule) {
                     self.arena().len(rule)
                 } else {
@@ -1084,7 +1083,7 @@ fn multiple(value: f64, divisor: f64) -> bool {
     let value = value.abs();
     let divisor = divisor.abs();
     let result = value - (value / divisor).floor() * divisor;
-    !(result > 0.0)
+    result.is_nan() || result <= 0.0
 }
 fn numeric_order(left: BinaryValue<'_>, right: BinaryValue<'_>) -> Result<Ordering> {
     crate::decimal::compare_values(left, right).map_err(Error::Compare)

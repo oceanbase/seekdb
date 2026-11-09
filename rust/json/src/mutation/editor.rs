@@ -24,6 +24,9 @@ use super::sql::{PreparedEdit, SqlOperation};
 /// A stable binary JSON snapshot. Reads must fill the requested range or fail.
 pub trait BinarySource {
     fn len(&self) -> u64;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     /// Returns the complete immutable snapshot when its storage can be borrowed.
     fn contiguous(&self) -> Option<&[u8]> { None }
     fn read_exact(&self, offset: u64, output: &mut [u8]) -> io::Result<()>;

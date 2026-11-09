@@ -227,7 +227,8 @@ int JsonContainerBuilder::finish(ObString &binary, bool aggregate, bool sort_key
       sort_keys, aggregate, max_depth));
   const int ret = build_status_error(state_->output_->status);
   if (ret == OB_SUCCESS) {
-    binary.assign_ptr(reinterpret_cast<char *>(state_->output_->binary.data()), state_->output_->binary.size());
+    binary.assign_ptr(reinterpret_cast<char *>(state_->output_->binary.data()),
+                      static_cast<ObString::obstr_size_t>(state_->output_->binary.size()));
   }
   return ret;
 }
@@ -241,7 +242,8 @@ int JsonContainerBuilder::format(ObString &text)
   int ret = state_->text_->platform_error;
   if (ret == OB_SUCCESS && state_->text_->status != json::Status::Ok) { ret = OB_ERR_UNEXPECTED; }
   if (ret == OB_SUCCESS) {
-    text.assign_ptr(reinterpret_cast<char *>(state_->text_->text.data()), state_->text_->text.size());
+    text.assign_ptr(reinterpret_cast<char *>(state_->text_->text.data()),
+                    static_cast<ObString::obstr_size_t>(state_->text_->text.size()));
   }
   return ret;
 }

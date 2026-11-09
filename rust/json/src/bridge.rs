@@ -512,6 +512,7 @@ fn parse_value(input: &[u8], text: bool, max_depth: u32) -> Box<ValueParseResult
     };
     Box::new(ValueParseResult { state })
 }
+#[allow(clippy::boxed_local)]
 fn take_value(parsed: Box<ValueParseResult>) -> Box<Value> {
     Box::new(parsed.state.expect("value parse status was checked"))
 }
@@ -2046,6 +2047,7 @@ impl MergeState {
     }
 }
 
+#[allow(clippy::boxed_local)]
 fn finish_merge(merger: Box<MergeState>) -> ffi::MergeOutput {
     let result = merger.state.unwrap().and_then(|state| state.finish());
     match result {
@@ -2179,6 +2181,7 @@ impl BinaryWriter {
     fn writer_double(&mut self, value: f64) -> i32 { writer_status(self.double(value)) }
     fn writer_end(&mut self, handle: u64) -> i32 { writer_status(self.end(crate::writer::ContainerId(handle))) }
 }
+#[allow(clippy::boxed_local)]
 fn writer_finish(writer: Box<BinaryWriter>) -> ffi::WriterFinishResult {
     match writer.finish(false) {
         Ok(binary) => ffi::WriterFinishResult { status: 0, binary },

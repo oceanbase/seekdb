@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_value.h"
+#include <optional>
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1

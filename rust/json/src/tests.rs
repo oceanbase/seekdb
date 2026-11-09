@@ -145,6 +145,23 @@ fn numeric_classification_and_boundaries() {
 }
 
 #[test]
+fn exponent_signs_are_not_rewritten_as_negative_zero() {
+    for text in [
+        &b"1e-0"[..],
+        b"1E-0",
+        b"[1e-0]",
+        b"{\"a\":-0,\"b\":1e-0}",
+        b"-0",
+    ] {
+        assert!(parse(text, ParseOptions::default()).is_ok(), "{}", String::from_utf8_lossy(text));
+    }
+    assert_eq!(
+        parse(b"1e-0", ParseOptions::default()).unwrap(),
+        Document::Number(Number::F64(1.0))
+    );
+}
+
+#[test]
 fn binary_document_reads_borrowed_and_owned_documents() {
     let input = br#"{"a":[1,-2,3.5,true,null,"x"],"b":{"c":18446744073709551615}}"#;
     let bytes = parse_binary(input, ParseOptions::default()).unwrap();
@@ -432,6 +449,25 @@ fn mysql_path_parser_covers_standard_steps_and_errors() {
 }
 
 #[test]
+fn deeply_nested_filter_expressions_are_bounded() {
+    let mut negated = String::from("$?(");
+    negated.push_str(&"!".repeat(10_000));
+    negated.push_str("@.a)");
+    assert_eq!(
+        crate::SqlPath::parse(negated.as_bytes()).unwrap_err().kind,
+        PathErrorKind::TooManyNodes
+    );
+    let mut parenthesized = String::from("$?(");
+    parenthesized.push_str(&"(".repeat(10_000));
+    parenthesized.push_str("@.a");
+    parenthesized.push_str(&")".repeat(10_001));
+    assert_eq!(
+        crate::SqlPath::parse(parenthesized.as_bytes()).unwrap_err().kind,
+        PathErrorKind::TooManyNodes
+    );
+}
+
+#[test]
 fn mysql_path_query_preserves_binary_values_and_result_order() {
     let bytes = parse_binary(
         "{\"a\":[0,1,2,3],\"b\":{\"a\":5},\"雪\":{\"x\":true},\"a.b\":9}".as_bytes(),
@@ -450,7 +486,7 @@ fn mysql_path_query_preserves_binary_values_and_result_order() {
     let single = |path: &str| {
         let values = query(path);
         assert_eq!(values.len(), 1, "{path}");
-        values[0].clone()
+        values[0]
     };
 
     assert_eq!(single("$.a[1]").number().unwrap(), Number::I64(1));
@@ -1004,16 +1040,17 @@ fn decimal_equality_preserves_sql_number_semantics() {
 
 #[test]
 fn binary_value_serialization_round_trips_document_shapes() {
-    for text in [
-        &br#"null"#[..],
-        &br#"true"#[..],
-        &br#"-9223372036854775808"#[..],
-        &br#"18446744073709551615"#[..],
-        &br#"-0.0"#[..],
-        &"\"雪\"".as_bytes()[..],
-        &br#"[0,127,128,-128,-129,32767,32768]"#[..],
-        &br#"{"a":[0,1,{"b":false}],"c":"d"}"#[..],
-    ] {
+    let texts: [&[u8]; 8] = [
+        br#"null"#,
+        br#"true"#,
+        br#"-9223372036854775808"#,
+        br#"18446744073709551615"#,
+        br#"-0.0"#,
+        "\"雪\"".as_bytes(),
+        br#"[0,127,128,-128,-129,32767,32768]"#,
+        br#"{"a":[0,1,{"b":false}],"c":"d"}"#,
+    ];
+    for text in texts {
         let bytes = parse_binary(text, ParseOptions::default()).unwrap();
         let document = BinaryDocument::new(bytes.clone()).unwrap();
         let serialized = binary::serialize_value(document.root().unwrap()).unwrap();
@@ -2792,10 +2829,10 @@ fn owned_mutations_edit_and_discard_deep_values_without_recursive_state() {
 #[test]
 fn owned_constructor_inputs_preserve_bytes_and_failed_append_state() {
     use crate::construction::{ContainerBuilder, Scalar};
-    let inputs = vec![Scalar::Null.encode().unwrap(), Scalar::Signed(-1).encode().unwrap(),
+    let inputs = [Scalar::Null.encode().unwrap(), Scalar::Signed(-1).encode().unwrap(),
         Scalar::Unsigned(u64::MAX).encode().unwrap(), Scalar::Float(-0.0).encode().unwrap(),
-        Scalar::String(&vec![b'x'; 300]).encode().unwrap(),
-        Scalar::String(&vec![b'y'; 65_536]).encode().unwrap(),
+        Scalar::String(&[b'x'; 300]).encode().unwrap(),
+        Scalar::String(&[b'y'; 65_536]).encode().unwrap(),
         Scalar::Opaque { field_type: 28, bytes: &[0, 255] }.encode().unwrap(),
         parse_binary(br#"{"aa":[-1,null],"b":{"":true}}"#, Default::default()).unwrap()];
     for object in [false, true] {

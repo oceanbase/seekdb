@@ -415,12 +415,11 @@ impl Arena {
             .parent
             .iter()
             .enumerate()
-            .filter_map(|(id, owner)| {
-                reachable[id].then(|| {
-                    owner
-                        .filter(|parent| reachable[*parent])
-                        .map(|parent| remap[parent])
-                })
+            .filter(|(id, _owner)| reachable[*id])
+            .map(|(_, owner)| {
+                owner
+                    .filter(|parent| reachable[*parent])
+                    .map(|parent| remap[parent])
             })
             .collect();
         self.nodes = std::mem::take(&mut self.nodes)

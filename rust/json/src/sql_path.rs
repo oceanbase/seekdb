@@ -171,10 +171,8 @@ impl<'a> Parser<'a> {
         self.skip_whitespace();
         let lax = if self.consume_keyword(b"lax") {
             true
-        } else if self.consume_keyword(b"strict") {
-            false
         } else {
-            true
+            !self.consume_keyword(b"strict")
         };
         self.lax = lax;
         self.skip_whitespace();
@@ -259,12 +257,10 @@ impl<'a> Parser<'a> {
             self.position += 1;
             self.skip_whitespace();
             self.expect(b')')?;
-            return Ok(SqlPathStep::Method(parse_method(name).ok_or_else(
-                || PathError {
-                    kind: PathErrorKind::Syntax,
-                    byte_offset: start,
-                },
-            )?));
+            return Ok(SqlPathStep::Method(parse_method(name).ok_or(PathError {
+                kind: PathErrorKind::Syntax,
+                byte_offset: start,
+            })?));
         }
         let key = {
             if name[0].is_ascii_digit() {
@@ -337,7 +333,7 @@ impl<'a> Parser<'a> {
             value = value
                 .checked_mul(10)
                 .and_then(|value| value.checked_add(u64::from(self.input[self.position] - b'0')))
-                .ok_or_else(|| PathError {
+                .ok_or(PathError {
                     kind: PathErrorKind::Syntax,
                     byte_offset: start,
                 })?;
@@ -352,13 +348,7 @@ impl<'a> Parser<'a> {
     fn parse_filter(&mut self) -> PathResult<FilterExpr> {
         self.skip_whitespace();
         self.expect(b'(')?;
-        self.filter_depth += 1;
-        if self.filter_depth > MAX_PATH_NODES as u32 {
-            return Err(PathError {
-                kind: PathErrorKind::TooManyNodes,
-                byte_offset: self.position,
-            });
-        }
+        self.enter_filter()?;
         self.skip_whitespace();
         let result = self.parse_or();
         self.skip_whitespace();
@@ -366,8 +356,23 @@ impl<'a> Parser<'a> {
             self.expect(b')')?;
             Ok(filter)
         });
-        self.filter_depth -= 1;
+        self.leave_filter();
         result
+    }
+
+    fn enter_filter(&mut self) -> PathResult<()> {
+        self.filter_depth += 1;
+        if self.filter_depth > MAX_PATH_NODES as u32 {
+            return Err(PathError {
+                kind: PathErrorKind::TooManyNodes,
+                byte_offset: self.position,
+            });
+        }
+        Ok(())
+    }
+
+    fn leave_filter(&mut self) {
+        self.filter_depth -= 1;
     }
 
     fn parse_or(&mut self) -> PathResult<FilterExpr> {
@@ -400,11 +405,17 @@ impl<'a> Parser<'a> {
         if self.peek() == Some(b'!') && !self.starts_exists() {
             self.position += 1;
             self.skip_whitespace();
-            return Ok(FilterExpr::Not(Box::new(self.parse_unary()?)));
+            self.enter_filter()?;
+            let expression = self.parse_unary();
+            self.leave_filter();
+            return Ok(FilterExpr::Not(Box::new(expression?)));
         }
         if self.consume(b'(') {
             self.skip_whitespace();
-            let expression = self.parse_or()?;
+            self.enter_filter()?;
+            let expression = self.parse_or();
+            self.leave_filter();
+            let expression = expression?;
             self.skip_whitespace();
             self.expect(b')')?;
             return Ok(expression);

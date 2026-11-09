@@ -182,7 +182,8 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
 
       const rust::Slice<const uint8_t> binary(merged.binary.data(), merged.binary.size());
       if (dst_type == ObJsonType) {
-        res_string.assign_ptr(reinterpret_cast<const char *>(merged.binary.data()), merged.binary.size());
+        res_string.assign_ptr(reinterpret_cast<const char *>(merged.binary.data()),
+                              static_cast<ObString::obstr_size_t>(merged.binary.size()));
       } else {
         ObString tmp_val;
         ObString result_str;
@@ -195,7 +196,8 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
             || formatted->status != common::json::Status::Ok || formatted->text.empty()) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          tmp_val.assign_ptr(reinterpret_cast<char *>(formatted->text.data()), formatted->text.size());
+          tmp_val.assign_ptr(reinterpret_cast<char *>(formatted->text.data()),
+                             static_cast<ObString::obstr_size_t>(formatted->text.size()));
           ObCollationType in_cs_type = CS_TYPE_UTF8MB4_BIN;
           ObCollationType dst_cs_type = expr.obj_meta_.get_collation_type();
           result_str = tmp_val;
