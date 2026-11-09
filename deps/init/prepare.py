@@ -310,7 +310,7 @@ def install(profile, destination, cache_directory):
     print("Dependencies ready: " + str(destination), flush=True)
 
 
-def install_locked(lock_file, destination, archive_directory, system, architecture):
+def install_locked(lock_file, destination, cache_directory, system, architecture):
     packages = locked_packages(lock_file, system, architecture)
     key = hashlib.sha256(json.dumps(packages, sort_keys=True).encode("utf-8")).hexdigest()
     if ready(destination, key):
@@ -318,6 +318,7 @@ def install_locked(lock_file, destination, archive_directory, system, architectu
         return
 
     destination.parent.mkdir(parents=True, exist_ok=True)
+    archive_directory = locked_cache_directory(platform.system(), cache_directory) if packages else None
     with tempfile.TemporaryDirectory(prefix=".deps-", dir=destination.parent) as temporary:
         stage = Path(temporary) / "prebuilt"
         stage.mkdir()
@@ -391,15 +392,14 @@ def main(arguments):
     prepare_rust(rust_target)
     cache = os.environ.get("DEP_CACHE_DIR")
     cache_directory = Path(cache).expanduser().resolve() if cache else None
-    archive_directory = locked_cache_directory(system, cache_directory)
     install(profile, ROOT / "deps/3rd", cache_directory if os.name != "nt" else None)
-    install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/native", archive_directory,
+    install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/native", cache_directory,
                    system, architecture)
     if options.wasm:
         subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
     if options.android:
         install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android", None)
-        install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/android", archive_directory,
+        install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/android", cache_directory,
                        "Android", "arm64")
     if options.ios:
         subprocess.run([
