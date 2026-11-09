@@ -413,7 +413,15 @@ int ObLocalManagementService::execute_bootstrap()
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
     FLOG_INFO("success to get local-service lock in execute_bootstrap");
     ObBootstrap bootstrap(ddl_service_, runtime_ddl_service_);
-    if (OB_FAIL(bootstrap.execute_bootstrap())) {
+    // Bootstrap runs on the caller thread, which has no worker timeout. Inner
+    // SQL executed by the bootstrap steps (e.g. the __all_global_stat
+    // transaction in init_global_stat) would otherwise inherit the rpc_timeout
+    // default of 2s and a cold/slow local I/O can make a fresh bootstrap fail
+    // intermittently with OB_TIMEOUT. Give the whole bootstrap the DDL timeout
+    // instead; it is also used below for waiting on system packages.
+    ObTimeoutCtx bootstrap_timeout_ctx;
+    if (OB_FAIL(bootstrap_timeout_ctx.set_timeout(config::_ob_ddl_timeout()))) {
+    } else if (OB_FAIL(bootstrap.execute_bootstrap())) {
     }
 
     BOOTSTRAP_LOG(INFO, "start local services");
