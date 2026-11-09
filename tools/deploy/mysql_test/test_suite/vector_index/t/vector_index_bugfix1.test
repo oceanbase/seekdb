@@ -663,3 +663,71 @@ order by p.cardinality, p.plan_id;
 drop table t_issue1439_or_selectivity;
 
 alter system set vector_memory_limit = 0;
+
+# Regression for #1535: simplify scalar filters without restructuring ANN.
+--disable_query_log
+CREATE DATABASE ann_predicate_absorption;
+USE ann_predicate_absorption;
+CREATE TABLE t (
+  id INT PRIMARY KEY, category INT, parity VARCHAR(8), embedding VECTOR(3),
+  KEY idx_category(category)
+) ORGANIZATION HEAP;
+INSERT INTO t VALUES
+  (1,1,'even','[1,0,0]'), (2,1,NULL,'[2,0,0]'),
+  (3,2,'even','[3,0,0]'), (4,2,'odd','[4,0,0]'),
+  (5,NULL,'even','[5,0,0]'), (6,NULL,NULL,'[6,0,0]'),
+  (7,0,'odd','[7,0,0]');
+CREATE VECTOR INDEX idx_embedding ON t(embedding)
+  WITH (distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=128,sync_mode=immediate);
+
+--echo # Absorption removes the unused parity filter and keeps vector access.
+# This fixture has one leaf operator: BASIC row 4 is the operator and row 8 its filters.
+let $operator = query_get_value("EXPLAIN BASIC SELECT id FROM t WHERE category = 1 AND (category = 1 OR parity = 'even') ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+let $plan = query_get_value("EXPLAIN BASIC SELECT id FROM t WHERE category = 1 AND (category = 1 OR parity = 'even') ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 8);
+eval SELECT LOCATE('parity', "$plan") = 0 AS absorbed, LOCATE('VECTOR INDEX', "$operator") > 0 AS vector_access;
+SELECT id FROM t WHERE category = 1 AND (category = 1 OR parity = 'even')
+  ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # A balanced tree with 1024 OR branches must have the same compact plan.
+let $branch = (category = 1 OR parity = 'even');
+let $depth = 10;
+while ($depth)
+{
+  let $branch = ($branch) AND ($branch);
+  dec $depth;
+}
+let $operator = query_get_value("EXPLAIN BASIC SELECT id FROM t WHERE category = 1 AND ($branch) ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+let $plan = query_get_value("EXPLAIN BASIC SELECT id FROM t WHERE category = 1 AND ($branch) ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 8);
+eval SELECT LOCATE('parity', "$plan") = 0 AS absorbed, LOCATE('VECTOR INDEX', "$operator") > 0 AS vector_access;
+eval SELECT id FROM t WHERE category = 1 AND ($branch) ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # The dual absorption identity also preserves nullable predicate semantics.
+SELECT id FROM t WHERE category = 1 OR (category = 1 AND parity = 'even')
+  ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # Different predicates must not be absorbed.
+let $plan = query_get_value("EXPLAIN BASIC SELECT id FROM t WHERE category = 2 AND (category = 1 OR parity = 'even') ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 8);
+eval SELECT LOCATE('parity', "$plan") > 0 AS retained;
+SELECT id FROM t WHERE category = 2 AND (category = 1 OR parity = 'even')
+  ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10;
+
+--echo # NO_REWRITE keeps the redundant predicate.
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ NO_REWRITE */ id FROM t WHERE category = 1 AND (category = 1 OR parity = 'even') ORDER BY l2_distance(embedding, '[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 8);
+eval SELECT LOCATE('parity', "$plan") > 0 AS retained;
+
+--echo # Cached prepared plans must respect changed parameter equality.
+PREPARE q FROM 'SELECT id FROM t WHERE category = ? AND (category = ? OR parity = ?) ORDER BY l2_distance(embedding, ''[0,0,0]'') APPROXIMATE LIMIT 10';
+SET @p = 1, @q = 1, @parity = 'even';
+EXECUTE q USING @p, @q, @parity;
+SET @p = 2;
+EXECUTE q USING @p, @q, @parity;
+SET @p = 1, @q = 2;
+EXECUTE q USING @p, @q, @parity;
+DEALLOCATE PREPARE q;
+
+--echo # Exact search remains a correctness control.
+SELECT id FROM t WHERE category = 1 AND (category = 1 OR parity = 'even')
+  ORDER BY l2_distance(embedding, '[0,0,0]') LIMIT 10;
+USE test;
+DROP DATABASE ann_predicate_absorption;
+--enable_query_log
