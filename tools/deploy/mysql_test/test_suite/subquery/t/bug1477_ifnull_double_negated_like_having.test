@@ -1,0 +1,21 @@
+#description: IFNULL with a boolean scalar subquery and a double-negated LIKE in HAVING
+#issue: https://github.com/oceanbase/seekdb/issues/1477
+
+# HAVING conditions take the same push_not rewrite as WHERE and used to fail with ERROR 4016
+SELECT 1 FROM dual HAVING IFNULL((SELECT FALSE), !(!(1 LIKE 'x')));
+
+# A TRUE scalar subquery keeps the row
+SELECT 1 FROM dual HAVING IFNULL((SELECT TRUE), !(!(1 LIKE 'x')));
+
+# A longer even NOT chain is removed by the same rewrite
+SELECT 1 FROM dual HAVING IFNULL((SELECT FALSE), !(!(!(!(1 LIKE 'x')))));
+
+# Control cases: a single negation instead of two
+SELECT 1 FROM dual HAVING IFNULL((SELECT FALSE), !(1 LIKE 'x'));
+SELECT 1 FROM dual HAVING IFNULL((SELECT TRUE), !(1 LIKE 'x'));
+
+# Control case: a literal instead of a scalar subquery
+SELECT 1 FROM dual HAVING IFNULL(FALSE, !(!(1 LIKE 'x')));
+
+# Control case: a NULL scalar subquery
+SELECT 1 FROM dual HAVING IFNULL((SELECT NULL), !(!(1 LIKE 'x')));
