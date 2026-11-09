@@ -1514,6 +1514,9 @@ void ObIOCallbackManager::handle(LinkTask *task)
   RequestHolder holder(req);
   ObTraceIDGuard trace_guard(req->trace_id_);
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  int64_t diagnostic_callback_type = -1;
+#endif
   if (OB_ISNULL(req)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -1557,6 +1560,11 @@ void ObIOCallbackManager::handle(LinkTask *task)
         } else {
           if (nullptr != req->get_callback()) {
             if (OB_FAIL(req->get_callback()->process(req->get_io_data_buf(), req->io_result_->size_))) {
+#ifdef _WIN32
+              if (OB_ERR_UNEXPECTED == ret || OB_DESERIALIZE_ERROR == ret) {
+                diagnostic_callback_type = static_cast<int64_t>(req->get_callback()->get_type());
+              }
+#endif
             }
             time_guard.click("callback_process");
           }
@@ -1566,6 +1574,14 @@ void ObIOCallbackManager::handle(LinkTask *task)
           LOG_INFO("callback process cost too much time", K(ret), K(time_guard), K(req));
         }
       }
+#ifdef _WIN32
+      if (diagnostic_callback_type >= 0) {
+        LOG_INFO("seek1243 post-io callback failure", K(ret), K(diagnostic_callback_type),
+                 "observation_raw_us", ObTimeUtility::current_monotonic_raw_time(), KP(req),
+                 "fd", req->fd_, "offset", req->io_result_->offset_, "size", req->io_result_->size_,
+                 "pre_callback_io_ret", OB_SUCCESS);
+      }
+#endif
       //recycle buffer after process
       if (free_raw_buf) {
         req->free_io_buffer();
