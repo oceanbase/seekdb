@@ -138,6 +138,25 @@ public:
   ~ObFTParserProperty() = default;
   int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
 
+  /**
+   * Reset the property to the default values. The parse function only sets
+   * the properties that are relevant for the type of the parser, so the
+   * values of the previous parser have to be cleared explicitly when the
+   * property is reused for another parser.
+   */
+  void reset()
+  {
+    min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
+    max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
+    ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE;
+    ik_mode_smart_ = true;
+    stopword_table_.reset();
+    dict_table_.reset();
+    quantifier_table_.reset();
+    min_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE;
+    max_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE;
+  }
+
   bool is_equal(const ObFTParserProperty &other) const
   {
     return min_token_size_ == other.min_token_size_ && max_token_size_ == other.max_token_size_

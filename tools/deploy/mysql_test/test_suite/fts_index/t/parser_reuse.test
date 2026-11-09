@@ -1,0 +1,113 @@
+#owner: oceanbase
+#owner group: storage
+# description: regression test of the reuse of the tokenizer parser.  The parser
+#              instance is reused for the calls of the tokenize function of one
+#              thread and it is recycled after a fixed number of calls, the
+#              tokens of a document must never be affected by the documents
+#              that were segmented before it.  The index build creates a
+#              tokenizer instance for every document, the tokens of the index
+#              must not change either.
+
+--disable_warnings
+drop database if exists fts;
+create database fts;
+use fts;
+--enable_warnings
+
+create table t_reuse(
+  id int primary key,
+  detail varchar(4096));
+
+# the first document holds a marker that must not be found in any other
+# document, the last document holds a marker as well
+insert into t_reuse values (1, 'qqzzxmarker');
+insert into t_reuse(id, detail)
+select a.n * 30 + b.n + 2,
+       concat('filler document ', a.n * 30 + b.n + 2, ' distributed database oceanbase')
+from (select 0 as n union all select 1 union all select 2 union all select 3 union all select 4
+      union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) a,
+     (select 0 as n union all select 1 union all select 2 union all select 3 union all select 4
+      union all select 5 union all select 6 union all select 7 union all select 8 union all select 9
+      union all select 10 union all select 11 union all select 12 union all select 13 union all select 14
+      union all select 15 union all select 16 union all select 17 union all select 18 union all select 19
+      union all select 20 union all select 21 union all select 22 union all select 23 union all select 24
+      union all select 25 union all select 26 union all select 27 union all select 28 union all select 29) b;
+insert into t_reuse values (302, 'wwvvmfinalmarker');
+
+# the index is built with one scan, a tokenizer instance is created for every
+# document of the build
+alter table t_reuse add fulltext index i1(detail) with parser ik;
+
+create table t_reuse_beng(
+  id int primary key,
+  detail varchar(4096));
+
+insert into t_reuse_beng values (1, 'qqzzxmarker');
+insert into t_reuse_beng(id, detail)
+select a.n * 30 + b.n + 2,
+       concat('filler document ', a.n * 30 + b.n + 2, ' distributed database oceanbase')
+from (select 0 as n union all select 1 union all select 2 union all select 3 union all select 4
+      union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) a,
+     (select 0 as n union all select 1 union all select 2 union all select 3 union all select 4
+      union all select 5 union all select 6 union all select 7 union all select 8 union all select 9
+      union all select 10 union all select 11 union all select 12 union all select 13 union all select 14
+      union all select 15 union all select 16 union all select 17 union all select 18 union all select 19
+      union all select 20 union all select 21 union all select 22 union all select 23 union all select 24
+      union all select 25 union all select 26 union all select 27 union all select 28 union all select 29) b;
+insert into t_reuse_beng values (302, 'wwvvmfinalmarker');
+
+alter table t_reuse_beng add fulltext index i1(detail) with parser beng;
+
+--result_format 4
+
+# every document was indexed
+select count(*) from t_reuse;
+select count(*) from t_reuse_beng;
+
+# the marker of the first document is only found in the first document, the
+# tokens of a document are not affected by the documents before it
+select id from t_reuse where match (detail) against ("qqzzxmarker");
+select count(*) from t_reuse where match (detail) against ("qqzzxmarker");
+
+# the marker of the last document is only found in the last document
+select id from t_reuse where match (detail) against ("wwvvmfinalmarker");
+select count(*) from t_reuse where match (detail) against ("wwvvmfinalmarker");
+
+# the words that every document holds are found in every document
+select count(*) from t_reuse where match (detail) against ("oceanbase");
+select count(*) from t_reuse where match (detail) against ("filler");
+
+# the same holds for the beng parser
+select id from t_reuse_beng where match (detail) against ("qqzzxmarker");
+select count(*) from t_reuse_beng where match (detail) against ("qqzzxmarker");
+select id from t_reuse_beng where match (detail) against ("wwvvmfinalmarker");
+select count(*) from t_reuse_beng where match (detail) against ("wwvvmfinalmarker");
+select count(*) from t_reuse_beng where match (detail) against ("oceanbase");
+select count(*) from t_reuse_beng where match (detail) against ("filler");
+
+# the tokenizer does not keep any state between two calls
+select tokenize('qqzzxmarker', 'ik');
+select tokenize('', 'ik');
+select tokenize('filler document 5', 'ik');
+select tokenize('filler document 5', 'ik');
+select tokenize('分布式数据库', 'ik');
+select tokenize('filler document 5', 'ik');
+
+select tokenize('qqzzxmarker', 'beng');
+select tokenize('', 'beng');
+select tokenize('filler document 5', 'beng');
+select tokenize('filler document 5', 'beng');
+
+select tokenize('qqzzxmarker', 'ngram');
+select tokenize('', 'ngram');
+select tokenize('filler document 5', 'ngram');
+select tokenize('filler document 5', 'ngram');
+
+# the tokenizer instance is recycled after a fixed number of calls, the result
+# of the calls does not change
+select count(*) from (select tokenize(concat('filler document ', id), 'ik') as t from t_reuse) x;
+select count(*) from (select tokenize(concat('filler document ', id), 'beng') as t from t_reuse) x;
+
+--disable_warnings
+drop database fts;
+--enable_warnings

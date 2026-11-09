@@ -59,6 +59,12 @@ public:
                      int64_t &char_cnt,
                      int64_t &word_freq) override;
 
+  /**
+   * Reset the parser so that it can segment another document. The dictionaries
+   * are kept, only the per document state is reset.
+   */
+  int reset_for_reuse(ObFTParserParam *param) override;
+
   VIRTUAL_TO_STRING_KV(K(is_inited_));
 
 private:

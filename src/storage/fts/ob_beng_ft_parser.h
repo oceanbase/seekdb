@@ -35,6 +35,7 @@ public:
 public:
   explicit ObBEngFTParser(common::ObIAllocator &allocator)
     : allocator_(allocator),
+      word_allocator_(nullptr),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
@@ -51,6 +52,12 @@ public:
       int64_t &char_len,
       int64_t &word_freq) override;
 
+  /**
+   * Reset the parser so that it can segment another document. The analyzer is
+   * kept, only the document is replaced.
+   */
+  virtual int reset_for_reuse(ObFTParserParam *param) override;
+
   VIRTUAL_TO_STRING_KV(K_(analysis_ctx), K_(english_analyzer), KP_(token_stream), K_(is_inited));
 private:
   int segment(
@@ -58,6 +65,9 @@ private:
       share::ObITokenStream *&token_stream);
 private:
   common::ObIAllocator &allocator_;
+  // the allocator that owns the words of the document, the words are copied
+  // into it because the analyzer reuses its own buffer for every token
+  common::ObIAllocator *word_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;

@@ -71,7 +71,11 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
-      external_properties_(alloc)
+      external_properties_(alloc),
+      is_copy_(false),
+      has_header_(false),
+      null_str_(),
+      select_expr_names_(alloc)
   {
   }
 
@@ -91,6 +95,15 @@ public:
   int64_t buffer_size_;
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
+  // the statement is a copy statement, it writes the result of the query to a file
+  bool is_copy_;
+  // the file holds the names of the columns in its first line
+  bool has_header_;
+  // the text that is written for a null value
+  common::ObString null_str_;
+  // the names of the columns of the query, they are written in the first line
+  // of the file when the statement is a copy statement
+  common::ObFixedArray<common::ObString, common::ObIAllocator> select_expr_names_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
 };
@@ -126,7 +139,9 @@ public:
       external_properties_(),
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
       block_id_(0),
-      need_commit_(true)
+      need_commit_(true),
+      header_written_(false),
+      has_null_str_(false)
   {
   }
 
@@ -240,6 +255,7 @@ private:
                              int64_t &pos,
                              ObCsvFileWriter &data_writer);
   int write_single_char_to_file(const char *wchar, ObCsvFileWriter &data_writer);
+  int write_datetime_to_file(const ObObj &obj, ObCsvFileWriter &data_writer);
   int write_lob_to_file(const ObObj &obj,
                         const ObExpr &expr,
                         const ObDatum &datum,
@@ -256,6 +272,11 @@ private:
   int create_the_only_data_writer(ObExternalFileWriter *&data_writer);
   int new_data_writer(ObExternalFileWriter *&data_writer);
   int check_secure_file_path(ObString file_name);
+  int check_copy_target_not_exist();
+  int remove_copy_target();
+  int write_header(ObCsvFileWriter &data_writer);
+  int write_header_field(const common::ObString &name, ObCsvFileWriter &data_writer);
+  int write_null_str(ObCsvFileWriter &data_writer);
   char *get_json_buf() { return json_buf_; }
   int64_t get_json_buf_len() { return json_buf_len_; }
   char *get_shared_buf() { return shared_buf_; }
@@ -292,6 +313,10 @@ private:
   ObExternalFileFormat::FormatType format_type_;
   uint32_t block_id_;
   bool need_commit_;
+  // the header of the file has been written
+  bool header_written_;
+  // the text of the null option is written for a null value
+  bool has_null_str_;
   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
 
 };

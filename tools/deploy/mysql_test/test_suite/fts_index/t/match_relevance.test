@@ -1,0 +1,78 @@
+#owner: oceanbase
+#owner group: storage
+# description: regression test of the relevance score optimization of the fulltext
+#              index.  A query that uses the match expression as a filter only does
+#              not need the bm25 score any more, a query that consumes the score as
+#              a number still needs it.
+
+--disable_warnings
+drop database if exists fts;
+create database fts;
+use fts;
+--enable_warnings
+
+create table t_relevance(
+  id int primary key,
+  digest varchar(64),
+  detail varchar(4096),
+  fulltext index i1(detail));
+
+insert into t_relevance values
+  (1, 'd1', 'distributed database oceanbase fulltext index'),
+  (2, 'd2', 'oceanbase distributed transaction'),
+  (3, 'd3', 'mysql fulltext index distributed search'),
+  (4, 'd4', 'distributed'),
+  (5, 'd5', 'nothing to see here'),
+  (6, 'd6', 'oceanbase database'),
+  (7, 'd7', 'database database database');
+
+--result_format 4
+
+# the aggregate does not consume the relevance score, the scan does not have to
+# calculate it, the row set does not change
+explain select count(*) from t_relevance where match (detail) against ("distributed database");
+select count(*) from t_relevance where match (detail) against ("distributed database");
+
+# the number of the matched rows is the same as the number of the rows whose
+# relevance score is greater than zero
+select (select count(*) from t_relevance where match (detail) against ("distributed database")) as cnt_without_score,
+       (select count(*) from t_relevance where match (detail) against ("distributed database") > 0) as cnt_with_score;
+
+# the score is calculated when it is projected
+explain select digest, match (detail) against ("distributed database") as score from t_relevance where match (detail) against ("distributed database");
+select digest, match (detail) against ("distributed database") as score from t_relevance where match (detail) against ("distributed database");
+
+# the score is calculated when it is aggregated
+explain select max(match (detail) against ("distributed database")) from t_relevance where match (detail) against ("distributed database");
+select max(match (detail) against ("distributed database")) from t_relevance where match (detail) against ("distributed database");
+
+# the score is calculated when it is grouped
+explain select match (detail) against ("distributed database") > 0.5, count(*) from t_relevance where match (detail) against ("distributed database") group by match (detail) against ("distributed database") > 0.5;
+select match (detail) against ("distributed database") > 0.5, count(*) from t_relevance where match (detail) against ("distributed database") group by match (detail) against ("distributed database") > 0.5;
+
+# the score is calculated when it is compared with a constant
+explain select digest from t_relevance where match (detail) against ("distributed database") > 0.5;
+select digest from t_relevance where match (detail) against ("distributed database") > 0.5;
+
+# the score is calculated when the rows are sorted by it
+explain select digest from t_relevance where match (detail) against ("distributed database") order by match (detail) against ("distributed database") desc;
+select digest from t_relevance where match (detail) against ("distributed database") order by match (detail) against ("distributed database") desc;
+
+# the rows that are sorted by another column do not need the score either
+explain select digest from t_relevance where match (detail) against ("distributed database") order by id desc;
+select digest from t_relevance where match (detail) against ("distributed database") order by id desc;
+
+# the score is calculated when the rows of a derived table are sorted by it,
+# the order preservation of the fulltext search adds the order by to the
+# derived table
+explain select count(*) from (select id from t_relevance where match (detail) against ("distributed database") limit 3) t;
+select id from (select id from t_relevance where match (detail) against ("distributed database") limit 3) t order by id;
+select id from (select id from t_relevance where match (detail) against ("distributed database") order by match (detail) against ("distributed database") desc limit 3) t order by id;
+
+# the boolean mode and the natural language mode return the same rows
+select count(*) from t_relevance where match (detail) against ("distributed database" in boolean mode);
+select count(*) from t_relevance where match (detail) against ("distributed database" in natural language mode);
+
+--disable_warnings
+drop database fts;
+--enable_warnings

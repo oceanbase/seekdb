@@ -208,6 +208,7 @@ public:
   int resolve_json_table_item(const ParseNode &table_node,
                               TableItem *&table_item);
   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);
+  int resolve_file_table_item(const ParseNode &table_node, TableItem *&table_item);
   int create_unnest_table_item(TableItem *&table_item, ObString table_name);
   int unnest_table_add_column(TableItem *&table_item, ColumnItem *&col_item, ObString col_name);
   int resolve_hybrid_search_item(const ParseNode &parse_tree, TableItem *&table_item);
@@ -671,6 +672,17 @@ protected:
   int gen_values_table_column_items(const int64_t column_cnt,
                                     const ObIArray<ObRawExprResType> &res_types,
                                     TableItem &table_item);
+  int gen_file_table_column_items(const ObFileTableDef &table_def,
+                                  TableItem &table_item);
+  int resolve_file_table_options(const ParseNode *option_node,
+                                 ObFileScanOptions &options);
+  int resolve_file_table_option_value(const ParseNode &value_node,
+                                      ObString &str_value,
+                                      int64_t &int_value,
+                                      bool &is_bool_value,
+                                      bool &is_str_value);
+  int resolve_file_table_full_path(const ObString &path, ObString &full_path);
+  int check_file_table_secure_path(const ObString &full_path);
   int resolve_match_against_expr(ObMatchFunRawExpr &expr);
   int resolve_es_match_expr(ObMatchFunRawExpr &expr);
 private:

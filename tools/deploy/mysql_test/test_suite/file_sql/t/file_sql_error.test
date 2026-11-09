@@ -1,0 +1,83 @@
+# owner: database-competition
+# owner group: SQL
+# description: The error paths and the security checks of the file table functions.
+# tags: sql,executor,file_sql
+
+--source mysql_test/test_suite/file_sql/include/copy_file_sql_data.inc
+
+--disable_query_log
+let $FILE_SQL_DATA_DIR = $OBSERVER_DIR/data_for_mysqltest_file_sql;
+--enable_query_log
+
+--echo # the feature is disabled by default
+select @@session.enable_file_sql AS default_enabled;
+--disable_result_log
+--error 1235
+eval select count(*) from read_csv('$FILE_SQL_DATA_DIR/basic.csv');
+--enable_result_log
+
+set session enable_file_sql = ON;
+
+--echo # the options of the reader are named, a positional argument is a syntax error
+--disable_result_log
+--error 1064
+eval select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', 'xml');
+--enable_result_log
+
+--echo # only the sample size that scans the whole file is supported
+--disable_result_log
+--error 1235
+eval select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', sample_size = 10);
+--enable_result_log
+
+--echo # an unknown option is not supported
+--disable_result_log
+--error 1235
+eval select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', unknown_option = 1);
+--enable_result_log
+
+--echo # the format option must name the format of the function that reads the file
+--disable_result_log
+--error 1235
+eval select * from read_csv('$FILE_SQL_DATA_DIR/basic.csv', format = 'json');
+--enable_result_log
+
+--echo # the file must exist
+--disable_result_log
+--error 1017
+eval select * from read_csv('$FILE_SQL_DATA_DIR/no_such_file.csv');
+--enable_result_log
+
+--echo # the extension of the file must be the one of the format that reads it
+--disable_result_log
+--error 1235
+eval select * from read_csv('$FILE_SQL_DATA_DIR/invalid.txt');
+--enable_result_log
+
+--echo # a file is not read by another function than the one of its format
+--disable_result_log
+--error 1235
+eval select * from read_json('$FILE_SQL_DATA_DIR/basic.csv');
+--enable_result_log
+
+--echo # the directory that secure_file_priv allows is set
+select @@global.secure_file_priv is not null AS secure_file_priv_is_set;
+
+--echo # the directory of the files that can be read cannot be changed over a
+--echo # network connection, the boundary of the files is kept
+--disable_result_log
+--error 1235
+set global secure_file_priv = '$FILE_SQL_DATA_DIR';
+--enable_result_log
+
+--echo # the path is resolved before it is checked, a path that stays inside the
+--echo # allowed directory is accepted
+eval select count(*) as row_count from read_csv('$FILE_SQL_DATA_DIR/../data_for_mysqltest_file_sql/basic.csv');
+
+--echo # the file that is read is not modified by the query
+eval select id, name from read_csv('$FILE_SQL_DATA_DIR/basic.csv') order by id;
+
+set session enable_file_sql = OFF;
+--enable_query_log
+
+--source mysql_test/test_suite/file_sql/include/remove_file_sql_data.inc

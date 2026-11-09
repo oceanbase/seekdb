@@ -263,15 +263,18 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWord &add_word) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObFTParserParam param;
-    ObITokenIterator *iter = nullptr;
-    param.allocator_ = &allocator;
+    // The words of the document are allocated from the allocator of the
+    // caller, so that they are released together with the document.  The
+    // parsers that do not copy the words into the allocator of the caller
+    // return the words that point into this allocator.
+    param.word_allocator_ = &allocator;
     param.cs_ = cs;
     param.fulltext_ = ft;
     param.ft_length_ = ft_len;
@@ -282,10 +285,32 @@ int ObFTParseHelper::segment(
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
-    } else if (OB_ISNULL(iter)) {
-      ret = OB_ERR_UNEXPECTED;
+    ObITokenIterator *iter = nullptr;
+    // The tokenizer instance is only kept when the reuse is enabled, otherwise
+    // it is destroyed before this function returns.
+    bool destroy_iter = false;
+    if (reuse_token_iter_) {
+      // The parser instance is allocated from its own arena, so that it
+      // survives the reset of the allocator of the caller and can be reused by
+      // the next document.
+      param.allocator_ = &token_iter_allocator_;
+      if (OB_FAIL(prepare_token_iter(param, parser_desc))) {
+      } else if (OB_ISNULL(token_iter_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        iter = token_iter_;
+      }
     } else {
+      param.allocator_ = &allocator;
+      if (OB_FAIL(parser_desc->segment(&param, iter))) {
+        iter = nullptr;
+      } else if (OB_ISNULL(iter)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        destroy_iter = true;
+      }
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(iter)) {
       const char *word = nullptr;
       int64_t word_len = 0;
       int64_t char_cnt = 0;
@@ -300,13 +325,88 @@ int ObFTParseHelper::segment(
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
       }
+      if (OB_SUCC(ret) && reuse_token_iter_) {
+        // The parser instance is recycled periodically, so that the memory of
+        // its arena does not grow endlessly.
+        ++token_iter_reuse_cnt_;
+        if (token_iter_reuse_cnt_ >= MAX_TOKEN_ITER_REUSE_CNT) {
+          free_token_iter();
+        }
+      }
     }
-    if (OB_NOT_NULL(iter)) {
+    if (destroy_iter && OB_NOT_NULL(iter)) {
       parser_desc->free_token_iter(&param, iter);
       iter = nullptr;
     }
   }
   return ret;
+}
+
+bool ObFTParseHelper::is_same_param(const ObFTParserParam &param, const ObFTParserParam &other)
+{
+  return param.cs_ == other.cs_ && param.parser_version_ == other.parser_version_
+         && param.ngram_token_size_ == other.ngram_token_size_
+         && param.min_ngram_size_ == other.min_ngram_size_
+         && param.max_ngram_size_ == other.max_ngram_size_
+         && param.ik_param_.mode_ == other.ik_param_.mode_;
+}
+
+int ObFTParseHelper::prepare_token_iter(ObFTParserParam &param, const ObIFTParserDesc *parser_desc) const
+{
+  int ret = OB_SUCCESS;
+  bool need_create = false;
+  if (OB_ISNULL(token_iter_) || OB_UNLIKELY(token_iter_desc_ != parser_desc)) {
+    // the parser type changed, create a new parser instance
+    need_create = true;
+  } else if (OB_UNLIKELY(!is_same_param(token_iter_param_, param))) {
+    // the parser configuration changed, create a new parser instance
+    need_create = true;
+  } else {
+    // Do not use the OB_SUCC/OB_FAIL macros here, they assign the result to
+    // the variable named ret, which would overwrite the state of this
+    // function.
+    const int reuse_ret = token_iter_->reset_for_reuse(&param);
+    if (OB_SUCCESS == reuse_ret) {
+      // the parser instance is reset and it is ready to segment the new document
+      need_create = false;
+    } else if (OB_NOT_SUPPORTED == reuse_ret) {
+      // the parser instance cannot be reused, create a new one
+      need_create = true;
+    } else {
+      ret = reuse_ret;
+    }
+  }
+  if (OB_SUCCESS == ret && need_create) {
+    free_token_iter();
+    // The parser instance of the previous document was destroyed already, so
+    // the memory of its arena can be reclaimed.  The words of the document do
+    // not point into the arena, they are allocated from the allocator of the
+    // caller.
+    token_iter_allocator_.reset();
+    if (OB_FAIL(parser_desc->segment(&param, token_iter_))) {
+      token_iter_ = nullptr;
+    } else {
+      token_iter_param_ = param;
+      token_iter_desc_ = parser_desc;
+      token_iter_reuse_cnt_ = 0;
+    }
+  }
+  return ret;
+}
+
+void ObFTParseHelper::free_token_iter() const
+{
+  if (OB_NOT_NULL(token_iter_)) {
+    if (OB_NOT_NULL(token_iter_desc_)) {
+      token_iter_desc_->free_token_iter(&token_iter_param_, token_iter_);
+    }
+    token_iter_ = nullptr;
+  }
+  token_iter_desc_ = nullptr;
+  token_iter_reuse_cnt_ = 0;
+  // The memory of the arena of the parser instance is not reclaimed here, it
+  // is reclaimed when a new parser instance is created or when the helper is
+  // reset.
 }
 
 ObFTParseHelper::ObFTParseHelper()
@@ -315,7 +415,13 @@ ObFTParseHelper::ObFTParseHelper()
     parser_name_(),
     add_word_flag_(),
     parser_property_(),
-    is_inited_(false)
+    is_inited_(false),
+    reuse_token_iter_(false),
+    token_iter_(nullptr),
+    token_iter_param_(),
+    token_iter_desc_(nullptr),
+    token_iter_reuse_cnt_(0),
+    token_iter_allocator_(ObMemAttr("FTParserInst"))
 {
 }
 
@@ -350,11 +456,52 @@ int ObFTParseHelper::init(
   return ret;
 }
 
+int ObFTParseHelper::reinit(
+    common::ObIAllocator *allocator,
+    const common::ObString &parser_name,
+    const common::ObString &parser_properties)
+{
+  int ret = OB_SUCCESS;
+  // The helper is used for more than one call, the tokenizer instance is
+  // reused between the calls.
+  reuse_token_iter_ = true;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = init(allocator, parser_name, parser_properties);
+    // init() resets the helper when it fails, the reuse is wanted anyway
+    reuse_token_iter_ = true;
+  } else if (OB_ISNULL(allocator) || OB_UNLIKELY(parser_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(parser_name_.parse_from_str(parser_name.ptr(), parser_name.length()))) {
+  } else {
+    // The property and the flags are specific to the type of the parser, they
+    // have to be reset before they are parsed again, otherwise the settings
+    // of the previous parser would be applied to the new one.
+    parser_property_.reset();
+    add_word_flag_.clear();
+    if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, parser_properties))) {
+    } else if (OB_FAIL(parser_name_.get_desc(parser_desc_))) {
+    } else if (OB_ISNULL(parser_desc_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(set_add_word_flag(*parser_desc_))) {
+    } else {
+      // The parser instance is kept, it is reused by the next document.
+      allocator_ = allocator;
+    }
+  }
+  return ret;
+}
+
 void ObFTParseHelper::reset()
 {
+  free_token_iter();
+  // the helper is not used any more, the memory of the arena of the parser
+  // instance can be reclaimed
+  token_iter_allocator_.reset();
   parser_desc_ = nullptr;
   allocator_ = nullptr;
   add_word_flag_.clear();
+  parser_property_.reset();
+  reuse_token_iter_ = false;
   is_inited_ = false;
 }
 
@@ -379,7 +526,8 @@ int ObFTParseHelper::segment(
   } else {
     words.reuse();
     ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
-    if (OB_FAIL(segment(
+    int inner_ret = OB_SUCCESS;
+    if (OB_FAIL(inner_ret = segment(
                     parser_property_,
                     parser_name_.get_parser_version(),
                     parser_desc_,

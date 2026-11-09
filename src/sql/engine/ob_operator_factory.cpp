@@ -125,6 +125,8 @@
 #include "sql/engine/opt_statistics/ob_optimizer_stats_gathering_op.h"
 #include "sql/optimizer/ob_log_values_table_access.h"
 #include "sql/engine/basic/ob_values_table_access_op.h"
+#include "sql/optimizer/ob_log_file_table.h"
+#include "sql/engine/basic/ob_file_table_op.h"
 #include "sql/engine/expand/ob_expand_vec_op.h"
 #include "sql/engine/table/ob_ddl_block_sample_scan_op.h"
 

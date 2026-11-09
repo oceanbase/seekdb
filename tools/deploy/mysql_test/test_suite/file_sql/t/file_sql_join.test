@@ -1,0 +1,55 @@
+# owner: database-competition
+# owner group: SQL
+# description: Join a file table with a base table and with another file table.
+# tags: sql,executor,file_sql
+
+--source mysql_test/test_suite/file_sql/include/copy_file_sql_data.inc
+
+--disable_query_log
+let $FILE_SQL_DATA_DIR = $OBSERVER_DIR/data_for_mysqltest_file_sql;
+--enable_query_log
+
+set session enable_file_sql = ON;
+
+create table file_sql_ref (id bigint primary key, label varchar(32));
+insert into file_sql_ref values (1, 'first'), (2, 'second'), (3, 'third');
+
+--echo # join a file table with a base table
+eval select f.id, f.name, r.label
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+       join file_sql_ref r on f.id = r.id
+      order by f.id;
+
+--echo # the left join keeps the rows of the file that have no match
+eval select f.id, f.name, r.label
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+       left join file_sql_ref r on f.id = r.id + 10
+      order by f.id;
+
+--echo # join two file tables
+eval select c.id, c.name, j.note
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') c
+       join read_json('$FILE_SQL_DATA_DIR/basic.jsonl', format = 'newline_delimited') j
+         on c.id = j.id
+      order by c.id;
+
+--echo # aggregate the result of the join
+eval select r.label, count(*) as cnt, sum(f.score) as score_sum
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+       join file_sql_ref r on f.id = r.id
+      group by r.label
+      order by r.label;
+
+--echo # filter the rows of a file table before the join
+eval select f.id, f.name, r.label
+       from read_csv('$FILE_SQL_DATA_DIR/basic.csv') f
+       join file_sql_ref r on f.id = r.id
+      where f.score > 90
+      order by f.id;
+
+drop table file_sql_ref;
+
+set session enable_file_sql = OFF;
+--enable_query_log
+
+--source mysql_test/test_suite/file_sql/include/remove_file_sql_data.inc

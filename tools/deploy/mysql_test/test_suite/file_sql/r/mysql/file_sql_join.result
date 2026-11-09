@@ -1,0 +1,24 @@
+# join a file table with a base table
+id	name	label
+1	Alice	first
+2	Bob	second
+3	Chen	third
+# the left join keeps the rows of the file that have no match
+id	name	label
+1	Alice	NULL
+2	Bob	NULL
+3	Chen	NULL
+# join two file tables
+id	name	note
+1	Alice	NULL
+2	Bob	NULL
+3	Chen	ok
+# aggregate the result of the join
+label	cnt	score_sum
+first	1	98.5
+second	1	87
+third	1	90.25
+# filter the rows of a file table before the join
+id	name	label
+1	Alice	first
+3	Chen	third

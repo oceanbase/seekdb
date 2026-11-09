@@ -30,6 +30,7 @@
 #include "sql/resolver/dml/ob_raw_expr_sets.h"
 #include "sql/resolver/expr/ob_raw_expr_copier.h"
 #include "sql/resolver/dml/ob_stmt_expr_visitor.h"
+#include "sql/resolver/dml/ob_file_table_def.h"
 #include "data_plane/access/ob_tablet_scan.h"
 #include "query/vector/ob_vector_index_param.h"
 
@@ -155,6 +156,7 @@ struct TableItem
     json_table_def_ = nullptr;
     table_type_ = MAX_TABLE_TYPE;
     values_table_def_ = NULL;
+    file_table_def_ = NULL;
     sample_info_ = nullptr;
   }
 
@@ -190,6 +192,7 @@ struct TableItem
     JSON_TABLE,
     VALUES_TABLE,
     LATERAL_TABLE,
+    FILE_TABLE,
   };
 
   /**
@@ -224,6 +227,7 @@ struct TableItem
   bool is_function_table() const { return FUNCTION_TABLE == type_; }
   bool is_json_table() const { return JSON_TABLE == type_; }  // json_table_def_->table_type_ == MulModeTableType::OB_ORA_JSON_TABLE_TYPE
   bool is_values_table() const { return VALUES_TABLE == type_; }//used to mark values statement: values row(1,2), row(3,4);
+  bool is_file_table() const { return FILE_TABLE == type_; } // a file read by a file table function
 
   bool is_lateral_table() const { return LATERAL_TABLE == type_; }
   bool is_extended_all_or_user_sys_view() const
@@ -260,6 +264,8 @@ struct TableItem
 
   ObJsonTableDef* get_json_table_def() { return json_table_def_; }
   int deep_copy_json_table_def(const ObJsonTableDef& jt_def, ObIRawExprCopier &expr_copier, ObIAllocator* allocator);
+  int deep_copy_file_table_def(const ObFileTableDef& table_def,
+                                common::ObIAllocator* allocator);
   int deep_copy_values_table_def(const ObValuesTableDef& table_def,
                                  ObIRawExprCopier &expr_copier,
                                  ObIAllocator* allocator);
@@ -303,6 +309,8 @@ struct TableItem
   ObJsonTableDef *json_table_def_;
   // values table
   ObValuesTableDef *values_table_def_;
+  // file table, a file read by a file table function
+  ObFileTableDef *file_table_def_;
   // sample scan infos
   SampleInfo *sample_info_;
 };
@@ -845,6 +853,7 @@ public:
   int generate_func_table_name(ObIAllocator &allocator, ObString &table_name);
   int generate_json_table_name(ObIAllocator &allocator, ObString &table_name);
   int generate_values_table_name(ObIAllocator &allocator, ObString &table_name);
+  int generate_file_table_name(ObIAllocator &allocator, ObString &table_name);
   int append_id_to_view_name(char *buf,
                              int64_t buf_len,
                              int64_t &pos,

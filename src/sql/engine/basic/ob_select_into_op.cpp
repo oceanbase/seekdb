@@ -25,6 +25,7 @@
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "common/udt/ob_collection_type.h"
+#include "common/timezone/ob_time_convert.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_lob_access_utils.h"
 
@@ -38,7 +39,23 @@ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+    external_properties_, is_copy_, has_header_, null_str_, select_expr_names_);
+
+/**
+ * @brief Check whether a text holds another text.
+ */
+static bool ob_select_into_str_contains(const common::ObString &str, const common::ObString &sub)
+{
+  if (sub.length() <= 0 || sub.length() > str.length()) {
+    return false;
+  }
+  for (int64_t i = 0; i + sub.length() <= str.length(); ++i) {
+    if (0 == memcmp(str.ptr() + i, sub.ptr(), static_cast<size_t>(sub.length()))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 
 int ObSelectIntoOp::inner_open()
@@ -75,6 +92,9 @@ int ObSelectIntoOp::inner_open()
         LOG_WARN("not support select into type", K(format_type_));
       }
     }
+  }
+  if (OB_SUCC(ret) && MY_SPEC.is_copy_ && OB_FAIL(check_copy_target_not_exist())) {
+    LOG_WARN("the target of the copy statement exists", K(ret), K(basic_url_));
   }
   return ret;
 }
@@ -149,6 +169,8 @@ void ObSelectIntoOp::set_csv_format_options()
       char_escape_ = external_properties_.csv_format_.field_escaped_char_;
     }
   }
+  // the copy statement writes the text of the null option for a null value
+  has_null_str_ = MY_SPEC.null_str_.length() > 0;
 }
 
 int ObSelectIntoOp::init_env_common()
@@ -199,6 +221,17 @@ int ObSelectIntoOp::inner_get_next_row()
   if (OB_SUCC(ret) && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
       && T_INTO_VARIABLES != into_type
       && OB_FAIL(create_the_only_data_writer(data_writer))) {
+  }
+  if (OB_SUCC(ret) && MY_SPEC.has_header_ && !header_written_
+      && T_INTO_VARIABLES != into_type
+      && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_) {
+    ObCsvFileWriter *csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer);
+    if (OB_ISNULL(csv_data_writer)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(write_header(*csv_data_writer))) {
+    } else {
+      header_written_ = true;
+    }
   }
   while (OB_SUCC(ret) && row_count < top_limit_cnt_) {
     clear_evaluated_flag();
@@ -253,6 +286,17 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_FAIL(create_the_only_data_writer(data_writer))) {
     } else if (OB_ISNULL(data_writer)) {
       ret = OB_ERR_UNEXPECTED;
+    }
+  }
+  if (OB_SUCC(ret) && MY_SPEC.has_header_ && !header_written_
+      && T_INTO_VARIABLES != into_type
+      && ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_) {
+    ObCsvFileWriter *csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer);
+    if (OB_ISNULL(csv_data_writer)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(write_header(*csv_data_writer))) {
+    } else {
+      header_written_ = true;
     }
   }
 
@@ -326,6 +370,14 @@ int ObSelectIntoOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(data_writer_) && OB_FAIL(data_writer_->close_data_writer())) {
+  }
+  if (OB_SUCC(ret) && !need_commit_ && MY_SPEC.is_copy_) {
+    // the query of the copy statement failed, the file holds a part of the
+    // result of the query, it is removed
+    int tmp_ret = remove_copy_target();
+    if (OB_FAIL(tmp_ret)) {
+      LOG_WARN("cannot remove the target of the copy statement", K(tmp_ret), K(basic_url_));
+    }
   }
   return ret;
 }
@@ -901,6 +953,31 @@ int ObSelectIntoOp::write_single_char_to_file(const char *wchar, ObCsvFileWriter
   return ret;
 }
 
+/**
+ * @brief Write the text of a datetime value with the scale of its column.
+ *
+ * The plain text of a datetime is written with the maximum precision, so the
+ * copy statement writes the value with the scale of the column of the query.
+ * The file that is written holds the same values as the query, it can be read
+ * back by the reader of a csv file.
+ */
+int ObSelectIntoOp::write_datetime_to_file(const ObObj &obj, ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  char datetime_buf[OB_CAST_TO_VARCHAR_MAX_LENGTH];
+  int64_t datetime_pos = 0;
+  if (OB_FAIL(ObTimeConverter::datetime_to_str(obj.get_datetime(), nullptr, obj.get_scale(),
+                                                datetime_buf, sizeof(datetime_buf), datetime_pos, true))) {
+    LOG_WARN("cannot write the datetime value", K(ret));
+  } else {
+    ObObj datetime_obj;
+    datetime_obj.set_string(common::ObVarcharType, datetime_buf, datetime_pos);
+    datetime_obj.set_collation_type(cs_type_);
+    OZ(write_obj_to_file(datetime_obj, data_writer, false));
+  }
+  return ret;
+}
+
 int ObSelectIntoOp::print_lob_field(const ObObj &obj,
                                     const ObExpr &expr,
                                     const ObDatum &datum,
@@ -929,11 +1006,23 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
   }
-  if (!has_escape_) {
+  if (!has_escape_ && !has_null_str_) {
     OZ(write_obj_to_file(obj, data_writer, false));
   } else if (obj.is_null()) {
-    OZ(write_single_char_to_file(&char_escape_, data_writer));
-    OZ(write_single_char_to_file(&char_n, data_writer));
+    if (has_null_str_) {
+      // the copy statement writes the text of the null option for a null value
+      OZ(write_null_str(data_writer));
+    } else if (MY_SPEC.is_copy_) {
+      // the copy statement writes an empty field for a null value, the reader
+      // of a csv file reads an empty field as a null value, so the file that
+      // is written can be read back
+    } else {
+      OZ(write_single_char_to_file(&char_escape_, data_writer));
+      OZ(write_single_char_to_file(&char_n, data_writer));
+    }
+  } else if (MY_SPEC.is_copy_ && obj.is_datetime()) {
+    // the copy statement writes a datetime with the scale of its column
+    OZ(write_datetime_to_file(obj, data_writer));
   } else {
     OZ(write_obj_to_file(obj, data_writer, true));
   }
@@ -1223,6 +1312,121 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
       ret = OB_ERR_NO_PRIV_DIRECT_PATH_ACCESS;
       LOG_ERROR("failed to check secure path", K(ret), K(secure_file_priv));
     }
+  }
+  return ret;
+}
+
+/**
+ * @brief Check that the target of a copy statement does not exist.
+ *
+ * The copy statement writes a new file, it fails when the file already exists.
+ */
+int ObSelectIntoOp::check_copy_target_not_exist()
+{
+  int ret = OB_SUCCESS;
+  struct stat file_stat;
+  MEMSET(&file_stat, 0, sizeof(file_stat));
+  if (0 == ::stat(basic_url_.ptr(), &file_stat)) {
+    ret = OB_FILE_ALREADY_EXIST;
+    LOG_WARN("the target of the copy statement exists", K(ret), K(basic_url_));
+  } else if (ENOENT != errno) {
+    ret = OB_IO_ERROR;
+    LOG_WARN("cannot stat the target of the copy statement", K(ret), K(basic_url_), K(errno));
+  }
+  return ret;
+}
+
+/**
+ * @brief Remove the file that was written by a copy statement.
+ *
+ * The file is removed when the query of the copy statement fails, the file
+ * holds a part of the result of the query in this case.
+ */
+int ObSelectIntoOp::remove_copy_target()
+{
+  int ret = OB_SUCCESS;
+  if (0 != ::remove(basic_url_.ptr()) && ENOENT != errno) {
+    ret = OB_IO_ERROR;
+    LOG_WARN("cannot remove the target of the copy statement", K(ret), K(basic_url_), K(errno));
+  }
+  return ret;
+}
+
+/**
+ * @brief Write the names of the columns in the first line of the file.
+ */
+int ObSelectIntoOp::write_header(ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<common::ObString> &names = MY_SPEC.select_expr_names_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < names.count(); ++i) {
+    if (OB_FAIL(write_header_field(names.at(i), data_writer))) {
+    } else if (OB_SUCC(ret) && i != names.count() - 1) {
+      OZ(write_obj_to_file(field_str_, data_writer));
+    }
+  }
+  // print line terminator
+  OZ(write_obj_to_file(line_str_, data_writer));
+  // clear shared buffer
+  OZ(data_writer.flush_shared_buf(shared_buf_));
+  if (has_compress_) {
+    OZ(data_writer.flush_buf());
+  }
+  return ret;
+}
+
+/**
+ * @brief Write the name of one column in the header of the file.
+ *
+ * The name is enclosed when it holds a character that would break the file,
+ * such as the terminator of the fields.
+ */
+int ObSelectIntoOp::write_header_field(const common::ObString &name, ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  bool need_enclose = false;
+  if (has_enclose_) {
+    need_enclose = ob_select_into_str_contains(name, field_str_.get_varchar())
+                   || ob_select_into_str_contains(name, escape_printer_.enclose_)
+                   || ob_select_into_str_contains(name, escape_printer_.escape_)
+                   || (NULL != name.find('\n'))
+                   || (NULL != name.find('\r'));
+  }
+  if (need_enclose) {
+    OZ(write_single_char_to_file(&char_enclose_, data_writer));
+  }
+  ObObj obj;
+  obj.set_varchar(name);
+  obj.set_collation_type(cs_type_);
+  OZ(write_obj_to_file(obj, data_writer, true));
+  if (need_enclose) {
+    OZ(write_single_char_to_file(&char_enclose_, data_writer));
+  }
+  return ret;
+}
+
+/**
+ * @brief Write the text of the null option for a null value.
+ */
+int ObSelectIntoOp::write_null_str(ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  const common::ObString &null_str = MY_SPEC.null_str_;
+  bool need_enclose = false;
+  if (has_enclose_) {
+    need_enclose = ob_select_into_str_contains(null_str, field_str_.get_varchar())
+                   || (NULL != null_str.find('\n'))
+                   || (NULL != null_str.find('\r'));
+  }
+  if (need_enclose) {
+    OZ(write_single_char_to_file(&char_enclose_, data_writer));
+  }
+  ObObj obj;
+  obj.set_varchar(null_str);
+  obj.set_collation_type(cs_type_);
+  OZ(write_obj_to_file(obj, data_writer, true));
+  if (need_enclose) {
+    OZ(write_single_char_to_file(&char_enclose_, data_writer));
   }
   return ret;
 }

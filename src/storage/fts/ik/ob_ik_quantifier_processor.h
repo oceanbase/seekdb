@@ -41,6 +41,8 @@ public:
                  const uint8_t char_len,
                  const ObFTCharUtil::CharType type);
 
+  int reset() override;
+
 private:
   int process_CN_number(TokenizeContext &ctx,
                         const char *ch,
@@ -51,11 +53,13 @@ private:
                        const char *ch,
                        const uint8_t char_len,
                        const ObFTCharUtil::CharType type);
-  void reset();
 
 private:
   bool need_count_scan(TokenizeContext &ctx);
   int output_num_token(TokenizeContext &ctx);
+
+private:
+  void reset_state();
 
 private:
   const ObIFTDict &quan_dict_;

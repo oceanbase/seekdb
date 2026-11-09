@@ -53,6 +53,9 @@ ObEvalCtx::ObEvalCtx(ObExecContext &exec_ctx, ObIAllocator *allocator)
     tmp_alloc_used_(exec_ctx.get_tmp_alloc_used()),
     batch_idx_(0),
     batch_size_(0),
+    batch_skip_(NULL),
+    batch_skip_size_(0),
+    lazy_eval_(false),
     expr_res_alloc_((dynamic_cast<ObArenaAllocator*>(allocator) != NULL) ?
                       (*(dynamic_cast<ObArenaAllocator*>(allocator))) : exec_ctx.get_eval_res_allocator())
 {
@@ -67,6 +70,9 @@ ObEvalCtx::ObEvalCtx(ObEvalCtx &eval_ctx)
     tmp_alloc_used_(eval_ctx.tmp_alloc_used_),
     batch_idx_(eval_ctx.get_batch_idx()),
     batch_size_(eval_ctx.get_batch_size()),
+    batch_skip_(eval_ctx.get_batch_skip()),
+    batch_skip_size_(eval_ctx.get_batch_skip_size()),
+    lazy_eval_(eval_ctx.is_lazy_eval()),
     expr_res_alloc_(eval_ctx.expr_res_alloc_)
 {
 }
@@ -609,6 +615,22 @@ void ObExpr::reset_datum_ptr(char *frame, const int64_t size, const int64_t idx)
   }
 }
 
+namespace
+{
+// Whether the expression merges the rows of a batch into one request. The AI
+// functions do, they send one request carrying the inputs of all the rows of
+// the batch to the model, so they must be evaluated by their batch callback.
+bool is_batch_merge_expr(const ObExpr &expr)
+{
+  switch (expr.type_) {
+    case T_FUN_SYS_AI_EMBED:
+      return true;
+    default:
+      return false;
+  }
+}
+} // namespace
+
 int ObExpr::eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) const
 {
 #define INNER_BATCH_SIZE() MAX(1, ctx.get_batch_size())
@@ -641,7 +663,23 @@ int ObExpr::eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) con
       SQL_LOG(WARN, "failed to check stack overflow", K(ret));
     } else {
       reset_datum_ptr(frame, INNER_BATCH_SIZE(), ctx.get_batch_idx());
-      ret = eval_func_(*this, ctx, *datum);
+      const ObBitVector *batch_skip = ctx.get_batch_skip();
+      const int64_t batch_skip_size = ctx.get_batch_skip_size();
+      if (NULL != batch_skip && NULL != eval_batch_func_ && is_batch_merge_expr(*this)
+          && batch_skip_size == ctx.get_batch_size() && !ctx.is_lazy_eval()) {
+        // The expression merges the rows of a batch into one request, so it
+        // has to be evaluated by its batch callback. The current expression is
+        // evaluated row by row, which would send one request per row of the
+        // batch. Evaluate the whole batch at once, the rows that are already
+        // evaluated are skipped by the batch callback.
+        // The argument of an expression that is evaluated only when it is
+        // needed, e.g. the second argument of ifnull, is not evaluated for
+        // every row of the batch, the rows of the batch must not be merged
+        // in this case.
+        ret = (*eval_batch_func_)(*this, ctx, *batch_skip, batch_skip_size);
+      } else {
+        ret = eval_func_(*this, ctx, *datum);
+      }
       if (OB_SUCC(ret)) {
         ObBitVector *evaluated_flags = to_bit_vector(frame + eval_flags_off_);
         evaluated_flags->set(ctx.get_batch_idx());
@@ -694,7 +732,15 @@ int ObExpr::do_eval_batch(ObEvalCtx &ctx,
     if (OB_UNLIKELY(need_stack_check_) && OB_FAIL(check_stack_overflow())) {
       SQL_LOG(WARN, "failed to check stack overflow", K(ret));
     } else {
+      // Remember the rows of the batch that are filtered out while the batch
+      // is evaluated. An expression that merges the rows of a batch into one
+      // request is reached row by row when it is nested in another
+      // expression, it needs them to know which rows are evaluated.
+      const ObBitVector *old_skip = ctx.get_batch_skip();
+      const int64_t old_skip_size = ctx.get_batch_skip_size();
+      ctx.set_batch_skip(&skip, size);
       ret = (*eval_batch_func_)(*this, ctx, skip, size);
+      ctx.set_batch_skip(old_skip, old_skip_size);
       if (OB_SUCC(ret)) {
       } else {
         ObDatum *datum = reinterpret_cast<ObDatum *>(frame + datum_off_);
