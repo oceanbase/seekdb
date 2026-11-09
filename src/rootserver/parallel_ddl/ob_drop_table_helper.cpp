@@ -947,7 +947,8 @@ int ObDropTableHelper::calc_schema_version_cnt_for_table_(
     schema_version_cnt_++;
 
     // for aux table, promote data table schema version
-    if (table_schema.is_aux_table()) {
+    if (table_schema.is_aux_table()
+        && OB_HASH_EXIST != drop_table_ids_.exist_refactored(table_schema.get_data_table_id())) {
       schema_version_cnt_++;
     }
 
@@ -1194,6 +1195,10 @@ int ObDropTableHelper::drop_table_to_recyclebin_(const ObTableSchema &table_sche
   ObSchemaService *schema_service_impl = NULL;
   const ObDatabaseSchema *recyclebin_database_schema = NULL;
   int64_t new_schema_version = OB_INVALID_VERSION;
+  // A data table recycled in this transaction gets its final schema version below.
+  // Avoid rereading and updating it once for every auxiliary table.
+  const bool need_update_data_table_schema_version =
+      OB_HASH_EXIST != drop_table_ids_.exist_refactored(table_schema.get_data_table_id());
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1226,7 +1231,8 @@ int ObDropTableHelper::drop_table_to_recyclebin_(const ObTableSchema &table_sche
                            table_schema,
                            new_table_schema,
                            OB_DDL_DROP_TABLE_TO_RECYCLEBIN,
-                           ddl_stmt_str))) {
+                           ddl_stmt_str,
+                           need_update_data_table_schema_version))) {
         }
       }
     }
