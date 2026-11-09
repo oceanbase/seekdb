@@ -59,6 +59,7 @@
 #include "lib/utility/ob_print_utils.h"     // databuff_printf
 #include "share/ob_ex_rpc.h"
 #include "share/seek1243_drop_diagnostic.h"
+#include "rpc/ob_request.h"
 
 namespace oceanbase
 {
@@ -1276,7 +1277,18 @@ int ObLocalManagementService::parallel_drop_table(const ObDropTableArg &arg, ObD
 {
   int ret = OB_SUCCESS;
 #ifdef OB_SEEK1243_DROP_DIAGNOSTIC
-  const auto drop_key = share::seek1243::stage_event_key(0, arg.table_type_, arg.session_id_, 0);
+  auto drop_key = share::seek1243::stage_event_key(0, arg.table_type_, arg.session_id_, 0);
+  // process_request snapshots before the SQL processor assigns the trace.
+  // This synchronous boundary still owns the request; refresh just its key.
+  const rpc::ObRequest *request = THIS_WORKER.get_cur_request();
+  if (THIS_WORKER.is_th_worker() && NULL != request) {
+    drop_key.request_generation = request->get_nio_request_generation();
+    drop_key.request_recv_ts = request->get_receive_timestamp();
+    const auto &request_trace = request->get_trace_id();
+    request_trace.get_uval(drop_key.request_trace);
+    drop_key.request_key_available = drop_key.request_generation != 0
+        && drop_key.request_recv_ts != 0 && request_trace.is_valid();
+  }
   lib::Seek1243ContextGuard drop_request_context(THIS_WORKER, drop_key);
   common::seek1243::Scope drop_request_scope(drop_key, "outer parallel_drop_table", ret);
 #ifdef _WIN32
