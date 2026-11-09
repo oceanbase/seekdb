@@ -1,0 +1,43 @@
+# Regression for oceanbase/seekdb#1512.
+# Use a low statement-local threshold to keep the plan checks small.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS duplicate_integer_inlist;
+--enable_warnings
+CREATE TABLE duplicate_integer_inlist(id INT PRIMARY KEY, category BIGINT);
+INSERT INTO duplicate_integer_inlist VALUES (1,1),(2,2),(3,3),(4,4),(5,NULL);
+
+--echo # Duplicate-heavy integers keep a direct IN predicate.
+--let $plan = query_get_value("EXPLAIN FORMAT=JSON SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id FROM duplicate_integer_inlist WHERE category IN (1,2,3,1,2,3,1,2,3)", Query Plan, 3)
+eval SELECT LOCATE('TABLE FULL SCAN', '$plan') > 0 AS direct_in;
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids FROM duplicate_integer_inlist WHERE category IN (1,2,3,1,2,3,1,2,3);
+
+--echo # Distinct cardinality equal to the threshold still rewrites.
+--let $plan = query_get_value("EXPLAIN FORMAT=JSON SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id FROM duplicate_integer_inlist WHERE category IN (1,2,3,4,1,2,3,4)", Query Plan, 3)
+eval SELECT LOCATE('TABLE FULL SCAN', '$plan') = 0 AS rewrites_inlist;
+
+--echo # Threshold one still forces the existing rewrite.
+--let $plan = query_get_value("EXPLAIN FORMAT=JSON SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',1) */ id FROM duplicate_integer_inlist WHERE category IN (1,1,1)", Query Plan, 3)
+eval SELECT LOCATE('TABLE FULL SCAN', '$plan') = 0 AS rewrites_inlist;
+
+--echo # NOT IN and NULL retain SQL three-valued logic.
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids FROM duplicate_integer_inlist WHERE category NOT IN (1,2,3,1,2,3);
+SELECT COUNT(*) AS cnt FROM duplicate_integer_inlist WHERE category NOT IN (1,2,3,NULL,1,2,3);
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids FROM duplicate_integer_inlist WHERE category IN (1,2,NULL,1,2,NULL);
+
+--echo # Mixed types and row constructors retain their semantics.
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids FROM duplicate_integer_inlist WHERE category IN (1,'2',3,1,'2',3);
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids FROM duplicate_integer_inlist WHERE (category,id) IN ((1,1),(2,2),(1,1),(2,2));
+SELECT GROUP_CONCAT(id ORDER BY id) AS ids FROM duplicate_integer_inlist WHERE category IN (18446744073709551615,1,18446744073709551615,1);
+
+--echo # Prepared statements remain valid across different bindings.
+PREPARE inlist_stmt FROM "SELECT /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ GROUP_CONCAT(id ORDER BY id) AS ids FROM duplicate_integer_inlist WHERE category IN (?,?,?,?)";
+SET @a=1,@b=1,@c=1,@d=1;
+EXECUTE inlist_stmt USING @a,@b,@c,@d;
+SET @a=1,@b=2,@c=3,@d=4;
+EXECUTE inlist_stmt USING @a,@b,@c,@d;
+SET @a=NULL,@b=2,@c=2,@d=2;
+EXECUTE inlist_stmt USING @a,@b,@c,@d;
+DEALLOCATE PREPARE inlist_stmt;
+DROP TABLE duplicate_integer_inlist;
+--enable_query_log

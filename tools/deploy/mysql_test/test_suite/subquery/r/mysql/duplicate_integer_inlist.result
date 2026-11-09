@@ -1,0 +1,32 @@
+# Duplicate-heavy integers keep a direct IN predicate.
+direct_in
+1
+ids
+1,2,3
+# Distinct cardinality equal to the threshold still rewrites.
+rewrites_inlist
+1
+# Threshold one still forces the existing rewrite.
+rewrites_inlist
+1
+# NOT IN and NULL retain SQL three-valued logic.
+ids
+4
+cnt
+0
+ids
+1,2
+# Mixed types and row constructors retain their semantics.
+ids
+1,2,3
+ids
+1,2
+ids
+1
+# Prepared statements remain valid across different bindings.
+ids
+1
+ids
+1,2,3,4
+ids
+2

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -263,6 +264,49 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+// Count only concrete signed integers. Do not change the parse tree or parameter
+// positions: the ordinary IN expression still evaluates every original operand.
+static int check_small_distinct_integer_inlist(const ParseNode &in_list,
+                                              const ParamStore *param_store,
+                                              const int64_t threshold,
+                                              bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  is_small = false;
+  bool all_integers = true;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> distinct_values;
+  if (OB_ISNULL(in_list.children_) || in_list.num_child_ <= 0 || threshold <= 1) {
+    // Keep the original rewrite decision for malformed lists and forced rewrites.
+  } else if (OB_FAIL(distinct_values.create(threshold, "InListDistinct", "InListDistinct"))) {
+    LOG_WARN("failed to create distinct integer set", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && all_integers
+         && distinct_values.size() < threshold && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      int64_t value = 0;
+      if (OB_ISNULL(node)) {
+        all_integers = false;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_QUESTIONMARK == node->type_
+                 && nullptr != param_store
+                 && node->value_ >= 0 && node->value_ < param_store->count()
+                 && ObIntType == param_store->at(node->value_).get_type()) {
+        value = param_store->at(node->value_).get_int();
+      } else {
+        // NULL, unsigned values, strings and row constructors retain their path.
+        all_integers = false;
+      }
+      if (OB_SUCC(ret) && all_integers
+          && OB_FAIL(distinct_values.set_refactored(value))) {
+        LOG_WARN("failed to record distinct integer", K(ret));
+      }
+    }
+    is_small = OB_SUCC(ret) && all_integers && distinct_values.size() < threshold;
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +394,15 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && !is_prepare_stmt && 1 == column_cnt && threshold > 1) {
+        bool is_small = false;
+        if (OB_FAIL(check_small_distinct_integer_inlist(in_list, param_store, threshold, is_small))) {
+          LOG_WARN("failed to count distinct integers in IN list", K(ret));
+        } else if (is_small) {
+          // Duplicates must not turn a small membership filter into a subquery.
+          is_enable = false;
+        }
+      }
     }
   }
   return ret;
