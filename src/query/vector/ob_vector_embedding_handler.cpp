@@ -22,7 +22,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/json/ob_json.h"
 #include "common/json_type/ob_json_parse.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 #include "share/ob_server_struct.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/lock/ob_thread_cond.h"
@@ -378,7 +378,7 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
 {
   int ret = OB_SUCCESS;
   ObJsonReaderHelper json_reader(allocator_);
-  ObJsonNode *root = nullptr;
+  ObIJsonBase *root = nullptr;
 
   if (OB_ISNULL(response_data) || response_size == 0) {
     ret = OB_INVALID_ARGUMENT;

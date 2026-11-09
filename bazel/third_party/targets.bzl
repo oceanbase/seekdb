@@ -27,7 +27,6 @@ SDK_HEADERS = {
             "//conditions:default": [],
         }),
     },
-    "rapidjson_headers": _headers("rapidjson"),
     "roaring_headers": _headers("roaring"),
     "vsag_headers": _headers("vsag"),
     "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},

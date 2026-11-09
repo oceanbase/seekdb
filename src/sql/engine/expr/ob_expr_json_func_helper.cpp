@@ -16,7 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "rust/config.h"
+#include "rust/json.h"
+#include <memory>
+#include <optional>
+#include <string>
 #include "ob_expr_json_func_helper.h"
+#include "common/json_type/json_builder.h"
+#include "ob_expr_json_native_path.h"
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_expr_cast.h"
@@ -24,6 +30,8 @@
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "lib/utility/ob_defer.h"
+#include <variant>
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -33,9 +41,190 @@ namespace oceanbase
 namespace sql
 {
 
+ObJsonParamCacheCtx::ObJsonParamCacheCtx(common::ObIAllocator *allocator)
+  : ObExprOperatorCtx(),
+    path_cache_(allocator),
+    native_path_cache_(std::make_unique<JsonPathCache>()),
+    is_first_exec_(true),
+    is_json_path_const_(false),
+    json_param_()
+{}
+
+ObJsonParamCacheCtx::~ObJsonParamCacheCtx() = default;
+
+uint32_t ObJsonExprHelper::get_json_text_depth_limit(uint32_t configured)
+{
+  const uint32_t limit = configured < JSON_DOCUMENT_MAX_DEPTH ? JSON_DOCUMENT_MAX_DEPTH : configured;
+  return limit == UINT32_MAX ? limit : limit + 1;
+}
+
+int ObJsonExprHelper::get_json_metadata(const ObString &data, ObJsonInType input_type, bool with_depth,
+                                        uint32_t max_depth_config, JsonMetadata &metadata)
+{
+  INIT_SUCC(ret);
+  if (data.empty() || OB_ISNULL(data.ptr())) {
+    ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+  } else {
+    const uint8_t *input = reinterpret_cast<const uint8_t *>(data.ptr());
+    rust::Slice<const uint8_t> slice(input, data.length());
+    oceanbase::common::json::BinaryMetadataResult result = input_type == ObJsonInType::JSON_BIN
+        ? oceanbase::common::json::inspect_binary(slice, with_depth)
+        : oceanbase::common::json::inspect_text(
+              slice, with_depth, get_json_text_depth_limit(max_depth_config));
+    if (result.status != oceanbase::common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to inspect binary JSON", K(ret), K(result.byte_offset));
+    } else {
+      metadata.type_ = static_cast<ObJsonNodeType>(result.value_type);
+      metadata.field_type_ = static_cast<ObObjType>(result.opaque_field_type);
+      metadata.depth_ = result.depth;
+      metadata.length_ = result.length;
+    }
+  }
+  return ret;
+}
+
+int query_native_json_path(const ObString &data, ObJsonInType input_type,
+                           const common::json::Path &path, bool auto_wrap,
+                           bool first_only, uint32_t max_depth_config,
+                           JsonPathMatches &matches)
+{
+  INIT_SUCC(ret);
+  if (data.empty() || OB_ISNULL(data.ptr())) {
+    ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+  } else {
+    const uint8_t *input = reinterpret_cast<const uint8_t *>(data.ptr());
+    rust::Slice<const uint8_t> slice(input, data.length());
+    common::json::PathQueryResult result = input_type == ObJsonInType::JSON_BIN
+        ? common::json::query_binary(path, slice, auto_wrap, first_only)
+        : common::json::query_text(
+              path, slice, auto_wrap, first_only,
+              ObJsonExprHelper::get_json_text_depth_limit(max_depth_config));
+    if (result.status != common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to query JSON path", K(ret), K(result.byte_offset));
+    } else {
+      matches.count_ = result.match_count;
+      matches.single_length_ = result.single_length;
+    }
+  }
+  return ret;
+}
+
+int get_native_json_query(const ObExpr &expr,
+                          ObEvalCtx &ctx,
+                          MultimodeAlloctor &allocator,
+                          uint16_t index,
+                          std::optional<rust::Box<common::json::Query>> &query,
+                          bool &is_null,
+                          bool *is_cover_by_error)
+{
+  INIT_SUCC(ret);
+  ObDatum *json_datum = NULL;
+  ObExpr *json_arg = expr.args_[index];
+  ObObjType val_type = json_arg->datum_meta_.type_;
+  ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
+  bool allow_partial_update = false;
+  ObString json_doc;
+  ObJsonInType input_type = ObJsonInType::JSON_TEXT;
+  ObIJsonBase *partial_document = nullptr;
+  DEFER(if (partial_document != nullptr) { partial_document->reset(); });
+  query.reset();
+  if (OB_FAIL(allocator.eval_arg(json_arg, ctx, json_datum))) {
+    if (is_cover_by_error != nullptr) {
+      *is_cover_by_error = false;
+    }
+  } else if (val_type == ObNullType || json_datum->is_null()) {
+    is_null = true;
+  } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("input type error", K(val_type));
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
+  } else if (ob_is_json(val_type)
+      && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(
+             expr, ctx, json_datum->get_string(), allow_partial_update))) {
+  } else if (allow_partial_update) {
+    if (OB_FAIL(ObJsonExprHelper::get_json_for_partial_update(
+            expr, *json_arg, ctx, allocator, *json_datum, partial_document))) {
+    } else if (OB_FAIL(partial_document->get_raw_binary(json_doc, &allocator))) {
+    } else {
+      input_type = ObJsonInType::JSON_BIN;
+    }
+  } else if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(
+                 json_arg, ctx, allocator, json_doc, is_null))) {
+  } else {
+    input_type = ObJsonExprHelper::get_json_internal_type(val_type);
+  }
+  if (OB_SUCC(ret) && !is_null) {
+    query.emplace(common::json::new_query(
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(json_doc.ptr()), json_doc.length()),
+        input_type != ObJsonInType::JSON_BIN,
+        ObJsonExprHelper::get_json_text_depth_limit(
+            ObJsonExprHelper::get_json_max_depth_config())));
+    if ((*query)->status() != common::json::Status::Ok) {
+      ret = (*query)->status() == common::json::Status::Depth
+          ? OB_ERR_JSON_OUT_OF_DEPTH : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to parse JSON", K(ret), K((*query)->byte_offset()));
+      if (ret == OB_ERR_JSON_OUT_OF_DEPTH) {
+        if (is_cover_by_error != nullptr) {
+          *is_cover_by_error = false;
+        }
+        LOG_USER_ERROR(OB_ERR_JSON_OUT_OF_DEPTH);
+      } else {
+        LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+      }
+    }
+  }
+  return ret;
+}
+
+int get_native_json_path(const ObExpr &expr,
+                         ObEvalCtx &ctx,
+                         MultimodeAlloctor &allocator,
+                         ObJsonParamCacheCtx *param_ctx,
+                         uint16_t index,
+                         const common::json::Path *&path,
+                         bool &is_null,
+                         bool &is_cover_by_error)
+{
+  INIT_SUCC(ret);
+  ObExpr *path_expr = expr.args_[index];
+  ObObjType type = path_expr->datum_meta_.type_;
+  ObString path_text;
+  JsonPathCache *path_cache = param_ctx->get_native_path_cache();
+  path = NULL;
+  if (!param_ctx->is_first_exec_ && param_ctx->is_json_path_const_ && OB_NOT_NULL(path_cache)) {
+    ret = path_cache->find_and_add(path_text, 0, true, path);
+  } else {
+    ObDatum *path_datum = NULL;
+    if (OB_FAIL(allocator.eval_arg(path_expr, ctx, path_datum))) {
+      is_cover_by_error = false;
+    } else if (type == ObNullType || path_datum->is_null()) {
+      is_null = true;
+    } else if (!ob_is_string_type(type)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("input type error", K(type));
+    } else {
+      path_text = path_datum->get_string();
+      if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(
+              path_expr, ctx, allocator, path_text, is_null))) {
+      } else if (path_text.length() == 0) {
+        is_null = true;
+      } else if (OB_FAIL(ObJsonExprHelper::convert_string_collation_type(
+                     path_expr->datum_meta_.cs_type_, CS_TYPE_UTF8MB4_BIN,
+                     &ctx.exec_ctx_.get_allocator(), path_text, path_text))) {
+      } else if (OB_FAIL(find_and_add_native_path_cache(
+                     path_cache, path, path_text, 0, true, param_ctx->is_json_path_const_))) {
+        is_cover_by_error = false;
+      }
+    }
+  }
+  return ret;
+}
+
 ObJsonInType ObJsonExprHelper::get_json_internal_type(ObObjType type)
 {
-  return type == ObJsonType ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
+  return type == ObJsonType ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TEXT;
 }
 
 int ObJsonExprHelper::ensure_collation(ObObjType type, ObCollationType cs_type)
@@ -74,7 +263,7 @@ int ObJsonExprHelper::get_json_or_str_data(ObExpr *expr, ObEvalCtx &ctx,
 
 int ObJsonExprHelper::get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
                                       MultimodeAlloctor &allocator,
-                                      uint16_t index, ObIJsonBase*& j_schema,
+                                      uint16_t index, ObJsonSchemaCache*& j_schema,
                                       bool &is_null)
 {
   INIT_SUCC(ret);
@@ -98,9 +287,223 @@ int ObJsonExprHelper::get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
       ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type);
       ObJsonSchemaCache* schema_cache = ObJsonExprHelper::get_schema_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
 
-      if (OB_SUCC(ret) && OB_NOT_NULL(schema_cache) 
-          && OB_FAIL(ObJsonExprHelper::find_and_add_schema_cache(schema_cache, j_schema, j_str, 1, j_in_type))) {
+      if (OB_ISNULL(schema_cache)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(ObJsonExprHelper::find_and_add_schema_cache(schema_cache, j_schema, j_str, 1, j_in_type))) {
       }
+    }
+  }
+  return ret;
+}
+
+namespace {
+int mutation_status(int32_t status, int32_t source_status, JsonMutation operation)
+{
+  switch (status) {
+    case 0: return OB_SUCCESS;
+    case 1: return OB_ALLOCATE_MEMORY_FAILED;
+    case 2: return source_status;
+    case 7: return operation == JsonMutation::ArrayInsert
+        ? OB_ERR_INVALID_JSON_PATH_ARRAY_CELL : OB_ERR_INVALID_JSON_PATH;
+    case 8: return OB_ERR_JSON_VACUOUS_PATH;
+    case 9: return OB_ERR_JSON_DOCUMENT_NULL_KEY;
+    default: return OB_ERR_UNEXPECTED;
+  }
+}
+
+rust::Slice<const uint8_t> mutation_bytes(const ObString &bytes)
+{
+  static const uint8_t empty = 0;
+  return rust::Slice<const uint8_t>(bytes.empty() ? &empty
+      : reinterpret_cast<const uint8_t *>(bytes.ptr()), bytes.length());
+}
+} // namespace
+
+int ObJsonExprHelper::push_json_merge_argument(const ObExpr &expr, ObEvalCtx &ctx,
+    MultimodeAlloctor &allocator, uint16_t index, BinaryMerge &merger, bool &is_null, bool *input_error)
+{
+  INIT_SUCC(ret);
+  ObDatum *datum = nullptr;
+  ObExpr *argument = expr.args_[index];
+  ObString input;
+  const ObObjType type = argument->datum_meta_.type_;
+  is_null = false;
+  if (input_error != nullptr) { *input_error = true; }
+  if (OB_FAIL(allocator.eval_arg(argument, ctx, datum))) {
+  } else if (type == ObNullType || datum->is_null()) {
+    is_null = true;
+  } else if (type != ObJsonType && !ob_is_string_type(type)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+  } else if (OB_FAIL(ensure_collation(type, argument->datum_meta_.cs_type_))) {
+  } else if (OB_FAIL(get_json_or_str_data(argument, ctx, allocator, input, is_null))) {
+  }
+  if (OB_SUCC(ret)) {
+    const int32_t status = merger.merge_push(mutation_bytes(input), type != ObJsonType,
+        is_null, get_json_text_depth_limit(get_json_max_depth_config()));
+    if (input_error != nullptr) { *input_error = merger.merge_input_failed(); }
+    ret = status == 0 ? OB_SUCCESS : status == 1 ? OB_ALLOCATE_MEMORY_FAILED
+        : status == 9 ? OB_ERR_JSON_PATCH_INVALID : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+    if (ret == OB_ERR_INVALID_JSON_TEXT_IN_PARAM) { LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM); }
+    else if (ret == OB_ERR_JSON_PATCH_INVALID) { LOG_USER_ERROR(OB_ERR_JSON_PATCH_INVALID); }
+  }
+  return ret;
+}
+
+int ObJsonExprHelper::eval_json_merge(const ObExpr &expr, ObEvalCtx &ctx,
+    ObDatum &res, bool patch)
+{
+  INIT_SUCC(ret);
+  ObEvalCtx::TempAllocGuard allocation_scope(ctx);
+  MultimodeAlloctor allocator(allocation_scope.get_allocator());
+  lib::ObMallocHookAttrGuard malloc_scope(lib::ObMemAttr("JSONModule"));
+  rust::Box<BinaryMerge> merger = common::json::new_merge_accumulator(patch ? 1 : 0);
+  if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
+    ret = OB_ERR_INVALID_JSON_CHARSET;
+  }
+  for (int64_t index = 0; OB_SUCC(ret) && merger->merge_needs_input() && index < expr.arg_cnt_; ++index) {
+    bool is_null = false;
+    ret = push_json_merge_argument(expr, ctx, allocator, index, *merger, is_null);
+  }
+  if (OB_SUCC(ret)) {
+    common::json::MergeOutput result = common::json::finish_merge(std::move(merger));
+    if (result.status != 0) {
+      ret = result.status == 1 ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
+    } else if (result.is_null) {
+      res.set_null();
+    } else {
+      ObString binary(result.binary.size(), reinterpret_cast<const char *>(result.binary.data()));
+      ret = pack_json_str_res(expr, ctx, res, binary);
+    }
+  }
+  return ret;
+}
+
+int ObJsonExprHelper::eval_json_mutation(const ObExpr &expr, ObEvalCtx &ctx,
+    ObDatum &res, JsonMutation operation)
+{
+  INIT_SUCC(ret);
+  ObEvalCtx::TempAllocGuard allocation_scope(ctx);
+  MultimodeAlloctor allocator(allocation_scope.get_allocator());
+  lib::ObMallocHookAttrGuard malloc_scope(lib::ObMemAttr("JSONModule"));
+  ObIJsonBase *partial_document = nullptr;
+  DEFER(if (partial_document != nullptr) { partial_document->reset(); });
+  std::optional<rust::Box<common::json::SqlEditor>> editor;
+  std::optional<common::json::BinarySource> source;
+  ObJsonBinUpdateCtx *update = nullptr;
+  ObDatum *document = nullptr;
+  ObExpr *document_expr = expr.args_[0];
+  bool is_null = false;
+  bool allow_partial = false;
+  const bool remove = operation == JsonMutation::Remove;
+  const bool eager = operation == JsonMutation::Set || operation == JsonMutation::Replace;
+  const bool null_type_short_circuit = eager || remove;
+  if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
+    ret = OB_ERR_INVALID_JSON_CHARSET;
+  } else if (OB_FAIL(allocator.eval_arg(document_expr, ctx, document))) {
+  } else if (document_expr->datum_meta_.type_ == ObNullType || document->is_null()) {
+    is_null = true;
+  } else if (document_expr->datum_meta_.type_ != ObJsonType
+      && !ob_is_string_type(document_expr->datum_meta_.type_)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+  } else if (OB_FAIL(ensure_collation(document_expr->datum_meta_.type_, document_expr->datum_meta_.cs_type_))) {
+  } else if (ob_is_json(document_expr->datum_meta_.type_)
+      && OB_FAIL(is_allow_partial_update(expr, ctx, document->get_string(), allow_partial))) {
+  } else {
+    ObString input;
+    bool text = document_expr->datum_meta_.type_ != ObJsonType;
+    if (allow_partial) {
+      if (OB_FAIL(get_json_for_partial_update(expr, *document_expr, ctx, allocator, *document, partial_document))) {
+      } else if (partial_document->is_bin()
+          && (update = static_cast<ObJsonBin *>(partial_document)->get_update_ctx()) != nullptr) {
+        source.emplace(*update->cursor_);
+        editor.emplace(common::json::new_sql_editor_external(source.value()));
+      } else if (OB_FAIL(partial_document->get_raw_binary(input, &allocator))) {
+      } else {
+        text = false;
+      }
+    } else if (OB_FAIL(get_json_or_str_data(document_expr, ctx, allocator, input, is_null))) {
+    }
+    if (OB_SUCC(ret) && !is_null && !editor.has_value()) {
+      editor.emplace(common::json::new_sql_editor_owned(mutation_bytes(input), text,
+          get_json_text_depth_limit(get_json_max_depth_config())));
+    }
+    if (OB_SUCC(ret) && !is_null && (*editor)->editor_status() != 0) {
+      const int32_t status = (*editor)->editor_status();
+      ret = status == 1 ? OB_ALLOCATE_MEMORY_FAILED
+          : status == 2 ? (*editor)->editor_source_status() : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      if (ret == OB_ERR_INVALID_JSON_TEXT_IN_PARAM) { LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM); }
+    }
+  }
+  JsonPathCache local_cache;
+  JsonPathCache *path_cache = get_native_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
+  if (path_cache == nullptr) { path_cache = &local_cache; }
+  for (int64_t index = 1; OB_SUCC(ret) && !is_null && index < expr.arg_cnt_; index += remove ? 1 : 2) {
+    ObExpr *path_expr = expr.args_[index];
+    ObDatum *path_datum = nullptr;
+    const common::json::Path *path = nullptr;
+    if (null_type_short_circuit && path_expr->datum_meta_.type_ == ObNullType) {
+      is_null = true;
+    } else if (OB_FAIL(allocator.eval_arg(path_expr, ctx, path_datum))) {
+      if (remove) { ret = OB_ERR_INVALID_JSON_PATH; }
+    } else if (path_datum->is_null()) {
+      if (null_type_short_circuit) { ret = OB_ERR_INVALID_JSON_PATH; LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH); }
+      else { is_null = true; }
+    } else {
+      ObString path_text = path_datum->get_string();
+      if (OB_FAIL(get_json_or_str_data(path_expr, ctx, allocator, path_text, is_null))) {
+      } else if (OB_FAIL(find_and_add_native_path_cache(path_cache, path, path_text, index, false))) {
+        if (operation == JsonMutation::Replace) {
+          ret = OB_ERR_INVALID_JSON_PATH;
+          LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
+        }
+      } else {
+        rust::Box<common::json::PreparedMutation> prepared = source.has_value()
+            ? (*editor)->prepare_external(source.value(), *path, static_cast<uint8_t>(operation))
+            : (*editor)->prepare_owned(*path, static_cast<uint8_t>(operation));
+        if (OB_FAIL(mutation_status(prepared->prepared_status(), prepared->prepared_source_status(), operation))) {
+          if (ret == OB_ERR_JSON_VACUOUS_PATH) { LOG_USER_ERROR(OB_ERR_JSON_VACUOUS_PATH); }
+        } else {
+          ObString binary;
+          if (prepared->prepared_needs_value()
+              && OB_FAIL(get_json_binary(expr, ctx, allocator, index + 1, binary))) {
+            if (!eager) { ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM; }
+          }
+          if (OB_SUCC(ret)) {
+            const int32_t status = source.has_value()
+                ? (*editor)->apply_external(source.value(), std::move(prepared), mutation_bytes(binary))
+                : (*editor)->apply_owned(std::move(prepared), mutation_bytes(binary));
+            ret = mutation_status(status, (*editor)->editor_source_status(), operation);
+          }
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (is_null) {
+    res.set_null();
+  } else {
+    rust::Box<BinaryEdit> edit = source.has_value()
+        ? common::json::finish_external(std::move(editor.value()), source.value(), update->is_rebuild_all(), update->is_no_update())
+        : common::json::finish_owned(std::move(editor.value()));
+    if (OB_FAIL(mutation_status(edit->edit_status(), edit->edit_source_status(), operation))) {
+    } else if (!edit->edit_is_partial()) {
+      const rust::Slice<const uint8_t> binary = edit->edit_binary();
+      const ObString data(binary.size(), reinterpret_cast<const char *>(binary.data()));
+      ret = pack_json_str_res(expr, ctx, res, data);
+    } else if (OB_ISNULL(update)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(update->merge_edit(*edit))) {
+    } else {
+      for (size_t index = 0; OB_SUCC(ret) && index < edit->edit_write_count(); ++index) {
+        const rust::Slice<const uint8_t> bytes = edit->edit_write_bytes(index);
+        const uint64_t offset = edit->edit_write_offset(index);
+        if (offset == update->cursor_->get_length()) {
+          ret = update->cursor_->append(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+        } else {
+          ret = update->cursor_->set(offset, reinterpret_cast<const char *>(bytes.data()), bytes.size());
+        }
+      }
+      if (OB_SUCC(ret)) { ret = pack_json_diff_res(expr, ctx, allocator, partial_document, res); }
     }
   }
   return ret;
@@ -109,8 +512,7 @@ int ObJsonExprHelper::get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
 int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
                                     MultimodeAlloctor &allocator,
                                     uint16_t index, ObIJsonBase*& j_base,
-                                    bool &is_null, bool need_to_tree, 
-                                    bool relax, bool preserve_dup)
+                                    bool &is_null, bool preserve_dup)
 {
   INIT_SUCC(ret);
   ObDatum *json_datum = NULL;
@@ -138,12 +540,9 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
     } else {
       ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
 
-      ObJsonInType expect_type = need_to_tree ? ObJsonInType::JSON_TREE : j_in_type;
-      bool relax_json = false;
-      uint32_t parse_flag = relax_json ? ObJsonParser::JSN_RELAXED_FLAG : 0;
+      uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
       ADD_FLAG_IF_NEED(preserve_dup, parse_flag, ObJsonParser::JSN_PRESERVE_DUP_FLAG);
-      if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type,
-                                                  expect_type, j_base, parse_flag))) {
+      if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type, j_base, parse_flag))) {
         ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
       }
@@ -156,49 +555,29 @@ int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data,
                                             const char *func_name,
                                             ObExecContext &exec_ctx,
                                             common::ObIAllocator *allocator,
-                                            ObIJsonBase *&j_schema)
+                                            ObString &schema)
 {
   INIT_SUCC(ret);
   ObObjType val_type = data.get_type();
+  ObCollationType cs_type = data.get_collation_type();
   const common::ObLobReadOptions *lob_options = nullptr;
-  if (data.is_null()) {
-    void *json_node_buf = allocator->alloc(sizeof(ObJsonNull));
-    if (OB_ISNULL(json_node_buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      ObJsonNull *null_node = static_cast<ObJsonNull*>(new(json_node_buf) ObJsonNull());
-      if (OB_FAIL(ObJsonBaseFactory::transform(allocator, null_node, ObJsonInType::JSON_BIN, j_schema))) {
-      }
-    }
-  } else if (OB_FAIL(exec_ctx.get_lob_read_options(lob_options))) {
-  } else if (ObJsonExprHelper::is_convertible_to_json(val_type)) {
-    ObCollationType cs_type = data.get_collation_type();
-    ObIJsonBase* j_base = nullptr;
-    // Only lowercase true/false is considered a Boolean value, so use strict
-    // mode.
-    if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
-                                                                  cs_type, j_base, ObConv2JsonParam(false,
-                                                                  data.has_lob_header(), false,
-                                                                  false, true, true),
-                                                                  lob_options))) {
-      if (ret == OB_ERR_NULL_VALUE || ret == OB_ERR_INVALID_JSON_TEXT) { // json_str is null
+  if (OB_FAIL(exec_ctx.get_lob_read_options(lob_options))) {
+  } else if (!ObJsonExprHelper::is_convertible_to_json(val_type)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_JSON;
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 1, func_name);
+  } else if (val_type != ObJsonType && OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
+  } else {
+    ObString input = data.get_string();
+    if (OB_FAIL(common::lob_helper::read_real_string_data(
+            allocator, val_type, cs_type, data.has_lob_header(), input, lob_options))) {
+    } else if (OB_FAIL(compile_json_schema(*allocator, input,
+                   ObJsonExprHelper::get_json_internal_type(val_type),
+                   get_json_text_depth_limit(get_json_max_depth_config()), schema))) {
+      if (ret == OB_ERR_NULL_VALUE || ret == OB_ERR_INVALID_JSON_TEXT) {
         ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
       }
-    } else if (j_base->json_type() != common::ObJsonNodeType::J_OBJECT) {
-      ret = OB_ERR_TYPE_OF_JSON_SCHEMA;
-    } else {
-      ObJsonSchemaTree json_schema(allocator);
-      ObJsonArray* schema_map = nullptr;
-      if (OB_FAIL(json_schema.build_schema_tree(j_base))) {
-      } else if (OB_ISNULL(schema_map = json_schema.get_schema_map())) {
-        ret = OB_BAD_NULL_ERROR;
-      } else if (OB_FAIL(ObJsonBaseFactory::transform(allocator, schema_map, ObJsonInType::JSON_BIN, j_schema))) {
-      }
     }
-  } else {
-    ret = OB_ERR_INVALID_TYPE_FOR_JSON;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 1, func_name);
   }
   return ret;
 }
@@ -222,6 +601,7 @@ int ObJsonExprHelper::get_partial_json_bin(
     }
   }
   if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(update_ctx->init_status())) {
   } else if (OB_FAIL(data_plane::bind_json_lob(lob_handle, *update_ctx))) {
   } else if (OB_ISNULL(bin_ctx = OB_NEWx(ObJsonBinCtx, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -230,7 +610,6 @@ int ObJsonExprHelper::get_partial_json_bin(
   } else if (OB_ISNULL(j_bin = OB_NEWx(ObJsonBin, &allocator, &allocator, bin_ctx, true))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(j_bin->reset_iter())) {
-  } else if (OB_FALSE_IT(j_bin->set_seek_flag(false))) {
   } else {
     j_base = j_bin;
   }
@@ -273,7 +652,7 @@ int ObJsonExprHelper::get_json_for_partial_update(
                  allocator, locator, query_timeout_ts, lob_handle))) {
   } else if (OB_FAIL(data_plane::read_json_lob_root_type(
                  *lob_handle, root_type))) {
-  } else if (! ObJsonBin::is_doc_header(root_type)) {
+  } else if (! common::json::is_document_header(root_type)) {
     // if root type not doc header, means that old json data.
     // old json is not binary charset in lob, so can not use partial lob
     ObString j_str;
@@ -286,7 +665,7 @@ int ObJsonExprHelper::get_json_for_partial_update(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(
-          &allocator, j_str, ObJsonInType::JSON_BIN, ObJsonInType::JSON_TREE, j_base, 0, ObJsonExprHelper::get_json_max_depth_config()))) {
+          &allocator, j_str, ObJsonInType::JSON_BIN, j_base, 0, ObJsonExprHelper::get_json_max_depth_config()))) {
     }
   } else if (OB_FAIL(get_partial_json_bin(allocator, *lob_handle, nullptr, j_base))) {
   } else if (OB_ISNULL(j_base)) {
@@ -306,90 +685,38 @@ int ObJsonExprHelper::get_json_for_partial_update(
 int ObJsonExprHelper::refine_range_json_value_const(
   const common::ObObj &data, ObExecContext &ctx,
   bool is_bool, common::ObIAllocator *allocator,
-  ObIJsonBase*& j_base, bool to_bin)
+  ObIJsonBase*& j_base)
 {
+  UNUSED(is_bool);
   int ret = OB_SUCCESS;
-  ObObjType val_type = data.get_type();
-  ObCollationType cs_type = data.get_collation_type();
+  ObObjType type = data.get_type();
   const common::ObLobReadOptions *lob_options = nullptr;
-
-  if (!ObJsonExprHelper::is_convertible_to_json(val_type)) {
+  ObString input;
+  if (!is_convertible_to_json(type)) {
     ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
     LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
   } else if (OB_FAIL(ctx.get_lob_read_options(lob_options))) {
-  } else if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
-                                                                cs_type, j_base, ObConv2JsonParam(to_bin,
-                                                                data.has_lob_header(), false, false, true, true),
-                                                                lob_options))) {
-  }
-
-  return ret;
-}
-
-
-int ObJsonExprHelper::get_json_val(const common::ObDatum &data, 
-                                   ObExecContext &ctx,
-                                   ObExpr* expr,
-                                   common::ObIAllocator *allocator,
-                                   ObObjType val_type,
-                                   ObCollationType &cs_type,
-                                   ObIJsonBase*& j_base, bool to_bin)
-{
-  INIT_SUCC(ret);
-  const common::ObLobReadOptions *lob_options = nullptr;
-  if (OB_FAIL(ctx.get_lob_read_options(lob_options))) {
   } else if (data.is_null()) {
-    void *json_node_buf = allocator->alloc(sizeof(ObJsonNull));
-    if (OB_ISNULL(json_node_buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      ObJsonNull *null_node = static_cast<ObJsonNull*>(new(json_node_buf) ObJsonNull());
-      if (to_bin) {
-        if (OB_FAIL(ObJsonBaseFactory::transform(allocator, null_node, ObJsonInType::JSON_BIN, j_base))) {
-        }
-      } else {
-        j_base = null_node;
-      }
-    }
-  } else if (ObJsonExprHelper::is_convertible_to_json(val_type)) {
-    if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
-                                                                  cs_type, j_base, ObConv2JsonParam(to_bin,
-                                                                  expr->obj_meta_.has_lob_header(), 
-                                                                  false, false, true),
-                                                                  lob_options))) {
-    }
-  } else {
-    ObBasicSessionInfo *session = ctx.get_my_session();
-    if (OB_ISNULL(session)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ObJsonExprHelper::transform_scalar_2jsonBase(data, val_type,
-                                                                    allocator, expr->datum_meta_.scale_,
-                                                                    session->get_timezone_info(),
-                                                                    session,
-                                                                    j_base, to_bin,
-                                                                    expr->is_boolean_))) {
-    }
-  }
-
-  return ret;
-}
-
-int ObJsonExprHelper::cast_to_json_tree(ObString &text, common::ObIAllocator *allocator, uint32_t parse_flag, uint32_t max_depth_config)
-{
-  INIT_SUCC(ret);
-  ObJsonNode *j_tree = NULL;
-  if (OB_FAIL(ObJsonParser::get_tree(allocator, text, j_tree, parse_flag, max_depth_config))) {
-  } else {
-    ObJsonBuffer jbuf(allocator);
-    if (OB_FAIL(j_tree->print(jbuf, true, 0, false, 0))) {
-    } else if (jbuf.empty()) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      text.assign_ptr(jbuf.ptr(), jbuf.length());
+    auto encoded = common::json::encode_scalar(0, 0, 0, 0, rust::Slice<const uint8_t>(), 0);
+    ret = encoded.status == 1 ? OB_ALLOCATE_MEMORY_FAILED : encoded.status == 0
+        ? copy_json_binary(*allocator, ObString(encoded.binary.size(),
+              reinterpret_cast<char *>(encoded.binary.data())), j_base) : OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ensure_collation(type, data.get_collation_type()))) {
+  } else if (FALSE_IT(input = data.get_string())) {
+  } else if (OB_FAIL(common::lob_helper::read_real_string_data(allocator, type,
+        data.get_collation_type(), data.has_lob_header(), input, lob_options))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, input,
+        get_json_internal_type(type), j_base,
+        ObJsonParser::JSN_SCHEMA_FLAG, get_json_max_depth_config()))) {
+    if (type == ObJsonType && ret != OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
     }
   }
   return ret;
 }
+
+
+
 
 int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator, 
                                   ObDatum &src_datum, 
@@ -477,207 +804,232 @@ void ObJsonExprHelper::get_accuracy_from_expr(const ObExpr &expr, ObAccuracy &ac
   }
 }
 
-int ObJsonExprHelper::get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
-                                   common::ObIAllocator *allocator, uint16_t index,
-                                   ObIJsonBase*& j_base, bool to_bin, bool format_json,
-                                   uint32_t parse_flag)
+namespace {
+struct ConvertedJson {
+  std::variant<ObString, rust::Vec<uint8_t>> bytes;
+
+  int get_binary(ObIAllocator &allocator, ObString &binary) const
+  {
+    if (const auto *owned = std::get_if<rust::Vec<uint8_t>>(&bytes)) {
+      return deep_copy_ob_string(allocator, ObString(owned->size(),
+          reinterpret_cast<const char *>(owned->data())), binary);
+    }
+    binary = std::get<ObString>(bytes);
+    return OB_SUCCESS;
+  }
+
+  int append(JsonContainerBuilder &builder, const ObString &key)
+  {
+    if (auto *owned = std::get_if<rust::Vec<uint8_t>>(&bytes)) {
+      common::json::BuildResult encoded{0, std::move(*owned), 0, 0};
+      return builder.append_encoded(key, std::move(encoded));
+    }
+    return builder.append(key, std::get<ObString>(bytes));
+  }
+};
+}
+
+static int convert_datum_to_json(const ObDatum &datum, const ObObjMeta &meta,
+    ObScale scale, bool is_bool, bool format_json, bool strict, bool oracle,
+    ObIAllocator &allocator, ObBasicSessionInfo *session,
+    const common::ObLobReadOptions *lob_options, ConvertedJson &converted)
 {
-  INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
-  ObExpr *json_arg = expr.args_[index];
-  ObObjType val_type = json_arg->datum_meta_.type_;
-  MultimodeAlloctor *alloc = nullptr;
+  int ret = OB_SUCCESS;
+  ObObjType type = meta.get_type();
+  ObCollationType cs_type = meta.get_collation_type();
+  uint8_t kind = 0;
+  int64_t integer = 0;
+  uint64_t unsigned_integer = 0;
+  double real = 0;
+  uint16_t field_type = 0;
+  ObString payload;
+  ObJsonBuffer database_payload(&allocator);
+  bool has_binary = false;
+  if (datum.is_null() || type == ObNullType) {
+  } else if (is_bool) {
+    kind = 8;
+    integer = datum.get_bool();
+  } else if (ObJsonExprHelper::is_convertible_to_json(type)) {
+    payload = datum.get_string();
+    if (!oracle && type != ObJsonType && OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
+    } else if (OB_FAIL(common::lob_helper::read_real_string_data(
+        &allocator, type, cs_type, meta.has_lob_header(), payload, lob_options))) {
+    } else if (oracle && type != ObJsonType && cs_type != CS_TYPE_INVALID && cs_type != CS_TYPE_BINARY
+        && OB_FAIL(ObExprUtil::convert_string_collation(payload, cs_type, payload, CS_TYPE_UTF8MB4_BIN, allocator))) {
+    } else if (type == ObJsonType) {
+      converted.bytes.emplace<ObString>(payload);
+      has_binary = true;
+    } else if (format_json) {
+      auto parsed = common::json::parse_binary(
+          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(payload.ptr()), payload.length()),
+          common::json::Duplicate::Overwrite, ObJsonExprHelper::get_json_text_depth_limit(ObJsonExprHelper::get_json_max_depth_config()), false);
+      if (parsed.status == common::json::Status::Ok) {
+        converted.bytes.emplace<rust::Vec<uint8_t>>(std::move(parsed.binary));
+        has_binary = true;
+      } else if (strict) {
+        ret = oracle ? OB_ERR_JSON_SYNTAX_ERROR : OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      } else { kind = 5; }
+    } else { kind = 5; }
+  } else if (oracle && format_json) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+  } else {
+    switch (type) {
+      case ObTinyIntType: case ObSmallIntType: case ObMediumIntType: case ObInt32Type: case ObIntType:
+        kind = 2; integer = datum.get_int(); break;
+      case ObUTinyIntType: case ObUSmallIntType: case ObUMediumIntType: case ObUInt32Type: case ObUInt64Type:
+        kind = 3; unsigned_integer = datum.get_uint64(); break;
+      case ObYearType:
+        kind = 2; ret = ObTimeConverter::year_to_int(datum.get_year(), integer); break;
+      case ObFloatType: case ObUFloatType: case ObDoubleType: case ObUDoubleType:
+        real = type == ObFloatType || type == ObUFloatType ? datum.get_float() : datum.get_double();
+        if (isnan(real)) { kind = 5; payload = ObString("Nan"); }
+        else if (isinf(real)) { kind = 5; payload = real > 0 ? ObString("Inf") : ObString("-Inf"); }
+        else { kind = 4; }
+        break;
+      case ObDecimalIntType: case ObUNumberType: case ObNumberType: {
+        kind = 1;
+        number::ObNumber number;
+        if (ob_is_decimal_int(type)) {
+          ret = wide::to_number(datum.get_decimal_int(), datum.get_int_bytes(), scale, allocator, number);
+        } else { ret = number.deep_copy_v3(datum.get_number(), allocator); }
+        int64_t pos = 0;
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(database_payload.reserve(number.get_serialize_size() + 4))) {
+        } else if (OB_FAIL(serialization::encode_i16(database_payload.ptr(), database_payload.capacity(), pos, -1))) {
+        } else if (OB_FAIL(serialization::encode_i16(database_payload.ptr(), database_payload.capacity(), pos, scale))) {
+        } else if (OB_FAIL(number.serialize(database_payload.ptr(), database_payload.capacity(), pos))) {
+        } else if (OB_FAIL(database_payload.set_length(pos))) {
+        } else { payload = database_payload.string(); }
+        break;
+      }
+      case ObDateType: case ObMySQLDateType: case ObTimeType: case ObDateTimeType:
+      case ObMySQLDateTimeType: case ObTimestampType: {
+        ObTime time;
+        int64_t value = 0;
+        if (type == ObDateType) {
+          kind = 9; time.mode_ = DT_TYPE_DATE;
+          ret = ObTimeConverter::date_to_ob_time(datum.get_date(), time);
+          int32_t date = ObTimeConverter::ob_time_to_date(time);
+          if (OB_SUCC(ret)) { ret = database_payload.append(reinterpret_cast<const char *>(&date), sizeof(date)); }
+        } else if (type == ObMySQLDateType) {
+          kind = 32; time.mode_ = DT_TYPE_DATE;
+          ret = ObTimeConverter::mdate_to_ob_time(datum.get_date(), time);
+          ObMySQLDate date = ObTimeConverter::ob_time_to_mdate(time);
+          if (OB_SUCC(ret)) { ret = database_payload.append(reinterpret_cast<const char *>(&date), sizeof(date)); }
+        } else {
+          if (type == ObTimeType) {
+            kind = 10; time.mode_ = DT_TYPE_TIME;
+            ret = ObTimeConverter::time_to_ob_time(datum.get_time(), time);
+            if (OB_SUCC(ret)) { value = ObTimeConverter::ob_time_to_time(time); }
+          } else if (type == ObMySQLDateTimeType) {
+            kind = 33; time.mode_ = DT_TYPE_MYSQL_DATETIME;
+            ret = ObTimeConverter::mdatetime_to_ob_time(datum.get_datetime(), time);
+            ObMySQLDateTime datetime;
+            if (OB_SUCC(ret)) { ret = ObTimeConverter::ob_time_to_mdatetime(time, datetime); }
+            if (OB_SUCC(ret)) { MEMCPY(&value, &datetime, sizeof(value)); }
+          } else {
+            kind = type == ObDateTimeType ? 11 : 12;
+            time.mode_ = DT_TYPE_DATETIME;
+            const ObTimeZoneInfo *timezone = kind == 12 && session != nullptr ? session->get_timezone_info() : nullptr;
+            ret = ObTimeConverter::datetime_to_ob_time(kind == 12 ? datum.get_timestamp() : datum.get_datetime(), timezone, time);
+            ObTimeConvertCtx context(nullptr, false);
+            if (OB_SUCC(ret)) { ret = ObTimeConverter::ob_time_to_datetime(time, context, value); }
+          }
+          if (OB_SUCC(ret)) { ret = database_payload.append(reinterpret_cast<const char *>(&value), sizeof(value)); }
+        }
+        payload = database_payload.string();
+        break;
+      }
+      case ObHexStringType:
+        kind = 13; field_type = static_cast<uint16_t>(type); payload = datum.get_string(); break;
+      case ObBitType: {
+        kind = 13; field_type = static_cast<uint16_t>(type);
+        const int32_t capacity = (OB_MAX_BIT_LENGTH + 7) / 8;
+        char *buffer = static_cast<char *>(allocator.alloc(capacity));
+        int64_t pos = 0;
+        if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        else if (OB_FAIL(bit_to_char_array(datum.get_uint64(), scale, buffer, capacity, pos))) {
+        } else { payload.assign_ptr(buffer, pos); }
+        break;
+      }
+      case ObGeometryType: ret = OB_ERR_INVALID_JSON_TEXT; break;
+      case ObUserDefinedSQLType: ret = OB_ERR_INVALID_CAST_TO_JSON; break;
+      default: ret = OB_INVALID_ARGUMENT; break;
+    }
+  }
+  if (OB_SUCC(ret) && !has_binary) {
+    auto encoded = common::json::encode_scalar(kind, integer, unsigned_integer, real,
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(payload.ptr()), payload.length()), field_type);
+    if (encoded.status != 0) {
+      ret = encoded.status == 1 ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_UNEXPECTED;
+    } else {
+      converted.bytes.emplace<rust::Vec<uint8_t>>(std::move(encoded.binary));
+    }
+  }
+  return ret;
+}
+
+int ObJsonExprHelper::datum_to_json_binary(const ObDatum &datum, const ObObjMeta &meta,
+    ObScale scale, bool is_bool, bool format_json, bool strict, bool oracle,
+    ObIAllocator &allocator, ObBasicSessionInfo *session,
+    const common::ObLobReadOptions *lob_options, ObString &binary)
+{
+  ConvertedJson converted;
+  const int ret = convert_datum_to_json(datum, meta, scale, is_bool, format_json, strict,
+      oracle, allocator, session, lob_options, converted);
+  return ret != OB_SUCCESS ? ret : converted.get_binary(allocator, binary);
+}
+
+static int get_converted_json_value(const ObExpr &expr, ObEvalCtx &ctx,
+    MultimodeAlloctor &allocator, uint16_t index, ConvertedJson &converted)
+{
+  int ret = OB_SUCCESS;
+  ObExpr *arg = expr.args_[index];
+  ObDatum *datum = nullptr;
   const common::ObLobReadOptions *lob_options = nullptr;
   if (OB_FAIL(ctx.exec_ctx_.get_lob_read_options(lob_options))) {
-  } else if (OB_ISNULL(alloc = static_cast<MultimodeAlloctor*>(allocator))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(alloc->eval_arg(json_arg, ctx, json_datum))) {
-  } else if (json_datum->is_null()) {
-    void *json_node_buf = allocator->alloc(sizeof(ObJsonNull));
-    if (OB_ISNULL(json_node_buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(allocator.eval_arg(arg, ctx, datum))) {
+  } else if (arg->datum_meta_.type_ == ObCollectionSQLType && !datum->is_null()) {
+    ObString text;
+    if (OB_FAIL(ObArrayExprUtils::convert_to_string(allocator, ctx, arg->obj_meta_.get_subschema_id(), datum->get_string(), text))) {
     } else {
-      ObJsonNull *null_node = static_cast<ObJsonNull*>(new(json_node_buf) ObJsonNull());
-      if (to_bin) {
-        if (OB_FAIL(ObJsonBaseFactory::transform(allocator, null_node, ObJsonInType::JSON_BIN, j_base))) {
-        }
-      } else {
-        j_base = null_node;
-      }
-    }  
-  } else if (json_arg->is_boolean_ == 1) {
-    void *json_node_buf = allocator->alloc(sizeof(ObJsonBoolean));
-    if (OB_ISNULL(json_node_buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      ObJsonBoolean *bool_node = (ObJsonBoolean*)new(json_node_buf)ObJsonBoolean(json_datum->get_bool());
-      if (to_bin) {
-        if (OB_FAIL(ObJsonBaseFactory::transform(allocator, bool_node, ObJsonInType::JSON_BIN, j_base))) {
-        }
-      } else {
-        j_base = bool_node;
-      }
-    }
-  } else if (ObJsonExprHelper::is_convertible_to_json(val_type)) {
-    ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
-    if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(*json_datum, val_type,
-                                                                  allocator, cs_type,
-                                                                  j_base, ObConv2JsonParam(to_bin,
-                                                                  json_arg->obj_meta_.has_lob_header(),
-                                                                  false,
-                                                                  HAS_FLAG(parse_flag, ObJsonParser::JSN_RELAXED_FLAG),
-                                                                  format_json),
-                                                                  lob_options))) {
-    }
-  } else if (val_type == ObCollectionSQLType) {
-    ObString val_str = json_datum->get_string();
-    ObString res_str;
-    void *buf = NULL;
-    if (OB_FAIL(ObArrayExprUtils::convert_to_string(*allocator, ctx, json_arg->obj_meta_.get_subschema_id(),
-                                                    val_str, res_str))) {
-    } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObJsonString)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      ObIJsonBase* json_node = NULL;
-      json_node = (ObJsonString*)new(buf)ObJsonString(res_str.ptr(), res_str.length());
-      if (to_bin) {
-        if (OB_FAIL(ObJsonBaseFactory::transform(allocator, json_node, ObJsonInType::JSON_BIN, j_base))) {
-        }
-      } else {
-        j_base = json_node;
-      }
+      auto encoded = common::json::encode_scalar(5, 0, 0, 0,
+          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(text.ptr()), text.length()), 0);
+      if (encoded.status != 0) { ret = OB_ERR_UNEXPECTED; }
+      else { converted.bytes.emplace<rust::Vec<uint8_t>>(std::move(encoded.binary)); }
     }
   } else {
-    ObBasicSessionInfo *session = ctx.exec_ctx_.get_my_session();
-    ObScale scale = json_arg->datum_meta_.scale_;
-    scale = (val_type == ObBitType) ? json_arg->datum_meta_.length_semantics_ : scale;
-    if (OB_ISNULL(session)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ObJsonExprHelper::transform_scalar_2jsonBase(*json_datum, val_type,
-                                                                    allocator, scale,
-                                                                    session->get_timezone_info(),
-                                                                    session,
-                                                                    j_base, to_bin))) {
-    }
-  }
-
-  if (OB_SUCC(ret) && OB_NOT_NULL(j_base)) {
-    j_base->set_allocator(allocator);
+    ObScale scale = arg->datum_meta_.type_ == ObBitType ? arg->datum_meta_.length_semantics_ : arg->datum_meta_.scale_;
+    ret = convert_datum_to_json(*datum, arg->obj_meta_, scale, arg->is_boolean_, false, false, false,
+        allocator, ctx.exec_ctx_.get_my_session(), lob_options, converted);
   }
   return ret;
 }
 
-
-int ObJsonExprHelper::datum_to_json_val(const ObDatum *json_datum,
-                                        ObObjMeta& data_meta,
-                                        common::ObIAllocator *allocator,
-                                        ObBasicSessionInfo *session,
-                                        ObIJsonBase*& j_base,
-                                        bool is_bool_data_type,
-                                        bool is_format_json,
-                                        bool is_strict,
-                                        bool is_bin,
-                                        const common::ObLobReadOptions *lob_options)
+int ObJsonExprHelper::get_json_binary(const ObExpr &expr, ObEvalCtx &ctx,
+    MultimodeAlloctor &allocator, uint16_t index, ObString &binary)
 {
-  INIT_SUCC(ret);
-  ObObjType val_type = data_meta.get_type();
-  ObCollationType cs_type = data_meta.get_collation_type();
-
-  if (json_datum->is_null() || ob_is_null(val_type)) {
-    ObJsonNull *null_node = nullptr;
-    if (OB_ISNULL(null_node = OB_NEWx(ObJsonNull, allocator))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    }
-    j_base = null_node; 
-  } else if (is_bool_data_type) {
-    ObJsonBoolean *bool_node = nullptr;
-    if (OB_ISNULL(bool_node = OB_NEWx(ObJsonBoolean, allocator, (json_datum->get_bool())))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    }
-    j_base = bool_node;
-  } else if (ObJsonExprHelper::is_convertible_to_json(val_type)) {
-    if (val_type == ObVarcharType
-        || val_type == ObCharType
-        || val_type == ObTinyTextType
-        || val_type == ObTextType
-        || val_type == ObMediumTextType
-        || val_type == ObLongTextType) {
-      
-      uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
-      ObString j_str = json_datum->get_string();
-      ObString out_str;
-      bool need_convert = (cs_type != CS_TYPE_INVALID && cs_type != CS_TYPE_BINARY);
-      if (OB_FAIL(common::lob_helper::read_real_string_data(
-              allocator, val_type, cs_type, data_meta.has_lob_header(), j_str, lob_options))) {
-      } else if (need_convert && OB_FAIL(ObExprUtil::convert_string_collation(j_str, cs_type, out_str, CS_TYPE_UTF8MB4_BIN, *allocator))) {
-      } else if ((!need_convert || out_str.ptr() == j_str.ptr()) && OB_FAIL(deep_copy_ob_string(*allocator, j_str, out_str))) {
-      } else if (FALSE_IT(j_str.assign_ptr(out_str.ptr(), out_str.length()))) {
-      } else if (!is_format_json) {
-        ObJsonString* string_node = nullptr;
-        if (OB_FAIL(ret)) {
-        } else if (OB_ISNULL(string_node = OB_NEWx(ObJsonString, allocator, j_str.ptr(), j_str.length()))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          j_base = string_node;
-        }
-      } else {
-        if (OB_FAIL(ObJsonParser::check_json_syntax(j_str, allocator, parse_flag, get_json_max_depth_config()))) {
-          if (!is_strict) {
-            ret = OB_SUCCESS;
-            ObJsonString* string_node = nullptr;
-            if (OB_ISNULL(string_node = OB_NEWx(ObJsonString, allocator, j_str.ptr(), j_str.length()))) {
-              ret = OB_ALLOCATE_MEMORY_FAILED;
-            }
-            j_base = string_node;
-          } else {
-            ret = OB_ERR_JSON_SYNTAX_ERROR;
-          }
-        } else if (OB_FAIL(ObJsonBaseFactory::get_json_base( allocator, j_str,
-                                   ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, 
-                                   j_base, parse_flag,
-                                   ObJsonExprHelper::get_json_max_depth_config()))) {
-        }
-      }
-    } else if (val_type == ObJsonType) {
-      ObJsonInType to_type = is_bin ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
-      ObString j_str = json_datum->get_string();
-      if (OB_FAIL(common::lob_helper::read_real_string_data(
-              allocator, val_type, cs_type, data_meta.has_lob_header(), j_str, lob_options))) {
-      } else if (OB_FAIL(deep_copy_ob_string(*allocator, j_str, j_str))) {
-      } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_BIN, 
-                                                          to_type, j_base, 0,
-                                                          ObJsonExprHelper::get_json_max_depth_config()))) {
-        ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-      }
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-    }
-
-    if (OB_SUCC(ret)) {
-
-      if (OB_FAIL(ObJsonBaseFactory::transform(allocator, j_base, 
-                      is_bin ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE , j_base))) {
-      } else {
-        j_base->set_allocator(allocator);
-      }
-    }
-  } else {
-    ObScale scale = data_meta.get_scale();
-    if (is_format_json) {
-      ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("input type error", K(val_type));
-    } else if (OB_ISNULL(session)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ObJsonExprHelper::transform_scalar_2jsonBase(*json_datum, val_type,
-                                                                    allocator, scale,
-                                                                    session->get_timezone_info(),
-                                                                    session,
-                                                                    j_base,
-                                                                    is_bin))) {
-    }
-  }
-  return ret;
+  ConvertedJson converted;
+  const int ret = get_converted_json_value(expr, ctx, allocator, index, converted);
+  return ret != OB_SUCCESS ? ret : converted.get_binary(allocator, binary);
 }
+
+int ObJsonExprHelper::append_json_value(const ObExpr &expr, ObEvalCtx &ctx,
+    MultimodeAlloctor &allocator, uint16_t index, JsonContainerBuilder &builder,
+    const ObString &key, bool &input_error)
+{
+  ConvertedJson converted;
+  input_error = true;
+  const int ret = get_converted_json_value(expr, ctx, allocator, index, converted);
+  if (ret != OB_SUCCESS) { return ret; }
+  input_error = false;
+  return converted.append(builder, key);
+}
+
+
+
+
+
 
 int ObJsonExprHelper::convert_string_collation_type(ObCollationType in_cs_type, 
                                                     ObCollationType dst_cs_type,
@@ -740,45 +1092,7 @@ int ObJsonExprHelper::convert_string_collation_type(ObCollationType in_cs_type,
   return ret;
 }
 
-int ObJsonExprHelper::json_base_replace(ObIJsonBase *json_old, ObIJsonBase *json_new,
-                                        ObIJsonBase *&json_doc)
-{
-  INIT_SUCC(ret);
-  ObIAllocator *allocator = nullptr;
-  ObIJsonBase *parent = nullptr;
-  ObIJsonBase *new_node = json_new;
 
-  if (OB_ISNULL(json_old) || OB_ISNULL(json_new) || OB_ISNULL(json_doc)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(allocator = json_doc->get_allocator())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(json_old->get_parent(parent))) {
-  } else if (json_old == json_doc || OB_ISNULL(parent)) {
-    // for json binary, json_old and json_doc may be at same position,
-    if (OB_FAIL(json_doc->reset())) {
-    } else {
-      json_doc = json_new;
-      // json_new may no allocator, so update
-      if (OB_ISNULL(json_doc->get_allocator())) {
-        json_doc->set_allocator(allocator);
-      }
-    }
-  } else {
-    if (json_doc->is_bin()) {
-      if (OB_NOT_NULL(json_new) && ! json_new->is_bin() && OB_FAIL(ObJsonBaseFactory::transform(allocator, json_new, ObJsonInType::JSON_BIN, new_node))) {
-      }
-    } else {
-      if (OB_NOT_NULL(json_new) && ! json_new->is_tree() && ObJsonBaseFactory::transform(allocator, json_new, ObJsonInType::JSON_TREE, new_node)) {
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(parent->replace(json_old, new_node))) {
-    } else if (OB_FAIL(refresh_root_when_bin_rebuild_all(json_doc))) {
-    }
-  }
-  return ret;
-}
 
 // get json expr param cache context, if not exists cache context do nothing
 ObJsonParamCacheCtx* ObJsonExprHelper::get_param_cache_ctx(const uint64_t& id, ObExecContext *exec_ctx)
@@ -818,6 +1132,36 @@ ObJsonPathCache* ObJsonExprHelper::get_path_cache_ctx(const uint64_t& id, ObExec
   return (cache_ctx == NULL) ? NULL : cache_ctx->get_path_cache();
 }
 
+namespace
+{
+class ObJsonNativePathCacheCtx : public ObExprOperatorCtx
+{
+public:
+  ObJsonNativePathCacheCtx() : ObExprOperatorCtx(), path_cache_() {}
+  virtual ~ObJsonNativePathCacheCtx() {}
+  JsonPathCache *get_path_cache() { return &path_cache_; }
+private:
+  JsonPathCache path_cache_;
+};
+}
+
+JsonPathCache* get_native_path_cache_ctx(const uint64_t& id, ObExecContext *exec_ctx)
+{
+  INIT_SUCC(ret);
+  ObJsonNativePathCacheCtx* cache_ctx = NULL;
+  if (ObExpr::INVALID_EXP_CTX_ID != id) {
+    cache_ctx = static_cast<ObJsonNativePathCacheCtx*>(exec_ctx->get_expr_op_ctx(id));
+    if (OB_ISNULL(cache_ctx)) {
+      void *cache_ctx_buf = NULL;
+      ret = exec_ctx->create_expr_op_ctx(id, sizeof(ObJsonNativePathCacheCtx), cache_ctx_buf);
+      if (OB_SUCC(ret) && OB_NOT_NULL(cache_ctx_buf)) {
+        cache_ctx = new (cache_ctx_buf) ObJsonNativePathCacheCtx();
+      }
+    }
+  }
+  return (cache_ctx == NULL) ? NULL : cache_ctx->get_path_cache();
+}
+
 // get json expr schema cache context, if not exists cache context do nothing
 ObJsonSchemaCache* ObJsonExprHelper::get_schema_cache_ctx(const uint64_t& id, ObExecContext *exec_ctx)
 {
@@ -837,16 +1181,17 @@ ObJsonSchemaCache* ObJsonExprHelper::get_schema_cache_ctx(const uint64_t& id, Ob
   return (cache_ctx == NULL) ? NULL : cache_ctx->get_schema_cache();
 }
 
-int ObJsonExprHelper::find_and_add_schema_cache(ObJsonSchemaCache* schema_cache, ObIJsonBase*& res_schema,
+int ObJsonExprHelper::find_and_add_schema_cache(ObJsonSchemaCache* schema_cache, ObJsonSchemaCache*& res_schema,
                                       ObString& schema_str, int arg_idx, const ObJsonInType& in_type)
 {
   INIT_SUCC(ret);
-  if (OB_FAIL(schema_cache->find_and_add_cache(res_schema, schema_str, arg_idx, in_type))) {
+  if (OB_FAIL(schema_cache->prepare(schema_str, arg_idx, in_type))) {
     if (ret == OB_ERR_INVALID_JSON_TEXT) {
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
     }
   }
+  if (OB_SUCC(ret)) { res_schema = schema_cache; }
   return ret;
 }
 
@@ -856,6 +1201,62 @@ int ObJsonExprHelper::find_and_add_cache(ObJsonPathCache* path_cache, ObJsonPath
 {
   INIT_SUCC(ret);
   if (OB_FAIL(path_cache->find_and_add_cache(res_path, path_str, arg_idx, is_const))) {
+    ret = OB_ERR_INVALID_JSON_PATH;
+    LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
+  } else if (!enable_wildcard && res_path->can_match_many()) {
+    ret = OB_ERR_INVALID_JSON_PATH_WILDCARD;
+    LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH_WILDCARD);
+  }
+  return ret;
+}
+
+int JsonPathCache::find_and_add(ObString &path_text, int64_t arg_idx, bool is_const,
+                                const common::json::Path *&path)
+{
+  INIT_SUCC(ret);
+  if (arg_idx < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const size_t index = static_cast<size_t>(arg_idx);
+    bool found = false;
+    if (index < entries_.size() && entries_[index].has_value()) {
+      const Entry &entry = entries_[index].value();
+      found = is_const || (entry.text_.size() == static_cast<size_t>(path_text.length())
+          && (path_text.length() == 0
+              || MEMCMP(entry.text_.data(), path_text.ptr(), path_text.length()) == 0));
+      if (found) {
+        path = &entry.parsed_->path();
+      }
+    }
+    if (OB_SUCC(ret) && !found) {
+      std::string text;
+      if (path_text.length() > 0) {
+        text.assign(path_text.ptr(), path_text.length());
+      }
+      const uint8_t *input = reinterpret_cast<const uint8_t *>(path_text.ptr());
+      rust::Box<common::json::PathParseResult> parsed = common::json::parse_mysql_path(
+          rust::Slice<const uint8_t>(input, path_text.length()));
+      if (parsed->status() != common::json::Status::Ok) {
+        ret = OB_ERR_INVALID_JSON_PATH;
+      } else {
+        path = &parsed->path();
+        if (index >= entries_.size()) {
+          entries_.resize(index + 1);
+        }
+        entries_[index].emplace(std::move(text), std::move(parsed));
+      }
+    }
+  }
+  return ret;
+}
+
+int find_and_add_native_path_cache(JsonPathCache* path_cache,
+                                   const common::json::Path*& res_path,
+                                   ObString& path_str, int64_t arg_idx, bool enable_wildcard,
+                                   bool is_const)
+{
+  INIT_SUCC(ret);
+  if (OB_FAIL(path_cache->find_and_add(path_str, arg_idx, is_const, res_path))) {
     ret = OB_ERR_INVALID_JSON_PATH;
     LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
   } else if (!enable_wildcard && res_path->can_match_many()) {
@@ -977,245 +1378,7 @@ int ObJsonExprHelper::is_json_zero(const ObString& data, int& result)
 }
 
 
-template <typename T>
-int ObJsonExprHelper::transform_scalar_2jsonBase(const T &datum,
-                                                 ObObjType type,
-                                                 common::ObIAllocator *allocator,
-                                                 ObScale scale,
-                                                 const ObTimeZoneInfo *tz_info,
-                                                 ObBasicSessionInfo *session,
-                                                 ObIJsonBase*& j_base,
-                                                 bool to_bin,
-                                                 bool is_bool)
-{
-  int ret = OB_SUCCESS;
-  void* buf = NULL;
-  ObIJsonBase* json_node = NULL;
 
-  switch(type) {
-    case ObTinyIntType: {
-      // mysql boolean type 
-      if (is_bool) {
-        buf = allocator->alloc(sizeof(ObJsonBoolean));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          json_node = (ObJsonBoolean*)new(buf)ObJsonBoolean(datum.get_bool());
-        }
-      } else {
-        buf = allocator->alloc(sizeof(ObJsonInt));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          json_node = (ObJsonInt*)new(buf)ObJsonInt(datum.get_int());
-        }
-      }
-      break;
-    }
-    case ObSmallIntType:
-    case ObMediumIntType:
-    case ObInt32Type:
-    case ObIntType: {
-      buf = allocator->alloc(sizeof(ObJsonInt));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        json_node = (ObJsonInt*)new(buf)ObJsonInt(datum.get_int());
-      }
-      break;
-    }
-    case ObUTinyIntType:
-    case ObUSmallIntType:
-    case ObUMediumIntType:
-    case ObUInt32Type:
-    case ObUInt64Type: {
-      buf = allocator->alloc(sizeof(ObJsonUint));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        json_node = (ObJsonInt*)new(buf)ObJsonUint(datum.get_uint64());
-      }
-      break;
-    }
-    case ObYearType: {
-      buf = allocator->alloc(sizeof(ObJsonInt));
-      int64_t value = 0;
-      if (OB_FAIL(ObTimeConverter::year_to_int(datum.get_year(), value))) {
-      } else if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        json_node = (ObJsonInt*)new(buf)ObJsonInt(value);
-      }
-      break;
-    }
-    case ObDateTimeType:
-    case ObTimestampType:
-    case ObDateType:
-    case ObMySQLDateType:
-    case ObMySQLDateTimeType:
-    case ObTimeType: {
-      ObTime ob_time;
-      int64_t value = 0;
-      ObJsonNodeType node_type;
-      if (type == ObDateType) {
-        node_type = ObJsonNodeType::J_DATE;
-        value = datum.get_date();
-        ob_time.mode_ = DT_TYPE_DATE;
-        if (OB_FAIL(ObTimeConverter::date_to_ob_time(value, ob_time))) {
-        }
-      } else if (type == ObMySQLDateType) {
-        node_type = ObJsonNodeType::J_MYSQL_DATE;
-        value = datum.get_date();
-        ob_time.mode_ = DT_TYPE_DATE;
-        if (OB_FAIL(ObTimeConverter::mdate_to_ob_time(value, ob_time))) {
-        }
-      } else if (type == ObTimeType) {
-        node_type = ObJsonNodeType::J_TIME;
-        value = datum.get_time();
-        ob_time.mode_ = DT_TYPE_TIME;
-        if (OB_FAIL(ObTimeConverter::time_to_ob_time(value, ob_time))) {
-        }
-      } else if (type == ObDateTimeType) {
-        node_type = ObJsonNodeType::J_DATETIME;
-        value = datum.get_datetime();
-        ob_time.mode_ = DT_TYPE_DATETIME;
-        if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(value, nullptr, ob_time))) {
-        }
-      } else if (type == ObMySQLDateTimeType) {
-        node_type = ObJsonNodeType::J_MYSQL_DATETIME;
-        value = datum.get_datetime();
-        ob_time.mode_ = DT_TYPE_MYSQL_DATETIME;
-        if (OB_FAIL(ObTimeConverter::mdatetime_to_ob_time(value, ob_time))) {
-        }
-      } else {
-        node_type = ObJsonNodeType::J_TIMESTAMP;
-        value = datum.get_timestamp();
-        ob_time.mode_ = DT_TYPE_DATETIME;
-        if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(value, tz_info, ob_time))) {
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        buf = allocator->alloc(sizeof(ObJsonDatetime));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          json_node = (ObJsonDatetime *)new(buf)ObJsonDatetime(node_type, ob_time);
-        }
-      }
-      break;
-    }
-
-    case ObFloatType:
-    case ObDoubleType:
-    case ObUFloatType:
-    case ObUDoubleType: {
-      double val;
-      if (type == ObFloatType || type ==ObUFloatType ) {
-        val = datum.get_float();
-      } else {
-        val = datum.get_double();
-      }
-      if (isnan(val)) {
-        buf = allocator->alloc(sizeof(ObJsonString));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          json_node = (ObJsonString *)new(buf)ObJsonString("Nan", 3);
-        }
-      } else if (isinf(val) != 0) {
-        buf = allocator->alloc(sizeof(ObJsonString));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          if (isinf(val) == 1) {
-            json_node = (ObJsonString *)new(buf)ObJsonString("Inf", 3);
-          } else {
-            json_node = (ObJsonString *)new(buf)ObJsonString("-Inf", 4);
-          }
-        }
-      } else {
-        buf = allocator->alloc(sizeof(ObJsonDouble));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          json_node = (ObJsonDouble *)new(buf)ObJsonDouble(val);
-        }
-      }
-      break;
-    }
-    case ObDecimalIntType:
-    case ObUNumberType:
-    case ObNumberType: {
-      // won't waster much memory, do deep copy num
-      number::ObNumber num;
-      buf = allocator->alloc(sizeof(ObJsonDecimal));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-      if (OB_FAIL(ret)) {
-      } else if (ob_is_decimal_int(type)) {
-        if (OB_FAIL(wide::to_number(datum.get_decimal_int(), datum.get_int_bytes(), scale, *allocator, num))) {
-        }
-      } else if (OB_FAIL(num.deep_copy_v3(datum.get_number(), *allocator))) {
-      }
-      if (OB_FAIL(ret)) {
-      } else {
-        // shadow copy
-        json_node = (ObJsonDecimal *)new(buf)ObJsonDecimal(num, -1, scale);
-      }
-      break;
-    }
-    case ObHexStringType: {
-      buf = allocator->alloc(sizeof(ObJsonOpaque));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        json_node = (ObJsonOpaque *)new(buf)ObJsonOpaque(datum.get_string(), type);
-      }
-      break;
-    }
-    case ObBitType: {
-      // using bit as char array to do cast.
-      uint64_t in_val = datum.get_uint64();
-      char *bit_buf = nullptr;
-      const int32_t bit_buf_len = (OB_MAX_BIT_LENGTH + 7) / 8;
-      int64_t bit_buf_pos = 0;
-      if (OB_ISNULL(bit_buf = static_cast<char*>(allocator->alloc(bit_buf_len)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(bit_to_char_array(in_val, scale, bit_buf, bit_buf_len, bit_buf_pos))) {
-      } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObJsonOpaque)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        json_node = (ObJsonOpaque *)new(buf)ObJsonOpaque(ObString(bit_buf_pos, bit_buf), type);
-      }      
-      break;
-    }
-    case ObGeometryType: {
-      ret = OB_ERR_INVALID_JSON_TEXT;
-      break;
-    }
-    case ObUserDefinedSQLType: {
-      ret = OB_ERR_INVALID_CAST_TO_JSON;
-      break;
-    }
-    default:
-    {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (to_bin) {
-      if (OB_FAIL(ObJsonBaseFactory::transform(allocator, json_node, ObJsonInType::JSON_BIN, j_base))) {
-      }
-    } else {
-      j_base = json_node;
-    }
-  }
-
-  return ret;
-}
 
 #define PRINT_OB_DATETIME(ob_time, value, j_buf) \
   const int64_t tmp_buf_len = DATETIME_MAX_LENGTH + 1; \
@@ -1257,130 +1420,7 @@ struct ObFindDoubleEscapeFunc {
 };
 
 
-template <typename T>
-int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
-                                                      ObObjType type,
-                                                      common::ObIAllocator *allocator,
-                                                      ObCollationType cs_type,
-                                                      ObIJsonBase*& j_base,
-                                                      ObConv2JsonParam flags,
-                                                      const common::ObLobReadOptions *lob_options)
-{
-  int ret = OB_SUCCESS;
-  void* buf = NULL;
-  ObIJsonBase* json_node = NULL;
 
-  switch(type) {
-    case ObNullType: {
-      buf = allocator->alloc(sizeof(ObJsonNull));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        json_node = (ObJsonNull*)new(buf)ObJsonNull();
-      }
-      break;
-    }
-    case ObVarcharType:
-    case ObCharType:
-    case ObTinyTextType:
-    case ObTextType :
-    case ObMediumTextType:
-    case ObLongTextType: {
-      ObString j_str;
-      if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
-      } else {
-        j_str = datum.get_string();
-        if (OB_FAIL(common::lob_helper::read_real_string_data(
-                allocator, type, cs_type, flags.has_lob_header_, j_str, lob_options))) {
-        } else if (flags.deep_copy_) {
-          ret = deep_copy_ob_string(*allocator, j_str, j_str);
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        if (flags.format_json_) {
-          uint32_t parse_flag = flags.relax_type_ ? ObJsonParser::JSN_RELAXED_FLAG : ObJsonParser::JSN_STRICT_FLAG;
-          uint32_t json_depth_config = ObJsonExprHelper::get_json_max_depth_config();
-          ADD_FLAG_IF_NEED(flags.is_schema_, parse_flag, ObJsonParser::JSN_SCHEMA_FLAG);
-          if(OB_FAIL(ObJsonExprHelper::cast_to_json_tree(j_str, allocator, parse_flag, json_depth_config))) {
-            if (flags.wrap_on_fail_) {
-              if (OB_ISNULL(buf = allocator->alloc(sizeof(ObJsonString)))) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else {
-                ret = OB_SUCCESS;
-                json_node = (ObJsonString*)new(buf)ObJsonString(j_str.ptr(), j_str.length());
-              }
-            } else {
-            }
-          } else {
-            ObJsonInType to_type = flags.to_bin_ ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
-            if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_TREE,
-                                                        to_type, json_node, parse_flag,
-                                                        ObJsonExprHelper::get_json_max_depth_config()))) {
-              if (flags.is_schema_ && ret == OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA) {
-              } else {
-                ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-              }
-            }
-          }
-        } else {
-          if (OB_ISNULL(buf = allocator->alloc(sizeof(ObJsonString)))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            json_node = (ObJsonString*)new(buf)ObJsonString(j_str.ptr(), j_str.length());
-          }
-        }
-      }
-
-      break;
-    }
-    case ObJsonType: {
-      ObString j_str = datum.get_string();
-      if (OB_SUCC(ret)) {
-        ObString tmp_str = j_str;
-        if (OB_FAIL(common::lob_helper::read_real_string_data(
-                allocator, type, cs_type, flags.has_lob_header_, tmp_str, lob_options))) {
-        } else if (flags.deep_copy_) {
-          if (OB_FAIL(deep_copy_ob_string(*allocator, tmp_str, j_str))) {
-          }
-        } else {
-          j_str = tmp_str;
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        ObJsonInType to_type = flags.to_bin_ ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
-        uint32_t parse_flag = flags.relax_type_ ? ObJsonParser::JSN_RELAXED_FLAG : ObJsonParser::JSN_STRICT_FLAG;
-        ADD_FLAG_IF_NEED(flags.is_schema_, parse_flag, ObJsonParser::JSN_SCHEMA_FLAG);
-        if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_BIN,
-                                                     to_type, json_node, parse_flag, 
-                                                     ObJsonExprHelper::get_json_max_depth_config()))) {
-          if (flags.is_schema_ && ret == OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA) {
-          } else {
-            ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-          }
-        }
-      }
-      break;
-    }
-    default:
-    {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (flags.to_bin_) {
-      if (OB_FAIL(ObJsonBaseFactory::transform(allocator, json_node, ObJsonInType::JSON_BIN, j_base))) {
-      }
-    } else {
-      json_node->set_allocator(allocator);
-      j_base = json_node;
-    }
-  }
-
-  return ret;
-}
 
 int ObJsonExprHelper::get_sql_scalar_type(
   ObEvalCtx& ctx,
@@ -2132,20 +2172,6 @@ bool ObJsonExprHelper::is_json_partial_update_mode(const ObExpr &expr)
   return (expr.extra_ & OB_JSON_PARTIAL_UPDATE_ALLOW) != 0;
 }
 
-int ObJsonExprHelper::refresh_root_when_bin_rebuild_all(ObIJsonBase *j_base)
-{
-  INIT_SUCC(ret);
-  ObJsonBin *j_bin = nullptr;
-  ObJsonBinUpdateCtx *update_ctx = nullptr;
-  if (OB_ISNULL(j_base)) {
-  } else if (! j_base->is_bin()) {
-  } else if (OB_FALSE_IT(j_bin = static_cast<ObJsonBin*>(j_base))) {
-  } else if (OB_ISNULL(update_ctx = j_bin->get_update_ctx())) {
-  } else if (! update_ctx->is_rebuild_all()) {
-  } else if (OB_FAIL(j_bin->reset(0))) {
-  }
-  return ret;
-}
 
 int ObJsonExprHelper::init_json_expr_extra_info(
     ObIAllocator *allocator,

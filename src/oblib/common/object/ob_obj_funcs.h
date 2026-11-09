@@ -1739,7 +1739,7 @@ inline int obj_print_sql<ObJsonType>(const ObObj &obj, char *buffer, int64_t len
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buffer, length, pos))) {
   } else if (str.empty()) { // nothing to print;
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, j_base, parse_flag))) {
   } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "'"))) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "%.*s", 
@@ -1770,7 +1770,7 @@ inline int obj_print_plain_str<ObJsonType>(const ObObj &obj, char *buffer, int64
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buffer, length, pos))) {
   } else if (str.empty()) { // nothing to print;
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, j_base, parse_flag))) {
   } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (params.use_memcpy_) {
     ret = databuff_memcpy(buffer, length, pos, jbuf.length(), jbuf.ptr());
@@ -1795,7 +1795,7 @@ inline int obj_print_json<ObJsonType>(const ObObj &obj, char *buf, int64_t buf_l
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buf, buf_len, pos))) {
   } else if (str.empty()) { // nothing to print;
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, j_base, parse_flag))) {
   } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%.*s",
                                      static_cast<int>(MIN(jbuf.length(), buf_len - pos)),

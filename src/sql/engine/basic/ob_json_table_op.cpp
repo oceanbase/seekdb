@@ -1,3 +1,4 @@
+#include "common/json_type/json_builder.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -19,14 +20,36 @@
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_value.h"
 #include "sql/engine/expr/ob_expr_json_query.h"
-#include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "rust/json.h"
+#include <optional>
 
 namespace oceanbase
 {
 using namespace common;
 namespace sql
 {
+
+class JsonTableInput
+{
+public:
+  std::optional<rust::Box<common::json::Value>> value_;
+};
+
+class JsonTableColumn
+{
+public:
+  void reset_values()
+  {
+    result_.reset();
+    output_.reset();
+    selection_.reset();
+  }
+  std::optional<rust::Box<common::json::PathParseResult>> path_;
+  std::optional<rust::Box<common::json::SelectionResult>> selection_;
+  std::optional<common::json::PathValueResult> output_;
+  std::optional<ObJsonBin> result_;
+};
 
 /* json value  mismatch type { MISSING : 0, EXTRA : 1, TYPE : 2, EMPTY : 3} */
 const static int32_t JSN_VALUE_TYPE_MISSING_DATA    = 0;
@@ -599,11 +622,13 @@ int ObJsonTableOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
-  } else {
-    jt_ctx_.row_alloc_.reuse();
-  }
-  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(reset_variable())) {
+  } else {
+    if (jt_ctx_.json_input_ != nullptr) {
+      jt_ctx_.json_input_->value_.reset();
+    }
+    input_ = nullptr;
+    jt_ctx_.row_alloc_.reuse();
   }
   return ret;
 }
@@ -639,7 +664,16 @@ int ObJsonTableOp::init()
   if (!is_inited_) {
     const ObJsonTableSpec* spec_ptr = reinterpret_cast<const ObJsonTableSpec*>(&spec_);
     jt_ctx_.spec_ptr_ = const_cast<ObJsonTableSpec*>(spec_ptr);
-    if (OB_FAIL(generate_table_exec_tree())) {
+    JsonContainerBuilder array(false);
+    JsonContainerBuilder object(true);
+    ObString binary;
+    if (OB_FAIL(encode_json_null(*allocator_, binary))) {
+    } else if (OB_FAIL(copy_json_binary(*allocator_, binary, j_null_))) {
+    } else if (OB_FAIL(array.finish(binary))) {
+    } else if (OB_FAIL(copy_json_binary(*allocator_, binary, j_arr_))) {
+    } else if (OB_FAIL(object.finish(binary))) {
+    } else if (OB_FAIL(copy_json_binary(*allocator_, binary, j_obj_))) {
+    } else if (OB_FAIL(generate_table_exec_tree())) {
     } else {
       const sql::ObSQLSessionInfo *session = get_exec_ctx().get_my_session();
       if (OB_ISNULL(session)) {
@@ -694,6 +728,11 @@ int ObJsonTableOp::inner_close()
     def_root_->destroy();
   }
   jt_ctx_.row_alloc_.clear();
+  if (jt_ctx_.json_input_ != nullptr) {
+    jt_ctx_.json_input_->~JsonTableInput();
+    jt_ctx_.json_input_ = nullptr;
+    input_ = nullptr;
+  }
   if (OB_NOT_NULL(jt_ctx_.table_func_) && OB_NOT_NULL(jt_ctx_.op_exec_alloc_)) {
     jt_ctx_.op_exec_alloc_->free(jt_ctx_.table_func_);
   }
@@ -725,60 +764,18 @@ void ObJsonTableOp::destroy()
   ObOperator::destroy();
 }
 
-int RegularCol::check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx)
+int RegularCol::check_json_column_type(ObRegCol &col_node, JtScanCtx* ctx)
 {
-  INIT_SUCC(ret);
-  ObExpr* expr = ctx->spec_ptr_->column_exprs_.at(col_node.col_info_.output_column_idx_);
-  if (col_node.type() == COL_TYPE_QUERY) {
-    if (col_node.expr_param_.dst_type_ != ObVarcharType 
-         && col_node.expr_param_.dst_type_ != ObLongTextType 
-         && col_node.expr_param_.dst_type_ != ObJsonType) {
-      ret = OB_ERR_INVALID_DATA_TYPE_RETURNING;
-      LOG_USER_ERROR(OB_ERR_INVALID_DATA_TYPE_RETURNING);
-    } else if (OB_ISNULL(col_node.expr_param_.json_path_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (col_node.expr_param_.json_path_->is_last_func() 
-                && OB_FAIL( ObJsonExprHelper::check_item_func_with_return(col_node.expr_param_.json_path_->get_last_node_type(), 
-                              col_node.expr_param_.dst_type_, expr->datum_meta_.cs_type_, 1))) {
-      if (ret == OB_ERR_INVALID_DATA_TYPE_RETURNING) {
-        ret = OB_ERR_INVALID_DATA_TYPE;
-        LOG_USER_ERROR(OB_ERR_INVALID_DATA_TYPE, "JSON_TABLE");
-      }
-    } else if (OB_FAIL(ObExprJsonQuery::check_item_method_valid_with_wrapper(col_node.expr_param_.json_path_,
-                                                                             col_node.expr_param_.wrapper_))) {
-    }
-  } else if (col_node.type() == COL_TYPE_VALUE) {
-    if (OB_ISNULL(col_node.expr_param_.json_path_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (col_node.expr_param_.json_path_->is_last_func() 
-        && OB_FAIL( ObJsonExprHelper::check_item_func_with_return(col_node.expr_param_.json_path_->get_last_node_type(), 
-                                                                  col_node.expr_param_.dst_type_, expr->datum_meta_.cs_type_, 0))) {
-      if (ret == OB_ERR_INVALID_DATA_TYPE_RETURNING) {
-        ret = OB_ERR_INVALID_DATA_TYPE;
-        LOG_USER_ERROR(OB_ERR_INVALID_DATA_TYPE, "JSON_TABLE");
-      }
-    }
-  }
-  return ret;
-}
-
-int RegularCol::eval_query_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_expr, bool& is_null)
-{
-  INIT_SUCC(ret);
-  ObJsonArray* in = static_cast<ObJsonArray*>(col_node.curr_);
-  is_null = false;
-  int8_t use_wrapper = 0;
-  if (in->element_count() == 0) {
-    is_null = true;
-  } else if (in->element_count() == 1 
-              && OB_FAIL(ObExprJsonQuery::get_single_obj_wrapper(col_node.col_info_.wrapper_, 
-                                          use_wrapper, in[0][0]->json_type(), col_node.col_info_.allow_scalar_))) {
-    SET_COVER_ERROR(ctx, ret);
-  } else if (in->element_count() > 1 
-              && OB_FAIL(ObExprJsonQuery::get_multi_scalars_wrapper_type(col_node.col_info_.wrapper_, use_wrapper))) {
-    SET_COVER_ERROR(ctx, ret);
-  } else if (!use_wrapper) {
-    col_node.curr_ = in[0][0];
+  int ret = OB_SUCCESS;
+  if ((col_node.type() == COL_TYPE_QUERY || col_node.type() == COL_TYPE_VALUE)
+      && (col_node.json_column_ == nullptr || !col_node.json_column_->path_.has_value())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (col_node.type() == COL_TYPE_QUERY
+             && col_node.expr_param_.dst_type_ != ObVarcharType
+             && col_node.expr_param_.dst_type_ != ObLongTextType
+             && col_node.expr_param_.dst_type_ != ObJsonType) {
+    ret = OB_ERR_INVALID_DATA_TYPE_RETURNING;
+    LOG_USER_ERROR(OB_ERR_INVALID_DATA_TYPE_RETURNING);
   }
   return ret;
 }
@@ -801,12 +798,11 @@ int RegularCol::eval_value_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
     char* res_ptr = ctx->buf;
     int len = snprintf(ctx->buf, sizeof(ctx->buf), "%ld", in->get_int());
     if (len > 0) {
-      ObJsonString* j_string = nullptr;
-      if (OB_ISNULL(j_string = static_cast<ObJsonString*>(ctx->row_alloc_.alloc(sizeof(ObJsonString))))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
+      ObIJsonBase *value = nullptr;
+      if (OB_FAIL(make_json_string(ctx->row_alloc_, ObString(len, ctx->buf), value))) {
         RESET_COVER_CODE(ctx);
       } else {
-        col_node.curr_ = new(j_string) ObJsonString(ctx->buf, len);
+        col_node.curr_ = value;
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -821,19 +817,17 @@ int RegularCol::eval_exist_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
   is_null = true;
   if (ob_is_string_type(col_node.col_info_.data_type_.get_obj_type())) {
     ObString value("1");
-    void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonString));
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+    ObIJsonBase *result = nullptr;
+    if (OB_FAIL(make_json_string(ctx->row_alloc_, value, result))) {
     } else {
-      col_node.curr_ = static_cast<ObJsonString*>(new(buf)ObJsonString(value.ptr(), value.length()));
+      col_node.curr_ = result;
       is_null = false;
     }
   } else {
-    void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonInt));
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+    ObIJsonBase *result = nullptr;
+    if (OB_FAIL(make_json_integer(ctx->row_alloc_, 1, result))) {
     } else {
-      col_node.curr_ = static_cast<ObJsonInt*>(new(buf)ObJsonInt(1));
+      col_node.curr_ = result;
       is_null = false;
     }
   }
@@ -1065,6 +1059,20 @@ int ScanNode::reset(JtScanCtx* ctx)
   return ret;
 }
 
+bool ObMultiModeTableNode::same_input(void *in, JtScanCtx *ctx) const
+{
+  return ctx->is_json_table_func()
+      ? input_identity_ == (in == nullptr ? 0 : static_cast<const common::json::Value *>(in)->identity())
+      : in_ == in;
+}
+
+void ObMultiModeTableNode::remember_input(void *in, JtScanCtx *ctx)
+{
+  in_ = in;
+  input_identity_ = ctx->is_json_table_func() && in != nullptr
+      ? static_cast<const common::json::Value *>(in)->identity() : 0;
+}
+
 void ObMultiModeTableNode::destroy()
 {
   // do nothing
@@ -1072,14 +1080,13 @@ void ObMultiModeTableNode::destroy()
 
 void ObRegCol::destroy()
 {
-  // path destory
-  if (is_path_evaled_ && OB_NOT_NULL(path_)) {
+  if (json_column_ != nullptr) {
+    json_column_->~JsonTableColumn();
+    json_column_ = nullptr;
+    path_ = nullptr;
     is_path_evaled_ = false;
-    if (tab_type_ == OB_ORA_JSON_TABLE_TYPE) { // do nothing current
-      ObJsonPath* json_path = static_cast<ObJsonPath*>(path_);
-      json_path->~ObJsonPath();
-    }
   }
+
 }
 
 void UnionNode::destroy()
@@ -1147,10 +1154,7 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
       is_null_value = true;
     } else {
       is_null_value = false;
-      if (col_type == COL_TYPE_QUERY) {
-        if (OB_FAIL(RegularCol::eval_query_col(*this, ctx, col_expr, is_null_value))) {
-        }
-      } else if (col_type == COL_TYPE_VALUE) {
+      if (col_type == COL_TYPE_VALUE) {
         if (OB_FAIL(RegularCol::eval_value_col(*this, ctx, col_expr, is_null_value))) {
         }
       } else if (col_type == COL_TYPE_EXISTS) {
@@ -1208,10 +1212,10 @@ int ScanNode::get_next_iter(void* in, JtScanCtx* ctx, bool& is_null_value)
   INIT_SUCC(ret);
   is_null_value = false;
   bool is_null_iter = false;
-  if (!is_evaled_ || in_ != in) {
+  if (!is_evaled_ || !same_input(in, ctx)) {
     if (OB_FAIL(seek_node_.reset(ctx))) {
     } else {
-      in_ = in;
+      remember_input(in, ctx);
       is_null_result_ = false;
       if (OB_ISNULL(in_)) {
         is_null_value = is_null_result_ = true;
@@ -1351,7 +1355,7 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
   is_null_value = false;
   bool is_left_null = false;
   bool is_right_null = false;
-  if (in != in_) {
+  if (!same_input(in, ctx)) {
     is_left_iter_end_ = false;
   }
   if (OB_NOT_NULL(left_node) && !is_left_iter_end_) {
@@ -1385,7 +1389,7 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
     ret = right_node->get_next_row(in, ctx, is_right_null);
     if (OB_FAIL(ret) &&  ret != OB_ITER_END) {
     } else if (OB_SUCC(ret) && is_right_null) {
-      if (in_ == in) {
+      if (same_input(in, ctx)) {
         ret = OB_ITER_END;
       }
     } else if (OB_SUCC(ret) && !is_right_null) {
@@ -1393,7 +1397,7 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
     }
   } 
   
-  in_ = in;
+  remember_input(in, ctx);
   return ret;
 }
 
@@ -1465,10 +1469,17 @@ int RegularCol::parse_default_value_2json(ObExpr* default_expr,
       cs_type = CS_TYPE_UTF8MB4_BIN;
     }
   }
-  origin_str = converted_datum.get_string();
-  if (OB_SUCC(ret) 
-      && OB_FAIL(ObJsonExprHelper::get_json_val(converted_datum, *ctx->exec_ctx_, default_expr,
-                                                ctx->op_exec_alloc_, val_type, cs_type, res))) {
+  ObObjMeta meta = default_expr->obj_meta_;
+  meta.set_type(val_type);
+  meta.set_collation_type(cs_type);
+  const common::ObLobReadOptions *lob_options = nullptr;
+  ObString binary;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ctx->exec_ctx_->get_lob_read_options(lob_options))) {
+  } else if (OB_FAIL(ObJsonExprHelper::datum_to_json_binary(converted_datum, meta,
+      default_expr->datum_meta_.scale_, default_expr->is_boolean_, true, true, false,
+      *ctx->op_exec_alloc_, ctx->exec_ctx_->get_my_session(), lob_options, binary))) {
+  } else if (OB_FAIL(copy_json_binary(*ctx->op_exec_alloc_, binary, res))) {
   }
   return ret;
 }
@@ -1631,19 +1642,17 @@ int JsonTableFunc::set_on_empty(ObRegCol& col_node, JtScanCtx* ctx, bool &need_c
     } else if (!res_val) { // result will return false currently, not return true
       if (ob_is_string_type(col_node.col_info_.data_type_.get_obj_type())) {
         ObString value = "0";
-        void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonString));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
+        ObIJsonBase *result = nullptr;
+        if (OB_FAIL(make_json_string(ctx->row_alloc_, value, result))) {
         } else {
-          col_node.curr_ = static_cast<ObJsonString*>(new(buf)ObJsonString(value.ptr(), value.length()));
+          col_node.curr_ = result;
           is_null = false;
         }
       } else {
-        void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonInt));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
+        ObIJsonBase *result = nullptr;
+        if (OB_FAIL(make_json_integer(ctx->row_alloc_, 0, result))) {
         } else {
-          col_node.curr_ = static_cast<ObJsonInt*>(new(buf)ObJsonInt(0));
+          col_node.curr_ = result;
           is_null = false;
         }
       }
@@ -1685,8 +1694,7 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
     } else if (col_type == COL_TYPE_QUERY) {
       t_val = NULL;
       if (col_node.expr_param_.error_type_ == JSN_QUERY_ERROR) {
-      } else if (OB_FAIL(ObExprJsonQuery::get_error_option(col_node.expr_param_.error_type_, t_val, 
-                  ctx->jt_op_->get_js_array(), ctx->jt_op_->get_js_object(), is_null))) {
+      } else if (OB_FAIL(ObExprJsonQuery::get_error_option(col_node.expr_param_.error_type_, ctx->row_alloc_, t_val, is_null))) {
       } else if (is_null) {
         if (OB_FAIL(ObExprJsonQuery::get_mismatch_option(col_node.expr_param_.on_mismatch_[0], ctx->error_code_))) {
         } else {
@@ -1717,19 +1725,17 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
       if (OB_FAIL(ret)) {
       } else if (ob_is_string_type(info.data_type_.get_obj_type())) {
         ObString value = is_true ? ObString("1") : ObString("0");
-        void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonString));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
+        ObIJsonBase *result = nullptr;
+        if (OB_FAIL(make_json_string(ctx->row_alloc_, value, result))) {
         } else {
-          col_node.curr_ = static_cast<ObJsonString*>(new(buf)ObJsonString(value.ptr(), value.length()));
+          col_node.curr_ = result;
           is_null = false;
         }
       } else {
-        void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonInt));
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
+        ObIJsonBase *result = nullptr;
+        if (OB_FAIL(make_json_integer(ctx->row_alloc_, is_true, result))) {
         } else {
-          col_node.curr_ = static_cast<ObJsonInt*>(new(buf)ObJsonInt(is_true));
+          col_node.curr_ = result;
           is_null = false;
         }
       }
@@ -1824,45 +1830,51 @@ int JsonTableFunc::cast_to_result(ObRegCol& col_node, JtScanCtx* ctx, bool enabl
   return ret;
 }
 
-int JsonTableFunc::eval_seek_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, bool &is_null_value, bool &need_cast_res)
+int JsonTableFunc::eval_seek_col(ObRegCol &col_node, void* in, JtScanCtx* ctx,
+                                  bool &is_null_value, bool &need_cast_res)
 {
-  INIT_SUCC(ret);
-  ObJsonSeekResult hit;
-  ObIJsonBase* in_val = static_cast<ObIJsonBase*>(in);
-  ObJsonPath* json_path = static_cast<ObJsonPath*>(col_node.path_);
-  ObExpr* col_expr = ctx->spec_ptr_->column_exprs_.at(col_node.col_info_.output_column_idx_);
-  in_val->set_allocator(&ctx->row_alloc_);
-  if (OB_FAIL(in_val->seek(*json_path, json_path->path_node_cnt(), true, false, hit))) {
-    SET_COVER_ERROR(ctx, ret);
-  } else if (hit.size() == 0) {
-    col_node.curr_ = nullptr;
-    is_null_value = true;
-  } else if (col_node.type() == COL_TYPE_EXISTS && hit.size() > 0) {
-    is_null_value = false;
-    col_node.curr_ = hit[0];
-  } else if (col_node.type() != COL_TYPE_QUERY && hit.size() == 1) {
-    is_null_value = false;
-    col_node.curr_ = hit[0];
-  } else if (col_node.type() == COL_TYPE_VALUE
-             && !ob_is_json(col_expr->datum_meta_.type_)) {
-    ret = OB_ERR_JSON_VALUE_NO_SCALAR;
-    SET_COVER_ERROR(ctx, ret);
-  } else if (col_node.type() == COL_TYPE_QUERY ||
-             (col_node.type() == COL_TYPE_VALUE
-              && ob_is_json(col_expr->datum_meta_.type_))) {
-    void* js_arr_buf = ctx->row_alloc_.alloc(sizeof(ObJsonArray));
-    ObIJsonBase* js_arr_ptr = nullptr;
-    if (OB_ISNULL(js_arr_buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(js_arr_ptr = new (js_arr_buf) ObJsonArray(&ctx->row_alloc_))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ObExprJsonQuery::append_node_into_res(js_arr_ptr, json_path, hit, &ctx->row_alloc_))) {
+  int ret = OB_SUCCESS;
+  const auto &value = *static_cast<const common::json::Value *>(in);
+  JsonTableColumn &column = *col_node.json_column_;
+  const auto &path = (*column.path_)->path();
+  column.reset_values();
+  col_node.curr_ = nullptr;
+  if (col_node.type() == COL_TYPE_EXISTS) {
+    column.selection_.emplace(common::json::select_values(value, path, true));
+    if ((*column.selection_)->status() != common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+    } else if ((*column.selection_)->len() > 0) {
+      col_node.curr_ = ctx->jt_op_->get_js_null();
     }
-    
-    if (OB_SUCC(ret)) {
-      is_null_value = false;
-      col_node.curr_ = js_arr_ptr;
+  } else {
+    ObExpr *expr = ctx->spec_ptr_->column_exprs_.at(col_node.col_info_.output_column_idx_);
+    const bool is_query = col_node.type() == COL_TYPE_QUERY;
+    const bool json_value = !is_query && ob_is_json(expr->datum_meta_.type_);
+    column.output_.emplace(common::json::selected_output(value, path,
+        is_query ? col_node.col_info_.wrapper_ : JSN_QUERY_WITHOUT_WRAPPER,
+        is_query ? col_node.col_info_.allow_scalar_ : JSN_QUERY_SCALARS_ALLOW,
+        false, json_value));
+    const auto &output = *column.output_;
+    if (output.status != common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+    } else if (output.match_count == 0) {
+    } else if (!is_query && !json_value && output.match_count > 1) {
+      ret = OB_ERR_JSON_VALUE_NO_SCALAR;
+    } else if (output.wrapper_required) {
+      ret = OB_ERR_WITHOUT_ARR_WRAPPER;
+      LOG_USER_ERROR(OB_ERR_WITHOUT_ARR_WRAPPER);
+    } else {
+      column.result_.emplace(reinterpret_cast<const char *>(output.binary.data()),
+                             output.binary.size(), &ctx->row_alloc_);
+      if (OB_FAIL(column.result_->reset_iter())) {
+      } else {
+        col_node.curr_ = &*column.result_;
+      }
     }
+  }
+  is_null_value = col_node.curr_ == nullptr;
+  if (OB_FAIL(ret)) {
+    SET_COVER_ERROR(ctx, ret);
   }
   return ret;
 }
@@ -1870,27 +1882,23 @@ int JsonTableFunc::eval_seek_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, b
 int JsonTableFunc::init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
 {
   INIT_SUCC(ret);
-  ObJsonPath* js_path = NULL;
   scan_node.tab_type_ = MulModeTableType::OB_ORA_JSON_TABLE_TYPE;
   bool need_eval = false;    // flag of eval default value
   bool need_datum = false;
-  if (!scan_node.is_path_evaled_ && OB_ISNULL(scan_node.path_) 
-      && (scan_node.node_type() == REG_TYPE 
-          || scan_node.node_type() == SCAN_TYPE) 
-      && !scan_node.col_info_.path_.empty()) {
-    void* path_buf = ctx->op_exec_alloc_->alloc(sizeof(ObJsonPath));
-    if (OB_ISNULL(path_buf)) {
+  if (scan_node.json_column_ == nullptr) {
+    if (OB_ISNULL(scan_node.json_column_ = OB_NEWx(JsonTableColumn, ctx->op_exec_alloc_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+  }
+  if (OB_SUCC(ret) && !scan_node.is_path_evaled_ && !scan_node.col_info_.path_.empty()) {
+    const ObString &text = scan_node.col_info_.path_;
+    scan_node.json_column_->path_.emplace(common::json::parse_mysql_path(
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(text.ptr()), text.length())));
+    if ((*scan_node.json_column_->path_)->status() != common::json::Status::Ok) {
+      ret = OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR;
+      LOG_USER_ERROR(OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR, text.length(), text.ptr());
     } else {
-      js_path = new (path_buf) ObJsonPath(scan_node.col_info_.path_, ctx->op_exec_alloc_);
-      if (OB_FAIL(js_path->parse_path())) {
-        ret = OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR;
-        LOG_USER_ERROR(OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR, scan_node.col_info_.path_.length(), scan_node.col_info_.path_.ptr());
-      } else {
-        scan_node.expr_param_.json_path_ = js_path;
-        scan_node.path_ = js_path;
-        scan_node.is_path_evaled_ = true;
-      }
+      scan_node.is_path_evaled_ = true;
     }
   }
   if (OB_FAIL(ret)) {
@@ -1939,7 +1947,7 @@ int JsonTableFunc::init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
     ObExpr* col_expr = ctx->spec_ptr_->column_exprs_.at(scan_node.col_info_.output_column_idx_);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(set_expr_exec_param(scan_node, ctx))) {
-    } else if (OB_FAIL(RegularCol::check_item_method_json(scan_node, ctx))) {
+    } else if (OB_FAIL(RegularCol::check_json_column_type(scan_node, ctx))) {
     } else if (OB_FAIL(check_default_value(ctx, scan_node, col_expr))) {
     }
   }
@@ -1961,73 +1969,50 @@ int JsonTableFunc::eval_default_value(JtScanCtx*& ctx, ObExpr*& default_expr, vo
   return ret;
 }
 
-int JsonTableFunc::reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx, ScanType init_flag, bool &is_null_value)
+int JsonTableFunc::reset_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
 {
-  INIT_SUCC(ret);
-  if (init_flag == SCAN_NODE_TYPE) {
-    ObJsonSeekResult hit;
-    ObIJsonBase* in_val = static_cast<ObIJsonBase*>(in);
-    ObJsonPath* js_path = static_cast<ObJsonPath*>(scan_node.path_);
-    in_val->set_allocator(&ctx->row_alloc_);
-    if (OB_ISNULL(in_val) || OB_ISNULL(js_path)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(in_val->seek(*js_path, js_path->path_node_cnt(), true, false, hit))) {
-      SET_COVER_ERROR(ctx, ret);
-    } else if (hit.size() == 0) {
-      scan_node.cur_pos_ = 0;
-      scan_node.total_ = 1;
-      is_null_value = true;
-      scan_node.curr_ = scan_node.iter_ = nullptr;
-    } else if (hit.size() == 1) {
-      scan_node.iter_ = scan_node.curr_ = hit[0];
-      is_null_value = false;
-      scan_node.cur_pos_ = 0;
-      scan_node.total_ = 1;
-    } else {
-      is_null_value = false;
-      void* js_arr_buf = ctx->row_alloc_.alloc(sizeof(ObJsonArray));
-      ObJsonArray* js_arr_ptr = nullptr;
-      if (OB_ISNULL(js_arr_buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_ISNULL(js_arr_ptr = new (js_arr_buf) ObJsonArray(&ctx->row_alloc_))) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ObJsonNode *j_node = NULL;
-        ObIJsonBase *jb_node = NULL;
-        for (int32_t i = 0; OB_SUCC(ret) && i < hit.size(); i++) {
-          if (ObJsonBaseFactory::transform(&ctx->row_alloc_, hit[i], ObJsonInType::JSON_TREE, jb_node)) { // to tree
-          } else {
-            j_node = static_cast<ObJsonNode *>(jb_node);
-            if (OB_FAIL(js_arr_ptr->array_append(j_node->clone(&ctx->row_alloc_)))) {
-            }
-          }
-        }
+  if (scan_node.json_column_ != nullptr) {
+    scan_node.json_column_->reset_values();
+  }
+  scan_node.curr_ = scan_node.iter_ = nullptr;
+  return OB_SUCCESS;
+}
 
-        if (OB_SUCC(ret)) {
-          scan_node.curr_ = js_arr_ptr;
-          scan_node.total_ = hit.size();
-          ObIJsonBase* iter = NULL;
-          if (OB_FAIL(js_arr_ptr->get_array_element(0, iter))) {
-          } else {
-            scan_node.iter_ = iter;
-          }
-        }
+int JsonTableFunc::reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ctx,
+                                    ScanType init_flag, bool &is_null_value)
+{
+  int ret = OB_SUCCESS;
+  if (init_flag == SCAN_NODE_TYPE) {
+    JsonTableColumn &column = *scan_node.json_column_;
+    column.reset_values();
+    if (in == nullptr || !column.path_.has_value()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      column.selection_.emplace(common::json::select_values(
+          *static_cast<const common::json::Value *>(in), (*column.path_)->path(), false));
+      if ((*column.selection_)->status() != common::json::Status::Ok) {
+        ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+        SET_COVER_ERROR(ctx, ret);
+      } else {
+        const auto &selection = **column.selection_;
+        scan_node.cur_pos_ = 0;
+        scan_node.total_ = selection.len() == 0 ? 1 : selection.len();
+        is_null_value = selection.len() == 0;
+        scan_node.curr_ = is_null_value ? nullptr : const_cast<common::json::SelectionResult *>(&selection);
+        scan_node.iter_ = is_null_value ? nullptr : const_cast<common::json::Value *>(&selection.value(0));
       }
     }
-  } else {
-    // do nothing in col node
   }
   return ret;
 }
 
 int JsonTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_null_value)
 {
-  INIT_SUCC(ret);
-
+  int ret = OB_SUCCESS;
   if (col_node.cur_pos_ + 1 < col_node.total_) {
-    col_node.cur_pos_++;
-    if (OB_FAIL(container_at(col_node.curr_, col_node.iter_, col_node.cur_pos_))) {
-    }
+    ++col_node.cur_pos_;
+    const auto &selection = **col_node.json_column_->selection_;
+    col_node.iter_ = const_cast<common::json::Value *>(&selection.value(col_node.cur_pos_));
   } else {
     ret = OB_ITER_END;
   }
@@ -2043,7 +2028,6 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
   ObCollationType doc_cs_type = doc_datum.cs_type_;
   ObString j_str;
   bool is_null = false;
-  ObIJsonBase* in = NULL;
   MultimodeAlloctor tmp_allocator(ctx.row_alloc_);
 
   if (doc_type == ObNullType) {
@@ -2061,7 +2045,6 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
     } else if (ob_is_string_type(doc_type)
                 && (doc_cs_type != CS_TYPE_BINARY)
                 && (ObCharset::charset_type_by_coll(doc_cs_type) != CHARSET_UTF8MB4)) {
-      // need convert to utf8 first, we are using GenericInsituStringStream<UTF8<> >
       char *buf = nullptr;
       const int64_t factor = 2;
       int64_t buf_len = j_str.length() * factor;
@@ -2077,47 +2060,27 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
         j_str.assign_ptr(buf, result_len);
       }
     }
-    ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(doc_type);
-    ObJsonInType expect_type = ObJsonInType::JSON_TREE;
-    uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
-    
-    // json type input, or has is json check
-    bool is_ensure_json = false;
-
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, j_str, j_in_type, expect_type, in, parse_flag, ObJsonExprHelper::get_json_max_depth_config()))
-                || (in->json_type() != ObJsonNodeType::J_ARRAY && in->json_type() != ObJsonNodeType::J_OBJECT)) {
-      if (OB_FAIL(ret) || (is_ensure_json)) {
-        in= nullptr;
-        ret = OB_ERR_JSON_SYNTAX_ERROR;
-        SET_COVER_ERROR(&ctx, ret);
-        ctx.is_need_end_ = 1;
+    if (OB_SUCC(ret)) {
+      if (ctx.json_input_ == nullptr
+          && OB_ISNULL(ctx.json_input_ = OB_NEWx(JsonTableInput, ctx.op_exec_alloc_))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        ret = OB_SUCCESS;
+        auto document = common::json::parse_value(
+            rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(j_str.ptr()), j_str.length()),
+            doc_type != ObJsonType,
+            ObJsonExprHelper::get_json_text_depth_limit(ObJsonExprHelper::get_json_max_depth_config()));
+        if (document->status() != common::json::Status::Ok) {
+          ctx.json_input_->value_.reset();
+          jt.input_ = nullptr;
+          ret = OB_ERR_JSON_SYNTAX_ERROR;
+          SET_COVER_ERROR(&ctx, ret);
+          ctx.is_need_end_ = 1;
+        } else {
+          ctx.json_input_->value_.emplace(common::json::take_value(std::move(document)));
+          jt.input_ = &**ctx.json_input_->value_;
+        }
       }
     }
-    if (OB_SUCC(ret)) {
-      jt.input_ = in;
-    }
-  }
-  return ret;
-}
-
-int JsonTableFunc::container_at(void* in, void *&out, int32_t pos) {
-  INIT_SUCC(ret);
-  ObIJsonBase* in_ = static_cast<ObIJsonBase*>(in);
-  ObIJsonBase* res = nullptr;
-
-  if (in_->json_type() == ObJsonNodeType::J_ARRAY) {
-    if (OB_FAIL(in_->get_array_element(pos, res))) {
-    }
-  } else if (in_->json_type() == ObJsonNodeType::J_OBJECT) {
-    if (OB_FAIL(in_->get_object_value(pos, res))) {
-    }
-  }
-  if (OB_SUCC(ret)) {
-    out = res;
   }
 
   return ret;

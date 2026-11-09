@@ -19,6 +19,7 @@ build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 build:clippy --output_groups=clippy_checks
 build:clippy --@rules_rust//rust/settings:clippy_flag=-Dwarnings
 build:clippy --@rules_rust//rust/settings:clippy_flag=-Cpanic=unwind
+test --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=unwind
 # SLP spends most of this generated parser's compile time on location copies.
 build:linux --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
 build:macos --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
@@ -50,6 +51,7 @@ build:ios-simulator --config=ios
 build:ios-simulator --platforms=@apple_support//platforms:ios_sim_arm64
 build:wasm --platforms=//bazel/platforms:wasm32
 build:wasm --@rules_rust//rust/toolchain/channel=nightly
+test:wasm --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=abort
 build:wasm --@rules_rust//cargo/settings:use_default_shell_env=true
 build:wasm --//src/standby:enable_standby=false
 build:wasm --action_env=EM_CONFIG

@@ -23,6 +23,7 @@
 #include "ob_obj_cast.h"
 #include "common/enumset/ob_enum_set_meta.h"
 #include "common/json_type/ob_json_bin.h"
+#include "common/json_type/json_builder.h"
 #include "common/json_type/ob_json_parse.h"  // ObJsonParser, previously hidden behind the exec_ctx include chain(free within lib)
 #include "share/object/ob_obj_cast_util.h"
 #include "share/object/ob_obj_cast_runtime.h"
@@ -1427,10 +1428,8 @@ static int int_json(const ObObjType expect_type, ObObjCastParams &params,
     ret= OB_ERR_UNEXPECTED;
     LOG_ERROR("NULL allocator in json cast function", K(ret), K(in), K(expect_type));
   } else {
-    ObJsonInt j_int(in.get_int());
-    ObIJsonBase *j_base = &j_int;
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+    if (OB_FAIL(encode_json_integer(*params.allocator_v2_, in.get_int(), raw_bin))) {
     } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
     } else {
       res_length = out.get_val_len();
@@ -1866,10 +1865,8 @@ static int uint_json(const ObObjType expect_type, ObObjCastParams &params,
     ret= OB_ERR_UNEXPECTED;
     LOG_ERROR("NULL allocator in json cast function", K(ret), K(in), K(expect_type));
   } else {
-    ObJsonUint j_uint(in.get_uint64());
-    ObIJsonBase *j_base = &j_uint;
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+    if (OB_FAIL(encode_json_unsigned(*params.allocator_v2_, in.get_uint64(), raw_bin))) {
     } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
     } else {
       res_length = out.get_val_len();
@@ -2313,10 +2310,8 @@ static int float_json(const ObObjType expect_type, ObObjCastParams &params,
     ret= OB_ERR_UNEXPECTED;
     LOG_ERROR("NULL allocator in json cast function", K(ret), K(in), K(expect_type));
   } else {
-    ObJsonDouble j_double(in.get_float());
-    ObIJsonBase *j_base = &j_double;
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+    if (OB_FAIL(encode_json_real(*params.allocator_v2_, in.get_float(), raw_bin))) {
     } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
     } else {
       res_length = out.get_val_len();
@@ -2800,10 +2795,8 @@ static int double_json(const ObObjType expect_type, ObObjCastParams &params,
     ret= OB_ERR_UNEXPECTED;
     LOG_ERROR("NULL allocator in json cast function", K(ret), K(in), K(expect_type));
   } else {
-    ObJsonDouble j_double(in.get_double());
-    ObIJsonBase *j_base = &j_double;
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+    if (OB_FAIL(encode_json_real(*params.allocator_v2_, in.get_double(), raw_bin))) {
     } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
     } else {
       res_length = out.get_val_len();
@@ -3341,10 +3334,8 @@ static int number_json(const ObObjType expect_type, ObObjCastParams &params,
     LOG_ERROR("NULL allocator in json cast function", K(ret), K(in), K(expect_type));
   } else {
     const number::ObNumber nmb(in.get_number());
-    ObJsonDecimal j_dec(nmb, -1, in.get_scale());
-    ObIJsonBase *j_base = &j_dec;
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+    if (OB_FAIL(encode_json_decimal(*params.allocator_v2_, nmb, -1, in.get_scale(), raw_bin))) {
     } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
     } else {
       res_length = out.get_val_len();
@@ -4049,10 +4040,8 @@ static int datetime_json(const ObObjType expect_type, ObObjCastParams &params,
       ObJsonNodeType j_type = (ObTimestampType == in.get_type())
                                   ? ObJsonNodeType::J_TIMESTAMP
                                   : ObJsonNodeType::J_DATETIME;
-      ObJsonDatetime j_datetime(j_type, ob_time);
-      ObIJsonBase *j_base = &j_datetime;
       ObString raw_bin;
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+      if (OB_FAIL(encode_json_time(*params.allocator_v2_, j_type, ob_time, raw_bin))) {
       } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
       } else {
         res_length = out.get_val_len();
@@ -4083,10 +4072,8 @@ static int mdatetime_json(const ObObjType expect_type, ObObjCastParams &params,
     ObTime ob_time(DT_TYPE_MYSQL_DATETIME);
     if (OB_FAIL(ObTimeConverter::mdatetime_to_ob_time(in_val, ob_time))) {
     } else {
-      ObJsonDatetime j_datetime(ObJsonNodeType::J_MYSQL_DATETIME, ob_time);
-      ObIJsonBase *j_base = &j_datetime;
       ObString raw_bin;
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+      if (OB_FAIL(encode_json_time(*params.allocator_v2_, ObJsonNodeType::J_MYSQL_DATETIME, ob_time, raw_bin))) {
       } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
       } else {
         res_length = out.get_val_len();
@@ -4696,10 +4683,8 @@ static int date_json(const ObObjType expect_type, ObObjCastParams &params,
     ObTime ob_time(DT_TYPE_DATE);
     if (OB_FAIL(ObTimeConverter::date_to_ob_time(in_val, ob_time))) {
     } else {
-      ObJsonDatetime j_date(ObJsonNodeType::J_DATE, ob_time);
-      ObIJsonBase *j_base = &j_date;
       ObString raw_bin;
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+      if (OB_FAIL(encode_json_time(*params.allocator_v2_, ObJsonNodeType::J_DATE, ob_time, raw_bin))) {
       } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
       } else {
         res_length = out.get_val_len();
@@ -4730,10 +4715,8 @@ static int mdate_json(const ObObjType expect_type, ObObjCastParams &params,
     ObTime ob_time(DT_TYPE_DATE);
     if (OB_FAIL(ObTimeConverter::mdate_to_ob_time(in_val, ob_time))) {
     } else {
-      ObJsonDatetime j_date(ObJsonNodeType::J_MYSQL_DATE, ob_time);
-      ObIJsonBase *j_base = &j_date;
       ObString raw_bin;
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+      if (OB_FAIL(encode_json_time(*params.allocator_v2_, ObJsonNodeType::J_MYSQL_DATE, ob_time, raw_bin))) {
       } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
       } else {
         res_length = out.get_val_len();
@@ -5113,10 +5096,8 @@ static int time_json(const ObObjType expect_type, ObObjCastParams &params,
     ObTime ob_time(DT_TYPE_TIME);
     if (OB_FAIL(ObTimeConverter::time_to_ob_time(in_val, ob_time))) {
     } else {
-      ObJsonDatetime j_time(ObJsonNodeType::J_TIME, ob_time);
-      ObIJsonBase *j_base = &j_time;
       ObString raw_bin;
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+      if (OB_FAIL(encode_json_time(*params.allocator_v2_, ObJsonNodeType::J_TIME, ob_time, raw_bin))) {
       } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
       } else {
         res_length = out.get_val_len();
@@ -5463,10 +5444,8 @@ static int year_json(const ObObjType expect_type, ObObjCastParams &params,
     LOG_ERROR("NULL allocator in json cast function", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(ObTimeConverter::year_to_int(in.get_year(), full_year))) {
   } else {
-    ObJsonInt j_year(full_year);
-    ObIJsonBase *j_base = &j_year;
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+    if (OB_FAIL(encode_json_integer(*params.allocator_v2_, full_year, raw_bin))) {
     } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
     } else {
       res_length = out.get_val_len();
@@ -6441,22 +6420,21 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObIJsonBase *j_base = NULL;
     ObString j_text = (need_charset_convert ? tmp_val.get_string() : in.get_string());
-    ObJsonOpaque j_opaque(j_text, in.get_type());
-    ObJsonString j_string(j_text.ptr(), j_text.length());
-    ObJsonNull j_null;
-    ObJsonNode *j_tree = NULL;
-    uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
+    enum class ScalarKind { Null, String, Opaque };
+    ScalarKind scalar_kind = ScalarKind::Null;
+    bool has_raw_bin = false;
+    ObString raw_bin;
+    uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
     ObObjType in_type = in.get_type();
     bool is_convert_jstr_type = (in_type == ObTinyTextType
                                  || in_type == ObTextType
                                  || in_type == ObMediumTextType
                                  || in_type == ObLongTextType);
     if (expect_type == ObJsonType && j_text.length() == 0 && cast_mode == 0) { // add column json null
-      j_base = &j_null;
+      scalar_kind = ScalarKind::Null;
     } else if (CS_TYPE_BINARY == in.get_collation_type()) {
-      j_base = &j_opaque;
+      scalar_kind = ScalarKind::Opaque;
     } else if ((CM_IS_SQL_AS_JSON_SCALAR(cast_mode) && ob_is_string_type(in_type))
                 || (CM_IS_IMPLICIT_CAST(cast_mode)
                     && !CM_IS_COLUMN_CONVERT(cast_mode)
@@ -6464,18 +6442,17 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
                     && is_convert_jstr_type)) {
       // consistent with mysql: TINYTEXT, TEXT, MEDIUMTEXT, and LONGTEXT. We want to treat them like strings
       ret = OB_SUCCESS;
-      j_base = &j_string;
+      scalar_kind = ScalarKind::String;
       if ((CM_IS_SQL_AS_JSON_SCALAR(cast_mode) && ob_is_string_type(in_type)) && j_text.compare("null") == 0) {
-        j_base = &j_null;
+        scalar_kind = ScalarKind::Null;
       }
-    } else if (OB_FAIL(ObJsonParser::get_tree(params.allocator_v2_, j_text,
-                                              j_tree, parse_flag,
-                                              params.json_max_depth_))) {
+    } else if (OB_FAIL(ObJsonParser::get_binary(params.allocator_v2_, j_text.ptr(), j_text.length(),
+                                                raw_bin, parse_flag, params.json_max_depth_))) {
       if (CM_IS_IMPLICIT_CAST(cast_mode)
                      && !CM_IS_COLUMN_CONVERT(cast_mode)
                      && is_convert_jstr_type) {
         ret = OB_SUCCESS;
-        j_base = &j_string;
+        scalar_kind = ScalarKind::String;
       } else {
         if (CM_IS_COLUMN_CONVERT(cast_mode)) {
           ret = OB_ERR_INVALID_JSON_TEXT;
@@ -6486,12 +6463,13 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
         }
       }
     } else {
-      j_base = j_tree;
+      has_raw_bin = true;
     }
 
     if (OB_SUCC(ret)) {
-      ObString raw_bin;
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+      if (!has_raw_bin && OB_FAIL((scalar_kind == ScalarKind::Null ? encode_json_null(*params.allocator_v2_, raw_bin)
+          : scalar_kind == ScalarKind::String ? encode_json_text(*params.allocator_v2_, j_text, raw_bin)
+          : encode_json_opaque(*params.allocator_v2_, j_text, static_cast<uint16_t>(in_type), raw_bin)))) {
       } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
       } else {
         res_length = out.get_val_len();
@@ -7051,10 +7029,8 @@ static int bit_json(const ObObjType expect_type, ObObjCastParams &params,
       LOG_ERROR("NULL allocator in json cast function", K(ret), K(in), K(expect_type));
     } else {
       common::ObString j_value(pos, buf);
-      ObJsonOpaque j_opaque(j_value, ObBitType);
-      ObIJsonBase *j_base = &j_opaque;
       ObString raw_bin;
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+      if (OB_FAIL(encode_json_opaque(*params.allocator_v2_, j_value, static_cast<uint16_t>(ObBitType), raw_bin))) {
       } else if (OB_FAIL(copy_string(params, expect_type, raw_bin.ptr(), raw_bin.length(), out))) {
       } else if (OB_FAIL(set_json_bin_res(&params, &out, out.get_string()))) {
       } else {
@@ -12000,10 +11976,8 @@ int ObObjCaster::bool_to_json(const ObObjType expect_type,
   } else {
     int64_t in_val = in_obj.get_int();
     bool bool_val = (in_obj.get_int() == 1) ? true : false;
-    ObJsonBoolean j_bool(bool_val);
-    ObIJsonBase *j_base = &j_bool;
     ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, cast_ctx.allocator_v2_))) {
+    if (OB_FAIL(encode_json_boolean(*cast_ctx.allocator_v2_, bool_val, raw_bin))) {
     } else if (OB_FAIL(set_json_bin_res(&cast_ctx, &buf_obj, raw_bin))) {
     } else {
       res_length = static_cast<ObLength>(buf_obj.get_string().length());

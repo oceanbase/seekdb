@@ -51,15 +51,7 @@ int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
       cmp_ret = 1;
     }
   } else {
-    ObJsonBin j_bin_l(l_data.ptr(), l_data.length(), &allocator);
-    ObJsonBin j_bin_r(r_data.ptr(), r_data.length(), &allocator);
-    ObIJsonBase *j_base_l = &j_bin_l;
-    ObIJsonBase *j_base_r = &j_bin_r;
-
-    if (OB_FAIL(j_bin_l.reset_iter())) {
-    } else if (OB_FAIL(j_bin_r.reset_iter())) {
-    } else if (OB_FAIL(j_base_l->compare(*j_base_r, cmp_ret))) {
-    }
+    ret = compare_json_binary(l_data, r_data, cmp_ret);
   }
   return ret;
 }

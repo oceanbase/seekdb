@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "common/xml/ob_path_parser.h"
 #include "common/xml/ob_xml_util.h"
-#include <rapidjson/memorystream.h>
+#include "lib/charset/ob_charset.h"
 
 namespace oceanbase {
 namespace common {
@@ -114,25 +114,28 @@ bool ObPathParserUtil::is_boolean_subpath_arg(ObPathNode* node)
 
 bool ObPathParserUtil::check_is_legal_tagname(const char* name, int length) 
 {
+  int ret = OB_SUCCESS;
   bool ret_bool = true;
   // An empty string is not a valid identifier.
-  // todo: use ob decode
   if (OB_ISNULL(name)) ret_bool = false;
-  rapidjson::MemoryStream input_stream(name, length);
-  unsigned codepoint = 0;
-  uint64_t last_pos = 0;
+  uint64_t pos = 0;
 
-  while (ret_bool && (input_stream.Tell() < length)) {
-    last_pos = input_stream.Tell();
+  while (ret_bool && pos < static_cast<uint64_t>(length)) {
+    const uint64_t last_pos = pos;
     bool first_codepoint = (last_pos == 0);
-    if (!rapidjson::UTF8<char>::Decode(input_stream, &codepoint)) { 
+    int32_t codepoint = 0;
+    int32_t char_len = 0;
+    if (OB_FAIL(ObCharset::mb_wc(CS_TYPE_UTF8MB4_BIN, name + pos, length - pos,
+                                 char_len, codepoint))) {
       ret_bool = false;
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "fail to decode.", 
-          K(ret_bool), K(codepoint), K(input_stream.Tell()), KCSTRING(name));
+          K(ret_bool), K(codepoint), K(pos), KCSTRING(name));
+      break;
     }
+    pos += char_len;
 
     // a unicode letter
-    uint64_t curr_pos = input_stream.Tell();
+    uint64_t curr_pos = pos;
     if (ObXPathUtil::is_letter(codepoint, name, last_pos, curr_pos - last_pos)
         || codepoint == 0x5F ) {
       // letter is ok,  _ is ok
@@ -143,7 +146,7 @@ bool ObPathParserUtil::check_is_legal_tagname(const char* name, int length)
       */
       ret_bool = false;
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "first character must be _ or letter.", 
-          K(ret_bool), K(codepoint), K(input_stream.Tell()), KCSTRING(name));
+          K(ret_bool), K(codepoint), K(pos), KCSTRING(name));
     } else if (ObXPathUtil::unicode_combining_mark(codepoint) || isdigit(codepoint)
               || ObXPathUtil::is_connector_punctuation(codepoint)
               || codepoint == 0x2D || codepoint == 0x2E){
@@ -152,7 +155,7 @@ bool ObPathParserUtil::check_is_legal_tagname(const char* name, int length)
       // nope
       ret_bool = false;
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "not legal xml element name.",
-          K(ret_bool), K(codepoint), K(input_stream.Tell()), KCSTRING(name));
+          K(ret_bool), K(codepoint), K(pos), KCSTRING(name));
     }
   }
   return ret_bool;

@@ -269,7 +269,7 @@ private:
 
   int inner_format_plan_to_json(ObIArray<ObSqlPlanItem*> &sql_plan_infos, 
                                 int64_t info_idx,
-                                json::Value *&ret_val);
+                                oceanbase::json::Value *&ret_val);
 
 
   int init_buffer(PlanText &plan_text);

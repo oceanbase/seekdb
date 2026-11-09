@@ -26,6 +26,7 @@ compression = { path = "../compression" }
 crypto = { path = "../crypto" }
 spatial-covering = { path = "../spatial-covering" }
 uuid-generator = { path = "../uuid-generator" }
+json = { path = "../json" }
 http-client = { path = "../http-client", optional = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

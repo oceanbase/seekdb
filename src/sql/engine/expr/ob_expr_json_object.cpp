@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_object.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
-#include "share/ob_json_access_utils.h"
+#include "common/json_type/json_builder.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -96,8 +96,7 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
-  ObJsonObject j_obj(&temp_allocator);
-  ObIJsonBase *j_base = &j_obj;
+  JsonContainerBuilder builder(true);
 
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
@@ -112,14 +111,15 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       LOG_USER_ERROR(OB_ERR_JSON_DOCUMENT_NULL_KEY);
     } else {
       ObString key = json_datum->get_string();
-      ObIJsonBase *j_val = NULL;
       bool is_null = false;
+      bool input_error = false;
       if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(arg, ctx, temp_allocator, key, is_null))) {
-      } else if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i+1, j_val))) {
-        ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-        LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
-      } else if (OB_FAIL(j_obj.add(key, static_cast<ObJsonNode*>(j_val), false, true, false))) {
-        if (ret == OB_ERR_JSON_DOCUMENT_NULL_KEY) {
+      } else if (OB_FAIL(ObJsonExprHelper::append_json_value(expr, ctx, temp_allocator,
+          i+1, builder, key, input_error))) {
+        if (input_error) {
+          ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+          LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+        } else if (ret == OB_ERR_JSON_DOCUMENT_NULL_KEY) {
           LOG_USER_ERROR(OB_ERR_JSON_DOCUMENT_NULL_KEY);
         }
       }
@@ -128,12 +128,8 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 
   if (OB_SUCC(ret)) {
     ObString raw_bin;
-    j_obj.stable_sort();
-    j_obj.unique();
-    if (ObJsonExprHelper::is_json_depth_exceed_limit(j_base->depth())) {
-      ret = OB_ERR_JSON_OUT_OF_DEPTH;
-      LOG_WARN("current json over depth", K(ret), K(j_base->depth()));
-    } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+    if (OB_FAIL(builder.finish(raw_bin, false, true, true,
+        std::max<uint32_t>(JSON_DOCUMENT_MAX_DEPTH, ObJsonExprHelper::get_json_max_depth_config())))) {
     } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
     }
   }

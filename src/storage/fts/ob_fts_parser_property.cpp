@@ -18,7 +18,7 @@
 
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_parse.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/json_builder.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
@@ -36,13 +36,36 @@ namespace storage
 {
 
 
+static int set_json_property(ObIAllocator &allocator, ObIJsonBase *&root,
+    const ObString &key, ObIJsonBase *value)
+{
+  int ret = OB_SUCCESS;
+  JsonContainerBuilder builder(true);
+  ObString previous;
+  ObString addition;
+  ObString binary;
+  ObIJsonBase *replacement = nullptr;
+  if (OB_FAIL(root->get_raw_binary(previous, &allocator))) {
+  } else if (OB_FAIL(value->get_raw_binary(addition, &allocator))) {
+  } else if (OB_FAIL(builder.extend(previous))) {
+  } else if (OB_FAIL(builder.append(key, addition))) {
+  } else if (OB_FAIL(builder.finish(binary))) {
+  } else if (OB_FAIL(copy_json_binary(allocator, binary, replacement))) {
+  } else {
+    OB_DELETEx(ObIJsonBase, &allocator, root);
+    root = replacement;
+  }
+  return ret;
+}
+
+
 int ObFTParserJsonProps::init()
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(root_ = OB_NEWx(ObJsonObject, &allocator_, &allocator_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator_, ObString("{}"),
+      ObJsonInType::JSON_TEXT, root_))) {
   } else {
     is_inited_ = true;
   }
@@ -58,20 +81,19 @@ int ObFTParserJsonProps::init()
 int ObFTParserJsonProps::config_set_min_token_size(const int64_t size)
 {
   int ret = OB_SUCCESS;
-  ObJsonInt *min_token_size = nullptr;
+  ObIJsonBase *min_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(min_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(make_json_integer(allocator_, size, min_token_size))) {
   } else if (!is_valid_min_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MIN_TOKEN_SIZE),
+  } else if (OB_FAIL(set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_MIN_TOKEN_SIZE),
                                        min_token_size))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonInt, &allocator_, min_token_size);
+    OB_DELETEx(ObIJsonBase, &allocator_, min_token_size);
   }
 
   return ret;
@@ -80,20 +102,19 @@ int ObFTParserJsonProps::config_set_min_token_size(const int64_t size)
 int ObFTParserJsonProps::config_set_max_token_size(const int64_t size)
 {
   int ret = OB_SUCCESS;
-  ObJsonInt *max_token_size = nullptr;
+  ObIJsonBase *max_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(max_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(make_json_integer(allocator_, size, max_token_size))) {
   } else if (!is_valid_max_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MAX_TOKEN_SIZE),
+  } else if (OB_FAIL(set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_MAX_TOKEN_SIZE),
                                        max_token_size))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonInt, &allocator_, max_token_size);
+    OB_DELETEx(ObIJsonBase, &allocator_, max_token_size);
   }
 
   return ret;
@@ -102,20 +123,19 @@ int ObFTParserJsonProps::config_set_max_token_size(const int64_t size)
 int ObFTParserJsonProps::config_set_ngram_token_size(const int64_t size)
 {
   int ret = OB_SUCCESS;
-  ObJsonInt *ngram_token_size = nullptr;
+  ObIJsonBase *ngram_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(ngram_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(make_json_integer(allocator_, size, ngram_token_size))) {
   } else if (!is_valid_ngram_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_NGRAM_TOKEN_SIZE),
+  } else if (OB_FAIL(set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_NGRAM_TOKEN_SIZE),
                                        ngram_token_size))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonInt, &allocator_, ngram_token_size);
+    OB_DELETEx(ObIJsonBase, &allocator_, ngram_token_size);
   }
 
   return ret;
@@ -125,18 +145,17 @@ int ObFTParserJsonProps::config_set_ngram_token_size(const int64_t size)
 int ObFTParserJsonProps::config_set_dict_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
-  ObJsonString *dict_table = nullptr;
+  ObIJsonBase *dict_table = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(dict_table = OB_NEWx(ObJsonString, &allocator_, str))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(make_json_string(allocator_, str, dict_table))) {
   } else if (OB_FAIL(
-                 root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE), dict_table))) {
+                 set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE), dict_table))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonString, &allocator_, dict_table);
+    OB_DELETEx(ObIJsonBase, &allocator_, dict_table);
   }
 
   return ret;
@@ -145,18 +164,17 @@ int ObFTParserJsonProps::config_set_dict_table(const ObString &str)
 int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
-  ObJsonString *stopword_table = nullptr;
+  ObIJsonBase *stopword_table = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(stopword_table = OB_NEWx(ObJsonString, &allocator_, str))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE),
+  } else if (OB_FAIL(make_json_string(allocator_, str, stopword_table))) {
+  } else if (OB_FAIL(set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE),
                                        stopword_table))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonString, &allocator_, stopword_table);
+    OB_DELETEx(ObIJsonBase, &allocator_, stopword_table);
   }
 
   return ret;
@@ -165,18 +183,17 @@ int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
 int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
 {
   int ret = OB_SUCCESS;
-  ObJsonString *quantifier_table = nullptr;
+  ObIJsonBase *quantifier_table = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(quantifier_table = OB_NEWx(ObJsonString, &allocator_, str))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE),
+  } else if (OB_FAIL(make_json_string(allocator_, str, quantifier_table))) {
+  } else if (OB_FAIL(set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE),
                                        quantifier_table))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonString, &allocator_, quantifier_table);
+    OB_DELETEx(ObIJsonBase, &allocator_, quantifier_table);
   }
 
   return ret;
@@ -185,17 +202,16 @@ int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
 int ObFTParserJsonProps::config_set_ik_mode(const ObString &ik_mode)
 {
   int ret = OB_SUCCESS;
-  ObJsonString *ik_mode_node = nullptr;
+  ObIJsonBase *ik_mode_node = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(ik_mode_node = OB_NEWx(ObJsonString, &allocator_, ik_mode))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_IK_MODE),
+  } else if (OB_FAIL(make_json_string(allocator_, ik_mode, ik_mode_node))) {
+  } else if (OB_FAIL(set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_IK_MODE),
                                        ik_mode_node))) {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonString, &allocator_, ik_mode_node);
+    OB_DELETEx(ObIJsonBase, &allocator_, ik_mode_node);
   }
 
   return ret;
@@ -204,20 +220,19 @@ int ObFTParserJsonProps::config_set_ik_mode(const ObString &ik_mode)
 int ObFTParserJsonProps::config_set_min_ngram_token_size(const int64_t size)
 {
   int ret = OB_SUCCESS;
-  ObJsonInt *ngram_token_size = nullptr;
+  ObIJsonBase *ngram_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(ngram_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(make_json_integer(allocator_, size, ngram_token_size))) {
   } else if (!is_valid_min_ngram_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MIN_NGRAM_SIZE),
+  } else if (OB_FAIL(set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_MIN_NGRAM_SIZE),
                                        ngram_token_size))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonInt, &allocator_, ngram_token_size);
+    OB_DELETEx(ObIJsonBase, &allocator_, ngram_token_size);
   }
 
   return ret;
@@ -226,20 +241,19 @@ int ObFTParserJsonProps::config_set_min_ngram_token_size(const int64_t size)
 int ObFTParserJsonProps::config_set_max_ngram_token_size(const int64_t size)
 {
   int ret = OB_SUCCESS;
-  ObJsonInt *ngram_token_size = nullptr;
+  ObIJsonBase *ngram_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(ngram_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(make_json_integer(allocator_, size, ngram_token_size))) {
   } else if (!is_valid_max_ngram_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MAX_NGRAM_SIZE),
+  } else if (OB_FAIL(set_json_property(allocator_, root_, ObString(ObFTSLiteral::CONFIG_NAME_MAX_NGRAM_SIZE),
                                        ngram_token_size))) {
   } else {
   }
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObJsonInt, &allocator_, ngram_token_size);
+    OB_DELETEx(ObIJsonBase, &allocator_, ngram_token_size);
   }
 
   return ret;
@@ -248,13 +262,13 @@ int ObFTParserJsonProps::config_set_max_ngram_token_size(const int64_t size)
 int ObFTParserJsonProps::parse_from_valid_str(const ObString &str)
 {
   int ret = OB_SUCCESS;
-  ObJsonNode *root = nullptr;
+  ObIJsonBase *root = nullptr;
 
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
   } else if (str.empty()) {
     // do nothing and use default {}
-  } else if (OB_FAIL(ObJsonParser::get_tree(&allocator_, str, root))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator_, str, ObJsonInType::JSON_TEXT, root))) {
   } else {
     root_ = root;
   }
@@ -366,8 +380,7 @@ int ObFTParserJsonProps::config_get_dict_table(ObString &str) const
       ret = OB_ERR_UNEXPECTED;
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
     } else {
-      ObJsonString *json_str = static_cast<ObJsonString *>(value);
-      str = json_str->get_str();
+      str.assign_ptr(value->get_data(), value->get_data_length());
     }
   }
   return ret;
@@ -389,8 +402,7 @@ int ObFTParserJsonProps::config_get_stopword_table(ObString &str) const
       ret = OB_ERR_UNEXPECTED;
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
     } else {
-      ObJsonString *json_str = static_cast<ObJsonString *>(value);
-      str = json_str->get_str();
+      str.assign_ptr(value->get_data(), value->get_data_length());
     }
   }
   return ret;
@@ -412,8 +424,7 @@ int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
       ret = OB_ERR_UNEXPECTED;
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
     } else {
-      ObJsonString *json_str = static_cast<ObJsonString *>(value);
-      str = json_str->get_str();
+      str.assign_ptr(value->get_data(), value->get_data_length());
     }
   }
   return ret;
@@ -435,8 +446,7 @@ int ObFTParserJsonProps::config_get_ik_mode(ObString &ik_mode) const
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ObJsonString *json_str = static_cast<ObJsonString *>(value);
-      ik_mode = json_str->get_str();
+      ik_mode.assign_ptr(value->get_data(), value->get_data_length());
     }
   }
   return ret;
@@ -947,8 +957,9 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (FAILEDx(databuff_printf(buf,
                                   buf_len,
                                   pos,
-                                  "%s=\"%s\"",
+                                  "%s=\"%.*s\"",
                                   ObFTSLiteral::CONFIG_NAME_IK_MODE,
+                                  static_cast<int>(ik_mode.length()),
                                   ik_mode.ptr()))) {
       }
     }
@@ -1087,28 +1098,33 @@ int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
 
   ObArenaAllocator alloc;
-  ObJsonObject properties_root(&alloc);
+  JsonContainerBuilder properties_root(true);
 
   if (OB_ISNULL(array)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < array->element_count(); i++) {
-      ObIJsonBase *array_value_item;
+      ObIJsonBase *array_value_item = nullptr;
       ObString config_name;
-      ObIJsonBase *config_value;
+      ObIJsonBase *config_value = nullptr;
       if (OB_FAIL(array->get_array_element(i, array_value_item))) {
       } else if (array_value_item->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_INVALID_ARGUMENT;
       } else if (1 != array_value_item->element_count()) {
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(array_value_item->get_object_value(0, config_name, config_value))) {
-      } else if (OB_FAIL(properties_root.object_add(config_name, config_value))) {
+      } else {
+        ObString binary;
+        if (OB_FAIL(config_value->get_raw_binary(binary, &alloc))) {
+        } else if (OB_FAIL(properties_root.append(config_name, binary))) {
+        }
       }
     }
-    ObJsonBuffer j_buf(&allocator);
-    if (FAILEDx(properties_root.print(j_buf, false))) {
-    } else {
-      json_str = j_buf.string();
+    ObString binary;
+    ObString text;
+    if (FAILEDx(properties_root.finish(binary))) {
+    } else if (FAILEDx(properties_root.format(text))) {
+    } else if (FAILEDx(ob_write_string(allocator, text, json_str))) {
     }
   }
 

@@ -26,7 +26,7 @@
 #include "share/ob_telemetry.h"
 #include "share/inner_table/local_table_schema.h"
 #include "common/ob_version_def.h"
-#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/json_builder.h"
 #ifndef __EMSCRIPTEN__
 #include "rust/http_client.h"
 #endif
@@ -1133,11 +1133,11 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
   const int64_t OS_INFO_LEN = 32;
   const int64_t CPU_MODEL_LEN = 64;
   const int64_t SIZE_STR_LEN = 16;
-  ObJsonObject root(allocator);
-  ObJsonObject host(allocator);
-  ObJsonObject instance(allocator);
-  ObJsonObject resource(allocator);
-  ObJsonObject content(allocator);
+  JsonContainerBuilder root(true);
+  JsonContainerBuilder host(true);
+  JsonContainerBuilder instance(true);
+  JsonContainerBuilder resource(true);
+  JsonContainerBuilder content(true);
   char os_name[OS_INFO_LEN] = {'\0'};
   char os_version[OS_INFO_LEN] = {'\0'};
   char cpu_model[CPU_MODEL_LEN] = {'\0'};
@@ -1170,71 +1170,54 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
   }
 
   // construct host
-  ObJsonString os_json(os_name);
-  ObJsonString os_version_json(os_version);
-  ObJsonString cpu_json(cpu_model);
-  ObJsonInt host_cpu_count_json(host_cpu_count);
-  ObJsonString host_memory_size_json(host_memory_size);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(host.add("os", &os_json))) {
-  } else if (OB_FAIL(host.add("osVersion", &os_version_json))) {
-  } else if (OB_FAIL(host.add("cpu", &cpu_json))) {
-  } else if (OB_FAIL(host.add("cpuCount", &host_cpu_count_json))) {
-  } else if (OB_FAIL(host.add("memorySize", &host_memory_size_json))) {
+  } else if (OB_FAIL(host.append_string("os", os_name))) {
+  } else if (OB_FAIL(host.append_string("osVersion", os_version))) {
+  } else if (OB_FAIL(host.append_string("cpu", cpu_model))) {
+  } else if (OB_FAIL(host.append_integer("cpuCount", host_cpu_count))) {
+  } else if (OB_FAIL(host.append_string("memorySize", host_memory_size))) {
   }
 
   // construct instance
-  ObJsonString host_hash_json(host_hash);
-  ObJsonInt port_json(port);
-  ObJsonInt timestamp_json(ts);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(instance.add("hostHash", &host_hash_json))) {
-  } else if (OB_FAIL(instance.add("port", &port_json))) {
-  } else if (OB_FAIL(instance.add("createTimestamp", &timestamp_json))) {
+  } else if (OB_FAIL(instance.append_string("hostHash", host_hash))) {
+  } else if (OB_FAIL(instance.append_integer("port", port))) {
+  } else if (OB_FAIL(instance.append_integer("createTimestamp", ts))) {
   }
 
   // construct resource
-  ObJsonInt cpu_count_json(cpu_count);
-  ObJsonString memory_budget_json(memory_budget);
-  ObJsonString log_disk_size_json(log_disk_size);
-  ObJsonString datafile_size_json(datafile_size);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(resource.add("cpuCount", &cpu_count_json))) {
+  } else if (OB_FAIL(resource.append_integer("cpuCount", cpu_count))) {
   // Keep the legacy JSON key for telemetry schema compatibility.
-  } else if (OB_FAIL(resource.add("memoryLimit", &memory_budget_json))) {
-  } else if (OB_FAIL(resource.add("logDiskSize", &log_disk_size_json))) {
-  } else if (OB_FAIL(resource.add("dataFileSize", &datafile_size_json))) {
+  } else if (OB_FAIL(resource.append_string("memoryLimit", memory_budget))) {
+  } else if (OB_FAIL(resource.append_string("logDiskSize", log_disk_size))) {
+  } else if (OB_FAIL(resource.append_string("dataFileSize", datafile_size))) {
   }
 
   // construct content
-  ObJsonString id_json(id);
-  ObJsonString version_json(version);
-  ObJsonString reporter_json(reporter);
-  ObJsonString event_json(event_name);
-  ObJsonInt telemetry_version_json(TELEMETRY_VERSION);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(content.add("id", &id_json))) {
-  } else if (OB_FAIL(content.add("version", &version_json))) {
-  } else if (OB_FAIL(content.add("reporter", &reporter_json))) {
-  } else if (OB_FAIL(content.add("host", &host))) {
-  } else if (OB_FAIL(content.add("instance", &instance))) {
-  } else if (OB_FAIL(content.add("resource", &resource))) {
-  } else if (OB_FAIL(content.add("event", &event_json))) {
-  } else if (OB_FAIL(content.add("telemetryVersion", &telemetry_version_json))) {
+  } else if (OB_FAIL(content.append_string("id", id))) {
+  } else if (OB_FAIL(content.append_string("version", version))) {
+  } else if (OB_FAIL(content.append_string("reporter", reporter))) {
+  } else if (OB_FAIL(content.append_container("host", host))) {
+  } else if (OB_FAIL(content.append_container("instance", instance))) {
+  } else if (OB_FAIL(content.append_container("resource", resource))) {
+  } else if (OB_FAIL(content.append_string("event", event_name))) {
+  } else if (OB_FAIL(content.append_integer("telemetryVersion", TELEMETRY_VERSION))) {
   }
 
   // construct root
-  ObJsonString component_json(OB_SEEKDB_NAME);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(root.add("content", &content))) {
-  } else if (OB_FAIL(root.add("component", &component_json))) {
+  } else if (OB_FAIL(root.append_container("content", content))) {
+  } else if (OB_FAIL(root.append_string("component", OB_SEEKDB_NAME))) {
   }
 
-  ObJsonBuffer j_buf(allocator);
+  ObString binary;
+  ObString text;
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(root.print(j_buf, false))) {
-  } else {
-    json_str.assign_ptr(j_buf.ptr(), j_buf.length());
+  } else if (OB_FAIL(root.finish(binary))) {
+  } else if (OB_FAIL(root.format(text))) {
+  } else if (OB_FAIL(ob_write_string(*allocator, text, json_str))) {
   }
 
   return ret;

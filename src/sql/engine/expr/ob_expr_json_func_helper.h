@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_JSON_FUNC_HELPER_H_
 #define OCEANBASE_SQL_OB_EXPR_JSON_FUNC_HELPER_H_
 
+#include <memory>
+
 #include "sql/engine/expr/ob_expr_util.h"
 #include "share/object/ob_obj_cast_util.h"  // ObJsonZeroVal moved down to
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -24,7 +26,6 @@
 #include "query/parser/ob_item_type.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "common/lob/ob_lob_base.h"
-#include "common/json_type/ob_json_tree.h"
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_bin.h"
 #include "common/json_type/ob_json_parse.h"
@@ -35,12 +36,16 @@
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/ob_exec_context.h"
 
+namespace oceanbase { namespace common { struct BinaryMerge; class JsonContainerBuilder; } }
+
 using namespace oceanbase::common;
 
 namespace oceanbase
 {
 namespace sql
 {
+enum class JsonMutation : uint8_t { Set = 0, Insert = 1, Replace = 2, Remove = 3, ArrayAppend = 4, ArrayInsert = 5 };
+class JsonPathCache;
 const static int32_t OB_LITERAL_MAX_INT_LEN = 21;
 
 struct ObJsonExprParam {
@@ -96,81 +101,27 @@ public:
 class ObJsonParamCacheCtx : public ObExprOperatorCtx
 {
   public:
-  ObJsonParamCacheCtx(common::ObIAllocator *allocator)
-    : ObExprOperatorCtx(),
-      path_cache_(allocator),
-      is_first_exec_(true),
-      is_json_path_const_(false),
-      json_param_()
-  {}
-  virtual ~ObJsonParamCacheCtx() {}
+  ObJsonParamCacheCtx(common::ObIAllocator *allocator);
+  virtual ~ObJsonParamCacheCtx() override;
   ObJsonPathCache *get_path_cache() { return &path_cache_; }
+  JsonPathCache *get_native_path_cache() { return native_path_cache_.get(); }
 
 private:
   ObJsonPathCache path_cache_;
+  std::unique_ptr<JsonPathCache> native_path_cache_;
 public:
   bool is_first_exec_;
   bool is_json_path_const_;
   ObJsonExprParam json_param_;
 };
 
-struct ObConv2JsonParam {
-  ObConv2JsonParam(bool to_bin, bool has_lob_header) :
-  to_bin_(to_bin),
-  has_lob_header_(has_lob_header),
-  deep_copy_(false),
-  relax_type_(true),
-  format_json_(false),
-  is_schema_(false)
-  {}
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy) :
-  to_bin_(to_bin),
-  has_lob_header_(has_lob_header),
-  deep_copy_(deep_copy),
-  relax_type_(true),
-  format_json_(false),
-  is_schema_(false)
-  {}
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool relax_type) :
-  to_bin_(to_bin),
-  has_lob_header_(has_lob_header),
-  deep_copy_(deep_copy),
-  relax_type_(relax_type),
-  format_json_(false),
-  is_schema_(false)
-  {}
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool relax_type, bool format_json) :
-  to_bin_(to_bin),
-  has_lob_header_(has_lob_header),
-  deep_copy_(deep_copy),
-  relax_type_(relax_type),
-  format_json_(format_json),
-  is_schema_(false)
-  {}
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool relax_type, bool format_json, bool is_schema) :
-  to_bin_(to_bin),
-  has_lob_header_(has_lob_header),
-  deep_copy_(deep_copy),
-  relax_type_(relax_type),
-  format_json_(format_json),
-  is_schema_(is_schema)
-  {}
 
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool relax_type, bool format_json, bool is_schema, bool is_wrap_fail) :
-    to_bin_(to_bin),
-    has_lob_header_(has_lob_header),
-    deep_copy_(deep_copy),
-    relax_type_(relax_type),
-    format_json_(format_json),
-    is_schema_(is_schema),
-    wrap_on_fail_(is_wrap_fail) {}
-  bool to_bin_;
-  bool has_lob_header_;
-  bool deep_copy_ = false;
-  bool relax_type_ = true;
-  bool format_json_ = false;
-  bool is_schema_ = false;
-  bool wrap_on_fail_ = false;
+struct JsonMetadata
+{
+  ObJsonNodeType type_;
+  ObObjType field_type_;
+  uint32_t depth_;
+  uint64_t length_;
 };
 
 class ObJsonExprHelper final
@@ -200,6 +151,12 @@ class ObJsonExprHelper final
     ObJsonSchemaCache schema_cache_;
   };
 public:
+  static int get_json_metadata(const common::ObString &data,
+                               common::ObJsonInType input_type,
+                               bool with_depth,
+                               uint32_t max_depth_config,
+                               JsonMetadata &metadata);
+  static uint32_t get_json_text_depth_limit(uint32_t configured);
   static ObJsonParamCacheCtx* get_param_cache_ctx(const uint64_t& id, ObExecContext *exec_ctx);
   static int get_json_or_str_data(ObExpr *expr, ObEvalCtx &ctx,
                                   MultimodeAlloctor &allocator,
@@ -214,14 +171,18 @@ public:
   @param[out] is_null    the flag for null situation
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
+  static int eval_json_merge(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool patch);
+  static int push_json_merge_argument(const ObExpr &expr, ObEvalCtx &ctx,
+      MultimodeAlloctor &allocator, uint16_t index, BinaryMerge &merger, bool &is_null, bool *input_error = nullptr);
+  static int eval_json_mutation(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res,
+      JsonMutation operation);
   static int get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
                           MultimodeAlloctor &allocator,
                           uint16_t index, ObIJsonBase*& j_base,
-                          bool &is_null, bool need_to_tree=true, 
-                          bool relax = true, bool preserve_dup = false);
+                          bool &is_null, bool preserve_dup = false);
   static int get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
                             MultimodeAlloctor &allocator,
-                            uint16_t index, ObIJsonBase*& j_base,
+                            uint16_t index, ObJsonSchemaCache*& j_base,
                             bool &is_null);
 
 
@@ -247,10 +208,6 @@ public:
       ObIJsonBase *&j_base);
 
 
-  static int cast_to_json_tree(ObString &text, 
-                               common::ObIAllocator *allocator, 
-                               uint32_t parse_flag = 0,
-                               uint32_t max_depth_config = JSON_DOCUMENT_MAX_DEPTH);
   /*
   get json value to JsonBase in static_typing_engine
   @param[in]  expr       the input arguments
@@ -261,15 +218,22 @@ public:
   @param[in]  to_bin     expect value is binary or not
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
-  static int get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
-                          common::ObIAllocator *allocator, uint16_t index,
-                          ObIJsonBase*& j_base, bool to_bin = false, bool format_json = false, 
-                          uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG);
+  static int get_json_binary(const ObExpr &expr, ObEvalCtx &ctx,
+                             MultimodeAlloctor &allocator, uint16_t index, ObString &binary);
+  static int append_json_value(const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator,
+                               uint16_t index, common::JsonContainerBuilder &builder,
+                               const common::ObString &key, bool &input_error);
+  static int datum_to_json_binary(const ObDatum &datum, const ObObjMeta &meta,
+                                  ObScale scale, bool is_bool, bool format_json, bool strict,
+                                  bool oracle, common::ObIAllocator &allocator,
+                                  ObBasicSessionInfo *session,
+                                  const common::ObLobReadOptions *lob_options, ObString &binary);
+
   static int get_const_json_schema(const common::ObObj &data,
                                    const char *func_name,
                                    ObExecContext &exec_ctx,
                                    common::ObIAllocator *allocator,
-                                   ObIJsonBase *&j_schema);
+                                   ObString &schema);
 
   /*
   get json value to JsonBase in old_typing_engine
@@ -284,18 +248,7 @@ public:
   static int refine_range_json_value_const(
                           const common::ObObj &data, ObExecContext &ctx,
                           bool is_bool, common::ObIAllocator *allocator,
-                          ObIJsonBase*& j_base, bool to_bin = false);
-  static int get_json_val(const common::ObDatum &data, 
-                          ObExecContext &ctx,
-                          ObExpr* expr,
-                          common::ObIAllocator *allocator,
-                          ObObjType val_type,
-                          ObCollationType &cs_type,
-                          ObIJsonBase*& j_base, bool to_bin = false);
-  static int datum_to_json_val(const ObDatum *json_datum,  ObObjMeta& data_meta, common::ObIAllocator *allocator,
-                               ObBasicSessionInfo *session, ObIJsonBase*& j_base, bool is_bool_data_type,
-                               bool format_json, bool is_strict, bool is_bin,
-                               const common::ObLobReadOptions *lob_options);
+                          ObIJsonBase*& j_base);
   
  
   /*
@@ -305,13 +258,11 @@ public:
   @param[in]  json_doc   the root json node of old json node
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
-  static int json_base_replace(ObIJsonBase *json_old, ObIJsonBase *json_new,
-                               ObIJsonBase *&json_doc);
 
   static int find_and_add_cache(ObJsonPathCache* path_cache, ObJsonPath*& res_path,
                                 ObString& path_str, int arg_idx, bool enable_wildcard, 
                                 bool is_const = false);
-  static int find_and_add_schema_cache(ObJsonSchemaCache* schema_cache, ObIJsonBase*& j_schema,
+  static int find_and_add_schema_cache(ObJsonSchemaCache* schema_cache, ObJsonSchemaCache*& j_schema,
                                       ObString& schema_str, int arg_idx, const ObJsonInType& in_type);
 
   static ObJsonPathCache* get_path_cache_ctx(const uint64_t& id, ObExecContext *exec_ctx);
@@ -340,16 +291,6 @@ public:
   @param[in]  to_bin         whether convert to binary
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
-  template <typename T>
-  static int transform_scalar_2jsonBase(const T &datum,
-                                        ObObjType type,
-                                        common::ObIAllocator *allocator,
-                                        ObScale scale,
-                                        const ObTimeZoneInfo *tz_info,
-                                        ObBasicSessionInfo *session,
-                                        ObIJsonBase*& j_base,
-                                        bool to_bin,
-                                        bool is_bool = false);
   /*
   try to transfrom from type which is_convertible_to_json to jsonBase
   @param[in]  datum          the input datum
@@ -361,14 +302,6 @@ public:
   @param[in]  deep_copy      whether deep copy input string from datum
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
-  template <typename T>
-  static int transform_convertible_2jsonBase(const T &datum,
-                                             ObObjType type,
-                                             common::ObIAllocator *allocator,
-                                             ObCollationType cs_type,
-                                             ObIJsonBase*& j_base,
-                                             ObConv2JsonParam flags,
-                                             const common::ObLobReadOptions *lob_options);
 
 
   static bool is_convertible_to_json(ObObjType &type);
@@ -485,7 +418,6 @@ public:
     ObIJsonBase *json_doc,
     ObDatum &res);
 
-  static int refresh_root_when_bin_rebuild_all(ObIJsonBase *j_base);
 
   static int init_json_expr_extra_info(
       ObIAllocator *allocator,
