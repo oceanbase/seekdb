@@ -1004,8 +1004,12 @@ int ObTxCtx::takeover_from_replay()
     // INIT has no durable commit intent and its previous owner has gone away.
     // As on OceanBase leader takeover, an undecided MDS table-lock transaction
     // must abort even if its commit-info log has already been replayed.
+    // In-transaction locks (e.g. the DDL RUNTIME lock) are not MDS, so check
+    // the recovered lock ops as well; otherwise an orphan lock blocks all DDL.
+    const bool has_table_lock = mt_ctx_.get_lock_mem_ctx().get_lock_op_count() > 0;
     const bool abort_tx = get_downstream_state() == ObTxState::INIT
                           || is_contain_mds_type_(ObTxDataSourceType::TABLE_LOCK)
+                          || has_table_lock
                           || runtime_state_.is_force_abort();
     commit_retry_timeout_ = get_commit_retry_interval_us_();
     if (OB_FAIL(mt_ctx_.replay_to_commit(false /*is_resume*/))) {
@@ -1031,7 +1035,7 @@ int ObTxCtx::takeover_from_replay()
         // timer also tolerates timestamp services becoming ready after LS online.
         part_trans_action_ = ObPartTransAction::COMMIT;
       }
-      TRANS_LOG(INFO, "replayed transaction taken over for local completion", K(abort_tx), KPC(this));
+      TRANS_LOG(INFO, "replayed transaction taken over for local completion", K(abort_tx), K(has_table_lock), KPC(this));
     }
   }
   return ret;
