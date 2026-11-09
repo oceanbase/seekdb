@@ -2384,8 +2384,10 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
       } else if (OB_ISNULL(temp)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(temp->formalize(ctx_->session_info_))) {
+         LOG_WARN("failed to formalize expr", K(ret));
       } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(
                             *expr_factory, expr, temp, ctx_->session_info_))) {
+          LOG_WARN("failed to add cast for replaced expr", K(ret));
       } else {
         // NOT returns INT32, while predicates such as LIKE return INT64.
         // Preserve the replaced expression's type so that formalizing its
