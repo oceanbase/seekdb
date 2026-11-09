@@ -1,0 +1,52 @@
+# Issue 1534: redundant range filters in adaptive vector scans
+USE test;
+SELECT id FROM t_vec_redundant_filter WHERE age < 10
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 10;
+id
+1
+2
+SELECT id FROM t_vec_redundant_filter WHERE age < 10 AND age < 20 AND age < 25
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 10;
+id
+1
+2
+EXPLAIN SELECT id FROM t_vec_redundant_filter
+  WHERE age < 10 AND age < 20 AND age < 25
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 2;
+Query Plan
+==================================================================================================
+|ID|OPERATOR                               |NAME                           |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_vec_redundant_filter(idx_age)|2       |10          |
+==================================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_vec_redundant_filter.id]), filter([t_vec_redundant_filter.age < 10]), rowset=16
+      access([t_vec_redundant_filter.id], [t_vec_redundant_filter.age]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true], 
+      range_key([t_vec_redundant_filter.age], [t_vec_redundant_filter.id]), range(NULL,MAX ; 10,MIN)
+SELECT id FROM t_vec_redundant_filter WHERE age < 10 AND age < 20
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 10;
+id
+1
+2
+SELECT id FROM t_vec_redundant_filter WHERE age < 30 AND age < 20
+  ORDER BY l2_distance(embedding, '[0.1,0.2,0.3]') APPROXIMATE LIMIT 10;
+id
+1
+2
+3
+PREPARE vec_redundant_filter_stmt FROM
+  'SELECT id FROM t_vec_redundant_filter WHERE age < ? AND age < ? ORDER BY l2_distance(embedding, ''[0.1,0.2,0.3]'') APPROXIMATE LIMIT 10';
+SET @vec_filter_a = 10, @vec_filter_b = 20;
+EXECUTE vec_redundant_filter_stmt USING @vec_filter_a, @vec_filter_b;
+id
+1
+2
+SET @vec_filter_a = 30, @vec_filter_b = 20;
+EXECUTE vec_redundant_filter_stmt USING @vec_filter_a, @vec_filter_b;
+id
+1
+2
+3
+DEALLOCATE PREPARE vec_redundant_filter_stmt;
