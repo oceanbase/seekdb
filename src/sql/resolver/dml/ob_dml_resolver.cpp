@@ -51,6 +51,43 @@ using namespace pl;
 
 namespace sql
 {
+namespace
+{
+
+// An approximate vector index scan emits candidates from the nearest neighbour outwards, i.e. in
+// ascending order of the index distance metric. For a distance-like expression the value of the
+// ORDER BY expression grows with the distance, so an ascending ORDER BY matches the emitted order.
+// For inner_product() a larger value means "closer", so only a descending ORDER BY matches.
+// When the requested direction is the opposite one, the index scan can not satisfy the ORDER BY and
+// the exact (non approximate) plan must be kept.
+bool is_order_direction_compatible_with_vec_index(const ObDMLStmt &stmt, const ObRawExpr &order_expr)
+{
+  bool is_compatible = true;
+  if (1 != stmt.get_order_item_size()) {
+    is_compatible = false;
+  } else {
+    const ObOrderDirection direction = stmt.get_order_item(0).order_type_;
+    switch (order_expr.get_expr_type()) {
+      case T_FUN_SYS_INNER_PRODUCT:
+        is_compatible = is_descending_direction(direction);
+        break;
+      case T_FUN_SYS_NEGATIVE_INNER_PRODUCT:
+      case T_FUN_SYS_L2_DISTANCE:
+      case T_FUN_SYS_L2_SQUARED:
+      case T_FUN_SYS_COSINE_DISTANCE:
+        is_compatible = is_ascending_direction(direction);
+        break;
+      default:
+        // Keep the previous behavior for the remaining vector sort expressions.
+        is_compatible = true;
+        break;
+    }
+  }
+  return is_compatible;
+}
+
+} // namespace
+
 ObDMLResolver::ObDMLResolver(ObResolverParams &params)
     : ObStmtResolver(params),
       current_scope_(T_NONE_SCOPE),
@@ -5344,8 +5381,17 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
-        stmt->set_has_vec_approx(true);
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid) {
+        if (!is_order_direction_compatible_with_vec_index(*stmt, *tmp_expr)) {
+          // The vector index always returns the nearest (most similar) rows first. That is the
+          // ascending order of a distance-like expression, but the descending order of
+          // inner_product(). If the requested ORDER BY direction is the opposite one, the physical
+          // order of the index scan can not satisfy it, so the ANN path must not be chosen.
+          LOG_WARN("order direction can not be served by vector index, will not use index",
+                   K(tmp_expr->get_expr_type()), K(stmt->get_order_item(0).order_type_));
+        } else {
+          stmt->set_has_vec_approx(true);
+        }
       }
       if (OB_SUCC(ret) && !has_const) {
         // if has vector expr, but no const param, not support use vector index
