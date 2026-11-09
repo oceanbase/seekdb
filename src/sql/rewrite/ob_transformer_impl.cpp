@@ -453,7 +453,11 @@ int ObTransformerImpl::transform_rule_set_in_one_iteration(ObDMLStmt *&stmt,
      * The ordering to apply the following rules is important,
      * think carefully when new rules are added
      */
-    APPLY_RULE_IF_NEEDED(SIMPLIFY_EXPR, ObTransformSimplifyExpr);
+    if (ann_predicates_only_) {
+      APPLY_RULE_IF_NEEDED(SIMPLIFY_EXPR, AnnFilterSimplifier);
+    } else {
+      APPLY_RULE_IF_NEEDED(SIMPLIFY_EXPR, ObTransformSimplifyExpr);
+    }
     APPLY_RULE_IF_NEEDED(SIMPLIFY_DISTINCT, ObTransformSimplifyDistinct);
     APPLY_RULE_IF_NEEDED(SIMPLIFY_GROUPBY, ObTransformSimplifyGroupby);
     APPLY_RULE_IF_NEEDED(SIMPLIFY_WINFUNC, ObTransformSimplifyWinfunc);
@@ -536,8 +540,16 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
-    if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
+    ann_predicates_only_ = func.contain_vec_index_approx_;
+    if (func.contain_geometry_values_ || func.contain_fulltext_search_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    }
+    if (func.contain_vec_index_approx_) {
+      // Keep ANN's query structure intact, but allow equivalent scalar
+      // predicates to be simplified before constructing its pre-filter.
+      uint64_t ann_enable_list = 0;
+      ObTransformRule::add_trans_type(ann_enable_list, SIMPLIFY_EXPR);
+      disable_list |= ObTransformRule::ALL_TRANSFORM_RULES & ~ann_enable_list;
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
