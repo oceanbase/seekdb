@@ -950,7 +950,10 @@ public:
       scheduler_(nullptr),
       priority_(ObDagPrio::DAG_PRIO_MAX),
       running_task_cnts_(0),
-      limits_(0)
+      limits_(0),
+      last_high_compaction_type_(ObDagType::DAG_TYPE_MAX),
+      prefer_large_mini_(true),
+      high_prio_dispatch_turn_(0)
   {}
   ~ObDagPrioScheduler() { destroy();}
   void destroy();
@@ -1078,6 +1081,7 @@ private:
     const bool check_size_overflow,
     ObIDag *&dag);
   void add_schedule_info_(const ObDagType::ObDagTypeEnum dag_type, const int64_t data_size);
+  void record_ready_task_dispatch_(const ObDagType::ObDagTypeEnum dag_type);
   void add_added_info_(const ObDagType::ObDagTypeEnum dag_type);
   int schedule_one_();
   int schedule_dag_(ObIDag &dag, bool &move_dag_to_waiting_list);
@@ -1116,6 +1120,10 @@ private:
   int64_t priority_;
   int64_t running_task_cnts_;
   int64_t limits_;           // needs to be equal with thread_score
+  // Scheduling policy state, protected by prio_lock_.
+  ObDagType::ObDagTypeEnum last_high_compaction_type_;
+  bool prefer_large_mini_;
+  int64_t high_prio_dispatch_turn_;
 };
 
 #define DEFINE_ATOMIC_ARRAY_FUNC(name, var) \
