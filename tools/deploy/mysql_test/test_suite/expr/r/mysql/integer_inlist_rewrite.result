@@ -1,0 +1,151 @@
+drop table if exists integer_inlist_rewrite;
+create table integer_inlist_rewrite (id int primary key, v bigint unsigned);
+insert into integer_inlist_rewrite values
+(1,1),(2,2),(3,3),(4,4),(5,5),(6,NULL),(7,18446744073709551615);
+# Three distinct integers below the threshold must remain an IN filter.
+explain basic select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in (1,2,3,1,2,3,1,2,3);
+Query Plan
+===========================================
+|ID|OPERATOR       |NAME                  |
+-------------------------------------------
+|0 |TABLE FULL SCAN|integer_inlist_rewrite|
+===========================================
+Outputs & filters:
+-------------------------------------
+  0 - output([integer_inlist_rewrite.id]), filter([integer_inlist_rewrite.v IN (1, 2, 3, 1, 2, 3, 1, 2, 3)]), rowset=16
+      access([integer_inlist_rewrite.id], [integer_inlist_rewrite.v]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([integer_inlist_rewrite.id]), range(MIN ; MAX)always true
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in (1,2,3,1,2,3,1,2,3) order by id;
+id
+1
+2
+3
+# Same parameterized shape, different values: no parameter may be removed.
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in (1,2,3,4,5,4,5,4,5) order by id;
+id
+1
+2
+3
+4
+5
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in (1,2,3,1,2,3,1,2,3) order by id;
+id
+1
+2
+3
+# The threshold boundary and explicitly forced rewrite still apply.
+explain basic select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in (1,2,3,4,1,2,3,4);
+Query Plan
+=====================================================
+|ID|OPERATOR                 |NAME                  |
+-----------------------------------------------------
+|0 |HASH JOIN                |                      |
+|1 |├─SUBPLAN SCAN           |VIEW2                 |
+|2 |│ └─HASH DISTINCT        |                      |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1         |
+|4 |└─TABLE FULL SCAN        |integer_inlist_rewrite|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([integer_inlist_rewrite.id]), filter(nil), rowset=16
+      equal_conds([integer_inlist_rewrite.v = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([integer_inlist_rewrite.id], [integer_inlist_rewrite.v]), filter(nil), rowset=16
+      access([integer_inlist_rewrite.id], [integer_inlist_rewrite.v]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([integer_inlist_rewrite.id]), range(MIN ; MAX)always true
+explain basic select /*+ opt_param('inlist_rewrite_threshold', 1) */ id
+from integer_inlist_rewrite where v in (1,1,1,1);
+Query Plan
+=====================================================
+|ID|OPERATOR                 |NAME                  |
+-----------------------------------------------------
+|0 |HASH JOIN                |                      |
+|1 |├─SUBPLAN SCAN           |VIEW2                 |
+|2 |│ └─HASH DISTINCT        |                      |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1         |
+|4 |└─TABLE FULL SCAN        |integer_inlist_rewrite|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([integer_inlist_rewrite.id]), filter(nil), rowset=16
+      equal_conds([integer_inlist_rewrite.v = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([integer_inlist_rewrite.id], [integer_inlist_rewrite.v]), filter(nil), rowset=16
+      access([integer_inlist_rewrite.id], [integer_inlist_rewrite.v]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([integer_inlist_rewrite.id]), range(MIN ; MAX)always true
+# NULL must preserve three-valued IN and NOT IN semantics.
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in (1,NULL,1,NULL,1,NULL) order by id;
+id
+1
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v not in (1,NULL,1,NULL,1,NULL) order by id;
+id
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in (NULL,NULL,NULL,NULL) order by id;
+id
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v not in (1,2,3,1,2,3) order by id;
+id
+4
+5
+7
+# Unsigned boundary values must not be truncated to signed integers.
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite
+where v in (18446744073709551615,18446744073709551615,
+18446744073709551615,18446744073709551615) order by id;
+id
+7
+# Strings, decimal literals and row values keep the existing path.
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in ('1','2','1','2') order by id;
+id
+1
+2
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where v in (1.5,2.0,1.5,2.0) order by id;
+id
+2
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id
+from integer_inlist_rewrite where (id,v) in ((1,1),(2,2),(1,1),(2,2)) order by id;
+id
+1
+2
+# Prepared statements must retain every independently bound parameter.
+prepare inlist_stmt from
+'select /*+ opt_param(''inlist_rewrite_threshold'', 4) */ id from integer_inlist_rewrite where v in (?,?,?,?,?,?) order by id';
+set @a=1, @b=2, @c=3, @d=1, @e=2, @f=3;
+execute inlist_stmt using @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+set @d=4, @e=5, @f=NULL;
+execute inlist_stmt using @a,@b,@c,@d,@e,@f;
+id
+1
+2
+3
+4
+5
+deallocate prepare inlist_stmt;
+drop table integer_inlist_rewrite;
