@@ -189,6 +189,10 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
           }
         }
       }
+      if (OB_SUCC(ret) && !is_packed && value.is_ext()
+          && OB_FAIL(ObSqlUdtUtils::convert_pl_composite_for_client(value, result))) {
+        // PL composite cells are sent to the client as one JSON text cell
+      }
       if (OB_SUCC(ret) && !is_packed) {
         // Compatibility with server versions before 4.1.
         //    use only locator and response routine

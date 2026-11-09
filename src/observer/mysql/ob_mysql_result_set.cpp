@@ -84,6 +84,14 @@ int ObMySQLResultSet::next_field(ObMySQLField &obmf)
         // do nothing
       } else {
         replace_lob_type(obmf);
+        if (ObExtendType == field.type_.get_type()) {
+          // PL composite cells are sent as JSON text, so describe the column
+          // as text instead of the internal complex type.
+          obmf.type_ = oceanbase::obmysql::EMySQLFieldType::MYSQL_TYPE_VAR_STRING;
+          obmf.flags_ &= ~BINARY_FLAG;
+          obmf.type_name_.reset();
+          obmf.type_owner_.reset();
+        }
       }
     }
   }
