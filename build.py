@@ -46,6 +46,8 @@ def _sha256_file(path: Path) -> str:
 def _download_binary(url: str, destination: Path, checksum: str) -> Path:
     """Verify before atomic installation; use the environment's proxy settings."""
     if destination.is_file() and _sha256_file(destination) == checksum:
+        if os.name != "nt":
+            destination.chmod(destination.stat().st_mode | 0o100)
         return destination
     destination.parent.mkdir(parents=True, exist_ok=True)
     opener = urllib.request.build_opener()
