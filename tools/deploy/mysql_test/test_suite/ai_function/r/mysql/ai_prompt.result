@@ -2,7 +2,8 @@ select ai_prompt('{0}+{1}={2} 吗？请回答true或false','1');
 ai_prompt('{0}+{1}={2} 吗？请回答true或false','1')
 {"args": ["1"], "template": "{0}+{1}={2} 吗？请回答true或false"}
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"));
-ERROR 0A000: json type is not supported not supported
+ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"))
+{"args": ["1", {"a": "1"}], "template": "{0}+{1}={2} 吗？请回答true或false"}
 select ai_prompt();
 ERROR 42000: Incorrect parameter count in the call to native function 'ai_prompt'
 select ai_prompt(1);
@@ -51,11 +52,21 @@ ERROR 22000: Invalid data type for the operation
 select ai_prompt(a) from t1;
 ERROR 22000: Invalid data type for the operation
 select ai_prompt(b) from t1;
-ERROR 22000: Invalid data type for the operation
+ai_prompt(b)
+{"args": [], "template": "b"}
+{"args": [], "template": "bb"}
+{"args": [], "template": "bbb"}
+{"args": [], "template": "BBB"}
+{"args": [], "template": "bb"}
 select ai_prompt(c) from t1;
 ERROR 22000: Invalid data type for the operation
 select ai_prompt(d) from t1;
-ERROR 22000: Invalid data type for the operation
+ai_prompt(d)
+{"args": [], "template": "d"}
+{"args": [], "template": "dd"}
+{"args": [], "template": "ddd"}
+{"args": [], "template": "DDD"}
+{"args": [], "template": "dd"}
 drop table t1;
 drop table if exists t1;
 create table t1 (nr char(5), a varchar(10), b BINARY(20), c VARBINARY(20));
@@ -175,14 +186,14 @@ ai_prompt(a,b)	sum(d)
 {"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}	20
 select ai_prompt(w.a, w.b), b from t1 as w;
 ai_prompt(w.a, w.b)	b
-{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}	oExGTLHmkvIGQekFkd  
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}	oExGTLHmkvIGQekFkd  
 {"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}	RioBRrIKsEiedMVmtUqq
-{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}	oExGTLHmkvIGQekFkd  
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}	oExGTLHmkvIGQekFkd  
 select cast(ai_prompt(w.a, w.b) as char), b from t1 as w;
 cast(ai_prompt(w.a, w.b) as char)	b
-{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}	oExGTLHmkvIGQekFkd  
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "b"}	oExGTLHmkvIGQekFkd  
 {"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}	RioBRrIKsEiedMVmtUqq
-{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}	oExGTLHmkvIGQekFkd  
+{"args": ["oExGTLHmkvIGQekFkd\u0000\u0000"], "template": "bb"}	oExGTLHmkvIGQekFkd  
 select ai_prompt(a,b) from t1 where d>10;
 ai_prompt(a,b)
 {"args": ["RioBRrIKsEiedMVmtUqq"], "template": "bbb"}
