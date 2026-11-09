@@ -1,0 +1,89 @@
+{
+  "pid": 33736,
+  "sql_ready": true,
+  "argv": [
+    "/workspace/amd107/runtime108/observer",
+    "--base-dir=/workspace/amd107/candidate-quality64",
+    "--port=2882",
+    "--nodaemon",
+    "--parameter",
+    "memory_budget=16G",
+    "--parameter",
+    "cpu_count=8",
+    "--parameter",
+    "datafile_maxsize=40G",
+    "--parameter",
+    "log_disk_size=10G",
+    "--log-level",
+    "INFO"
+  ],
+  "settings": {
+    "LD_LIBRARY_PATH": "/workspace/amd107/runtime108/lib:/opt/hipvs/lib:/opt/rocm/lib",
+    "SEEKDB_HOME": "/seekdb_workspace",
+    "TMPDIR": "/workspace/amd107/tmp",
+    "SEEKDB_CUVS_BRIDGE": "/workspace/amd107/hnsw_bridge/libseekdb_cuvs_bridge.so",
+    "SEEKDB_HIPVS_HNSW_HIERARCHY": "gpu",
+    "SEEKDB_HIPVS_SEARCH_EF": "1000",
+    "SEEKDB_HIPVS_CPU_THREADS": "0",
+    "SEEKDB_HIPVS_HNSW_M": "64",
+    "SEEKDB_HIPVS_GRAPH_DEGREE": "128",
+    "SEEKDB_HIPVS_INTERMEDIATE_DEGREE": "256",
+    "SEEKDB_HIPVS_EF_CONSTRUCTION": "400",
+    "SEEKDB_HIPVS_NN_DESCENT_NITER": "20"
+  },
+  "executable_sha256": "84b7c08ae4c9d54f2c51eec91f8a847bda8501a5cecda1694fbce8a565465724",
+  "bridge_sha256": "65c69d59001855d4a5c87ff037f38f66557020499e7d40b8dcd62f6e34b76f8d",
+  "original_launch": "/workspace/amd107/candidate-quality-launch.json",
+  "original_pid": 14001,
+  "old_process_before_wait": {
+    "pid": 14001,
+    "leader": {
+      "state": "Z",
+      "start_ticks": "1047594726"
+    },
+    "threads": [
+      {
+        "tid": 14001,
+        "state": "Z",
+        "start_ticks": "1047594726"
+      }
+    ],
+    "active_threads": [],
+    "fully_exited_or_zombie_only": true
+  },
+  "old_process_at_recovery_start": {
+    "pid": 14001,
+    "leader": {
+      "state": "Z",
+      "start_ticks": "1047594726"
+    },
+    "threads": [
+      {
+        "tid": 14001,
+        "state": "Z",
+        "start_ticks": "1047594726"
+      }
+    ],
+    "active_threads": [],
+    "fully_exited_or_zombie_only": true
+  },
+  "port2882_listeners_before_start": [],
+  "port2882_connects_before_start": false,
+  "signals_sent": [],
+  "cloud_instance_restarted": false,
+  "new_cloud_instance_created": false,
+  "database_path": "/workspace/amd107/candidate-quality64",
+  "database_directory_device_at_recovery": 1793,
+  "database_directory_inode_at_recovery": 6037800,
+  "database_directory_deleted_or_created": false,
+  "index_ddl_issued": false,
+  "argv_reused_exactly": true,
+  "saved_settings_reused_exactly": true,
+  "environment_source": "current shell environment overlaid with exact saved launch settings",
+  "complete_original_process_environment_reused": false,
+  "historical_database_inode_continuity_proven": false,
+  "started_utc": "2026-10-28T10:36:54.324084+00:00",
+  "stdout": "/workspace/amd107/candidate-persisted.out",
+  "scope": "Recover same existing DB after owned SIGTERM; persistence/recall check is separate",
+  "version": "5.7.25-OceanBase seekdb-v1.4.0.0"
+}

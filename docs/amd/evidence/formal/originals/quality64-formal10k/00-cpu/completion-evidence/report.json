@@ -1,0 +1,41 @@
+{
+  "status": "running",
+  "started_utc": "2026-10-28T10:03:44.924270+00:00",
+  "mode": "formal",
+  "qualified_gpu_build": false,
+  "script_sha256": "280ace5911ebd1af83bd59b9188852f28e86d4aa669f79507d94c9131bccee1e",
+  "rounds": [
+    {
+      "backend": "cpu",
+      "round": 0,
+      "table": "cpu_r00",
+      "index": "ix_cpu_r00",
+      "status": "building",
+      "qualified_gpu_build": false,
+      "raw_data_readback": {
+        "rows": 10000,
+        "float32_values": 1280000,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442"
+      },
+      "query_data_readback": {
+        "rows": 100,
+        "float32_values": 12800,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4"
+      },
+      "build_started_utc": "2026-10-28T10:03:48.476444+00:00",
+      "raw_data_ready_before_timer": true,
+      "target_index_absent_before_timer": true
+    }
+  ],
+  "schema": "amd107_20261028100345_30525",
+  "query_count": 100,
+  "k": 10,
+  "recall_targets": 1000,
+  "dataset_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442",
+  "driver": "mysql",
+  "actual_session_ob_hnsw_ef_search": 1000
+}

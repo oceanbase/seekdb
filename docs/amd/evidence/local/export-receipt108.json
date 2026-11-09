@@ -1,0 +1,17 @@
+{
+  "archive": "/workspace/amd-build108/observer-cuvs108-linux-x86_64.tar.xz",
+  "bytes": 34385152,
+  "sha256": "4f7d98261af6f53b2162c93cdbc9045a902caaa0a87cf3ce590f39698a691e5a",
+  "files": [
+    {
+      "path": "observer",
+      "bytes": 125785896,
+      "sha256": "84b7c08ae4c9d54f2c51eec91f8a847bda8501a5cecda1694fbce8a565465724"
+    },
+    {
+      "path": "lib/libaio.so.1",
+      "bytes": 31472,
+      "sha256": "034b3bc6b8ccf407f3b68a9c2efacc5beed470cc086a6119e563b0695531a553"
+    }
+  ]
+}

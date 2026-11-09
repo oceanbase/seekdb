@@ -1,0 +1,5 @@
+[seekdb_hipvs_hnsw] event=build_start n=10000 dim=128 metric=L2Expanded hierarchy=gpu hnsw_m=64 graph_degree=128 intermediate_degree=256 nn_descent_niter=20 ef_construction=400 search_ef=1000 threads=0 fallback=disabled
+[seekdb_hipvs_hnsw] event=gpu_cagra_complete elapsed_ms=1907.189
+[ 32045][10:05:05:115593][warning] Intermediate graph degree cannot be larger than number of rows in dataset, reducing it to 94
+[seekdb_hipvs_hnsw] event=build_complete backend=cagra-to-hnsw hierarchy=gpu hnsw_conversion_ms=592.820 total_ms=2500.009 search_backend=cpu-hnsw fallback=disabled
+[seekdb_hipvs_hnsw] event=serialize_complete format=SKHNSW01 payload_bytes=10424796 hnsw_data=included target=caller-proc-fd

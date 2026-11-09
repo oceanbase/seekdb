@@ -251,14 +251,18 @@ int ObVectorIndexUtil::parser_params_from_string(
             param.dist_algorithm_ = ObVectorIndexDistAlgorithm::VIDA_COS;
           } else {
             ret = OB_NOT_SUPPORTED;
+            LOG_WARN("not support vector index dist algorithm", K(ret), K(new_param_value));
           }
         } else if (new_param_name == "LIB") {
           if (new_param_value == "VSAG") {
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_VSAG;
           } else if (new_param_value == "OB") {
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_OB;
+          } else if (new_param_value == "CUVS") {
+            param.lib_ = static_cast<ObVectorIndexAlgorithmLib>(3) /* CUVS */;
           } else {
             ret = OB_NOT_SUPPORTED;
+            LOG_WARN("not support vector index lib", K(ret), K(new_param_value));
           }
         } else if (new_param_name == "TYPE") {
           if (new_param_value == "HNSW") {
@@ -534,8 +538,25 @@ int ObVectorIndexUtil::parser_params_from_string(
         }
       } else {
         ret = OB_NOT_SUPPORTED;
+        LOG_WARN("not support vector index type", K(ret), K(index_type));
       }
       param.dim_ = 0; // TODO@xiajin: fill dim
+    }
+    if (OB_SUCC(ret)
+        && param.lib_ == static_cast<ObVectorIndexAlgorithmLib>(3) /* CUVS */
+        && param.dist_algorithm_ != ObVectorIndexDistAlgorithm::VIDA_L2) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("lib=cuvs only supports distance=l2", K(ret), K(param.dist_algorithm_));
+    }
+    // Validate after default resolution: extra-info HNSW is converted to HGRAPH.
+    if (OB_SUCC(ret) && param.lib_ == static_cast<ObVectorIndexAlgorithmLib>(3) /* CUVS */
+        && (param.extra_info_actual_size_ != 0
+            || (param.type_ != ObVectorIndexAlgorithmType::VIAT_MAX
+                && param.type_ != ObVectorIndexAlgorithmType::VIAT_HNSW))) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("lib=cuvs requires ordinary HNSW without extra info", K(ret),
+               K(param.type_), K(param.extra_info_actual_size_));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "lib=cuvs requires ordinary HNSW without extra info");
     }
   }
   return ret;
@@ -1030,6 +1051,8 @@ int ObVectorIndexUtil::construct_rebuild_index_param(
         tmp_lib = ObString("VSAG");
       } else if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_OB) {
         tmp_lib = ObString("OB");
+      } else if (old_vec_param.lib_ == static_cast<ObVectorIndexAlgorithmLib>(3) /* CUVS */) {
+        tmp_lib = ObString("CUVS");
       } else {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -2978,15 +3001,18 @@ int ObVectorIndexUtil::check_index_param(
             }
           } else {
             ret = OB_NOT_SUPPORTED;
+            LOG_WARN("not support vector index distance algorithm", K(ret), K(new_parser_name));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index distance algorithm is");
           }
         } else if (last_variable == "LIB") {
           if (new_parser_name == "VSAG" ||
-              new_parser_name == "OB") {
+              new_parser_name == "OB" ||
+              new_parser_name == "CUVS") {
             lib_is_set = true;
             lib_name = new_parser_name;
           } else {
             ret = OB_NOT_SUPPORTED;
+            LOG_WARN("not support vector index lib", K(ret), K(new_parser_name));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index lib is");
           }
         } else if (last_variable == "TYPE") {
@@ -3281,34 +3307,52 @@ int ObVectorIndexUtil::check_index_param(
         if (m_value >= 5 && m_value <= 128) {
         } else {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("invalid vector index m value", K(ret), K(parser_value));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index m is");
         }
         if (OB_FAIL(ret)) {
-        } else if (lib_is_set && lib_name != "VSAG") {
+        } else if (lib_is_set && lib_name != "VSAG" && lib_name != "CUVS") {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index name should be 'VSAG' or 'CUVS'", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' is");
+        }
+        if (OB_FAIL(ret)) {
+        } else if (lib_is_set && lib_name == "CUVS" && distance_name != "L2") {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("lib=cuvs only supports distance=l2", K(ret), K(distance_name));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "lib=cuvs only supports distance=l2");
         }
         if (OB_FAIL(ret)) {
         } else if (ef_construction_value <= m_value) {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("unexpected setting of vector index param, ef_construction value must be larger than m value",
+            K(ret), K(ef_construction_value), K(m_value));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "the vector index params ef_construction less than or equal to m value is");
         }
         if (OB_FAIL(ret)) {
         } else if (nlist_is_set || sample_per_nlist_is_set || nbits_is_set) {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index no need to set nlist or sample_per_nlist or nbits",
+            K(ret), K(nlist_is_set), K(sample_per_nlist_is_set));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index setting nlist or sample_per_nlist or nbits is");
         }
         if (OB_FAIL(ret)) {
         } else if (!type_hybrid_vec_is_set && (endpoint_is_set || sync_interval_is_set)) {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index no need to set model or sync_interval",
+            K(ret), K(endpoint_is_set), K(sync_interval_is_set));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index setting model or sync_interval is");
         } else if (!type_hybrid_vec_is_set && sync_mode_is_set
                    && sync_interval_type == ObVectorIndexSyncIntervalType::VSIT_MANUAL) {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index sync_mode does not support MANUAL",
+            K(ret), K(sync_interval_type));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index sync_mode MANUAL is");
         } else if (!type_hybrid_vec_is_set && !tbl_schema.is_heap_organized_table() && sync_mode_is_set
                    && sync_interval_type == ObVectorIndexSyncIntervalType::VSIT_NUMERIC) {
           ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index on non-heap table does not support sync_mode=ASYNC",
+            K(ret), K(tbl_schema.get_table_id()), K(sync_interval_type));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index on non-heap table setting sync_mode=ASYNC is");
         }
       }

@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/workspace/amd107/sql_benchmark.py", line 425, in main
+    row['completion_proof'] = completion_proof(contract, context, folder, args.sql_timeout)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/amd107/sql_benchmark.py", line 278, in completion_proof
+    raise RuntimeError('Completion/proof command failed, not a GPU result')
+RuntimeError: Completion/proof command failed, not a GPU result

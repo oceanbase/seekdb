@@ -1,0 +1,18 @@
+usage: evaluate_files_ctypes.py [-h] --base BASE --query QUERY
+                                --truth-directory TRUTH_DIRECTORY --output
+                                OUTPUT [--minimum-recall MINIMUM_RECALL]
+                                library
+
+Evaluate the real input files against existing hash-bound GT; never recompute
+GT.
+
+positional arguments:
+  library
+
+options:
+  -h, --help            show this help message and exit
+  --base BASE
+  --query QUERY
+  --truth-directory TRUTH_DIRECTORY
+  --output OUTPUT
+  --minimum-recall MINIMUM_RECALL

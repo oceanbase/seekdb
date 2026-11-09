@@ -1,0 +1,12 @@
+test_declared_query_count_mismatch_rejected (__main__.GroundTruthTests.test_declared_query_count_mismatch_rejected) ... ok
+test_invalid_k_counts_dimension_block_and_metric_rejected (__main__.GroundTruthTests.test_invalid_k_counts_dimension_block_and_metric_rejected) ... ok
+test_known_answers_ties_partial_blocks_and_k_equal_n (__main__.GroundTruthTests.test_known_answers_ties_partial_blocks_and_k_equal_n) ... ok
+test_nan_in_last_base_row_and_inf_query_rejected (__main__.GroundTruthTests.test_nan_in_last_base_row_and_inf_query_rejected) ... ok
+test_nine_digits_roundtrip_signed_zero_subnormal_and_extremes (__main__.GroundTruthTests.test_nine_digits_roundtrip_signed_zero_subnormal_and_extremes) ... ok
+test_sql_full_query_denominator_and_missing_query_rejected (__main__.GroundTruthTests.test_sql_full_query_denominator_and_missing_query_rejected) ... ok
+test_truncated_and_trailing_bytes_rejected_before_output (__main__.GroundTruthTests.test_truncated_and_trailing_bytes_rejected_before_output) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.063s
+
+OK

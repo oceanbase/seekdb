@@ -1,0 +1,11 @@
+usage: generate_dataset.py [-h] --output OUTPUT [--base-count BASE_COUNT]
+                           [--query-count QUERY_COUNT] [--dimension DIMENSION]
+                           [--seed SEED]
+
+options:
+  -h, --help            show this help message and exit
+  --output OUTPUT
+  --base-count BASE_COUNT
+  --query-count QUERY_COUNT
+  --dimension DIMENSION
+  --seed SEED

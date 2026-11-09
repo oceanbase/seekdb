@@ -1,0 +1,58 @@
+{
+  "pid": 14001,
+  "sql_ready": true,
+  "argv": [
+    "/workspace/amd107/runtime108/observer",
+    "--base-dir=/workspace/amd107/candidate-quality64",
+    "--port=2882",
+    "--nodaemon",
+    "--parameter",
+    "memory_budget=16G",
+    "--parameter",
+    "cpu_count=8",
+    "--parameter",
+    "datafile_maxsize=40G",
+    "--parameter",
+    "log_disk_size=10G",
+    "--log-level",
+    "INFO"
+  ],
+  "settings": {
+    "LD_LIBRARY_PATH": "/workspace/amd107/runtime108/lib:/opt/hipvs/lib:/opt/rocm/lib",
+    "SEEKDB_HOME": "/seekdb_workspace",
+    "TMPDIR": "/workspace/amd107/tmp",
+    "SEEKDB_CUVS_BRIDGE": "/workspace/amd107/hnsw_bridge/libseekdb_cuvs_bridge.so",
+    "SEEKDB_HIPVS_HNSW_HIERARCHY": "gpu",
+    "SEEKDB_HIPVS_SEARCH_EF": "1000",
+    "SEEKDB_HIPVS_CPU_THREADS": "0",
+    "SEEKDB_HIPVS_HNSW_M": "64",
+    "SEEKDB_HIPVS_GRAPH_DEGREE": "128",
+    "SEEKDB_HIPVS_INTERMEDIATE_DEGREE": "256",
+    "SEEKDB_HIPVS_EF_CONSTRUCTION": "400",
+    "SEEKDB_HIPVS_NN_DESCENT_NITER": "20"
+  },
+  "executable_sha256": "84b7c08ae4c9d54f2c51eec91f8a847bda8501a5cecda1694fbce8a565465724",
+  "bridge_sha256": "65c69d59001855d4a5c87ff037f38f66557020499e7d40b8dcd62f6e34b76f8d",
+  "original_launch": "/workspace/amd107/candidate108-launch.json",
+  "original_pid_stopped": 9458,
+  "original_process_start_ticks": "1047514870",
+  "stopped_process_state": {
+    "state": "Z",
+    "start_ticks": "1047514870"
+  },
+  "cloud_instance_restarted": false,
+  "new_cloud_instance_created": false,
+  "started_utc": "2026-10-28T09:18:29.196180+00:00",
+  "stdout": "/workspace/amd107/candidate-quality.out",
+  "search_ef_requested": 1000,
+  "quality_parameters": {
+    "m": 64,
+    "ef_construction": 400,
+    "effective_search_ef": 1000,
+    "graph_degree": 128,
+    "intermediate_degree": 256,
+    "nn_descent_niter": 20
+  },
+  "cpu_query_ef_note": "VSAG clamp is conditional ef_search>1000; requested1000 is unchanged. CPU and GPU effective ef1000 must match DDL/session/logs.",
+  "version": "5.7.25-OceanBase seekdb-v1.4.0.0"
+}

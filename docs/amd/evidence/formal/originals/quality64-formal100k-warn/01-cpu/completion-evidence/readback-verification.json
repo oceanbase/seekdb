@@ -1,0 +1,14 @@
+{
+  "base": {
+    "rows": 100000,
+    "float32_values": 12800000,
+    "bitwise_equal": true,
+    "float32_sha256": "a998b5ea0c9b3cebf291995d5fc82cdf34decfc99260038442266acae3e156ba"
+  },
+  "query": {
+    "rows": 100,
+    "float32_values": 12800,
+    "bitwise_equal": true,
+    "float32_sha256": "4a85d4807d8cf06e845f10c145a2510494e3ea1db6c8f3a6eab62bfe282a6601"
+  }
+}

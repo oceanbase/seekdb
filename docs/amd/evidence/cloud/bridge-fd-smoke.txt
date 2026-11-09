@@ -1,0 +1,56 @@
+[seekdb_hipvs_hnsw] event=error stage=build_input detail=invalid shape or NULL base fallback=disabled
+[seekdb_hipvs_hnsw] event=error stage=search_input detail=invalid handle, shape, topk, or output pointer fallback=disabled
+[seekdb_hipvs_hnsw] event=build_start n=2048 dim=32 metric=L2Expanded hierarchy=gpu hnsw_m=16 graph_degree=32 intermediate_degree=64 nn_descent_niter=20 ef_construction=200 search_ef=512 threads=1 fallback=disabled
+[seekdb_hipvs_hnsw] event=gpu_cagra_complete elapsed_ms=781.662
+[  7361][08:49:16:012078][warning] Intermediate graph degree cannot be larger than number of rows in dataset, reducing it to 5
+[seekdb_hipvs_hnsw] event=build_complete backend=cagra-to-hnsw hierarchy=gpu hnsw_conversion_ms=590.752 total_ms=1372.414 search_backend=cpu-hnsw fallback=disabled
+{"search_number": 1, "recall": 0.985, "required": 0.95, "layout_id_distance_checks_passed": true}
+{"search_number": 2, "recall": 0.985, "required": 0.95, "layout_id_distance_checks_passed": true}
+[seekdb_hipvs_hnsw] event=error stage=search_input detail=invalid handle, shape, topk, or output pointer fallback=disabled
+[seekdb_hipvs_hnsw] event=serialize_complete format=SKHNSW01 payload_bytes=566468 hnsw_data=included target=regular-path
+[seekdb_hipvs_hnsw] event=error stage=deserialize_header detail=format, shape, hierarchy, size or parameters mismatch fallback=disabled
+[seekdb_hipvs_hnsw] event=error stage=deserialize_payload detail=payload I/O or checksum mismatch fallback=disabled
+[seekdb_hipvs_hnsw] event=deserialize_complete format=SKHNSW01 n=2048 dim=32 hierarchy=gpu search_backend=cpu-hnsw rebuild=none
+{"search_number": 3, "recall": 0.985, "required": 0.95, "layout_id_distance_checks_passed": true}
+[seekdb_hipvs_hnsw] event=serialize_complete format=SKHNSW01 payload_bytes=566468 hnsw_data=included target=caller-proc-fd
+[seekdb_hipvs_hnsw] event=serialize_complete format=SKHNSW01 payload_bytes=566468 hnsw_data=included target=caller-proc-fd
+[seekdb_hipvs_hnsw] event=deserialize_complete format=SKHNSW01 n=2048 dim=32 hierarchy=gpu search_backend=cpu-hnsw rebuild=none
+{"search_number": 4, "recall": 0.985, "required": 0.95, "layout_id_distance_checks_passed": true}
+[seekdb_hipvs_hnsw] event=build_start n=2048 dim=32 metric=L2Expanded hierarchy=gpu hnsw_m=16 graph_degree=32 intermediate_degree=64 nn_descent_niter=20 ef_construction=200 search_ef=512 threads=1 fallback=disabled
+[seekdb_hipvs_hnsw] event=gpu_cagra_complete elapsed_ms=644.071
+[  7361][08:49:17:224319][warning] Intermediate graph degree cannot be larger than number of rows in dataset, reducing it to 5
+[seekdb_hipvs_hnsw] event=build_complete backend=cagra-to-hnsw hierarchy=gpu hnsw_conversion_ms=404.618 total_ms=1048.689 search_backend=cpu-hnsw fallback=disabled
+{
+  "passed": true,
+  "library": "/workspace/amd107/hnsw_bridge/libseekdb_cuvs_bridge.so",
+  "library_sha256": "65c69d59001855d4a5c87ff037f38f66557020499e7d40b8dcd62f6e34b76f8d",
+  "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.39",
+  "abi": {
+    "long_bytes": 8,
+    "uint_bytes": 4,
+    "symbols": 6
+  },
+  "seed": 1729,
+  "n": 2048,
+  "dim": 32,
+  "nq": 20,
+  "topk": 10,
+  "recall": 0.985,
+  "repeated_recall": 0.985,
+  "restored_recall": 0.985,
+  "one_shot_recall": 0.985,
+  "proc_fd_recall": 0.985,
+  "v5_libc_tmpfile_roundtrip": true,
+  "timings": {
+    "build_synced_seconds": 1.372487124055624,
+    "serialize_seconds": 0.0034498795866966248,
+    "deserialize_seconds": 0.0029053520411252975
+  },
+  "base_sha256": "6f1bd69d5692b245b4a7b7d775fa3fc9dc93fb3b920fea418e8562e34639ab30",
+  "queries_sha256": "0ddc2653761c57ae5907eba79764f7f0c93eedab8850ecfbefe7625eb9ec4d53",
+  "configuration": {
+    "SEEKDB_HIPVS_SEARCH_EF": "512"
+  },
+  "checks_passed": 836,
+  "scope": "bridge-only ABI/quality/persistence smoke; not a seekdb end-to-end build speed claim"
+}

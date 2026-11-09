@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "summary_source": "D:\\ob2026_plan\\runs\\amd107\\evidence-formal108.summary.json",
+  "summary_sha256": "e5ad34f9fe44c241cb3df346a57adb463f9d1ccf7735de8db33f8317b8f1dd1f",
+  "compact_file_sha_and_size_match": true,
+  "decompressed_json_sha_matches_summary": true,
+  "canonical_manifest_sha_and_size_match": true,
+  "reconstructed_manifest_import_mtimes_rounded": 21584,
+  "maximum_import_mtime_rounding_ns": 256,
+  "imported_manifest_backup": "D:\\ob2026_plan\\runs\\amd107\\evidence-formal108.manifest.imported-rounded.json",
+  "original_file_paths_sizes_and_shas_unchanged": true,
+  "canonical_manifest_source": "D:\\ob2026_plan\\runs\\amd107\\evidence-formal108.manifest.json",
+  "archive_metadata": {
+    "path": "/workspace/amd107/evidence-formal108.full.tar.gz",
+    "size": 1293531108,
+    "sha256": "5995e9d5dc371cc7ed09cb958756751c47b2d84a8d03027f093ef17915840d82"
+  },
+  "archive_binary_locally_verified": false,
+  "persistence_verified": false
+}

@@ -1,0 +1,20 @@
+{
+  "seed": 20261028,
+  "generator": "NumPy PCG64, normal, unit L2",
+  "numpy_version": "2.4.6",
+  "dimension": 128,
+  "index_reused": false,
+  "files": {
+    "base": {
+      "rows": 100000,
+      "bytes": 51200000,
+      "sha256": "a998b5ea0c9b3cebf291995d5fc82cdf34decfc99260038442266acae3e156ba"
+    },
+    "query": {
+      "rows": 100,
+      "bytes": 51200,
+      "sha256": "4a85d4807d8cf06e845f10c145a2510494e3ea1db6c8f3a6eab62bfe282a6601"
+    }
+  },
+  "elapsed_sec": 0.33047021739184856
+}

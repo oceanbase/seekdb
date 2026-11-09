@@ -1,0 +1,161 @@
+{
+  "status": "PASS",
+  "finished_utc": "2026-10-28T09:15:02.798059+00:00",
+  "scope": "Portable local controls and documented CLI; no server or GPU execution",
+  "real_sql_execution": false,
+  "gpu_execution": false,
+  "python_version": "3.12.14 (main, Aug 13 2026, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)]",
+  "syntax_checked_python_files": 10,
+  "commands": [
+    {
+      "name": "test_prepare_ground_truth",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "unittest/amd_hipvs/test_prepare_ground_truth.py"
+      ],
+      "exit": 0,
+      "transcript_sha256": "d1dd47cf72eec4607221f8334a4ee8225a327f316b82465ca3d96ac548637f92"
+    },
+    {
+      "name": "test_completion_proof",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "unittest/amd_hipvs/test_completion_proof.py"
+      ],
+      "exit": 0,
+      "transcript_sha256": "4ea0f91565a2d561aaa5b6770cb3d9aeb9397bc36b9a080bc320b66b83ad8153"
+    },
+    {
+      "name": "test_dispatch",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "unittest/amd_hipvs/test_dispatch.py"
+      ],
+      "exit": 0,
+      "transcript_sha256": "b70ee2f99b7728ff1e049e835e1f7f3c7babe96726e13d7d39b991abdf1c07f9"
+    },
+    {
+      "name": "snapshot_io_contract",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "unittest/amd_hipvs/snapshot_io_contract.py"
+      ],
+      "exit": 0,
+      "transcript_sha256": "3ec7e8da2de6d40e89ca2a3b13122a45753740113c3a8ff3403a38a0b92f921d"
+    },
+    {
+      "name": "help-generate_dataset",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "tools/benchmark/amd_hnsw/generate_dataset.py",
+        "--help"
+      ],
+      "exit": 0,
+      "transcript_sha256": "f834149d80a2a929112783a967bf5588fc42e0baaef9404046bdeb4399cb67ba"
+    },
+    {
+      "name": "help-prepare_ground_truth",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "tools/benchmark/amd_hnsw/prepare_ground_truth.py",
+        "--help"
+      ],
+      "exit": 0,
+      "transcript_sha256": "b4b7d9782343769ed163541b0fa9891b38046d1d91fdd6fedc78caaeeb8612a9"
+    },
+    {
+      "name": "help-sql_benchmark",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "tools/benchmark/amd_hnsw/sql_benchmark.py",
+        "--help"
+      ],
+      "exit": 0,
+      "transcript_sha256": "09c86d62acf04d57cf1b07f51a650de3b87b3dcba02d0c16795664456ea12486"
+    },
+    {
+      "name": "help-completion_proof",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "tools/benchmark/amd_hnsw/completion_proof.py",
+        "--help"
+      ],
+      "exit": 0,
+      "transcript_sha256": "9b659872ad926faa664f7f9d09d4aad7011768e9d004e1cc396e253373b5c85e"
+    },
+    {
+      "name": "help-smoke_ctypes",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "tools/hipvs_bridge/smoke_ctypes.py",
+        "--help"
+      ],
+      "exit": 0,
+      "transcript_sha256": "2df703240423c5f6dfd4f13fbb1383ab9046755014893944ac235888bff99d89"
+    },
+    {
+      "name": "help-evaluate_files_ctypes",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "tools/hipvs_bridge/evaluate_files_ctypes.py",
+        "--help"
+      ],
+      "exit": 0,
+      "transcript_sha256": "cc33101e7e25cab2baec1eac6e9733ef4af6159c1e802771f8d2c5fae355689f"
+    },
+    {
+      "name": "bridge-build-shell-syntax",
+      "argv": [
+        "bash",
+        "-n",
+        "tools/hipvs_bridge/build.sh"
+      ],
+      "exit": 0,
+      "transcript_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "documented-generation-small",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "tools/benchmark/amd_hnsw/generate_dataset.py",
+        "--output",
+        "/tmp/amd-delivery-dataset-vb6dfatp/corpus",
+        "--base-count",
+        "17",
+        "--query-count",
+        "5",
+        "--dimension",
+        "4",
+        "--seed",
+        "20261028"
+      ],
+      "exit": 0,
+      "transcript_sha256": "64179b250c07764646ce14fc9e8f39786b3ed0211d0e96c4cdba4a69c23ba225"
+    },
+    {
+      "name": "documented-exact-gt-small",
+      "argv": [
+        "/opt/selftest-venv/bin/python3",
+        "tools/benchmark/amd_hnsw/prepare_ground_truth.py",
+        "--base",
+        "/tmp/amd-delivery-dataset-vb6dfatp/corpus/base.f32",
+        "--query",
+        "/tmp/amd-delivery-dataset-vb6dfatp/corpus/query.f32",
+        "--base-count",
+        "17",
+        "--query-count",
+        "5",
+        "--dimension",
+        "4",
+        "--k",
+        "3",
+        "--metric",
+        "l2",
+        "--output",
+        "/tmp/amd-delivery-dataset-vb6dfatp/truth"
+      ],
+      "exit": 0,
+      "transcript_sha256": "6ddffedf67bbbc3fcbb8feaedc9c8c622de85e94dda550ddfd4badbed51b590e"
+    }
+  ]
+}

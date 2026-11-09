@@ -1,0 +1,72 @@
+[
+  {
+    "label": "feature",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/aadf910a6dae3b51ebc9f7cc61c3e3fe6bdd1a53/tools/hipvs_bridge/seekdb_cuvs_bridge.c",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\feature\\tools\\hipvs_bridge\\seekdb_cuvs_bridge.c",
+    "bytes": 4238,
+    "sha256": "8aa6048fba39b5f5ab35d30ca713282b9d22e666875577e4dfce7c9cf570fd49"
+  },
+  {
+    "label": "feature",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/aadf910a6dae3b51ebc9f7cc61c3e3fe6bdd1a53/tools/hipvs_bridge/seekdb_cuvs_bridge.h",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\feature\\tools\\hipvs_bridge\\seekdb_cuvs_bridge.h",
+    "bytes": 1437,
+    "sha256": "f41c79f926256edbd87f425aa8150676623ecc687f46ddcc87672704b8a43464"
+  },
+  {
+    "label": "feature",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/aadf910a6dae3b51ebc9f7cc61c3e3fe6bdd1a53/tools/hipvs_bridge/build.sh",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\feature\\tools\\hipvs_bridge\\build.sh",
+    "bytes": 938,
+    "sha256": "6664a4d00895187fa0eea287db186574d10b3b297680586d353ae552590ff426"
+  },
+  {
+    "label": "feature",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/aadf910a6dae3b51ebc9f7cc61c3e3fe6bdd1a53/src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\feature\\src\\oblib\\lib\\vector\\ob_vsag_adaptor.cpp",
+    "bytes": 73955,
+    "sha256": "ba7311cbf39205df432117a55a83544f9d17e55670561d23ee7ccb32afd38eba"
+  },
+  {
+    "label": "feature",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/aadf910a6dae3b51ebc9f7cc61c3e3fe6bdd1a53/src/oblib/lib/vector/ob_vsag_adaptor.h",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\feature\\src\\oblib\\lib\\vector\\ob_vsag_adaptor.h",
+    "bytes": 8088,
+    "sha256": "12dd70370bf169fa15f5ff7e9b87e32fd325bff6d8614702fded9df44d86af53"
+  },
+  {
+    "label": "official-v5",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/634888d9b037153fa143d2c913ba4b25503e1d62/tools/hipvs_bridge/seekdb_cuvs_bridge.c",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\official-v5\\tools\\hipvs_bridge\\seekdb_cuvs_bridge.c",
+    "bytes": 6227,
+    "sha256": "296fafff4bd8d86ff2222840d44a23f56ba687acd1393879c8a0e922e7620b3e"
+  },
+  {
+    "label": "official-v5",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/634888d9b037153fa143d2c913ba4b25503e1d62/tools/hipvs_bridge/seekdb_cuvs_bridge.h",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\official-v5\\tools\\hipvs_bridge\\seekdb_cuvs_bridge.h",
+    "bytes": 1571,
+    "sha256": "d171cd16e1f89b3ad1e86332aafebdd1da1a2c33793bc0d43ee01e09e6a0faab"
+  },
+  {
+    "label": "official-v5",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/634888d9b037153fa143d2c913ba4b25503e1d62/tools/hipvs_bridge/build.sh",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\official-v5\\tools\\hipvs_bridge\\build.sh",
+    "bytes": 938,
+    "sha256": "6664a4d00895187fa0eea287db186574d10b3b297680586d353ae552590ff426"
+  },
+  {
+    "label": "official-v5",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/634888d9b037153fa143d2c913ba4b25503e1d62/src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\official-v5\\src\\oblib\\lib\\vector\\ob_vsag_adaptor.cpp",
+    "bytes": 87218,
+    "sha256": "febc6b620503bcfcfed543f10484249aad5b676e0d28053113849f26fcb6a2e7"
+  },
+  {
+    "label": "official-v5",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/634888d9b037153fa143d2c913ba4b25503e1d62/src/oblib/lib/vector/ob_vsag_adaptor.h",
+    "path": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\official-v5\\src\\oblib\\lib\\vector\\ob_vsag_adaptor.h",
+    "bytes": 8088,
+    "sha256": "12dd70370bf169fa15f5ff7e9b87e32fd325bff6d8614702fded9df44d86af53"
+  }
+]

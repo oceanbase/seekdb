@@ -1,0 +1,980 @@
+{
+  "status": "running",
+  "started_utc": "2026-10-28T10:03:44.924270+00:00",
+  "mode": "formal",
+  "qualified_gpu_build": false,
+  "script_sha256": "280ace5911ebd1af83bd59b9188852f28e86d4aa669f79507d94c9131bccee1e",
+  "rounds": [
+    {
+      "backend": "cpu",
+      "round": 0,
+      "table": "cpu_r00",
+      "index": "ix_cpu_r00",
+      "status": "verified_round_complete",
+      "qualified_gpu_build": false,
+      "raw_data_readback": {
+        "rows": 10000,
+        "float32_values": 1280000,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442"
+      },
+      "query_data_readback": {
+        "rows": 100,
+        "float32_values": 12800,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4"
+      },
+      "build_started_utc": "2026-10-28T10:03:48.476444+00:00",
+      "raw_data_ready_before_timer": true,
+      "target_index_absent_before_timer": true,
+      "ddl_return_sec": 5.652465473860502,
+      "ddl_to_first_query_return_sec": 5.675352983176708,
+      "plan_contains_index_name": true,
+      "completion_proof": {
+        "schema": "amd107_20261028100345_30525",
+        "table": "cpu_r00",
+        "index": "ix_cpu_r00",
+        "backend": "cpu",
+        "indexed_rows": 10000,
+        "complete_index_ready": true,
+        "no_lazy_work_remaining": true,
+        "index_used": true,
+        "hnsw_semantics": true,
+        "cpu_fallback": false,
+        "raw_data_readback": {
+          "base": {
+            "rows": 10000,
+            "float32_values": 1280000,
+            "bitwise_equal": true,
+            "float32_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442"
+          },
+          "query": {
+            "rows": 100,
+            "float32_values": 12800,
+            "bitwise_equal": true,
+            "float32_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4"
+          }
+        },
+        "sql_success_event_numbers": [
+          90,
+          91,
+          92
+        ],
+        "evidence": [
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/base-readback.jsonl",
+            "sha256": "becf70879af2f50ab5043704a1b9a0796fe45ac59be6dc919aeb01566168e440"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/arguments.json",
+            "sha256": "e487592c8aa2a2f10b9996aeb14f2f79a4be194c7459312710bb909aeb1b82a5"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/bounded-log-captures.json",
+            "sha256": "692c63bc41c8086eb5de7e3fd88eb2f660d3038d3799d45208070a6a605cab46"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/completion_proof.py",
+            "sha256": "f00dd54003e57864af93ffff94b65ecfc1195effd42b2d5cbd3bd66a0cd6b44c"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/input-manifest.json",
+            "sha256": "e794ca3ff01dca93e36e8b2aa865fa43b19f0e4926e3ea3f90ea9509208d6c48"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/phase-log-00.delta",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/readback-verification.json",
+            "sha256": "6c302645b7f7ef97a62620cce94d3f457228351ff7ba8f047c8baaac9b90e6f4"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/report.json",
+            "sha256": "f83f4dd0505b08a63f30afd8e546095953b13b60537dcef252df46c1d3d05f56"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000090.rows.json",
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000090.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000090.sql",
+            "sha256": "7fca090a0bbd4460ba7eb4a1246cef7eac86aac7ed234dcc7620e133b70b18be"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000090.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000091.rows.json",
+            "sha256": "cdba5468dfc18d9c5b2a5d89e0a21efc90c14abc7d43dc80927cf5225cc77b82"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000091.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000091.sql",
+            "sha256": "555c5ff44de54dcc074701fc681b945f0e772c1eb38cc90f1af5ef045e7bb3f5"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000091.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000092.rows.json",
+            "sha256": "1c645406bbe8b9e840a2b89dd46edbdf0ec686d9818141aeb44024dcf5b8f69c"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000092.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000092.sql",
+            "sha256": "f5c145f12a44a1a2375aeab5ccfdc81bd1ceeeda9a53b2f404afcbde8117f4bd"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-000092.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/sql-success-events.json",
+            "sha256": "021132687f1f800c17164a93f060973969e808091ddc65ce722a287c9c85920c"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/completion-evidence/version.json",
+            "sha256": "40103f7050a09d347aa48c84647ea880bdbdd9772bea4dbe041ccbf79a21719d"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/explain.json",
+            "sha256": "1c645406bbe8b9e840a2b89dd46edbdf0ec686d9818141aeb44024dcf5b8f69c"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/first-query.json",
+            "sha256": "cdba5468dfc18d9c5b2a5d89e0a21efc90c14abc7d43dc80927cf5225cc77b82"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/indexes-before.json",
+            "sha256": "c887b0eb3b7e57f23dafd88956da61be6279c118060e554afc4adb4397691b4b"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/query-readback.jsonl",
+            "sha256": "81131a894a43128df90b82e38d1c0b43594968d8c8c61c81f2e3ba056ece2206"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-cpu/server-log-starts.json",
+            "sha256": "efb8ba374b8f9c7b700362f5bcf58941078bf80b386cdc6d412e79a8e9d16035"
+          }
+        ]
+      },
+      "build_to_proven_ready_sec": 6.18722652643919,
+      "build_interval_finished_utc": "2026-10-28T10:03:54.663862+00:00",
+      "server_log_deltas": [
+        {
+          "path": "/workspace/amd107/candidate-quality64/log/seekdb.log",
+          "offset": 62598913,
+          "inode": 6057532,
+          "status": "captured",
+          "end_offset": 62598913,
+          "artifact": "/workspace/amd107/quality64-formal10k/00-cpu/server-log-00.delta",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "recall": {
+        "hits": 1000,
+        "targets": 1000,
+        "pooled": 1.0,
+        "minimum_query": 1.0,
+        "query_count": 100,
+        "hits_per_query": {
+          "0": 10,
+          "1": 10,
+          "2": 10,
+          "3": 10,
+          "4": 10,
+          "5": 10,
+          "6": 10,
+          "7": 10,
+          "8": 10,
+          "9": 10,
+          "10": 10,
+          "11": 10,
+          "12": 10,
+          "13": 10,
+          "14": 10,
+          "15": 10,
+          "16": 10,
+          "17": 10,
+          "18": 10,
+          "19": 10,
+          "20": 10,
+          "21": 10,
+          "22": 10,
+          "23": 10,
+          "24": 10,
+          "25": 10,
+          "26": 10,
+          "27": 10,
+          "28": 10,
+          "29": 10,
+          "30": 10,
+          "31": 10,
+          "32": 10,
+          "33": 10,
+          "34": 10,
+          "35": 10,
+          "36": 10,
+          "37": 10,
+          "38": 10,
+          "39": 10,
+          "40": 10,
+          "41": 10,
+          "42": 10,
+          "43": 10,
+          "44": 10,
+          "45": 10,
+          "46": 10,
+          "47": 10,
+          "48": 10,
+          "49": 10,
+          "50": 10,
+          "51": 10,
+          "52": 10,
+          "53": 10,
+          "54": 10,
+          "55": 10,
+          "56": 10,
+          "57": 10,
+          "58": 10,
+          "59": 10,
+          "60": 10,
+          "61": 10,
+          "62": 10,
+          "63": 10,
+          "64": 10,
+          "65": 10,
+          "66": 10,
+          "67": 10,
+          "68": 10,
+          "69": 10,
+          "70": 10,
+          "71": 10,
+          "72": 10,
+          "73": 10,
+          "74": 10,
+          "75": 10,
+          "76": 10,
+          "77": 10,
+          "78": 10,
+          "79": 10,
+          "80": 10,
+          "81": 10,
+          "82": 10,
+          "83": 10,
+          "84": 10,
+          "85": 10,
+          "86": 10,
+          "87": 10,
+          "88": 10,
+          "89": 10,
+          "90": 10,
+          "91": 10,
+          "92": 10,
+          "93": 10,
+          "94": 10,
+          "95": 10,
+          "96": 10,
+          "97": 10,
+          "98": 10,
+          "99": 10
+        }
+      }
+    },
+    {
+      "backend": "gpu",
+      "round": 0,
+      "table": "gpu_r00",
+      "index": "ix_gpu_r00",
+      "status": "verified_round_complete",
+      "qualified_gpu_build": true,
+      "raw_data_readback": {
+        "rows": 10000,
+        "float32_values": 1280000,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442"
+      },
+      "query_data_readback": {
+        "rows": 100,
+        "float32_values": 12800,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4"
+      },
+      "build_started_utc": "2026-10-28T10:03:58.447261+00:00",
+      "raw_data_ready_before_timer": true,
+      "target_index_absent_before_timer": true,
+      "ddl_return_sec": 3.4689138177782297,
+      "ddl_to_first_query_return_sec": 3.487781349569559,
+      "plan_contains_index_name": true,
+      "completion_proof": {
+        "schema": "amd107_20261028100345_30525",
+        "table": "gpu_r00",
+        "index": "ix_gpu_r00",
+        "backend": "gpu",
+        "indexed_rows": 10000,
+        "complete_index_ready": true,
+        "no_lazy_work_remaining": true,
+        "index_used": true,
+        "hnsw_semantics": true,
+        "cpu_fallback": false,
+        "raw_data_readback": {
+          "base": {
+            "rows": 10000,
+            "float32_values": 1280000,
+            "bitwise_equal": true,
+            "float32_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442"
+          },
+          "query": {
+            "rows": 100,
+            "float32_values": 12800,
+            "bitwise_equal": true,
+            "float32_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4"
+          }
+        },
+        "sql_success_event_numbers": [
+          281,
+          282,
+          283
+        ],
+        "gpu_build_participation": true,
+        "gpu_build_evidence": {
+          "method": "source_and_real_api_phase_log",
+          "gpu_apis": [
+            "cuvsCagraBuild",
+            "cuvsHnswFromCagra",
+            "cuvsHnswSerialize"
+          ],
+          "source_sha256": "864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220",
+          "bridge_library_sha256": "65c69d59001855d4a5c87ff037f38f66557020499e7d40b8dcd62f6e34b76f8d",
+          "gpu_arch": "gfx1100",
+          "phase_log_sha256": [
+            "b7097276eee35d96caf3729b6edc1fe5f755155b7f9dede9b3df361761d10ef3"
+          ],
+          "synchronized_full_hnsw_and_caller_fd_snapshot": true,
+          "profiled_kernel_names_available": false
+        },
+        "evidence": [
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/base-readback.jsonl",
+            "sha256": "becf70879af2f50ab5043704a1b9a0796fe45ac59be6dc919aeb01566168e440"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/arguments.json",
+            "sha256": "e487592c8aa2a2f10b9996aeb14f2f79a4be194c7459312710bb909aeb1b82a5"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/bounded-log-captures.json",
+            "sha256": "7cf0d94e87a7b906ffc074504380fc54b972ac7a947ef9b3dcaaeceaa2f037be"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/bridge-library.json",
+            "sha256": "6dda1ae318631f780583e04675cc50e2e2f1fdb298c2e2702ba273376604899a"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/bridge-source.c",
+            "sha256": "864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/completion_proof.py",
+            "sha256": "f00dd54003e57864af93ffff94b65ecfc1195effd42b2d5cbd3bd66a0cd6b44c"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/gpu-environment.txt",
+            "sha256": "09e3a2bfa65d0afd626c5266ceeaf7307a937afe2e9d5f43715013966dc485c8"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/input-manifest.json",
+            "sha256": "e794ca3ff01dca93e36e8b2aa865fa43b19f0e4926e3ea3f90ea9509208d6c48"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/observer-maps.txt",
+            "sha256": "1619060e51dd4518f2b452c8eee14bbc7a03488641ad559be08103b939dc5bdd"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/phase-log-00.delta",
+            "sha256": "b7097276eee35d96caf3729b6edc1fe5f755155b7f9dede9b3df361761d10ef3"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/readback-verification.json",
+            "sha256": "6c302645b7f7ef97a62620cce94d3f457228351ff7ba8f047c8baaac9b90e6f4"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/report.json",
+            "sha256": "7985176720b0b344a7818fabf1c82a736116768524e1bc1e094714fef69029f9"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000281.rows.json",
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000281.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000281.sql",
+            "sha256": "aaa8c834660b0b2df0dcfd34dd7c1599b8992fb8f233b5e05f3b1362f87a3d72"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000281.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000282.rows.json",
+            "sha256": "cdba5468dfc18d9c5b2a5d89e0a21efc90c14abc7d43dc80927cf5225cc77b82"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000282.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000282.sql",
+            "sha256": "9f81827a48dede86e10a139909e6c42ad66788adca0c0017fe922973f8841ef3"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000282.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000283.rows.json",
+            "sha256": "667c614d56bc55df42e62770d4351c5e4e36925eae651029bfcc3dda95b15fd4"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000283.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000283.sql",
+            "sha256": "5fb106a5b59c0f054aba75fe8b9aa5fd9f31cac957f5aa5445863329346fa541"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-000283.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/sql-success-events.json",
+            "sha256": "2cd049c68eed7360832a4db36c2b21bfc5f2de1870be4c207ea13dcf87fc1e34"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/completion-evidence/version.json",
+            "sha256": "40103f7050a09d347aa48c84647ea880bdbdd9772bea4dbe041ccbf79a21719d"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/explain.json",
+            "sha256": "667c614d56bc55df42e62770d4351c5e4e36925eae651029bfcc3dda95b15fd4"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/first-query.json",
+            "sha256": "cdba5468dfc18d9c5b2a5d89e0a21efc90c14abc7d43dc80927cf5225cc77b82"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/indexes-before.json",
+            "sha256": "d8d46bb5772d8fe271da1e463a7736fe2b0b189537bd23d0214416239bfefdc6"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/query-readback.jsonl",
+            "sha256": "81131a894a43128df90b82e38d1c0b43594968d8c8c61c81f2e3ba056ece2206"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/00-gpu/server-log-starts.json",
+            "sha256": "efb8ba374b8f9c7b700362f5bcf58941078bf80b386cdc6d412e79a8e9d16035"
+          }
+        ]
+      },
+      "build_to_proven_ready_sec": 4.2454331535845995,
+      "build_interval_finished_utc": "2026-10-28T10:04:02.693117+00:00",
+      "server_log_deltas": [
+        {
+          "path": "/workspace/amd107/candidate-quality64/log/seekdb.log",
+          "offset": 62598913,
+          "inode": 6057532,
+          "status": "captured",
+          "end_offset": 62599487,
+          "artifact": "/workspace/amd107/quality64-formal10k/00-gpu/server-log-00.delta",
+          "sha256": "b7097276eee35d96caf3729b6edc1fe5f755155b7f9dede9b3df361761d10ef3"
+        }
+      ],
+      "recall": {
+        "hits": 1000,
+        "targets": 1000,
+        "pooled": 1.0,
+        "minimum_query": 1.0,
+        "query_count": 100,
+        "hits_per_query": {
+          "0": 10,
+          "1": 10,
+          "2": 10,
+          "3": 10,
+          "4": 10,
+          "5": 10,
+          "6": 10,
+          "7": 10,
+          "8": 10,
+          "9": 10,
+          "10": 10,
+          "11": 10,
+          "12": 10,
+          "13": 10,
+          "14": 10,
+          "15": 10,
+          "16": 10,
+          "17": 10,
+          "18": 10,
+          "19": 10,
+          "20": 10,
+          "21": 10,
+          "22": 10,
+          "23": 10,
+          "24": 10,
+          "25": 10,
+          "26": 10,
+          "27": 10,
+          "28": 10,
+          "29": 10,
+          "30": 10,
+          "31": 10,
+          "32": 10,
+          "33": 10,
+          "34": 10,
+          "35": 10,
+          "36": 10,
+          "37": 10,
+          "38": 10,
+          "39": 10,
+          "40": 10,
+          "41": 10,
+          "42": 10,
+          "43": 10,
+          "44": 10,
+          "45": 10,
+          "46": 10,
+          "47": 10,
+          "48": 10,
+          "49": 10,
+          "50": 10,
+          "51": 10,
+          "52": 10,
+          "53": 10,
+          "54": 10,
+          "55": 10,
+          "56": 10,
+          "57": 10,
+          "58": 10,
+          "59": 10,
+          "60": 10,
+          "61": 10,
+          "62": 10,
+          "63": 10,
+          "64": 10,
+          "65": 10,
+          "66": 10,
+          "67": 10,
+          "68": 10,
+          "69": 10,
+          "70": 10,
+          "71": 10,
+          "72": 10,
+          "73": 10,
+          "74": 10,
+          "75": 10,
+          "76": 10,
+          "77": 10,
+          "78": 10,
+          "79": 10,
+          "80": 10,
+          "81": 10,
+          "82": 10,
+          "83": 10,
+          "84": 10,
+          "85": 10,
+          "86": 10,
+          "87": 10,
+          "88": 10,
+          "89": 10,
+          "90": 10,
+          "91": 10,
+          "92": 10,
+          "93": 10,
+          "94": 10,
+          "95": 10,
+          "96": 10,
+          "97": 10,
+          "98": 10,
+          "99": 10
+        }
+      }
+    },
+    {
+      "backend": "gpu",
+      "round": 1,
+      "table": "gpu_r01",
+      "index": "ix_gpu_r01",
+      "status": "verified_round_complete",
+      "qualified_gpu_build": true,
+      "raw_data_readback": {
+        "rows": 10000,
+        "float32_values": 1280000,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442"
+      },
+      "query_data_readback": {
+        "rows": 100,
+        "float32_values": 12800,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4"
+      },
+      "build_started_utc": "2026-10-28T10:04:21.000049+00:00",
+      "raw_data_ready_before_timer": true,
+      "target_index_absent_before_timer": true,
+      "ddl_return_sec": 3.820905802771449,
+      "ddl_to_first_query_return_sec": 3.840546553954482,
+      "plan_contains_index_name": true,
+      "completion_proof": {
+        "schema": "amd107_20261028100345_30525",
+        "table": "gpu_r01",
+        "index": "ix_gpu_r01",
+        "backend": "gpu",
+        "indexed_rows": 10000,
+        "complete_index_ready": true,
+        "no_lazy_work_remaining": true,
+        "index_used": true,
+        "hnsw_semantics": true,
+        "cpu_fallback": false,
+        "raw_data_readback": {
+          "base": {
+            "rows": 10000,
+            "float32_values": 1280000,
+            "bitwise_equal": true,
+            "float32_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442"
+          },
+          "query": {
+            "rows": 100,
+            "float32_values": 12800,
+            "bitwise_equal": true,
+            "float32_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4"
+          }
+        },
+        "sql_success_event_numbers": [
+          472,
+          473,
+          474
+        ],
+        "gpu_build_participation": true,
+        "gpu_build_evidence": {
+          "method": "source_and_real_api_phase_log",
+          "gpu_apis": [
+            "cuvsCagraBuild",
+            "cuvsHnswFromCagra",
+            "cuvsHnswSerialize"
+          ],
+          "source_sha256": "864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220",
+          "bridge_library_sha256": "65c69d59001855d4a5c87ff037f38f66557020499e7d40b8dcd62f6e34b76f8d",
+          "gpu_arch": "gfx1100",
+          "phase_log_sha256": [
+            "4376a7e281a4629236b554a14ca8b59ce872eb59312132d70bbb9249ad25d528"
+          ],
+          "synchronized_full_hnsw_and_caller_fd_snapshot": true,
+          "profiled_kernel_names_available": false
+        },
+        "evidence": [
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/base-readback.jsonl",
+            "sha256": "becf70879af2f50ab5043704a1b9a0796fe45ac59be6dc919aeb01566168e440"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/arguments.json",
+            "sha256": "e487592c8aa2a2f10b9996aeb14f2f79a4be194c7459312710bb909aeb1b82a5"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/bounded-log-captures.json",
+            "sha256": "c3d539fa930402999abd96c84287563e06c3b76b85b7b975f3e8eda50644df92"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/bridge-library.json",
+            "sha256": "6dda1ae318631f780583e04675cc50e2e2f1fdb298c2e2702ba273376604899a"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/bridge-source.c",
+            "sha256": "864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/completion_proof.py",
+            "sha256": "f00dd54003e57864af93ffff94b65ecfc1195effd42b2d5cbd3bd66a0cd6b44c"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/gpu-environment.txt",
+            "sha256": "09e3a2bfa65d0afd626c5266ceeaf7307a937afe2e9d5f43715013966dc485c8"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/input-manifest.json",
+            "sha256": "e794ca3ff01dca93e36e8b2aa865fa43b19f0e4926e3ea3f90ea9509208d6c48"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/observer-maps.txt",
+            "sha256": "741d7020a084a551c0422fc4c6ec60310c5c2dbdc766991d8da7c8a22dfe90d1"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/phase-log-00.delta",
+            "sha256": "4376a7e281a4629236b554a14ca8b59ce872eb59312132d70bbb9249ad25d528"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/readback-verification.json",
+            "sha256": "6c302645b7f7ef97a62620cce94d3f457228351ff7ba8f047c8baaac9b90e6f4"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/report.json",
+            "sha256": "b33ac7c584f8a61cfcd4315aea70cd2a83fd4d21dc052b67edc40b554333994c"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000472.rows.json",
+            "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000472.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000472.sql",
+            "sha256": "94a9838eccd0b0401ebf78e774dbe3f32138eaee7044b534b733f8387dd44a75"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000472.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000473.rows.json",
+            "sha256": "cdba5468dfc18d9c5b2a5d89e0a21efc90c14abc7d43dc80927cf5225cc77b82"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000473.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000473.sql",
+            "sha256": "95685aa050686e5f64c544dbcc2cb449aca2b08e38d893bc7488d4795074f4fe"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000473.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000474.rows.json",
+            "sha256": "a868d4990e6d07b5f1338b8f6f3ff10b682e5b5d5edc3d7035edaefe2b744dc3"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000474.session.json",
+            "sha256": "9dc264f6c28968d5fd031b8d50be8bbf181d4dc84d5a5e4af7f5a027dc366986"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000474.sql",
+            "sha256": "eda6e8cdaa2e9049368844f559014bacfa3e06f563c32826217a77145cbcff56"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-000474.stderr.txt",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/sql-success-events.json",
+            "sha256": "05c8ebc1f3a964ef86e4cb91684a32eac753eb5dc94ae20953ec4b5710b2f9a0"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/completion-evidence/version.json",
+            "sha256": "40103f7050a09d347aa48c84647ea880bdbdd9772bea4dbe041ccbf79a21719d"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/explain.json",
+            "sha256": "a868d4990e6d07b5f1338b8f6f3ff10b682e5b5d5edc3d7035edaefe2b744dc3"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/first-query.json",
+            "sha256": "cdba5468dfc18d9c5b2a5d89e0a21efc90c14abc7d43dc80927cf5225cc77b82"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/indexes-before.json",
+            "sha256": "793dedce6994b713cbb194205e839de56e5cd6ea66693c0cada5dcacfb75bd3a"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/query-readback.jsonl",
+            "sha256": "81131a894a43128df90b82e38d1c0b43594968d8c8c61c81f2e3ba056ece2206"
+          },
+          {
+            "path": "/workspace/amd107/quality64-formal10k/01-gpu/server-log-starts.json",
+            "sha256": "b8d6b3b08cfdb5f97b90ea64b2b72121d0591541f04f4befdb5e846543b160fa"
+          }
+        ]
+      },
+      "build_to_proven_ready_sec": 4.601356314495206,
+      "build_interval_finished_utc": "2026-10-28T10:04:25.602202+00:00",
+      "server_log_deltas": [
+        {
+          "path": "/workspace/amd107/candidate-quality64/log/seekdb.log",
+          "offset": 62599487,
+          "inode": 6057532,
+          "status": "captured",
+          "end_offset": 62600062,
+          "artifact": "/workspace/amd107/quality64-formal10k/01-gpu/server-log-00.delta",
+          "sha256": "4376a7e281a4629236b554a14ca8b59ce872eb59312132d70bbb9249ad25d528"
+        }
+      ],
+      "recall": {
+        "hits": 1000,
+        "targets": 1000,
+        "pooled": 1.0,
+        "minimum_query": 1.0,
+        "query_count": 100,
+        "hits_per_query": {
+          "0": 10,
+          "1": 10,
+          "2": 10,
+          "3": 10,
+          "4": 10,
+          "5": 10,
+          "6": 10,
+          "7": 10,
+          "8": 10,
+          "9": 10,
+          "10": 10,
+          "11": 10,
+          "12": 10,
+          "13": 10,
+          "14": 10,
+          "15": 10,
+          "16": 10,
+          "17": 10,
+          "18": 10,
+          "19": 10,
+          "20": 10,
+          "21": 10,
+          "22": 10,
+          "23": 10,
+          "24": 10,
+          "25": 10,
+          "26": 10,
+          "27": 10,
+          "28": 10,
+          "29": 10,
+          "30": 10,
+          "31": 10,
+          "32": 10,
+          "33": 10,
+          "34": 10,
+          "35": 10,
+          "36": 10,
+          "37": 10,
+          "38": 10,
+          "39": 10,
+          "40": 10,
+          "41": 10,
+          "42": 10,
+          "43": 10,
+          "44": 10,
+          "45": 10,
+          "46": 10,
+          "47": 10,
+          "48": 10,
+          "49": 10,
+          "50": 10,
+          "51": 10,
+          "52": 10,
+          "53": 10,
+          "54": 10,
+          "55": 10,
+          "56": 10,
+          "57": 10,
+          "58": 10,
+          "59": 10,
+          "60": 10,
+          "61": 10,
+          "62": 10,
+          "63": 10,
+          "64": 10,
+          "65": 10,
+          "66": 10,
+          "67": 10,
+          "68": 10,
+          "69": 10,
+          "70": 10,
+          "71": 10,
+          "72": 10,
+          "73": 10,
+          "74": 10,
+          "75": 10,
+          "76": 10,
+          "77": 10,
+          "78": 10,
+          "79": 10,
+          "80": 10,
+          "81": 10,
+          "82": 10,
+          "83": 10,
+          "84": 10,
+          "85": 10,
+          "86": 10,
+          "87": 10,
+          "88": 10,
+          "89": 10,
+          "90": 10,
+          "91": 10,
+          "92": 10,
+          "93": 10,
+          "94": 10,
+          "95": 10,
+          "96": 10,
+          "97": 10,
+          "98": 10,
+          "99": 10
+        }
+      }
+    },
+    {
+      "backend": "cpu",
+      "round": 1,
+      "table": "cpu_r01",
+      "index": "ix_cpu_r01",
+      "status": "building",
+      "qualified_gpu_build": false,
+      "raw_data_readback": {
+        "rows": 10000,
+        "float32_values": 1280000,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442"
+      },
+      "query_data_readback": {
+        "rows": 100,
+        "float32_values": 12800,
+        "bitwise_equal": true,
+        "sql_readback_expression": "array_map(x -> CAST(x AS DOUBLE),c2)",
+        "readback_float32_sha256": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4"
+      },
+      "build_started_utc": "2026-10-28T10:04:42.789062+00:00",
+      "raw_data_ready_before_timer": true,
+      "target_index_absent_before_timer": true
+    }
+  ],
+  "schema": "amd107_20261028100345_30525",
+  "query_count": 100,
+  "k": 10,
+  "recall_targets": 1000,
+  "dataset_sha256": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442",
+  "driver": "mysql",
+  "actual_session_ob_hnsw_ef_search": 1000
+}

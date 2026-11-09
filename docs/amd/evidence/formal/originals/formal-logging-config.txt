@@ -1,0 +1,1 @@
+observer	syslog_level	STRING	WARN	specifies the current level of logging. There are DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR, seven different log levels.	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	EDIAG	0

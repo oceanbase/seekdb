@@ -1,0 +1,10 @@
+[
+  {
+    "source": "/workspace/amd107/candidate-quality64/log/seekdb.log",
+    "start_offset": 62598336,
+    "end_offset": 62598913,
+    "inode": 6057532,
+    "path": "/workspace/amd107/quality64-formal100k-warn/02-gpu/completion-evidence/phase-log-00.delta",
+    "sha256": "4a5718d1fb56279f3538989b1c55e5ce790af49839ea1aac5f3b18dd912b0d6d"
+  }
+]

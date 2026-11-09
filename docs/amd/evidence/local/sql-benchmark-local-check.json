@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "scope": "local-only; no database connection or cloud operation",
+  "checks": {
+    "python_ast": "PASS",
+    "cli_help": "PASS",
+    "existing_tiny_manifest_and_actual_raw_hashes": "PASS",
+    "sql_text_float32_bitwise_identity": "PASS",
+    "complete_recall_denominator": "9/9",
+    "missing_query": "REJECTED",
+    "duplicate_ids": "REJECTED",
+    "double_array_readback_fake_all_rows": "5 rows / 10 float32 values PASS",
+    "changed_stored_value_fake": "REJECTED",
+    "per_connection_mysql_init_command_mock": "SET SESSION ob_hnsw_ef_search=512 PASS",
+    "per_statement_actual_session_receipt_mock": "512 PASS",
+    "uninitialized_session_64_for_requested_512_mock": "REJECTED"
+  },
+  "script_sha256": "b8fafcedb7312c7d5c873d91c543fdf29f94804ae8097e012d755cdcd2a31d01",
+  "real_sql_execution": false,
+  "formal_gpu_build_verified": false,
+  "root_live_interface_evidence": "precise-readback107.txt: array_map(x -> CAST(x AS DOUBLE),c2) works on image; full revised smoke remains root-owned"
+}

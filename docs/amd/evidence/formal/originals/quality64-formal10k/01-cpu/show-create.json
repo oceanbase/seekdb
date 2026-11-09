@@ -1,0 +1,21 @@
+[
+  [
+    "cpu_r01",
+    "CREATE TABLE `cpu_r01` ("
+  ],
+  [
+    "  `c1` int(11) NOT NULL,"
+  ],
+  [
+    "  `c2` VECTOR(128) DEFAULT NULL,"
+  ],
+  [
+    "  PRIMARY KEY (`c1`),"
+  ],
+  [
+    "  VECTOR KEY `ix_cpu_r01` (`c2`) WITH (DISTANCE=L2,TYPE=HNSW,LIB=VSAG,M=64,EF_CONSTRUCTION=400,EF_SEARCH=1000) BLOCK_SIZE 16384"
+  ],
+  [
+    ") ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0"
+  ]
+]

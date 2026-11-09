@@ -1,0 +1,192 @@
+{
+  "copies": [
+    {
+      "destination": "tools/hipvs_bridge/seekdb_cuvs_bridge.c",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw_bridge\\seekdb_cuvs_bridge.c",
+      "bytes": 19331,
+      "sha256": "864e7aa6fd12c0903108556d6b49fd683f105781b58bb0a8b0867f4719dfe220"
+    },
+    {
+      "destination": "tools/hipvs_bridge/seekdb_cuvs_bridge.h",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw_bridge\\seekdb_cuvs_bridge.h",
+      "bytes": 1240,
+      "sha256": "c337c5a749c42ea3eb10daad91ca71a49927b0c5c4d064c94483d8c9cff34d66"
+    },
+    {
+      "destination": "tools/hipvs_bridge/build.sh",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw_bridge\\build.sh",
+      "bytes": 1353,
+      "sha256": "28c07d23c5ce572faebd5fce860c6df34f5bc365e9b041fddc39dd535fc9599f"
+    },
+    {
+      "destination": "tools/hipvs_bridge/smoke_ctypes.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw_bridge\\smoke_ctypes.py",
+      "bytes": 15622,
+      "sha256": "3fa93fd5ad9ec7d58d7f798e1c8cef025735e82e5512b529f276aa71ef95cc9f"
+    },
+    {
+      "destination": "tools/hipvs_bridge/evaluate_files_ctypes.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw_bridge\\evaluate_files_ctypes.py",
+      "bytes": 9367,
+      "sha256": "2bf5062615755c379cd97a26d1f87a947ee63d21e72c70fe97808d155f1e3998"
+    },
+    {
+      "destination": "tools/benchmark/amd_hnsw/generate_dataset.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\generate_dataset.py",
+      "bytes": 1776,
+      "sha256": "c58b73d7540862fcb53f953e944234493547fd209a5b5fe8e43c8eaf4028570e"
+    },
+    {
+      "destination": "tools/benchmark/amd_hnsw/prepare_ground_truth.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\prepare_ground_truth.py",
+      "bytes": 8919,
+      "sha256": "986b3a82dee52dcf1fc5538f815bc7812f1a24df44d943298cc5235cc0442b24"
+    },
+    {
+      "destination": "tools/benchmark/amd_hnsw/sql_benchmark.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\sql_benchmark.py",
+      "bytes": 26669,
+      "sha256": "280ace5911ebd1af83bd59b9188852f28e86d4aa669f79507d94c9131bccee1e"
+    },
+    {
+      "destination": "tools/benchmark/amd_hnsw/completion_proof.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\completion_proof.py",
+      "bytes": 18474,
+      "sha256": "f00dd54003e57864af93ffff94b65ecfc1195effd42b2d5cbd3bd66a0cd6b44c"
+    },
+    {
+      "destination": "tools/benchmark/amd_hnsw/contract.example.json",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\contract.example.json",
+      "bytes": 1049,
+      "sha256": "5fc4a2ef076602dbf0c95d3fcecda89a044d30a7fc260f0ffb3ad22ce70467bc"
+    },
+    {
+      "destination": "unittest/amd_hipvs/test_prepare_ground_truth.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\test_prepare_ground_truth.py",
+      "bytes": 4584,
+      "sha256": "430c61b276c01b820ffb8be355270dde84f466c400c3f64eceaf2aec70b40fc4"
+    },
+    {
+      "destination": "unittest/amd_hipvs/test_completion_proof.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\test_completion_proof.py",
+      "bytes": 9118,
+      "sha256": "c5775fa722bce1af9e80136216d3fc676cbacd64acaffed629b4b2bec1adf51d"
+    },
+    {
+      "destination": "unittest/amd_hipvs/snapshot_io_contract.py",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw_bridge\\snapshot_io_contract.py",
+      "bytes": 6133,
+      "sha256": "176c624dcc3ba9817781efc0dfb745b9bd656a76feca92c68fc9bec6bddff2a7"
+    },
+    {
+      "destination": "unittest/amd_hipvs/test_dispatch.py",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\semantic_regression.py",
+      "bytes": 6400,
+      "sha256": "168e6abe8dcc8e9df665089079fd4f00b2c8a49069d1647076db6078bfcb9c92"
+    },
+    {
+      "destination": "docs/amd/provenance/manifest108.json",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\manifest108.json",
+      "bytes": 4780,
+      "sha256": "30d6c2b83f0f27d66e3ef24d7941274438992732ae3509b13c20102f7f01eb6f"
+    },
+    {
+      "destination": "docs/amd/provenance/sources-provenance.json",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\sources-provenance.json",
+      "bytes": 1076,
+      "sha256": "06b6a920ef0fde96e18268e50591cd5c1f63afce4f4339f6e47896b4a45cc425"
+    },
+    {
+      "destination": "docs/amd/provenance/enum-usage-audit.json",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\enum-usage-audit.json",
+      "bytes": 2587,
+      "sha256": "c1bf94ce26e914405c4c2982ef566b21eeecf6be1d56522ebd92197072aa30b1"
+    },
+    {
+      "destination": "docs/amd/provenance/cuvs108-backport.patch",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\cuvs108-backport.patch",
+      "bytes": 49718,
+      "sha256": "1e199f56280f60e4f4521a6d185ee36eb784d57145fdebed89d9577a34e5aa77"
+    },
+    {
+      "destination": "docs/amd/provenance/bridge-reference-downloads.json",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\bridge-reference\\provenance.json",
+      "bytes": 3993,
+      "sha256": "af496adc18afc2b2b12663869030536d725ed03936bd79d80eaa6b74a4822887"
+    },
+    {
+      "destination": "docs/amd/provenance/official-requirements-snapshot.txt",
+      "source": "D:\\ob2026_plan\\ecosystem-easy\\AMD-official-rules.txt",
+      "bytes": 15145,
+      "sha256": "ea03136e6f3a402adb988ac66b2e258b26582a765f5a0a34319d619622b32034"
+    },
+    {
+      "destination": "docs/amd/evidence/local/receipt108.json",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\receipt108.json",
+      "bytes": 41518,
+      "sha256": "250bfb653fa24125f389c81c1e018526792481564cfa9afdff3f9da849e4ec73"
+    },
+    {
+      "destination": "docs/amd/evidence/local/export-receipt108.json",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\export-receipt108.json",
+      "bytes": 496,
+      "sha256": "c9eced700cc77b3126408e87d361cb3732cece9be44c4f78030db7d2fe53dffd"
+    },
+    {
+      "destination": "docs/amd/evidence/local/smoke108-receipt.json",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\smoke108-receipt.json",
+      "bytes": 9091,
+      "sha256": "0807fb3e9371aa85eeab7c95b0ddd2e0695f9e8ea2b5d7d9b52c88718d74d4ac"
+    },
+    {
+      "destination": "docs/amd/evidence/local/semantic-regression108-receipt.json",
+      "source": "D:\\ob2026_plan\\validation\\amd-build107\\semantic-regression108-receipt.json",
+      "bytes": 1019,
+      "sha256": "639adfb7d20d883f8c2af93b7f35f503f9ac21d7851f6e499c9078a258b00bf6"
+    },
+    {
+      "destination": "docs/amd/evidence/local/bridge-fd-fix-local-validation.json",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw_bridge\\fd-fix-local-validation.json",
+      "bytes": 1006,
+      "sha256": "899a250954399f5d229765f1251d3e1cf0b549a26231bc4453fdf88c89841200"
+    },
+    {
+      "destination": "docs/amd/evidence/local/bridge-local-validation.json",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw_bridge\\local-validation.json",
+      "bytes": 865,
+      "sha256": "0bf1dcf73d9f4f5a5f2c4b106e20f4171d2f4093fa334061e86830162fe14161"
+    },
+    {
+      "destination": "docs/amd/evidence/local/completion-proof-local-check.json",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\completion-proof-local-check.json",
+      "bytes": 1544,
+      "sha256": "e98b6669bba85685803510938cd721d94d1a07925ad58be52784393c2750cc67"
+    },
+    {
+      "destination": "docs/amd/evidence/local/ground-truth-selftest-receipt.json",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\ground-truth-selftest-receipt.json",
+      "bytes": 2111,
+      "sha256": "31603a621a1bf9e2261d83d9c9d8393bddab691fafeba47767712e884ba3320c"
+    },
+    {
+      "destination": "docs/amd/evidence/local/sql-benchmark-local-check.json",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\sql-benchmark-local-check.json",
+      "bytes": 1024,
+      "sha256": "2a23ee3a6613e0ba26f5e41ce31b9b5f8d3a680c04528980ce3468245510bafa"
+    },
+    {
+      "destination": "docs/amd/evidence/cloud/environment.json",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\environment.json",
+      "bytes": 4283,
+      "sha256": "09e3a2bfa65d0afd626c5266ceeaf7307a937afe2e9d5f43715013966dc485c8"
+    },
+    {
+      "destination": "docs/amd/evidence/cloud/bridge-fd-smoke.txt",
+      "source": "D:\\ob2026_plan\\runs\\amd107\\hnsw-fdfix-smoke.txt",
+      "bytes": 3829,
+      "sha256": "acc37ccd26984c09dd9a25486bfabba8295e2de8b5a67e2447027135496f223f"
+    }
+  ],
+  "test_portability_changes": "Tests use repository-relative source paths and current SQL recall helper; runtime bridge and benchmark source bytes are preserved. Snapshot I/O control now extracts, compiles and runs current bridge source using CC; historical generated C harness is excluded.",
+  "excluded": "All transfer scripts, private artifact URLs, platform/account screenshots, launch receipts and signed-link responses."
+}

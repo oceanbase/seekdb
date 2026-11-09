@@ -1,0 +1,188 @@
+{
+  "base": "e6a26ec7c0f5adca3a4b07dfdc39a1b9bc53b925",
+  "reference": "634888d9b037153fa143d2c913ba4b25503e1d62",
+  "files": [
+    {
+      "path": "src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+      "baseline_sha256": "844425446604c4ee7bfbf9610dade4bdc2ed9135527cc9b3f82081c28400b3af",
+      "candidate_sha256": "85dbc1bd6e23837af1d7d0fe9e90c8408fc5f8a7c518e1a4fe539632ce0575e5",
+      "selected_hunks": [
+        {
+          "old_start": 18,
+          "old_end": 23,
+          "new_start": 18,
+          "new_end": 36
+        },
+        {
+          "old_start": 27,
+          "old_end": 33,
+          "new_start": 40,
+          "new_end": 71
+        },
+        {
+          "old_start": 35,
+          "old_end": 41,
+          "new_start": 73,
+          "new_end": 517
+        },
+        {
+          "old_start": 145,
+          "old_end": 150,
+          "new_start": 627,
+          "new_end": 633
+        },
+        {
+          "old_start": 236,
+          "old_end": 241,
+          "new_start": 719,
+          "new_end": 731
+        },
+        {
+          "old_start": 247,
+          "old_end": 252,
+          "new_start": 737,
+          "new_end": 789
+        },
+        {
+          "old_start": 310,
+          "old_end": 315,
+          "new_start": 848,
+          "new_end": 863
+        },
+        {
+          "old_start": 352,
+          "old_end": 358,
+          "new_start": 900,
+          "new_end": 907
+        },
+        {
+          "old_start": 974,
+          "old_end": 980,
+          "new_start": 1543,
+          "new_end": 1553
+        },
+        {
+          "old_start": 1014,
+          "old_end": 1021,
+          "new_start": 1589,
+          "new_end": 1605
+        },
+        {
+          "old_start": 1105,
+          "old_end": 1113,
+          "new_start": 1693,
+          "new_end": 1703
+        },
+        {
+          "old_start": 1152,
+          "old_end": 1164,
+          "new_start": 1744,
+          "new_end": 1769
+        },
+        {
+          "old_start": 1195,
+          "old_end": 1203,
+          "new_start": 1800,
+          "new_end": 1821
+        },
+        {
+          "old_start": 1271,
+          "old_end": 1278,
+          "new_start": 1885,
+          "new_end": 1899
+        },
+        {
+          "old_start": 1310,
+          "old_end": 1315,
+          "new_start": 1933,
+          "new_end": 1955
+        },
+        {
+          "old_start": 1355,
+          "old_end": 1364,
+          "new_start": 1995,
+          "new_end": 2006
+        },
+        {
+          "old_start": 1381,
+          "old_end": 1395,
+          "new_start": 2023,
+          "new_end": 2039
+        },
+        {
+          "old_start": 1412,
+          "old_end": 1417,
+          "new_start": 2057,
+          "new_end": 2148
+        }
+      ]
+    },
+    {
+      "path": "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp",
+      "baseline_sha256": "e2f5c37d19ef25bd10a8746b0f9005ec98c85af3fcf6d44d7844f4bdb32b9eb1",
+      "candidate_sha256": "f1269d50a8568f1684de34fc8a01de55e98d48131945bfba24d88d90bc1630b5",
+      "selected_hunks": [
+        {
+          "old_start": 1359,
+          "old_end": 1364,
+          "new_start": 1423,
+          "new_end": 1442
+        },
+        {
+          "old_start": 1523,
+          "old_end": 1528,
+          "new_start": 1616,
+          "new_end": 1622
+        },
+        {
+          "old_start": 1710,
+          "old_end": 1719,
+          "new_start": 1816,
+          "new_end": 1827
+        },
+        {
+          "old_start": 3187,
+          "old_end": 3196,
+          "new_start": 3310,
+          "new_end": 3326
+        }
+      ]
+    },
+    {
+      "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+      "baseline_sha256": "2c625476eec19f5c9d5593ec66356cbb176f620a95d351c0824ad4f2bc3df2b7",
+      "candidate_sha256": "342429c9aa68b40309a0875d585894a6c5740dee7991178ee47fa6e03faf8319",
+      "selected_hunks": [
+        {
+          "old_start": 251,
+          "old_end": 264,
+          "new_start": 257,
+          "new_end": 274
+        },
+        {
+          "old_start": 534,
+          "old_end": 541,
+          "new_start": 574,
+          "new_end": 588
+        },
+        {
+          "old_start": 2987,
+          "old_end": 3001,
+          "new_start": 3187,
+          "new_end": 3204
+        },
+        {
+          "old_start": 3290,
+          "old_end": 3323,
+          "new_start": 3535,
+          "new_end": 3586
+        }
+      ]
+    },
+    {
+      "path": "src/oblib/lib/vector/ob_cuvs_hooks.h",
+      "new": true,
+      "candidate_sha256": "511e43bbec7909ae6642200dab9a8e4fc0ba2ed2ea2b1d3affbc18aff9ff0313"
+    }
+  ]
+}

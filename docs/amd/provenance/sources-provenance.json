@@ -1,0 +1,20 @@
+[
+  {
+    "path": "src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/634888d9b037153fa143d2c913ba4b25503e1d62/src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+    "reference_bytes": 87218,
+    "reference_sha256": "febc6b620503bcfcfed543f10484249aad5b676e0d28053113849f26fcb6a2e7"
+  },
+  {
+    "path": "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/634888d9b037153fa143d2c913ba4b25503e1d62/src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp",
+    "reference_bytes": 215095,
+    "reference_sha256": "b40b92354524dd4e88c143ab024a5ca1af75b6a789e4ce9676bd48e72f88419c"
+  },
+  {
+    "path": "src/observer/vector_index/ob_vector_index_util.cpp",
+    "url": "https://raw.githubusercontent.com/zihaomu/seekdb/634888d9b037153fa143d2c913ba4b25503e1d62/src/observer/vector_index/ob_vector_index_util.cpp",
+    "reference_bytes": 318800,
+    "reference_sha256": "6d44369cf32b1e9760ad618512c5977a92bd2621a57ff70fd7fe5b323f5c114f"
+  }
+]
