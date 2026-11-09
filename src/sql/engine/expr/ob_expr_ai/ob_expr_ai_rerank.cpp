@@ -348,6 +348,35 @@ int ObExprAIRerank::sort_document_array_by_model_result(ObIAllocator &allocator,
     }
   }
   if (OB_SUCC(ret)) {
+    // The model may return results in arbitrary order. Sort the mapped
+    // documents by relevance score (descending) so the doc_key path returns
+    // the same relevance ordering as the no-doc_key path, which always sorts.
+    // std::stable_sort keeps the model's order for equal scores.
+    int64_t sorted_count = sorted_document_array_obj->element_count();
+    std::vector<ObJsonNode *> nodes;
+    nodes.reserve(sorted_count);
+    for (int64_t i = 0; i < sorted_count; i++) {
+      nodes.push_back(sorted_document_array_obj->get_value(i));
+    }
+    std::stable_sort(nodes.begin(), nodes.end(), [](ObJsonNode *a, ObJsonNode *b) {
+      ObJsonObject *obj_a = static_cast<ObJsonObject *>(a);
+      ObJsonObject *obj_b = static_cast<ObJsonObject *>(b);
+      return get_rerank_score(obj_a->get_value(MODEL_SCORE_KEY)) >
+             get_rerank_score(obj_b->get_value(MODEL_SCORE_KEY));
+    });
+    ObJsonArray *sorted = nullptr;
+    if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, sorted))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < static_cast<int64_t>(nodes.size()); i++) {
+        if (OB_FAIL(sorted->append(nodes[i]))) {
+        }
+      }
+      if (OB_SUCC(ret)) {
+        sorted_document_array_obj = sorted;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
     sorted_document_array = sorted_document_array_obj;
   }
   return ret;
