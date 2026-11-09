@@ -32,7 +32,7 @@ sub_part_t1	CREATE TABLE `sub_part_t1` (
   PRIMARY KEY (`c1`, `c2`),
   FULLTEXT KEY `idx1` (`c3`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384,
   FULLTEXT KEY `idx2` (`c4`) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=2) BLOCK_SIZE 16384
-) ORGANIZATION INDEX AUTO_INCREMENT = 1 DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+) ORGANIZATION INDEX AUTO_INCREMENT = 1 DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by range columns(c1) subpartition by range columns(c2) subpartition template (
 subpartition `m0` values less than (100),
 subpartition `m1` values less than (200),
@@ -379,7 +379,7 @@ CREATE TABLE `t6_y` (
   KEY `i_0_VUgpDp` (`c1`, `c2`, `c13`) LOCAL,
   KEY `i_2_Cd` (`c11`, `c12`) LOCAL,
   KEY `i_3_uClzM` (`c7`, `c1`) LOCAL
-) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0;
 insert into t6_y(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13)
   values('DW025','XAYzBuzALLItjoaBC DEF G025', '-25', 2101, 2139, '2000-05-01 09:54:48', 'FOOwEiEaxpNxXtZNsZiLpANyrwgtJtvoEGvAxDaNPJKL MNO 025', '2004-08-11 13:00:36.00000', '-25.00000000000000000000000000000', '-25.0000', '-25', 'tnAcsdGnbnuwJGdEcsmjDjYbaoxAMqLQSZaUmIPTtXwJQfVOttrO PQR ST025', 'eOhKGyHmulLxdkGiwqfgIMKBRVQenUwjRVhpAebFdIVvvXqFUbTqjWkwLMjmmnCkaNO PQR S025');
 insert into t6_y(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13)
@@ -479,7 +479,7 @@ CREATE TABLE `bug2024111900105177241` (
   KEY `g_i_1_mBsUB` (`c2`, `c8`) BLOCK_SIZE 16384 GLOBAL,
   KEY `i_2_IvQoVzH` (`c2`, `c27`, `c14`, `c31`) BLOCK_SIZE 16384 LOCAL,
   KEY `i_3_d` (`c3`, `c31`) BLOCK_SIZE 16384 LOCAL
-) AUTO_INCREMENT = 100425246 DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
+) AUTO_INCREMENT = 100425246 DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
  partition by key(c26,c33,c25,c18,c21,c11,c16)
 (partition `p0`,
 partition `p1`,

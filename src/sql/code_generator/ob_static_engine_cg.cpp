@@ -683,7 +683,7 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
   } else if (0 == ObString::make_string("none").case_compare(codec_str)) {
     compress_type = NONE_COMPRESSOR;
   } else if (0 == ObString::make_string("zstd").case_compare(codec_str)) {
-    compress_type = ZSTD_1_3_8_COMPRESSOR;
+    compress_type = ZSTD_COMPRESSOR;
   } else {
     ret = OB_ERR_UNEXPECTED;
   }

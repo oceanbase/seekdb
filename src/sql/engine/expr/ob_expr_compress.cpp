@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_compress.h"
 
+#include "lib/compress/ob_compress_util.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "rust/compression.h"
@@ -83,16 +84,20 @@ int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     expr_datum.set_string(ObString::make_empty_string());
   } else {
     const ObString& str_val = arg->get_string();
-    uint64_t new_len = compression::zlib_compress_bound(str_val.length());
+    const auto bound = compression::compress_bound(
+        static_cast<uint8_t>(ZLIB_COMPRESSOR), str_val.length());
+    uint64_t new_len = bound.size;
     const int64_t buf_len = new_len + COMPRESS_HEADER_LEN + 1;
     char *buf = expr.get_str_res_mem(ctx, buf_len);
-    if (OB_ISNULL(buf)) {
+    if (compression::Code::Ok != bound.code) {
+      ret = common::compression_error_code(bound.code);
+    } else if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      const auto result = compression::zlib_compress(
-          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(str_val.ptr()), str_val.length()),
-          rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(buf + COMPRESS_HEADER_LEN), new_len),
-          -1);
+      const auto result = compression::compress(
+          static_cast<uint8_t>(ZLIB_COMPRESSOR),
+          reinterpret_cast<const uint8_t *>(str_val.ptr()), str_val.length(),
+          reinterpret_cast<uint8_t *>(buf + COMPRESS_HEADER_LEN), new_len);
       if (compression::Code::Ok != result.code) {
         ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
       } else {
@@ -197,11 +202,11 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       } else if (orig_len > 0) {
         if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
         } else {
-          const auto result = compression::zlib_decompress(
-              rust::Slice<const uint8_t>(
-                  reinterpret_cast<const uint8_t *>(str_val.ptr() + COMPRESS_HEADER_LEN),
-                  str_val.length() - COMPRESS_HEADER_LEN),
-              rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(buf), orig_len));
+          const auto result = compression::decompress(
+              static_cast<uint8_t>(ZLIB_COMPRESSOR),
+              reinterpret_cast<const uint8_t *>(str_val.ptr() + COMPRESS_HEADER_LEN),
+              str_val.length() - COMPRESS_HEADER_LEN,
+              reinterpret_cast<uint8_t *>(buf), orig_len);
           if (compression::Code::Ok != result.code) {
             expr_datum.set_null();
             LOG_USER_WARN(OB_ERR_ZLIB_DATA);

@@ -90,9 +90,12 @@ where
     let capacity = chunk.len() - 1;
     reserve_scratch(&mut scratch, capacity).ok()?;
     scratch.resize(capacity, 0);
-    let size =
-        compression::zlib_compress(chunk, &mut scratch, compression::DEFAULT_COMPRESSION_LEVEL)
-            .ok()?;
+    let size = compression::zlib::zlib_compress(
+        chunk,
+        &mut scratch,
+        compression::zlib::DEFAULT_COMPRESSION_LEVEL,
+    )
+    .ok()?;
     if size < chunk.len() {
         scratch.truncate(size);
         Some(scratch)
@@ -156,7 +159,7 @@ pub fn deframe_step_limited(buf: &[u8], at: usize, max_plain: usize) -> DeframeS
             return DeframeStep::Bad;
         }
         out.resize(output_cap, 0);
-        match compression::zlib_decompress_complete(payload, &mut out) {
+        match compression::zlib::zlib_decompress_complete(payload, &mut out) {
             Ok(size) if size == uncomp_len => out.truncate(size),
             _ => return DeframeStep::Bad,
         }

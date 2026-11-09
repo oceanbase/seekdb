@@ -490,9 +490,13 @@ int ObSelectIntoOp::check_csv_file_size(ObCsvFileWriter &data_writer)
       }
     }
     if (has_compress_ && has_split) {
-      data_writer.get_compress_stream_writer()->reuse();
+      if (OB_FAIL(data_writer.get_compress_stream_writer()->reuse())) {
+        LOG_WARN("failed to reset outfile compression", K(ret));
+      }
     }
-    data_writer.update_last_line_pos();
+    if (OB_SUCC(ret)) {
+      data_writer.update_last_line_pos();
+    }
   }
   return ret;
 }

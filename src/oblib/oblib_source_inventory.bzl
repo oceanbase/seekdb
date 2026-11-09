@@ -420,16 +420,6 @@ OBLIB_STANDALONE_CXX_SOURCES = {
     "src/oblib/common:oblib_common": [
         "src/oblib/common/timezone/ob_timezone_util.cpp",
     ],
-    "src/oblib/lib/compress/zstd_1_3_8:zstd_1_3_8_objs": [
-        "src/oblib/lib/compress/zstd_1_3_8/ob_zstd_wrapper.cpp",
-    ],
-    "src/oblib/lib/compress:compress": [
-        "src/oblib/lib/compress/none/ob_none_compressor.cpp",
-        "src/oblib/lib/compress/ob_compressor.cpp",
-        "src/oblib/lib/compress/ob_compressor_pool.cpp",
-        "src/oblib/lib/compress/zlib/ob_zlib_compressor.cpp",
-        "src/oblib/lib/compress/zstd_1_3_8/ob_zstd_compressor_1_3_8.cpp",
-    ],
     "src/oblib/lib/restore:restore": [
         "src/oblib/lib/restore/ob_io_device.cpp",
     ],
@@ -439,32 +429,5 @@ OBLIB_STANDALONE_CXX_SOURCES = {
     ],
     "src/oblib/lib:mock_di": [
         "src/oblib/lib/stat/mock_diagnostic_info.cpp",
-    ],
-}
-
-OBLIB_STANDALONE_C_SOURCES = {
-    "src/oblib/lib/compress/zstd_1_3_8:zstd_1_3_8_objs": [
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/debug.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/entropy_common.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/error_private.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/fse_compress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/fse_decompress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/hist.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/huf_compress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/huf_decompress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/pool.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/threading.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/xxhash.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_common.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_compress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_ddict.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_decompress.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_decompress_block.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_double_fast.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_fast.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_lazy.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_ldm.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstd_opt.c",
-        "src/oblib/lib/compress/zstd_1_3_8/zstd_src/zstdmt_compress.c",
     ],
 }

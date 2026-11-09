@@ -197,6 +197,14 @@ fn stream_decoder_accepts_zlib_and_concatenated_gzip_members() {
         .unwrap();
     assert!(second.stream_end);
     assert_eq!(b"hello", &decoded[..second.produced]);
+    let final_poll = decoder.process(&[], &mut decoded).unwrap();
+    assert!(final_poll.stream_end);
+    assert_eq!(0, final_poll.consumed);
+    assert_eq!(0, final_poll.produced);
+
+    let third = decoder.process(NATIVE_ZLIB_LEVEL6, &mut decoded).unwrap();
+    assert!(third.stream_end);
+    assert_eq!(b"hello world\n", &decoded[..third.produced]);
 }
 
 #[test]

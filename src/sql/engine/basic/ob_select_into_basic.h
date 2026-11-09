@@ -29,19 +29,26 @@ namespace sql
 {
 using CsvCompressType = ObCSVGeneralFormat::ObCSVCompression;
 
+struct StreamCompressionProgress
+{
+  int64_t consumed = 0;
+  int64_t produced = 0;
+  bool finished = false;
+};
+
 class ObOutfileStreamCompressor
 {
 public:
   ObOutfileStreamCompressor(ObIAllocator &allocator)
       : allocator_(allocator) {}
   virtual ~ObOutfileStreamCompressor() { }
-  virtual int compress(const char *src, int64_t src_size, size_t &consumed_size,
-                       char *dest, int64_t dest_capacity, int64_t &decompressed_size,
-                       bool is_file_end, bool &compress_ended) = 0;
+  virtual int compress(const char *src, int64_t src_size,
+                       char *dest, int64_t dest_capacity,
+                       bool is_file_end, StreamCompressionProgress &progress) = 0;
 
   virtual int init() = 0;
   virtual void reset() {};
-  virtual void reuse() {};
+  virtual int reuse() = 0;
   static int create(CsvCompressType format, ObIAllocator &allocator, ObOutfileStreamCompressor *&compressor);
   static void destroy(ObOutfileStreamCompressor *compressor);
 protected:
@@ -52,16 +59,16 @@ class ObOutfileZstdStreamCompressor : public ObOutfileStreamCompressor
 {
 public:
   ObOutfileZstdStreamCompressor(ObIAllocator &allocator)
-      : ObOutfileStreamCompressor(allocator), zstd_cctx_(NULL) {}
+      : ObOutfileStreamCompressor(allocator) {}
   ~ObOutfileZstdStreamCompressor() { reset(); }
-  int compress(const char *src, int64_t src_size, size_t &consumed_size,
-               char *dest, int64_t dest_capacity, int64_t &decompressed_size,
-               bool is_file_end, bool &compress_ended) override;
+  int compress(const char *src, int64_t src_size,
+               char *dest, int64_t dest_capacity,
+               bool is_file_end, StreamCompressionProgress &progress) override;
   int init() override;
   void reset() override;
-  void reuse() override;
+  int reuse() override;
 private:
-  void *zstd_cctx_;
+  std::optional<rust::Box<compression::ZstdEncoder>> encoder_;
 };
 
 class ObOutfileGzipStreamCompressor : public ObOutfileStreamCompressor
@@ -70,12 +77,12 @@ public:
   ObOutfileGzipStreamCompressor(ObIAllocator &allocator)
       : ObOutfileStreamCompressor(allocator) {}
   ~ObOutfileGzipStreamCompressor() { reset(); }
-  int compress(const char *src, int64_t src_size, size_t &consumed_size,
-               char *dest, int64_t dest_capacity, int64_t &decompressed_size,
-               bool is_file_end, bool &compress_ended) override;
+  int compress(const char *src, int64_t src_size,
+               char *dest, int64_t dest_capacity,
+               bool is_file_end, StreamCompressionProgress &progress) override;
   int init() override;
   void reset() override;
-  void reuse() override;
+  int reuse() override;
 private:
   std::optional<rust::Box<compression::GzipEncoder>> encoder_;
 };
@@ -100,7 +107,7 @@ public:
            ObIAllocator &allocator,
            int64_t buffer_size);
 
-  void reuse();
+  int reuse();
 
   void reset();
 

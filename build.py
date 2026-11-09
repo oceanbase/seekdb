@@ -177,6 +177,22 @@ def _route_options(
     return startup, forwarded, defaults
 
 
+def _normalize_cxxbridge_lockfile_paths(root: Path, output_base: Path) -> None:
+    """Keep watched-file labels independent of an output base inside the workspace."""
+    try:
+        output_directory = output_base.relative_to(root).as_posix()
+    except ValueError:
+        return
+    repository = "+cxxbridge_repository+cxxbridge_source"
+    local_prefix = ("FILE:@@//%s/external/%s/" % (output_directory, repository)).encode()
+    canonical_prefix = ("FILE:@@%s/" % repository).encode()
+    lockfile = root / "MODULE.bazel.lock"
+    contents = lockfile.read_bytes()
+    normalized = contents.replace(local_prefix, canonical_prefix)
+    if normalized != contents:
+        lockfile.write_bytes(normalized)
+
+
 def main(arguments: List[str]) -> int:
     root = Path(__file__).resolve().parent
     os.environ.setdefault("RUSTUP_DIST_SERVER", "https://rsproxy.cn")
@@ -256,6 +272,7 @@ def main(arguments: List[str]) -> int:
             "--bazelrc=" + name,
         ] + startup_options + bazel_arguments, cwd=root).returncode
     finally:
+        _normalize_cxxbridge_lockfile_paths(root, output_base)
         Path(name).unlink()
 
 
