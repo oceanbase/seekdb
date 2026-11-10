@@ -95,14 +95,14 @@ int ObLogTopk::est_cost()
   } else if (OB_UNLIKELY((parallel = get_parallel()) < 1)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObTransformUtils::get_limit_value(topk_limit_count_,
-                                                       get_plan()->get_optimizer_context().get_params(),
+                                                       get_plan()->get_optimizer_context().get_parameter_context(),
                                                        get_plan()->get_optimizer_context().get_exec_ctx(),
                                                        &get_plan()->get_optimizer_context().get_allocator(),
                                                        limit_count,
                                                        is_null_value))) {
   } else if (!is_null_value &&
              OB_FAIL(ObTransformUtils::get_limit_value(topk_limit_offset_,
-                                                       get_plan()->get_optimizer_context().get_params(),
+                                                       get_plan()->get_optimizer_context().get_parameter_context(),
                                                        get_plan()->get_optimizer_context().get_exec_ctx(),
                                                        &get_plan()->get_optimizer_context().get_allocator(),
                                                        offset_count,

@@ -19,6 +19,7 @@
 #include "sql/engine/expr/ob_lob_result_materializer.h"
 
 #include "lib/allocator/page_arena.h"
+#include "common/datum/datum_value.h"
 #include "query/session/ob_session_access.h"
 #include "share/ob_lob_access_utils.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -28,19 +29,20 @@ namespace oceanbase
 namespace sql
 {
 
-int materialize_lob_result(common::ObObj &value,
+int materialize_lob_result(common::DatumValue &value,
                            common::ObIAllocator *allocator,
                            const ObSQLSessionInfo &session_info,
                            common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
-  if (!(value.is_lob() || value.is_json() || value.is_geometry()) ||
+  if (!(value.is_lob_storage() || value.is_json() || value.is_geometry()) ||
       value.is_null() || value.is_nop_value()) {
     // No external payload to materialize.
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    common::ObTextStringIter text_iter(value);
+    common::ObTextStringIter text_iter(value.get_type(), value.get_collation_type(),
+                                       value.get_string(), value.has_lob_header());
     common::ObArenaAllocator tmp_allocator(
         "LobRead", common::OB_MALLOC_NORMAL_BLOCK_SIZE);
     if (OB_ISNULL(lob_read_service)) {
@@ -56,14 +58,18 @@ int materialize_lob_result(common::ObObj &value,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(text_iter.get_full_data(data))) {
     } else {
-      common::ObObjType dst_type = common::ObLongTextType;
+      common::SqlValueType dst_type = common::ObLongTextType;
       if (value.is_json()) {
         dst_type = common::ObJsonType;
       } else if (value.is_geometry()) {
         dst_type = common::ObGeometryType;
       }
-      value.set_lob_value(
-          dst_type, data.ptr(), static_cast<int32_t>(data.length()));
+      value.datum_.set_string(data);
+      value.meta_.set_type(dst_type);
+      value.meta_.set_inrow();
+      if (dst_type != common::ObCollectionSQLType) {
+        value.meta_.set_collation_level(common::CS_LEVEL_IMPLICIT);
+      }
     }
   }
   return ret;

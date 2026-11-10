@@ -107,6 +107,7 @@ private:
 
 class ObMergeJoinOp: public ObJoinOp
 {
+  friend class FixedMergeJoinCellsTestAccess;
 private:
   struct JoinRowList
   {
@@ -282,7 +283,7 @@ private:
     // When the other fetcher is end, we start to iterator this fetcher and outptu until end.
     // At the beginning, there are some rows in the current batch that not output yet.
     // We need store these rows and output first, then get batch from child and output directly.
-    ObSEArray<ObDatum *, 256> backup_datums_;
+    ObSEArray<Datum *, 256> backup_datums_;
     int64_t backup_rows_cnt_;
     int64_t backup_rows_used_;
     ObBatchResultHolder brs_holder_;
@@ -554,6 +555,7 @@ private:
   double left_mem_bound_ratio_;
 
 private:
+  common::ObSEArray<common::DatumCmpOp, 4> native_equal_cmp_;
   DISALLOW_COPY_AND_ASSIGN(ObMergeJoinOp);
 };
 

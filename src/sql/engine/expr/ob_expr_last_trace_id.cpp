@@ -44,7 +44,7 @@ int ObExprLastTraceId::calc_result_type0(ObExprResType &type, ObExprTypeCtx &typ
 }
 
 int ObExprLastTraceId::eval_last_trace_id(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

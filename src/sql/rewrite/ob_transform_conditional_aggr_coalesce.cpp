@@ -721,11 +721,10 @@ int ObTransformConditionalAggrCoalesce::try_share_aggr(ObIArray<ObAggFunRawExpr*
       for(int64_t i = 0; OB_SUCC(ret) && i < equal_ctx.param_expr_.count(); i++) {
         ObPCConstParamInfo param_info;
         int64_t param_idx = equal_ctx.param_expr_.at(i).param_idx_;
-        if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_param_store().count())) {
+        if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_parameter_count())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
-        } else if (OB_FAIL(param_info.const_params_.push_back(
-                                                      plan_ctx->get_param_store().at(param_idx)))) {
+        } else if (OB_FAIL(param_info.add_runtime_parameter(*plan_ctx, param_idx, *ctx_->allocator_))) {
         } else if (OB_FAIL(constraints.push_back(param_info))) {
         } else {/*do nothing*/}
       }

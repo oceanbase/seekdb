@@ -79,22 +79,22 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case TABLET_ID:
-          cur_row_.cells_[i].set_int(tablet->get_tablet_meta().tablet_id_.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tablet->get_tablet_meta().tablet_id_.id()) : ret);
           break;
         case FINISH_SCN: {
           int64_t last_major_snapshot_version = tablet->get_last_major_snapshot_version();
-          cur_row_.cells_[i].set_int(last_major_snapshot_version);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, last_major_snapshot_version) : ret);
           break;
         }
         case WAIT_CHECK_SCN:
-          cur_row_.cells_[i].set_int(medium_info_list->get_wait_check_medium_scn());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, medium_info_list->get_wait_check_medium_scn()) : ret);
           break;
         case MAX_RECEIVED_SCN:
           if (OB_SUCCESS == compaction::ObMediumCompactionScheduleFunc::get_max_sync_medium_scn(
               *tablet, *medium_info_list, max_sync_medium_scn)) {
-            cur_row_.cells_[i].set_int(max_sync_medium_scn);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, max_sync_medium_scn) : ret);
           } else {
-            cur_row_.cells_[i].set_int(-1);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, -1) : ret);
           }
           break;
         case SERIALIZE_SCN_LIST:
@@ -103,9 +103,9 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
             int64_t pos = 0;
             MEMSET(medium_info_buf_, '\0', OB_MAX_VARCHAR_LENGTH);
             medium_info_list->gene_info(medium_info_buf_, OB_MAX_VARCHAR_LENGTH, pos);
-            cur_row_.cells_[i].set_varchar(medium_info_buf_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, medium_info_buf_) : ret);
           } else {
-            cur_row_.cells_[i].set_varchar("");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "") : ret);
           }
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;

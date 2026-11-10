@@ -37,7 +37,7 @@ public:
                                 ObExprResType *types_stack,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

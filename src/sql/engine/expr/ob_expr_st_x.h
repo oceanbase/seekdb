@@ -38,16 +38,9 @@ public:
                                 ObExprResType *texts,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  int calc_common(common::ObObj &result,
-                  const common::ObObj *params,
-                  int64_t param_num,
-                  common::ObExprCtx &expr_ctx,
-                  bool is_first_d,
-                  bool only_geog) const;
-
   static int eval_common(const ObExpr &expr,
                          ObEvalCtx &ctx,
-                         ObDatum &expr_datum,
+                         Datum &expr_datum,
                          bool is_first_d,
                          bool only_geog,
                          const char *func_name);
@@ -68,7 +61,7 @@ public:
   explicit ObExprSTX(common::ObIAllocator &alloc)
     : ObExprSTCoordinate(alloc, T_FUN_SYS_ST_X, N_ST_X) {}
   virtual ~ObExprSTX() {}
-  static int eval_st_x(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_x(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -83,7 +76,7 @@ public:
   explicit ObExprSTY(common::ObIAllocator &alloc)
     : ObExprSTCoordinate(alloc, T_FUN_SYS_ST_Y, N_ST_Y) {}
   virtual ~ObExprSTY() {}
-  static int eval_st_y(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_y(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -98,7 +91,7 @@ public:
   explicit ObExprSTLatitude(common::ObIAllocator &alloc)
     : ObExprSTCoordinate(alloc, T_FUN_SYS_ST_LATITUDE, N_ST_LATITUDE) {}
   virtual ~ObExprSTLatitude() {}
-  static int eval_st_latitude(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_latitude(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -113,7 +106,7 @@ public:
   explicit ObExprSTLongitude(common::ObIAllocator &alloc)
     : ObExprSTCoordinate(alloc, T_FUN_SYS_ST_LONGITUDE, N_ST_LONGITUDE) {}
   virtual ~ObExprSTLongitude() {}
-  static int eval_st_longitude(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_longitude(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

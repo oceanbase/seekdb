@@ -45,13 +45,13 @@ enum CalcPartIdType {
 struct RangePartition {
 public:
   RangePartition() : datum_(), is_max_range_(false) {}
-  RangePartition(const ObDatum &datum) : datum_(datum), is_max_range_(false) {}
+  RangePartition(const Datum &datum) : datum_(datum), is_max_range_(false) {}
   ~RangePartition() {}
 
   void set_max_range_part() { is_max_range_ = true; }
   bool is_max_range_part() const { return is_max_range_; }
 
-  ObDatum datum_;
+  Datum datum_;
   bool is_max_range_;
 
   TO_STRING_KV(K_(datum), K_(is_max_range));
@@ -60,12 +60,12 @@ public:
 struct RangePartCmp {
 public:
   RangePartCmp()
-      : cmp_func_(nullptr),
+      : cmp_func_(),
         datum_access_ctx_(nullptr),
         ret_(OB_SUCCESS)
   {}
   ~RangePartCmp() = default;
-  bool operator()(const ObDatum &l, const RangePartition &r);
+  bool operator()(const Datum &l, const RangePartition &r);
 
   ObExprCmpFuncType cmp_func_;
   const common::ObDatumAccessContext *datum_access_ctx_;
@@ -76,9 +76,9 @@ struct PartValKey
 {
 public:
   PartValKey()
-      : datum_(), hash_func_(nullptr), cmp_func_(nullptr), datum_access_ctx_(nullptr)
+      : datum_(), hash_func_(), cmp_func_(), datum_access_ctx_(nullptr)
   {}
-  PartValKey(const ObDatum &datum,
+  PartValKey(const Datum &datum,
              ObExprHashFuncType hash_func,
              ObExprCmpFuncType cmp_func,
              const common::ObDatumAccessContext *datum_access_ctx)
@@ -92,7 +92,7 @@ public:
   int hash(uint64_t &hash_val, uint64_t seed = 0) const;
   TO_STRING_KV(K_(datum), K_(hash_func), K_(cmp_func));
 
-  ObDatum datum_;
+  Datum datum_;
   ObExprHashFuncType hash_func_;
   ObExprCmpFuncType cmp_func_;
   const common::ObDatumAccessContext *datum_access_ctx_;
@@ -202,14 +202,14 @@ public:
 
   static int resolve_nonpartitioned_tablet(const ObExpr &expr,
                                         ObEvalCtx &ctx,
-                                        ObDatum &res_datum);
+                                        Datum &res_datum);
   static int calc_partition_level_one(const ObExpr &expr,
                                       ObEvalCtx &ctx,
-                                      ObDatum &res_datum);
+                                      Datum &res_datum);
   static int calc_partition_level_two(const ObExpr &expr,
                                       ObEvalCtx &ctx,
-                                      ObDatum &res_datum);
-  static int extract_part_and_tablet_id(const ObDatum &part_datum,
+                                      Datum &res_datum);
+  static int extract_part_and_tablet_id(const Datum &part_datum,
                                         common::ObObjectID &part_id,
                                         common::ObTabletID &tablet_id);
   static int calc_part_and_tablet_id(const ObExpr *calc_part_id,
@@ -231,13 +231,13 @@ private:
                          CalcPartitionBaseInfo *&calc_part_info) const;
   static int concat_part_and_tablet_id(const ObExpr &expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &res_datum,
+                                       Datum &res_datum,
                                        uint64_t part_id,
                                        uint64_t tablet_id);
   static int build_row(ObEvalCtx &ctx,
                        common::ObIAllocator &allocator,
                        const ObExpr &expr,
-                       common::ObNewRow &row);
+                       common::ObIArray<common::DatumValue> &row);
   static int calc_partition_id(const ObExpr &expr,
                                ObEvalCtx &ctx,
                                const CalcPartitionBaseInfo &tl_expr_info,

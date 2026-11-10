@@ -27,12 +27,14 @@ namespace oceanbase
 namespace sql
 {
 
+class NativeParameterSlotSnapshot;
+
 // Batch result backup && restore, backup rows by shadow copy.
 class ObBatchResultHolder
 {
 public:
   ObBatchResultHolder() : allocator_(NULL), exprs_(NULL), eval_ctx_(NULL), datums_(NULL),
-                          saved_size_(0), inited_(false)
+                          parameters_(nullptr), capacity_(0), expr_count_(0), saved_size_(0), inited_(false)
   {
   }
 
@@ -49,7 +51,10 @@ private:
   common::ObIAllocator *allocator_;
   const common::ObIArray<ObExpr *> *exprs_;
   ObEvalCtx *eval_ctx_;
-  ObDatum *datums_;
+  Datum *datums_;
+  NativeParameterSlotSnapshot *parameters_;
+  int64_t capacity_;
+  int64_t expr_count_;
   int64_t saved_size_;
   bool inited_;
 };

@@ -421,7 +421,7 @@ int ObRowkeyInfo::get_column_ids(ObIArray<uint64_t> &column_ids) const
 }
 
 
-int ObRowkeyInfo::get_spatial_col_id_by_type(uint64_t &column_id, ObObjType type) const
+int ObRowkeyInfo::get_spatial_col_id_by_type(uint64_t &column_id, SqlValueType type) const
 {
   int ret = OB_SUCCESS;
   bool found = false;

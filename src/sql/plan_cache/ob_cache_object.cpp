@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_PC
 #include "ob_cache_object.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
 #include "share/ob_truncated_string.h"
 #include "sql/pl/ob_pl.h"
 
@@ -113,6 +114,57 @@ int ObPlanCacheObject::set_params_info(const ParamStore &params)
   return ret;
 }
 
+int ObPlanCacheObject::set_params_info(const ObPhysicalPlanCtx &parameters)
+{
+  if (!parameters.native_parameters_ready()) {
+    return set_params_info(parameters.get_parameter_inputs());
+  }
+  int ret = OB_SUCCESS;
+  const int64_t count = parameters.get_parameter_count();
+  if (count > 0) { ret = params_info_.reserve(count); }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    // Group envelopes are sparse construction records with their real array
+    // declaration. Ordinary bindings read the final value and metadata pages.
+    const DatumParameter *group = parameters.get_group_parameter_input(i);
+    const DatumParameterMetadata *metadata = group != nullptr
+        ? &group->get_metadata() : parameters.get_parameter_metadata(i);
+    const DatumParameterMetadata *current_metadata = parameters.get_parameter_metadata(i);
+    Datum::State state = group != nullptr ? group->datum_.state() : Datum::State::Null;
+    const bool valid = group != nullptr || parameters.read_native_parameter_state(i, state);
+    ObParamInfo info;
+    if (metadata == nullptr || current_metadata == nullptr || !valid) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      // Resolver flag merging updates the effective metadata page, while the
+      // sparse group retains its original array declaration and value graph.
+      info.flag_ = current_metadata->flag_;
+      info.type_ = metadata->param_meta_.get_type();
+      info.col_type_ = metadata->type_meta_.get_collation_type();
+      info.is_typed_null_value_ = state == Datum::State::Null && info.type_ != ObNullType;
+      if (metadata->type_meta_.is_ext_sql_array()) {
+        ObDataType element_type;
+        if (group == nullptr) { ret = OB_ERR_UNEXPECTED; }
+        else if (OB_FAIL(ObSQLUtils::get_ext_obj_data_type(*group, element_type))) {
+        } else {
+          info.ext_real_type_ = element_type.get_obj_type();
+          info.scale_ = element_type.get_scale();
+          info.precision_ = element_type.get_precision();
+        }
+      } else if (metadata->param_meta_.is_ext() || metadata->type_meta_.is_collection_sql_type()) {
+        info.scale_ = 0;
+        const uint64_t udt_id = metadata->accuracy_.get_accuracy();
+        *(reinterpret_cast<uint32 *>(&info.ext_real_type_)) = (udt_id >> 32) & UINT_MAX32;
+        *(reinterpret_cast<uint32 *>(&info.col_type_)) = udt_id & UINT_MAX32;
+      } else {
+        info.scale_ = metadata->accuracy_.get_scale();
+        info.precision_ = metadata->accuracy_.get_precision();
+      }
+      if (OB_SUCC(ret)) { ret = params_info_.push_back(info); }
+    }
+  }
+  return ret;
+}
+
 int ObPlanCacheObject::get_base_table_version(const uint64_t table_id, int64_t &table_version) const
 {
   int ret = OB_SUCCESS;
@@ -159,7 +211,7 @@ int ObPlanCacheObject::check_pre_calc_cons(const bool is_ignore_stmt,
   ObPhysicalPlanCtx *phy_plan_ctx = exec_ctx.get_physical_plan_ctx();
   ObPreCalcExprFrameInfo &pre_calc_frame = pre_calc_con.pre_calc_expr_info_;
   const PreCalcExprExpectResult expect_res = pre_calc_con.expect_result_;
-  ObSEArray<ObDatumObjParam, 4> datum_params;
+  ObSEArray<DatumParameter, 4> datum_params;
   if (OB_ISNULL(phy_plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {
@@ -270,7 +322,7 @@ int ObPlanCacheObject::pre_calculation(const bool is_ignore_stmt,
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = exec_ctx.get_physical_plan_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
-  ObSEArray<ObDatumObjParam, 4> datum_params;
+  ObSEArray<DatumParameter, 4> datum_params;
   if (OB_ISNULL(phy_plan_ctx) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {

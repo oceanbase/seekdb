@@ -64,8 +64,8 @@ public:
                                const uint64_t table_id, bool &exist);
   static int delete_table_id_from_parent_table_set(ObDMLRtCtx &dml_rtctx, const ObDMLBaseCtDef &dml_ctdef);
   static int check_lob_column_changed(ObEvalCtx &eval_ctx, 
-              const ObExpr& old_expr, ObDatum& old_datum,
-              const ObExpr& new_expr, ObDatum& new_datum,
+              const ObExpr& old_expr, Datum& old_datum,
+              const ObExpr& new_expr, Datum& new_datum,
               int64_t& result);
   static int check_row_whether_changed(const ObUpdCtDef &upd_ctdef, ObUpdRtDef &upd_rtdef, ObEvalCtx &eval_ctx);
   static int filter_row_for_check_cst(const ExprFixedArray &cst_exprs,
@@ -84,7 +84,7 @@ public:
   static int check_column_null(ObEvalCtx &eval_ctx,
                                const ObExprPtrIArray &row,
                                const ColumnContent &column_info,
-                               ObDatum &datum,
+                               Datum &datum,
                                const bool is_ignore,
                                const bool is_single_value,
                                const ObSQLMode sql_mode);
@@ -92,7 +92,7 @@ public:
                                  const ExprFixedArray &dml_row,
                                  const ColumnContent &column_info,
                                  common::ObIAllocator &allocator,
-                                 ObDatum &datum);
+                                 Datum &datum);
   static int check_filter_row(const ObInsCtDef &ins_ctdef,
                               ObEvalCtx &eval_ctx,
                               bool &is_skipped);
@@ -268,7 +268,7 @@ public:
                                   int64_t row_num,
                                   common::ObString &column_name,
                                   ObExecContext &ctx,
-                                  const ObObjType column_type);
+                                  const SqlValueType column_type);
   static int get_root_exec_ctx_for_fk_cascading(ObExecContext *ctx, ObExecContext* &needed_ctx);
 
 private:

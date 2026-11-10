@@ -75,11 +75,11 @@ int ObExprElt::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &expr) const
   return ret;
 }
 
-int ObExprElt::eval_elt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprElt::eval_elt(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *first = NULL;
-  ObDatum *d = NULL;
+  Datum *first = NULL;
+  Datum *d = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, first))) {
   } else if (first->is_null() || first->get_int() <= 0 || first->get_int() >= expr.arg_cnt_) {
     expr_datum.set_null();

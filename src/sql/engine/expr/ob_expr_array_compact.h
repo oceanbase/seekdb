@@ -33,7 +33,7 @@ public:
   virtual ~ObExprArrayCompact();
   virtual int calc_result_type1(ObExprResType &type, ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                       const ObBitVector &skip, const int64_t batch_size);
   static int eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx,

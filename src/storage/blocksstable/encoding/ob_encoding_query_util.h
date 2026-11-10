@@ -172,7 +172,7 @@ OB_INLINE int32_t *get_store_class_tag_map()
   return store_class_tag_map;
 }
 
-OB_INLINE int32_t get_datum_store_len(const common::ObObjDatumMapType &datum_type)
+OB_INLINE int32_t get_datum_store_len(const common::SqlValueDatumMapType &datum_type)
 {
   int32_t datum_len = 0;
   switch (datum_type) {

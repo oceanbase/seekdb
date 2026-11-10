@@ -108,17 +108,17 @@ bool ObAllVirtualSchedulerRunningJob::FillScanner::operator()(
       switch(col_id) {
         case OWNER: {
           if (sess_info->get_is_deserialized()) {
-            cur_row_->cells_[cell_idx].set_varchar("");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, "") : ret);
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
           } else {
-            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_user_name());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_user_name()) : ret);
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
           }
           break;
         }
         case JOB_NAME: {
           if (OB_NOT_NULL(sess_info->get_job_info())) {
-            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_job_info()->get_job_name());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_job_info()->get_job_name()) : ret);
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
           } else {
             cur_row_->cells_[cell_idx].set_null();
@@ -131,7 +131,7 @@ bool ObAllVirtualSchedulerRunningJob::FillScanner::operator()(
         }
         case JOB_CLASS: {
           if (OB_NOT_NULL(sess_info->get_job_info())) {
-            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_job_info()->get_job_class());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_job_info()->get_job_class()) : ret);
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
           } else {
             cur_row_->cells_[cell_idx].set_null();
@@ -147,7 +147,7 @@ bool ObAllVirtualSchedulerRunningJob::FillScanner::operator()(
           break;
         }
         case SESSION_ID: {
-          cur_row_->cells_[cell_idx].set_uint64(static_cast<uint64_t>(sess_info->get_server_sid()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_->cells_, cur_row_->count_, cell_idx, static_cast<uint64_t>(sess_info->get_server_sid())) : ret);
           break;
         }
         case SLAVE_PROCESS_ID: {
@@ -163,7 +163,7 @@ bool ObAllVirtualSchedulerRunningJob::FillScanner::operator()(
           break;
         }
         case ELAPSED_TIME: {
-          cur_row_->cells_[cell_idx].set_int(ObTimeUtility::current_time() - sess_info->get_sess_create_time());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, cell_idx, ObTimeUtility::current_time() - sess_info->get_sess_create_time()) : ret);
           break;
         }
         case CPU_USED: {

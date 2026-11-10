@@ -235,29 +235,28 @@ def add_index_method_end(num_index):
 
 def print_default_column(column_name, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, default_value, column_id, is_hidden, is_storing_column):
   global cpp_f
-  set_op = "";
+  default_value_expr = "";
   if "NULL" == default_value or "null" == default_value:
-    set_op = 'set_null()'
+    default_value_expr = 'make_inner_table_default_null()'
   elif column_type == 'ObIntType':
-    set_op = 'set_int({0})'.format(default_value)
+    default_value_expr = 'make_inner_table_default_int(ObIntType, {0})'.format(default_value)
   elif column_type == 'ObUInt64Type':
-    set_op = 'set_uint64({0})'.format(default_value)
+    default_value_expr = 'make_inner_table_default_uint64({0})'.format(default_value)
   elif column_type == 'ObTinyIntType':
-    set_op = 'set_tinyint({0})'.format(default_value)
+    default_value_expr = 'make_inner_table_default_int(ObTinyIntType, {0})'.format(default_value)
   elif column_type == 'ObVarcharType':
       if column_collation_type == "CS_TYPE_BINARY":
-        set_op = 'set_varbinary(ObString::make_string("{0}"))'.format(default_value)
+        collation = 'CS_TYPE_BINARY'
       else:
-        set_op = 'set_varchar(ObString::make_string("{0}"))'.format(default_value)
+        collation = column_collation_type
+      default_value_expr = 'make_inner_table_default_string(ObVarcharType, ObString::make_string("{0}"), {1}, false)'.format(default_value, collation)
   elif column_type == 'ObTimestampType':
     if (default_value == 'CURRENT_TIMESTAMP') or (default_value == 'current_timestmap'):
-      set_op = 'set_timestamp(ObTimeUtility::current_time())'
+      default_value_expr = 'make_inner_table_default_now()'
     else:
-      set_op = 'set_timestamp({0})'.format(default_value)
+      default_value_expr = 'make_inner_table_default_timestamp({0})'.format(default_value)
   elif column_type == 'ObLongTextType':
-    set_op = 'set_lob_value(ObLongTextType, "{0}", static_cast<int32_t>(strlen("{0}")))'.format(default_value)
-    if column_collation_type == "CS_TYPE_BINARY":
-      set_op += '; {0}_default.set_collation_type(CS_TYPE_BINARY);'.format(column_name.lower())
+    default_value_expr = 'make_inner_table_default_string(ObLongTextType, ObString::make_string("{0}"), {1}, true)'.format(default_value, column_collation_type)
   else:
     raise IOError("ERROR column format: column_name={0} column_type={1}\n".format(column_name, column_type))
   if is_hidden == 'true' or is_storing_column == 'true':
@@ -265,8 +264,7 @@ def print_default_column(column_name, rowkey_id, index_id, part_key_pos, column_
       ## index
       line = """
   if (OB_SUCC(ret)) {{
-    ObObj {12}_default;
-    {12}_default.{13};
+    DatumValue {12}_default = {13};
     ADD_COLUMN_SCHEMA_T_WITH_COLUMN_FLAGS("{0}", //column_name
       column_id + {1}, //column_id
       {2}, //rowkey_id
@@ -285,12 +283,11 @@ def print_default_column(column_name, rowkey_id, index_id, part_key_pos, column_
       {15}); //is_storing_column 
   }}
 """
-      cpp_f.write(line.format(column_name, column_id, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_name.lower(), set_op, is_hidden, is_storing_column))
+      cpp_f.write(line.format(column_name, column_id, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_name.lower(), default_value_expr, is_hidden, is_storing_column))
     else:
       line = """
   if (OB_SUCC(ret)) {{
-    ObObj {11}_default;
-    {11}_default.{12};
+    DatumValue {11}_default = {12};
     ADD_COLUMN_SCHEMA_T_WITH_COLUMN_FLAGS("{0}", //column_name
       ++column_id, //column_id
       {1}, //rowkey_id
@@ -309,14 +306,13 @@ def print_default_column(column_name, rowkey_id, index_id, part_key_pos, column_
       {14}); //is_storing_column
   }}
 """
-      cpp_f.write(line.format(column_name, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_name.lower(),set_op, is_hidden, is_storing_column))
+      cpp_f.write(line.format(column_name, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_name.lower(), default_value_expr, is_hidden, is_storing_column))
   else:
     if column_id != 0:
       ## index
       line = """
   if (OB_SUCC(ret)) {{
-    ObObj {12}_default;
-    {12}_default.{13};
+    DatumValue {12}_default = {13};
     ADD_COLUMN_SCHEMA_T("{0}", //column_name
       column_id + {1}, //column_id
       {2}, //rowkey_id
@@ -333,12 +329,11 @@ def print_default_column(column_name, rowkey_id, index_id, part_key_pos, column_
       {12}_default); //default_value
   }}
 """
-      cpp_f.write(line.format(column_name, column_id, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_name.lower(), set_op))
+      cpp_f.write(line.format(column_name, column_id, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_name.lower(), default_value_expr))
     else:
       line = """
   if (OB_SUCC(ret)) {{
-    ObObj {11}_default;
-    {11}_default.{12};
+    DatumValue {11}_default = {12};
     ADD_COLUMN_SCHEMA_T("{0}", //column_name
       ++column_id, //column_id
       {1}, //rowkey_id
@@ -355,7 +350,7 @@ def print_default_column(column_name, rowkey_id, index_id, part_key_pos, column_
       {11}_default); //default_value
   }}
 """
-      cpp_f.write(line.format(column_name, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_name.lower(),set_op))
+      cpp_f.write(line.format(column_name, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_name.lower(), default_value_expr))
     
 def print_column(column_name, rowkey_id, index_id, part_key_pos, column_type, column_collation_type, column_length, column_precision, column_scale, is_nullable, is_autoincrement, column_id, is_hidden, is_storing_column):
   global cpp_f
@@ -462,11 +457,9 @@ def print_timestamp_column(column_name, rowkey_id, index_id, part_key_pos, colum
       if int(column_scale) > 0 :
         line = """
   if (OB_SUCC(ret)) {{
-    ObObj gmt_default;
-    ObObj gmt_default_null;
+    DatumValue gmt_default = make_inner_table_default_now();
+    DatumValue gmt_default_null = make_inner_table_default_null();
 
-    gmt_default.set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
-    gmt_default_null.set_null();
     ADD_COLUMN_SCHEMA_TS_T_WITH_COLUMN_FLAGS("{0}", //column_name
       column_id + {1}, //column_id
       {2}, //rowkey_id
@@ -511,11 +504,9 @@ def print_timestamp_column(column_name, rowkey_id, index_id, part_key_pos, colum
       if int(column_scale) > 0 :
         line = """
   if (OB_SUCC(ret)) {{
-    ObObj gmt_default;
-    ObObj gmt_default_null;
+    DatumValue gmt_default = make_inner_table_default_now();
+    DatumValue gmt_default_null = make_inner_table_default_null();
 
-    gmt_default.set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
-    gmt_default_null.set_null();
     ADD_COLUMN_SCHEMA_TS_T_WITH_COLUMN_FLAGS("{0}", //column_name
       ++column_id, //column_id
       {1}, //rowkey_id
@@ -561,11 +552,9 @@ def print_timestamp_column(column_name, rowkey_id, index_id, part_key_pos, colum
       if int(column_scale) > 0 :
         line = """
   if (OB_SUCC(ret)) {{
-    ObObj gmt_default;
-    ObObj gmt_default_null;
+    DatumValue gmt_default = make_inner_table_default_now();
+    DatumValue gmt_default_null = make_inner_table_default_null();
 
-    gmt_default.set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
-    gmt_default_null.set_null();
     ADD_COLUMN_SCHEMA_TS_T("{0}", //column_name
       column_id + {1}, //column_id
       {2}, //rowkey_id
@@ -606,11 +595,9 @@ def print_timestamp_column(column_name, rowkey_id, index_id, part_key_pos, colum
       if int(column_scale) > 0 :
         line = """
   if (OB_SUCC(ret)) {{
-    ObObj gmt_default;
-    ObObj gmt_default_null;
+    DatumValue gmt_default = make_inner_table_default_now();
+    DatumValue gmt_default_null = make_inner_table_default_null();
 
-    gmt_default.set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
-    gmt_default_null.set_null();
     ADD_COLUMN_SCHEMA_TS_T("{0}", //column_name
       ++column_id, //column_id
       {1}, //rowkey_id
@@ -658,11 +645,9 @@ def add_gm_columns(columns):
     if column == 'gmt_create':
       line = """
   if (OB_SUCC(ret)) {
-    ObObj gmt_create_default;
-    ObObj gmt_create_default_null;
+    DatumValue gmt_create_default = make_inner_table_default_now();
+    DatumValue gmt_create_default_null = make_inner_table_default_null();
 
-    gmt_create_default.set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
-    gmt_create_default_null.set_null();
     ADD_COLUMN_SCHEMA_TS_T("gmt_create", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -683,11 +668,9 @@ def add_gm_columns(columns):
     elif column == 'gmt_modified':
       line = """
   if (OB_SUCC(ret)) {
-    ObObj gmt_modified_default;
-    ObObj gmt_modified_default_null;
+    DatumValue gmt_modified_default = make_inner_table_default_now();
+    DatumValue gmt_modified_default_null = make_inner_table_default_null();
 
-    gmt_modified_default.set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
-    gmt_modified_default_null.set_null();
     ADD_COLUMN_SCHEMA_TS_T("gmt_modified", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -1613,7 +1596,7 @@ def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
   f.write('{\n')
   f.write('  int ret = OB_SUCCESS;\n')
   f.write('  const int64_t col_count = output_column_ids_.count();\n')
-  f.write('  ObObj *cells = cur_row_.cells_;\n\n')
+  f.write('  DatumValue *cells = cur_row_.cells_;\n\n')
   f.write('  if (OB_ISNULL(cells)) {\n')
   f.write('    ret = OB_ERR_UNEXPECTED;\n')
   f.write('    SERVER_LOG(WARN, "cells is null", K(ret));\n')
@@ -1632,12 +1615,13 @@ def generate_single_local_virtual_table_impl(f, class_name, kw, all_columns):
       set_method = 'set_uint64'
 
     if set_method == 'set_varbinary':
-      f.write('          cells[i].set_varbinary({0});\n'.format(var_name))
+      f.write('          ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, {0});\n'.format(var_name))
+      f.write('          if (OB_SUCC(ret)) { cells[i].set_collation_type(CS_TYPE_BINARY); }\n')
     elif set_method == 'set_varchar':
-      f.write('          cells[i].set_varchar({0});\n'.format(var_name))
+      f.write('          ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, {0});\n'.format(var_name))
       f.write('          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));\n')
     else:
-      f.write('          cells[i].{0}({1});\n'.format(set_method, var_name))
+      f.write('          ret = DatumValueBuffer::{0}(cells, cur_row_.count_, i, {1});\n'.format(set_method, var_name))
     
     f.write('          break;\n')
     f.write('        }\n')

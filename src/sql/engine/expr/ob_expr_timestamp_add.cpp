@@ -166,13 +166,13 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
   return ret;
 }
 
-int calc_timestampadd_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_timestampadd_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  ObDatum *unit_datum = NULL;
-  ObDatum *interval_datum = NULL;
-  ObDatum *timestamp_datum = NULL;
+  Datum *unit_datum = NULL;
+  Datum *interval_datum = NULL;
+  Datum *timestamp_datum = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;
   const common::ObTimeZoneInfo *tz_info = NULL;
@@ -200,7 +200,7 @@ int calc_timestampadd_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
                 expr.args_[2]->datum_meta_.scale_,
                 cvrt_ctx.tz_info_, ot,
                 get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), 0,
-                expr.args_[2]->obj_meta_.has_lob_header()))) {
+                expr.args_[2]->obj_meta_.has_lob_header(), &expr.args_[2]->get_sql_type()))) {
     } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot, cvrt_ctx, ts))) {
     } else if (OB_FAIL(ObExprTimeStampAdd::calc(unit_datum->get_int(), ot, ts, cvrt_ctx,
                             interval_int, res))) {

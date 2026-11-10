@@ -59,7 +59,7 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
   } else if (param_num < 2) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObjTypeClass type_class = ObNullTC;
+    SqlTypeClass type_class = ObNullTC;
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
       type_class = types_stack[i].get_type_class();
       if (ObNullTC == type_class || ObEnumSetTC == type_class) {
@@ -99,7 +99,7 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
         }
       }
 
-      ObObjType calc_type = type.get_calc_type();
+      SqlValueType calc_type = type.get_calc_type();
 
       if (ObVarcharType == calc_type) {
         for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
@@ -170,10 +170,10 @@ int ObExprField::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &expr) const
   return ret;
 }
 
-int ObExprField::eval_field(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprField::eval_field(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *first = NULL;
+  Datum *first = NULL;
   int cmp_ret = 0;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
@@ -183,7 +183,7 @@ int ObExprField::eval_field(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
     // 0 == field(NULL, ...);
     if (!first->is_null()) {
       for (int64_t pos = 1; OB_SUCC(ret) && pos < expr.arg_cnt_; pos++) {
-        ObDatum *d = NULL;
+        Datum *d = NULL;
         if (OB_FAIL(expr.args_[pos]->eval(ctx, d))) {
         } else if (OB_FAIL(expr.args_[0]->basic_funcs_->null_first_cmp_(
                        *first, *d, cmp_ret, datum_access_ctx))) {

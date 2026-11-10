@@ -45,14 +45,6 @@ int ObExprVecIVFCenterID::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprVecIVFCenterID::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  // TODO by query ivf index
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprVecIVFCenterID::cg_expr(
     ObExprCGCtx &expr_cg_ctx,
@@ -73,7 +65,7 @@ int ObExprVecIVFCenterID::cg_expr(
 int ObExprVecIVFCenterID::calc_center_id(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (expr.arg_cnt_ == 1) {

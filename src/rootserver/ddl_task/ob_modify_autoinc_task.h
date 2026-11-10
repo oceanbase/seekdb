@@ -32,7 +32,7 @@ public:
     const int64_t dest_table_id,
     const int64_t schema_version,
     const uint64_t column_id,
-    const ObObjType &orig_column_type,
+    const SqlValueType &orig_column_type,
     const ObSQLMode &sql_mode,
     const common::ObCurTraceId::TraceId &trace_id,
     const int64_t task_id);
@@ -45,7 +45,7 @@ private:
   int64_t dest_table_id_;
   int64_t schema_version_;
   uint64_t column_id_;
-  ObObjType orig_column_type_;
+  SqlValueType orig_column_type_;
   ObSQLMode sql_mode_;
   common::ObCurTraceId::TraceId trace_id_;
   int64_t task_id_;

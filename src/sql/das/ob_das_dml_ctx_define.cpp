@@ -288,14 +288,14 @@ int ObDASWriteBuffer::DmlShadowRow::init(ObIAllocator &allocator,
 }
 
 int ObDASWriteBuffer::DmlShadowRow::init(ObIAllocator &allocator,
-                                         const ObIArray<ObObjMeta> &col_types,
+                                         const ObIArray<SqlTypeMeta> &col_types,
                                          bool strip_lob_locator)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(allocator, col_types.count(), strip_lob_locator))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < col_types.count(); ++i) {
-    ObObjDatumMapType obj_datum_map = ObDatum::get_obj_datum_map_type(
+    SqlValueDatumMapType obj_datum_map = ObDatum::get_sql_value_datum_map_type(
         col_types.at(i).get_type());
     if (OB_LIKELY(OBJ_DATUM_NULL != obj_datum_map)) {
       total_reserved_size_ += ObDatum::get_reserved_size(obj_datum_map);
@@ -309,6 +309,9 @@ int ObDASWriteBuffer::DmlShadowRow::init(ObIAllocator &allocator,
   column_types_ = &col_types;
   reserve_datum_buf_ = true;
   if (OB_SUCC(ret)) {
+    // The first storage conversion decodes the reserved destination cell.
+    // Initialize its descriptor before binding the per-column payload buffer.
+    DatumShadowStoredRow::reuse();
     reset_datum_ptr();
   }
   return ret;
@@ -321,17 +324,10 @@ int ObDASWriteBuffer::DmlShadowRow::shadow_copy(const ObIArray<ObExpr*> &exprs, 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL datums or count mismatch", K(ret), KPC(store_row_), K(exprs.count()));
   } else {
-    ObDatum *datum = nullptr;
-    ObDatum *cells = store_row_->cells();
-    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
-      if (OB_FAIL(exprs.at(i)->eval(ctx, datum))) {
-      } else {
-        cells[i] = *datum;
-      }
-      if (OB_SUCC(ret)) {
-        store_row_->row_size_ += cells[i].len_;
-      }
-    }
+    // The base shadow owner now materializes inline scalar representations in
+    // stable per-column scratch while preserving reference borrowing semantics.
+    ret = DatumShadowStoredRow::shadow_copy(exprs, ctx);
+    // DML shadows retain their completed prefix even if a later column fails.
     saved_ = true;
   }
   return ret;
@@ -343,17 +339,22 @@ int ObDASWriteBuffer::DmlShadowRow::shadow_copy(const blocksstable::ObDatumRow &
   if (OB_ISNULL(store_row_) || OB_UNLIKELY(store_row_->cnt_ != row.get_column_count())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObDatum *cells = store_row_->cells();
-    ObObjDatumMapType map_type = OBJ_DATUM_MAPPING_MAX;
+    StoredDatumCell *cells = store_row_->stored_cells();
+    SqlValueDatumMapType map_type = OBJ_DATUM_MAPPING_MAX;
     for (int64_t i = 0; OB_SUCC(ret) && i < row.get_column_count(); ++i) {
-      if (FALSE_IT(map_type = ObDatum::get_obj_datum_map_type(column_types_->at(i).get_type()))) {
-      } else if (OB_FAIL(cells[i].from_storage_datum(row.storage_datums_[i], map_type))) {
+      // Numeric conversions write through the buffer bound by reset_datum_ptr;
+      // string conversions may replace it with a borrowed storage payload.
+      ObDatum datum = StoredDatumCodec::decode_legacy_view(cells[i]);
+      if (FALSE_IT(map_type = ObDatum::get_sql_value_datum_map_type(column_types_->at(i).get_type()))) {
+      } else if (OB_FAIL(datum.from_storage_datum(row.storage_datums_[i], map_type))) {
       }
       if (OB_SUCC(ret)) {
+        cells[i] = StoredDatumCodec::encode_legacy_view(datum);
         //add the data length of datum
         store_row_->row_size_ += cells[i].len_;
       }
     }
+    // Preserve the completed prefix until the caller explicitly reuses it.
     saved_ = true;
   }
   return ret;
@@ -550,7 +551,7 @@ OB_INLINE int ObDASWriteBuffer::add_row_to_dlist(const ObChunkDatumStore::Shadow
   } else {
     char *buf = dml_row->payload_;
     int64_t buf_size = lsr->row_size_ + row_extend_size_ - ROW_HEAD_SIZE;
-    if (OB_FAIL(dml_row->copy_shadow_datums(lsr->cells(), lsr->cnt_, buf, buf_size,
+    if (OB_FAIL(dml_row->copy_shadow_cells(lsr->stored_cells(), lsr->cnt_, buf, buf_size,
                                             lsr->row_size_ + row_extend_size_, row_extend_size_/*extra_size*/))) {
     } else {
       row_added = true;
@@ -630,7 +631,7 @@ int ObDASWriteBuffer::begin(Iterator &it)
   return ret;
 }
 
-int ObDASWriteBuffer::begin(NewRowIterator &it, const ObIArray<ObObjMeta> &col_types)
+int ObDASWriteBuffer::begin(NewRowIterator &it, const ObIArray<SqlTypeMeta> &col_types)
 {
   int ret = OB_SUCCESS;
   it.cur_row_ = buffer_list_.header_.next_;
@@ -789,7 +790,7 @@ int ObDASWriteBuffer::serialize_buffer_list(char *buf, const int64_t buf_len, in
       } else {
         DmlRow *tmp_row = reinterpret_cast<DmlRow*>(buf + pos);
         MEMCPY(tmp_row, dml_row, dml_row->row_size_);
-        DmlRow::unswizzling_datum(tmp_row->cells(), dml_row->cnt_, dml_row->payload_);
+        DmlRow::unswizzling_cells(tmp_row->stored_cells(), dml_row->cnt_, dml_row->payload_);
         pos += dml_row->row_size_;
         dml_row = ObDASWriteBuffer::get_next_dml_row(dml_row);
       }
@@ -869,7 +870,8 @@ int ObDASWriteBuffer::NewRowIterator::get_next_row(blocksstable::ObDatumRow *&ro
 
   if (OB_SUCC(ret) && sr != nullptr) {
     for (int64_t i = 0; OB_SUCC(ret) && i < sr->cnt_; ++i) {
-      cur_new_row_->storage_datums_[i].shallow_copy_from_datum(sr->cells()[i]);
+      cur_new_row_->storage_datums_[i].shallow_copy_from_datum(
+          StoredDatumCodec::decode_legacy_view(sr->stored_cells()[i]));
     }
     if (OB_SUCC(ret)) {
       row = cur_new_row_;

@@ -54,7 +54,7 @@ struct ObTopkItem : public ObTopkBaseItem
                K_(obj_hash),
                K_(col_obj));
   uint64_t obj_hash_;
-  common::ObObj col_obj_;
+  common::DatumValue col_obj_;
 };
 
 struct ObTopkDatumItem : public ObTopkBaseItem
@@ -62,16 +62,16 @@ struct ObTopkDatumItem : public ObTopkBaseItem
   ObTopkDatumItem()
     : ObTopkBaseItem(),
       datum_hash_(0),
-      datum_(NULL)
+      datum_()
   {
   }
 
   TO_STRING_KV(K_(fre_times),
                K_(delta),
                K_(datum_hash),
-               KPC_(datum));
+               K_(datum));
   uint64_t datum_hash_;
-  ObDatum *datum_;
+  common::Datum datum_;
 };
 
 typedef common::hash::ObHashMap<uint64_t, uint64_t, common::hash::NoPthreadDefendMode> ObTopkMap;
@@ -86,6 +86,8 @@ class ObTopKFrequencyHistograms
       window_size_(0),
       item_size_(0),
       is_topk_hist_need_des_row_(false),
+      datum_meta_(),
+      has_datum_meta_(false),
       topk_fre_items_(),
       used_list_(),
       free_list_(),
@@ -106,14 +108,16 @@ class ObTopKFrequencyHistograms
       free_list_.set_attr(lib::ObMemAttr("ObTopkfreelist"));
     }
 
-    int read_result(const ObObj &result_obj);
-    int create_topk_fre_items(const ObObjMeta *obj_meta = NULL);
+    int read_result(const DatumValue &result_value);
+    int create_topk_fre_items(const SqlTypeMeta *obj_meta = NULL);
     int sort_topk_fre_items(ObIArray<ObTopkItem> &items);
     int shrink_topk_items();
-    int add_top_k_frequency_item(const ObObj &obj, int64_t repeat_cnt);
-    int add_top_k_frequency_item(uint64_t datum_hash, const ObDatum &datum);
-    int add_batch_items(const char **payloads, int32_t *lens, uint64_t *hash_val, int64_t batch_cnt);
-    int merge_distribute_top_k_fre_items(const ObObj &obj);
+    int add_top_k_frequency_item(const DatumValue &obj, int64_t repeat_cnt);
+    int add_top_k_frequency_item(uint64_t datum_hash, const ObDatum &datum,
+                                 const SqlTypeMeta &actual_meta);
+    int add_batch_items(const char **payloads, int32_t *lens, uint64_t *hash_val,
+                        int64_t batch_cnt, const SqlTypeMeta &actual_meta);
+    int merge_distribute_top_k_fre_items(const DatumValue &obj);
     void set_window_size(int64_t window_size) { window_size_ = window_size; }
     void set_item_size(int64_t item_size) { item_size_ = item_size; }
     void set_is_topk_hist_need_des_row(bool is_true) { is_topk_hist_need_des_row_ = is_true; }
@@ -122,8 +126,9 @@ class ObTopKFrequencyHistograms
     bool has_bucket() const { return !used_list_.empty(); }
     int64_t get_total_fre_item() const { return N_; }
     ObTopkBaseItem *get_entry(const uint64_t hash_val);
-    int add_entry(const uint64_t &datum_hash, const ObDatum &datum, const int64_t fre_time, const int64_t delta);
-    int add_entry(const uint64_t &obj_hash, const ObObj &obj, const int64_t fre_time, const int64_t delta);
+    int add_entry(const uint64_t &datum_hash, const Datum &datum,
+                  const SqlTypeMeta &actual_meta, const int64_t fre_time, const int64_t delta);
+    int add_entry(const uint64_t &obj_hash, const DatumValue &obj, const int64_t fre_time, const int64_t delta);
     int remove_entry(ObTopkBaseItem *item);
     int shrink_memory_usage();
     void reset_memory_usage();
@@ -132,7 +137,10 @@ class ObTopKFrequencyHistograms
     int64_t get_total_disuse_fre_item() const { return disuse_cnt_; }
     double get_current_min_topk_ratio() const;
     void set_the_obj_memory_use_limit();
-    int64_t get_max_reserved_item_size() const { return item_size_ * 1.5; }
+    int64_t get_max_reserved_item_size() const {
+      return item_size_ < 0 || item_size_ > INT64_MAX - item_size_ / 2
+          ? INT64_MAX : item_size_ + item_size_ / 2;
+    }
     void set_max_disuse_cnt(int64_t max_disuse_cnt) { max_disuse_cnt_ = max_disuse_cnt; }
     OB_INLINE void inc_disuse_cnt()
     {
@@ -172,6 +180,7 @@ class ObTopKFrequencyHistograms
                  K_(disuse_cnt),
                  K_(obj_memory_limit));
   private:
+    int add_datum_item(uint64_t hash, const Datum &datum, const SqlTypeMeta &meta);
     const int64_t MIN_OBJ_MEMORY_LIMIT = 1LL * 1024LL * 1024LL; // 1MB
     const int64_t MAX_OBJ_MEMORY_LIMIT = 10LL * 1024LL * 1024LL; // 10MB
     int64_t N_;
@@ -179,6 +188,10 @@ class ObTopKFrequencyHistograms
     int64_t window_size_; // in default, the  window size is 1000
     int64_t item_size_;
     bool is_topk_hist_need_des_row_; // for parallel topk histogram compuation
+    // One actual physical-column declaration for datum mode. This is not a
+    // semantic SqlType or a resource/PL ownership declaration.
+    SqlTypeMeta datum_meta_;
+    bool has_datum_meta_;
     common::ObFixedArray<ObTopkItem, common::ObIAllocator> topk_fre_items_;
     // the following are used to computation
     common::ObSEArray<ObTopkBaseItem*, 16> used_list_;

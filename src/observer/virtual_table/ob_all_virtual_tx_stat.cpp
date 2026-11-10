@@ -87,21 +87,21 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case TX_ID:
-          cur_row_.cells_[i].set_int(tx_stat.tx_id_.get_id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.tx_id_.get_id()) : ret);
           break;
         case SESSION_ID:
-          cur_row_.cells_[i].set_int(tx_stat.session_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.session_id_) : ret);
           break;
         case IS_DECIDED:
-          cur_row_.cells_[i].set_bool(tx_stat.has_decided_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cur_row_.cells_, cur_row_.count_, i, tx_stat.has_decided_) : ret);
           break;
         case WRITE_STATE:
-          cur_row_.cells_[i].set_varchar(tx_stat.has_write_state_ ? "true" : "false");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, tx_stat.has_write_state_ ? "true" : "false") : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case TX_CTX_CREATE_TIME:
           if (is_valid_timestamp_(tx_stat.tx_ctx_create_time_)) {
-            cur_row_.cells_[i].set_timestamp(tx_stat.tx_ctx_create_time_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tx_stat.tx_ctx_create_time_) : ret);
           } else {
             // if invalid timestamp, display NULL
             cur_row_.cells_[i].reset();
@@ -109,62 +109,62 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
           break;
         case TX_EXPIRED_TIME:
           if (is_valid_timestamp_(tx_stat.tx_expired_time_)) {
-            cur_row_.cells_[i].set_timestamp(tx_stat.tx_expired_time_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tx_stat.tx_expired_time_) : ret);
           } else {
             // if invalid timestamp, display NULL
             cur_row_.cells_[i].reset();
           }
           break;
         case REF_CNT:
-          cur_row_.cells_[i].set_int(tx_stat.ref_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.ref_cnt_) : ret);
           break;
         case LAST_OP_SN:
-          cur_row_.cells_[i].set_int(tx_stat.last_op_sn_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.last_op_sn_) : ret);
           break;
         case PENDING_WRITE:
-          cur_row_.cells_[i].set_int(tx_stat.pending_write_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.pending_write_) : ret);
           break;
         case STATE:
-          cur_row_.cells_[i].set_int(tx_stat.state_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.state_) : ret);
           break;
         case PART_TX_ACTION:
-          cur_row_.cells_[i].set_int(tx_stat.part_tx_action_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.part_tx_action_) : ret);
           break;
         case TX_CTX_ADDR:
           ctx_addr_buffer_[0] = 0;
             snprintf(ctx_addr_buffer_, CTX_ADDR_BUFFER_SIZE, "0x%lx", (uint64_t)tx_stat.tx_ctx_addr_);
-          cur_row_.cells_[i].set_varchar(ctx_addr_buffer_);
-          cur_row_.cells_[i].set_default_collation_type();
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ctx_addr_buffer_) : ret);
+          cur_row_.cells_[i].meta_.set_default_collation_type();
           break;
         case PENDING_LOG_SIZE:
-          cur_row_.cells_[i].set_int(tx_stat.pending_log_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.pending_log_size_) : ret);
           break;
         case FLUSHED_LOG_SIZE:
-          cur_row_.cells_[i].set_int(tx_stat.flushed_log_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.flushed_log_size_) : ret);
           break;
         case IS_EXITING:
-          cur_row_.cells_[i].set_int(tx_stat.is_exiting_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.is_exiting_) : ret);
           break;
         case LAST_REQUEST_TS:
-          cur_row_.cells_[i].set_timestamp(tx_stat.last_request_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tx_stat.last_request_ts_) : ret);
           break;
         case START_SCN:
-          cur_row_.cells_[i].set_uint64(tx_stat.start_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, tx_stat.start_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case END_SCN:
-          cur_row_.cells_[i].set_uint64(tx_stat.end_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, tx_stat.end_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case REC_SCN:
-          cur_row_.cells_[i].set_uint64(tx_stat.rec_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, tx_stat.rec_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case BUSY_CBS_CNT:
-          cur_row_.cells_[i].set_int(tx_stat.busy_cbs_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.busy_cbs_cnt_) : ret);
           break;
         case REPLAY_COMPLETE:
-          cur_row_.cells_[i].set_int(tx_stat.replay_completeness_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.replay_completeness_) : ret);
           break;
         case SERIAL_LOG_FINAL_SCN:
-          cur_row_.cells_[i].set_int(tx_stat.serial_final_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_stat.serial_final_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case CALLBACK_LIST_STATS:
           {
@@ -172,7 +172,7 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
             if (OB_FAIL(cstring_helper_.convert(tx_stat.get_callback_list_stats_displayer(), buf))) {
             } else {
               const int32_t buf_len = static_cast<int32_t>(strlen(buf));
-              cur_row_.cells_[i].set_lob_value(ObLongTextType, buf, buf_len);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(buf_len, buf)) : ret);
               cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
           }

@@ -137,17 +137,17 @@ int ObLobDataReader::read_lob_data(blocksstable::ObStorageDatum &datum, ObCollat
   return ret;
 }
 
-int ObLobDataReader::fuse_disk_lob_header(common::ObObj &obj)
+int ObLobDataReader::fuse_disk_lob_header(common::DatumValue &value)
 {
   int ret = OB_SUCCESS;
-  if (!obj.is_lob_storage() || obj.is_nop_value() || obj.is_null()) {
+  if (!value.is_lob_storage() || value.is_nop_value() || value.is_null()) {
   } else {
-    ObString data = obj.get_string();
+    ObString data = value.get_string();
     ObString out;
     if (OB_FAIL(ObLobManager::fill_lob_header(allocator_, data, out))) {
     } else {
-      obj.set_string(obj.get_type(), out);
-      obj.set_has_lob_header();
+      value.datum_.set_string(out);
+      value.get_meta().set_has_lob_header();
     }
   }
   return ret;

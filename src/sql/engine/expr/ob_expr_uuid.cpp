@@ -156,7 +156,7 @@ int ObExprUuid::calc(unsigned char *scratch)
 }
 
 int ObExprUuid::eval_uuid(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
@@ -242,7 +242,7 @@ int ObExprUuid2bin::cg_expr(ObExprCGCtx &op_cg_ctx,
     if (OB_ISNULL(flag_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObjType flag_expr_type = flag_expr->get_result_type().get_type();
+      SqlValueType flag_expr_type = flag_expr->get_result_type().get_type();
       if (OB_UNLIKELY(ObNullType != flag_expr_type &&
                   !ob_is_integer_type(flag_expr_type))) {
         ret = OB_ERR_UNEXPECTED;
@@ -267,11 +267,11 @@ int ObExprUuid2bin::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprUuid2bin::uuid2bin(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprUuid2bin::uuid2bin(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = nullptr;
-  ObDatum *swap_flag = nullptr;
+  Datum *text = nullptr;
+  Datum *swap_flag = nullptr;
   bool need_swap = false;
   bool is_null = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text))) {
@@ -339,7 +339,7 @@ int ObExprUuid2bin::uuid2bin_batch(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (expr.arg_cnt_ == 2) {
-    ObDatum *swap_flag = nullptr;
+    Datum *swap_flag = nullptr;
     if (OB_ISNULL(expr.args_[1])) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, swap_flag))) {
@@ -355,13 +355,13 @@ int ObExprUuid2bin::uuid2bin_batch(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    ObDatum *res_datum = expr.locate_batch_datums(ctx);
+    Datum *res_datum = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       }
-      ObDatum &text= expr.args_[0]->locate_expr_datum(ctx, i);
+      Datum &text= expr.args_[0]->locate_expr_datum(ctx, i);
       if (text.is_null()) {
         res_datum[i].set_null();
       } else {
@@ -423,10 +423,10 @@ int ObExprIsUuid::cg_expr(ObExprCGCtx &op_cg_ctx,
 }
 
 
-int ObExprIsUuid::is_uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIsUuid::is_uuid(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = nullptr;
+  Datum *text = nullptr;
   if (OB_ISNULL(expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, text))) {
@@ -458,13 +458,13 @@ int ObExprIsUuid::is_uuid_batch(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatum *res_datum = expr.locate_batch_datums(ctx);
+    Datum *res_datum = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       }
-      ObDatum &text= expr.args_[0]->locate_expr_datum(ctx, i);
+      Datum &text= expr.args_[0]->locate_expr_datum(ctx, i);
       if (text.is_null()) {
         res_datum[i].set_null();
       } else {
@@ -528,7 +528,7 @@ int ObExprBin2uuid::cg_expr(ObExprCGCtx &op_cg_ctx,
     if (OB_ISNULL(flag_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObjType flag_expr_type = flag_expr->get_result_type().get_type();
+      SqlValueType flag_expr_type = flag_expr->get_result_type().get_type();
       if (OB_UNLIKELY(ObNullType != flag_expr_type &&
                   !ob_is_integer_type(flag_expr_type))) {
         ret = OB_ERR_UNEXPECTED;
@@ -559,11 +559,11 @@ int ObExprBin2uuid::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprBin2uuid::bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprBin2uuid::bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = nullptr;
-  ObDatum *swap_flag = nullptr;
+  Datum *text = nullptr;
+  Datum *swap_flag = nullptr;
   bool need_swap = false;
   bool is_null = false;
   if (OB_ISNULL(expr.args_[0])) {
@@ -644,7 +644,7 @@ int ObExprBin2uuid::bin2uuid_batch(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (expr.arg_cnt_ == 2) {
-    ObDatum *swap_flag = nullptr;
+    Datum *swap_flag = nullptr;
     if (OB_ISNULL(expr.args_[1])) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, swap_flag))) {
@@ -660,13 +660,13 @@ int ObExprBin2uuid::bin2uuid_batch(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    ObDatum *res_datum = expr.locate_batch_datums(ctx);
+    Datum *res_datum = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       }
-      ObDatum &text = expr.args_[0]->locate_expr_datum(ctx, i);
+      Datum &text = expr.args_[0]->locate_expr_datum(ctx, i);
       if (text.is_null()) {
         res_datum[i].set_null();
       } else {

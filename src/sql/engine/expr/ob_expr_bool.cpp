@@ -37,13 +37,13 @@ int ObExprBool::calc_result_type1(ObExprResType &type,
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   if (ob_is_numeric_type(type1.get_type()) || ob_is_json(type1.get_type())) {
-    type1.set_calc_meta(type1.get_obj_meta());
+    type1.set_calc_meta(type1.get_sql_type_meta());
     type1.set_calc_accuracy(type1.get_accuracy());
     if (ob_is_json(type1.get_type())) {
       type1.set_calc_type(type1.get_type());      
     }
   } else {
-    const ObObjType &calc_type = ObDoubleType;
+    const SqlValueType &calc_type = ObDoubleType;
     type1.set_calc_type(calc_type);
     const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[calc_type];
     type1.set_calc_accuracy(calc_acc);
@@ -58,14 +58,14 @@ int ObExprBool::calc_result_type1(ObExprResType &type,
 
 #define CHECK_IS_TRUE_FUNC_NAME(type)                               \
   int calc_bool_expr_for_##type(const ObExpr &expr, ObEvalCtx &ctx, \
-      ObDatum &res_datum)
-// ObObjEvaluator::is_true() inside, if input obj is null, result is false
+      Datum &res_datum)
+// DatumBoolEvaluator::is_true() inside, if the input value is null, result is false
 // But we need to set it to null here
 // eg: expr1 and null -> null
 // If bool expr is set to false, the above result will become false
 #define EVAL_ARG()                                      \
   int ret = OB_SUCCESS;                                 \
-  ObDatum *child_datum = NULL;                          \
+  Datum *child_datum = NULL;                          \
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_datum))) { \
     LOG_WARN("eval arg 0 failed", K(ret));              \
   } else if (child_datum->is_null()) {                  \
@@ -86,7 +86,7 @@ CHECK_IS_TRUE_FUNC_NAME(float_type)
 {
   EVAL_ARG()
   {
-    // Do not consider the problem of comparing floating-point numbers with 0, see ObObj::is_zero()
+    // Keep the existing exact comparison semantics for floating-point zero.
     int32_t res = (0 == child_datum->get_float()) ? 0 : 1;
     res_datum.set_int32(res);
   }
@@ -97,7 +97,7 @@ CHECK_IS_TRUE_FUNC_NAME(double_type)
 {
   EVAL_ARG()
   {
-    // Do not consider the problem of comparing floating-point numbers with 0, see ObObj::is_zero()
+    // Keep the existing exact comparison semantics for floating-point zero.
     int32_t res = (0 == child_datum->get_double()) ? 0 : 1;
     res_datum.set_int32(res);
   }
@@ -135,25 +135,13 @@ CHECK_IS_TRUE_FUNC_NAME(decint_type)
   EVAL_ARG()
   {
     bool is_zero = false;
-    switch (get_decimalint_type(expr.args_[0]->datum_meta_.precision_))
-    {
-    case common::DECIMAL_INT_32:
-      is_zero = (*reinterpret_cast<const int32_t *>(child_datum->get_decimal_int()) == 0);
-      break;
-    case common::DECIMAL_INT_64:
-      is_zero = (*reinterpret_cast<const int64_t *>(child_datum->get_decimal_int()) == 0);
-      break;
-    case common::DECIMAL_INT_128:
-      is_zero = (*reinterpret_cast<const int128_t *>(child_datum->get_decimal_int()) == 0);
-      break;
-    case common::DECIMAL_INT_256:
-      is_zero = (*reinterpret_cast<const int256_t *>(child_datum->get_decimal_int()) == 0);
-      break;
-    case common::DECIMAL_INT_512:
-      is_zero = (*reinterpret_cast<const int512_t *>(child_datum->get_decimal_int()) == 0);
-      break;
-    default:
-      ret = OB_ERR_UNEXPECTED;
+    alignas(8) char coefficient_scratch[64];
+    common::ObDatum coefficient;
+    if (OB_SUCC(ret = expr.args_[0]->get_datum_copy_plan().get_decimal(*child_datum, coefficient,
+        coefficient_scratch, sizeof(coefficient_scratch)))) {
+      is_zero = true;
+      const char *bytes = reinterpret_cast<const char *>(coefficient.get_decimal_int());
+      for (uint32_t i = 0; is_zero && i < coefficient.get_int_bytes(); ++i) { is_zero = bytes[i] == 0; }
     }
     if (OB_FAIL(ret)) {
     } else {
@@ -168,7 +156,7 @@ inline int get_bool(const T &val, const uint32_t len, const ObExpr &expr, bool &
 {
   UNUSED(len);
   UNUSED(expr);
-  res = (0 != val); // No need consider the problem of 'float == 0', see ObObj::is_zero()
+  res = (0 != val); // Keep the existing exact comparison semantics for floating-point zero.
   return OB_SUCCESS;
 }
 template <>

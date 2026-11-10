@@ -112,49 +112,45 @@ int ObGroupRowHashTable::likely_equal(
   const ObGroupRowItem &left, const ObGroupRowItem &right,
   bool &result) const
 {
-  // All rows is in one group, when no group by columns (group by const expr),
-  // so the default %result is true
   int ret = OB_SUCCESS;
   result = true;
-  ObDatum *l_cells = nullptr;
-  if (!left.is_expr_row_) {
-    l_cells = left.groupby_store_row_->cells();
-  }
+  const StoredDatumCell *l_cells = left.is_expr_row_ ? nullptr
+      : left.groupby_store_row_->stored_cells();
   const int64_t group_col_count = cmp_funcs_->count();
-  for (int64_t i = 0; result && i < group_col_count; ++i) {
-    ObDatum *l = nullptr;
-    ObDatum *r = nullptr;
-    if (left.is_expr_row_) {
-      ObExpr *e = gby_exprs_->at(i);
-      if (nullptr != e) {
-        l = &e->locate_expr_datum(*eval_ctx_, left.batch_idx_);
-      }
-    } else {
-      l = &l_cells[i];
+  for (int64_t i = 0; OB_SUCC(ret) && result && i < group_col_count; ++i) {
+    ObExpr *expr = gby_exprs_->at(i);
+    ObDatum left_view, right_view;
+    const ObDatum *l = nullptr, *r = nullptr;
+    alignas(8) char left_scratch[64], right_scratch[64];
+    if (!left.is_expr_row_) {
+      left_view = StoredDatumCodec::decode_legacy_view(l_cells[i]);
+      l = &left_view;
+    } else if (expr != nullptr) {
+      ret = expr->get_datum_copy_plan().legacy_view(
+          expr->locate_expr_datum(*eval_ctx_, left.batch_idx_),
+          left_view, left_scratch, sizeof(left_scratch));
+      if (OB_SUCC(ret)) { l = &left_view; }
     }
-    // already evaluated when calc hash
-    ObExpr *e = gby_exprs_->at(i);
-    if (nullptr != e ) {
-      r = &e->locate_expr_datum(*eval_ctx_, right.batch_idx_);
+    if (OB_SUCC(ret) && expr != nullptr) {
+      ret = expr->get_datum_copy_plan().legacy_view(
+          expr->locate_expr_datum(*eval_ctx_, right.batch_idx_),
+          right_view, right_scratch, sizeof(right_scratch));
+      if (OB_SUCC(ret)) { r = &right_view; }
     }
-    const bool l_isnull = nullptr == l || l->is_null();
-    const bool r_isnull = nullptr == r || r->is_null();
-    if (l_isnull != r_isnull) {
+    if (OB_FAIL(ret)) {
       result = false;
-    } else if (l_isnull && r_isnull) {
-      result = true;
     } else {
-      // we try memcmp fist since it is likely equal
-      if (l->len_ == r->len_
-          && (0 == memcmp(l->ptr_, r->ptr_, l->len_))) {
+      const bool l_isnull = l == nullptr || l->is_null();
+      const bool r_isnull = r == nullptr || r->is_null();
+      if (l_isnull != r_isnull) { result = false; }
+      else if (l_isnull) { result = true; }
+      else if (l->len_ == r->len_ && (l->len_ == 0 || MEMCMP(l->ptr_, r->ptr_, l->len_) == 0)) {
         result = true;
       } else {
         int cmp_res = 0;
-        if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-                *l, *r, cmp_res, datum_access_ctx_))) {
-        } else {
-          result = (0 == cmp_res);
-        }
+        if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l, *r, cmp_res, datum_access_ctx_))) {
+          result = false;
+        } else { result = cmp_res == 0; }
       }
     }
   }
@@ -617,7 +613,7 @@ int ObHashGroupByOp::next_duplicate_data_permutation(
     } else if (OB_NOT_NULL(child_brs)) {
       const int64_t aggr_code = last_group ? MY_SPEC.dist_col_group_idxs_.count() : nth_group;
       ObExpr *aggr_code_expr = all_groupby_exprs_.at(first_idx - 1);
-      ObDatum *datums = aggr_code_expr->locate_datums_for_update(eval_ctx_, child_brs->size_);
+      Datum *datums = aggr_code_expr->locate_datums_for_update(eval_ctx_, child_brs->size_);
       ObBitVector &eval_flags = aggr_code_expr->get_evaluated_flags(eval_ctx_);
       for (int64_t i = 0; i < child_brs->size_; ++i) {
         if (child_brs->skip_->exist(i)) {
@@ -631,7 +627,7 @@ int ObHashGroupByOp::next_duplicate_data_permutation(
       // disable rowsets
       const int64_t aggr_code = last_group ? MY_SPEC.dist_col_group_idxs_.count() : nth_group;
       ObExpr *aggr_code_expr = all_groupby_exprs_.at(first_idx - 1);
-      ObDatum &datum = aggr_code_expr->locate_datum_for_write(eval_ctx_);
+      Datum &datum = aggr_code_expr->locate_datum_for_write(eval_ctx_);
       datum.set_int(aggr_code);
       aggr_code_expr->set_evaluated_projected(eval_ctx_);
 
@@ -640,7 +636,7 @@ int ObHashGroupByOp::next_duplicate_data_permutation(
     if (!use_distinct_data_) {
       //get the aggr_code and then insert group hash-table or insert duplicate hash-table
       if (nullptr == child_brs) {
-        ObDatum *datum = nullptr;
+        Datum *datum = nullptr;
         int64_t aggr_code = -1;
         ObExpr *aggr_code_expr = all_groupby_exprs_.at(MY_SPEC.aggr_code_idx_);
         if (OB_FAIL(aggr_code_expr->eval(eval_ctx_, datum))) {
@@ -711,9 +707,23 @@ int ObHashGroupByOp::init_distinct_info(bool is_part)
                             expr->obj_meta_.has_lob_header(),
                             expr->datum_meta_.precision_,
                             expr->datum_meta_.precision_);
-      hash_func.hash_func_ = expr->basic_funcs_->murmur_hash_v2_;
-      hash_func.batch_hash_func_ = expr->basic_funcs_->murmur_hash_v2_batch_;
-      if (OB_FAIL(hash_funcs_.push_back(hash_func))) {
+      // The distinct store still owns fixed/legacy cells. Select the same
+      // explicit MurmurV2 algorithm as prepare_basic, using the complete Type.
+      const SqlType &type = expr->get_sql_type();
+      const ObCollationType collation = type.collation() == CS_TYPE_INVALID
+          && !ObDatumFuncs::is_string_type(type.kind()) ? CS_TYPE_BINARY : type.collation();
+      const ObDatumBasicFuncs *legacy = ObDatumFuncs::get_basic_func(type.kind(), collation,
+          type.has_scale() ? type.scale() : SCALE_UNKNOWN_YET, type.legacy_meta().has_lob_header(),
+          type.has_precision() ? type.precision() : PRECISION_UNKNOWN_YET);
+      if (legacy == nullptr || legacy->murmur_hash_v2_ == nullptr
+          || legacy->murmur_hash_v2_batch_ == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        hash_func.hash_func_ = legacy->murmur_hash_v2_;
+        hash_func.batch_hash_func_ = legacy->murmur_hash_v2_batch_;
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(hash_funcs_.push_back(hash_func))) {
       } else if (OB_FAIL(cmp_funcs_.push_back(cmp_func))) {
       } else if (OB_FAIL(sort_collations_.push_back(field_collation))) {
       }
@@ -1192,14 +1202,14 @@ int ObHashGroupByOp::calc_groupby_exprs_hash(ObIArray<ObExpr*> &groupby_exprs,
 {
   int ret = OB_SUCCESS;
   hash_value = 99194853094755497L;
-  ObDatum *result = NULL;
+  Datum *result = NULL;
   if (NULL == srow) {
     for (int64_t i = 0; OB_SUCC(ret) && i < groupby_exprs.count(); ++i) {
       ObExpr *expr = groupby_exprs.at(i);
       if (OB_ISNULL(expr)) {
       } else if (OB_FAIL(expr->eval(eval_ctx_, result))) {
       } else {
-        ObExprHashFuncType hash_func = expr->basic_funcs_->murmur_hash_v2_;
+        const DatumHashOp &hash_func = expr->basic_funcs_->murmur_hash_v2_;
         if (OB_FAIL(
                 hash_func(*result, hash_value, hash_value, datum_access_ctx_))) {
         }
@@ -1772,21 +1782,21 @@ int ObHashGroupByOp::next_batch(bool is_from_row_store,
   return ret;
 }
 
-void ObHashGroupByOp::calc_groupby_exprs_hash_batch(
+int ObHashGroupByOp::calc_groupby_exprs_hash_batch(
   ObIArray<ObExpr *> &groupby_exprs, const ObBatchRows &child_brs)
 {
   uint64_t seed = 99194853094755497L;
-  int64_t ret = OB_SUCCESS;
+  int ret = OB_SUCCESS;
   if (ObThreeStageAggrStage::FIRST_STAGE == MY_SPEC.aggr_stage_ && !has_calc_base_hash_) {
     // first calc hash values of groupby_expr
-    for (int64_t i = 0; i < MY_SPEC.aggr_code_idx_; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.aggr_code_idx_; ++i) {
       ObExpr *expr = groupby_exprs.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObBatchDatumHashFunc hash_func = expr->basic_funcs_->murmur_hash_v2_batch_;
+        const DatumHashOp &hash_func = expr->basic_funcs_->murmur_hash_v2_batch_;
         const bool is_batch_seed = (i > 0);
-        hash_func(base_hash_vals_,
+        ret = hash_func(base_hash_vals_,
                   expr->locate_batch_datums(eval_ctx_), expr->is_batch_result(),
                   *child_brs.skip_, child_brs.size_,
                   is_batch_seed ? base_hash_vals_ : &seed,
@@ -1794,23 +1804,25 @@ void ObHashGroupByOp::calc_groupby_exprs_hash_batch(
                   datum_access_ctx_);
       }
     }
-    has_calc_base_hash_ = true;
-    start_calc_hash_idx_ = MY_SPEC.aggr_code_idx_;
+    if (OB_SUCC(ret)) {
+      has_calc_base_hash_ = true;
+      start_calc_hash_idx_ = MY_SPEC.aggr_code_idx_;
+    }
   }
-  if (0 < start_calc_hash_idx_) {
+  if (OB_SUCC(ret) && 0 < start_calc_hash_idx_) {
     for (int64_t i = 0; i < child_brs.size_; ++i) {
       if (!child_brs.skip_->exist(i)) {
         hash_vals_[i] = base_hash_vals_[i];
       }
     }
   }
-  for (int64_t i = start_calc_hash_idx_; i < groupby_exprs.count(); ++i) {
+  for (int64_t i = start_calc_hash_idx_; OB_SUCC(ret) && i < groupby_exprs.count(); ++i) {
     ObExpr *expr = groupby_exprs.at(i);
     if (OB_ISNULL(expr)) {
     } else {
-      ObBatchDatumHashFunc hash_func = expr->basic_funcs_->murmur_hash_v2_batch_;
+      const DatumHashOp &hash_func = expr->basic_funcs_->murmur_hash_v2_batch_;
       const bool is_batch_seed = (i > 0);
-      hash_func(hash_vals_,
+      ret = hash_func(hash_vals_,
                 expr->locate_batch_datums(eval_ctx_), expr->is_batch_result(),
                 *child_brs.skip_, child_brs.size_,
                 is_batch_seed ? hash_vals_ : &seed,
@@ -1818,6 +1830,7 @@ void ObHashGroupByOp::calc_groupby_exprs_hash_batch(
                 datum_access_ctx_);
     }
   }
+  return ret;
 }
 
 int ObHashGroupByOp::eval_groupby_exprs_batch(const ObChunkDatumStore::StoredRow **store_rows,
@@ -1912,8 +1925,8 @@ int ObHashGroupByOp::batch_process_duplicate_data(
       //       and output the duplicate data
       int64_t tmp_group_cnt = 0;
       if (nullptr == store_rows) {
-        calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs);
-        local_group_rows_.prefetch(child_brs, hash_vals_);
+        if (OB_FAIL(calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs))) {
+        } else { local_group_rows_.prefetch(child_brs, hash_vals_); }
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < child_brs.size_; i++) {
         if (child_brs.skip_->exist(i) || is_dumped_[i]) {
@@ -2125,7 +2138,7 @@ int ObHashGroupByOp::group_child_batch_rows(const ObChunkDatumStore::StoredRow *
   bool force_check_dump = check_dump;
   int64_t aggr_code = -1;
   ObExpr *aggr_code_expr = MY_SPEC.aggr_code_expr_;
-  ObDatum *aggr_code_datum = nullptr;
+  Datum *aggr_code_datum = nullptr;
   int64_t distinct_data_idx = 0;
   // mem prefetch for hashtable
   if (OB_FAIL(eval_groupby_exprs_batch(store_rows, child_brs))) {
@@ -2136,9 +2149,11 @@ int ObHashGroupByOp::group_child_batch_rows(const ObChunkDatumStore::StoredRow *
     // no groupby exprs, don't calculate the last duplicate data for non-distinct aggregate
   } else {
     if (!group_rows_arr_.is_valid_ && nullptr == store_rows) {
-      calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs);
-      local_group_rows_.prefetch(child_brs, hash_vals_);
-      batch_hash_calculated = true;
+      if (OB_FAIL(calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs))) {
+      } else {
+        local_group_rows_.prefetch(child_brs, hash_vals_);
+        batch_hash_calculated = true;
+      }
     }
     uint16_t new_groups = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < child_brs.size_; i++) {
@@ -2156,7 +2171,7 @@ int ObHashGroupByOp::group_child_batch_rows(const ObChunkDatumStore::StoredRow *
           aggr_code = aggr_code_datum->get_int();
           if (aggr_code < MY_SPEC.dist_aggr_group_idxes_.count()) {
             if (!batch_hash_calculated) {
-              calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs);
+              if (OB_FAIL(calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs))) { break; }
               batch_hash_calculated = true;
             }
             ++distinct_data_idx;
@@ -2194,7 +2209,7 @@ int ObHashGroupByOp::group_child_batch_rows(const ObChunkDatumStore::StoredRow *
                     || !need_start_dump(input_rows, est_part_cnt, force_check_dump))) {
         // add new local group
         if (!batch_hash_calculated) {
-          calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs);
+          if (OB_FAIL(calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs))) { break; }
           batch_hash_calculated = true;
         }
         ++agged_row_cnt_;
@@ -2216,7 +2231,7 @@ int ObHashGroupByOp::group_child_batch_rows(const ObChunkDatumStore::StoredRow *
         }
       } else {
         if (!batch_hash_calculated) {
-          calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs);
+          if (OB_FAIL(calc_groupby_exprs_hash_batch(dup_groupby_exprs_, child_brs))) { break; }
           batch_hash_calculated = true;
         }
         // need dump
@@ -2470,8 +2485,8 @@ int ObHashGroupByOp::by_pass_prepare_one_batch(const int64_t batch_size)
   if (OB_SUCC(ret) && (llc_est_.enabled_ || (MY_SPEC.skew_detection_enabled_ && popular_map_.size() > 0))) {
     const ObChunkDatumStore::StoredRow **store_rows = NULL;
     if (OB_FAIL(eval_groupby_exprs_batch(store_rows, brs_))) {
+    } else if (OB_FAIL(calc_groupby_exprs_hash_batch(dup_groupby_exprs_, brs_))) {
     } else {
-      calc_groupby_exprs_hash_batch(dup_groupby_exprs_, brs_);
       if (MY_SPEC.skew_detection_enabled_ && 
           popular_map_.size() > 0 &&
           OB_FAIL(bypass_process_popular_value_batch())) {
@@ -2508,7 +2523,7 @@ int ObHashGroupByOp::by_pass_get_next_permutation(int64_t &nth_group, bool &last
   } else {
     CK (dup_groupby_exprs_.count() == all_groupby_exprs_.count());
     for (int64_t i = 0; OB_SUCC(ret) && i < dup_groupby_exprs_.count(); ++i) {
-      ObDatum *datum = nullptr;
+      Datum *datum = nullptr;
       if (nullptr == dup_groupby_exprs_.at(i)) {
         all_groupby_exprs_.at(i)->locate_expr_datum(eval_ctx_).set_null();
       } else if (OB_FAIL(dup_groupby_exprs_.at(i)->eval(eval_ctx_, datum))) {
@@ -2540,7 +2555,7 @@ int ObHashGroupByOp::by_pass_get_next_permutation_batch(int64_t &nth_group, bool
       my_brs.skip_->set_all(child_brs->size_);
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < dup_groupby_exprs_.count(); ++i) {
-        ObDatum *datum = nullptr;
+        Datum *datum = nullptr;
         if (nullptr == dup_groupby_exprs_.at(i)) {
           for (int64_t j = 0; j < child_brs->size_; ++j) {
             if (child_brs->skip_->at(j)) {

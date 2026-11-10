@@ -25,7 +25,7 @@
 #include "query/command/ob_root_command_service.h"
 #include "query/session/ob_session_access.h"
 #include "ob_sql_session_info.h"
-#include "share/object/ob_obj_cast.h"
+#include "sql/session/ob_piece_cache.h"
 #include "share/ob_rpc_struct.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "sql/pl/ob_pl_package.h"
@@ -172,7 +172,7 @@ ObSQLSessionInfo::~ObSQLSessionInfo()
 }
 
 void ObSQLSessionInfo::configure_obj_cast(
-    common::ObObjCastParams &params,
+    common::DatumCastParams &params,
     common::ObISrsProvider *srs_provider,
     common::ObILobReadService *lob_read_service) const
 {
@@ -1596,8 +1596,8 @@ int ObSQLSessionInfo::get_tmp_table_size(uint64_t &size) {
   const ObBasicSysVar *tmp_table_size = get_sys_var(SYS_VAR_TMP_TABLE_SIZE);
   CK (OB_NOT_NULL(tmp_table_size));
   if (OB_SUCC(ret) &&
-      tmp_table_size->get_value().get_uint64() != tmp_table_size->get_max_val().get_uint64()) {
-    size = tmp_table_size->get_value().get_uint64();
+      tmp_table_size->get_value_datum().get_uint() != tmp_table_size->get_max_val_datum().get_uint()) {
+    size = tmp_table_size->get_value_datum().get_uint();
   } else {
     size = OB_INVALID_SIZE;
   }
@@ -1701,9 +1701,9 @@ int ObSQLSessionInfo::on_user_connect(share::schema::ObSessionPrivInfo &priv_inf
       if (OB_FAIL(get_sys_variable(SYS_VAR_MAX_USER_CONNECTIONS, max_user_connections))) {
       }
     } else {
-      ObObj val;
-      val.set_uint64(max_user_connections);
-      if (OB_FAIL(update_sys_variable(SYS_VAR_MAX_USER_CONNECTIONS, val))) {
+      DatumValue val;
+      if (OB_FAIL(val.set_uint64(max_user_connections, get_allocator()))) {
+      } else if (OB_FAIL(update_sys_variable(SYS_VAR_MAX_USER_CONNECTIONS, val))) {
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(conn_res_mgr_->on_user_connect(
@@ -1843,16 +1843,17 @@ int ObSessionAccess::set_default_database(
 }
 
 int ObSessionAccess::get_collation_connection(
-    const sql::ObSQLSessionInfo *session, common::ObObj &value)
+    const sql::ObSQLSessionInfo *session, common::DatumValue &value,
+    void *scratch, int64_t capacity)
 {
   return nullptr == session
       ? common::OB_INVALID_ARGUMENT
-      : session->get_sys_variable(
-            share::ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION, value);
+      : session->export_sys_variable(
+            share::ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION, value, scratch, capacity);
 }
 
 int ObSessionAccess::set_collation_connection(
-    sql::ObSQLSessionInfo *session, const common::ObObj &value)
+    sql::ObSQLSessionInfo *session, const common::DatumValue &value)
 {
   return nullptr == session
       ? common::OB_INVALID_ARGUMENT

@@ -50,7 +50,7 @@ public:
 
   int add_database_status(const common::ObAddr &server_addr,
                           const share::schema::ObDatabaseSchema &database_schema,
-                          common::ObObj *cells,
+                          common::DatumValue *cells,
                           const int64_t col_count);
   int add_all_database_status();
 private:

@@ -248,6 +248,15 @@ public:
   virtual int assign_task_result(ObIDASTaskOp *other) override { return OB_SUCCESS; }
   storage::ObTableScanParam &get_scan_param() { return scan_param_; }
   const storage::ObTableScanParam &get_scan_param() const { return scan_param_; }
+  // The execution owner outlives every local open/retry of this task. Storage
+  // release clears scan_param_'s borrowed view, so retain its source here.
+  // Set a new source only after consumers of the preceding scan are released.
+  void set_native_point_get_keys(
+      const common::ObIArray<storage::DatumLookupKey> *keys)
+  {
+    native_point_get_keys_ = keys;
+    scan_param_.datum_lookup_keys_ = keys;
+  }
   storage::ObTableScanParam *get_local_lookup_param();
 
   int init_related_tablet_ids(ObDASRelatedTabletID &related_tablet_ids);
@@ -326,6 +335,8 @@ protected:
   // For DASScanOp, essentially it is a wrapper for the PartitionService's table_scan() interface,
   // Parameter is scan_param, result is result iterator
   storage::ObTableScanParam scan_param_;
+  // Process-local only: never serialized or owned by the retry allocator.
+  const common::ObIArray<storage::DatumLookupKey> *native_point_get_keys_;
   const ObDASScanCtDef *scan_ctdef_;
   ObDASScanRtDef *scan_rtdef_;
   // result_ is actually a ObDASIter during execution

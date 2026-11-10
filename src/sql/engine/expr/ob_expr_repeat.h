@@ -32,18 +32,11 @@ public:
                                 ObExprResType &text,
                                 ObExprResType &count,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc(common::ObObj &result,
-                  const common::ObObjType type,
-                  const common::ObString &text,
-                  const int64_t count,
-                  common::ObIAllocator *allocator,
-                  const int64_t max_result_size);
-
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   static int repeat(common::ObString &output,
                     bool &is_null,
@@ -51,7 +44,7 @@ public:
                     const int64_t count,
                     common::ObIAllocator &alloc,
                     const int64_t max_result_size);
-  static int repeat_text(ObObjType res_type,
+  static int repeat_text(SqlValueType res_type,
                          bool has_lob_header,
                          ObString &output,
                          bool &is_null,

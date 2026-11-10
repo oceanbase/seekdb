@@ -627,7 +627,7 @@ int ObGeoExprUtils::geo_to_2d_wkb(ObGeometry &geo,
     int64_t res_size = WKB_OFFSET + wkb_size_visitor.geo_size();
     char *res_buf = nullptr;
     int64_t res_buf_len = 0;
-    ObDatum tmp_res;
+    Datum tmp_res;
     ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &tmp_res);
     if (OB_FAIL(str_result.init(res_size, nullptr))) {
     } else if (OB_FAIL(str_result.get_reserved_buffer(res_buf, res_buf_len))) {
@@ -665,7 +665,7 @@ int ObGeoExprUtils::geo_to_3d_wkb(common::ObGeometry &geo,
   } else {
     ObString no_srid_wkb = geo.to_wkb();
     int64_t res_size = WKB_OFFSET + no_srid_wkb.length();
-    ObDatum tmp_res;  // not used
+    Datum tmp_res;  // not used
     char *res_buf = nullptr;
     int64_t res_buf_len = 0;
     ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &tmp_res);
@@ -734,7 +734,7 @@ int ObGeoExprUtils::zoom_in_geos_for_relation(const ObSrsItem *srs, ObGeometry &
   return ret;
 }
 
-int ObGeoExprUtils::pack_geo_res(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const ObString &str)
+int ObGeoExprUtils::pack_geo_res(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
@@ -823,7 +823,7 @@ int ObGeoExprUtils::length_unit_conversion(const ObString &unit_str, const ObSrs
   return ret;
 }
 
-int ObGeoExprUtils::get_input_geometry(const char* func_name, MultimodeAlloctor &allocator, ObDatum *gis_datum, ObEvalCtx &ctx, ObExpr *gis_arg,
+int ObGeoExprUtils::get_input_geometry(const char* func_name, MultimodeAlloctor &allocator, Datum *gis_datum, ObEvalCtx &ctx, ObExpr *gis_arg,
     common::ObSrsCacheGuard &srs_guard, const ObSrsItem *&srs, ObGeometry *&geo)
 {
   int ret = OB_SUCCESS;
@@ -1024,7 +1024,7 @@ void ObGeoExprUtils::expr_get_const_param_cache(ObGeoConstParamCache* const_para
 
 int ObGeoExprUtils::expr_prepare_build_geometry(ObExecContext &exec_ctx,
                                                 MultimodeAlloctor &allocator,
-                                                const ObDatum &datum,
+                                                const Datum &datum,
                                                 const ObExpr &gis_arg,
                                                 ObString &wkb,
                                                 ObGeoType &type,

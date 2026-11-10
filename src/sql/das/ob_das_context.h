@@ -16,6 +16,8 @@
 
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
+#include "common/datum/native_typed_datum.h"
+#include "common/datum/datum_parameter_metadata.h"
 #include "data_plane/transaction/ob_tx_read_snapshot.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_tablet_mapper.h"
@@ -43,21 +45,39 @@ public:
 };
 typedef common::ObList<DmlRowkeyDistCtx, common::ObIAllocator> DASDelCtxList;
 
+// Domain batch column, not a semantic SQL-array. One value and pure metadata
+// per row; count_ publishes only a prefix prepared across every batch column.
 struct GroupRescanParam
 {
-public:
-  GroupRescanParam()
-    : param_idx_(common::OB_INVALID_ID),
-      gr_param_(nullptr)
-  { }
-  GroupRescanParam(int64_t param_idx, ObSqlArrayObj *gr_param)
-  : param_idx_(param_idx),
-    gr_param_(gr_param)
-  { }
-  TO_STRING_KV(K_(param_idx),
-               KPC_(gr_param));
+  GroupRescanParam() : param_idx_(common::OB_INVALID_ID), values_(), metadata_(), count_(0) {}
+  int init(int64_t param_idx, int64_t capacity, common::ObIAllocator &owner)
+  {
+    int ret = common::OB_SUCCESS;
+    GroupRescanParam candidate;
+    if (param_idx < 0 || capacity <= 0
+        || capacity > INT64_MAX / static_cast<int64_t>(sizeof(common::NativeTypedDatum))
+        || capacity > INT64_MAX / static_cast<int64_t>(sizeof(common::DatumParameterMetadata))) { ret = common::OB_INVALID_ARGUMENT; }
+    else if (OB_FAIL(candidate.values_.allocate_array(owner, capacity))) {
+    } else if (OB_FAIL(candidate.metadata_.allocate_array(owner, capacity))) {
+    } else { candidate.param_idx_ = param_idx; *this = candidate; }
+    return ret;
+  }
+  int stage(const common::NativeTypedDatum &value,
+            const common::DatumParameterMetadata &attributes, common::ObIAllocator &owner)
+  {
+    int ret = common::OB_SUCCESS;
+    common::NativeTypedDatum owned;
+    if (count_ < 0 || count_ >= values_.count() || values_.count() != metadata_.count()) {
+      ret = common::OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(common::clone_native_parameter_value(value, owner, owned))) {
+    } else { values_.at(count_) = owned; metadata_.at(count_) = attributes; }
+    return ret;
+  }
+  TO_STRING_KV(K_(param_idx), K_(values), K_(metadata), K_(count));
   int64_t param_idx_;
-  ObSqlArrayObj *gr_param_; //group rescan param
+  common::ObArrayWrap<common::NativeTypedDatum> values_;
+  common::ObArrayWrap<common::DatumParameterMetadata> metadata_;
+  int64_t count_;
 };
 typedef common::ObArrayWrap<GroupRescanParam> GroupParamArray;
 class ObDASCtx

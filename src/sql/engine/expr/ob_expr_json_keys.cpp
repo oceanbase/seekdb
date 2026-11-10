@@ -65,7 +65,7 @@ int ObExprJsonKeys::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   bool is_null_result = false;
@@ -75,9 +75,9 @@ int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   DEFER(if (partial_document != nullptr) { partial_document->reset(); });
-  ObDatum *doc_datum = NULL;
+  Datum *doc_datum = NULL;
   ObExpr *doc_arg = expr.args_[0];
-  ObObjType doc_type = doc_arg->datum_meta_.type_;
+  SqlValueType doc_type = doc_arg->datum_meta_.type_;
   ObCollationType doc_cs_type = doc_arg->datum_meta_.cs_type_;
   bool allow_partial_update = false;
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
@@ -121,7 +121,7 @@ int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     JsonPathCache* path_cache = get_native_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
     path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
 
-    ObDatum *path_data = NULL;
+    Datum *path_data = NULL;
     if (expr.args_[1]->datum_meta_.type_ == ObNullType) {
       is_null_result = true;
     } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, path_data))) {

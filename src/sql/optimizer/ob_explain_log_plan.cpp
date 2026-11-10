@@ -83,8 +83,9 @@ int ObExplainLogPlan::generate_normal_raw_plan()
         optimizer_context_.set_packed(false);
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < plan_strs.count(); ++i) {
-        ObObj obj;
-        obj.set_varchar(plan_strs.at(i));
+        DatumValue obj;
+        obj.meta_.set_varchar();
+        obj.datum_.set_string(plan_strs.at(i));
         ObNewRow row;
         row.cells_ = &obj;
         row.count_ = 1;

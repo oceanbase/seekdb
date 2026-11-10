@@ -46,7 +46,7 @@ struct ObSysStat
 
     TO_STRING_KV("name", common::ObString(name_), K_(value), "info", common::ObString(info_));
     const char *name_;
-    common::ObObj value_;
+    int64_t value_;
     const char *info_;
   };
 

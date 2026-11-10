@@ -33,9 +33,9 @@ public:
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx)
                                 const override;
-  static int eval_des_encrypt_with_key(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_des_encrypt_with_key(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_des_encrypt_batch_with_key(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
-  static int eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_des_encrypt_batch_with_default(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -54,7 +54,7 @@ public:
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx)
                                 const override;
-  static int eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_des_decrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -73,7 +73,7 @@ public:
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx)
                                 const override;
-  static int eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_encrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -109,7 +109,7 @@ public:
                                 ObExprResType &type2,
                                 ObExprTypeCtx &type_ctx)
                                 const override;
-  static int eval_encode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_encode(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_encode_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -128,7 +128,7 @@ public:
                                 ObExprResType &type2,
                                 ObExprTypeCtx &type_ctx)
                                 const override;
-  static int eval_decode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_decode(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_decode_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

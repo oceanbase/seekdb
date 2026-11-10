@@ -39,8 +39,8 @@ int ObExprSTTransform::calc_result_type2(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  ObObjType type_g = type1.get_type();
-  ObObjType type_srid = type2.get_type();
+  SqlValueType type_g = type1.get_type();
+  SqlValueType type_srid = type2.get_type();
 
   if (ob_is_null(type_g)) {
     // do nothing
@@ -65,11 +65,11 @@ int ObExprSTTransform::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum = NULL;
-  ObDatum *datum2 = NULL;
+  Datum *gis_datum = NULL;
+  Datum *datum2 = NULL;
   ObGeometry *src_geo = NULL;
   ObGeometry *dest_geo = NULL;
   common::ObSrsCacheGuard srs_guard;

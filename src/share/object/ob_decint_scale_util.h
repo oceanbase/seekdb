@@ -38,7 +38,7 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
                      const ObScale in_scale, const ObScale out_scale,
                      const ObPrecision out_prec, const ObCastMode cast_mode,
                      ObDecimalIntBuilder &val,
-                     const ObIObjCastRuntime *runtime);
+                     const ObIDatumCastRuntime *runtime);
 
 int check_decimalint_accuracy(const ObCastMode cast_mode,
                               const ObDecimalInt *res_decint, const int32_t int_bytes,

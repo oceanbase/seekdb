@@ -113,7 +113,7 @@ int ObExprJsonValue::calc_result_typeN(ObExprResType& type,
 int ObExprJsonValue::calc_input_type(ObExprResType& types_stack, bool &is_json_input)
 {
   INIT_SUCC(ret);
-  ObObjType doc_type = types_stack.get_type();
+  SqlValueType doc_type = types_stack.get_type();
   if (types_stack.get_type() == ObNullType) {
   } else if (!ObJsonExprHelper::is_convertible_to_json(doc_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
@@ -157,13 +157,13 @@ int ObExprJsonValue::calc_empty_error_type(ObExprResType* types_stack, uint8_t p
 }
 
 
-int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   bool is_cover_by_error = true;
   bool is_null_result = false;
   uint8_t is_type_mismatch = 0;
-  ObDatum *return_val = NULL;
+  Datum *return_val = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
@@ -278,7 +278,7 @@ int ObExprJsonValue::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   return ret;
 }
 
-int ObExprJsonQueryParamInfo::get_int_val_from_raw(ObIAllocator &alloc, ObExecContext *exec_ctx, const ObRawExpr* raw_expr, ObObj &const_data)
+int ObExprJsonQueryParamInfo::get_int_val_from_raw(ObIAllocator &alloc, ObExecContext *exec_ctx, const ObRawExpr* raw_expr, DatumValue &const_data)
 {
   INIT_SUCC(ret);
   const_data.reset();
@@ -302,7 +302,7 @@ int ObExprJsonQueryParamInfo::init_mismatch_array(const ObRawExpr* raw_expr,
   uint32_t pos = -1;
   ObArray<int8_t> val;
   ObArray<int8_t> type;
-  ObObj const_data;
+  DatumValue const_data;
   for(uint32_t i = JSN_VAL_MISMATCH; OB_SUCC(ret) 
                     && i < raw_expr->get_param_count(); i++) {
     if (OB_FAIL(get_int_val_from_raw(allocator_, exec_ctx, raw_expr->get_param_expr(i), const_data))) {
@@ -331,7 +331,7 @@ int ObExprJsonQueryParamInfo::init_jsn_val_expr_param(ObIAllocator &alloc, ObExp
   INIT_SUCC(ret);
   ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
   const ObRawExpr *path = raw_expr->get_param_expr(JSN_VAL_PATH);
-  ObObj const_data;
+  DatumValue const_data;
   ObArray<int8_t> param_vec;
   uint32_t pos = -1;
   // parse clause node
@@ -362,8 +362,8 @@ int ObExprJsonValue::set_result(const ObExpr &expr,
                                 bool &is_null_result,
                                 bool &is_cover_by_error,
                                 uint8_t &is_type_mismatch,
-                                ObDatum &res,
-                                ObDatum *return_val,
+                                Datum &res,
+                                Datum *return_val,
                                 ObIAllocator *allocator,
                                 ObIJsonBase *hit)
 {
@@ -476,13 +476,12 @@ int ObExprJsonValue::get_clause_param_value(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-template<typename Obj>
 int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
-                                                const ObObjType &type,
-                                                const Obj *obj)
+                                                const SqlValueType &type,
+                                                const common::ObDatum *obj)
 {
   INIT_SUCC(ret);
-  ObObjTypeClass tc = ob_obj_type_class(type);
+  SqlTypeClass tc = sql_type_class(type);
 
   switch (tc) {
     case ObNumberTC: {
@@ -541,10 +540,10 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
   return ret;
 }
 
-int ObExprJsonValue::get_empty_option(ObDatum *&empty_res, 
+int ObExprJsonValue::get_empty_option(Datum *&empty_res,
                                       bool &is_cover_by_error, 
                                       int8_t empty_type, 
-                                      ObDatum *empty_datum, 
+                                      Datum *empty_datum,
                                       bool &is_null_result)
 {
   INIT_SUCC(ret);
@@ -598,7 +597,7 @@ void ObExprJsonValue::get_error_option(int8_t error_type,
 
 bool ObExprJsonValue::try_set_error_val(const ObExpr &expr,
                                         ObEvalCtx &ctx,
-                                        ObDatum &res, int &ret, 
+                                        Datum &res, int &ret,
                                         ObJsonExprParam* json_param,
                                         uint8_t &is_type_mismatch)
 {
@@ -637,11 +636,13 @@ bool ObExprJsonValue::try_set_error_val(const ObExpr &expr,
 int ObExprJsonValue::get_default_value(ObExpr *expr,
                                       ObEvalCtx &ctx,
                                       const ObAccuracy &accuracy,
-                                      ObDatum **default_value)
+                                      Datum **default_value)
 {
   INIT_SUCC(ret);
-  ObObjType val_type = expr->datum_meta_.type_;
-  ObDatum *json_datum = NULL;
+  SqlValueType val_type = expr->datum_meta_.type_;
+  Datum *json_datum = NULL;
+  common::ObDatum checked_view;
+  alignas(8) char checked_scratch[64];
   {
     expr->extra_ &= ~CM_WARN_ON_FAIL; // make cast return error when fail
     expr->extra_ &= ~CM_NO_RANGE_CHECK; // make cast check range
@@ -651,7 +652,9 @@ int ObExprJsonValue::get_default_value(ObExpr *expr,
   }
   if (OB_FAIL(expr->eval(ctx, json_datum))) {
   } else if (val_type == ObNullType || json_datum->is_null()) {
-  } else if (OB_FAIL(check_default_val_accuracy<ObDatum>(accuracy, val_type, json_datum))) {
+  } else if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(
+      *json_datum, checked_view, checked_scratch, sizeof(checked_scratch)))) {
+  } else if (OB_FAIL(check_default_val_accuracy(accuracy, val_type, &checked_view))) {
   } else {
     *default_value = json_datum;
   }

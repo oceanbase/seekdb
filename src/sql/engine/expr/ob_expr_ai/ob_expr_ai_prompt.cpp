@@ -79,10 +79,10 @@ int ObExprAIPrompt::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
+int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *template_datum = NULL;
+  Datum *template_datum = NULL;
   ObExpr *arg0 = expr.args_[0];
   ObString template_str;
   ObIJsonBase *args_array = NULL;
@@ -104,7 +104,7 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(tmp_allocator, args_array))) {
   } else {
     for (int64_t i = 1; i < expr.arg_cnt_ && OB_SUCC(ret); i++) {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       ObExpr *arg = expr.args_[i];
       ObString arg_str;
       if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, datum))) {

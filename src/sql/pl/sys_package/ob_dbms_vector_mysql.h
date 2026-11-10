@@ -31,7 +31,7 @@ public:
   virtual ~ObDBMSVectorMySql() {}
 
 #define DECLARE_FUNC(func) \
-  static int func(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int func(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result);
 
   DECLARE_FUNC(refresh_index);
   DECLARE_FUNC(rebuild_index);

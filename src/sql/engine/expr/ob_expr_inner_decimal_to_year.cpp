@@ -37,10 +37,10 @@ const uint8_t OBJ_YEAR_MIN = 1;
 const uint8_t OBJ_YEAR_MAX = 255;
 const uint8_t OBJ_YEAR_LOW = 0;
 
-int ObExprInnerDecimalToYear::eval_inner_decimal_to_year(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum) 
+int ObExprInnerDecimalToYear::eval_inner_decimal_to_year(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum* val_datum = NULL;
+  Datum* val_datum = NULL;
   int64_t year_int = 0;
   bool is_start = (expr.extra_ & 1) == 1;
   bool is_equal = (expr.extra_ & 2) == 2;

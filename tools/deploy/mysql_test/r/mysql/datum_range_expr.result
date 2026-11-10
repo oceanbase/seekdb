@@ -1,0 +1,40 @@
+# Allocator-owned Datum results preserve calculated scan bounds
+DROP TABLE IF EXISTS datum_range_expr;
+CREATE TABLE datum_range_expr(id INT PRIMARY KEY,a BIGINT,s VARCHAR(512),n DECIMAL(65,30),KEY ka(a),KEY ks(s),KEY kn(n));
+INSERT INTO datum_range_expr VALUES(1,-5,'éAlpha',-1.234567890123456789012345678901),(2,0,'中文Beta',0),(3,10,CONCAT(REPEAT('a',180),'中'),123456789012345678901234567890.123456789012345678901234567890),(4,NULL,NULL,NULL);
+PREPARE datum_range_i FROM 'SELECT id FROM datum_range_expr FORCE INDEX(ka) WHERE a=?+1 ORDER BY id';
+SET @datum_range_i=-6;
+EXECUTE datum_range_i USING @datum_range_i;
+id
+1
+SET @datum_range_i=9;
+EXECUTE datum_range_i USING @datum_range_i;
+id
+3
+SET @datum_range_i=NULL;
+EXECUTE datum_range_i USING @datum_range_i;
+id
+DEALLOCATE PREPARE datum_range_i;
+PREPARE datum_range_s FROM 'SELECT id FROM datum_range_expr FORCE INDEX(ks) WHERE s=CONCAT(?,?) ORDER BY id';
+SET @datum_range_l='é',@datum_range_r='Alpha';
+EXECUTE datum_range_s USING @datum_range_l,@datum_range_r;
+id
+1
+SET @datum_range_l=REPEAT('a',180),@datum_range_r='中';
+EXECUTE datum_range_s USING @datum_range_l,@datum_range_r;
+id
+3
+SET @datum_range_l=NULL;
+EXECUTE datum_range_s USING @datum_range_l,@datum_range_r;
+id
+DEALLOCATE PREPARE datum_range_s;
+SELECT t.id,(SELECT COUNT(*) FROM datum_range_expr x FORCE INDEX(ks) WHERE x.s=CONCAT(t.s,'')) AS c FROM datum_range_expr t ORDER BY t.id;
+id	c
+1	1
+2	1
+3	1
+4	0
+SELECT id FROM datum_range_expr FORCE INDEX(kn) WHERE n=CAST(CONCAT('0','') AS DECIMAL(65,30))+CAST(0 AS DECIMAL(65,30)) ORDER BY id;
+id
+2
+DROP TABLE datum_range_expr;

@@ -27,13 +27,15 @@ namespace observer
 {
 namespace
 {
-int set_string_cell(ObObj &cell, const rust::String &text, ObIAllocator &allocator)
+int set_string_cell(DatumValue &cell, const rust::String &text, ObIAllocator &allocator)
 {
   ObString copied;
   int ret = ob_write_string(allocator,
       ObString(static_cast<int32_t>(text.size()), text.data()), copied);
   if (OB_SUCC(ret)) {
-    cell.set_varchar(copied);
+    cell.meta_.set_varchar();
+    cell.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    cell.datum_.set_string(copied);
     cell.set_collation_type(
         ObCharset::get_default_collation(ObCharset::get_default_charset()));
   }
@@ -77,7 +79,7 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
   if (index_ >= config::parameter_count()) {
     ret = OB_ITER_END;
   } else {
-    ObObj *cells = cur_row_.cells_;
+    DatumValue *cells = cur_row_.cells_;
     if (OB_UNLIKELY(NULL == cells)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
@@ -87,7 +89,7 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
         const uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
         case SERVER_TYPE: {
-            cells[i].set_varchar("observer");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "observer") : ret);
             cells[i].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
@@ -132,7 +134,7 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
             const ObString value(static_cast<int32_t>(parameter.value.size()), parameter.value.data());
             const ObString default_value(static_cast<int32_t>(parameter.default_value.size()), parameter.default_value.data());
             int isdefault = value.case_compare(default_value) == 0 ? 1 : 0;
-            cells[i].set_int(isdefault);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, isdefault) : ret);
             break;
           }
         default : {

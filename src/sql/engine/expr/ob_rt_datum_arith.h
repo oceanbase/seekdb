@@ -27,13 +27,10 @@ namespace sql
 //
 // Runtime datum arithmetic evaluation.
 //
-// Why need this:
-// ObObj can do runtime arithmetic evaluation by the static interface of arithmetic expressions
-// (e.g.: ObExprMul::calc). ObDatum can not do this, because ObDatum's memory is binding to ObExpr,
-// it always need a ObExpr to do arithmetic evaluation. We must build the needed arithmetic
-// expressions in compile time in static typing engine, see: the `linear_inter_expr_` expression of
+// Runtime arithmetic builds a temporary expression tree because datum storage is bound to ObExpr;
+// evaluation therefore needs an expression context, rather than standalone static arithmetic calls.
 // 
-// to use,  we need a convenient way to do runtime ObDatum arithmetic evaluation.
+// to use,  we need a convenient way to do runtime Datum arithmetic evaluation.
 //
 // Usage:
 //
@@ -88,16 +85,16 @@ public:
   // Evaluate the input datums' result, set the result's datum ptr to %res.
   // The %input should be correlate with datum metas in setup_datum_metas().
   template <typename ...TS>
-  int eval(ObDatum *&res, TS &...input)
+  int eval(Datum *&res, TS &...input)
   {
-    const ObDatum *args[] = { &input... };
+    const Datum *args[] = { &input... };
     return inner_eval(res, args, ARRAYSIZEOF(args));
   }
 
 private:
   Item build_arith_expr(const Item &l, const Item &r, ObItemType op);
   int inner_setup_datum_metas(const ObDatumMeta *metas, int64_t cnt);
-  int inner_eval(ObDatum *&res, const ObDatum **args, int64_t arg_cnt);
+  int inner_eval(Datum *&res, const Datum **args, int64_t arg_cnt);
 
 private:
   common::ObArenaAllocator alloc_;

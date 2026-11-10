@@ -32,7 +32,7 @@ public:
 
   virtual int calc_result_typeN(ObExprResType &type, ObExprResType *types, int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_array_slice(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_slice(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_slice_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                     const int64_t batch_size);
 

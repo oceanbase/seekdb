@@ -36,8 +36,8 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
 
   static int calc(ObExecContext &exec_ctx,
-      ObObjType date_type,
-      const ObDatum &date,
+      SqlValueType date_type,
+      const Datum &date,
       const ObDateUnitType extract_field,
       const ObScale scale,
       const ObCastMode cast_mode,
@@ -46,11 +46,12 @@ public:
       const ObDateSqlMode date_sql_mode,
       bool has_lob_header,
       bool &is_null,
-      int64_t &result);
+      int64_t &result,
+      const common::SqlType &input_type);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   // for static engine batch
   static int calc_extract_mysql_batch(
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);

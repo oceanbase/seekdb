@@ -105,7 +105,7 @@ private:
    * If ob_sql_type_str failed to call, and the error code returned is OB_SIZE_OVERFLOW.
    * realloc memory to the size of OB_MAX_EXTENDED_TYPE_INFO_LENGTH, then try again
    */
-  int get_type_str(const ObObjMeta &obj_meta, const ObAccuracy &accuracy,
+  int get_type_str(const SqlTypeMeta &obj_meta, const ObAccuracy &accuracy,
       const common::ObIArray<ObString> &type_info,
       const int16_t default_length_semantics, int64_t &pos,
       const uint64_t sub_type = static_cast<uint64_t>(common::ObGeoType::GEOMETRY),

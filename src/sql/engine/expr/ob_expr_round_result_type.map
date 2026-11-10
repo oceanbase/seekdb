@@ -1,4 +1,4 @@
-static constexpr ObObjType ROUND_RESULT_TYPE[ObMaxType] =
+static constexpr SqlValueType ROUND_RESULT_TYPE[ObMaxType] =
 {
     ObDoubleType,     /* NullType  */
     ObIntType,        /* TinyIntType  */

@@ -42,7 +42,7 @@ int ObAllVirtualDagWarningHistory::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   row = nullptr;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t compression_ratio = 0;
   int n = 0;
   if (!dag_warning_info_iter_.is_opened()) {
@@ -67,42 +67,42 @@ int ObAllVirtualDagWarningHistory::inner_get_next_row(common::ObNewRow *&row)
         ret = OB_BUF_NOT_ENOUGH;
         SERVER_LOG(WARN, "buffer not enough", K(ret));
       } else {
-        cells[i].set_varchar(task_id_buf_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, task_id_buf_) : ret);
         cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       }
       break;
     case MODULE:
       //module
-      cells[i].set_varchar(share::ObIDag::get_dag_module_str(dag_warning_info_.dag_type_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, share::ObIDag::get_dag_module_str(dag_warning_info_.dag_type_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case TYPE: {
       //dag_type
-      cells[i].set_varchar(share::ObIDag::get_dag_type_str(dag_warning_info_.dag_type_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, share::ObIDag::get_dag_type_str(dag_warning_info_.dag_type_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     }
     case RET: {
       // dag_ret
-      cells[i].set_varchar(common::ob_error_name(dag_warning_info_.dag_ret_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, common::ob_error_name(dag_warning_info_.dag_ret_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     }
     case STATUS:
       // dag_status
-      cells[i].set_varchar(ObDagWarningInfo::get_dag_status_str(dag_warning_info_.dag_status_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, ObDagWarningInfo::get_dag_status_str(dag_warning_info_.dag_status_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case GMT_CREATE:
       //table_type
-      cells[i].set_timestamp(dag_warning_info_.gmt_create_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, dag_warning_info_.gmt_create_) : ret);
       break;
     case GMT_MODIFIED:
       //major_table_id
-      cells[i].set_timestamp(dag_warning_info_.gmt_modified_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, dag_warning_info_.gmt_modified_) : ret);
       break;
     case RETRY_CNT:
-      cells[i].set_int(dag_warning_info_.retry_cnt_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, dag_warning_info_.retry_cnt_) : ret);
       break;
     case WARNING_INFO: {
       MEMSET(warning_info_buf_, '\0', sizeof(warning_info_buf_));
@@ -115,7 +115,7 @@ int ObAllVirtualDagWarningHistory::inner_get_next_row(common::ObNewRow *&row)
       }
       common::databuff_printf(warning_info_buf_, sizeof(warning_info_buf_), pos, "%s",
         comment_);
-      cells[i].set_varchar(warning_info_buf_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, warning_info_buf_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     }

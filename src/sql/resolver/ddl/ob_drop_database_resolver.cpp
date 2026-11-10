@@ -119,10 +119,10 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_SUCC(ret)) {
-      ObObj is_recyclebin_open;
+      bool is_recyclebin_open = false;
       if (OB_FAIL(session_info_->get_sys_variable(share::SYS_VAR_RECYCLEBIN, is_recyclebin_open))){
       } else {
-        drop_database_stmt->set_to_recyclebin(is_recyclebin_open.get_bool());
+        drop_database_stmt->set_to_recyclebin(is_recyclebin_open);
       }
     }
   }

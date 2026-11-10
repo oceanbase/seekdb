@@ -68,7 +68,7 @@ int ObExprArraySort::calc_result_type1(ObExprResType &type,
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -83,7 +83,7 @@ int ObExprArraySort::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprArraySort::eval_array_sort(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArraySort::eval_array_sort(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -92,7 +92,7 @@ int ObExprArraySort::eval_array_sort(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
   uint32_t *sort_idx = NULL;
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
 
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
@@ -118,7 +118,7 @@ int ObExprArraySort::eval_array_sort_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                            const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -126,13 +126,13 @@ int ObExprArraySort::eval_array_sort_batch(const ObExpr &expr, ObEvalCtx &ctx,
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
   uint32_t *sort_idx = NULL;
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
 
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

@@ -259,31 +259,34 @@ int ObSchema2DDLSql::type2str(
   if (OB_SUCC(ret)) {
     nwrite += n;
     n = 0;
-    if (!column_schema.get_orig_default_value().is_null()
-        && column_schema.get_orig_default_value().is_valid_type()
+    DatumValue default_value;
+    alignas(8) char default_scratch[64];
+    if (!column_schema.get_orig_default_datum().is_null()
+        && column_schema.get_orig_default_meta().is_valid()
         && column_schema.get_data_type() != ObLongTextType) {
-      if (ObIntType == column_schema.get_data_type()) {
+      if (OB_FAIL(column_schema.export_orig_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+      } else if (ObIntType == column_schema.get_data_type()) {
         int64_t value = 0;
-        if (OB_FAIL(column_schema.get_orig_default_value().get_int(value))) {
+        if (OB_FAIL(default_value.get_int(value))) {
         } else {
           n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %" PRId64, value);
         }
       } else if (ObTinyIntType == column_schema.get_data_type()) {
         int8_t value = 0;
-        if (OB_FAIL(column_schema.get_orig_default_value().get_tinyint(value))) {
+        if (OB_FAIL(default_value.get_tinyint(value))) {
         } else {
           n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %d", value);
         }
 
       } else if (ObUInt64Type == column_schema.get_data_type()) {
         uint64_t value = 0;
-        if (OB_FAIL(column_schema.get_orig_default_value().get_uint64(value))) {
+        if (OB_FAIL(default_value.get_uint64(value))) {
         } else {
           n = snprintf(str_buf + nwrite, buf_size - nwrite, " default %" PRIu64, value);
         }
       } else if (ObVarcharType == column_schema.get_data_type()) {
         ObString value;
-        if (OB_FAIL(column_schema.get_orig_default_value().get_varchar(value))) {
+        if (OB_FAIL(default_value.get_varchar(value))) {
         } else {
           n = snprintf(str_buf + nwrite, buf_size - nwrite,
               " default '%.*s'", value.length(), value.ptr());

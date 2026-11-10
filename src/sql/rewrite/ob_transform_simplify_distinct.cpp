@@ -95,7 +95,7 @@ int ObTransformSimplifyDistinct::distinct_can_be_eliminated(ObSelectStmt *stmt, 
     const ObRawExpr *limit_offset_expr = stmt->get_offset_expr();
     bool is_null_value = false;
     if (OB_FAIL(ObTransformUtils::get_expr_int_value(stmt->get_limit_expr(),
-                                                    &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
+                                                    ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                     ctx_->exec_ctx_,
                                                     ctx_->allocator_,
                                                     limit_count,

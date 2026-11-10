@@ -35,7 +35,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_timestampnvl(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_timestampnvl(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprTimestampNvl);

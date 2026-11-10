@@ -25,6 +25,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObStoreRowkey;
+}
 namespace transaction
 {
 class ObTxDesc;
@@ -32,6 +36,7 @@ class ObTxDesc;
 namespace blocksstable
 {
 struct ObDatumRange;
+struct ObStorageDatum;
 }
 namespace share
 {
@@ -83,6 +88,20 @@ private:
   common::ObArenaAllocator allocator_;
 };
 
+// A point key already in the storage representation. The producer owns both
+// the cells and their payloads until the scan iterator is reused or released.
+struct DatumLookupKey
+{
+  blocksstable::ObStorageDatum *datums_ = nullptr;
+  int64_t count_ = 0;
+  int64_t group_id_ = 0;
+  // Optional producer-owned view for Memtable lookup. Its descriptors and
+  // payloads have the same lifetime as datums_; no storage-side cloning needed.
+  const common::ObStoreRowkey *cached_rowkey_ = nullptr;
+  bool is_valid() const { return nullptr != datums_ && count_ > 0; }
+  TO_STRING_KV(K_(count), K_(group_id), KP_(datums));
+};
+
 // Broad transitional scan request shared by DAS and the data plane.  Its
 // public placement stops implementation-header fan-out; field reduction can
 // proceed independently after the boundary is enforced.
@@ -108,7 +127,8 @@ public:
       scan_resume_point_(nullptr),
       mds_collector_(nullptr),
       row_scan_cnt_(nullptr),
-      enable_new_false_range_(false)
+      enable_new_false_range_(false),
+      datum_lookup_keys_(nullptr)
   {}
   virtual ~ObTableScanParam() {}
 
@@ -125,10 +145,12 @@ public:
   OB_INLINE virtual bool is_valid() const
   {
     return snapshot_.valid_ && ObVTableScanParam::is_valid()
-        && (!is_mds_query_ || nullptr != mds_collector_);
+        && (!is_mds_query_ || nullptr != mds_collector_)
+        && (nullptr == datum_lookup_keys_ || (is_get_ && key_ranges_.empty()));
   }
   void destroy() override
   {
+    datum_lookup_keys_ = nullptr;
     ObVTableScanParam::destroy();
   }
 
@@ -141,6 +163,9 @@ public:
   ObMdsReadInfoCollector *mds_collector_;
   uint64_t *row_scan_cnt_;
   bool enable_new_false_range_;
+  // Local point lookups use exactly one representation, never both this and
+  // key_ranges_. Null retains the existing range/virtual-table interface.
+  const common::ObIArray<DatumLookupKey> *datum_lookup_keys_;
 
   DECLARE_VIRTUAL_TO_STRING;
 private:

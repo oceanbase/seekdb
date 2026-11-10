@@ -39,11 +39,11 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
-  static int eval_inner_decode_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_inner_decode_like(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
 private:
-  static int cast_like_obj_if_needed(ObEvalCtx &ctx, const ObExpr &pattern_expr, ObDatum *pattern_datum,
-                                    const ObExpr &dst_expr, ObDatum * &cast_datum);
+  static int cast_like_obj_if_needed(ObEvalCtx &ctx, const ObExpr &pattern_expr, Datum *pattern_datum,
+                                    const ObExpr &dst_expr, Datum * &cast_datum);
   // get prefix string (without wildcards) length of like pattern 
   static int get_pattern_prefix_len(const ObCollationType &cs_type, 
                                     const ObString &escape_str, 

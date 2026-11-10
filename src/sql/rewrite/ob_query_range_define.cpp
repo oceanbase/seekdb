@@ -17,10 +17,13 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 
 #include "sql/rewrite/ob_query_range_define.h"
+#include "common/datum/datum_parameter_codec.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/rewrite/ob_expr_range_converter.h"
 #include "sql/rewrite/ob_range_graph_generator.h"
 #include "sql/rewrite/ob_range_generator.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/optimizer/ob_opt_est_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -29,6 +32,88 @@ namespace oceanbase {
 using namespace common;
 namespace sql {
 ERRSIM_POINT_DEF(ERRSIM_FAST_NLJ_RANGE_GENERATOR_CHECK);
+
+namespace
+{
+// The old RangeMap corpus contains an inert TempExpr: no expression, frame,
+// context or input column and expr_idx == -1. Its empty legacy frame group has
+// no carrier bytes to migrate. Keep this narrow range-wire codec independent
+// of the native executable Expr/frame codec.
+bool is_legacy_inert_temp(const ObTempExpr &expr)
+{
+  return expr.need_ctx_cnt_ == 0 && expr.rt_exprs_.empty() && expr.const_frame_ptrs_.empty()
+      && expr.const_frame_.empty() && expr.param_frame_.empty() && expr.datum_frame_.empty()
+      && expr.dynamic_frame_.empty() && expr.ser_expr_marks_.empty()
+      && expr.expr_idx_ == OB_INVALID_INDEX && expr.idx_col_arr_.empty();
+}
+
+int64_t legacy_inert_frame_body_size()
+{
+  // need_ctx, fixed i32 expression count, const pointers, old frame-group count
+  // and extra-memory count, followed by the three remaining frame arrays.
+  return serialization::encoded_length(int64_t(0)) + serialization::encoded_length_i32(0)
+      + 6 * serialization::encoded_length(int64_t(0));
+}
+
+int64_t legacy_inert_temp_size()
+{
+  const int64_t header = serialization::encoded_length(int64_t(1)) + serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+  return 2 * header + legacy_inert_frame_body_size()
+      + serialization::encoded_length(int64_t(OB_INVALID_INDEX)) + serialization::encoded_length(int64_t(0));
+}
+
+int encode_inert_header(char *buf, int64_t length, int64_t &pos, int64_t body_size)
+{
+  int ret = serialization::encode(buf, length, pos, int64_t(1));
+  if (OB_SUCC(ret)) { ret = serialization::encode_fixed_bytes_i64(buf, length, pos, body_size); }
+  return ret;
+}
+
+int serialize_legacy_inert_temp(char *buf, int64_t length, int64_t &position)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = position;
+  const int64_t header = serialization::encoded_length(int64_t(1)) + serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+  if (OB_FAIL(encode_inert_header(buf, length, pos, legacy_inert_temp_size() - header))) {
+  } else if (OB_FAIL(encode_inert_header(buf, length, pos, legacy_inert_frame_body_size()))) {
+  } else if (OB_FAIL(serialization::encode(buf, length, pos, int64_t(0)))) {
+  } else if (OB_FAIL(serialization::encode_i32(buf, length, pos, 0))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < 6; ++i) { ret = serialization::encode(buf, length, pos, int64_t(0)); }
+  if (OB_SUCC(ret)) { ret = serialization::encode(buf, length, pos, int64_t(OB_INVALID_INDEX)); }
+  if (OB_SUCC(ret)) { ret = serialization::encode(buf, length, pos, int64_t(0)); }
+  if (OB_SUCC(ret)) { position = pos; }
+  return ret;
+}
+
+bool deserialize_legacy_inert_temp(const char *buf, int64_t length, int64_t &position)
+{
+  int64_t pos = position;
+  int64_t version = 0, body_size = 0;
+  if (buf == nullptr || pos < 0 || pos > length
+      || serialization::decode(buf, length, pos, version) != OB_SUCCESS || version != 1
+      || serialization::decode(buf, length, pos, body_size) != OB_SUCCESS
+      || body_size < 0 || body_size > length - pos) { return false; }
+  const int64_t temp_end = pos + body_size;
+  if (serialization::decode(buf, temp_end, pos, version) != OB_SUCCESS || version != 1
+      || serialization::decode(buf, temp_end, pos, body_size) != OB_SUCCESS
+      || body_size != legacy_inert_frame_body_size() || body_size > temp_end - pos) { return false; }
+  const int64_t frame_end = pos + body_size;
+  int64_t zero = -1;
+  int32_t expr_count = -1;
+  if (serialization::decode(buf, frame_end, pos, zero) != OB_SUCCESS || zero != 0
+      || serialization::decode_i32(buf, frame_end, pos, &expr_count) != OB_SUCCESS || expr_count != 0) { return false; }
+  for (int64_t i = 0; i < 6; ++i) {
+    if (serialization::decode(buf, frame_end, pos, zero) != OB_SUCCESS || zero != 0) { return false; }
+  }
+  int64_t expr_idx = 0, columns = -1;
+  if (pos != frame_end || serialization::decode(buf, temp_end, pos, expr_idx) != OB_SUCCESS
+      || expr_idx != OB_INVALID_INDEX || serialization::decode(buf, temp_end, pos, columns) != OB_SUCCESS
+      || columns != 0 || pos != temp_end) { return false; }
+  position = pos;
+  return true;
+}
+} // namespace
 
 void ObRangeNode::reset()
 {
@@ -200,6 +285,32 @@ DEF_TO_STRING(ObRangeNode)
   return pos;
 }
 
+int ObRangeMap::ExprFinalInfo::set_const_value(const Datum &value, const SqlTypeMeta &meta,
+                                             ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  DatumValue source, owned;
+  if (OB_FAIL(source.assign_native_borrowed(value, meta))) {
+  } else if (OB_FAIL(clone_typed_value(source, owned, owner))) {
+  } else {
+    // The tagged slot initially holds param_idx_. Explicitly begin the
+    // native member's lifetime, including when replacing an existing constant.
+    new (&const_val_) Datum(owned.datum_);
+    const_meta_ = owned.meta_;
+    is_param_ = false;
+    is_expr_ = false;
+    is_const_ = true;
+  }
+  return ret;
+}
+
+int ObRangeMap::ExprFinalInfo::export_const_value(ObDatum &value, void *scratch,
+                                                int64_t capacity) const
+{
+  return !is_const_ || is_param_ ? OB_INVALID_ARGUMENT
+      : DatumParameterCodec::export_native_value(const_val_, const_meta_, value, scratch, capacity);
+}
+
 OB_DEF_SERIALIZE(ObRangeMap)
 {
   int ret = OB_SUCCESS;
@@ -210,9 +321,16 @@ OB_DEF_SERIALIZE(ObRangeMap)
     if (expr_final_infos_.at(i).is_param_) {
       OB_UNIS_ENCODE(expr_final_infos_.at(i).param_idx_);
     } else if (expr_final_infos_.at(i).is_const_) {
-      OB_UNIS_ENCODE(*expr_final_infos_.at(i).const_val_);
+      const auto &info = expr_final_infos_.at(i);
+      if (OB_FAIL(ret)) {
+      } else {
+        ret = DatumParameterCodec::encode_native_value(info.const_val_, info.const_meta_, buf, buf_len, pos);
+      }
     } else if (expr_final_infos_.at(i).is_expr_) {
-      OB_UNIS_ENCODE(*expr_final_infos_.at(i).temp_expr_);
+      const ObTempExpr *expr = expr_final_infos_.at(i).temp_expr_;
+      if (expr == nullptr) { ret = OB_INVALID_ARGUMENT; }
+      else if (is_legacy_inert_temp(*expr)) { ret = serialize_legacy_inert_temp(buf, buf_len, pos); }
+      else { OB_UNIS_ENCODE(*expr); }
     }
   }
   cnt = in_params_.count();
@@ -235,28 +353,29 @@ OB_DEF_DESERIALIZE(ObRangeMap)
 {
   int ret = OB_SUCCESS;
   expr_final_infos_.reset();
+  in_params_.reset();
   int64_t cnt = 0;
-  OB_UNIS_DECODE(cnt);
+  ret = serialization::decode(buf, data_len, pos, cnt);
+  if (OB_SUCC(ret) && (cnt < 0 || cnt > data_len - pos)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(expr_final_infos_.prepare_allocate(cnt))) {
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt; ++i) {
-    OB_UNIS_DECODE(expr_final_infos_.at(i).flags_);
-    if (expr_final_infos_.at(i).is_param_) {
-      OB_UNIS_DECODE(expr_final_infos_.at(i).param_idx_);
+    ret = serialization::decode(buf, data_len, pos, expr_final_infos_.at(i).flags_);
+    if (OB_FAIL(ret)) {
+    } else if (expr_final_infos_.at(i).is_param_) {
+      ret = serialization::decode(buf, data_len, pos, expr_final_infos_.at(i).param_idx_);
     } else if (expr_final_infos_.at(i).is_const_) {
-      ObObj *obj_val = nullptr;
-      void *ptr = allocator_.alloc(sizeof(ObObj));
-      if (OB_ISNULL(ptr)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("failed to allocate memeory for ObObj");
+      Datum value;
+      SqlTypeMeta meta;
+      if (OB_FAIL(DatumParameterCodec::decode_native_value(buf, data_len, pos, allocator_, value, meta))) {
       } else {
-        obj_val = new(ptr)ObObj();
-        OB_UNIS_DECODE(*obj_val);
-        if (OB_SUCC(ret)) {
-          expr_final_infos_.at(i).const_val_ = obj_val;
-        }
+        auto &info = expr_final_infos_.at(i);
+        new (&info.const_val_) Datum(value);
+        info.const_meta_ = meta;
       }
     } else if (expr_final_infos_.at(i).is_expr_) {
       ObTempExpr *temp_expr = nullptr;
@@ -266,14 +385,22 @@ OB_DEF_DESERIALIZE(ObRangeMap)
         LOG_ERROR("failed to allocate memeory for temp expr");
       } else {
         temp_expr = new(ptr)ObTempExpr(allocator_);
-        OB_UNIS_DECODE(*temp_expr);
+        // Only a structurally empty, nonexecutable legacy TempExpr bypasses
+        // the native frame codec. Nonempty old execution frames remain rejected.
+        if (!deserialize_legacy_inert_temp(buf, data_len, pos)) {
+          ret = temp_expr->deserialize(buf, data_len, pos);
+        }
         if (OB_SUCC(ret)) {
           expr_final_infos_.at(i).temp_expr_ = temp_expr;
         }
       }
     }
   }
+  cnt = 0;
   OB_UNIS_DECODE(cnt);
+  if (OB_SUCC(ret) && (cnt < 0 || cnt > data_len - pos)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(in_params_.prepare_allocate(cnt))) {
     }
@@ -288,15 +415,22 @@ OB_DEF_DESERIALIZE(ObRangeMap)
     } else {
       param = new(ptr)InParam(allocator_);
       in_params_.at(i) = param;
-      OB_UNIS_DECODE(param_cnt);
+      ret = serialization::decode(buf, data_len, pos, param_cnt);
+      if (OB_SUCC(ret) && (param_cnt < 0 || param_cnt > data_len - pos)) {
+        ret = OB_DESERIALIZE_ERROR;
+      }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(param->prepare_allocate(param_cnt))) {
         }
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < param_cnt; ++j) {
-        OB_UNIS_DECODE(param->at(j));
+        ret = serialization::decode(buf, data_len, pos, param->at(j));
       }
     }
+  }
+  if (OB_FAIL(ret)) {
+    expr_final_infos_.reset();
+    in_params_.reset();
   }
   return ret;
 }
@@ -311,9 +445,17 @@ OB_DEF_SERIALIZE_SIZE(ObRangeMap)
     if (expr_final_infos_.at(i).is_param_) {
       OB_UNIS_ADD_LEN(expr_final_infos_.at(i).param_idx_);
     } else if (expr_final_infos_.at(i).is_const_) {
-      OB_UNIS_ADD_LEN(*expr_final_infos_.at(i).const_val_);
+      const auto &info = expr_final_infos_.at(i);
+      int64_t size = 0;
+      if (DatumParameterCodec::native_value_size(info.const_val_, info.const_meta_, size) != OB_SUCCESS ||
+          __builtin_add_overflow(len, size, &len)) {
+            return 0;
+          }
     } else if (expr_final_infos_.at(i).is_expr_) {
-      OB_UNIS_ADD_LEN(*expr_final_infos_.at(i).temp_expr_);
+      const ObTempExpr *expr = expr_final_infos_.at(i).temp_expr_;
+      if (expr == nullptr) { return 0; }
+      if (is_legacy_inert_temp(*expr)) { len += legacy_inert_temp_size(); }
+      else { OB_UNIS_ADD_LEN(*expr); }
     }
   }
   cnt = in_params_.count();
@@ -339,7 +481,7 @@ OB_SERIALIZE_MEMBER(ObFastFinalPos, index_, offset_, flags_);
 int ObQueryRangeCtx::init(ObPreRangeGraph *pre_range_graph,
                           const ObIArray<ColumnItem> &range_columns,
                           ExprConstrantArray *expr_constraints,
-                          const ParamStore *params,
+                          const ObPhysicalPlanCtx *params,
                           ObRawExprFactory *expr_factory,
                           const bool ignore_calc_failure,
                           const int64_t index_prefix,
@@ -360,7 +502,7 @@ int ObQueryRangeCtx::init(ObPreRangeGraph *pre_range_graph,
   } else {
     column_cnt_ = range_columns.count();
     expr_constraints_ = expr_constraints;
-    params_ = params;
+    parameter_context_ = params;
     ignore_calc_failure_ = ignore_calc_failure;
     expr_factory_ = expr_factory;
     session_info_ = exec_ctx_->get_my_session();
@@ -526,25 +668,12 @@ int ObPreRangeGraph::deep_copy_range_map(const ObRangeMap &src_range_map)
   if (OB_FAIL(range_map_.expr_final_infos_.prepare_allocate(count))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    range_map_.expr_final_infos_.at(i).flags_ = src_range_map.expr_final_infos_.at(i).flags_;
-    if (range_map_.expr_final_infos_.at(i).is_param_) {
+    const auto &source = src_range_map.expr_final_infos_.at(i);
+    if (source.is_param_) {
       range_map_.expr_final_infos_.at(i).param_idx_ = src_range_map.expr_final_infos_.at(i).param_idx_;
-    } else if (range_map_.expr_final_infos_.at(i).is_const_) {
-      ObObj *obj_val = nullptr;
-      void *ptr = allocator_.alloc(sizeof(ObObj));
-      if (OB_ISNULL(src_range_map.expr_final_infos_.at(i).const_val_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(ptr)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("failed to allocate memeory for ObObj");
-      } else {
-        obj_val = new(ptr)ObObj();
-        if (OB_FAIL(ob_write_obj(allocator_, *src_range_map.expr_final_infos_.at(i).const_val_, *obj_val))) {
-        } else {
-          range_map_.expr_final_infos_.at(i).const_val_ = obj_val;
-        }
-      }
-    } else if (range_map_.expr_final_infos_.at(i).is_expr_) {
+    } else if (source.is_const_) {
+      ret = range_map_.expr_final_infos_.at(i).set_const_value(source.const_val_, source.const_meta_, allocator_);
+    } else if (source.is_expr_) {
       ObTempExpr *temp_expr = nullptr;
       if (OB_ISNULL(src_range_map.expr_final_infos_.at(i).temp_expr_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -552,6 +681,9 @@ int ObPreRangeGraph::deep_copy_range_map(const ObRangeMap &src_range_map)
       } else {
         range_map_.expr_final_infos_.at(i).temp_expr_ = temp_expr;
       }
+    }
+    if (OB_SUCC(ret)) {
+      range_map_.expr_final_infos_.at(i).flags_ = source.flags_;
     }
   }
 
@@ -583,7 +715,7 @@ int ObPreRangeGraph::preliminary_extract_query_range(const ObIArray<ColumnItem> 
                                                      const ObIArray<ObRawExpr*> &root_exprs,
                                                      ObExecContext *exec_ctx,
                                                      ExprConstrantArray *expr_constraints,
-                                                     const ParamStore *params,
+                                                     const ObPhysicalPlanCtx *params,
                                                      const bool ignore_calc_failure,
                                                      const int64_t index_prefix /* =-1*/,
                                                      const ObTableSchema *index_schema /* = NULL*/,
@@ -607,6 +739,95 @@ int ObPreRangeGraph::preliminary_extract_query_range(const ObIArray<ColumnItem> 
     }
   }
   return ret;
+}
+
+int ObQueryRangeProvider::try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
+                                                     int64_t (&values)[3], bool &supported) const
+{
+  UNUSED(plan_ctx); UNUSED(values);
+  supported = false;
+  return OB_SUCCESS;
+}
+
+int ObPreRangeGraph::try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
+                                                int64_t (&values)[3], bool &supported) const
+{
+  return try_get_native_bigint_point(nullptr, &plan_ctx, values, supported);
+}
+
+int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &parameters,
+                                                int64_t (&values)[3], bool &supported) const
+{
+  return try_get_native_bigint_point(&parameters, nullptr, values, supported);
+}
+
+int ObPreRangeGraph::get_native_bigint_point_parameters(int64_t parameter_count,
+    int64_t (&indexes)[3], bool &supported) const
+{
+  supported = false;
+  const ObRangeNode *node = node_head_;
+  if (!is_precise_get_ || column_count_ != 3 || column_metas_.count() != 3
+      || node_count_ != 1 || contain_exec_param_ || contain_geo_filters_
+      || fast_nlj_range_ || general_nlj_range_ || range_map_.in_params_.count() != 0
+      || node == nullptr || node->column_cnt_ != 3
+      || node->and_next_ != nullptr || node->or_next_ != nullptr
+      || node->start_keys_ == nullptr || node->end_keys_ == nullptr
+      || node->min_offset_ != 0 || node->max_offset_ != 2
+      || !node->include_start_ || !node->include_end_
+      || node->always_true_ || node->always_false_ || node->contain_in_
+      || node->is_domain_node_ || node->is_not_in_node_ || node->is_like_node_
+      || node->reserved_ != 0 || node->in_param_count_ != 0) {
+    return OB_SUCCESS;
+  }
+
+  int64_t candidate[3];
+  for (int64_t i = 0; i < 3; ++i) {
+    const ObRangeColumnMeta *meta = column_metas_.at(i);
+    const int64_t index = node->start_keys_[i];
+    if (meta == nullptr || meta->column_type_.get_type() != ObIntType
+        || index != node->end_keys_[i] || index < 0 || index >= range_map_.expr_final_infos_.count()) {
+      return OB_SUCCESS;
+    }
+    const ObRangeMap::ExprFinalInfo &info = range_map_.expr_final_infos_.at(index);
+    // Only the simple parameter bit: no casts, NULL-safe comparison, execution
+    // parameters, or row modifiers can enter either native path.
+    if (info.flags_ != 1 || info.param_idx_ < 0 || info.param_idx_ >= parameter_count) {
+      return OB_SUCCESS;
+    }
+    candidate[i] = info.param_idx_;
+  }
+  for (int64_t i = 0; i < 3; ++i) { indexes[i] = candidate[i]; }
+  supported = true;
+  return OB_SUCCESS;
+}
+
+int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *parameters,
+                                                const ObPhysicalPlanCtx *plan_ctx,
+                                                int64_t (&values)[3], bool &supported) const
+{
+  supported = false;
+  if ((parameters == nullptr) == (plan_ctx == nullptr)) { return OB_ERR_UNEXPECTED; }
+  const int64_t count = plan_ctx != nullptr ? plan_ctx->get_parameter_count() : parameters->count();
+  int64_t indexes[3], candidate[3];
+  bool shape = false;
+  const int ret = get_native_bigint_point_parameters(count, indexes, shape);
+  if (ret != OB_SUCCESS || !shape) { return ret; }
+  for (int64_t i = 0; i < 3; ++i) {
+    if (plan_ctx != nullptr) {
+      if (!plan_ctx->read_native_bigint_parameter(indexes[i], candidate[i])) { return OB_SUCCESS; }
+    } else {
+      const DatumParameter &input = parameters->at(indexes[i]);
+      if (input.get_type() != ObIntType || !input.datum_.is_present()
+          || input.datum_.length() != 0
+          || input.datum_.reference_flags() != Datum::NoReferenceFlags) {
+        return OB_SUCCESS;
+      }
+      candidate[i] = input.datum_.get_int();
+    }
+  }
+  for (int64_t i = 0; i < 3; ++i) { values[i] = candidate[i]; }
+  supported = true;
+  return OB_SUCCESS;
 }
 
 int ObPreRangeGraph::get_tablet_ranges(common::ObIAllocator &allocator,
@@ -649,7 +870,7 @@ int ObPreRangeGraph::get_tablet_ranges(common::ObIAllocator &allocator,
 int ObPreRangeGraph::get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj_range_ctx,
                                                 common::ObIAllocator &allocator,
                                                 ObExecContext &exec_ctx,
-                                                const ParamStore &param_store,
+                                                const ObPhysicalPlanCtx &param_store,
                                                 int64_t range_buffer_idx,
                                                 void *range_buffer,
                                                 ObQueryRangeArray &ranges,
@@ -682,7 +903,7 @@ int ObPreRangeGraph::get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj
       }
     }
   } else if (general_nlj_range_) {
-    ObArray<ObObj> objs;
+    ObArray<DatumValue> objs;
     bool can_fast_extract = true;
     bool dummy_all_single_value_ranges = false;
     bool always_false = false;
@@ -760,8 +981,8 @@ int ObPreRangeGraph::get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj
     if (OB_SUCC(ret) && always_false) {
       ranges.reuse();
       ObNewRange *range = static_cast<ObNewRange*>(range_buffer);
-      ObObj *starts = reinterpret_cast<ObObj*>(static_cast<char*>(range_buffer) + sizeof(ObNewRange));
-      ObObj *ends = starts + column_count_;
+      DatumValue *starts = reinterpret_cast<DatumValue*>(static_cast<char*>(range_buffer) + sizeof(ObNewRange));
+      DatumValue *ends = starts + column_count_;
       for (int i = 0; OB_SUCC(ret) && i < column_count_; ++i) {
         starts[i].set_max_value();
         ends[i].set_min_value();
@@ -1216,7 +1437,7 @@ int ObPreRangeGraph::get_range_exprs(ObRawExprFactory &expr_factory,
                                      ObIArray<ObRawExpr*> &range_exprs,
                                      ObExecContext *exec_ctx,
                                      ObQueryCtx *query_ctx,
-                                     const ParamStore *params,
+                                     const ObPhysicalPlanCtx *params,
                                      const int64_t index_prefix /* =-1*/)
 {
   int ret = OB_SUCCESS;
@@ -1515,7 +1736,7 @@ int ObPreRangeGraph::range_node_to_expr(ObQueryRangeCtx &ctx,
       bool all_is_percent_sign = false;
       if (!pattern_expr->is_static_const_expr() || !escape_expr->is_static_const_expr()) {
         create_like = true;
-      } else if (OB_FAIL(ObOptEstUtils::if_expr_start_with_patten_sign(ctx.params_,
+      } else if (OB_FAIL(ObOptEstUtils::if_expr_start_with_patten_sign(ctx.parameter_context_,
                                                                        pattern_expr,
                                                                        escape_expr,
                                                                        ctx.exec_ctx_,
@@ -1722,21 +1943,20 @@ int ObPreRangeGraph::set_general_nlj_range_extraction(const ObIArray<ObFastFinal
 // Notes:
 // LIKE escape treats NULL differently from 0x00: NULL is equivalent to '\\',
 // but 0x00 is just 0x00. Therefore, before use this interface, PLEASE MAKE SURE escape is not null.
-int ObPreRangeGraph::is_precise_like_range(const ObObjParam &pattern, char escape, bool &is_precise)
+int ObPreRangeGraph::is_precise_like_range(SqlValueType type, const ObString &pattern_str, ObCollationType cs_type,
+                                         char escape, bool &is_precise)
 {
   int ret = OB_SUCCESS;
 
-  ObCollationType cs_type = pattern.get_collation_type();
   int64_t mbmaxlen = 1;
   is_precise = false;
-  if (pattern.is_string_type()) {
-    ObString pattern_str = pattern.get_string();
+  if (ob_is_string_type(type)) {
     if (cs_type == CS_TYPE_INVALID || cs_type >= CS_TYPE_MAX) {
     } else if (ObCharset::is_cs_uca(cs_type)) {
     } else if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(cs_type, mbmaxlen))) {
     } else {
       ObArenaAllocator allocator;
-      size_t col_len = pattern.get_string_len();
+      size_t col_len = pattern_str.length();
       col_len = static_cast<int32_t>(col_len * mbmaxlen);
       size_t min_str_len = col_len;
       size_t max_str_len = col_len;
@@ -1830,8 +2050,8 @@ bool ObPreRangeGraph::check_like_range_precise(const ObString &pattern_str,
 // Then come to judge whether this expression should be precisely extracted or expanded to (min, max)
 bool ObPreRangeGraph::can_be_extract_range(ObItemType cmp_type,
                                         const ObRawExprResType &col_type,
-                                        const ObObjMeta &calc_meta,
-                                        ObObjType data_type,
+                                        const SqlTypeMeta &calc_meta,
+                                        SqlValueType data_type,
                                         bool &always_true)
 {
   bool bret = true;
@@ -1869,7 +2089,7 @@ bool ObPreRangeGraph::can_be_extract_range(ObItemType cmp_type,
   // data_type: const->get_data_type()
   // Except for scenarios involving enum/set, using any parameter type of calc_type does not affect the judgment of is_cast_monotonic
   // For the col_enum op const_int scenario, calc_type is enum, need to change it to int for special handling
-  ObObjMeta calc_type = calc_meta;
+  SqlTypeMeta calc_type = calc_meta;
   if (calc_type.is_enum_or_set()) {
     calc_type.set_int();
   }
@@ -1894,13 +2114,13 @@ bool ObPreRangeGraph::can_be_extract_range(ObItemType cmp_type,
         && (calc_type.is_string_or_lob_locator_type() || calc_type.is_double()
             || calc_type.is_number() || calc_type.is_integer_type())) {
       // do nothing
-    } else if (OB_FAIL(ObObjCaster::is_cast_monotonic(col_type.get_type(),
+    } else if (OB_FAIL(ObTypeCastRules::is_cast_monotonic(col_type.get_type(),
                                                       calc_type.get_type(),
                                                       is_cast_monotonic))) {
     } else if (!is_cast_monotonic) {
       bret = false;
       always_true = true;
-    } else if (OB_FAIL(ObObjCaster::is_cast_monotonic(calc_type.get_type(),
+    } else if (OB_FAIL(ObTypeCastRules::is_cast_monotonic(calc_type.get_type(),
                                                         col_type.get_type(),
                                                         is_cast_monotonic))) {
     } else if (!is_cast_monotonic) {
@@ -1931,7 +2151,7 @@ bool ObPreRangeGraph::can_be_extract_range(ObItemType cmp_type,
 
 // op that be rewritten as normal key-part, need to check if can cast
 bool ObPreRangeGraph::can_domain_be_extract_range(const ObDomainOpType &op_type, const ObRawExprResType &col_type,
-                                              const ObObjMeta &res_type, common::ObObjType data_type,
+                                              const SqlTypeMeta &res_type, common::SqlValueType data_type,
                                               bool &always_true)
 {
   bool bret = true;

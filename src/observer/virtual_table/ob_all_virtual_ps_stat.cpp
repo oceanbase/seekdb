@@ -28,31 +28,31 @@ using namespace common;
 int ObAllVirtualPsStat::fill_cells(ObPsCache &ps_cache)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t col_count = output_column_ids_.count();
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
       case share::ALL_VIRTUAL_PS_STAT_CDE::STMT_COUNT: {
         // @shaoge use the size of stmt_id_map as the size of ps_cache
-        cells[i].set_int(ps_cache.get_stmt_id_map_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, ps_cache.get_stmt_id_map_size()) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_STAT_CDE::HIT_COUNT: {
         uint64_t hit_count = ps_cache.get_hit_count();
-        cells[i].set_int(hit_count);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, hit_count) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_STAT_CDE::ACCESS_COUNT: {
         uint64_t access_count = ps_cache.get_access_count();
-        cells[i].set_int(access_count);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, access_count) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_STAT_CDE::MEM_HOLD: {
         int64_t mem_total = 0;
         if (OB_FAIL(ps_cache.mem_total(mem_total))) {
         } else {
-          cells[i].set_int(mem_total);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, mem_total) : ret);
         }
         break;
       }

@@ -361,11 +361,11 @@ int ObSRDaaTIterImpl::filter_on_demand(const int64_t count, const double relevan
       ret = OB_ERR_UNEXPECTED;
     } else {
       guard.set_batch_idx(count);
-      ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+      common::Datum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
       relevance_proj_datum.set_double(relevance);
       relevance_proj_expr->get_evaluated_flags(*eval_ctx).set(count);
       relevance_proj_expr->set_evaluated_projected(*eval_ctx);
-      ObDatum *filter_res = nullptr;
+      common::Datum *filter_res = nullptr;
       filter_expr->clear_evaluated_flag(*eval_ctx);
       if (OB_FAIL(filter_expr->eval(*eval_ctx, filter_res))) {
       } else {
@@ -376,7 +376,7 @@ int ObSRDaaTIterImpl::filter_on_demand(const int64_t count, const double relevan
     ret = OB_ERR_UNEXPECTED;
   } else {
     guard.set_batch_idx(0);
-    ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
     relevance_proj_datum.set_double(relevance);
     relevance_proj_expr->set_evaluated_projected(*eval_ctx);
   }
@@ -419,7 +419,7 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
     for (int64_t i = 0; i < count; ++i) {
       guard.set_batch_idx(i);
-      ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+      common::Datum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
       set_datum_func_(id_proj_datum, buffered_domain_ids_[i]);
       id_evaluated_flags.set(i);
       id_proj_expr->set_evaluated_projected(*eval_ctx);
@@ -428,7 +428,7 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
       sql::ObBitVector &relevance_evaluated_flags = relevance_proj_expr->get_evaluated_flags(*eval_ctx);
       for (int64_t i = 0; i < count; ++i) {
         guard.set_batch_idx(i);
-        ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+        common::Datum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
         relevance_proj_datum.set_double(buffered_relevances_[i]);
         relevance_evaluated_flags.set(i);
         relevance_proj_expr->set_evaluated_projected(*eval_ctx);
@@ -438,10 +438,10 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
     ret = OB_ERR_UNEXPECTED;
   } else {
     guard.set_batch_idx(0);
-    ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
     set_datum_func_(id_proj_datum, buffered_domain_ids_[0]);
     id_proj_expr->set_evaluated_projected(*eval_ctx);
-    ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
     relevance_proj_datum.set_double(buffered_relevances_[0]);
     relevance_proj_expr->set_evaluated_projected(*eval_ctx);
   }

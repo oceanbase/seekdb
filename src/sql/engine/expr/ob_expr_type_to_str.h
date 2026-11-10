@@ -112,7 +112,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
   static int inner_to_str(const ObCollationType cs_type,
                           const uint64_t enum_val,
                           const ObIArray<common::ObString> &str_values,
@@ -130,7 +130,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
   static int inner_to_str(const uint64_t enum_val,
                           const ObIArray<common::ObString> &str_values,
                           common::ObTextStringResult &text_result);
@@ -151,7 +151,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 
 private:
   // disallow copy
@@ -170,7 +170,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 
 private:
   // disallow copy
@@ -190,7 +190,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_inner_type_to_enumset(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int eval_inner_type_to_enumset(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprInnerTypeToEnumSet);
 };

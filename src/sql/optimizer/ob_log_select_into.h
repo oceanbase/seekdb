@@ -20,6 +20,8 @@
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/optimizer/ob_log_operator_factory.h"
 #include "query/parser/ob_item_type.h"
+#include "common/datum/datum.h"
+#include "common/object/ob_type_metadata.h"
 
 namespace oceanbase
 {
@@ -52,17 +54,20 @@ public:
   {
     into_type_ = into_type;
   }
-  inline void set_outfile_name(common::ObObj &name_str)
+  inline void set_outfile_name(const common::Datum &name_str, const common::SqlTypeMeta &meta)
   {
     outfile_name_ = name_str;
+    outfile_name_meta_ = meta;
   }
-  inline void set_field_str(common::ObObj &field_str)
+  inline void set_field_str(const common::Datum &field_str, const common::SqlTypeMeta &meta)
   {
     field_str_ = field_str;
+    field_str_meta_ = meta;
   }
-  inline void set_line_str(common::ObObj &line_str)
+  inline void set_line_str(const common::Datum &line_str, const common::SqlTypeMeta &meta)
   {
     line_str_ = line_str;
+    line_str_meta_ = meta;
   }
   inline void set_user_vars(common::ObIArray<common::ObString> &user_vars)
   {
@@ -88,13 +93,15 @@ public:
   {
     buffer_size_ = buffer_size;
   }
-  inline void set_closed_cht(common::ObObj &closed_cht)
+  inline void set_closed_cht(const common::Datum &closed_cht, const common::SqlTypeMeta &meta)
   {
     closed_cht_ = closed_cht;
+    closed_cht_meta_ = meta;
   }
-  inline void set_escaped_cht(common::ObObj &escaped_cht)
+  inline void set_escaped_cht(const common::Datum &escaped_cht, const common::SqlTypeMeta &meta)
   {
     escaped_cht_ = escaped_cht;
+    escaped_cht_meta_ = meta;
   }
   inline void set_cs_type(common::ObCollationType &cs_type)
   {
@@ -112,15 +119,18 @@ public:
   {
     return into_type_;
   }
-  inline common::ObObj get_outfile_name() const
+  const common::SqlTypeMeta &get_outfile_name_meta() const { return outfile_name_meta_; }
+  inline const common::Datum &get_outfile_name() const
   {
     return outfile_name_;
   }
-  inline common::ObObj get_field_str() const
+  const common::SqlTypeMeta &get_field_str_meta() const { return field_str_meta_; }
+  inline const common::Datum &get_field_str() const
   {
     return field_str_;
   }
-  inline common::ObObj get_line_str() const
+  const common::SqlTypeMeta &get_line_str_meta() const { return line_str_meta_; }
+  inline const common::Datum &get_line_str() const
   {
     return line_str_;
   }
@@ -144,11 +154,13 @@ public:
   {
     return buffer_size_;
   }
-  inline common::ObObj get_closed_cht() const
+  const common::SqlTypeMeta &get_closed_cht_meta() const { return closed_cht_meta_; }
+  inline const common::Datum &get_closed_cht() const
   {
     return closed_cht_;
   }
-  inline common::ObObj get_escaped_cht() const
+  const common::SqlTypeMeta &get_escaped_cht_meta() const { return escaped_cht_meta_; }
+  inline const common::Datum &get_escaped_cht() const
   {
     return escaped_cht_;
   }
@@ -174,17 +186,22 @@ public:
   static const int64_t DEFAULT_BUFFER_SIZE = 1*1024*1024;
 private:
   ObItemType into_type_;
-  common::ObObj outfile_name_;
-  common::ObObj field_str_;
-  common::ObObj line_str_;
+  common::Datum outfile_name_;
+  common::Datum field_str_;
+  common::Datum line_str_;
   common::ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> select_exprs_;
   common::ObSEArray<common::ObString, 16, common::ModulePageAllocator, true> user_vars_;
-  common::ObObj closed_cht_;
+  common::Datum closed_cht_;
   bool is_optional_;
   bool is_single_;
   int64_t max_file_size_;
   int64_t buffer_size_;
-  common::ObObj escaped_cht_;
+  common::Datum escaped_cht_;
+  common::SqlTypeMeta outfile_name_meta_;
+  common::SqlTypeMeta field_str_meta_;
+  common::SqlTypeMeta line_str_meta_;
+  common::SqlTypeMeta closed_cht_meta_;
+  common::SqlTypeMeta escaped_cht_meta_;
   common::ObCollationType cs_type_;
   bool is_overwrite_;
   common::ObString external_properties_;

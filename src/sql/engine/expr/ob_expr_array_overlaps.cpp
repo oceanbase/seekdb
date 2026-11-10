@@ -65,7 +65,7 @@ int ObExprArrayOverlaps::calc_result_type2(ObExprResType &type,
   } else if ((!ob_is_collection_sql_type(type1.get_type()) && !type1.is_null())
              || (!ob_is_collection_sql_type(type2.get_type()) && !type2.is_null())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(type1.get_type()), ob_obj_type_str(type2.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, sql_value_type_to_string(type1.get_type()), sql_value_type_to_string(type2.get_type()));
   } else if (type1.is_null() || type2.is_null()) {
     // do nothing
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type1))) {
@@ -97,7 +97,7 @@ int ObExprArrayOverlaps::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayOverlaps::eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx, Relation relation, ObDatum &res)
+int ObExprArrayOverlaps::eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx, Relation relation, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -106,8 +106,8 @@ int ObExprArrayOverlaps::eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx
   const uint16_t r_meta_id = expr.args_[1]->obj_meta_.get_subschema_id();
   ObIArrayType *l_arr_obj = NULL;
   ObIArrayType *r_arr_obj = NULL;
-  ObDatum *l_datum = NULL;
-  ObDatum *r_datum = NULL;
+  Datum *l_datum = NULL;
+  Datum *r_datum = NULL;
   bool bret = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, l_datum))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, r_datum))) {
@@ -127,7 +127,7 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
                                                     const int64_t batch_size, Relation relation)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -138,8 +138,8 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector l_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector r_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector l_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector r_array = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
@@ -160,7 +160,7 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
   return ret;
 }
 
-int ObExprArrayOverlaps::eval_array_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayOverlaps::eval_array_overlaps(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_array_relations(expr, ctx, OVERLAPS, res);
 }

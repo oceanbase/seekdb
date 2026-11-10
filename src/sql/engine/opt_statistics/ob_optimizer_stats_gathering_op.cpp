@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "ob_optimizer_stats_gathering_op.h"
 
 namespace oceanbase
@@ -305,7 +307,7 @@ int ObOptimizerStatsGatheringOp::get_col_stat_by_key(ObOptColumnStat::Key &key, 
 int ObOptimizerStatsGatheringOp::calc_column_stats(ObExpr *expr, uint64_t column_id, int64_t &row_len)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int64_t col_len  = 0;
   ObOptOSGColumnStat *global_col_stat = NULL;
   ObOptColumnStat::Key global_col_stats_key(MY_SPEC.table_id_, MY_SPEC.table_id_, column_id);
@@ -324,10 +326,12 @@ int ObOptimizerStatsGatheringOp::calc_column_stats(ObExpr *expr, uint64_t column
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObExprSysOpOpnsize::calc_sys_op_opnsize(expr, datum, col_len))) {
   } else if (OB_FALSE_IT(global_col_stat->col_stat_->set_stat_level(StatLevel::TABLE_LEVEL))) {
-  } else if (OB_FAIL(global_col_stat->update_column_stat_info(datum, expr->obj_meta_,
-                                                              expr->basic_funcs_->null_first_cmp_))) {
   } else {
-    row_len += col_len;
+    const ObDatumBasicFuncs *functions = storage_predicate_functions(*expr);
+    if (functions == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(global_col_stat->update_column_stat_info(datum, expr->get_sql_type(), expr->obj_meta_,
+                                                               functions->null_first_cmp_))) {
+    } else { row_len += col_len; }
   }
   return ret;
 }
@@ -512,7 +516,7 @@ int ObOptimizerStatsGatheringOp::get_col_stat_map(ColStatIndMap &col_stat_map)
       ObOptOSGColumnStat *osg_col_stat = NULL;
       if (OB_ISNULL(osg_col_stat = it->second) || OB_ISNULL(osg_col_stat->col_stat_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(osg_col_stat->set_min_max_datum_to_obj())) {
+      } else if (OB_FAIL(osg_col_stat->publish_min_max_values())) {
       } else if (OB_FAIL(col_stat_map.set_refactored(it->first, osg_col_stat->col_stat_))) {
       }
     }
@@ -567,7 +571,7 @@ int ObOptimizerStatsGatheringOp::get_col_stats(common::ObIArray<ObOptColumnStat*
     ObOptOSGColumnStat *osg_col_stat = NULL;
     if (OB_ISNULL(osg_col_stat = it->second) || OB_ISNULL(osg_col_stat->col_stat_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(osg_col_stat->set_min_max_datum_to_obj())) {
+    } else if (OB_FAIL(osg_col_stat->publish_min_max_values())) {
     } else if (OB_FAIL(col_stats.push_back(osg_col_stat->col_stat_))) {
     }
   }

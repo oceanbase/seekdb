@@ -36,7 +36,7 @@
                                  ObExprResType &type2,
                                  common::ObExprTypeCtx &type_ctx) const override;
    
-   static int calc_semantic_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+   static int calc_semantic_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
    
    virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
    
@@ -57,7 +57,7 @@
                                  int64_t param_num,
                                  common::ObExprTypeCtx &type_ctx) const override;
    
-   static int calc_semantic_vector_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+   static int calc_semantic_vector_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
    
    virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
    

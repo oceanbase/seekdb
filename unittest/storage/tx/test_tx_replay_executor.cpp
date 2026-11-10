@@ -15,6 +15,7 @@
  */
 
 #include <gtest/gtest.h>
+#include "lib/allocator/page_arena.h"
 #include "storage/memtable/ob_memtable_mutator.h"
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tx/ob_tx_ctx.h"
@@ -55,9 +56,9 @@ protected:
       const int64_t index = row_count_++ % 2;
       EXPECT_EQ(MutatorType::MUTATOR_ROW, header.mutator_type_);
       EXPECT_EQ(ObTabletID(ObTabletID::MIN_USER_TABLET_ID + 1), header.tablet_id_);
-      EXPECT_EQ(1, row.rowkey_.get_obj_cnt());
-      if (row.rowkey_.get_obj_cnt() == 1) {
-        EXPECT_EQ(index == 0 ? 42 : 84, row.rowkey_.get_obj_ptr()[0].get_int());
+      EXPECT_EQ(1, row.rowkey_.get_value_count());
+      if (row.rowkey_.get_value_count() == 1) {
+        EXPECT_EQ(index == 0 ? 42 : 84, row.rowkey_.get_values()[0].get_int());
       }
       const char *payload = empty_payload_ ? "" : (index == 0 ? "first" : "second");
       EXPECT_EQ(blocksstable::ObDmlFlag::DF_UPDATE, row.dml_flag_);
@@ -109,14 +110,14 @@ protected:
     filled_.reset();
     ObTxRedoLog redo;
     ObMutatorWriter writer;
+    ObArenaAllocator key_allocator;
     ObITransCallback callback;
     if (OB_FAIL(filled_.init_for_fill())
         || OB_FAIL(filled_.prepare_mutator_buf(redo))
         || OB_FAIL(writer.set_buffer(redo.get_mutator_buf(), redo.get_mutator_size()))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < 2; ++i) {
-        ObObj cell;
-        cell.set_int(i == 0 ? 42 : 84);
+        DatumValue cell;
         ObStoreRowkey key;
         ObMemtableKey memtable_key;
         ObRowData new_row;
@@ -124,7 +125,9 @@ protected:
         const char *payload = empty_payload ? "" : (i == 0 ? "first" : "second");
         new_row.set(payload, STRLEN(payload));
         RedoDataNode node;
-        if (OB_FAIL(key.assign(&cell, 1)) || OB_FAIL(memtable_key.encode(&key))) {
+        if (OB_FAIL(cell.set_int(i == 0 ? 42 : 84, key_allocator))
+            || OB_FAIL(key.assign(&cell, 1))
+            || OB_FAIL(memtable_key.encode(&key))) {
         } else {
           node.set(&memtable_key, old_row, new_row, blocksstable::ObDmlFlag::DF_UPDATE,
               1, 0, 1, 0, ObTxSEQ(i == 0 ? 9 : 3, 0),

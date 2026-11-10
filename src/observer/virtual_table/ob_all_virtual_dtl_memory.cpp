@@ -211,60 +211,60 @@ int ObAllVirtualDtlMemory::inner_get_next_row(ObNewRow *&row)
 int ObAllVirtualDtlMemory::get_row(ObAllVirtualDtlMemoryPoolInfo &mem_pool_info, ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
       case CHANNEL_TOTAL_CNT: {
-        cells[cell_idx].set_int(mem_pool_info.channel_total_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.channel_total_cnt_) : ret);
         break;
       }
       case CHANNEL_BLOCK_CNT: {
-        cells[cell_idx].set_int(mem_pool_info.channel_block_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.channel_block_cnt_) : ret);
         break;
       }
       case MAX_PARALLEL_CNT:{// OB_APP_MIN_COLUMN_ID + 5
-        cells[cell_idx].set_int(mem_pool_info.max_parallel_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.max_parallel_cnt_) : ret);
         break;
       }
       case MAX_BLOCKED_BUFFER_SIZE: {
-        cells[cell_idx].set_int(mem_pool_info.max_blocked_buffer_size_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.max_blocked_buffer_size_) : ret);
         break;
       }
       case ACCUMULATED_BLOCK_CNT: {
-        cells[cell_idx].set_int(mem_pool_info.accumulated_block_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.accumulated_block_cnt_) : ret);
         break;
       }
       case CURRENT_BUFFER_USED: {
-        cells[cell_idx].set_int(mem_pool_info.current_buffer_used_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.current_buffer_used_) : ret);
         break;
       }
       case SQENO: {
-        cells[cell_idx].set_int(mem_pool_info.seqno_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.seqno_) : ret);
         break;
       }
       case ALLOC_CNT: {// OB_APP_MIN_COLUMN_ID + 10
-        cells[cell_idx].set_int(mem_pool_info.alloc_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.alloc_cnt_) : ret);
         break;
       }
       case FREE_CNT: {
-        cells[cell_idx].set_int(mem_pool_info.free_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.free_cnt_) : ret);
         break;
       }
       case FREE_QUEUE_LEN: {
-        cells[cell_idx].set_int(mem_pool_info.free_queue_len_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.free_queue_len_) : ret);
         break;
       }
       case TOTAL_MEMORY_SIZE: {
-        cells[cell_idx].set_int(mem_pool_info.total_memory_size_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.total_memory_size_) : ret);
         break;
       }
       case REAL_ALLOC_CNT: {
-        cells[cell_idx].set_int(mem_pool_info.real_alloc_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.real_alloc_cnt_) : ret);
         break;
       }
       case REAL_FREE_CNT: {// OB_APP_MIN_COLUMN_ID + 15
-        cells[cell_idx].set_int(mem_pool_info.real_free_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, mem_pool_info.real_free_cnt_) : ret);
         break;
       }
       default: {

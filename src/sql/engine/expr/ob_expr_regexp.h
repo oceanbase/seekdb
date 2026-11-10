@@ -55,10 +55,10 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_regexp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_regexp(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   template<typename RegExpCtx>
-  static int regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int regexp_match(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   int16_t regexp_idx_; // idx of posix_regexp_list_ in plan ctx, for regexp operator
   bool pattern_is_const_;

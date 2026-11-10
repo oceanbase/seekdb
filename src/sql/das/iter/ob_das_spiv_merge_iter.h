@@ -203,13 +203,13 @@ private:
   void sort_by_value(uint32_t *keys, float *values, int l, int r);
 
   int rowkey2docid(ObRowkey &rowkey, ObDocIdExt &docid);
-  inline static void set_datum_int(ObDatum &datum, const ObDocIdExt &docid)
+  inline static void set_datum_int(common::Datum &datum, const ObDocIdExt &docid)
   {
     datum.set_int(docid.get_datum().get_int());
   }
-  inline static void set_datum_shallow(ObDatum &datum, const ObDocIdExt &docid)
+  inline static void set_datum_shallow(common::Datum &datum, const ObDocIdExt &docid)
   {
-    datum.set_datum(docid.get_datum());
+    datum.set_string(docid.get_datum().get_string());
   }
   inline static bool docid_lt_int(const ObDocIdExt &left, const ObDocIdExt &right) {
     return left.get_datum().get_uint64() < right.get_datum().get_uint64();
@@ -293,7 +293,7 @@ private:
 
   ObExprVectorDistance::ObVecDisType dis_type_;
   double selectivity_;
-  void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  void (*set_datum_func_)(common::Datum &, const ObDocIdExt &);
   bool (*docid_lt_func_)(const ObDocIdExt &, const ObDocIdExt &);
   bool (*docid_gt_func_)(const ObDocIdExt &, const ObDocIdExt &);
   ObSEArray<ObDASScanIter *, OB_DEFAULT_SPIV_SCAN_ITER_CNT> inv_dim_scan_iters_;

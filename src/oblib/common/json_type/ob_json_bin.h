@@ -89,7 +89,7 @@ public:
   ObJsonInType get_internal_type() const override { return ObJsonInType::JSON_BIN; }
   uint64_t element_count() const override { return meta_.element_count_; }
   ObJsonNodeType json_type() const override { return meta_.value_type_; }
-  ObObjType field_type() const override { return meta_.field_type_; }
+  SqlValueType field_type() const override { return meta_.field_type_; }
   uint64_t member_count() const override
   {
     return json_type() == ObJsonNodeType::J_ARRAY || json_type() == ObJsonNodeType::J_OBJECT
@@ -123,7 +123,7 @@ private:
     uint8_t entry_size_ = 0;
     uint64_t element_count_ = 0;
     uint64_t bytes_ = 0;
-    ObObjType field_type_ = ObNullType;
+    SqlValueType field_type_ = ObNullType;
     uint64_t str_data_offset_ = 0;
   };
   int native_child(size_t index, uint64_t &offset, uint8_t &type, uint8_t &entry_type) const;

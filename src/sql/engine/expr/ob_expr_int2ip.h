@@ -34,13 +34,10 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   // helper func
-  static int int2ip(common::ObObj &result,
-                    const int64_t text,
-                    common::ObExprStringBuf &string_buf);
-  static int int2ip(common::ObDatum &result,
+  static int int2ip(common::Datum &result,
                     const int64_t text);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprInt2ip);

@@ -37,8 +37,8 @@ int ObExprPrivSTClipByBox2D::calc_result_type2(ObExprResType &type, ObExprResTyp
     ObExprResType &type2, common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType obj_type1 = type1.get_type();
-  ObObjType obj_type2 = type2.get_type();
+  SqlValueType obj_type1 = type1.get_type();
+  SqlValueType obj_type2 = type2.get_type();
 
   if (!ob_is_string_type(obj_type1) && !ob_is_geometry(obj_type1) && !ob_is_null(obj_type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
@@ -63,12 +63,12 @@ int ObExprPrivSTClipByBox2D::process_input_geometry(common::ObSrsCacheGuard &srs
     const ObSrsItem *&srs2)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum1 = nullptr;
-  ObDatum *datum2 = nullptr;
+  Datum *datum1 = nullptr;
+  Datum *datum2 = nullptr;
   ObExpr *arg1 = expr.args_[0];
   ObExpr *arg2 = expr.args_[1];
-  ObObjType type1 = arg1->datum_meta_.type_;
-  ObObjType type2 = arg2->datum_meta_.type_;
+  SqlValueType type1 = arg1->datum_meta_.type_;
+  SqlValueType type2 = arg2->datum_meta_.type_;
 
   if (ob_is_null(type1) || ob_is_null(type2)) {
     is_null_res = true;
@@ -108,7 +108,7 @@ int ObExprPrivSTClipByBox2D::process_input_geometry(common::ObSrsCacheGuard &srs
 }
 
 int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;

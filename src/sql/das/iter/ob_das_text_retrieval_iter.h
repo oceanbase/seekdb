@@ -143,7 +143,7 @@ protected:
   ObDASScanIter *inverted_idx_scan_iter_;
   ObDASScanIter *inverted_idx_agg_iter_;
   ObDASScanIter *forward_idx_iter_;
-  ObObj *fwd_range_objs_;
+  DatumValue *fwd_range_objs_;
   sql::ObExpr *token_weight_expr_;
   sql::ObBitVector *skip_;
   int64_t token_doc_cnt_;

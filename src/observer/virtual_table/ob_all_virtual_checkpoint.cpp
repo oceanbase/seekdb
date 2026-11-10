@@ -111,14 +111,14 @@ int ObAllVirtualCheckpointInfo::inner_get_next_row(ObNewRow *&row)
                                               service_type_buf_,
                                               sizeof(service_type_buf_)))) {
           } else {
-            cur_row_.cells_[i].set_varchar(service_type_buf_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, service_type_buf_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 1: {
           //TODO:SCN
-          cur_row_.cells_[i].set_uint64(checkpoint.rec_scn.is_valid() ? checkpoint.rec_scn.get_val_for_inner_table_field() : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, checkpoint.rec_scn.is_valid() ? checkpoint.rec_scn.get_val_for_inner_table_field() : 0) : ret);
           break;
         }
         default:

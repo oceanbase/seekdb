@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_SQL_REWRITE_QUERY_RANGE_PROVIDER_
 #define OCEANBASE_SQL_REWRITE_QUERY_RANGE_PROVIDER_
 
+#include "common/datum/datum_param_store.h"
+#include "common/datum/datum.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"
@@ -31,6 +33,7 @@ namespace sql
 {
 struct ColumnItem;
 class ObRawExpr;
+class ObPhysicalPlanCtx;
 typedef common::ObSEArray<common::ObNewRange *, 1> ObQueryRangeArray;
 typedef common::ObSEArray<common::ObNewRange, 4, common::ModulePageAllocator, true> ObRangesArray;
 typedef common::ObSEArray<ColumnItem, 16, common::ModulePageAllocator, true> ColumnArray;
@@ -42,6 +45,21 @@ class ObQueryRangeProvider
 {
 public:
   virtual ~ObQueryRangeProvider() {}
+  // Optional, conservative probe for the three signed-BIGINT point-get pilot.
+  // Unsupported inputs preserve values and continue through the existing range
+  // generator. Successful raw integers are copied independently of the
+  // parameter payloads; they do not borrow parameter or graph memory.
+  virtual int try_get_native_bigint_point(const common::DatumParamStore &parameters,
+                                          int64_t (&values)[3], bool &supported) const
+  {
+    UNUSED(parameters); UNUSED(values);
+    supported = false;
+    return common::OB_SUCCESS;
+  }
+  // A bound execution owner is an explicit source, independent of construction inputs.
+  // Providers without this specialization conservatively decline the fast path.
+  virtual int try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
+                                          int64_t (&values)[3], bool &supported) const;
   virtual int get_tablet_ranges(common::ObIAllocator &allocator,
                                 ObExecContext &exec_ctx,
                                 ObQueryRangeArray &ranges,
@@ -59,7 +77,7 @@ public:
   virtual int get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj_range_ctx,
                                          common::ObIAllocator &allocator,
                                          ObExecContext &exec_ctx,
-                                         const ParamStore &param_store,
+                                         const ObPhysicalPlanCtx &param_store,
                                          int64_t range_buffer_idx,
                                          void *range_buffer,
                                          ObQueryRangeArray &ranges,

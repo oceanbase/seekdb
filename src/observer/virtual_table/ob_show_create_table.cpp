@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "observer/virtual_table/ob_show_create_table.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -90,13 +91,13 @@ int ObShowCreateTable::calc_show_table_id(uint64_t &show_table_id)
        OB_SUCCESS == ret && OB_INVALID_ID == show_table_id && i < key_ranges_.count(); ++i) {
     const ObRowkey &start_key = key_ranges_.at(i).start_key_;
     const ObRowkey &end_key = key_ranges_.at(i).end_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-    const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-    if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
+    const DatumValue *end_key_obj_ptr = end_key.get_values();
+    if (start_key.get_value_count() > 0 && start_key.get_value_count() == end_key.get_value_count()) {
       if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
-      } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
+      } else if (key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])
                  && ObIntType == start_key_obj_ptr[0].get_type()) {
         show_table_id = start_key_obj_ptr[0].get_int();
       } else {/*do nothing*/}
@@ -187,12 +188,12 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
       switch(col_id) {
         case OB_APP_MIN_COLUMN_ID: {
           // table_id
-          cur_row_.cells_[cell_idx].set_int(show_table_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, show_table_id) : ret);
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 1: {
           // table
-          cur_row_.cells_[cell_idx].set_varchar(table_schema.get_table_name_str());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, table_schema.get_table_name_str()) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
@@ -236,7 +237,7 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
             }
           }
           if (OB_SUCC(ret)) {
-            cur_row_.cells_[cell_idx].set_lob_value(ObLongTextType, table_def_buf, static_cast<int32_t>(pos));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cur_row_.cells_, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(pos), table_def_buf)) : ret);
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -248,7 +249,7 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
           if (CHARSET_INVALID == cs_client_type &&
               OB_FAIL(session_->get_character_set_client(cs_client_type))) {
           } else {
-            cur_row_.cells_[cell_idx].set_varchar(ObCharset::charset_name(cs_client_type));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, ObCharset::charset_name(cs_client_type)) : ret);
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -259,7 +260,7 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
           if (CS_TYPE_INVALID == coll_connection_type &&
               OB_FAIL(session_->get_collation_connection(coll_connection_type))) {
           } else {
-            cur_row_.cells_[cell_idx].set_varchar(ObCharset::collation_name(coll_connection_type));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, ObCharset::collation_name(coll_connection_type)) : ret);
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;

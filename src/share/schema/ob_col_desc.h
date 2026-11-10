@@ -60,7 +60,7 @@ public:
   NEED_SERIALIZE_AND_DESERIALIZE;
 
   uint32_t col_id_;
-  common::ObObjMeta col_type_;
+  common::SqlTypeMeta col_type_;
   common::ObOrderType col_order_;
 };
 

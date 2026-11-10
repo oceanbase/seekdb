@@ -26,7 +26,7 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
+class DatumParameter;
 class ObString;
 }
 
@@ -129,12 +129,12 @@ public:
                           int64_t spec_version,
                           int64_t body_version,
                           const int64_t var_idx,
-                          common::ObObj &var_val);
+                          common::DatumParameter &var_val);
   int set_package_var_val(const ObPLResolveCtx &resolve_ctx,
                           sql::ObExecContext &exec_ctx,
                           uint64_t package_id,
                           const int64_t var_idx,
-                          const common::ObObj &var_val);
+                          const common::DatumParameter &var_val);
 
   int load_package_spec(const ObPLResolveCtx &resolve_ctx,
                         const share::schema::ObPackageInfo &package_spec_info,

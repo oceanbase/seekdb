@@ -346,7 +346,7 @@ int ObLogSort::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_
     param.need_row_count_ = -1;
   } else if (NULL != topn_expr_ &&
              OB_FAIL(ObTransformUtils::get_limit_value(topn_expr_,
-                                                       get_plan()->get_optimizer_context().get_params(),
+                                                       get_plan()->get_optimizer_context().get_parameter_context(),
                                                        get_plan()->get_optimizer_context().get_exec_ctx(),
                                                        &get_plan()->get_optimizer_context().get_allocator(),
                                                        topn_count,
@@ -410,7 +410,7 @@ int ObLogSort::inner_est_cost(const int64_t parallel, double child_card, double 
     ret = OB_ERR_UNEXPECTED;
   } else if (NULL != topn_expr_ &&
              OB_FAIL(ObTransformUtils::get_limit_value(topn_expr_,
-                                                       get_plan()->get_optimizer_context().get_params(),
+                                                       get_plan()->get_optimizer_context().get_parameter_context(),
                                                        get_plan()->get_optimizer_context().get_exec_ctx(),
                                                        &get_plan()->get_optimizer_context().get_allocator(),
                                                        topn_count,

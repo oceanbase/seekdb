@@ -63,8 +63,8 @@ int ObExprArrayPosition::calc_result_type2(ObExprResType &type,
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_WARN(OB_ERR_INVALID_TYPE_FOR_OP, 
-        ob_obj_type_str(type1.get_type()),
-        ob_obj_type_str(type2.get_type()));
+        sql_value_type_to_string(type1.get_type()),
+        sql_value_type_to_string(type2.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_array_type(exec_ctx, type1, type2, subschema_id))) {
   } 
   
@@ -77,14 +77,14 @@ int ObExprArrayPosition::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayPosition::eval_array_position(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayPosition::eval_array_position(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-  ObDatum *arr_datum = NULL;
-  ObDatum *elem_datum = NULL;
+  Datum *arr_datum = NULL;
+  Datum *elem_datum = NULL;
   ObIArrayType *src_arr = NULL;
   int idx = 0;
 
@@ -126,7 +126,7 @@ int ObExprArrayPosition::eval_array_position_batch(const ObExpr &expr,
                             const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -137,8 +137,8 @@ int ObExprArrayPosition::eval_array_position_batch(const ObExpr &expr,
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector elem_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector elem_array = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       int idx = 0;
       if (skip.at(j) || eval_flags.at(j)) {
@@ -166,7 +166,7 @@ int ObExprArrayPosition::eval_array_position_batch(const ObExpr &expr,
           res_datum.at(j)->set_int(0);
         }
       } else {
-        ObDatum *elem_datum = elem_array.at(j);
+        Datum *elem_datum = elem_array.at(j);
         if (OB_FAIL(array_position(expr, tmp_allocator, ctx, src_arr, elem_datum, idx))) {
         } else {
           res_datum.at(j)->set_int(idx + 1);
@@ -182,12 +182,12 @@ int ObExprArrayPosition::array_position(const ObExpr &expr,
                             ObIAllocator &alloc, 
                             ObEvalCtx &ctx,
                             ObIArrayType *src_arr,
-                            ObDatum *val_datum, 
+                            Datum *val_datum,
                             int &idx)
 {
   int ret = OB_SUCCESS;
-  const ObObjType &right_type = expr.args_[1]->datum_meta_.type_;
-  ObObjTypeClass right_tc = ob_obj_type_class(right_type);
+  const SqlValueType &right_type = expr.args_[1]->datum_meta_.type_;
+  SqlTypeClass right_tc = sql_type_class(right_type);
 
   switch (right_tc) {
   case ObUIntTC:

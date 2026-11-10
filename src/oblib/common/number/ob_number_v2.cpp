@@ -59,7 +59,7 @@ const ObNumber &ObNumber::get_pi()
 }
 
 const ObString NUMBER_ERRMSG("ERROR NUM");//9 byte
-// ObNumber serialization deserialization implementation, completely referenced the code in ObObj
+// ObNumber serialization and deserialization implementation.
 DEFINE_SERIALIZE(ObNumber)
 {
   return serialization::encode_number_type(buf, buf_len, pos, d_, digits_);

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_is.h"
 #include "ob_expr_json_func_helper.h"
+#include "common/datum/datum_value.h"
 
 namespace oceanbase
 {
@@ -50,15 +51,15 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
     ObConstRawExpr *const_param2 = static_cast<ObConstRawExpr *>(param2);
     if (OB_ISNULL(const_param2)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (ObDoubleType == const_param2->get_value().get_type()) {
+    } else if (ObDoubleType == const_param2->get_value_meta().get_type()) {
         type1.set_calc_type(ObDoubleType);
         type1.set_calc_accuracy(type1.get_accuracy());
-    } else if (!const_param2->get_value().is_null()) {  // is true/false
+    } else if (!const_param2->get_value_datum().is_null()) {  // is true/false
       if (ob_is_numeric_type(type1.get_type())) {
-        type1.set_calc_meta(type1.get_obj_meta());
+        type1.set_calc_meta(type1.get_sql_type_meta());
         type1.set_calc_accuracy(type1.get_accuracy());
       } else if (ob_is_json(type1.get_type())) {
-        type1.set_calc_meta(type1.get_obj_meta());
+        type1.set_calc_meta(type1.get_sql_type_meta());
         type1.set_calc_accuracy(type1.get_accuracy());
       } else {
         type1.set_calc_type(ObNumberType);
@@ -82,8 +83,8 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprIsBase::is_infinite_nan(const ObObjType datum_type,
-                              ObDatum *datum,
+int ObExprIsBase::is_infinite_nan(const SqlValueType datum_type,
+                              Datum *datum,
                               bool &ret_bool,
                               Ieee754 inf_or_nan)
 {
@@ -143,7 +144,7 @@ int ObExprIsBase::cg_expr_internal(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_
     eval_func = ObExprIs::type##_is_false;        \
   }
 
-int ObExprIsBase::cg_result_type_class(ObObjType type, ObExpr::EvalFunc &eval_func, bool is_not,
+int ObExprIsBase::cg_result_type_class(SqlValueType type, ObExpr::EvalFunc &eval_func, bool is_not,
                                         bool is_true) const {
   int ret = OB_SUCCESS;
   switch (type) {
@@ -196,21 +197,21 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
   int ret = OB_SUCCESS;
   const ObConstRawExpr *param2 = NULL;
   const ObConstRawExpr *param3 = NULL;
-  ObObjType param1_type = ObMaxType;
+  SqlValueType param1_type = ObMaxType;
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
   } else if(FALSE_IT(param1_type = rt_expr.args_[0]->datum_meta_.type_)) {
-  } else if (param2->get_value().is_null()) {  // c1 is null
+  } else if (param2->get_value_datum().is_null()) {  // c1 is null
     rt_expr.eval_func_ = ObExprIs::calc_is_null;
-  } else if (param2->get_value().is_true()) {
+  } else if ((!param2->get_value_datum().is_null() && ob_is_int_tc(param2->get_value_meta().get_type()) && param2->get_value_datum().get_int() != 0)) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, false, true))) {
     }
-  } else if (param2->get_value().is_false()) {
+  } else if ((!param2->get_value_datum().is_null() && ob_is_int_tc(param2->get_value_meta().get_type()) && param2->get_value_datum().get_int() == 0)) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, false, false))) {
     }
-  } else if (ObDoubleType == param2->get_value().get_type()) {
-    if (isnan(param2->get_value().get_double())) {
+  } else if (ObDoubleType == param2->get_value_meta().get_type()) {
+    if (isnan(param2->get_value_datum().get_double())) {
       rt_expr.eval_func_ = ObExprIs::calc_is_nan;
     } else {
       rt_expr.eval_func_ = ObExprIs::calc_is_infinite;
@@ -226,22 +227,22 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   int ret = OB_SUCCESS;
   const ObConstRawExpr *param2 = NULL;
   const ObConstRawExpr *param3 = NULL;
-  ObObjType param1_type = ObMaxType;
+  SqlValueType param1_type = ObMaxType;
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
   } else if(FALSE_IT(param1_type = rt_expr.args_[0]->datum_meta_.type_)) {
-  } else if (param2->get_value().is_null()) {  // c1 is null
+  } else if (param2->get_value_datum().is_null()) {  // c1 is null
     rt_expr.eval_func_ = ObExprIsNot::calc_is_not_null;
     rt_expr.eval_batch_func_ = ObExprIsNot::calc_batch_is_not_null;
-  } else if (param2->get_value().is_true()) {
+  } else if ((!param2->get_value_datum().is_null() && ob_is_int_tc(param2->get_value_meta().get_type()) && param2->get_value_datum().get_int() != 0)) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, true, true))) {
     }
-  } else if (param2->get_value().is_false()) {
+  } else if ((!param2->get_value_datum().is_null() && ob_is_int_tc(param2->get_value_meta().get_type()) && param2->get_value_datum().get_int() == 0)) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, true, false))) {
     }
-  } else if (ObDoubleType == param2->get_value().get_type()) {
-    if (isnan(param2->get_value().get_double())) {
+  } else if (ObDoubleType == param2->get_value_meta().get_type()) {
+    if (isnan(param2->get_value_datum().get_double())) {
       rt_expr.eval_func_ = ObExprIsNot::calc_is_not_nan;
     } else {
       rt_expr.eval_func_ = ObExprIsNot::calc_is_not_infinite;
@@ -252,10 +253,10 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   return ret;
 }
 
-int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else {
     bool ret_bool = param1->is_null();
@@ -264,10 +265,10 @@ int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
   return ret;
 }
 
-int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
@@ -282,10 +283,10 @@ int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
   return ret;
 }
 
-int ObExprIs::calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIs::calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
@@ -300,10 +301,10 @@ int ObExprIs::calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   return ret;
 }
 
-int ObExprIsNot::calc_is_not_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIsNot::calc_is_not_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else {
     bool ret_bool = !param1->is_null();
@@ -316,7 +317,7 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
                                         const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
@@ -324,7 +325,7 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       }
-      ObDatum &arg = expr.args_[0]->locate_expr_datum(ctx, i);
+      Datum &arg = expr.args_[0]->locate_expr_datum(ctx, i);
       bool v = !arg.is_null();
       results[i].set_int32(static_cast<int32_t>(v));
       eval_flags.set(i);
@@ -333,10 +334,10 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprIsNot::calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIsNot::calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
@@ -351,10 +352,10 @@ int ObExprIsNot::calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   return ret;
 }
 
-int ObExprIsNot::calc_is_not_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIsNot::calc_is_not_nan(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
     expr_datum.set_null();
@@ -382,16 +383,16 @@ int ObExprInnerIsTrue::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected type", K(type1));
   } else {
-    type.set_type(ObExtendType);
+    type.set_ext();
     type.set_precision(DEFAULT_PRECISION_FOR_TEMPORAL);
     type.set_scale(SCALE_UNKNOWN_YET);
     type.set_result_flag(NOT_NULL_FLAG);
     type2.set_calc_type(type2.get_type());
     if (ob_is_numeric_type(type1.get_type())) {
-      type1.set_calc_meta(type1.get_obj_meta());
+      type1.set_calc_meta(type1.get_sql_type_meta());
       type1.set_calc_accuracy(type1.get_accuracy());
     } else if (ob_is_json(type1.get_type())) {
-      type1.set_calc_meta(type1.get_obj_meta());
+      type1.set_calc_meta(type1.get_sql_type_meta());
       type1.set_calc_accuracy(type1.get_accuracy());
     } else {
       type1.set_calc_type(ObNumberType);
@@ -408,19 +409,19 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
 {
   int ret = OB_SUCCESS;
   const ObConstRawExpr *param2 = NULL;
-  ObObjType param1_type = ObMaxType;
+  SqlValueType param1_type = ObMaxType;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     if (OB_ISNULL(param2 = static_cast<const ObConstRawExpr *>(raw_expr.get_param_expr(1)))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(!param2->get_value().is_int())) {
+    } else if (OB_UNLIKELY(!param2->get_value_meta().is_int())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("const value is not int type", KPC(param2));
     } else {
       param1_type = rt_expr.args_[0]->datum_meta_.type_;
-      bool is_start = param2->get_value().get_int() > 0;
+      bool is_start = param2->get_value_datum().get_int() > 0;
       switch (param1_type) {
       case ObTinyIntType:
       case ObSmallIntType:
@@ -502,21 +503,46 @@ int ObExprIsBase::is_zero<const ObDecimalInt *>(const ObDecimalInt *decimal_int,
   return is_zero;
 }
 
+namespace
+{
+#define SCALAR_ZERO_READER(kind) \
+int read_zero_##kind(const ObExpr &, const Datum &value, bool &zero) \
+{ zero = ObExprIsBase::is_zero(value.get_##kind(), value.length()); return OB_SUCCESS; }
+SCALAR_ZERO_READER(int)
+SCALAR_ZERO_READER(float)
+SCALAR_ZERO_READER(double)
+SCALAR_ZERO_READER(number)
+SCALAR_ZERO_READER(json)
+#undef SCALAR_ZERO_READER
+
+int read_zero_decimal_int(const ObExpr &expr, const Datum &value, bool &zero)
+{
+  alignas(8) char scratch[64];
+  common::ObDatum coefficient;
+  const int ret = expr.args_[0]->get_datum_copy_plan().get_decimal(value, coefficient, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS) {
+    zero = ObExprIsBase::is_zero(coefficient.get_decimal_int(), coefficient.get_int_bytes());
+  }
+  return ret;
+}
+} // namespace
+
 #define NUMERIC_CALC_FUNC(type, func_name, bool_is_not, is_true, str_is_not)                \
   int func_name::type##_##str_is_not##_##is_true(const ObExpr &expr, ObEvalCtx &ctx,        \
-                                                ObDatum &expr_datum)                    \
+                                                Datum &expr_datum)                    \
   {                                                           \
     int ret = OB_SUCCESS;                                     \
-    ObDatum *param1 = NULL;                                   \
+    Datum *param1 = NULL;                                   \
     bool ret_bool = false;                                    \
     if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {          \
       LOG_WARN("eval first param failed", K(ret));            \
     } else if (param1->is_null()) {                           \
       ret_bool = bool_is_not;                                 \
     } else {                                                  \
-      ret_bool = bool_is_not == is_true ?                     \
-                is_zero(param1->get_##type(), param1->len_) : \
-                !is_zero(param1->get_##type(), param1->len_); \
+      bool zero = false;                                      \
+      if (OB_SUCC(ret = read_zero_##type(expr, *param1, zero))) { \
+        ret_bool = bool_is_not == is_true ? zero : !zero;       \
+      }                                                       \
     }                                                         \
     if (OB_SUCC(ret)) {                                       \
       expr_datum.set_int32(static_cast<int32_t>(ret_bool));   \
@@ -555,31 +581,24 @@ NUMERIC_CALC_FUNC(json, ObExprIs, false, false, is)
 
 #define INNER_NUMERIC_CALC_FUNC(type, is_start, str_pos)                          \
   int ObExprInnerIsTrue::type##_##is_true##_##str_pos(const ObExpr &expr, ObEvalCtx &ctx,     \
-                                                      ObDatum &expr_datum)        \
+                                                      Datum &expr_datum)        \
   {                                                                               \
     int ret = OB_SUCCESS;                                                         \
-    ObDatum *param1 = NULL;                                                       \
-    void *ptr = NULL;                                                             \
+    Datum *param1 = NULL;                                                       \
     bool ret_bool = false;                                                        \
     if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {                              \
       LOG_WARN("eval first param failed", K(ret));                                \
     } else if (param1->is_null()) {                                               \
       ret_bool = false;                                                           \
     } else {                                                                      \
-      ret_bool = !is_zero(param1->get_##type(), param1->len_);                    \
+      bool zero = false;                                                         \
+      if (OB_SUCC(ret = read_zero_##type(expr, *param1, zero))) { ret_bool = !zero; } \
     }                                                                             \
     if (OB_SUCC(ret)) {                                                           \
-      if (OB_ISNULL(ptr = expr.get_str_res_mem(ctx, sizeof(ObObj)))) {            \
-        ret = OB_ALLOCATE_MEMORY_FAILED;                                          \
-        LOG_WARN("failed to allocate expr result memory");                        \
+      if ((ret_bool && is_start) || (!ret_bool && !is_start)) {                   \
+        expr_datum.set_min();                                                   \
       } else {                                                                    \
-        ObObj *res_obj = new(ptr)ObObj();                                         \
-        if ((ret_bool && is_start) || (!ret_bool && !is_start)) {                 \
-          res_obj->set_min_value();                                               \
-        } else {                                                                  \
-          res_obj->set_max_value();                                               \
-        }                                                                         \
-        ret = expr_datum.from_obj(*res_obj);                                      \
+        expr_datum.set_max();                                                   \
       }                                                                           \
     }                                                                             \
     return ret;                                                                   \

@@ -38,8 +38,7 @@ ObExprMul::ObExprMul(ObIAllocator &alloc, ObExprOperatorType type)
                         2,
                         NOT_ROW_DIMENSION,
                         ObExprResultTypeUtil::get_mul_result_type,
-                        ObExprResultTypeUtil::get_mul_calc_type,
-                        mul_funcs_)
+                        ObExprResultTypeUtil::get_mul_calc_type)
 {
   param_lazy_eval_ = false;
 }
@@ -128,223 +127,12 @@ int ObExprMul::calc_result_type2(ObExprResType &type,
 
 
 
-ObArithFunc ObExprMul::mul_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMul::mul_int,
-  ObExprMul::mul_uint,
-  NULL,
-  ObExprMul::mul_double,
-  ObExprMul::mul_number,
-  NULL,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-  NULL,//otimestamp
-  NULL,//raw
-  NULL,//interval
-};
-
-ObArithFunc ObExprMul::agg_mul_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMul::mul_int,
-  ObExprMul::mul_uint,
-  NULL,
-  ObExprMul::mul_double_no_overflow,
-  ObExprMul::mul_number,
-  NULL,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-  NULL,//otimestamp
-  NULL,//raw
-  NULL,//interval
-};
-
-int ObExprMul::mul_int(ObObj &res,
-                       const ObObj &left,
-                       const ObObj &right,
-                       ObIAllocator *allocator,
-                       ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  int64_t left_i = left.get_int();
-  int64_t right_i = right.get_int();
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (left.get_type_class() == right.get_type_class()) {
-    if (OB_UNLIKELY(is_multi_overflow64(left_i, right_i))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld * %ld)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
-    }
-    res.set_int(left_i * right_i);
-  } else if (OB_UNLIKELY(ObUIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (OB_UNLIKELY(is_int_uint_mul_out_of_range(left_i, right_i))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld * %lu)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-    res.set_uint64(left_i * right_i);
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMul::mul_uint(ObObj &res,
-                        const ObObj &left,
-                        const ObObj &right,
-                        ObIAllocator *allocator,
-                        ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  uint64_t left_i = left.get_uint64();
-  uint64_t right_i = right.get_uint64();
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (left.get_type_class() == right.get_type_class()) {
-    if (OB_UNLIKELY(is_uint_uint_mul_out_of_range(left_i, right_i))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%lu * %lu)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-
-    }
-    res.set_uint64(left_i * right_i);
-  } else if (OB_UNLIKELY(ObIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (OB_UNLIKELY(is_int_uint_mul_out_of_range(right_i, left_i))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%lu * %ld)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-    res.set_uint64(left_i * right_i);
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMul::mul_double(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    double left_d = left.get_double();
-    double right_d = right.get_double();
-    res.set_double(left_d * right_d);
-    if (OB_UNLIKELY(is_double_out_of_range(res.get_double()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%e * %e)'",
-                      left_d,
-                      right_d);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
-      res.set_null();
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMul::mul_double_no_overflow(ObObj &res,
-                                      const ObObj &left,
-                                      const ObObj &right,
-                                      ObIAllocator *,
-                                      ObScale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    double left_d = left.get_double();
-    double right_d = right.get_double();
-    res.set_double(left_d * right_d);
-  }
-  return ret;
-}
-
-int ObExprMul::mul_number(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  number::ObNumber res_nmb;
-  if (OB_UNLIKELY(NULL == allocator)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("allocator is null", K(ret));
-  } else if (OB_FAIL(left.get_number().mul_v3(right.get_number(), res_nmb, *allocator))) {
-  } else {
-    ObObjType res_type = res.get_type();
-    if (ObUNumberType == res_type) {
-      res.set_unumber(res_nmb);
-    } else {
-      res.set_number(res_nmb);
-    }
-  }
-  UNUSED(scale);
-  return ret;
-}
-
 struct ObIntIntBatchMulRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
 {
   static void raw_op(int64_t &res, const int64_t l, const int64_t r)
   {
-    res = l * r;
+    // Keep the wrapped result defined before the existing overflow diagnostic.
+    (void)ObExprMul::is_mul_out_of_range(l, r, res);
   }
 
   static int raw_check(const int64_t, const int64_t l, const int64_t r)
@@ -367,12 +155,12 @@ struct ObIntIntBatchMulRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
 
 int ObExprMul::mul_int_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObSignedIntArithOpWrap<ObIntIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMul::mul_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObSignedIntArithOpWrap<ObIntIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -402,12 +190,12 @@ struct ObIntUIntBatchMulRaw : public ObArithOpRawType<uint64_t, int64_t, uint64_
 
 int ObExprMul::mul_int_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntUIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObIntUIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMul::mul_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntUIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObIntUIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -437,12 +225,12 @@ struct ObUIntIntBatchMulRaw : public ObArithOpRawType<uint64_t, uint64_t, int64_
 
 int ObExprMul::mul_uint_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMul::mul_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -472,12 +260,12 @@ struct ObUIntUIntBatchMulRaw : public ObArithOpRawType<uint64_t, uint64_t, uint6
 
 int ObExprMul::mul_uint_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntUIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntUIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMul::mul_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntUIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntUIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -512,12 +300,12 @@ struct ObFloatBatchMulRawWithCheck: public ObFloatBatchMulRawNoCheck
 
 int ObExprMul::mul_float(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObFloatBatchMulRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObArithOpWrap<ObFloatBatchMulRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMul::mul_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObFloatBatchMulRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObArithOpWrap<ObFloatBatchMulRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
@@ -557,21 +345,21 @@ struct ObDoubleBatchMulRawWithCheck: public ObDoubleBatchMulRawNoCheck
 int ObExprMul::mul_double(EVAL_FUNC_ARG_DECL)
 {
   return T_OP_AGG_MUL == expr.type_
-      ? def_arith_eval_func<ObArithOpWrap<ObDoubleBatchMulRawNoCheck>>(EVAL_FUNC_ARG_LIST)
-      : def_arith_eval_func<ObArithOpWrap<ObDoubleBatchMulRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+      ? def_arith_eval_func<ObArithOpWrap<ObDoubleBatchMulRawNoCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx)
+      : def_arith_eval_func<ObArithOpWrap<ObDoubleBatchMulRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMul::mul_double_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   return T_OP_AGG_MUL == expr.type_
-      ? def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMulRawNoCheck>>(BATCH_EVAL_FUNC_ARG_LIST)
-      : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMulRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
+      ? def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMulRawNoCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx)
+      : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMulRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
 struct ObNumberMulFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
     char local_buff[ObNumber::MAX_BYTE_LEN];
@@ -581,7 +369,7 @@ struct ObNumberMulFunc
     number::ObNumber res_num;
     if (OB_FAIL(l_num.mul_v3(r_num, res_num, local_alloc))) {
     } else {
-      res.set_number(res_num);
+      ret = ObExprUtil::set_number(expr, ctx, res, res_num);
     }
     return ret;
   }
@@ -589,14 +377,14 @@ struct ObNumberMulFunc
 
 int ObExprMul::mul_number(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObNumberMulFunc>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObNumberMulFunc>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector l_datums;
-  ObDatumVector r_datums;
+  DatumVector l_datums;
+  DatumVector r_datums;
   const ObExpr &left = *expr.args_[0];
   const ObExpr &right = *expr.args_[1];
 
@@ -609,7 +397,7 @@ int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
   if (OB_SUCC(ret)) {
     char local_buff[ObNumber::MAX_BYTE_LEN];
     ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN);
-    ObDatumVector results = expr.locate_expr_datumvector(ctx);
+    DatumVector results = expr.locate_expr_datumvector(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
     for (auto i = 0; OB_SUCC(ret) && i < size; i++) {
@@ -624,24 +412,23 @@ int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       ObNumber res_num;
       ObNumber l_num(l_datums.at(i)->get_number());
       ObNumber r_num(r_datums.at(i)->get_number());
-      uint32_t *res_digits = const_cast<uint32_t *> (results.at(i)->get_number_digits());
-      ObNumber::Desc &desc_buf = const_cast<ObNumber::Desc &> (results.at(i)->get_number_desc());
-      // Notice that, space of desc_buf is allocated in frame but without memset operation, which causes random memory content.
-      // And the reserved in storage layer should be 0, thus you must replacement new here to avoid checksum error, etc.
-      ObNumber::Desc *res_desc = new (&desc_buf) ObNumber::Desc();
+      char *number_buffer = expr.get_reference_res_mem(ctx, ObNumber::MAX_BYTE_LEN, i);
+      if (number_buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; break; }
+      uint32_t *res_digits = reinterpret_cast<uint32_t *>(number_buffer + sizeof(number::ObCompactNumber));
+      ObNumber::Desc *res_desc = new (number_buffer) ObNumber::Desc();
       // speedup detection
       if (ObNumber::try_fast_mul(l_num, r_num, res_digits, *res_desc)) {
-        results.at(i)->set_pack(sizeof(number::ObCompactNumber) +
-                                res_desc->len_ * sizeof(*res_digits));
-        eval_flags.set(i);
+        ret = results.at(i)->set_number_shallow(
+            *reinterpret_cast<const number::ObCompactNumber *>(number_buffer));
+        if (OB_SUCC(ret)) { eval_flags.set(i); }
         // LOG_DEBUG("mul speedup", K(l_num.format()),
         // K(r_num.format()), K(res_num.format()));
       } else {
         // normal path: no speedup
         if (OB_FAIL(l_num.mul_v3(r_num, res_num, local_alloc))) {
         } else {
-          results.at(i)->set_number(res_num);
-          eval_flags.set(i);
+          ret = ObExprUtil::set_number(expr, ctx, *results.at(i), res_num, i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
         local_alloc.free();
       }
@@ -774,22 +561,22 @@ struct ObDecint128TO256: public ObArithOpRawType<int256_t, int128_t, int128_t>
 #define DECINC_MUL_EVAL_FUNC_DECL(RES, L, R) \
 int ObExprMul::mul_decimal##RES##_##L##_##R(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRaw<RES##_t, L##_t, R##_t>>>(EVAL_FUNC_ARG_LIST); \
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRaw<RES##_t, L##_t, R##_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx); \
 }                                            \
 int ObExprMul::mul_decimal##RES##_##L##_##R##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRaw<RES##_t, L##_t, R##_t>>>(BATCH_EVAL_FUNC_ARG_LIST); \
+  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRaw<RES##_t, L##_t, R##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx); \
 }
 
 // use bignum overflow checking instead promoting calculation type
 int ObExprMul::mul_decimalint256_int128_int128(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRaw<int256_t, int128_t, int128_t>>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRaw<int256_t, int128_t, int128_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMul::mul_decimalint256_int128_int128_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRaw<int256_t, int128_t, int128_t>>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRaw<int256_t, int128_t, int128_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
@@ -811,13 +598,13 @@ DECINC_MUL_EVAL_FUNC_DECL(int256, int128, int64)
   {                                                                                                \
     return def_arith_eval_func<                                                                    \
       ObArithOpWrap<ObDecimalIntBatchMulResTypeNotLagerRaw<RES##_t, L##_t, R##_t>>>(               \
-      EVAL_FUNC_ARG_LIST);                                                                         \
+      EVAL_FUNC_ARG_LIST, expr, ctx);                                                                         \
   }                                                                                                \
   int ObExprMul::mul_decimal##RES##_##L##_##R##_batch(BATCH_EVAL_FUNC_ARG_DECL)                    \
   {                                                                                                \
     return def_batch_arith_op<                                                                     \
       ObArithOpWrap<ObDecimalIntBatchMulResTypeNotLagerRaw<RES##_t, L##_t, R##_t>>>(               \
-      BATCH_EVAL_FUNC_ARG_LIST);                                                                   \
+      BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);                                                                   \
   }
 DECINC_RES_TYPE_NOT_LAGER_MUL_EVAL_FUNC_DECL(int32, int32, int32)
 DECINC_RES_TYPE_NOT_LAGER_MUL_EVAL_FUNC_DECL(int64, int32, int64)
@@ -842,14 +629,14 @@ int ObExprMul::mul_decimal##TYPE##_round(EVAL_FUNC_ARG_DECL)      \
   const int16_t scale = (expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_) \
                           - OB_MAX_DECIMAL_SCALE; \
   const TYPE##_t sf = get_scale_factor<TYPE##_t>(scale);                          \
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRawWithRound<TYPE##_t>>>(EVAL_FUNC_ARG_LIST, sf); \
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRawWithRound<TYPE##_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx, sf); \
 }                                            \
 int ObExprMul::mul_decimal##TYPE##_round_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   const int16_t scale = (expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_) \
                           - OB_MAX_DECIMAL_SCALE; \
   const TYPE##_t sf = get_scale_factor<TYPE##_t>(scale);                         \
-  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRawWithRound<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, sf); \
+  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRawWithRound<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx, sf); \
 }
 
 DECINC_MUL_ROUND_EVAL_FUNC_DECL(int64)
@@ -861,13 +648,13 @@ DECINC_MUL_ROUND_EVAL_FUNC_DECL(int512)
 
 int ObExprMul::mul_decimalint512_with_check(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMul::mul_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRawWithCheck>>(
-    BATCH_EVAL_FUNC_ARG_LIST);
+    BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
@@ -876,7 +663,7 @@ int ObExprMul::mul_decimalint512_round_with_check(EVAL_FUNC_ARG_DECL)
   const int16_t scale = (expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_)
                            - OB_MAX_DECIMAL_SCALE;
   const int512_t sf = get_scale_factor<int512_t>(scale);
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRawWithRoundCheck>>(EVAL_FUNC_ARG_LIST, sf);
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMulRawWithRoundCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx, sf);
 }
 
 int ObExprMul::mul_decimalint512_round_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
@@ -884,23 +671,25 @@ int ObExprMul::mul_decimalint512_round_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL
   const int16_t scale = (expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_)
                            - OB_MAX_DECIMAL_SCALE;
   const int512_t sf = get_scale_factor<int512_t>(scale);
-  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRawWithRoundCheck>>(BATCH_EVAL_FUNC_ARG_LIST, sf);
+  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMulRawWithRoundCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx, sf);
 }
 
 
 template<typename Res, typename Left, typename Righ>
 struct ObDecimalNumberMulFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const int64_t scale,
-                 ObNumStackOnceAlloc &alloc) const
+  int operator()(Datum &res, const Datum &l, const Datum &r, const int64_t scale,
+                 ObNumStackOnceAlloc &alloc, const ObExpr &expr, ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
-    Res res_int = *reinterpret_cast<const Left *>(l.ptr_);
-    res_int = res_int * (*reinterpret_cast<const Righ *>(r.ptr_));
+    Left left;
+    Righ right;
     number::ObNumber res_num;
-    if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
+    if (OB_FAIL(ObExprUtil::get_decimal_int(l, left))) {
+    } else if (OB_FAIL(ObExprUtil::get_decimal_int(r, right))) {
+    } else if (OB_FAIL(wide::to_number(Res(left) * right, scale, alloc, res_num))) {
     } else {
-      res.set_number(res_num);
+      ret = ObExprUtil::set_number(expr, ctx, res, res_num);
       alloc.free();  // for batch function reuse alloc
     }
     return ret;
@@ -912,13 +701,13 @@ int ObExprMul::mul_decimal##RES##_##L##_##R##_number_result(EVAL_FUNC_ARG_DECL) 
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_;      \
-  return def_arith_eval_func<ObDecimalNumberMulFunc<RES##_t, L##_t, R##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_arith_eval_func<ObDecimalNumberMulFunc<RES##_t, L##_t, R##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc, expr, ctx); \
 }                                            \
 int ObExprMul::mul_decimal##RES##_##L##_##R##_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_ + expr.args_[1]->datum_meta_.scale_;      \
-  return def_batch_arith_op_by_datum_func<ObDecimalNumberMulFunc<RES##_t, L##_t, R##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_batch_arith_op_by_datum_func<ObDecimalNumberMulFunc<RES##_t, L##_t, R##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc, expr, ctx); \
 }
 
 DECINC_MUL_EVAL_FUNC_NUMBER_DECL(int32, int32, int32)
@@ -1058,10 +847,10 @@ int ObExprMul::cg_expr(ObExprCGCtx &op_cg_ctx,
   OB_ASSERT(NULL != rt_expr.args_);
   OB_ASSERT(NULL != rt_expr.args_[0]);
   OB_ASSERT(NULL != rt_expr.args_[1]);
-  const common::ObObjType left = rt_expr.args_[0]->datum_meta_.type_;
-  const common::ObObjType right = rt_expr.args_[1]->datum_meta_.type_;
-  const ObObjTypeClass left_tc = ob_obj_type_class(left);
-  const ObObjTypeClass right_tc = ob_obj_type_class(right);
+  const common::SqlValueType left = rt_expr.args_[0]->datum_meta_.type_;
+  const common::SqlValueType right = rt_expr.args_[1]->datum_meta_.type_;
+  const SqlTypeClass left_tc = sql_type_class(left);
+  const SqlTypeClass right_tc = sql_type_class(right);
 
   rt_expr.inner_functions_ = NULL;
   rt_expr.may_not_need_raw_check_ = false;

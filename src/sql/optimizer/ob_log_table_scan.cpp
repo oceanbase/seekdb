@@ -2247,7 +2247,7 @@ int ObLogTableScan::extract_bnlj_param_idxs(ObIArray<int64_t> &bnlj_params)
       ObRawExpr *expr = range_param_exprs.at(i);
       if (expr->has_flag(IS_DYNAMIC_PARAM)) {
         ObConstRawExpr *exec_param = static_cast<ObConstRawExpr*>(expr);
-        if (OB_FAIL(add_var_to_array_no_dup(bnlj_params, exec_param->get_value().get_unknown()))) {
+        if (OB_FAIL(add_var_to_array_no_dup(bnlj_params, exec_param->get_questionmark_index()))) {
         }
       }
     }
@@ -2255,7 +2255,7 @@ int ObLogTableScan::extract_bnlj_param_idxs(ObIArray<int64_t> &bnlj_params)
       ObRawExpr *expr = filter_param_exprs.at(i);
       if (expr->has_flag(IS_DYNAMIC_PARAM)) {
         ObConstRawExpr *exec_param = static_cast<ObConstRawExpr*>(expr);
-        if (OB_FAIL(add_var_to_array_no_dup(bnlj_params, exec_param->get_value().get_unknown()))) {
+        if (OB_FAIL(add_var_to_array_no_dup(bnlj_params, exec_param->get_questionmark_index()))) {
         }
       }
     }
@@ -3896,12 +3896,12 @@ int ObLogTableScan::generate_filter_monotonicity()
 {
   int ret = OB_SUCCESS;
   ObExecContext *exec_ctx = NULL;
-  const ParamStore *param_store = NULL;
+  const ObPhysicalPlanCtx *param_store = NULL;
   ObRawExpr * filter_expr = NULL;
   ObSEArray<ObRawExpr *, 2> col_exprs;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(get_stmt()) || OB_ISNULL(get_stmt()->get_query_ctx()) ||
       OB_ISNULL(exec_ctx = get_plan()->get_optimizer_context().get_exec_ctx()) ||
-      OB_ISNULL(param_store = get_plan()->get_optimizer_context().get_params())) {
+      OB_ISNULL(param_store = get_plan()->get_optimizer_context().get_parameter_context())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < get_filter_exprs().count(); ++i) {

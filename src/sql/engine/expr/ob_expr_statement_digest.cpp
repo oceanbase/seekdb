@@ -146,10 +146,10 @@ int ObExprStatementDigest::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_
   return ret;
 }
 
-int ObExprStatementDigest::eval_statement_digest(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprStatementDigest::eval_statement_digest(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   ObSQLSessionInfo *session = NULL;
   share::schema::ObSchemaGetterGuard *schema_guard = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session()) ||
@@ -206,10 +206,10 @@ int ObExprStatementDigestText::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr 
   return ret;
 }
 
-int ObExprStatementDigestText::eval_statement_digest_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprStatementDigestText::eval_statement_digest_text(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   ObSQLSessionInfo *session = NULL;
   share::schema::ObSchemaGetterGuard *schema_guard = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session()) ||

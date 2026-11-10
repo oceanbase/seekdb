@@ -181,8 +181,8 @@ struct JtScanCtx {
   bool is_const_input_;
   int error_code_; 
   int32_t ord_val_;
-  ObDatum* res_obj_;
-  ObDatum** data_;
+  Datum* res_obj_;
+  Datum** data_;
   char buf[OB_MAX_DECIMAL_PRECISION];
 
 };
@@ -504,9 +504,9 @@ public:
   static void proc_query_on_error(JtScanCtx* ctx, ObRegCol &col_node, int& ret, bool& is_null);
   static int check_default_val_cast_allowed(JtScanCtx* ctx, ObMultiModeTableNode &col_node, ObExpr* expr)  { return 0; }  // check type of default value
   static int set_val_on_empty(JtScanCtx* ctx, ObRegCol &col_node, bool& need_cast_res, bool& is_null);
-  static bool check_cast_allowed(const ObObjType orig_type,
+  static bool check_cast_allowed(const SqlValueType orig_type,
                                 const ObCollationType orig_cs_type,
-                                const ObObjType expect_type,
+                                const SqlValueType expect_type,
                                 const ObCollationType expect_cs_type,
                                 const bool is_explicit_cast);
   static int check_json_column_type(ObRegCol &col_node, JtScanCtx* ctx);
@@ -517,7 +517,7 @@ public:
                                              ObIJsonBase* j_base);
   static int parse_default_value_2json(ObExpr* default_expr, 
                                        JtScanCtx* ctx,
-                                       ObDatum*& tmp_datum,
+                                       Datum*& tmp_datum,
                                        ObIJsonBase *&res);
   static int check_default_value_mysql(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* expr);
 };

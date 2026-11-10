@@ -43,7 +43,7 @@ int ObExprTime::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   //param will be casted to ObTimeType before calculation
-  //see ObExprOperator::cast_operand_type for more details if necessary
+  // See the expression cast path for operand conversion details.
   type1.set_calc_type(ObTimeType);
   type.set_type(ObTimeType);
   //deduce scale now.
@@ -67,10 +67,10 @@ int ObExprTime::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExp
   return ret;
 }
 
-int ObExprTime::calc_time(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprTime::calc_time(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -147,8 +147,8 @@ int ObExprTimeBase::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-static int ob_expr_convert_to_time(const ObDatum &datum,
-                                  ObObjType type,
+static int ob_expr_convert_to_time(const Datum &datum,
+                                  SqlValueType type,
                                   const ObScale scale,
                                   bool with_date,
                                   bool is_allow_incomplete_dates,
@@ -156,7 +156,8 @@ static int ob_expr_convert_to_time(const ObDatum &datum,
                                   ObTime &ot,
                                   bool has_lob_header,
                                   const common::ObTimeZoneInfo *tz_info,
-                                  ObSQLMode sql_mode)
+                                  ObSQLMode sql_mode,
+                                  const common::SqlType &input_type)
 {
   int ret = OB_SUCCESS;
   if (with_date) {
@@ -166,7 +167,7 @@ static int ob_expr_convert_to_time(const ObDatum &datum,
     date_sql_mode.allow_incomplete_dates_ = is_allow_incomplete_dates;
     if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, datum, type, scale, tz_info,
         ot2, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), date_sql_mode,
-        has_lob_header))) {
+        has_lob_header, &input_type))) {
     } else {
       if (ob_is_mysql_datetime_tc(type) || ob_is_mysql_date_tc(type)) {
         if (OB_FAIL(ObTimeConverter::validate_datetime(ot2, date_sql_mode))) {
@@ -179,7 +180,7 @@ static int ob_expr_convert_to_time(const ObDatum &datum,
   } else {
     ObTime ot2(DT_TYPE_TIME);
     if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_, datum, type, scale, tz_info,
-                                                 ot2, has_lob_header))) {
+                                                 ot2, has_lob_header, &input_type))) {
     } else {
       ot = ot2;
     }
@@ -187,11 +188,11 @@ static int ob_expr_convert_to_time(const ObDatum &datum,
   return ret;
 }
 
-int ObExprTimeBase::calc(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum,
+int ObExprTimeBase::calc(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum,
                         int32_t type, bool with_date, bool is_allow_incomplete_dates /* false */)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   const ObSQLSessionInfo *session = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;
@@ -209,7 +210,7 @@ int ObExprTimeBase::calc(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum
     if (OB_FAIL(ob_expr_convert_to_time(*param_datum, expr.args_[0]->datum_meta_.type_,
                                         expr.args_[0]->datum_meta_.scale_, with_date, is_allow_incomplete_dates,
                                         ctx, ot, expr.args_[0]->obj_meta_.has_lob_header(),
-                                        tz_info, sql_mode))) {
+                                        tz_info, sql_mode, expr.args_[0]->get_sql_type()))) {
       LOG_USER_WARN(OB_ERR_CAST_VARCHAR_TO_TIME);
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
@@ -282,7 +283,7 @@ ObExprHour::ObExprHour(ObIAllocator &alloc)
 
 ObExprHour::~ObExprHour() {}
 
-int ObExprHour::calc_hour(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprHour::calc_hour(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_HOUR, false);
 }
@@ -292,7 +293,7 @@ ObExprMinute::ObExprMinute(ObIAllocator &alloc)
 
 ObExprMinute::~ObExprMinute() {}
 
-int ObExprMinute::calc_minute(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprMinute::calc_minute(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_MIN, false);
 }
@@ -302,7 +303,7 @@ ObExprSecond::ObExprSecond(ObIAllocator &alloc)
 
 ObExprSecond::~ObExprSecond() {}
 
-int ObExprSecond::calc_second(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSecond::calc_second(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_SEC, false);
 }
@@ -312,7 +313,7 @@ ObExprMicrosecond::ObExprMicrosecond(ObIAllocator &alloc)
 
 ObExprMicrosecond::~ObExprMicrosecond() {}
 
-int ObExprMicrosecond::calc_microsecond(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprMicrosecond::calc_microsecond(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_USEC, false);
 }
@@ -322,7 +323,7 @@ ObExprYear::ObExprYear(ObIAllocator &alloc)
 
 ObExprYear::~ObExprYear() {}
 
-int ObExprYear::calc_year(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprYear::calc_year(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_YEAR, true, true);
 }
@@ -332,7 +333,7 @@ ObExprMonth::ObExprMonth(ObIAllocator &alloc)
 
 ObExprMonth::~ObExprMonth() {}
 
-int ObExprMonth::calc_month(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprMonth::calc_month(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   // For the MONTH('2020-00-00') scenario, to fully compatible with mysql, we also need to tolerate month and day being 0
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_MON, true, true);
@@ -343,7 +344,7 @@ ObExprMonthName::ObExprMonthName(ObIAllocator &alloc)
 
 ObExprMonthName::~ObExprMonthName() {}
 
-int ObExprMonthName::calc_month_name(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprMonthName::calc_month_name(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   // NOTE: the last param should be true otherwise '2020-09-00' will not work
@@ -362,7 +363,7 @@ int ObExprMonthName::calc_result_type1(ObExprResType &type,
   type.set_collation_type(cs_type);
   type.set_collation_level(CS_LEVEL_IMPLICIT);
   type.set_full_length(MONTHNAME_MAX_LENGTH, type1.get_length_semantics());
-  common::ObObjTypeClass tc1 = ob_obj_type_class(type1.get_type());
+  common::SqlTypeClass tc1 = sql_type_class(type1.get_type());
   if (common::ObEnumSetTC == tc1) {
     type1.set_calc_type(common::ObVarcharType);
     type1.set_collation_type(cs_type);

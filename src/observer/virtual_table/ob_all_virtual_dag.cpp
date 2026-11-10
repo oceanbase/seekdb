@@ -129,7 +129,7 @@ int ObAllVirtualDag::fill_cells(share::ObDagInfo &dag_info)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t n = 0;
   if (!dag_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -142,7 +142,7 @@ int ObAllVirtualDag::fill_cells(share::ObDagInfo &dag_info)
     case DAG_TYPE:
       //dag type
       if (dag_info.dag_type_ >= ObDagType::DAG_TYPE_MINI_MERGE && dag_info.dag_type_ < ObDagType::DAG_TYPE_MAX) {
-        cells[i].set_varchar(share::ObIDag::get_dag_type_str(dag_info.dag_type_));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, share::ObIDag::get_dag_type_str(dag_info.dag_type_)) : ret);
         cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -151,7 +151,7 @@ int ObAllVirtualDag::fill_cells(share::ObDagInfo &dag_info)
       break;
     case DAG_KEY:
       //dag key
-      cells[i].set_varchar(dag_info.dag_key_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, dag_info.dag_key_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case DAG_ID:
@@ -161,34 +161,34 @@ int ObAllVirtualDag::fill_cells(share::ObDagInfo &dag_info)
         ret = OB_BUF_NOT_ENOUGH;
         SERVER_LOG(WARN, "buffer not enough", K(ret));
       } else {
-        cells[i].set_varchar(dag_id_buf_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, dag_id_buf_) : ret);
         cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       }
       break;
     case DAG_STATUS:
       // dag_status
-      cells[i].set_varchar(share::ObIDag::get_dag_status_str(dag_info.dag_status_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, share::ObIDag::get_dag_status_str(dag_info.dag_status_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case RUNNING_TASK_CNT:
       //running task count
-      cells[i].set_int(dag_info.running_task_cnt_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, dag_info.running_task_cnt_) : ret);
       break;
     case ADD_TIME:
       //add time
-      cells[i].set_timestamp(dag_info.add_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, dag_info.add_time_) : ret);
       break;
     case START_TIME:
       //start time
-      cells[i].set_timestamp(dag_info.start_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, dag_info.start_time_) : ret);
       break;
     case INDEGREE:
       //indegree
-      cells[i].set_int(dag_info.indegree_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, dag_info.indegree_) : ret);
       break;
     case COMMENT: {
       //merge_type
-      cells[i].set_varchar(dag_info.comment_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, dag_info.comment_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     }
@@ -255,21 +255,21 @@ int ObAllVirtualDagScheduler::fill_cells(share::ObDagSchedulerInfo &dag_schedule
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t n = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
     case VALUE_TYPE:
-      cells[i].set_varchar(share::ObDagSchedulerInfo::ObValueTypeStr[dag_scheduler_info.value_type_]);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, share::ObDagSchedulerInfo::ObValueTypeStr[dag_scheduler_info.value_type_]) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case KEY:
-      cells[i].set_varchar(dag_scheduler_info.key_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, dag_scheduler_info.key_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case VALUE:
-      cells[i].set_int(dag_scheduler_info.value_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, dag_scheduler_info.value_) : ret);
       break;
     default:
       ret = OB_ERR_UNEXPECTED;

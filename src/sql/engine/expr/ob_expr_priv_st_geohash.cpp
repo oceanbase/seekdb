@@ -46,12 +46,12 @@ int ObExprPrivSTGeoHash::calc_result_typeN(
     ret = OB_ERR_PARAM_SIZE;
     LOG_USER_ERROR(OB_ERR_PARAM_SIZE, fun_name.length(), fun_name.ptr());
   } else {
-    ObObjType type_geom = types[0].get_type();
+    SqlValueType type_geom = types[0].get_type();
     if (!ob_is_geometry(type_geom) && !ob_is_string_type(type_geom) && !ob_is_null(type_geom)) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOHASH);
     } else if (param_num == 2) {
-      ObObjType prec_type = types[1].get_type();
+      SqlValueType prec_type = types[1].get_type();
       if ((ob_is_integer_type(prec_type) && ObTinyIntType != prec_type) || ob_is_null(prec_type)) {
         // do noting
       } else if (ob_is_string_type(prec_type)) {
@@ -216,7 +216,7 @@ int ObExprPrivSTGeoHash::process_input_geometry(
         int &precision)
 {
   int ret = OB_SUCCESS;
-  ObDatum *geo_datum = nullptr;
+  Datum *geo_datum = nullptr;
   ObExpr *geo_arg = expr.args_[0];
   ObGeoType geo_type;
   uint32_t geo_srid;
@@ -258,7 +258,7 @@ int ObExprPrivSTGeoHash::process_input_geometry(
 
   if (OB_SUCC(ret) && !is_null_res && expr.arg_cnt_ == 2) {
     ObExpr *prec_arg = expr.args_[1];
-    ObDatum *prec_datum = nullptr;
+    Datum *prec_datum = nullptr;
     if (ob_is_null(prec_arg->datum_meta_.type_)) {
       precision = 0;
     } else if (OB_FAIL(prec_arg->eval(ctx, prec_datum))) {
@@ -277,7 +277,7 @@ int ObExprPrivSTGeoHash::process_input_geometry(
   return ret;
 }
 
-int ObExprPrivSTGeoHash::eval_priv_st_geohash(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTGeoHash::eval_priv_st_geohash(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;

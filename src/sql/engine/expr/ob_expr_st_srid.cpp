@@ -77,18 +77,18 @@ int ObExprSTSRID::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprSTSRID::eval_st_srid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTSRID::eval_st_srid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_st_srid_common(expr, ctx, res, N_ST_SRID);
 }
 
-int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const char *func_name)
+int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, const char *func_name)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   ObGeoSrid srid = 0;

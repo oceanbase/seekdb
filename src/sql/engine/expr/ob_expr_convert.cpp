@@ -51,8 +51,9 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
   if (ob_is_string_type(type.get_type())) {
     type.set_length(type1.get_length());
   }
-  const ObObj &dest_collation = type2.get_param();
-  TYPE_CHECK(dest_collation, ObVarcharType);
+  const Datum &dest_collation = type2.get_param_datum();
+  const SqlTypeMeta &dest_collation_meta = type2.get_param_value_meta();
+  TYPE_CHECK(dest_collation_meta, ObVarcharType);
   if (OB_SUCC(ret)) {
     ObString cs_name = dest_collation.get_string();
     ObCharsetType charset_type = CHARSET_INVALID;
@@ -66,7 +67,7 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
       type2.set_calc_type(ObVarcharType);
       // cast expression will cast the first child node of convert expression to type1, calculation result of convert is the first one
       // Subnode result
-      type1.set_calc_meta(type.get_obj_meta());
+      type1.set_calc_meta(type.get_sql_type_meta());
       type1.set_calc_collation_type(type.get_collation_type());
       type1.set_calc_collation_level(type.get_collation_level());
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_CHARSET_CONVERT_IGNORE_ERR);
@@ -76,10 +77,10 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *child_res = NULL;
+  Datum *child_res = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_res))) {
   } else {
     ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;

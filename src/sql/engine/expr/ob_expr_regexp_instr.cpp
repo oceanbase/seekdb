@@ -155,16 +155,16 @@ int ObExprRegexpInstr::is_valid_for_generated_column(const ObRawExpr*expr,
 }
 
 template<typename RegExpCtx>
-int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = NULL;
-  ObDatum *pattern = NULL;
-  ObDatum *position = NULL;
-  ObDatum *occurrence = NULL;
-  ObDatum *return_opt = NULL;
-  ObDatum *match_type = NULL;
-  ObDatum *subexpr = NULL;
+  Datum *text = NULL;
+  Datum *pattern = NULL;
+  Datum *position = NULL;
+  Datum *occurrence = NULL;
+  Datum *return_opt = NULL;
+  Datum *match_type = NULL;
+  Datum *subexpr = NULL;
   if (OB_FAIL(expr.eval_param_value(
               ctx, text, pattern, position, occurrence, return_opt, match_type, subexpr))) {
     if (ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
@@ -196,14 +196,14 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
                         (return_opt != NULL && return_opt->is_null()) ||
                         (match_type != NULL && match_type->is_null()));
     if (OB_FAIL(ObExprUtil::get_int_param_val(
-          position, expr.arg_cnt_ > 2 && expr.args_[2]->obj_meta_.is_decimal_int(), pos))
+          position, (expr.arg_cnt_ > 2 ? expr.args_[2] : nullptr), pos))
         || OB_FAIL(ObExprUtil::get_int_param_val(
-          occurrence, expr.arg_cnt_ > 3 && expr.args_[3]->obj_meta_.is_decimal_int(), occur))
+          occurrence, (expr.arg_cnt_ > 3 ? expr.args_[3] : nullptr), occur))
         || OB_FAIL(ObExprUtil::get_int_param_val(
-          return_opt, expr.arg_cnt_ > 4 && expr.args_[4]->obj_meta_.is_decimal_int(),
+          return_opt, (expr.arg_cnt_ > 4 ? expr.args_[4] : nullptr),
           return_opt_val))
         || OB_FAIL(ObExprUtil::get_int_param_val(
-          subexpr, expr.arg_cnt_ > 6 && expr.args_[6]->obj_meta_.is_decimal_int(), subexpr_val))) {
+          subexpr, (expr.arg_cnt_ > 6 ? expr.args_[6] : nullptr), subexpr_val))) {
     } else if (!null_result
                && (pos <= 0 || occur < 0 || subexpr_val < 0
                    || (return_opt_val < 0 || return_opt_val > 1))) {
@@ -284,7 +284,7 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   return ret;
 }
 
-int ObExprRegexpInstr::eval_regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexpInstr::eval_regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return regexp_instr<ObExprRegexContext>(expr, ctx, expr_datum);
 }

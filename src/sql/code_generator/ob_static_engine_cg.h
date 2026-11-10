@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SRC_OB_STATIC_ENGINE_CG_H_
 #define OCEANBASE_SRC_OB_STATIC_ENGINE_CG_H_
 
+#include "common/datum/datum_value.h"
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/code_generator/ob_dml_cg_service.h"
 #include "sql/code_generator/ob_tsc_cg_service.h"
@@ -158,6 +159,7 @@ class ObStaticEngineCG
 {
   friend class ObDmlCgService;
   friend class ObTscCgService;
+  friend struct NativeSelectIntoOptionsTestPeer;
 public:
   template <int TYPE>
   friend struct GenSpecHelper;
@@ -439,7 +441,7 @@ private:
 
   int generate_popular_values_hash(
       const common::ObHashFunc &hash_func,
-      const ObIArray<common::ObObj> &popular_values_expr,
+      const ObIArray<common::DatumValue> &popular_values_expr,
       common::ObFixedArray<uint64_t, common::ObIAllocator> &popular_values_hash);
   int generate_delete_with_das(ObLogDelete &op, ObTableDeleteSpec &spec);
 
@@ -500,7 +502,7 @@ private:
 
   bool column_exists_in_list(const ObIArray<std::pair<uint64_t, uint64_t>> &visited_columns, const uint64_t table_id, const uint64_t column_id);
 
-  void set_murmur_hash_func(ObHashFunc &hash_func, const common::ObDatumBasicFuncs *basic_funcs_);
+  void set_murmur_hash_func(ObHashFunc &hash_func, const common::DatumBasicFuncs *basic_funcs_);
 
   int prepare_topn_runtime_filter_info(ObLogSort &op, ObOpSpec &spec);
 

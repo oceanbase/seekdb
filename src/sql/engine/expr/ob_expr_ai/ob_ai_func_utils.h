@@ -337,7 +337,7 @@ public:
                                  const share::ObAiModelEndpointInfo &endpoint_info,
                                  ObIJsonBase *http_response,
                                  ObIJsonBase *&result);
-  static int set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, ObString &res_str);
+  static int set_string_result(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, ObString &res_str);
   static bool is_provider_support_base64(const ObString &provider);
   static int decode_base64_embedding_array(const ObIJsonBase &embedding_jbase, ObIAllocator &allocator,
                                            const int64_t dimension, float *&vector);

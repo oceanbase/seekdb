@@ -34,7 +34,7 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_element_at(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_element_at(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_element_at_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                    const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

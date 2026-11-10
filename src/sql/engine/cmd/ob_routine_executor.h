@@ -39,7 +39,7 @@ namespace oceanbase
 namespace common
 {
 class ObField;
-class ObObjParam;
+class DatumParameter;
 }
 namespace share
 {

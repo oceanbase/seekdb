@@ -21,6 +21,11 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/oblog/ob_log.h"
 #include "common/datum/ob_datum.h"
+#include "common/datum/datum.h"
+#include "common/datum/datum_copy_plan.h"
+#include "common/datum/datum_parameter.h"
+#include "common/datum/native_typed_datum.h"
+#include "common/datum/datum_param_store.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "query/engine/ob_serializable_function.h"
 #include "query/parser/ob_item_type.h"
@@ -29,9 +34,14 @@
 
 namespace oceanbase
 {
+namespace pl { class ObPLINS; }
+namespace share { namespace schema { class ObSchemaGetterGuard; } }
 namespace common
 {
- class ObObjParam;
+ class DatumParameter;
+ class DatumCmpOp;
+ class DatumHashOp;
+ struct DatumBasicFuncs;
 }
 
 namespace storage
@@ -42,22 +52,32 @@ namespace storage
 namespace sql
 {
 
-using ObExprHashFuncType = common::ObDatumHashFuncType;
-using ObExprCmpFuncType = common::ObDatumCmpFuncType;
-using ObBatchDatumHashFunc = common::ObBatchDatumHashFunc;
+using ObExprHashFuncType = common::DatumHashOp;
+using ObExprCmpFuncType = common::DatumCmpOp;
+using ObBatchDatumHashFunc = common::DatumHashOp;
 using NullSafeRowCmpFunc = common::NullSafeRowCmpFunc;
-typedef int (*RowCmpFunc) (const common::ObObjMeta &l_meta, const common::ObObjMeta &r_meta,
+typedef int (*RowCmpFunc) (const common::SqlTypeMeta &l_meta, const common::SqlTypeMeta &r_meta,
                            const void *l_data, const int32_t l_len,
                            const void *r_data, const int32_t r_len,
                            int &cmp_ret,
                            const common::ObDatumAccessContext *access_ctx);
 
 class ObExecContext;
+class ObRawExprResType;
+class ObSQLSessionInfo;
 struct ObIExprExtraInfo;
-struct ObSqlDatumArray;
 class ObDatumCaster;
-using common::ObDatum;
-using common::ObDatumVector;
+using common::Datum;
+// Query's batch view uses native values. Storage keeps its explicit legacy view.
+struct DatumVector
+{
+  common::Datum *at(int64_t index) const { return datums_ + (mask_ & index); }
+  void set_batch(bool batch) { mask_ = batch ? UINT64_MAX : 0; }
+  bool is_batch() const { return mask_ == UINT64_MAX; }
+  TO_STRING_KV(KP(datums_), K(mask_));
+  common::Datum *datums_ = nullptr;
+  uint64_t mask_ = 0;
+};
 class ObSubQueryIterator;
 
 typedef ObItemType ObExprOperatorType;
@@ -70,13 +90,13 @@ public:
                   , scale_(-1), precision_(-1)
   {
   }
-  ObDatumMeta(const common::ObObjType type,
+  ObDatumMeta(const common::SqlValueType type,
               const common::ObCollationType cs_type,
               const int8_t scale)
     : type_(type), cs_type_(cs_type), scale_(scale), precision_(-1)
   {
   }
-  ObDatumMeta(const common::ObObjType type,
+  ObDatumMeta(const common::SqlValueType type,
               const common::ObCollationType cs_type,
               const int8_t scale,
               const common::ObPrecision prec)
@@ -87,7 +107,7 @@ public:
   void reset() { new (this) ObDatumMeta(); }
   TO_STRING_KV(K_(type), K_(cs_type), K_(scale), K_(precision));
 
-  common::ObObjType type_;
+  common::SqlValueType type_;
   common::ObCollationType cs_type_;
   int8_t scale_;
   union {
@@ -115,12 +135,12 @@ public:
   }
   OB_INLINE bool is_ext_sql_array() const
   {
-    //in ObObj, scale_ and meta extend flag union in the same structure,
+    // In the legacy value layout, scale and metadata extension flags share a union,
     //for extend type meta, scale_ means extend flag
     return ((static_cast<uint8_t>(common::ObExtendType) == type_)
             && (common::T_EXT_SQL_ARRAY == static_cast<uint8_t>(scale_)));
   }
-  OB_INLINE common::ObObjType get_type() const { return type_; }
+  OB_INLINE common::SqlValueType get_type() const { return type_; }
   OB_INLINE uint16_t get_subschema_id() const { return static_cast<uint16_t>(cs_type_); }
   // ObCollectionSQLType reused cs_type as part of sub schema id, always return CS_TYPE_BINARY.
   OB_INLINE ObCollationType get_cs_type() const { return type_ == ObCollectionSQLType ? CS_TYPE_BINARY : cs_type_; }
@@ -155,6 +175,38 @@ struct ObEvalInfo
 	};
 	// result count (set to batch_size in batch_eval)
 	uint16_t cnt_;
+};
+
+// Generic scalar expression slots and their logical parameter-frame numbering.
+// ParameterValuePage owns compact values independently of these legacy offsets.
+// Batch columns hold contiguous Datum arrays with one EvalInfo per Expr.
+struct ScalarFrameLayout
+{
+  static constexpr int64_t slot_size()
+  {
+    return (sizeof(Datum) + sizeof(ObEvalInfo) + alignof(Datum) - 1)
+        / alignof(Datum) * alignof(Datum);
+  }
+  static constexpr int64_t datum_offset(int64_t slot) { return slot * slot_size(); }
+  static constexpr int64_t eval_info_offset(int64_t slot)
+  { return datum_offset(slot) + sizeof(Datum); }
+  static constexpr int64_t slots_per_frame() { return common::MAX_FRAME_SIZE / slot_size(); }
+  static constexpr int64_t frame_count(int64_t count)
+  { return (count + slots_per_frame() - 1) / slots_per_frame(); }
+
+  // Original parameters and appended parameters occupy separate page ranges,
+  // even when the final original page has unused slots. Indices are validated
+  // by the callers; frame_idx is relative to the parameter-frame prefix.
+  static void locate_parameter(int64_t original_count, int64_t param_idx,
+                               int64_t &frame_idx, int64_t &slot_idx)
+  {
+    const int64_t local_idx = param_idx < original_count ? param_idx : param_idx - original_count;
+    frame_idx = local_idx / slots_per_frame();
+    slot_idx = local_idx % slots_per_frame();
+    if (original_count > 0 && param_idx >= original_count) {
+      frame_idx += frame_count(original_count);
+    }
+  }
 };
 
 // expression evaluate context
@@ -295,9 +347,9 @@ private:
 struct alignas(8) ObDynReserveBuf
 {
   static const uint32_t MAGIC_NUM = 0xD928e5bf;
-  static bool supported(const common::ObObjType &type)
+  static bool supported(const common::SqlValueType &type)
   {
-    const common::ObObjTypeClass tc = common::ob_obj_type_class(type);
+    const common::SqlTypeClass tc = common::sql_type_class(type);
     return common::ObStringTC == tc || common::ObTextTC == tc
            || common::ObRawTC == tc
            || common::ObRowIDTC == tc
@@ -324,7 +376,7 @@ typedef common::ObFixedArray<common::ObString, common::ObIAllocator> ObStrValues
   const ObBitVector &skip, const int64_t size
 #define BATCH_EVAL_FUNC_ARG_LIST expr, ctx, skip, size
 
-#define EVAL_FUNC_ARG_DECL const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum
+#define EVAL_FUNC_ARG_DECL const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum
 #define EVAL_FUNC_ARG_LIST expr, ctx, expr_datum
 
 
@@ -340,9 +392,43 @@ extern const int64_t ARGS_IDX_THREE;
 extern const int64_t ARGS_IDX_FOUR;
 extern const int64_t ARGS_IDX_FIVE;
 
+// Plan-owned offsets for the compact alternative. The ordinary ObExpr offsets
+// continue to describe its real Datum16 fallback. Neither owns execution data.
+struct NativeI64ExprLayout
+{
+  uint32_t value_off;
+  uint32_t state_off;
+  uint32_t eval_info_off;
+  uint32_t eval_flags_off;
+  uint32_t pvt_skip_off;
+  uint32_t capacity;
+};
+
+struct NativeI64Lane
+{
+  int64_t *values;
+  uint8_t *states;
+  uint32_t capacity;
+  bool batch;
+};
+
+// Only an Expr with an explicit prepared descriptor may inspect this header.
+// Ordinary frame payload bytes are never probed for a magic value.
+struct alignas(8) NativeI64FrameHeader
+{
+  static constexpr uint32_t MAGIC = 0x49363446;
+  static constexpr uint16_t VERSION = 1;
+  uint32_t magic;
+  uint16_t version;
+  uint8_t compact;
+  uint8_t reserved;
+};
+static_assert(sizeof(NativeI64FrameHeader) == 8, "candidate frame header ABI");
+static_assert(sizeof(NativeI64ExprLayout) == 24, "prepared I64 lane offsets");
+
 struct ObExpr
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   friend class ObOperator;
 
@@ -350,62 +436,159 @@ public:
 
   ObExpr();
   // Rebuild derived function tables after datum_meta_ or obj_meta_ changes.
-  int init_runtime_functions();
-  OB_INLINE int eval(ObEvalCtx &ctx, common::ObDatum *&datum) const;
+  int init_runtime_functions(common::ObIAllocator &allocator);
+  int bind_sql_type(const common::SqlType &type, common::ObIAllocator &owner);
+  int prepare_scalar_type(const common::SqlTypeMeta &meta, const common::ObAccuracy &accuracy,
+                           common::ObIAllocator &owner);
+  int prepare_resolved_type(const ObRawExprResType &resolved, const ObSQLSessionInfo *session,
+                            common::ObIAllocator &owner,
+                            share::schema::ObSchemaGetterGuard *schema_guard = nullptr,
+                            const pl::ObPLINS *pl_declarations = nullptr);
+  int clone_prepared_metadata_from(const ObExpr &source, common::ObIAllocator &owner);
+  int serialize_native_metadata(char *buffer, int64_t length, int64_t &position) const;
+  int deserialize_native_metadata(const char *buffer, int64_t length, int64_t &position,
+                                   common::ObIAllocator &owner);
+  int64_t native_metadata_serialize_size() const;
+  static int clone_native_value(const common::SqlType &type, const common::Datum &source,
+                                common::ObIAllocator &owner, common::Datum &destination);
+
+  struct CmpSpec
+  {
+    const common::SqlType *left_type_ = nullptr;
+    const common::SqlType *right_type_ = nullptr;
+    common::ObCmpNullPos null_pos_ = common::NULL_LAST;
+    common::ObCollationType collation_ = common::CS_TYPE_INVALID;
+  };
+  int prepare_cmp_ops(common::ObIAllocator &allocator, int64_t count);
+  int configure_cmp_op(int64_t index, int64_t left_arg, int64_t right_arg,
+                       common::ObCmpNullPos null_pos, common::ObCollationType collation);
+  int configure_cmp_op(int64_t index, const common::SqlType &left, const common::SqlType &right,
+                       common::ObCmpNullPos null_pos, common::ObCollationType collation);
+  const common::DatumCmpOp &get_cmp_op(int64_t index = 0) const;
+  int64_t get_cmp_op_count() const { return native_cmp_op_count_; }
+
+  const common::SqlType &get_sql_type() const
+  {
+    OB_ASSERT(sql_type_ != nullptr);
+    return *sql_type_;
+  }
+  common::DatumCopyPlan get_datum_copy_plan() const
+  {
+    return common::DatumCopyPlan(get_sql_type());
+  }
+
+  // Prepare the existing legacy copy metadata, preserving its accuracy union.
+  // The returned plan owns these metadata bytes and borrows no SqlType. Full
+  // enum/collection/UDT metadata still belongs to resolved or schema owners.
+  common::DatumCopyPlan prepare_legacy_copy_plan() const
+  {
+    common::ObAccuracy accuracy;
+    if (obj_meta_.is_string_or_lob_locator_type()) {
+      accuracy.set_length(max_length_);
+      accuracy.set_length_semantics(datum_meta_.length_semantics_);
+    } else {
+      accuracy.set_precision(datum_meta_.precision_);
+      accuracy.set_scale(datum_meta_.scale_);
+    }
+    return common::DatumCopyPlan(obj_meta_, accuracy);
+  }
+
+  OB_INLINE int eval(ObEvalCtx &ctx, common::Datum *&datum) const;
+  // Checked mode reads preserve their output on failure. A malformed candidate
+  // header is an error, never a request to interpret compact bytes as Datum.
+  int get_native_i64_mode(ObEvalCtx &ctx, bool &native) const;
+  bool uses_native_i64(ObEvalCtx &ctx) const
+  {
+    bool native = false;
+    const int ret = get_native_i64_mode(ctx, native);
+    OB_ASSERT(ret == common::OB_SUCCESS);
+    return native;
+  }
+  int get_native_i64_lane(ObEvalCtx &ctx, NativeI64Lane &lane) const;
+  // Prepared value-slot bounds, independent of a consumer operator's batch size.
+  // These metadata-only queries preserve out on failure. A runtime caller must
+  // first validate candidate mode/header with get_native_i64_mode().
+  int get_frame_value_capacity(uint32_t &out) const;
+  // Always the generic Datum16 offsets, even if a native descriptor exists.
+  // Frame allocation and wire validation use this same extent calculation.
+  int get_generic_frame_value_capacity(uint32_t &out) const;
+  int eval_i64(ObEvalCtx &ctx, int64_t &value, common::Datum::State &state) const;
+  int read_value(ObEvalCtx &ctx, int64_t row, common::Datum &caller_value) const;
+  int eval_value(ObEvalCtx &ctx, common::Datum &caller_value) const;
+  int eval_native_parameter(ObEvalCtx &ctx, common::Datum *&datum) const;
+  common::Datum &locate_native_parameter(ObEvalCtx &ctx) const;
+  ObEvalInfo &native_parameter_eval_info(ObEvalCtx &ctx) const;
+  int assign_native_parameter(ObEvalCtx &ctx, const common::Datum &value) const;
+  int prepare_native_parameter_write(ObEvalCtx &ctx, int64_t parameter_index) const;
   int eval_enumset(ObEvalCtx &ctx,
                    const common::ObIArray<common::ObString> &str_values,
                    const uint64_t cast_mode,
-                   common::ObDatum *&datum) const;
+                   common::Datum *&datum) const;
 
   OB_INLINE int eval_batch(ObEvalCtx &ctx,
                            const ObBitVector &skip,
                            const int64_t size) const;
 
   void reset() { new (this) ObExpr(); }
-  ObDatum &locate_expr_datum(ObEvalCtx &ctx) const
+  Datum &locate_expr_datum(ObEvalCtx &ctx) const
   {
+    if (native_parameter_alias_) { return locate_native_parameter(ctx); }
+    OB_ASSERT(native_i64_layout_ == nullptr || !uses_native_i64(ctx));
     // performance critical, do not check pointer validity.
-    return reinterpret_cast<ObDatum *>(ctx.frames_[frame_idx_] + datum_off_)[get_datum_idx(ctx)];
+    return reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_)[get_datum_idx(ctx)];
   }
 
-  ObDatum &locate_expr_datum(ObEvalCtx &ctx, const int64_t batch_idx) const
+  Datum &locate_expr_datum(ObEvalCtx &ctx, const int64_t batch_idx) const
   {
+    if (native_parameter_alias_) { return locate_native_parameter(ctx); }
+    OB_ASSERT(native_i64_layout_ == nullptr || !uses_native_i64(ctx));
     int64_t idx = batch_idx_mask_ & batch_idx;
-    return reinterpret_cast<ObDatum *>(ctx.frames_[frame_idx_] + datum_off_)[idx];
+    return reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_)[idx];
   }
 
-  ObDatumVector locate_expr_datumvector(ObEvalCtx &ctx) const
+  DatumVector locate_expr_datumvector(ObEvalCtx &ctx) const
   {
-    ObDatumVector datumsvector;
+    OB_ASSERT(native_i64_layout_ == nullptr || !uses_native_i64(ctx));
+    DatumVector datumsvector;
     datumsvector.set_batch(is_batch_result());
-    datumsvector.datums_ = reinterpret_cast<ObDatum *>(ctx.frames_[frame_idx_] + datum_off_);
+    datumsvector.datums_ = native_parameter_alias_ ? &locate_native_parameter(ctx)
+        : reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_);
     return datumsvector;
   }
 
-  ObDatum *locate_batch_datums(ObEvalCtx &ctx) const
+  Datum *locate_batch_datums(ObEvalCtx &ctx) const
   {
-    return reinterpret_cast<ObDatum *>(ctx.frames_[frame_idx_] + datum_off_);
+    OB_ASSERT(native_i64_layout_ == nullptr || !uses_native_i64(ctx));
+    return native_parameter_alias_ ? &locate_native_parameter(ctx)
+        : reinterpret_cast<Datum *>(ctx.frames_[frame_idx_] + datum_off_);
   }
 
   // batch version of locate_param_datum.  Array size is batch_size_ in ObEvalCtx
-  OB_INLINE ObDatumVector locate_param_datumvector(ObEvalCtx &ctx, int param_index) const
+  OB_INLINE DatumVector locate_param_datumvector(ObEvalCtx &ctx, int param_index) const
   {
       return args_[param_index]->locate_expr_datumvector(ctx);
   }
 
   ObBitVector &get_evaluated_flags(ObEvalCtx &ctx) const
   {
-    return *to_bit_vector(ctx.frames_[frame_idx_] + eval_flags_off_);
+    const uint32_t off = native_i64_layout_ != nullptr && uses_native_i64(ctx)
+        ? native_i64_layout_->eval_flags_off : eval_flags_off_;
+    return *to_bit_vector(ctx.frames_[frame_idx_] + off);
   }
 
   ObBitVector &get_pvt_skip(ObEvalCtx &ctx) const
   {
-    return *to_bit_vector(ctx.frames_[frame_idx_] + pvt_skip_off_);
+    const uint32_t off = native_i64_layout_ != nullptr && uses_native_i64(ctx)
+        ? native_i64_layout_->pvt_skip_off : pvt_skip_off_;
+    return *to_bit_vector(ctx.frames_[frame_idx_] + off);
   }
 
   ObEvalInfo &get_eval_info(ObEvalCtx &ctx) const
   {
-    return *reinterpret_cast<ObEvalInfo *>(ctx.frames_[frame_idx_] + eval_info_off_);
+    if (native_parameter_alias_) { return native_parameter_eval_info(ctx); }
+    const uint32_t off = native_i64_layout_ != nullptr && uses_native_i64(ctx)
+        ? native_i64_layout_->eval_info_off : eval_info_off_;
+    return *reinterpret_cast<ObEvalInfo *>(ctx.frames_[frame_idx_] + off);
   }
 
   OB_INLINE char *get_rev_buf(ObEvalCtx &ctx) const
@@ -413,18 +596,35 @@ public:
     return ctx.frames_[frame_idx_] + res_buf_off_;
   }
 
-  // locate expr datum && reset ptr_ to reserved buf
-  OB_INLINE ObDatum &locate_datum_for_write(ObEvalCtx &ctx) const;
+  // Locate the native slot. Its producer publishes the complete value.
+  OB_INLINE Datum &locate_datum_for_write(ObEvalCtx &ctx) const;
 
-  // locate batch datums and reset datum ptr_ to reserved buf
-  inline ObDatum *locate_datums_for_update(ObEvalCtx &ctx, const int64_t size) const;
+  // Locate the native batch array; no payload pointer repair is needed.
+  inline Datum *locate_datums_for_update(ObEvalCtx &ctx, const int64_t size) const;
 
-  // reset ptr in ObDatum to reserved buf
-  OB_INLINE void reset_ptr_in_datum(ObEvalCtx &ctx, const int64_t datum_idx) const;
 
-  OB_INLINE ObDatum &locate_param_datum(ObEvalCtx &ctx, int param_index) const
+  OB_INLINE Datum &locate_param_datum(ObEvalCtx &ctx, int param_index) const
   {
       return args_[param_index]->locate_expr_datum(ctx);
+  }
+
+  // Acquire owned output bytes before publishing a reference. Inline producers
+  // never call this method; no Datum is changed until its writer succeeds.
+  char *get_reference_res_mem(ObEvalCtx &ctx, int64_t size, int64_t idx = -1) const
+  {
+    char *result = nullptr;
+    if (size >= 0 && size <= UINT32_MAX
+        && get_sql_type().canonical_representation() == common::DatumRepresentation::Reference) {
+      const int64_t row = batch_idx_mask_ & (idx < 0 ? get_datum_idx(ctx) : idx);
+      if (size <= res_buf_len_) {
+        result = ctx.frames_[frame_idx_] + res_buf_off_ + res_buf_len_ * row;
+      } else if (ObDynReserveBuf::supported(datum_meta_.type_)) {
+        result = alloc_str_res_mem(ctx, size, row);
+      } else {
+        result = static_cast<char *>(ctx.alloc_expr_res(size));
+      }
+    }
+    return result;
   }
 
   // Get result memory for string type.
@@ -449,6 +649,13 @@ public:
     int64_t idx = batch_idx_mask_ & datum_idx;
     if (OB_UNLIKELY(!ObDynReserveBuf::supported(datum_meta_.type_))) {
       SQL_ENG_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "unexpected alloc string result memory called", K(*this));
+    } else if (dyn_buf_header_offset_ == 0) {
+      // An inline expression may be rebound to a reference result. Its frame
+      // contains no ObDynReserveBuf; offset zero is not a valid header.
+      if (res_buf_len_ > 0) {
+        len = res_buf_len_;
+        buffer = ctx.frames_[frame_idx_] + res_buf_off_ + res_buf_len_ * idx;
+      }
     } else {
       ObDynReserveBuf *drb = reinterpret_cast<ObDynReserveBuf *>(
         ctx.frames_[frame_idx_] + dyn_buf_header_offset_ + sizeof(ObDynReserveBuf) * idx);
@@ -468,7 +675,7 @@ public:
     cur_str_resvered_buf(ctx, get_datum_idx(ctx), buffer, len);
   }
 
-  bool is_variable_res_buf()
+  bool is_variable_res_buf() const
   {
     return OBJ_DATUM_STRING == obj_datum_map_;
   };
@@ -519,7 +726,7 @@ public:
   OB_INLINE int deep_copy_self_datum(ObEvalCtx &ctx) const;
 
   // deep copy %datum to reserve buffer or new allocated buffer if reserved buffer is not enough.
-  OB_INLINE int deep_copy_datum(ObEvalCtx &ctx, const common::ObDatum &datum) const;
+  OB_INLINE int deep_copy_datum(ObEvalCtx &ctx, const common::Datum &datum) const;
 
   bool is_batch_result() const { return batch_result_; }
   int64_t get_datum_idx(ObEvalCtx &ctx) const
@@ -605,19 +812,16 @@ public:
 
 private:
   char *alloc_str_res_mem(ObEvalCtx &ctx, const int64_t size, const int64_t idx) const;
-  // reset datums pointer to reserved buffer.
-  void reset_datums_ptr(char *frame, const int64_t size) const;
-  void reset_datum_ptr(char *frame, const int64_t size, const int64_t idx) const;
-  // Zero the datum descriptor (pack_) for `size` datums in the frame. See
-  // the implementation comment in ob_expr.cpp for the full rationale.
+  // Initialize the values in a fresh, unevaluated batch to NULL.
   void clear_datum_descriptors(char *frame, const int64_t size) const;
-  int eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) const;
+  int eval_one_datum_of_batch(ObEvalCtx &ctx, common::Datum *&datum) const;
   int do_eval_batch(ObEvalCtx &ctx, const ObBitVector &skip, const int64_t size) const;
+  int do_eval_native_i64_batch(ObEvalCtx &ctx, const ObBitVector &skip, int64_t size) const;
 
 public:
   typedef int (*EvalFunc) (const ObExpr &expr,
                            ObEvalCtx &ctx,
-                           ObDatum &expr_datum);
+                           Datum &expr_datum);
   typedef int (*EvalBatchFunc) (const ObExpr &expr,
                                 ObEvalCtx &ctx,
                                 const ObBitVector &skip,
@@ -626,20 +830,22 @@ public:
                                   const common::ObIArray<common::ObString> &str_values,
                                   const uint64_t cast_mode,
                                   ObEvalCtx &ctx,
-                                  ObDatum &expr_datum);
+                                  Datum &expr_datum);
 
   const static uint64_t MAGIC_NUM = 0x6367614D72707845L; // string of "ExprMagc"
   uint64_t magic_;
   ObExprOperatorType type_;
   // meta data of datum
   ObDatumMeta datum_meta_;
-  // meta data of ObObj, used for ObObj converting.
-  common::ObObjMeta obj_meta_;
+  // Owned by the plan; clone/deserialize must reconstruct this descriptor.
+  const common::SqlType *sql_type_;
+  const NativeI64ExprLayout *native_i64_layout_;
+  // Value metadata used for legacy conversion boundaries.
+  common::SqlTypeMeta obj_meta_;
   // max length of datum value. can be less than 0
   int32_t max_length_;
-  // type of ObObj memory layout to ObDatum memory layout mapping,
-  // used to convert ObDatum to ObObj and vice versa.
-  common::ObObjDatumMapType obj_datum_map_;
+  // Mapping between legacy value memory layout and Datum memory layout.
+  common::SqlValueDatumMapType obj_datum_map_;
 
   union {
     struct {
@@ -650,6 +856,9 @@ public:
       uint64_t is_dynamic_const_:1; // is const during the subplan execution, including exec param
       uint64_t need_stack_check_:1; // the expression tree depth needs to check whether the stack overflows
       uint64_t nullable_:1;
+      // Ordinary SQL QM only. The serialized flag selects native owner/index
+      // access instead of interpreting its logical legacy byte offsets.
+      uint64_t native_parameter_alias_:1;
     };
     uint64_t flag_;
   };
@@ -682,7 +891,7 @@ public:
   uint32_t parent_cnt_;
   // frame index
   uint32_t frame_idx_;
-  // offset of ObDatum in frame
+  // offset of Datum in frame
   uint32_t datum_off_;
   // offset of ObEvalInfo
   uint32_t eval_info_off_;
@@ -708,7 +917,10 @@ public:
       int64_t reserved_                :   46;
     };
   };
-  common::ObDatumBasicFuncs *basic_funcs_;
+  const common::DatumBasicFuncs *basic_funcs_;
+  common::DatumCmpOp *native_cmp_ops_;
+  CmpSpec *native_cmp_specs_;
+  int64_t native_cmp_op_count_;
   uint64_t batch_idx_mask_;
   ObIExprExtraInfo *extra_info_;
   int64_t local_session_var_id_;
@@ -748,166 +960,51 @@ private:
   ObEvalCtx &ctx_;
 };
 
-struct ObDatumObj
-{
-public:
-  void set_scale(common::ObScale scale) {
-    meta_.scale_ = scale;
-  }
-  TO_STRING_KV(K_(meta));
-
-public:
-  ObDatumMeta meta_;
-  common::ObDatum datum_;
-};
+using common::DatumParameter;
 
 typedef common::ObIArray<ObExpr *> ObExprPtrIArray;
 typedef common::ObFixedArray<ObExpr *, common::ObIAllocator> ExprFixedArray;
 
-// copy from ObObjParam
-struct ObDatumObjParam : public ObDatumObj
-{
-  ObDatumObjParam() : ObDatumObj(), accuracy_(), res_flags_(0), flag_()
-  {
-  }
-  ObDatumObjParam(const ObDatumObj &other)
-    : ObDatumObj(other), accuracy_(), res_flags_(0), flag_()
-  {
-  }
+// Capture the one evaluated native value with its actual complete declaration.
+// A retaining consumer clones both before the frame or declaration owner retires.
+int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx,
+    common::NativeTypedDatum &value, common::DatumParameterMetadata &attributes);
 
-  TO_STRING_KV(K_(accuracy), K_(res_flags), K_(datum), K_(meta));
-public:
-  int from_objparam(const common::ObObjParam &objparam, common::ObIAllocator *allocator = nullptr);
+// Explicit physical boundary for PL/resolver consumers.
+// Preserve raw LOB/type metadata separately from declaration accuracy. The
+// caller must clone before the expression frame can be reset or overwritten.
+int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &value);
 
-  int to_objparam(common::ObObjParam &obj_param, common::ObIAllocator *allocator = nullptr);
-  int construct_array_param_datum(const common::ObObjParam &obj_param, common::ObIAllocator &alloc);
-  int construct_sql_array_obj(common::ObObjParam &obj_param, common::ObIAllocator &allocator);
-  template<typename T>
-  int alloc_datum_reserved_buff(const T &obj_meta, const int16_t precision,
-                                common::ObIAllocator &allocator)
-  {
-    int ret = OB_SUCCESS;
-    common::ObObjType real_type = obj_meta.is_ext_sql_array() ? common::ObIntType : obj_meta.get_type();
-    common::ObObjDatumMapType obj_datum_map = common::ObDatum::get_obj_datum_map_type(real_type);
-    if (OB_LIKELY(common::OBJ_DATUM_NULL != obj_datum_map)) {
-      uint32_t def_res_len = common::ObDatum::get_reserved_size(obj_datum_map, precision);
-      if (OB_ISNULL(datum_.ptr_ = static_cast<char *>(allocator.alloc(def_res_len)))) {
-        ret = common::OB_ALLOCATE_MEMORY_FAILED;
-        SQL_ENG_LOG(WARN, "fail to alloc memory", K(def_res_len), K(ret));
-      }
-    }
-    return ret;
-  }
-  void set_sql_array_datum(const ObSqlDatumArray *datum_array)
-  {
-    //you can't use datum_.extend_obj_ here,
-    //datum_.extend_obj_m is just to asign an ObObj pointer
-    //here you need to set the address of the constructed datum array
-    datum_.set_int(reinterpret_cast<int64_t>(datum_array));
-  }
-  const ObSqlDatumArray *get_sql_datum_array() const
-  {
-    ObSqlDatumArray *datum_array = nullptr;
-    if (meta_.is_ext_sql_array()) {
-      //you can't call get_ext() here, get_ext() in Datum is to get an ObObj pointer
-      //here you need to get the address of the constructed datum array
-      int64_t array_addr = datum_.get_int();
-      datum_array = reinterpret_cast<ObSqlDatumArray*>(array_addr);
-    }
-    return datum_array;
-  }
-  ObSqlDatumArray *get_sql_datum_array()
-  {
-    ObSqlDatumArray *datum_array = nullptr;
-    if (meta_.is_ext_sql_array()) {
-      //you can't call get_ext() here, get_ext() in Datum is to get an ObObj pointer
-      //here you need to get the address of the constructed datum array
-      int64_t array_addr = datum_.get_int();
-      datum_array = reinterpret_cast<ObSqlDatumArray*>(array_addr);
-    }
-    return datum_array;
-  }
+// A borrowed native descriptor binding; the producer owns its payload.
+int bind_datum_parameter(const common::DatumParameter &source,
+                            DatumParameter &destination,
+                            common::ObIAllocator *allocator);
 
-  OB_INLINE void set_datum(const common::ObDatum &datum)
-  {
-    datum_ = datum;
-  }
+// Explicit value boundaries for remaining resolver / range interfaces. Values
+// and complete type metadata stay separate in native caches.
+int clone_datum_value(const common::ObDatum &source, const common::SqlTypeMeta &meta,
+                      common::ObDatum &destination, common::ObIAllocator &allocator);
 
-  OB_INLINE void set_meta(const ObDatumMeta &meta)
-  {
-    accuracy_.scale_ = meta.scale_;
-    accuracy_.precision_ = meta.precision_;
-    meta_ = meta;
-  }
-  // accuracy.
-  OB_INLINE void set_accuracy(const common::ObAccuracy &accuracy) { accuracy_.set_accuracy(accuracy); }
-  OB_INLINE void set_length(common::ObLength length) { accuracy_.set_length(length); }
-  OB_INLINE void set_precision(common::ObPrecision precision) { accuracy_.set_precision(precision); }
-  OB_INLINE void set_length_semantics(common::ObLengthSemantics length_semantics) { accuracy_.set_length_semantics(length_semantics); }
-  OB_INLINE void set_scale(common::ObScale scale) {
-    ObDatumObj::set_scale(scale);
-    accuracy_.set_scale(scale);
-  }
-  OB_INLINE void set_udt_id(uint64_t id) {
-    accuracy_.set_accuracy(id);
-  }
-  OB_INLINE const common::ObAccuracy &get_accuracy() const { return accuracy_; }
-  OB_INLINE common::ObLength get_length() const { return accuracy_.get_length(); }
-  OB_INLINE common::ObPrecision get_precision() const { return accuracy_.get_precision(); }
-  OB_INLINE common::ObScale get_scale() const { return accuracy_.get_scale(); }
-  OB_INLINE uint64_t get_udt_id() const {
-    return meta_.type_ == static_cast<uint8_t>(common::ObExtendType)
-           ? accuracy_.get_accuracy()
-           : common::OB_INVALID_INDEX;
-  }
-  OB_INLINE void set_result_flag(uint32_t flag) { res_flags_ |= flag; }
-  OB_INLINE void unset_result_flag(uint32_t flag) { res_flags_ &= (~flag); }
-  OB_INLINE bool has_result_flag(uint32_t flag) const { return res_flags_ & flag; }
-  OB_INLINE uint32_t get_result_flag() const { return res_flags_; }
+int clone_datum_value(const common::DatumParameter &source,
+                      common::DatumParameter &destination,
+                      common::ObIAllocator &allocator);
+int clone_datum_parameter(const common::DatumParameter &source, DatumParameter &destination,
+                          common::ObIAllocator &allocator);
+int assign_datum_parameter(const DatumParameter &source, common::DatumParameter &destination);
 
-  OB_INLINE const common::ParamFlag &get_param_flag() const { return flag_; }
-  OB_INLINE void set_need_to_check_type(bool flag) { flag_.need_to_check_type_ = flag; }
-  OB_INLINE bool need_to_check_type() const { return flag_.need_to_check_type_; }
-
-  OB_INLINE void set_need_to_check_bool_value(bool flag) { flag_.need_to_check_bool_value_ = flag; }
-  OB_INLINE bool need_to_check_bool_value() const { return flag_.need_to_check_bool_value_; }
-
-  OB_INLINE void set_expected_bool_value(bool b_value) { flag_.expected_bool_value_ = b_value; }
-  OB_INLINE bool expected_bool_value() const { return flag_.expected_bool_value_; }
-
-  OB_INLINE bool is_nop_value() const { return false; }
-
-  NEED_SERIALIZE_AND_DESERIALIZE;
-
-  static uint32_t accuracy_offset_bits() { return offsetof(ObDatumObjParam, accuracy_) * 8; }
-  static uint32_t res_flags_offset_bits() { return offsetof(ObDatumObjParam, res_flags_) * 8; }
-  static uint32_t flag_offset_bits() { return offsetof(ObDatumObjParam, flag_) * 8; }
-
-private:
-  common::ObAccuracy accuracy_;
-  uint32_t res_flags_;  // BINARY, NUM, NOT_NULL, TIMESTAMP, etc
-                        // reference: src/lib/regex/include/mysql_com.h
-  common::ParamFlag flag_;
-};
-
-typedef common::Ob2DArray<ObDatumObjParam,
-                          common::OB_MALLOC_BIG_BLOCK_SIZE,
-                          common::ObWrapperAllocator,
-                          false,
-                          common::ObSEArray<ObDatumObjParam *, 1, common::ObWrapperAllocator, false>
-                          > DatumParamStore;
+using common::DatumParamStore;
 
 // Helper function for print datum which interpreted by expression
 // Can only be used in log message like this:
 //    LOG_WARN(....., "datum", DATUM2STR(*expr, *datum))
 struct ObToStringDatum
 {
-  ObToStringDatum(const ObExpr &e, const common::ObDatum &d) : e_(e), d_(d) {}
+  ObToStringDatum(const ObExpr &e, const common::Datum &d) : e_(e), d_(d) {}
 
   DECLARE_TO_STRING;
 
   const ObExpr &e_;
-  const common::ObDatum  &d_;
+  const common::Datum  &d_;
 };
 typedef ObToStringDatum DATUM2STR;
 
@@ -963,54 +1060,23 @@ private:
 };
 typedef ToStringExprRowVec ROWEXPR2STRVEC;
 
-OB_INLINE ObDatum &ObExpr::locate_datum_for_write(ObEvalCtx &ctx) const
+OB_INLINE Datum &ObExpr::locate_datum_for_write(ObEvalCtx &ctx) const
 {
-  // performance critical, do not check pointer validity.
-  char *frame = ctx.frames_[frame_idx_];
-  OB_ASSERT(NULL != frame);
-  const int64_t idx = get_datum_idx(ctx);
-  ObDatum *expr_datum = reinterpret_cast<ObDatum *>(frame + datum_off_) + idx;
-  char *data_pos = frame + res_buf_off_ + res_buf_len_ * idx;
-  if (expr_datum->ptr_ != data_pos) {
-    expr_datum->ptr_ = data_pos;
-  }
-  return *expr_datum;
+  return locate_expr_datum(ctx);
 }
 
-inline ObDatum *ObExpr::locate_datums_for_update(ObEvalCtx &ctx,
-                                                 const int64_t size) const
+inline Datum *ObExpr::locate_datums_for_update(ObEvalCtx &ctx, const int64_t size) const
 {
-  char *frame = ctx.frames_[frame_idx_];
-  OB_ASSERT(NULL != frame);
-  ObDatum *datums = reinterpret_cast<ObDatum *>(frame + datum_off_);
-  char *ptr = frame + res_buf_off_;
-  ObDatum *d = datums;
-  for (int64_t i = 0; i < size; i++) {
-    if (d->ptr_ != ptr) {
-      d->ptr_ = ptr;
-    }
-    ptr += res_buf_len_;
-    d++;
-  }
-  return datums;
-}
-
-OB_INLINE void ObExpr::reset_ptr_in_datum(ObEvalCtx &ctx, const int64_t datum_idx) const
-{
-  OB_ASSERT(datum_idx >= 0);
-  char *frame = ctx.frames_[frame_idx_];
-  OB_ASSERT(NULL != frame);
-  ObDatum *expr_datum = reinterpret_cast<ObDatum *>(frame + datum_off_) + datum_idx;
-  char *data_pos = frame + res_buf_off_ + res_buf_len_ * datum_idx;
-  expr_datum->ptr_ = data_pos;
+  UNUSED(size);
+  return locate_batch_datums(ctx);
 }
 
 template <typename ...TS>
 OB_INLINE int ObExpr::eval_param_value(ObEvalCtx &ctx, TS &...args) const
 {
   int ret = common::OB_SUCCESS;
-  common::ObDatum **params[] = { &args... };
-  common::ObDatum *tmp = NULL;
+  common::Datum **params[] = { &args... };
+  common::Datum *tmp = NULL;
   for (int param_index = 0; OB_SUCC(ret) && param_index < arg_cnt_; param_index++) {
 _Pragma("GCC diagnostic push")
 _Pragma("GCC diagnostic ignored \"-Warray-bounds\"")
@@ -1027,7 +1093,7 @@ OB_INLINE int ObExpr::eval_batch_param_value(ObEvalCtx &ctx, const ObBitVector &
                                        const int64_t size, TS &...args) const
 {
   int ret = common::OB_SUCCESS;
-  ObDatumVector *params[] = { &args...};
+  DatumVector *params[] = { &args...};
   for (int param_index = 0; OB_SUCC(ret) && param_index < arg_cnt_; param_index++) {
     if (OB_FAIL(args_[param_index]->eval_batch(ctx, skip, size))) {
     } else if (param_index < ARRAYSIZEOF(params)) {
@@ -1037,13 +1103,20 @@ OB_INLINE int ObExpr::eval_batch_param_value(ObEvalCtx &ctx, const ObBitVector &
   return ret;
 }
 
-OB_INLINE int ObExpr::eval(ObEvalCtx &ctx, common::ObDatum *&datum) const
+OB_INLINE int ObExpr::eval(ObEvalCtx &ctx, common::Datum *&datum) const
 {
+  if (native_i64_layout_ != nullptr) {
+    bool native = false;
+    const int ret = get_native_i64_mode(ctx, native);
+    if (ret != common::OB_SUCCESS) { return ret; }
+    if (native) { return common::OB_ERR_UNEXPECTED; }
+  }
+  if (native_parameter_alias_) { return eval_native_parameter(ctx, datum); }
   // performance critical, do not check %frame_idx_ and %frame again. (checked in CG)
 	int ret = common::OB_SUCCESS;
 	char *frame = ctx.frames_[frame_idx_];
   OB_ASSERT(NULL != frame);
-	datum = (ObDatum *)(frame + datum_off_);
+	datum = (Datum *)(frame + datum_off_);
   ObEvalInfo *eval_info = (ObEvalInfo *)(frame + eval_info_off_);
   if (is_batch_result()) {
     if (NULL == eval_func_ || eval_info->projected_) {
@@ -1056,9 +1129,6 @@ OB_INLINE int ObExpr::eval(ObEvalCtx &ctx, common::ObDatum *&datum) const
     if (OB_UNLIKELY(need_stack_check_) && OB_FAIL(check_stack_overflow())) {
       SQL_LOG(WARN, "failed to check stack overflow", K(ret));
     } else {
-      if (datum->ptr_ != frame + res_buf_off_) {
-        datum->ptr_ = frame + res_buf_off_;
-      }
       ret = eval_func_(*this, ctx, *datum);
       if (OB_LIKELY(common::OB_SUCCESS == ret)) {
         eval_info->evaluated_ = true;
@@ -1074,11 +1144,24 @@ OB_INLINE int ObExpr::eval_batch(ObEvalCtx &ctx,
                                  const ObBitVector &skip,
                                  const int64_t size) const
 {
+  if (native_i64_layout_ != nullptr) {
+    bool native = false;
+    const int ret = get_native_i64_mode(ctx, native);
+    if (ret != common::OB_SUCCESS) { return ret; }
+    if (native) { return do_eval_native_i64_batch(ctx, skip, size); }
+  }
+  // A parameter's first generic ABI request can allocate. This failure must
+  // reach the caller even for an all-skipped batch: callers locate the result
+  // after success, unlike the old const callback dry-run error contract.
+  if (native_parameter_alias_) {
+    common::Datum *datum = nullptr;
+    return eval_native_parameter(ctx, datum);
+  }
   int ret = common::OB_SUCCESS;
   const ObEvalInfo &info = get_eval_info(ctx);
   if (!is_batch_result()) {
     bool const_dry_run = skip.accumulate_bit_cnt(size) >= size;
-    common::ObDatum *datum = NULL;
+    common::Datum *datum = NULL;
     ret = eval(ctx, datum);
     if (!const_dry_run) {
       // do nothing
@@ -1096,31 +1179,42 @@ OB_INLINE int ObExpr::eval_batch(ObEvalCtx &ctx,
 OB_INLINE int ObExpr::deep_copy_self_datum(ObEvalCtx &ctx) const
 {
   int ret = OB_SUCCESS;
-  const ObDatum &datum = locate_expr_datum(ctx);
+  Datum *parameter = nullptr;
+  if (native_parameter_alias_ && OB_FAIL(eval_native_parameter(ctx, parameter))) { return ret; }
+  const Datum &datum = locate_expr_datum(ctx);
   if (OB_FAIL(deep_copy_datum(ctx, datum))) {
   }
 
   return ret;
 }
 
-OB_INLINE int ObExpr::deep_copy_datum(ObEvalCtx &ctx, const common::ObDatum &datum) const
+OB_INLINE int ObExpr::deep_copy_datum(ObEvalCtx &ctx, const common::Datum &datum) const
 {
-  int ret = common::OB_SUCCESS;
-  // shadow copy datum first, because %datum may overlay with %dst
-  common::ObDatum src = datum;
-  ObDatum &dst = this->locate_datum_for_write(ctx);
-  dst.pack_ = src.pack_;
-  if (!src.null_) {
-    if (OB_UNLIKELY(src.len_ > res_buf_len_)) {
-      // only string datum may exceed %res_buf_len_;
-      if (OB_ISNULL(dst.ptr_ = get_str_res_mem(ctx, src.len_))) {
-        ret = common::OB_ALLOCATE_MEMORY_FAILED;
-        SQL_LOG(WARN, "allocate memory failed", K(ret));
-      } else {
-        MEMMOVE(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-      }
+  if (native_parameter_alias_) { return assign_native_parameter(ctx, datum); }
+  // Preserve the source before selecting owner memory: source may be this slot.
+  const common::Datum source = datum;
+  const common::DatumCopyPlan plan = get_datum_copy_plan();
+  int64_t bytes = 0;
+  int ret = plan.carrier_span_size(source, bytes);
+  if (OB_SUCC(ret) && source.is_present() && source.is_ext()
+      && get_sql_type().legacy_meta().is_pl_extend_type()) {
+    // The complete CopyPlan validation above still precedes publication.
+    // Retain only the PL carrier here; ownership of its pointee is unchanged.
+    common::Datum candidate;
+    candidate.set_inline_extended(source.get_ext(), source.get_extend_type(),
+        source.get_extend_size(), source.get_extend_collation_level(),
+        source.get_extend_collation(), source.is_inline_extended()
+            ? source.inline_extended_payload_size() == common::DATUM_LEGACY_EXTEND_SIZE
+            : source.length() == common::DATUM_LEGACY_EXTEND_SIZE);
+    locate_expr_datum(ctx) = candidate;
+  } else if (OB_SUCC(ret)) {
+    char *buffer = bytes > 0 ? get_reference_res_mem(ctx, bytes) : nullptr;
+    if (bytes > 0 && buffer == nullptr) {
+      ret = common::OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      MEMMOVE(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
+      int64_t position = 0;
+      ret = plan.copy_carrier_span_borrowing_resources(
+          source, locate_expr_datum(ctx), buffer, bytes, position);
     }
   }
   return ret;

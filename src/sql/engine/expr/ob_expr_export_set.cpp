@@ -154,14 +154,14 @@ int ObExprExportSet::cg_expr(ObExprCGCtx&, const ObRawExpr&, ObExpr& rt_expr) co
   return ret;
 }
 
-int ObExprExportSet::eval_export_set(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum)
+int ObExprExportSet::eval_export_set(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum* bits = NULL;
-  ObDatum* on = NULL;
-  ObDatum* off = NULL;
-  ObDatum* sep = NULL;
-  ObDatum* n_bits = NULL;
+  Datum* bits = NULL;
+  Datum* on = NULL;
+  Datum* off = NULL;
+  Datum* sep = NULL;
+  Datum* n_bits = NULL;
   int64_t max_size = 0;
   if (OB_FAIL(expr.eval_param_value(ctx, bits, on, off, sep, n_bits))) {
   } else if (bits->is_null() || on->is_null() || off->is_null()) {

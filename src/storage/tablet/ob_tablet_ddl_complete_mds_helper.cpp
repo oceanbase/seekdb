@@ -93,7 +93,7 @@ int ObTabletDDLCompleteArg::set_storage_schema(const ObStorageSchema &other)
   } else{
     for (int64_t i = 0; OB_SUCC(ret) && i < storage_schema_->column_array_.count(); ++i) {
       ObStorageColumnSchema &cs = storage_schema_->column_array_.at(i);
-      cs.orig_default_value_.reset();
+      cs.clear_default_value(allocator_);
     }
   }
   return ret;

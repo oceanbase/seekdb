@@ -34,7 +34,7 @@ public:
                                 ObExprResType &day,
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual common::ObCastMode get_cast_mode() const { return CM_STRING_INTEGER_TRUNC;}
-  static int calc_makedate(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int calc_makedate(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
   template <typename T>
   static int calc(T &res, int64_t year, int64_t day);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

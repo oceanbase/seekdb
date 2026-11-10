@@ -86,10 +86,10 @@ protected:
   };
   virtual int extract_part_info(PartInfo &part_info) = 0;
   virtual int convert_to_dml(const PartInfo &part_info, ObDMLSqlSplicer &dml) = 0;
-  int gen_high_bound_val_str(const common::ObRowkey &high_bound_val,
+  int gen_high_bound_val_str(const common::PartitionBoundRow &high_bound_val,
                              common::ObString &high_bound_val_str,
                              common::ObString &b_high_bound_val_str);
-  int gen_list_val_str(const common::ObIArray<common::ObNewRow>& list_value,
+  int gen_list_val_str(const common::ObIArray<common::PartitionBoundRow>& list_value,
                        common::ObString &list_val_str,
                        common::ObString &b_list_val_str);
 private:

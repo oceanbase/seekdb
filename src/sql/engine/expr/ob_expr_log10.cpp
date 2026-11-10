@@ -50,10 +50,10 @@ int ObExprLog10::calc_result_type1(ObExprResType &type,
 }
 
 int calc_log10_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
   } else if (arg->is_null()) {
     res_datum.set_null();

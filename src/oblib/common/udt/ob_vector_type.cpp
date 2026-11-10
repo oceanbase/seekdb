@@ -107,14 +107,17 @@ int ObVectorF32Data::clone_empty(ObIAllocator &alloc, ObIArrayType *&output, boo
   return ret;
 }
 
-int ObVectorF32Data::elem_at(uint32_t idx, ObObj &elem_obj) const
+int ObVectorF32Data::elem_at_datum(uint32_t idx, ObDatum &value) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(idx >= length_)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "idx is out of range", K(ret), K(idx), K(length_));
+  } else if (OB_ISNULL(value.ptr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    OB_LOG(WARN, "output datum buffer is null", K(ret));
   } else {
-    elem_obj.set_float(data_[idx]);
+    value.set_float(data_[idx]);
   }
   return ret;
 }
@@ -199,14 +202,17 @@ int ObVectorU8Data::clone_empty(ObIAllocator &alloc, ObIArrayType *&output, bool
   return ret;
 }
 
-int ObVectorU8Data::elem_at(uint32_t idx, ObObj &elem_obj) const
+int ObVectorU8Data::elem_at_datum(uint32_t idx, ObDatum &value) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(idx >= length_)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "idx is out of range", K(ret), K(idx), K(length_));
+  } else if (OB_ISNULL(value.ptr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    OB_LOG(WARN, "output datum buffer is null", K(ret));
   } else {
-    elem_obj.set_utinyint(data_[idx]);
+    value.set_uint(data_[idx]);
   }
   return ret;
 }

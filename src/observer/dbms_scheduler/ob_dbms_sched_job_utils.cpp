@@ -246,8 +246,9 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
 
   if (OB_SUCC(ret)) {
     if (is_delete_after_stop) {
-      ObObj state_obj;
-      state_obj.set_char("KILLED");
+      DatumValue state_obj;
+      state_obj.meta_.set_char();
+      state_obj.datum_.set_string("KILLED", 6);
       if(OB_FAIL(update_dbms_sched_job_info(sql_client, job_info, ObString("state"), state_obj))) {
       }
     }
@@ -470,7 +471,7 @@ int ObDBMSSchedJobUtils::create_dbms_sched_job(
 int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_client,
                                                     const ObDBMSSchedJobInfo &job_info,
                                                     const ObString &job_attribute_name,
-                                                    const ObObj &job_attribute_value,
+                                                    const DatumValue &job_attribute_value,
                                                     const bool from_pl_set_attr)
 {
   int ret = OB_SUCCESS;

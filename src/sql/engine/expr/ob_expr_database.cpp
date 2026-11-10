@@ -44,7 +44,7 @@ int ObExprDatabase::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_c
 }
 
 int ObExprDatabase::eval_database(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

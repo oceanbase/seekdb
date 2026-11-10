@@ -160,7 +160,7 @@ int ObUniqueIndexChecker::scan_table_with_column_checksum(
           if (OB_ISNULL(col = param.data_table_schema_->get_column_schema(col_id))) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            const bool col_need_reshape = !param.is_scan_index_ && (col->is_virtual_generated_column() || !col->get_orig_default_value().is_null())
+            const bool col_need_reshape = !param.is_scan_index_ && (col->is_virtual_generated_column() || !col->get_orig_default_datum().is_null())
               && col->get_meta_type().is_fixed_len_char_type();
             if (OB_FAIL(need_reshape.push_back(col_need_reshape))) {
             }

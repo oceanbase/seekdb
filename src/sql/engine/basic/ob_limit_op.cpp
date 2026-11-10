@@ -97,13 +97,13 @@ int ObLimitOp::get_int_val(ObExpr *expr, ObEvalCtx &eval_ctx, int64_t &val, bool
   int ret = OB_SUCCESS;
   if (NULL != expr) {
     OB_ASSERT(ob_is_int_tc(expr->datum_meta_.type_));
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(expr->eval(eval_ctx, datum))) {
-    } else if (datum->null_) {
+    } else if (datum->is_null()) {
       is_null_value = true;
       val = 0;
     } else {
-      val = *datum->int_;
+      val = datum->get_int();
     }
   }
   return ret;
@@ -114,12 +114,12 @@ int ObLimitOp::get_double_val(ObExpr *expr, ObEvalCtx &eval_ctx, double &val)
   int ret = OB_SUCCESS;
   if (NULL != expr) {
     OB_ASSERT(ob_is_double_tc(expr->datum_meta_.type_));
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(expr->eval(eval_ctx, datum))) {
-    } else if (datum->null_) {
+    } else if (datum->is_null()) {
       val = 0.0;
     } else {
-      val = *datum->double_;
+      val = datum->get_double();
     }
   }
   return ret;
@@ -390,13 +390,17 @@ int ObLimitOp::is_row_order_by_item_value_equal(bool &is_equal)
        && pre_sort_columns_.store_row_->cnt_ == MY_SPEC.sort_columns_.count());
     for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < MY_SPEC.sort_columns_.count(); ++i) {
       const ObExpr *expr = MY_SPEC.sort_columns_.at(i);
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
-                 pre_sort_columns_.store_row_->cells()[i], *datum, cmp_ret,
-                 datum_access_ctx_))) {
       } else {
-        is_equal = 0 == cmp_ret;
+        Datum stored_datum;
+        if (OB_FAIL(StoredDatumCodec::decode_native(pre_sort_columns_.store_row_->stored_cells()[i],
+              expr->get_datum_copy_plan(), stored_datum))) { break; }
+        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+                   stored_datum, *datum, cmp_ret, datum_access_ctx_))) {
+        } else {
+          is_equal = 0 == cmp_ret;
+        }
       }
     }
   }
@@ -419,7 +423,7 @@ int ObLimitOp::compare_value_in_batch(bool &keep_iterating,
        && pre_sort_columns_.store_row_->cnt_ == MY_SPEC.sort_columns_.count());
 
     const int64_t size = MY_SPEC.sort_columns_.count();
-    ObSEArray<ObDatumVector, 16> datum_vectors;
+    ObSEArray<DatumVector, 16> datum_vectors;
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.sort_columns_.count(); ++i) {
       ObExpr *expr = MY_SPEC.sort_columns_.at(i);
       if (OB_FAIL(expr->eval_batch(eval_ctx_, skip, batch_size))) {
@@ -436,8 +440,11 @@ int ObLimitOp::compare_value_in_batch(bool &keep_iterating,
                    ++col_idx) {
         ObExpr *expr = MY_SPEC.sort_columns_.at(col_idx);
         int cmp_ret = 0;
+        Datum stored_datum;
+        if (OB_FAIL(StoredDatumCodec::decode_native(pre_sort_columns_.store_row_->stored_cells()[col_idx],
+              expr->get_datum_copy_plan(), stored_datum))) { break; }
         if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
-                    pre_sort_columns_.store_row_->cells()[col_idx],
+                    stored_datum,
                     *(datum_vectors[col_idx].at(row_idx)), cmp_ret,
                     datum_access_ctx_))) {
         } else {

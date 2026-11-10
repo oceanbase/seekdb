@@ -54,7 +54,7 @@ public:
       const ObRawExpr &raw_expr,
       ObExpr &rt_expr) const override;
 
-  static int eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
   static int eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t size);
   static double eval(
       const int64_t token_freq,

@@ -53,13 +53,13 @@ int ObExprSTIsValid::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprSTIsValid::eval_st_isvalid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTIsValid::eval_st_isvalid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   ObGeoSrid srid = 0;

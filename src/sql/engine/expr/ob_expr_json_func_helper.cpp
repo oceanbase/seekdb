@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "rust/config.h"
 #include "rust/json.h"
+#include "share/datum/datum_value_cast.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -26,6 +27,7 @@
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_expr_cast.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/ob_spi.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/expr/ob_json_param_type.h"
@@ -76,7 +78,7 @@ int ObJsonExprHelper::get_json_metadata(const ObString &data, ObJsonInType input
       LOG_WARN("fail to inspect binary JSON", K(ret), K(result.byte_offset));
     } else {
       metadata.type_ = static_cast<ObJsonNodeType>(result.value_type);
-      metadata.field_type_ = static_cast<ObObjType>(result.opaque_field_type);
+      metadata.field_type_ = static_cast<SqlValueType>(result.opaque_field_type);
       metadata.depth_ = result.depth;
       metadata.length_ = result.length;
     }
@@ -120,9 +122,9 @@ int get_native_json_query(const ObExpr &expr,
                           bool *is_cover_by_error)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[index];
-  ObObjType val_type = json_arg->datum_meta_.type_;
+  SqlValueType val_type = json_arg->datum_meta_.type_;
   ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
   bool allow_partial_update = false;
   ObString json_doc;
@@ -189,14 +191,14 @@ int get_native_json_path(const ObExpr &expr,
 {
   INIT_SUCC(ret);
   ObExpr *path_expr = expr.args_[index];
-  ObObjType type = path_expr->datum_meta_.type_;
+  SqlValueType type = path_expr->datum_meta_.type_;
   ObString path_text;
   JsonPathCache *path_cache = param_ctx->get_native_path_cache();
   path = NULL;
   if (!param_ctx->is_first_exec_ && param_ctx->is_json_path_const_ && OB_NOT_NULL(path_cache)) {
     ret = path_cache->find_and_add(path_text, 0, true, path);
   } else {
-    ObDatum *path_datum = NULL;
+    Datum *path_datum = NULL;
     if (OB_FAIL(allocator.eval_arg(path_expr, ctx, path_datum))) {
       is_cover_by_error = false;
     } else if (type == ObNullType || path_datum->is_null()) {
@@ -222,12 +224,12 @@ int get_native_json_path(const ObExpr &expr,
   return ret;
 }
 
-ObJsonInType ObJsonExprHelper::get_json_internal_type(ObObjType type)
+ObJsonInType ObJsonExprHelper::get_json_internal_type(SqlValueType type)
 {
   return type == ObJsonType ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TEXT;
 }
 
-int ObJsonExprHelper::ensure_collation(ObObjType type, ObCollationType cs_type)
+int ObJsonExprHelper::ensure_collation(SqlValueType type, ObCollationType cs_type)
 {
   INIT_SUCC(ret);
   if (ob_is_string_type(type) && (ObCharset::charset_type_by_coll(cs_type) != CHARSET_UTF8MB4)) {
@@ -244,8 +246,8 @@ int ObJsonExprHelper::get_json_or_str_data(ObExpr *expr, ObEvalCtx &ctx,
                                            ObString& str, bool& is_null) 
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
-  ObObjType val_type = expr->datum_meta_.type_;
+  Datum *json_datum = NULL;
+  SqlValueType val_type = expr->datum_meta_.type_;
   if (OB_FAIL(allocator.eval_arg(expr, ctx, json_datum))) {
   } else if (json_datum->is_null() || val_type == ObNullType) {
     is_null = true;
@@ -268,9 +270,9 @@ int ObJsonExprHelper::get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
 {
   INIT_SUCC(ret);
 
-  ObDatum *schema_datum = nullptr;
+  Datum *schema_datum = nullptr;
   ObExpr *schema_arg = expr.args_[index];
-  ObObjType type = schema_arg->datum_meta_.type_;
+  SqlValueType type = schema_arg->datum_meta_.type_;
   ObCollationType cs_type = schema_arg->datum_meta_.cs_type_;
   if (OB_FAIL(allocator.eval_arg(schema_arg, ctx, schema_datum))) {
   } else if (type == ObNullType || schema_datum->is_null()) {
@@ -323,10 +325,10 @@ int ObJsonExprHelper::push_json_merge_argument(const ObExpr &expr, ObEvalCtx &ct
     MultimodeAlloctor &allocator, uint16_t index, BinaryMerge &merger, bool &is_null, bool *input_error)
 {
   INIT_SUCC(ret);
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   ObExpr *argument = expr.args_[index];
   ObString input;
-  const ObObjType type = argument->datum_meta_.type_;
+  const SqlValueType type = argument->datum_meta_.type_;
   is_null = false;
   if (input_error != nullptr) { *input_error = true; }
   if (OB_FAIL(allocator.eval_arg(argument, ctx, datum))) {
@@ -350,7 +352,7 @@ int ObJsonExprHelper::push_json_merge_argument(const ObExpr &expr, ObEvalCtx &ct
 }
 
 int ObJsonExprHelper::eval_json_merge(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &res, bool patch)
+    Datum &res, bool patch)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard allocation_scope(ctx);
@@ -379,7 +381,7 @@ int ObJsonExprHelper::eval_json_merge(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 int ObJsonExprHelper::eval_json_mutation(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &res, JsonMutation operation)
+    Datum &res, JsonMutation operation)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard allocation_scope(ctx);
@@ -390,7 +392,7 @@ int ObJsonExprHelper::eval_json_mutation(const ObExpr &expr, ObEvalCtx &ctx,
   std::optional<rust::Box<common::json::SqlEditor>> editor;
   std::optional<common::json::BinarySource> source;
   ObJsonBinUpdateCtx *update = nullptr;
-  ObDatum *document = nullptr;
+  Datum *document = nullptr;
   ObExpr *document_expr = expr.args_[0];
   bool is_null = false;
   bool allow_partial = false;
@@ -439,7 +441,7 @@ int ObJsonExprHelper::eval_json_mutation(const ObExpr &expr, ObEvalCtx &ctx,
   if (path_cache == nullptr) { path_cache = &local_cache; }
   for (int64_t index = 1; OB_SUCC(ret) && !is_null && index < expr.arg_cnt_; index += remove ? 1 : 2) {
     ObExpr *path_expr = expr.args_[index];
-    ObDatum *path_datum = nullptr;
+    Datum *path_datum = nullptr;
     const common::json::Path *path = nullptr;
     if (null_type_short_circuit && path_expr->datum_meta_.type_ == ObNullType) {
       is_null = true;
@@ -515,9 +517,9 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
                                     bool &is_null, bool preserve_dup)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[index];
-  ObObjType val_type = json_arg->datum_meta_.type_;
+  SqlValueType val_type = json_arg->datum_meta_.type_;
   ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
   bool allow_partial_update = false;
 
@@ -551,14 +553,14 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data,
+int ObJsonExprHelper::get_const_json_schema(const DatumValue &data,
                                             const char *func_name,
                                             ObExecContext &exec_ctx,
                                             common::ObIAllocator *allocator,
                                             ObString &schema)
 {
   INIT_SUCC(ret);
-  ObObjType val_type = data.get_type();
+  SqlValueType val_type = data.get_type();
   ObCollationType cs_type = data.get_collation_type();
   const common::ObLobReadOptions *lob_options = nullptr;
   if (OB_FAIL(exec_ctx.get_lob_read_options(lob_options))) {
@@ -625,7 +627,7 @@ int ObJsonExprHelper::get_json_for_partial_update(
     const ObExpr &json_expr,
     ObEvalCtx &ctx,
     ObIAllocator &allocator,
-    ObDatum &json_datum,
+    Datum &json_datum,
     ObIJsonBase *&j_base)
 {
   INIT_SUCC(ret);
@@ -683,13 +685,13 @@ int ObJsonExprHelper::get_json_for_partial_update(
 }
 
 int ObJsonExprHelper::refine_range_json_value_const(
-  const common::ObObj &data, ObExecContext &ctx,
+  const common::DatumValue &data, ObExecContext &ctx,
   bool is_bool, common::ObIAllocator *allocator,
   ObIJsonBase*& j_base)
 {
   UNUSED(is_bool);
   int ret = OB_SUCCESS;
-  ObObjType type = data.get_type();
+  SqlValueType type = data.get_type();
   const common::ObLobReadOptions *lob_options = nullptr;
   ObString input;
   if (!is_convertible_to_json(type)) {
@@ -719,22 +721,19 @@ int ObJsonExprHelper::refine_range_json_value_const(
 
 
 int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator, 
-                                  ObDatum &src_datum, 
+                                  Datum &src_datum,
                                   const ObExpr &expr, 
                                   const ObExpr &default_expr, 
                                   ObEvalCtx &ctx, 
-                                  ObDatum &res, 
+                                  Datum &res,
                                   bool xt_need_acc_check)
 {
   int ret = OB_SUCCESS;
   ObCastMode def_cm = CM_NONE;
   ObSQLSessionInfo *session = NULL;
-  ObObj dst_obj, buf_obj, src_obj;
-  const ObObj *res_obj = NULL;
   ObAccuracy out_acc;
   if (src_datum.is_null()) {
     res.set_null();
-  } else if (OB_FAIL(src_datum.to_obj(src_obj, default_expr.obj_meta_, default_expr.obj_datum_map_))) {
   } else {
     // to type
     if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
@@ -742,7 +741,7 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
     } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                   session, def_cm))) {
     } else {
-      ObObjType obj_type = expr.datum_meta_.type_;
+      SqlValueType obj_type = expr.datum_meta_.type_;
       ObCollationType cs_type = expr.datum_meta_.cs_type_;
       ObPhysicalPlanCtx *phy_plan_ctx = ctx.exec_ctx_.get_physical_plan_ctx();
       const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
@@ -752,39 +751,70 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
           cast_ctx,
           ctx.exec_ctx_.get_srs_provider(),
           ctx.exec_ctx_.get_lob_read_service());
-      if (OB_FAIL(ObObjCaster::to_type(obj_type, cs_type, cast_ctx, src_obj, dst_obj))) {
+      alignas(8) char source_scratch[64];
+      common::ObDatum legacy_source;
+      OZ(default_expr.get_datum_copy_plan().legacy_view(src_datum, legacy_source, source_scratch, sizeof(source_scratch)));
+      DatumValue source;
+      OZ(source.assign_legacy_borrowed(legacy_source, default_expr.obj_meta_));
+      DatumValue converted;
+      alignas(8) char converted_scratch[64];
+      common::ObDatum converted_view;
+      Datum accuracy_checked;
+      int warning = OB_SUCCESS;
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(DatumValueCaster::to_type(obj_type, cast_ctx, source, allocator, converted))) {
+      } else if (OB_FAIL(converted.export_legacy(converted_view, converted_scratch, sizeof(converted_scratch)))) {
       } else if (FALSE_IT(get_accuracy_from_expr(expr, out_acc))) {
-      } else if (FALSE_IT(res_obj = &dst_obj)) {
-      } else if (OB_FAIL(obj_accuracy_check(cast_ctx, out_acc, cs_type, dst_obj, buf_obj, res_obj))) {
-        if (!xt_need_acc_check && (ob_is_varchar_or_char(obj_type, cs_type)) && ret == OB_ERR_DATA_TOO_LONG) {
+      } else if (OB_FAIL(datum_accuracy_check_legacy_input(expr, def_cm, ctx, out_acc,
+                                               expr.obj_meta_.has_lob_header(),
+                                               converted_view, accuracy_checked, warning))) {
+        if (!xt_need_acc_check && ob_is_varchar_or_char(obj_type, cs_type)
+            && ret == OB_ERR_DATA_TOO_LONG) {
           ObLengthSemantics ls = LS_CHAR;
-          const char* str = dst_obj.get_string_ptr();
-          int32_t str_len_byte = dst_obj.get_string_len();
+          const ObString value = converted.get_string();
+          const char* str = value.ptr();
+          int32_t str_len_byte = value.length();
           int64_t char_len = 0;
           int32_t trunc_len_byte = 0;
           trunc_len_byte = (ls == LS_BYTE ?
                 ObCharset::max_bytes_charpos(cs_type, str, str_len_byte,
                                              expr.max_length_, char_len):
                 ObCharset::charpos(cs_type, str, str_len_byte, expr.max_length_));
-          if (trunc_len_byte == 0) {
-            (const_cast<ObObj*>(res_obj))->set_null();
+          if (trunc_len_byte <= 0) {
+            accuracy_checked.set_null();
           } else {
-            (const_cast<ObObj*>(res_obj))->set_common_value(ObString(trunc_len_byte, str));
+            ret = accuracy_checked.set_string(ObString(trunc_len_byte, str));
           }
           ret = OB_SUCCESS;
         } else {
         }
-      } else if (OB_FAIL(ObSPIService::spi_pad_char_or_varchar(session, obj_type, out_acc, &allocator, const_cast<ObObj *>(res_obj)))) {
+      } else {
+        DatumParameter padded;
+        padded.set_type_meta(expr.obj_meta_);
+        padded.set_accuracy(out_acc);
+        alignas(8) char checked_scratch[64];
+        common::ObDatum checked_view;
+        if (OB_FAIL(expr.get_datum_copy_plan().legacy_view(accuracy_checked, checked_view,
+            checked_scratch, sizeof(checked_scratch)))) {
+        } else if (OB_FAIL(padded.assign_legacy_borrowed(checked_view, expr.obj_meta_))) {
+        } else if (OB_FAIL(ObSPIService::spi_pad_char_or_varchar(session, obj_type, out_acc,
+                                                          &allocator, &padded))) {
+        } else {
+          alignas(8) char padded_scratch[64];
+          common::ObDatum padded_view;
+          if (OB_FAIL(padded.export_legacy(padded_view, padded_scratch, sizeof(padded_scratch)))) {
+          } else { ret = expr.get_datum_copy_plan().import_legacy(padded_view, accuracy_checked); }
+        }
       }
 
       if (OB_SUCC(ret)) {
-        if (OB_NOT_NULL(res_obj)) {
-          res.from_obj(*res_obj);
+        if (!accuracy_checked.is_null()) {
+          res.set_datum(accuracy_checked);
           ObExprStrResAlloc res_alloc(expr, ctx);
-          if (OB_FAIL(res.deep_copy(res, res_alloc))) {
+          if (OB_FAIL(ObExpr::clone_native_value(expr.get_sql_type(), res, res_alloc, res))) {
           }
         } else {
-          ret = OB_ERR_UNEXPECTED;
+          res.set_null();
         }
       }
     }
@@ -796,7 +826,7 @@ void ObJsonExprHelper::get_accuracy_from_expr(const ObExpr &expr, ObAccuracy &ac
 {
   accuracy.set_length(expr.max_length_);
   accuracy.set_scale(expr.datum_meta_.scale_);
-  const ObObjTypeClass &dst_tc = ob_obj_type_class(expr.datum_meta_.type_);
+  const SqlTypeClass &dst_tc = sql_type_class(expr.datum_meta_.type_);
   if (ObStringTC == dst_tc || ObTextTC == dst_tc) {
     accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
   } else {
@@ -829,13 +859,15 @@ struct ConvertedJson {
 };
 }
 
-static int convert_datum_to_json(const ObDatum &datum, const ObObjMeta &meta,
+template <typename T>
+static int convert_datum_to_json(const T &datum, const SqlTypeMeta &meta,
+    const SqlType *type_context,
     ObScale scale, bool is_bool, bool format_json, bool strict, bool oracle,
     ObIAllocator &allocator, ObBasicSessionInfo *session,
     const common::ObLobReadOptions *lob_options, ConvertedJson &converted)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = meta.get_type();
+  SqlValueType type = meta.get_type();
   ObCollationType cs_type = meta.get_collation_type();
   uint8_t kind = 0;
   int64_t integer = 0;
@@ -890,7 +922,19 @@ static int convert_datum_to_json(const ObDatum &datum, const ObObjMeta &meta,
         kind = 1;
         number::ObNumber number;
         if (ob_is_decimal_int(type)) {
-          ret = wide::to_number(datum.get_decimal_int(), datum.get_int_bytes(), scale, allocator, number);
+          if constexpr (std::is_same<T, Datum>::value) {
+            alignas(8) char coefficient_scratch[64];
+            ObDatum coefficient;
+            if (type_context == nullptr) {
+              ret = OB_INVALID_ARGUMENT;
+            } else if (OB_FAIL(DatumCopyPlan(*type_context).get_decimal(
+                           datum, coefficient, coefficient_scratch, sizeof(coefficient_scratch)))) {
+            } else if (OB_FAIL(wide::to_number(coefficient.get_decimal_int(),
+                           coefficient.get_int_bytes(), scale, allocator, number))) {
+            }
+          } else {
+            ret = wide::to_number(datum.get_decimal_int(), datum.get_int_bytes(), scale, allocator, number);
+          }
         } else { ret = number.deep_copy_v3(datum.get_number(), allocator); }
         int64_t pos = 0;
         if (OB_FAIL(ret)) {
@@ -969,13 +1013,25 @@ static int convert_datum_to_json(const ObDatum &datum, const ObObjMeta &meta,
   return ret;
 }
 
-int ObJsonExprHelper::datum_to_json_binary(const ObDatum &datum, const ObObjMeta &meta,
+int ObJsonExprHelper::datum_to_json_binary(const Datum &datum, const SqlTypeMeta &meta,
+    const SqlType &type_context,
     ObScale scale, bool is_bool, bool format_json, bool strict, bool oracle,
     ObIAllocator &allocator, ObBasicSessionInfo *session,
     const common::ObLobReadOptions *lob_options, ObString &binary)
 {
   ConvertedJson converted;
-  const int ret = convert_datum_to_json(datum, meta, scale, is_bool, format_json, strict,
+  const int ret = convert_datum_to_json(datum, meta, &type_context, scale,
+      is_bool, format_json, strict, oracle, allocator, session, lob_options, converted);
+  return ret != OB_SUCCESS ? ret : converted.get_binary(allocator, binary);
+}
+
+int ObJsonExprHelper::datum_to_json_binary(const ObDatum &datum, const SqlTypeMeta &meta,
+    ObScale scale, bool is_bool, bool format_json, bool strict, bool oracle,
+    ObIAllocator &allocator, ObBasicSessionInfo *session,
+    const common::ObLobReadOptions *lob_options, ObString &binary)
+{
+  ConvertedJson converted;
+  const int ret = convert_datum_to_json(datum, meta, nullptr, scale, is_bool, format_json, strict,
       oracle, allocator, session, lob_options, converted);
   return ret != OB_SUCCESS ? ret : converted.get_binary(allocator, binary);
 }
@@ -985,7 +1041,7 @@ static int get_converted_json_value(const ObExpr &expr, ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   ObExpr *arg = expr.args_[index];
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   const common::ObLobReadOptions *lob_options = nullptr;
   if (OB_FAIL(ctx.exec_ctx_.get_lob_read_options(lob_options))) {
   } else if (OB_FAIL(allocator.eval_arg(arg, ctx, datum))) {
@@ -1000,7 +1056,8 @@ static int get_converted_json_value(const ObExpr &expr, ObEvalCtx &ctx,
     }
   } else {
     ObScale scale = arg->datum_meta_.type_ == ObBitType ? arg->datum_meta_.length_semantics_ : arg->datum_meta_.scale_;
-    ret = convert_datum_to_json(*datum, arg->obj_meta_, scale, arg->is_boolean_, false, false, false,
+    ret = convert_datum_to_json(*datum, arg->obj_meta_, &arg->get_sql_type(), scale,
+        arg->is_boolean_, false, false, false,
         allocator, ctx.exec_ctx_.get_my_session(), lob_options, converted);
   }
   return ret;
@@ -1266,7 +1323,7 @@ int find_and_add_native_path_cache(JsonPathCache* path_cache,
   return ret;
 }
 
-bool ObJsonExprHelper::is_convertible_to_json(ObObjType &type)
+bool ObJsonExprHelper::is_convertible_to_json(SqlValueType &type)
 {
   bool val = false;
   switch (type) {
@@ -1292,7 +1349,7 @@ int ObJsonExprHelper::is_valid_for_json(ObExprResType* types_stack,
                                         const char* func_name)
 {
   INIT_SUCC(ret);
-  ObObjType in_type = types_stack[index].get_type();
+  SqlValueType in_type = types_stack[index].get_type();
 
   if (!is_convertible_to_json(in_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
@@ -1315,7 +1372,7 @@ int ObJsonExprHelper::is_valid_for_json(ObExprResType& type,
                                         const char* func_name)
 {
   INIT_SUCC(ret);
-  ObObjType in_type = type.get_type();
+  SqlValueType in_type = type.get_type();
   
   if (!is_convertible_to_json(in_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
@@ -1332,7 +1389,7 @@ int ObJsonExprHelper::is_valid_for_json(ObExprResType& type,
 int ObJsonExprHelper::is_valid_for_path(ObExprResType* types_stack, uint32_t index)
 {
   INIT_SUCC(ret);
-  ObObjType in_type = types_stack[index].get_type();
+  SqlValueType in_type = types_stack[index].get_type();
   if (in_type == ObNullType || in_type == ObJsonType) {
   } else if (ob_is_string_type(in_type)) {
     if (types_stack[index].get_charset_type() != CHARSET_UTF8MB4) {
@@ -1347,7 +1404,7 @@ int ObJsonExprHelper::is_valid_for_path(ObExprResType* types_stack, uint32_t ind
 
 void ObJsonExprHelper::set_type_for_value(ObExprResType* types_stack, uint32_t index)
 {
-  ObObjType in_type = types_stack[index].get_type();
+  SqlValueType in_type = types_stack[index].get_type();
   if (in_type == ObNullType) {
   } else if (ob_is_string_type(in_type)) {
     if (in_type == ObVarcharType && types_stack[index].get_collation_type() == CS_TYPE_BINARY) {
@@ -1425,7 +1482,7 @@ struct ObFindDoubleEscapeFunc {
 int ObJsonExprHelper::get_sql_scalar_type(
   ObEvalCtx& ctx,
   int64_t origin, 
-  ObObjType& scalar_type, 
+  SqlValueType& scalar_type,
   int32_t& scalar_len,
   int32_t& precision,
   int32_t& scale,
@@ -1436,7 +1493,7 @@ int ObJsonExprHelper::get_sql_scalar_type(
   ParseNode parse_node;
   parse_node.value_ = origin;
 
-  scalar_type = static_cast<ObObjType>(parse_node.int16_values_[0]);
+  scalar_type = static_cast<SqlValueType>(parse_node.int16_values_[0]);
   scalar_len = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
 
   if (ob_is_string_tc(scalar_type) && OB_FAIL(ObJsonUtil::get_accuracy_internal(
@@ -1465,14 +1522,14 @@ int ObJsonExprHelper::get_cast_type(const ObExprResType param_type2,
                                     ObExprTypeCtx &type_ctx)
 {
   INIT_SUCC(ret);
-    if (!param_type2.is_int() && !param_type2.get_param().is_int()) {
+    if (!param_type2.is_int() && !param_type2.get_param_value_meta().is_int()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cast param type is unexpected", K(param_type2));
   } else {
-    const ObObj &param = param_type2.get_param();
+    const Datum &param = param_type2.get_param_datum();
     ParseNode parse_node;
     parse_node.value_ = param.get_int();
-    ObObjType obj_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
+    SqlValueType obj_type = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
     dst_type.set_collation_type(static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]));
     dst_type.set_type(obj_type);
     if (ob_is_string_type(obj_type)) {
@@ -1611,7 +1668,7 @@ int ObJsonExprHelper::get_cast_inttc_len(ObExprResType &type1,
     }
   } else {
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
-    ObObjTypeClass tc1 = type1.get_type_class();
+    SqlTypeClass tc1 = type1.get_type_class();
     int16_t scale = type1.get_accuracy().get_scale();
     if (ObDoubleTC == tc1) {
       res_len -= 1;
@@ -1632,7 +1689,7 @@ int ObJsonExprHelper::get_clause_opt(ObExpr *expr,
                                     int8_t &type)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   if (OB_FAIL(expr->eval(ctx, json_datum))) {
   } else {
     int64_t option_type = json_datum->get_int();
@@ -1649,7 +1706,6 @@ int ObJsonExprHelper::get_cast_string_len(ObExprResType &type1,
                         common::ObCollationType conn)
 {
   INIT_SUCC(ret);
-  const ObObj &val = type1.get_param();
 
   if (!type1.is_literal()) { // column
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
@@ -1728,7 +1784,16 @@ int ObJsonExprHelper::get_cast_string_len(ObExprResType &type1,
                        cast_mode,
                        cast_coll_type);
     ObString val_str;
-    EXPR_GET_VARCHAR_V2(val, val_str);
+    {
+        DatumValue val;
+        alignas(8) char literal_scratch[64];
+        DatumValue converted_literal;
+        OZ(type1.export_param(val, literal_scratch, sizeof(literal_scratch)));
+        if (OB_SUCC(ret)) {
+          ret = DatumValueCaster::to_type(ObVarcharType, cast_ctx, val, oballocator, converted_literal);
+        }
+        if (OB_SUCC(ret)) { ret = converted_literal.get_varchar(val_str); }
+      }
     if (OB_SUCC(ret) && NULL != val_str.ptr()) {
       int32_t len_byte = val_str.length();
       res_len = len_byte;
@@ -1755,15 +1820,15 @@ int ObJsonExprHelper::parse_res_type(ObExprResType& type1,
   INIT_SUCC(ret);
   const int32_t VARCHAR2_DEFAULT_LEN = 4000;
   ObExprResType dst_type;
-  const ObObj &param = res_type.get_param();
+  const Datum &param = res_type.get_param_datum();
 
   if (param.get_int() == 0) {
     //     result_type.set_type(type1.get_type());
     //     result_type.set_collation_type(type1.get_collation_type());
     //     result_type.set_accuracy(type1.get_accuracy());
-    //     ObObjType obj_type = type1.get_type();
+    //     SqlValueType obj_type = type1.get_type();
 
-    ObObjType obj_type = ObJsonType;
+    SqlValueType obj_type = ObJsonType;
     result_type.set_type(ObJsonType);
     result_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     int16_t length_semantics = (OB_NOT_NULL(type_ctx.get_session())
@@ -1780,12 +1845,12 @@ int ObJsonExprHelper::parse_res_type(ObExprResType& type1,
   return ret;
 }
 
-int ObJsonExprHelper::eval_and_check_res_type(int64_t value, ObObjType& type, int32_t& dst_len)
+int ObJsonExprHelper::eval_and_check_res_type(int64_t value, SqlValueType& type, int32_t& dst_len)
 {
   INIT_SUCC(ret);
   ParseNode node;
   node.value_ = value;
-  ObObjType dst_type = static_cast<ObObjType>(node.int16_values_[0]);
+  SqlValueType dst_type = static_cast<SqlValueType>(node.int16_values_[0]);
   dst_len = node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
   if (dst_type != ObVarcharType 
       && dst_type != ObLongTextType 
@@ -1798,7 +1863,7 @@ int ObJsonExprHelper::eval_and_check_res_type(int64_t value, ObObjType& type, in
   return ret;
 }
 // JSON_EXPR_FLAG 0 json value , 1 json query
-int ObJsonExprHelper::check_item_func_with_return(ObJsonPathNodeType path_type, ObObjType dst_type, common::ObCollationType dst_coll_type, int8_t JSON_EXPR_FLAG)
+int ObJsonExprHelper::check_item_func_with_return(ObJsonPathNodeType path_type, SqlValueType dst_type, common::ObCollationType dst_coll_type, int8_t JSON_EXPR_FLAG)
 {
   INIT_SUCC(ret);
   switch (path_type) {
@@ -1871,11 +1936,11 @@ int ObJsonExprHelper::check_item_func_with_return(ObJsonPathNodeType path_type, 
 int ObJsonExprHelper::get_expr_option_value(const ObExprResType param_type2, int8_t &dst_type)
 {
   INIT_SUCC(ret);
-  if (!param_type2.is_int() && !param_type2.get_param().is_int()) {
+  if (!param_type2.is_int() && !param_type2.get_param_value_meta().is_int()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cast param type is unexpected", K(param_type2));
   } else {
-    dst_type = param_type2.get_param().get_int();
+    dst_type = param_type2.get_param_datum().get_int();
   }
   return ret;
 }
@@ -1959,7 +2024,7 @@ int ObJsonExprHelper::parse_asc_option(ObExprResType& asc_type,
 {
   INIT_SUCC(ret);
   ObExprResType temp_type;
-  ObObjType doc_type = type1.get_type();
+  SqlValueType doc_type = type1.get_type();
   int8_t asc_option = 0;
 
   if (asc_type.get_type() != ObIntType) {
@@ -2015,7 +2080,7 @@ int ObJsonExprHelper::character2_ascii_string(common::ObIAllocator *allocator,
   return ret;
 }
 
-int ObJsonExprHelper::pre_default_value_check(ObObjType dst_type, ObString val_str, ObObjType val_type, size_t length) {
+int ObJsonExprHelper::pre_default_value_check(SqlValueType dst_type, ObString val_str, SqlValueType val_type, size_t length) {
   INIT_SUCC(ret);
   size_t len;
   switch (dst_type) {
@@ -2088,7 +2153,7 @@ int ObJsonExprHelper::pack_json_diff_res(
     ObEvalCtx &ctx,
     ObIAllocator &temp_allocator,
     ObIJsonBase *json_doc,
-    ObDatum &res)
+    Datum &res)
 {
   INIT_SUCC(ret);
   ObJsonBin *bin = nullptr;
@@ -2118,7 +2183,7 @@ int ObJsonExprHelper::pack_json_res(
     ObEvalCtx &ctx,
     ObIAllocator &temp_allocator,
     ObIJsonBase *json_doc,
-    ObDatum &res)
+    Datum &res)
 {
   INIT_SUCC(ret);
   bool shoudl_pack_diff = false;
@@ -2207,9 +2272,9 @@ bool ObJsonExprHelper::check_json_path_can_pushdown(const ObRawExpr &path_expr)
     LOG_INFO("path expr is not const expr, so not support", K(path_expr));
   } else {
     const ObConstRawExpr &const_param = static_cast<const ObConstRawExpr &>(path_expr);
-    const ObObj &path_value = const_param.get_value();
+    const Datum &path_value = const_param.get_value_datum();
     share::ObSubColumnPath sub_col_path;
-    if (! path_value.is_string_type() || path_value.is_null()) {
+    if (! const_param.get_value_meta().is_string_type() || path_value.is_null()) {
       LOG_INFO("path expr is not string, so not support", K(path_value), K(const_param));
     } else if (OB_SUCCESS != share::ObSubColumnPath::parse_sub_column_path(path_value.get_string(), sub_col_path)) {
     } else {
@@ -2251,18 +2316,18 @@ bool ObJsonExprHelper::check_json_expr_can_pushdown(const ObRawExpr &json_expr)
     } else if (! type_expr->is_const_raw_expr()) {
       LOG_INFO("returning type is not const, so do not pushdown", KPC(type_expr), K(json_expr));
     // check trunc expr
-    } else if (! trunc_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(trunc_expr)->get_value().get_int() != 0) {
+    } else if (! trunc_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(trunc_expr)->get_value_datum().get_int() != 0) {
       LOG_INFO("truncate expr is not default value, so do not support pushdown", KPC(trunc_expr), K(json_expr));
     // check ascii expr
-    } else if (! ascii_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(ascii_expr)->get_value().get_int() != 0) {
+    } else if (! ascii_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(ascii_expr)->get_value_datum().get_int() != 0) {
       LOG_INFO("ascii expr not default value, so do not support pushdown", KPC(ascii_expr), K(json_expr));
-    } else if (! empty_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(empty_expr)->get_value().get_int() != JSN_VALUE_IMPLICIT) {
+    } else if (! empty_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(empty_expr)->get_value_datum().get_int() != JSN_VALUE_IMPLICIT) {
       LOG_INFO("empty clause expr not default value, so do not support pushdown", KPC(empty_expr), K(json_expr));
-    } else if (! empty_def_expr->is_const_raw_expr() || ! static_cast<const ObConstRawExpr *>(empty_def_expr)->get_value().is_null()) {
+    } else if (! empty_def_expr->is_const_raw_expr() || ! static_cast<const ObConstRawExpr *>(empty_def_expr)->get_value_datum().is_null()) {
       LOG_INFO("empty define clause expr not default value, so do not support pushdown", KPC(empty_def_expr), K(json_expr));
-    } else if (! error_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(error_expr)->get_value().get_int() != JSN_VALUE_IMPLICIT) {
+    } else if (! error_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(error_expr)->get_value_datum().get_int() != JSN_VALUE_IMPLICIT) {
       LOG_INFO("error clause expr not default value, so do not support pushdown", KPC(error_expr), K(json_expr));
-    } else if (! error_def_expr->is_const_raw_expr() || ! static_cast<const ObConstRawExpr *>(error_def_expr)->get_value().is_null()) {
+    } else if (! error_def_expr->is_const_raw_expr() || ! static_cast<const ObConstRawExpr *>(error_def_expr)->get_value_datum().is_null()) {
       LOG_INFO("error define clause expr not default value, so do not support pushdown", KPC(error_def_expr), K(json_expr));
     } else {
       res = true;
@@ -2285,8 +2350,8 @@ int ObJsonExprHelper::get_sub_column_path_from_json_expr(ObIAllocator& allocator
       ret = OB_ERR_UNEXPECTED;
     } else {
       const ObConstRawExpr *const_param = static_cast<const ObConstRawExpr *>(path_expr);
-      const ObObj &path_value = const_param->get_value();
-      if (! path_value.is_string_type() || path_value.is_null()) {
+      const Datum &path_value = const_param->get_value_datum();
+      if (! const_param->get_value_meta().is_string_type() || path_value.is_null()) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ob_write_string(allocator, path_value.get_string(), path_str))) {
       } else if (OB_FAIL(share::ObSubColumnPath::parse_sub_column_path(path_str, sub_col_path))) {

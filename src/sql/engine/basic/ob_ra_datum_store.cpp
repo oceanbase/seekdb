@@ -52,21 +52,39 @@ template <typename T, typename B>
 void pointer2off(T *&pointer, B *base)
 {
   pointer = reinterpret_cast<T *>(
-      reinterpret_cast<const char *>(pointer) - reinterpret_cast<const char *>(base));
+      reinterpret_cast<uintptr_t>(pointer) - reinterpret_cast<uintptr_t>(base));
 }
 
 template <typename T, typename B>
 void off2pointer(T *&pointer, B *base)
 {
   pointer = reinterpret_cast<T *>(
-      reinterpret_cast<intptr_t>(pointer) + reinterpret_cast<char *>(base));
+      reinterpret_cast<uintptr_t>(pointer) + reinterpret_cast<uintptr_t>(base));
 }
 
 template <typename T, typename B>
 void point2pointer(T *&dst_pointer, B *dst_base, T *src_pointer, const B *src_base)
 {
-  dst_pointer = reinterpret_cast<T *>(reinterpret_cast<char *>(dst_base) +
-      reinterpret_cast<intptr_t>(src_pointer) - reinterpret_cast<const char *>(src_base));
+  dst_pointer = reinterpret_cast<T *>(reinterpret_cast<uintptr_t>(dst_base) +
+      reinterpret_cast<uintptr_t>(src_pointer) - reinterpret_cast<uintptr_t>(src_base));
+}
+} // namespace ra_datum_store
+
+namespace
+{
+int validate_ra_copy(const ObRADatumStore::StoredRow &row, int64_t count,
+                    int64_t cell_and_payload_size, char *buffer, int64_t capacity,
+                    int64_t row_size, uint32_t extra_size)
+{
+  const int64_t expected = sizeof(row) + cell_and_payload_size + extra_size
+      + ObRADatumStore::Block::ROW_INDEX_SIZE;
+  if (row.payload_ != buffer || capacity < 0 || count > INT32_MAX
+      || row_size != expected || row_size > UINT32_MAX) {
+    return OB_INVALID_ARGUMENT;
+  } else if (expected - int64_t(sizeof(row)) - ObRADatumStore::Block::ROW_INDEX_SIZE > capacity) {
+    return OB_BUF_NOT_ENOUGH;
+  }
+  return OB_SUCCESS;
 }
 
 }
@@ -77,18 +95,22 @@ int ObRADatumStore::StoredRow::copy_datums(const common::ObIArray<ObExpr*> &expr
   const uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(payload_ != buf) || OB_UNLIKELY(size < 0)) {
-    ret = OB_INVALID_ARGUMENT;
+  int64_t payload_size = 0;
+  if (OB_FAIL(ObRADatumStore::row_copy_size<false>(exprs, ctx, payload_size))) {
+  } else if (OB_FAIL(validate_ra_copy(*this, exprs.count(), payload_size, buf,
+                                     size, row_size, row_extend_size))) {
   } else {
-    readable_ = true;
-    cnt_ = ~(1U << 31) & static_cast<int32>(exprs.count());
-    row_size_ = static_cast<int32_t>(row_size);
-    int64_t pos = sizeof(ObDatum) * cnt_ + row_extend_size;
-    for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
-      ObDatum &in_datum = static_cast<ObDatum&>(exprs.at(i)->locate_expr_datum(ctx));
-      ObDatum *datum = new (&cells()[i])ObDatum();
-      if (OB_FAIL(datum->deep_copy(in_datum, buf, size, pos))) {
-      }
+    int64_t pos = sizeof(StoredDatumCell) * exprs.count() + row_extend_size;
+    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+      const ObExpr &expr = *exprs.at(i);
+      const Datum &in_datum = expr.locate_expr_datum(ctx);
+      ret = StoredDatumCodec::encode_native_copy(in_datum, stored_cells()[i],
+          expr.get_datum_copy_plan(), buf, size, pos);
+    }
+    if (OB_SUCC(ret)) {
+      readable_ = true;
+      cnt_ = static_cast<uint32_t>(exprs.count());
+      row_size_ = static_cast<uint32_t>(row_size);
     }
   }
   return ret;
@@ -99,18 +121,20 @@ int ObRADatumStore::StoredRow::copy_datums(const common::ObIArray<ObDatum> &datu
   const uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(payload_ != buf) || OB_UNLIKELY(size < 0)) {
-    ret = OB_INVALID_ARGUMENT;
+  int64_t payload_size = 0;
+  if (OB_FAIL(ObRADatumStore::row_copy_size(datums, payload_size))) {
+  } else if (OB_FAIL(validate_ra_copy(*this, datums.count(), payload_size, buf,
+                                     size, row_size, row_extend_size))) {
   } else {
-    readable_ = true;
-    cnt_ = ~(1U << 31) & static_cast<int32>(datums.count());
-    row_size_ = static_cast<int32_t>(row_size);
-    int64_t pos = sizeof(ObDatum) * cnt_ + row_extend_size;
-    for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
+    int64_t pos = sizeof(StoredDatumCell) * datums.count() + row_extend_size;
+    for (int64_t i = 0; OB_SUCC(ret) && i < datums.count(); ++i) {
       const ObDatum &in_datum = datums.at(i);
-      ObDatum *datum = new (&cells()[i])ObDatum();
-      if (OB_FAIL(datum->deep_copy(in_datum, buf, size, pos))) {
-      }
+      ret = StoredDatumCodec::encode_legacy_copy(in_datum, stored_cells()[i], buf, size, pos);
+    }
+    if (OB_SUCC(ret)) {
+      readable_ = true;
+      cnt_ = static_cast<uint32_t>(datums.count());
+      row_size_ = static_cast<uint32_t>(row_size);
     }
   }
   return ret;
@@ -122,17 +146,21 @@ int ObRADatumStore::StoredRow::to_expr(const common::ObIArray<ObExpr*> &exprs,
     ObEvalCtx &ctx) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(cnt_ < exprs.count())) {
+  if (OB_UNLIKELY(!readable_ || cnt_ < exprs.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("datum count mismatch", K(ret), K(cnt_), K(exprs.count()));
   } else {
-    for (uint32_t i = 0; i < exprs.count(); ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+      if (exprs.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
+    }
+    for (uint32_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
       if (exprs.at(i)->is_const_expr()) {
         continue;
       } else {
-        exprs.at(i)->locate_expr_datum(ctx) = cells()[i];
-        exprs.at(i)->set_evaluated_projected(ctx);
-        LOG_DEBUG("succ to_expr", K(cnt_), K(i), KPC(exprs.at(i)), K(cells()[i]));
+        ret = StoredDatumCodec::decode_native(stored_cells()[i],
+            exprs.at(i)->get_datum_copy_plan(), exprs.at(i)->locate_expr_datum(ctx));
+        if (OB_SUCC(ret)) { exprs.at(i)->set_evaluated_projected(ctx); }
+        LOG_DEBUG("succ to_expr", K(cnt_), K(i), KPC(exprs.at(i)), K(stored_cells()[i]));
       }
     }
   }
@@ -142,12 +170,20 @@ int ObRADatumStore::StoredRow::to_expr(const common::ObIArray<ObExpr*> &exprs,
 int ObRADatumStore::StoredRow::assign(const StoredRow *sr)
 {
   int ret = OB_SUCCESS;
-  MEMCPY(this, static_cast<const void*>(sr), sr->row_size_);
-  ObDatum* src_cells = const_cast<ObDatum*>(sr->cells());
-  for (int64_t i = 0; i < cnt_; ++i) {
-    ra_datum_store::point2pointer(*(const char **)&cells()[i].ptr_,
-                  this,
-                  *(const char **)&src_cells[i].ptr_, sr);
+  if (sr == nullptr || sr->body_size() < int64_t(sizeof(*sr))
+      + int64_t(sizeof(StoredDatumCell)) * sr->cnt_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (this != sr) {
+    // row_size_ includes a separate block-tail index quota. Only the body is
+    // contiguous here; copying that quota reads/writes four bytes past the row.
+    MEMCPY(this, static_cast<const void*>(sr), sr->body_size());
+    if (readable_) {
+      const StoredDatumCell *src_cells = sr->stored_cells();
+      for (int64_t i = 0; i < cnt_; ++i) {
+        ra_datum_store::point2pointer(*(const char **)&stored_cells()[i].ptr_,
+                    this, *(const char **)&src_cells[i].ptr_, sr);
+      }
+    }
   }
   return ret;
 }
@@ -157,7 +193,7 @@ int ObRADatumStore::StoredRow::to_copyable()
   int ret = OB_SUCCESS;
   if (0 != readable_) {
     for (int64_t i = 0; i < cnt_; ++i) {
-      ra_datum_store::pointer2off(*(const char **)&cells()[i].ptr_, this);
+      ra_datum_store::pointer2off(*(const char **)&stored_cells()[i].ptr_, this);
     }
     readable_ = false;
   }
@@ -169,7 +205,7 @@ int ObRADatumStore::StoredRow::to_readable()
   int ret = OB_SUCCESS;
   if (0 == readable_) {
     for (int64_t i = 0; i < cnt_; ++i) {
-      ra_datum_store::off2pointer(*(const char **)&cells()[i].ptr_, this);
+      ra_datum_store::off2pointer(*(const char **)&stored_cells()[i].ptr_, this);
     }
     readable_ = true;
   }
@@ -260,11 +296,12 @@ int ObRADatumStore::Block::copy_stored_row(ShrinkBuffer &buf, const StoredRow &s
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(row_size <= ROW_INDEX_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (row_size > buf.remain()) {
+    ret = OB_BUF_NOT_ENOUGH;
   } else {
     StoredRow *sr = new (buf.head())StoredRow;
-    sr->assign(&stored_row);
-
-    if (OB_FAIL(buf.fill_tail(ROW_INDEX_SIZE))) {
+    if (OB_FAIL(sr->assign(&stored_row))) {
+    } else if (OB_FAIL(buf.fill_tail(ROW_INDEX_SIZE))) {
     } else {
       *reinterpret_cast<row_idx_t *>(buf.tail()) = static_cast<row_idx_t>(buf.head() - payload_);
       idx_off_ -= static_cast<int32_t>(ROW_INDEX_SIZE);

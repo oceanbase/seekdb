@@ -101,7 +101,7 @@ void ObSyncCmdDriver::free_output_row(ObMySQLResultSet &result)
   if (OB_NOT_NULL(result.get_exec_context().get_output_row())) {
     const ObNewRow *row = result.get_exec_context().get_output_row();
     for (int64_t i = 0; i < row->get_count(); ++i) {
-      ObObj &obj = row->cells_[i];
+      DatumValue &obj = row->cells_[i];
       if (obj.is_pl_extend()) {
         (void)pl::ObUserDefinedType::destruct_obj(obj, &session_);
       }
@@ -231,14 +231,14 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
 
     ObNewRow *tmp_row = const_cast<ObNewRow*>(row);
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_row->get_count(); i++) {
-      ObObj& value = tmp_row->get_cell(i);
+      DatumValue& value = tmp_row->get_cell(i);
       if (ob_is_string_tc(value.get_type()) && CS_TYPE_INVALID != value.get_collation_type()) {
         OZ(convert_string_value_charset(value, result, charset_type));
       } else if (ob_is_text_tc(value.get_type())
                 && OB_FAIL(convert_text_value_charset(value, result, charset_type))) {
       }
       if (OB_FAIL(ret)) {
-      } else if ((value.is_lob() || value.is_json() || value.is_geometry())
+      } else if ((value.get_meta().is_lob() || value.is_json() || value.is_geometry())
                   && OB_FAIL(process_lob_locator_results(value, result))) {
       } else if ((value.is_collection_sql_type() || value.is_geometry()) &&
                  OB_FAIL(ObSqlUdtUtils::convert_result_for_client(value, result))) {

@@ -36,14 +36,14 @@ int ObPLCacheMgr::get_sys_var_in_pl_cache_str(ObBasicSessionInfo &session,
 {
   int ret = OB_SUCCESS;
   const int64_t MAX_SYS_VARS_STR_SIZE = 256;
-  ObObj val;
+  DatumValue val;
   ObSysVarInPC sys_vars;
   char *buf = nullptr;
   int64_t pos = 0;
 
   for (int64_t i = 0; OB_SUCC(ret) && i < PL_CACHE_SYS_VAR_COUNT; ++i) {
     val.reset();
-    if (OB_FAIL(session.get_sys_variable(InfluencePLMap[i], val))) {
+    if (OB_FAIL(session.copy_sys_variable(InfluencePLMap[i], val, allocator))) {
     } else if (OB_FAIL(sys_vars.push_back(val))) {
     }
   }

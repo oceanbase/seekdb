@@ -21,6 +21,7 @@
 #include "sql/das/ob_das_ref.h"
 #include "sql/das/ob_das_scan_op.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/basic/stored_datum_cell.h"
 
 namespace oceanbase
 {
@@ -90,7 +91,8 @@ public:
   int64_t cur_group_idx();
   int64_t row_cnt_with_cur_group_idx();
 
-  const ObDatum *cur_datums();
+  // Borrows the current fixed row until save/reuse/reset advances its owner.
+  const StoredDatumCell *cur_stored_cells();
   void reuse();
   void reset();
   TO_STRING_KV(K_(saved_size),

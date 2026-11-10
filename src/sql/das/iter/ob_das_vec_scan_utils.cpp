@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SQL_DAS
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+#include "data_plane/native_key_value_buffer.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
@@ -138,7 +141,7 @@ int ObDasVecScanUtils::get_real_search_vec(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
 
-  ObDatum *search_vec_datum = NULL;
+  Datum *search_vec_datum = NULL;
   const ObDatumAccessContext *access_ctx = nullptr;
   if (OB_ISNULL(sort_rtdef) || OB_ISNULL(sort_rtdef->eval_ctx_)
       || OB_ISNULL(origin_vec)) {
@@ -197,7 +200,7 @@ int ObDasVecScanUtils::init_limit(const ObDASVecAuxScanCtDef *ir_ctdef,
                     && (OB_ISNULL(base_rtdef) || base_rtdef->limit_param_.is_valid()))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (nullptr != sort_ctdef->limit_expr_) {
-      ObDatum *limit_datum = nullptr;
+      Datum *limit_datum = nullptr;
       if (OB_FAIL(sort_ctdef->limit_expr_->eval(*sort_rtdef->eval_ctx_, limit_datum))) {
       } else if (limit_datum->is_null()) {
         is_null = true;
@@ -208,7 +211,7 @@ int ObDasVecScanUtils::init_limit(const ObDASVecAuxScanCtDef *ir_ctdef,
     }
 
     if (OB_SUCC(ret) && !is_null && nullptr != sort_ctdef->offset_expr_) {
-      ObDatum *offset_datum = nullptr;
+      Datum *offset_datum = nullptr;
       if (OB_FAIL(sort_ctdef->offset_expr_->eval(*sort_rtdef->eval_ctx_, offset_datum))) {
       } else if (offset_datum->is_null()) {
         limit_param.offset_ = 0;
@@ -422,7 +425,7 @@ int ObDasVecScanUtils::get_rowkey(ObIAllocator &allocator, const ObDASScanCtDef 
   int ret = OB_SUCCESS;
 
   int64_t rowkey_cnt = 0;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
 
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
@@ -430,20 +433,19 @@ int ObDasVecScanUtils::get_rowkey(ObIAllocator &allocator, const ObDASScanCtDef 
   } else if (OB_FALSE_IT(rowkey_cnt = ctdef->rowkey_exprs_.count())) {
   } else if (OB_UNLIKELY(rowkey_cnt <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * rowkey_cnt))) {
+  } else if (OB_ISNULL(buf = allocator.alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FALSE_IT(obj_ptr = new (buf) ObObj[rowkey_cnt])) {
-  } else if (OB_ISNULL(rowkey = static_cast<ObRowkey *>(allocator.alloc(sizeof(ObRowkey))))) {
+  } else if (OB_FALSE_IT(obj_ptr = new (buf) DatumValue[rowkey_cnt])) {
+  } else if (OB_ISNULL(rowkey = OB_NEWx(ObRowkey, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
-      ObObj tmp_obj;
+      DatumValue tmp_obj;
       ObExpr *expr = ctdef->rowkey_exprs_.at(i);
-      ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
-      if (OB_ISNULL(datum.ptr_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, obj_ptr[i]))) {
+      Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+      if (OB_FAIL(project_native_datum_value_view(datum, expr->get_sql_type(),
+          expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, allocator))) {
+      } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], allocator))) {
       }
     }
 

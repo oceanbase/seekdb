@@ -1469,7 +1469,10 @@ int ObTableSqlService::supplement_for_core_table(ObISQLClient &sql_client,
         && !ob_is_geometry(column.get_data_type())) {
       {
         ObTimeZoneInfo tz_info;
-        if (OB_FAIL(column.get_orig_default_value().print_plain_str_literal(
+        DatumValue default_value;
+        alignas(8) char default_scratch[64];
+        if (OB_FAIL(column.export_orig_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+        } else if (OB_FAIL(default_value.print_plain_str_literal(
                 orig_default_value_buf, value_buf_len, orig_default_value_len, &tz_info))) {
         }
       }
@@ -1479,13 +1482,13 @@ int ObTableSqlService::supplement_for_core_table(ObISQLClient &sql_client,
   if (OB_SUCC(ret)) {
     if (ob_is_string_type(column.get_data_type()) || ob_is_json(column.get_data_type())
         || ob_is_geometry(column.get_data_type())) {
-      ObString orig_default_value_str = column.get_orig_default_value().get_string();
+      ObString orig_default_value_str = column.get_orig_default_datum().get_string();
       orig_default_value.assign_ptr(orig_default_value_str.ptr(), orig_default_value_str.length());
     } else {
       orig_default_value.assign_ptr(orig_default_value_buf,
                                     static_cast<int32_t>(orig_default_value_len));
     }
-    if (column.get_orig_default_value().is_null()) {
+    if (column.get_orig_default_datum().is_null()) {
       orig_default_value.reset();
     }
   }
@@ -1507,7 +1510,7 @@ int ObTableSqlService::supplement_for_core_table(ObISQLClient &sql_client,
       ObCoreTableProxy::Cell cell;
       cell.name_ = column.get_column_name_str();
       ObSqlString sql_string;
-      if (column.get_orig_default_value().is_null()) {
+      if (column.get_orig_default_datum().is_null()) {
         cell.value_.reset();
       } else {
         if (OB_FAIL(sql_append_hex_escape_str(ObHexEscapeSqlStr(orig_default_value).str(),
@@ -3124,14 +3127,14 @@ int ObTableSqlService::gen_column_dml_without_check(
       ob_is_json(column.get_data_type()) ||
       ob_is_geometry(column.get_data_type())) {
     //The default value of the generated column is the expression definition of the generated column
-    ObString orig_default_value_str = column.get_orig_default_value().get_string();
-    ObString cur_default_value_str = column.get_cur_default_value().get_string();
+    ObString orig_default_value_str = column.get_orig_default_datum().get_string();
+    ObString cur_default_value_str = column.get_cur_default_datum().get_string();
     orig_default_value.assign_ptr(orig_default_value_str.ptr(), orig_default_value_str.length());
     cur_default_value.assign_ptr(cur_default_value_str.ptr(), cur_default_value_str.length());
-    if (!column.get_orig_default_value().is_null() && OB_ISNULL(orig_default_value.ptr())) {
+    if (!column.get_orig_default_datum().is_null() && OB_ISNULL(orig_default_value.ptr())) {
       orig_default_value.assign_ptr("", 0);
     }
-    if (!column.get_cur_default_value().is_null() && OB_ISNULL(cur_default_value.ptr())) {
+    if (!column.get_cur_default_datum().is_null() && OB_ISNULL(cur_default_value.ptr())) {
       cur_default_value.assign_ptr("", 0);
     }
   } else {
@@ -3154,10 +3157,16 @@ int ObTableSqlService::gen_column_dml_without_check(
       int64_t orig_default_value_len = 0;
       int64_t cur_default_value_len = 0;
       ObTimeZoneInfo tz_info;
+      DatumValue orig_default;
+      DatumValue cur_default;
+      alignas(8) char orig_default_scratch[64];
+      alignas(8) char cur_default_scratch[64];
       if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
-      } else if (OB_FAIL(column.get_orig_default_value().print_plain_str_literal(
+      } else if (OB_FAIL(column.export_orig_default_value(orig_default, orig_default_scratch, sizeof(orig_default_scratch)))) {
+      } else if (OB_FAIL(orig_default.print_plain_str_literal(
                       orig_default_value_buf, value_buf_len, orig_default_value_len, &tz_info))) {
-      } else if (OB_FAIL(column.get_cur_default_value().print_plain_str_literal(
+      } else if (OB_FAIL(column.export_cur_default_value(cur_default, cur_default_scratch, sizeof(cur_default_scratch)))) {
+      } else if (OB_FAIL(cur_default.print_plain_str_literal(
                              cur_default_value_buf, value_buf_len, cur_default_value_len, &tz_info))) {
       } else {
         orig_default_value.assign_ptr(orig_default_value_buf, static_cast<int32_t>(orig_default_value_len));
@@ -3167,10 +3176,10 @@ int ObTableSqlService::gen_column_dml_without_check(
   }
   if (OB_SUCC(ret)) {
     ObString cur_default_value_v1;
-    if (column.get_orig_default_value().is_null()) {
+    if (column.get_orig_default_datum().is_null()) {
       orig_default_value.reset();
     }
-    if (column.get_cur_default_value().is_null()) {
+    if (column.get_cur_default_datum().is_null()) {
       cur_default_value.reset();
     }
     ObString bin_extended_type_info;

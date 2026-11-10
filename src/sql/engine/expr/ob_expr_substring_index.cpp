@@ -106,31 +106,30 @@ int ObExprSubstringIndex::cg_expr(ObExprCGCtx &, const ObRawExpr &raw_expr, ObEx
 }
 
 int ObExprSubstringIndex::eval_substring_index(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum &str = expr.locate_param_datum(ctx, 0);
-  ObDatum &delim = expr.locate_param_datum(ctx, 1);
-  ObDatum &count = expr.locate_param_datum(ctx, 2);
-  if (OB_FAIL(expr.eval_param_value(ctx))) {
-  } else if (OB_UNLIKELY(str.is_null() || delim.is_null() || count.is_null())) {
+  Datum *str = nullptr;
+  Datum *delim = nullptr;
+  Datum *count = nullptr;
+  if (OB_FAIL(expr.eval_param_value(ctx, str, delim, count))) {
+  } else if (OB_UNLIKELY(str->is_null() || delim->is_null() || count->is_null())) {
     expr_datum.set_null();
-  } else if (0 == str.len_ || 0 == delim.len_) {
+  } else if (0 == str->length() || 0 == delim->length()) {
     // return empty string if %str or %delim is empty.
     // Reset null flag to prevent loss of empty string information
-    expr_datum.null_ = 0;
-    expr_datum.len_ = 0;
+    ret = expr_datum.set_string(nullptr, 0);
   } else {
-    const ObString m_delim = delim.get_string();
+    const ObString m_delim = delim->get_string();
     // mysql 5.6 static cast count to int32,
     // actually this is a bug and fixed in mysql 8.0.
-    int64_t count_val = count.get_int();
+    int64_t count_val = count->get_int();
     ObString res_str;
     ObExprKMPSearchCtx *kmp_ctx = NULL;
     const uint64_t op_id = static_cast<uint64_t>(expr.expr_ctx_id_);
     if (OB_FAIL(ObExprKMPSearchCtx::get_kmp_ctx_from_exec_ctx(ctx.exec_ctx_, op_id, kmp_ctx))) {
     } else if (OB_FAIL(kmp_ctx->init(m_delim, count_val < 0, ctx.exec_ctx_.get_allocator()))) {
-    } else if (OB_FAIL(kmp_ctx->substring_index_search(str.get_string(), count_val, res_str))) {
+    } else if (OB_FAIL(kmp_ctx->substring_index_search(str->get_string(), count_val, res_str))) {
     } else {
       expr_datum.set_string(res_str);
     }
@@ -153,7 +152,7 @@ int ObExprSubstringIndex::eval_substring_index_batch(const ObExpr &expr,
   } else if (OB_FAIL(ObExprKMPSearchCtx::get_kmp_ctx_from_exec_ctx(ctx.exec_ctx_,
                                                                    op_id, kmp_ctx))) {
   } else {
-    ObDatum *res = expr.locate_batch_datums(ctx);
+    Datum *res = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
@@ -161,17 +160,16 @@ int ObExprSubstringIndex::eval_substring_index_batch(const ObExpr &expr,
       }
       ObString res_str;
       int64_t count_val = 0;
-      ObDatum &text = expr.args_[0]->locate_expr_datum(ctx, i);
-      ObDatum &delim = expr.args_[1]->locate_expr_datum(ctx, i);
-      ObDatum &count = expr.args_[2]->locate_expr_datum(ctx, i);
+      Datum &text = expr.args_[0]->locate_expr_datum(ctx, i);
+      Datum &delim = expr.args_[1]->locate_expr_datum(ctx, i);
+      Datum &count = expr.args_[2]->locate_expr_datum(ctx, i);
       if (OB_UNLIKELY(text.is_null() || delim.is_null() || count.is_null())) {
         res[i].set_null();
-      } else if (0 == text.len_ || 0 == delim.len_ ||
+      } else if (0 == text.length() || 0 == delim.length() ||
                  0 == (count_val = count.get_int())) {
         // return empty string if %str or %delim is empty.
         // Reset null flag to prevent loss of empty string information
-        res[i].null_ = 0;
-        res[i].len_ = 0;
+        ret = res[i].set_string(nullptr, 0);
       } else if (OB_FAIL(kmp_ctx->init(delim.get_string(),
                                        count_val < 0, ctx.exec_ctx_.get_allocator()))) {
       } else if (OB_FAIL(kmp_ctx->substring_index_search(text.get_string(), count_val, res_str))) {

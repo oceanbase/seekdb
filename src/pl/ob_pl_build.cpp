@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 #include "rust/config.h"
+#include <openssl/rand.h>
 #include "share/rc/ob_server_runtime.h"
 
 #include "pl/ob_pl_build.h"
@@ -27,7 +28,6 @@
 #include "pl/ob_pl_package.h"
 #include "pl/ob_pl_dependency_util.h"
 #include "lib/ob_running_mode.h"
-#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase {
 using namespace common;
@@ -40,6 +40,90 @@ lib::ObMutex ObPLBuilder::package_dep_info_lock_;
 
 namespace
 {
+// Validate an already resolved definition without retagging imported parent
+// locals or cached schema versions with the current compilation's origin.
+int check_record_declaration_origin(const ObUserDefinedType &definition)
+{
+  const SqlPLDeclarationIdentity &identity = definition.get_sql_declaration_identity();
+  return !identity.is_specified() || !identity.valid_with(definition.get_sql_nominal_identity())
+      || identity.declaration_id != definition.get_user_type_id() ? OB_ERR_UNEXPECTED : OB_SUCCESS;
+}
+
+int prepare_record_declaration_origins(ObPLAstUnit &ast,
+                                       SqlPLDeclarationSource enclosing_source,
+                                       const SqlNominalType &enclosing_nominal)
+{
+  int ret = OB_SUCCESS;
+  ObPLUserTypeTable &table = ast.get_user_type_table();
+  // External entries must arrive with their real producer's identity. The
+  // inner-mock path puts imported parent locals in both lists, so validate this
+  // list before considering an unbound local declaration in get_types().
+  for (int64_t i = 0; OB_SUCC(ret) && i < table.get_external_types().count(); ++i) {
+    const ObUserDefinedType *definition = table.get_external_types().at(i);
+    if (definition == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (definition->is_record_type()) { ret = check_record_declaration_origin(*definition); }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < table.get_types().count(); ++i) {
+    const ObUserDefinedType *definition = table.get_types().at(i);
+    if (definition == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!definition->is_record_type()) {
+      // Cursor, PL collection and opaque ownership are separate contracts.
+    } else if (definition->get_sql_declaration_identity().is_specified()) {
+      ret = check_record_declaration_origin(*definition);
+    } else if (definition->get_user_type_id() == OB_INVALID_ID
+        || definition->get_sql_nominal_identity().specified
+        || table.get_external_type(definition->get_user_type_id()) != nullptr
+        || (!definition->is_local_type() && !definition->is_package_type())) {
+      // A missing external/schema origin must not become a new local/package
+      // declaration merely because the definition appears in this table.
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      SqlPLDeclarationIdentity identity;
+      SqlNominalType nominal;
+      identity.tenant_id = OB_SERVER_RUNTIME_ID;
+      identity.declaration_id = definition->get_user_type_id();
+      if (ast.is_package()) {
+        // The caller supplies the exact PackageInfo/TriggerInfo which produced
+        // this AST. Never obtain a newer schema version for an existing shape.
+        identity.source = enclosing_source;
+        nominal = enclosing_nominal;
+        if (enclosing_source != SqlPLDeclarationSource::PackageSpec
+            && enclosing_source != SqlPLDeclarationSource::PackageBody
+            && enclosing_source != SqlPLDeclarationSource::Trigger) {
+          ret = OB_ERR_UNEXPECTED;
+        }
+      } else if (enclosing_source != SqlPLDeclarationSource::None || enclosing_nominal.specified
+          || !definition->is_local_type()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        if (!table.get_sql_compilation_scope().is_valid()) {
+          // Scope belongs to the AST type table, not this finalize invocation.
+          // A second finalize reuses it, and random failure publishes nothing.
+          unsigned char random_scope[16];
+          SqlPLCompilationScope scope;
+          if (RAND_bytes(random_scope, sizeof(random_scope)) != 1) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            MEMCPY(&scope.high, random_scope, sizeof(scope.high));
+            MEMCPY(&scope.low, random_scope + sizeof(scope.high), sizeof(scope.low));
+            if (!scope.is_valid()) { ret = OB_ERR_UNEXPECTED; }
+            else { ret = table.set_sql_compilation_scope(scope); }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          identity.source = SqlPLDeclarationSource::Local;
+          identity.compilation_scope = table.get_sql_compilation_scope();
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ret = const_cast<ObUserDefinedType *>(definition)->set_sql_declaration_identity(identity, nominal);
+      }
+    }
+  }
+  return ret;
+}
+
 // Prepare routine and package expressions for interpreter execution.
 int pl_prepare_expressions(ObPLAstUnit &ast, ObPLExecutableUnit &unit)
 {
@@ -61,9 +145,11 @@ int pl_prepare_expressions(ObPLAstUnit &ast, ObPLExecutableUnit &unit)
 int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
                             share::schema::ObSchemaGetterGuard &schema_guard,
                             ObPLAstUnit &ast,
-                            ObPLExecutableUnit &unit)
+                            ObPLExecutableUnit &unit,
+                            SqlPLDeclarationSource enclosing_source,
+                            const SqlNominalType &enclosing_nominal)
 {
-  int ret = OB_SUCCESS;
+  int ret = prepare_record_declaration_origins(ast, enclosing_source, enclosing_nominal);
   if (OB_SUCC(ret)) {
     sql::ObRawExprUniqueSet raw_exprs(false);
     for (int64_t i = 0; OB_SUCC(ret) && i < ast.get_exprs().count(); ++i) {
@@ -75,6 +161,7 @@ int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
                                     0 /*original param cnt*/,
                                     0 /*param cnt*/);
     se_cg.set_rt_question_mark_eval(true);
+    se_cg.set_pl_declarations(ast.get_body() == nullptr ? nullptr : &ast.get_body()->get_namespace());
     OZ (se_cg.generate(raw_exprs, unit.get_frame_info()));
 
     uint32_t expr_op_size = 0;
@@ -131,7 +218,7 @@ int ObPLBuilder::check_dep_schema(ObSchemaGetterGuard &schema_guard,
 }
 
 
-int ObPLBuilder::init_anonymous_scalar_type(const ObObjParam &param,
+int ObPLBuilder::init_anonymous_scalar_type(const DatumParameter &param,
     bool is_prepare_protocol, ObPLDataType &pl_type)
 {
   int ret = OB_SUCCESS;
@@ -185,7 +272,7 @@ int ObPLBuilder::init_anonymous_ast(
   func_ast.set_ret_type(pl_type);
 
   for (int64_t i = 0; OB_SUCC(ret) && OB_NOT_NULL(params) && i < params->count(); ++i) {
-    ObObjParam& param = const_cast<ObObjParam&>(params->at(i));
+    DatumParameter& param = const_cast<DatumParameter&>(params->at(i));
     if (param.is_pl_extend()) {
       if (!is_mocked_anonymous_array_id(param.get_udt_id())) {
         const ObUserDefinedType *user_type = nullptr;
@@ -315,7 +402,8 @@ int ObPLBuilder::compile(
         if (OB_FAIL(ObPL::check_session_alive(session_info_))) {
         } else {
           OZ (pl_prepare_expressions(func_ast, func));
-          OZ (pl_finalize_expressions(session_info_, schema_guard_, func_ast, func));
+          OZ (pl_finalize_expressions(session_info_, schema_guard_, func_ast, func,
+                                      SqlPLDeclarationSource::None, SqlNominalType()));
           OZ (func.get_enum_set_ctx().assgin(func_ast.get_enum_set_ctx()));
           OZ (func.set_variables(func_ast.get_symbol_table()));
           OZ (func.set_types(func_ast.get_user_type_table()));
@@ -513,7 +601,8 @@ int ObPLBuilder::compile(
       // Prepare expressions and AST metadata for interpreter execution.
       lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_BUILD)));
       OZ (pl_prepare_expressions(func_ast, func));
-      OZ (pl_finalize_expressions(session_info_, schema_guard_, func_ast, func));
+      OZ (pl_finalize_expressions(session_info_, schema_guard_, func_ast, func,
+                                      SqlPLDeclarationSource::None, SqlNominalType()));
       OZ (func.get_enum_set_ctx().assgin(func_ast.get_enum_set_ctx()));
       OZ (func.set_variables(func_ast.get_symbol_table()));
       OZ (func.set_types(func_ast.get_user_type_table()));
@@ -784,6 +873,7 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
     uint64_t trigger_id = ObTriggerInfo::get_package_trigger_id(package_info.get_package_id());
     
     OZ (schema_guard_.get_trigger_info( trigger_id, trigger_info));
+    CK (OB_NOT_NULL(trigger_info));
     OX (package_ast.set_priv_user(trigger_info->get_trigger_priv_user()));
   }
   if (OB_SUCC(ret)) {
@@ -811,7 +901,29 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
       // Prepare package expressions for interpreter execution.
       OZ (ObPL::check_session_alive(session_info_));
       OZ (pl_prepare_expressions(package_ast, package));
-      OZ (pl_finalize_expressions(session_info_, schema_guard_, package_ast, package));
+      SqlPLDeclarationSource declaration_source = SqlPLDeclarationSource::None;
+      SqlNominalType declaration_nominal;
+      declaration_nominal.specified = true;
+      declaration_nominal.tenant_id = OB_SERVER_RUNTIME_ID;
+      if (OB_SUCC(ret) && package_info.is_for_trigger()) {
+        if (trigger_info == nullptr || trigger_info->get_schema_version() != package_info.get_schema_version()
+            || trigger_info->get_trigger_id() != ObTriggerInfo::get_package_trigger_id(package_info.get_package_id())) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          declaration_source = SqlPLDeclarationSource::Trigger;
+          declaration_nominal.object_id = trigger_info->get_trigger_id();
+          declaration_nominal.schema_version = trigger_info->get_schema_version();
+        }
+      } else if (OB_SUCC(ret) && (package_info.is_package() || package_info.is_package_body())) {
+        declaration_source = package_info.is_package()
+            ? SqlPLDeclarationSource::PackageSpec : SqlPLDeclarationSource::PackageBody;
+        declaration_nominal.object_id = package_info.get_package_id();
+        declaration_nominal.schema_version = package_info.get_schema_version();
+      } else if (OB_SUCC(ret)) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+      OZ (pl_finalize_expressions(session_info_, schema_guard_, package_ast, package,
+                                  declaration_source, declaration_nominal));
     }
   }
 
@@ -1191,35 +1303,50 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
   for(int64_t routine_idx = 0; OB_SUCC(ret) && routine_idx < routine_table.get_count(); routine_idx++) {
     ObPLFunctionAST *routine_ast = NULL;
     const ObPLRoutineInfo *routine_info = NULL;
+    const char *phase = "check_session_alive";
     if (OB_FAIL(ObPL::check_session_alive(session_info))) {
     } else if (OB_FAIL(routine_table.get_routine_info(routine_idx, routine_info))) {
+      phase = "get_routine_info";
     } else if (OB_ISNULL(routine_info)) {
       //empty routine info is possible when package body is empty, push null to make idx correct
       if (OB_FAIL(compile_unit.add_routine(NULL))) {
+        phase = "add_null_routine_info";
       }
     } else if (OB_FAIL(routine_table.get_routine_ast(routine_idx, routine_ast))) {
+      phase = "get_routine_ast";
     } else if (OB_ISNULL(routine_ast)) {
       //empty routine ast is possible when package spec generating or package body is empty
       // push null to make idx correct, will report error when called
       if (OB_FAIL(compile_unit.add_routine(NULL))) {
+        phase = "add_null_routine_ast";
       }
     } else {
       ObPLFunction *routine = NULL;
+      phase = "allocate_routine";
       if (OB_ISNULL(routine
         = static_cast<ObPLFunction *>(compile_unit.get_allocator().alloc(sizeof(ObPLFunction))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
         new (routine) ObPLFunction(compile_unit.get_mem_context());
+        phase = "init_function";
         OZ (init_function(schema_guard, exec_env, *routine_info, *routine));
         if (OB_SUCC(ret)) {
           lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_BUILD)));
           // Prepare expressions and AST metadata for interpreter execution.
+          if (OB_SUCC(ret)) { phase = "pl_prepare_expressions"; }
           OZ (pl_prepare_expressions(*routine_ast, *routine));
-          OZ (pl_finalize_expressions(session_info, schema_guard, *routine_ast, *routine));
+          if (OB_SUCC(ret)) { phase = "pl_finalize_expressions"; }
+          OZ (pl_finalize_expressions(session_info, schema_guard, *routine_ast, *routine,
+                                      SqlPLDeclarationSource::None, SqlNominalType()));
+          if (OB_SUCC(ret)) { phase = "assign_enum_set_context"; }
           OZ (routine->get_enum_set_ctx().assgin(routine_ast->get_enum_set_ctx()));
+          if (OB_SUCC(ret)) { phase = "set_variables"; }
           OZ (routine->set_variables(routine_ast->get_symbol_table()));
+          if (OB_SUCC(ret)) { phase = "set_types"; }
           OZ (routine->set_types(routine_ast->get_user_type_table()));
+          if (OB_SUCC(ret)) { phase = "assign_dependency_table"; }
           OZ (routine->get_dependency_table().assign(routine_ast->get_dependency_table()));
+          if (OB_SUCC(ret)) { phase = "add_members"; }
           OZ (routine->add_members(routine_ast->get_flag()));
           OX (routine->set_can_cached(routine_ast->get_can_cached()));
           OX (routine->set_has_incomplete_rt_dep_error(routine_ast->has_incomplete_rt_dep_error()));
@@ -1227,6 +1354,7 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
           OX (routine->set_has_parallel_affect_factor(routine_ast->has_parallel_affect_factor()));
           OX (routine->set_ret_type(routine_ast->get_ret_type()));
           OX (routine->set_ast(routine_ast));
+          if (OB_SUCC(ret)) { phase = "add_routine"; }
           OZ (compile_unit.add_routine(routine));
         }
       }
@@ -1235,6 +1363,12 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
         compile_unit.get_allocator().free(routine);
         routine = NULL;
       }
+    }
+    if (OB_FAIL(ret)) {
+      const uint64_t routine_id = routine_info == NULL ? OB_INVALID_ID : routine_info->get_id();
+      const ObString routine_name = routine_info == NULL ? ObString() : routine_info->get_name();
+      LOG_INFO("PL subprogram compile stage failed", K(ret), K(phase), K(routine_idx),
+               K(routine_id), K(routine_name));
     }
   }
   return ret;

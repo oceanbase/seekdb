@@ -22,7 +22,8 @@
 
 #include "common/rowkey/ob_rowkey.h"
 #include "common/ob_tablet_id.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
+#include "lib/allocator/ob_allocator.h"
 
 #include "storage/ob_i_store.h"
 #include "storage/memtable/mvcc/ob_crtp_util.h"
@@ -129,7 +130,8 @@ public:
             const transaction::ObTxSEQ seq_no);
   void reset();
 public:
-  char obj_array_[sizeof(common::ObObj) * common::OB_MAX_ROWKEY_COLUMN_NUMBER];
+  common::DatumValue key_values_[common::OB_MAX_ROWKEY_COLUMN_NUMBER];
+  common::ObArenaAllocator rowkey_owner_;
   common::ObStoreRowkey rowkey_;
   uint32_t row_size_;
   uint64_t table_id_;

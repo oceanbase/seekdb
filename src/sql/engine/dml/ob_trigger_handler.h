@@ -69,6 +69,9 @@ public:
   }
   static int free_trigger_param_memory(ObTrigDMLRtDef &trig_rtdef, bool keep_composite_attr = true);
 private:
+  friend struct NativeTriggerParameterTestAccess;
+  static int stabilize_trigger_params(const DatumParameter *initial, int64_t count, ParamStore &params,
+                                      ObIAllocator &temporary_owner, ObSQLSessionInfo *session);
   // trigger
   static int init_trigger_row(ObIAllocator &alloc, int64_t rowtype_col_count, pl::ObPLRecord *&record);
   static int calc_when_condition(ObTableModifyOp &dml_op,
@@ -85,7 +88,7 @@ private:
                                   uint64_t trigger_id,
                                   uint64_t routine_id,
                                   ParamStore &params,
-                                  ObObj &result);
+                                  bool *condition);
   static int check_and_update_new_row(ObTableModifyOp *self_op,
                                       const ObTriggerColumnsInfo &columns,
                                       ObEvalCtx &eval_ctx,
@@ -100,19 +103,13 @@ private:
                                         const ObTrigDMLCtDef &trig_ctdef,
                                         ObTrigDMLRtDef &trig_rtdef,
                                         uint64_t tg_event);
-  static int convert_sql_type_to_pl_type(ObSQLSessionInfo *session,
-                                         ObExecContext &exec_ctx,
-                                         ObSchemaGetterGuard *schema_guard,
-                                         ObIAllocator &alloc,
-                                         ObObj &src,
-                                         ObObj &dst,
-                                         ObObjType obj_type);
-  static int convert_pl_type_to_sql_type(ObSQLSessionInfo *session,
-                                         ObExecContext &exec_ctx,
-                                         ObIAllocator &alloc,
-                                         ObObj &src,
-                                         ObObj &dst,
-                                         ObObjType obj_type);
+  static int convert_sql_type_to_pl_type(bool has_session,
+                                         bool has_schema_guard,
+                                         const common::DatumValue &src,
+                                         common::DatumValue &dst);
+  static int convert_pl_type_to_sql_type(const common::DatumValue &src,
+                                         common::DatumValue &dst,
+                                         SqlValueType obj_type);
 
 private:
   static const uint64_t ROUTINE_IDX_CALC_WHEN = 1;

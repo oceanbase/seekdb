@@ -21,7 +21,8 @@
 #include <random>
 #include "lib/allocator/ob_malloc.h"
 #include "query/optimizer/stat/ob_opt_column_stat.h"
-#include "common/datum/ob_datum.h"
+#include "common/datum/datum.h"
+#include "common/datum/sql_type.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/rc/ob_server_runtime.h"
 #include "common/ob_version_def.h"
@@ -38,25 +39,28 @@ enum ValEvalType {
 struct ObMinMaxValEval {
   ObMinMaxValEval(ValEvalType eval_type):
     val_type_(eval_type),
-    datum_(NULL),
+    datum_(),
+    has_datum_(false),
     meta_(),
     cmp_func_(NULL)
   { }
   void reset()
   {
     val_type_ = T_INVALID_VAL;
-    if (datum_ != NULL) {
-      datum_->reset();
+    if (has_datum_) {
+      datum_.reset();
     }
     meta_.reset();
   }
-  inline bool is_valid() const { return datum_ != NULL && cmp_func_ != NULL; }
-  int get_obj(ObObj &obj) const;
+  inline bool is_valid() const { return has_datum_ && cmp_func_ != NULL; }
+  // Borrowed native view; publish_min_max_values copies into the statistic owner.
+  int get_value(DatumValue &value) const;
   int deep_copy(const ObMinMaxValEval &other, ObIAllocator &alloc);
 
   ValEvalType val_type_;
-  ObDatum *datum_;
-  ObObjMeta meta_;
+  Datum datum_;
+  bool has_datum_;
+  SqlTypeMeta meta_;
   ObDatumCmpFuncType cmp_func_;
   TO_STRING_KV(K_(val_type),
                K_(datum),
@@ -101,11 +105,10 @@ public:
   static ObOptOSGColumnStat* create_new_osg_col_stat(
       common::ObIAllocator &allocator,
       const ObDatumAccessContext *datum_access_ctx);
-  int get_min_obj(ObObj &obj);
-  int get_max_obj(ObObj &obj);
-  int set_min_max_datum_to_obj();
+  int publish_min_max_values();
   int merge_column_stat(const ObOptOSGColumnStat &other);
-  int update_column_stat_info(const ObDatum *datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func);
+  int update_column_stat_info(const Datum *datum, const SqlType &source_type,
+                              const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func);
 
   ObOptColumnStat *col_stat_;
   // members below is no need to serialize
@@ -120,10 +123,10 @@ public:
                K_(min_val),
                K_(max_val));
 private:
-  int inner_merge_min(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func);
-  int inner_merge_max(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func);
-  int inner_merge_min_max(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func);
-  int calc_col_len(const ObDatum &datum, const ObObjMeta &meta, int64_t &col_len);
+  int inner_merge_min(const Datum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func);
+  int inner_merge_max(const Datum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func);
+  int inner_merge_min_max(const Datum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func);
+  int calc_col_len(const ObDatum &datum, const SqlTypeMeta &meta, int64_t &col_len);
   DISALLOW_COPY_AND_ASSIGN(ObOptOSGColumnStat);
 };
 

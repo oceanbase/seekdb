@@ -57,9 +57,9 @@ int ObExprJsonLength::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta meta1, bool has_lob_header1,
-                           const ObDatum *data2, ObDatumMeta meta2, bool has_lob_header2,
-                           MultimodeAlloctor *allocator, ObDatum &res,
+int ObExprJsonLength::calc(ObEvalCtx &ctx, const Datum &data1, ObDatumMeta meta1, bool has_lob_header1,
+                           const Datum *data2, ObDatumMeta meta2, bool has_lob_header2,
+                           MultimodeAlloctor *allocator, Datum &res,
                            JsonPathCache* path_cache)
 {
   INIT_SUCC(ret);
@@ -67,7 +67,7 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
   uint32_t res_len = 0;
   ObString j_doc;
   ObJsonInType j_in_type = ObJsonInType::JSON_TEXT;
-  ObObjType type1 = meta1.type_;
+  SqlValueType type1 = meta1.type_;
   ObCollationType cs_type1 = meta1.cs_type_;
   // handle data1(json text)
   if (type1 == ObNullType || data1.is_null()) { // null should display "NULL"
@@ -94,7 +94,7 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
         res_len = metadata.length_;
       }
     } else { // handle json path
-      ObObjType type2 = meta2.type_;
+      SqlValueType type2 = meta2.type_;
       if (type2 == ObNullType) { // null should display "NULL"
         is_null = true;
       } else { // ObLongTextType
@@ -131,13 +131,13 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
 }
 
 // for new sql engine 
-int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *datum1 = NULL;
+  Datum *datum1 = NULL;
   ObDatumMeta meta1;
   bool has_lob_header1 = false;
-  ObDatum *datum0 = NULL;
+  Datum *datum0 = NULL;
   ObExpr *arg0 = expr.args_[0];
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   

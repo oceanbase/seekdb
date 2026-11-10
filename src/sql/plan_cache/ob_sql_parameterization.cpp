@@ -484,7 +484,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
       // do nothing
     }
     if (OB_SUCC(ret)) {
-      ObObjParam value;
+      DatumParameter value;
       ObAccuracy tmp_accuracy;
       if (ctx.is_fast_parse_const_) { // Here we need to obtain all information identified as constants by fast parse
         if (!is_node_not_param(ctx)) { // determine whether it is a constant that can be parameterized
@@ -672,10 +672,10 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
       if (OB_ISNULL(ctx.tree_->children_) || 2 != ctx.tree_->num_child_) {
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_NOT_NULL(ctx.tree_->children_[0])
-                 && ob_is_numeric_type(ITEM_TO_OBJ_TYPE(ctx.tree_->children_[0]->type_))
+                 && ob_is_numeric_type(ITEM_TO_SQL_VALUE_TYPE(ctx.tree_->children_[0]->type_))
                  && FALSE_IT(ctx.tree_->children_[0]->is_num_must_be_pos_ = 1)) {
       } else if (OB_NOT_NULL(ctx.tree_->children_[1])
-                 && ob_is_numeric_type(ITEM_TO_OBJ_TYPE(ctx.tree_->children_[1]->type_))
+                 && ob_is_numeric_type(ITEM_TO_SQL_VALUE_TYPE(ctx.tree_->children_[1]->type_))
                  && FALSE_IT(ctx.tree_->children_[1]->is_num_must_be_pos_ = 1)) {
       }
     } else if (T_COMMA_LIMIT_CLAUSE == ctx.tree_->type_) {
@@ -685,9 +685,9 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           || OB_ISNULL(ctx.tree_->children_[0])
           || OB_ISNULL(ctx.tree_->children_[1])) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (ob_is_numeric_type(ITEM_TO_OBJ_TYPE(ctx.tree_->children_[0]->type_))
+      } else if (ob_is_numeric_type(ITEM_TO_SQL_VALUE_TYPE(ctx.tree_->children_[0]->type_))
                  && FALSE_IT(ctx.tree_->children_[0]->is_num_must_be_pos_ = 1)) {
-      } else if (ob_is_numeric_type(ITEM_TO_OBJ_TYPE(ctx.tree_->children_[1]->type_))
+      } else if (ob_is_numeric_type(ITEM_TO_SQL_VALUE_TYPE(ctx.tree_->children_[1]->type_))
                  && FALSE_IT(ctx.tree_->children_[1]->is_num_must_be_pos_ = 1)) {
       }
     }
@@ -2363,9 +2363,9 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     // select 1 - (2/3/4) from dual;
     // For constant node 2, it cannot be converted to -2
     // do nothing
-  } else if (ob_is_number_or_decimal_int_tc(ITEM_TO_OBJ_TYPE(tree->children_[1]->type_))
-             || ((ob_is_integer_type(ITEM_TO_OBJ_TYPE(tree->children_[1]->type_))
-                  || ob_is_real_type(ITEM_TO_OBJ_TYPE(tree->children_[1]->type_)))
+  } else if (ob_is_number_or_decimal_int_tc(ITEM_TO_SQL_VALUE_TYPE(tree->children_[1]->type_))
+             || ((ob_is_integer_type(ITEM_TO_SQL_VALUE_TYPE(tree->children_[1]->type_))
+                  || ob_is_real_type(ITEM_TO_SQL_VALUE_TYPE(tree->children_[1]->type_)))
                  && tree->children_[1]->value_ >= 0)) {
     ParseNode *child = tree->children_[1];
     tree->type_ = T_OP_ADD;
@@ -2468,7 +2468,7 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
 int ObSqlParameterization::find_leftest_const_node(ParseNode &cur_node, ParseNode *&const_node)
 {
   int ret = OB_SUCCESS;
-  if (ob_is_numeric_type(ITEM_TO_OBJ_TYPE(cur_node.type_))
+  if (ob_is_numeric_type(ITEM_TO_SQL_VALUE_TYPE(cur_node.type_))
       && 0 == cur_node.is_assigned_from_child_) {
     const_node = &cur_node;
   } else if (1 == cur_node.is_assigned_from_child_) {

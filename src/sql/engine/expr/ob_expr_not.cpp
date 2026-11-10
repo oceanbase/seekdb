@@ -74,7 +74,7 @@ int ObExprNot::cg_expr(ObExprCGCtx &expr_cg_ctx,
 
 int ObExprNot::eval_not(const ObExpr &expr,
                         ObEvalCtx &ctx,
-                        ObDatum &expr_datum)
+                        Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr.args_)
@@ -84,7 +84,7 @@ int ObExprNot::eval_not(const ObExpr &expr,
   } else {
     // not indicates that the parameter has been added with a bool expression, so the logic reaches here
     // The value of the parameter must be an int (0 or 1)
-    ObDatum *param = NULL;
+    Datum *param = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
     } else if (param->is_null()) {
       expr_datum.set_null();
@@ -110,12 +110,12 @@ int ObExprNot::eval_not_batch(const ObExpr &expr,
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
     } else {
-      ObDatum *results = expr.locate_batch_datums(ctx);
+      Datum *results = expr.locate_batch_datums(ctx);
       for (int64_t i = 0; i < batch_size; ++i) {
         if (skip.at(i) || eval_flags.at(i)) {
           continue;
         }
-        ObDatum &datum = expr.args_[0]->locate_expr_datum(ctx, i);
+        Datum &datum = expr.args_[0]->locate_expr_datum(ctx, i);
         eval_flags.set(i);
         if (datum.is_null()) {
           results[i].set_null();

@@ -42,9 +42,9 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_array_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_overlaps(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_overlaps_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
-  static int eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx, Relation relation, ObDatum &res);
+  static int eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx, Relation relation, Datum &res);
   static int eval_array_relations_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                         const int64_t batch_size, Relation relation);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

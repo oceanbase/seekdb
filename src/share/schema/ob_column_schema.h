@@ -18,6 +18,8 @@
 #define OCEANBASE_SCHEMA_COLUMN_SCHEMA_H_
 #include "share/ob_define.h"
 #include "share/session/ob_local_session_var.h"
+#include "common/datum/datum.h"
+#include "common/datum/datum_parameter.h"
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_hashmap.h"
@@ -106,7 +108,7 @@ int assign(const ObColumnSchemaV2 &src_schema);
   bool is_prefix_column() const;
   bool is_func_idx_column() const;
   inline void set_data_type(const common::ColumnType type) { meta_type_.set_type(type); }
-  inline void set_meta_type(const common::ObObjMeta type) { meta_type_ = type; }
+  inline void set_meta_type(const common::SqlTypeMeta type) { meta_type_ = type; }
   inline void set_accuracy(const common::ObAccuracy &accuracy) { accuracy_ = accuracy; }
   inline void set_data_length(const int64_t length) { set_data_length(static_cast<int32_t>(length)); } //TODO(xiaofeng.lby): fix it later
   inline void set_data_length(const int32_t length) { accuracy_.set_length(length); }
@@ -130,13 +132,30 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline void set_binary_collation(const bool is_binary) { is_binary_collation_ = is_binary; }
   inline bool is_binary_collation() const  { return is_binary_collation_; }
   inline void set_collation_type(const common::ObCollationType type) { meta_type_.set_collation_type(type); }
-  inline int set_orig_default_value(const common::ObObj default_value) { return deep_copy_obj(default_value, orig_default_value_); }
-  inline int set_orig_default_value_v2(const common::ObObj default_value) { return deep_copy_obj(default_value, orig_default_value_); }
-  inline int set_cur_default_value(const common::ObObj default_value, bool is_default_expr_v2) {
-    add_or_del_column_flag(DEFAULT_EXPR_V2_COLUMN_FLAG, is_default_expr_v2);
-    return deep_copy_obj(default_value, cur_default_value_);
+  // Each default has one native value and its historical wire metadata.
+  // Scalars are inline; reference payloads belong to the schema arena.
+  template <typename Value>
+  int set_orig_default_value(const Value &value) {
+    return copy_default_value(value, orig_default_value_, orig_default_meta_);
   }
-  inline int set_cur_default_value_v2(const common::ObObj default_value) { return deep_copy_obj(default_value, cur_default_value_); }
+  template <typename Value>
+  int set_orig_default_value_v2(const Value &value) { return set_orig_default_value(value); }
+  template <typename Value>
+  int set_cur_default_value(const Value &value, bool is_default_expr_v2) {
+    const int ret = copy_default_value(value, cur_default_value_, cur_default_meta_);
+    if (ret == common::OB_SUCCESS) {
+      add_or_del_column_flag(DEFAULT_EXPR_V2_COLUMN_FLAG, is_default_expr_v2);
+    }
+    return ret;
+  }
+  template <typename Value>
+  int set_cur_default_value(const Value &value) {
+    return set_cur_default_value(value, is_default_expr_v2_column());
+  }
+  template <typename Value>
+  int set_cur_default_value_v2(const Value &value) {
+    return copy_default_value(value, cur_default_value_, cur_default_meta_);
+  }
   inline int set_column_name(const char *col_name) { return deep_copy_str(col_name, column_name_); }
   inline int set_column_name(const common::ObString &col_name) { return deep_copy_str(col_name, column_name_); }
   inline int set_comment(const char *comment) { return deep_copy_str(comment, comment_); }
@@ -173,11 +192,11 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline common::ObOrderType get_order_in_rowkey() const { return order_in_rowkey_; }
   inline common::ColumnType get_data_type() const { return meta_type_.get_type(); }
   inline common::ColumnTypeClass get_data_type_class() const { return meta_type_.get_type_class(); }
-  inline common::ObObjMeta get_meta_type() const { return meta_type_; }
+  inline common::SqlTypeMeta get_meta_type() const { return meta_type_; }
   inline const common::ObAccuracy &get_accuracy() const { return accuracy_; }
   inline int32_t get_data_length() const;
   inline static int32_t get_data_length(const common::ObAccuracy &accuracy,
-                                        const common::ObObjMeta &meta_type);
+                                        const common::SqlTypeMeta &meta_type);
   inline int16_t get_data_precision() const { return accuracy_.get_precision(); }
   inline int16_t get_data_scale() const { return accuracy_.get_scale(); }
   inline int16_t get_length_semantics() const { return accuracy_.get_length_semantics();}
@@ -205,9 +224,18 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline bool is_extend() const { return meta_type_.is_ext(); }
   inline common::ObCharsetType get_charset_type() const { return charset_type_; }
   inline common::ObCollationType get_collation_type() const { return meta_type_.get_collation_type(); }
-  inline const common::ObObj &get_orig_default_value()  const { return orig_default_value_; }
-  inline const common::ObObj &get_cur_default_value()  const { return cur_default_value_; }
-  inline common::ObObj &get_cur_default_value() { return cur_default_value_; }
+  const common::Datum &get_orig_default_datum() const { return orig_default_value_; }
+  const common::Datum &get_cur_default_datum() const { return cur_default_value_; }
+  const common::SqlTypeMeta &get_orig_default_meta() const { return orig_default_meta_; }
+  const common::SqlTypeMeta &get_cur_default_meta() const { return cur_default_meta_; }
+  // Explicit legacy views borrow caller scratch (scalar/state) or this schema
+  // (references). Use copy_* when the consumer must retain an independent value.
+  // All four methods leave output unchanged on failure. No column declaration
+  // is fabricated from the historical value metadata at these boundaries.
+  int export_orig_default_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_cur_default_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_orig_default_value(common::DatumValue &output, common::ObIAllocator &owner) const;
+  int copy_cur_default_value(common::DatumValue &output, common::ObIAllocator &owner) const;
   inline const char *get_column_name() const { return extract_str(column_name_); }
   inline const common::ObString &get_column_name_str() const { return column_name_; }
   inline const char *get_comment() const {return extract_str(comment_);}
@@ -364,7 +392,7 @@ private:
     } part_pos_;//partition key
     int64_t tbl_part_key_pos_;
   };//greater than zero if this column is used to calc part expr
-  common::ObObjMeta meta_type_;
+  common::SqlTypeMeta meta_type_;
   common::ObAccuracy accuracy_;
   bool is_nullable_;
   bool is_zero_fill_;
@@ -376,8 +404,18 @@ private:
   bool is_binary_collation_;
   bool on_update_current_timestamp_;
   //default value
-  common::ObObj orig_default_value_;//first default value, used for alter table add column; collation must be same with the column
-  common::ObObj cur_default_value_; //collation must be same with the column
+  int copy_default_value(const common::DatumValue &source, common::Datum &target,
+                         common::SqlTypeMeta &target_meta);
+  int copy_default_value(const common::DatumParameter &source, common::Datum &target,
+                         common::SqlTypeMeta &target_meta);
+  int copy_default_value(const common::Datum &source, const common::SqlTypeMeta &meta,
+                         common::Datum &target, common::SqlTypeMeta &target_meta);
+  common::Datum orig_default_value_; // first default, used for ALTER TABLE ADD COLUMN
+  common::Datum cur_default_value_;
+  // Value-domain metadata, distinct from the column's full declaration. These
+  // retain literal/SQL-text/NOW/unknown-precision Decimal wire semantics.
+  common::SqlTypeMeta orig_default_meta_;
+  common::SqlTypeMeta cur_default_meta_;
   common::ObString column_name_;
   common::ObString comment_;
   common::ObArrayHelper<common::ObString> extended_type_info_;//used for enum and set
@@ -406,10 +444,10 @@ inline int32_t ObColumnSchemaV2::get_data_length() const
 }
 
 inline int32_t ObColumnSchemaV2::get_data_length(const common::ObAccuracy &accuracy,
-    const common::ObObjMeta &meta_type)
+    const common::SqlTypeMeta &meta_type)
 {
   return (ob_is_accuracy_length_valid_tc(meta_type.get_type()) ?
-      accuracy.get_length() : ob_obj_type_size(meta_type.get_type()));
+      accuracy.get_length() : sql_value_type_size(meta_type.get_type()));
 }
 
 inline bool ObColumnSchemaV2::is_hidden_pk_column_id(const uint64_t column_id)

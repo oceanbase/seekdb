@@ -66,7 +66,7 @@ int ObExprSTBufferStrategy::calc_result_typeN(ObExprResType &type,
   UNUSED(type_ctx);
   INIT_SUCC(ret);
   // 1st param must be string or null 
-  ObObjType first_type = types[0].get_type();
+  SqlValueType first_type = types[0].get_type();
   if (ob_is_string_type(first_type) || ob_is_null(first_type)) {
     if (ob_is_string_type(first_type)) {
       types[0].set_calc_type(first_type);
@@ -85,15 +85,15 @@ int ObExprSTBufferStrategy::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprSTBufferStrategy::eval_st_buffer_strategy(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTBufferStrategy::eval_st_buffer_strategy(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *strategy_datum = NULL;
+  Datum *strategy_datum = NULL;
   ObString strategy_str;
-  ObDatum *val_datum = NULL;
+  Datum *val_datum = NULL;
   ObGeoBufferStrategyType strategy = ObGeoBufferStrategyType::INVALID;
   double points_per_circle = 0.0;
   int num_args = expr.arg_cnt_;
@@ -237,14 +237,14 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
 {
   INIT_SUCC(ret);
   // set strategy
-  ObDatum *strat_datum = NULL;
+  Datum *strat_datum = NULL;
   ObExpr *first_strategy_arg = NULL;
   int num_args = expr.arg_cnt_;
   if (num_args == 2) {
     // do nothing, not strategy argument, use default value;
   } else {
     ObExpr *first_strategy_arg = expr.args_[ST_BUFFER_STRATEG_ARG_START_IDX];
-    ObObjType strategy_data_type = first_strategy_arg->datum_meta_.type_;
+    SqlValueType strategy_data_type = first_strategy_arg->datum_meta_.type_;
     ObCollationType strategy_cs_type = first_strategy_arg->datum_meta_.cs_type_;
     bool is_priv_strategy = (ob_is_integer_type(strategy_data_type)
                              || (ob_is_string_type(strategy_data_type)
@@ -341,11 +341,11 @@ int ObExprSTBuffer::fill_proj4_params(lib::MemoryContext &mem_ctx,
   return ret;
 }
 
-int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *geo_datum = NULL;
-  ObDatum *dist_datum = NULL;
+  Datum *geo_datum = NULL;
+  Datum *dist_datum = NULL;
   int num_args = expr.arg_cnt_;
   ObGeometry *geo = NULL;
   double distance = 0.0;
@@ -674,12 +674,12 @@ int ObExprPrivSTBuffer::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *geo_datum = NULL;
+  Datum *geo_datum = NULL;
   ObString geo_str;
-  ObDatum *dist_datum = NULL;
+  Datum *dist_datum = NULL;
   int num_args = expr.arg_cnt_;
   ObGeometry *geo = NULL;
   double distance = 0.0;

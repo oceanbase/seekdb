@@ -59,7 +59,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
   void set_plsql_line(int64_t v) { plsql_line_ = v; }
   int64_t get_plsql_line() { return plsql_line_; }
@@ -71,10 +71,9 @@ public:
   common::ObString& get_plsql_variable() { return plsql_variable_; }
 
 private:
-  static int get_plsql_unit(common::ObObj &result,
-                            common::ObIAllocator &alloc,
+  // The returned view borrows the active PL frame until its caller copies it.
+  static int get_plsql_unit(common::ObString &result,
                             ObSQLSessionInfo &session,
-                            const ObExprResType &result_type,
                             const ObString &plsql_variable);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprPLSQLVariable);

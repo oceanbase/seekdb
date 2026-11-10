@@ -214,14 +214,14 @@ int ObExprTimeFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   char *buf = NULL;
   int64_t buf_len = 0;
   int64_t pos = 0;
-  ObDatum *time = NULL;
-  ObDatum *format = NULL;
+  Datum *time = NULL;
+  Datum *format = NULL;
   bool res_null = false;
   if (OB_FAIL(expr.eval_param_value(ctx, time, format))) {
   } else if (time->is_null() || format->is_null()) {

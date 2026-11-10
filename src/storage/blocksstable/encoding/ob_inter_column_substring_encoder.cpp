@@ -69,8 +69,8 @@ int ObInterColSubStrEncoder::init(
   } else if (OB_FAIL(start_pos_array_.reserve(rows.count()))) {
   } else if (OB_FAIL(exc_row_ids_.reserve(rows.count()))) {
   } else {
-    const ObObjTypeStoreClass sc = get_store_class_map()[
-        ob_obj_type_class(column_type_.get_type())];
+    const SqlValueTypeStoreClass sc = get_store_class_map()[
+        sql_type_class(column_type_.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(sc))) {
       ret = OB_NOT_SUPPORTED;
     } else {
@@ -89,9 +89,9 @@ int ObInterColSubStrEncoder::set_ref_col_idx(const int64_t ref_col_idx,
   } else if (OB_UNLIKELY(0 > ref_col_idx)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObObjMeta &ref_col_type = ctx_->encoding_ctx_->col_descs_->at(ref_col_idx).col_type_;
-    const ObObjTypeStoreClass ref_sc = get_store_class_map()[
-        ob_obj_type_class(ref_col_type.get_type())];
+    const SqlTypeMeta &ref_col_type = ctx_->encoding_ctx_->col_descs_->at(ref_col_idx).col_type_;
+    const SqlValueTypeStoreClass ref_sc = get_store_class_map()[
+        sql_type_class(ref_col_type.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(ref_sc))) {
       ret = OB_NOT_SUPPORTED;
     } else {

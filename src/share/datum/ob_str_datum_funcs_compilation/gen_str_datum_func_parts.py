@@ -59,7 +59,6 @@ common_template = '''
 
 #include "share/datum/ob_datum_funcs.h"
 #include "share/datum/ob_datum_cmp_func_def.h"
-#include "common/object/ob_obj_funcs.h"
 #include "share/vector/ob_bit_vector.h"
 #include "share/ob_version_parser.h"
 #include "share/datum/ob_datum_funcs_impl.h"

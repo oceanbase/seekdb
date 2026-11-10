@@ -60,11 +60,11 @@ int ObExprMakedate::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprMakedate::calc_makedate(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprMakedate::calc_makedate(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *year = NULL;
-  ObDatum *day = NULL;
+  Datum *year = NULL;
+  Datum *day = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, year, day))) {
   } else if (year->is_null() || day->is_null()) {
     expr_datum.set_null();

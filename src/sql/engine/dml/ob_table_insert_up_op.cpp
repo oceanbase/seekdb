@@ -455,7 +455,7 @@ int ObTableInsertUpOp::record_stmt_last_update_id()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(MY_SPEC.upd_auto_inc_expr_)) {
     int64_t last_insert_id = 0;
-    ObDatum *auto_inc_id_datum = nullptr;
+    Datum *auto_inc_id_datum = nullptr;
     bool is_zero = false;
     uint64_t casted_value = 0;
     ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
@@ -479,7 +479,7 @@ int ObTableInsertUpOp::record_session_last_insert_id()
   int ret = OB_SUCCESS;
   if (!has_guarantee_last_insert_id_) {
     if (OB_NOT_NULL(MY_SPEC.ins_auto_inc_expr_)) {
-      ObDatum *auto_inc_id_datum = nullptr;
+      Datum *auto_inc_id_datum = nullptr;
       bool is_zero = false;
       uint64_t casted_value = 0;
       ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
@@ -729,7 +729,7 @@ int ObTableInsertUpOp::calc_update_multi_tablet_id(const ObUpdCtDef &upd_ctdef,
 {
   int ret = OB_SUCCESS;
   ObObjectID partition_id = OB_INVALID_ID;
-  ObDatum *partition_id_datum = NULL;
+  Datum *partition_id_datum = NULL;
   if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(&part_id_expr, eval_ctx_, partition_id, tablet_id))) {
   } else if (OB_FAIL(deal_hint_part_selection(partition_id))) {
   }
@@ -1328,7 +1328,7 @@ int ObTableInsertUpOp::update_auto_increment(const ObExpr &expr,
   if (NULL != autoinc_param) {
     bool is_zero = false;
     uint64_t casted_value = 0;
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(expr.eval(eval_ctx_, datum))) {
     } else if (OB_FAIL(ObExprAutoincNextval::get_uint_value(
                 expr, datum, is_zero, casted_value))) {

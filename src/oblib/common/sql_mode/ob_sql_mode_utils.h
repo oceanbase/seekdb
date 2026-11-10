@@ -24,11 +24,13 @@ namespace oceanbase
 {
 namespace common
 {
+class ObIAllocator;
 bool is_sql_mode_supported(ObSQLMode mode);
 
 int ob_str_to_sql_mode(const ObString &str, ObSQLMode &mode);
 
-int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *allocator);
+struct DatumValue;
+int ob_sql_mode_to_str(const DatumValue &int_val, DatumValue &str_val, ObIAllocator *allocator);
 inline bool is_strict_mode(ObSQLMode mode)
 {
   return ((SMO_STRICT_ALL_TABLES & mode) || (SMO_STRICT_TRANS_TABLES & mode));

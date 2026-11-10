@@ -75,7 +75,7 @@ int ObExprArrayContains::calc_result_type2(ObExprResType &type,
     // do nothing
   } else if (!ob_is_collection_sql_type(type1_ptr->get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(type1_ptr->get_type()), ob_obj_type_str(type2_ptr->get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, sql_value_type_to_string(type1_ptr->get_type()), sql_value_type_to_string(type2_ptr->get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_array_type(exec_ctx, *type1_ptr, *type2_ptr, subschema_id))) {
   } 
   
@@ -89,7 +89,7 @@ int ObExprArrayContains::calc_result_type2(ObExprResType &type,
 }
 
 #define EVAL_FUNC_ARRAY_CONTAINS(TYPE, GET_FUNC)                                                                      \
-  int ObExprArrayContains::eval_array_contains_##TYPE(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)               \
+  int ObExprArrayContains::eval_array_contains_##TYPE(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)               \
   {                                                                                                                   \
     int ret = OB_SUCCESS;                                                                                             \
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);                                                                       \
@@ -98,8 +98,8 @@ int ObExprArrayContains::calc_result_type2(ObExprResType &type,
     uint32_t p1 = expr.extra_ == 1 ? 0 : 1;                                                                           \
     const uint16_t meta_id = expr.args_[p0]->obj_meta_.get_subschema_id();                                            \
     ObIArrayType *arr_obj = NULL;                                                                                     \
-    ObDatum *datum = NULL;                                                                                            \
-    ObDatum *datum_val = NULL;                                                                                        \
+    Datum *datum = NULL;                                                                                            \
+    Datum *datum_val = NULL;                                                                                        \
     TYPE val;                                                                                                         \
     bool bret = false;                                                                                                \
     if (OB_FAIL(expr.args_[p0]->eval(ctx, datum))) {                                                                  \
@@ -127,7 +127,7 @@ EVAL_FUNC_ARRAY_CONTAINS(float, get_float)
 EVAL_FUNC_ARRAY_CONTAINS(double, get_double)
 EVAL_FUNC_ARRAY_CONTAINS(ObString, get_string)
 
-int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -138,8 +138,8 @@ int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx
   const uint16_t r_meta_id = expr.args_[p1]->obj_meta_.get_subschema_id();
   ObIArrayType *arr_obj = NULL;
   ObIArrayType *arr_val = NULL;
-  ObDatum *datum = NULL;
-  ObDatum *datum_val = NULL;
+  Datum *datum = NULL;
+  Datum *datum_val = NULL;
   bool bret = false;
   if (OB_FAIL(expr.args_[p0]->eval(ctx, datum))) {
   } else if (OB_FAIL(expr.args_[p1]->eval(ctx, datum_val))) {
@@ -162,7 +162,7 @@ int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)    \
   {                                                                                             \
     int ret = OB_SUCCESS;                                                                       \
-    ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);                                \
+    DatumVector res_datum = expr.locate_expr_datumvector(ctx);                                \
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);                                    \
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);                                                 \
     common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();                      \
@@ -175,8 +175,8 @@ int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx
     } else if (OB_FAIL(expr.args_[p1]->eval_batch(ctx, skip, batch_size))) {                    \
       LOG_WARN("failed to eval batch result args0", K(ret));                                    \
     } else {                                                                                    \
-      ObDatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);                   \
-      ObDatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);                   \
+      DatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);                   \
+      DatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);                   \
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {                                \
         if (skip.at(j) || eval_flags.at(j)) {                                                   \
           continue;                                                                             \
@@ -211,7 +211,7 @@ EVAL_FUNC_ARRAY_CONTAINS_BATCH(ObString, get_string)
 int ObExprArrayContains::eval_array_contains_array_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -224,8 +224,8 @@ int ObExprArrayContains::eval_array_contains_array_batch(const ObExpr &expr, ObE
   if (OB_FAIL(expr.args_[p0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[p1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);
-    ObDatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);
+    DatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);
+    DatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
@@ -264,20 +264,20 @@ int ObExprArrayContains::cg_expr(ObExprCGCtx &expr_cg_ctx,
     rt_expr.extra_ = raw_expr.get_reverse_param_order();
     uint32_t p1 = rt_expr.extra_ == 1 ? 0 : 1;
     uint32_t p0 = rt_expr.extra_ == 1 ? 1 : 0;
-    const ObObjType right_type = rt_expr.args_[p1]->datum_meta_.type_;  
-    ObObjTypeClass right_tc = ob_obj_type_class(right_type);
+    const SqlValueType right_type = rt_expr.args_[p1]->datum_meta_.type_;
+    SqlTypeClass right_tc = sql_type_class(right_type);
     if (right_tc == ObNullTC) {
       // use array element type
       ObExecContext *exec_ctx = expr_cg_ctx.session_->get_cur_exec_ctx();
       const uint16_t sub_id = rt_expr.args_[p0]->obj_meta_.get_subschema_id();
-      ObObjType elem_type;
+      SqlValueType elem_type;
       uint32_t unused;
       bool is_vec = false;
       if (ob_is_null(rt_expr.args_[p0]->datum_meta_.type_)) {
         // do nothing
       } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, sub_id, elem_type, unused, is_vec))) {
       } else {
-        right_tc = ob_obj_type_class(elem_type);
+        right_tc = sql_type_class(elem_type);
       }
     }
     if OB_SUCC(ret) {

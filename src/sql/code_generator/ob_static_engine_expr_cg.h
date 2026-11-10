@@ -23,6 +23,7 @@
 
 namespace oceanbase
 {
+namespace pl { class ObPLINS; }
 namespace common
 {
 class ObIAllocator;
@@ -52,7 +53,7 @@ public:
               ObSQLSessionInfo *session,
               share::schema::ObSchemaGetterGuard *schema_guard)
     : allocator_(&allocator), session_(session),
-      schema_guard_(schema_guard)
+      schema_guard_(schema_guard), pl_declarations_(nullptr)
   {}
 
 private:
@@ -62,6 +63,9 @@ public:
   common::ObIAllocator *allocator_;
   ObSQLSessionInfo *session_;
   share::schema::ObSchemaGetterGuard *schema_guard_;
+  // Borrowed only while generating expressions; completed SqlType trees are
+  // cloned into the plan owner and never keep this AST/runtime namespace.
+  const pl::ObPLINS *pl_declarations_;
 };
 
 class ObRawExpr;
@@ -73,8 +77,9 @@ class ObStaticEngineExprCG
 public:
   static const int64_t STACK_OVERFLOW_CHECK_DEPTH = 16;
   static const int64_t SMALL_SCAN_CARDINALITY = 16;
-  static const int64_t DATUM_EVAL_INFO_SIZE = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  static const int64_t DATUM_EVAL_INFO_SIZE = ScalarFrameLayout::slot_size();
   friend class ObRawExpr;
+  friend struct ScalarFrameLayoutTestAccess;
   struct TmpFrameInfo {
     TmpFrameInfo() : expr_start_pos_(0), frame_info_() {}
     TmpFrameInfo(uint64_t start_pos,
@@ -115,6 +120,10 @@ public:
   // @param [out] expr_info information related to frame and rt_exprs
   int generate(const ObRawExprUniqueSet &all_raw_exprs, ObExprFrameInfo &expr_info);
 
+  // Called after every operator and storage consumer has been generated. A
+  // supported graph gets immutable alternatives; execution chooses one page.
+  static int finalize_native_i64_point(ObPhysicalPlan &plan, const ObExecContext &exec_ctx);
+
   int generate(ObRawExpr *expr,
                ObRawExprUniqueSet &flattened_raw_exprs,
                ObExprFrameInfo &expr_info);
@@ -148,6 +157,8 @@ public:
   void set_batch_size(const int64_t v) { batch_size_ = v; }
 
   void set_rt_question_mark_eval(const bool v) { rt_question_mark_eval_ = v; }
+  void set_pl_declarations(const pl::ObPLINS *declarations)
+  { op_cg_ctx_.pl_declarations_ = declarations; }
   void set_contain_dynamic_eval_rt_qm(const bool v) { contain_dynamic_eval_rt_qm_ = v; }
 
   static int generate_partial_expr_frame(const ObPhysicalPlan &plan,
@@ -256,7 +267,7 @@ private:
   // Initialize frame layout
   // @param [in/out] exprs all expressions to be calculated for frame layout
   // @param [in] reserve_empty_string Whether to allocate reserved memory for string type in frame
-  // @param [in] continuous_datum ObDatum + ObEvalInfo should be continuous
+  // @param [in] continuous_datum Datum + ObEvalInfo should be continuous
   // @param [in/out] frame_index_pos offset of generated frame, used for calculating the current generated frame
   //                 index in all frames
   // @param [out]    frame_info_arr all frame related information
@@ -280,22 +291,29 @@ private:
                         common::ObIArray<char *> &frame_ptrs);
 
   // called after res_buf_len_ assigned to get the buffer size with dynamic reserved buffer.
+  static constexpr int64_t align_frame_part(int64_t size) { return (size + 7) / 8 * 8; }
+
   int64_t reserve_data_consume(const ObExpr &expr)
   {
     const bool need_dyn_buf = ObDynReserveBuf::supported(expr.datum_meta_.type_);
-    return expr.res_buf_len_
-        + (need_dyn_buf && expr.res_buf_len_ > 0 ? sizeof(ObDynReserveBuf) : 0);
+    return align_frame_part(expr.res_buf_len_
+        + (need_dyn_buf && expr.res_buf_len_ > 0 ? sizeof(ObDynReserveBuf) : 0));
   }
 
   // called after res_buf_len_ assigned to get the buffer size with dynamic reserved buffer.
-  int64_t reserve_data_consume(const common::ObObjType &type, const int16_t prec)
+  int64_t reserve_data_consume(const common::SqlValueType &type, const int16_t prec)
   {
     const bool need_dyn_buf = ObDynReserveBuf::supported(type);
-    // ObObjDatumMapType datum_map_type = ObDatum::get_obj_datum_map_type(type);
+    // SqlValueDatumMapType datum_map_type = common::ObDatum::get_sql_value_datum_map_type(type);
     auto res_buf_len =
-        ObDatum::get_reserved_size(ObDatum::get_obj_datum_map_type(type), prec);
-    return res_buf_len +
-           +(need_dyn_buf && res_buf_len > 0 ? sizeof(ObDynReserveBuf) : 0);
+        common::ObDatum::get_reserved_size(common::ObDatum::get_sql_value_datum_map_type(type), prec);
+    const bool inline_kind = (type >= common::ObTinyIntType && type <= common::ObUDoubleType)
+        || (type >= common::ObDateTimeType && type <= common::ObYearType)
+        || type == common::ObBitType || type == common::ObEnumType || type == common::ObSetType
+        || type == common::ObMySQLDateType || type == common::ObMySQLDateTimeType
+        || (type == common::ObDecimalIntType && prec > 0 && prec <= common::MAX_PRECISION_DECIMAL_INT_64);
+    return inline_kind ? 0 : align_frame_part(res_buf_len
+        + (need_dyn_buf && res_buf_len > 0 ? sizeof(ObDynReserveBuf) : 0));
   }
 
   inline int64_t get_expr_datums_count(const ObExpr &expr)
@@ -346,15 +364,13 @@ private:
   int64_t reserve_datums_buf_len(const ObExpr &expr)
   {
     const bool need_dyn_buf = ObDynReserveBuf::supported(expr.datum_meta_.type_);
-    return expr.res_buf_len_ *
-               get_expr_datums_count(expr) /* reserve datums part */
-           + (need_dyn_buf ? get_expr_datums_count(expr) * sizeof(ObDynReserveBuf)
-                           : 0) /* dynamic datums part */;
+    return align_frame_part(expr.res_buf_len_ * get_expr_datums_count(expr))
+           + (need_dyn_buf ? get_expr_datums_count(expr) * sizeof(ObDynReserveBuf) : 0);
   }
 
   inline int64_t get_datums_header_size(const ObExpr &expr)
   {
-    return sizeof(ObDatum) * get_expr_datums_count(expr);
+    return sizeof(Datum) * get_expr_datums_count(expr);
   }
 
   int arrange_datum_data(common::ObIArray<ObRawExpr *> &exprs,
@@ -382,10 +398,9 @@ private:
   // - EvalFlag(BitVector) instance + BitVector data
   // - SkipBitmap(BitVector) + BitVector data
   int64_t get_expr_datums_header_size(const ObExpr &expr) {
-    int64_t size = get_datums_header_size(expr)
-                   + sizeof(ObEvalInfo)
-                   + get_expr_skip_vector_size(expr) /*skip*/
-                   + get_expr_bitmap_vector_size(expr); /*eval flags*/
+    int64_t size = align_frame_part(get_datums_header_size(expr) + get_expr_skip_vector_size(expr))
+                   + align_frame_part(sizeof(ObEvalInfo))
+                   + get_expr_bitmap_vector_size(expr);
 
     return size;
   }
@@ -396,7 +411,7 @@ private:
   // - datum instance
   // - EvalInfo instance
   int get_expr_datum_fixed_header_size() {
-    return sizeof(ObDatum) + sizeof(ObEvalInfo);
+    return ScalarFrameLayout::slot_size();
   }
   // Fetch non const exprs
   // @param [in] raw_exprs all raw exprs
@@ -422,7 +437,7 @@ private:
   // routine
   ObExprBatchSize
   get_expr_execute_size(const common::ObIArray<ObRawExpr *> &raw_exprs, int64_t lob_rowsets_max_rows);
-  inline bool is_large_data(ObObjType type) {
+  inline bool is_large_data(SqlValueType type) {
     bool b_large_data = false;
     if (type == ObLongTextType
         || type == ObMediumTextType

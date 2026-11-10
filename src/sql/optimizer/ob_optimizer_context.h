@@ -202,7 +202,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
                    ObSqlSchemaGuard *sql_schema_guard,
                    common::ObOptStatManager* opt_stat_manager,
                    common::ObIAllocator &allocator,
-                   const ParamStore *params,
                    const common::ObAddr &addr,
                    const ObGlobalHint &global_hint,
                    ObRawExprFactory &expr_factory,
@@ -217,7 +216,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     allocator_(allocator),
     table_access_plan_list_(), // declared as auto free
     server_(addr),
-    params_(params),
     global_hint_(global_hint),
     expr_factory_(expr_factory),
     log_plan_factory_(allocator),
@@ -335,10 +333,8 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     return table_part;
   }
   common::ObIArray<TableAccessPlan> &get_table_access_plan_list() { return table_access_plan_list_; }
-  inline const ParamStore *get_params()
-  {
-    return params_;
-  }
+  const ObPhysicalPlanCtx *get_parameter_context() const
+  { return exec_ctx_ == nullptr ? nullptr : exec_ctx_->get_physical_plan_ctx(); }
   inline const ObGlobalHint &get_global_hint() const { return global_hint_; }
   inline ObRawExprFactory &get_expr_factory() { return expr_factory_; }
   inline ObLogPlanFactory &get_log_plan_factory() { return log_plan_factory_; }
@@ -723,7 +719,6 @@ private:
   common::ObArray<TableAccessPlan, common::ModulePageAllocator, true> table_access_plan_list_;
   common::ObSEArray<ObTablePartitionInfo *, 1, common::ModulePageAllocator, true> table_partition_infos_;
   common::ObAddr server_;
-  const ParamStore *params_;
   const ObGlobalHint &global_hint_;
   ObRawExprFactory &expr_factory_;
   ObLogPlanFactory log_plan_factory_;

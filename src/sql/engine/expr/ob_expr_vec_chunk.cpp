@@ -45,13 +45,6 @@ int ObExprVecChunk::calc_result_typeN(ObExprResType &type,
   return ret;
 }
  
-int ObExprVecChunk::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-   return OB_NOT_SUPPORTED;
-}
  
 int ObExprVecChunk::cg_expr(
     ObExprCGCtx &expr_cg_ctx,
@@ -71,10 +64,10 @@ int ObExprVecChunk::cg_expr(
 int ObExprVecChunk::generate_vec_chunk(
       const ObExpr &raw_ctx,
       ObEvalCtx &eval_ctx,
-      ObDatum &expr_datum)
+      Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   if (OB_FAIL(raw_ctx.args_[0]->eval(eval_ctx, datum))) {
   } else if (OB_ISNULL(datum)) {
     ret = OB_ERR_UNEXPECTED;

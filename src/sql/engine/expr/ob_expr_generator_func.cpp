@@ -46,7 +46,7 @@ int ObExprGeneratorFunc::calc_result_type1(ObExprResType &type,
 
 int ObExprGeneratorFunc::eval_next_value(const ObExpr &expr,
                                      ObEvalCtx &ctx,
-                                     ObDatum &res_datum)
+                                     Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObExprGeneratorFuncCtx *generator_ctx = NULL;
@@ -61,7 +61,7 @@ int ObExprGeneratorFunc::eval_next_value(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    ObDatum *limit_datum = NULL;
+    Datum *limit_datum = NULL;
     if (OB_UNLIKELY(1 != expr.arg_cnt_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(expr.eval_param_value(ctx, limit_datum))) {

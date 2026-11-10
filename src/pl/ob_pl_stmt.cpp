@@ -1412,8 +1412,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         } else {
         }
       } else {
-        ObObj val = sys_var->get_value();
-        obj_type.set_obj_type(val.get_type());
+        obj_type.set_obj_type(sys_var->get_value_meta().get_type());
         data_type.set_data_type(obj_type);
       }
     }
@@ -2533,7 +2532,7 @@ int ObPLBlockNS::expand_data_type_once(const ObUserDefinedType *user_type,
       }
     } else {
       ObDataType ext_type;
-      ObObjMeta meta;
+      SqlTypeMeta meta;
       meta.set_type(ObExtendType);
       meta.set_extend_type(member->get_type());
       ext_type.set_meta_type(meta);
@@ -2727,7 +2726,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
     //   fetch c_cursor into nums(1);
     //
     // We got `num(1)` by T_OBJ_ACCESS_REF expression for write. T_OBJ_ACCESS_REF return
-    // the address of ObObj by extend value in execution, so %expr's result type is set to
+    // the address of the datum-backed extend value in execution, so %expr's result type is set to
     // ObExtendType. We get the obj type from final type of T_OBJ_ACCESS_REF here.
     const auto &access_expr = static_cast<const ObObjAccessRawExpr &>(expr);
     OZ(access_expr.get_final_type(final_type));
@@ -2740,7 +2739,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
       // do nothing, %final_type already fetched
     } else if (T_QUESTIONMARK == expr.get_expr_type()) {
       CK (OB_NOT_NULL(ns.get_symbol_table()));
-      int64_t var_index = static_cast<const ObConstRawExpr&>(expr).get_value().get_int();
+      int64_t var_index = static_cast<const ObConstRawExpr&>(expr).get_value_datum().get_int();
       const ObPLVar *var = ns.get_symbol_table()->get_symbol(var_index);
       CK (OB_NOT_NULL(var));
       OX (final_type = var->get_pl_data_type());
@@ -2751,7 +2750,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
     if (OB_SUCC(ret)) {
       if (final_type.is_cursor_type() || final_type.is_opaque_type()) {
         ObDataType ext_type;
-        ObObjMeta meta_type;
+        SqlTypeMeta meta_type;
         meta_type.set_type(ObExtendType);
         meta_type.set_extend_type(final_type.get_type());
         ext_type.set_meta_type(meta_type);
@@ -2782,7 +2781,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
           ObDataType ext_type;
           ObDataType type;
           ObPLIntegerRange range;
-          ObObjMeta meta;
+          SqlTypeMeta meta;
           meta.set_type(ObExtendType);
           meta.set_extend_type(final_type.get_type());
           ext_type.set_meta_type(meta);
@@ -2838,18 +2837,18 @@ int ObPLInto::calc_type_constraint(const sql::ObRawExpr &expr,
 do {  \
   const ObConstRawExpr *c_expr = static_cast<const ObConstRawExpr*>(expr); \
   CK (OB_NOT_NULL(c_expr)); \
-  CK (c_expr->get_value().is_uint64() \
-      || c_expr->get_value().is_int() \
-      || c_expr->get_value().is_unknown()); \
-  OX (val = c_expr->get_value().is_uint64() ? c_expr->get_value().get_uint64() \
-        : c_expr->get_value().is_int() ? c_expr->get_value().get_int() \
-        : c_expr->get_value().get_unknown()); \
+  CK (c_expr->get_value_meta().is_uint64() \
+      || c_expr->get_value_meta().is_int() \
+      || c_expr->get_value_meta().is_unknown()); \
+  OX (val = c_expr->get_value_meta().is_uint64() ? c_expr->get_value_datum().get_uint64() \
+        : c_expr->get_value_meta().is_int() ? c_expr->get_value_datum().get_int() \
+        : c_expr->get_questionmark_index()); \
 } while (0)
 
   if (T_QUESTIONMARK == expr.get_expr_type()) {
     const ObConstRawExpr &const_expr = static_cast<const ObConstRawExpr&>(expr);
     OZ (ObPLResolver::get_local_variable_constraint(
-      ns, const_expr.get_value().get_unknown(), flag, range));
+      ns, const_expr.get_questionmark_index(), flag, range));
   } else if (T_OBJ_ACCESS_REF == expr.get_expr_type()) {
     const ObObjAccessRawExpr &obj_access_expr = static_cast<const ObObjAccessRawExpr&>(expr);
     pl::ObPLDataType final_type;
@@ -3115,10 +3114,10 @@ int ObPLFunctionAST::add_argument(const common::ObString &name,
     if (OB_ISNULL(type)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (type->get_meta_type().is_bit()) {
-      ObObjMeta &meta_type = const_cast<ObObjMeta&>(type->get_meta_type());
+      SqlTypeMeta &meta_type = const_cast<SqlTypeMeta&>(type->get_meta_type());
       meta_type.set_scale(type->get_precision());
     } else {
-      ObObjMeta &meta_type = const_cast<ObObjMeta&>(type->get_meta_type());
+      SqlTypeMeta &meta_type = const_cast<SqlTypeMeta&>(type->get_meta_type());
       meta_type.set_scale(type->get_scale());
     }
   }

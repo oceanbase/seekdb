@@ -93,85 +93,85 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case SESSION_ID:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.sess_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.sess_id_) : ret);
           break;
         case TX_ID:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.tx_id_.get_id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.tx_id_.get_id()) : ret);
           break;
         case STATE:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.state_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.state_) : ret);
           break;
         case WRITE_STATE:
           if (tx_scheduler_stat.has_write_state_) {
             tx_scheduler_stat.get_parts_str(parts_buffer_, OB_MAX_BUFFER_SIZE);
-            cur_row_.cells_[i].set_varchar(parts_buffer_);
-            cur_row_.cells_[i].set_default_collation_type();
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, parts_buffer_) : ret);
+            cur_row_.cells_[i].meta_.set_default_collation_type();
           } else {
             cur_row_.cells_[i].reset();
           }
           break;
         case ISOLATION_LEVEL:
-          cur_row_.cells_[i].set_int((int)tx_scheduler_stat.isolation_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, (int)tx_scheduler_stat.isolation_) : ret);
           break;
         case SNAPSHOT_VERSION:
           if (tx_scheduler_stat.snapshot_version_.get_val_for_inner_table_field() != OB_INVALID_SCN_VAL) {
-            cur_row_.cells_[i].set_uint64(tx_scheduler_stat.snapshot_version_.get_val_for_inner_table_field());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.snapshot_version_.get_val_for_inner_table_field()) : ret);
           } else {
             cur_row_.cells_[i].reset();
           }
           break;
         case ACCESS_MODE:
-          cur_row_.cells_[i].set_int((int)tx_scheduler_stat.access_mode_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, (int)tx_scheduler_stat.access_mode_) : ret);
           break;
         case TX_OP_SN:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.op_sn_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.op_sn_) : ret);
           break;
         case FLAG:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.flag_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.flag_) : ret);
           break;
         case ACTIVE_TS:
           if (is_valid_timestamp_(tx_scheduler_stat.active_ts_)) {
-            cur_row_.cells_[i].set_timestamp(tx_scheduler_stat.active_ts_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.active_ts_) : ret);
           } else {
             cur_row_.cells_[i].reset();
           }
           break;
         case EXPIRE_TS:
           if (is_valid_timestamp_(tx_scheduler_stat.expire_ts_)) {
-            cur_row_.cells_[i].set_timestamp(tx_scheduler_stat.expire_ts_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.expire_ts_) : ret);
           } else {
             cur_row_.cells_[i].reset();
           }
           break;
         case TIMEOUT_US:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.timeout_us_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.timeout_us_) : ret);
           break;
         case REF_CNT:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.ref_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.ref_cnt_) : ret);
           break;
         case TX_DESC_ADDR:
           tx_desc_addr_buffer_[0] = 0;
           snprintf(tx_desc_addr_buffer_, 18, "0x%lx", (uint64_t)tx_scheduler_stat.tx_desc_addr_);
-          cur_row_.cells_[i].set_varchar(tx_desc_addr_buffer_);
-          cur_row_.cells_[i].set_default_collation_type();
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, tx_desc_addr_buffer_) : ret);
+          cur_row_.cells_[i].meta_.set_default_collation_type();
           break;
         case SAVEPOINTS:
           if (0 < tx_scheduler_stat.savepoints_.count()) {
             (void)tx_scheduler_stat.savepoints_.to_string(savepoints_buffer_, OB_MAX_BUFFER_SIZE);
-            cur_row_.cells_[i].set_varchar(savepoints_buffer_);
-            cur_row_.cells_[i].set_default_collation_type();
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, savepoints_buffer_) : ret);
+            cur_row_.cells_[i].meta_.set_default_collation_type();
           } else {
             cur_row_.cells_[i].reset();
           }
           break;
         case SAVEPOINTS_TOTAL_CNT:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.savepoints_.count());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.savepoints_.count()) : ret);
           break;
         case INTERNAL_ABORT_CAUSE:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.abort_cause_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.abort_cause_) : ret);
           break;
         case CAN_EARLY_LOCK_RELEASE:
-          cur_row_.cells_[i].set_bool(tx_scheduler_stat.can_elr_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cur_row_.cells_, cur_row_.count_, i, tx_scheduler_stat.can_elr_) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

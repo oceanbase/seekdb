@@ -341,7 +341,7 @@ int ObTransformSimplifySet::check_limit_zero_in_stmt(ObRawExpr *limit_expr,
 {
   UNUSED(offset_expr);
   int ret = OB_SUCCESS;
-  ObObj result;
+  DatumValue result;
   need_remove = false;
   bool is_valid = false;
   if (OB_NOT_NULL(limit_expr)) {

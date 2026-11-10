@@ -112,18 +112,27 @@ void ObWinbufPieceMsgCtx::reset_resource()
 
 namespace ob_dh_winbuf {
 
-template <typename T, typename B>
-void pointer2off(T *&pointer, B *base)
+static bool valid_datum_payload(uint32_t row_size, int64_t payload_len, int64_t count)
 {
-  pointer = reinterpret_cast<T *>(
-      reinterpret_cast<const char *>(pointer) - reinterpret_cast<const char *>(base));
+  return row_size >= sizeof(ObChunkDatumStore::StoredRow)
+      && payload_len == int64_t(row_size) - int64_t(sizeof(ObChunkDatumStore::StoredRow))
+      && count >= 0 && count <= payload_len / int64_t(sizeof(StoredDatumCell));
 }
 
-template <typename T, typename B>
-void off2pointer(T *&pointer, B *base)
+static bool valid_datum_cells(const StoredDatumCell *cells, int64_t count,
+                       int64_t payload_len, uintptr_t base)
 {
-  pointer = reinterpret_cast<T *>(
-      reinterpret_cast<intptr_t>(pointer) + reinterpret_cast<char *>(base));
+  bool valid = true;
+  for (int64_t i = 0; valid && i < count; ++i) {
+    const uintptr_t address = reinterpret_cast<uintptr_t>(cells[i].ptr_);
+    // NULL carries unused address bits. Preserve their historical wire bytes;
+    // only non-NULL references must fit in the copied payload.
+    if (!cells[i].is_null() && (address < base || address - base > uint64_t(payload_len)
+        || cells[i].len_ > uint64_t(payload_len) - (address - base))) {
+      valid = false;
+    }
+  }
+  return valid;
 }
 
 }
@@ -143,15 +152,20 @@ OB_DEF_SERIALIZE(ObWinbufPieceMsg)
       if (OB_SUCC(ret)) {
         if (row_size_ > 0) {
           if (OB_ISNULL(datum_row_) || row_size_ != datum_row_->row_size_
-              || row_size_ < sizeof(ObChunkDatumStore::StoredRow) ||
-                 payload_len_ < 0) {
+              || col_count_ != datum_row_->cnt_
+              || !ob_dh_winbuf::valid_datum_payload(row_size_, payload_len_, col_count_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (pos < 0 || pos > buf_len || payload_len_ > buf_len - pos) {
+            ret = OB_SIZE_OVERFLOW;
+          } else if (!ob_dh_winbuf::valid_datum_cells(datum_row_->stored_cells(), col_count_,
+                         payload_len_, reinterpret_cast<uintptr_t>(datum_row_->payload_))) {
             ret = OB_ERR_UNEXPECTED;
           } else {
             MEMCPY(buf + pos, datum_row_->payload_, payload_len_);
-            common::ObDatum *cells = reinterpret_cast<common::ObDatum *>(buf + pos);
-            for (int i = 0; i < datum_row_->cnt_; ++i) {
-              ob_dh_winbuf::pointer2off(*(const char **)&cells[i].ptr_, datum_row_->payload_);
-            }
+            // Piece messages carry Chunk payload bytes, relative to payload_,
+            // including any existing trailing bytes. No RA size adjustment.
+            ObChunkDatumStore::StoredRow::unswizzling_cells(
+                reinterpret_cast<StoredDatumCell *>(buf + pos), datum_row_->cnt_, datum_row_->payload_);
             pos += payload_len_;
           }
         }
@@ -172,40 +186,56 @@ OB_DEF_DESERIALIZE(ObWinbufPieceMsg)
   int ret = OB_SUCCESS;
   ret = ObDatahubPieceMsg::deserialize(buf, data_len, pos);
   if (OB_SUCC(ret)) {
+    bool is_end = false;
+    bool is_datum = false;
+    int64_t col_count = 0;
     LST_DO_CODE(OB_UNIS_DECODE,
-                is_end_,
-                is_datum_,
-                col_count_);
-    if (is_datum_) {
-      OB_UNIS_DECODE(row_size_);
-      OB_UNIS_DECODE(payload_len_);
-      if (OB_SUCC(ret) && row_size_ > 0) {
+                is_end,
+                is_datum,
+                col_count);
+    if (OB_FAIL(ret)) {
+    } else if (is_datum) {
+      uint32_t row_size = 0;
+      int64_t payload_len = 0;
+      ObChunkDatumStore::StoredRow *copy = nullptr;
+      OB_UNIS_DECODE(row_size);
+      OB_UNIS_DECODE(payload_len);
+      if (OB_SUCC(ret) && row_size > 0) {
         char *datum_row_ptr = NULL;
-        if (OB_ISNULL(datum_row_ptr = static_cast<char *>(deseria_allocator_.alloc(
-              row_size_)))) {
+        if (!ob_dh_winbuf::valid_datum_payload(row_size, payload_len, col_count)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (pos < 0 || pos > data_len || payload_len > data_len - pos) {
+          ret = OB_SIZE_OVERFLOW;
+        } else if (!ob_dh_winbuf::valid_datum_cells(
+                       reinterpret_cast<const StoredDatumCell *>(buf + pos), col_count, payload_len, 0)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_ISNULL(datum_row_ptr = static_cast<char *>(deseria_allocator_.alloc(row_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else {
-          datum_row_ = new(datum_row_ptr) ObChunkDatumStore::StoredRow();
-          datum_row_->row_size_ = row_size_;
-          datum_row_->cnt_ = col_count_;
-          if (pos + payload_len_ > data_len) {
-            ret = OB_SIZE_OVERFLOW;
-          } else {
-            MEMCPY(datum_row_->payload_, buf + pos, payload_len_);
-            common::ObDatum *cells = reinterpret_cast<common::ObDatum *>(datum_row_->payload_);
-            for (int64_t i = 0; i < datum_row_->cnt_; ++i) {
-              ob_dh_winbuf::off2pointer(*(const char **)&cells[i].ptr_, datum_row_->payload_);
-            }
-            pos += payload_len_;
-          }
+          copy = new(datum_row_ptr) ObChunkDatumStore::StoredRow();
+          copy->row_size_ = row_size;
+          copy->cnt_ = static_cast<uint32_t>(col_count);
+          MEMCPY(copy->payload_, buf + pos, payload_len);
+          copy->swizzling(copy->payload_);
+          pos += payload_len;
         }
       }
-    } else {
-      if (col_count_ > 0 &&
-          OB_FAIL(ob_create_row(deseria_allocator_, col_count_, row_))) {
-      } else {
-        LST_DO_CODE(OB_UNIS_DECODE, row_);
+      if (OB_SUCC(ret)) {
+        row_size_ = row_size;
+        payload_len_ = payload_len;
+        datum_row_ = copy;
       }
+    } else {
+      if (col_count > 0 &&
+          OB_FAIL(ob_create_row(deseria_allocator_, col_count, row_))) {
+      } else {
+        if (pos < data_len) { ret = row_.deserialize(deseria_allocator_, buf, data_len, pos); }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      is_end_ = is_end;
+      is_datum_ = is_datum;
+      col_count_ = col_count;
     }
   }
   return ret;

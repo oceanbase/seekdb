@@ -18,7 +18,8 @@
 #define _OB_OPT_COLUMN_STAT_H_
 
 #include <stdint.h>
-#include "common/object/ob_object.h"
+#include "common/datum/datum.h"
+#include "common/datum/datum_value.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "share/cache/ob_kvcache_struct.h"
@@ -48,26 +49,27 @@ public:
   ObHistBucket(int64_t repeat_count, int64_t endpoint_num)
     : endpoint_repeat_count_(repeat_count), endpoint_num_(endpoint_num)
   {}
-  ObHistBucket(const ObObj &obj, int64_t repeat_count, int64_t endpoint_num)
-    : endpoint_value_(obj),
-      endpoint_repeat_count_(repeat_count),
-      endpoint_num_(endpoint_num)
-  {}
+  const Datum &get_endpoint_datum() const { return endpoint_value_; }
+  const SqlTypeMeta &get_endpoint_meta() const { return endpoint_meta_; }
+  int set_endpoint_borrowed(const DatumValue &value);
+  int set_endpoint_native_borrowed(const Datum &value, const SqlTypeMeta &meta);
+  int export_endpoint_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_endpoint_value(DatumValue &output, ObIAllocator &owner) const;
 
   int deep_copy(const ObHistBucket &src,
                 char *buf,
                 const int64_t buf_len,
                 int64_t &pos);
   int deep_copy(ObIAllocator &alloc, const ObHistBucket &src);
-  int64_t deep_copy_size() const { return endpoint_value_.get_deep_copy_size(); }
+  int64_t deep_copy_size() const;
 
-  TO_STRING_KV(K_(endpoint_value),
-               K_(endpoint_repeat_count),
-               K_(endpoint_num));
+  DECLARE_TO_STRING;
 
-  common::ObObj endpoint_value_;
-  int64_t endpoint_repeat_count_; // the frequence for the endpoint_value;
-  int64_t endpoint_num_; // cumlative frequence
+  int64_t endpoint_repeat_count_; // the frequency for the endpoint value
+  int64_t endpoint_num_; // cumulative frequency
+private:
+  Datum endpoint_value_;
+  SqlTypeMeta endpoint_meta_;
 };
 
 
@@ -99,7 +101,7 @@ public:
 
   int deep_copy(const ObHistogram &src, char *buf, const int64_t buf_len, int64_t &pos);
   int deep_copy(ObIAllocator &alloc, const ObHistogram &src);
-  int assign(const ObHistogram &other);
+  int assign(const ObHistogram &other, ObIAllocator &owner);
   int64_t deep_copy_size() const;
 
   bool is_valid() const
@@ -134,8 +136,8 @@ public:
   void set_pop_count(int64_t pop_count) { pop_count_ = pop_count; }
 
   int prepare_allocate_buckets(ObIAllocator &allocator, const int64_t bucket_size);
-  int add_bucket(const ObHistBucket &bucket);
-  int assign_buckets(const ObIArray<ObHistBucket> &buckets);
+  int add_bucket(const ObHistBucket &bucket, ObIAllocator &owner);
+  int assign_buckets(const ObIArray<ObHistBucket> &buckets, ObIAllocator &owner);
 
   void calc_density(ObHistType hist_type,
                     const int64_t row_count,
@@ -245,13 +247,20 @@ public:
   uint64_t get_column_id() const { return column_id_; }
   void set_column_id(uint64_t cid) { column_id_ = cid; }
 
-  const common::ObObj &get_max_value() const { return max_value_; }
-  common::ObObj &get_max_value() { return max_value_; }
-  void set_max_value(const common::ObObj &max) { max_value_ = max; }
-
-  const common::ObObj &get_min_value() const { return min_value_; }
-  common::ObObj &get_min_value() { return min_value_; }
-  void set_min_value(const common::ObObj &min) { min_value_ = min; }
+  const Datum &get_min_datum() const { return min_value_; }
+  const Datum &get_max_datum() const { return max_value_; }
+  const SqlTypeMeta &get_min_meta() const { return min_meta_; }
+  const SqlTypeMeta &get_max_meta() const { return max_meta_; }
+  int set_min_value(const DatumValue &value);
+  int set_max_value(const DatumValue &value);
+  int set_min_native(const Datum &value, const SqlTypeMeta &meta);
+  int set_max_native(const Datum &value, const SqlTypeMeta &meta);
+  int export_min_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_max_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_min_value(DatumValue &output, ObIAllocator &owner) const;
+  int copy_max_value(DatumValue &output, ObIAllocator &owner) const;
+  void clear_min_value() { min_value_.set_null(); min_meta_.set_null(); }
+  void clear_max_value() { max_value_.set_null(); max_meta_.set_null(); }
 
   int64_t get_num_distinct() const { return num_distinct_; }
   void set_num_distinct(int64_t num_distinct) { num_distinct_ = num_distinct; }
@@ -325,25 +334,11 @@ public:
 
   static ObOptColumnStat *malloc_new_column_stat(common::ObIAllocator &allocator);
 
-  TO_STRING_KV(K_(table_id),
-               K_(partition_id),
-               K_(column_id),
-               K_(last_analyzed),
-               K_(object_type),
-               K_(num_distinct),
-               K_(num_null),
-               K_(min_value),
-               K_(max_value),
-               K_(num_not_null),
-               K_(avg_length),
-               K_(cs_type),
-               K_(total_col_len),
-               K_(llc_bitmap_size),
-               K_(llc_bitmap),
-               K_(histogram));
+  DECLARE_TO_STRING;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObOptColumnStat);
-  int merge_min_max(ObObj &cur, const ObObj &other, bool is_cmp_min);
+  int merge_min_max(Datum &cur, SqlTypeMeta &cur_meta, const Datum &other,
+                    const SqlTypeMeta &other_meta, bool is_cmp_min);
 protected:
   uint64_t table_id_;
   int64_t partition_id_;
@@ -354,8 +349,11 @@ protected:
   int64_t num_not_null_;
   int64_t num_distinct_;
   int64_t avg_length_;
-  common::ObObj min_value_;
-  common::ObObj max_value_;
+  // Inline scalars; reference bytes belong to allocator_ or the cache buffer.
+  Datum min_value_;
+  Datum max_value_;
+  SqlTypeMeta min_meta_;
+  SqlTypeMeta max_meta_;
   int64_t llc_bitmap_size_;
   char *llc_bitmap_;
   ObHistogram histogram_;

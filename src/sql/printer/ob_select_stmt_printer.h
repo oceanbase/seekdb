@@ -35,7 +35,7 @@ public:
                       int64_t *pos,
                       const ObSelectStmt *stmt,
                       ObSchemaGetterGuard *schema_guard,
-                      common::ObObjPrintParams print_params,
+                      common::ObValuePrintParams print_params,
                       const bool force_col_alias = false)
   : ObDMLStmtPrinter(buf, buf_len, pos, stmt, schema_guard, print_params),
     column_list_(NULL),
@@ -46,7 +46,7 @@ public:
                       int64_t *pos,
                       const ObSelectStmt *stmt,
                       ObSchemaGetterGuard *schema_guard,
-                      common::ObObjPrintParams print_params,
+                      common::ObValuePrintParams print_params,
                       const ParamStore *param_store,
                       const bool force_col_alias = false,
                       const ObSQLSessionInfo *session = NULL)

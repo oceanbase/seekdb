@@ -21,6 +21,7 @@
 
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "sql/engine/expr/ob_expr_util.h"
 
 namespace oceanbase
 {
@@ -45,9 +46,9 @@ struct ObDoArithBatchEval
                         ObEvalCtx &ctx,
                         const ObBitVector &skip,
                         const int64_t size,
-                        const ObDatumVector &res,
-                        const ObDatumVector &left,
-                        const ObDatumVector &right,
+                        const DatumVector &res,
+                        const DatumVector &left,
+                        const DatumVector &right,
                         Args &...args) const
   {
     int ret = OB_SUCCESS;
@@ -55,7 +56,7 @@ struct ObDoArithBatchEval
     // Datum operators may allocate a variable-length result from the current batch slot.
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
     const int64_t step_size = sizeof(uint16_t) * CHAR_BIT;
-    common::ObDatumDesc desc;
+    bool got_null = false;
     for (int64_t i = 0; i < size && OB_SUCC(ret);) {
       const int64_t bit_vec_off = i / step_size;
       const uint16_t skip_v = skip.reinterpret_data<uint16_t>()[bit_vec_off];
@@ -64,7 +65,7 @@ struct ObDoArithBatchEval
         for (int64_t j = 0; OB_SUCC(ret) && j < step_size; i++, j++) {
           batch_info_guard.set_batch_idx(i);
           ret = ArithOp::datum_op(*res.at(i), *left.at(i), *right.at(i), args...);
-          desc.pack_ |= res.at(i)->pack_;
+          got_null |= res.at(i)->is_null();
         }
         if (OB_SUCC(ret)) {
           eval_v = 0xFFFF;
@@ -78,12 +79,12 @@ struct ObDoArithBatchEval
             batch_info_guard.set_batch_idx(i);
             ret = ArithOp::datum_op(*res.at(i), *left.at(i), *right.at(i), args...);
             eval_flags.bit_or_assign(i, OB_SUCCESS == ret);
-            desc.pack_ |= res.at(i)->pack_;
+            got_null |= res.at(i)->is_null();
           }
         }
       }
     }
-    if (OB_SUCC(ret) && desc.is_null()) {
+    if (OB_SUCC(ret) && got_null) {
       expr.get_eval_info(ctx).notnull_ = false;
     }
     return ret;
@@ -106,12 +107,12 @@ inline int call_functor_with_arg_iter(const ObExpr &expr,
     SQL_LOG(WARN, "one argument must be batch result in arith batch evaluate",
             K(ret), K(expr), K(left), K(right));
   } else {
-    ObDatumVector res = expr.locate_expr_datumvector(ctx);
+    DatumVector res = expr.locate_expr_datumvector(ctx);
     // A binary expression with at least one batch operand always produces a
     // batch.  Keep the old driver's unconditional result indexing explicit.
     res.set_batch(true);
-    const ObDatumVector left_datums = left.locate_expr_datumvector(ctx);
-    const ObDatumVector right_datums = right.locate_expr_datumvector(ctx);
+    const DatumVector left_datums = left.locate_expr_datumvector(ctx);
+    const DatumVector right_datums = right.locate_expr_datumvector(ctx);
     ret = ObDoArithBatchEval<ArithOp>()(
         expr, ctx, skip, size, res, left_datums, right_datums, args...);
   }
@@ -178,7 +179,7 @@ template <typename DatumFunctor>
 struct ObWrapArithOpNullCheck: public ObArithOpBase
 {
   template <typename... Args>
-  static int datum_op(ObDatum &res, const ObDatum &l, const ObDatum &r, Args &...args)
+  static int datum_op(Datum &res, const Datum &l, const Datum &r, Args &...args)
   {
     int ret = OB_SUCCESS;
     if (l.is_null() || r.is_null()) {
@@ -198,33 +199,148 @@ int def_batch_arith_op_by_datum_func(BATCH_EVAL_FUNC_ARG_DECL, Args &...args)
 }
 
 // Wrap arith datum operate from raw operate.
+// Signed BIGINT arithmetic uses the carrier's scalar accessors. The prepared
+// expression type selects signed i64; neither a payload pointer nor its stride
+// belongs to this operation. The same functor can be instantiated for the
+// legacy pointer carrier and an inline carrier without changing Expr's ABI.
 template <typename Base>
-struct ObArithOpWrap : public Base
+struct ObSignedIntArithOpWrap : public Base
 {
-  constexpr static bool is_raw_op_supported() { return true; }
-  template <typename... Args>
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, Args &...args) const
+  static_assert(std::is_same<typename Base::RES_RAW_TYPE, int64_t>::value
+      && std::is_same<typename Base::L_RAW_TYPE, int64_t>::value
+      && std::is_same<typename Base::R_RAW_TYPE, int64_t>::value,
+      "Signed BIGINT arithmetic requires signed i64 operands and result");
+  constexpr static bool is_raw_op_supported() { return false; }
+
+  template <typename DatumType, typename... Args>
+  int operator()(DatumType &res, const DatumType &l, const DatumType &r, Args &...args) const
   {
-    Base::raw_op(
-        *const_cast<typename Base::RES_RAW_TYPE *>(
-            reinterpret_cast<const typename Base::RES_RAW_TYPE *>(res.ptr_)),
-        *reinterpret_cast<const typename Base::L_RAW_TYPE *>(l.ptr_),
-        *reinterpret_cast<const typename Base::R_RAW_TYPE *>(r.ptr_),
-        args...);
-    res.pack_ = sizeof(typename Base::RES_RAW_TYPE);
-    return Base::raw_check(*reinterpret_cast<const typename Base::RES_RAW_TYPE *>(res.ptr_),
-                           *reinterpret_cast<const typename Base::L_RAW_TYPE *>(l.ptr_),
-                           *reinterpret_cast<const typename Base::R_RAW_TYPE *>(r.ptr_));
+    const int64_t left = l.get_int();
+    const int64_t right = r.get_int();
+    int64_t value = 0;
+    Base::raw_op(value, left, right, args...);
+    // Keep the old write-before-check contract; the enclosing evaluator owns
+    // error publication and the arithmetic policy owns overflow diagnostics.
+    res.set_int(value);
+    return Base::raw_check(value, left, right);
   }
 
-  template <typename... Args>
-  static int datum_op(ObDatum &res, const ObDatum &l, const ObDatum &r, Args &...args)
+  template <typename DatumType, typename... Args>
+  static int datum_op(DatumType &res, const DatumType &l, const DatumType &r, Args &...args)
   {
     int ret = OB_SUCCESS;
     if (l.is_null() || r.is_null()) {
       res.set_null();
     } else {
-      ret = ObArithOpWrap()(res, l, r, args...);
+      ret = ObSignedIntArithOpWrap()(res, l, r, args...);
+    }
+    return ret;
+  }
+};
+
+// The prepared arithmetic policy selects each integral representation. Keep
+// unsigned-result arithmetic independent of the carrier's payload address.
+template <typename Base>
+struct ObUnsignedIntArithOpWrap : public Base
+{
+  using Left = typename Base::L_RAW_TYPE;
+  using Right = typename Base::R_RAW_TYPE;
+  static_assert(std::is_same<typename Base::RES_RAW_TYPE, uint64_t>::value
+      && (std::is_same<Left, int64_t>::value || std::is_same<Left, uint64_t>::value)
+      && (std::is_same<Right, int64_t>::value || std::is_same<Right, uint64_t>::value),
+      "Unsigned BIGINT arithmetic requires integral i64/u64 operands");
+  constexpr static bool is_raw_op_supported() { return false; }
+
+  template <typename Integer, typename DatumType>
+  static Integer read(const DatumType &value)
+  {
+    if constexpr (std::is_same<Integer, int64_t>::value) {
+      return value.get_int();
+    } else {
+      return value.get_uint();
+    }
+  }
+
+  template <typename DatumType, typename... Args>
+  int operator()(DatumType &res, const DatumType &l, const DatumType &r, Args &...args) const
+  {
+    const Left left = read<Left>(l);
+    const Right right = read<Right>(r);
+    uint64_t value = 0;
+    Base::raw_op(value, left, right, args...);
+    // Preserve the existing write-before-check contract and policy diagnostics.
+    res.set_uint(value);
+    return Base::raw_check(value, left, right);
+  }
+
+  template <typename DatumType, typename... Args>
+  static int datum_op(DatumType &res, const DatumType &l, const DatumType &r, Args &...args)
+  {
+    int ret = common::OB_SUCCESS;
+    if (l.is_null() || r.is_null()) {
+      res.set_null();
+    } else {
+      ret = ObUnsignedIntArithOpWrap()(res, l, r, args...);
+    }
+    return ret;
+  }
+};
+
+// Floating arithmetic is inline. Decimal arithmetic explicitly presents the
+// prepared coefficient to the existing wide-integer library for this call.
+template <typename Base>
+struct ObArithOpWrap : public Base
+{
+  constexpr static bool is_raw_op_supported() { return false; }
+  template <typename Floating>
+  static Floating read_floating(const Datum &value)
+  {
+    if constexpr (std::is_same<Floating, float>::value) { return value.get_float(); }
+    else { return value.get_double(); }
+  }
+  template <typename... Args>
+  int operator()(Datum &res, const Datum &l, const Datum &r,
+                 const ObExpr &expr, ObEvalCtx &ctx, Args &...args) const
+  {
+    using Result = typename Base::RES_RAW_TYPE;
+    using Left = typename Base::L_RAW_TYPE;
+    using Right = typename Base::R_RAW_TYPE;
+    if constexpr (std::is_floating_point<Result>::value) {
+      const Left left = read_floating<Left>(l);
+      const Right right = read_floating<Right>(r);
+      Result value = 0;
+      Base::raw_op(value, left, right, args...);
+      if constexpr (std::is_same<Result, float>::value) { res.set_float(value); }
+      else { res.set_double(value); }
+      return Base::raw_check(value, left, right);
+    } else {
+      int ret = OB_SUCCESS;
+      Left left;
+      Right right;
+      if (OB_FAIL(ObExprUtil::get_decimal_int(l, left))) {
+      } else if (OB_FAIL(ObExprUtil::get_decimal_int(r, right))) {
+      } else {
+        Result value;
+        Base::raw_op(value, left, right, args...);
+        if (OB_FAIL(ObExprUtil::set_decimal_int(expr, ctx, res,
+            reinterpret_cast<const common::ObDecimalInt *>(&value), sizeof(value)))) {
+        } else {
+          ret = Base::raw_check(value, left, right);
+        }
+      }
+      return ret;
+    }
+  }
+
+  template <typename... Args>
+  static int datum_op(Datum &res, const Datum &l, const Datum &r,
+                      const ObExpr &expr, ObEvalCtx &ctx, Args &...args)
+  {
+    int ret = OB_SUCCESS;
+    if (l.is_null() || r.is_null()) {
+      res.set_null();
+    } else {
+      ret = ObArithOpWrap()(res, l, r, expr, ctx, args...);
     }
     return ret;
   }
@@ -233,7 +349,7 @@ struct ObArithOpWrap : public Base
 template <typename Base>
 struct ObNestedArithOpWrap : public Base
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr, ObEvalCtx &ctx) const
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

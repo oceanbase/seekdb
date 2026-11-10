@@ -333,13 +333,17 @@ int ObDBMSSchedTableOperator::extract_info(
 
 #define EXTRACT_TIMESTAMP_FIELD_MYSQL_SKIP_RET(result, col_name, v)   \
 do {                                                                  \
-  ObObj obj;                                                          \
-  OZ ((result).get_obj(col_name, obj));                               \
+  common::DatumValue obj;                                                          \
+  OZ ((result).get_value(col_name, obj));                               \
   if (OB_SUCC(ret)) {                                                 \
     if (obj.is_null()) {                                              \
       v = static_cast<int64_t>(0);                                    \
     } else {                                                          \
-      OZ (obj.get_timestamp(v));                                      \
+      if (!obj.is_timestamp()) {                                          \
+        ret = OB_OBJ_TYPE_ERROR;                                          \
+      } else {                                                            \
+        v = obj.get_timestamp();                                          \
+      }                                                                   \
     }                                                                 \
   } else if (OB_ERR_COLUMN_NOT_FOUND == ret) {                        \
     ret = OB_SUCCESS;                                                 \

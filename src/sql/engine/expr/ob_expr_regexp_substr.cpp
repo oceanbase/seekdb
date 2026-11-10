@@ -67,7 +67,7 @@ int ObExprRegexpSubstr::calc_result_typeN(ObExprResType &type,
       const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
               ? type_ctx.get_session()->get_actual_length_semantics()
               : common::LS_BYTE);
-      ObObjMeta real_types[2] = {text, pattern};
+      SqlTypeMeta real_types[2] = {text, pattern};
       if (text.is_blob()) {
         type.set_blob();
       } else {
@@ -162,15 +162,15 @@ int ObExprRegexpSubstr::is_valid_for_generated_column(const ObRawExpr*expr,
 }
 
 template<typename RegExpCtx>
-int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = NULL;
-  ObDatum *pattern = NULL;
-  ObDatum *position = NULL;
-  ObDatum *occurrence = NULL;
-  ObDatum *match_type = NULL;
-  ObDatum *subexpr = NULL;
+  Datum *text = NULL;
+  Datum *pattern = NULL;
+  Datum *position = NULL;
+  Datum *occurrence = NULL;
+  Datum *match_type = NULL;
+  Datum *subexpr = NULL;
   int64_t pos = 1;
   int64_t occur = 1;
   int64_t subexpr_val = 0;
@@ -200,11 +200,11 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                        (subexpr != NULL && subexpr->is_null()) ||
                        (match_type != NULL && match_type->is_null());
     if (OB_FAIL(ObExprUtil::get_int_param_val(
-          position, (expr.arg_cnt_ > 2 && expr.args_[2]->obj_meta_.is_decimal_int()), pos))
+          position, (expr.arg_cnt_ > 2 ? expr.args_[2] : nullptr), pos))
         || OB_FAIL(ObExprUtil::get_int_param_val(
-          occurrence, (expr.arg_cnt_ > 3 && expr.args_[3]->obj_meta_.is_decimal_int()), occur))
+          occurrence, (expr.arg_cnt_ > 3 ? expr.args_[3] : nullptr), occur))
         || OB_FAIL(ObExprUtil::get_int_param_val(
-          subexpr, expr.arg_cnt_ > 5 && expr.args_[5]->obj_meta_.is_decimal_int(), subexpr_val))) {
+          subexpr, (expr.arg_cnt_ > 5 ? expr.args_[5] : nullptr), subexpr_val))) {
     } else if (!null_result && (pos <= 0 || occur <= 0 || subexpr_val < 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "use position or occurrence or subexpr in regexp_substr");
@@ -317,7 +317,7 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   return ret;
 }
 
-int ObExprRegexpSubstr::eval_regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexpSubstr::eval_regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return regexp_substr<ObExprRegexContext>(expr, ctx, expr_datum);
 }

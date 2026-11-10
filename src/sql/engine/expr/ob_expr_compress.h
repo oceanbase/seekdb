@@ -35,7 +35,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_compress(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
   
 private:
@@ -53,7 +53,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprUncompress);
 };
@@ -69,7 +69,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_uncompressed_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_uncompressed_length(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprUncompressedLength);
 };

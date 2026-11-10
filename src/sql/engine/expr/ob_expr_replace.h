@@ -39,7 +39,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_replace(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   // helper func
   static int replace(common::ObString &result,

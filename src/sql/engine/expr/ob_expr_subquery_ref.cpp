@@ -203,12 +203,12 @@ int ObExprSubQueryRef::cg_expr(
 
 
 int ObExprSubQueryRef::expr_eval(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   const Extra &extra = Extra::get_info(expr);
   const ExtraInfo *extra_info = static_cast<ExtraInfo *>(expr.extra_info_);
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObSubQueryIterator *iter = NULL;
   // Reset all iters
   if (OB_ISNULL(extra_info)) {
@@ -228,17 +228,19 @@ int ObExprSubQueryRef::expr_eval(
       bool iter_end = false;
       bool found_in_hash_map = false;
       bool is_hash_enabled = iter->has_hashmap();
+      ObSubQueryIterator::PendingCacheEntry pending;
       if (is_hash_enabled) {
-        ObDatum out;
+        Datum out;
         if (OB_FAIL(iter->get_curr_probe_row())) {
-        } else if (OB_FAIL(iter->get_refactored(out))) {
+        } else if (OB_FAIL(iter->get_refactored(out, expr))) {
           if (OB_HASH_NOT_EXIST != ret) {
           } else {
             ret = OB_SUCCESS;
           }
         } else {
           found_in_hash_map = true;
-          if (OB_FAIL(expr.deep_copy_datum(ctx, out))) {
+          if (expr.get_sql_type().requires_resource_clone()) { expr_datum = out; }
+          else if (OB_FAIL(expr.deep_copy_datum(ctx, out))) {
           }
         }
       }
@@ -251,39 +253,24 @@ int ObExprSubQueryRef::expr_eval(
         } else {
         }
       } else if (OB_FAIL(iter->get_output().at(0)->eval(iter->get_eval_ctx(), datum))) {
-      } else if (OB_FAIL(expr.deep_copy_datum(ctx, *datum))) {
+      } else if (expr.get_sql_type().requires_resource_clone()) {
+        if (!iter->get_output().at(0)->get_sql_type().equals(expr.get_sql_type())) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          // Retain before the second advance can reset the producer's owner.
+          ret = iter->retain_scalar_result(*datum, expr.get_sql_type(), expr_datum);
+        }
+      } else if (OB_FAIL(ObExpr::clone_native_value(expr.get_sql_type(), *datum,
+                         ctx.exec_ctx_.get_allocator(), expr_datum))) {
+        // Ordinary values retain the existing copy path and allocation policy.
       }
       if (OB_SUCC(ret) && is_hash_enabled
                        && iter->probe_row_.cnt_ > 0
                        && !found_in_hash_map
                        && !iter_end) {
-        //now we can insert curr row and curr result into hashmap
-        //first to get arena allocator from sp_iter to deep copy row
-        ObDatum value;
-        DatumRow row_key;
-        row_key.cnt_ = iter->probe_row_.cnt_;
-                //first check memory is enough
-        int64_t need_size =  datum->len_ + sizeof(ObDatum);
-        for (int64_t i = 0; i < iter->probe_row_.cnt_; ++i) {
-          need_size += (iter->probe_row_.elems_[i].len_ + sizeof(ObDatum));
-        }
-        bool can_insert = iter->check_can_insert(need_size);
-        ObIAllocator *alloc = nullptr;
-        if (!can_insert) {
-          //memory is exceed, do not insert new rows
-        } else if (OB_FAIL(iter->get_arena_allocator(alloc)) || OB_ISNULL(alloc)) {
-        } else if (OB_ISNULL(row_key.elems_
-                  = static_cast<ObDatum *> (alloc->alloc(sizeof(ObDatum) * row_key.cnt_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else if (OB_FAIL(value.deep_copy(*datum, *alloc))) {
-        } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < row_key.cnt_; ++i) {
-            if (OB_FAIL(row_key.elems_[i].deep_copy(iter->probe_row_.elems_[i], *alloc))) {
-            }
-          }
-          if (OB_SUCC(ret) && OB_FAIL(iter->set_refactored(row_key, value, need_size))) {
-          }
-        }
+        // Retain both resources and bytes before advancing the storage child.
+        // The entry is not visible until scalar cardinality has been checked.
+        ret = iter->prepare_cache_result(expr_datum, expr, pending);
       }
       if (OB_SUCC(ret) && !found_in_hash_map && !iter_end) {
         if (OB_UNLIKELY(OB_SUCCESS == (ret = iter->get_next_row()))) {
@@ -293,6 +280,7 @@ int ObExprSubQueryRef::expr_eval(
         } else {
         }
       }
+      if (OB_SUCC(ret)) { ret = iter->publish_cache_result(pending); }
     }
   } else {
     // result is row or set, return extra info directly

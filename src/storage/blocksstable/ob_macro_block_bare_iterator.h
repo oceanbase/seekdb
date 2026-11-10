@@ -160,7 +160,7 @@ private:
 private:
   ObDatumRow row_;
   ObMicroBlockBareIterator micro_iter_;
-  const ObObjMeta *column_types_;
+  const SqlTypeMeta *column_types_;
   const int64_t *column_checksums_;
   common::ObFixedArray<share::schema::ObColDesc, common::ObIAllocator> rowkey_descs_;
   common::ObIAllocator *allocator_;

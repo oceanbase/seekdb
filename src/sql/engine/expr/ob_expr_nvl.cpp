@@ -77,7 +77,7 @@ ObExprNvl::~ObExprNvl()
 
 void set_calc_type(const ObExprResType &in_type, ObExprResType &out_type)
 {
-  out_type.set_calc_meta(in_type.get_obj_meta());
+  out_type.set_calc_meta(in_type.get_sql_type_meta());
   out_type.set_calc_accuracy(in_type.get_accuracy());
   out_type.set_calc_collation_type(in_type.get_collation_type());
   out_type.set_calc_collation_level(in_type.get_collation_level());
@@ -144,7 +144,7 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
       const bool type1_is_enumset = ob_is_enumset_tc(type1.get_type());
       const bool type2_is_enumset = ob_is_enumset_tc(type2.get_type());
       if (type1_is_enumset || type2_is_enumset) {
-        ObObjType calc_type = get_enumset_calc_type(type.get_type(), OB_INVALID_INDEX);
+        SqlValueType calc_type = get_enumset_calc_type(type.get_type(), OB_INVALID_INDEX);
         if (OB_UNLIKELY(ObMaxType == calc_type)) {
           ret = OB_ERR_UNEXPECTED;
           SQL_ENG_LOG(WARN, "invalid type of parameter ", K(type1), K(type2), K(ret));
@@ -175,18 +175,17 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
 }
 
 int ObExprNvlUtil::calc_nvl_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // nvl(arg0, arg1)
-  ObDatum *arg0 = NULL;
-  ObDatum *arg1 = NULL;
-  constexpr bool is_udt_type = false;
-  bool v = false;
+  Datum *arg0 = NULL;
+  Datum *arg1 = NULL;
 
   if (OB_FAIL(expr.eval_param_value(ctx, arg0, arg1))) {
-  } else if (OB_FAIL(pl::ObPLDataType::datum_is_null(arg0, is_udt_type, v))) {
-  } else if (!v) {
+  } else if (OB_ISNULL(arg0)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!arg0->is_null()) {
     res_datum.set_datum(*arg0);
   } else {
     res_datum.set_datum(*arg1);
@@ -199,12 +198,10 @@ int ObExprNvlUtil::calc_nvl_expr_batch(const ObExpr &expr,
                                       const ObBitVector &skip,
                                       const int64_t batch_size) {
   int ret = OB_SUCCESS;
-  ObDatum* results = expr.locate_batch_datums(ctx);
+  Datum* results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  ObDatumVector args0;
-  ObDatumVector args1;
-  constexpr bool is_udt_type = false;
-  bool v = false;
+  DatumVector args0;
+  DatumVector args1;
   if (OB_FAIL(expr.eval_batch_param_value(ctx, skip, batch_size, args0,
                                           args1))) {
   } else {
@@ -212,15 +209,16 @@ int ObExprNvlUtil::calc_nvl_expr_batch(const ObExpr &expr,
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       }
-      eval_flags.set(i);
-      ObDatum *arg0 = args0.at(i);
-      ObDatum *arg1 = args1.at(i);
-      if (OB_FAIL(pl::ObPLDataType::datum_is_null(arg0, is_udt_type, v))) {
-      } else if (!v) {
+      Datum *arg0 = args0.at(i);
+      Datum *arg1 = args1.at(i);
+      if (OB_ISNULL(arg0)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!arg0->is_null()) {
         results[i].set_datum(*arg0);
       } else {
         results[i].set_datum(*arg1);
       }
+      if (OB_SUCC(ret)) { eval_flags.set(i); }
     }
   }
 
@@ -228,19 +226,18 @@ int ObExprNvlUtil::calc_nvl_expr_batch(const ObExpr &expr,
 }
 
 int ObExprNvlUtil::calc_nvl_expr2(const ObExpr &expr, ObEvalCtx &ctx,
-                                  ObDatum &res_datum)
+                                  Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // nvl(arg0, arg1, arg2)
-  ObDatum *arg0 = NULL;
-  ObDatum *arg1 = NULL;
-  ObDatum *arg2 = NULL;
-  constexpr bool is_udt_type = false;
-  bool v = false;
+  Datum *arg0 = NULL;
+  Datum *arg1 = NULL;
+  Datum *arg2 = NULL;
 
   if (OB_FAIL(expr.eval_param_value(ctx, arg0, arg1, arg2))) {
-  } else if (OB_FAIL(pl::ObPLDataType::datum_is_null(arg0, is_udt_type, v))) {
-  } else if (!v) {
+  } else if (OB_ISNULL(arg0)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!arg0->is_null()) {
     res_datum.set_datum(*arg1);
   } else {
     res_datum.set_datum(*arg2);

@@ -64,7 +64,7 @@ int ObExprPrivSTBestsrid::calc_result_typeN(ObExprResType& type,
 }
 
 int ObExprPrivSTBestsrid::get_geog_box(ObEvalCtx &ctx, lib::MemoryContext &mem_ctx, ObString wkb, 
-                                      ObObjType input_type, bool &is_geo_empty, ObGeogBox *&geo_box)
+                                      SqlValueType input_type, bool &is_geo_empty, ObGeogBox *&geo_box)
 {
   int ret = OB_SUCCESS;
   ObGeometry *geo = NULL;
@@ -99,7 +99,7 @@ int ObExprPrivSTBestsrid::get_geog_box(ObEvalCtx &ctx, lib::MemoryContext &mem_c
   return ret;
 }
 
-int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObGeogBox *geo_box1 = NULL;
@@ -111,7 +111,7 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
   common::ObSrsCacheGuard srs_guard;
   bool is_null_res = false;
   bool is_geo_empty = false;
-  ObDatum *geo_datum[2] = { nullptr };
+  Datum *geo_datum[2] = { nullptr };
 
   for (uint8_t i = 0; i < param_num && OB_SUCC(ret); i++) {
     ObExpr *geo_arg = expr.args_[i];
@@ -124,7 +124,7 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
   for (uint8_t i = 0; i < param_num && OB_SUCC(ret) && !is_null_res; i++) {
     ObString geo_str;
     ObExpr *geo_arg = expr.args_[i];
-    ObObjType input_type = geo_arg->datum_meta_.type_;
+    SqlValueType input_type = geo_arg->datum_meta_.type_;
     if (geo_datum[i]->is_null()) {
       res.set_null();
       is_null_res = true;

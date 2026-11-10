@@ -60,7 +60,7 @@ public:
         prefix_col_obj_metas_(allocator)
   {}
   int init(int64_t table_id, int64_t range_column_cnt, const ObIArray<int64_t> &prefix_col_idxs,
-           const ObIArray<ObObjMeta> &prefix_col_obj_metas);
+           const ObIArray<SqlTypeMeta> &prefix_col_obj_metas);
   int assign(const ObPxQueryRangeInfo &other);
   inline bool can_extract() const { return 0 < prefix_col_idxs_.count() ; }
   inline void destroy() {
@@ -80,7 +80,7 @@ public:
   // then the prefix_col_idxs_ = [1, 0],
   // and we should fill (min, max) for c3
   ObFixedArray<int64_t, common::ObIAllocator> prefix_col_idxs_;
-  ObFixedArray<ObObjMeta, common::ObIAllocator> prefix_col_obj_metas_;
+  ObFixedArray<SqlTypeMeta, common::ObIAllocator> prefix_col_obj_metas_;
   TO_STRING_KV(K_(table_id), K_(range_column_cnt), K_(prefix_col_idxs), K_(prefix_col_obj_metas));
 };
 

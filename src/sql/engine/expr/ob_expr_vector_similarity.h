@@ -57,8 +57,8 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
-  static int calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum, ObVecSimilarityType dis_type);
+  static int calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
+  static int calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum, ObVecSimilarityType dis_type);
   static int calc_similarity_from_distance(const ObExprVectorDistance::ObVecDisType dis_type, const float &distance, float &similarity);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorSimilarity);
@@ -83,7 +83,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_l2_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_l2_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorL2Similarity);
 };
@@ -98,7 +98,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_cosine_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_cosine_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorCosineSimilarity);
 };
@@ -113,7 +113,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_ip_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_ip_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorIPSimilarity);
 };

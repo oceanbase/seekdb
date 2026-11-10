@@ -77,32 +77,7 @@ OB_INLINE static int pad_on_local_buf(const ObString &space_pattern,
   return ret;
 }
 
-int pad_column(const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, common::ObObj &cell)
-{
-  int ret = OB_SUCCESS;
-  if (cell.is_fixed_len_char_type()) {
-    ObLength length = accuracy.get_length(); // byte or char length
-    int32_t cell_strlen = 0; // byte or char length
-    const ObString space_pattern = get_padding_str(cell.get_collation_type());
-    if (OB_FAIL(cell.get_char_length(accuracy, *(reinterpret_cast<int32_t *>(&cell_strlen))))) {
-    } else {
-      if (cell_strlen < length) {
-        uint32_t cell_len = cell.get_val_len();
-        const char *ptr = cell.get_string_ptr();
-        if (OB_FAIL(pad_on_local_buf(space_pattern, (length - cell_strlen), padding_alloc,
-                                     ptr, cell_len))) {
-        } else {
-          // watch out !!! in order to deep copy an ObObj instance whose type is char or varchar,
-          // set_collation_type() should be revoked. But here no need to set collation type
-          cell.set_string(cell.get_type(), ObString(cell_len, cell_len, ptr));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int pad_column(const ObObjMeta &obj_meta, const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, blocksstable::ObStorageDatum &datum)
+int pad_column(const SqlTypeMeta &obj_meta, const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, blocksstable::ObStorageDatum &datum)
 {
   int ret = OB_SUCCESS;
   if (datum.is_null()) {
@@ -129,7 +104,7 @@ int pad_column(const ObObjMeta &obj_meta, const ObAccuracy accuracy, common::ObI
 int pad_column(const common::ObAccuracy accuracy, sql::ObEvalCtx &ctx, sql::ObExpr &expr)
 {
   int ret = OB_SUCCESS;
-  sql::ObDatum &datum = expr.locate_expr_datum(ctx);
+  common::Datum &datum = expr.locate_expr_datum(ctx);
   if (datum.is_null()) {
     // do nothing.
   } else if (expr.obj_meta_.is_fixed_len_char_type()) {
@@ -137,25 +112,24 @@ int pad_column(const common::ObAccuracy accuracy, sql::ObEvalCtx &ctx, sql::ObEx
     const common::ObCollationType cs_type = expr.datum_meta_.cs_type_;
     const ObString space_pattern = get_padding_str(cs_type);
     int32_t cur_len = 0; // byte or char length
-    bool is_ascii = can_do_ascii_optimize(cs_type) && is_ascii_str(datum.ptr_, datum.pack_);
+    bool is_ascii = can_do_ascii_optimize(cs_type) && is_ascii_str(static_cast<const char *>(datum.get_reference()), datum.length());
     if (is_ascii) {
-      cur_len = datum.pack_;
+      cur_len = datum.length();
     } else {
-      cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, datum.ptr_, datum.pack_));
+      cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, static_cast<const char *>(datum.get_reference()), datum.length()));
     }
     if (cur_len < length) {
       char *ptr = nullptr;
-      const int32_t pad_len = datum.pack_ + (length - cur_len) * space_pattern.length();
+      const int32_t pad_len = datum.length() + (length - cur_len) * space_pattern.length();
       const int64_t buf_len = pad_len;
       if (OB_ISNULL(ptr = expr.get_str_res_mem(ctx, buf_len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_LOG(WARN, "no memory", K(ret));
       } else {
         int32_t true_len = 0;
-        MEMMOVE(ptr, datum.ptr_, datum.pack_);
-        append_padding_pattern(space_pattern, datum.pack_, buf_len, ptr, true_len);
-        datum.ptr_ = ptr;
-        datum.pack_ = true_len;
+        MEMMOVE(ptr, static_cast<const char *>(datum.get_reference()), datum.length());
+        append_padding_pattern(space_pattern, datum.length(), buf_len, ptr, true_len);
+        datum.set_reference(ptr, true_len, datum.reference_flags());
       }
     }
   }
@@ -389,7 +363,7 @@ int decimal_or_number_to_int64(const ObDatum &datum,
                                int64_t &res)
 {
   int ret = OB_SUCCESS;
-  ObObjType ob_type = datum_meta.get_type();
+  SqlValueType ob_type = datum_meta.get_type();
   if (ObNumberType == ob_type) {
     const number::ObNumber nmb(datum.get_number());
     if (OB_FAIL(nmb.extract_valid_int64_with_trunc(res))) {

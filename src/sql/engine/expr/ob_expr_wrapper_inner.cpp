@@ -51,10 +51,10 @@ int ObExprWrapperInner::cg_expr(ObExprCGCtx &,
 
 int ObExprWrapperInner::eval_wrapper_inner(const ObExpr &expr,
                                          ObEvalCtx &ctx,
-                                         ObDatum &expr_datum)
+                                         Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else {
     expr_datum.set_datum(*arg);

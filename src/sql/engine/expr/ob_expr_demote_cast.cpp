@@ -49,11 +49,11 @@ int ObExprDemoteCastBase::get_column_res_type(const ObExprResType &param_type,
 {
   int ret = OB_SUCCESS;
   ObDatumMeta column_datum_meta;
-  if (!param_type.is_int() && !param_type.get_param().is_int()) {
+  if (!param_type.is_int() && !param_type.get_param_value_meta().is_int()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_column_datum_meta(param_type.get_param().get_int(), column_datum_meta))) {
+  } else if (OB_FAIL(get_column_datum_meta(param_type.get_param_datum().get_int(), column_datum_meta))) {
   } else {
-    column_res_type.set_type(static_cast<ObObjType>(column_datum_meta.type_));
+    column_res_type.set_type(static_cast<SqlValueType>(column_datum_meta.type_));
     column_res_type.set_cs_type(static_cast<ObCollationType>(column_datum_meta.cs_type_));
     if (ob_is_string_type(column_res_type.get_type())) {
       column_res_type.set_length(column_datum_meta.length_semantics_);
@@ -70,7 +70,7 @@ int ObExprDemoteCastBase::get_column_datum_meta(const int64_t val, ObDatumMeta &
   int ret = OB_SUCCESS;
   ParseNode parse_node;
   parse_node.value_ = val;
-  column_datum_meta.type_ = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
+  column_datum_meta.type_ = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
   column_datum_meta.cs_type_ =
     static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]);
   if (ob_is_string_type(column_datum_meta.type_)) {
@@ -141,8 +141,8 @@ int ObExprDemoteCastBase::set_calc_type_for_const_param(const ObExprResType &col
 int ObExprDemoteCastBase::demote_cast(const ObExpr &expr, ObEvalCtx &ctx, TypeDemotionRes &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *constant = NULL;
-  ObDatum *column_info = NULL;
+  Datum *constant = NULL;
+  Datum *column_info = NULL;
   ObDatumMeta column_datum_meta;
   ObDatumMeta constant_datum_meta = expr.args_[0]->datum_meta_;
   // demote constant value type and get its range placement in the field.
@@ -163,13 +163,14 @@ int ObExprDemoteCastBase::demote_cast(const ObExpr &expr, ObEvalCtx &ctx, TypeDe
     if (OB_FAIL(demote_null_constant(expr.args_[0], column_datum_meta, res))) {
     }
   } else {
-    if (OB_FAIL(demote_field_constant(*constant, constant_datum_meta, column_datum_meta, res))) {
+    if (OB_FAIL(demote_field_constant(expr, ctx, *constant, constant_datum_meta, column_datum_meta, res))) {
     }
   }
   return ret;
 }
 
-int ObExprDemoteCastBase::demote_field_constant(const ObDatum &constant,
+int ObExprDemoteCastBase::demote_field_constant(const ObExpr &expr, ObEvalCtx &ctx,
+                                                const Datum &constant,
                                                 const ObDatumMeta &src_meta, /*constant meta*/
                                                 const ObDatumMeta &dst_meta, /*field meta*/
                                                 TypeDemotionRes &res)
@@ -177,7 +178,7 @@ int ObExprDemoteCastBase::demote_field_constant(const ObDatum &constant,
   int ret = OB_SUCCESS;
   // Must be consistent with `ObRawExprTypeDemotion::type_can_demote. An error will be thrown
   // during execution stage if an unsupported type is encountered.
-  switch (ob_obj_type_class(dst_meta.type_)) {
+  switch (sql_type_class(dst_meta.type_)) {
     case ObIntTC:
     case ObUIntTC: {
       ret = demote_int_field_constant(constant, src_meta, dst_meta, res);
@@ -185,7 +186,7 @@ int ObExprDemoteCastBase::demote_field_constant(const ObDatum &constant,
     }
     case ObNumberTC:
     case ObDecimalIntTC: {
-      ret = demote_decimal_field_constant(constant, src_meta, dst_meta, res);
+      ret = demote_decimal_field_constant(expr, ctx, constant, src_meta, dst_meta, res);
       break;
     }
     case ObYearTC: {
@@ -217,7 +218,7 @@ int ObExprDemoteCastBase::demote_field_constant(const ObDatum &constant,
   return ret;
 }
 
-int ObExprDemoteCastBase::demote_int_field_constant(const ObDatum &constant,
+int ObExprDemoteCastBase::demote_int_field_constant(const Datum &constant,
                                                     const ObDatumMeta &src_meta,
                                                     const ObDatumMeta &dst_meta,
                                                     TypeDemotionRes &res)
@@ -248,7 +249,8 @@ int ObExprDemoteCastBase::demote_int_field_constant(const ObDatum &constant,
   return ret;
 }
 
-int ObExprDemoteCastBase::demote_decimal_field_constant(const ObDatum &constant,
+int ObExprDemoteCastBase::demote_decimal_field_constant(const ObExpr &expr, ObEvalCtx &ctx,
+                                                        const Datum &constant,
                                                         const ObDatumMeta &src_meta,
                                                         const ObDatumMeta &dst_meta,
                                                         TypeDemotionRes &res)
@@ -259,8 +261,10 @@ int ObExprDemoteCastBase::demote_decimal_field_constant(const ObDatum &constant,
   } else {
     number::ObNumber num(constant.get_number());
     if (ob_is_number_tc(dst_meta.type_)) {
-      res.val_.set_number(num);
-      res.set_inside();
+      if (res.publish_value_) {
+        OZ(ObExprUtil::set_number(expr, ctx, res.val_, num));
+      }
+      OX(res.set_inside());
     } else { // decimal int type
       ObNumStackOnceAlloc tmp_alloc;
       number::ObNumber round_num;
@@ -301,12 +305,17 @@ int ObExprDemoteCastBase::demote_decimal_field_constant(const ObDatum &constant,
           } else if (OB_FAIL(ObDatumCast::align_decint_precision_unsafe(
               scaled_val.get_decimal_int(), scaled_val.get_int_bytes(), out_bytes, res_val))) {
           } else {
-            res.val_.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
-            res.set_inside();
+            if (res.publish_value_) {
+              OZ(ObExprUtil::set_decimal_int(expr, ctx, res.val_,
+                  res_val.get_decimal_int(), res_val.get_int_bytes()));
+            }
+            OX(res.set_inside());
           }
         } else {
-          res.val_.set_decimal_int(decint, int_bytes);
-          res.set_inside();
+          if (res.publish_value_) {
+            OZ(ObExprUtil::set_decimal_int(expr, ctx, res.val_, decint, int_bytes));
+          }
+          OX(res.set_inside());
         }
       }
     }
@@ -314,7 +323,7 @@ int ObExprDemoteCastBase::demote_decimal_field_constant(const ObDatum &constant,
   return ret;
 }
 
-int ObExprDemoteCastBase::demote_year_field_constant(const ObDatum &constant,
+int ObExprDemoteCastBase::demote_year_field_constant(const Datum &constant,
                                                      const ObDatumMeta &src_meta,
                                                      const ObDatumMeta &dst_meta,
                                                      TypeDemotionRes &res)
@@ -355,7 +364,7 @@ int ObExprDemoteCastBase::demote_year_field_constant(const ObDatum &constant,
   return ret;
 }
 
-int ObExprDemoteCastBase::demote_date_field_constant(const ObDatum &constant,
+int ObExprDemoteCastBase::demote_date_field_constant(const Datum &constant,
                                                      const ObDatumMeta &src_meta,
                                                      const ObDatumMeta &dst_meta,
                                                      TypeDemotionRes &res)
@@ -390,7 +399,7 @@ int ObExprDemoteCastBase::demote_date_field_constant(const ObDatum &constant,
   return ret;
 }
 
-int ObExprDemoteCastBase::demote_datetime_timestamp_field_constant(const ObDatum &constant,
+int ObExprDemoteCastBase::demote_datetime_timestamp_field_constant(const Datum &constant,
                                                                    const ObDatumMeta &src_meta,
                                                                    const ObDatumMeta &dst_meta,
                                                                    TypeDemotionRes &res)
@@ -412,7 +421,7 @@ int ObExprDemoteCastBase::demote_datetime_timestamp_field_constant(const ObDatum
   return ret;
 }
 
-int ObExprDemoteCastBase::demote_time_field_constant(const ObDatum &constant,
+int ObExprDemoteCastBase::demote_time_field_constant(const Datum &constant,
                                                      const ObDatumMeta &src_meta,
                                                      const ObDatumMeta &dst_meta,
                                                      TypeDemotionRes &res)
@@ -505,7 +514,7 @@ int ObExprDemoteCast::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
   return ret;
 }
 
-int ObExprDemoteCast::eval_demoted_val(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &demoted_val)
+int ObExprDemoteCast::eval_demoted_val(const ObExpr &expr, ObEvalCtx &ctx, Datum &demoted_val)
 {
   int ret = OB_SUCCESS;
   TypeDemotionRes res(demoted_val);
@@ -556,16 +565,13 @@ int ObExprRangePlacement::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw
 }
 
 int ObExprRangePlacement::eval_range_placement(const ObExpr &expr, ObEvalCtx &ctx,
-                                               ObDatum &range_placement)
+                                               Datum &range_placement)
 {
   int ret = OB_SUCCESS;
-  ObDatum demoted_val;
-  // Use temporary memory to store the demoted value. Ensure that this buffer can accommodate
-  // the maximum value representable by the largest data type, currently it is decimal_int_512.
-  char value_buf[MAX_TYPE_BUF_SIZE];
-  demoted_val.ptr_ = value_buf;
-  demoted_val.pack_ = 0;
-  TypeDemotionRes res(demoted_val);
+  Datum demoted_val;
+  // This evaluator returns only the classification. Numeric demotion performs
+  // the same range arithmetic without publishing an unused value of another type.
+  TypeDemotionRes res(demoted_val, false);
   if (OB_FAIL(demote_cast(expr, ctx, res))) {
   } else {
     // set range placement value as datum result

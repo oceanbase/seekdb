@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/rewrite/ob_transform_utils.h"
+#include "share/datum/typed_datum_compare.h"
 
 using namespace oceanbase;
 using namespace oceanbase::sql;
@@ -27,6 +28,15 @@ bool ObQuestionmarkEqualCtx::compare_const(const ObConstRawExpr &left,
 {
   int &ret = err_code_;
   bool bret = false;
+  common::DatumValue left_value, right_value, left_param, right_param;
+  alignas(8) char left_value_scratch[64], right_value_scratch[64];
+  alignas(8) char left_param_scratch[64], right_param_scratch[64];
+  if (OB_SUCC(ret) && (OB_FAIL(left.export_value(left_value, left_value_scratch, sizeof(left_value_scratch)))
+      || OB_FAIL(right.export_value(right_value, right_value_scratch, sizeof(right_value_scratch)))
+      || OB_FAIL(left.export_bound_param(left_param, left_param_scratch, sizeof(left_param_scratch)))
+      || OB_FAIL(right.export_bound_param(right_param, right_param_scratch, sizeof(right_param_scratch))))) {
+    return false;
+  }
   if (left.get_expr_type() != right.get_expr_type() ||
       left.get_result_type() != right.get_result_type() ||
       (left.get_result_type().is_ext()
@@ -35,14 +45,14 @@ bool ObQuestionmarkEqualCtx::compare_const(const ObConstRawExpr &left,
       OB_SUCCESS != err_code_) {
     // do nothing
   } else if (left.get_expr_type() != T_QUESTIONMARK) {
-    bret = left.get_value().strict_equal(right.get_value());
+    bret = common::strict_equal_datum_values(left_value, right_value);
   } else {
-    bret = !left.get_param().is_null() && !right.get_param().is_null() &&
-        left.get_param().strict_equal(right.get_param());
+    bret = !left_param.is_null() && !right_param.is_null() &&
+        common::strict_equal_datum_values(left_param, right_param);
     if (bret) {
       ObPCParamEqualInfo equal_info;
-      equal_info.first_param_idx_ = left.get_value().get_unknown();
-      equal_info.second_param_idx_ = right.get_value().get_unknown();
+      equal_info.first_param_idx_ = left.get_questionmark_index();
+      equal_info.second_param_idx_ = right.get_questionmark_index();
       if (equal_info.first_param_idx_ != equal_info.second_param_idx_) {
         if (OB_FAIL(equal_pairs_.push_back(equal_info))) {
         }
@@ -71,8 +81,14 @@ uint64_t ObSharedExprResolver::hash_expr_tree(ObRawExpr *expr, uint64_t hash_cod
     if (expr->get_expr_type() == T_QUESTIONMARK) {
       // do nothing
     } else if (expr->is_const_raw_expr()) {
-      hash_code = common::do_hash(static_cast<ObConstRawExpr *>(expr)->get_value(),
-                                  hash_code);
+      common::DatumValue view;
+      alignas(8) char scratch[64];
+      const int ret = static_cast<ObConstRawExpr *>(expr)->export_value(view, scratch, sizeof(scratch));
+      if (ret != OB_SUCCESS) {
+        LOG_ERROR("invalid owned Raw constant while hashing shared expression", K(ret));
+        ob_abort();
+      }
+      hash_code = common::do_hash(view, hash_code);
     } else if (expr->get_expr_type() == T_FUN_SYS_CAST) {
       hash_code = hash_expr_tree(expr->get_param_expr(0), hash_code, false);
     } else if (!is_root) {

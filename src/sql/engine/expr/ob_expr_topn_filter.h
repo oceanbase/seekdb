@@ -27,6 +27,7 @@ namespace sql
 
 class ObDynamicFilterExecutor;
 
+// The storage decoder consumes an explicit legacy parameter array.
 using ObRuntimeFilterParams = common::ObSEArray<common::ObDatum, 4>;
 
 class ObExprTopNFilterContext final: public ObExprOperatorCtx
@@ -106,13 +107,13 @@ public:
   int state_machine(const ObExpr &expr, ObEvalCtx &ctx, Args &&... args);
 
 private:
-  inline int bypass(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  inline int bypass(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   inline int bypass(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                     const int64_t batch_size);
   inline int bypass(const ObExpr &expr, ObEvalCtx &ctx,ObDynamicFilterExecutor &dynamic_filter,
                     ObRuntimeFilterParams &params, bool &is_data_prepared);
 
-  inline int do_process(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  inline int do_process(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   inline int do_process(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                        const int64_t batch_size);
   inline int do_process(const ObExpr &expr, ObEvalCtx &ctx, ObDynamicFilterExecutor &dynamic_filter,
@@ -169,7 +170,7 @@ public:
   }
 
 public:
-  static int eval_topn_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_topn_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_topn_filter_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                     const int64_t batch_size);
   static int prepare_storage_white_filter_data(const ObExpr &expr,

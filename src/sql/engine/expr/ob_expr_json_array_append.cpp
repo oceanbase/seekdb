@@ -91,7 +91,7 @@ int ObExprJsonArrayAppend::calc_result_typeN(ObExprResType& type,
 }                                        
 
 
-int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonArrayAppend::eval_json_array_append(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObJsonExprHelper::eval_json_mutation(expr, ctx, res, JsonMutation::ArrayAppend);
 }

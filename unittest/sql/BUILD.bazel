@@ -1,0 +1,951 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "unsigned_integer_arithmetic_cases",
+    srcs = ["test_unsigned_integer_arithmetic.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_unsigned_integer_arithmetic",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":unsigned_integer_arithmetic_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "signed_integer_arithmetic_cases",
+    srcs = ["test_signed_integer_arithmetic.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_signed_integer_arithmetic",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":signed_integer_arithmetic_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "scalar_frame_layout_cases",
+    srcs = ["test_scalar_frame_layout.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_scalar_frame_layout",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":scalar_frame_layout_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "signed_add_accessors_cases",
+    srcs = ["test_signed_add_accessors.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_signed_add_accessors",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":signed_add_accessors_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_execution_parameters_cases",
+    srcs = ["test_native_execution_parameters.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_execution_parameters",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_execution_parameters_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_dml_vector_cases",
+    srcs = ["test_fixed_dml_vector.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_dml_vector",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_dml_vector_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_dml_domain_cases",
+    srcs = ["test_fixed_dml_domain.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_dml_domain",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_dml_domain_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_dml_core_cases",
+    srcs = ["test_fixed_dml_core.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_dml_core",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_dml_core_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_filter_sample_cases",
+    srcs = [
+        "test_fixed_filter_sample.cpp",
+        "test_native_topn_filter_values.cpp",
+        "test_native_white_filter_parameters.cpp",
+    ],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_filter_sample",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_filter_sample_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_scalar_consumers_cases",
+    srcs = ["test_fixed_scalar_consumers.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_scalar_consumers",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_scalar_consumers_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_sort_cells_cases",
+    srcs = ["test_fixed_sort_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_sort_cells",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_sort_cells_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_row_consumers_cases",
+    srcs = ["test_fixed_row_consumers.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_row_consumers",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_row_consumers_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_aggregate_cells_cases",
+    srcs = [
+        "test_fixed_aggregate_cells.cpp",
+        "test_native_pushdown_minmax.cpp",
+    ],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_fixed_aggregate_cells",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":fixed_aggregate_cells_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_compare_cells_cases",
+    srcs = ["test_fixed_compare_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_compare_cells",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_compare_cells_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_window_cells_cases",
+    srcs = ["test_fixed_window_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_window_cells",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_window_cells_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_merge_join_cells_cases",
+    srcs = ["test_fixed_merge_join_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_merge_join_cells",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_merge_join_cells_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_winbuf_wire_cases",
+    srcs = ["test_fixed_winbuf_wire.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_winbuf_wire",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_winbuf_wire_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_groupby_cells_cases",
+    srcs = ["test_fixed_groupby_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_groupby_cells",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_groupby_cells_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "fixed_ra_datum_cells_cases",
+    srcs = ["test_fixed_ra_datum_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_ra_datum_cells",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_ra_datum_cells_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "stored_format_consumer_cases",
+    srcs = ["test_stored_format_consumers.cpp", "test_stored_wire_consumers.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:stored_format_consumer_test_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_stored_format_consumers",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":stored_format_consumer_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_point_get_retry_cases",
+    srcs = ["test_native_point_get_retry.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_point_get_retry",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_point_get_retry_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_bigint_point_cases",
+    srcs = ["test_native_bigint_point.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_bigint_point",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_bigint_point_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_point_get_input_cases",
+    srcs = ["test_native_point_get_input.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_point_get_input",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_point_get_input_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "stored_datum_cells_cases",
+    srcs = ["test_stored_datum_cells.cpp", "test_native_stored_datum_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_stored_datum_cells",
+    linkstatic = True,
+    linkopts = ["-Wl,--gc-sections"],
+    deps = [
+        ":stored_datum_cells_cases",
+        "//src/sql:stored_datum_cells_test_runtime",
+        "//src/oblib:oblib_test_runtime",
+    ],
+)
+
+cc_library(
+    name = "datum_collection_compare_cases",
+    srcs = ["test_datum_collection_compare.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_datum_collection_compare",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":datum_collection_compare_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "datum_parameter_constraint_cases",
+    srcs = [
+        "test_datum_parameter_constraints.cpp",
+        "test_context_datum_parameters.cpp",
+        "test_native_pc_const_values.cpp",
+    ],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_datum_parameter_constraints",
+    linkstatic = True,
+    data = ["data/physical_plan_context.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":datum_parameter_constraint_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "statement_time_cases",
+    srcs = ["test_statement_time.cpp", "test_statement_time_context.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_statement_time",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":statement_time_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "batch_rescan_param_cases",
+    srcs = ["test_batch_rescan_params.cpp", "test_dynamic_param_capture.cpp"],
+    alwayslink = True,
+    deps = ["//src/sql:sql_runtime_interface", "//src/sql:sql_runtime_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_batch_rescan_params",
+    linkstatic = True,
+    data = ["data/batch_rescan_params.golden", "data/range_map.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":batch_rescan_param_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "range_map_datum_cases",
+    srcs = ["test_range_map_datum.cpp", "test_values_datum.cpp", "test_literal_datum.cpp",
+            "test_native_raw_constant_owner.cpp", "test_native_raw_constant_builders.cpp",
+            "test_native_expr_res_type.cpp", "test_native_select_into_options.cpp"],
+    alwayslink = True,
+    deps = ["//src/sql:sql_runtime_interface", "//src/sql:sql_runtime_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_range_map_datum",
+    linkstatic = True,
+    data = ["data/range_map.golden", "data/values_table_access.golden", "data/literal_values.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":range_map_datum_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_column_cast_cases",
+    srcs = ["test_native_column_cast.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_column_cast",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_column_cast_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_lob_result_cases",
+    srcs = ["test_native_lob_result.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql:native_lob_result_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_lob_result",
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":native_lob_result_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "native_simple_range_cases",
+    srcs = ["test_native_simple_range.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql:native_range_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_simple_range",
+    data = ["data/simple_range.golden"],
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":native_simple_range_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "native_scalar_cases",
+    srcs = ["test_native_scalar.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql/optimizer:native_scalar_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_scalar",
+    data = ["data/scalar_inputs.golden", "data/scalar_values.golden", "data/scalar_lob_temporal_inputs.golden", "data/scalar_lob_temporal.golden"],
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":native_scalar_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+# Integrate in existing unittest/sql/BUILD.bazel. Do not add a direct Share dependency.
+cc_library(
+    name = "native_mvi_producer_cases",
+    srcs = ["test_native_mvi_producer.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_mvi_producer",
+    linkstatic = True,
+    data = ["data/mvi_producer.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_mvi_producer_cases", "//src/observer:liboceanbase"],
+)
+
+
+# Append to unittest/sql/BUILD.bazel after the parent confirms the source freeze.
+# No Storage private/header dependency is required by the permanent cases.
+cc_library(
+    name = "mvi_datum_lookup_cases",
+    srcs = ["test_mvi_datum_lookup.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_mvi_datum_lookup",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":mvi_datum_lookup_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_temp_expr_cases",
+    srcs = ["test_native_temp_expr.cpp"],
+    alwayslink = True,
+    deps = ["//src/sql:sql_runtime_interface", "//src/sql:sql_runtime_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_temp_expr",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_temp_expr_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "session_native_values_cases",
+    srcs = [
+        "test_session_datum_values.cpp",
+        "test_native_user_variable.cpp",
+        "test_session_native_result.cpp",
+        "test_native_row_stores.cpp",
+        "test_native_px_tablet_id.cpp",
+        "test_native_udt_result_owner.cpp",
+        "test_native_load_format.cpp",
+        "test_native_trigger_record_cleanup.cpp",
+        "test_native_trigger_param_lifetime.cpp",
+        "test_native_system_variable_tracking.cpp",
+        "test_native_system_variable_values.cpp",
+        "test_native_local_session_values.cpp",
+        "test_native_plsql_variable.cpp",
+        "test_session_native_values_main.cpp",
+    ],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql:session_native_values_test_runtime",
+        "//src/sql:native_lob_result_test_runtime",
+        "//src/sql:native_px_tablet_id_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_session_native_values",
+    linkstatic = True,
+    data = [
+        "data/native-row-row-flat-v1.bin",
+        "data/native-row-row-compact-v1.bin",
+        "data/native-row-scanner-v1.bin",
+        "data/native-row-values-v1.bin",
+        "data/native-row-chunk-v1.bin",
+        "data/session_values_map.golden",
+        "data/session_result_values.golden",
+        "data/session_switch_values.golden",
+        "data/system_variable_tracking.golden",
+        "data/system_variable_values.golden",
+        "data/local_session_values.golden",
+        "data/native_plsql_variable.golden",
+        "//src/observer:liboceanbase_test_runtime",
+    ],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":session_native_values_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_column_stats_cases",
+    srcs = ["test_native_column_stats.cpp", "test_session_native_values_main.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql:session_native_values_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_column_stats",
+    linkstatic = True,
+    data = ["data/native_column_stats.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_column_stats_cases", "//src/observer:liboceanbase"],
+)
+
+# Integration snippet only. Root owns actual BUILD files.
+cc_library(
+    name = "native_histogram_values_cases",
+    srcs = [
+        "test_native_histogram_values.cpp",
+        "test_session_native_values_main.cpp",
+    ],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql:session_native_values_test_runtime",
+        "//src/sql:native_histogram_values_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_histogram_values",
+    linkstatic = True,
+    data = ["data/native_histogram_values.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_histogram_values_cases", "//src/observer:liboceanbase"],
+)
+
+# Review-only integration sketch. Root owns all actual BUILD changes.
+# Keep the test cases inside the SQL module's compile interface; do not add
+# direct Share / Observer / Storage private implementation dependencies.
+cc_library(
+    name = "native_vector_values_cases",
+    srcs = [
+        "test_native_vector_values.cpp",
+        "test_session_native_values_main.cpp",
+    ],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql:session_native_values_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_vector_values",
+    linkstatic = True,
+    data = ["data/native_vector_values.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_vector_values_cases", "//src/observer:liboceanbase"],
+)
+
+# unittest/sql/BUILD.bazel integration sketch; root owns actual BUILD.
+cc_library(
+    name = "native_hash_cols_cases",
+    srcs = ["test_native_hash_cols.cpp", "test_session_native_values_main.cpp"],
+    alwayslink = True,
+    deps = ["//src/sql:sql_runtime_interface", "//src/sql:sql_runtime_internal_headers", "//src/sql:session_native_values_test_runtime", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_hash_cols",
+    linkstatic = True,
+    data = ["data/native_hash_cols.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_hash_cols_cases", "//src/observer:liboceanbase"],
+)
+
+# Root owns actual BUILD files. Add beside native_column_stats_cases in unittest/sql/BUILD.bazel.
+cc_library(
+    name = "native_stats_results_cases",
+    srcs = ["test_native_stats_results.cpp", "test_session_native_values_main.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/sql:session_native_values_test_runtime",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_stats_results",
+    linkstatic = True,
+    data = ["data/native_stats_results.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_stats_results_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "des_hex_str_cases",
+    srcs = ["test_expr_des_hex_str.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_expr_des_hex_str",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":des_hex_str_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_subquery_cache_cases",
+    srcs = ["test_native_subquery_cache.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_subquery_cache",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_subquery_cache_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_expr_callbacks_cases",
+    srcs = ["test_native_expr_callbacks.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_expr_callbacks",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_expr_callbacks_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_frame_wire_cases",
+    srcs = ["test_native_frame_wire.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_frame_wire",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_frame_wire_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_batch_hash_cases",
+    srcs = ["test_native_batch_hash.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_batch_hash",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_batch_hash_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_pl_value_cases",
+    srcs = ["test_native_pl_value.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_pl_value",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_pl_value_cases", "//src/observer:liboceanbase"],
+)

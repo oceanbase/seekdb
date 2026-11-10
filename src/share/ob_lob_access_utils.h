@@ -26,6 +26,7 @@ namespace oceanbase
 {
 namespace common
 {
+struct DatumValue;
 class ObILobAccessContext;
 class ObILobReadService;
 struct ObLobDiffHeader;
@@ -62,7 +63,7 @@ class ObTextStringIter
 public:
   static const uint32_t DEAFULT_LOB_PREFIX_CHAR_LEN = 1000;
   static const uint32_t MAX_CHAR_MULTIPLIER = 4;
-  ObTextStringIter(ObObjType type, ObCollationType cs_type, const ObString &datum_str, 
+  ObTextStringIter(SqlValueType type, ObCollationType cs_type, const ObString &datum_str,
                    bool has_lob_header) :
     type_(type), cs_type_(cs_type), is_init_(false), is_lob_(false), is_outrow_(false),
     has_lob_header_(has_lob_header), state_(TEXTSTRING_ITER_INVALID), datum_str_(datum_str),
@@ -74,16 +75,6 @@ public:
     cs_type_ = ob_is_json(type) ? CS_TYPE_BINARY : cs_type_;
   }
 
-  ObTextStringIter(const ObObj &obj) :
-    type_(obj.get_type()), cs_type_(obj.get_collation_type()), is_init_(false), is_lob_(false),
-    is_outrow_(false), has_lob_header_(obj.has_lob_header()), state_(TEXTSTRING_ITER_INVALID),
-    datum_str_(obj.get_string()), ctx_(nullptr), err_ret_(OB_SUCCESS), tmp_alloc_(nullptr)
-  {
-    if (is_lob_storage(obj.get_type())) {
-      validate_has_lob_header(has_lob_header_);
-    }
-    cs_type_ = ob_is_json(obj.get_type()) ? CS_TYPE_BINARY : cs_type_;
-  }
   ~ObTextStringIter();
 
   TO_STRING_KV(K_(type), K_(cs_type), K_(is_init), K_(is_lob), K_(is_outrow),
@@ -119,10 +110,12 @@ public:
   int get_char_len(int64_t &char_length);
   uint32_t get_iter_count();
   uint32_t get_reserved_char_len();
-  static int convert_outrow_lob_to_inrow_templob(const ObObj &in_obj,
-                                                 ObObj &out_obj,
+  // The unchanged path borrows input bytes. Rebuilt LOBs and requested deep
+  // copies belong to owner; input and output may refer to the same value.
+  static int convert_outrow_lob_to_inrow_templob(const DatumValue &input,
+                                                 DatumValue &output,
                                                  const ObLobReadOptions *options,
-                                                 ObIAllocator *allocator,
+                                                 ObIAllocator &owner,
                                                  bool allow_persist_inrow = false,
                                                  bool need_deep_copy = false);
 
@@ -140,7 +133,7 @@ private:
             && state_ == valid_state && OB_NOT_NULL(ctx_));
   }
 private:
-  ObObjType type_;
+  SqlValueType type_;
   ObCollationType cs_type_;
   uint32_t is_init_ : 1;
   uint32_t is_lob_ : 1;
@@ -155,10 +148,11 @@ private:
 };
 
 // wrapper class to handle templob output(including string types)
+struct DatumCastParams;
 class ObTextStringResult
 {
 public:
-  ObTextStringResult(const ObObjType type,  bool has_lob_header, ObIAllocator *allocator) :
+  ObTextStringResult(const SqlValueType type,  bool has_lob_header, ObIAllocator *allocator) :
     type_(type), buffer_(NULL), buff_len_(0), pos_(0), is_outrow_templob_(false),
     has_lob_header_(has_lob_header), is_init_(false), alloc_(allocator)
   {
@@ -209,19 +203,21 @@ public:
   OB_INLINE void get_result_buffer(ObString &buf_str) { buf_str.assign(buffer_, pos_); }
   OB_INLINE void set_has_lob_header(bool has_header) { has_lob_header_ = has_header; }
   OB_INLINE bool has_lob_header() { return (is_lob_storage(type_)) && has_lob_header_; }
-  static int ob_convert_obj_temporay_lob(ObObj &obj, ObIAllocator &allocator);
+  template <typename Value>
+  static int convert_temporary_lob(Value &value, ObIAllocator &allocator);
   static int ob_convert_datum_temporay_lob(ObDatum &datum,
-                                           const ObObjMeta &in_obj_meta,
-                                           const ObObjMeta &out_obj_meta,
+                                           const SqlTypeMeta &in_obj_meta,
+                                           const SqlTypeMeta &out_obj_meta,
                                            ObIAllocator &allocator);
   int calc_buffer_len(const int64_t res_len);
   OB_INLINE int64_t get_buff_len() { return buff_len_; }
 
 protected:
+  int init_cast_buffer(int64_t res_len, DatumCastParams *params, ObIAllocator *allocator);
   int fill_temp_lob_header(const int64_t res_len);
 
 protected:
-  const ObObjType type_;
+  const SqlValueType type_;
   char *buffer_;
   int64_t buff_len_;
   int64_t pos_;
@@ -231,7 +227,7 @@ protected:
   ObIAllocator *alloc_;
 };
 
-OB_INLINE bool ob_is_empty_lob(ObObjType type, const ObDatum &datum, bool has_lob_header)
+OB_INLINE bool ob_is_empty_lob(SqlValueType type, const ObDatum &datum, bool has_lob_header)
 {
   bool bret = false;
   if (common::is_lob_storage(type)) {
@@ -242,22 +238,12 @@ OB_INLINE bool ob_is_empty_lob(ObObjType type, const ObDatum &datum, bool has_lo
 }
 
 template <typename TextVec>
-OB_INLINE bool ob_is_empty_lob(ObObjType type, const TextVec &vector, bool has_lob_header,
+OB_INLINE bool ob_is_empty_lob(SqlValueType type, const TextVec &vector, bool has_lob_header,
                                int64_t idx)
 {
   bool bret = false;
   if (common::is_lob_storage(type)) {
     common::ObLobLocatorV2 loc(vector->get_string(idx), has_lob_header);
-    bret = loc.is_empty_lob();
-  }
-  return bret;
-}
-
-OB_INLINE bool ob_is_empty_lob(const ObObj &obj)
-{
-  bool bret = false;
-  if (common::is_lob_storage(obj.get_type())) {
-    common::ObLobLocatorV2 loc(obj.get_string(), obj.has_lob_header());
     bret = loc.is_empty_lob();
   }
   return bret;
@@ -285,6 +271,34 @@ public:
   virtual int deserialize_lob_diffs(char* buf, const int64_t buf_len, ObLobDiffHeader *diff_header) = 0;
 };
 
+template <typename Value>
+int ObTextStringResult::convert_temporary_lob(Value &obj, ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  SqlValueType type = obj.get_type();
+  if (!is_lob_storage(type)) {
+  } else if (obj.has_lob_header()) {
+    ret = OB_UNEXPECT_INTERNAL_ERROR;
+    COMMON_LOG(WARN, "Lob: not support to convert obj has lob header to tempory lob", K(ret), K(obj));
+  } else if (obj.is_null() || obj.is_nop_value()) {
+  } else {
+    ObString row_str = obj.get_string();
+    ObTextStringResult new_tmp_lob(obj.get_type(), true, &allocator);
+    if (OB_FAIL(new_tmp_lob.init(row_str.length()))) {
+    } else if (OB_FAIL(new_tmp_lob.append(row_str))) {
+    } else {
+      ObString result;
+      new_tmp_lob.get_result_buffer(result);
+      obj.set_lob_value(type, result.ptr(), static_cast<int32_t>(result.length()));
+      if (new_tmp_lob.has_lob_header()) {
+        obj.set_has_lob_header();
+      }
+    }
+  }
+  return ret;
+}
+
+
 } // end namespace common
 } // end namespace oceanbase
 
@@ -292,12 +306,10 @@ namespace oceanbase
 {
 namespace common
 {
-struct ObObjCastParams;
+struct DatumCastParams;
 namespace lob_helper
 {
-int read_real_string_data(ObIAllocator *allocator, const ObObj &obj, ObString &str,
-                          const ObLobReadOptions *options);
-int read_real_string_data(ObIAllocator *allocator, ObObjType type, ObCollationType cs_type,
+int read_real_string_data(ObIAllocator *allocator, SqlValueType type, ObCollationType cs_type,
                           bool has_lob_header, ObString &str,
                           const ObLobReadOptions *options);
 template <typename Allocator>
@@ -318,8 +330,8 @@ int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, ObString &
   return ret;
 }
 
-template <typename Allocator>
-int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, const ObObjType type, ObObj &res_obj)
+template <typename Allocator, typename Value>
+int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, const SqlValueType type, Value &res_obj)
 {
   int ret = OB_SUCCESS;
   ObString result;
@@ -334,28 +346,26 @@ int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, const ObOb
 }  // namespace lob_helper
 }  // namespace common
 
-// ObObj-level text/lob result writer owned by the Share runtime.
 namespace common
 {
-class ObTextStringObObjResult : public ObTextStringResult
+// Native Datum text/lob result writer. The result borrows the buffer allocated
+// by this writer; callers must keep the allocator alive for the Datum value.
+class ObTextStringDatumValueResult : public ObTextStringResult
 {
 public:
-  ObTextStringObObjResult(const ObObjType type, ObObjCastParams *params, ObObj *res_obj, bool has_header) :
-    ObTextStringResult(type, has_header, NULL), params_(params), res_obj_(res_obj)
+  ObTextStringDatumValueResult(const SqlValueType type, DatumCastParams *params, DatumValue *result, bool has_header) :
+    ObTextStringResult(type, has_header, NULL), params_(params), result_(result)
   {}
 
-  ~ObTextStringObObjResult(){};
+  ~ObTextStringDatumValueResult(){};
 
-  TO_STRING_KV(KP_(params), KP_(res_obj));
+  TO_STRING_KV(KP_(params), KP_(result));
   int init(int64_t res_len, ObIAllocator *allocator = NULL) override;
   void set_result();
 
 private:
-  char * buff_alloc (const int64_t size);
-
-private:
-  ObObjCastParams *params_;
-  ObObj *res_obj_;
+  DatumCastParams *params_;
+  DatumValue *result_;
 };
 }  // namespace common
 }  // namespace oceanbase

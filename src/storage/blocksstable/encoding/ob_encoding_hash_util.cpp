@@ -148,7 +148,7 @@ int ObEncodingHashTableBuilder::build(const ObColDatums &col_datums, const ObCol
     STORAGE_LOG(WARN, "invalid argument", K(ret), K_(node_num),
         "row_count", col_datums.count());
   } else {
-    ObObjTypeStoreClass store_class = get_store_class_map()[col_desc.col_type_.get_type_class()];
+    SqlValueTypeStoreClass store_class = get_store_class_map()[col_desc.col_type_.get_type_class()];
     const bool need_binary_hash =
         store_class == ObTextSC || store_class == ObJsonSC || store_class == ObLobSC || store_class == ObGeometrySC;
     const bool need_batch_hash = !need_binary_hash;
@@ -190,7 +190,7 @@ int ObEncodingHashTableBuilder::build(const ObColDatums &col_datums, const ObCol
           } else if (datum.is_ext()) {
             ret = common::OB_NOT_SUPPORTED;
             STORAGE_LOG(WARN, "not supported extend object type",
-                        K(ret), K(row_id), K(datum), K(*datum.extend_obj_));
+                        K(ret), K(row_id), K(datum));
           } else if (!need_batch_hash) {
             uint64_t pos = 0;
             if (OB_FAIL(hash(datum, hash_func, need_binary_hash, pos))) {
@@ -356,7 +356,7 @@ void ObEncodingHashTableFactory::clear()
 }
 
 int build_column_encoding_ctx(ObEncodingHashTable *ht,
-                              const ObObjTypeStoreClass store_class,
+                              const SqlValueTypeStoreClass store_class,
                               const int64_t type_store_size,
                               ObColumnEncodingCtx &col_ctx)
 {

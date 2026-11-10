@@ -46,7 +46,7 @@ int ObExprJsonValid::calc_result_type1(ObExprResType &type,
   type.set_scale(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].scale_);
   type.set_precision(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].precision_);
 
-  ObObjType in_type = type1.get_type();
+  SqlValueType in_type = type1.get_type();
   if (in_type == ObNullType) {
   } else if (in_type == ObJsonType) {
     // do nothing
@@ -65,11 +65,11 @@ int ObExprJsonValid::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonValid::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta,
-                          bool has_lob_header, MultimodeAlloctor *allocator, ObDatum &res)
+int ObExprJsonValid::calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta,
+                          bool has_lob_header, MultimodeAlloctor *allocator, Datum &res)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
   bool is_null = false;
   bool is_empty_text = false;
@@ -118,10 +118,10 @@ int ObExprJsonValid::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta,
 }
 
 // for new sql engine
-int ObExprJsonValid::eval_json_valid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonValid::eval_json_valid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObExpr *arg = expr.args_[0];
 
   if (OB_FAIL(arg->eval(ctx, datum))) {

@@ -84,7 +84,7 @@ int ObExprJsonSchemaValid::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   const ObExprJsonSchemaValidInfo *info
@@ -158,7 +158,7 @@ int ObExprJsonSchemaValidInfo::init_json_schema_extra_info(ObIAllocator &alloc,
   INIT_SUCC(ret);
   ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
   got_data = false;
-  ObObj const_data;
+  DatumValue const_data;
   if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                         schema,
                                                         const_data,

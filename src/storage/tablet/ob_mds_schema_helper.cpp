@@ -144,13 +144,13 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
    *
    * SNAPSHOT column and SEQ_NO column are multi version columns
    */
-  ObObjMeta mds_type_meta;
+  SqlTypeMeta mds_type_meta;
   mds_type_meta.set_tinyint();
-  ObObjMeta udf_key_meta;
+  SqlTypeMeta udf_key_meta;
   udf_key_meta.set_binary();
-  ObObjMeta meta_info_meta;
+  SqlTypeMeta meta_info_meta;
   meta_info_meta.set_binary();
-  ObObjMeta user_data_meta;
+  SqlTypeMeta user_data_meta;
   user_data_meta.set_binary();
 
   ObColumnSchemaV2 mds_type_column_schema;
@@ -248,7 +248,7 @@ int ObMdsSchemaHelper::build_column_schema(const uint64_t table_id,
     const int64_t schema_version,
     const int64_t rowkey_position,
     const common::ObOrderType &order_in_rowkey,
-    const common::ObObjMeta &meta_type,
+    const common::SqlTypeMeta &meta_type,
     const int64_t data_length,
     share::schema::ObColumnSchemaV2 &column_schema)
 {

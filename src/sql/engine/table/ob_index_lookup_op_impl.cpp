@@ -205,14 +205,23 @@ int ObIndexLookupOpImpl::build_trans_datum(ObExpr *expr,
   }
   if (OB_SUCC(ret)) {
     void *buf = nullptr;
-    ObDatum &col_datum = expr->locate_expr_datum(*eval_ctx);
-    int64_t pos = sizeof(ObDatum);
-    int64_t len = sizeof(ObDatum) + col_datum.len_;
-    if (OB_ISNULL(buf = alloc.alloc(len))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (FALSE_IT(datum_ptr = new (buf) ObDatum)) {
-      // do nothing
-    } else if (OB_FAIL(datum_ptr->deep_copy(col_datum, static_cast<char *>(buf), sizeof(ObDatum) + col_datum.len_, pos))) {
+    const Datum &source = expr->locate_expr_datum(*eval_ctx);
+    const DatumCopyPlan plan = expr->get_datum_copy_plan();
+    int64_t payload = 0;
+    if (OB_FAIL(plan.legacy_payload_size(source, payload))) {
+    } else if (payload > INT64_MAX - static_cast<int64_t>(sizeof(ObDatum))) {
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      const int64_t len = sizeof(ObDatum) + payload;
+      int64_t pos = sizeof(ObDatum);
+      ObDatum *candidate = nullptr;
+      if (OB_ISNULL(buf = alloc.alloc(len))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (FALSE_IT(candidate = new (buf) ObDatum)) {
+      } else if (OB_FAIL(plan.export_legacy(source, *candidate, static_cast<char *>(buf), len, pos))) {
+      } else {
+        datum_ptr = candidate;
+      }
     }
   }
 

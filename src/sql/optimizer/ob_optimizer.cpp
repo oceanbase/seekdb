@@ -608,7 +608,7 @@ int ObOptimizer::check_pdml_insert_up_enabled(const ObDelUpdStmt &pdml_stmt,
         for (ObTableSchema::const_column_iterator col_iter = table_schema->column_begin();
              NULL != col_iter && col_iter != table_schema->column_end();
              col_iter++) {
-          ObObjType data_type = (*col_iter)->get_data_type();
+          SqlValueType data_type = (*col_iter)->get_data_type();
           if (ob_is_geometry(data_type)
               || ob_is_text_tc(data_type)
               || ob_is_json(data_type)

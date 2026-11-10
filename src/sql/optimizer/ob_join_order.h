@@ -2700,7 +2700,7 @@ struct NullAwareAntiJoinInfo {
                                 const ObTableSchema *index_schema,
                                 ObIArray<ObConstRawExpr*> &query_tokens);
     int get_query_tokens_by_boolean_mode(ObMatchFunRawExpr *match_expr,
-                                         const ObObj &result,
+                                         const common::DatumValue &result,
                                          ObIArray<ObConstRawExpr*> &query_tokens);
     int get_range_of_query_tokens(ObIArray<ObConstRawExpr*> &query_tokens,
                                   const ObTableSchema &index_schema,

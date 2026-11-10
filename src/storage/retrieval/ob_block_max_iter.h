@@ -81,8 +81,8 @@ struct ObBlockMaxScoreIterParam
   int64_t score_col_idx_;
   int64_t domain_id_idx_in_rowkey_;
   int64_t dim_col_idx_in_rowkey_;
-  ObObjMeta domain_id_obj_meta_;
-  ObObjMeta dim_obj_meta_;
+  SqlTypeMeta domain_id_obj_meta_;
+  SqlTypeMeta dim_obj_meta_;
   ObIAllocator *scan_allocator_; // should reuse on reuse / rescan
   ObMaxScoreRankingType ranking_type_;
 };

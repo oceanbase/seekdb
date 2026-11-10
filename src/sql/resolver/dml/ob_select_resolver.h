@@ -164,7 +164,8 @@ protected:
 
   //resolve select into
   int resolve_into_clause(const ParseNode *node);
-  int resolve_into_const_node(const ParseNode *node, ObObj &obj);
+  int resolve_into_const_node(const ParseNode *node, common::Datum &value,
+                              common::SqlTypeMeta &meta);
   int resolve_into_field_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_line_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_variable_node(const ParseNode *node, ObSelectIntoItem &into_item);

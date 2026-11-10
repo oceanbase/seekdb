@@ -18,7 +18,8 @@
 #define OCEANBASE_SHARE_LOCAL_SESSION_VAR_H_
 
 #include "share/system_variable/ob_sys_var_class_type.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
+#include "common/datum/datum.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/allocator/page_arena.h"
 
@@ -28,14 +29,31 @@ namespace share
 {
 
 struct ObSessionSysVar {
-  OB_UNIS_VERSION(1);
 public:
-  TO_STRING_KV(K_(type), K_(val));
-  bool is_equal(const common::ObObj &other_val) const;
+  ObSessionSysVar() : type_(SYS_VAR_INVALID), value_(), value_meta_() {}
+  int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+  int serialize_(char *buf, int64_t buf_len, int64_t &pos) const;
+  int64_t get_serialize_size() const;
+  int64_t get_serialize_size_() const;
+  int deserialize(const char *buf, int64_t data_len, int64_t &pos,
+                  common::ObIAllocator &owner);
+  const common::Datum &get_value_datum() const { return value_; }
+  const common::SqlTypeMeta &get_value_meta() const { return value_meta_; }
+  int set_value(const common::DatumValue &value, common::ObIAllocator &owner);
+  int set_native_value(const common::Datum &value, const common::SqlTypeMeta &meta,
+                       common::ObIAllocator &owner);
+  int export_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_value(common::DatumValue &output, common::ObIAllocator &owner) const;
+  TO_STRING_KV(K_(type), K_(value), K_(value_meta));
+  bool is_equal(const common::DatumValue &other_val) const;
+  bool is_equal(const common::Datum &other, const common::SqlTypeMeta &meta) const;
   int64_t get_deep_copy_size() const;
 
   share::ObSysVarClassType type_;
-  common::ObObj val_;
+private:
+  common::Datum value_; // References belong to the container's explicit arena.
+  common::SqlTypeMeta value_meta_;
+  static const int64_t UNIS_VERSION = 1;
 };
 
 class ObLocalSessionVar {
@@ -56,7 +74,9 @@ public:
   }
   void reset();
   int set_local_var_capacity(int64_t sz);
-  int add_local_var(share::ObSysVarClassType var_type, const common::ObObj &value);
+  int add_local_var(share::ObSysVarClassType var_type, const common::DatumValue &value);
+  int add_local_var_native(share::ObSysVarClassType var_type, const common::Datum &value,
+                           const common::SqlTypeMeta &meta);
   int add_local_var(const ObSessionSysVar *var);
   int get_local_var(share::ObSysVarClassType var_type, ObSessionSysVar *&sys_var) const;
   int get_local_vars(common::ObIArray<const ObSessionSysVar *> &var_array) const;

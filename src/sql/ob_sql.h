@@ -66,6 +66,7 @@ class ObSPIService;
 class ObIVirtualTableIteratorFactory;
 struct ObSqlCtx;
 class ObResultSet;
+class ObPhysicalPlanCtx;
 class ObLogPlan;
 class ObOptimizer;
 
@@ -320,6 +321,7 @@ private:
 
   int construct_param_store(const ParamStore &params,
                             ParamStore &param_store);
+  int construct_param_store(const ParamStore &params, ObPhysicalPlanCtx &plan_ctx);
   int construct_ps_param_store(const ParamStore &params,
                                const ParamStore &fixed_params,
                                const ObIArray<int64_t> &fixed_param_idx,
@@ -538,9 +540,10 @@ private:
   int get_reconstructed_batch_stmt(ObPlanCacheCtx &pc_ctx, ObString& stmt_sql);
   void rollback_implicit_trans_when_fail(ObResultSet &result, int &ret);
   friend class ::test::TestOptimizerUtils;
+  friend struct NativePcConstValuesTestPeer;
 
 public:
-  static int add_param_to_param_store(const ObObjParam &param,
+  static int add_param_to_param_store(const DatumParameter &param,
                                       ParamStore &param_store);
   static bool is_exist_in_fixed_param_idx(const int64_t idx,
                                    const ObIArray<int64_t> &fixed_param_idx);

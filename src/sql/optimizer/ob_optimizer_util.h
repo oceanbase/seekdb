@@ -199,7 +199,7 @@ public:
                                    ObExecContext &ctx,
                                    Monotonicity &monotonicity,
                                    bool &is_strict,
-                                   const ParamStore &param_store,
+                                   const ObPhysicalPlanCtx &param_store,
                                    ObPCConstParamInfo& const_param_info);
                                    
   static int get_expr_monotonicity_recursively(const ObRawExpr *expr,
@@ -207,7 +207,7 @@ public:
                                                ObExecContext &ctx,
                                                Monotonicity &monotonicity,
                                                bool &is_strict,
-                                               const ParamStore &param_store,
+                                               const ObPhysicalPlanCtx &param_store,
                                                ObPCConstParamInfo &const_param_info);
 
   static bool is_sub_expr(const ObRawExpr *sub_expr, const ObRawExpr *expr);
@@ -1161,7 +1161,7 @@ public:
                                       ObIArray<ObRawExpr *> &output_pushdown_preds,
                                       const bool first_child);
 
-  static int check_is_null_qual(const ParamStore *params,
+  static int check_is_null_qual(const ObPhysicalPlanCtx *params,
                                 const ObDMLStmt *stmt,
                                 ObExecContext *exec_ctx,
                                 ObIAllocator &allocator,

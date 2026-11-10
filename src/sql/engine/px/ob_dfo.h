@@ -118,7 +118,7 @@ public:
 // PX end describes the data structure of each SQC
 class ObPxSqcMeta
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   ObPxSqcMeta() :
               execution_id_(common::OB_INVALID_ID),
@@ -161,6 +161,10 @@ public:
   {}
   ~ObPxSqcMeta() = default;
   int assign(const ObPxSqcMeta &other);
+  // Explicit historical physical-batch port. Decoding v1 does not bind missing
+  // declarations or make a nonempty old batch ready for semantic execution.
+  int serialize_legacy_v1(char *buf, int64_t length, int64_t &pos) const;
+  int64_t get_legacy_v1_serialize_size() const;
   // Input, output functions
   /* Get the communication port of the qc end, read by the qc end and link */
   dtl::ObDtlChannelInfo &get_qc_channel_info() { return qc_ch_info_; }
@@ -285,6 +289,10 @@ public:
                K_(recieve_use_interm_result), K_(serial_receive_channels),
                K_(sqc_order_gi_tasks));
 private:
+  int serialize_version(char *buf, int64_t length, int64_t &pos, int64_t version) const;
+  int serialize_body(char *buf, int64_t buf_len, int64_t &pos, int64_t version) const;
+  int deserialize_body(const char *buf, int64_t data_len, int64_t &pos, int64_t version);
+  int serialized_body_size(int64_t version, int64_t &length) const;
   uint64_t execution_id_;
   uint64_t qc_id_;
   int64_t sqc_id_;

@@ -1104,7 +1104,7 @@ int ObTransformSimplifyGroupby::get_valid_count_aggr(ObSelectStmt *select_stmt,
   } else {
     ObAggFunRawExpr *aggr = NULL;
     ObRawExpr *param = NULL;
-    ObObj obj_value;
+    DatumValue obj_value;
     bool got_result = false;
     ObIArray<ObAggFunRawExpr*> &aggrs = select_stmt->get_aggr_items();
     for (int64_t i = 0; OB_SUCC(ret) && i < aggrs.count(); ++i) {
@@ -1480,7 +1480,7 @@ int ObTransformSimplifyGroupby::get_param_value(const ObDMLStmt *stmt,
 {
   int ret = OB_SUCCESS;
   is_valid = true;
-  ObObj obj_value;
+  DatumValue obj_value;
   bool got_result = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(param) || OB_ISNULL(ctx_) ||
       OB_ISNULL(ctx_->allocator_) || OB_ISNULL(ctx_->exec_ctx_)) {
@@ -1991,7 +1991,7 @@ int ObTransformSimplifyGroupby::split_const_in_aggr_func(ObDMLStmt *stmt, bool &
   return ret;
 }
 
-bool ObTransformSimplifyGroupby::is_numeric(ObObjType type)
+bool ObTransformSimplifyGroupby::is_numeric(SqlValueType type)
 {
   bool aggr_is_valid = false;
   switch (type) {

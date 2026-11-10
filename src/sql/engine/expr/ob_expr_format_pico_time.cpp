@@ -46,10 +46,10 @@ int ObExprFormatPicoTime::calc_result_type1(ObExprResType &type,
 }
 
 int ObExprFormatPicoTime::eval_format_pico_time(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
   } else {
     if (OB_FAIL(eval_format_pico_time_util(expr, res_datum, datum, ctx))){
@@ -67,13 +67,13 @@ int ObExprFormatPicoTime::eval_format_pico_time_batch(const ObExpr &expr,
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatum *res_datum = expr.locate_batch_datums(ctx);
+    Datum *res_datum = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       }
-      ObDatum *datum= &expr.args_[0]->locate_expr_datum(ctx, i);
+      Datum *datum= &expr.args_[0]->locate_expr_datum(ctx, i);
       if (OB_FAIL(eval_format_pico_time_util(expr, res_datum[i], datum, ctx, i))){
       } else {
         // do nothing
@@ -84,8 +84,8 @@ int ObExprFormatPicoTime::eval_format_pico_time_batch(const ObExpr &expr,
   return ret;
 }
 
-int ObExprFormatPicoTime::eval_format_pico_time_util(const ObExpr &expr, ObDatum &res_datum,
-                                            ObDatum *param1, ObEvalCtx &ctx,  int64_t index)
+int ObExprFormatPicoTime::eval_format_pico_time_util(const ObExpr &expr, Datum &res_datum,
+                                            Datum *param1, ObEvalCtx &ctx,  int64_t index)
 {
   int ret = OB_SUCCESS;
   if (param1->is_null()) {

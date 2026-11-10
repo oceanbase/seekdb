@@ -218,13 +218,13 @@ public:
   int init(
       const common::ObIArray<int64_t> *exc_row_ids,
       const ObColDatums *col_datums,
-      const common::ObObjMeta type);
+      const common::SqlTypeMeta type);
   void reset() { MEMSET(this, 0, sizeof(*this)); }
   int64_t size() const;
   inline bool is_bit_packing() const { return bit_packing_; }
 
 protected:
-  common::ObObjMeta type_;
+  common::SqlTypeMeta type_;
   const ObColDatums *col_datums_;
   const common::ObIArray<int64_t> *exc_row_ids_;
   BitSet bitset_;
@@ -245,7 +245,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObBitMapMetaBaseWriter);
 };
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 class ObBitMapMetaWriter : public ObBitMapMetaBaseWriter
 {
 public:
@@ -270,7 +270,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObBitMapMetaWriter);
 };
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 int ObBitMapMetaWriter<StoreClass>::traverse_exc(bool &suitable)
 {
   int ret = common::OB_SUCCESS;
@@ -299,7 +299,7 @@ int ObBitMapMetaWriter<StoreClass>::traverse_exc(bool &suitable)
   return ret;
 }
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 OB_INLINE void ObBitMapMetaWriter<StoreClass>::fill_param()
 {
   if (0 > exc_fix_size_) {
@@ -333,7 +333,7 @@ OB_INLINE void ObBitMapMetaWriter<ObUIntSC>::fill_param()
   exc_total_size_ = bit_packing_ ? (exc_total_size_ + CHAR_BIT - 1) / CHAR_BIT : exc_total_size_;
 }
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 OB_INLINE void ObBitMapMetaWriter<StoreClass>::fill_meta_header(bool &suitable)
 {
   const int64_t bs_exc_cnt = has_ext_val_ ? exc_row_ids_->count() : 0;
@@ -357,7 +357,7 @@ OB_INLINE void ObBitMapMetaWriter<StoreClass>::fill_meta_header(bool &suitable)
   }
 }
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 OB_INLINE void ObBitMapMetaWriter<StoreClass>::process_cell(const common::ObDatum &datum)
 {
   const int64_t len = datum.len_;
@@ -393,7 +393,7 @@ OB_INLINE void ObBitMapMetaWriter<ObUIntSC>::process_cell(const common::ObDatum 
 }
 
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 int ObBitMapMetaWriter<StoreClass>::write(char *buf)
 {
   int ret = common::OB_SUCCESS;
@@ -434,7 +434,7 @@ int ObBitMapMetaWriter<StoreClass>::write(char *buf)
   return ret;
 }
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 int ObBitMapMetaWriter<StoreClass>::write_bit_packing_data(char *buf)
 {
   int ret = common::OB_SUCCESS;
@@ -478,7 +478,7 @@ int ObBitMapMetaWriter<StoreClass>::write_bit_packing_data(char *buf)
   return ret;
 }
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 int ObBitMapMetaWriter<StoreClass>::write_var_data(char *buf)
 {
   int ret = common::OB_SUCCESS;
@@ -514,7 +514,7 @@ int ObBitMapMetaWriter<StoreClass>::write_var_data(char *buf)
   return ret;
 }
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 int ObBitMapMetaWriter<StoreClass>::write_fix_data(char *buf)
 {
   int ret = common::OB_SUCCESS;
@@ -548,7 +548,7 @@ int ObBitMapMetaWriter<StoreClass>::write_fix_data(char *buf)
   return ret;
 }
 
-template<ObObjTypeStoreClass StoreClass>
+template<SqlValueTypeStoreClass StoreClass>
 OB_INLINE void ObBitMapMetaWriter<StoreClass>::write_cell(
       char *buf,
       int64_t &offset,
@@ -559,24 +559,24 @@ OB_INLINE void ObBitMapMetaWriter<StoreClass>::write_cell(
   offset += len;
 }
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 class ObBitMapMetaReader
 {
 public:
   static int read(const char *buf, const int64_t row_count,
       const bool bit_packing, const int64_t row_id, const int64_t len,
-      int64_t &ref, common::ObDatum &datum, const common::ObObjType &obj_type);
+      int64_t &ref, common::ObDatum &datum, const common::SqlValueType &obj_type);
 
   OB_INLINE static int read_exc_cell(const char *buf, const ObBitMapMetaHeader *meta,
     const bool bit_packing, const int64_t ref, const int64_t len,
-    common::ObDatum &datum, const uint64_t integer_mask, const common::ObObjType &obj_type);
+    common::ObDatum &datum, const uint64_t integer_mask, const common::SqlValueType &obj_type);
 };
 
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 int ObBitMapMetaReader<StoreClass>::read(const char *buf, const int64_t row_count,
     const bool bit_packing, const int64_t row_id, const int64_t len,
-    int64_t &ref, common::ObDatum &datum, const common::ObObjType &obj_type)
+    int64_t &ref, common::ObDatum &datum, const common::SqlValueType &obj_type)
 {
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(buf)
@@ -604,7 +604,7 @@ int ObBitMapMetaReader<StoreClass>::read(const char *buf, const int64_t row_coun
       }
       // read data
       uint64_t integer_mask = 0;
-      if (common::ObIntTC == ob_obj_type_class(obj_type)) {
+      if (common::ObIntTC == sql_type_class(obj_type)) {
         integer_mask = ~INTEGER_MASK_TABLE[get_type_size_map()[obj_type]];
       }
       if (OB_FAIL(ret)) {
@@ -618,16 +618,16 @@ int ObBitMapMetaReader<StoreClass>::read(const char *buf, const int64_t row_coun
   return ret;
 }
 
-template <ObObjTypeStoreClass StoreClass>
+template <SqlValueTypeStoreClass StoreClass>
 OB_INLINE int ObBitMapMetaReader<StoreClass>::read_exc_cell(const char *buf,
     const ObBitMapMetaHeader *meta, const bool bit_packing, const int64_t ref,
-    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::ObObjType &obj_type)
+    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::SqlValueType &obj_type)
 {
   int ret = common::OB_SUCCESS;
   uint32_t datum_len = 0;
   uint64_t v = 0;
   if (OB_FAIL(get_uint_data_datum_len(
-      common::ObDatum::get_obj_datum_map_type(obj_type),
+      common::ObDatum::get_sql_value_datum_map_type(obj_type),
       datum_len))){
   } else if (bit_packing) {
     if (OB_FAIL(ObBitStream::get(reinterpret_cast<unsigned char *>
@@ -652,7 +652,7 @@ OB_INLINE int ObBitMapMetaReader<StoreClass>::read_exc_cell(const char *buf,
 template <>
 OB_INLINE int ObBitMapMetaReader<ObNumberSC>::read_exc_cell(const char *buf,
     const ObBitMapMetaHeader *meta, const bool bit_packing, const int64_t ref,
-    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::ObObjType &obj_type)
+    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::SqlValueType &obj_type)
 {
   int ret = common::OB_SUCCESS;
   UNUSEDx(bit_packing, integer_mask, obj_type);
@@ -685,7 +685,7 @@ OB_INLINE int ObBitMapMetaReader<ObNumberSC>::read_exc_cell(const char *buf,
 template <>
 OB_INLINE int ObBitMapMetaReader<ObDecimalIntSC>::read_exc_cell(const char *buf,
     const ObBitMapMetaHeader *meta, const bool bit_packing, const int64_t ref,
-    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::ObObjType &obj_type)
+    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::SqlValueType &obj_type)
 {
   int ret = common::OB_SUCCESS;
   UNUSEDx(bit_packing, integer_mask, obj_type);
@@ -717,7 +717,7 @@ OB_INLINE int ObBitMapMetaReader<ObDecimalIntSC>::read_exc_cell(const char *buf,
 template <>
 OB_INLINE int ObBitMapMetaReader<ObStringSC>::read_exc_cell(const char *buf,
     const ObBitMapMetaHeader *meta, const bool bit_packing, const int64_t ref,
-    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::ObObjType &obj_type)
+    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::SqlValueType &obj_type)
 {
   int ret = common::OB_SUCCESS;
   UNUSEDx(bit_packing, integer_mask, obj_type);
@@ -750,7 +750,7 @@ OB_INLINE int ObBitMapMetaReader<ObStringSC>::read_exc_cell(const char *buf,
 template <>
 OB_INLINE int ObBitMapMetaReader<ObOTimestampSC>::read_exc_cell(const char *buf,
     const ObBitMapMetaHeader *meta, const bool bit_packing, const int64_t ref,
-    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::ObObjType &obj_type)
+    const int64_t len, common::ObDatum &datum, const uint64_t integer_mask, const common::SqlValueType &obj_type)
 {
   int ret = common::OB_SUCCESS;
   UNUSEDx(bit_packing, integer_mask);
@@ -769,7 +769,7 @@ OB_INLINE int ObBitMapMetaReader<ObOTimestampSC>::read_exc_cell(const char *buf,
   }
 
   if (OB_SUCC(ret)) {
-    ObObjDatumMapType datum_type = ObDatum::get_obj_datum_map_type(obj_type);
+    SqlValueDatumMapType datum_type = ObDatum::get_sql_value_datum_map_type(obj_type);
     const uint32_t size = ObDatum::get_reserved_size(datum_type);
     MEMCPY(const_cast<char *>(datum.ptr_), buf + meta->data_offset_ + offset, size);
     datum.pack_ = size;
@@ -783,7 +783,7 @@ struct ObBitMapExcValReadCellFunc
 {
   static inline int read_exc_cell(const ObBitMapMetaHeader *meta, const char *buf, const int64_t ref,
       const bool bitpacked, const int64_t len, const int64_t vec_offset,
-      const common::ObObjType &store_type, VectorType &vector)
+      const common::SqlValueType &store_type, VectorType &vector)
   {
     int ret = OB_SUCCESS;
     int64_t offset = 0;
@@ -826,12 +826,12 @@ struct ObBitMapExcValReadCellFunc<VectorType, ObEncodingDecodeMetodType::D_INTEG
 {
   static inline int read_exc_cell(const ObBitMapMetaHeader *meta, const char *buf, const int64_t ref,
       const bool bitpacked, const int64_t len, const int64_t vec_offset,
-      const common::ObObjType &store_type, VectorType &vector)
+      const common::SqlValueType &store_type, VectorType &vector)
   {
     int ret = OB_SUCCESS;
     uint32_t datum_len = 0;
     uint64_t unpacked_val = 0;
-    if (OB_FAIL(get_uint_data_datum_len(common::ObDatum::get_obj_datum_map_type(store_type), datum_len))){
+    if (OB_FAIL(get_uint_data_datum_len(common::ObDatum::get_sql_value_datum_map_type(store_type), datum_len))){
     } else if (bitpacked) {
       if (OB_FAIL(ObBitStream::get(
           reinterpret_cast<unsigned char *>(const_cast<char *>(buf + meta->data_offset_)),
@@ -840,7 +840,7 @@ struct ObBitMapExcValReadCellFunc<VectorType, ObEncodingDecodeMetodType::D_INTEG
     } else {
       const int64_t cell_len = meta->get_fix_data_size(len);
       MEMCPY(&unpacked_val, buf + meta->data_offset_ + ref * cell_len, cell_len);
-      if (common::ObIntTC == ob_obj_type_class(store_type)) {
+      if (common::ObIntTC == sql_type_class(store_type)) {
         uint64_t integer_mask = ~INTEGER_MASK_TABLE[get_type_size_map()[store_type]];
         if (0 != integer_mask && (unpacked_val & (integer_mask >> 1))) {
           unpacked_val |= integer_mask;
@@ -859,7 +859,7 @@ template<typename VectorType, ObEncodingDecodeMetodType DECODE_TYPE>
 struct ObBitMapExcValDecodeFunc
 {
   static int decode(const char *buf, const int64_t ref, const bool bitpacked, const int64_t len,
-      const int64_t vec_offset, const common::ObObjType &store_type, VectorType &vector)
+      const int64_t vec_offset, const common::SqlValueType &store_type, VectorType &vector)
   {
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf) || OB_UNLIKELY(-1 == ref || len <= 0)) {
@@ -901,7 +901,7 @@ template<ObEncodingDecodeMetodType DECODE_TYPE>
 struct ObBitMapExcValDecodeFunc<ObFixedLengthFormat<char[0]>, DECODE_TYPE>
 {
   static int decode(const char *buf, const int64_t ref, const bool bitpacked, const int64_t len,
-      const int64_t vec_offset, const common::ObObjType &store_type, ObFixedLengthFormat<char[0]> &vector)
+      const int64_t vec_offset, const common::SqlValueType &store_type, ObFixedLengthFormat<char[0]> &vector)
   {
     int ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected var-length data for fixed-length vector", K(ret));

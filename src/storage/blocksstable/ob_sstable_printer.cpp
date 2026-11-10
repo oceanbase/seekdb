@@ -15,6 +15,7 @@
  */
 
 #include "ob_sstable_printer.h"
+#include "common/datum/datum_sql_print.h"
 #include "storage/tx_table/ob_tx_table_iterator.h"
 #include "storage/blocksstable/ob_macro_block_meta.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
@@ -84,7 +85,7 @@ namespace blocksstable
     P_END(); \
   } while (0)
 
-// mapping to ObObjType
+// mapping to SqlValueType
 static const char * OB_OBJ_TYPE_NAMES[ObMaxType] = {
     "ObNullType", "ObTinyIntType", "ObSmallIntType",
     "ObMediumIntType", "ObInt32Type", "ObIntType",
@@ -189,7 +190,7 @@ void ObSSTablePrinter::print_cols_info_start(const char *n1, const char *n2, con
   FPRINTF("--------{%-15s %15s %15s %15s %15s}----------\n", n1, n2, n3, n4, n5);
 }
 
-void ObSSTablePrinter::print_cols_info_line(const int32_t &v1, const common::ObObjType v2, const common::ObOrderType v3, const int64_t &v4, const int64_t & v5)
+void ObSSTablePrinter::print_cols_info_line(const int32_t &v1, const common::SqlValueType v2, const common::ObOrderType v3, const int64_t &v4, const int64_t & v5)
 {
   const char *v3_cstr = ObOrderType::ASC == v3 ? "ASC" : "DESC";
   if (isatty(fileno(stderr)) > 0) {
@@ -245,17 +246,38 @@ void ObSSTablePrinter::print_row_title(const ObDatumRow *row, const int64_t row_
   }
 }
 
-void ObSSTablePrinter::print_cell(const ObObj &cell)
-{
-  ObCStringHelper helper;
-  P_VALUE_STR_B(helper.convert(cell));
-}
-
 void ObSSTablePrinter::print_cell(const ObStorageDatum &datum)
 {
   ObCStringHelper helper;
   ObStorageDatumWrapper wrapper(datum, true);
   P_VALUE_STR_B(helper.convert(wrapper));
+}
+
+namespace
+{
+class ObDatumDebugString
+{
+public:
+  ObDatumDebugString(const DatumValue &value, const bool smart)
+      : value_(value), smart_(smart) {}
+  int64_t to_string(char *buf, const int64_t buf_len) const
+  {
+    int64_t pos = 0;
+    const int ret = smart_
+        ? print_datum_debug_smart(value_, buf, buf_len, pos)
+        : print_datum_debug_json(value_, buf, buf_len, pos);
+    return OB_SUCCESS == ret ? pos : (OB_SIZE_OVERFLOW == ret ? buf_len - 1 : 0);
+  }
+private:
+  const DatumValue &value_;
+  const bool smart_;
+};
+}
+
+void ObSSTablePrinter::print_cell(const DatumValue &value)
+{
+  ObCStringHelper helper;
+  P_VALUE_STR_B(helper.convert(ObDatumDebugString(value, false)));
 }
 
 void ObSSTablePrinter::print_common_header(const ObMacroBlockCommonHeader *common_header)
@@ -450,7 +472,7 @@ void ObSSTablePrinter::print_micro_header(const ObMicroBlockHeader *micro_block_
 
 void ObSSTablePrinter::print_store_row(
     const ObDatumRow *row,
-    const ObObjMeta *obj_metas,
+    const SqlTypeMeta *obj_metas,
     const int64_t type_array_column_cnt,
     const bool is_index_block,
     const bool is_trans_sstable)
@@ -496,21 +518,21 @@ void ObSSTablePrinter::print_store_row(
       }
     }
   } else {
-    ObObj obj;
     for (int64_t i = 0; i < type_array_column_cnt; ++i) {
-      ObObjMeta column_meta = obj_metas[i];
-      if (OB_FAIL(row->storage_datums_[i].to_obj_enhance(obj, column_meta))) {
+      DatumValue value;
+      if (OB_FAIL(row->storage_datums_[i].to_value_view(obj_metas[i], value))) {
       } else {
-        print_cell(obj);
+        print_cell(value);
       }
     }
     for (int64_t i = type_array_column_cnt; i < row->get_column_count(); ++i) {
       if (is_index_block && i == type_array_column_cnt) {
-        ObObjMeta column_meta;
+        SqlTypeMeta column_meta;
         column_meta.set_varbinary();
-        if (OB_FAIL(row->storage_datums_[i].to_obj_enhance(obj, column_meta))) {
+        DatumValue value;
+        if (OB_FAIL(row->storage_datums_[i].to_value_view(column_meta, value))) {
         } else {
-          print_cell(obj);
+          print_cell(value);
         }
       } else {
         print_cell(row->storage_datums_[i]);
@@ -520,16 +542,16 @@ void ObSSTablePrinter::print_store_row(
   P_END();
 }
 
-void ObSSTablePrinter::print_store_row_hex(const ObDatumRow *row, const ObObjMeta *obj_metas, const int64_t buf_size, char *hex_print_buf)
+void ObSSTablePrinter::print_store_row_hex(const ObDatumRow *row, const SqlTypeMeta *obj_metas, const int64_t buf_size, char *hex_print_buf)
 {
 
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(hex_print_buf)) {
-    ObObj obj;
     for (int64_t i = 0; i < row->get_column_count(); ++i) {
       int64_t pos = 0;
-      if (OB_FAIL(row->storage_datums_[i].to_obj_enhance(obj, obj_metas[i]))) {
-      } else if (OB_FAIL(obj.print_smart(hex_print_buf, buf_size, pos))) {
+      DatumValue value;
+      if (OB_FAIL(row->storage_datums_[i].to_value_view(obj_metas[i], value))) {
+      } else if (OB_FAIL(print_datum_debug_smart(value, hex_print_buf, buf_size, pos))) {
       } else {
         P_VALUE_STR_B(hex_print_buf);
       }

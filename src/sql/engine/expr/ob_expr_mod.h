@@ -34,14 +34,15 @@ public:
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
 
-  static int mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_float(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_float(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_double(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_number(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+
+  static int mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   // temporary used, remove after all expr converted
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
@@ -49,29 +50,10 @@ public:
                       ObExpr &rt_expr) const override;
 
 private:
-  OB_INLINE static int mod_int(common::ObObj &res,
-                     const common::ObObj &left,
-                     const common::ObObj &right,
-                     common::ObIAllocator *allocator,
-                     common::ObScale scale);
-  OB_INLINE static int mod_uint(common::ObObj &res,
-                      const common::ObObj &left,
-                      const common::ObObj &right,
-                      common::ObIAllocator *allocator,
-                      common::ObScale scale);
-  static int mod_double(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale scale);
-  static int mod_number(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale scale);
+
+
   DISALLOW_COPY_AND_ASSIGN(ObExprMod);
 private:
-  static ObArithFunc mod_funcs_[common::ObMaxTC];
 };
 }
 }

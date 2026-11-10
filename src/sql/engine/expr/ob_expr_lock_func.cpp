@@ -153,14 +153,14 @@ int ObExprGetLock::cg_expr(ObExprCGCtx &expr_cg_ctx,
 
 int ObExprGetLock::get_lock(const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObDatum &result)
+                            Datum &result)
 {
   int ret = OB_SUCCESS;
 
   // NOTICE: use this to make it same like never timeout.
   static const int64_t MAX_LOCK_TIME = 365LL * 24 * 3600 * 1000 * 1000;
-  ObDatum *lock_name = NULL;
-  ObDatum *lock_timeout = NULL;
+  Datum *lock_name = NULL;
+  Datum *lock_timeout = NULL;
 
   if (OB_FAIL(expr.eval_param_value(ctx, lock_name, lock_timeout))) {
   } else if (lock_name->is_null()) {
@@ -228,11 +228,11 @@ int ObExprIsFreeLock::cg_expr(ObExprCGCtx &expr_cg_ctx,
 
 int ObExprIsFreeLock::is_free_lock(const ObExpr &expr,
                                    ObEvalCtx &ctx,
-                                   ObDatum &result)
+                                   Datum &result)
 {
   int ret = OB_SUCCESS;
 
-  ObDatum *lock_name = NULL;
+  Datum *lock_name = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, lock_name))) {
   } else if (lock_name->is_null()) {
     // TODO: yichang.yyf use the error code of mysql ER_USER_LOCK_WRONG_NAME or ER_USER_LOCK_OVERLONG_NAME;
@@ -287,13 +287,13 @@ int ObExprIsUsedLock::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return ret;
 }
 
-int ObExprIsUsedLock::is_used_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprIsUsedLock::is_used_lock(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   int ret = OB_SUCCESS;
   // we can get session info use this
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   uint32_t sess_id = 0;
-  ObDatum *lock_name = NULL;
+  Datum *lock_name = NULL;
 
   if (OB_FAIL(expr.eval_param_value(ctx, lock_name))) {
   } else if (lock_name->is_null()) {
@@ -351,11 +351,11 @@ int ObExprReleaseLock::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return ret;
 }
 
-int ObExprReleaseLock::release_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprReleaseLock::release_lock(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   int ret = OB_SUCCESS;
 
-  ObDatum *lock_name = NULL;
+  Datum *lock_name = NULL;
   int64_t release_cnt = ObLockExecutor::INVALID_RELEASE_CNT;
 
   if (OB_FAIL(expr.eval_param_value(ctx, lock_name))) {
@@ -407,7 +407,7 @@ int ObExprReleaseAllLocks::cg_expr(ObExprCGCtx &expr_cg_ctx,
 
 int ObExprReleaseAllLocks::release_all_locks(const ObExpr &expr,
                                              ObEvalCtx &ctx,
-                                             ObDatum &result)
+                                             Datum &result)
 {
   int ret = OB_SUCCESS;
   int64_t release_cnt = 0;

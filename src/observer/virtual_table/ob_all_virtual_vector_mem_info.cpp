@@ -48,7 +48,7 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (!start_to_read_) {
-    ObObj *cells = NULL;
+    DatumValue *cells = NULL;
     // allocator_ is allocator of PageArena type, no need to free
     if (NULL == (cells = cur_row_.cells_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -83,22 +83,22 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
             uint64_t col_id = output_column_ids_.at(i);
             switch (col_id) {
               case INDEX_METADATA_SIZE:
-                cells[i].set_int(manage_used);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, manage_used) : ret);
                 break;
               case VECTOR_MEM_HOLD:
-                cells[i].set_int(vector_hold);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, vector_hold) : ret);
                 break;
               case VECTOR_MEM_USED:
-                cells[i].set_int(vector_used);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, vector_used) : ret);
                 break;
               case VECTOR_MEM_LIMIT:
-                cells[i].set_int(vector_limit);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, vector_limit) : ret);
                 break;
               case TX_SHARE_LIMIT:
-                cells[i].set_int(tx_share_limit);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, tx_share_limit) : ret);
                 break;
               case VECTOR_MEM_DETAIL_INFO:
-                cells[i].set_varchar(vector_used_str_);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, vector_used_str_) : ret);
                 cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               default:

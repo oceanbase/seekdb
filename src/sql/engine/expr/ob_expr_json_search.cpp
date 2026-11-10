@@ -65,7 +65,7 @@ int ObExprJsonSearch::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   bool is_null = false;
@@ -78,10 +78,10 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   }
 
   bool one_flag = false;
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   if (OB_SUCC(ret) && !is_null) {
     ObExpr *json_arg = expr.args_[1];
-    ObObjType val_type = json_arg->datum_meta_.type_;
+    SqlValueType val_type = json_arg->datum_meta_.type_;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
     } else if (val_type == ObNullType || json_datum->is_null()) {
       is_null = true;
@@ -110,7 +110,7 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   int32_t escape_wc = static_cast<int32_t>('\\');
   if (OB_SUCC(ret) && expr.arg_cnt_ >= 4 && !is_null) {
     ObExpr *json_arg = expr.args_[3];
-    ObObjType val_type = json_arg->datum_meta_.type_;
+    SqlValueType val_type = json_arg->datum_meta_.type_;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
     } else if (val_type == ObNullType || json_datum->is_null()) {
     } else if (!ob_is_string_type(val_type)) {
@@ -140,7 +140,7 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObString target;
   if (OB_SUCC(ret) && !is_null) {
     ObExpr *json_arg = expr.args_[2];
-    ObObjType val_type = json_arg->datum_meta_.type_;
+    SqlValueType val_type = json_arg->datum_meta_.type_;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
     } else if (val_type == ObNullType || json_datum->is_null()) {
       is_null = true;
@@ -162,7 +162,7 @@ int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     path_cache = path_cache != NULL ? path_cache : &ctx_cache;
     for (uint64_t i = 4; OB_SUCC(ret) && !is_null && i < expr.arg_cnt_; i++) {
       ObExpr *json_arg = expr.args_[i];
-      ObObjType val_type = json_arg->datum_meta_.type_;
+      SqlValueType val_type = json_arg->datum_meta_.type_;
       if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
       } else if (val_type == ObNullType || json_datum->is_null()) {
         is_null = true;

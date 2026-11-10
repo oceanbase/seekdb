@@ -98,11 +98,11 @@ int ObExprNameConst::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprNameConst::eval_name_const(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprNameConst::eval_name_const(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *name_param = NULL;
-  ObDatum *value_param = NULL;
+  Datum *name_param = NULL;
+  Datum *value_param = NULL;
   ObExpr *name_expr = expr.args_[0];
   if (OB_FAIL(expr.eval_param_value(ctx, name_param, value_param))) {
   } else if (OB_ISNULL(name_param) || OB_ISNULL(value_param) || OB_ISNULL(name_expr)) {
@@ -113,7 +113,7 @@ int ObExprNameConst::eval_name_const(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     LOG_USER_ERROR(OB_ERR_RESERVED_SYNTAX, fun_name.length(), fun_name.ptr());
   } else {
     //check if name < 0 to be compatiable with mysql
-    common::ObObjType name_type = name_expr->datum_meta_.get_type();
+    common::SqlValueType name_type = name_expr->datum_meta_.get_type();
     bool is_neg = false;
     if (ObFloatType == name_type) {
       is_neg = name_param->get_float() < 0;

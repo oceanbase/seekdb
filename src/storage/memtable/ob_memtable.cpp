@@ -606,12 +606,14 @@ int ObMemtable::get(
   ObMemtableKey returned_mtk;
   ObMvccValueIterator value_iter;
   const ObITableReadInfo *read_info = nullptr;
+  ObStoreRowkey adapted_key;
+  const ObStoreRowkey *store_key = &rowkey.get_store_rowkey();
   if (IS_NOT_INIT) {
     TRANS_LOG(WARN, "not init", K(*this));
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!param.is_valid())
              || OB_UNLIKELY(!context.is_valid())
-             || OB_UNLIKELY(!rowkey.is_memtable_valid())) {
+             || OB_UNLIKELY(!rowkey.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid param, ", K(param), K(context), K(rowkey));
   } else if (OB_ISNULL(read_info = param.get_read_info(context.use_fuse_row_cache_))) {
@@ -621,7 +623,16 @@ int ObMemtable::get(
     const ObColDescIArray &out_cols = read_info->get_columns_desc();
     ObStoreRowLockState lock_state;
     bool is_snapshot_opt = context.query_flag_.is_snapshot_opt();
-    if (OB_FAIL(parameter_mtk.encode(out_cols, &rowkey.get_store_rowkey()))) {
+    // Local index-back can arrive as datums only. Materialize the legacy
+    // MemTable key here, so SSTable-only reads stay on the Datum row path.
+    if (!store_key->is_valid()) {
+      if (OB_FAIL(rowkey.to_store_rowkey(out_cols, *context.get_range_allocator(), adapted_key))) {
+      } else {
+        store_key = &adapted_key;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(parameter_mtk.encode(out_cols, store_key))) {
     } else if (OB_FAIL(mvcc_engine_.get(context.store_ctx_->mvcc_acc_ctx_,
                                         context.query_flag_,
                                         &parameter_mtk,
@@ -676,7 +687,7 @@ int ObMemtable::get(
         }
         ObNopBitMap bitmap;
         int64_t row_scn = 0;
-        if (OB_FAIL(bitmap.init(request_cnt, store_rowkey->get_obj_cnt()))) {
+        if (OB_FAIL(bitmap.init(request_cnt, store_rowkey->get_value_count()))) {
         } else if (OB_FAIL(ObReadRow::iterate_row(*read_info, *store_rowkey, value_iter, row, bitmap, row_scn))) {
         } else {
           if (param.need_scn_) {
@@ -2320,7 +2331,7 @@ int ObMemtable::lock_(
   ObTxNodeArgs tx_node_args;
   ObMvccWriteResults mvcc_results;
 
-  const int64_t column_cnt = rowkey.get_obj_cnt();
+  const int64_t column_cnt = rowkey.get_value_count();
 
   if (OB_FAIL(mvcc_results.prepare_allocate(1))) {
   } else if (OB_FAIL(tx_node_args.prepare_allocate(1))) {

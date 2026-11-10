@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
+struct DatumValue;
 }
 namespace share
 {
@@ -47,11 +47,11 @@ public:
 
 private:
   int add_partitions(const share::schema::ObDatabaseSchema &database_schema,
-                     common::ObObj *cells,
+                     common::DatumValue *cells,
                      const int64_t col_count);
   int add_partitions(const share::schema::ObSimpleTableSchemaV2 &table_schema,
                      const common::ObString &database_name,
-                     common::ObObj *cells,
+                     common::DatumValue *cells,
                      const int64_t col_count);
   int gen_high_bound_val_str(
       const share::schema::ObBasePartition *part,

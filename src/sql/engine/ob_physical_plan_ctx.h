@@ -16,9 +16,14 @@
 
 #ifndef OCEANBASE_SQL_OB_PHYSICAL_PLAN_CTX_H
 #define OCEANBASE_SQL_OB_PHYSICAL_PLAN_CTX_H
+#include "common/datum/datum.h"
+#include "common/datum/datum_parameter_metadata.h"
+#include "common/datum/native_typed_datum.h"
+#include "common/datum/datum_parameter_array.h"
 #include "share/ob_autoincrement_param.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "common/sql_mode/ob_sql_mode.h"
+#include "query/engine/statement_time.h"
 #include "common/ob_field.h"
 #include "lib/time/ob_clock_generator.h"
 #include "data_plane/transaction/ob_tx_options.h"
@@ -33,6 +38,7 @@
 
 namespace oceanbase
 {
+namespace pl { class ObPLExecState; }
 namespace sql
 {
 class ObResultSet;
@@ -40,6 +46,88 @@ class ObSQLSessionInfo;
 class ObPhysicalPlan;
 class ObExecContext;
 struct ObPxDmlRowInfo;
+class ObPhysicalPlanCtx;
+
+// A same-execution binding backup for the existing shallow batch-result holder.
+// Payload spans retain their statement owner; this token cannot extend it.
+class NativeParameterSlotSnapshot
+{
+public:
+  NativeParameterSlotSnapshot() : owner_(nullptr), generation_(0), index_(-1), value_(), attributes_(), word_(0), state_(0) {}
+  int64_t index() const { return index_; }
+  const common::NativeTypedDatum &value() const { return value_; }
+  const common::DatumParameterMetadata &attributes() const { return attributes_; }
+private:
+  friend class ObPhysicalPlanCtx;
+  const ObPhysicalPlanCtx *owner_;
+  uint64_t generation_;
+  int64_t index_;
+  common::NativeTypedDatum value_;
+  common::DatumParameterMetadata attributes_;
+  uint64_t word_;
+  uint8_t state_;
+};
+
+// Sparse actual SQL-array input carried beside its selected scalar slot.
+// Types and spans borrow the receiving execution owner, never wire addresses.
+struct NativeParameterGroup
+{
+  NativeParameterGroup() : index_(-1), value_(), attributes_() {}
+  int64_t index_;
+  common::NativeTypedDatum value_;
+  common::DatumParameterMetadata attributes_;
+};
+
+// The parameter owner has an 8-byte word for every slot. Signed BIGINT uses
+// that word directly; supported generic values own their descriptor separately.
+// State and EvalInfo are disjoint from the payload region. A Datum projection
+// exists only after an actual generic Expr ABI request for that slot.
+class ParameterValuePage
+{
+public:
+  static int allocate(common::ObIAllocator &owner, int64_t capacity, ParameterValuePage *&out);
+  static ParameterValuePage &from_handle(char *handle)
+  { return *reinterpret_cast<ParameterValuePage *>(handle); }
+  static const ParameterValuePage &from_handle(const char *handle)
+  { return *reinterpret_cast<const ParameterValuePage *>(handle); }
+  int64_t capacity() const { return capacity_; }
+  static int64_t payload_bytes(int64_t capacity) { return capacity * sizeof(uint64_t); }
+  static int64_t allocation_bytes(int64_t capacity)
+  { return (eval_offset(capacity) + capacity * sizeof(ObEvalInfo) + alignof(uint64_t) - 1)
+      / alignof(uint64_t) * alignof(uint64_t); }
+  int assign(int64_t slot, const common::Datum &value, const common::SqlTypeMeta &meta,
+             common::ObIAllocator &owner);
+  int assign(int64_t slot, const common::Datum &value, const common::SqlType &type,
+             common::ObIAllocator &owner)
+  { return assign(slot, value, type.legacy_meta(), owner); }
+  int read(int64_t slot, common::Datum &value) const;
+  bool read_i64(int64_t slot, int64_t &value) const;
+  bool read_i64(int64_t slot, int64_t &value, common::Datum::State &state) const;
+  bool matches_layout(int64_t slot, const common::SqlType &type) const;
+  common::Datum::State state(int64_t slot) const;
+  ObEvalInfo &eval_info(int64_t slot) const;
+  int materialize(int64_t slot, common::ObIAllocator &owner, common::Datum *&value);
+  common::Datum *find_materialized(int64_t slot) const;
+  int prepare_existing_projections(const ParameterValuePage &source,
+                                   common::ObIAllocator &owner);
+private:
+  friend class ObPhysicalPlanCtx;
+  explicit ParameterValuePage(int64_t capacity) : capacity_(capacity), projections_(nullptr) {}
+  static int64_t eval_offset(int64_t capacity)
+  { return (sizeof(ParameterValuePage) + payload_bytes(capacity) + capacity
+          + alignof(ObEvalInfo) - 1) / alignof(ObEvalInfo) * alignof(ObEvalInfo); }
+  uint64_t *words() const
+  { return reinterpret_cast<uint64_t *>(reinterpret_cast<char *>(const_cast<ParameterValuePage *>(this))
+      + sizeof(ParameterValuePage)); }
+  uint8_t *states() const
+  { return reinterpret_cast<uint8_t *>(words() + capacity_); }
+  static const uint8_t INLINE_I64 = 0x80;
+  static const uint8_t STATE_MASK = 0x7f;
+  int64_t capacity_;
+  // Allocated only by the first actual generic ABI consumer. Null entries
+  // have no Datum object; values remain stable when other entries are added.
+  common::Datum **projections_;
+};
 
 struct PartParamIdxArray
 {
@@ -78,6 +166,7 @@ public:
   virtual ~ObPhysicalPlanCtx();
   void destroy() 
   {
+    reset_datum_param_store();
     total_memstore_read_row_count_ = 0;
     total_ssstore_read_row_count_ = 0;
     // Member variables that need to request additional memory 
@@ -161,27 +250,96 @@ public:
     }
     return bool_ret;
   }
-  // param store
+  // Construction inputs are retired after the final execution pages publish.
+  int64_t get_parameter_count() const
+  { return native_parameters_ready_ ? native_parameter_metadata_.count() : param_store_.count(); }
+  bool native_parameters_ready() const { return native_parameters_ready_; }
+  const ParamStore &get_parameter_inputs() const
+  { OB_ASSERT(!native_parameters_ready_); return param_store_; }
   int reserve_param_space(int64_t param_count);
-  const ParamStore &get_param_store() const { return param_store_; }
-  ParamStore &get_param_store_for_update() { return param_store_; }
-  const common::ObObjParam *get_param_mem() const
+  int append_parameter_input(const DatumParameter &parameter);
+  int set_parameter_input(int64_t index, const DatumParameter &parameter);
+  int assign_parameter_inputs(const ParamStore &parameters);
+  int rebuild_runtime_parameters(const ParamStore &parameters);
+  int truncate_runtime_parameters(int64_t count);
+  void mark_batch_parameters();
+  int build_resolution_inputs(ParamStore &inputs, common::ObIAllocator &statement_owner) const;
+  int merge_resolution_parameter_flags(const ParamStore &inputs);
+  // The callback can edit only staged construction values. Neither it nor a
+  // source reference may escape into an initialized execution binding.
+  template <typename Writer> int edit_parameter_inputs(Writer writer)
   {
-    if (param_store_.count() <= 0) {
-      return nullptr;
-    } else {
-      return &param_store_.at(0);
+    int ret = native_parameters_ready_ ? common::OB_STATE_NOT_MATCH : common::OB_SUCCESS;
+    ParamStore staged((common::ObWrapperAllocator(&parameter_input_allocator_)));
+    for (int64_t i = 0; ret == common::OB_SUCCESS && i < param_store_.count(); ++i) {
+      DatumParameter copy;
+      ret = clone_construction_parameter(param_store_.at(i), copy);
+      if (ret == common::OB_SUCCESS) { ret = staged.push_back(copy); }
     }
+    if (ret == common::OB_SUCCESS) { ret = writer(staged); }
+    if (ret == common::OB_SUCCESS) { ret = assign_parameter_inputs(staged); }
+    return ret;
   }
-  DatumParamStore &get_datum_param_store() { return datum_param_store_; }
-  const DatumParamStore &get_datum_param_store() const { return datum_param_store_; }
+  // Opaque ParameterValuePage handles; these are not Datum frame bytes.
   const ObIArray<char *> &get_param_frame_ptrs() const { return param_frame_ptrs_; }
   int init_datum_param_store();
+  // Consume request/PL descriptors synchronously from their pointer directory.
+  // The published values and Types own every surviving execution span; no input
+  // pointer is retained after this call, including on failure.
+  int init_datum_param_store(
+      const common::ObIArray<const common::DatumParameter *> &inputs);
+  // Borrowed outputs name the current effective slot, including a selected
+  // group leaf. A retaining consumer must clone before any binding mutation.
+  const common::DatumParameterMetadata *get_parameter_metadata(int64_t index) const;
+  bool has_native_parameter(int64_t index) const;
+  bool read_native_parameter_state(int64_t index, common::Datum::State &state) const;
+  int read_native_parameter(int64_t index, common::Datum &value) const;
+  int materialize_parameter_for_expr(int64_t index, common::Datum *&value);
+  common::Datum *locate_materialized_parameter(int64_t index) const;
+  ObEvalInfo *get_parameter_eval_info(int64_t index) const;
+  const common::SqlType *get_native_parameter_type(int64_t index) const;
+  // Read a present signed BIGINT without exposing its execution slot.
+  // A rejected binding leaves value unchanged.
+  bool read_native_bigint_parameter(int64_t index, int64_t &value) const;
+  // Read one validated signed BIGINT binding, including a typed SQL NULL,
+  // through a single page lookup. Failure leaves both outputs unchanged.
+  bool read_native_bigint_parameter(
+      int64_t index, int64_t &value, common::Datum::State &state) const;
+  const common::DatumParameter *get_group_parameter_input(int64_t index) const;
+  int capture_native_parameter(int64_t index, common::NativeTypedDatum &value,
+      common::DatumParameterMetadata &attributes) const;
+  // Metadata contains no value. FullType is supplied by the actual producer;
+  // all fallible preparation precedes publication of value/type/attributes.
+  int set_runtime_parameter(int64_t index, const common::Datum &value,
+      const common::SqlType &supplied_type, const common::DatumParameterMetadata &attributes);
+  int clone_runtime_parameters_to(ObPhysicalPlanCtx &destination) const;
+  // Capture/validation never evaluate, allocate or request a Datum projection.
+  int capture_runtime_parameter_slot(int64_t index, NativeParameterSlotSnapshot &snapshot) const;
+  int validate_runtime_parameter_slot(const NativeParameterSlotSnapshot &snapshot) const;
+  // Call only after every token in the holder has been validated. No failure or
+  // allocation below publication, and current EvalInfo remains unchanged.
+  void restore_runtime_parameter_slot(const NativeParameterSlotSnapshot &snapshot);
+  int64_t get_native_group_count() const { return native_group_inputs_.count(); }
+  int capture_native_group(int64_t group_index, NativeParameterGroup &output) const;
+  int runtime_parameter_legacy_size(int64_t index, int64_t &bytes) const;
+  int export_runtime_parameter_legacy(int64_t index, common::ObDatum &out,
+      void *caller_scratch, int64_t capacity) const;
+  // Receiver construction metadata and sparse array inputs are consumed only
+  // after the typed PX stream has produced every final page and complete Type.
+  int restore_native_parameter_frames(const common::ObIArray<char *> &frames,
+      const common::ObIArray<const common::SqlType *> &types, int64_t original_count,
+      const common::ObIArray<common::DatumParameterMetadata> *metadata = nullptr,
+      const common::ObIArray<NativeParameterGroup> *groups = nullptr);
   void reset_datum_param_store()
   {
-    param_store_.reuse();
-    datum_param_store_.reuse();
+    native_parameters_ready_ = false;
+    ++parameter_snapshot_generation_;
+    native_parameter_metadata_.reuse();
+    native_parameter_types_.reuse();
+    native_group_inputs_.reuse();
     param_frame_ptrs_.reuse();
+    param_store_.destroy();
+    parameter_input_allocator_.reset();
     original_param_cnt_ = 0;
     param_frame_capacity_ = 0;
   }
@@ -191,10 +349,10 @@ public:
     cur_time_.set_timestamp(session_val);
   }
   void set_cur_time(const int64_t &session_val, const ObSQLSessionInfo &session);
-  const common::ObObj &get_cur_time() const { return cur_time_; }
-  common::ObObj &get_cur_time() { return cur_time_; }
+  const StatementTime &get_cur_time() const { return cur_time_; }
+  StatementTime &get_cur_time() { return cur_time_; }
   int64_t get_cur_time_tardy_value() const { return cur_time_.get_datetime() + DELTA_TARDY_TIME_US; }
-  bool has_cur_time() const { return common::ObTimestampType == cur_time_.get_type(); }
+  bool has_cur_time() const { return cur_time_.has_value(); }
   int64_t get_warning_count() const
   {
     return warning_count_;
@@ -447,7 +605,7 @@ public:
   bool is_ps_protocol() const { return is_ps_protocol_; }
   void set_original_param_cnt(const int64_t cnt) { original_param_cnt_ = cnt; }
   int64_t get_original_param_cnt() const { return original_param_cnt_; }
-  bool is_exec_param_readable() const { return param_store_.count() > original_param_cnt_; }
+  bool is_exec_param_readable() const { return get_parameter_count() > original_param_cnt_; }
   void set_orig_question_mark_cnt(const int64_t cnt) { orig_question_mark_cnt_ = cnt; }
   int64_t get_orig_question_mark_cnt() const { return orig_question_mark_cnt_; }
   void set_ps_fixed_array_index(const common::ObIArray<int64_t> &fixed_array) { ps_fixed_array_index_ = &fixed_array; }
@@ -474,7 +632,7 @@ public:
                                                const ObDataType &elem_type,
                                                uint16_t &subschema_id);
   int get_subschema_id_by_type_string(const ObString &type_string, uint16_t &subschema_id);
-  int get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+  int get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                     const ObIArray<common::ObString> &type_info,
                                     uint16_t &subschema_id);
   int build_subschema_by_fields(const ColumnsFieldIArray *fields,
@@ -488,16 +646,33 @@ public:
   ObIArray<ObArrayParamGroup> &get_array_param_groups() { return array_param_groups_; }
   int set_all_local_session_vars(ObIArray<ObLocalSessionVar> &all_local_session_vars);
   int get_local_session_vars(int64_t idx, const ObSolidifiedVarsContext *&local_vars);
-  bool is_param_datum_frame_inited() const { return param_frame_ptrs_.count() > 0; }
+  bool is_param_datum_frame_inited() const { return native_parameters_ready_; }
 private:
-  int init_param_store_after_deserialize();
-  void reset_datum_frame(char *frame, int64_t expr_cnt);
-  int extend_param_frame(const int64_t old_size);
+  friend class oceanbase::pl::ObPLExecState;
+  friend struct NativeExecutionParametersTestPeer;
+  uint64_t parameter_snapshot_generation_ = 1;
+  // PL variables use their PL domain owner and do not bind SQL parameter pages.
+  // This deliberately private access cannot expose an initialized SQL frame.
+  ParamStore &pl_variable_store()
+  { OB_ASSERT(!native_parameters_ready_); return param_store_; }
+  const ParamStore &pl_variable_store() const
+  { OB_ASSERT(!native_parameters_ready_); return param_store_; }
+  int initialize_runtime_parameters(
+      const common::ObIArray<const common::DatumParameter *> *inputs = nullptr);
+  int clone_construction_parameter(const DatumParameter &source, DatumParameter &output);
+  int prepare_runtime_parameter(const DatumParameter &source, common::Datum &value,
+      const common::SqlType *&type, int64_t index);
+  int publish_runtime_parameter(int64_t index, const common::DatumParameterMetadata &attributes,
+      const common::Datum &value, const common::SqlType *type);
+  int normalize_parameter_metadata(const common::Datum &value, const common::SqlType &type,
+      const common::DatumParameterMetadata &source, common::DatumParameterMetadata &output) const;
+  int adopt_runtime_parameters(ObPhysicalPlanCtx &staged);
+  int validate_parameter_page_rebind(const common::ObIArray<char *> &pages) const;
+  void rebind_parameter_page_aliases(const common::ObIArray<char *> &pages);
   int reserve_param_frame(const int64_t capacity);
-  void get_param_frame_info(int64_t param_idx,
-                            ObDatum *&datum,
-                            ObEvalInfo *&eval_info);
-  int inner_get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+  int parameter_wire_view(int64_t index, DatumParameter &output,
+      void *scratch, int64_t capacity) const;
+  int inner_get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                           const ObIArray<common::ObString> &type_info,
                                           uint16_t &subschema_id) const;
 private:
@@ -517,12 +692,27 @@ private:
   // used for TRANSACTION SET CONSISTENCY check
   int64_t tsc_snapshot_timestamp_;
   // only used when the sql contains fun like current_time
-  common::ObObj cur_time_;//used for session
+  StatementTime cur_time_; // fixed statement clock
   // execution timeout for this round of execution
   int64_t ts_timeout_us_;
   common::ObConsistencyLevel consistency_level_;
+  // This allocator owns construction blocks and edit-created bytes, rather
+  // than forwarding free() into the execution arena. Destroy the store before
+  // resetting it; surviving data is already in the final execution owner.
+  common::ObArenaAllocator parameter_input_allocator_;
   ParamStore param_store_;
-  DatumParamStore datum_param_store_;
+  bool native_parameters_ready_;
+  struct GroupParameterInput {
+    GroupParameterInput() : index_(-1), input_(), type_(nullptr) {}
+    int64_t index_;
+    common::DatumParameter input_;
+    const common::SqlType *type_;
+  };
+  common::ObSEArray<common::DatumParameterMetadata, 8> native_parameter_metadata_;
+  common::ObSEArray<GroupParameterInput, 2> native_group_inputs_;
+  // Complex declarations and projections for the remaining full-type APIs.
+  // Scalar bindings use native_parameter_metadata_ and leave these entries NULL.
+  mutable common::ObSEArray<const common::SqlType *, 16> native_parameter_types_;
   common::ObSEArray<char *, 1, common::ModulePageAllocator, true> param_frame_ptrs_;
   // Original param cont for input SQL, used in static engine for param frames allocation.
   // Param store can be divided into three continuous part:

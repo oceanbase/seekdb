@@ -1601,7 +1601,7 @@ int ObTransformPredicateMoveAround::pullup_predicates_from_const_select(ObSelect
                            ctx_, child_stmt, child_expr, NULLABLE_SCOPE::NS_TOP, is_not_null))) {
       } else if (!is_not_null) {
         // do nothing
-        ObObj result;
+        DatumValue result;
         bool got_result = false;
         if (!child_expr->is_static_scalar_const_expr()) {
           //do nothing
@@ -1649,7 +1649,7 @@ int ObTransformPredicateMoveAround::check_false_condition(ObSelectStmt *stmt,
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (T_BOOL == expr->get_expr_type() &&
-                !static_cast<const ObConstRawExpr*>(expr)->get_value().get_bool()) {
+                !static_cast<const ObConstRawExpr*>(expr)->get_value_datum().get_bool()) {
         false_cond_exists = true;
       }
     }
@@ -3164,7 +3164,7 @@ int ObTransformPredicateMoveAround::create_equal_exprs_for_insert(ObDelUpdStmt *
                                                             &constraints))) {
       } else if (!is_not_null && source_exprs.at(i)->is_static_scalar_const_expr()) {
         // check default value
-        ObObj result;
+        DatumValue result;
         bool got_result = false;
         if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                               source_exprs.at(i),
@@ -3265,7 +3265,7 @@ int ObTransformPredicateMoveAround::generate_pullup_predicates_for_dual_stmt(
                                                             &constraints))) {
       } else if (!is_not_null) {
         // do nothing
-        ObObj result;
+        DatumValue result;
         bool got_result = false;
         if (!sel_expr->is_static_scalar_const_expr()) {
           //do nothing
@@ -3422,7 +3422,7 @@ int ObTransformPredicateMoveAround::is_column_expr_null(ObDMLStmt *stmt,
       ret = OB_ERR_UNEXPECTED;
     } else if (child_expr->is_static_scalar_const_expr()) {
       //case: insert into t1 select null from dual;
-      ObObj result;
+      DatumValue result;
       bool got_result = false;
       if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                             child_expr,

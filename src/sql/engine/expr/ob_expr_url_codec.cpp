@@ -200,7 +200,7 @@ int ObExprURLDecode::eval_url_decode(EVAL_FUNC_ARG_DECL)
 int ObExprURLCODEC::eval_url_codec(EVAL_FUNC_ARG_DECL, bool is_encode)
 {
   int ret = OB_SUCCESS;
-  ObDatum *input = NULL;
+  Datum *input = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, input))) {
   } else if (input->is_null()) {
@@ -230,7 +230,7 @@ int ObExprURLDecode::eval_url_decode_batch(BATCH_EVAL_FUNC_ARG_DECL)
 int ObExprURLCODEC::eval_url_codec_batch(BATCH_EVAL_FUNC_ARG_DECL, bool is_encode)
 {
   int ret = OB_SUCCESS;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
 
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
@@ -238,7 +238,7 @@ int ObExprURLCODEC::eval_url_codec_batch(BATCH_EVAL_FUNC_ARG_DECL, bool is_encod
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, size))) {
     } else {
-      ObDatumVector datum_array = expr.args_[0]->locate_expr_datumvector(ctx);
+      DatumVector datum_array = expr.args_[0]->locate_expr_datumvector(ctx);
 
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
       batch_info_guard.set_batch_size(size);

@@ -48,7 +48,7 @@ int ObExprArrayDifference::calc_result_type1(ObExprResType &type,
   ObDataType src_elem_type;
   uint32_t depth = 0;
   bool is_vec = false;
-  ObObjType coll_calc_type = ObMaxType;
+  SqlValueType coll_calc_type = ObMaxType;
   ObCollectionTypeBase *coll_type = NULL;
   ObExprResType calc_type;
   bool is_null_res = false;
@@ -61,7 +61,7 @@ int ObExprArrayDifference::calc_result_type1(ObExprResType &type,
     is_null_res = true;
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -70,11 +70,11 @@ int ObExprArrayDifference::calc_result_type1(ObExprResType &type,
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_difference with multi-dimension array");
   } else if (ob_is_int_uint_tc(src_elem_type.get_obj_type())) {
-    coll_calc_type = ObObjType::ObIntType;
+    coll_calc_type = SqlValueType::ObIntType;
   } else if (ob_is_float_tc(src_elem_type.get_obj_type())) {
-    coll_calc_type = ObObjType::ObFloatType;
+    coll_calc_type = SqlValueType::ObFloatType;
   } else if (ob_is_double_tc(src_elem_type.get_obj_type())) {
-    coll_calc_type = ObObjType::ObDoubleType;
+    coll_calc_type = SqlValueType::ObDoubleType;
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_difference with non-numeric type");
@@ -103,28 +103,34 @@ int ObExprArrayDifference::calc_result_type1(ObExprResType &type,
 int ObExprArrayDifference::calc_difference(ObIArrayType *src_arr, ObIArrayType *res_arr)
 {
   int ret = OB_SUCCESS;
-  ObObj this_elem;
-  ObObj last_elem;
+  alignas(int512_t) char this_buf[sizeof(int512_t)] = {};
+  alignas(int512_t) char last_buf[sizeof(int512_t)] = {};
+  common::ObDatum this_elem;
+  common::ObDatum last_elem;
+  this_elem.ptr_ = this_buf;
+  last_elem.ptr_ = last_buf;
   ObCollectionBasicType *elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(src_arr->get_array_type())->element_type_);
-  ObObjType obj_type = elem_type->basic_meta_.get_obj_type();
+  SqlValueType obj_type = elem_type->basic_meta_.get_obj_type();
 
   for (int64_t i = 0; i < src_arr->size() && OB_SUCC(ret); i++) {
-    last_elem = this_elem;
-    if (OB_FAIL(src_arr->elem_at(i, this_elem))) {
-    } else if (i == 0 && OB_FALSE_IT(last_elem = this_elem)) {
+    if (OB_FAIL(src_arr->elem_at_datum(i, this_elem))) {
+    } else if (i == 0) {
+      MEMCPY(last_buf, this_buf, sizeof(last_buf));
+      last_elem = this_elem;
+      last_elem.ptr_ = last_buf;
     } else if (ob_is_int_uint_tc(obj_type)) {
       ObArrayFixedSize<int64_t> *array_obj = static_cast<ObArrayFixedSize<int64_t> *>(res_arr);
       if (OB_FAIL(ObArrayExprUtils::raw_check_minus<int64_t>(
-                      this_elem.get_int() - last_elem.get_int(), 
-                      this_elem.get_int(), 
+                      this_elem.get_int() - last_elem.get_int(),
+                      this_elem.get_int(),
                       last_elem.get_int()))) {
       } else if (OB_FAIL(array_obj->push_back(this_elem.get_int() - last_elem.get_int()))) {
       }
     } else if (ob_is_float_tc(obj_type)) {
       ObArrayFixedSize<float> *array_obj = static_cast<ObArrayFixedSize<float> *>(res_arr);
       if (OB_FAIL(ObArrayExprUtils::raw_check_minus<float>(
-                      this_elem.get_float() - last_elem.get_float(), 
-                      this_elem.get_float(), 
+                      this_elem.get_float() - last_elem.get_float(),
+                      this_elem.get_float(),
                       last_elem.get_float()))) {
       } else if (OB_FAIL(array_obj->push_back(this_elem.get_float() - last_elem.get_float()))) {
       }
@@ -132,7 +138,7 @@ int ObExprArrayDifference::calc_difference(ObIArrayType *src_arr, ObIArrayType *
       ObArrayFixedSize<double> *array_obj = static_cast<ObArrayFixedSize<double> *>(res_arr);
       if (OB_FAIL(ObArrayExprUtils::raw_check_minus<double>(
                       this_elem.get_double() - last_elem.get_double(),
-                      this_elem.get_double(), 
+                      this_elem.get_double(),
                       last_elem.get_double()))) {
       } else if (OB_FAIL(array_obj->push_back(this_elem.get_double() - last_elem.get_double()))) {
       }
@@ -140,17 +146,22 @@ int ObExprArrayDifference::calc_difference(ObIArrayType *src_arr, ObIArrayType *
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "unexpected result element type", K(ret), K(obj_type));
     }
+    if (OB_SUCC(ret) && i > 0) {
+      MEMCPY(last_buf, this_buf, sizeof(last_buf));
+      last_elem = this_elem;
+      last_elem.ptr_ = last_buf;
+    }
   } // end for
   return ret;
 }
-int ObExprArrayDifference::eval_array_difference(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayDifference::eval_array_difference(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   const uint16_t res_subschema_id = expr.obj_meta_.get_subschema_id();
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
 
@@ -177,7 +188,7 @@ int ObExprArrayDifference::eval_array_difference_batch(const ObExpr &expr, ObEva
                                                        const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -188,7 +199,7 @@ int ObExprArrayDifference::eval_array_difference_batch(const ObExpr &expr, ObEva
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

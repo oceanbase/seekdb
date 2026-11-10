@@ -54,7 +54,7 @@ int ObExprSTAsText::calc_result_typeN(ObExprResType& type,
     LOG_USER_ERROR(OB_ERR_PARAM_SIZE, fun_name.length(), fun_name.ptr());
   } else {
     if (1 == param_num) {
-      ObObjType data_type = types_stack[0].get_type();
+      SqlValueType data_type = types_stack[0].get_type();
       if (ob_is_geometry(data_type) || ob_is_null(data_type)) {
         // do nothing
       } else {
@@ -65,7 +65,7 @@ int ObExprSTAsText::calc_result_typeN(ObExprResType& type,
     }
 
     if (2 == param_num) {
-      ObObjType option_type = types_stack[1].get_type();
+      SqlValueType option_type = types_stack[1].get_type();
       if (ob_is_string_type(option_type) || ob_is_null(option_type)) {
         // do nothing
       } else {
@@ -87,7 +87,7 @@ int ObExprSTAsText::calc_result_typeN(ObExprResType& type,
 
 int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum &res,
+                                          Datum &res,
                                           const char *func_name)
 {
   int ret = OB_SUCCESS;
@@ -103,7 +103,7 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
   ObGeometry *geo = NULL;
   bool is_geog = false;
   bool need_reverse = false;
-  ObDatum *gis_datum = NULL;
+  Datum *gis_datum = NULL;
   ObString wkb;
   bool is_3d_geo = false;
   // get geo
@@ -123,7 +123,7 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
   // get axis_order
   if (!is_null_result && OB_SUCC(ret) && num_args > 1 ) {
     ObGeoAxisOrder axis_order = ObGeoAxisOrder::INVALID;
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     ObString dstr;
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, datum))) {
     } else if (datum->is_null()){
@@ -200,12 +200,12 @@ int ObExprSTAsText::to_wkt(ObIAllocator &allocator, ObGeometry *geo, ObString &r
   return ret;
 }
 
-int ObExprSTAsText::eval_st_astext(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTAsText::eval_st_astext(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_st_astext_common(expr, ctx, res, N_ST_ASTEXT);
 }
 
-int ObExprSTAsWkt::eval_st_astext(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTAsWkt::eval_st_astext(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_st_astext_common(expr, ctx, res, N_ST_ASWKT);
 }

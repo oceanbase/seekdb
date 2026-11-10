@@ -182,15 +182,15 @@ int ObExprReplace::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) co
   return ret;
 }
 
-int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObString res;
   const bool is_mysql = true;
   ObExprStrResAlloc alloc(expr, ctx);
-  ObDatum *text = NULL;
-  ObDatum *from = NULL;
-  ObDatum *to = NULL;
+  Datum *text = NULL;
+  Datum *from = NULL;
+  Datum *to = NULL;
   bool is_clob = expr.args_[0]->datum_meta_.is_clob();
   bool is_lob_res = ob_is_text_tc(expr.datum_meta_.type_);
   if (OB_FAIL(expr.eval_param_value(ctx, text, from, to))) {
@@ -200,7 +200,7 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     ObExpr *from_expr = expr.args_[1];
     int64_t from_len = 0;
     if (!ob_is_text_tc(from_expr->datum_meta_.type_)) {
-      from_len = from->len_;
+      from_len = from->length();
     } else {
       ObLobLocatorV2 locator(from->get_string(), from_expr->obj_meta_.has_lob_header());
       if (OB_FAIL(locator.get_lob_data_byte_len(from_len))) {
@@ -213,7 +213,7 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     } else {
       expr_datum.set_null();
     }
-  } else if (is_clob && (0 == text->len_)) {
+  } else if (is_clob && (0 == text->length())) {
     expr_datum.set_datum(*text);
   } else if (!is_lob_res) { // non text tc inputs 
     if (OB_FAIL(replace(res,

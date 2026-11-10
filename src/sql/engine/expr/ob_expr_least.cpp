@@ -70,7 +70,7 @@ int ObExprLeastGreatest::calc_result_typeN_mysql(ObExprResType &type,
     // Otherwise cast all parameters to the derived calc_type
     bool all_integer = true;
     for (int i = 0; i < param_num && all_integer; ++i) {
-      ObObjType obj_type = types[i].get_type();
+      SqlValueType obj_type = types[i].get_type();
       if (!ob_is_integer_type(obj_type) && ObNullType != obj_type) {
         all_integer = false;
       }
@@ -81,7 +81,7 @@ int ObExprLeastGreatest::calc_result_typeN_mysql(ObExprResType &type,
     if (OB_SUCC(ret)) {
       // can't cast origin parameters.
       for (int64_t i = 0; i < param_num; i++) {
-        types[i].set_calc_meta(types[i].get_obj_meta());
+        types[i].set_calc_meta(types[i].get_sql_type_meta());
       }
       if (all_integer && type.is_integer_type()) {
         type.set_calc_type(ObNullType);
@@ -119,7 +119,7 @@ int ObExprLeastGreatest::cg_expr(ObExprCGCtx &op_cg_ctx,
       if (OB_ISNULL(rt_expr.args_[i])) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_ISNULL(rt_expr.args_[i]->basic_funcs_)
-          || OB_ISNULL(rt_expr.args_[i]->basic_funcs_->null_first_cmp_)) {
+          || !rt_expr.args_[i]->basic_funcs_->null_first_cmp_.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
       }
     }
@@ -129,7 +129,7 @@ int ObExprLeastGreatest::cg_expr(ObExprCGCtx &op_cg_ctx,
       } else {
         rt_expr.eval_func_ = ObExprLeast::calc_least;
       }
-      const ObObjMeta &cmp_meta = raw_expr.get_extra_calc_meta();
+      const SqlTypeMeta &cmp_meta = raw_expr.get_extra_calc_meta();
       const bool is_explicit_cast = false;
       const int32_t result_flag = 0;
       ObCastMode cm = CM_NONE;
@@ -155,25 +155,15 @@ int ObExprLeastGreatest::cg_expr(ObExprCGCtx &op_cg_ctx,
           info->cm_ = cm;
           rt_expr.extra_info_ = info;
 
-          bool has_lob_header = false;
-          if (is_lob_storage(info->cmp_meta_.type_)) {
-            has_lob_header = true;
-          }
-          ObDatumCmpFuncType cmp_func = ObDatumFuncs::get_nullsafe_cmp_func(cmp_meta.get_type(),
-                                                                            cmp_meta.get_type(),
-                                                                            NULL_LAST,
-                                                                            cmp_meta.get_collation_type(),
-                                                                            info->cmp_meta_.scale_,
-                                                                            has_lob_header);
-          if (OB_ISNULL(cmp_func)) {
-            ret = OB_INVALID_ARGUMENT;
-          } else if (OB_ISNULL(rt_expr.inner_functions_ =
-                            reinterpret_cast<void**>(op_cg_ctx.allocator_->alloc(sizeof(void*))))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            rt_expr.inner_func_cnt_ = 1;
-            rt_expr.inner_functions_[0] = reinterpret_cast<void*>(cmp_func);
-          }
+          SqlTypeMeta meta = cmp_meta;
+          if (is_lob_storage(meta.get_type())) { meta.set_has_lob_header(); }
+          ObAccuracy accuracy;
+          if (!ob_is_string_or_lob_type(meta.get_type())) { accuracy.set_scale(info->cmp_meta_.scale_); }
+          ObExpr domain;
+          OZ(domain.prepare_scalar_type(meta, accuracy, *op_cg_ctx.allocator_));
+          OZ(rt_expr.prepare_cmp_ops(*op_cg_ctx.allocator_, 1));
+          OZ(rt_expr.configure_cmp_op(0, domain.get_sql_type(), domain.get_sql_type(), NULL_LAST,
+                                     cmp_meta.get_collation_type()));
         }
       }
     }
@@ -184,7 +174,7 @@ int ObExprLeastGreatest::cg_expr(ObExprCGCtx &op_cg_ctx,
 int ObExprLeastGreatest::cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
                                     const ObDatumMeta &dst_meta,
                                     const ObCastMode &cm, ObIAllocator &allocator,
-                                    ObDatum &res_datum)
+                                    Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   const bool string_type = ob_is_string_type(dst_meta.type_);
@@ -195,9 +185,11 @@ int ObExprLeastGreatest::cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
     res_datum = src_expr.locate_expr_datum(ctx);
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
   } else {
-    ObDatum *cast_datum = NULL;
+    Datum *cast_datum = NULL;
+    const SqlType *result_type = nullptr;
     if (OB_FAIL(ctx.datum_caster_->to_type(dst_meta, src_expr, cm, cast_datum, ctx.get_batch_idx()))) {
-    } else if (OB_FAIL(res_datum.deep_copy(*cast_datum, allocator))) {
+    } else if (OB_FAIL(ctx.datum_caster_->get_result_type(src_expr, cast_datum, result_type))) {
+    } else if (OB_FAIL(ObExpr::clone_native_value(*result_type, *cast_datum, allocator, res_datum))) {
     } else {
       LOG_DEBUG("cast_param", K(src_expr), KP(ctx.frames_[src_expr.frame_idx_]),
                 K(&(src_expr.locate_expr_datum(ctx))),
@@ -208,7 +200,7 @@ int ObExprLeastGreatest::cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
 }
 
 int ObExprLeastGreatest::cast_result(const ObExpr &src_expr, const ObExpr &dst_expr, ObEvalCtx &ctx,
-                                     const ObCastMode &cm, ObDatum &expr_datum)
+                                     const ObCastMode &cm, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   const bool string_type = ob_is_string_type(src_expr.datum_meta_.type_);
@@ -218,14 +210,14 @@ int ObExprLeastGreatest::cast_result(const ObExpr &src_expr, const ObExpr &dst_e
       && (!decimal_int_type
           || (src_expr.datum_meta_.scale_ == dst_expr.datum_meta_.scale_
               && src_expr.datum_meta_.precision_ == dst_expr.datum_meta_.precision_))) {
-    ObDatum *res_datum = nullptr;
+    Datum *res_datum = nullptr;
     if (OB_FAIL(src_expr.eval(ctx, res_datum))) {
     } else {
       expr_datum = *res_datum;
     }
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
   } else {
-    ObDatum *cast_datum = NULL;
+    Datum *cast_datum = NULL;
     if (OB_FAIL(ctx.datum_caster_->to_type(dst_expr.datum_meta_, src_expr, cm, cast_datum, ctx.get_batch_idx()))) {
     } else if (OB_FAIL(dst_expr.deep_copy_datum(ctx, *cast_datum))) {
     }
@@ -234,7 +226,7 @@ int ObExprLeastGreatest::cast_result(const ObExpr &src_expr, const ObExpr &dst_e
 }
 
 int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
-                                    ObDatum &expr_datum, bool least)
+                                    Datum &expr_datum, bool least)
 {
   int ret = OB_SUCCESS;
   uint32_t param_num = expr.arg_cnt_;
@@ -247,7 +239,7 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
   // select least(c2, c1) from t; reports warning
   // select least(c1, c2) from t; reports null without warning
   for (int i = 0; OB_SUCC(ret) && !has_null && i < param_num; ++i) {
-    ObDatum *tmp_datum = NULL;
+    Datum *tmp_datum = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, tmp_datum))) {
     } else {
       if (tmp_datum->is_null()) {
@@ -259,7 +251,7 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
   // if all params and integer and result type is also integer, there is no inner_function of least expr.
   // otherwise, inner_func_cnt_ will be one. It stores the cmp function for parameters.
   if (!has_null && OB_SUCC(ret)) {
-    const bool all_integer = 0 == expr.inner_func_cnt_;
+    const bool all_integer = 0 == expr.get_cmp_op_count();
     // compare all params.
     if (all_integer) {
       if (ob_is_int_tc(expr.datum_meta_.type_)) {
@@ -286,9 +278,9 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
     } else {
       DatumCastExtraInfo *cast_info = static_cast<DatumCastExtraInfo *>(expr.extra_info_);
       int res_idx = 0;
-      ObDatum minmax_datum;
+      Datum minmax_datum;
       ObTempExprCtx::TempAllocGuard tmp_alloc_guard(ctx);
-      ObDatumCmpFuncType cmp_func = reinterpret_cast<ObDatumCmpFuncType>(expr.inner_functions_[0]);
+      const DatumCmpOp &cmp_func = expr.get_cmp_op();
       const common::ObDatumAccessContext *datum_access_ctx = nullptr;
       if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
       } else if (OB_SUCC(ret) &&
@@ -296,7 +288,7 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
                              tmp_alloc_guard.get_allocator(), minmax_datum))) {
       }
       for (int i = 1; OB_SUCC(ret) && i < param_num; ++i) {
-        ObDatum cur_datum;
+        Datum cur_datum;
         if (OB_FAIL(cast_param(*expr.args_[i], ctx, cast_info->cmp_meta_, cast_info->cm_,
                               tmp_alloc_guard.get_allocator(), cur_datum))) {
         } else {
@@ -336,7 +328,7 @@ ObExprLeast::ObExprLeast(common::ObIAllocator &alloc)
 }
 
 //same type params
-int ObExprLeast::calc_least(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprLeast::calc_least(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ret = ObExprLeastGreatest::calc_mysql(expr, ctx, expr_datum, true);

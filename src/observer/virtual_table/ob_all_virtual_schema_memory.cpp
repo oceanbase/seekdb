@@ -69,28 +69,28 @@ int ObAllVirtualSchemaMemory::inner_get_next_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case ALLOCATOR_TYPE: {
-          cur_row_.cells_[i].set_varchar( 0 == pos ? "current" : "another");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, 0 == pos ? "current" : "another") : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case USED_SCHEMA_MGR_CNT: {
-          cur_row_.cells_[i].set_int(used_schema_mgr_cnt);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, used_schema_mgr_cnt) : ret);
           break;
         }
         case FREE_SCHEMA_MGR_CNT: {
-          cur_row_.cells_[i].set_int(free_schema_mgr_cnt);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, free_schema_mgr_cnt) : ret);
           break;
         }
         case MEM_USED: {
-          cur_row_.cells_[i].set_int(mem_used);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mem_used) : ret);
           break;
         }
         case MEM_TOTAL: {
-          cur_row_.cells_[i].set_int(mem_total);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mem_total) : ret);
           break;
         }
         case ALLOCATOR_IDX: {
-          cur_row_.cells_[i].set_int(allocator_idx);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, allocator_idx) : ret);
           break;
         }
         default : {

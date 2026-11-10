@@ -54,7 +54,7 @@ int ObRawEncoder::init(const ObColumnEncodingCtx &ctx,
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else {
     column_header_.type_ = type_;
-    store_class_ = get_store_class_map()[ob_obj_type_class(column_type_.get_type())];
+    store_class_ = get_store_class_map()[sql_type_class(column_type_.get_type())];
     type_store_size_ = get_type_size_map()[column_type_.get_type()];
     if (type_store_size_ > 0) {
       if(type_store_size_ > sizeof(int64_t)) {

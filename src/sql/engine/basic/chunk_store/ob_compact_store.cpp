@@ -105,7 +105,7 @@ int ObCompactStore::inner_get_next_row(const ObChunkDatumStore::StoredRow *&sr)
   return ret;
 }
 
-int ObCompactStore::inner_add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,
+int ObCompactStore::inner_add_batch(const common::Datum **datums, const common::ObIArray<ObExpr *> &exprs,
                                     const uint16_t selector[], const int64_t size,
                                     ObChunkDatumStore::StoredRow **stored_rows)
 {

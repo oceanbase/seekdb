@@ -53,51 +53,51 @@ int ObAllVirtualLongOpsStatus::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID:
           // sid
-          cur_row_.cells_[i].set_int(longops_value_.sid_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, longops_value_.sid_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 1:
           // op_name
-          cur_row_.cells_[i].set_varchar(longops_value_.op_name_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, longops_value_.op_name_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case OB_APP_MIN_COLUMN_ID + 2:
           // target
-          cur_row_.cells_[i].set_varchar(longops_value_.target_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, longops_value_.target_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case OB_APP_MIN_COLUMN_ID + 3:
           // start_time
-          cur_row_.cells_[i].set_int(longops_value_.start_time_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, longops_value_.start_time_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 4:
           // finish_time
-          cur_row_.cells_[i].set_int(longops_value_.finish_time_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, longops_value_.finish_time_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 5:
           // elapsed_seconds
-          cur_row_.cells_[i].set_int(longops_value_.elapsed_seconds_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, longops_value_.elapsed_seconds_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 6:
           // time_remaining
-          cur_row_.cells_[i].set_int(longops_value_.time_remaining_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, longops_value_.time_remaining_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 7:
           // last_update_time
-          cur_row_.cells_[i].set_int(longops_value_.last_update_time_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, longops_value_.last_update_time_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 8:
           // percentage
-          cur_row_.cells_[i].set_int(longops_value_.percentage_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, longops_value_.percentage_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 9:
           // message
-          cur_row_.cells_[i].set_varchar(longops_value_.message_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, longops_value_.message_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case OB_APP_MIN_COLUMN_ID + 10: {
           // trace id
           int len = longops_value_.trace_id_.to_string(trace_id_, OB_MAX_TRACE_ID_BUFFER_SIZE);
-          cur_row_.cells_[i].set_varchar(trace_id_, len);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ObString(len, trace_id_)) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }

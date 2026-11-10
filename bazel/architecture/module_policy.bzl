@@ -156,4 +156,5 @@ UNITTEST_ALLOWED_DIRECT_MODULE_DEPS = {
 # Observer module.
 UNITTEST_RUNTIME_DEPS = [
     "//src/observer:liboceanbase",
+    "//src/observer:liboceanbase_test_runtime",
 ]

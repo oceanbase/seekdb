@@ -52,10 +52,10 @@ struct ObCopyPartInfo {
     is_normal_range_part_(false),
     is_hash_part_(false)
   { }
-  common::ObObj pre_part_upper_bound_;
-  common::ObObj part_lower_bound_;
-  common::ObObj part_upper_bound_;
-  common::ObObj src_part_lower_bound_;
+  common::DatumValue pre_part_upper_bound_;
+  common::DatumValue part_lower_bound_;
+  common::DatumValue part_upper_bound_;
+  common::DatumValue src_part_lower_bound_;
   ObCopyResType min_res_type_;
   ObCopyResType max_res_type_;
   bool is_normal_range_part_;
@@ -88,19 +88,19 @@ struct CopyTableStatHelper {
   int copy_col_stat(bool is_subpart,
                     const ObIArray<ObOptColumnStatHandle> &col_handles,
                     ObIArray<ObOptColumnStat *> &column_stats);
-  int copy_min_val(const common::ObObj &src_min_val,
-                   common::ObObj &dst_min_val,
+  int copy_min_val(const common::DatumValue &src_min_val,
+                   common::DatumValue &dst_min_val,
                    ObCopyPartInfo *dst_part_info);
-  int copy_max_val(const common::ObObj &src_max_val,
-                   common::ObObj &dst_max_val,
+  int copy_max_val(const common::DatumValue &src_max_val,
+                   common::DatumValue &dst_max_val,
                    ObCopyPartInfo *dst_part_info);
   int check_range_part(bool is_subpart, const ObIArray<ObOptColumnStatHandle> &col_handles, bool &flag);
   // int copy_histogram(const ObHistogram &src_hist,
   //                    ObHistogram &dst_hist,
   //                    ObCopyPartInfo *dst_part_info);
   // int set_dst_hist_buckets(ObHistogram &dst_hist,
-  //                          const common::ObObj &endpoint_val_1,
-  //                          const common::ObObj &endpoint_val_2);
+  //                          const common::DatumValue &endpoint_val_1,
+  //                          const common::DatumValue &endpoint_val_2);
   uint64_t table_id_;
   ObString owner_;
   ObString table_name_;
@@ -131,7 +131,7 @@ public:
                                ObCopyLevel &copy_level);
   
   static int extract_partition_column_ids(CopyTableStatHelper &copy_stat_helper,
-                                          const ObTableSchema *table_schema);
+                                          const share::schema::ObTableSchema *table_schema);
 
   static int copy_tab_col_stats(sql::ObExecContext &ctx,
                                 ObTableStatParam &table_stat_param,
@@ -143,43 +143,43 @@ public:
 
   static int get_dst_part_infos(const ObTableStatParam &table_stat_param,
                                 CopyTableStatHelper &helper,
-                                const ObTableSchema *table_schema,
+                                const share::schema::ObTableSchema *table_schema,
                                 const ObCopyLevel copy_level,
                                 bool &is_found);
 
-  static int get_copy_part_info(const ObTableSchema *table_schema,
+  static int get_copy_part_info(const share::schema::ObTableSchema *table_schema,
                                 const ObCopyLevel copy_level,
                                 const int64_t idx,
                                 CopyTableStatHelper &helper,
                                 ObCopyPartInfo *&dst_part_info);
 
-  static int get_src_part_info(const ObTableSchema *table_schema,
+  static int get_src_part_info(const share::schema::ObTableSchema *table_schema,
                                CopyTableStatHelper &helper,
-                               const ObBasePartition *part,
-                               const ObBasePartition *pre_part,
+                               const share::schema::ObBasePartition *part,
+                               const share::schema::ObBasePartition *pre_part,
                                const ObCopyLevel copy_level);
 
-  static int get_dst_part_info(const ObTableSchema *table_schema,
+  static int get_dst_part_info(const share::schema::ObTableSchema *table_schema,
                                CopyTableStatHelper &helper,
-                               const ObBasePartition *part,
-                               const ObBasePartition *pre_part,
+                               const share::schema::ObBasePartition *part,
+                               const share::schema::ObBasePartition *pre_part,
                                const ObCopyLevel copy_level);
 
-  static int get_hash_or_default_part_info(const ObTableSchema *table_schema,
+  static int get_hash_or_default_part_info(const share::schema::ObTableSchema *table_schema,
                                            CopyTableStatHelper &helper,
                                            const ObCopyLevel copy_level,
                                            bool is_hash);
 
-  static int get_normal_list_part_info(const ObTableSchema *table_schema,
+  static int get_normal_list_part_info(const share::schema::ObTableSchema *table_schema,
                                        CopyTableStatHelper &helper,
-                                       const ObBasePartition *part,
+                                       const share::schema::ObBasePartition *part,
                                        const ObCopyLevel copy_level,
                                        int64_t list_val_cnt);
 
-  static int get_range_part_info(const ObTableSchema *table_schema,
+  static int get_range_part_info(const share::schema::ObTableSchema *table_schema,
                                         CopyTableStatHelper &helper,
-                                        const ObBasePartition *part,
-                                        const ObBasePartition *pre_part,
+                                        const share::schema::ObBasePartition *part,
+                                        const share::schema::ObBasePartition *pre_part,
                                         const ObCopyLevel copy_level,
                                         int64_t rowkey_idx);
 };

@@ -1,4 +1,4 @@
-static constexpr ObObjType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
+static constexpr SqlValueType MERGE_RESULT_TYPE[ObMaxType][ObMaxType] = {
     /*NullType*/
     {
         ObNullType,          /*NullType=>NullType  */

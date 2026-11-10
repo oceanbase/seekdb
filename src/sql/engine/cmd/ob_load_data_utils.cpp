@@ -156,14 +156,14 @@ int ObLoadDataUtils::check_need_opt_stat_gather(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = nullptr;
   const ObLoadDataHint &hint = load_stmt.get_hints();
-  ObObj obj;
+  bool online_stats = false;
   int64_t gather_optimizer_statistics = 0;
   need_opt_stat_gather = false;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, obj))) {
+  } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, online_stats))) {
   } else if (OB_FAIL(hint.get_value(ObLoadDataHint::GATHER_OPTIMIZER_STATISTICS, gather_optimizer_statistics))) {
-  } else if (gather_optimizer_statistics != 0 && obj.get_bool()) {
+  } else if (gather_optimizer_statistics != 0 && online_stats) {
     need_opt_stat_gather = true;
   }
   return ret;

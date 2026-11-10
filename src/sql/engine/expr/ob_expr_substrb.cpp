@@ -237,12 +237,12 @@ int ObExprSubstrb::get_well_formatted_boundary(ObCollationType cs_type,
   return ret;
 }
 
-int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *src = NULL;
-  ObDatum *start = NULL;
-  ObDatum *len = NULL;
+  Datum *src = NULL;
+  Datum *start = NULL;
+  Datum *len = NULL;
   if (OB_UNLIKELY(2 != expr.arg_cnt_ && 3 != expr.arg_cnt_)) {
     ret = OB_INVALID_ARGUMENT_NUM;
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, start, len))) {

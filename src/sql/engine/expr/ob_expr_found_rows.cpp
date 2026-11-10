@@ -44,7 +44,7 @@ int ObExprFoundRows::calc_result_type0(ObExprResType &type,
 }
 
 int ObExprFoundRows::eval_found_rows(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

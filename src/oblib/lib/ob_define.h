@@ -1864,18 +1864,6 @@ struct ObNumberDesc
     T &allocator_; \
   };
 
-// need define:
-//   ObRow row;
-//   ObObj obj;
-#define ROW_CELL_SET_VAL(table_id, type, val) \
-  obj.set_##type(val);\
-  if (OB_SUCCESS == ret  \
-      && OB_SUCCESS != (ret = row.set_cell(table_id, ++column_id, obj))) \
-  {\
-    ObCStringHelper helper; \
-    _OB_LOG(WARN, "failed to set cell=%s, ret=%d", helper.convert(obj), ret); \
-  }
-
 OB_INLINE int64_t &get_tid_cache()
 {
   // NOTE: cache tid

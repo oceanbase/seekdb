@@ -41,7 +41,7 @@ public:
                                 ObExprResType &type2,
                                 ObExprResType &type3,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int eval_maketime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int eval_maketime(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
   static int eval_batch_maketime(const ObExpr &expr, ObEvalCtx &ctx,
                                  const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

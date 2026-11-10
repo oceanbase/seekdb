@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SQL_OB_LOG_EXCHANGE_H
 #define OCEANBASE_SQL_OB_LOG_EXCHANGE_H
+#include "common/datum/datum_value.h"
 #include "lib/allocator/page_arena.h"
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/engine/px/ob_px_basic_info.h"
@@ -100,7 +101,7 @@ public:
   const common::ObIArray<ObRawExpr *> &get_repart_sub_keys() const {return repartition_sub_keys_;}
   const common::ObIArray<ObRawExpr *> &get_repart_func_exprs() const {return repartition_func_exprs_;}
   const common::ObIArray<ObExchangeInfo::HashExpr> &get_hash_dist_exprs() const {return hash_dist_exprs_;}
-  const common::ObIArray<common::ObObj> *get_popular_values() const {return &popular_values_;}
+  const common::ObIArray<common::DatumValue> *get_popular_values() const {return &popular_values_;}
   const ObRawExpr *get_calc_part_id_expr() const { return calc_part_id_expr_; }
   ObRawExpr *get_calc_part_id_expr() { return calc_part_id_expr_; }
   ObRepartitionType get_repartition_type() const {return repartition_type_;}
@@ -240,7 +241,7 @@ private:
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> repartition_func_exprs_;
   ObRawExpr *calc_part_id_expr_;
   common::ObSEArray<ObExchangeInfo::HashExpr, 4, common::ModulePageAllocator, true> hash_dist_exprs_;
-  common::ObSEArray<ObObj, 20, common::ModulePageAllocator, true> popular_values_; // for hybrid hash distr
+  common::ObSEArray<DatumValue, 20, common::ModulePageAllocator, true> popular_values_; // for hybrid hash distr
 
   ObPQDistributeMethod::Type dist_method_;
   ObPQDistributeMethod::Type unmatch_row_dist_method_;

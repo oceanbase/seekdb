@@ -35,6 +35,9 @@
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 
+#include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
+
 namespace oceanbase
 {
 namespace sql
@@ -283,7 +286,6 @@ int ObRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
 {
   int ret = OB_SUCCESS;
   if (copier.deep_copy_attributes()) {
-    ObObj param;
     if (OB_ISNULL(inner_alloc_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(ob_write_string(*inner_alloc_,
@@ -334,7 +336,7 @@ int ObRawExpr::get_type_and_length(char *buf, const int64_t buf_len, int64_t &po
 {
   int ret = OB_SUCCESS;
   if (EXPLAIN_EXTENDED == type || EXPLAIN_EXTENDED_NOADDR == type) {
-    const char* type_str = common::inner_obj_type_str(get_data_type());
+    const char* type_str = common::inner_sql_value_type_to_string(get_data_type());
     if (nullptr == type_str || strlen(type_str) > INT32_MAX) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("some error happend");
@@ -566,8 +568,8 @@ bool ObRawExpr::is_multivalue_index_column_expr() const
       OB_NOT_NULL(param_asis = get_param_expr(8)) && param_asis->is_const_raw_expr() &&
       OB_NOT_NULL(param_multi = get_param_expr(12)) && param_multi->is_const_raw_expr())
   {
-    common::ObObj value_asis = (static_cast<const ObConstRawExpr *>(param_asis))->get_value();
-    common::ObObj value_multi = (static_cast<const ObConstRawExpr *>(param_multi))->get_value();
+    const Datum &value_asis = static_cast<const ObConstRawExpr *>(param_asis)->get_value_datum();
+    const Datum &value_multi = static_cast<const ObConstRawExpr *>(param_multi)->get_value_datum();
     bool_ret = value_asis.get_int() == 1 && value_multi.get_int() == 0;
   }
   return bool_ret;
@@ -616,7 +618,7 @@ bool ObRawExpr::is_multivalue_define_json_expr() const
       multi_expr->is_const_expr()) {
     const ObConstRawExpr *const_expr1 = static_cast<const ObConstRawExpr*>(asis_expr);
     const ObConstRawExpr *const_expr2 = static_cast<const ObConstRawExpr*>(multi_expr);
-    b_ret = (const_expr1->get_value().get_int() == 1 && const_expr2->get_value().get_int() == 0);
+    b_ret = (const_expr1->get_value_datum().get_int() == 1 && const_expr2->get_value_datum().get_int() == 0);
   }
 
   return b_ret;
@@ -707,8 +709,8 @@ int ObRawExpr::get_geo_cast_result_type(ObGeoType& geo_type) const
     ret = OB_ERR_UNEXPECTED;
   } else {
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(get_param_expr(1));
-    ObObj value = const_expr->get_value();
-    if (!value.is_int()) {
+    const Datum &value = const_expr->get_value_datum();
+    if (!const_expr->get_value_meta().is_int()) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       ParseNode parse_node;
@@ -1056,6 +1058,16 @@ bool ObRawExpr::need_attr_expr() const
 }
 
 ////////////////////////////////////////////////////////////////
+namespace {
+bool same_raw_constant(const DatumValue &left, const DatumValue &right)
+{
+  DatumValue l = left, r = right;
+  if (l.meta_.is_string_type()) { l.meta_.set_collation_type(CS_TYPE_BINARY); }
+  if (r.meta_.is_string_type()) { r.meta_.set_collation_type(CS_TYPE_BINARY); }
+  bool equal = false;
+  return OB_SUCCESS == datum_values_equal(l, r, equal) && equal;
+}
+} // namespace
 int ObConstRawExpr::assign(const ObRawExpr &other)
 {
   int ret = OB_SUCCESS;
@@ -1066,9 +1078,11 @@ int ObConstRawExpr::assign(const ObRawExpr &other)
     } else if (OB_FAIL(ObTerminalRawExpr::assign(other))) {
     } else {
       const ObConstRawExpr &const_expr = static_cast<const ObConstRawExpr &>(other);
-      value_ = const_expr.get_value();
+      value_ = const_expr.get_value_datum();
+      value_meta_ = const_expr.get_value_meta();
       literal_prefix_ = const_expr.get_literal_prefix();
-      param_ = const_expr.get_param();
+      param_ = const_expr.get_bound_param_datum();
+      param_meta_ = const_expr.get_bound_param_value_meta();
       obj_meta_ = const_expr.get_expr_obj_meta();
       is_date_unit_ = const_expr.is_date_unit_;
       is_literal_bool_ = const_expr.is_literal_bool();
@@ -1084,16 +1098,18 @@ int ObConstRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTerminalRawExpr::inner_deep_copy(copier))) {
   } else if (copier.deep_copy_attributes()) {
-    ObObj tmp_value;
-    ObObj tmp_param;
+    Datum tmp_value;
+    Datum tmp_param;
+    ObString tmp_prefix;
     if (OB_ISNULL(inner_alloc_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(deep_copy_obj(*inner_alloc_, value_, tmp_value))) {
-    } else if (OB_FAIL(deep_copy_obj(*inner_alloc_, param_, tmp_param))) {
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, literal_prefix_, literal_prefix_))) {
+    } else if (OB_FAIL(DatumParameterCodec::clone_raw_constant_value(value_, value_meta_, *inner_alloc_, tmp_value))) {
+    } else if (OB_FAIL(DatumParameterCodec::clone_raw_constant_value(param_, param_meta_, *inner_alloc_, tmp_param))) {
+    } else if (OB_FAIL(ob_write_string(*inner_alloc_, literal_prefix_, tmp_prefix))) {
     } else {
       value_ = tmp_value;
       param_ = tmp_param;
+      literal_prefix_ = tmp_prefix;
     }
   }
   return ret;
@@ -1108,17 +1124,167 @@ int ObConstRawExpr::replace_expr(const ObIArray<ObRawExpr *> &other_exprs,
   return ret;
 }
 
-void ObConstRawExpr::set_value(const ObObj &val)
+int ObConstRawExpr::set_value_borrowed(const Datum &value, const SqlTypeMeta &meta)
 {
-  set_meta_type(val.get_meta()); // let const raw expr's type and value type be the same
-  set_expr_obj_meta(val.get_meta());
-  value_ = val;
-  param_ = val;
+  int ret = OB_SUCCESS;
+  alignas(8) char scratch[64];
+  ObDatum view;
+  // Copy before publication: callers may borrow this node's own value/meta.
+  const Datum candidate = value;
+  const SqlTypeMeta candidate_meta = meta;
+  if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(
+          candidate, candidate_meta, view, scratch, sizeof(scratch)))) {
+  } else {
+    value_ = candidate;
+    value_meta_ = candidate_meta;
+    param_ = candidate;
+    param_meta_ = candidate_meta;
+    set_meta_type(candidate_meta);
+    set_expr_obj_meta(candidate_meta);
+  }
+  return ret;
 }
 
-void ObConstRawExpr::set_obj_param(const ObObj &param)
+int ObConstRawExpr::set_bound_param_borrowed(const Datum &value, const SqlTypeMeta &meta)
 {
-  param_ = param;
+  int ret = OB_SUCCESS;
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const Datum candidate = value;
+  const SqlTypeMeta candidate_meta = meta;
+  if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(
+          candidate, candidate_meta, view, scratch, sizeof(scratch)))) {
+  } else {
+    param_ = candidate;
+    param_meta_ = candidate_meta;
+  }
+  return ret;
+}
+
+int ObConstRawExpr::replace_value_borrowed(const Datum &value, const SqlTypeMeta &meta)
+{
+  int ret = OB_SUCCESS;
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const Datum candidate = value;
+  const SqlTypeMeta candidate_meta = meta;
+  if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(
+          candidate, candidate_meta, view, scratch, sizeof(scratch)))) {
+  } else {
+    value_ = candidate;
+    value_meta_ = candidate_meta;
+  }
+  return ret;
+}
+
+int ObConstRawExpr::set_value_borrowed(const DatumValue &source)
+{
+  int ret = OB_SUCCESS;
+  Datum candidate;
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(source.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(physical, source.meta_, candidate))) {
+  } else { ret = set_value_borrowed(candidate, source.meta_); }
+  return ret;
+}
+
+int ObConstRawExpr::set_value_borrowed(const DatumParameter &source)
+{
+  return set_value_borrowed(source.value_view());
+}
+
+int ObConstRawExpr::set_bound_param_borrowed(const DatumValue &source)
+{
+  int ret = OB_SUCCESS;
+  Datum candidate;
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(source.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(physical, source.meta_, candidate))) {
+  } else { ret = set_bound_param_borrowed(candidate, source.meta_); }
+  return ret;
+}
+
+int ObConstRawExpr::set_bound_param_borrowed(const DatumParameter &source)
+{
+  return set_bound_param_borrowed(source.value_view());
+}
+
+int ObConstRawExpr::replace_value_borrowed(const DatumValue &source)
+{
+  int ret = OB_SUCCESS;
+  Datum candidate;
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(source.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(physical, source.meta_, candidate))) {
+  } else { ret = replace_value_borrowed(candidate, source.meta_); }
+  return ret;
+}
+
+int ObConstRawExpr::replace_value_borrowed(const DatumParameter &source)
+{
+  return replace_value_borrowed(source.value_view());
+}
+
+int ObConstRawExpr::export_value(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  int ret = OB_SUCCESS;
+  DatumValue candidate;
+  ObDatum physical;
+  if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(value_, value_meta_,
+          physical, scratch, capacity))) {
+  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, value_meta_))) {
+  } else {
+    output = candidate;
+  }
+  return ret;
+}
+
+int ObConstRawExpr::export_bound_param(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  int ret = OB_SUCCESS;
+  DatumValue candidate;
+  ObDatum physical;
+  if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(param_, param_meta_,
+          physical, scratch, capacity))) {
+  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, param_meta_))) {
+  } else {
+    output = candidate;
+  }
+  return ret;
+}
+
+int ObConstRawExpr::set_questionmark_index(int64_t index)
+{
+  Datum candidate;
+  candidate.set_int(index);
+  SqlTypeMeta meta = value_meta_;
+  meta.set_unknown();
+  return replace_value_borrowed(candidate, meta);
+}
+
+int ObConstRawExpr::get_questionmark_index(int64_t &index) const
+{
+  int ret = OB_SUCCESS;
+  if (!value_meta_.is_unknown() || value_.is_null()) {
+    ret = OB_OBJ_TYPE_ERROR;
+  } else if (!value_.is_present() || value_.length() != 0
+      || value_.reference_flags() != Datum::NoReferenceFlags) {
+    ret = OB_INVALID_ARGUMENT;
+  } else { index = value_.get_int(); }
+  return ret;
+}
+
+int64_t ObConstRawExpr::get_questionmark_index() const
+{
+  int64_t index = OB_INVALID_INDEX;
+  const int ret = get_questionmark_index(index);
+  // All producers are checked. This overload is only for a known question mark;
+  // callers accepting another kind use the fallible overload above.
+  OB_ASSERT(ret == OB_SUCCESS);
+  return index;
 }
 
 void ObConstRawExpr::set_literal_prefix(const ObString &name)
@@ -1130,6 +1296,7 @@ void ObConstRawExpr::reset()
 {
   ObRawExpr::reset();
   value_.reset();
+  value_meta_.reset();
   literal_prefix_.reset();
   is_literal_bool_ = false;
   extra_.array_param_group_id_ = -1;
@@ -1147,7 +1314,13 @@ void ObConstRawExpr::set_is_date_unit()
 uint64_t ObConstRawExpr::hash_internal(uint64_t seed) const
 {
   uint64_t hash_val = seed;
-  value_.hash(hash_val, seed);
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int export_ret = export_value(view, scratch, sizeof(scratch));
+  // Checked writers guarantee physical shape. This failure is not the old
+  // semantic helper's unsupported-type result, and must not produce a hash.
+  OB_ASSERT(export_ret == OB_SUCCESS);
+  hash_datum_value(view, seed, hash_val);
   if (T_QUESTIONMARK == get_expr_type() && is_dynamic_eval_questionmark()) {
     if (OB_UNLIKELY(!result_type_.is_decimal_int() || !orig_questionmark_type_.is_number())) {
       int ret = OB_NOT_SUPPORTED;
@@ -1160,8 +1333,8 @@ uint64_t ObConstRawExpr::hash_internal(uint64_t seed) const
       // value determined by precision & scale
       ObPrecision prec = result_type_.get_precision();
       ObScale scale = result_type_.get_scale();
-      hash_val = ObMurmurHash::hash(&prec, sizeof(ObPrecision), hash_val);
-      hash_val = ObMurmurHash::hash(&scale, sizeof(ObScale), hash_val);
+      hash_val = murmurhash(&prec, sizeof(ObPrecision), hash_val);
+      hash_val = murmurhash(&scale, sizeof(ObScale), hash_val);
     }
   }
   return hash_val;
@@ -1184,8 +1357,8 @@ bool ObConstRawExpr::inner_same_as(
     if (check_context != NULL) {
       int64_t l_param_idx = -1, r_param_idx = -1;
       int &ret = check_context->err_code_;
-      if (OB_FAIL(get_value().get_unknown(l_param_idx))) {
-      } else if (OB_FAIL(r_expr.get_value().get_unknown(r_param_idx))) {
+      if (OB_FAIL(get_questionmark_index(l_param_idx))) {
+      } else if (OB_FAIL(r_expr.get_questionmark_index(r_param_idx))) {
       } else if (l_param_idx == r_param_idx) {
         bool_ret = get_result_type() == r_expr.get_result_type();
       }
@@ -1206,7 +1379,7 @@ bool ObConstRawExpr::inner_same_as(
           const ObConstRawExpr *c_expr = static_cast<const ObConstRawExpr *>(&expr);
           int64_t param_idx = -1;
           int &ret = check_context->err_code_;
-          if (OB_FAIL(c_expr->get_value().get_unknown(param_idx))) {
+          if (OB_FAIL(c_expr->get_questionmark_index(param_idx))) {
           } else if (OB_FAIL(check_context->param_expr_.push_back(
               ObExprEqualCheckContext::ParamExprPair(param_idx, this)))) {
           } else { }
@@ -1215,10 +1388,19 @@ bool ObConstRawExpr::inner_same_as(
     }
   } else {
     const ObConstRawExpr *c_expr = static_cast<const ObConstRawExpr *>(&expr);
-    if (get_value().get_meta() != c_expr->get_value().get_meta()) {
+    if (get_value_meta() != c_expr->get_value_meta()) {
       bool_ret = false;
-    } else if (get_value().is_equal(c_expr->get_value(), CS_TYPE_BINARY)) {
-      bool_ret = true;
+    } else {
+      int ret = OB_SUCCESS;
+      alignas(8) char left_scratch[64], right_scratch[64];
+      DatumValue left, right;
+      if (OB_FAIL(export_value(left, left_scratch, sizeof(left_scratch)))) {
+      } else if (OB_FAIL(c_expr->export_value(right, right_scratch, sizeof(right_scratch)))) {
+      } else { bool_ret = same_raw_constant(left, right); }
+      if (ret != OB_SUCCESS) {
+        if (check_context != nullptr) { check_context->err_code_ = ret; }
+        else { OB_ASSERT(ret == OB_SUCCESS); }
+      }
     }
   }
   return bool_ret;
@@ -1226,9 +1408,13 @@ bool ObConstRawExpr::inner_same_as(
 
 void ObConstRawExpr::inner_calc_hash()
 {
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int export_ret = export_value(view, scratch, sizeof(scratch));
+  OB_ASSERT(export_ret == OB_SUCCESS);
   expr_hash_ = common::do_hash(get_expr_type(), expr_hash_);
-  expr_hash_ = common::do_hash(get_value().get_meta(), expr_hash_);
-  expr_hash_ = common::do_hash(get_value(), expr_hash_);
+  expr_hash_ = common::do_hash(get_value_meta(), expr_hash_);
+  hash_datum_value(view, expr_hash_, expr_hash_);
 }
 
 int ObConstRawExpr::get_expr_dep_session_vars(const ObBasicSessionInfo *session,
@@ -1264,23 +1450,33 @@ bool ObExprEqualCheckContext::compare_const(const ObConstRawExpr &left,
 {
   int &ret = err_code_;
   bool result = false;
-  if (left.get_result_type() == right.get_result_type()) {
-    if (ignore_param_ && (left.get_value().is_unknown() || right.get_value().is_unknown())) {
+  if (OB_SUCC(ret) && left.get_result_type() == right.get_result_type()) {
+    if (ignore_param_ && (left.get_value_meta().is_unknown() || right.get_value_meta().is_unknown())) {
       result = true;
     } else {
-      const ObObj &this_value = left.get_value().is_unknown() ?
-          left.get_param() : left.get_value();
-      const ObObj &other_value = right.get_value().is_unknown() ?
-          right.get_param() : right.get_value();
-      result = this_value.is_equal(other_value, CS_TYPE_BINARY);
+      alignas(8) char left_scratch[64], right_scratch[64];
+      DatumValue this_value, other_value;
+      ret = left.get_value_meta().is_unknown()
+          ? left.export_bound_param(this_value, left_scratch, sizeof(left_scratch))
+          : left.export_value(this_value, left_scratch, sizeof(left_scratch));
+      if (OB_SUCC(ret)) {
+        ret = right.get_value_meta().is_unknown()
+            ? right.export_bound_param(other_value, right_scratch, sizeof(right_scratch))
+            : right.export_value(other_value, right_scratch, sizeof(right_scratch));
+      }
+      if (OB_SUCC(ret)) { result = same_raw_constant(this_value, other_value); }
     }
   }
-  if (OB_SUCC(ret) && result && left.get_value().is_unknown()) {
-    if (OB_FAIL(add_param_pair(left.get_value().get_unknown(), NULL))) {
+  if (OB_SUCC(ret) && result && left.get_value_meta().is_unknown()) {
+    int64_t index = 0;
+    if (OB_FAIL(left.get_questionmark_index(index))) {
+    } else if (OB_FAIL(add_param_pair(index, NULL))) {
     }
   }
-  if (OB_SUCC(ret) && result && right.get_value().is_unknown()) {
-    if (OB_FAIL(add_param_pair(right.get_value().get_unknown(), NULL))) {
+  if (OB_SUCC(ret) && result && right.get_value_meta().is_unknown()) {
+    int64_t index = 0;
+    if (OB_FAIL(right.get_questionmark_index(index))) {
+    } else if (OB_FAIL(add_param_pair(index, NULL))) {
     }
   }
   return result;
@@ -1298,22 +1494,20 @@ int ObConstRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t 
   if (EXPLAIN_HINT_FORMAT == type) {
     if (OB_FAIL(BUF_PRINTF("?"))) {
     }
-  } else if (get_value().is_unknown()) { // for explain special handling QuestionMark as ?, other places print as $IntNum
-    if (OB_FAIL(get_param().print_sql_literal(buf, buf_len, pos))) {
-      if (OB_ERR_NULL_VALUE == ret) {
-        ret = OB_SUCCESS; //ignore mull time zone info
-      }
-    } else if (EXPLAIN_EXTENDED != type) {
-      /* do nothing */
-    } else if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
-    }
   } else {
-    if (OB_FAIL(get_value().print_sql_literal(buf, buf_len, pos))) {
-      if (OB_ERR_NULL_VALUE == ret) {
-        //ignore mull time zone info
-        ret = OB_SUCCESS;
+    alignas(8) char scratch[64];
+    DatumValue view;
+    const bool questionmark = get_value_meta().is_unknown();
+    ret = questionmark ? export_bound_param(view, scratch, sizeof(scratch))
+                      : export_value(view, scratch, sizeof(scratch));
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(view.print_sql_literal(buf, buf_len, pos))) {
+        if (OB_ERR_NULL_VALUE == ret) { ret = OB_SUCCESS; } // original NULL timezone behavior
+      } else if (questionmark && EXPLAIN_EXTENDED == type) {
+        if (OB_FAIL(BUF_PRINTF("("))) {
+        } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
+        } else if (OB_FAIL(BUF_PRINTF(")"))) {
+        }
       }
     }
   }
@@ -1323,6 +1517,10 @@ int ObConstRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t 
 int64_t ObConstRawExpr::to_string(char* buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
+  alignas(8) char value_scratch[64], param_scratch[64];
+  DatumValue value, param;
+  const int value_ret = export_value(value, value_scratch, sizeof(value_scratch));
+  const int param_ret = export_bound_param(param, param_scratch, sizeof(param_scratch));
   J_OBJ_START();
 #ifndef NDEBUG
   J_KV(KP(this));
@@ -1332,11 +1530,16 @@ int64_t ObConstRawExpr::to_string(char* buf, const int64_t buf_len) const
       N_RESULT_TYPE, result_type_,
       N_EXPR_INFO, info_,
       N_REL_ID, rel_ids_,
-      N_VALUE, value_,
+      N_VALUE, value,
       "is_dynamic_questionmark", is_dynamic_eval_questionmark_,
-      K_(param),
+      "param", param,
       K_(obj_meta),
       K_(expr_hash));
+  if (value_ret != OB_SUCCESS || param_ret != OB_SUCCESS) {
+    J_COMMA();
+    J_KV("value_export_error", value_ret, "param_export_error", param_ret,
+         K_(value_meta), K_(param_meta));
+  }
   if (!literal_prefix_.empty()) {
     J_COMMA();
     J_KV(K_(literal_prefix));
@@ -1450,7 +1653,11 @@ void ObUserVarIdentRawExpr::reset()
 
 uint64_t ObUserVarIdentRawExpr::hash_internal(uint64_t seed) const
 {
-  value_.hash(seed, seed);
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int export_ret = export_value(view, scratch, sizeof(scratch));
+  OB_ASSERT(export_ret == OB_SUCCESS);
+  hash_datum_value(view, seed, seed);
   seed = common::do_hash(is_contain_assign_, seed);
   return seed;
 }
@@ -1459,13 +1666,23 @@ bool ObUserVarIdentRawExpr::inner_same_as(const ObRawExpr &expr,
                                           ObExprEqualCheckContext *check_context) const
 {
   bool bool_ret = false;
-  UNUSED(check_context);
   if (get_expr_type() == expr.get_expr_type()) {
     const ObUserVarIdentRawExpr *user_var_expr = static_cast<const ObUserVarIdentRawExpr *>(&expr);
-    if (get_value().get_meta() != user_var_expr->get_value().get_meta()) {
+    if (get_value_meta() != user_var_expr->get_value_meta()) {
       bool_ret = false;
-    } else if (get_value().is_equal(user_var_expr->get_value(), CS_TYPE_BINARY)) {
-      bool_ret = (get_is_contain_assign() == user_var_expr->get_is_contain_assign());
+    } else {
+      int ret = OB_SUCCESS;
+      alignas(8) char left_scratch[64], right_scratch[64];
+      DatumValue left, right;
+      if (OB_FAIL(export_value(left, left_scratch, sizeof(left_scratch)))) {
+      } else if (OB_FAIL(user_var_expr->export_value(right, right_scratch, sizeof(right_scratch)))) {
+      } else if (same_raw_constant(left, right)) {
+        bool_ret = (get_is_contain_assign() == user_var_expr->get_is_contain_assign());
+      }
+      if (ret != OB_SUCCESS) {
+        if (check_context != nullptr) { check_context->err_code_ = ret; }
+        else { OB_ASSERT(ret == OB_SUCCESS); }
+      }
     }
   }
   return bool_ret;
@@ -1473,18 +1690,25 @@ bool ObUserVarIdentRawExpr::inner_same_as(const ObRawExpr &expr,
 
 void ObUserVarIdentRawExpr::inner_calc_hash()
 {
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int export_ret = export_value(view, scratch, sizeof(scratch));
+  OB_ASSERT(export_ret == OB_SUCCESS);
   expr_hash_ = common::do_hash(get_expr_type(), expr_hash_);
-  expr_hash_ = common::do_hash(get_value().get_meta(), expr_hash_);
-  expr_hash_ = common::do_hash(get_value(), expr_hash_);
+  expr_hash_ = common::do_hash(get_value_meta(), expr_hash_);
+  hash_datum_value(view, expr_hash_, expr_hash_);
   expr_hash_ = common::do_hash(get_is_contain_assign(), expr_hash_);
 }
 
-bool ObUserVarIdentRawExpr::is_same_variable(const ObObj &obj) const
+bool ObUserVarIdentRawExpr::is_same_variable(const DatumValue &obj) const
 {
   bool bool_ret = false;
-  if (get_value().get_meta() == obj.get_meta() &&
-      get_value().is_equal(obj, CS_TYPE_BINARY)) {
-    bool_ret = true;
+  if (get_value_meta() == obj.get_meta()) {
+    alignas(8) char scratch[64];
+    DatumValue view;
+    const int export_ret = export_value(view, scratch, sizeof(scratch));
+    OB_ASSERT(export_ret == OB_SUCCESS);
+    bool_ret = same_raw_constant(view, obj);
   }
   return bool_ret;
 }
@@ -1497,6 +1721,9 @@ int ObUserVarIdentRawExpr::do_visit(ObRawExprVisitor &visitor)
 int64_t ObUserVarIdentRawExpr::to_string(char* buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
+  alignas(8) char scratch[64];
+  DatumValue value;
+  const int export_ret = export_value(value, scratch, sizeof(scratch));
   J_OBJ_START();
 #ifndef NDEBUG
   J_KV(KP(this));
@@ -1506,10 +1733,14 @@ int64_t ObUserVarIdentRawExpr::to_string(char* buf, const int64_t buf_len) const
        N_RESULT_TYPE, result_type_,
        N_EXPR_INFO, info_,
        N_REL_ID, rel_ids_,
-       N_VALUE, value_,
+       N_VALUE, value,
        "is_contain_assign", is_contain_assign_,
        "query_has_udf", query_has_udf_,
        K_(expr_hash));
+  if (export_ret != OB_SUCCESS) {
+    J_COMMA();
+    J_KV("value_export_error", export_ret, K_(value_meta));
+  }
   J_OBJ_END();
   return pos;
 }
@@ -1705,32 +1936,38 @@ int ObQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
   return ret;
 }
 
-void ObExecParamRawExpr::set_param_index(int64_t index)
+int ObExecParamRawExpr::set_param_index(int64_t index)
 {
-  ObObjParam val;
-  val.set_unknown(index);
-  val.set_param_meta();
-  set_value(val);
-  set_result_type(outer_expr_->get_result_type());
+  int ret = OB_SUCCESS;
+  Datum value;
+  value.set_int(index);
+  SqlTypeMeta meta;
+  meta.set_unknown();
+  CK (inner_alloc_ != nullptr && outer_expr_ != nullptr);
+  OZ (set_value_borrowed(value, meta));
+  if (OB_SUCC(ret)) { set_result_type(outer_expr_->get_result_type()); }
+  return ret;
 }
 
-void ObExecParamRawExpr::set_param_index(ObQueryCtx &query_ctx)
+int ObExecParamRawExpr::set_param_index(ObQueryCtx &query_ctx)
 {
-  ObObjParam val;
-  val.set_unknown(query_ctx.question_marks_count_);
-  val.set_param_meta();
-  set_value(val);
-  exec_param_idx_ = query_ctx.question_marks_count_ - query_ctx.ori_question_marks_count_;
-  ++query_ctx.question_marks_count_;
+  int ret = OB_SUCCESS;
+  Datum value;
+  value.set_int(query_ctx.question_marks_count_);
+  SqlTypeMeta meta;
+  meta.set_unknown();
+  CK (inner_alloc_ != nullptr);
+  OZ (set_value_borrowed(value, meta));
+  if (OB_SUCC(ret)) {
+    exec_param_idx_ = query_ctx.question_marks_count_ - query_ctx.ori_question_marks_count_;
+    ++query_ctx.question_marks_count_;
+  }
+  return ret;
 }
 
 int64_t ObExecParamRawExpr::get_param_index() const
 {
-  int64_t param_index = OB_INVALID_INDEX;
-  if (OB_UNLIKELY(get_value().is_unknown())) {
-    param_index = get_value().get_unknown();
-  }
-  return param_index;
+  return get_value_meta().is_unknown() ? get_questionmark_index() : OB_INVALID_INDEX;
 }
 
 int ObExecParamRawExpr::assign(const ObRawExpr &other)
@@ -3823,7 +4060,7 @@ bool ObSysFunRawExpr::inner_json_expr_same_as(
       r_column_expr = r_param_expr;
       r_param_expr = nullptr;
       if (l_param_expr->is_const_expr()) {
-        ObString path_str = (static_cast<const ObConstRawExpr*>(l_param_expr))->get_value().get_string();
+        ObString path_str = (static_cast<const ObConstRawExpr*>(l_param_expr))->get_value_datum().get_string();
         bool_ret = path_str.empty();
       }
     } else if (r_param_expr->is_wrappered_json_extract()) {
@@ -3892,9 +4129,9 @@ bool ObSysFunRawExpr::inner_same_as(
               const ObConstRawExpr* val2 =
                 static_cast<const ObConstRawExpr*>(s_expr->get_param_expr(i));
               ObRawExprResType* res_type1 =
-                reinterpret_cast<ObRawExprResType*>(val1->get_value().get_int());
+                reinterpret_cast<ObRawExprResType*>(val1->get_value_datum().get_int());
               ObRawExprResType* res_type2 =
-                reinterpret_cast<ObRawExprResType*>(val2->get_value().get_int());
+                reinterpret_cast<ObRawExprResType*>(val2->get_value_datum().get_int());
               if (NULL == res_type1 || NULL == res_type2 || *res_type1 != *res_type2) {
                 bool_ret = false;
               }
@@ -3963,7 +4200,7 @@ void ObSysFunRawExpr::inner_calc_hash()
     } else if (T_OP_GET_PACKAGE_VAR == get_expr_type() && 2 == i) {
       if (T_INT == get_param_expr(i)->get_expr_type()) {
         const ObConstRawExpr* val = static_cast<const ObConstRawExpr*>(get_param_expr(i));
-        ObRawExprResType* res_type = reinterpret_cast<ObRawExprResType*>(val->get_value().get_int());
+        ObRawExprResType* res_type = reinterpret_cast<ObRawExprResType*>(val->get_value_datum().get_int());
         if (NULL != res_type) {
           expr_hash_ = common::do_hash(*res_type, expr_hash_);
         }
@@ -4194,18 +4431,18 @@ int ObSysFunRawExpr::get_cast_type_name(char *buf, int64_t buf_len, int64_t &pos
     ret = OB_ERR_UNEXPECTED;
   } else {
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(get_param_expr(1));
-    ObObj value = const_expr->get_value();
-    if (!value.is_int()) {
+    const Datum &value = const_expr->get_value_datum();
+    if (!const_expr->get_value_meta().is_int()) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       ParseNode node;
       node.value_ = value.get_int();
-      ObObjType dest_type = static_cast<ObObjType>(node.int16_values_[0]);
+      SqlValueType dest_type = static_cast<SqlValueType>(node.int16_values_[0]);
       ObCollationType coll_type = static_cast<ObCollationType>(node.int16_values_[1]);
       int32_t length = 0;
       int16_t precision = 0;
       int16_t scale = 0;
-      const char *type_str = inner_obj_type_str(dest_type);
+      const char *type_str = inner_sql_value_type_to_string(dest_type);
       if (ob_is_string_tc(dest_type)) {
         length = node.int32_values_[1] < 0 ?
             static_cast<int32_t>(OB_MAX_VARCHAR_LENGTH) : node.int32_values_[1];
@@ -4239,16 +4476,16 @@ int ObSysFunRawExpr::get_column_conv_name(char *buf, int64_t buf_len, int64_t &p
     ret = OB_ERR_UNEXPECTED;
   } else {
     const ObConstRawExpr *type_expr = static_cast<const ObConstRawExpr*>(get_param_expr(0));
-    ObObjType type = static_cast<ObObjType>(type_expr->get_value().get_int());
+    SqlValueType type = static_cast<SqlValueType>(type_expr->get_value_datum().get_int());
     const ObConstRawExpr *collation_expr = static_cast<const ObConstRawExpr*>(get_param_expr(1));
-    common::ObCollationType cs_type = static_cast<common::ObCollationType>(collation_expr->get_value().get_int());
+    common::ObCollationType cs_type = static_cast<common::ObCollationType>(collation_expr->get_value_datum().get_int());
     const ObConstRawExpr *accuracy_expr = static_cast<const ObConstRawExpr*>(get_param_expr(2));
-    int64_t accuray_value = accuracy_expr->get_value().get_int();
+    int64_t accuray_value = accuracy_expr->get_value_datum().get_int();
     ObAccuracy accuracy;
     accuracy.set_accuracy(accuray_value);
     const ObConstRawExpr *bool_expr = static_cast<const ObConstRawExpr*>(get_param_expr(3));
-    bool is_nullable = bool_expr->get_value().get_bool();
-    const char *type_str = inner_obj_type_str(type);
+    bool is_nullable = bool_expr->get_value_datum().get_bool();
+    const char *type_str = inner_sql_value_type_to_string(type);
     if (ob_is_string_type(type)) {
       if (OB_FAIL(BUF_PRINTF("%s,%s,length:%d,%s,", type_str, ObCharset::collation_name(cs_type),
                              accuracy.get_length(), is_nullable ? "NULL" : "NOT NULL"))) {
@@ -5716,8 +5953,8 @@ bool ObExprParamCheckContext::compare_const(const ObConstRawExpr &left, const Ob
     } else if (is_left_calc_item && is_right_calc_item) {
       const ObRawExpr *left_param = NULL;
       const ObRawExpr *right_param = NULL;
-      if (OB_FAIL(get_calc_expr(left.get_value().get_unknown(), left_param))) {
-      } else if (OB_FAIL(get_calc_expr(right.get_value().get_unknown(), right_param))) {
+      if (OB_FAIL(get_calc_expr(left.get_questionmark_index(), left_param))) {
+      } else if (OB_FAIL(get_calc_expr(right.get_questionmark_index(), right_param))) {
       } else if (OB_ISNULL(left_param) || OB_ISNULL(right_param)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -5727,8 +5964,8 @@ bool ObExprParamCheckContext::compare_const(const ObConstRawExpr &left, const Ob
         bret = false;
     } else {
       ObPCParamEqualInfo info;
-      const int64_t l_param_idx = left.get_value().get_unknown();
-      const int64_t r_param_idx = right.get_value().get_unknown();
+      const int64_t l_param_idx = left.get_questionmark_index();
+      const int64_t r_param_idx = right.get_questionmark_index();
       if (l_param_idx == r_param_idx) {
         bret = true;
       } else if (NULL != equal_param_constraints_) {
@@ -5746,7 +5983,11 @@ bool ObExprParamCheckContext::compare_const(const ObConstRawExpr &left, const Ob
   } else if (left.is_param_expr() || right.is_param_expr()) {
     /*do nothing*/
   } else {
-    bret = left.get_value().is_equal(right.get_value(), CS_TYPE_BINARY);
+    alignas(8) char left_scratch[64], right_scratch[64];
+    DatumValue left_value, right_value;
+    if (OB_FAIL(left.export_value(left_value, left_scratch, sizeof(left_scratch)))) {
+    } else if (OB_FAIL(right.export_value(right_value, right_scratch, sizeof(right_scratch)))) {
+    } else { bret = same_raw_constant(left_value, right_value); }
   }
   return bret;
 }
@@ -5762,7 +6003,7 @@ int ObExprParamCheckContext::is_pre_calc_item(const ObConstRawExpr &const_expr, 
   } else if (const_expr.has_flag(IS_DYNAMIC_PARAM)) {
     is_calc = true;
   } else if (calc_count > 0) {
-    int64_t q_idx = const_expr.get_value().get_unknown();
+    int64_t q_idx = const_expr.get_questionmark_index();
     int64_t min_calc_index = calculable_items_->at(0).hidden_idx_;
     if (OB_UNLIKELY(q_idx < 0 || min_calc_index < 0)) {
       ret = OB_ERR_UNEXPECTED;

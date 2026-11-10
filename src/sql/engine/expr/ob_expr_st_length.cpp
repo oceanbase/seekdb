@@ -34,12 +34,12 @@ int ObExprSTLength::calc_result_typeN(ObExprResType &type, ObExprResType *types_
 {
   UNUSED(type_ctx);
   INIT_SUCC(ret);
-  ObObjType geo_tp = types_stack[0].get_type();
+  SqlValueType geo_tp = types_stack[0].get_type();
   if (!ob_is_geometry(geo_tp) && !ob_is_string_type(geo_tp) && !ob_is_null(geo_tp)) {
     types_stack[0].set_calc_type(ObVarcharType);
     types_stack[0].set_calc_collation_type(CS_TYPE_BINARY);
   } else if (param_num == 2) {
-    ObObjType unit_tp = types_stack[1].get_type();
+    SqlValueType unit_tp = types_stack[1].get_type();
     if (ob_is_string_type(unit_tp) || ob_is_null(unit_tp)) {
       // do nothing
     } else {
@@ -54,18 +54,18 @@ int ObExprSTLength::calc_result_typeN(ObExprResType &type, ObExprResType *types_
   return ret;
 }
 
-int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;
-  ObDatum *datum1 = nullptr;
+  Datum *datum1 = nullptr;
   ObExpr *arg1 = expr.args_[0];
-  ObObjType type1 = arg1->datum_meta_.type_;
+  SqlValueType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   double res_num = 0;
-  ObDatum *gis_unit = NULL;
+  Datum *gis_unit = NULL;
   if (ob_is_null(type1)) {
     is_null_res = true;
   } else if (OB_FAIL(temp_allocator.eval_arg(arg1, ctx, datum1))) {

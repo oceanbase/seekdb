@@ -67,7 +67,7 @@ int ObExprXor::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 int ObExprXor::eval_xor(const ObExpr &expr,
                         ObEvalCtx &ctx,
-                        ObDatum &expr_datum)
+                        Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr.args_)
@@ -75,7 +75,7 @@ int ObExprXor::eval_xor(const ObExpr &expr,
     ret = OB_INVALID_ARGUMENT;
   } else {
     // xor supports short-circuit, if there is null, directly return null
-    ObDatum *param = NULL;
+    Datum *param = NULL;
     bool found_null = false;
     bool cur_bool_v = false;
     if (OB_ISNULL(expr.args_[0])) {

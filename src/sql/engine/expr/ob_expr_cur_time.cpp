@@ -49,7 +49,7 @@ int ObExprUtcTimestamp::calc_result_type0(ObExprResType &type, ObExprTypeCtx &ty
 }
 
 int ObExprUtcTimestamp::eval_utc_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
@@ -113,7 +113,7 @@ int ObExprUtcTime::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
 }
 
 int ObExprUtcTime::eval_utc_time(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
@@ -165,7 +165,7 @@ int ObExprUtcDate::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
 }
 
 int ObExprUtcDate::eval_utc_date(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
@@ -217,7 +217,7 @@ int ObExprCurTimestamp::calc_result_type0(ObExprResType &type, ObExprTypeCtx &ty
 }
 
 int ObExprCurTimestamp::eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())
@@ -285,7 +285,7 @@ int ObExprSysdate::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
 }
 
 int ObExprSysdate::eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
@@ -361,7 +361,7 @@ int ObExprCurDate::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
 }
 
 int ObExprCurDate::eval_cur_date(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
@@ -423,7 +423,7 @@ int ObExprCurTime::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
 }
 
 int ObExprCurTime::eval_cur_time(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

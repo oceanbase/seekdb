@@ -29,7 +29,7 @@ public:
   virtual ~ObExprInstr();
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                ObExpr &rt_expr) const;
-  static int calc_mysql_instr_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_mysql_instr_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprInstr);
 };

@@ -37,46 +37,6 @@ ObExprConcat::~ObExprConcat()
 }
 
 
-// non-text tc
-int ObExprConcat::calc(common::ObObj &result,
-                       const common::ObString obj1,
-                       const common::ObString obj2,
-                       ObIAllocator *allocator,
-                       const int64_t max_result_len)
-{
-  int ret = OB_SUCCESS;
-  int32_t this_len = obj1.length();
-  int32_t other_len = obj2.length();
-  ObString varchar;
-  int64_t max_length = max_result_len;
-  if (max_result_len <= 0) {
-    max_length = OB_MAX_VARCHAR_LENGTH;
-  }
-  if (OB_UNLIKELY(this_len + other_len > max_length)) {
-    //FIXME: The length of the merged string exceeds the maximum limit, the result is set to NULL
-    result.set_null();
-    ret = OB_SIZE_OVERFLOW;
-  } else if (OB_UNLIKELY(this_len <= 0)) {
-    result.set_varchar(obj2);
-  } else if (OB_UNLIKELY(other_len <= 0)) {
-    result.set_varchar(obj1);
-  } else if (OB_ISNULL(allocator)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    char *buf = NULL;
-    if (OB_ISNULL(buf = static_cast<char*>(allocator->alloc(this_len + other_len)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("alloc memory failed", K(ret), K(this_len + other_len));
-    } else {
-      MEMCPY(buf, obj1.ptr(), this_len);
-      MEMCPY(buf + this_len, obj2.ptr(), other_len);
-      varchar.assign(buf, this_len + other_len);
-      result.set_varchar(varchar);
-    }
-  }
-  return ret;
-}
-
 int ObExprConcat::calc_result_typeN(ObExprResType &type,
                                     ObExprResType *types,
                                     int64_t param_num,
@@ -138,7 +98,7 @@ int ObExprConcat::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &expr) const
   return ret;
 }
 
-static int eval_concat_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum, const int64_t &res_len)
+static int eval_concat_text(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum, const int64_t &res_len)
 {
   int ret = OB_SUCCESS;
   ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
@@ -149,7 +109,7 @@ static int eval_concat_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
-      ObDatum &v = expr.locate_param_datum(ctx, i);
+      Datum &v = expr.locate_param_datum(ctx, i);
       if (v.is_null()) {
       } else {
         ObDatumMeta input_meta = expr.args_[i]->datum_meta_;
@@ -182,24 +142,24 @@ static int eval_concat_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
   return ret;
 }
 
-int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum *first_not_null = NULL;
+    Datum *first_not_null = NULL;
     int64_t null_cnt = 0;
     int64_t res_len = 0;
     int64_t lob_data_byte_len = 0;
-    ObObjType res_type = expr.datum_meta_.type_;
+    SqlValueType res_type = expr.datum_meta_.type_;
     // get result length
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
-      ObDatum &v = expr.locate_param_datum(ctx, i);
+      Datum &v = expr.locate_param_datum(ctx, i);
       if (v.is_null()) {
         null_cnt += 1;
       } else {
         if (!ob_is_text_tc(expr.args_[i]->datum_meta_.type_)) {
-          res_len += v.len_;
+          res_len += v.length();
         } else {
           ObLobLocatorV2 locator(v.get_string(), expr.args_[i]->obj_meta_.has_lob_header());
           if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
@@ -238,10 +198,10 @@ int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       } else {
         int64_t off = 0;
         for (int64_t i = 0; i < expr.arg_cnt_; i++) {
-          ObDatum &v = expr.locate_param_datum(ctx, i);
+          Datum &v = expr.locate_param_datum(ctx, i);
           if (!v.is_null()) {
-            MEMCPY(buf + off, v.ptr_, v.len_);
-            off += v.len_;
+            MEMCPY(buf + off, v.get_string().ptr(), v.length());
+            off += v.length();
           }
         }
         OB_ASSERT(off == res_len);

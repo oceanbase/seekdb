@@ -119,6 +119,9 @@ protected:
   
 protected:
   static const uint64_t MAP_HASH_BUCKET_NUM = 1543L;
+  struct alignas(8) LegacyDirectInsertCell { char bytes_[64]; };
+  common::ObSEArray<common::ObDatum, 16> direct_insert_cells_;
+  common::ObSEArray<LegacyDirectInsertCell, 16> direct_insert_scratch_;
   common::ObArenaAllocator allocator_;
   bool is_all_partition_finished_;
   bool is_partitioned_table_;

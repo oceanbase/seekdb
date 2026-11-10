@@ -35,7 +35,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int exists_eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int exists_eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprExists);
 };

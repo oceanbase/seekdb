@@ -36,16 +36,11 @@ public:
   // Check result length with %max_result_len (if %max_result_len greater than zero)
   // or max length of varchar.
   // %result type is set to varchar.
-  static int calc(common::ObObj &result,
-                  const common::ObString obj1,
-                  const common::ObString obj2,
-                  common::ObIAllocator *allocator,
-                  const int64_t max_result_len);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_concat(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   DECLARE_SET_LOCAL_SESSION_VARS;
 

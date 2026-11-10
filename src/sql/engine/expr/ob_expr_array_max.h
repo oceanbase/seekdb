@@ -33,11 +33,11 @@ public:
 
   virtual int calc_result_type1(ObExprResType &type, ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_array_extreme(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool is_max = true);
+  static int eval_array_extreme(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, bool is_max = true);
   static int eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                     const ObBitVector &skip, const int64_t batch_size,
                                     bool is_max = true);
-  static int calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool is_max = true);
+  static int calc_extreme(ObIArrayType* src_arr, uint32_t &res_idx, bool is_max = true);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprArrayExtreme);
@@ -49,7 +49,7 @@ public:
   explicit ObExprArrayMax(common::ObIAllocator &alloc);
   virtual ~ObExprArrayMax();
 
-  static int eval_array_max(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_max(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_max_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                   const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
@@ -65,7 +65,7 @@ public:
   explicit ObExprArrayMin(common::ObIAllocator &alloc);
   virtual ~ObExprArrayMin();
 
-  static int eval_array_min(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_min(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_min_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                   const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

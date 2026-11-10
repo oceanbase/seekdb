@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_log.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_pow.h"
 #include "sql/session/ob_sql_session_info.h"
 
@@ -52,11 +53,11 @@ int ObExprLog::calc_result_type2(ObExprResType &type,
 }
 
 int calc_log_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *base = NULL;
-  ObDatum *x = NULL;
+  Datum *base = NULL;
+  Datum *x = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, base)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, x))) {
   } else if (base->is_null() || x->is_null()) {
@@ -77,11 +78,11 @@ int calc_log_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 int calc_log_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *base = NULL;
-  ObDatum *x = NULL;
+  Datum *base = NULL;
+  Datum *x = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, base)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, x))) {
   } else if (base->is_null() || x->is_null()) {
@@ -93,7 +94,7 @@ int calc_log_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(x_nmb.log(base_nmb, res_nmb, alloc_guard.get_allocator()))) {
     } else {
-      res_datum.set_number(res_nmb);
+      ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);
     }
   }
   return ret;
@@ -108,8 +109,8 @@ int ObExprLog::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   if (OB_UNLIKELY(2 != raw_expr.get_param_count())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObObjType base_res_type = rt_expr.args_[0]->datum_meta_.type_;
-    const ObObjType x_res_type = rt_expr.args_[1]->datum_meta_.type_;
+    const SqlValueType base_res_type = rt_expr.args_[0]->datum_meta_.type_;
+    const SqlValueType x_res_type = rt_expr.args_[1]->datum_meta_.type_;
     if (ObNumberType == base_res_type && ObNumberType == x_res_type) {
       rt_expr.eval_func_ = calc_log_expr_number;
     } else if (ObDoubleType == base_res_type && ObDoubleType == x_res_type) {

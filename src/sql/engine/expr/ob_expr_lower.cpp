@@ -154,7 +154,7 @@ int ObExprLowerUpper::cg_expr_common(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  ObObjType text_type = ObMaxType;
+  SqlValueType text_type = ObMaxType;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
@@ -206,10 +206,10 @@ static inline int32_t calc_common_inner(char *buf,
 }
 
 int ObExprLowerUpper::calc_common(const ObExpr &expr, ObEvalCtx &ctx,
-                                  ObDatum &expr_datum, bool lower, ObCollationType cs_type)
+                                  Datum &expr_datum, bool lower, ObCollationType cs_type)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text_datum = NULL;
+  Datum *text_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text_datum))) {
   } else if (text_datum->is_null()) {
     expr_datum.set_null();
@@ -304,12 +304,12 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprLowerUpper, raw_expr) {
   return ret;
 }
 
-int ObExprLower::calc_lower(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprLower::calc_lower(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return calc_common(expr, ctx, expr_datum, true, CS_TYPE_INVALID);
 }
 
-int ObExprUpper::calc_upper(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprUpper::calc_upper(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return calc_common(expr, ctx, expr_datum, false, CS_TYPE_INVALID);
 }

@@ -249,41 +249,52 @@ struct ObScalarPushdownAggregateSpec
   TO_STRING_KV(K_(kind), K_(slot), KP_(output));
 };
 
-// One current/staging pair is retained for every MIN/MAX output.  Capacity
-// grows geometrically and is reused across segments and reset_scan(); a failed
-// assignment leaves the slot byte-for-byte unchanged.
+// One native current/staging pair is retained for every MIN/MAX output.
+// Reference capacity grows geometrically and is reused across segments and
+// reset_scan(); inline values allocate no payload. A failed assignment leaves
+// the slot unchanged.
 struct ObOwnedAggregateDatum
 {
   ObOwnedAggregateDatum()
     : datum_(), buffer_(nullptr), capacity_(0), has_value_(false)
   { datum_.set_null(); }
 
-  int assign(const common::ObDatum &src, common::ObIAllocator &allocator)
+  int assign(const common::Datum &src, const common::SqlType &type,
+             common::ObIAllocator &allocator)
   {
     int ret = OB_SUCCESS;
+    const common::DatumCopyPlan plan(type);
+    common::Datum candidate;
     char *target = buffer_;
     int64_t target_capacity = capacity_;
-    const int64_t required = MAX(static_cast<int64_t>(src.len_), 1L);
+    int64_t payload_size = 0;
+    int64_t position = 0;
     if (OB_UNLIKELY(src.is_null())) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_UNLIKELY(src.len_ > 0 && nullptr == src.ptr_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (required > capacity_) {
-      target_capacity = MAX(64L, capacity_);
-      while (target_capacity < required && target_capacity <= INT64_MAX / 2) {
-        target_capacity *= 2;
+    } else if (OB_FAIL(plan.payload_copy_size(src, payload_size))) {
+    } else {
+      // Only reference values need a retained allocation. Preserve the
+      // existing capacity policy, including an empty non-NULL reference.
+      const bool reference = type.canonical_representation()
+          == common::DatumRepresentation::Reference;
+      const int64_t required = reference ? MAX(payload_size, 1L) : 0;
+      if (required > capacity_) {
+        target_capacity = MAX(64L, capacity_);
+        while (target_capacity < required && target_capacity <= INT64_MAX / 2) {
+          target_capacity *= 2;
+        }
+        if (target_capacity < required) {
+          target_capacity = required;
+        }
+        if (OB_ISNULL(target = static_cast<char *>(allocator.alloc(target_capacity)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        }
       }
-      if (target_capacity < required) {
-        target_capacity = required;
-      }
-      if (OB_ISNULL(target = static_cast<char *>(allocator.alloc(target_capacity)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
+      if (OB_SUCC(ret)) {
+        ret = plan.deep_copy(src, candidate, target, target_capacity, position);
       }
     }
     if (OB_SUCC(ret)) {
-      if (src.len_ > 0) {
-        MEMCPY(target, src.ptr_, src.len_);
-      }
       if (target != buffer_) {
         if (nullptr != buffer_) {
           allocator.free(buffer_);
@@ -291,9 +302,10 @@ struct ObOwnedAggregateDatum
         buffer_ = target;
         capacity_ = target_capacity;
       }
-      datum_.ptr_ = buffer_;
-      datum_.pack_ = src.pack_;
+      datum_ = candidate;
       has_value_ = true;
+    } else if (target != buffer_ && nullptr != target) {
+      allocator.free(target);
     }
     return ret;
   }
@@ -316,7 +328,7 @@ struct ObOwnedAggregateDatum
 
   void swap(ObOwnedAggregateDatum &other)
   {
-    common::ObDatum datum = datum_;
+    common::Datum datum = datum_;
     char *buffer = buffer_;
     const int64_t capacity = capacity_;
     const bool has_value = has_value_;
@@ -330,7 +342,7 @@ struct ObOwnedAggregateDatum
     other.has_value_ = has_value;
   }
 
-  common::ObDatum datum_;
+  common::Datum datum_;
   char *buffer_;
   int64_t capacity_;
   bool has_value_;
@@ -407,12 +419,16 @@ public:
                  && 1 == expr->arg_cnt_) {
         if (expr->obj_meta_.is_lob_storage()) {
           ret = OB_NOT_SUPPORTED;
-        } else if (OB_ISNULL(expr->basic_funcs_)
+        } else if (OB_ISNULL(expr->sql_type_)
+                   || OB_ISNULL(expr->basic_funcs_)
                    || OB_ISNULL(expr->basic_funcs_->null_first_cmp_)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
           spec.kind_ = T_FUN_MIN == expr->type_ ? SCALAR_AGG_MIN : SCALAR_AGG_MAX;
-          spec.cmp_func_ = expr->basic_funcs_->null_first_cmp_;
+          // Segment reductions are borrowed storage descriptors. Retained
+          // native values cross this comparator through a synchronous view,
+          // preserving the exact selected comparison function.
+          spec.cmp_func_ = expr->basic_funcs_->null_first_cmp_.legacy_function();
         }
       } else {
         ret = OB_NOT_SUPPORTED;
@@ -727,14 +743,20 @@ private:
       if (OB_SUCC(ret) && nullptr != candidate && !candidate->is_null()) {
         int cmp = 0;
         bool replace = !agg_state.current_.has_value_;
-        if (!replace
-            && OB_FAIL(
-                spec.cmp_func_(agg_state.current_.datum_, *candidate, cmp, access_ctx_))) {
+        const common::DatumCopyPlan plan = spec.output_->get_datum_copy_plan();
+        common::Datum imported;
+        common::ObDatum current_view;
+        alignas(8) char current_scratch[64];
+        if (OB_FAIL(plan.import_legacy(*candidate, imported))) {
+        } else if (!replace && OB_FAIL(plan.legacy_view(agg_state.current_.datum_,
+            current_view, current_scratch, sizeof(current_scratch)))) {
+        } else if (!replace
+            && OB_FAIL(spec.cmp_func_(current_view, *candidate, cmp, access_ctx_))) {
         } else if (!replace) {
           replace = (is_min && cmp > 0) || (!is_min && cmp < 0);
         }
         if (OB_SUCC(ret) && replace) {
-          if (OB_FAIL(agg_state.staging_.assign(*candidate, allocator_))) {
+          if (OB_FAIL(agg_state.staging_.assign(imported, spec.output_->get_sql_type(), allocator_))) {
           } else {
             agg_state.staging_ready_ = true;
           }
@@ -802,9 +824,11 @@ private:
       } else if (!agg_state.current_.has_value_) {
         expr->locate_datum_for_write(eval_ctx_).set_null();
         expr->get_eval_info(eval_ctx_).evaluated_ = true;
-      } else if (OB_FAIL(expr->deep_copy_datum(eval_ctx_, agg_state.current_.datum_))) {
       } else {
-        expr->get_eval_info(eval_ctx_).evaluated_ = true;
+        if (OB_FAIL(expr->deep_copy_datum(eval_ctx_, agg_state.current_.datum_))) {
+        } else {
+          expr->get_eval_info(eval_ctx_).evaluated_ = true;
+        }
       }
     }
     return ret;

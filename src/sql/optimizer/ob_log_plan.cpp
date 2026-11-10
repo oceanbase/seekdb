@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "rust/config.h"
 #include "ob_log_plan.h"
+#include "share/datum/typed_datum_compare.h"
+#include "share/datum/datum_value_cast.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_log_table_scan.h"
@@ -2987,7 +2989,7 @@ int ObLogPlan::check_if_use_hybrid_hash_distribution(ObOptimizerContext &optimiz
                                                      const ObDMLStmt *stmt,
                                                      ObJoinType join_type,
                                                      ObRawExpr  &expr,
-                                                     ObIArray<ObObj> &popular_values) const
+                                                     ObIArray<DatumValue> &popular_values) const
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo* session_info = optimizer_ctx.get_session_info();
@@ -3012,7 +3014,7 @@ int ObLogPlan::check_if_use_hybrid_hash_distribution(ObOptimizerContext &optimiz
 }
 int ObLogPlan::get_popular_values_hash(ObIAllocator &allocator,
                                        ObOptColumnStatHandle &handle,
-                                       common::ObIArray<ObObj> &popular_values) const
+                                       common::ObIArray<DatumValue> &popular_values) const
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(handle.stat_)
@@ -3029,8 +3031,8 @@ int ObLogPlan::get_popular_values_hash(ObIAllocator &allocator,
       const ObHistBucket &bucket = histogram.get(i);
       int64_t freq = bucket.endpoint_repeat_count_ * 100 / total_cnt;
       if (freq >= min_freq) {
-        ObObj value;
-        if (OB_FAIL(ob_write_obj(allocator, bucket.endpoint_value_, value))) {
+        DatumValue value;
+        if (OB_FAIL(bucket.copy_endpoint_value(value, allocator))) {
         } else if (OB_FAIL(popular_values.push_back(value))) {
         }
       }
@@ -3045,22 +3047,22 @@ int ObLogPlan::assign_right_popular_value_to_left(ObExchangeInfo &left_exch_info
   int ret = OB_SUCCESS;
   // for join char with text, popular value from char col histogram should add lob locator
   for (int i = 0; OB_SUCC(ret) && i < right_exch_info.popular_values_.count(); i++) {
-    const ObObj &pv = right_exch_info.popular_values_.at(i);
+    const DatumValue &pv = right_exch_info.popular_values_.at(i);
     if (left_exch_info.hash_dist_exprs_.count() == 0 ||
         OB_ISNULL(left_exch_info.hash_dist_exprs_.at(0).expr_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObjType expect_type = left_exch_info.hash_dist_exprs_.at(0).expr_->get_result_meta().get_type();
+      SqlValueType expect_type = left_exch_info.hash_dist_exprs_.at(0).expr_->get_result_meta().get_type();
       bool need_cast = (!is_lob_storage(pv.get_type()) && is_lob_storage(expect_type)) ||
                        (is_lob_storage(pv.get_type()) && !is_lob_storage(expect_type));
-      ObObj new_pv;
+      DatumValue new_pv;
       if (need_cast) {
         ObCastCtx cast_ctx(&get_allocator(), NULL, CM_NONE, pv.get_meta().get_collation_type());
-        if (OB_FAIL(ObObjCaster::to_type(expect_type, cast_ctx, pv, new_pv))) {
+        if (OB_FAIL(DatumValueCaster::to_type(expect_type, cast_ctx, pv, get_allocator(), new_pv))) {
           LOG_WARN("failed to do cast obj", K(ret), K(pv), K(expect_type));;
         }
       } else {
-        new_pv = pv;
+        ret = clone_typed_value(pv, new_pv, get_allocator());
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(left_exch_info.popular_values_.push_back(new_pv))) {
@@ -3392,7 +3394,7 @@ int ObLogPlan::get_repartition_keys(const EqualSets &equal_sets,
                   == src_keys.at(j)->get_result_type().get_type_class()
               && target_part_keys.at(i)->get_result_type().get_collation_type()
                   == src_keys.at(j)->get_result_type().get_collation_type()
-              && !ObObjCmpFuncs::is_datetime_timestamp_cmp(
+              && !is_datetime_timestamp_type_pair(
                   target_part_keys.at(i)->get_result_type().get_type(),
                   src_keys.at(j)->get_result_type().get_type())) {
             if (OB_FAIL(src_part_keys.push_back(src_keys.at(j)))) {
@@ -4631,7 +4633,7 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
   bool has_rollup_opt_param = false;
   bool enable_hash_rollup = false;
   bool force_hash_rollup = false;
-  ObObj hash_rollup_policy;
+  DatumValue hash_rollup_policy;
   ObQueryCtx *query_ctx = nullptr;
   if (OB_FAIL(candidates_.get_best_plan(best_plan))) {
   } else if (OB_ISNULL(best_plan) ||
@@ -5948,14 +5950,14 @@ int ObLogPlan::get_order_by_topn_expr(int64_t input_card,
              NULL != get_stmt()->get_limit_percent_expr()) {
     need_limit = true;
   } else if (OB_FAIL(ObTransformUtils::get_limit_value(stmt->get_limit_expr(),
-                                                       get_optimizer_context().get_params(),
+                                                       get_optimizer_context().get_parameter_context(),
                                                        get_optimizer_context().get_exec_ctx(),
                                                        &get_optimizer_context().get_allocator(),
                                                        limit_count,
                                                        is_null_value))) {
   } else if (!is_null_value &&
              OB_FAIL(ObTransformUtils::get_limit_value(stmt->get_offset_expr(),
-                                                       get_optimizer_context().get_params(),
+                                                       get_optimizer_context().get_parameter_context(),
                                                        get_optimizer_context().get_exec_ctx(),
                                                        &get_optimizer_context().get_allocator(),
                                                        limit_offset,
@@ -6821,16 +6823,16 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
     }
     if (OB_SUCC(ret)) {
       select_into->set_into_type(into_item->into_type_);
-      select_into->set_outfile_name(into_item->outfile_name_);
-      select_into->set_field_str(into_item->field_str_);
-      select_into->set_line_str(into_item->line_str_);
+      select_into->set_outfile_name(into_item->outfile_name_, into_item->outfile_name_meta_);
+      select_into->set_field_str(into_item->field_str_, into_item->field_str_meta_);
+      select_into->set_line_str(into_item->line_str_, into_item->line_str_meta_);
       select_into->set_user_vars(into_item->user_vars_);
       select_into->set_is_optional(into_item->is_optional_);
-      select_into->set_closed_cht(into_item->closed_cht_);
+      select_into->set_closed_cht(into_item->closed_cht_, into_item->closed_cht_meta_);
       select_into->set_is_single(into_item->is_single_);
       select_into->set_max_file_size(into_item->max_file_size_);
       select_into->set_buffer_size(into_item->buffer_size_);
-      select_into->set_escaped_cht(into_item->escaped_cht_);
+      select_into->set_escaped_cht(into_item->escaped_cht_, into_item->escaped_cht_meta_);
       select_into->set_cs_type(into_item->cs_type_);
       select_into->set_external_properties(into_item->external_properties_);
       select_into->set_child(ObLogicalOperator::first_child, old_top);
@@ -9690,7 +9692,7 @@ int ObLogPlan::gen_das_access_plans(ObLogTableScan *table_scan,
       OB_ISNULL(table_partition_info) ||
       OB_ISNULL(opt_ctx) ||
       OB_ISNULL(opt_ctx->get_exec_ctx()) ||
-      OB_ISNULL(opt_ctx->get_params()) ||
+      OB_ISNULL(opt_ctx->get_parameter_context()) ||
       OB_ISNULL(sql_schema_guard = opt_ctx->get_sql_schema_guard()) ||
       OB_ISNULL(stmt = table_scan->get_stmt()) ||
       OB_ISNULL(table_item = stmt->get_table_item_by_id(table_scan->get_table_id())) ||
@@ -9698,7 +9700,7 @@ int ObLogPlan::gen_das_access_plans(ObLogTableScan *table_scan,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FALSE_IT(table_partition_info->get_table_access_plan().set_use_das(table_scan->use_das()))) {
   } else if (OB_FAIL(table_partition_info->get_table_access_plan().set_is_das_empty_part(*opt_ctx->get_exec_ctx(),
-                                                                                      *opt_ctx->get_params(),
+                                                                                      *opt_ctx->get_parameter_context(),
                                                                                       dtc_params))) {
   } else if (!table_scan->use_das() || !table_scan->is_match_all()) {
     // do nothing
@@ -10189,7 +10191,7 @@ int ObLogPlan::add_non_standard_comparison_explain_note()
   if (OB_ISNULL(query_ctx = opt_ctx.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (query_ctx->type_demotion_flag_inited_) {
-    ObObj non_std_cmp_level;
+    DatumValue non_std_cmp_level;
     if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_opt_param(
         ObOptParamHint::NON_STANDARD_COMPARISON_LEVEL, non_std_cmp_level))) {
     } else if (non_std_cmp_level.is_varchar()) {
@@ -10349,11 +10351,12 @@ int ObLogPlan::allocate_output_expr_for_values_op(ObLogicalOperator &values_op)
     ObConstRawExpr *output = NULL;
     if (OB_FAIL(optimizer_context_.get_expr_factory().create_raw_expr(T_VARCHAR, output))) {
     } else {
-      ObObj v;
-      v.set_varchar(" ");
+      DatumValue v;
+      OZ (v.set_varchar(ObString(" "), optimizer_context_.get_expr_factory().get_allocator()));
       v.set_collation_type(ObCharset::get_system_collation());
-      output->set_value(v);
-      if (OB_FAIL(output->formalize(optimizer_context_.get_session_info()))) {
+      OZ (output->set_value_borrowed(v));
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(output->formalize(optimizer_context_.get_session_info()))) {
       } else if (OB_FAIL(values_op.get_output_exprs().push_back(output))) {
       } else {
         values_op.set_branch_id(0);
@@ -10538,8 +10541,8 @@ int ObLogPlan::generate_column_expr(ObRawExprFactory &expr_factory,
     column_item.base_tid_ = table_item->ref_id_;
     column_item.base_cid_ = rowkey->get_column_id();
     column_item.column_name_ = rowkey->get_column_name();
-    column_item.set_default_value(column_schema.get_cur_default_value());
-    if (OB_FAIL(rowkey->add_relation_id(stmt->get_table_bit_index(table_id)))) {
+    if (OB_FAIL(column_item.set_default_native_value(column_schema.get_cur_default_datum(), column_schema.get_cur_default_meta()))) {
+    } else if (OB_FAIL(rowkey->add_relation_id(stmt->get_table_bit_index(table_id)))) {
     } else if (OB_FAIL(rowkey->formalize(optimizer_context_.get_session_info()))) {
     } else if (OB_FAIL(rowkey->pull_relation_id())) {
     } else if (OB_FAIL(column_items_.push_back(column_item))) {
@@ -11964,7 +11967,7 @@ int ObLogPlan::construct_startup_filter_for_limit(ObRawExpr *limit_expr, ObLogic
   if (OB_ISNULL(limit_expr) || OB_ISNULL(log_op)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObTransformUtils::get_expr_int_value(limit_expr,
-                                                          get_optimizer_context().get_params(),
+                                                          get_optimizer_context().get_parameter_context(),
                                                           get_optimizer_context().get_exec_ctx(),
                                                           &get_allocator(),
                                                           limit_value,

@@ -480,7 +480,7 @@ struct ObShuffleTaskHandle {
   common::ObSEArray<ObRawExpr *, 16> insert_exprs;
   ObInsertValueGenerator generator;
   ObTempExpr *calc_tablet_id_expr;
-  ObNewRow row_in_file;
+  common::ObSEArray<common::DatumValue, 16> row_in_file;
   ObDataFragMgr &datafrag_mgr;
   common::ObBitSet<> &string_values;
   ObShuffleResult result;
@@ -572,15 +572,18 @@ public:
                              int64_t &valid_len,
                              int64_t &line_count);
 
-  static void field_to_obj(common::ObObj &obj,
+  // Borrow the parser's current field until the next line is parsed. Both
+  // SQL printing and partition evaluation finish before that buffer advances.
+  static void field_to_value(common::DatumValue &value,
                            const ObCSVGeneralParser::FieldValue &field,
                            const common::ObCollationType cs_type,
                            bool is_string_type_column) {
     if (field.is_null_) {
-      obj.set_null();
+      value.set_null();
     } else {
-      obj.set_varchar(field.ptr_, field.len_);
-      obj.set_collation_type(cs_type);
+      value.datum_.set_string(field.ptr_, field.len_);
+      value.meta_.set_varchar();
+      value.set_collation_type(cs_type);
     }
   }
 

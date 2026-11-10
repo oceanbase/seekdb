@@ -51,10 +51,10 @@ int ObExprSqrt::calc_result_type1(ObExprResType &type,
 }
 
 int calc_sqrt_expr_mysql(const ObExpr &expr, ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
   } else if (arg->is_null()) {
     res_datum.set_null();
@@ -78,8 +78,8 @@ int calc_sqrt_expr_mysql_in_batch(const ObExpr &expr,
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
     ObBitVector &eval_flag = expr.get_evaluated_flags(ctx);
-    ObDatumVector arg_datums = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatum *res_datums = expr.locate_batch_datums(ctx);
+    DatumVector arg_datums = expr.args_[0]->locate_expr_datumvector(ctx);
+    Datum *res_datums = expr.locate_batch_datums(ctx);
     for (int64_t i = 0; i < batch_size; ++i) {
       if (!eval_flag.contain(i) && !skip.contain(i)) {
         if (arg_datums.at(i)->is_null() || arg_datums.at(i)->get_double() < 0) {
@@ -102,7 +102,7 @@ int ObExprSqrt::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   rt_expr.extra_ = raw_expr.get_aggr_type();
   {
     OB_ASSERT(1 == rt_expr.arg_cnt_);
-    ObObjType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
+    SqlValueType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
     if (ObDoubleType == arg_res_type) {
       rt_expr.eval_func_ = calc_sqrt_expr_mysql;
       rt_expr.eval_batch_func_ = calc_sqrt_expr_mysql_in_batch;

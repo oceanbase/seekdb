@@ -37,7 +37,7 @@ public:
                                 ObExprResType* types,
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx) const override;
-  static int eval_array_sortby(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_sortby(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int index_sort(common::ObArenaAllocator &allocator, ObIArrayType *lambda_arr, uint32_t *&sort_idx);
   static int fill_array_by_index(ObIArrayType *src_arr, uint32_t *sort_idx, ObIArrayType *res_arr);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

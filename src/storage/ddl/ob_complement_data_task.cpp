@@ -1584,7 +1584,7 @@ int ObLocalScan::get_next_row(const ObDatumRow *&datum_row)
     write_row_.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
     for (int64_t i = 0, j = 0; OB_SUCC(ret) && i < exist_column_mapping_.size(); i++) {
       const int64_t in_row_index = unique_index_checking_ ? i : storaged_index_with_extra_rowkey(i);
-      ObObjMeta &obj_meta = extended_gc_.org_extended_col_ids_.at(i).col_type_;
+      SqlTypeMeta &obj_meta = extended_gc_.org_extended_col_ids_.at(i).col_type_;
       if (exist_column_mapping_.test(i)) {
         // fill with value stored in origin data table.
         if (OB_UNLIKELY(j >= extended_gc_.extended_col_ids_.count())) {

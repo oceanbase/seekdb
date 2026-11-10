@@ -53,7 +53,7 @@ int ObExprJsonContains::calc_result_typeN(ObExprResType &type,
     type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
     type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].scale_);
     for (int64_t i = 0; OB_SUCC(ret) && i < 2; i++) {
-      ObObjType in_type = types_stack[i].get_type();
+      SqlValueType in_type = types_stack[i].get_type();
       if (!ob_is_string_type(in_type)) {
       } else if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, i, N_JSON_CONTAINS))) {
       }
@@ -66,7 +66,7 @@ int ObExprJsonContains::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   bool is_null_result = false;
@@ -88,7 +88,7 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
     JsonPathCache ctx_cache;
     JsonPathCache *path_cache = get_native_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
     path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
-    ObDatum *path_data = NULL;
+    Datum *path_data = NULL;
     if (OB_FAIL(temp_allocator.eval_arg(expr.args_[2], ctx, path_data))) {
     } else if (expr.args_[2]->datum_meta_.type_ == ObNullType || path_data->is_null()) {
       is_null_result = true;

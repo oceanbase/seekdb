@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_index_merge_iter.h"
 #include "src/sql/das/ob_das_attach_define.h"
+#include "common/datum/datum_key_ops.h"
+#include "common/datum/datum_value_projection.h"
 namespace oceanbase
 {
 using namespace common;
@@ -86,13 +88,13 @@ int ObDASIndexMergeIter::IndexMergeRowStore::to_expr()
   return ret;
 }
 
-const ObDatum *ObDASIndexMergeIter::IndexMergeRowStore::cur_datums()
+const StoredDatumCell *ObDASIndexMergeIter::IndexMergeRowStore::cur_stored_cells()
 {
-  const ObDatum *datums = nullptr;
-  if (OB_LIKELY(cur_idx_ < saved_size_) && OB_NOT_NULL(store_rows_) && OB_NOT_NULL(store_rows_[cur_idx_].store_row_)) {
-    datums = store_rows_[cur_idx_].store_row_->cells();
+  const StoredDatumCell *cells = nullptr;
+  if (OB_LIKELY(have_data()) && OB_NOT_NULL(store_rows_) && OB_NOT_NULL(store_rows_[cur_idx_].store_row_)) {
+    cells = store_rows_[cur_idx_].store_row_->stored_cells();
   }
-  return datums;
+  return cells;
 }
 
 void ObDASIndexMergeIter::IndexMergeRowStore::reuse()
@@ -349,7 +351,7 @@ int ObDASIndexMergeIter::fill_default_values_for_union(const common::ObIArray<Ob
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(*eval_ctx_);
       batch_info_guard.set_batch_size(1);
       batch_info_guard.set_batch_idx(0);
-      ObDatum &datum = expr->locate_datum_for_write(*eval_ctx_);
+      Datum &datum = expr->locate_datum_for_write(*eval_ctx_);
       datum.set_double(0.0);
       expr->set_evaluated_flag(*eval_ctx_);
       expr->set_evaluated_projected(*eval_ctx_);
@@ -536,25 +538,34 @@ int ObDASIndexMergeIter::compare(int64_t cur_idx, int64_t &output_idx, int &cmp_
   } else if (output_idx == OB_INVALID_INDEX) {
     output_idx = cur_idx;
   } else {
-    const ObDatum *cur_datums = child_stores_.at(cur_idx).cur_datums();
-    const ObDatum *output_datums = child_stores_.at(output_idx).cur_datums();
-    if (OB_ISNULL(cur_datums) || OB_ISNULL(output_datums)) {
+    const StoredDatumCell *cur_cells = child_stores_.at(cur_idx).cur_stored_cells();
+    const StoredDatumCell *output_cells = child_stores_.at(output_idx).cur_stored_cells();
+    if (OB_ISNULL(cur_cells) || OB_ISNULL(output_cells)) {
       ret = OB_ERR_UNEXPECTED;
     }
-    ObObj cur_obj;
-    ObObj output_obj;
+    DatumValue cur_value;
+    DatumValue output_value;
     for (int64_t i = 0; (cmp_ret == 0) && OB_SUCC(ret) && i < rowkey_exprs_->count(); i++) {
       const ObExpr *expr = rowkey_exprs_->at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(cur_datums[i].to_obj(cur_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(output_datums[i].to_obj(output_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(cur_obj.check_collation_free_and_compare(output_obj, cmp_ret))) {
-      } else if (cmp_ret != 0) {
-        if (cmp_ret < 0) {
-          output_idx = OB_UNLIKELY(is_reverse_) ? output_idx : cur_idx;
-        } else {
-          output_idx = OB_UNLIKELY(is_reverse_) ? cur_idx : output_idx;
+      } else {
+        const ObDatum cur_datum = StoredDatumCodec::decode_legacy_view(cur_cells[i]);
+        const ObDatum output_datum = StoredDatumCodec::decode_legacy_view(output_cells[i]);
+        if (OB_FAIL(project_datum_value_view(cur_datum, expr->obj_meta_,
+                                             expr->obj_datum_map_, cur_value.get_meta(),
+                                             cur_value, false /* keep_null_collation */))) {
+        } else if (OB_FAIL(project_datum_value_view(output_datum, expr->obj_meta_,
+                                             expr->obj_datum_map_, output_value.get_meta(),
+                                             output_value, false /* keep_null_collation */))) {
+        } else if (OB_FAIL(compare_key_value(cur_value, output_value, cmp_ret,
+                                              true /* collation_free */))) {
+        } else if (cmp_ret != 0) {
+          if (cmp_ret < 0) {
+            output_idx = OB_UNLIKELY(is_reverse_) ? output_idx : cur_idx;
+          } else {
+            output_idx = OB_UNLIKELY(is_reverse_) ? cur_idx : output_idx;
+          }
         }
       }
     }

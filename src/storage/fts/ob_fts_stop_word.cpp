@@ -44,7 +44,7 @@ int ObStopWordChecker::init()
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(stopword_set_.create(DEFAULT_STOPWORD_BUCKET_NUM, "StopWordSet", "StopWordSet"))) {
   } else {
-    ObObjMeta stop_meta;
+    SqlTypeMeta stop_meta;
     stop_meta.set_varchar();
     stop_meta.set_collation_type(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
 
@@ -112,7 +112,7 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 // class ObAddWord
 ObAddWord::ObAddWord(
     const ObFTParserProperty &property,
-    const ObObjMeta &meta,
+    const SqlTypeMeta &meta,
     const ObAddWordFlag &flag,
     common::ObIAllocator &allocator,
     ObFTWordMap &word_map)

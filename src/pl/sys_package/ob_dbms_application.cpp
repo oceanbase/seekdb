@@ -23,7 +23,7 @@ using namespace sql;
 namespace pl
 {
 // this is a procedure, and not need to return result
-int ObDBMSAppInfo::read_client_info(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAppInfo::read_client_info(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString client_info;
@@ -31,12 +31,12 @@ int ObDBMSAppInfo::read_client_info(sql::ObExecContext &ctx, sql::ParamStore &pa
   CK (OB_NOT_NULL(ctx.get_my_session()));
   CK (OB_LIKELY(1 == params.count()));
   OV (params.at(0).get_param_meta().is_varchar(), OB_INVALID_ARGUMENT);
-  client_info = ctx.get_my_session()->get_client_info();
-  params.at(0).set_varchar(client_info);
+  if (OB_SUCC(ret)) { client_info = ctx.get_my_session()->get_client_info(); }
+  OZ(params.at(0).set_varchar(client_info, ctx.get_allocator()));
   return ret;
 }
 // this is a procedure, and not need to return result
-int ObDBMSAppInfo::read_module(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAppInfo::read_module(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString module_name;
@@ -46,14 +46,16 @@ int ObDBMSAppInfo::read_module(sql::ObExecContext &ctx, sql::ParamStore &params,
   CK (OB_LIKELY(2 == params.count()));
   OV (params.at(0).get_param_meta().is_varchar(), OB_INVALID_ARGUMENT);
   OV (params.at(1).get_param_meta().is_varchar(), OB_INVALID_ARGUMENT);
-  module_name = ctx.get_my_session()->get_module_name();
-  action_name = ctx.get_my_session()->get_action_name();
-  params.at(0).set_varchar(module_name);
-  params.at(1).set_varchar(action_name);
+  if (OB_SUCC(ret)) {
+    module_name = ctx.get_my_session()->get_module_name();
+    action_name = ctx.get_my_session()->get_action_name();
+  }
+  OZ(params.at(0).set_varchar(module_name, ctx.get_allocator()));
+  OZ(params.at(1).set_varchar(action_name, ctx.get_allocator()));
   return ret;
 }
 // this is a procedure, and not need to return result
-int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString action_name;
@@ -71,7 +73,7 @@ int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, 
   return ret;
 }
 // this is a procedure, and not need to return result
-int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString client_info;
@@ -93,7 +95,7 @@ int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &par
   return ret;
 }
 // this is a procedure, and not need to return result
-int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString module_name;

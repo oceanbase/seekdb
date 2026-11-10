@@ -25,7 +25,7 @@ namespace oceanbase
 namespace sql
 {
 
-int ObXMLExprHelper::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, ObString &res_str)
+int ObXMLExprHelper::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, ObString &res_str)
 {
   int ret = OB_SUCCESS;
   ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
@@ -44,8 +44,8 @@ int ObXMLExprHelper::get_str_from_expr(const ObExpr *expr,
                                        ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
-  ObObjType val_type = expr->datum_meta_.type_;
+  Datum *datum = NULL;
+  SqlValueType val_type = expr->datum_meta_.type_;
   MultimodeAlloctor &alloc = static_cast<MultimodeAlloctor&>(allocator);
   if (OB_FAIL(alloc.eval_arg(expr, ctx, datum))) {
   } else if (!ob_is_string_type(val_type)) {

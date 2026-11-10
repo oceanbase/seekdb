@@ -55,7 +55,7 @@ int ObExprJsonMemberOf::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonMemberOf::eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonMemberOf::eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -65,9 +65,9 @@ int ObExprJsonMemberOf::eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, 
   std::optional<rust::Box<common::json::Query>> candidate;
   std::optional<rust::Box<common::json::Query>> target;
   if (!is_null_result) {
-    ObDatum *json_datum = NULL;
+    Datum *json_datum = NULL;
     ObExpr *json_arg = expr.args_[0];
-    ObObjType target_type = expr.args_[1]->datum_meta_.type_;
+    SqlValueType target_type = expr.args_[1]->datum_meta_.type_;
     ObString candidate_binary;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
     } else if (json_datum->is_null()) {

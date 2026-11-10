@@ -18,9 +18,21 @@
 #define _OB_SCHEMA_MACRO_DEFINE_H_
 
 #include "common/rowkey/ob_rowkey_info.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "lib/charset/ob_charset.h"
 #include "share/schema/ob_table_schema.h"
+
+namespace oceanbase { namespace common {
+// Borrowing defaults are safe here because ObColumnSchemaV2 copies the datum
+// payload into its schema allocator before these generated locals expire.
+DatumValue make_inner_table_default_null();
+DatumValue make_inner_table_default_int(SqlValueType type, int64_t value);
+DatumValue make_inner_table_default_uint64(uint64_t value);
+DatumValue make_inner_table_default_timestamp(int64_t value);
+DatumValue make_inner_table_default_string(SqlValueType type, const ObString &value,
+                                           ObCollationType collation, bool is_lob);
+DatumValue make_inner_table_default_now();
+} }
 
 #define ADD_COLUMN_SCHEMA(col_name, \
                           col_id, \
@@ -329,8 +341,8 @@ int ADD_COLUMN_SCHEMA_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_sch
                                          const common::ObOrderType order,
                                          const bool nullable,
                                          const bool is_autoincrement,
-                                         ObObj &orig_default_value,
-                                         ObObj &cur_default_value,
+                                         DatumValue &orig_default_value,
+                                         DatumValue &cur_default_value,
                                          const bool is_hidden = false,
                                          const bool is_storing_column = false);
 
@@ -349,8 +361,8 @@ int ADD_COLUMN_SCHEMA_TS_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_
                                             const bool nullable,
                                             const bool is_autoincrement,
                                             const bool is_on_update_for_timestamp,
-                                            ObObj &orig_default_value,
-                                            ObObj &cur_default_value,
+                                            DatumValue &orig_default_value,
+                                            DatumValue &cur_default_value,
                                             const bool is_hidden = false,
                                             const bool is_storing_column = false);
 

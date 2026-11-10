@@ -51,7 +51,7 @@ public:
   {}
   virtual ~ObRawExprTypeDemotion() {}
   int demote_type(ObOpRawExpr &expr);
-  static bool need_constraint(const ObObjType from_type, const ObObjType &to_type);
+  static bool need_constraint(const SqlValueType from_type, const SqlValueType &to_type);
 
 private:
   int init_query_ctx_flags(bool &disabled);

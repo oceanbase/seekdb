@@ -48,9 +48,9 @@ int ObExprFindInSet::calc_result_type2(ObExprResType &type,
 		type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt64Type].scale_);
     type.set_calc_type(ObVarcharType);
 		ObExprOperator::calc_result_flag2(type, type1, type2);
-    ObObjMeta coll_types[2];
-    coll_types[0] = type1.get_obj_meta();
-    coll_types[1] = type2.get_obj_meta();
+    SqlTypeMeta coll_types[2];
+    coll_types[0] = type1.get_sql_type_meta();
+    coll_types[1] = type2.get_sql_type_meta();
     if (OB_FAIL(aggregate_charsets_for_comparison(type.get_calc_meta(), coll_types, 2, type_ctx))) {
     } else {
       type1.set_calc_type(ObVarcharType);
@@ -287,12 +287,12 @@ int search_with_const_set(const ObExpr &expr,
 }
 
 int ObExprFindInSet::calc_find_in_set_expr(const ObExpr &expr, ObEvalCtx &ctx, 
-                                           ObDatum &res_datum)
+                                           Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // find_in_set(str, strlist)
-  ObDatum *str = NULL;
-  ObDatum *strlist = NULL;
+  Datum *str = NULL;
+  Datum *strlist = NULL;
   if (OB_UNLIKELY(2 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.eval_param_value(ctx, str, strlist))) {

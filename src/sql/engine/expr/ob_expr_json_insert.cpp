@@ -81,7 +81,7 @@ int ObExprJsonInsert::calc_result_typeN(ObExprResType& type,
   return ret;
 }                                     
 
-int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObJsonExprHelper::eval_json_mutation(expr, ctx, res, JsonMutation::Insert);
 }

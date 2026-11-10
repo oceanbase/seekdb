@@ -1162,25 +1162,19 @@ int ObRangeGraphGenerator::generate_expr_final_info()
       ret = OB_ERR_UNEXPECTED;
     } else if (T_QUESTIONMARK == expr->get_expr_type()) {
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(expr);
-      const ObObj& val = const_expr->get_value();
-      if (OB_UNLIKELY(!val.is_unknown())) {
+      if (OB_UNLIKELY(!const_expr->get_value_meta().is_unknown())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected value type", K(val));
+        LOG_WARN("get unexpected value type", K(const_expr->get_value_meta()));
       } else {
-        val.get_unknown(expr_info.param_idx_);
+        ret = const_expr->get_questionmark_index(expr_info.param_idx_);
         expr_info.is_param_ = true;
       }
     } else if (expr->has_flag(IS_CONST)) {
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(expr);
-      void *ptr = allocator_.alloc(sizeof(ObObj));
-      if (OB_ISNULL(ptr)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memeory for ObObj");
-      } else {
-        expr_info.const_val_ = new(ptr)ObObj();
-        expr_info.is_const_ = true;
-        if (OB_FAIL(ob_write_obj(allocator_, const_expr->get_value(), *expr_info.const_val_))) {
-        }
+      DatumValue view;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(expr_info.set_const_value(view.datum_, view.meta_, allocator_))) {
       }
     } else if (OB_FAIL(ObStaticEngineExprCG::gen_expr_with_row_desc(
             expr, row_desc,

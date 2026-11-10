@@ -293,6 +293,8 @@ int ObAlterTableResolver::set_table_options()
 // bug: 48644348
 int ObAlterTableResolver::check_alter_column_schemas_valid(ObAlterTableStmt &stmt)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -316,7 +318,8 @@ int ObAlterTableResolver::check_alter_column_schemas_valid(ObAlterTableStmt &stm
                  alter_column_schema->is_generated_column()) {
         ObSEArray<ObString, 2> columns_names;
         ObItemType root_expr_type = T_INVALID;
-        if (OB_FAIL(alter_column_schema->get_cur_default_value().get_string(alter_column_name))) {
+        if ((OB_FAIL(alter_column_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+            || OB_FAIL(schema_default_value.get_string(alter_column_name)))) {
         } else if (OB_UNLIKELY(alter_column_name.empty())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(alter_column_name,
@@ -3373,11 +3376,13 @@ int ObAlterTableResolver::process_timestamp_column(ObColumnResolveStat &stat,
                                                    AlterColumnSchema &alter_column_schema)
 {
   int ret = OB_SUCCESS;
-  const ObObj &cur_default_value = alter_column_schema.get_cur_default_value();
+  DatumValue cur_default_value;
+  alignas(8) char default_scratch[64];
   bool explicit_value = false;
   if (NULL == session_info_) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "session info is NULL", K(ret));
+  } else if (OB_FAIL(alter_column_schema.export_cur_default_value(cur_default_value, default_scratch, sizeof(default_scratch)))) {
   } else if (OB_FAIL(alter_column_schema.set_orig_default_value(cur_default_value))) {
   } else if (OB_FAIL(session_info_->get_explicit_defaults_for_timestamp(explicit_value))) {
   } else if (true == explicit_value || alter_column_schema.is_generated_column()) {
@@ -3602,7 +3607,7 @@ int ObAlterTableResolver::resolve_alter_column(const ParseNode &node)
         ret = OB_ERR_PARSER_SYNTAX;
         SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
       } else {
-        ObObjParam default_value;
+        DatumParameter default_value;
         ObDefaultValueRes resolve_res(default_value);
         if (T_CONSTR_NULL == default_node->type_) {
           default_value.set_null();
@@ -3630,7 +3635,7 @@ int ObAlterTableResolver::resolve_alter_column(const ParseNode &node)
             if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                                   *allocator_, session_info_->get_dtc_params(), expr_str))) {
             } else {
-              default_value.set_varchar(expr_str);
+              ret = default_value.set_varchar(expr_str, *allocator_);
               default_value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
               default_value.set_param_meta();
             }
@@ -3904,7 +3909,7 @@ int ObAlterTableResolver::resolve_change_column(const ParseNode &node)
       if (OB_SUCC(ret)) {
         if (0 != origin_col_schema->get_rowkey_position()
             && alter_column_schema.is_set_default_
-            && alter_column_schema.get_cur_default_value().is_null()) {
+            && alter_column_schema.get_cur_default_datum().is_null()) {
           ret = OB_ERR_PRIMARY_CANT_HAVE_NULL;
           LOG_USER_ERROR(OB_ERR_PRIMARY_CANT_HAVE_NULL);
         } else if (0 != origin_col_schema->get_rowkey_position()
@@ -3943,8 +3948,8 @@ int ObAlterTableResolver::check_modify_column_allowed(
                                 const ObColumnResolveStat &stat)
 {
   int ret = OB_SUCCESS;
-  const ObObjType origin_col_type = origin_col_schema.get_data_type();
-  const ObObjType alter_col_type = alter_column_schema.get_data_type();
+  const SqlValueType origin_col_type = origin_col_schema.get_data_type();
+  const SqlValueType alter_col_type = alter_column_schema.get_data_type();
   const ObAccuracy &origin_col_accuracy = origin_col_schema.get_accuracy();
   const ObAccuracy &alter_col_accuracy = alter_column_schema.get_accuracy();
 
@@ -4084,7 +4089,7 @@ int ObAlterTableResolver::resolve_modify_column(const ParseNode &node,
         if (OB_SUCC(ret)) {
           if (0 != origin_col_schema->get_rowkey_position()
               && alter_column_schema.is_set_default_
-              && alter_column_schema.get_cur_default_value().is_null()) {
+              && alter_column_schema.get_cur_default_datum().is_null()) {
             ret = OB_ERR_PRIMARY_CANT_HAVE_NULL;
             LOG_USER_ERROR(OB_ERR_PRIMARY_CANT_HAVE_NULL);
           } else if (0 != origin_col_schema->get_rowkey_position()

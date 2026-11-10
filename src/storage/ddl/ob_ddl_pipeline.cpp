@@ -36,7 +36,7 @@ namespace
 {
 int read_full_lob_string(
     ObIAllocator &allocator,
-    ObObjType type,
+    SqlValueType type,
     ObCollationType collation_type,
     bool has_lob_header,
     ObString &value)

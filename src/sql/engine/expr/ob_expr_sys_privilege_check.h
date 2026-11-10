@@ -35,7 +35,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int eval_sys_privilege_check(
-      const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+      const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   static int check_show_priv(bool &allow_show,
                              ObExecContext &exec_ctx,

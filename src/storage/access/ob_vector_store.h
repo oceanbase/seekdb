@@ -20,6 +20,7 @@
 #include "lib/container/ob_bitmap.h"
 #include "storage/access/ob_table_param.h"
 #include "query/engine/expr/ob_expr.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "ob_block_batched_row_store.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "ob_pushdown_aggregate.h"
@@ -68,6 +69,7 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 protected:
   int fill_group_idx(const int64_t group_idx);
+  int import_decoded_rows(int64_t count);
   int fill_output_rows(
       const int64_t group_idx,
       blocksstable::ObIMicroBlockRowScanner &scanner,
@@ -106,6 +108,13 @@ protected:
   common::ObFixedArray<int32_t, common::ObIAllocator> cols_projector_;
   common::ObFixedArray<blocksstable::ObSqlDatumInfo, common::ObIAllocator> datum_infos_;
   common::ObFixedArray<const share::schema::ObColumnParam*, common::ObIAllocator> col_params_;
+  // Legacy decoder descriptors/payloads belong to this row-store owner. They
+  // never alias a native Expr frame; imported references remain valid for the
+  // same batch lifetime as the old decoder's output.
+  common::ObFixedArray<char *, common::ObIAllocator> decoder_buffers_;
+  common::ObFixedArray<const common::DatumCopyPlan *, common::ObIAllocator> copy_plans_;
+  common::ObFixedArray<sql::ObExprFrameWriteTarget, common::ObIAllocator> output_targets_;
+  sql::ObExprFrameWriteTarget group_idx_target_;
   sql::ObExpr *group_idx_expr_;
   common::ObFixedArray<blocksstable::ObStorageDatum, common::ObIAllocator> default_datums_;
   ObGroupByCellBase *group_by_cell_;

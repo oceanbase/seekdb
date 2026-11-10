@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_subplan_filter_op.h"
+#include "lib/ob_abort.h"
 
 namespace oceanbase
 {
@@ -26,24 +27,40 @@ namespace sql
 
 bool DatumRow::operator==(const DatumRow &other) const
 {
-  bool cmp = true;
-  if (cnt_ != other.cnt_) {
-    cmp = false;
-  } else {
-    for (int64_t i = 0; cmp && i < cnt_; ++i) {
-      cmp = ObDatum::binary_equal(elems_[i], other.elems_[i]);
-    }
+  bool equal = cnt_ == other.cnt_ && types_ != nullptr && other.types_ != nullptr;
+  for (int64_t i = 0; equal && i < cnt_; ++i) {
+    bool cell_equal = false;
+    const SqlType *type = types_[i];
+    const SqlType *other_type = other.types_[i];
+    equal = type != nullptr && other_type != nullptr && type->equals(*other_type)
+        && OB_SUCCESS == DatumCopyPlan(*type).binary_equal(
+            elems_[i], other.elems_[i], cell_equal) && cell_equal;
   }
-  return cmp;
+  return equal;
 }
 
 int DatumRow::hash(uint64_t &hash_val, uint64_t seed) const
 {
-  hash_val = seed;
-  for (int64_t i = 0; i < cnt_; ++i) {
-    hash_val = murmurhash(elems_[i].ptr_, elems_[i].len_, hash_val);
+  int ret = OB_SUCCESS;
+  uint64_t candidate = seed;
+  if (types_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
   }
-  return OB_SUCCESS;
+  // Preserve the cache's historical binary key semantics, independently of
+  // SQL collation equality. The typed view owns no data beyond this call.
+  for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
+    alignas(8) char scratch[64];
+    ObDatum legacy;
+    if (OB_ISNULL(types_[i])) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(DatumCopyPlan(*types_[i]).legacy_view(
+        elems_[i], legacy, scratch, sizeof(scratch)))) {
+    } else {
+      candidate = murmurhash(legacy.ptr_, legacy.len_, candidate);
+    }
+  }
+  if (OB_SUCC(ret)) { hash_val = candidate; }
+  return ret;
 }
 
 ObSubQueryIterator::ObSubQueryIterator(ObOperator &op)
@@ -53,6 +70,7 @@ ObSubQueryIterator::ObSubQueryIterator(ObOperator &op)
     inited_(false),
     store_("SpfIter"),
     mem_entity_(nullptr),
+    cache_value_owner_(nullptr),
     id_(-1),
     parent_(nullptr),
     memory_used_(0),
@@ -60,9 +78,121 @@ ObSubQueryIterator::ObSubQueryIterator(ObOperator &op)
     iter_brs_(NULL),
     batch_size_(0),
     batch_row_pos_(0),
-    iter_end_(false),
-    das_batch_params_recovery_()
+    iter_end_(false)
 {
+}
+
+ObSubQueryIterator::~ObSubQueryIterator()
+{
+  const int ret = close_cache_values();
+  if (ret != OB_SUCCESS) {
+    LOG_ERROR("SPF iterator resource cleanup failed before arena destroy", K(ret));
+    ob_abort();
+  }
+  if (cache_value_owner_ != nullptr) {
+    cache_value_owner_->~NativeSqlValueOwner();
+    op_.get_exec_ctx().get_allocator().free(cache_value_owner_);
+    cache_value_owner_ = nullptr;
+  }
+  if (hashmap_.created()) { hashmap_.destroy(); }
+  if (mem_entity_ != nullptr) { DESTROY_CONTEXT(mem_entity_); mem_entity_ = nullptr; }
+}
+
+int ObSubQueryIterator::retain_scalar_result(const Datum &source, const SqlType &type, Datum &output)
+{
+  return parent_ == nullptr ? OB_NOT_INIT : parent_->retain_scalar_result(source, type, output);
+}
+
+int ObSubQueryIterator::cache_key_eligible(bool &eligible) const
+{
+  int ret = OB_SUCCESS;
+  bool candidate = true;
+  if (probe_row_.cnt_ < 0 || probe_row_.types_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  for (int64_t i = 0; ret == OB_SUCCESS && i < probe_row_.cnt_; ++i) {
+    if (probe_row_.types_[i] == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (probe_row_.types_[i]->requires_resource_clone()) { candidate = false; }
+  }
+  if (ret == OB_SUCCESS) { eligible = candidate; }
+  return ret;
+}
+
+int ObSubQueryIterator::get_cache_value_owner(NativeSqlValueOwner *&owner)
+{
+  int ret = OB_SUCCESS;
+  if (mem_entity_ == nullptr) { ret = OB_NOT_INIT; }
+  else if (cache_value_owner_ == nullptr) {
+    void *memory = op_.get_exec_ctx().get_allocator().alloc(sizeof(NativeSqlValueOwner));
+    if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      cache_value_owner_ = new (memory) NativeSqlValueOwner(
+          mem_entity_->get_arena_allocator(), op_.get_exec_ctx().get_my_session());
+    }
+  }
+  if (ret == OB_SUCCESS) { owner = cache_value_owner_; }
+  return ret;
+}
+
+int ObSubQueryIterator::close_cache_values()
+{
+  int ret = OB_SUCCESS;
+  // The map must stop borrowing resource values before any pointee is released.
+  if (hashmap_.created()) { ret = hashmap_.reuse(); }
+  if (ret == OB_SUCCESS && cache_value_owner_ != nullptr) {
+    ret = cache_value_owner_->enforce_empty_before_destroy();
+  }
+  return ret;
+}
+
+int ObSubQueryIterator::store_retained_resource_row()
+{
+  struct LegacyScratch { alignas(8) char bytes_[64]; };
+  ObSEArray<ObDatum, 8> views;
+  ObSEArray<LegacyScratch, 8> scratches;
+  const auto &expressions = get_output();
+  int ret = OB_SUCCESS;
+  if (stored_output_types_.empty()) {
+    for (int64_t i = 0; ret == OB_SUCCESS && i < expressions.count(); ++i) {
+      const SqlType *type = nullptr;
+      if (expressions.at(i) == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else if (OB_FAIL(expressions.at(i)->get_sql_type().clone_to(
+          op_.get_exec_ctx().get_allocator(), type))) {}
+      else { ret = stored_output_types_.push_back(type); }
+    }
+  }
+  if (ret == OB_SUCCESS) { ret = validate_stored_output_types(); }
+  if (ret == OB_SUCCESS) { ret = views.prepare_allocate(expressions.count()); }
+  if (ret == OB_SUCCESS) { ret = scratches.prepare_allocate(expressions.count()); }
+  for (int64_t i = 0; ret == OB_SUCCESS && i < expressions.count(); ++i) {
+    const ObExpr *expr = expressions.at(i);
+    Datum *source = nullptr;
+    Datum retained;
+    if (expr == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(expr->eval(op_.get_eval_ctx(), source))) {}
+    else if (expr->get_sql_type().requires_resource_clone()
+        && OB_FAIL(retain_scalar_result(*source, expr->get_sql_type(), retained))) {}
+    else {
+      const Datum &value = expr->get_sql_type().requires_resource_clone() ? retained : *source;
+      ret = expr->get_datum_copy_plan().legacy_view(value, views.at(i), scratches.at(i).bytes_, 64);
+    }
+  }
+  // The writer owns descriptor bytes; the execution owner retains pointees.
+  if (ret == OB_SUCCESS) { ret = store_.add_row(views.get_data(), views.count(), 0, nullptr); }
+  return ret;
+}
+
+int ObSubQueryIterator::validate_stored_output_types() const
+{
+  int ret = OB_SUCCESS;
+  if (!stored_output_types_.empty()) {
+    if (stored_output_types_.count() != get_output().count()) { ret = OB_ERR_UNEXPECTED; }
+    for (int64_t i = 0; ret == OB_SUCCESS && i < stored_output_types_.count(); ++i) {
+      if (get_output().at(i) == nullptr || stored_output_types_.at(i) == nullptr
+          || !stored_output_types_.at(i)->equals(get_output().at(i)->get_sql_type())) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+  }
+  return ret;
 }
 
 int ObSubQueryIterator::get_next_row()
@@ -70,7 +200,8 @@ int ObSubQueryIterator::get_next_row()
   int ret = OB_SUCCESS;
   bool is_from_store = init_plan_ && inited_;
   if (is_from_store) {
-    ret = store_it_.get_next_row(get_output(), op_.get_eval_ctx());
+    ret = validate_stored_output_types();
+    if (ret == OB_SUCCESS) { ret = store_it_.get_next_row(get_output(), op_.get_eval_ctx()); }
   } else if (parent_->enable_left_das_batch()) {
     uint64_t parent_spf_group = 0;
     int64_t parent_group_rescan_cnt = 0;
@@ -150,7 +281,7 @@ int ObSubQueryIterator::get_next_row_vecrorizely()
   for (int i = 0; OB_SUCC(ret) && i < op_.get_spec().output_.count(); i++) {
     ObExpr *expr = op_.get_spec().output_.at(i);
     if (expr->is_batch_result() && 0 != cur_idx()) {
-      ObDatum *datums = expr->locate_batch_datums(eval_ctx_);
+      Datum *datums = expr->locate_batch_datums(eval_ctx_);
       datums[0] = datums[cur_idx()];
       LOG_DEBUG("copy datum to datum[0], details: ", K(cur_idx()), K(datums[0]),
                K(expr->locate_batch_datums(eval_ctx_)),
@@ -180,8 +311,7 @@ int ObSubQueryIterator::rewind(const bool reset_onetime_plan /* = false */)
     }
   } else {
     if (parent_->enable_left_das_batch()) {
-      if (OB_FAIL(alloc_das_batch_store())) {
-      } else {
+      {
         uint64_t parent_spf_group = 0;
         int64_t parent_group_rescan_cnt = 0;
         const GroupParamArray *group_params = nullptr;
@@ -218,27 +348,42 @@ void ObSubQueryIterator::reuse()
   inited_ = false;
   store_it_.reset();
   store_.reset();
+  stored_output_types_.reuse();
   iter_brs_ = NULL;
   batch_size_ = 0;
   batch_row_pos_ = 0;
   iter_end_ = false;
-  das_batch_params_recovery_.reset();
 }
 //TODO move to the corresponding expr, set a flag to ensure it is calculated only once
 int ObSubQueryIterator::prepare_init_plan()
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
-    if (!store_.is_inited()) {
+    bool resource_output = false;
+    for (int64_t i = 0; OB_SUCC(ret) && i < get_output().count(); ++i) {
+      if (get_output().at(i) == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else { resource_output |= get_output().at(i)->get_sql_type().requires_resource_clone(); }
+    }
+    if (OB_SUCC(ret) && !store_.is_inited()) {
       // TODO bin.lb: use auto memory management
       OZ(store_.init(1L << 20));
       OZ(store_.alloc_dir_id());
     }
-    if (op_.is_vectorized()) {
+    if (OB_FAIL(ret)) {
+    } else if (op_.is_vectorized()) {
       const ObBatchRows *iter_brs = NULL;
       do {
         int64_t stored_rows_count = 0;
         if (OB_FAIL(op_.get_next_batch(op_.get_spec().max_batch_size_, iter_brs))) {
+        } else if (resource_output) {
+          ObEvalCtx::BatchInfoScopeGuard guard(op_.get_eval_ctx());
+          guard.set_batch_size(iter_brs->size_);
+          for (int64_t i = 0; OB_SUCC(ret) && i < iter_brs->size_; ++i) {
+            if (!iter_brs->skip_->at(i)) {
+              guard.set_batch_idx(i);
+              ret = store_retained_resource_row();
+            }
+          }
         } else if (OB_FAIL(store_.add_batch(get_output(), op_.get_eval_ctx(), *iter_brs->skip_,
                                             iter_brs->size_, stored_rows_count))) {
         }
@@ -250,7 +395,8 @@ int ObSubQueryIterator::prepare_init_plan()
       }
     } else {
       while (OB_SUCC(ret) && OB_SUCC(get_next_row())) {
-        OZ(store_.add_row(get_output(), &op_.get_eval_ctx()));
+        if (resource_output) { OZ(store_retained_resource_row()); }
+        else { OZ(store_.add_row(get_output(), &op_.get_eval_ctx())); }
       }
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
@@ -282,8 +428,13 @@ int ObSubQueryIterator::init_probe_row(const int64_t cnt)
   int ret = OB_SUCCESS;
   probe_row_.cnt_ = cnt;
   if (OB_ISNULL(probe_row_.elems_ =
-      static_cast<ObDatum *>(op_.get_exec_ctx().get_allocator().alloc(cnt * sizeof(ObDatum))))) {
+      static_cast<Datum *>(op_.get_exec_ctx().get_allocator().alloc(cnt * sizeof(Datum))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    new (probe_row_.elems_) Datum[cnt];
+    probe_row_.types_ = static_cast<const SqlType **>(
+        op_.get_exec_ctx().get_allocator().alloc(sizeof(SqlType *) * cnt));
+    if (probe_row_.types_ == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
   }
   return ret;
 }
@@ -311,62 +462,142 @@ int ObSubQueryIterator::get_curr_probe_row()
   } else {
     // put exec param into probe_row
     for (int64_t i = 0; i < probe_row_.cnt_; ++i) {
-      probe_row_.elems_[i] = spec.exec_param_array_[get_iter_id() - 1/*ignore child 0*/][i]
-                             ->locate_expr_datum(op_.get_eval_ctx());
+      const ObExpr *expr = spec.exec_param_array_[get_iter_id() - 1][i];
+      probe_row_.elems_[i] = expr->locate_expr_datum(op_.get_eval_ctx());
+      probe_row_.types_[i] = &expr->get_sql_type();
     }
   }
   return ret;
 }
 
-int ObSubQueryIterator::get_refactored(ObDatum &out)
+int ObSubQueryIterator::get_refactored(Datum &out, const ObExpr &result_expr)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(hashmap_.get_refactored(probe_row_, out))) {
-    if (OB_HASH_NOT_EXIST != ret) {
-    }
+  CachedResult cached;
+  bool eligible = false;
+  int ret = cache_key_eligible(eligible);
+  if (ret == OB_SUCCESS && !eligible) { ret = OB_HASH_NOT_EXIST; }
+  if (ret == OB_SUCCESS) { ret = hashmap_.get_refactored(probe_row_, cached); }
+  if (OB_SUCC(ret)) {
+    if (cached.type_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (!cached.type_->equals(result_expr.get_sql_type())) { ret = OB_HASH_NOT_EXIST; }
+    else if (cached.type_->requires_resource_clone()) {
+      ret = retain_scalar_result(cached.value_, *cached.type_, out);
+    } else { out = cached.value_; }
   }
   return ret;
 }
 
-int ObSubQueryIterator::set_refactored(const DatumRow &row,
-                                                       const ObDatum &result,
-                                                       const int64_t deep_copy_size)
+int ObSubQueryIterator::prepare_cache_result(const Datum &result, const ObExpr &result_expr,
+                                             PendingCacheEntry &pending)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(hashmap_.set_refactored(row, result))) {
+  bool eligible = false;
+  int ret = cache_key_eligible(eligible);
+  if (ret != OB_SUCCESS) { return ret; }
+  if (!eligible) { pending = PendingCacheEntry(); return OB_SUCCESS; }
+  int64_t bytes = sizeof(Datum) * (probe_row_.cnt_ + 1)
+      + sizeof(SqlType *) * probe_row_.cnt_;
+  int64_t span = 0;
+  ObIAllocator *allocator = nullptr;
+  if (probe_row_.types_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(result_expr.get_datum_copy_plan().carrier_span_size(result, span))) {
+  } else if (span > INT64_MAX - bytes) {
+    ret = OB_SIZE_OVERFLOW;
   } else {
-    memory_used_ += deep_copy_size;
+    bytes += span;
   }
+  for (int64_t i = 0; OB_SUCC(ret) && i < probe_row_.cnt_; ++i) {
+    if (OB_FAIL(DatumCopyPlan(*probe_row_.types_[i]).carrier_span_size(
+        probe_row_.elems_[i], span))) {
+    } else if (span > INT64_MAX - bytes) {
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      bytes += span;
+    }
+  }
+  if (OB_FAIL(ret) || !check_can_insert(bytes)) {
+  } else if (OB_FAIL(get_arena_allocator(allocator)) || OB_ISNULL(allocator)) {
+    if (OB_SUCC(ret)) { ret = OB_ERR_UNEXPECTED; }
+  } else {
+    DatumRow key;
+    Datum value;
+    const SqlType *result_type = nullptr;
+    key.cnt_ = probe_row_.cnt_;
+    if (OB_ISNULL(key.elems_ = static_cast<Datum *>(allocator->alloc(sizeof(Datum) * key.cnt_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_ISNULL(key.types_ = static_cast<const SqlType **>(
+        allocator->alloc(sizeof(SqlType *) * key.cnt_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      new (key.elems_) Datum[key.cnt_];
+      // A cache entry outlives the input frame. Resources must use the real
+      // domain cloner; copying only their wrapper would retain stale pointees.
+      if (OB_FAIL(result_expr.get_sql_type().clone_to(*allocator, result_type))) {
+      } else if (result_type->requires_resource_clone()) {
+        NativeSqlValueOwner *owner = nullptr;
+        if (OB_FAIL(get_cache_value_owner(owner))) {
+        } else {
+          // Complete native Type is authoritative; unknown resource leaves
+          // have no implicit runtime namespace and fail before publication.
+          ret = clone_native_owned_value(*result_type, result, *owner, value, nullptr, false);
+        }
+      } else if (OB_FAIL(ObExpr::clone_native_value(*result_type, result, *allocator, value))) {
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < key.cnt_; ++i) {
+        // Retain type metadata in the same cache owner as each cloned value;
+        // a runtime Expr may later bind a different effective parameter type.
+        if (OB_FAIL(probe_row_.types_[i]->clone_to(*allocator, key.types_[i]))) {
+        } else {
+          ret = ObExpr::clone_native_value(*key.types_[i], probe_row_.elems_[i],
+                                           *allocator, key.elems_[i]);
+        }
+      }
+      if (OB_SUCC(ret)) {
+        pending.key_ = key;
+        pending.value_ = value;
+        pending.result_type_ = result_type;
+        pending.ready_ = true;
+      }
+    }
+    // Include allocations made by domain cloners and failed insertions. A
+    // single resource clone may exceed the historical cache soft limit.
+    memory_used_ = mem_entity_->get_arena_allocator().used();
+  }
+  return ret;
+}
+
+int ObSubQueryIterator::publish_cache_result(PendingCacheEntry &pending)
+{
+  int ret = OB_SUCCESS;
+  if (pending.ready_) {
+    CachedResult result;
+    result.value_ = pending.value_;
+    result.type_ = pending.result_type_;
+    ret = hashmap_.set_refactored(pending.key_, result, 1 /* overwrite a changed result type */);
+    if (OB_SUCC(ret)) { pending.ready_ = false; }
+  }
+  return ret;
+}
+
+int ObSubQueryIterator::cache_result(const Datum &result, const ObExpr &result_expr)
+{
+  PendingCacheEntry pending;
+  int ret = prepare_cache_result(result, result_expr, pending);
+  if (OB_SUCC(ret)) { ret = publish_cache_result(pending); }
   return ret;
 }
 
 int ObSubQueryIterator::reset_hash_map()
 {
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(mem_entity_)) {
-    mem_entity_->reuse();
-  }
-  memory_used_ = 0;
-  if (hashmap_.created() && OB_FAIL(hashmap_.reuse())) {
+  const int ret = close_cache_values();
+  if (ret == OB_SUCCESS) {
+    if (mem_entity_ != nullptr) { mem_entity_->reuse(); }
+    memory_used_ = 0;
   }
   return ret;
 }
 
-int ObSubQueryIterator::alloc_das_batch_store()
-{
-  int ret = OB_SUCCESS;
-  int64_t params_count = 0;
-  params_count = parent_->get_spec().rescan_params_.count();
-  if (!das_batch_params_recovery_.empty()) {
-    //Do nothing
-    OB_ASSERT(params_count == das_batch_params_recovery_.count());
-  } else {
-    ObIAllocator& alloc = op_.get_exec_ctx().get_allocator();
-    if (OB_FAIL(das_batch_params_recovery_.allocate_array(alloc, params_count))) {
-    }
-  }
-  return ret;
-}
+
 
 ObSubPlanFilterSpec::ObSubPlanFilterSpec(ObIAllocator &alloc, const ObPhyOperatorType type)
   : ObOpSpec(alloc, type),
@@ -424,6 +655,7 @@ ObSubPlanFilterOp::ObSubPlanFilterOp(
   : ObOperator(exec_ctx, spec, input),
     iter_end_(false),
     max_group_size_(0),
+    execution_value_owner_(nullptr),
     update_set_mem_(NULL),
     enable_left_px_batch_(false),
     current_group_(0),
@@ -435,13 +667,52 @@ ObSubPlanFilterOp::ObSubPlanFilterOp(
     is_left_end_(false),
     left_row_idx_(0),
     batch_rescan_ctl_(),
-    cur_params_(),
-    cur_param_idxs_(),
-    cur_param_expr_idxs_(),
     last_store_row_mem_(NULL),
-    group_rescan_cnt_(0),
-    rescan_params_info_()
+    group_rescan_cnt_(0)
 {
+}
+
+int ObSubPlanFilterOp::retain_scalar_result(const Datum &source, const SqlType &type, Datum &output)
+{
+  int ret = OB_SUCCESS;
+  if (!type.requires_resource_clone()) {
+    ret = ObExpr::clone_native_value(type, source, ctx_.get_allocator(), output);
+  } else {
+    if (execution_value_owner_ == nullptr) {
+      void *memory = ctx_.get_allocator().alloc(sizeof(NativeSqlValueOwner));
+      if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { execution_value_owner_ = new (memory) NativeSqlValueOwner(ctx_.get_allocator(), ctx_.get_my_session()); }
+    }
+    if (ret == OB_SUCCESS) {
+      ret = clone_native_owned_value(type, source, *execution_value_owner_, output, nullptr, true);
+    }
+  }
+  return ret;
+}
+
+int ObSubPlanFilterOp::close_owned_values()
+{
+  int first_error = OB_SUCCESS;
+  FOREACH_CNT(it, subplan_iters_) {
+    if (*it != nullptr) {
+      const int ret = (*it)->close_cache_values();
+      if (first_error == OB_SUCCESS && ret != OB_SUCCESS) { first_error = ret; }
+    }
+  }
+  if (execution_value_owner_ != nullptr) {
+    const int ret = execution_value_owner_->enforce_empty_before_destroy();
+    if (first_error == OB_SUCCESS && ret != OB_SUCCESS) { first_error = ret; }
+  }
+  return first_error;
+}
+
+void ObSubPlanFilterOp::enforce_empty_before_destroy()
+{
+  const int ret = close_owned_values();
+  if (ret != OB_SUCCESS) {
+    LOG_ERROR("SPF resource cleanup failed before arena destroy", K(ret));
+    ob_abort();
+  }
 }
 
 ObSubPlanFilterOp::~ObSubPlanFilterOp()
@@ -453,6 +724,7 @@ ObSubPlanFilterOp::~ObSubPlanFilterOp()
 
 void ObSubPlanFilterOp::destroy_subplan_iters()
 {
+  enforce_empty_before_destroy();
   FOREACH_CNT(it, subplan_iters_) {
     if (NULL != *it) {
       (*it)->~Iterator();
@@ -460,6 +732,11 @@ void ObSubPlanFilterOp::destroy_subplan_iters()
     }
   }
   subplan_iters_.reset();
+  if (execution_value_owner_ != nullptr) {
+    execution_value_owner_->~NativeSqlValueOwner();
+    ctx_.get_allocator().free(execution_value_owner_);
+    execution_value_owner_ = nullptr;
+  }
 }
 
 void ObSubPlanFilterOp::destroy_px_batch_rescan_status()
@@ -468,9 +745,6 @@ void ObSubPlanFilterOp::destroy_px_batch_rescan_status()
   last_store_row_.reset();
   left_rows_.reset();
   batch_rescan_ctl_.reset();
-  cur_params_.reset();
-  cur_param_expr_idxs_.reset();
-  cur_param_idxs_.reset();
 }
 
 void ObSubPlanFilterOp::destroy()
@@ -512,9 +786,6 @@ int ObSubPlanFilterOp::rescan()
 
   if (OB_SUCC(ret) && enable_left_px_batch_) {
     batch_rescan_ctl_.reuse();
-    cur_params_.reset();
-    cur_param_idxs_.reset();
-    cur_param_expr_idxs_.reset();
     brs_holder_.reset();
   }
 
@@ -569,17 +840,20 @@ int ObSubPlanFilterOp::fill_cur_row_rescan_param()
   } else if (batch_rescan_ctl_.cur_idx_ >= batch_rescan_ctl_.params_.get_count()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    common::ObIArray<common::ObObjParam>& params =
-        batch_rescan_ctl_.params_.get_one_batch_params(batch_rescan_ctl_.cur_idx_);
+    const ObBatchRescanParams::Row &params =
+        batch_rescan_ctl_.params_.get_one_batch_values(batch_rescan_ctl_.cur_idx_);
+    const auto &attributes = batch_rescan_ctl_.params_.get_one_batch_metadata(batch_rescan_ctl_.cur_idx_);
     int64_t param_cnt = params.count();
     int64_t idx = OB_INVALID_ID;
     for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
       idx = batch_rescan_ctl_.params_.get_param_idx(i);
-      plan_ctx->get_param_store_for_update().at(idx) = params.at(i);
+      if (OB_UNLIKELY(i >= MY_SPEC.rescan_params_.count() || MY_SPEC.rescan_params_.at(i).param_idx_ != idx)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ret = MY_SPEC.rescan_params_.at(i).restore_dynamic_param(eval_ctx_, params.at(i), attributes.at(i));
+      }
     }
   }
-  int64_t params_size = 0;
-  OZ(prepare_rescan_params(false, params_size));
   return ret;
 }
 
@@ -638,10 +912,10 @@ int ObSubPlanFilterOp::inner_open()
         } else if (OB_FAIL(iter->init_mem_entity())) {
         } else if (MY_SPEC.exec_param_array_[i - 1].count() > 0) {
           //min of buckets is 16,
-          //max will not exceed card of left_child and HASH_MAP_MEMORY_LIMIT/ObObj
+          //max will not exceed card of left_child and HASH_MAP_MEMORY_LIMIT/sizeof(Datum)
           if (OB_FAIL(iter->init_hashmap(max(
                   16/*hard code*/, min(get_child(0)->get_spec().get_rows(),
-                      iter->HASH_MAP_MEMORY_LIMIT / static_cast<int64_t>(sizeof(ObDatum))))))) {
+                      iter->HASH_MAP_MEMORY_LIMIT / static_cast<int64_t>(sizeof(Datum))))))) {
           } else if (OB_FAIL(iter->init_probe_row(MY_SPEC.exec_param_array_[i - 1].count()))) {
           }
         }
@@ -689,11 +963,12 @@ int ObSubPlanFilterOp::inner_open()
 
 int ObSubPlanFilterOp::inner_close()
 {
+  const int ret = close_owned_values();
+  if (ret != OB_SUCCESS) { return ret; }
   destroy_subplan_iters();
   destroy_update_set_mem();
   if (MY_SPEC.enable_das_group_rescan_) {
     das_batch_params_.reset();
-    rescan_params_info_.reset();
   }
   return OB_SUCCESS;
 }
@@ -941,7 +1216,7 @@ int ObSubPlanFilterOp::handle_next_batch_with_px_rescan(const int64_t op_max_bat
           } else if (filtered) {
             brs_.skip_->set(l_idx);
           } else {
-            ObDatum *datum = NULL;
+            Datum *datum = NULL;
             FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
               if (OB_FAIL((*e)->eval(eval_ctx_, datum))) {
               }
@@ -976,9 +1251,8 @@ int ObSubPlanFilterOp::handle_next_batch_with_group_rescan(const int64_t op_max_
     left_rows_iter_.reset();
     (void) brs_holder_.restore();
     current_group_ = 0;
-    last_store_row_mem_->get_arena_allocator().reset();
-    if(OB_FAIL(init_das_batch_params())) {
-    }
+    if (OB_FAIL(init_das_batch_params())) {
+    } else { last_store_row_mem_->get_arena_allocator().reset(); }
     while (OB_SUCC(ret) && continue_fetching(left_rows_total_cnt, stop_fetch, true)) {
       set_param_null();
       clear_evaluated_flag();
@@ -1062,7 +1336,7 @@ int ObSubPlanFilterOp::handle_next_batch_with_group_rescan(const int64_t op_max_
           } else if (filtered) {
             brs_.skip_->set(l_idx);
           } else {
-            ObDatum *datum = NULL;
+            Datum *datum = NULL;
             FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
               if (OB_FAIL((*e)->eval(eval_ctx_, datum))) {
               }
@@ -1144,7 +1418,7 @@ int ObSubPlanFilterOp::inner_get_next_batch(const int64_t max_row_cnt)
               brs_.skip_->set(l_idx);
             } else {
               all_filtered = false;
-              ObDatum *datum = NULL;
+              Datum *datum = NULL;
               FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
                 if (OB_FAIL((*e)->eval(eval_ctx_, datum))) {
                 }
@@ -1173,33 +1447,36 @@ int ObSubPlanFilterOp::inner_get_next_batch(const int64_t max_row_cnt)
 int ObSubPlanFilterOp::prepare_rescan_params(bool need_save, int64_t& params_size)
 {
   int ret = OB_SUCCESS;
-  ObObjParam *param = NULL;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   CK(OB_NOT_NULL(plan_ctx));
-  cur_params_.reset();
-  cur_param_idxs_.reset();
-  cur_param_expr_idxs_.reset();
-  for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.rescan_params_.count(); ++i) {
-    if (OB_FAIL(MY_SPEC.rescan_params_.at(i).set_dynamic_param(eval_ctx_, param))) {
-    } else if (OB_ISNULL(param)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (need_save) {
-      ObObjParam copy_result;
-      int64_t expr_idx = 0;
-      OZ(batch_rescan_ctl_.params_.deep_copy_param(*param, copy_result));
-      params_size += copy_result.get_deep_copy_size();
-      OZ(cur_params_.push_back(copy_result));
-      OZ(cur_param_idxs_.push_back(MY_SPEC.rescan_params_.at(i).param_idx_));
-      CK(OB_NOT_NULL(plan_ctx->get_phy_plan()));
-      OZ(plan_ctx->get_phy_plan()->get_expr_frame_info().get_expr_idx_in_frame(
-          MY_SPEC.rescan_params_.at(i).dst_, expr_idx));
-      OZ(cur_param_expr_idxs_.push_back(expr_idx));
+  if (!need_save) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.rescan_params_.count(); ++i) {
+      ret = MY_SPEC.rescan_params_.at(i).set_dynamic_param(eval_ctx_);
     }
-  }
-  if (OB_SUCC(ret) && need_save) {
-    batch_rescan_ctl_.param_version_ += 1;
-    OZ(batch_rescan_ctl_.params_.append_batch_rescan_param(
-            cur_param_idxs_, cur_params_, cur_param_expr_idxs_));
+  } else {
+    ObBatchRescanParams::RowBuilder builder(batch_rescan_ctl_.params_);
+    common::ObSEArray<int64_t, 8> param_idxs, param_expr_idxs;
+    for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.rescan_params_.count(); ++i) {
+      const ObDynamicParamSetter &setter = MY_SPEC.rescan_params_.at(i);
+      NativeTypedDatum value;
+      DatumParameterMetadata attributes;
+      int64_t expr_idx = 0;
+      OZ(setter.set_dynamic_param(eval_ctx_, value, attributes));
+      OZ(builder.append(value, attributes));
+      if (OB_SUCC(ret)) {
+        int64_t bytes = 0;
+        OZ(DatumCopyPlan(*value.type_).carrier_span_size(value.datum_, bytes));
+        if (OB_SUCC(ret)) { params_size += bytes; }
+      }
+      OZ(param_idxs.push_back(setter.param_idx_));
+      CK(OB_NOT_NULL(plan_ctx->get_phy_plan()));
+      OZ(plan_ctx->get_phy_plan()->get_expr_frame_info().get_expr_idx_in_frame(setter.dst_, expr_idx));
+      OZ(param_expr_idxs.push_back(expr_idx));
+    }
+    if (OB_SUCC(ret)) {
+      ret = builder.finish(param_idxs, param_expr_idxs);
+      if (OB_SUCC(ret)) { batch_rescan_ctl_.param_version_ += 1; }
+    }
   }
   return ret;
 }
@@ -1249,7 +1526,7 @@ int ObSubPlanFilterOp::prepare_onetime_exprs_inner()
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.onetime_exprs_.count(); ++i) {
     const ObDynamicParamSetter &setter = MY_SPEC.onetime_exprs_.at(i);
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(setter.src_->eval(eval_ctx_, datum))) {
     } else if (OB_FAIL(setter.update_dynamic_param(eval_ctx_, *datum))) {
     }
@@ -1331,33 +1608,14 @@ int ObSubPlanFilterOp::alloc_das_batch_params(uint64_t group_size)
 {
   int ret = OB_SUCCESS;
   if (das_batch_params_.empty()) {
-    ret = das_batch_params_.allocate_array(ctx_.get_allocator(),
-                                           MY_SPEC.rescan_params_.count());
-    if(OB_SUCC(ret)) {
-      uint64_t obj_buf_size = sizeof(ObObjParam) * group_size;
-      for (int64_t i = 0; OB_SUCC(ret) && i < das_batch_params_.count(); ++i) {
-        void *buf = ctx_.get_allocator().alloc(obj_buf_size);
-        if (NULL == buf) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          das_batch_params_.at(i).data_ = reinterpret_cast<ObObjParam*>(buf);
-          das_batch_params_.at(i).count_ = 0;
-          ObExpr *dst_expr = MY_SPEC.rescan_params_.at(i).dst_;
-          das_batch_params_.at(i).element_.set_meta_type(dst_expr->obj_meta_);
-        }
-      }
+    GroupParamArray prepared;
+    if (OB_FAIL(prepared.allocate_array(ctx_.get_allocator(), MY_SPEC.rescan_params_.count()))) {
     } else {
-    }
-  }
-  if (OB_SUCC(ret) && !das_batch_params_.empty()) {
-    ret = rescan_params_info_.allocate_array(ctx_.get_allocator(),
-                                           MY_SPEC.rescan_params_.count());
-    if (OB_SUCC(ret)) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < rescan_params_info_.count(); ++i) {
-        rescan_params_info_.at(i).param_idx_ = MY_SPEC.rescan_params_.at(i).param_idx_;
-        rescan_params_info_.at(i).gr_param_ = &das_batch_params_.at(i);
+      for (int64_t i = 0; OB_SUCC(ret) && i < prepared.count(); ++i) {
+        ret = prepared.at(i).init(MY_SPEC.rescan_params_.at(i).param_idx_, group_size, ctx_.get_allocator());
       }
     }
+    if (OB_SUCC(ret)) { das_batch_params_ = prepared; }
   }
   return ret;
 }
@@ -1367,7 +1625,11 @@ int ObSubPlanFilterOp::init_das_batch_params()
   OB_ASSERT(!das_batch_params_.empty());
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < das_batch_params_.count(); ++i) {
-    das_batch_params_.at(i).count_ = 0;
+    auto &column = das_batch_params_.at(i);
+    for (int64_t j = 0; j < column.values_.count(); ++j) {
+      column.values_.at(j) = NativeTypedDatum(); column.metadata_.at(j) = DatumParameterMetadata();
+    }
+    column.count_ = 0;
   }
   return ret;
 }
@@ -1375,51 +1637,32 @@ int ObSubPlanFilterOp::init_das_batch_params()
 int ObSubPlanFilterOp::deep_copy_dynamic_obj()
 {
   int ret = OB_SUCCESS;
-  ObObjParam *param = NULL;
-  int64_t param_cnt = MY_SPEC.rescan_params_.count();
-  if (OB_ISNULL(last_store_row_mem_)) {
-    ret = OB_INVALID_ARGUMENT;
+  const int64_t count = MY_SPEC.rescan_params_.count();
+  if (OB_ISNULL(last_store_row_mem_) || count != das_batch_params_.count()) { ret = OB_INVALID_ARGUMENT; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    NativeTypedDatum value;
+    DatumParameterMetadata attributes;
+    if (das_batch_params_.at(i).count_ != das_batch_params_.at(0).count_) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(MY_SPEC.rescan_params_.at(i).set_dynamic_param(eval_ctx_, value, attributes))) {
+    } else { ret = das_batch_params_.at(i).stage(value, attributes, last_store_row_mem_->get_arena_allocator()); }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
-    const ObDynamicParamSetter &rescan_param = MY_SPEC.rescan_params_.at(i);
-    if (OB_FAIL(rescan_param.set_dynamic_param(eval_ctx_, param))) {
-    } else if (OB_ISNULL(param)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ob_write_obj(last_store_row_mem_->get_arena_allocator(),
-                                    *param,
-                                    das_batch_params_.at(i).data_[das_batch_params_.at(i).count_]))) {
-    } else {
-      ++das_batch_params_.at(i).count_;
-    }
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; i < count; ++i) { ++das_batch_params_.at(i).count_; }
   }
   return ret;
 }
 
-int ObSubPlanFilterOp::fill_cur_row_das_batch_param(ObEvalCtx& eval_ctx, uint64_t current_group) const
+int ObSubPlanFilterOp::fill_cur_row_das_batch_param(ObEvalCtx &eval_ctx, uint64_t current_group) const
 {
   int ret = OB_SUCCESS;
-  ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
-  if (das_batch_params_.empty() || current_group >= das_batch_params_.at(0).count_) {
+  if (das_batch_params_.empty() || MY_SPEC.rescan_params_.count() != das_batch_params_.count()) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
-    int64_t param_cnt = das_batch_params_.count();
-    if (unlikely(MY_SPEC.rescan_params_.count() != param_cnt)) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
-      const ObDynamicParamSetter &rescan_param = MY_SPEC.rescan_params_.at(i);
-      int64_t param_idx = rescan_param.param_idx_;
-      ObExpr *dst = rescan_param.dst_;
-      ObDatum &param_datum = dst->locate_datum_for_write(eval_ctx);
-      const ObSqlArrayObj &arr = das_batch_params_.at(i);
-      dst->get_eval_info(eval_ctx).clear_evaluated_flag();
-      ObDynamicParamSetter::clear_parent_evaluated_flag(eval_ctx, *dst);
-      if (OB_FAIL(param_datum.from_obj(arr.data_[current_group], dst->obj_datum_map_))) {
-      } else {
-        plan_ctx->get_param_store_for_update().at(param_idx) = arr.data_[current_group];
-        dst->set_evaluated_projected(eval_ctx);
-      }
-    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < das_batch_params_.count(); ++i) {
+    const GroupRescanParam &column = das_batch_params_.at(i);
+    if (current_group >= column.count_) { ret = OB_ERR_UNEXPECTED; }
+    else { ret = MY_SPEC.rescan_params_.at(i).restore_dynamic_param(
+        eval_ctx, column.values_.at(current_group), column.metadata_.at(current_group)); }
   }
   return ret;
 }

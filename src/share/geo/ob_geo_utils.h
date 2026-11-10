@@ -32,7 +32,6 @@ namespace oceanbase
 {
 namespace common
 {
-typedef common::hash::ObHashMap<common::ObString, common::ObObj*> QualifiedMap;
 enum class NumberObjType {
   DOUBLE,
   UINT64

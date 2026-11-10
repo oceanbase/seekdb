@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_arg_case.h"
-#include "sql/engine/expr/ob_expr_equal.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
@@ -49,10 +48,10 @@ int ObExprArgCase::deserialize(const char *buf, const int64_t data_len, int64_t 
       int64_t loop = input_types_.count() / 2;
       bool all_are_numeric = ob_is_accurate_numeric_type(input_types_.at(0).get_calc_type());
       bool all_same_type = true;
-      ObObjMeta case_meta = input_types_.at(0).get_calc_meta();
+      SqlTypeMeta case_meta = input_types_.at(0).get_calc_meta();
       for (int64_t i = 1; OB_SUCC(ret) && i < loop; ++i) {
-        ObObjType type = input_types_.at(i).get_calc_type();
-        ObObjMeta param_meta = input_types_.at(i).get_calc_meta();
+        SqlValueType type = input_types_.at(i).get_calc_type();
+        SqlTypeMeta param_meta = input_types_.at(i).get_calc_meta();
         if (all_same_type && !ObSQLUtils::is_same_type_for_compare(case_meta, param_meta)) {
           all_same_type = false;
         }
@@ -148,7 +147,7 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
       type.set_calc_collation_level(tmp_res_type.get_collation_level());
       ObExprOperator::calc_result_flagN(type, types_stack + cond_type_count, val_type_count);
       for (int64_t i = 1; OB_SUCC(ret) && i < cond_type_count; ++i) {
-        ObObjType calc_type;
+        SqlValueType calc_type;
         if (ob_is_enumset_tc(types_stack[i].get_type())) {
           if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(calc_type,
                                                                     types_stack[0].get_type(),
@@ -158,72 +157,6 @@ int ObExprArgCase::calc_result_typeN(ObExprResType &type,
           }
         }
       }
-    }
-  }
-  return ret;
-}
-
-int ObExprArgCase::calc_with_cast(ObObj &result,
-                        const ObObj *objs_stack,
-                        int64_t param_num,
-                        ObCompareCtx &cmp_ctx,
-                        ObCastCtx &cast_ctx,
-                        const ObExprResType &res_type,
-                        const ob_get_cmp_type_func get_cmp_type_func)
-{
-  int ret = OB_SUCCESS;
-  bool match_when = false;
-  ObObj tmp_result;
-  ObObj equal_result;
-  if (OB_ISNULL(objs_stack) || OB_ISNULL(get_cmp_type_func)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(param_num < 2) ) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param_num", K(param_num));
-  } else {
-    // case c1
-    //  when 10 then expr1
-    //  when 11 then expr2
-    //  else expr3
-    // param_count = 2+2N
-    //
-    // case c1 when 10 then expr1
-    //         when 11 then expr2
-    // param_count = 1+2N
-
-    const bool has_else = (param_num % 2 == 0);
-    int64_t loop = (has_else) ? param_num - 2 : param_num;
-    for (int64_t i = 1; OB_SUCC(ret) && i < loop; i += 2) {
-      if (OB_FAIL(get_cmp_type_func(cmp_ctx.cmp_type_,
-                                    objs_stack[0].get_type(),
-                                    objs_stack[i].get_type(),
-                                    res_type.get_calc_type()))) {
-      } else {
-        cast_ctx.dest_collation_ = cmp_ctx.cmp_cs_type_;
-        ret = ObExprEqual::calc_cast(equal_result, objs_stack[0], objs_stack[i], cmp_ctx, cast_ctx);
-        if (OB_SUCC(ret)) {
-          if (ObNullType == equal_result.get_type()) {
-          } else if (OB_UNLIKELY(ObInt32Type != equal_result.get_type())) { // ObExprEqual::calc returns int32
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected calc result type. must be tiny", K(equal_result));
-          } else if (equal_result.is_true()) {
-            match_when = true;
-            tmp_result = objs_stack[i + 1];
-            break;
-          }
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (!match_when) {
-        if (param_num % 2 == 0) {
-          tmp_result = objs_stack[param_num - 1]; // match else (default value)
-        } else {
-          tmp_result.set_null();
-        }
-      }
-      cast_ctx.dest_collation_ = res_type.get_collation_type();
-      ret = ObObjCaster::to_type(res_type.get_type(), res_type.get_collation_type(), cast_ctx, tmp_result, result);
     }
   }
   return ret;

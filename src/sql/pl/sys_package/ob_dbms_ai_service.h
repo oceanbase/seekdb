@@ -25,13 +25,6 @@
 namespace oceanbase
 {
 
-namespace common
-{
-
-class ObObj;
-
-} // namespace common
-
 namespace pl
 {
 
@@ -40,12 +33,12 @@ class ObPLExecCtx;
 class ObDBMSAiService
 {
 public:
-  static int create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result);
-  static int drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result);
+  static int drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result);
 
-  static int create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result);
-  static int alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result);
-  static int drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result);
+  static int alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result);
+  static int drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result);
 private:
   static int precheck_version_and_param_count_(int expect_param_count, sql::ParamStore &params);
   static int get_json_base_(

@@ -57,7 +57,7 @@ int ObExprNotExists::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) 
 };
 
 int ObExprNotExists::not_exists_eval(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   bool exists = false;

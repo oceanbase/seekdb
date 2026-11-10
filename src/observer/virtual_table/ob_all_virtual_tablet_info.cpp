@@ -110,54 +110,54 @@ int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID:
           // tablet_id
-          cur_row_.cells_[i].set_int(tablet_meta.tablet_id_.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tablet_meta.tablet_id_.id()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 1:
           // data_tablet_id
-          cur_row_.cells_[i].set_int(tablet_meta.data_tablet_id_.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tablet_meta.data_tablet_id_.id()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 2:
           // ref_tablet_id
-          cur_row_.cells_[i].set_int(0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, 0) : ret);
           break;
           //TODO:SCN
         case OB_APP_MIN_COLUMN_ID + 3:
           // checkpoint_ts
-          cur_row_.cells_[i].set_uint64(tablet_meta.clog_checkpoint_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, tablet_meta.clog_checkpoint_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 4:
           // snapshot_version
-          cur_row_.cells_[i].set_uint64(tablet_meta.snapshot_version_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, tablet_meta.snapshot_version_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 5:
           // multi_version_start
-          cur_row_.cells_[i].set_uint64(tablet_meta.multi_version_start_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, tablet_meta.multi_version_start_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 6: {
           // restore_status
           ObTabletRestoreStatus::STATUS restore_status;
           if (OB_FAIL(tablet_meta.local_status_.get_restore_status(restore_status))) {
           } else {
-            cur_row_.cells_[i].set_int(restore_status);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, restore_status) : ret);
           }
         }
           break;
         case OB_APP_MIN_COLUMN_ID + 7: {
           // tablet_status
           if (is_empty_result) {
-            cur_row_.cells_[i].set_int(static_cast<int64_t>(ObTabletStatus::MAX));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, static_cast<int64_t>(ObTabletStatus::MAX)) : ret);
           } else {
-            cur_row_.cells_[i].set_int(static_cast<int64_t>(latest_user_data.get_tablet_status()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, static_cast<int64_t>(latest_user_data.get_tablet_status())) : ret);
           }
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 8:
           // is_committed
-          cur_row_.cells_[i].set_int(trans_stat == mds::TwoPhaseCommitState::ON_COMMIT ? 1 : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, trans_stat == mds::TwoPhaseCommitState::ON_COMMIT ? 1 : 0) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 9:
           // is_empty_shell
-          cur_row_.cells_[i].set_int(tablet->is_empty_shell() ? 1 : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tablet->is_empty_shell() ? 1 : 0) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

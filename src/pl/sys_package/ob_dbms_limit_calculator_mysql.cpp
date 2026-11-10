@@ -31,7 +31,7 @@ namespace pl
 int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
     sql::ObExecContext &ctx,
     sql::ParamStore &params,
-    common::ObObj &result)
+    common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   const int64_t MAX_RES_LEN = 512;
@@ -59,7 +59,7 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
   } else if (OB_FAIL(resource_calculator->get_min_phy_resource_value(arg, res))) {
   } else if (OB_FAIL(get_json_result_(res, ptr, MAX_RES_LEN, pos))) {
   } else {
-    params.at(1).set_varchar(ptr, pos);
+    params.at(1).set_varchar_view(ObString(pos, ptr));
     LOG_INFO("phy_res_calculate_by_logic_res success", K(arg), K(res),
              K(str_arg), K(params.at(0).get_varchar()), K(params.at(1).get_varchar()));
   }

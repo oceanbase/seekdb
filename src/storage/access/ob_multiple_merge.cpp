@@ -1165,28 +1165,48 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
     if (OB_FAIL(nop_pos_.get_nop_pos(i, pos))) {
     } else {
       idx = access_param_->iter_param_.out_cols_project_->at(pos);
-      ObObj def_cell(out_cols_param->at(idx)->get_orig_default_value());
-      if (is_lob_storage(def_cell.get_type())
+      DatumValue def_cell;
+      alignas(8) char default_scratch[64];
+      if (OB_FAIL(out_cols_param->at(idx)->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+      } else if (is_lob_storage(def_cell.get_type())
           && OB_FAIL(fuse_lob_default(def_cell, out_cols_param->at(idx)->get_column_id()))) {
         STORAGE_LOG(WARN, "Fail to fuse lob default, ", K(ret));
       } else if (NULL == access_param_->output_exprs_) {
-        if (OB_FAIL(row.storage_datums_[pos].from_obj(def_cell))) {
+        if (OB_FAIL(row.storage_datums_[pos].from_value(def_cell))) {
         }
       } else {
         // skip virtual column which has nop default value.
         if (!def_cell.is_nop_value()) {
           sql::ObExpr *expr = access_param_->output_exprs_->at(pos);
-          sql::ObDatum &datum = expr->locate_datum_for_write(
+          common::Datum &datum = expr->locate_datum_for_write(
               access_param_->get_op()->get_eval_ctx());
           sql::ObEvalInfo &eval_info = expr->get_eval_info(
               access_param_->get_op()->get_eval_ctx());
-          if (OB_FAIL(datum.from_obj(def_cell, expr->obj_datum_map_))) {
-          } else if (is_lob_storage(def_cell.get_type()) &&
-                     OB_FAIL(sql::ob_adjust_lob_datum(
-                         access_param_->get_op()->get_eval_ctx().exec_ctx_,
-                         def_cell, expr->obj_meta_, expr->obj_datum_map_,
-                         lob_reader_.get_allocator(), datum))) {
-          } else {
+          // Scalars are imported inline; references keep their column/LOB
+          // owner. Any wrapper materialized in scratch is copied to the
+          // expression's result owner before this scope ends.
+          ObDatum source;
+          alignas(8) char source_scratch[64];
+          if (OB_FAIL(def_cell.export_legacy(source, source_scratch, sizeof(source_scratch)))) {
+          } else if (ObDatum::get_sql_value_datum_map_type(def_cell.get_type()) == OBJ_DATUM_STRING
+              && !def_cell.is_null()) {
+            // The LOB header contract lives in meta. Match the former string
+            // mapping's OUTROW flag without inheriting SQL-only Datum flags.
+            source.pack_ = source.len_;
+            if (def_cell.get_meta().is_outrow()) { source.set_outrow(); }
+          }
+          common::Datum native_source;
+          if (OB_SUCC(ret) && OB_FAIL(expr->get_datum_copy_plan().import_legacy(source, native_source))) {
+          } else if (OB_SUCC(ret) && native_source.is_present() && native_source.length() > 0
+                     && native_source.get_reference() == source_scratch) {
+            ret = expr->deep_copy_datum(access_param_->get_op()->get_eval_ctx(), native_source);
+          } else if (OB_SUCC(ret)) { datum = native_source; }
+          if (OB_SUCC(ret) && is_lob_storage(def_cell.get_type()) &&
+              OB_FAIL(sql::ob_adjust_lob_datum(
+                  access_param_->get_op()->get_eval_ctx().exec_ctx_,
+                  native_source, def_cell.get_meta(), expr->obj_meta_,
+                  lob_reader_.get_allocator(), datum))) {
+          } else if (OB_SUCC(ret)) {
             eval_info.evaluated_ = true;
           }
         }
@@ -1263,7 +1283,7 @@ int ObMultipleMerge::fill_virtual_columns(ObDatumRow &row)
         sql::ObExpr *expr = access_param_->output_exprs_->at(pos);
         // table scan access exprs is column reference expr, only virtual column has argument.
         if (expr->arg_cnt_ > 0) {
-          ObDatum *datum = NULL;
+          common::Datum *datum = NULL;
           access_param_->get_op()->clear_datum_eval_flag();
           if (OB_FAIL(expr->eval(access_param_->get_op()->get_eval_ctx(), datum))) {
           } else if (need_padding_ && expr->obj_meta_.is_fixed_len_char_type()) {
@@ -1603,7 +1623,7 @@ OB_INLINE bool ObMultipleMerge::need_handle_lob_columns(const blocksstable::ObDa
     bret = false;
     for (int64_t i = access_param_->iter_param_.get_schema_rowkey_count(); !bret && i < row.count_; ++i) {
       blocksstable::ObStorageDatum &datum = row.storage_datums_[i];
-      ObObjMeta datum_meta = access_param_->iter_param_.get_col_params()->at(i)->get_meta_type();
+      SqlTypeMeta datum_meta = access_param_->iter_param_.get_col_params()->at(i)->get_meta_type();
       if (datum_meta.is_lob_storage() && !datum.is_null() && !datum.is_nop()) {
         const ObLobCommon *lob_common = reinterpret_cast<const ObLobCommon *>(datum.ptr_);
         bret |= (!lob_common->in_row_);
@@ -1637,7 +1657,7 @@ int ObMultipleMerge::handle_lob_before_fuse_row()
   return ret;
 }
 
-int ObMultipleMerge::fuse_lob_default(ObObj &def_cell, const uint64_t col_id)
+int ObMultipleMerge::fuse_lob_default(DatumValue &def_cell, const uint64_t col_id)
 {
   // Do not change this behavior dynamically while a scan is running;
   // otherwise the locator helper may not match the selected compatibility mode.
@@ -1657,8 +1677,8 @@ int ObMultipleMerge::fuse_lob_default(ObObj &def_cell, const uint64_t col_id)
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected lob locator helper", K(ret),
                     KPC(access_ctx_->lob_locator_helper_));
-      } else if (access_ctx_->lob_locator_helper_->fuse_mem_lob_header(def_cell,
-                  col_id, is_sys_table(access_param_->iter_param_.table_id_))) {
+      } else if (OB_FAIL(lob_locator_helper->fuse_mem_lob_header(def_cell,
+                  col_id, is_sys_table(access_param_->iter_param_.table_id_)))) {
         STORAGE_LOG(WARN, "fuse lob default with locator v2 failed", K(ret));
       }
     }

@@ -41,7 +41,7 @@ int ObAllVirtualEngineTable::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator is NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -59,31 +59,31 @@ int ObAllVirtualEngineTable::inner_get_next_row(common::ObNewRow *&row)
           uint64_t col_id = output_column_ids_.at(k);
           switch (col_id) {
           case ENGINE: {
-              cells[cell_idx].set_varchar("InnoDB");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "InnoDB") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
               break;
             }
           case SUPPORT: {
-              cells[cell_idx].set_varchar("DEFAULT");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "DEFAULT") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
               break;
             }
           case COMMENT: {
-              cells[cell_idx].set_varchar("Supports transactions");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "Supports transactions") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
               break;
             }
           case TRANSACTIONS: {
-              cells[cell_idx].set_varchar("YES");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "YES") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
               break;
             }
           case SAVEPOINTS: {
-              cells[cell_idx].set_varchar("YES");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "YES") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
               break;

@@ -60,12 +60,11 @@ public:
 private:
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
-  int get_current_result(common::ObObj &result);
+  int get_current_result(common::DatumValue &result);
   int64_t node_idx_;
   bool already_calc_;
   int64_t row_count_;
   int64_t col_count_;
-  common::ObObj value_;
   pl::ObPLCollection *value_table_;
   int (ObFunctionTableOp::*next_row_func_)();
 };

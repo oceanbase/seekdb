@@ -1,4 +1,4 @@
-static constexpr ObObjType ARITH_RESULT_TYPE[ObMaxType][ObMaxType] =
+static constexpr SqlValueType ARITH_RESULT_TYPE[ObMaxType][ObMaxType] =
 {
   /*NullType*/
   {

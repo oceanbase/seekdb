@@ -48,14 +48,14 @@ int ObDASSortIter::inner_init(ObDASIterParam &param)
         limit_param_ = sort_param.limit_param_;
       } else {
         if (nullptr != sort_ctdef_->limit_expr_) {
-          ObDatum *limit_datum = nullptr;
+          common::Datum *limit_datum = nullptr;
           if (OB_FAIL(sort_ctdef_->limit_expr_->eval(*eval_ctx_, limit_datum))) {
           } else {
             limit_param_.limit_ = (limit_datum->is_null() || limit_datum->get_int() < 0) ? 0 : limit_datum->get_int();
           }
         }
         if (nullptr != sort_ctdef_->offset_expr_) {
-          ObDatum *offset_datum = nullptr;
+          common::Datum *offset_datum = nullptr;
           if (OB_FAIL(sort_ctdef_->offset_expr_->eval(*eval_ctx_, offset_datum))) {
           } else if (offset_datum->is_null()) {
             limit_param_.limit_ = 0;

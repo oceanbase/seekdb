@@ -72,14 +72,14 @@ int ObExprTimestamp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   if (1 == rt_expr.arg_cnt_) {
-    ObObjType type = rt_expr.args_[0]->datum_meta_.type_;
+    SqlValueType type = rt_expr.args_[0]->datum_meta_.type_;
     CK(ObNullType == type || ObDateTimeType == type || ObMySQLDateTimeType == type);
     if (OB_SUCC(ret)) {
       rt_expr.eval_func_ = ObExprTimestamp::calc_timestamp1;
     }
   } else if (2 == rt_expr.arg_cnt_) {
-    ObObjType type1 = rt_expr.args_[0]->datum_meta_.type_;
-    ObObjType type2 = rt_expr.args_[1]->datum_meta_.type_;
+    SqlValueType type1 = rt_expr.args_[0]->datum_meta_.type_;
+    SqlValueType type2 = rt_expr.args_[1]->datum_meta_.type_;
     CK(ObNullType == type1 || ObDateTimeType == type1);
     CK(ObNullType == type2 || ObTimeType == type2);
     if (OB_SUCC(ret)) {
@@ -91,10 +91,10 @@ int ObExprTimestamp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   return ret;
 }
 
-int ObExprTimestamp::calc_timestamp1(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprTimestamp::calc_timestamp1(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param))) {
   } else if (param->is_null()) {
     result.set_null();
@@ -104,11 +104,11 @@ int ObExprTimestamp::calc_timestamp1(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   return ret;
 }
 
-int ObExprTimestamp::calc_timestamp2(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprTimestamp::calc_timestamp2(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datetime = NULL;
-  ObDatum *time = NULL;
+  Datum *datetime = NULL;
+  Datum *time = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, datetime, time))) {
   } else if (datetime->is_null() || time->is_null()) {
     result.set_null();

@@ -39,7 +39,7 @@ class ObSQLSessionInfo;
 }
 namespace common
 {
-struct ObObjCastParams;
+struct DatumCastParams;
 }
 namespace query
 {
@@ -53,7 +53,7 @@ public:
   static sql::ObSQLSessionInfo *get_session(sql::ObExecContext &ctx);
   static void configure_obj_cast(
       sql::ObExecContext &ctx,
-      common::ObObjCastParams &params);
+      common::DatumCastParams &params);
   static common::ObMySQLProxy *get_sql_proxy(sql::ObExecContext &ctx);
   static share::schema::ObSchemaGetterGuard *get_schema_guard(
       sql::ObExecContext &ctx);

@@ -46,7 +46,7 @@ struct ObBaseDecoderCtx
 public:
   ObBaseDecoderCtx() : obj_meta_(), micro_block_header_(NULL), col_header_(NULL) {}
 
-  common::ObObjMeta obj_meta_;
+  common::SqlTypeMeta obj_meta_;
   const ObMicroBlockHeader *micro_block_header_;
   const ObColumnHeader *col_header_;
 
@@ -61,7 +61,7 @@ public:
   }
 
   // performance critical, do not check parameters
-  OB_INLINE void fill(const common::ObObjMeta &obj_meta,
+  OB_INLINE void fill(const common::SqlTypeMeta &obj_meta,
       const ObMicroBlockHeader *micro_header,
       const ObColumnHeader *col_header,
       common::ObIAllocator *allocator,
@@ -260,7 +260,7 @@ public:
 
   virtual bool is_new_column() const { return false; }
 
-  static bool need_padding(const bool is_padding_mode, const ObObjMeta &obj_meta)
+  static bool need_padding(const bool is_padding_mode, const SqlTypeMeta &obj_meta)
   {
     return is_padding_mode && obj_meta.is_fixed_len_char_type();
   }
@@ -302,8 +302,7 @@ public:
   virtual int decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, const int64_t row_id,
       const ObBitStream &bs, const char *data, const int64_t len)const override
   {
-    datum.set_ext();
-    datum.no_cv(datum.extend_obj_)->set_ext(common::ObActionFlag::OP_NOP);
+    datum.set_ext_value(common::ObActionFlag::OP_NOP);
     return common::OB_SUCCESS;
   }
 

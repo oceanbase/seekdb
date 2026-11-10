@@ -44,7 +44,7 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
-  static int eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                     const ObBitVector &skip, const int64_t batch_size);
 private:
@@ -56,17 +56,16 @@ private:
                    share::schema::ObSchemaGetterGuard *schema_guard,
                    obmysql::MYSQL_PROTOCOL_TYPE encode_type,
                    common::ObIArray<obmysql::ObMySQLCellValue> &values);
-  static int convert_string_value_charset(common::ObObj &value,
+  static int convert_string_value_charset(common::DatumValue &value,
                                           common::ObIAllocator &alloc,
                                           const ObSQLSessionInfo &my_session);
-  static int convert_text_value_charset(common::ObObj& value,
+  static int convert_text_value_charset(common::DatumValue &value,
                                         bool res_has_lob_header,
                                         common::ObIAllocator &alloc,
                                         const ObSQLSessionInfo &my_session,
                                         sql::ObExecContext &exec_ctx);
-  static int process_lob_locator_results(common::ObObj& value,
+  static int process_lob_locator_results(common::DatumValue &value,
                                          common::ObIAllocator &alloc,
-                                         const ObSQLSessionInfo &my_session,
                                          sql::ObExecContext &exec_ctx);
 
   static int convert_string_charset(const common::ObString &in_str,
@@ -75,7 +74,7 @@ private:
                                     char *buf, int32_t buf_len, uint32_t &result_len);
   static int process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLSessionInfo *session,
                              common::ObIAllocator &alloc, ObOutputPackInfo *extra_info,
-                             share::schema::ObSchemaGetterGuard *schema_guard, ObDatum &expr_datum);
+                             share::schema::ObSchemaGetterGuard *schema_guard, Datum &expr_datum);
   DISALLOW_COPY_AND_ASSIGN(ObExprOutputPack);
 };
 

@@ -65,27 +65,27 @@ int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID:
           // tablet_count
-          cur_row_.cells_[i].set_int(ls_info.tablet_count_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, ls_info.tablet_count_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 1:
           // weak_read_timestamp
-          cur_row_.cells_[i].set_uint64(ls_info.weak_read_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, ls_info.weak_read_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 2:
           // clog_checkpoint_ts
-          cur_row_.cells_[i].set_uint64(!ls_info.checkpoint_scn_.is_valid() ? 0 : ls_info.checkpoint_scn_.get_val_for_tx());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, !ls_info.checkpoint_scn_.is_valid() ? 0 : ls_info.checkpoint_scn_.get_val_for_tx()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 3:
           // clog_checkpoint_lsn
-          cur_row_.cells_[i].set_uint64(ls_info.checkpoint_lsn_ < 0 ? 0 : ls_info.checkpoint_lsn_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, ls_info.checkpoint_lsn_ < 0 ? 0 : ls_info.checkpoint_lsn_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 4:
           // tablet_change_checkpoint_scn
-          cur_row_.cells_[i].set_uint64(!ls_info.tablet_change_checkpoint_scn_.is_valid() ? 0 : ls_info.tablet_change_checkpoint_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, !ls_info.tablet_change_checkpoint_scn_.is_valid() ? 0 : ls_info.tablet_change_checkpoint_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 5:
           // tx blocked
-          cur_row_.cells_[i].set_int(ls_info.tx_blocked_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, ls_info.tx_blocked_) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

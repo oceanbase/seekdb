@@ -484,8 +484,8 @@ public:
     } else {
       cmp = end_key_.compare(r.start_key_);
       if (0 == cmp) {
-        if (end_key_.get_obj_ptr()[end_key_.get_obj_cnt() - 1].is_max_value() ||
-            end_key_.get_obj_ptr()[end_key_.get_obj_cnt() - 1].is_min_value()) {
+        if (end_key_.get_values()[end_key_.get_value_count() - 1].is_max_value() ||
+            end_key_.get_values()[end_key_.get_value_count() - 1].is_min_value()) {
           // do nothing
         } else if (!border_flag_.inclusive_end() && !r.border_flag_.inclusive_start()) {
           cmp = -1;
@@ -619,7 +619,7 @@ public:
     int64_t prefix_len = 0;
     if (OB_FAIL(ObRowkey::get_common_prefix_length(start_key_, end_key_, prefix_len))) {
     } else {
-      rowkey.assign(const_cast<ObObj *>(start_key_.get_obj_ptr()), prefix_len);
+      rowkey.assign(const_cast<DatumValue *>(start_key_.get_values()), prefix_len);
     }
     return ret;
   }
@@ -647,7 +647,7 @@ int ObNewRange::deserialize(Allocator &allocator, const char *buf, const int64_t
                             int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  ObObj array[OB_MAX_ROWKEY_COLUMN_NUMBER * 2];
+  DatumValue array[OB_MAX_ROWKEY_COLUMN_NUMBER * 2];
   ObNewRange copy_range;
   copy_range.start_key_.assign(array, OB_MAX_ROWKEY_COLUMN_NUMBER);
   copy_range.end_key_.assign(array + OB_MAX_ROWKEY_COLUMN_NUMBER, OB_MAX_ROWKEY_COLUMN_NUMBER);

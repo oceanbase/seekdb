@@ -110,7 +110,8 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("#define " + file_def_str + "\n");
   head_file.write("#include \"share/system_variable/ob_sys_var_class_type.h\"\n");
   head_file.write("#include <stdint.h>\n");
-  head_file.write("#include \"common/object/ob_object.h\"\n");
+  head_file.write("#include \"common/datum/datum_value.h\"\n");
+  head_file.write("#include \"common/datum/datum.h\"\n");
   head_file.write("namespace oceanbase\n");
   head_file.write("{\n");
   head_file.write("namespace share\n");
@@ -135,7 +136,7 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("struct ObSysVarFromJson{\n");
   head_file.write("  ObSysVarClassType id_;\n");
   head_file.write("  common::ObString name_;\n");
-  head_file.write("  common::ObObjType data_type_;\n");
+  head_file.write("  common::SqlValueType data_type_;\n");
   head_file.write("  common::ObString default_value_; // used for runtime initialization\n");
   head_file.write("  common::ObString base_value_; // used for session sync\n");
   head_file.write("  common::ObString min_val_;\n");
@@ -161,7 +162,7 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  static int64_t get_all_sys_var_count();\n");
   head_file.write("  static ObSysVarClassType get_sys_var_id(int64_t i);\n");
   head_file.write("  static common::ObString get_name(int64_t i);\n");
-  head_file.write("  static common::ObObjType get_type(int64_t i);\n");
+  head_file.write("  static common::SqlValueType get_type(int64_t i);\n");
   head_file.write("  static common::ObString get_value(int64_t i);\n");
   head_file.write("  static common::ObString get_base_str_value(int64_t i);\n");
   head_file.write("  static common::ObString get_min(int64_t i);\n");
@@ -171,8 +172,12 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  static bool need_serialize(int64_t i);\n");
   head_file.write("  static bool is_mysql_only(int64_t i);\n");
   head_file.write("  static common::ObString get_alias(int64_t i);\n");
-  head_file.write("  static const common::ObObj &get_default_value(int64_t i);\n")
-  head_file.write("  static const common::ObObj &get_base_value(int64_t i);\n")
+  head_file.write("  static const common::Datum &get_default_datum(int64_t i);\n")
+  head_file.write("  static const common::SqlTypeMeta &get_default_meta(int64_t i);\n")
+  head_file.write("  static const common::Datum &get_base_datum(int64_t i);\n")
+  head_file.write("  static const common::SqlTypeMeta &get_base_meta(int64_t i);\n")
+  head_file.write("  static int export_default_value(int64_t i, common::DatumValue &out, void *scratch, int64_t capacity);\n")
+  head_file.write("  static int export_base_value(int64_t i, common::DatumValue &out, void *scratch, int64_t capacity);\n")
   head_file.write("  static int64_t get_amount();\n");
   head_file.write("  static ObCollationType get_default_sysvar_collation();\n");
   head_file.write("  static int set_value(const char *name, const char * new_value);\n");
@@ -224,7 +229,8 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("#define USING_LOG_PREFIX SHARE\n")
   cpp_file.write("#include \"" + pdir + "/" + cpp_file_name.replace(".cpp", ".h") + "\"\n")
   cpp_file.write("#include \"ob_sys_var_meta.h\"\n")
-  cpp_file.write("#include \"share/object/ob_obj_cast.h\"\n")
+  cpp_file.write("#include \"share/datum/datum_value_cast.h\"\n")
+  cpp_file.write("#include \"common/datum/datum_parameter_codec.h\"\n")
   cpp_file.write("using namespace oceanbase::common;\n");
   cpp_file.write("\n")
   cpp_file.write("namespace oceanbase\n");
@@ -232,9 +238,11 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("namespace share\n");
   cpp_file.write("{\n");
   cpp_file.write("static ObSysVarFromJson ObSysVars[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
-  cpp_file.write("static ObObj ObSysVarDefaultValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
+  cpp_file.write("static Datum ObSysVarDefaultValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
+  cpp_file.write("static SqlTypeMeta ObSysVarDefaultMetas[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
   cpp_file.write("static ObArenaAllocator ObSysVarAllocator(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);\n")
-  cpp_file.write("static ObObj ObSysVarBaseValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
+  cpp_file.write("static Datum ObSysVarBaseValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
+  cpp_file.write("static SqlTypeMeta ObSysVarBaseMetas[ObSysVarMeta::ALL_SYS_VARS_COUNT];\n")
   cpp_file.write("static ObArenaAllocator ObBaseSysVarAllocator(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);\n")
   cpp_file.write("static int64_t ObSysVarsIdToArrayIdx[ObSysVarMeta::OB_MAX_SYS_VAR_ID];\n")
   cpp_file.write("// In VarsInit, it is necessary to determine whether the id corresponding to the current maximum SysVars is greater than OB_MAX_SYS_VAR_ID\n")
@@ -295,7 +303,7 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}\n")
   cpp_file.write("ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}\n")
   cpp_file.write("ObString ObSysVariables::get_name(int64_t i){ return ObSysVars[i].name_;}\n")
-  cpp_file.write("ObObjType ObSysVariables::get_type(int64_t i){ return ObSysVars[i].data_type_;}\n")
+  cpp_file.write("SqlValueType ObSysVariables::get_type(int64_t i){ return ObSysVars[i].data_type_;}\n")
   cpp_file.write("ObString ObSysVariables::get_value(int64_t i){ return ObSysVars[i].default_value_;}\n")
   cpp_file.write("ObString ObSysVariables::get_base_str_value(int64_t i){ return ObSysVars[i].base_value_;}\n")
   cpp_file.write("ObString ObSysVariables::get_min(int64_t i){ return ObSysVars[i].min_val_;}\n")
@@ -305,8 +313,35 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("bool ObSysVariables::need_serialize(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::NEED_SERIALIZE;}\n")
   cpp_file.write("bool ObSysVariables::is_mysql_only(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::MYSQL_ONLY;}\n")
   cpp_file.write("ObString ObSysVariables::get_alias(int64_t i){ return ObSysVars[i].alias_;}\n")
-  cpp_file.write("const ObObj &ObSysVariables::get_default_value(int64_t i){ return ObSysVarDefaultValues[i];}\n")
-  cpp_file.write("const ObObj &ObSysVariables::get_base_value(int64_t i){ return ObSysVarBaseValues[i];}\n")
+  cpp_file.write("const Datum &ObSysVariables::get_default_datum(int64_t i){ return ObSysVarDefaultValues[i];}\n")
+  cpp_file.write("const SqlTypeMeta &ObSysVariables::get_default_meta(int64_t i){ return ObSysVarDefaultMetas[i];}\n")
+  cpp_file.write("const Datum &ObSysVariables::get_base_datum(int64_t i){ return ObSysVarBaseValues[i];}\n")
+  cpp_file.write("const SqlTypeMeta &ObSysVariables::get_base_meta(int64_t i){ return ObSysVarBaseMetas[i];}\n")
+  cpp_file.write("\n")
+  cpp_file.write("static int export_global_sysvar_value(const Datum &value, const SqlTypeMeta &meta,\n")
+  cpp_file.write("    DatumValue &out, void *scratch, int64_t capacity)\n")
+  cpp_file.write("{\n")
+  cpp_file.write("  int ret = OB_SUCCESS;\n")
+  cpp_file.write("  DatumValue candidate;\n")
+  cpp_file.write("  ObDatum physical;\n")
+  cpp_file.write("  if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(\n")
+  cpp_file.write("          value, meta, physical, scratch, capacity))) {\n")
+  cpp_file.write("  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, meta))) {\n")
+  cpp_file.write("  } else {\n")
+  cpp_file.write("    out = candidate;\n")
+  cpp_file.write("  }\n")
+  cpp_file.write("  return ret;\n")
+  cpp_file.write("}\n")
+  cpp_file.write("\n")
+  cpp_file.write("int ObSysVariables::export_default_value(int64_t i, DatumValue &out, void *scratch, int64_t capacity)\n")
+  cpp_file.write("{\n")
+  cpp_file.write("  return export_global_sysvar_value(ObSysVarDefaultValues[i], ObSysVarDefaultMetas[i], out, scratch, capacity);\n")
+  cpp_file.write("}\n")
+  cpp_file.write("\n")
+  cpp_file.write("int ObSysVariables::export_base_value(int64_t i, DatumValue &out, void *scratch, int64_t capacity)\n")
+  cpp_file.write("{\n")
+  cpp_file.write("  return export_global_sysvar_value(ObSysVarBaseValues[i], ObSysVarBaseMetas[i], out, scratch, capacity);\n")
+  cpp_file.write("}\n")
   cpp_file.write("int64_t ObSysVariables::get_amount(){ return var_amount;}\n")
   cpp_file.write("ObCollationType ObSysVariables::get_default_sysvar_collation() { return CS_TYPE_UTF8MB4_GENERAL_CI;}\n")
   cpp_file.write("\n")
@@ -362,52 +397,57 @@ int ObSysVariables::init_default_values()
 {
   int ret = OB_SUCCESS;
   int64_t sys_var_count = get_amount();
+  // Cast outputs are transient. Reuse one scratch arena across indices; only
+  // final native reference bytes belong to the two long-lived global owners.
+  ObArenaAllocator calc_owner(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);
   for (int64_t i = 0; OB_SUCC(ret) && i < sys_var_count; ++i) {
+    calc_owner.reuse();
     const ObString &sys_var_val_str = ObSysVariables::get_value(i);
     const ObString &base_sys_var_val_str = ObSysVariables::get_base_str_value(i);
-    const ObObjType sys_var_type = ObSysVariables::get_type(i);
+    const SqlValueType sys_var_type = ObSysVariables::get_type(i);
     if (OB_UNLIKELY(sys_var_type == ObTimestampType)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("need tz_info when cast to timestamp", K(ret), K(sys_var_val_str));
     } else {
-      ObObj in_obj;
-      ObObj out_obj;
-      in_obj.set_varchar(sys_var_val_str);
+      DatumValue in_obj, base_in_obj, out_obj, base_out_obj;
+      in_obj.meta_.set_varchar();
+      in_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+      in_obj.datum_.set_string(sys_var_val_str);
       in_obj.set_collation_type(ObSysVariables::get_default_sysvar_collation());
-      ObObj base_in_obj;
-      ObObj base_out_obj;
-      base_in_obj.set_varchar(base_sys_var_val_str);
+      base_in_obj.meta_.set_varchar();
+      base_in_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+      base_in_obj.datum_.set_string(base_sys_var_val_str);
       base_in_obj.set_collation_type(ObSysVariables::get_default_sysvar_collation());
-      //varchar to others. so, no need to get collation from session
-      ObCastCtx cast_ctx(&ObSysVarAllocator,
-                         NULL,
-                         0,
-                         CM_NONE,
-                         CS_TYPE_INVALID,
-                         NULL);
-      ObCastCtx fixed_cast_ctx(&ObBaseSysVarAllocator,
-                    NULL,
-                    0,
-                    CM_NONE,
-                    CS_TYPE_INVALID,
-                    NULL);
-      if (OB_FAIL(ObObjCaster::to_type(sys_var_type, cast_ctx, in_obj, out_obj))) {
-        ObString sys_var_name = ObSysVariables::get_name(i);
-        LOG_WARN("fail to cast object",
-                 K(ret), "cell", in_obj, "from_type", ob_obj_type_str(in_obj.get_type()),
-                 "to_type", ob_obj_type_str(sys_var_type), K(sys_var_name), K(i));
-      } else if (OB_FAIL(ObObjCaster::to_type(sys_var_type, fixed_cast_ctx, base_in_obj, base_out_obj))) {
-        ObString sys_var_name = ObSysVariables::get_name(i);
-        LOG_WARN("fail to cast object",
-                 K(ret), "cell", base_in_obj, "from_type", ob_obj_type_str(base_in_obj.get_type()),
-                 "to_type", ob_obj_type_str(sys_var_type), K(sys_var_name), K(i));
+      ObCastCtx cast_ctx(&calc_owner, NULL, 0, CM_NONE, CS_TYPE_INVALID, NULL);
+      ObCastCtx fixed_cast_ctx(&calc_owner, NULL, 0, CM_NONE, CS_TYPE_INVALID, NULL);
+      if (OB_FAIL(DatumValueCaster::to_type(sys_var_type, cast_ctx, in_obj,
+                                           calc_owner, out_obj))) {
+        const ObString sys_var_name = ObSysVariables::get_name(i);
+        LOG_WARN("fail to cast system variable default", K(ret), K(in_obj), K(sys_var_type), K(sys_var_name), K(i));
+      } else if (OB_FAIL(DatumValueCaster::to_type(sys_var_type, fixed_cast_ctx, base_in_obj,
+                                                  calc_owner, base_out_obj))) {
+        const ObString sys_var_name = ObSysVariables::get_name(i);
+        LOG_WARN("fail to cast system variable base", K(ret), K(base_in_obj), K(sys_var_type), K(sys_var_name), K(i));
       } else {
         if (ob_is_string_type(out_obj.get_type())) {
           out_obj.set_collation_level(CS_LEVEL_SYSCONST);
           base_out_obj.set_collation_level(CS_LEVEL_SYSCONST);
         }
-        ObSysVarDefaultValues[i] = out_obj;
-        ObSysVarBaseValues[i] = base_out_obj;
+        Datum candidate, base_candidate;
+        if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
+                out_obj.datum_, out_obj.meta_, ObSysVarAllocator, candidate))) {
+          LOG_WARN("fail to own system variable default", K(ret), K(i));
+        } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
+                base_out_obj.datum_, base_out_obj.meta_, ObBaseSysVarAllocator, base_candidate))) {
+          LOG_WARN("fail to own system variable base", K(ret), K(i));
+        } else {
+          // Publish this index only after both casts and ownership operations.
+          // Earlier successful indices retain the original prefix semantics.
+          ObSysVarDefaultValues[i] = candidate;
+          ObSysVarDefaultMetas[i] = out_obj.meta_;
+          ObSysVarBaseValues[i] = base_candidate;
+          ObSysVarBaseMetas[i] = base_out_obj.meta_;
+        }
       }
     }
   }
@@ -585,7 +625,8 @@ def write_sys_var_class(wfile, idx, sys_var_name, data_type, base_class, \
         + ", " + ("NULL" if get_meta_type_func is None else get_meta_type_func) \
         + ") {}\n")
   wfile.write("  inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_" + sys_var_name.upper() + "; }\n")
-  wfile.write("  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(" + str(idx) + "); }\n")
+  wfile.write("  inline virtual const common::Datum &get_global_default_datum() const { return share::ObSysVariables::get_default_datum(" + str(idx) + "); }\n")
+  wfile.write("  inline virtual const common::SqlTypeMeta &get_global_default_meta() const { return share::ObSysVariables::get_default_meta(" + str(idx) + "); }\n")
   wfile.write("};\n");
 
 def make_sys_var_class_type_h(pdir, filename, sorted_list):
@@ -645,7 +686,7 @@ def make_sys_var_sql_h(pdir, filename, sorted_list):
   file_def_str = "OCEANBASE_" + pdir.replace("/", "_").upper() + "_" + base_name[0 : suffix_idx].upper() + "_"
   wfile.write("#ifndef " + file_def_str + "\n")
   wfile.write("#define " + file_def_str + "\n")
-  wfile.write("#include \"common/object/ob_object.h\"\n")
+  wfile.write("#include \"common/datum/datum_value.h\"\n")
   wfile.write("#include \"sql/session/ob_system_variable.h\"\n")
   wfile.write("#include \"share/system_variable/ob_system_variable_init.h\"\n")
   wfile.write("#include \"lib/allocator/page_arena.h\"\n")
@@ -841,6 +882,7 @@ def make_sys_var_sql_cpp(pdir, filename, list_sorted_by_name, list_sorted_by_id)
   wfile.write("#define USING_LOG_PREFIX SQL_SESSION\n");
   wfile.write("#include \"" + pdir + "/" + base_name.replace(".cpp", ".h") + "\"\n")
   wfile.write("#include \"lib/utility/ob_smart_call.h\"\n")
+  wfile.write("#include \"lib/ob_check_macros.h\"\n")
   wfile.write("#include \"share/system_variable/ob_system_variable_init.h\"\n")
   wfile.write("#include \"share/system_variable/ob_sys_var_meta.h\"\n")
   wfile.write("using namespace oceanbase::common;\n");

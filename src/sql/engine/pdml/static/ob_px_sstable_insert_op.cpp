@@ -39,7 +39,7 @@ OB_SERIALIZE_MEMBER((ObPxMultiPartSSTableInsertSpec, ObPxMultiPartInsertSpec), s
 int ObPxMultiPartSSTableInsertSpec::get_snapshot_version(ObEvalCtx &eval_ctx, int64_t &snapshot_version) const
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   snapshot_version = 0;
   if (OB_FAIL(snapshot_query_expr_->eval(eval_ctx, datum))) {
   } else if (datum->is_null()) {
@@ -74,7 +74,7 @@ int ObPxMultiPartSSTableInsertOp::get_tablet_info_from_row(
     ret = OB_ERR_UNEXPECTED;
   } else if (row.count() > part_id_idx) {
     ObExpr *expr = row.at(part_id_idx);
-    ObDatum &expr_datum = expr->locate_expr_datum(get_eval_ctx());
+    Datum &expr_datum = expr->locate_expr_datum(get_eval_ctx());
     tablet_id = expr_datum.get_int();
   }
 
@@ -83,7 +83,7 @@ int ObPxMultiPartSSTableInsertOp::get_tablet_info_from_row(
     bool found_slice_expr = false;
     for (int64_t i = 0; OB_SUCC(ret) && !found_slice_expr && i < row.count(); ++i) {
       if (row.at(i)->type_ == ObItemType::T_PSEUDO_DDL_SLICE_ID) {
-        ObDatum &expr_datum = row.at(i)->locate_expr_datum(get_eval_ctx());
+        Datum &expr_datum = row.at(i)->locate_expr_datum(get_eval_ctx());
         tablet_slice_param->slice_id_ = expr_datum.get_int();
         found_slice_expr = true;
       }
@@ -232,26 +232,19 @@ int ObPxMultiPartSSTableInsertOp::init_tablet_autoinc_param(
   return ret;
 }
 
-int ObPxMultiPartSSTableInsertOp::eval_current_row(const int64_t rowkey_column_count, blocksstable::ObDatumRow &current_row)
+int ObPxMultiPartSSTableInsertOp::eval_current_row(const int64_t rowkey_column_count,
+                                                   blocksstable::ObDatumRow &current_row)
 {
   int ret = OB_SUCCESS;
   const ObExprPtrIArray &exprs = get_spec().ins_ctdef_.new_row_;
-  if (OB_UNLIKELY(rowkey_column_count <= 0 || !current_row.is_valid() || exprs.count() > current_row.get_capacity())) {
+  common::ObSEArray<ObDatum *, 16> cells;
+  if (rowkey_column_count <= 0 || !current_row.is_valid() || exprs.count() > current_row.get_capacity()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(eval_current_row(cells))) {
   } else {
-    clear_evaluated_flag();
-    ObEvalCtx &eval_ctx = get_eval_ctx();
-    const int64_t extra_rowkey_column_count = common::OB_MAX_EXTRA_ROWKEY_COLUMN_NUMBER;
-    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
-      ObDatum *datum = nullptr;
-      const ObExpr *e = exprs.at(i);
-      if (OB_ISNULL(e)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(e->eval(eval_ctx, datum))) {
-      } else {
-        const int64_t store_position = i < rowkey_column_count ? i : i + extra_rowkey_column_count;
-        current_row.storage_datums_[store_position].shallow_copy_from_datum(*datum);
-      }
+    for (int64_t i = 0; i < cells.count(); ++i) {
+      const int64_t position = i < rowkey_column_count ? i : i + common::OB_MAX_EXTRA_ROWKEY_COLUMN_NUMBER;
+      current_row.storage_datums_[position].shallow_copy_from_datum(*cells.at(i));
     }
   }
   return ret;
@@ -264,14 +257,21 @@ int ObPxMultiPartSSTableInsertOp::eval_current_row(ObIArray<ObDatum *> &datums)
   clear_evaluated_flag();
   const ObExprPtrIArray &exprs = get_spec().ins_ctdef_.new_row_;
   ObEvalCtx &eval_ctx = get_eval_ctx();
-  for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
-    ObDatum *datum = nullptr;
-    const ObExpr *e = exprs.at(i);
-    if (OB_ISNULL(e)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(e->eval(eval_ctx, datum))) {
-    } else if (OB_FAIL(datums.push_back(datum))) {
-    }
+  if (direct_insert_cells_.count() != exprs.count()) {
+    if (OB_FAIL(direct_insert_cells_.prepare_allocate(exprs.count()))) {
+    } else { ret = direct_insert_scratch_.prepare_allocate(exprs.count()); }
+  }
+  // Direct insert still consumes its fixed legacy row view synchronously.
+  // Scalar normalization belongs to this operator, never a temporary stack
+  // array or a reinterpretation of the native Expr frame.
+  for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+    Datum *value = nullptr;
+    const ObExpr *expr = exprs.at(i);
+    if (expr == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(expr->eval(eval_ctx, value))) {
+    } else if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(*value,
+        direct_insert_cells_.at(i), direct_insert_scratch_.at(i).bytes_, 64))) {
+    } else { ret = datums.push_back(&direct_insert_cells_.at(i)); }
   }
   return ret;
 }

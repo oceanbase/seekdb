@@ -33,7 +33,7 @@ public:
                                 ObExprResType &radian,
                                 common::ObExprTypeCtx &type_ctx) const;
   static int calc_degrees_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                               ObDatum &res_datum);
+                               Datum &res_datum);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 private:

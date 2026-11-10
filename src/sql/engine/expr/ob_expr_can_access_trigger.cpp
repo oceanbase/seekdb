@@ -50,13 +50,13 @@ int ObExprCanAccessTrigger::calc_result_type2(ObExprResType &type,
 
 int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
                                            ObEvalCtx &ctx,
-                                           ObDatum &res_datum)
+                                           Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &database_name = expr.locate_param_datum(ctx, 0);
-    ObDatum &table_name = expr.locate_param_datum(ctx, 1);
+    Datum &database_name = expr.locate_param_datum(ctx, 0);
+    Datum &table_name = expr.locate_param_datum(ctx, 1);
     OX (res_datum.set_true());
     ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
     ObSessionPrivInfo session_priv;

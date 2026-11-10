@@ -33,16 +33,14 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc(common::ObObj &res,
-                  const common::ObObj &obj1,
-                  const common::ObObj &obj2,
-                  common::ObIAllocator *allocator,
-                  common::ObScale calc_scale);
+
 
   static int div_float(EVAL_FUNC_ARG_DECL);
   static int div_float_batch(BATCH_EVAL_FUNC_ARG_DECL);
+
   static int div_double(EVAL_FUNC_ARG_DECL);
   static int div_double_batch(BATCH_EVAL_FUNC_ARG_DECL);
+
   static int div_number(EVAL_FUNC_ARG_DECL);
   static int div_number_batch(BATCH_EVAL_FUNC_ARG_DECL);
   static int div_vec(EVAL_FUNC_ARG_DECL);
@@ -82,21 +80,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int div_double(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale scale);
-  static int div_double_no_overflow(common::ObObj &res,
-                                    const common::ObObj &left,
-                                    const common::ObObj &right,
-                                    common::ObIAllocator *allocator,
-                                    common::ObScale scale);
-   static int div_number(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale calc_scale);
+
 
   template<typename ltype, typename rtype>
   static int decint_div_mysql_fn(EVAL_FUNC_ARG_DECL);
@@ -108,8 +92,6 @@ public:
   static ObScale decint_res_round_up_scale(const ObExpr &, int64_t div_inc);
 private:
   static const int16_t extra_scale_for_decint_div = 8;
-  static ObArithFunc div_funcs_[common::ObMaxTC];
-  static ObArithFunc avg_div_funcs_[common::ObMaxTC];
   static const common::ObScale DIV_MAX_CALC_SCALE;
 };
 

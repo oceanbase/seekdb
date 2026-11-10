@@ -20,6 +20,7 @@
 #include "lib/allocator/ob_malloc.h"
 #include "common/object/ob_obj_type.h"
 #include "common/object/ob_object.h"
+#include "common/object/ob_cmp_op.h"
 #include "common/ob_action_flag.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "share/rc/ob_server_runtime.h"
@@ -61,7 +62,7 @@ extern const char* OB_ENCODING_LABEL_STRING_DIFF;
     } \
   }
 
-enum ObObjTypeStoreClass
+enum SqlValueTypeStoreClass
 {
   ObExtendSC = 0,
   ObIntSC, // signed integers, time types
@@ -78,25 +79,25 @@ enum ObObjTypeStoreClass
   ObMaxSC,
 };
 
-OB_INLINE bool is_string_encoding_valid(const ObObjTypeStoreClass sc)
+OB_INLINE bool is_string_encoding_valid(const SqlValueTypeStoreClass sc)
 {
   return sc == ObStringSC || sc == ObTextSC || sc == ObJsonSC || sc == ObGeometrySC;
 }
 
-OB_INLINE bool store_class_might_contain_lob_locator(const ObObjTypeStoreClass sc)
+OB_INLINE bool store_class_might_contain_lob_locator(const SqlValueTypeStoreClass sc)
 {
   return sc == ObTextSC || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC;
 }
 
-OB_INLINE bool is_var_length_type(const ObObjTypeStoreClass sc)
+OB_INLINE bool is_var_length_type(const SqlValueTypeStoreClass sc)
 {
   return sc == ObNumberSC || sc == ObDecimalIntSC || sc == ObStringSC || sc == ObTextSC
       || sc == ObLobSC || sc == ObJsonSC || sc == ObGeometrySC;
 }
 
-OB_INLINE ObObjTypeStoreClass *get_store_class_map()
+OB_INLINE SqlValueTypeStoreClass *get_store_class_map()
 {
-  static ObObjTypeStoreClass store_class_map[] = {
+  static SqlValueTypeStoreClass store_class_map[] = {
     ObExtendSC, // ObNullTC
     ObIntSC, // ObIntTC
     ObUIntSC, // ObUIntTC
@@ -278,33 +279,12 @@ OB_INLINE void set_stored_ext_value(common::ObDatum &datum, const ObStoredExtVal
   if (STORED_NULL == v) {
     datum.set_null();
   } else if (STORED_NOPE == v) {
-    datum.set_ext();
-    datum.no_cv(datum.extend_obj_)->set_ext(common::ObActionFlag::OP_NOP);
-  }
-}
-
-OB_INLINE ObStoredExtValue get_stored_ext_value(const common::ObObj &cell)
-{
-  ObStoredExtValue v = STORED_NOT_EXT;
-  if (cell.is_null()) {
-    v = STORED_NULL;
-  } else if (common::ObActionFlag::OP_NOP == cell.get_ext()) {
-    v = STORED_NOPE;
-  }
-  return v;
-}
-
-OB_INLINE void set_stored_ext_value(common::ObObj &cell, const ObStoredExtValue v)
-{
-  if (STORED_NULL == v) {
-    cell.set_null();
-  } else if (STORED_NOPE == v) {
-    cell.set_ext(common::ObActionFlag::OP_NOP);
+    datum.set_ext_value(common::ObActionFlag::OP_NOP);
   }
 }
 
 OB_INLINE static int get_uint_data_datum_len(
-    const common::ObObjDatumMapType &datum_type,
+    const common::SqlValueDatumMapType &datum_type,
     uint32_t &datum_len)
 {
   int ret = common::OB_SUCCESS;
@@ -360,7 +340,7 @@ OB_INLINE static int batch_load_number_data_to_datum(
 }
 
 OB_INLINE static int batch_load_ots_intvl_data_to_datum(
-    const common::ObObjDatumMapType &datum_type,
+    const common::SqlValueDatumMapType &datum_type,
     const char **cell_datas,
     const int64_t row_cap,
     common::ObDatum *datums)
@@ -385,19 +365,19 @@ OB_INLINE static int batch_load_ots_intvl_data_to_datum(
 
 // For StringSC, data length should be already stored in datums[i].len_
 inline static int batch_load_data_to_datum(
-    const common::ObObjType &obj_type,
+    const common::SqlValueType &obj_type,
     const char **cell_datas,
     const int64_t row_cap,
     const int64_t integer_mask,
     common::ObDatum *datums)
 {
   int ret = common::OB_SUCCESS;
-  switch (get_store_class_map()[ob_obj_type_class(obj_type)]) {
+  switch (get_store_class_map()[sql_type_class(obj_type)]) {
   case ObIntSC:
   case ObUIntSC: {
     uint32_t datum_len = 0;
     if (OB_FAIL(get_uint_data_datum_len(
-        common::ObDatum::get_obj_datum_map_type(obj_type),
+        common::ObDatum::get_sql_value_datum_map_type(obj_type),
         datum_len))) {
     } else {
       uint64_t value = 0;
@@ -454,7 +434,7 @@ inline static int batch_load_data_to_datum(
 }
 
 inline static int load_data_to_datum(
-    const common::ObObjType &obj_type,
+    const common::SqlValueType &obj_type,
     const char *cell_data,
     const int64_t cell_len,
     const int64_t integer_mask,
@@ -466,12 +446,12 @@ inline static int load_data_to_datum(
     STORAGE_LOG(WARN, "Null pointer of cell data for loading data to datum",
                 K(ret), K(cell_data), K(cell_len));
   } else {
-    switch (get_store_class_map()[ob_obj_type_class(obj_type)]) {
+    switch (get_store_class_map()[sql_type_class(obj_type)]) {
       case ObIntSC:
       case ObUIntSC: {
         uint32_t datum_len = 0;
         if (OB_FAIL(get_uint_data_datum_len(
-            common::ObDatum::get_obj_datum_map_type(obj_type),
+            common::ObDatum::get_sql_value_datum_map_type(obj_type),
             datum_len))) {
         } else {
           uint64_t value = 0;
@@ -512,7 +492,7 @@ inline static int load_data_to_datum(
       }
       case ObOTimestampSC:
       case ObIntervalSC: {
-        ObObjDatumMapType datum_type = ObDatum::get_obj_datum_map_type(obj_type);
+        SqlValueDatumMapType datum_type = ObDatum::get_sql_value_datum_map_type(obj_type);
         const uint32_t size = ObDatum::get_reserved_size(datum_type);
         MEMCPY(const_cast<char *>(datum.ptr_), cell_data, size);
         datum.pack_ = size;

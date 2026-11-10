@@ -50,7 +50,7 @@ int ObExprCurrentUser::calc_result_type0(ObExprResType &type,
 }
 
 int ObExprCurrentUser::eval_current_user(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

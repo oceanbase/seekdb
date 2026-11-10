@@ -31,7 +31,7 @@ namespace sql
 
 ObDMLStmtPrinter::ObDMLStmtPrinter(char *buf, int64_t buf_len, int64_t *pos, const ObDMLStmt *stmt,
                                    ObSchemaGetterGuard *schema_guard,
-                                   ObObjPrintParams print_params,
+                                   ObValuePrintParams print_params,
                                    const ParamStore *param_store,
                                    const ObSQLSessionInfo *session)
   : buf_(buf),
@@ -45,6 +45,7 @@ ObDMLStmtPrinter::ObDMLStmtPrinter(char *buf, int64_t buf_len, int64_t *pos, con
     print_params_(print_params),
     expr_printer_(buf, buf_len, pos, schema_guard_, print_params_, param_store),
     param_store_(param_store),
+    parameter_context_(nullptr),
     session_(session)
 {
 }
@@ -942,7 +943,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
       } else if (col_info.col_type_ == static_cast<int32_t>(COL_TYPE_QUERY)) {
         // to print returning type
         OZ (print_json_return_type(col_info.res_type_, col_info.data_type_));
-        ObObjType cast_type = col_info.data_type_.get_obj_type();
+        SqlValueType cast_type = col_info.data_type_.get_obj_type();
         if (cast_type != ObJsonType){
           DATA_PRINTF(" format json");
         }
@@ -1033,7 +1034,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
           if (OB_FAIL(ret)) {
           } else if (T_BOOL == cur_def->empty_expr_->get_expr_type()) { // bool need print 'true' or 'false' int json_table, not 1=1'
             ObConstRawExpr *con_expr = static_cast<ObConstRawExpr*>(cur_def->empty_expr_);
-            if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, con_expr->get_value().get_bool() ? "true" : "false"))) {
+            if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, con_expr->get_value_datum().get_bool() ? "true" : "false"))) {
             }
           } else if (OB_FAIL(expr_printer_.do_print(cur_def->empty_expr_, T_NONE_SCOPE))) {
           }
@@ -1050,7 +1051,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
           if (OB_FAIL(ret)) {
           } else if (T_BOOL == cur_def->error_expr_->get_expr_type()) { // bool need print 'true' or 'false' int json_table, not 1=1'
             ObConstRawExpr *con_expr = static_cast<ObConstRawExpr*>(cur_def->error_expr_);
-            if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, con_expr->get_value().get_bool() ? "true" : "false"))) {
+            if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, con_expr->get_value_datum().get_bool() ? "true" : "false"))) {
             }
           } else if (OB_FAIL(expr_printer_.do_print(cur_def->error_expr_, T_NONE_SCOPE))) {
           }
@@ -1440,7 +1441,7 @@ int ObDMLStmtPrinter::print_limit()
       if (NULL != offset_expr) {
         if (NULL != print_params_.exec_ctx_) {
           ObArenaAllocator allocator("PrintDMLStmt");
-          ObObj result;
+          DatumValue result;
           bool got_result = false;
           if (!offset_expr->is_static_const_expr()) {
             ret = OB_ERR_UNEXPECTED;
@@ -1466,7 +1467,7 @@ int ObDMLStmtPrinter::print_limit()
       if (NULL != limit_expr) {
         if (NULL != print_params_.exec_ctx_) {
           ObArenaAllocator allocator("PrintDMLStmt");
-          ObObj result;
+          DatumValue result;
           bool got_result = false;
           if (!limit_expr->is_static_const_expr()) {
             ret = OB_ERR_UNEXPECTED;
@@ -1550,6 +1551,7 @@ int ObDMLStmtPrinter::print_subquery(const ObSelectStmt *subselect_stmt,
                               param_store_,
                               subquery_print_params & FORCE_COL_ALIAS,
                               session_);
+  printer.bind_runtime_parameters(parameter_context_);
   if (subquery_print_params & PRINT_CTE) {
     printer.enable_print_temp_table_as_cte();
   }

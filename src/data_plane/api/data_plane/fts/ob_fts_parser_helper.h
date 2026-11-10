@@ -171,7 +171,7 @@ public:
    * @param[out] words, word lists after segment
    */
   int segment(
-      const common::ObObjMeta &meta,
+      const common::SqlTypeMeta &meta,
       const char *fulltext,
       const int64_t fulltext_len,
       int64_t &doc_length,

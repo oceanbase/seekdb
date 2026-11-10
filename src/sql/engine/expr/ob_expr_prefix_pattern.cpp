@@ -45,11 +45,11 @@ int ObExprPrefixPattern::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum) {
+int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum) {
   int ret = OB_SUCCESS;
-  ObDatum *pattern = NULL;
-  ObDatum *len_param = NULL;
-  ObDatum *escape = NULL;
+  Datum *pattern = NULL;
+  Datum *len_param = NULL;
+  Datum *escape = NULL;
   ObCollationType escape_coll = expr.args_[2]->datum_meta_.cs_type_;
   int64_t result_len = 0;
   int64_t prefix_len = 0;
@@ -167,10 +167,10 @@ int ObExprPrefixPattern::calc_result_type3(ObExprResType &type,
       || (!ob_is_string_type(type3.get_type()) && !type3.is_null())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    type1.set_calc_meta(type1.get_obj_meta());
-    type2.set_calc_meta(type2.get_obj_meta());
-    type3.set_calc_meta(type3.get_obj_meta());
-    type.set_meta(type1.get_obj_meta());
+    type1.set_calc_meta(type1.get_sql_type_meta());
+    type2.set_calc_meta(type2.get_sql_type_meta());
+    type3.set_calc_meta(type3.get_sql_type_meta());
+    type.set_meta(type1.get_sql_type_meta());
     type.set_accuracy(type1.get_accuracy());
     type2.set_calc_type(ObIntType);
   }

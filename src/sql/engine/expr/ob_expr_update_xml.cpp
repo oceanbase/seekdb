@@ -45,7 +45,7 @@ int ObExprUpdateXml::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_PARAM_SIZE;
   } else {
     for (int8_t i = 0; OB_SUCC(ret) && i < param_num; i++) {
-      ObObjType param_type = types[i].get_type();
+      SqlValueType param_type = types[i].get_type();
       if (param_type == ObNullType) {
       } else if (ob_is_string_type(param_type)) {
         if (types[i].get_charset_type() != CHARSET_UTF8MB4) {
@@ -68,7 +68,7 @@ int ObExprUpdateXml::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprUpdateXml::eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprUpdateXml::eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -370,7 +370,7 @@ int ObExprUpdateXml::update_pi_node(ObMulModeMemCtx* xml_mem_ctx,
                                     ObXmlUpdateNodeInfo *&update_info)
 {
   int ret = OB_SUCCESS;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
   ObXmlNode *clone_node = nullptr;
   if (val_type == ObNullType) {
@@ -403,7 +403,7 @@ int ObExprUpdateXml::update_text_or_attribute_node(ObMulModeMemCtx* xml_mem_ctx,
                                                    ObXmlUpdateNodeInfo *&update_info)
 {
   int ret = OB_SUCCESS;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   ObCollationType cs_type = expr->datum_meta_.cs_type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
   ObXmlNode *clone_node = nullptr;
@@ -447,9 +447,9 @@ int ObExprUpdateXml::update_namespace_node(ObMulModeMemCtx* xml_mem_ctx,
                                            ObXmlUpdateNodeInfo *&update_info)
 {
   int ret = OB_SUCCESS;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObXmlNode *clone_node = nullptr;
   if (val_type == ObNullType) {
     ret = OB_ERR_XML_PARSE;
@@ -472,7 +472,7 @@ int ObExprUpdateXml::update_element_node(ObMulModeMemCtx* xml_mem_ctx,
                                          ObXmlUpdateNodeInfo *&update_info)
 {
   int ret = OB_SUCCESS;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
   ObXmlElement *ele = static_cast<ObXmlElement *>(xml_node);
   ObXmlNode *clone_node = nullptr;
@@ -512,7 +512,7 @@ int ObExprUpdateXml::update_cdata_and_comment_node(ObMulModeMemCtx* xml_mem_ctx,
                                                    ObXmlUpdateNodeInfo *&update_info)
 {
   int ret = OB_SUCCESS;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
   ObXmlNode *clone_node = nullptr;
   if (val_type == ObNullType) {
@@ -540,9 +540,9 @@ int ObExprUpdateXml::get_update_str_info(ObMulModeMemCtx* xml_mem_ctx,
                                           ObXmlUpdateNodeInfo *&update_info)
 {
   INIT_SUCC(ret);
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   ObString value_str;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
   if (OB_ISNULL(update_info = static_cast<ObXmlUpdateNodeInfo*>(xml_mem_ctx->allocator_->alloc(sizeof(ObXmlUpdateNodeInfo))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -579,10 +579,10 @@ int ObExprUpdateXml::get_update_xml_info(ObMulModeMemCtx* xml_mem_ctx,
                                           ObXmlUpdateNodeInfo *&update_info)
 {
   INIT_SUCC(ret);
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   ObString value_str;
   ObXmlDocument *xml_doc = NULL;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
   if (OB_ISNULL(update_info = static_cast<ObXmlUpdateNodeInfo*>(xml_mem_ctx->allocator_->alloc(sizeof(ObXmlUpdateNodeInfo))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

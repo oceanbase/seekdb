@@ -50,13 +50,6 @@ int ObExprWordSegment::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprWordSegment::calc_resultN(ObObj &result,
-                                    const ObObj *objs_array,
-                                    int64_t param_num,
-                                    ObExprCtx &expr_ctx) const
-{
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprWordSegment::cg_expr(
     ObExprCGCtx &cg_ctx,
@@ -76,7 +69,7 @@ int ObExprWordSegment::cg_expr(
 /*static*/ int ObExprWordSegment::generate_fulltext_column(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   const ObCharsetInfo *cs = nullptr;
@@ -93,7 +86,7 @@ int ObExprWordSegment::cg_expr(
     int32_t length_of_separator = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < raw_ctx.arg_cnt_; ++i) {
       ObString res;
-      common::ObDatum *datum = nullptr;
+      common::Datum *datum = nullptr;
       if (OB_ISNULL(raw_ctx.args_[i])) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(raw_ctx.args_[i]->eval(eval_ctx, datum))) {

@@ -30,197 +30,54 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
 {
   int ret = OB_SUCCESS;
   op_ = &op;
-  if (outputs_.empty()) { // not inited
-    // first traverse, treat MapConvert::start_ as count
-    if (op.is_vectorized()) {
-      if (has_virtual_) {
-        ret = OB_ERR_UNEXPECTED;
+  if (exprs.count() != projector.count()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (outputs_.empty() && OB_FAIL(outputs_.prepare_allocate(exprs.count()))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+      sql::ObExpr *expr = exprs.at(i);
+      if (expr == nullptr) {
+        ret = OB_INVALID_ARGUMENT;
       } else {
-        // reset datum pointers to reserved buffer.
-        FOREACH_CNT_X(e, exprs, OB_SUCC(ret)) {
-          if (!(*e)->is_batch_result()) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            (*e)->locate_datums_for_update(op.get_eval_ctx(), op.get_batch_size());
-          }
-        }
-      }
-    }
-
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(outputs_.prepare_allocate(exprs.count()))) {
-    } else {
-      for (int64_t i = 0; i < exprs.count(); i++) {
-        sql::ObExpr *e = exprs.at(i);
-        // output should always be T_COLUMN_REF, only virtual column has argument.
-        if (e->arg_cnt_ > 0) {
-          has_virtual_ = true;
-        } else {
-          const int32_t obj_idx = projector.at(i);
-          if (obj_idx >= 0) {
-            common::ObObjDatumMapType map_type = e->obj_datum_map_;
-            if (num_.map_type_ == map_type) {
-              num_.start_++;
-            } else if (str_.map_type_ == map_type) {
-              str_.start_++;
-            } else if (int_.map_type_ == map_type) {
-              int_.start_++;
-            }
-          }
-        }
-      }
-
-      // setup MapConvert::start_ and assign %start_ to %end_
-      other_idx_ = num_.start_ + str_.start_ + int_.start_;
-      int_.start_ = int_.end_ = num_.start_ + str_.start_;
-      str_.start_ = str_.end_ = num_.start_;
-      num_.start_ = num_.end_ = 0;
-
-      int64_t other_end = other_idx_;
-      // second traverse, setup MapConvert::end_ && outputs_
-      for (int64_t i = 0; i < exprs.count(); i++) {
-        sql::ObExpr *e = exprs.at(i);
-        const int32_t obj_idx = projector.at(i);
-        int64_t item_idx = 0;
-        if (e->arg_cnt_ == 0 && obj_idx >= 0) {
-          common::ObObjDatumMapType map_type = e->obj_datum_map_;
-          if (num_.map_type_ == map_type) {
-            item_idx = num_.end_++;
-          } else if (str_.map_type_ == map_type) {
-            item_idx = str_.end_++;
-          } else if (int_.map_type_ == map_type) {
-            item_idx = int_.end_++;
-          } else {
-            item_idx = other_end++;
-          }
-        } else {
-          item_idx = other_end++;
-        }
-        Item &item = outputs_[item_idx];
-        item.obj_idx_ = obj_idx;
+        Item &item = outputs_.at(i);
+        item.obj_idx_ = projector.at(i);
         item.expr_idx_ = i;
-        if (!op.is_vectorized()) {
-          item.datum_ = &e->locate_datum_for_write(op_->get_eval_ctx());
-        } else {
-          item.datum_ = e->locate_batch_datums(op_->get_eval_ctx());
-          item.eval_flags_ = &e->get_evaluated_flags(op_->get_eval_ctx());
-        }
-        item.eval_info_ = &e->get_eval_info(op_->get_eval_ctx());
-        item.data_ = item.datum_->ptr_;
+        if (OB_FAIL(item.target_.prepare(*expr, op.get_eval_ctx()))) { break; }
+        item.eval_info_ = &expr->get_eval_info(op.get_eval_ctx());
+        item.eval_flags_ = expr->is_batch_result()
+            ? &expr->get_evaluated_flags(op.get_eval_ctx()) : nullptr;
+        has_virtual_ |= expr->arg_cnt_ > 0;
       }
     }
   }
   return ret;
-};
-
-template <common::ObObjDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
-OB_INLINE void ObRow2ExprsProjector::MapConvert<OBJ_DATUM_MAP_TYPE, NEED_RESET_PTR>::project(
-    const ObRow2ExprsProjector::Item *items, const blocksstable::ObStorageDatum *datums,
-    int16_t *nop_pos, int64_t &nop_cnt) const
-{
-  // performance critical, no parameter validity check.
-  for (int32_t i = start_; i < end_; i++) {
-    const Item &item = items[i];
-    const blocksstable::ObStorageDatum &datum = datums[item.obj_idx_];
-    if (OB_UNLIKELY(datum.is_nop())) {
-      nop_pos[nop_cnt++] = item.expr_idx_;
-    } else if (OB_UNLIKELY(datum.is_null())) {
-      item.datum_->set_null();
-    } else {
-      if (NEED_RESET_PTR) {
-        if (OB_UNLIKELY(item.datum_->ptr_ != item.data_)) {
-          item.datum_->ptr_ = item.data_;
-        }
-      }
-      item.datum_->datum2datum<OBJ_DATUM_MAP_TYPE>(datum);
-    }
-  }
-}
-
-template <common::ObObjDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
-OB_INLINE void ObRow2ExprsProjector::MapConvert<OBJ_DATUM_MAP_TYPE,
-          NEED_RESET_PTR>::project_batch_datum(
-              const ObRow2ExprsProjector::Item *items, const blocksstable::ObStorageDatum *datums,
-              int16_t *nop_pos, int64_t &nop_cnt, const int64_t idx) const
-{
-  // performance critical, no parameter validity check.
-  for (int32_t i = start_; i < end_; i++) {
-    const Item &item = items[i];
-    const blocksstable::ObStorageDatum &datum = datums[item.obj_idx_];
-    if (OB_UNLIKELY(datum.is_nop())) {
-      nop_pos[nop_cnt++] = item.expr_idx_;
-    } else if (OB_UNLIKELY(datum.is_null())) {
-      item.datum_[idx].set_null();
-    } else {
-      item.datum_[idx].datum2datum<OBJ_DATUM_MAP_TYPE>(datum);
-    }
-  }
 }
 
 int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
                                   const blocksstable::ObStorageDatum *datums,
-                                  int16_t *nop_pos,
-                                  int64_t &nop_cnt)
+                                  int16_t *nop_pos, int64_t &nop_cnt)
 {
-  // performance critical, no parameter validity check.
   int ret = OB_SUCCESS;
-  if (!op_->is_vectorized()) {
-    num_.project(outputs_.get_data(), datums, nop_pos, nop_cnt);
-    str_.project(outputs_.get_data(), datums, nop_pos, nop_cnt);
-    int_.project(outputs_.get_data(), datums, nop_pos, nop_cnt);
-
-    for (int64_t i = other_idx_; OB_SUCC(ret) && i < outputs_.count(); i++) {
-      const Item &item = outputs_.at(i);
-      const blocksstable::ObStorageDatum *datum = NULL;
-      if (OB_UNLIKELY(item.obj_idx_ < 0
-                      || (datum = &datums[item.obj_idx_])->is_nop())) {
-        nop_pos[nop_cnt++] = item.expr_idx_;
-        item.eval_info_->evaluated_ = false;
-      } else if (OB_UNLIKELY(datum->is_null())) {
-        item.datum_->set_null();
-        item.eval_info_->evaluated_ = true;
-        item.eval_info_->projected_ = true;
-      } else {
-        if (OB_UNLIKELY(item.datum_->ptr_ != item.data_)) {
-          item.datum_->ptr_ = item.data_;
-        }
-        if (OB_FAIL(item.datum_->from_storage_datum(*datum, exprs.at(item.expr_idx_)->obj_datum_map_))) {
-        } else {
-          // the other items may contain virtual columns, set evaluated flag.
-          item.eval_info_->evaluated_ = true;
-          item.eval_info_->projected_ = true;
-        }
-      }
-    }
-  } else {
-    const int64_t idx = op_->get_eval_ctx().get_batch_idx();
-    num_.project_batch_datum(outputs_.get_data(), datums, nop_pos, nop_cnt, idx);
-    str_.project_batch_datum(outputs_.get_data(), datums, nop_pos, nop_cnt, idx);
-    int_.project_batch_datum(outputs_.get_data(), datums, nop_pos, nop_cnt, idx);
-
-    for (int64_t i = other_idx_; OB_SUCC(ret) && i < outputs_.count(); i++) {
-      const Item &item = outputs_.at(i);
-      const blocksstable::ObStorageDatum *datum = NULL;
+  const int64_t batch_idx = op_->is_vectorized() ? op_->get_eval_ctx().get_batch_idx() : 0;
+  // Every column is imported into its sole selected execution frame. Storage NOPs
+  // retain the existing default/virtual-column path; there is no second output
+  // owner that can bypass this projection or generic expression evaluation.
+  for (int64_t i = 0; OB_SUCC(ret) && i < outputs_.count(); ++i) {
+    const Item &item = outputs_.at(i);
+    const sql::ObExpr &expr = *exprs.at(item.expr_idx_);
+    const int64_t idx = expr.is_batch_result() ? batch_idx : 0;
+    if (item.obj_idx_ < 0 || datums[item.obj_idx_].is_nop()) {
+      nop_pos[nop_cnt++] = item.expr_idx_;
+      if (item.eval_flags_ != nullptr) { item.eval_flags_->unset(idx); }
+      else { item.eval_info_->evaluated_ = false; }
+    } else if (OB_FAIL(item.target_.import_legacy(
+                   expr.get_datum_copy_plan(), datums[item.obj_idx_], idx))) {
+    } else {
       item.eval_info_->evaluated_ = true;
-      if (OB_UNLIKELY(item.obj_idx_ < 0
-                      || (datum = &datums[item.obj_idx_])->is_nop())) {
-        nop_pos[nop_cnt++] = item.expr_idx_;
-        item.eval_flags_->unset(idx);
-      } else if (OB_UNLIKELY(datum->is_null())) {
-        item.datum_[idx].set_null();
-        item.eval_flags_->set(idx);
-      } else {
-        if (OB_FAIL(item.datum_[idx].from_storage_datum(
-                    *datum, exprs.at(item.expr_idx_)->obj_datum_map_))) {
-        } else {
-          // the other items may contain virtual columns, set evaluated flag.
-          item.eval_flags_->set(idx);
-        }
-      }
+      item.eval_info_->projected_ = true;
+      if (item.eval_flags_ != nullptr) { item.eval_flags_->set(idx); }
     }
   }
-
   return ret;
 }
 
@@ -253,7 +110,7 @@ DEF_TO_STRING(ObRow2ExprsProjector::Item)
 {
   int64_t pos = 0;
   J_OBJ_START();
-  J_KV(K(obj_idx_), K(expr_idx_), K(datum_), K(eval_info_), K(data_));
+  J_KV(K(obj_idx_), K(expr_idx_), "native_i64", target_.is_native(), K(eval_info_));
   J_OBJ_END();
   return pos;
 }
@@ -280,6 +137,7 @@ DEF_TO_STRING(ObTableScanParam)
        N_COLUMN_IDS, column_ids_,
        N_INDEX_ID, index_id_,
        N_KEY_RANGES, key_ranges_,
+       KPC_(datum_lookup_keys),
        K_(range_array_pos),
        N_TIMEOUT, timeout_,
        N_SCAN_FLAG, scan_flag_,
@@ -311,12 +169,12 @@ DEF_TO_STRING(ObTableScanParam)
 int ScanResumePoint::add_range(const ObITableReadInfo& read_info, const blocksstable::ObDatumRange& datum_range)
 {  
   INIT_SUCC(ret);
-  ObObjMeta* obj_metas;
+  SqlTypeMeta* obj_metas;
   ObDatumRange tmp_range;
   ObNewRange new_range;
   int rowkey_cnt = read_info.get_schema_rowkey_count();
 
-  if (OB_ISNULL(obj_metas = (ObObjMeta*)allocator_.alloc(rowkey_cnt * sizeof(ObObjMeta)))) {
+  if (OB_ISNULL(obj_metas = (SqlTypeMeta*)allocator_.alloc(rowkey_cnt * sizeof(SqlTypeMeta)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory for obj_metas", K(rowkey_cnt));
   } else {

@@ -575,8 +575,8 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
     ObCharsets4Parser charsets4parser = pc_ctx.sql_ctx_.session_info_->get_charsets4parser();
     // if exact mode is on, not needs to do fast parser
     bool enable_exact_mode = pc_ctx.sql_ctx_.session_info_->get_enable_exact_mode();
-    fp_result.cache_params_ =
-        &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store_for_update());
+    fp_result.parameter_context_ =
+        pc_ctx.exec_ctx_.get_physical_plan_ctx();
     if (OB_FAIL(construct_plan_cache_key(*pc_ctx.sql_ctx_.session_info_,
                                          ObLibCacheNameSpace::NS_CRSR,
                                          fp_result.pc_key_))) {
@@ -1627,7 +1627,7 @@ int ObPlanCache::update_memory_conf()
         &pc_mem_conf.high_pct_
       };
   ObArenaAllocator alloc;
-  ObObj obj_val;
+  DatumValue obj_val;
 
   {
     for (int32_t i = 0; i < 3 && OB_SUCC(ret); ++i) {
@@ -1789,10 +1789,10 @@ template int ObPlanCache::add_ps_plan<ObPLFunction>(ObPLFunction *plan, ObPlanCa
 //                K(pc_ctx.sql_ctx_.schema_guard_),
 //                K(pc_ctx.exec_ctx_.get_physical_plan_ctx()),
 //                K(ret));
-//   } else if (FALSE_IT(pc_ctx.fp_result_.cache_params_ =
-//     &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store_for_update()))) {
+//   } else if (FALSE_IT(pc_ctx.fp_result_.parameter_context_ =
+//     pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
 //     //do nothing
-//   } else if (FALSE_IT(original_param_cnt = pc_ctx.fp_result_.cache_params_->count())) {
+//   } else if (FALSE_IT(original_param_cnt = pc_ctx.fp_result_.parameter_context_->get_parameter_count())) {
 //     // do nothing
 //   } else if (OB_FAIL(construct_plan_cache_key(pc_ctx, ObLibCacheNameSpace::NS_CRSR))) {
 //     LOG_WARN("fail to construnct plan cache key", K(ret));
@@ -1880,8 +1880,8 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
                K(pc_ctx.sql_ctx_.schema_guard_),
                K(pc_ctx.exec_ctx_.get_physical_plan_ctx()),
                K(ret));
-  } else if (FALSE_IT(pc_ctx.fp_result_.cache_params_ =
-    &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store_for_update()))) {
+  } else if (FALSE_IT(pc_ctx.fp_result_.parameter_context_ =
+    pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     //do nothing
   } else if (OB_FAIL(construct_plan_cache_key(pc_ctx, ObLibCacheNameSpace::NS_CRSR))) {
   } else {

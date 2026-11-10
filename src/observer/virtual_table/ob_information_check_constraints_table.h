@@ -31,9 +31,9 @@ public:
 
 private:
   int add_check_constraints(
-      const share::schema::ObDatabaseSchema& database_schema, common::ObObj* cells, const int64_t col_count);
+      const share::schema::ObDatabaseSchema& database_schema, common::DatumValue* cells, const int64_t col_count);
   int add_check_constraints(const share::schema::ObTableSchema& table_schema, const common::ObString& database_name,
-      common::ObObj* cells, const int64_t col_count);
+      common::DatumValue* cells, const int64_t col_count);
 
 
 private:

@@ -30,7 +30,7 @@ class ObExprArrayExcept : public ObExprArraySetOperation
 public:
   explicit ObExprArrayExcept(common::ObIAllocator &alloc);
   virtual ~ObExprArrayExcept();
-  static int eval_array_except(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_except(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_except_batch(const ObExpr &expr, 
                 ObEvalCtx &ctx,
                 const ObBitVector &skip, 

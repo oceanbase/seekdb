@@ -127,7 +127,19 @@ int ObMergeJoinOp::inner_open()
 {
   int ret = OB_SUCCESS;
   ObIAllocator &allocator = ctx_.get_allocator();
-  if (OB_FAIL(ObJoinOp::inner_open())) {
+  native_equal_cmp_.reuse();
+  for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.equal_cond_infos_.count(); ++i) {
+    const auto &condition = MY_SPEC.equal_cond_infos_.at(i);
+    ObExpr *left = condition.expr_->args_[condition.is_opposite_ ? 1 : 0];
+    ObExpr *right = condition.expr_->args_[condition.is_opposite_ ? 0 : 1];
+    common::DatumCmpOp operation;
+    if (OB_FAIL(common::ObDatumFuncs::bind_legacy_cmp(left->get_sql_type(), right->get_sql_type(),
+          condition.ns_cmp_func_, operation))) {
+    } else { ret = native_equal_cmp_.push_back(operation); }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObJoinOp::inner_open())) {
   } else if (OB_FAIL(left_fetcher_.init(*left_, allocator, &left_row_joined_))
              || OB_FAIL(right_fetcher_.init(*right_, allocator, NULL))) {
   } else if (OB_FAIL(init_mem_context())) {
@@ -759,8 +771,8 @@ int ObMergeJoinOp::calc_equal_conds(int64_t &cmp_res)
                                              : equal_cond.expr_->args_[0];
     ObExpr *r_expr = equal_cond.is_opposite_ ? equal_cond.expr_->args_[0]
                                              : equal_cond.expr_->args_[1];
-    ObDatum *l_datum = NULL;
-    ObDatum *r_datum = NULL;
+    Datum *l_datum = NULL;
+    Datum *r_datum = NULL;
     if (OB_FAIL(l_expr->eval(eval_ctx_, l_datum))
         || OB_FAIL(r_expr->eval(eval_ctx_, r_datum))) {
     } else {
@@ -768,7 +780,7 @@ int ObMergeJoinOp::calc_equal_conds(int64_t &cmp_res)
         cmp_res = (T_OP_NSEQ == equal_cond.expr_->type_) ? 0 : -1;
       } else {
         int cmp_ret = 0;
-        if (OB_FAIL(equal_cond.ns_cmp_func_(
+        if (OB_FAIL(native_equal_cmp_.at(i)(
                 *l_datum, *r_datum, cmp_ret, datum_access_ctx_))) {
         } else if (cmp_ret != 0) {
           cmp_res = cmp_ret;
@@ -923,8 +935,8 @@ int ObMergeJoinOp::ChildBatchFetcher::get_next_batch(const int64_t max_row_cnt)
         if (expr->is_const_expr()) {
           continue;
         } else {
-          ObDatum *datum = all_exprs_->at(i)->locate_batch_datums(merge_join_op_.eval_ctx_);
-          MEMCPY(datum, backup_datums_.at(i) + backup_rows_used_, sizeof(ObDatum) * restore_cnt);
+          Datum *datum = all_exprs_->at(i)->locate_batch_datums(merge_join_op_.eval_ctx_);
+          MEMCPY(datum, backup_datums_.at(i) + backup_rows_used_, sizeof(Datum) * restore_cnt);
           all_exprs_->at(i)->set_evaluated_projected(merge_join_op_.eval_ctx_);
         }
       }
@@ -965,13 +977,13 @@ int ObMergeJoinOp::ChildBatchFetcher::backup_remain_rows()
   if (OB_UNLIKELY(cur_idx_ >= brs_.size_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (backup_datums_.empty()) {
-    int64_t alloc_size = sizeof(ObDatum) * merge_join_op_.spec_.max_batch_size_;
+    int64_t alloc_size = sizeof(Datum) * merge_join_op_.spec_.max_batch_size_;
     for (int64_t i = 0; i < all_exprs_->count() && OB_SUCC(ret); i++) {
       const ObExpr *expr = all_exprs_->at(i);
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       // if expr is const, use NULL datum pointer as padding.
       if (!expr->is_const_expr() &&
-            OB_ISNULL(datum = static_cast<ObDatum *>(allocator.alloc(alloc_size)))) {
+            OB_ISNULL(datum = static_cast<Datum *>(allocator.alloc(alloc_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(backup_datums_.push_back(datum))) {
       }
@@ -989,8 +1001,8 @@ int ObMergeJoinOp::ChildBatchFetcher::backup_remain_rows()
         } else {
           backup_rows_cnt_ = 0;
           backup_rows_used_ = 0;
-          ObDatumVector src_datum = expr->locate_expr_datumvector(merge_join_op_.eval_ctx_);
-          ObDatum *datum = backup_datums_.at(i);
+          DatumVector src_datum = expr->locate_expr_datumvector(merge_join_op_.eval_ctx_);
+          Datum *datum = backup_datums_.at(i);
           if (OB_ISNULL(datum)) {
             ret = OB_ERR_UNEXPECTED;
           } else {
@@ -1159,13 +1171,13 @@ int ObMergeJoinOp::calc_equal_conds_with_batch_idx(int64_t &cmp_res)
                                              : equal_cond.expr_->args_[0];
     ObExpr *r_child_expr = equal_cond.is_opposite_ ? equal_cond.expr_->args_[0]
                                              : equal_cond.expr_->args_[1];
-    ObDatum *l_datum = &l_child_expr->locate_expr_datum(eval_ctx_, l_table_batch_idx);
-    ObDatum *r_datum = &r_child_expr->locate_expr_datum(eval_ctx_, r_table_batch_idx);
+    Datum *l_datum = &l_child_expr->locate_expr_datum(eval_ctx_, l_table_batch_idx);
+    Datum *r_datum = &r_child_expr->locate_expr_datum(eval_ctx_, r_table_batch_idx);
     if (l_datum->is_null() && r_datum->is_null()) {
       cmp_res = (T_OP_NSEQ == equal_cond.expr_->type_) ? 0 : -1;
     } else {
       int cmp_ret = 0;
-      if (OB_FAIL(equal_cond.ns_cmp_func_(
+      if (OB_FAIL(native_equal_cmp_.at(i)(
               *l_datum, *r_datum, cmp_ret, datum_access_ctx_))) {
       } else if (cmp_ret != 0) {
         cmp_res = cmp_ret;
@@ -1196,22 +1208,27 @@ int ObMergeJoinOp::calc_equal_conds_with_stored_row(const ObRADatumStore::Stored
                                                   : equal_cond.expr_->args_[0];
     ObExpr *r_child_expr = equal_cond.is_opposite_ ? equal_cond.expr_->args_[0]
         : equal_cond.expr_->args_[1];
-    ObDatum *l_table_datum = nullptr;
-    ObDatum *r_table_datum = nullptr;
+    // This descriptor borrows the RA row only for the synchronous comparison.
+    Datum stored_datum;
+    const ObExpr &stored_expr = *(is_left_table_stored_row ? l_child_expr : r_child_expr);
+    if (OB_FAIL(StoredDatumCodec::decode_native(stored_row->stored_cells()[equal_param_idx.at(i)],
+          stored_expr.get_datum_copy_plan(), stored_datum))) { break; }
+    const Datum *l_table_datum = nullptr;
+    const Datum *r_table_datum = nullptr;
 
     if (is_left_table_stored_row) {
-      l_table_datum = const_cast<ObDatum *>(&stored_row->cells()[equal_param_idx.at(i)]);
+      l_table_datum = &stored_datum;
       r_table_datum = &r_child_expr->locate_expr_datum(eval_ctx_, batch_idx);
     } else {
       l_table_datum = &l_child_expr->locate_expr_datum(eval_ctx_, batch_idx);
-      r_table_datum = const_cast<ObDatum *>(&stored_row->cells()[equal_param_idx.at(i)]);
+      r_table_datum = &stored_datum;
     }
     if (OB_SUCC(ret)) {
     if (l_table_datum->is_null() && r_table_datum->is_null()) {
       cmp_res = (T_OP_NSEQ == equal_cond.expr_->type_) ? 0 : -1;
     } else {
       int cmp_ret = 0;
-      if (OB_FAIL(equal_cond.ns_cmp_func_(
+      if (OB_FAIL(native_equal_cmp_.at(i)(
               *l_table_datum, *r_table_datum, cmp_ret, datum_access_ctx_))) {
       } else if (cmp_ret != 0) {
         cmp_res = cmp_ret;

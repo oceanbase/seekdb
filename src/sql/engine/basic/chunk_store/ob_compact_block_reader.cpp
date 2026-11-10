@@ -37,7 +37,7 @@ int ObCompactBlockReader::CurRowInfo::init(const ChunkRowMeta *row_meta, const u
     row_size_ = reinterpret_cast<const uint32_t*>(buf);
     // the n-th var_column in offset array.
     cur_var_offset_pos_ = 0;
-    cur_data_ptr_ = sizeof(ObDatum) * row_meta->col_cnt_ + sizeof(ObChunkDatumStore::StoredRow);
+    cur_data_ptr_ = sizeof(StoredDatumCell) * row_meta->col_cnt_ + sizeof(ObChunkDatumStore::StoredRow);
     var_column_cnt_ = row_meta->col_cnt_ - row_meta->fixed_cnt_;
     int64_t var_offset_size = offset_width * (var_column_cnt_ + 1);
     bitmap_size_ = sql::ObBitVector::memory_size(row_meta->col_cnt_);
@@ -91,7 +91,7 @@ int ObCompactBlockReader::get_stored_row(ObChunkDatumStore::StoredRow *&sr)
   } else {
     const T *offset_array = reinterpret_cast<const T *>(row_info_.buf_ + HEAD_SIZE + row_info_.bitmap_size_);
     for (int64_t i = 0; OB_SUCC(ret) && i < row_meta_->col_cnt_; i++) {
-      ObDatum *cur_datum = reinterpret_cast<ObDatum *>(sr->payload_ + i * sizeof(ObDatum));
+      StoredDatumCell *cur_datum = &sr->stored_cells()[i];
       uint32_t len = 0;
       char *tmp_ptr = reinterpret_cast<char *>(sr) + row_info_.cur_data_ptr_;
       if (row_info_.bit_vec_->at(i)) {
@@ -186,7 +186,7 @@ int ObCompactBlockReader::calc_stored_row_size(const char *compact_row, const Ch
     }
     if (OB_SUCC(ret)) {
       size = row_size - HEAD_SIZE - bit_map_size - offset_width * (var_column_cnt + 1)\
-            + row_meta->col_cnt_ * sizeof(ObDatum) + sizeof(ObChunkDatumStore::StoredRow);
+            + row_meta->col_cnt_ * sizeof(StoredDatumCell) + sizeof(ObChunkDatumStore::StoredRow);
 
     }
   }

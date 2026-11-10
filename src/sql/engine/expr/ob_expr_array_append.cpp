@@ -64,7 +64,7 @@ int ObExprArrayAppendCommon::calc_result_type2(ObExprResType &type,
     is_null_res = true;
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_array_type(exec_ctx, type1, type2, subschema_id))) {
   } 
   // set result type
@@ -78,7 +78,7 @@ int ObExprArrayAppendCommon::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayAppendCommon::eval_append(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool is_prepend)
+int ObExprArrayAppendCommon::eval_append(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, bool is_prepend)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -88,8 +88,8 @@ int ObExprArrayAppendCommon::eval_append(const ObExpr &expr, ObEvalCtx &ctx, ObD
   ObIArrayType *src_arr = NULL;
   ObIArrayType *val_arr = NULL;
   ObIArrayType *res_arr = NULL;
-  ObDatum *arr_datum = NULL;
-  ObDatum *val_datum = NULL;
+  Datum *arr_datum = NULL;
+  Datum *val_datum = NULL;
   bool is_null_res = false;
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
@@ -102,10 +102,10 @@ int ObExprArrayAppendCommon::eval_append(const ObExpr &expr, ObEvalCtx &ctx, ObD
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id, res_arr, false))) {
   } else if (!is_prepend) {
     if (OB_FAIL(res_arr->insert_from(*src_arr))) {
-    } else if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum, val_subschema_id, val_arr, res_arr))) {
+    } else if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum, val_subschema_id, val_arr, res_arr, *expr.args_[1]))) {
     }
   } else {
-    if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum, val_subschema_id, val_arr, res_arr))) {
+    if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum, val_subschema_id, val_arr, res_arr, *expr.args_[1]))) {
     } else if (OB_FAIL(res_arr->insert_from(*src_arr))) {
     }
   }
@@ -128,7 +128,7 @@ int ObExprArrayAppendCommon::eval_append_batch(const ObExpr &expr, ObEvalCtx &ct
                                                bool is_prepend)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -144,8 +144,8 @@ int ObExprArrayAppendCommon::eval_append_batch(const ObExpr &expr, ObEvalCtx &ct
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector val_datum = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector val_datum = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       bool is_null_res = false;
       if (skip.at(j) || eval_flags.at(j)) {
@@ -163,10 +163,10 @@ int ObExprArrayAppendCommon::eval_append_batch(const ObExpr &expr, ObEvalCtx &ct
       if (OB_FAIL(ret) || is_null_res) {
       } else if (!is_prepend) {
         if (OB_FAIL(res_arr->insert_from(*src_arr))) {
-        } else if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum.at(j), val_subschema_id, val_arr, res_arr))) {
+        } else if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum.at(j), val_subschema_id, val_arr, res_arr, *expr.args_[1]))) {
         }
       } else {
-        if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum.at(j), val_subschema_id, val_arr, res_arr))) {
+        if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum.at(j), val_subschema_id, val_arr, res_arr, *expr.args_[1]))) {
         } else if (OB_FAIL(res_arr->insert_from(*src_arr))) {
         }
       }
@@ -194,8 +194,8 @@ int ObExprArrayAppendCommon::eval_append_batch(const ObExpr &expr, ObEvalCtx &ct
 }
 
 int ObExprArrayAppendCommon::append_elem(ObIAllocator &tmp_allocator, ObEvalCtx &ctx,
-                                         ObDatum *val_datum, uint16_t val_subschema_id,
-                                         ObIArrayType *val_arr, ObIArrayType *res_arr)
+                                         Datum *val_datum, uint16_t val_subschema_id,
+                                         ObIArrayType *val_arr, ObIArrayType *res_arr, const ObExpr &value_expr)
 {
   int ret = OB_SUCCESS;
   if (res_arr->get_format() == Nested_Array) {
@@ -210,7 +210,7 @@ int ObExprArrayAppendCommon::append_elem(ObIAllocator &tmp_allocator, ObEvalCtx 
     }
   } else {
     ObCollectionBasicType *elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(res_arr->get_array_type())->element_type_);
-    if (OB_FAIL(ObArrayUtil::append(*res_arr, elem_type->basic_meta_.get_obj_type(), val_datum))) {
+    if (OB_FAIL(ObArrayExprUtils::append_native_element(*res_arr, elem_type->basic_meta_.get_obj_type(), *val_datum, value_expr))) {
     }
   }
   return ret;
@@ -231,7 +231,7 @@ ObExprArrayAppend::~ObExprArrayAppend()
 {
 }
 
-int ObExprArrayAppend::eval_array_append(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayAppend::eval_array_append(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_append(expr, ctx, res, false);
 }
@@ -267,7 +267,7 @@ ObExprArrayPrepend::~ObExprArrayPrepend()
 {
 }
 
-int ObExprArrayPrepend::eval_array_prepend(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayPrepend::eval_array_prepend(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_append(expr, ctx, res, true);
 }

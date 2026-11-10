@@ -62,7 +62,7 @@ protected:
   
 private:
   int filter_by_mbr(bool &got_row);
-  int filter_by_mbr(const ObObj &mbr_obj, bool &pass_through);
+  int filter_by_mbr(const DatumValue &mbr_obj, bool &pass_through);
 
   const ObDASScanCtDef *scan_ctdef_;
   ObDASScanRtDef *scan_rtdef_;
@@ -74,7 +74,7 @@ private:
   int64_t max_rowkey_cnt_;
 
   ObIAllocator* allocator_;
-  ObObj *obj_ptr_;
+  DatumValue *obj_ptr_;
 };
 
 

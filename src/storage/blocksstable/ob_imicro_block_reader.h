@@ -449,7 +449,7 @@ public:
       const int64_t end_idx,
       int64_t &border_row_idx,
       bool &is_equal);
-  static bool need_padding(const bool is_padding_mode, const ObObjMeta &obj_meta)
+  static bool need_padding(const bool is_padding_mode, const SqlTypeMeta &obj_meta)
   {
     return is_padding_mode && obj_meta.is_fixed_len_char_type();
   }

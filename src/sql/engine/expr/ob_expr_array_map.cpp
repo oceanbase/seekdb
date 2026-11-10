@@ -128,7 +128,7 @@ int ObExprArrayMapCommon::eval_src_arrays(const ObExpr &expr, ObEvalCtx &ctx, Ob
   int ret = OB_SUCCESS;
   bool is_first_arr = true;
   for (int64_t i = 1; i < expr.arg_cnt_ && OB_SUCC(ret) && !is_null_res; i++) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     const uint16_t meta_id = expr.args_[i]->obj_meta_.get_subschema_id();
     arr_obj[i - 1] = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
@@ -152,7 +152,7 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
 {
   int ret = OB_SUCCESS;
   uint16_t subschema_id  = info->lambda_subschema_id_;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObIArrayType *elem_arr = NULL;
 
   if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id , lambda_arr, false))) {
@@ -179,7 +179,7 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
       const ObCollectionBasicType *elem_type = dynamic_cast<const ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(lambda_arr->get_array_type())->element_type_);
       if (OB_UNLIKELY(OB_ISNULL(elem_type))) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObArrayUtil::append(*lambda_arr, elem_type->basic_meta_.get_obj_type(), datum))) {
+      } else if (OB_FAIL(ObArrayExprUtils::append_native_element(*lambda_arr, elem_type->basic_meta_.get_obj_type(), *datum, *lambda_expr))) {
       }
     }
   } // end for
@@ -357,7 +357,7 @@ int ObExprArrayMapCommon::get_lambda_subschema_id(ObExecContext *exec_ctx,
   } else {
     ObDataType elem_type;
     const ObExprResType &lambda_type = lambda_expr->get_result_type();
-    elem_type.set_meta_type(lambda_type.get_obj_meta());
+    elem_type.set_meta_type(lambda_type.get_sql_type_meta());
     elem_type.set_accuracy(lambda_type.get_accuracy());
     if (ob_is_collection_sql_type(elem_type.get_obj_type())) {
       if (OB_FAIL(ObArrayExprUtils::deduce_nested_array_subschema_id(exec_ctx, elem_type, lambda_subschema_id))) {
@@ -434,7 +434,7 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
   ObDataType elem_type;
   uint16_t subschema_id;
   bool is_null_res = false;
-  ObObjType lambda_type = types_stack[0].get_type();
+  SqlValueType lambda_type = types_stack[0].get_type();
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -460,7 +460,7 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
       elem_type.meta_.set_utinyint(); // default type
     } else if (lambda_type == ObDecimalIntType || lambda_type == ObNumberType || lambda_type == ObUNumberType) {
       // decimalint isn't supported in array, so cast to supported type
-      ObObjType calc_type = ObIntType; 
+      SqlValueType calc_type = ObIntType;
       if (types_stack[0].get_scale() != 0) {
         calc_type = ObDoubleType;
       }
@@ -468,7 +468,7 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
       elem_type.set_meta_type(types_stack[0].get_calc_meta());
       elem_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[calc_type]);
     } else {
-      elem_type.set_meta_type(types_stack[0].get_obj_meta());
+      elem_type.set_meta_type(types_stack[0].get_sql_type_meta());
       elem_type.set_accuracy(types_stack[0].get_accuracy());
     }
     if (ob_is_collection_sql_type(elem_type.get_obj_type())) {
@@ -491,7 +491,7 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArrayMap::eval_array_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayMap::eval_array_map(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

@@ -45,7 +45,7 @@ int ObExprDateFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   {
     OB_ASSERT(rt_expr.arg_cnt_ == 2);
     OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
-    if (ObStringTC != ob_obj_type_class(rt_expr.args_[1]->datum_meta_.type_) &&
+    if (ObStringTC != sql_type_class(rt_expr.args_[1]->datum_meta_.type_) &&
         ObNullType != rt_expr.args_[1]->datum_meta_.type_) {
       rt_expr.eval_func_ = ObExprDateFormat::calc_date_format_invalid;
     } else {
@@ -55,7 +55,7 @@ int ObExprDateFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObTime ob_time;
@@ -63,8 +63,8 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   int64_t buf_len = OB_MAX_DATE_FORMAT_BUF_LEN;
   int64_t pos = 0;
   const ObSQLSessionInfo *session = NULL;
-  ObDatum *date = NULL;
-  ObDatum *format = NULL;
+  Datum *date = NULL;
+  Datum *format = NULL;
   uint64_t cast_mode = 0;
   bool res_null = false;
   ObDateSqlMode date_sql_mode;
@@ -93,7 +93,7 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                             ob_time,
                                             get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
                                             date_sql_mode,
-                                            expr.args_[0]->obj_meta_.has_lob_header()))) {
+                                            expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
     LOG_WARN("failed to convert datum to ob time");
     if (CM_IS_WARN_ON_FAIL(cast_mode) && OB_ALLOCATE_MEMORY_FAILED != ret) {
       ret = OB_SUCCESS;
@@ -118,7 +118,7 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 }
 
 int ObExprDateFormat::calc_date_format_invalid(const ObExpr &expr, ObEvalCtx &ctx,
-                                               ObDatum &expr_datum)
+                                               Datum &expr_datum)
 {
   UNUSED(expr);
   int ret = OB_SUCCESS;
@@ -236,11 +236,11 @@ int ObExprGetFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprGetFormat::calc_get_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprGetFormat::calc_get_format(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *unit = NULL;
-  ObDatum *format = NULL;
+  Datum *unit = NULL;
+  Datum *format = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, unit, format))) {
   } else if (OB_UNLIKELY(unit->is_null() || unit->get_int() < 0
              || unit->get_int() >= GET_FORMAT_MAX)) {

@@ -140,7 +140,7 @@ int ObExprFuncDump::calc_result_typeN(ObExprResType &type,
 
 
 static int databuff_print_decimalint(
-    const ObDatumMeta datum_meta, const ObDatum &datum,
+    const ObDatumMeta datum_meta, const common::ObDatum &datum,
     char *buffer, int64_t length, int64_t &pos)
 {
   int ret = OB_SUCCESS;
@@ -214,10 +214,10 @@ int ObExprFuncDump::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) c
   return ret;
 }
 
-int ObExprFuncDump::eval_dump(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprFuncDump::eval_dump(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *input = NULL;
+  Datum *input = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, input))) {
   } else if (input->is_null()) {
     expr_datum.set_null();
@@ -240,8 +240,12 @@ int ObExprFuncDump::eval_dump(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       case ObDecimalIntType: {
         char buf[MAX_DUMP_BUFFER_SIZE] = {0};
         int64_t buf_pos = 0;
-        if (OB_FAIL(databuff_print_decimalint(
-            expr.args_[0]->datum_meta_, *input, buf, sizeof(buf), buf_pos))) {
+        common::ObDatum coefficient;
+        alignas(8) char coefficient_buf[64];
+        if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(
+            *input, coefficient, coefficient_buf, sizeof(coefficient_buf)))) {
+        } else if (OB_FAIL(databuff_print_decimalint(
+            expr.args_[0]->datum_meta_, coefficient, buf, sizeof(buf), buf_pos))) {
         } else if (OB_FAIL(ObExprUtil::set_expr_ascii_result(
                             expr, ctx, expr_datum, ObString(buf_pos, buf)))) {
         }

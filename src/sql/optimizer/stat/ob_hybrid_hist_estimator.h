@@ -17,6 +17,7 @@
 #ifndef OB_HYBRID_HIST_ESTIMATOR_H
 #define OB_HYBRID_HIST_ESTIMATOR_H
 
+#include "common/datum/datum_value.h"
 #include "sql/optimizer/stat/ob_stats_estimator.h"
 #include "sql/optimizer/stat/ob_opt_column_stat.h"
 #include "sql/optimizer/stat/ob_opt_table_stat.h"
@@ -36,13 +37,13 @@ struct BucketDesc
 struct BucketNode
 {
   BucketNode() : ep_val_(), ep_count_(0), is_pop_(false) {}
-  BucketNode(const ObObj &obj, int64_t ep_count) :
+  BucketNode(const DatumValue &obj, int64_t ep_count) :
     ep_val_(obj), ep_count_(ep_count), is_pop_(false)
   {}
 
   TO_STRING_KV(K(ep_val_), K(ep_count_), K(is_pop_));
 
-  ObObj ep_val_;
+  DatumValue ep_val_;
   int64_t ep_count_;
   bool is_pop_;
 };
@@ -56,14 +57,17 @@ public:
     num_distinct_(0),
     pop_count_(0),
     pop_freq_(0),
+    value_owner_("HybridHistVal"),
     hybrid_buckets_()
   {}
 
-  int read_result(const ObObj &result_obj);
+  int read_result(const DatumValue &result_obj);
   const ObIArray<ObHistBucket> &get_buckets() const { return hybrid_buckets_; }
   int64_t get_bucket_size() { return hybrid_buckets_.count(); }
   int add_hist_bucket(ObHistBucket &hist_bucket) {
-    return hybrid_buckets_.push_back(hist_bucket);
+    ObHistBucket owned;
+    const int ret = owned.deep_copy(value_owner_, hist_bucket);
+    return ret == OB_SUCCESS ? hybrid_buckets_.push_back(owned) : ret;
   }
   int64_t get_total_count() { return total_count_; }
   int64_t get_num_distinct() { return num_distinct_; }
@@ -96,10 +100,10 @@ public:
                         int64_t num_distinct,
                         int64_t pop_count,
                         int64_t pop_freq,
-                        const ObObjMeta &obj_meta,
+                        const SqlTypeMeta &obj_meta,
                         const ObDatumAccessContext *datum_access_ctx);
   static int build_prefix_str_datum_for_lob(ObIAllocator &allocator,
-                                            const ObObjMeta &obj_meta,
+                                            const SqlTypeMeta &obj_meta,
                                             const ObDatum &old_datum,
                                             ObDatum &new_datum,
                                             const ObDatumAccessContext *datum_access_ctx);
@@ -112,7 +116,9 @@ private:
   int64_t num_distinct_;
   int64_t pop_count_;
   int64_t pop_freq_;
+  ObArenaAllocator value_owner_;
   common::ObSEArray<ObHistBucket, 16, common::ModulePageAllocator, true> hybrid_buckets_;
+  DISALLOW_COPY_AND_ASSIGN(ObHybridHistograms);
 };
 
 

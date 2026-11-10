@@ -145,20 +145,20 @@ public:
                                    const bool is_range_partition,
                                    bool &is_equal);
 
-  static int is_row_equal(const ObRowkey &first_row,
-                          const ObRowkey &second_row,
+  static int is_key_equal(const common::PartitionBoundRow &first_row,
+                          const common::PartitionBoundRow &second_row,
                           bool &is_equal);
 
   static int is_list_partition_equal(const share::schema::ObBasePartition *first_partition,
                                      const share::schema::ObBasePartition *second_partition,
                                      bool &is_equal);
 
-  static int is_row_equal(const common::ObNewRow &first_row,
-                          const common::ObNewRow &second_row,
+  static int is_row_equal(const common::PartitionBoundRow &first_row,
+                          const common::PartitionBoundRow &second_row,
                           bool &is_equal);
 
-  static int is_obj_equal(const common::ObObj &first_obj,
-                          const common::ObObj &second_obj,
+  static int is_obj_equal(const common::DatumValue &first_obj,
+                          const common::DatumValue &second_obj,
                           bool &is_equal);
 
   TO_STRING_KV(K_(is_strict), K_(pwj_tables));

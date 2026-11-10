@@ -68,25 +68,25 @@ int ObAllVirtualCompactionSuggestion::fill_cells()
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
     case MERGE_TYPE:
-      cells[i].set_varchar(merge_type_to_str(suggestion_.merge_type_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, merge_type_to_str(suggestion_.merge_type_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case TABLET_ID:
-      cells[i].set_int(suggestion_.tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, suggestion_.tablet_id_) : ret);
       break;
     case MERGE_START_TIME:
-      cells[i].set_timestamp(suggestion_.merge_start_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, suggestion_.merge_start_time_) : ret);
       break;
     case MERGE_FINISH_TIME:
-      cells[i].set_timestamp(suggestion_.merge_finish_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, suggestion_.merge_finish_time_) : ret);
       break;
     case SUGGESTION: {
-      cells[i].set_varchar(suggestion_.suggestion_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, suggestion_.suggestion_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     }

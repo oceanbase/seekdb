@@ -33,8 +33,6 @@ namespace common
 class ObTimeZoneInfo;
 class ObString;
 class ObIAllocator;
-class ObObj;
-struct ObObjPrintParams;
 }
 namespace observer
 {
@@ -42,11 +40,6 @@ class ObMPUtils
 {
 public:
   static int add_changed_session_info(obmysql::OMPKOK &ok_pkt, sql::ObSQLSessionInfo &session);
-private:
-  static int get_user_sql_literal(common::ObIAllocator &allocator, const common::ObObj &obj,
-                                  common::ObString &value_str, const common::ObObjPrintParams &print_param);
-  static int get_literal_print_length(const common::ObObj &obj, bool is_plain, int64_t &len,
-                                      const common::ObObjPrintParams &print_param);
 };
 } // end of namespace observer
 } // end of namespace oceanbase

@@ -61,11 +61,11 @@ int ObExprSTContains::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprSTContains::eval_st_contains(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTContains::eval_st_contains(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum1 = NULL;
-  ObDatum *gis_datum2 = NULL;
+  Datum *gis_datum1 = NULL;
+  Datum *gis_datum2 = NULL;
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
 

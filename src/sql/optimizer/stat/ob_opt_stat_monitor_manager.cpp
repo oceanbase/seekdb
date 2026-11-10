@@ -15,6 +15,10 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "share/datum/datum_value_cast.h"
+#include "share/ob_share_util.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/datum/typed_datum_compare.h"
 #include "ob_opt_stat_monitor_manager.h"
 #include "share/ob_ex_rpc.h"
 #include "share/rc/ob_server_runtime.h"
@@ -104,7 +108,7 @@ void ObOptStatMonitorFlushAllTask::runTimerTask()
     
     bool write_enabled = false;
     THIS_WORKER.set_timeout_ts(FLUSH_INTERVAL / 2 + ObTimeUtility::current_time());
-    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    if (OB_FAIL(share::ObShareUtil::is_server_write_enabled(write_enabled))) {
       LOG_WARN("fail to check whether server writes are enabled", KR(ret));
     } else if (!write_enabled) {
       // do nothing
@@ -339,7 +343,7 @@ int ObOptStatMonitorManager::run_periodic_maintenance_once()
   bool write_enabled = false;
   bool is_async_job_available = false;
   int64_t flushed_dml_epoch = INVALID_GATHER_EPOCH;
-  if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+  if (OB_FAIL(share::ObShareUtil::is_server_write_enabled(write_enabled))) {
     LOG_WARN("failed to check server role", K(ret));
   } else if (!write_enabled) {
     // do nothing
@@ -785,8 +789,8 @@ int ObOptStatMonitorManager::get_column_usage_from_table(ObExecContext &ctx,
         ObColumnStatParam *target_param = NULL;
         int64_t flag = 0;
         for (int64_t i = 0; OB_SUCC(ret) && i < info_count + 1; ++i) {
-          ObObj val;
-          if (OB_FAIL(client_result->get_obj(i, val))) {
+          DatumValue val;
+          if (OB_FAIL(client_result->get_value(i, val))) {
             LOG_WARN("failed to get object", K(ret));
           } else if (!val.is_int()) {
             ret = OB_ERR_UNEXPECTED;
@@ -861,7 +865,7 @@ int ObOptStatMonitorManager::check_table_writeable(bool &is_writeable)
   int ret = OB_SUCCESS;
   is_writeable = true;
   bool write_enabled = false;
-  if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+  if (OB_FAIL(share::ObShareUtil::is_server_write_enabled(write_enabled))) {
     LOG_WARN("fail to check whether server writes are enabled", KR(ret));
   } else if (OB_UNLIKELY(!write_enabled)) {
     is_writeable = false;
@@ -1217,15 +1221,15 @@ int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const ObSqlStri
           int64_t idx1 = 0;
           int64_t idx2 = 1;
           int64_t idx3 = 2;
-          ObObj obj1;
-          ObObj obj2;
-          ObObj obj3;
+          DatumValue obj1;
+          DatumValue obj2;
+          DatumValue obj3;
           int64_t table_id = -1;
           int64_t tablet_id = 0;
           int64_t inserts = 0;
-          if (OB_FAIL(client_result->get_obj(idx1, obj1)) ||
-              OB_FAIL(client_result->get_obj(idx2, obj2)) ||
-              OB_FAIL(client_result->get_obj(idx3, obj3))) {
+          if (OB_FAIL(client_result->get_value(idx1, obj1)) ||
+              OB_FAIL(client_result->get_value(idx2, obj2)) ||
+              OB_FAIL(client_result->get_value(idx3, obj3))) {
           } else if (OB_FAIL(obj1.get_int(table_id)) ||
                      OB_FAIL(obj2.get_int(tablet_id)) ||
                      OB_FAIL(obj3.get_int(inserts))) {
@@ -1781,8 +1785,8 @@ int ObOptStatMonitorManager::get_async_stale_max_table_size(const uint64_t table
   ObArenaAllocator tmp_alloc("OptStatPrefs", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObAsyncStaleMaxTableSizePrefs prefs;
   ObString opt_name(prefs.get_stat_pref_name());
-  ObObj result;
-  ObObj dest_obj;
+  DatumValue result;
+  DatumValue dest_obj;
   ObCastCtx cast_ctx(&tmp_alloc, NULL, CM_NONE, ObCharset::get_system_collation());
   async_stale_max_table_size = DEFAULT_ASYNC_MAX_SCAN_ROWCOUNT;
   if (OB_FAIL(ObDbmsStatsPreferences::get_prefs(mysql_proxy_, tmp_alloc,
@@ -1790,7 +1794,7 @@ int ObOptStatMonitorManager::get_async_stale_max_table_size(const uint64_t table
     LOG_WARN("failed to get prefs", K(ret));
   } else if (result.is_null()) {
     //do nothing
-  } else if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, result, dest_obj))) {
+  } else if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, result, *cast_ctx.allocator_v2_, dest_obj))) {
     LOG_WARN("failed to type", K(ret), K(result));
   } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(async_stale_max_table_size))) {
     LOG_WARN("failed to extract valid int64 with trunc", K(ret), K(result));

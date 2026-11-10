@@ -41,8 +41,8 @@ int ObHashPartCols::equal_distinct(
   } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx))) {
   } else if (use_expr_) {
     //for this situation, must be crash in a batch, need to get datum from expr
-    ObDatum *l_cell = nullptr;
-    ObDatum *r_cell = nullptr;
+    Datum *l_cell = nullptr;
+    Datum *r_cell = nullptr;
     const int64_t right_batch_idx = eval_ctx->get_batch_idx();
     const int64_t left_batch_idx = batch_idx_;
     for (int64_t i = 0; OB_SUCC(ret) && i < sort_collations->count() && 0 == cmp_result; ++i) {
@@ -52,22 +52,30 @@ int ObHashPartCols::equal_distinct(
       l_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
       batch_info_guard.set_batch_idx(right_batch_idx);
       r_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
-      if (OB_FAIL(cmp_funcs->at(i).cmp_func_(
-              *l_cell, *r_cell, cmp_result, datum_access_ctx))) {
+      alignas(8) char left_scratch[64], right_scratch[64];
+      ObDatum left, right;
+      const common::DatumCopyPlan plan = exprs->at(idx)->get_datum_copy_plan();
+      if (OB_FAIL(plan.legacy_view(*l_cell, left, left_scratch, sizeof(left_scratch)))) {
+      } else if (OB_FAIL(plan.legacy_view(*r_cell, right, right_scratch, sizeof(right_scratch)))) {
+      } else if (OB_FAIL(cmp_funcs->at(i).cmp_func_(left, right, cmp_result, datum_access_ctx))) {
       }
     }
     //reset batch_idx before return 
     batch_info_guard.set_batch_idx(right_batch_idx);
     result = (0 == cmp_result);
   } else {
-    ObDatum *l_cells = store_row_->cells();
-    ObDatum *r_cell = nullptr;
+    const StoredDatumCell *l_cells = store_row_->stored_cells();
+    Datum *r_cell = nullptr;
     // must evaled in calc_hash_values
     for (int64_t i = 0; OB_SUCC(ret) && i < sort_collations->count() && 0 == cmp_result; ++i) {
       int64_t idx = sort_collations->at(i).field_idx_;
+      const ObDatum l_cell = StoredDatumCodec::decode_legacy_view(l_cells[idx]);
       r_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
-      if (OB_FAIL(cmp_funcs->at(i).cmp_func_(
-              l_cells[idx], *r_cell, cmp_result, datum_access_ctx))) {
+      alignas(8) char scratch[64];
+      ObDatum right;
+      if (OB_FAIL(exprs->at(idx)->get_datum_copy_plan().legacy_view(
+          *r_cell, right, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(cmp_funcs->at(i).cmp_func_(l_cell, right, cmp_result, datum_access_ctx))) {
       }
     }
     result = (0 == cmp_result);

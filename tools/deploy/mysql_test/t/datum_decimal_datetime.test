@@ -1,0 +1,25 @@
+--echo # Datum DECIMAL/DATETIME output preserves precision and wire formatting
+--disable_warnings
+DROP TABLE IF EXISTS datum_decimal_datetime;
+--enable_warnings
+CREATE TABLE datum_decimal_datetime (
+ id INT PRIMARY KEY,
+ n4 DECIMAL(9,0), n8 DECIMAL(18,2), n16 DECIMAL(38,10),
+ n32 DECIMAL(65,30), nz DECIMAL(65,30) UNSIGNED ZEROFILL,
+ d0 DATETIME, d3 DATETIME(3), d6 DATETIME(6)
+);
+INSERT INTO datum_decimal_datetime VALUES
+(1,-999999999,-9999999999999999.99,-1234567890123456789012345678.1234567890,-12345678901234567890123456789012345.123456789012345678901234567890,0.000000000000000000000000000001,'1000-01-01 00:00:00','2000-02-29 23:59:59.123','9999-12-31 23:59:59.999999'),
+(2,0,0,0,0,0,'2026-10-22 00:00:00','2026-10-22 00:00:00','2026-10-22 00:00:00'),
+(3,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+SELECT * FROM datum_decimal_datetime ORDER BY id;
+PREPARE datum_decimal_time_ps FROM 'SELECT * FROM datum_decimal_datetime WHERE id >= ? ORDER BY id';
+SET @datum_decimal_time_id=1;
+EXECUTE datum_decimal_time_ps USING @datum_decimal_time_id;
+SET @datum_decimal_time_id=3;
+EXECUTE datum_decimal_time_ps USING @datum_decimal_time_id;
+DEALLOCATE PREPARE datum_decimal_time_ps;
+SELECT SUM(n32),AVG(n8),MAX(d6),MIN(d0) FROM datum_decimal_datetime;
+SELECT n8/3,n32+n16,ROUND(n16,2) FROM datum_decimal_datetime WHERE id=1;
+SELECT CAST('1.2300' AS DECIMAL(8,4)),CAST('2026-10-22 12:34:56.123456' AS DATETIME(6));
+DROP TABLE datum_decimal_datetime;

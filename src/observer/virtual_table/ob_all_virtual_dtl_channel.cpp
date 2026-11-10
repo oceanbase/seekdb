@@ -153,77 +153,77 @@ int ObAllVirtualDtlChannel::inner_open()
 int ObAllVirtualDtlChannel::get_row(ObVirtualChannelInfo &chan_info, ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
       case CHANNEL_ID: {
-        cells[cell_idx].set_int(chan_info.channel_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.channel_id_) : ret);
         break;
       }
       case OP_ID: {
         if (-1 != chan_info.op_id_) {
-          cells[cell_idx].set_int(chan_info.op_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.op_id_) : ret);
         } else {
           cells[cell_idx].set_null();
         }
         break;
       }
       case PEER_ID: {
-        cells[cell_idx].set_int(chan_info.peer_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.peer_id_) : ret);
         break;
       }
       case IS_LOCAL: {
-        cells[cell_idx].set_bool(chan_info.is_local_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cells, cur_row_.count_, cell_idx, chan_info.is_local_) : ret);
         break;
       }
       case IS_DATA: {
-        cells[cell_idx].set_bool(chan_info.is_data_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cells, cur_row_.count_, cell_idx, chan_info.is_data_) : ret);
         break;
       }
       case IS_TRANSMIT: {
-        cells[cell_idx].set_bool(chan_info.is_transmit_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cells, cur_row_.count_, cell_idx, chan_info.is_transmit_) : ret);
         break;
       }
       case ALLOC_BUFFER_CNT: {
-        cells[cell_idx].set_int(chan_info.alloc_buffer_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.alloc_buffer_cnt_) : ret);
         break;
       }
       case FREE_BUFFER_CNT: {// OB_APP_MIN_COLUMN_ID + 10
-        cells[cell_idx].set_int(chan_info.free_buffer_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.free_buffer_cnt_) : ret);
         break;
       }
       case SEND_BUFFER_CNT: {
-        cells[cell_idx].set_int(chan_info.send_buffer_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.send_buffer_cnt_) : ret);
         break;
       }
       case RECV_BUFFER_CNT: {
-        cells[cell_idx].set_int(chan_info.recv_buffer_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.recv_buffer_cnt_) : ret);
         break;
       }
       case PROCESSED_BUFFER_CNT: {
-        cells[cell_idx].set_int(chan_info.processed_buffer_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.processed_buffer_cnt_) : ret);
         break;
       }
       case SEND_BUFFER_SIZE: {
-        cells[cell_idx].set_int(chan_info.send_buffer_size_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.send_buffer_size_) : ret);
         break;
       }
       case HASH_VAL: {// OB_APP_MIN_COLUMN_ID + 15
-        cells[cell_idx].set_int(chan_info.hash_val_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.hash_val_) : ret);
         break;
       }
       case BUFFER_POOL_ID:{
-        cells[cell_idx].set_int(chan_info.buffer_pool_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.buffer_pool_id_) : ret);
         break;
       }
       case PINS: {
-        cells[cell_idx].set_int(chan_info.pins_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.pins_) : ret);
         break;
       }
       case FIRST_IN_TS: {
         if (0 != chan_info.first_in_ts_) {
-          cells[cell_idx].set_timestamp(chan_info.first_in_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, chan_info.first_in_ts_) : ret);
         } else {
           cells[cell_idx].set_null();
         }
@@ -231,7 +231,7 @@ int ObAllVirtualDtlChannel::get_row(ObVirtualChannelInfo &chan_info, ObNewRow *&
       }
       case FIRST_OUT_TS: {
         if (0 != chan_info.first_out_ts_) {
-          cells[cell_idx].set_timestamp(chan_info.first_out_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, chan_info.first_out_ts_) : ret);
         } else {
           cells[cell_idx].set_null();
         }
@@ -239,7 +239,7 @@ int ObAllVirtualDtlChannel::get_row(ObVirtualChannelInfo &chan_info, ObNewRow *&
       }
       case LAST_IN_TS: {// OB_APP_MIN_COLUMN_ID + 20
         if (0 != chan_info.last_in_ts_) {
-          cells[cell_idx].set_timestamp(chan_info.last_in_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, chan_info.last_in_ts_) : ret);
         } else {
           cells[cell_idx].set_null();
         }
@@ -247,26 +247,26 @@ int ObAllVirtualDtlChannel::get_row(ObVirtualChannelInfo &chan_info, ObNewRow *&
       }
       case LAST_OUT_TS: {
         if (0 != chan_info.last_out_ts_) {
-          cells[cell_idx].set_timestamp(chan_info.last_out_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, chan_info.last_out_ts_) : ret);
         } else {
           cells[cell_idx].set_null();
         }
         break;
       }
       case STATE: {
-        cells[cell_idx].set_int(chan_info.state_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.state_) : ret);
         break;
       }
       case THREAD_ID: {
-        cells[cell_idx].set_int(chan_info.thread_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.thread_id_) : ret);
         break;
       }
       case OWNER_MOD: {
-        cells[cell_idx].set_int(chan_info.owner_mod_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, chan_info.owner_mod_) : ret);
         break;
       }
       case DTL_EOF: {
-        cells[cell_idx].set_bool(chan_info.eof_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cells, cur_row_.count_, cell_idx, chan_info.eof_) : ret);
         break;
       }
       default: {

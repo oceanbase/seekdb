@@ -16,11 +16,13 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/expr/ob_expr_output_pack.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "share/ob_lob_access_utils.h"
 #include "lib/container/ob_se_array.h"
 #include "query/protocol/ob_mysql_rust_row.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "share/datum/datum_value_cast.h"
 namespace oceanbase{
 
 using namespace common;
@@ -131,7 +133,7 @@ int ObOutputPackInfo::init_output_pack_info(uint64_t extra,
   return ret;
 }
 
-int ObExprOutputPack::eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprOutputPack::eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = nullptr;
@@ -145,9 +147,17 @@ int ObExprOutputPack::eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       || OB_ISNULL(sql_ctx = ctx.exec_ctx_.get_sql_ctx())
       || OB_ISNULL(schema_guard = sql_ctx->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(expr.eval_param_value(ctx))) {
-  } else if (OB_FAIL(process_oneline(expr, ctx, session, alloc,
-                                     extra_info, schema_guard, expr_datum))) {
+  } else {
+    // Evaluate in the original argument order, without requesting a retaining
+    // Datum* ABI from a compact Expr or an ordinary parameter owner.
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+      Datum value;
+      ret = expr.args_[i]->eval_value(ctx, value);
+    }
+    if (OB_SUCC(ret)) {
+      ret = process_oneline(expr, ctx, session, alloc,
+                            extra_info, schema_guard, expr_datum);
+    }
   }
   return ret;
 }
@@ -162,15 +172,21 @@ int ObExprOutputPack::eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
   ObOutputPackInfo *extra_info = static_cast<ObOutputPackInfo *> (expr.extra_info_);
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &alloc = alloc_guard.get_allocator();
-  ObDatum *result = expr.locate_batch_datums(ctx);
+  Datum *result = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())
       || OB_ISNULL(sql_ctx = ctx.exec_ctx_.get_sql_ctx())
       || OB_ISNULL(schema_guard = sql_ctx->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(expr.eval_batch_param_value(ctx, skip, batch_size))) {
   } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+      // An alias is already an owner binding. read_value below consumes it
+      // without allocating a generic parameter projection.
+      if (!expr.args_[i]->native_parameter_alias_) {
+        ret = expr.args_[i]->eval_batch(ctx, skip, batch_size);
+      }
+    }
     ObEvalCtx::BatchInfoScopeGuard guard(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
@@ -186,20 +202,27 @@ int ObExprOutputPack::eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprOutputPack::convert_string_value_charset(common::ObObj &value,
+int ObExprOutputPack::convert_string_value_charset(common::DatumValue &value,
                                                    common::ObIAllocator &alloc,
                                                    const ObSQLSessionInfo &my_session)
 {
   int ret = OB_SUCCESS;
   ObCharsetType charset_type = CHARSET_INVALID;
   if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-  } else {
-    OZ (value.convert_string_value_charset(charset_type, alloc));
+  } else if (!value.is_null()) {
+    ObString str = value.get_string();
+    ObCollationType collation = value.get_collation_type();
+    if (OB_FAIL(ObCharsetUtils::convert_string_value_charset(str, collation,
+                                                               charset_type, alloc))) {
+    } else {
+      value.datum_.set_string(str.ptr(), str.length());
+      value.meta_.set_collation_type(collation);
+    }
   }
   return ret;
 }
 
-int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
+int ObExprOutputPack::convert_text_value_charset(common::DatumValue &value,
                                                  bool res_has_lob_header,
                                                  common::ObIAllocator &alloc,
                                                  const ObSQLSessionInfo &my_session,
@@ -218,7 +241,7 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
     ObCollationType from_collation_type = value.get_collation_type();
     const ObCharsetInfo *from_charset_info = ObCharset::get_charset(from_collation_type);
     const ObCharsetInfo *to_charset_info = ObCharset::get_charset(to_collation_type);
-    const ObObjType type = value.get_type();
+    const SqlValueType type = value.get_type();
 
     if (OB_ISNULL(from_charset_info) || OB_ISNULL(to_charset_info)) {
       ret = OB_ERR_UNEXPECTED;
@@ -229,7 +252,7 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
       // get full data, buffer size is full byte length * 4
       ObString data_str;
       ObLobLocatorV2 loc(raw_str, value.has_lob_header());
-      ObTextStringIter str_iter(value);
+      ObTextStringIter str_iter(type, from_collation_type, raw_str, value.has_lob_header());
       if (OB_FAIL(ObTextStringHelper::build_text_iter(
               str_iter, exec_ctx, &alloc))) {
       } else if (OB_FAIL(str_iter.get_full_data(data_str))) {
@@ -254,10 +277,12 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
           LOG_INFO("Lob: new temp convert_text_value_charset in convert_text_value",
               K(ret), K(raw_str), K(type), K(to_collation_type), K(from_collation_type),
               K(from_charset_info->csname), K(to_charset_info->csname));
-          value.set_lob_value(type, lob_loc_str.ptr(), lob_loc_str.length());
-          value.set_collation_type(to_collation_type);
+          value.datum_.set_string(lob_loc_str.ptr(), lob_loc_str.length());
+          value.meta_.set_collation_type(to_collation_type);
           if (new_tmp_lob.has_lob_header()) {
-            value.set_has_lob_header();
+            value.meta_.set_has_lob_header();
+          } else {
+            value.meta_.set_inrow();
           }
         }
       }
@@ -266,31 +291,40 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
   return ret;
 }
 
-int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
+int ObExprOutputPack::process_lob_locator_results(common::DatumValue &value,
                                                   common::ObIAllocator &alloc,
-                                                  const ObSQLSessionInfo &my_session,
                                                   sql::ObExecContext &exec_ctx)
 {
   int ret = OB_SUCCESS;
-  if (!(value.is_lob() || value.is_json() || value.is_geometry())) {
+  if (!(value.meta_.is_lob() || value.is_json() || value.is_geometry())) {
     // not lob types, do nothing
   } else {
     // remove locator header and read full lob data
     ObString data;
     // lob locator v2
-    ObTextStringIter instr_iter(value);
+    ObTextStringIter instr_iter(value.get_type(), value.get_collation_type(),
+                                value.get_string(), value.has_lob_header());
     if (OB_FAIL(ObTextStringHelper::build_text_iter(
             instr_iter, exec_ctx, &alloc))) {
     } else if (OB_FAIL(instr_iter.get_full_data(data))) {
     } else {
-      ObObjType dst_type = value.is_json() ? ObJsonType : ObLongTextType;
+      SqlValueType dst_type = value.is_json() ? ObJsonType : ObLongTextType;
       if (value.is_json()) {
         dst_type = ObJsonType;
       } else if (value.is_geometry()) {
         dst_type = ObGeometryType;
       }
       // remove has lob header flag
-      value.set_lob_value(dst_type, data.ptr(), static_cast<int32_t>(data.length()));
+      value.datum_.set_string(data.ptr(), data.length());
+      if (dst_type == ObJsonType) {
+        value.meta_.set_json();
+      } else if (dst_type == ObGeometryType) {
+        value.meta_.set_geometry();
+      } else {
+        value.meta_.set_type(dst_type);
+        value.meta_.set_inrow();
+        value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+      }
     }
   }
   return ret;
@@ -331,6 +365,45 @@ int ObExprOutputPack::convert_string_charset(const common::ObString &in_str,
   return ret;
 }
 
+// Keep the existing native formatter fast path for common scalar Datums. The
+// generic DatumValue formatter handles the remaining native representations.
+static bool can_build_output_pack_cell_from_datum(const DatumValue &value)
+{
+  SqlValueDatumMapType expected_map = OBJ_DATUM_MAPPING_MAX;
+  switch (value.get_type_class()) {
+  case ObNullTC:
+    expected_map = OBJ_DATUM_NULL;
+    break;
+  case ObIntTC:
+  case ObUIntTC:
+  case ObDoubleTC:
+  case ObDateTimeTC:
+  case ObTimeTC:
+  case ObBitTC:
+  case ObMySQLDateTimeTC:
+    expected_map = OBJ_DATUM_8BYTE_DATA;
+    break;
+  case ObFloatTC:
+  case ObDateTC:
+  case ObMySQLDateTC:
+    expected_map = OBJ_DATUM_4BYTE_DATA;
+    break;
+  case ObYearTC:
+    expected_map = OBJ_DATUM_1BYTE_DATA;
+    break;
+  case ObNumberTC:
+    expected_map = OBJ_DATUM_NUMBER;
+    break;
+  case ObDecimalIntTC:
+    expected_map = OBJ_DATUM_DECIMALINT;
+    break;
+  default:
+    break;
+  }
+  return expected_map != OBJ_DATUM_MAPPING_MAX
+      && expected_map == common::ObDatum::get_sql_value_datum_map_type(value.get_type());
+}
+
 int ObExprOutputPack::build_row_values(
     const ObExpr &expr, ObEvalCtx &ctx, ObSQLSessionInfo *session,
     common::ObIAllocator &alloc, ObOutputPackInfo *extra_info,
@@ -341,49 +414,68 @@ int ObExprOutputPack::build_row_values(
   const ObDataTypeCastParams dtc_params =
       ObBasicSessionInfo::create_dtc_params(session);
   for (int64_t column_idx = 1; OB_SUCC(ret) && column_idx < expr.arg_cnt_; ++column_idx) {
-    ObDatum &datum = expr.locate_param_datum(ctx, column_idx);
-    ObObj obj;
-    if (OB_FAIL(datum.to_obj(obj, expr.args_[column_idx]->obj_meta_,
-                             expr.args_[column_idx]->obj_datum_map_))) {
-    } else {
-      if (obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type) {
-        ObCastMode cast_mode = CM_NONE;
-        if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session, cast_mode))) {
-        } else {
-          cast_mode |= CM_WARN_ON_FAIL;
-          if (obj.get_type() != extra_info->param_fields_.at(column_idx - 1).type_.get_type()) {
-            ObCastCtx cast_ctx(&alloc, NULL, cast_mode, CS_TYPE_INVALID);
-             if (OB_FAIL(common::ObObjCaster::to_type(extra_info->param_fields_.at(column_idx - 1).type_.get_type(),
-                                                      cast_ctx,
-                                                      obj,
-                                                      obj))) {
-            }
+    Datum datum;
+    OZ(expr.args_[column_idx]->read_value(ctx, ctx.get_batch_idx(), datum));
+    const SqlTypeMeta &meta = expr.args_[column_idx]->obj_meta_;
+    const ObField &field = extra_info->param_fields_.at(column_idx - 1);
+    common::ObDatum legacy;
+    OZ(ObExprUtil::export_legacy_value(*expr.args_[column_idx], datum, alloc, legacy));
+    DatumValue value;
+    OZ(value.assign_legacy_borrowed(legacy, meta));
+    ObCastMode cast_mode = CM_NONE;
+    if (OB_SUCC(ret) && obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type) {
+      if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session, cast_mode))) {
+      } else {
+        cast_mode |= CM_WARN_ON_FAIL;
+        // A binary-protocol PS parameter whose declared type differs from
+        // the result field still needs the regular SQL cast semantics.
+        if (meta.get_type() != field.type_meta_.get_type()) {
+          DatumValue converted;
+          ObCastCtx cast_ctx(&alloc, NULL, cast_mode, CS_TYPE_INVALID);
+          if (OB_FAIL(DatumValueCaster::to_type(field.type_meta_.get_type(), cast_ctx,
+                                                value, alloc, converted))) {
+          } else {
+            value = converted;
           }
         }
       }
-      if (OB_SUCC(ret)) {
-        if (ob_is_string_tc(obj.get_type()) && CS_TYPE_INVALID != obj.get_collation_type()) {
-          OZ(convert_string_value_charset(obj, alloc, *session));
-        } else if (ob_is_text_tc(obj.get_type())
-                  && OB_FAIL(convert_text_value_charset(obj, expr.obj_meta_.has_lob_header(), alloc, *session, ctx.exec_ctx_))) {
-        }
-        if (OB_FAIL(ret)) {
-        } else if ((obj.is_lob() || obj.is_json() || obj.is_geometry())
-                   && OB_FAIL(process_lob_locator_results(obj, alloc, *session, ctx.exec_ctx_))) {
-        } else if ((obj.is_collection_sql_type() || obj.is_geometry())
-                   && OB_FAIL(ObSqlUdtUtils::convert_result_for_client(obj, &alloc, session,
-                                                                       &ctx.exec_ctx_,
-                                                                       session->is_ps_protocol()))) {
+    }
+
+    if (OB_SUCC(ret)) {
+      if (value.is_null()) {
+        // Typed NULL has no payload to convert; keep it for the NULL cell builder.
+      } else if (ob_is_string_tc(value.get_type()) && CS_TYPE_INVALID != value.get_collation_type()) {
+        OZ(convert_string_value_charset(value, alloc, *session));
+      } else if (ob_is_text_tc(value.get_type())) {
+        OZ(convert_text_value_charset(value, expr.obj_meta_.has_lob_header(), alloc,
+                                      *session, ctx.exec_ctx_));
+      }
+      if (OB_SUCC(ret) && !value.is_null()) {
+        if ((value.meta_.is_lob() || value.is_json() || value.is_geometry())
+            && OB_FAIL(process_lob_locator_results(value, alloc, ctx.exec_ctx_))) {
+        } else if ((value.is_collection_sql_type() || value.is_geometry())
+                   && OB_FAIL(ObSqlUdtUtils::convert_result_for_client(
+                       value, &alloc, session, &ctx.exec_ctx_, session->is_ps_protocol()))) {
         }
       }
-    }
-    if (OB_SUCC(ret)) {
-      obmysql::ObMySQLCellValue value;
-      if (OB_FAIL(ObSMUtils::build_cell_value(
-              obj, encode_type, alloc, value, dtc_params,
-              &extra_info->param_fields_.at(column_idx - 1), *session,
-              schema_guard))) {
-      } else if (OB_FAIL(values.push_back(value))) {
+      if (OB_SUCC(ret)) {
+        obmysql::ObMySQLCellValue cell_value;
+        if (can_build_output_pack_cell_from_datum(value)) {
+          alignas(8) char cell_scratch[64];
+          common::ObDatum physical;
+          if (OB_FAIL(value.export_legacy(physical, cell_scratch, sizeof(cell_scratch)))) {
+          } else {
+            ret = ObSMUtils::build_datum_cell_value(
+                physical, value.meta_, encode_type, alloc, cell_value,
+                &field, dtc_params);
+          }
+        } else {
+          ret = ObSMUtils::build_cell_value(
+              value, encode_type, alloc, cell_value, dtc_params, &field,
+              *session, schema_guard);
+        }
+        if (OB_SUCC(ret) && OB_FAIL(values.push_back(cell_value))) {
+        }
       }
     }
   }
@@ -393,14 +485,15 @@ int ObExprOutputPack::build_row_values(
 int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLSessionInfo *session,
                                       common::ObIAllocator &alloc, ObOutputPackInfo *extra_info,
                                       share::schema::ObSchemaGetterGuard *schema_guard,
-                                      ObDatum &expr_datum)
+                                      Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   char *buffer = nullptr;
   int64_t len = 0;
   int64_t blob_len = 0;
   obmysql::MYSQL_PROTOCOL_TYPE encode_type;
-  ObDatum &type_datum = expr.locate_param_datum(ctx, 0);
+  Datum type_datum;
+  if (OB_FAIL(expr.args_[0]->read_value(ctx, ctx.get_batch_idx(), type_datum))) { return ret; }
   encode_type = (type_datum.get_int() == 0)
               ? obmysql::MYSQL_PROTOCOL_TYPE::BINARY : obmysql::MYSQL_PROTOCOL_TYPE::TEXT;
   const int64_t cell_count = expr.arg_cnt_ - 1;

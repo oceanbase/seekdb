@@ -57,7 +57,7 @@ int ObExprJsonOverlaps::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonOverlaps::eval_json_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonOverlaps::eval_json_overlaps(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   bool is_null_result = false;

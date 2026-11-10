@@ -47,7 +47,7 @@ namespace common
 {
 class ObISrsProvider;
 class ObILobReadService;
-struct ObObjCastParams;
+struct DatumCastParams;
 namespace sqlclient
 {
 class ObISQLConnection;
@@ -455,7 +455,7 @@ public:
     config_provider_ = config_provider;
   }
   void configure_obj_cast(
-      common::ObObjCastParams &params,
+      common::DatumCastParams &params,
       common::ObISrsProvider *srs_provider,
       common::ObILobReadService *lob_read_service) const;
   bool is_read_only() const { return config_provider_->is_read_only(); };

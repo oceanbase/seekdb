@@ -48,7 +48,7 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
   int ret = OB_SUCCESS;
   row = nullptr;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t compression_ratio = 0;
   int n = 0;
   if (!major_merge_info_iter_.is_opened() && !minor_merge_info_iter_.is_opened()) {
@@ -75,23 +75,23 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
     case TABLET_ID:
-      cells[i].set_int(static_info.tablet_id_.id());
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_info.tablet_id_.id()) : ret);
       break;
     case MERGE_TYPE: {
-      cells[i].set_varchar(merge_type_to_str(static_info.merge_type_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, merge_type_to_str(static_info.merge_type_)) : ret);
       cells[i].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     }
     case MERGE_VERSION:
       //TODO:SCN
-      cells[i].set_uint64(static_info.compaction_scn_ < 0 ? 0 : static_info.compaction_scn_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, i, static_info.compaction_scn_ < 0 ? 0 : static_info.compaction_scn_) : ret);
       break;
     case MERGE_START_TIME:
-      cells[i].set_timestamp(running_info.merge_start_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, running_info.merge_start_time_) : ret);
       break;
     case MERGE_FINISH_TIME:
-      cells[i].set_timestamp(running_info.merge_finish_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, running_info.merge_finish_time_) : ret);
       break;
     case TASK_ID:
       //dag_id
@@ -100,127 +100,127 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
         ret = OB_BUF_NOT_ENOUGH;
         SERVER_LOG(WARN, "buffer not enough", K(ret));
       } else {
-        cells[i].set_varchar(dag_id_buf_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, dag_id_buf_) : ret);
         cells[i].set_collation_type(
             ObCharset::get_default_collation(ObCharset::get_default_charset()));
       }
       break;
     case OCCUPY_SIZE:
-      cells[i].set_int(block_info.occupy_size_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, block_info.occupy_size_) : ret);
       break;
     case MACRO_BLOCK_COUNT:
-      cells[i].set_int(block_info.macro_block_count_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, block_info.macro_block_count_) : ret);
       break;
     case MULTIPLEXED_MACRO_BLOCK_COUNT:
-      cells[i].set_int(block_info.multiplexed_macro_block_count_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, block_info.multiplexed_macro_block_count_) : ret);
       break;
     case NEW_MICRO_COUNT_IN_NEW_MACRO:
-      cells[i].set_int(block_info.new_micro_count_in_new_macro_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, block_info.new_micro_count_in_new_macro_) : ret);
       break;
     case MULTIPLEXED_MICRO_COUNT_IN_NEW_MACRO:
-      cells[i].set_int(block_info.multiplexed_micro_count_in_new_macro_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, block_info.multiplexed_micro_count_in_new_macro_) : ret);
       break;
     case TOTAL_ROW_COUNT:
-      cells[i].set_int(block_info.total_row_count_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, block_info.total_row_count_) : ret);
       break;
     case INCREMENTAL_ROW_COUNT:
-      cells[i].set_int(block_info.incremental_row_count_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, block_info.incremental_row_count_) : ret);
       break;
     case COMPRESSION_RATIO:
       if (0 == block_info.original_size_) {
-        cells[i].set_double(1);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cells, cur_row_.count_, i, 1) : ret);
       } else {
         compression_ratio = block_info.compressed_size_ * 1.0 / block_info.original_size_ * 100;
-        cells[i].set_double(compression_ratio * 1.0 / 100);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cells, cur_row_.count_, i, compression_ratio * 1.0 / 100) : ret);
       }
       break;
     case NEW_FLUSH_DATA_RATE:
       // calc flush data speed
-      cells[i].set_int(block_info.new_flush_data_rate_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, block_info.new_flush_data_rate_) : ret);
       break;
     case PROGRESSIVE_MREGE_ROUND:
       if (static_info.is_full_merge_) {
-        cells[i].set_int(-1);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, -1) : ret);
       } else {
-        cells[i].set_int(static_info.progressive_merge_round_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_info.progressive_merge_round_) : ret);
       }
       break;
     case PROGRESSIVE_MREGE_NUM:
-      cells[i].set_int(static_info.progressive_merge_num_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_info.progressive_merge_num_) : ret);
       break;
     case PARALLEL_DEGREE:
-      cells[i].set_int(static_info.concurrent_cnt_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_info.concurrent_cnt_) : ret);
       break;
     case PARALLEL_INFO:
       if (static_info.concurrent_cnt_ > 1) {
         running_info.parallel_merge_info_.to_paral_info_string(
             parallel_merge_info_buf_,
             common::OB_PARALLEL_MERGE_INFO_LENGTH);
-        cells[i].set_varchar(parallel_merge_info_buf_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, parallel_merge_info_buf_) : ret);
       } else {
-        cells[i].set_varchar("-");
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "-") : ret);
       }
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case PARTICIPANT_TABLE_INFO:
       MEMSET(participant_table_str_, '\0', sizeof(participant_table_str_));
       static_info.participant_table_info_.fill_info(participant_table_str_, sizeof(participant_table_str_));
-      cells[i].set_varchar(participant_table_str_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, participant_table_str_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case MACRO_ID_LIST:
       MEMSET(macro_id_list_, '\0', sizeof(macro_id_list_));
       MEMCPY(macro_id_list_, block_info.macro_id_list_, strlen(block_info.macro_id_list_));
-      cells[i].set_varchar(macro_id_list_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, macro_id_list_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case COMMENT:
       merge_history_.fill_comment(comment_, sizeof(comment_), other_info_);
-      cells[i].set_varchar(comment_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, comment_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case KEPT_SNAPSHOT:
       if (static_info.kept_snapshot_info_.is_valid()) {
         MEMSET(kept_snapshot_info_, '\0', sizeof(kept_snapshot_info_));
         static_info.kept_snapshot_info_.to_string(kept_snapshot_info_, sizeof(kept_snapshot_info_));
-        cells[i].set_varchar(kept_snapshot_info_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, kept_snapshot_info_) : ret);
       } else {
-        cells[i].set_varchar("");
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "") : ret);
       }
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case MERGE_LEVEL:
       if (is_valid_merge_level(static_info.merge_level_)) {
-        cells[i].set_varchar(merge_level_to_str(static_info.merge_level_));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, merge_level_to_str(static_info.merge_level_)) : ret);
       } else {
-        cells[i].set_varchar("");
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "") : ret);
       }
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case IS_FULL_MERGE:
-      cells[i].set_bool(static_info.is_full_merge_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cells, cur_row_.count_, i, static_info.is_full_merge_) : ret);
       break;
     case IO_COST_TIME_PERCENTAGE:
-      cells[i].set_int(running_info.io_percentage_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, running_info.io_percentage_) : ret);
       break;
     case MERGE_REASON:
       if (ObAdaptiveMergePolicy::is_valid_merge_reason(static_info.merge_reason_)) {
-        cells[i].set_varchar(ObAdaptiveMergePolicy::merge_reason_to_str(static_info.merge_reason_));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, ObAdaptiveMergePolicy::merge_reason_to_str(static_info.merge_reason_)) : ret);
       } else {
-        cells[i].set_varchar("");
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "") : ret);
       }
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case BASE_MAJOR_STATUS:
-      cells[i].set_varchar("");
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "") : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case MDS_FILTER_INFO:
-      cells[i].set_varchar(static_info.mds_filter_info_str_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, static_info.mds_filter_info_str_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case EXECUTE_TIME:
-      cells[i].set_int(running_info.execute_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, running_info.execute_time_) : ret);
       break;
     default:
       ret = OB_ERR_UNEXPECTED;

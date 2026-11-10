@@ -59,7 +59,7 @@ int ObExprArraySortby::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session());
   ObExecContext *exec_ctx = OB_ISNULL(session) ? NULL : session->get_cur_exec_ctx();
-  ObObjType lambda_type = types_stack[0].get_type();
+  SqlValueType lambda_type = types_stack[0].get_type();
   bool is_null_res = false;
 
   if (OB_ISNULL(exec_ctx)) {
@@ -104,7 +104,7 @@ int ObExprArraySortby::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArraySortby::eval_array_sortby(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArraySortby::eval_array_sortby(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

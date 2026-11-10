@@ -41,48 +41,48 @@ int ObAllVirtualDumpInfo::inner_get_next_row(common::ObNewRow *&row)
     auto func = [&] (omt::ObServerRuntime &t) {
       int ret = OB_SUCCESS;
       const int64_t col_count = output_column_ids_.count();
-      ObObj *cells = cur_row_.cells_;
+      DatumValue *cells = cur_row_.cells_;
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
         case MIN_CPU:
-          cells[i].set_double(t.min_cpu());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cells, cur_row_.count_, i, t.min_cpu()) : ret);
           break;
         case MAX_CPU:
-          cells[i].set_double(t.max_cpu());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cells, cur_row_.count_, i, t.max_cpu()) : ret);
           break;
         case STOPPED:
-          cells[i].set_int(t.stopped_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.stopped_) : ret);
           break;
         case RECV_MYSQL_COUNT:
-          cells[i].set_int(t.recv_mysql_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.recv_mysql_cnt_) : ret);
           break;
         case RECV_TASK_COUNT:
-          cells[i].set_int(t.recv_task_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.recv_task_cnt_) : ret);
           break;
         case WORKER_COUNT:
-          cells[i].set_int(t.workers_.get_size());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.workers_.get_size()) : ret);
           break;
         case REQUEST_QUEUE_SIZE:
-          cells[i].set_int(t.req_queue_.size());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.req_queue_.size()) : ret);
           break;
         case QUEUE_0_SIZE:
-          cells[i].set_int(t.req_queue_.queue_size(0));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.req_queue_.queue_size(0)) : ret);
           break;
         case QUEUE_1_SIZE:
-          cells[i].set_int(t.req_queue_.queue_size(1));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.req_queue_.queue_size(1)) : ret);
           break;
         case QUEUE_2_SIZE:
-          cells[i].set_int(t.req_queue_.queue_size(2));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.req_queue_.queue_size(2)) : ret);
           break;
         case QUEUE_3_SIZE:
-          cells[i].set_int(t.req_queue_.queue_size(3));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.req_queue_.queue_size(3)) : ret);
           break;
         case QUEUE_4_SIZE:
-          cells[i].set_int(t.req_queue_.queue_size(4));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.req_queue_.queue_size(4)) : ret);
           break;
         case QUEUE_5_SIZE:
-          cells[i].set_int(t.req_queue_.queue_size(5));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, t.req_queue_.queue_size(5)) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

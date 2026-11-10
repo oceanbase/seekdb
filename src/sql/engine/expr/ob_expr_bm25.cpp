@@ -61,15 +61,15 @@ int ObExprBM25::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObE
   return ret;
 }
 
-int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *token_doc_cnt_datum = nullptr;
-  ObDatum *total_doc_cnt_datum = nullptr;
-  ObDatum *doc_length_datum = nullptr;
-  ObDatum *token_weight_datum = nullptr;
-  ObDatum *avg_doc_token_cnt_datum = nullptr;
-  ObDatum *related_token_cnt_datum = nullptr;
+  Datum *token_doc_cnt_datum = nullptr;
+  Datum *total_doc_cnt_datum = nullptr;
+  Datum *doc_length_datum = nullptr;
+  Datum *token_weight_datum = nullptr;
+  Datum *avg_doc_token_cnt_datum = nullptr;
+  Datum *related_token_cnt_datum = nullptr;
   if (OB_FAIL(expr.eval_param_value(
       ctx,
       token_doc_cnt_datum,
@@ -100,12 +100,12 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
 int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector token_doc_cnt_datum;
-  ObDatumVector total_doc_cnt_datum;
-  ObDatumVector doc_length_datum;
-  ObDatumVector token_weight_datum;
-  ObDatumVector avg_doc_token_cnt_datum;
-  ObDatumVector related_token_cnt_datum;
+  DatumVector token_doc_cnt_datum;
+  DatumVector total_doc_cnt_datum;
+  DatumVector doc_length_datum;
+  DatumVector token_weight_datum;
+  DatumVector avg_doc_token_cnt_datum;
+  DatumVector related_token_cnt_datum;
   if (OB_FAIL(expr.eval_batch_param_value(
     ctx,
     skip,
@@ -124,7 +124,7 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
     const int64_t total_doc_cnt = total_doc_cnt_datum.at(0)->get_int();
     const double token_weight = token_weight_datum.at(0)->get_double();
     const double avg_doc_token_cnt = avg_doc_token_cnt_datum.at(0)->get_double();
-    ObDatum *res_datum = expr.locate_batch_datums(ctx);
+    Datum *res_datum = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
       if (OB_UNLIKELY(doc_length_datum.at(i)->is_null() || related_token_cnt_datum.at(i)->is_null())) {

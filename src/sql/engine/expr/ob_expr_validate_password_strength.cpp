@@ -73,10 +73,10 @@ int ObExprValidatePasswordStrength::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 int ObExprValidatePasswordStrength::eval_password_strength(const ObExpr &expr,
                                                            ObEvalCtx &ctx,
-                                                           ObDatum &res_datum)
+                                                           Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *pwd_param = NULL;
+  Datum *pwd_param = NULL;
   ObCollationType c_src = ObCollationType::CS_TYPE_INVALID;
   ObString password_orig;
   ObString password;

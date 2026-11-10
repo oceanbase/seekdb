@@ -16,6 +16,7 @@
 
 #include "ob_information_global_status_table.h"
 
+#include "share/datum/datum_value_cast.h"
 #include "observer/ob_server_runtime_access.h"
 #include "share/ob_time_utility2.h"
 #include "sql/session/ob_sql_session_mgr.h"
@@ -61,22 +62,25 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "global_ctx_ is NULL or session_mgr_ is NULL", K(ret));
   } else {
-    ObObj obj;
+    const int64_t value_count = ARRAYSIZEOF(variables_name) - 1;
+    DatumValue *status_values = nullptr;
+    if (OB_FAIL(DatumValueBuffer::allocate(row_calc_buf_, value_count, status_values))) {}
     for (int64_t i = 0; OB_SUCC(ret) && NULL != variables_name[i]; ++i) {
+      DatumValue &obj = status_values[i];
       obj.reset();
       switch (i) {
       case THREADS_CONNECTED: {
           int64_t session_cnt = 0;
           if (OB_FAIL(get_observer_sql_session_mgr()->get_session_count(session_cnt))) {
           } else {
-            obj.set_int(session_cnt);
+            ret = DatumValueBuffer::set_int(status_values, value_count, i, session_cnt);
           }
           break;
         }
       case UPTIME: {
           int64_t uptime = ObTimeUtility2::extract_second(ObTimeUtility::current_time())
               - ObTimeUtility2::extract_second(global_ctx_->start_time_);
-          obj.set_int(uptime);
+          ret = DatumValueBuffer::set_int(status_values, value_count, i, uptime);
           break;
         }
       default: {
@@ -104,7 +108,7 @@ int ObInfoSchemaGlobalStatusTable::inner_get_next_row(ObNewRow *&row)
                K(allocator_), K(global_ctx_), K(cur_session_));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -123,7 +127,7 @@ int ObInfoSchemaGlobalStatusTable::inner_get_next_row(ObNewRow *&row)
                                       ObModIds::OB_HASH_BUCKET_GLOBAL_STATUS_MAP))) {
         } else if (OB_FAIL(fetch_all_global_status(all_status))) {
         } else {
-          ObObj casted_cell;
+          DatumValue casted_cell;
           const ObDataTypeCastParams dtc_params
                   = sql::ObBasicSessionInfo::create_dtc_params(session_);
           ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
@@ -135,7 +139,7 @@ int ObInfoSchemaGlobalStatusTable::inner_get_next_row(ObNewRow *&row)
               uint64_t col_id = output_column_ids_.at(j);
               switch (col_id) {
               case VARIABLE_NAME: {
-                  cells[cell_idx].set_varchar(it_begin->first);
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, it_begin->first) : ret);
                   cells[cell_idx].set_collation_type(
                       ObCharset::get_default_collation(
                           ObCharset::get_default_charset()));
@@ -143,15 +147,10 @@ int ObInfoSchemaGlobalStatusTable::inner_get_next_row(ObNewRow *&row)
                 }
               case VARIABLE_VALUE: {
                   casted_cell.reset();
-                  const ObObj *res_cell = NULL;
-                  if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, it_begin->second,
-                                                     casted_cell, res_cell))) {
-                  } else if (OB_ISNULL(res_cell)) {
-                    ret = OB_ERR_UNEXPECTED;
-                    SERVER_LOG(ERROR, "succ to cast to ObVarcharType, but res_cell is NULL",
-                               K(ret), K(it_begin->second));
+                  if (OB_FAIL(DatumValueCaster::to_type(ObVarcharType, cast_ctx,
+                          it_begin->second, *allocator_, casted_cell))) {
                   } else {
-                    cells[cell_idx] = *res_cell;
+                    ret = DatumValueBuffer::assign_view(casted_cell, cells, cur_row_.count_, cell_idx);
                   }
                   break;
                 }

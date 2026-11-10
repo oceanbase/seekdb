@@ -1607,7 +1607,7 @@ int ObOptEstCostModel::get_sort_cmp_cost(const common::ObIArray<sql::ObRawExprRe
   } else {
     double factor = 1.0;
     for (int64_t i = 0; OB_SUCC(ret) && i < types.count(); ++i) {
-      ObObjTypeClass tc = types.at(i).get_type_class();
+      SqlTypeClass tc = types.at(i).get_type_class();
       if (OB_UNLIKELY(tc >= ObMaxTC)) {
         ret = OB_INVALID_ARGUMENT;
       } else {
@@ -1790,8 +1790,8 @@ double ObOptEstCostModel::cost_hash(double rows, const ObIArray<ObRawExpr *> &ha
       // TODO sean.yyj: make mysqltest happy by now, refresh case result later
       // the calc type is only available for comparision op. In most other case, it is null type.
       // then the cost of hash distinct/group/sort/set/join_filter is a bit lower
-      // ObObjTypeClass type_class = expr->get_result_type().get_type_class();
-      ObObjTypeClass type_class = ObNullTC;
+      // SqlTypeClass type_class = expr->get_result_type().get_type_class();
+      SqlTypeClass type_class = ObNullTC;
       if (OB_UNLIKELY(OB_SUCCESS != get_qual_cmp_tc(expr, type_class))) {
         LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid qual, but we don't set error return code here, just skip it");
       } else {
@@ -1807,7 +1807,7 @@ double ObOptEstCostModel::cost_hash_quals(double rows, const ObIArray<ObRawExpr 
   double cost_per_row = 0.0;
   for (int64_t i = 0; i < quals.count(); ++i) {
     const ObRawExpr *qual = quals.at(i);
-    ObObjTypeClass calc_type = ObNullTC;
+    SqlTypeClass calc_type = ObNullTC;
     if (OB_UNLIKELY(OB_SUCCESS != get_qual_cmp_tc(qual, calc_type))) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid qual, but we don't set error return code here, just skip it");
     } else {
@@ -1974,7 +1974,7 @@ int ObOptEstCostModel::cost_one_qual(const ObRawExpr *expr, double &cost)
   } else if (expr->is_json_expr()) {
     cost += cost_params_.get_comparison_cost(sys_stat_, ObJsonTC);
   } else {
-    ObObjTypeClass type_class = ObNullTC;
+    SqlTypeClass type_class = ObNullTC;
     if (OB_UNLIKELY(OB_SUCCESS != get_qual_cmp_tc(expr, type_class))) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid qual, but we don't set error return code here, just skip it");
     } else {
@@ -1994,8 +1994,8 @@ double ObOptEstCostModel::cost_comparisions(double rows, const ObIArray<ObRawExp
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "expr should not be NULL, but we don't set error return code here, just skip it");
     } else {
       // todo sean.yyj
-      // ObObjTypeClass type_class = expr->get_result_type().get_type_class();
-      ObObjTypeClass type_class = ObNullTC;
+      // SqlTypeClass type_class = expr->get_result_type().get_type_class();
+      SqlTypeClass type_class = ObNullTC;
       if (OB_UNLIKELY(OB_SUCCESS != get_qual_cmp_tc(expr, type_class))) {
         LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid qual, but we don't set error return code here, just skip it");
       } else {
@@ -2091,8 +2091,8 @@ int ObOptEstCostModel::calc_pred_cost_per_row(const ObRawExpr *expr,
       if (OB_ISNULL(expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObObjType src = expr->get_param_expr(0)->get_result_type().get_type();
-        ObObjType dst = expr->get_result_type().get_type();
+        SqlValueType src = expr->get_param_expr(0)->get_result_type().get_type();
+        SqlValueType dst = expr->get_result_type().get_type();
         if (ob_is_string_type(src) &&
             (ob_is_numeric_type(dst) || ob_is_temporal_type(dst))) {
           cost += cost_params_.get_cmp_err_handle_expr_cost(sys_stat_) / rows;
@@ -2130,7 +2130,7 @@ int ObOptEstCostModel::calc_pred_cost_per_row(const ObRawExpr *expr,
 //    For example int and uint the calc_type is number
 // 3. The expression setup for some structures is unreasonable, NOT, OR, etc., can recursively take the comparison type of the parameters
 // Subsequent plan is to fix 1&2, NOT in 3 can be changed, complex predicates like OR will not be changed for now
-int ObOptEstCostModel::get_qual_cmp_tc(const ObRawExpr *qual, ObObjTypeClass &cmp_tc)
+int ObOptEstCostModel::get_qual_cmp_tc(const ObRawExpr *qual, SqlTypeClass &cmp_tc)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(qual)) {
@@ -2156,23 +2156,23 @@ int ObOptEstCostModel::get_qual_cmp_tc(const ObRawExpr *qual, ObObjTypeClass &cm
   } else if (T_OP_IS == qual->get_expr_type() || T_OP_IS_NOT == qual->get_expr_type()) {
     cmp_tc = qual->get_param_expr(0)->get_type_class();
   } else if (qual->get_expr_type() >= T_OP_ADD && qual->get_expr_type() <= T_OP_MOD) {
-    ObObjType calc_type = ObNullType;
-    ObObjType calc_type1 = ObNullType;
-    ObObjType calc_type2 = ObNullType;
+    SqlValueType calc_type = ObNullType;
+    SqlValueType calc_type1 = ObNullType;
+    SqlValueType calc_type2 = ObNullType;
     if (OB_FAIL(ObExprResultTypeUtil::get_arith_calc_type(calc_type, calc_type1, calc_type2,
                                       qual->get_param_expr(0)->get_result_type().get_type(),
                                       qual->get_param_expr(1)->get_result_type().get_type(),
                                       ObArithResultTypeMap::OP::ADD))) {
     } else {
-      cmp_tc = ob_obj_type_class(calc_type);
+      cmp_tc = sql_type_class(calc_type);
     }
   } else {
-    ObObjType cmp_type = ObNullType;
+    SqlValueType cmp_type = ObNullType;
     if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
                                       qual->get_param_expr(0)->get_result_type().get_type(),
                                       qual->get_param_expr(1)->get_result_type().get_type()))) {
     } else {
-      cmp_tc = ob_obj_type_class(cmp_type);
+      cmp_tc = sql_type_class(cmp_type);
     }
   }
   return ret;

@@ -30,7 +30,7 @@ public:
   virtual ~ObExprCurrentUserPriv();
   virtual int calc_result_type0(ObExprResType &type,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int eval_current_user_priv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_current_user_priv(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -45,7 +45,7 @@ public:
   virtual ~ObExprCurrentRole();
   virtual int calc_result_type0(ObExprResType &type,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int eval_current_role(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_current_role(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -62,7 +62,7 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

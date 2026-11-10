@@ -47,7 +47,7 @@ int ObExprStPrivAsEwkb::calc_result_typeN(ObExprResType& type,
   type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObLongTextType]);
 
   if (1 == param_num) {
-    ObObjType data_type = types_stack[0].get_type();
+    SqlValueType data_type = types_stack[0].get_type();
     if (ob_is_geometry(data_type) || ob_is_null(data_type)) {
       // do nothing
     } else {
@@ -68,7 +68,7 @@ int ObExprStPrivAsEwkb::calc_result_typeN(ObExprResType& type,
 
 int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
                                              ObEvalCtx &ctx,
-                                             ObDatum &res)
+                                             Datum &res)
 {
   int ret = OB_SUCCESS;
   uint32_t arg_num = expr.arg_cnt_;
@@ -79,7 +79,7 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
   const ObSrsItem *srs = NULL;
   common::ObSrsCacheGuard srs_guard;
   bool is_geog = false;
-  ObDatum *wkb_datum = NULL;
+  Datum *wkb_datum = NULL;
   ObGeometry *geo = NULL;
   ObString wkb_str;
 

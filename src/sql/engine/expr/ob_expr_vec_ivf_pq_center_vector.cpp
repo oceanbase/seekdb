@@ -56,14 +56,6 @@ int ObExprVecIVFPQCenterVector::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprVecIVFPQCenterVector::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  // TODO by query ivf index
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprVecIVFPQCenterVector::cg_expr(
     ObExprCGCtx &expr_cg_ctx,
@@ -86,10 +78,10 @@ int ObExprVecIVFPQCenterVector::cg_expr(
 int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   if (1 == expr.arg_cnt_) {
     expr_datum.set_null();
   } else if (4 == expr.arg_cnt_) {

@@ -73,7 +73,7 @@ int ObExprGeomWkb::calc_result_typeN(ObExprResType& type,
   type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObLongTextType]);
 
   if (1 == param_num) {
-    ObObjType data_type = types_stack[0].get_type();
+    SqlValueType data_type = types_stack[0].get_type();
     if (ob_is_geometry(data_type) || ob_is_null(data_type)) {
       // do nothing
     } else {
@@ -84,7 +84,7 @@ int ObExprGeomWkb::calc_result_typeN(ObExprResType& type,
   }
 
   if (2 == param_num) {
-    ObObjType option_type = types_stack[1].get_type();
+    SqlValueType option_type = types_stack[1].get_type();
     if (ob_is_string_type(option_type) || ob_is_null(option_type)) {
       // do nothing
     } else {
@@ -99,7 +99,7 @@ int ObExprGeomWkb::calc_result_typeN(ObExprResType& type,
 
 int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
                                  ObEvalCtx &ctx,
-                                 ObDatum &res)
+                                 Datum &res)
 {
 	int ret = OB_SUCCESS;
   uint32_t arg_num = expr.arg_cnt_;
@@ -114,7 +114,7 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   bool is_lat_long_order = false;
   bool need_reverse = false;
   bool srid_default_ordering = true;
-  ObDatum *wkb_datum = NULL;
+  Datum *wkb_datum = NULL;
   ObString wkb;
   ObGeometry *geo = NULL;
   ObGeoAxisOrder axis_order = ObGeoAxisOrder::INVALID;
@@ -134,7 +134,7 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret) && !is_null_result && arg_num == 2) {
-    ObDatum *option_datum = NULL;
+    Datum *option_datum = NULL;
     ObString option_str;
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, option_datum))) {
     } else if (option_datum->is_null()){
@@ -203,7 +203,7 @@ ObExprSTAsWkb::~ObExprSTAsWkb()
 
 int ObExprSTAsWkb::eval_st_aswkb(const ObExpr &expr,
                                  ObEvalCtx &ctx,
-                                 ObDatum &res)
+                                 Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -236,7 +236,7 @@ ObExprSTAsBinary::~ObExprSTAsBinary()
 
 int ObExprSTAsBinary::eval_st_asbinary(const ObExpr &expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &res)
+                                       Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();

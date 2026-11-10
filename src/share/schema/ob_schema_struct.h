@@ -26,6 +26,7 @@
 #include "common/ob_range.h"
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row_util.h"
+#include "common/datum/datum_value.h"
 #include "common/rowkey/ob_rowkey_info.h"
 #include "common/ob_store_format.h"
 #include "common/timezone/ob_time_convert.h"
@@ -56,6 +57,7 @@ class ObIAllocator;
 class ObSqlString;
 class ObString;
 class ObDataTypeCastParams;
+struct DatumValue;
 class ObKVCacheHandle;
 }
 namespace share
@@ -1539,7 +1541,6 @@ protected:
   int deep_copy_str(const char *src, common::ObString &dest);
   int deep_copy_str(const common::ObString &src, common::ObString &dest);
   static int deep_copy_str(const common::ObString &src, common::ObString &dest, ObIAllocator &alloc);
-  int deep_copy_obj(const common::ObObj &src, common::ObObj &dest);
   int deep_copy_string_array(const common::ObIArray<common::ObString> &src,
                              common::ObArrayHelper<common::ObString> &dst);
   int add_string_to_array(const common::ObString &str,
@@ -1650,14 +1651,14 @@ public:
   
   const common::ObString &get_name() const { return name_; }
   int set_name(const common::ObString &name) { return deep_copy_str(name, name_); }
-  common::ObObjType get_data_type() const { return data_type_; }
-  void set_data_type(common::ObObjType data_type) { data_type_ = data_type; }
+  common::SqlValueType get_data_type() const { return data_type_; }
+  void set_data_type(common::SqlValueType data_type) { data_type_ = data_type; }
   const common::ObString &get_value() const { return value_; }
-  int get_value(common::ObIAllocator *allocator, const common::ObDataTypeCastParams &dtc_params, common::ObObj &value) const;
-  inline int get_value(common::ObIAllocator *allocator, const common::ObTimeZoneInfo *tz_info, common::ObObj &value) const
+  int get_value(common::ObIAllocator &result_owner, const common::ObDataTypeCastParams &dtc_params, common::DatumValue &value) const;
+  inline int get_value(common::ObIAllocator &result_owner, const common::ObTimeZoneInfo *tz_info, common::DatumValue &value) const
   {
     const common::ObDataTypeCastParams dtc_params(tz_info);
-    return get_value(allocator, dtc_params, value);
+    return get_value(result_owner, dtc_params, value);
   }
   int set_value(const common::ObString &value) { return deep_copy_str(value, value_); }
   const common::ObString &get_min_val() const { return min_val_; }
@@ -1688,7 +1689,7 @@ public:
 private:
   
   common::ObString name_;
-  common::ObObjType data_type_;
+  common::SqlValueType data_type_;
   common::ObString value_;
   common::ObString min_val_;
   common::ObString max_val_;
@@ -2116,26 +2117,27 @@ public:
   static bool list_part_func_layout(const ObBasePartition *lhs, const ObBasePartition *rhs);
   static bool range_like_func_less_than(const ObBasePartition *lhs, const ObBasePartition *rhs);
   static bool hash_like_func_less_than(const ObBasePartition *lhs, const ObBasePartition *rhs);
-  // careful, add_list_row only push row, not deep copy objs in row
-  int add_list_row(const common::ObNewRow &row) {
-    return list_row_values_.push_back(row);
-  }
+  // Bounds always belong to this schema arena, including rows supplied by DDL.
+  int add_list_row(const common::PartitionBoundRow &row);
+  int add_list_row(const common::ObNewRow &row);
   int sort_list_row_values()
   {
     return list_row_values_.sort_array();
   }
-  int set_low_bound_val(const common::ObRowkey &high_bound_val);
-  const common::ObRowkey &get_low_bound_val() const
+  int set_low_bound_val(const common::ObRowkey &low_bound_val);
+  int set_low_bound_val(const common::PartitionBoundRow &low_bound_val);
+  const common::PartitionBoundRow &get_low_bound_val() const
   { return low_bound_val_; }
 
   int set_high_bound_val(const common::ObRowkey &high_bound_val);
+  int set_high_bound_val(const common::PartitionBoundRow &high_bound_val);
   int set_high_bound_val_with_hex_str(const common::ObString &high_bound_val_hex);
   int set_list_vector_values_with_hex_str(const common::ObString &list_vector_vals_hex);
-  const common::ObRowkey &get_high_bound_val() const
+  const common::PartitionBoundRow &get_high_bound_val() const
   { return high_bound_val_; }
   virtual int64_t get_deep_copy_size() const;
 
-  const common::ObIArray<common::ObNewRow>& get_list_row_values() const {
+  const common::ObIArray<common::PartitionBoundRow>& get_list_row_values() const {
     return list_row_values_.get_values();
   }
   const ObListRowValues& get_list_row_values_struct() const {
@@ -2147,7 +2149,7 @@ public:
   bool same_base_partition(const ObBasePartition &other) const
   {
     return part_idx_ == other.part_idx_
-        && high_bound_val_ == other.high_bound_val_
+        && partition_bound_keys_equal(high_bound_val_, other.high_bound_val_)
         && status_ == other.status_;
   }
   ObPartitionStatus get_status() const { return status_; }
@@ -2174,7 +2176,7 @@ protected:
   int64_t part_id_;
   int64_t schema_version_;
   common::ObString name_;
-  common::ObRowkey high_bound_val_;
+  common::PartitionBoundRow high_bound_val_;
   ObSchemaAllocator schema_allocator_;
   ObListRowValues list_row_values_;
   enum ObPartitionStatus status_;
@@ -2188,7 +2190,7 @@ protected:
   // Partition names may be filled later; remember whether a name was omitted by the user.
   bool is_empty_partition_name_;
   PartitionType partition_type_;
-  common::ObRowkey low_bound_val_;
+  common::PartitionBoundRow low_bound_val_;
   ObTabletID tablet_id_;
 
 };
@@ -2210,8 +2212,8 @@ public:
 
   void set_sub_part_num(const int64_t sub_part_num) { sub_part_num_ = sub_part_num; }
   int64_t get_sub_part_num() const { return sub_part_num_; }
-  common::ObObj get_sub_interval_start() const { return sub_interval_start_; }
-  common::ObObj get_sub_part_interval() const { return sub_part_interval_; }
+  const common::DatumValue &get_sub_interval_start() const { return sub_interval_start_; }
+  const common::DatumValue &get_sub_part_interval() const { return sub_part_interval_; }
   virtual bool is_normal_partition() const override
   {
     return !is_hidden_partition();
@@ -2222,8 +2224,8 @@ public:
   {
     return same_base_partition(other)
         && sub_part_num_ == other.sub_part_num_
-        && sub_interval_start_ == other.sub_interval_start_
-        && sub_part_interval_ == other.sub_part_interval_;
+        && partition_bound_values_equal(sub_interval_start_, other.sub_interval_start_)
+        && partition_bound_values_equal(sub_part_interval_, other.sub_part_interval_);
   }
   int add_partition(const ObSubPartition &subpartition);
   ObSubPartition **get_hidden_subpart_array() const { return hidden_subpartition_array_; }
@@ -2253,8 +2255,8 @@ protected:
   static const int64_t DEFAULT_ARRAY_CAPACITY = 128;
 private:
   int64_t sub_part_num_;
-  common::ObObj sub_interval_start_;
-  common::ObObj sub_part_interval_;
+  common::DatumValue sub_interval_start_;
+  common::DatumValue sub_part_interval_;
   int64_t subpartition_num_;
   int64_t subpartition_array_capacity_;
   ObSubPartition **subpartition_array_;
@@ -2648,7 +2650,7 @@ public:
 
   //Convert rowkey to sql literal for show
   static int convert_rowkey_to_sql_literal(
-             const common::ObRowkey &rowkey,
+             const common::PartitionBoundRow &rowkey,
              char *buf,
              const int64_t buf_len,
              int64_t &pos,
@@ -2657,7 +2659,7 @@ public:
 
   // Used to display the defined value of the LIST partition
   static int convert_rows_to_sql_literal(
-             const common::ObIArray<common::ObNewRow>& rows,
+             const common::ObIArray<common::PartitionBoundRow>& rows,
              char *buf,
              const int64_t buf_len,
              int64_t &pos,
@@ -2665,12 +2667,12 @@ public:
              const common::ObTimeZoneInfo *tz_info);
 
   //Convert rowkey's serialize buff to hex.For record all rowkey info.
-  static int convert_rowkey_to_hex(const common::ObRowkey &rowkey,
+  static int convert_rowkey_to_hex(const common::PartitionBoundRow &rowkey,
                                    char *buf,
                                    const int64_t buf_len,
                                    int64_t &pos);
 
-  static int convert_rows_to_hex(const common::ObIArray<common::ObNewRow>& rows,
+  static int convert_rows_to_hex(const common::ObIArray<common::PartitionBoundRow>& rows,
                                  char *buf,
                                  const int64_t buf_len,
                                  int64_t &pos);
@@ -2685,8 +2687,8 @@ public:
              ObSqlString *user_error = NULL);
 
   static bool is_types_equal_for_partition_check(
-              const common::ObObjType &typ1,
-              const common::ObObjType &type2);
+              const common::SqlValueType &typ1,
+              const common::SqlValueType &type2);
 
   /* --- calc tablet_ids/part_ids/sub_part_ids by partition columns --- */
 
@@ -2751,6 +2753,13 @@ public:
       common::ObObjectID &part_id,
       RelatedTableInfo *related_table = NULL);
 
+  static int get_tablet_and_part_id(
+      const share::schema::ObTableSchema &table_schema,
+      const common::ObIArray<common::DatumValue> &row,
+      common::ObTabletID &tablet_id,
+      common::ObObjectID &part_id,
+      RelatedTableInfo *related_table = NULL);
+
   // for secondary-partitioned table
   // param[@in]:
   // - part_id: object_id for partition, error will occur if first part doesn't exist.
@@ -2794,6 +2803,14 @@ public:
       const share::schema::ObTableSchema &table_schema,
       const common::ObPartID &part_id,
       const common::ObNewRow &row,
+      common::ObTabletID &tablet_id,
+      common::ObObjectID &subpart_id,
+      RelatedTableInfo *related_table = NULL);
+
+  static int get_tablet_and_subpart_id(
+      const share::schema::ObTableSchema &table_schema,
+      const common::ObPartID &part_id,
+      const common::ObIArray<common::DatumValue> &row,
       common::ObTabletID &tablet_id,
       common::ObObjectID &subpart_id,
       RelatedTableInfo *related_table = NULL);
@@ -2921,6 +2938,11 @@ private:
       ObPartition * const* partition_array,
       const int64_t partition_num,
       common::ObIArray<PartitionIndex> &indexes);
+  static int get_list_tablet_and_part_id_(
+      const common::PartitionBoundRow &row,
+      ObPartition * const* partition_array,
+      const int64_t partition_num,
+      common::ObIArray<PartitionIndex> &indexes);
 
   // param[@in]:
   // - part_id: object_id for partition, which is match with part_id in subpartition_array.
@@ -2989,6 +3011,12 @@ private:
   static int get_list_tablet_and_subpart_id_(
       const common::ObPartID &part_id,
       const common::ObNewRow &row,
+      ObSubPartition * const* subpartition_array,
+      const int64_t subpartition_num,
+      common::ObIArray<PartitionIndex> &indexes);
+  static int get_list_tablet_and_subpart_id_(
+      const common::ObPartID &part_id,
+      const common::PartitionBoundRow &row,
       ObSubPartition * const* subpartition_array,
       const int64_t subpartition_num,
       common::ObIArray<PartitionIndex> &indexes);
@@ -3028,6 +3056,17 @@ private:
                         const T &start_part,
                         int64_t &start_pos);
 
+
+  template <typename Partition>
+  static int get_native_partition_indexes(
+      const common::ObIArray<common::DatumValue> &row,
+      Partition *const *partitions, int64_t count, bool hash_part,
+      bool range_part, bool list_part, bool subpart, common::ObPartID parent_id,
+      common::ObIArray<PartitionIndex> &indexes);
+  static int compare_native_partition_bound(
+      const common::ObIArray<common::DatumValue> &row,
+      const ObBasePartition &partition, bool low_bound,
+      common::ObIAllocator &scratch, int &result);
 
   //Get partition end with end_part rowkey, return end_pos
   template <typename T>
@@ -3092,18 +3131,14 @@ int ObPartitionUtils::get_end_(
       ret = common::OB_ERR_UNEXPECTED;
       SHARE_SCHEMA_LOG(WARN, "result should not be NULL", K(ret), K(result));
     } else {
-      common::ObNewRow lrow;
-      lrow.cells_ = const_cast<common::ObObj*>((*result)->high_bound_val_.get_obj_ptr());
-      lrow.count_ = (*result)->high_bound_val_.get_obj_cnt();
+      common::PartitionBoundRow lrow = (*result)->high_bound_val_;
       lrow.projector_ = (*result)->projector_;
       lrow.projector_size_ = (*result)->projector_size_;
-      common::ObNewRow rrow;
-      rrow.cells_ = const_cast<common::ObObj*>(end_part.high_bound_val_.get_obj_ptr());
-      rrow.count_ = end_part.high_bound_val_.get_obj_cnt();
+      common::PartitionBoundRow rrow = end_part.high_bound_val_;
       rrow.projector_ = end_part.projector_;
       rrow.projector_size_ = end_part.projector_size_;
       int cmp = 0;
-      if (common::OB_SUCCESS != common::ObRowUtil::compare_row(lrow, rrow, cmp)) {
+      if (common::OB_SUCCESS != compare_partition_bound_rows(lrow, rrow, cmp)) {
       }
       if (0 == cmp) {
         if (pos == partition_num - 1) {
@@ -3120,19 +3155,15 @@ int ObPartitionUtils::get_end_(
       }
     }
   }
-  if (0 < partition_array[end_pos]->low_bound_val_.get_obj_cnt()) {
-    ObNewRow lrow;
-    lrow.cells_ = const_cast<ObObj*>(end_part.high_bound_val_.get_obj_ptr());
-    lrow.count_ = end_part.high_bound_val_.get_obj_cnt();
+  if (0 < partition_array[end_pos]->low_bound_val_.count()) {
+    common::PartitionBoundRow lrow = end_part.high_bound_val_;
     lrow.projector_ = end_part.projector_;
     lrow.projector_size_ = end_part.projector_size_;
-    ObNewRow rrow;
-    rrow.cells_ = const_cast<ObObj*>(partition_array[end_pos]->low_bound_val_.get_obj_ptr());
-    rrow.count_ = partition_array[end_pos]->low_bound_val_.get_obj_cnt();
+    common::PartitionBoundRow rrow = partition_array[end_pos]->low_bound_val_;
     rrow.projector_ = partition_array[end_pos]->projector_;
     rrow.projector_size_ = partition_array[end_pos]->projector_size_;
     int cmp = 0;
-    if (OB_SUCCESS != ObRowUtil::compare_row(lrow, rrow, cmp)) {
+    if (OB_SUCCESS != compare_partition_bound_rows(lrow, rrow, cmp)) {
     } else if (cmp < 0) {
       end_pos--;
     }
@@ -5861,24 +5892,24 @@ int ObPartitionUtils::check_partition_value(
   if (is_hash_like_part(part_type)) {
     is_equal = true;
   } else if (is_range_part(part_type)) {
-    if (l_part.get_high_bound_val().get_obj_cnt() != r_part.get_high_bound_val().get_obj_cnt()) {
+    if (l_part.get_high_bound_val().count() != r_part.get_high_bound_val().count()) {
       is_equal = false;
       ASSIGN_PARTITION_ERROR(user_error, "range_part partition value count not equal");
       SHARE_SCHEMA_LOG(TRACE, "fail to check partition value, value count not equal",
                        "left", l_part.get_high_bound_val(),
                        "right", r_part.get_high_bound_val());
     } else {
-      for (int64_t i = 0; i < l_part.get_high_bound_val().get_obj_cnt() && is_equal; i++) {
-        const common::ObObjMeta meta1 = l_part.get_high_bound_val().get_obj_ptr()[i].get_meta();
-        const common::ObObjMeta meta2 = r_part.get_high_bound_val().get_obj_ptr()[i].get_meta();
+      for (int64_t i = 0; i < l_part.get_high_bound_val().count() && is_equal; i++) {
+        const common::SqlTypeMeta meta1 = l_part.get_high_bound_val().get_cells()[i].get_meta();
+        const common::SqlTypeMeta meta2 = r_part.get_high_bound_val().get_cells()[i].get_meta();
         // The obj comparison function does not require the same cs_level
         if (meta1.get_collation_type() == meta2.get_collation_type()) {
           is_equal = is_types_equal_for_partition_check(meta1.get_type(), meta2.get_type());
           if (!is_equal) {
             ASSIGN_PARTITION_ERROR(user_error, "range_part partition meta type not equal");
             SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value meta not equal",
-                           "left", l_part.get_high_bound_val().get_obj_ptr()[i],
-                           "right", r_part.get_high_bound_val().get_obj_ptr()[i]);
+                           "left", l_part.get_high_bound_val().get_cells()[i],
+                           "right", r_part.get_high_bound_val().get_cells()[i]);
           }
         } else {
           is_equal = false;
@@ -5888,36 +5919,36 @@ int ObPartitionUtils::check_partition_value(
         }
         if (!is_equal) {
           //do nothing
-        } else if (0 != l_part.get_high_bound_val().get_obj_ptr()[i].compare(r_part.get_high_bound_val().get_obj_ptr()[i],
-                                                                      r_part.get_high_bound_val().get_obj_ptr()[i].get_collation_type())) {
+        } else if (!partition_bound_values_equal(l_part.get_high_bound_val().get_cells()[i],
+                                                          r_part.get_high_bound_val().get_cells()[i])) {
           is_equal = false;
           ASSIGN_PARTITION_ERROR(user_error, "range_part partition value not equal");
           SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value not equal",
-                           "left", l_part.get_high_bound_val().get_obj_ptr()[i],
-                           "right", r_part.get_high_bound_val().get_obj_ptr()[i]);
+                           "left", l_part.get_high_bound_val().get_cells()[i],
+                           "right", r_part.get_high_bound_val().get_cells()[i]);
         }
       }
     }
   } else if (is_list_part(part_type)) {
-    const common::ObIArray<common::ObNewRow> &l_list_values = l_part.get_list_row_values();
-    const common::ObIArray<common::ObNewRow> &r_list_values = r_part.get_list_row_values();
+    const common::ObIArray<common::PartitionBoundRow> &l_list_values = l_part.get_list_row_values();
+    const common::ObIArray<common::PartitionBoundRow> &r_list_values = r_part.get_list_row_values();
     if (l_list_values.count() != r_list_values.count()) {
       is_equal = false;
       ASSIGN_PARTITION_ERROR(user_error, "list_part partition value count not equal");
     } else {
       for (int64_t i = 0; i < l_list_values.count() && is_equal; i++) {
-        const common::ObNewRow &l_rowkey = l_list_values.at(i);
+        const common::PartitionBoundRow &l_rowkey = l_list_values.at(i);
         bool find_equal_item = false;
         for (int64_t j = 0; j < r_list_values.count() && !find_equal_item && is_equal; j++) {
-          const common::ObNewRow &r_rowkey = r_list_values.at(j);
+          const common::PartitionBoundRow &r_rowkey = r_list_values.at(j);
           // First check that the count and meta information are consistent;
           if (l_rowkey.get_count() != r_rowkey.get_count()) {
             is_equal = false;
             ASSIGN_PARTITION_ERROR(user_error, "list_part partition value count not equal");
           } else {
             for (int64_t z = 0; z < l_rowkey.get_count() && is_equal; z++) {
-              const common::ObObjMeta meta1 = l_rowkey.get_cell(z).get_meta();
-              const common::ObObjMeta meta2 = r_rowkey.get_cell(z).get_meta();
+              const common::SqlTypeMeta meta1 = l_rowkey.get_cell(z).get_meta();
+              const common::SqlTypeMeta meta2 = r_rowkey.get_cell(z).get_meta();
               // The obj comparison function does not require the same cs_level
               if (meta1.get_collation_type() == meta2.get_collation_type()) {
                 is_equal = is_types_equal_for_partition_check(meta1.get_type(), meta2.get_type());
@@ -5935,7 +5966,7 @@ int ObPartitionUtils::check_partition_value(
             }
           }
           // Check whether the value of rowkey is the same;
-          if (OB_SUCC(ret) && is_equal && l_rowkey == r_rowkey) {
+          if (OB_SUCC(ret) && is_equal && equal_partition_bound_rows(l_rowkey, r_rowkey)) {
             find_equal_item = true;
           }
         } //end for (int64_t j = 0

@@ -90,17 +90,12 @@ class ObScanner;
 class ObRowkey;
 class ObNewRange;
 class ObSqlString;
-struct ObObj;
-class ObObjParam;
 class ObAddr;
 
 void hex_dump(const void *data, const int32_t size,
               const bool char_type = true, const int32_t log_level = OB_LOG_LEVEL_DEBUG);
 int32_t parse_string_to_int_array(const char *line,
                                   const char del, int32_t *array, int32_t &size);
-/**
- * parse string like int:32 to ObObj
- */
 bool is2n(int64_t input);
 constexpr int64_t next_pow2(const int64_t x)
 {
@@ -460,9 +455,6 @@ int deep_copy_ob_string(Allocator &allocator, const ObString &src, ObString &dst
   }
   return ret;
 }
-
-int deep_copy_obj(ObIAllocator &allocator, const ObObj &src, ObObj &dst);
-int deep_copy_objparam(ObIAllocator &allocator, const ObObjParam &src, ObObjParam &dst);
 
 const char *extract_demangled_class_name(const char *full_class_name, const char *prefix, char *buffer, int64_t &len);
 

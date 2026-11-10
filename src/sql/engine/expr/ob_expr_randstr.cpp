@@ -65,7 +65,7 @@ int ObExprRandstr::calc_result_type2(ObExprResType &type,
 
 int ObExprRandstr::calc_random_str(const ObExpr &expr,
                                    ObEvalCtx &ctx,
-                                   ObDatum &res_datum)
+                                   Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   int64_t max_size = 0;
@@ -75,8 +75,8 @@ int ObExprRandstr::calc_random_str(const ObExpr &expr,
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
   } else {
     int64_t rand_res = 0;
-    ObDatum &len = expr.locate_param_datum(ctx, 0);
-    ObDatum &seed = expr.locate_param_datum(ctx, 1);
+    Datum &len = expr.locate_param_datum(ctx, 0);
+    Datum &seed = expr.locate_param_datum(ctx, 1);
     if (len.is_null() || seed.is_null()) {
       res_datum.set_null();
     } else if (OB_UNLIKELY(len.get_int() < 0)) {

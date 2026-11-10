@@ -250,7 +250,7 @@ int ObDatumRow::from_store_row(const storage::ObStoreRow &store_row)
     snapshot_version_ = store_row.snapshot_version_;
     fast_filter_skipped_ = store_row.fast_filter_skipped_;
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; i++) {
-      if (OB_FAIL(storage_datums_[i].from_obj_enhance(store_row.row_val_.cells_[i]))) {
+      if (OB_FAIL(storage_datums_[i].from_value(store_row.row_val_.cells_[i]))) {
       }
     }
   }
@@ -434,17 +434,19 @@ int ObNewRowBuilder::build(
   if (OB_UNLIKELY(nullptr == cols_descs_ || cols_descs_->count() < col_cnt)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to build new row", K(ret), K(datum_row), KP_(cols_descs));
-  } else if (OB_FAIL(obj_buf_.reserve(col_cnt))) {
+  } else if (OB_FAIL(value_buf_.reserve(col_cnt))) {
   } else {
-    new_row_.cells_ = obj_buf_.get_data();
+    new_row_.cells_ = value_buf_.data();
     new_row_.count_ = col_cnt;
     new_row_.projector_ = nullptr;
     new_row_.projector_size_ = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < col_cnt; i++) {
-      if (OB_FAIL(datum_row.storage_datums_[i].to_obj_enhance(new_row_.cells_[i], cols_descs_->at(i).col_type_))) {
+      DatumValue value = value_buf_.at(i);
+      if (OB_FAIL(datum_row.storage_datums_[i].to_value_view(cols_descs_->at(i).col_type_, value))) {
+      } else if (OB_FAIL(value_buf_.assign_view(i, value))) {
       }
     }
-    new_row = &new_row_;
+    if (OB_SUCC(ret)) { new_row = &new_row_; }
   }
   return ret;
 }

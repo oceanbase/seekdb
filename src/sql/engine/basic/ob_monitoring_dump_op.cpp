@@ -136,7 +136,7 @@ int ObMonitoringDumpOp::calc_hash_value()
   const ExprFixedArray &output = MY_SPEC.output_;
   for (int64_t i = 0; i < output.count() && OB_SUCC(ret); i++) {
     ObExpr *expr = output.at(i);
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
     } else {
       uint64_t ori_hash_value = output_hash_.at(i);

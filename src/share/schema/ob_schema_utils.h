@@ -220,7 +220,8 @@ private:
   static int get_runtime_variable(ObMultiVersionSchemaService &schema_service,
                                  schema::ObSchemaGetterGuard &schema_guard,
                                  share::ObSysVarClassType var_id,
-                                 common::ObObj &value);
+                                 common::ObIAllocator &result_owner,
+                                 common::DatumValue &value);
 
   static int batch_get_table_schemas_from_cache_(
       ObMultiVersionSchemaService *schema_service,

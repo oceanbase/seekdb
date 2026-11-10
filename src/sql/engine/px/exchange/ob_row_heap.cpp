@@ -63,13 +63,15 @@ bool ObDatumRowCompare::operator()(
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum *lcells = l->cells();
-    const ObDatum *rcells = r->cells();
+    const StoredDatumCell *lcells = l->stored_cells();
+    const StoredDatumCell *rcells = r->stored_cells();
     int cmp = 0;
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
+      const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(lcells[idx]);
+      const ObDatum r_datum = StoredDatumCodec::decode_legacy_view(rcells[idx]);
       if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
-              lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
+              l_datum, r_datum, cmp, datum_access_ctx_))) {
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {
@@ -120,13 +122,15 @@ bool ObMaxDatumRowCompare::operator()(
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum *lcells = l->cells();
-    const ObDatum *rcells = r->cells();
+    const StoredDatumCell *lcells = l->stored_cells();
+    const StoredDatumCell *rcells = r->stored_cells();
     int cmp = 0;
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
+      const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(lcells[idx]);
+      const ObDatum r_datum = StoredDatumCodec::decode_legacy_view(rcells[idx]);
       if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
-              lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
+              l_datum, r_datum, cmp, datum_access_ctx_))) {
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {

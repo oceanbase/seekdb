@@ -58,7 +58,7 @@ public :
   int init(ObDatum *attrs, uint32_t attr_count, bool with_length = true);
 
   int insert_from(const ObIArrayType &src, uint32_t begin, uint32_t len);
-  int elem_at(uint32_t idx, ObObj &elem_obj) const;
+  int elem_at_datum(uint32_t idx, ObDatum &value) const override;
   int at(uint32_t idx, ObIArrayType &dest) const { return OB_NOT_SUPPORTED; }
   void clear();
   int flatten(ObArrayAttr *attrs, uint32_t attr_count, uint32_t &attr_idx);

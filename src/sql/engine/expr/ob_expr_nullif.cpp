@@ -73,7 +73,7 @@ int ObExprNullif::se_deduce_type(ObExprResType &type,
                                  ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  type.set_meta(type1.get_obj_meta());
+  type.set_meta(type1.get_sql_type_meta());
   type.set_accuracy(type1.get_accuracy());
   if (ob_is_real_type(type.get_type()) && SCALE_UNKNOWN_YET != type1.get_scale()) {
     type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type1.get_scale())));
@@ -88,7 +88,7 @@ int ObExprNullif::se_deduce_type(ObExprResType &type,
   OZ(calc_cmp_type2(cmp_type, type1, type2, type_ctx));
   if (OB_SUCC(ret)) {
     if (ob_is_enumset_tc(type1.get_type()) || ob_is_enumset_tc(type2.get_type())) {
-      ObObjType calc_type = get_enumset_calc_type(cmp_type.get_calc_type(), -1);
+      SqlValueType calc_type = get_enumset_calc_type(cmp_type.get_calc_type(), -1);
       CK(ObMaxType != calc_type);
       if (OB_SUCC(ret)) {
         cmp_type.set_calc_type(calc_type);
@@ -144,7 +144,7 @@ int ObExprNullif::set_extra_info(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   } else if (OB_ISNULL(expr_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObObjMeta &cmp_meta = raw_expr.get_extra_calc_meta();
+    const SqlTypeMeta &cmp_meta = raw_expr.get_extra_calc_meta();
     ObSQLUtils::get_default_cast_mode(is_explicit_cast, result_flag,
                                       expr_cg_ctx.session_->get_stmt_type(),
                                       expr_cg_ctx.session_->is_ignore_stmt(),
@@ -166,7 +166,7 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   int ret = OB_SUCCESS;
   CK(2 == rt_expr.arg_cnt_);
   const uint32_t param_num = rt_expr.arg_cnt_;
-  const ObObjMeta &cmp_meta = raw_expr.get_extra_calc_meta();
+  const SqlTypeMeta &cmp_meta = raw_expr.get_extra_calc_meta();
   ObSQLMode sql_mode = expr_cg_ctx.session_->get_sql_mode();
   const ObLocalSessionVar *local_vars = NULL;
   if (ObNullType == rt_expr.args_[0]->datum_meta_.type_) {
@@ -188,53 +188,35 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
       rt_expr.eval_func_ = eval_nullif_enumset;
     }
   } else {
-    OV(OB_NOT_NULL(rt_expr.inner_functions_ = reinterpret_cast<void**>(
-                  expr_cg_ctx.allocator_->alloc(sizeof(DatumCmpFunc) * 1))),
-      OB_ALLOCATE_MEMORY_FAILED);
-
-    if (OB_SUCC(ret)) {
-      if (!cmp_meta.is_null()) {
-        DatumCmpFunc cmp_func = NULL;
-        if (rt_expr.args_[0]->datum_meta_.cs_type_ == rt_expr.args_[1]->datum_meta_.cs_type_) {
-          bool has_lob_header = rt_expr.args_[0]->obj_meta_.has_lob_header() ||
-                                rt_expr.args_[1]->obj_meta_.has_lob_header();
-          cmp_func = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-                                                          rt_expr.args_[0]->datum_meta_.type_,
-                                                          rt_expr.args_[1]->datum_meta_.type_,
-                                                          rt_expr.args_[0]->datum_meta_.scale_,
-                                                          rt_expr.args_[1]->datum_meta_.scale_,
-                                                          rt_expr.args_[0]->datum_meta_.precision_,
-                                                          rt_expr.args_[1]->datum_meta_.precision_,
-                                                          rt_expr.args_[0]->datum_meta_.cs_type_,
-                                                          has_lob_header);
+    OZ(rt_expr.prepare_cmp_ops(*expr_cg_ctx.allocator_, 1));
+    if (OB_SUCC(ret) && !cmp_meta.is_null()) {
+      const auto &left = *rt_expr.args_[0];
+      const auto &right = *rt_expr.args_[1];
+      const bool has_lob_header = left.obj_meta_.has_lob_header() || right.obj_meta_.has_lob_header();
+      const bool direct = left.datum_meta_.cs_type_ == right.datum_meta_.cs_type_
+          && !cmp_meta.is_decimal_int()
+          && ObExprCmpFuncsHelper::get_datum_expr_cmp_func(left.datum_meta_.type_, right.datum_meta_.type_,
+              left.datum_meta_.scale_, right.datum_meta_.scale_, left.datum_meta_.precision_, right.datum_meta_.precision_,
+              left.datum_meta_.cs_type_, has_lob_header) != nullptr;
+      DatumCastExtraInfo *info = static_cast<DatumCastExtraInfo *>(rt_expr.extra_info_);
+      if (direct) {
+        OZ(rt_expr.configure_cmp_op(0, 0, 1, NULL_LAST, left.datum_meta_.cs_type_));
+        if (OB_SUCC(ret)) { info->cmp_meta_.type_ = ObNullType; }
+      } else {
+        SqlTypeMeta meta = cmp_meta;
+        if (is_lob_storage(meta.get_type())) { meta.set_has_lob_header(); }
+        ObAccuracy accuracy;
+        if (!ob_is_string_or_lob_type(meta.get_type())) {
+          accuracy.set_precision(raw_expr.get_extra_calc_precision());
+          accuracy.set_scale(raw_expr.get_extra_calc_scale());
         }
-        // if compare type is decimal int, `cast_param` must be executed.
-        if (NULL != cmp_func && !cmp_meta.is_decimal_int()) {
-          rt_expr.inner_func_cnt_ = 1;
-          rt_expr.inner_functions_[0] = reinterpret_cast<void*>(cmp_func);
-          DatumCastExtraInfo *info = static_cast<DatumCastExtraInfo *>(rt_expr.extra_info_);
-          // assign null type means can compare directly.
-          info->cmp_meta_.type_ = ObNullType;
-        } else {
-          bool has_lob_header = is_lob_storage(cmp_meta.get_type());
-          if (OB_ISNULL(cmp_func = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-                                                            cmp_meta.get_type(),
-                                                            cmp_meta.get_type(),
-                                                            cmp_meta.get_scale(),
-                                                            cmp_meta.get_scale(),
-                                                            raw_expr.get_extra_calc_precision(),
-                                                            raw_expr.get_extra_calc_precision(),
-                                                            cmp_meta.get_collation_type(),
-                                                            has_lob_header))){
-            ret = OB_INVALID_ARGUMENT;
-          } else {
-            rt_expr.inner_func_cnt_ = 1;
-            rt_expr.inner_functions_[0] = reinterpret_cast<void*>(cmp_func);
-          }
-        }
+        ObExpr domain;
+        OZ(domain.prepare_scalar_type(meta, accuracy, *expr_cg_ctx.allocator_));
+        OZ(rt_expr.configure_cmp_op(0, domain.get_sql_type(), domain.get_sql_type(), NULL_LAST,
+                                   cmp_meta.get_collation_type()));
       }
-      OX(rt_expr.eval_func_ = eval_nullif);
     }
+    if (OB_SUCC(ret)) { rt_expr.eval_func_ = eval_nullif; }
   }
   return ret;
 }
@@ -242,7 +224,7 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 int ObExprNullif::cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
                                     const ObDatumMeta &dst_meta,
                                     const ObCastMode &cm, ObIAllocator &allocator,
-                                    ObDatum &res_datum)
+                                    Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   const bool string_type = ob_is_string_type(dst_meta.type_);
@@ -253,9 +235,11 @@ int ObExprNullif::cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
     res_datum = src_expr.locate_expr_datum(ctx);
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
   } else {
-    ObDatum *cast_datum = NULL;
+    Datum *cast_datum = NULL;
+    const SqlType *result_type = nullptr;
     if (OB_FAIL(ctx.datum_caster_->to_type(dst_meta, src_expr, cm, cast_datum, ctx.get_batch_idx()))) {
-    } else if (OB_FAIL(res_datum.deep_copy(*cast_datum, allocator))) {
+    } else if (OB_FAIL(ctx.datum_caster_->get_result_type(src_expr, cast_datum, result_type))) {
+    } else if (OB_FAIL(ObExpr::clone_native_value(*result_type, *cast_datum, allocator, res_datum))) {
     } else {
       LOG_DEBUG("cast_param", K(src_expr), KP(ctx.frames_[src_expr.frame_idx_]),
                 K(&(src_expr.locate_expr_datum(ctx))),
@@ -266,20 +250,29 @@ int ObExprNullif::cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
 }
 
 int ObExprNullif::cast_result(const ObExpr &src_expr, const ObExpr &dst_expr, ObEvalCtx &ctx,
-                                     const ObCastMode &cm, ObDatum &expr_datum)
+                                     const ObCastMode &cm, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   const bool string_type = ob_is_string_type(src_expr.datum_meta_.type_);
   if (src_expr.datum_meta_.type_ == dst_expr.datum_meta_.type_
       && (!string_type || src_expr.datum_meta_.cs_type_ == dst_expr.datum_meta_.cs_type_)) {
-    ObDatum *res_datum = nullptr;
+    Datum *res_datum = nullptr;
     if (OB_FAIL(src_expr.eval(ctx, res_datum))) {
-    } else {
+    } else if (src_expr.get_sql_type().canonical_representation()
+                   == dst_expr.get_sql_type().canonical_representation()) {
       expr_datum = *res_datum;
+    } else {
+      common::ObDatum legacy;
+      alignas(8) char scratch[64];
+      Datum converted;
+      OZ(src_expr.get_datum_copy_plan().legacy_view(*res_datum, legacy, scratch, sizeof(scratch)));
+      OZ(dst_expr.get_datum_copy_plan().import_legacy(legacy, converted));
+      OZ(dst_expr.deep_copy_datum(ctx, converted));
+      OX(expr_datum = dst_expr.locate_expr_datum(ctx));
     }
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
   } else {
-    ObDatum *cast_datum = NULL;
+    Datum *cast_datum = NULL;
     if (OB_FAIL(ctx.datum_caster_->to_type(dst_expr.datum_meta_, src_expr, cm, cast_datum, ctx.get_batch_idx()))) {
     } else if (OB_FAIL(dst_expr.deep_copy_datum(ctx, *cast_datum))) {
     }
@@ -287,26 +280,25 @@ int ObExprNullif::cast_result(const ObExpr &src_expr, const ObExpr &dst_expr, Ob
   return ret;
 }
 
-int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *cmp_e0 = NULL;
-  ObDatum *cmp_e1 = NULL;
-  ObDatum *res_e = NULL;
+  Datum *cmp_e0 = NULL;
+  Datum *cmp_e1 = NULL;
+  Datum *res_e = NULL;
   DatumCastExtraInfo *cast_info = NULL;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, cmp_e0))) {
   } else if (cmp_e0->is_null()) {
     res.set_null();
-  } else if (OB_UNLIKELY(1 != expr.inner_func_cnt_) || OB_ISNULL(expr.inner_functions_)
-      || OB_ISNULL(expr.inner_functions_[0])) {
+  } else if (OB_UNLIKELY(1 != expr.get_cmp_op_count()) || !expr.get_cmp_op().is_valid()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, cmp_e1))) {
   } else if (FALSE_IT(cast_info = static_cast<DatumCastExtraInfo *>(expr.extra_info_))) {
   } else if (ObNullType == cast_info->cmp_meta_.type_) {
     // can compare directly.
-    DatumCmpFunc cmp_func = reinterpret_cast<DatumCmpFunc>(expr.inner_functions_[0]);
+    const DatumCmpOp &cmp_func = expr.get_cmp_op();
     int cmp_ret = 0;
     bool equal = false;
     if (!cmp_e1->is_null()) {
@@ -326,10 +318,10 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     if (OB_FAIL(cast_result(*expr.args_[0], expr, ctx, cast_info->cm_, res))) {
     }
   } else {
-    DatumCmpFunc cmp_func = reinterpret_cast<DatumCmpFunc>(expr.inner_functions_[0]);
+    const DatumCmpOp &cmp_func = expr.get_cmp_op();
     ObTempExprCtx::TempAllocGuard tmp_alloc_guard(ctx);
-    ObDatum datum1;
-    ObDatum datum2;
+    Datum datum1;
+    Datum datum2;
     if (OB_FAIL(cast_param(*expr.args_[0], ctx, cast_info->cmp_meta_, cast_info->cm_,
                              tmp_alloc_guard.get_allocator(), datum1))) {
     } else if (OB_FAIL(cast_param(*expr.args_[1], ctx, cast_info->cmp_meta_, cast_info->cm_,
@@ -347,11 +339,11 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   return ret;
 }
 
-int ObExprNullif::eval_nullif_enumset(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprNullif::eval_nullif_enumset(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *cmp_e0 = NULL;
-  ObDatum *cmp_e1 = NULL;
+  Datum *cmp_e0 = NULL;
+  Datum *cmp_e1 = NULL;
   ObCastMode cm = CM_NONE;
   DatumCastExtraInfo *cast_info = NULL;
   bool equal = 0;
@@ -373,7 +365,7 @@ int ObExprNullif::eval_nullif_enumset(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       res.set_string(inner_value.string_value_);
     }
   } else {
-    ObDatum datum0;
+    Datum datum0;
     ObEnumSetInnerValue inner_value;
     ObTempExprCtx::TempAllocGuard tmp_alloc_guard(ctx);
     if (cmp_e1->is_null()) {

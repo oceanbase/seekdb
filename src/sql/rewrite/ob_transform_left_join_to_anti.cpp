@@ -313,7 +313,7 @@ int ObTransformLeftJoinToAnti::get_column_ref_in_is_null_condition(const ObRawEx
   if (OB_ISNULL(expr) || OB_ISNULL(expr->get_param_expr(0)) || OB_ISNULL(expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!(second_param = static_cast<const ObConstRawExpr *>(expr->get_param_expr(1)))
-                                    ->get_value().is_null()) {
+                                    ->get_value_datum().is_null()) {
     // skip exprs other than (IS NULL)
   } else if (expr->get_param_expr(0)->has_flag(IS_COLUMN)) {
     if (OB_FAIL(target.push_back(expr->get_param_expr(0)))) {

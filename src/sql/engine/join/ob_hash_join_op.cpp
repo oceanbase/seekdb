@@ -368,8 +368,19 @@ int alloc_ptrs(ObIAllocator &alloc, const TS &...args)
 int ObHashJoinOp::inner_open()
 {
   int ret = OB_SUCCESS;
+  native_hash_funcs_.reuse();
+  for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.all_join_keys_.count(); ++i) {
+    common::DatumHashOp operation;
+    if (MY_SPEC.all_join_keys_.count() != MY_SPEC.all_hash_funcs_.count()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(common::ObDatumFuncs::bind_legacy_hash(
+        MY_SPEC.all_join_keys_.at(i)->get_sql_type(), MY_SPEC.all_hash_funcs_.at(i).hash_func_, operation))) {
+    } else { ret = native_hash_funcs_.push_back(operation); }
+  }
+
   ObSQLSessionInfo *session = NULL;
-  if (OB_FAIL(set_shared_info())) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(set_shared_info())) {
   } else if (is_shared_ && OB_FAIL(sync_wait_open())) {
     is_shared_ = false;
   } else if ((OB_UNLIKELY(MY_SPEC.all_join_keys_.count() <= 0
@@ -4009,7 +4020,7 @@ int ObHashJoinOp::calc_hash_value(
 {
   int ret = OB_SUCCESS;
   hash_value = HASH_SEED;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   skipped = false;
   bool need_null_random = false;
   bool skip_null = (is_left_side && skip_left_null_) || (!is_left_side && skip_right_null_);
@@ -4017,7 +4028,7 @@ int ObHashJoinOp::calc_hash_value(
     if (OB_FAIL(join_keys.at(idx)->eval(eval_ctx_, datum))) {
     } else {
       need_null_random |= (datum->is_null() && !MY_SPEC.is_ns_equal_cond_.at(idx));
-      if (OB_FAIL(hash_funcs.at(idx).hash_func_(
+      if (OB_FAIL(native_hash_funcs_.at(idx + (is_left_side ? 0 : left_join_keys_.count()))(
               *datum, hash_value, hash_value, datum_access_ctx_))) {
       }
     }
@@ -4052,9 +4063,9 @@ int ObHashJoinOp::calc_hash_value_batch(const ObIArray<ObExpr*> &join_keys,
       ObExpr *expr = join_keys.at(idx); // expr ptr check in cg, not check here
       if (OB_FAIL(expr->eval_batch(eval_ctx_, *brs->skip_, brs->size_))) {
       } else {
-        ObBatchDatumHashFunc hash_func = expr->basic_funcs_->murmur_hash_v2_batch_;
+        const auto &hash_func = expr->basic_funcs_->murmur_hash_v2_batch_;
         const bool is_batch_seed = (idx > 0);
-        hash_func(hash_vals,
+        ret = hash_func(hash_vals,
                   expr->locate_batch_datums(eval_ctx_), expr->is_batch_result(),
                   *brs->skip_, brs->size_,
                   is_batch_seed ? hash_vals : &seed,
@@ -4068,7 +4079,7 @@ int ObHashJoinOp::calc_hash_value_batch(const ObIArray<ObExpr*> &join_keys,
       auto op = [&](const int64_t i) __attribute__((always_inline)) {
         bool need_null_random = false;
         for (int64_t j = 0; j < join_keys.count() && !need_null_random; ++j) {
-          ObDatum &curr_key = join_keys.at(j)->locate_batch_datums(eval_ctx_)[i];
+          Datum &curr_key = join_keys.at(j)->locate_batch_datums(eval_ctx_)[i];
           need_null_random |= (curr_key.is_null() && !MY_SPEC.is_ns_equal_cond_.at(j));
         }
         need_null_random &= (MY_SPEC.join_type_ != LEFT_ANTI_JOIN && MY_SPEC.join_type_ != RIGHT_ANTI_JOIN);
@@ -4210,7 +4221,7 @@ int ObHashJoinOp::calc_equal_conds(bool &is_match)
   int ret = OB_SUCCESS;
   is_match = true;
   const ObIArray<ObExpr *> &conds = MY_SPEC.equal_join_conds_;
-  ObDatum *cmp_res = NULL;
+  Datum *cmp_res = NULL;
   ARRAY_FOREACH(conds, i) {
     if (OB_FAIL(conds.at(i)->eval(eval_ctx_, cmp_res))) {
     } else if (cmp_res->is_null() || 0 == cmp_res->get_int()) {
@@ -4386,7 +4397,7 @@ int ObHashJoinOp::read_hashrow_batch()
     batch_info_guard.set_batch_size(right_brs_->size_);
     for (int64_t i = 0; OB_SUCC(ret) && i < right_selector_cnt_; ++i) {
       batch_info_guard.set_batch_idx(right_selector_[i]);
-      ObDatum *key_datum = nullptr;
+      Datum *key_datum = nullptr;
       if (OB_FAIL(right_join_keys_.at(0)->eval(eval_ctx_, key_datum))) {
       } else if (!key_datum->is_null()) {
         cur_tuples_[selector_cnt] = cur_tuples_[i];
@@ -4403,7 +4414,7 @@ int ObHashJoinOp::read_hashrow_batch()
   const int64_t L1_CACHE_SIZE = 64;
   if (OB_FAIL(ret)) {
   } else if (sizeof(ObHashJoinStoredJoinRow)
-      + left_->get_spec().output_.count() * sizeof(ObDatum) <= L1_CACHE_SIZE) {
+      + left_->get_spec().output_.count() * sizeof(Datum) <= L1_CACHE_SIZE) {
     for (int64_t i = 0; i < right_selector_cnt_; i++) {
       __builtin_prefetch(cur_tuples_[i], 0 /* for read */, 3 /* high temporal locality */);
     }
@@ -4437,8 +4448,8 @@ int ObHashJoinOp::read_hashrow_batch()
         FOREACH_CNT_X(e, MY_SPEC.equal_join_conds_, (matched && (OB_SUCCESS == ret))) {
           // we check children's output_ are consistant with join key in cg,
           // so we can locate datums without eval again
-          ObDatum &l = (*e)->args_[0]->locate_batch_datums(eval_ctx_)[batch_idx];
-          ObDatum &r = (*e)->args_[1]->locate_batch_datums(eval_ctx_)[batch_idx];
+          Datum &l = (*e)->args_[0]->locate_batch_datums(eval_ctx_)[batch_idx];
+          Datum &r = (*e)->args_[1]->locate_batch_datums(eval_ctx_)[batch_idx];
           if (!l.is_null()) {
             if (OB_FAIL((*e)->args_[0]->basic_funcs_->null_first_cmp_(
                     l, r, cmp_ret, datum_access_ctx_))) {
@@ -4730,7 +4741,7 @@ int ObHashJoinOp::right_anti_semi_read_hashrow_going_batch()
       clear_evaluated_flag();
       if (OB_FAIL(right_join_keys_.at(0)->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
       } else {
-        ObDatumVector key_datum = right_join_keys_.at(0)->locate_expr_datumvector(eval_ctx_);
+        DatumVector key_datum = right_join_keys_.at(0)->locate_expr_datumvector(eval_ctx_);
         for (int64_t i = 0; i < brs_.size_; ++i) {
           if (brs_.skip_->at(i)) {
             continue;
@@ -5235,7 +5246,7 @@ int ObHashJoinOp::fill_left_join_result_batch()
     ret = OB_SUCCESS;
   }
   if (OB_SUCCESS == ret) {
-    ObChunkDatumStore::Iterator::attach_rows(left_->get_spec().output_, eval_ctx_,
+    ret = ObChunkDatumStore::Iterator::attach_rows(left_->get_spec().output_, eval_ctx_,
                    reinterpret_cast<const ObChunkDatumStore::StoredRow **>(left_result_rows),
                    batch_idx);
     if (need_left_join()) {
@@ -5424,7 +5435,7 @@ int ObHashJoinOp::read_hashrow_batch_for_left_semi_anti()
     if (brs_.size_ > 0) {
       brs_.skip_->reset(brs_.size_);
     }
-    ObChunkDatumStore::Iterator::attach_rows(left_->get_spec().output_, eval_ctx_,
+    ret = ObChunkDatumStore::Iterator::attach_rows(left_->get_spec().output_, eval_ctx_,
                   reinterpret_cast<const ObChunkDatumStore::StoredRow **>(left_result_rows),
                   result_idx);
     brs_.size_ = result_idx;
@@ -5445,7 +5456,7 @@ int ObHashJoinOp::check_join_key_for_naaj(const bool is_left, bool &is_null)
   common::ObArrayHelper<ObExpr*> &curr_join_keys = is_left ? left_join_keys_ : right_join_keys_;
   CK (1 == curr_join_keys.count());
   CK (!is_null);
-  ObDatum *key_datum = nullptr;
+  Datum *key_datum = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
@@ -5477,7 +5488,7 @@ int ObHashJoinOp::check_join_key_for_naaj_batch(const bool is_left,
   } else if (has_null) {
   } else if (OB_FAIL(curr_join_keys.at(0)->eval_batch(eval_ctx_, *child_brs->skip_, batch_size))) {
   } else {
-    ObDatumVector key_datums = curr_join_keys.at(0)->locate_expr_datumvector(eval_ctx_);
+    DatumVector key_datums = curr_join_keys.at(0)->locate_expr_datumvector(eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (child_brs->skip_->at(i)) {
         continue;
@@ -5505,7 +5516,7 @@ int ObHashJoinOp::check_join_key_for_naaj_batch_output(const int64_t batch_size)
     // do nothing
   } else if (OB_FAIL(left_join_keys_.at(0)->eval_batch(eval_ctx_, *brs_.skip_, batch_size))) {
   } else {
-    ObDatumVector key_datums = left_join_keys_.at(0)->locate_expr_datumvector(eval_ctx_);
+    DatumVector key_datums = left_join_keys_.at(0)->locate_expr_datumvector(eval_ctx_);
     for (int64_t i = 0; i < batch_size; ++i) {
       if (key_datums.at(i)->is_null()) {
         brs_.skip_->set(i);

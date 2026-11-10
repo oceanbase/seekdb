@@ -53,7 +53,7 @@ protected:
 // The storage layer (ObLobManager) implements this port and the server module provider injects it.
 //
 // constraint: all inputs/outputs are share-level types(ObLobTextIterCtx&/ObString/ObIAllocator*/
-//       ObObjType/ObCollationType/ObTextStringIterState&), no storage types appear;
+//       SqlValueType/ObCollationType/ObTextStringIterState&), no storage types appear;
 //       ObLobAccessParam construction and query/getlength calls stay locked inside the storage implementation。
 class ObILobReadService
 {
@@ -69,7 +69,7 @@ public:
 
   // read the full json-delta out-of-row lob data(including partial-data merging), writes the result to ctx and data_str。
   virtual int get_delta_lob_full_data(ObLobTextIterCtx &ctx,
-                                      ObObjType type,
+                                      SqlValueType type,
                                       ObCollationType cs_type,
                                       ObLobLocatorV2 &lob_locator,
                                       ObIAllocator *allocator,

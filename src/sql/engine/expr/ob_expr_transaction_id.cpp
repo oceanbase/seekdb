@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_transaction_id.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -47,7 +48,7 @@ int ObExprTransactionId::calc_result_type0(ObExprResType &type, ObExprTypeCtx &t
 }
 
 int ObExprTransactionId::eval_transaction_id(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
@@ -64,7 +65,7 @@ int ObExprTransactionId::eval_transaction_id(const ObExpr &expr, ObEvalCtx &ctx,
       number::ObNumber num;
       if (OB_FAIL(num.from(tx_id, tmp_alloc))) {
       } else {
-        expr_datum.set_number(num);
+        ret = ObExprUtil::set_number(expr, ctx, expr_datum, num);
       }
     }
   }

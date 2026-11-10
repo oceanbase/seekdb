@@ -128,9 +128,11 @@ int ObLockContext::destroy(ObExecContext &ctx,
     // WHY WE NEED THIS
     uint64_t cur_last_insert_id = session_info->get_local_last_insert_id();
     if (cur_last_insert_id != last_insert_id_) {
-      ObObj last_insert_id;
-      last_insert_id.set_uint64(last_insert_id_);
-      tmp_ret = session_info->update_sys_variable(share::SYS_VAR_LAST_INSERT_ID, last_insert_id);
+      DatumValue last_insert_id;
+      tmp_ret = last_insert_id.set_uint64(last_insert_id_, ctx.get_allocator());
+      if (OB_SUCCESS == tmp_ret) {
+        tmp_ret = session_info->update_sys_variable(share::SYS_VAR_LAST_INSERT_ID, last_insert_id);
+      }
       if (OB_SUCCESS == tmp_ret &&
           OB_TMP_FAIL(session_info->update_sys_variable(share::SYS_VAR_IDENTITY, last_insert_id))) {
         LOG_WARN("succ update last_insert_id, but fail to update identity", K(tmp_ret));

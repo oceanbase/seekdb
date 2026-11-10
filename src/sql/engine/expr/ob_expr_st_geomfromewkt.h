@@ -35,7 +35,7 @@ public:
   virtual int calc_result_type1(ObExprResType &type,
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

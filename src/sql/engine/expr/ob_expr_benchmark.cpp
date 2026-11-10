@@ -61,10 +61,10 @@ int ObExprBenchmark::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
 
 int ObExprBenchmark::eval_benchmark(const ObExpr &expr,
                                     ObEvalCtx &ctx,
-                                    ObDatum &expr_datum)
+                                    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *loop_count;
+  Datum *loop_count;
   if (OB_FAIL(expr.args_[0]->eval(ctx, loop_count))) {
   } else if (loop_count->is_null() || loop_count->get_int() < 0) {
     expr_datum.set_null();
@@ -74,7 +74,7 @@ int ObExprBenchmark::eval_benchmark(const ObExpr &expr,
   } else {
     ObArray<ObExpr *> exprs_to_clear;
     int64_t loops = loop_count->get_int();
-    ObDatum *tmp_datum = nullptr;
+    Datum *tmp_datum = nullptr;
     if (OB_FAIL(collect_exprs(exprs_to_clear, expr, ctx))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < loops && OB_SUCC(THIS_WORKER.check_status()); ++i) {
@@ -94,8 +94,8 @@ int ObExprBenchmark::eval_benchmark_batch(const ObExpr &expr,
                                           const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatum *loop_count;
-  ObDatum *result = expr.locate_batch_datums(ctx);
+  Datum *loop_count;
+  Datum *result = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval(ctx, loop_count))) {
   } else if (loop_count->is_null() || loop_count->get_int() < 0) {
@@ -113,7 +113,7 @@ int ObExprBenchmark::eval_benchmark_batch(const ObExpr &expr,
   } else {
     ObArray<ObExpr *> exprs_to_clear;
     int64_t loops = loop_count->get_int();
-    ObDatum *tmp_datum = nullptr;
+    Datum *tmp_datum = nullptr;
     if (OB_FAIL(collect_exprs(exprs_to_clear, expr, ctx))) {
     } else {
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {

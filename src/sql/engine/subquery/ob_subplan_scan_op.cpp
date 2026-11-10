@@ -69,7 +69,7 @@ int ObSubPlanScanOp::inner_get_next_row()
     //      select 1 from (select @a=3);
     for (int64_t i = 0; OB_SUCC(ret) && i < child_->get_spec().output_.count(); i++) {
       ObExpr *expr = child_->get_spec().output_[i];
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
       }
     }
@@ -78,7 +78,7 @@ int ObSubPlanScanOp::inner_get_next_row()
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.projector_.count(); i += 2) {
       ObExpr *from = MY_SPEC.projector_[i];
       ObExpr *to = MY_SPEC.projector_[i + 1];
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       if (OB_FAIL(from->eval(eval_ctx_, datum))) {
       } else {
         to->locate_expr_datum(eval_ctx_) = *datum;
@@ -109,14 +109,14 @@ int ObSubPlanScanOp::next_batch(const int64_t max_row_cnt)
       ObExpr *to = MY_SPEC.projector_[i + 1];
       if (OB_FAIL(from->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
       } else {
-        ObDatum *from_datums = from->locate_batch_datums(eval_ctx_);
-        ObDatum *to_datums = to->locate_batch_datums(eval_ctx_);
+        Datum *from_datums = from->locate_batch_datums(eval_ctx_);
+        Datum *to_datums = to->locate_batch_datums(eval_ctx_);
         const ObEvalInfo &from_info = from->get_eval_info(eval_ctx_);
         ObEvalInfo &to_info = to->get_eval_info(eval_ctx_);
         if (OB_UNLIKELY(!to->is_batch_result())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (from->is_batch_result()) {
-          MEMCPY(to_datums, from_datums, brs_.size_ * sizeof(ObDatum));
+          MEMCPY(to_datums, from_datums, brs_.size_ * sizeof(Datum));
           to_info = from_info;
           to_info.projected_ = true;
           to_info.point_to_frame_ = false;

@@ -42,41 +42,34 @@ public:
   ObVariableSetExecutor();
   virtual ~ObVariableSetExecutor();
   int execute(ObExecContext &ctx, ObVariableSetStmt &stmt);
-  static int calc_var_value_static_engine(
-          ObVariableSetStmt::VariableSetNode &node,
-          ObVariableSetStmt &stmt,
-          ObExecContext &exec_ctx,
-          common::ObObj &value_obj);
-  static int calc_subquery_expr_value(ObExecContext &ctx,
-                                      ObSQLSessionInfo *session_info,
-                                      ObRawExpr *expr,
-                                      common::ObObj &value_obj);
-  static int execute_subquery_expr(ObExecContext &ctx,
-                                   ObSQLSessionInfo *session_info,
-                                   const ObSqlString &subquery_expr,
-                                   common::ObObj &value_obj);
+  static int calc_var_value_static_engine(ObVariableSetStmt::VariableSetNode &node,
+      ObVariableSetStmt &stmt, ObExecContext &ctx, common::DatumParameter &value);
+  static int calc_subquery_expr_value(ObExecContext &ctx, ObSQLSessionInfo *session,
+      ObRawExpr *expr, common::DatumValue &value);
+  static int execute_subquery_expr(ObExecContext &ctx, ObSQLSessionInfo *session,
+      const ObSqlString &sql, common::DatumValue &value);
   static int check_and_convert_sys_var(ObExecContext &ctx,
                                        const sql::ObSetVar &set_var,
                                        sql::ObBasicSysVar &sys_var,
-                                       const common::ObObj &in_val,
-                                       common::ObObj &out_val,
+                                       const common::DatumValue &in_val,
+                                       common::DatumValue &out_val,
                                        bool is_set_stmt);
-  static int set_user_variable(const common::ObObj &val,
+  static int set_user_variable(const common::DatumValue &val,
                                const common::ObString &name,
                                const common::ObExprCtx &expr_ctx);
-  static int set_user_variable(const common::ObObj &val,
+  static int set_user_variable(const common::DatumValue &val,
                                const common::ObString &name,
                                ObSQLSessionInfo *session);
   static int cast_value(ObExecContext &ctx,
                         const ObVariableSetStmt::VariableSetNode &var_node,
                         common::ObIAllocator &calc_buf,
                         const sql::ObBasicSysVar &sys_val,
-                        const common::ObObj &in_val,
-                        common::ObObj &out_val);
+                        const common::DatumValue &in_val,
+                        common::DatumValue &out_val);
   static int switch_to_session_variable(const common::ObExprCtx &expr_ctx,
-                                        const common::ObObj &value,
+                                        const common::DatumValue &value,
                                         ObSessionVariable &sess_var);
-  static int switch_to_session_variable(const common::ObObj &value,
+  static int switch_to_session_variable(const common::DatumValue &value,
                                         ObSessionVariable &sess_var);
 private:
   struct ObValidatePasswordCtx {
@@ -100,23 +93,23 @@ private:
     uint64_t cur_special_count_;
   };
   int process_session_autocommit_hook(ObExecContext &exec_ctx,
-                                      const common::ObObj &val);
+                                      const common::DatumValue &val);
   int process_auto_increment_hook(const ObSQLMode sql_mode,
                                   const common::ObString var_name,
-                                  common::ObObj &val);
+                                  common::DatumValue &val, common::ObIAllocator &owner);
   int process_last_insert_id_hook(ObPhysicalPlanCtx *plan_ctx,
                                   const ObSQLMode sql_mode,
                                   const common::ObString var_name,
-                                  common::ObObj &val);
+                                  common::DatumValue &val, common::ObIAllocator &owner);
 
   int update_global_variables(ObExecContext &ctx,
                               ObDDLStmt &stmt,
                               const sql::ObSetVar &set_var,
-                              const common::ObObj &value_obj);
-  int global_variable_timezone_formalize(ObExecContext &ctx, ObObj &val);
+                              const common::DatumValue &value_obj);
+  int global_variable_timezone_formalize(ObExecContext &ctx, DatumValue &val);
   int process_validate_password_hook(ObValidatePasswordCtx &ctx,
                                      const common::ObString var_name,
-                                     const common::ObObj &val);
+                                     const common::DatumValue &val);
   int cascade_set_validate_password(ObExecContext &ctx,
                                     ObVariableSetStmt &stmt,
                                     common::ObIAllocator &calc_buf,

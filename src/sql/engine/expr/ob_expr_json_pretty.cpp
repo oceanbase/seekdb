@@ -56,11 +56,11 @@ int ObExprJsonPretty::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonPretty::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, bool has_lob_header,
+int ObExprJsonPretty::calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta, bool has_lob_header,
                            MultimodeAlloctor *allocator, ObJsonBuffer &j_buf, bool &is_null)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
   ObIJsonBase *j_base = NULL;
   ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type);
@@ -88,7 +88,7 @@ int ObExprJsonPretty::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta
 }
 
 // for new sql engine
-int ObExprJsonPretty::eval_json_pretty(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonPretty::eval_json_pretty(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -96,7 +96,7 @@ int ObExprJsonPretty::eval_json_pretty(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObExpr *arg = expr.args_[0];
-  ObDatum *j_datum = NULL;
+  Datum *j_datum = NULL;
   ObJsonBuffer j_buf(&tmp_allocator);
   bool is_null = false;
 

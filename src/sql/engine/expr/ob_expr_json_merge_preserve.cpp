@@ -69,7 +69,7 @@ int ObExprJsonMergePreserve::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonMergePreserve::eval_json_merge_preserve(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonMergePreserve::eval_json_merge_preserve(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObJsonExprHelper::eval_json_merge(expr, ctx, res, false);
 }

@@ -606,8 +606,9 @@ int ObTransformJoinLimitPushDown::check_offset_limit_expr(ObRawExpr *offset_limi
              T_QUESTIONMARK == offset_limit_expr->get_expr_type()) {
     // do nothing
   } else if (offset_limit_expr->is_const_raw_expr()) {
-    const ObObj &value = static_cast<const ObConstRawExpr*>(offset_limit_expr)->get_value();
-    if (value.is_invalid_type() || !value.is_integer_type()) {
+    const ObConstRawExpr &constant = *static_cast<const ObConstRawExpr*>(offset_limit_expr);
+    const Datum &value = constant.get_value_datum();
+    if (!constant.get_value_meta().is_valid() || !ob_is_integer_type(constant.get_value_meta().get_type())) {
       is_valid = false;
     } else if (value.get_int() < 0) {
       is_valid = false;

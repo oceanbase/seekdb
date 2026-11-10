@@ -20,6 +20,9 @@
 #include "sql/das/ob_das_ir_define.h"
 #include "sql/engine/expr/ob_expr_bm25.h"
 
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 namespace sql
@@ -493,7 +496,7 @@ int ObDASTextRetrievalIter::do_doc_cnt_agg()
   } else {
     const sql::ObExpr *inv_idx_agg_expr = inv_idx_agg_param_.aggregate_exprs_->at(0);
     sql::ObEvalCtx *eval_ctx = ir_rtdef_->get_inv_idx_agg_rtdef()->eval_ctx_;
-    ObDatum *doc_cnt_datum = nullptr;
+    common::Datum *doc_cnt_datum = nullptr;
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
     guard.set_batch_idx(0);
     if (OB_FAIL(inv_idx_agg_expr->eval(*eval_ctx, doc_cnt_datum))) {
@@ -508,20 +511,20 @@ int ObDASTextRetrievalIter::gen_default_inv_idx_scan_range(const ObString &query
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   common::ObArenaAllocator &ctx_alloc = mem_context_->get_arena_allocator();
   constexpr int64_t obj_cnt = INV_IDX_ROWKEY_COL_CNT * 2;
-  ObObj tmp_obj;
-  tmp_obj.set_string(ObVarcharType, query_token);
+  DatumValue tmp_obj;
+  tmp_obj.datum_.set_string(query_token);tmp_obj.meta_.set_varchar();tmp_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
   // We need to ensure collation type / level between query text and token column is compatible
   tmp_obj.set_meta_type(ir_ctdef_->search_text_->obj_meta_);
 
-  if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(ObObj) * obj_cnt))) {
+  if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(DatumValue) * obj_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(obj_ptr = new (buf) ObObj[obj_cnt])) {
+  } else if (OB_ISNULL(obj_ptr = new (buf) DatumValue[obj_cnt])) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[0]))) {
-  } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[2]))) {
+  } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[0], ctx_alloc))) {
+  } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[2], ctx_alloc))) {
   } else {
     obj_ptr[1].set_min_value();
     obj_ptr[3].set_max_value();
@@ -541,20 +544,20 @@ int ObDASTextRetrievalIter::gen_inv_idx_scan_range(const ObString &query_token, 
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   common::ObArenaAllocator &ctx_alloc = mem_context_->get_arena_allocator();
   constexpr int64_t obj_cnt = INV_IDX_ROWKEY_COL_CNT;
-  ObObj tmp_obj;
-  tmp_obj.set_string(ObVarcharType, query_token);
+  DatumValue tmp_obj;
+  tmp_obj.datum_.set_string(query_token);tmp_obj.meta_.set_varchar();tmp_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
   // We need to ensure collation type / level between query text and token column is compatible
   tmp_obj.set_meta_type(ir_ctdef_->search_text_->obj_meta_);
 
-  if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(ObObj) * obj_cnt))) {
+  if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(DatumValue) * obj_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(obj_ptr = new (buf) ObObj[obj_cnt])) {
+  } else if (OB_ISNULL(obj_ptr = new (buf) DatumValue[obj_cnt])) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[0]))) {
-  } else if (OB_FAIL(doc_id.get_datum().to_obj(obj_ptr[1], ir_ctdef_->inv_scan_domain_id_col_->obj_meta_))) {
+  } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[0], ctx_alloc))) {
+  } else if (OB_FAIL(project_datum_value_view(doc_id.get_datum(), ir_ctdef_->inv_scan_domain_id_col_->obj_meta_, ObDatum::get_sql_value_datum_map_type(ir_ctdef_->inv_scan_domain_id_col_->obj_meta_.get_type()), obj_ptr[1].meta_, obj_ptr[1], true))) {
   } else {
     ObRowkey row_key(obj_ptr, obj_cnt);
     common::ObTableID inv_table_id = ir_ctdef_->get_inv_idx_scan_ctdef()->ref_table_id_;
@@ -638,7 +641,7 @@ int ObDASTextRetrievalIter::fill_token_doc_cnt()
   } else {
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
     guard.set_batch_idx(0);
-    ObDatum &doc_cnt_datum = inv_idx_agg_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &doc_cnt_datum = inv_idx_agg_expr->locate_datum_for_write(*eval_ctx);
     doc_cnt_datum.set_int(token_doc_cnt_);
   }
   return ret;
@@ -656,7 +659,7 @@ int ObDASTextRetrievalIter::fill_token_weight()
         total_doc_cnt_expr->locate_expr_datum(*ir_rtdef_->eval_ctx_, 0).get_int();
     ObEvalCtx::BatchInfoScopeGuard guard(*ir_rtdef_->eval_ctx_);
     guard.set_batch_idx(0);
-    ObDatum &token_weight_datum =
+    common::Datum &token_weight_datum =
         token_weight_expr_->locate_datum_for_write(*ir_rtdef_->eval_ctx_);
     token_weight_datum.set_double(
         sql::ObExprBM25::query_token_weight(token_doc_cnt_, total_doc_cnt));
@@ -668,7 +671,7 @@ int ObDASTextRetrievalIter::project_relevance_expr()
 {
   int ret = OB_SUCCESS;
   sql::ObExpr *relevance_expr = ir_ctdef_->relevance_expr_;
-  ObDatum *relevance_datum = nullptr;
+  common::Datum *relevance_datum = nullptr;
   if (OB_ISNULL(relevance_expr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(relevance_expr->eval(*ir_rtdef_->eval_ctx_, relevance_datum))) {
@@ -680,7 +683,7 @@ int ObDASTextRetrievalIter::batch_project_relevance_expr(const int64_t &count)
 {
   int ret = OB_SUCCESS;
   sql::ObExpr *relevance_expr = ir_ctdef_->relevance_expr_;
-  ObDatum *relevance_datum = nullptr;
+  common::Datum *relevance_datum = nullptr;
   if (OB_ISNULL(relevance_expr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(relevance_expr->eval_batch(*ir_rtdef_->eval_ctx_, *skip_, count))) {
@@ -828,12 +831,12 @@ int ObDASTRCacheIter::save_relevances_and_docids()
   } else if (OB_FAIL(relevance_expr->eval_batch(*ir_rtdef_->eval_ctx_, *skip_, count_))) {
   } else {
     cur_idx_ = 0;
-    const ObDatumVector &relevance_datum = relevance_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
-    const ObDatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
+    const sql::DatumVector &relevance_datum = relevance_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
+    const sql::DatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!skip_->at(i))) {
         relevance_[i] = relevance_datum.at(i)->get_double();
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (OB_FAIL(doc_id_[i].from_native(*doc_id_datum.at(i), doc_id_expr->get_sql_type()))) {
         }
       }
     }
@@ -849,10 +852,10 @@ int ObDASTRCacheIter::save_docids()
     ret = OB_INVALID_ARGUMENT;
   } else {
     cur_idx_ = 0;
-    const ObDatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
+    const sql::DatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!skip_->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (OB_FAIL(doc_id_[i].from_native(*doc_id_datum.at(i), doc_id_expr->get_sql_type()))) {
         };
       }
     }

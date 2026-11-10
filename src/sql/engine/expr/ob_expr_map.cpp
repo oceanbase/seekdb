@@ -73,7 +73,7 @@ int ObExprMap::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprMap::eval_map(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -236,10 +236,10 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
 #define CALC_KEY_IDX(Element_Type, Get_Func)                                           \
   std::map<Element_Type, uint32_t> key_idx;                                            \
   for (uint32_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); i+=2) {                      \
-    ObDatum *datum = NULL;                                                             \
+    Datum *datum = NULL;                                                             \
     if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {                                    \
       LOG_WARN("failed to eval args", K(ret), K(i));                                   \
-    } else if (OB_FAIL(ObArrayUtil::append(*full_key_arr, elem_type, datum))) {        \
+    } else if (OB_FAIL(ObArrayExprUtils::append_native_element(*full_key_arr, elem_type, *datum, *expr.args_[i]))) {        \
       LOG_WARN("failed to append array value", K(ret), K(i));                          \
     } else if (datum->is_null()) {                                                     \
       idx_arr[0] = i;                                                                  \
@@ -254,7 +254,7 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
   }
 
 int ObExprMap::construct_key_array(ObEvalCtx &ctx, const ObExpr &expr,
-                                   const ObObjType elem_type, ObIArrayType *&full_key_arr,
+                                   const SqlValueType elem_type, ObIArrayType *&full_key_arr,
                                    uint32_t *&idx_arr, uint32_t &idx_count)
 {
   int ret = OB_SUCCESS;

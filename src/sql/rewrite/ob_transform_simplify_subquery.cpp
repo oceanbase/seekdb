@@ -1580,7 +1580,7 @@ int ObTransformSimplifySubquery::check_limit(const ObItemType op_type,
     bool is_null_value = false;
     int64_t limit_value = 0;
     if (OB_FAIL(ObTransformUtils::get_limit_value(subquery->get_limit_expr(),
-                                                  &plan_ctx->get_param_store(),
+                                                  plan_ctx,
                                                   ctx_->exec_ctx_,
                                                   ctx_->allocator_,
                                                   limit_value,
@@ -1606,7 +1606,7 @@ int ObTransformSimplifySubquery::check_has_limit_1(const ObSelectStmt *stmt,
   } else if (NULL == stmt->get_limit_expr()) {
     // do nothing
   } else if (T_INT != stmt->get_limit_expr()->get_expr_type()
-             || 1 != static_cast<const ObConstRawExpr *>(stmt->get_limit_expr())->get_value().get_int()) {
+             || 1 != static_cast<const ObConstRawExpr *>(stmt->get_limit_expr())->get_value_datum().get_int()) {
     // do nothing
   } else {
     has_limit_1 = true;

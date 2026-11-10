@@ -58,15 +58,15 @@ int ObExprSTArea::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum = NULL;
+  Datum *gis_datum = NULL;
   ObExpr *gis_arg = expr.args_[0];
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  ObObjType input_type = gis_arg->datum_meta_.type_;
+  SqlValueType input_type = gis_arg->datum_meta_.type_;
 
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg, ctx, gis_datum))) {
   } else if (gis_datum->is_null()) {

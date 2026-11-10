@@ -25,8 +25,8 @@ namespace blocksstable
 
 static ObStorageDatum make_ext_datum(const int64_t ext_value) { ObStorageDatum datum; datum.set_ext_value(ext_value); return datum; }
 
-ObStorageDatum ObDatumRowkey::MIN_DATUM = make_ext_datum(ObObj::MIN_OBJECT_VALUE);
-ObStorageDatum ObDatumRowkey::MAX_DATUM = make_ext_datum(ObObj::MAX_OBJECT_VALUE);
+ObStorageDatum ObDatumRowkey::MIN_DATUM = make_ext_datum(DATUM_MIN_EXT_VALUE);
+ObStorageDatum ObDatumRowkey::MAX_DATUM = make_ext_datum(DATUM_MAX_EXT_VALUE);
 ObDatumRowkey ObDatumRowkey::MIN_ROWKEY(&ObDatumRowkey::MIN_DATUM, 1);
 ObDatumRowkey ObDatumRowkey::MAX_ROWKEY(&ObDatumRowkey::MAX_DATUM, 1);
 
@@ -218,112 +218,55 @@ void ObDatumRowkey::destroy(ObIAllocator &allocator)
 // shallow copy the obj value
 int ObDatumRowkey::from_rowkey(const ObRowkey &rowkey, common::ObIAllocator &allocator)
 {
-  int ret = OB_SUCCESS;
-  ObStorageDatum *datums = nullptr;
-
-  if (OB_UNLIKELY(!rowkey.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid argument to transfer from rowkey to datum rowkey", K(ret), K(rowkey));
-  } else if (rowkey.is_max_row()) {
-    set_max_rowkey();
-  } else if (rowkey.is_min_row()) {
-    set_min_rowkey();
-  } else {
-    datum_cnt_ = rowkey.get_obj_cnt();
-    if (OB_ISNULL(datums = reinterpret_cast<ObStorageDatum *>(allocator.alloc(sizeof(ObStorageDatum) * datum_cnt_)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "Failed to alloc memory", K(ret), K(datum_cnt_));
-    } else  {
-      // maybe we do not need the constructor
-      datums = new (datums) ObStorageDatum[datum_cnt_];
-      datums_ = datums;
-      for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt_; i++) {
-        const ObObj &rowkey_obj = rowkey.get_obj_ptr()[i];
-        if (rowkey_obj.is_lob_storage() && !rowkey_obj.has_lob_header()) {
-          ret = OB_ERR_UNEXPECTED;
-          STORAGE_LOG(WARN, "Lob rowkey does not has lob header", K(ret), K(rowkey_obj));
-        } else if (OB_FAIL(datums[i].from_obj_enhance(rowkey_obj))) {
-        }
-      }
+  int ret=OB_SUCCESS;ObStorageDatum *datums=nullptr;
+  if(!rowkey.is_valid())ret=OB_INVALID_ARGUMENT;
+  else if(rowkey.is_max_row())set_max_rowkey();
+  else if(rowkey.is_min_row())set_min_rowkey();
+  else if(rowkey.count()>INT32_MAX)ret=OB_SIZE_OVERFLOW;
+  else if(nullptr==(datums=static_cast<ObStorageDatum *>(allocator.alloc(sizeof(ObStorageDatum)*rowkey.count()))))ret=OB_ALLOCATE_MEMORY_FAILED;
+  else {
+    new(datums) ObStorageDatum[rowkey.count()];
+    for(int64_t i=0;ret==OB_SUCCESS&&i<rowkey.count();++i){
+      const DatumValue &value=rowkey.get_cell(i);
+      if(value.is_lob_storage()&&!value.has_lob_header())ret=OB_ERR_UNEXPECTED;
+      else if((ret=validate_key_value(value))==OB_SUCCESS)ret=datums[i].from_value(value);
     }
+    if(ret==OB_SUCCESS){
+      ObDatumRowkey candidate(datums,rowkey.count());candidate.store_rowkey_.get_rowkey()=rowkey;*this=candidate;
+    }else allocator.free(datums);
   }
-  if (OB_SUCC(ret)) {
-    group_idx_ = 0;
-    hash_ = 0;
-    store_rowkey_.reset();
-    store_rowkey_.get_rowkey() = rowkey;
-  } else if (nullptr != datums) {
-    allocator.free(datums);
-  }
-
   return ret;
 }
 
-int ObDatumRowkey::to_rowkey(ObRowkey &rowkey, const ObObjMeta* obj_metas, common::ObIAllocator &allocator) const
+int ObDatumRowkey::to_rowkey(ObRowkey &rowkey, const SqlTypeMeta* obj_metas, common::ObIAllocator &allocator) const
 {
-  int ret = OB_SUCCESS;
-  ObObj *objs = nullptr;
-
-  if (OB_UNLIKELY(!is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid argument to transfer from rowkey to datum rowkey", K(ret), K(rowkey));
-  } else if (is_max_rowkey()) {
-    rowkey.set_max_row();
-  } else if (is_min_rowkey()) {
-    rowkey.set_min_row();
-  } else {
-    if (OB_ISNULL(objs = reinterpret_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * datum_cnt_)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "Failed to alloc memory", K(ret), K(datum_cnt_));
-    } else  {
-      // maybe we do not need the constructor
-      objs = new (objs) ObObj[datum_cnt_];
-      for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt_; i++) {
-        if (OB_FAIL(datums_[i].to_obj_enhance(objs[i], obj_metas[i]))) {
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      rowkey = ObRowkey(objs, datum_cnt_);
-    } else if (nullptr != objs) {
-      allocator.free(objs);
-    }
+  int ret=OB_SUCCESS;DatumValue *values=nullptr;
+  if(!is_valid()||obj_metas==nullptr)ret=OB_INVALID_ARGUMENT;
+  else if(is_max_rowkey())rowkey.set_max_row();
+  else if(is_min_rowkey())rowkey.set_min_row();
+  else if((ret=storage::NativeKeyValueBuffer::allocate_values(allocator,datum_cnt_,values))==OB_SUCCESS){
+    for(int64_t i=0;ret==OB_SUCCESS&&i<datum_cnt_;++i)
+      ret=storage::NativeKeyValueBuffer::project_storage(datums_[i],obj_metas[i],values,datum_cnt_,i);
+    if(ret==OB_SUCCESS)rowkey.assign(values,datum_cnt_);else allocator.free(values);
   }
   return ret;
 }
 
 int ObDatumRowkey::from_rowkey(const ObRowkey &rowkey, ObStorageDatumBuffer &datum_buffer)
 {
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!rowkey.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid argument to transfer from rowkey to datum rowkey", K(ret), K(rowkey));
-  } else if (rowkey.is_max_row()) {
-    set_max_rowkey();
-  } else if (rowkey.is_min_row()) {
-    set_min_rowkey();
-  } else if (OB_FAIL(datum_buffer.reserve(rowkey.get_obj_cnt()))) {
-  } else {
-    ObStorageDatum *datums = datum_buffer.get_datums();
-    datum_cnt_ = rowkey.get_obj_cnt();
-    datums_ = datums;
-    for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt_; i++) {
-      const ObObj &rowkey_obj = rowkey.get_obj_ptr()[i];
-      if (rowkey_obj.is_lob_storage() && !rowkey_obj.has_lob_header()) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "Lob rowkey does not has lob header", K(ret), K(rowkey_obj));
-      } else if (OB_FAIL(datums[i].from_obj_enhance(rowkey_obj))) {
-      }
+  int ret=OB_SUCCESS;
+  if(!rowkey.is_valid())ret=OB_INVALID_ARGUMENT;
+  else if(rowkey.is_max_row())set_max_rowkey();
+  else if(rowkey.is_min_row())set_min_rowkey();
+  else if((ret=datum_buffer.reserve(rowkey.count()))==OB_SUCCESS){
+    ObStorageDatum *datums=datum_buffer.get_datums();
+    for(int64_t i=0;ret==OB_SUCCESS&&i<rowkey.count();++i){
+      const DatumValue &value=rowkey.get_cell(i);
+      if(value.is_lob_storage()&&!value.has_lob_header())ret=OB_ERR_UNEXPECTED;
+      else if((ret=validate_key_value(value))==OB_SUCCESS)ret=datums[i].from_value(value);
     }
+    if(ret==OB_SUCCESS){ObDatumRowkey candidate(datums,rowkey.count());candidate.store_rowkey_.get_rowkey()=rowkey;*this=candidate;}
   }
-  if (OB_SUCC(ret)) {
-    group_idx_ = 0;
-    hash_ = 0;
-    store_rowkey_.reset();
-    store_rowkey_.get_rowkey() = rowkey;
-  }
-
   return ret;
 }
 
@@ -332,31 +275,18 @@ int ObDatumRowkey::to_store_rowkey(const common::ObIArray<share::schema::ObColDe
                                    common::ObIAllocator &allocator,
                                    common::ObStoreRowkey &store_rowkey) const
 {
-  int ret = OB_SUCCESS;
-  common::ObObj *objs = nullptr;
-  if (is_max_rowkey()) {
-    store_rowkey.set_max();
-  } else if (is_min_rowkey()) {
-    store_rowkey.set_min();
-  } else if (OB_UNLIKELY(!is_valid() || col_descs.count() < datum_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid argument to transfer to store rowkey", K(ret), K(*this), K(col_descs.count()));
-  } else if (OB_ISNULL(objs = reinterpret_cast<common::ObObj*>(allocator.alloc(sizeof(common::ObObj) * datum_cnt_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    STORAGE_LOG(WARN, "Failed to alloc memory for obj buffer", K(ret), K(datum_cnt_));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt_; i++) {
-      if (OB_FAIL(datums_[i].to_obj_enhance(objs[i], col_descs.at(i).col_type_))) {
-      } else if (col_descs.at(i).col_type_.is_lob_storage()) {
-        objs[i].set_has_lob_header();
-      }
+  int ret=OB_SUCCESS;DatumValue *values=nullptr;
+  if(is_max_rowkey())store_rowkey.set_max();
+  else if(is_min_rowkey())store_rowkey.set_min();
+  else if(!is_valid()||col_descs.count()<datum_cnt_)ret=OB_INVALID_ARGUMENT;
+  else if((ret=storage::NativeKeyValueBuffer::allocate_values(allocator,datum_cnt_,values))==OB_SUCCESS){
+    for(int64_t i=0;ret==OB_SUCCESS&&i<datum_cnt_;++i){
+      ret=storage::NativeKeyValueBuffer::project_storage(datums_[i],col_descs.at(i).col_type_,values,datum_cnt_,i);
+      if(ret==OB_SUCCESS&&col_descs.at(i).col_type_.is_lob_storage())values[i].meta_.set_has_lob_header();
     }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(store_rowkey.assign(objs, datum_cnt_))) {
-      }
-    }
+    if(ret==OB_SUCCESS)ret=store_rowkey.assign(values,datum_cnt_);
+    if(ret!=OB_SUCCESS)allocator.free(values);
   }
-
   return ret;
 }
 
@@ -366,45 +296,20 @@ int ObDatumRowkey::deep_copy(ObStoreRowkey &dest,
                              const int64_t datum_cnt,
                              const uint64_t extra_rowkey_cnt) const
 {
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(col_descs.count() < datum_cnt || datum_cnt <= 0 || datum_cnt > datum_cnt_)) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid arguments", KR(ret), K(datum_cnt), K(col_descs));
-  } else {
-    const int64_t alloc_size = get_deep_copy_size() + sizeof(ObObj) * extra_rowkey_cnt;
-    char *buffer = nullptr;
-    if (OB_ISNULL(buffer = static_cast<char *>(allocator.alloc(alloc_size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "Fail to alloc memory for obj buffer", KR(ret));
-    } else {
-      ObObj *objs = reinterpret_cast<ObObj *>(buffer);
-      int64_t pos = sizeof(ObObj) * (datum_cnt + extra_rowkey_cnt);
-
-      for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt; i++) {
-        ObObj obj;
-        if (OB_FAIL(get_datum(i).to_obj_enhance(obj, col_descs.at(i).col_type_))) {
-        } else if (col_descs.at(i).col_type_.is_lob_storage()) {
-          obj.set_has_lob_header();
-        }
-
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(objs[i].deep_copy(obj, buffer, alloc_size, pos))) {
-        }
-      }
-
-      // set extra column
-      for (int64_t i = 0; OB_SUCC(ret) && i < extra_rowkey_cnt; i++) {
-        objs[datum_cnt + i].set_max_value();
-      }
-
-      // assign to dest
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(dest.assign(objs, datum_cnt + extra_rowkey_cnt))) {
-      }
+  int ret=OB_SUCCESS;
+  if(col_descs.count()<datum_cnt||datum_cnt<=0||datum_cnt>datum_cnt_||extra_rowkey_cnt>INT64_MAX-datum_cnt)ret=OB_INVALID_ARGUMENT;
+  else {
+    ObSEArray<DatumValue,8> views;ret=views.prepare_allocate(datum_cnt+extra_rowkey_cnt);
+    for(int64_t i=0;ret==OB_SUCCESS&&i<datum_cnt;++i){
+      ret=get_datum(i).to_value_view(col_descs.at(i).col_type_,views.at(i));
+      if(ret==OB_SUCCESS&&col_descs.at(i).col_type_.is_lob_storage())views.at(i).meta_.set_has_lob_header();
     }
+    for(int64_t i=0;ret==OB_SUCCESS&&i<extra_rowkey_cnt;++i)views.at(datum_cnt+i).set_max_value();
+    ObRowkey owned;
+    if(ret==OB_SUCCESS)ret=ObRowkey(views.get_data(),views.count()).deep_copy(owned,allocator);
+    if(ret==OB_SUCCESS)ret=dest.assign(owned.get_values(),owned.count());
+    if(ret!=OB_SUCCESS&&owned.get_values()!=nullptr)owned.destroy(allocator);
   }
-
   return ret;
 }
 
@@ -641,31 +546,16 @@ int ObDatumRowkeyHelper::convert_store_rowkey(const ObDatumRowkey &datum_rowkey,
                                               const ObIArray<share::schema::ObColDesc> &col_descs,
                                               common::ObStoreRowkey &rowkey)
 {
-  int ret = OB_SUCCESS;
-  ObObj *objs = nullptr;
-
-  if (OB_UNLIKELY(!datum_rowkey.is_valid() || col_descs.count() < datum_rowkey.get_datum_cnt())) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid argument to transfer datum rowkey", K(ret), K(rowkey), K(col_descs));
-  } else if (!obj_buffer_.is_inited() && OB_FAIL(obj_buffer_.init(allocator_))) {
-    STORAGE_LOG(WARN, "Failed to init obj_buf array", K(ret));
-  } else if (OB_FAIL(obj_buffer_.reserve(datum_rowkey.get_datum_cnt()))) {
-  } else if (OB_ISNULL(objs = obj_buffer_.get_data())) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Unexpected null obj buffer", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < datum_rowkey.get_datum_cnt(); i++) {
-      if (OB_FAIL(datum_rowkey.datums_[i].to_obj_enhance(objs[i], col_descs.at(i).col_type_))) {
-      } else if (col_descs.at(i).col_type_.is_lob_storage()) {
-        objs[i].set_has_lob_header();
-      }
+  int ret=OB_SUCCESS;
+  if(!datum_rowkey.is_valid()||col_descs.count()<datum_rowkey.get_datum_cnt())ret=OB_INVALID_ARGUMENT;
+  else if(!value_buffer_.is_inited()&&(ret=value_buffer_.init(allocator_))!=OB_SUCCESS){}
+  else if((ret=value_buffer_.reserve(datum_rowkey.get_datum_cnt()))==OB_SUCCESS){
+    for(int64_t i=0;ret==OB_SUCCESS&&i<datum_rowkey.get_datum_cnt();++i){
+      ret=value_buffer_.assign_storage(i,datum_rowkey.datums_[i],col_descs.at(i).col_type_);
+      if(ret==OB_SUCCESS&&col_descs.at(i).col_type_.is_lob_storage())value_buffer_.at(i).meta_.set_has_lob_header();
     }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(rowkey.assign(objs, datum_rowkey.get_datum_cnt()))) {
-      }
-    }
+    if(ret==OB_SUCCESS)ret=rowkey.assign(value_buffer_.get_data(),datum_rowkey.get_datum_cnt());
   }
-
   return ret;
 }
 

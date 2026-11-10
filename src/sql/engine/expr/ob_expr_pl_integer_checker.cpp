@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_pl_integer_checker.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/ob_exec_context.h"
+#include <type_traits>
 
 namespace oceanbase
 {
@@ -92,8 +94,15 @@ int ObExprPLIntegerChecker::calc_result_type1(ObExprResType &type,
 }
 
 template<typename T>
-int ObExprPLIntegerChecker::check_range(const T &obj, const ObObjType type, int64_t range)
+int ObExprPLIntegerChecker::check_range(const T &obj, const SqlValueType type, int64_t range)
 {
+  if constexpr (std::is_same<T, DatumValue>::value) {
+    // A native runtime NULL may retain its declared type. It is the same
+    // logical NULL that the legacy value dispatch skipped as ObNullType.
+    // Datum already supplies the width-specific numeric/NUMBER getters used
+    // by this range algorithm; do not reconstruct a general value object.
+    return obj.is_null() ? OB_SUCCESS : check_range(obj.datum_, type, range);
+  } else {
   int ret = OB_SUCCESS;
 #define GET_VALUE_AND_CHECK(type, v_type, func, min, max)       \
   case type: {                                                  \
@@ -135,61 +144,42 @@ int ObExprPLIntegerChecker::check_range(const T &obj, const ObObjType type, int6
 #undef GET_VALUE_AND_CHECK
 #undef CHECK_OVERFLOW
   return ret;
+  }
 }
 
-int ObExprPLIntegerChecker::calc(ObObj &result,
-                                 const ObObj &obj,
-                                 const pl::ObPLIntegerType &pls_type,
-                                 const pl::ObPLIntegerRange &pls_range,
-                                 ObIAllocator &calc_buf)
+template int ObExprPLIntegerChecker::check_range<DatumValue>(
+    const DatumValue &obj, const SqlValueType type, int64_t range);
+
+int ObExprPLIntegerChecker::calc(DatumParameter &result,
+    const DatumParameter &source, const pl::ObPLIntegerType &pls_type,
+    const pl::ObPLIntegerRange &pls_range, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
-  switch (pls_type) {
-    // SimpleInteger's overflow behavior differs, if it overflows, it needs to be rounded, otherwise, just validate
-    case PL_SIMPLE_INTEGER: {
-      int64_t v = 0;
-      if (obj.is_integer_type()) {
-        v = obj.get_int();
-      } else if (obj.is_number()) {
-        OZ (obj.get_number().extract_valid_int64_with_trunc(v));
-      }
-      if (OB_SUCC(ret)) {
-        if (v < pls_range.lower_ || v > pls_range.upper_) {
-          v = static_cast<int32_t>(v);
-          if (obj.is_integer_type()) {
-            result.set_int(obj.get_type(), v);
-          } else if (obj.is_number()) {
-            number::ObNumber n;
-            OZ (n.from(v, calc_buf));
-            OX (result.set_number(obj.get_type(), n));
-          }
-        } else {
-          OZ (deep_copy_obj(calc_buf, obj, result));
-        }
-      }
-      break;
-    }
-    case PL_PLS_INTEGER:
-    case PL_BINARY_INTEGER:
-    case PL_NATURAL:
-    case PL_NATURALN:
-    case PL_POSITIVE:
-    case PL_POSITIVEN:
-    case PL_SIGNTYPE: {
-      OZ (check_range(obj, obj.get_type(), pls_range.range_));
-      OZ (deep_copy_obj(calc_buf, obj, result));
-      break;
-    }
-    default: {
-      ret = OB_ERR_UNEXPECTED;
+  if (source.is_null()) {
+    ret = clone_datum_parameter(source, result, owner);
+  } else {
+    // Only SIMPLE_INTEGER wrapping writes this scratch buffer (an int32 or
+    // its small NUMBER representation); unchanged values borrow source until
+    // the final owned copy. This also handles result == source safely.
+    alignas(8) char scratch[64];
+    alignas(8) char source_scratch[64];
+    common::ObDatum source_view;
+    common::ObDatum checked; checked.ptr_ = scratch;
+    OZ (source.export_legacy(source_view, source_scratch, sizeof(source_scratch)));
+    OZ (calc(checked, source.get_type(), source_view, pls_type, pls_range, owner));
+    if (OB_SUCC(ret)) {
+      DatumParameter output = source;
+      OZ (output.assign_legacy_borrowed(checked, source.get_type_meta()));
+      OZ (clone_datum_parameter(output, result, owner));
     }
   }
   return ret;
 }
 
-int ObExprPLIntegerChecker::calc(ObDatum &res_datum,
-                                 const ObObjType type,
-                                 const ObDatum &param,
+
+int ObExprPLIntegerChecker::calc(common::ObDatum &res_datum,
+                                 const SqlValueType type,
+                                 const common::ObDatum &param,
                                  const pl::ObPLIntegerType &pls_type,
                                  const pl::ObPLIntegerRange &pls_range,
                                  ObIAllocator &calc_buf)
@@ -212,7 +202,7 @@ int ObExprPLIntegerChecker::calc(ObDatum &res_datum,
           } else if (ObNumberType == type) {
             number::ObNumber n;
             OZ (n.from(v, calc_buf));
-            OX (res_datum.set_number(n));
+            OX(res_datum.set_number(n));
           }
         } else {
           res_datum = param;
@@ -261,11 +251,11 @@ int ObExprPLIntegerChecker::cg_expr(ObExprCGCtx &op_cg_ctx,
 }
 
 int ObExprPLIntegerChecker::calc_pl_integer_checker(const ObExpr &expr,
-                                                    ObEvalCtx &ctx, ObDatum &expr_datum)
+                                                    ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
-  const ObObjType type = expr.args_[0]->datum_meta_.type_;
+  Datum *param = NULL;
+  const SqlValueType type = expr.args_[0]->datum_meta_.type_;
   ExtraInfo *info = static_cast<ExtraInfo *>(expr.extra_info_);
   CK(OB_NOT_NULL(info));
   if (OB_FAIL(ret)) {
@@ -281,8 +271,17 @@ int ObExprPLIntegerChecker::calc_pl_integer_checker(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-    OZ (calc(expr_datum, type, *param, info->pl_integer_type_,
-       info->pl_integer_range_, alloc_guard.get_allocator()));
+    alignas(8) char input_scratch[64];
+    alignas(8) char output_scratch[64];
+    common::ObDatum input;
+    common::ObDatum checked;
+    checked.ptr_ = output_scratch;
+    Datum candidate;
+    OZ(expr.args_[0]->get_datum_copy_plan().legacy_view(*param, input, input_scratch, sizeof(input_scratch)));
+    OZ(calc(checked, type, input, info->pl_integer_type_, info->pl_integer_range_, alloc_guard.get_allocator()));
+    OZ(expr.get_datum_copy_plan().import_legacy(checked, candidate));
+    ObExprStrResAlloc owner(expr, ctx);
+    OZ(ObExpr::clone_native_value(expr.get_sql_type(), candidate, owner, expr_datum));
   }
   return ret;
 }

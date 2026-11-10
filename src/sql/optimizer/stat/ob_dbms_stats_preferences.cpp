@@ -15,9 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include <inttypes.h>
 #include "sql/optimizer/stat/ob_dbms_stats_preferences.h"
 #include "share/ob_sql_client_decorator.h"
+#include "share/ob_dml_sql_splicer.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/parser/ob_parser.h"
 
@@ -65,7 +68,7 @@ int ObDbmsStatsPreferences::get_prefs(ObMySQLProxy *mysql_proxy,
                                       ObIAllocator &allocator,
                                       const uint64_t table_id,
                                       const ObString &opt_name,
-                                      ObObj &result)
+                                      DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObSqlString get_user_sql;
@@ -194,7 +197,7 @@ int ObDbmsStatsPreferences::do_get_prefs(ObMySQLProxy *mysql_proxy,
                                          ObIAllocator &allocator,
                                          const ObSqlString &raw_sql,
                                          bool &get_result,
-                                         ObObj &result)
+                                         DatumValue &result)
 {
   int ret = OB_SUCCESS;
   get_result = false;
@@ -210,12 +213,12 @@ int ObDbmsStatsPreferences::do_get_prefs(ObMySQLProxy *mysql_proxy,
       } else {
         bool is_first = true;
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
-          ObObj tmp;
+          DatumValue tmp;
           int64_t idx = 0;
           if (!is_first) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(client_result->get_obj(idx, tmp))) {
-          } else if (OB_FAIL(ob_write_obj(allocator, tmp, result))) {
+          } else if (OB_FAIL(client_result->get_value(idx, tmp))) {
+          } else if (OB_FAIL(clone_typed_value(tmp, result, allocator))) {
           } else {
             is_first = false;
             get_result = true;
@@ -448,14 +451,14 @@ int ObDbmsStatsPreferences::decode_perfs_result(ObIAllocator *allocator,
                                                 ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
-  ObObj name_obj;
-  ObObj val_obj;
+  DatumValue name_obj;
+  DatumValue val_obj;
   int64_t name_id = 0;
   int64_t val_id = 1;
   ObString pname;
   ObString pvalue;
-  if (OB_FAIL(client_result.get_obj(name_id, name_obj))) {
-  } else if (OB_FAIL(client_result.get_obj(val_id, val_obj))) {
+  if (OB_FAIL(client_result.get_value(name_id, name_obj))) {
+  } else if (OB_FAIL(client_result.get_value(val_id, val_obj))) {
   } else {
     bool is_decoded = false;
     for (int64_t i = 0; OB_SUCC(ret) && !is_decoded && i < need_acquired_prefs.count(); ++i) {
@@ -523,8 +526,8 @@ int ObStatPrefs::dump_pref_name_and_value(ObString &pref_name, ObString &pvalue)
 }
 
 int ObStatPrefs::decode_pref_result(ObIAllocator *allocator,
-                                    const ObObj &name_obj,
-                                    const ObObj &val_obj,
+                                    const DatumValue &name_obj,
+                                    const DatumValue &val_obj,
                                     ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -535,11 +538,19 @@ int ObStatPrefs::decode_pref_result(ObIAllocator *allocator,
   } else if (OB_ISNULL(get_stat_pref_name())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (0 == name_str.case_compare(get_stat_pref_name())) {
-    pvalue_ = val_str;
-    allocator_ = allocator;
-    if (OB_FAIL(check_pref_value_validity(&param))) {
+    // A result getter borrows only through next()/close(). Preferences outlive
+    // that cursor, so retain their text in the explicitly supplied owner.
+    ObString owned_value;
+    if (OB_ISNULL(allocator)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ob_write_string(*allocator, val_str, owned_value))) {
     } else {
-      is_decoded_ = true;
+      pvalue_ = owned_value;
+      allocator_ = allocator;
+      if (OB_FAIL(check_pref_value_validity(&param))) {
+      } else {
+        is_decoded_ = true;
+      }
     }
   } else {/*do nothing*/}
   return ret;
@@ -571,13 +582,15 @@ int ObDegreePrefs::check_pref_value_validity(ObTableStatParam *param/*default nu
   int ret = OB_SUCCESS;
   int64_t degree = 1;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf(ObModIds::OB_SQL_PARSER);
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     number::ObNumber num_degree;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(dest_obj.get_number(num_degree))) {
     } else if (OB_FAIL(num_degree.extract_valid_int64_with_trunc(degree))) {
     } else {/*do noting*/}
@@ -602,13 +615,15 @@ int ObEstimatePercentPrefs::check_pref_value_validity(ObTableStatParam *param/*d
         param->is_auto_sample_size_ = true;
       }
     } else {
-      ObObj src_obj;
-      ObObj dest_obj;
-      src_obj.set_string(ObVarcharType, pvalue_);
+      DatumValue src_obj;
+      DatumValue dest_obj;
+      src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       ObArenaAllocator calc_buf(ObModIds::OB_SQL_PARSER);
       ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
       double dst_val = 0.0;
-      if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+      if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
       } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
       } else if (dst_val < 0.000001 || dst_val > 100.0) {
         ret = OB_ERR_DBMS_STATS_PL;
@@ -767,13 +782,15 @@ int ObStalePercentPrefs::check_pref_value_validity(ObTableStatParam *param/*defa
 {
   int ret = OB_SUCCESS;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf(ObModIds::OB_SQL_PARSER);
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     double dst_val = 0.0;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
     } else if (dst_val < 0) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -848,13 +865,15 @@ int ObAsyncGatherStaleRatioPrefs::check_pref_value_validity(ObTableStatParam *pa
 {
   int ret = OB_SUCCESS;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf("StaleRatio");
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     double dst_val = 0.0;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
     } else if (dst_val <= MINIMUM_OF_ASYNC_GATHER_STALE_RATIO) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -873,13 +892,15 @@ int ObAsyncGatherSampleSizePrefs::check_pref_value_validity(ObTableStatParam *pa
 {
   int ret = OB_SUCCESS;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf("SampleSize");
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     int64_t sample_size = 0;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(sample_size))) {
     } else if (sample_size < MAGIC_SAMPLE_SIZE) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -898,13 +919,15 @@ int ObAsyncGatherFullTableSizePrefs::check_pref_value_validity(ObTableStatParam 
 {
   int ret = OB_SUCCESS;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf("FullTableSize");
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     int64_t table_size = 0;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(table_size))) {
     } else if (table_size < DEFAULT_ASYNC_MIN_TABLE_SIZE && table_size != 0) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -923,13 +946,15 @@ int ObAsyncStaleMaxTableSizePrefs::check_pref_value_validity(ObTableStatParam *p
 {
   int ret = OB_SUCCESS;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf("StaleMaxTabSize");
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     int64_t table_size = 0;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(table_size))) {
     } else if (table_size < DEFAULT_ASYNC_MIN_TABLE_SIZE && table_size != 0) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -949,13 +974,15 @@ int ObHistEstPercentPrefs::check_pref_value_validity(ObTableStatParam *param/*de
     if (0 == pvalue_.case_compare("DBMS_STATS.AUTO_SAMPLE_SIZE")) {
       /*do nothing*/
     } else {
-      ObObj src_obj;
-      ObObj dest_obj;
-      src_obj.set_string(ObVarcharType, pvalue_);
+      DatumValue src_obj;
+      DatumValue dest_obj;
+      src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       ObArenaAllocator calc_buf("HistEstPercent");
       ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
       double dst_val = 0.0;
-      if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+      if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
       } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
       } else if (dst_val < 0.000001 || dst_val > 100.0) {
         ret = OB_ERR_DBMS_STATS_PL;
@@ -993,14 +1020,16 @@ int ObGatherStatBatchSizePrefs::check_pref_value_validity(ObTableStatParam *para
 {
   int ret = OB_SUCCESS;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf("AutoBatchSize");
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     int64_t batch_part_size = 0; 
     int64_t int_part = 0;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (!dest_obj.get_number().is_valid_int64(int_part)) {
       ret = OB_ERR_DBMS_STATS_PL;
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(batch_part_size))) {
@@ -1022,14 +1051,16 @@ int ObAutoSampleRowCountPrefs::check_pref_value_validity(ObTableStatParam *param
 {
   int ret = OB_SUCCESS;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf("AutoRowCnt");
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     int64_t row_count = 0;
     int64_t int_part = 0;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (!dest_obj.get_number().is_valid_int64(int_part)) {
       ret = OB_ERR_DBMS_STATS_PL;
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(row_count))) {
@@ -1083,13 +1114,15 @@ int ObOnlineEstimatePercentPrefs::check_pref_value_validity(ObTableStatParam *pa
 {
   int ret = OB_SUCCESS;
   if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
+    DatumValue src_obj;
+    DatumValue dest_obj;
+    src_obj.datum_.set_string(pvalue_);
+    src_obj.meta_.set_type(ObVarcharType);
+    src_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     ObArenaAllocator calc_buf(ObModIds::OB_SQL_PARSER);
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     double dst_val = 0.0;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, src_obj, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
     } else if (dst_val < 0.000001 || dst_val > 100.0) {
       ret = OB_ERR_DBMS_STATS_PL;

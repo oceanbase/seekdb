@@ -158,7 +158,7 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
                                          const ObScale in_scale, const ObScale out_scale,
                                          const ObPrecision out_prec, const ObCastMode cast_mode,
                                          ObDecimalIntBuilder &val,
-                                         const ObIObjCastRuntime *runtime)
+                                         const ObIDatumCastRuntime *runtime)
 {
   int ret = OB_SUCCESS;
   ObDecimalIntBuilder max_v, min_v;

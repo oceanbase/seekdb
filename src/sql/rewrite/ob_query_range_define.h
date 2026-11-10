@@ -19,6 +19,8 @@
 #include "lib/list/ob_obj_store.h"
 #include "lib/allocator/ob_allocator.h"
 #include "common/object/ob_object.h"
+#include "common/datum/datum_core.h"
+#include "common/datum/datum.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
 #include "share/geo/ob_geo_common.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
@@ -217,6 +219,7 @@ public:
   struct ExprFinalInfo {
     ExprFinalInfo()
     : flags_(0),
+      const_meta_(),
       param_idx_(OB_INVALID_ID),
       related_raw_expr_(nullptr)
     {}
@@ -232,12 +235,22 @@ public:
         uint32_t reserved_:      18;
       };
     };
+    // Historical physical metadata; it is independent of an execution SqlType.
+    common::SqlTypeMeta const_meta_;
     union {
       int64_t param_idx_;
-      common::ObObj* const_val_;
+      common::Datum const_val_;
       ObTempExpr *temp_expr_;
     };
     ObRawExpr *related_raw_expr_;
+    // Clone the physical value into owner and publish the constant slot only
+    // after success. Ordinary scalars remain inline; arrays retain their
+    // existing physical graph ownership, not an inferred execution SqlType.
+    int set_const_value(const common::Datum &value, const common::SqlTypeMeta &meta,
+                        common::ObIAllocator &owner);
+    // Synchronous boundary: scalar/state bytes borrow scratch, references
+    // borrow this entry's owner. A retaining caller must copy before returning.
+    int export_const_value(common::ObDatum &value, void *scratch, int64_t capacity) const;
     TO_STRING_KV(K_(flags));
   };
 public:
@@ -305,7 +318,7 @@ struct ObQueryRangeCtx
       refresh_max_offset_(false),
       exec_ctx_(exec_ctx),
       expr_constraints_(nullptr),
-      params_(nullptr),
+      parameter_context_(nullptr),
       expr_factory_(nullptr),
       session_info_(nullptr),
       geo_column_id_map_(nullptr),
@@ -321,7 +334,7 @@ struct ObQueryRangeCtx
   int init(ObPreRangeGraph *pre_range_graph,
            const ObIArray<ColumnItem> &range_columns,
            ExprConstrantArray *expr_constraints,
-           const ParamStore *params,
+           const ObPhysicalPlanCtx *params,
            ObRawExprFactory *expr_factory,
            const bool ignore_calc_failure,
            const int64_t index_prefix,
@@ -338,7 +351,7 @@ struct ObQueryRangeCtx
   bool refresh_max_offset_;
   ObExecContext *exec_ctx_;
   ExprConstrantArray *expr_constraints_;
-  const common::ParamStore *params_;
+  const ObPhysicalPlanCtx *parameter_context_;
   ObRawExprFactory *expr_factory_;
   ObSQLSessionInfo *session_info_;
   common::ObSEArray<const ObRawExpr *, 16> final_exprs_;
@@ -386,6 +399,16 @@ public:
 
   virtual ~ObPreRangeGraph() { reset(); }
 
+  // Static counterpart of the raw-point reader, shared with closed-graph CG.
+  // Values and their NULL state are checked separately for each execution.
+  int get_native_bigint_point_parameters(int64_t parameter_count,
+      int64_t (&indexes)[3], bool &supported) const;
+
+  int try_get_native_bigint_point(const common::DatumParamStore &parameters,
+                                  int64_t (&values)[3], bool &supported) const override;
+  int try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
+                                  int64_t (&values)[3], bool &supported) const override;
+
   void reset();
   virtual int deep_copy(const ObPreRangeGraph &other);
 
@@ -400,7 +423,7 @@ public:
                                       const ObIArray<ObRawExpr*> &root_exprs,
                                       ObExecContext *exec_ctx,
                                       ExprConstrantArray *expr_constraints = NULL,
-                                      const ParamStore *params = NULL,
+                                      const ObPhysicalPlanCtx *params = NULL,
                                       const bool ignore_calc_failure = true,
                                       const int64_t index_prefix = -1,
                                       const ObTableSchema *index_schema = NULL,
@@ -422,7 +445,7 @@ public:
   virtual int get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj_range_ctx,
                                          common::ObIAllocator &allocator,
                                          ObExecContext &exec_ctx,
-                                         const ParamStore &param_store,
+                                         const ObPhysicalPlanCtx &param_store,
                                          int64_t range_buffer_idx,
                                          void *range_buffer,
                                          ObQueryRangeArray &ranges,
@@ -505,7 +528,7 @@ public:
                       ObIArray<ObRawExpr*> &range_exprs,
                       ObExecContext *exec_ctx,
                       ObQueryCtx *query_ctx,
-                      const ParamStore *params = NULL,
+                      const ObPhysicalPlanCtx *params = NULL,
                       const int64_t index_prefix = -1);
   int get_range_exprs_by_graph(ObQueryRangeCtx &ctx,
                                ObRawExprFactory &expr_factory,
@@ -530,23 +553,27 @@ public:
                      ObRawExpr *extra_value_expr = nullptr);
   int set_general_nlj_range_extraction(const ObIArray<ObFastFinalPos> &pos_arr);
   const ObIArray<ObFastFinalPos>& get_general_nlj_range_extraction() const { return fast_final_pos_arr_; }
-  static int is_precise_like_range(const ObObjParam &pattern, char escape, bool &is_precise);
+  static int is_precise_like_range(SqlValueType type, const ObString &pattern, ObCollationType collation,
+                                   char escape, bool &is_precise);
   static bool check_like_range_precise(const ObString &pattern_str,
                                        const char *max_str_buf,
                                        const size_t max_str_len,
                                        const char escape);
   static bool can_be_extract_range(ObItemType cmp_type,
                                    const ObRawExprResType &col_type,
-                                   const ObObjMeta &calc_meta,
-                                   ObObjType data_type,
+                                   const SqlTypeMeta &calc_meta,
+                                   SqlValueType data_type,
                                    bool &always_true);
   static bool can_domain_be_extract_range(const ObDomainOpType &op_type, const ObRawExprResType &col_type,
-                                          const ObObjMeta &res_type, common::ObObjType data_type,
+                                          const SqlTypeMeta &res_type, common::SqlValueType data_type,
                                           bool &always_true);
   static common::ObDomainOpType get_geo_relation(ObItemType type);
   static common::ObDomainOpType get_domain_op_type(ObItemType type);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPreRangeGraph);
+  int try_get_native_bigint_point(const common::DatumParamStore *parameters,
+                                  const ObPhysicalPlanCtx *plan_ctx,
+                                  int64_t (&values)[3], bool &supported) const;
 private:
   common::ObIAllocator &allocator_;
   uint64_t table_id_;

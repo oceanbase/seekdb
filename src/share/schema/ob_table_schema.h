@@ -122,7 +122,6 @@ typedef common::hash::ObPointerHashArray<ObColumnIdKey, ObColumnSchemaV2 *, ObGe
 IdHashArray;
 typedef common::hash::ObPointerHashArray<ObColumnSchemaHashWrapper, ObColumnSchemaV2 *, ObGetColumnKey>
 NameHashArray;
-typedef const common::ObObj& (ObColumnSchemaV2::*get_default_value)() const;
 
 extern const uint64_t HIDDEN_PK_COLUMN_IDS[3];
 extern const char* HIDDEN_PK_COLUMN_NAMES[3];
@@ -1531,10 +1530,6 @@ private:
   const IdHashArray *get_id_hash_array() const {return id_hash_array_;}
 
   int insert_col_to_column_array(ObColumnSchemaV2 *column);
-  int get_default_row(
-      get_default_value func,
-      const common::ObIArray<share::schema::ObColDesc> &column_ids,
-      common::ObNewRow &default_row) const;
   inline int64_t get_id_hash_array_mem_size(const int64_t column_cnt) const;
   inline int64_t get_name_hash_array_mem_size(const int64_t column_cnt) const;
   template <typename ArrayType>

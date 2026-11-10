@@ -842,7 +842,7 @@ int RegularCol::eval_unnest_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, Ob
   ObIArrayType *arr_obj = arr_stucts[col_node.col_info_.output_column_idx_];
   int32_t idx = col_node.cur_pos_;
   ObExpr* expr = ctx->spec_ptr_->column_exprs_.at(col_node.col_info_.output_column_idx_);
-  ObDatum& res_datum = expr->locate_datum_for_write(*ctx->eval_ctx_);
+  Datum& res_datum = expr->locate_datum_for_write(*ctx->eval_ctx_);
 
   if (OB_ISNULL(arr_obj) || arr_obj->is_null(idx)) {
     res_datum.set_null();
@@ -857,10 +857,15 @@ int RegularCol::eval_unnest_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, Ob
       res_datum.set_string(res_str);
     }
   } else {
-    ObObj elem_obj;
-    if (OB_FAIL(arr_obj->elem_at(idx, elem_obj))) {
+    // Array storage exposes the legacy element ABI. Import it immediately
+    // using the complete result-column type; the local descriptor never
+    // becomes an execution frame or escapes this call.
+    alignas(8) char scratch[64];
+    common::ObDatum element;
+    element.ptr_ = scratch;
+    if (OB_FAIL(arr_obj->elem_at_datum(idx, element))) {
     } else {
-      res_datum.from_obj(elem_obj);
+      ret = expr->get_datum_copy_plan().import_legacy(element, res_datum);
     }
   }
 
@@ -883,8 +888,8 @@ int UnnestTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEvalCtx &ev
   for (int64_t i = 0; OB_SUCC(ret) && i < col_num; ++i) {
     ObExpr *value_expr = ctx.spec_ptr_->value_exprs_.at(i);
     ObDataType data_type = ctx.spec_ptr_->cols_def_.at(i)->data_type_;
-    ObObjType obj_type = value_expr->datum_meta_.type_;
-    ObDatum *datum = NULL;
+    SqlValueType obj_type = value_expr->datum_meta_.type_;
+    Datum *datum = NULL;
     const uint16_t meta_id = value_expr->obj_meta_.get_subschema_id();
     ObIArrayType *arr_obj = NULL;
     bool is_null = false;
@@ -958,16 +963,16 @@ int UnnestTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is
 }
 
 // default value cast type check
-bool RegularCol::check_cast_allowed(const ObObjType orig_type,
+bool RegularCol::check_cast_allowed(const SqlValueType orig_type,
                                     const ObCollationType orig_cs_type,
-                                    const ObObjType expect_type,
+                                    const SqlValueType expect_type,
                                     const ObCollationType expect_cs_type,
                                     const bool is_explicit_cast)
 {
   UNUSED(expect_cs_type);
   bool res = true;
-  ObObjTypeClass ori_tc = ob_obj_type_class(orig_type);
-  ObObjTypeClass expect_tc = ob_obj_type_class(expect_type);
+  SqlTypeClass ori_tc = sql_type_class(orig_type);
+  SqlTypeClass expect_tc = sql_type_class(expect_type);
   bool is_expect_lob_tc = (ObLobTC == expect_tc || ObTextTC == expect_tc);
   bool is_ori_lob_tc = (ObLobTC == ori_tc || ObTextTC == ori_tc);
   return res;
@@ -1450,13 +1455,13 @@ int JsonTableFunc::check_default_value(JtScanCtx* ctx, ObRegCol &col_node, ObExp
 
 int RegularCol::parse_default_value_2json(ObExpr* default_expr, 
                                           JtScanCtx* ctx,
-                                          ObDatum*& tmp_datum,
+                                          Datum*& tmp_datum,
                                           ObIJsonBase *&res)
 {
   INIT_SUCC(ret);
-  ObObjType val_type = default_expr->datum_meta_.type_;
+  SqlValueType val_type = default_expr->datum_meta_.type_;
   ObCollationType cs_type = default_expr->datum_meta_.cs_type_;
-  ObDatum converted_datum;
+  Datum converted_datum;
   converted_datum.set_datum(*tmp_datum);
   ObString origin_str = converted_datum.get_string();
   // convert string charset if needed
@@ -1469,14 +1474,15 @@ int RegularCol::parse_default_value_2json(ObExpr* default_expr,
       cs_type = CS_TYPE_UTF8MB4_BIN;
     }
   }
-  ObObjMeta meta = default_expr->obj_meta_;
+  SqlTypeMeta meta = default_expr->obj_meta_;
   meta.set_type(val_type);
   meta.set_collation_type(cs_type);
   const common::ObLobReadOptions *lob_options = nullptr;
   ObString binary;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ctx->exec_ctx_->get_lob_read_options(lob_options))) {
-  } else if (OB_FAIL(ObJsonExprHelper::datum_to_json_binary(converted_datum, meta,
+  } else if (OB_FAIL(ObJsonExprHelper::datum_to_json_binary(
+      converted_datum, meta, default_expr->get_sql_type(),
       default_expr->datum_meta_.scale_, default_expr->is_boolean_, true, true, false,
       *ctx->op_exec_alloc_, ctx->exec_ctx_->get_my_session(), lob_options, binary))) {
   } else if (OB_FAIL(copy_json_binary(*ctx->op_exec_alloc_, binary, res))) {
@@ -1513,15 +1519,13 @@ int RegularCol::check_default_value_inner_mysql(JtScanCtx* ctx,
                                                 ObIJsonBase* j_base)
 {
   INIT_SUCC(ret);
-  ObDatum res;
-  char datum_buff[OBJ_DATUM_STRING_RES_SIZE] = {0};
-  res.ptr_ = datum_buff;
+  Datum res;
   
-  ObDatum* tmp_datum = nullptr;
+  Datum* tmp_datum = nullptr;
   uint8_t is_type_mismatch = 0;
   ObAccuracy accuracy = col_node.col_info_.data_type_.get_accuracy();
   char col_str[col_node.col_info_.col_name_.length() + 1];
-  ObObjType dst_type = expr->datum_meta_.type_;
+  SqlValueType dst_type = expr->datum_meta_.type_;
   ObJsonCastParam cast_param(dst_type, default_expr->datum_meta_.cs_type_, expr->datum_meta_.cs_type_, false);
   cast_param.is_only_check_ = true;
   cast_param.relaxed_time_convert_ = true;
@@ -1546,7 +1550,7 @@ int JsonTableFunc::set_expr_exec_param(ObRegCol& col_node, JtScanCtx* ctx)
   INIT_SUCC(ret);
   ObExpr* expr = ctx->spec_ptr_->column_exprs_.at(col_node.col_info_.output_column_idx_);
 
-  ObObjType dst_type = expr->datum_meta_.type_;
+  SqlValueType dst_type = expr->datum_meta_.type_;
   ObAccuracy accuracy = col_node.col_info_.data_type_.get_accuracy();
   col_node.expr_param_.truncate_ = col_node.col_info_.truncate_;
   col_node.expr_param_.format_json_ = col_node.col_info_.format_json_;
@@ -1620,9 +1624,9 @@ int JsonTableFunc::set_on_empty(ObRegCol& col_node, JtScanCtx* ctx, bool &need_c
     }
   } else if (col_type == COL_TYPE_VALUE) {
     is_null = false;
-    ObDatum *t_res = NULL;
+    Datum *t_res = NULL;
     if (OB_FAIL(ObExprJsonValue::get_empty_option(t_res, is_cover_by_error, col_node.col_info_.on_empty_,
-                                                static_cast<ObDatum*>(col_node.err_val_), is_null))) {
+                                                static_cast<Datum*>(col_node.err_val_), is_null))) {
       if (is_cover_by_error) {
         SET_COVER_ERROR(ctx, ret);
       }
@@ -1757,12 +1761,12 @@ int JsonTableFunc::cast_to_result(ObRegCol& col_node, JtScanCtx* ctx, bool enabl
   JtColType col_type = col_node.type();
 
   ObExpr* expr = ctx->spec_ptr_->column_exprs_.at(col_info.output_column_idx_);
-  ObDatum& res = expr->locate_datum_for_write(*ctx->eval_ctx_);
+  Datum& res = expr->locate_datum_for_write(*ctx->eval_ctx_);
   ctx->res_obj_ = &res;
   uint8_t is_type_mismatch = false;
   uint8_t ascii_type = false;
 
-  ObObjType dst_type = expr->datum_meta_.type_;
+  SqlValueType dst_type = expr->datum_meta_.type_;
   ObCollationType coll_type = expr->datum_meta_.cs_type_;
   ObAccuracy accuracy = col_info.data_type_.get_accuracy();
   ObCollationType dst_coll_type = col_info.data_type_.get_collation_type();
@@ -1779,7 +1783,7 @@ int JsonTableFunc::cast_to_result(ObRegCol& col_node, JtScanCtx* ctx, bool enabl
   switch (col_type) {
     case JtColType::COL_TYPE_VALUE: {
       if (col_node.res_flag_ != ResultType::NOT_DATUM) {
-        ObDatum *js_val = static_cast<ObDatum*>(col_node.curr_);
+        Datum *js_val = static_cast<Datum*>(col_node.curr_);
         ObExpr* default_expr;
         if (col_node.res_flag_ == ResultType::EMPTY_DATUM) {
           default_expr = ctx->spec_ptr_->emp_default_exprs_.at(col_node.col_info_.empty_expr_id_);
@@ -1957,7 +1961,7 @@ int JsonTableFunc::init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
 int JsonTableFunc::eval_default_value(JtScanCtx*& ctx, ObExpr*& default_expr, void*& res, bool need_datum)
 {
   INIT_SUCC(ret);
-  ObDatum* emp_datum = nullptr;
+  Datum* emp_datum = nullptr;
   ObIJsonBase* emp_json = nullptr;
   if (OB_FAIL(default_expr->eval(*ctx->eval_ctx_, emp_datum))) {
   } else if (need_datum) {
@@ -2022,9 +2026,9 @@ int JsonTableFunc::get_iter_value(ObRegCol &col_node, JtScanCtx* ctx, bool &is_n
 int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval_ctx)
 {
   INIT_SUCC(ret);
-  common::ObObjMeta& doc_obj_datum = ctx.spec_ptr_->value_exprs_.at(0)->obj_meta_;
+  common::SqlTypeMeta& doc_obj_datum = ctx.spec_ptr_->value_exprs_.at(0)->obj_meta_;
   ObDatumMeta& doc_datum = ctx.spec_ptr_->value_exprs_.at(0)->datum_meta_;
-  ObObjType doc_type = doc_datum.type_;
+  SqlValueType doc_type = doc_datum.type_;
   ObCollationType doc_cs_type = doc_datum.cs_type_;
   ObString j_str;
   bool is_null = false;

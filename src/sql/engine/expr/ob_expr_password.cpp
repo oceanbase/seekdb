@@ -62,10 +62,10 @@ int ObExprPassword::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) c
   return ret;
 }
 
-int ObExprPassword::eval_password(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprPassword::eval_password(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_string("", 0);

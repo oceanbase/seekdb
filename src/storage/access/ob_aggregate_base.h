@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 #include "storage/blocksstable/ob_datum_row.h"
+#include "common/datum/datum_copy_plan.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -141,6 +143,85 @@ public:
   bool is_reverse_; 
 };
 
+// Grouped aggregate state has one native value. The domain describes real
+// arithmetic storage, independently of the final SQL expression declaration.
+enum class ObAggNativeDomain : uint8_t
+{ Semantic, Signed, Float32, Float64, Number, DecimalCoefficient };
+
+class ObAggNativeCell
+{
+public:
+  explicit ObAggNativeCell(common::ObIAllocator *owner = nullptr)
+    : owner_(owner), type_(nullptr), buffer_(nullptr), capacity_(0),
+      domain_(ObAggNativeDomain::Semantic), coefficient_bytes_(0) {}
+  ~ObAggNativeCell() { reset(); }
+  void configure(const common::SqlType *type, ObAggNativeDomain domain, int32_t coefficient_bytes = 0)
+  { type_ = type; domain_ = domain; coefficient_bytes_ = coefficient_bytes; }
+  void reset();
+  void reuse() { value_.set_null(); }
+  void set_null() { value_.set_null(); }
+  bool is_null() const { return value_.is_null(); }
+  const common::Datum &native_value() const { return value_; }
+  int64_t get_int() const { return value_.get_int(); }
+  void set_int(int64_t value) { value_.set_int(value); }
+  float get_float() const { return value_.get_float(); }
+  double get_double() const { return value_.get_double(); }
+  void set_float(float value) { value_.set_float(value); }
+  void set_double(double value) { value_.set_double(value); }
+  int capture_legacy(const common::ObDatum &source);
+  int capture_native(const common::Datum &source);
+  int export_legacy(common::ObDatum &output, void *scratch, int64_t capacity) const;
+  // A mutable old arithmetic view is local to one synchronous kernel call.
+  // Null/inline values use caller scratch; retained spans borrow this cell.
+  int edit_view(common::ObDatum &output, void *scratch, int64_t capacity) const;
+  int commit_view(const common::ObDatum &source) { return capture_legacy(source); }
+  void take(ObAggNativeCell &source);
+  TO_STRING_KV(K_(value), K_(domain), K_(coefficient_bytes), K_(capacity));
+private:
+  int capture(const common::Datum &source);
+  int physical_meta(common::SqlTypeMeta &meta) const;
+  common::ObIAllocator *owner_;
+  const common::SqlType *type_; // actual longer-lived Expr declaration, never synthesized
+  common::Datum value_;
+  char *buffer_;
+  int64_t capacity_;
+  ObAggNativeDomain domain_;
+  int32_t coefficient_bytes_;
+};
+
+class ObNativeAggDatumBuf
+{
+public:
+  explicit ObNativeAggDatumBuf(common::ObIAllocator &owner)
+    : owner_(owner), cells_(nullptr), allocated_(0), capacity_(0), basic_count_(0),
+      type_(nullptr), domain_(ObAggNativeDomain::Semantic), coefficient_bytes_(0) {}
+  ~ObNativeAggDatumBuf() { reset(); }
+  int init(int64_t basic_count, const common::SqlType *type,
+           ObAggNativeDomain domain = ObAggNativeDomain::Semantic, int32_t coefficient_bytes = 0);
+  int reserve(int64_t count);
+  void reset();
+  void reuse();
+  void configure(const common::SqlType *type, ObAggNativeDomain domain, int32_t coefficient_bytes = 0);
+  void fill_datum_items(FillDatumType fill);
+  ObAggNativeCell &at(int64_t index) { OB_ASSERT(index >= 0 && index < capacity_); return cells_[index]; }
+  const ObAggNativeCell &at(int64_t index) const { OB_ASSERT(index >= 0 && index < capacity_); return cells_[index]; }
+  ObAggNativeCell *get_basic_buf() { return cells_; }
+  int64_t get_capacity() const { return capacity_; }
+  int64_t get_basic_count() const { return basic_count_; }
+  bool is_use_extra_data() const { return capacity_ > basic_count_; }
+  void swap(ObNativeAggDatumBuf &other);
+  TO_STRING_KV(K_(allocated), K_(capacity), K_(basic_count), K_(domain), K_(coefficient_bytes));
+private:
+  common::ObIAllocator &owner_;
+  ObAggNativeCell *cells_;
+  int64_t allocated_;
+  int64_t capacity_;
+  int64_t basic_count_;
+  const common::SqlType *type_;
+  ObAggNativeDomain domain_;
+  int32_t coefficient_bytes_;
+};
+
 // Common interface classes for aggregate pushdown in vectorization 1.0 and 2.0
 class ObAggCellBase
 {
@@ -155,13 +236,13 @@ public:
       const int64_t agg_row_idx = 0) = 0;
   // virtual bool need_access_data() const = 0;
   // virtual int32_t get_col_offset() const = 0;
-  virtual ObObjType get_obj_type() const = 0;
+  virtual SqlValueType get_obj_type() const = 0;
   int reserve_bitmap(const int64_t size);
   OB_INLINE bool is_assigned_to_group_by_processor() const 
   { return is_assigned_to_group_by_processor_; }
   OB_INLINE void set_assigned_to_group_by_processor()
   { is_assigned_to_group_by_processor_ = true; }
-  OB_INLINE const ObDatum &get_result_datum() const { return result_datum_; };
+  OB_INLINE const common::Datum &get_result_datum() const { return result_datum_.native_value(); };
   OB_INLINE ObPDAggType get_type() const { return agg_type_; }
   OB_INLINE bool is_min_agg() const { return PD_MIN == agg_type_; }
   OB_INLINE bool is_max_agg() const { return PD_MAX == agg_type_; }
@@ -171,7 +252,7 @@ public:
 protected:
   ObBitmap *bitmap_;
   blocksstable::ObAggRowReader *agg_row_reader_;
-  blocksstable::ObStorageDatum result_datum_;
+  ObAggNativeCell result_datum_;
   blocksstable::ObStorageDatum skip_index_datum_;
   common::ObIAllocator &allocator_;
   ObPDAggType agg_type_;
@@ -255,6 +336,8 @@ public:
   virtual int copy_output_rows(const int64_t batch_idx, const ObTableIterParam &iter_param) = 0;
   virtual int copy_single_output_row(sql::ObEvalCtx &ctx) = 0;
   virtual int collect_result() = 0;
+  virtual int capture_group_key_input() = 0;
+  virtual void release_group_key_views() = 0;
   virtual int add_distinct_null_value() = 0;
   virtual int extract_distinct() = 0;
   virtual int output_extra_group_by_result(int64_t &count, const ObTableIterParam &iter_param) = 0;
@@ -264,7 +347,7 @@ public:
   OB_INLINE int64_t get_batch_size() const { return batch_size_; }
   OB_INLINE int32_t get_group_by_col_offset() const { return group_by_col_offset_; }
   OB_INLINE const share::schema::ObColumnParam *get_group_by_col_param() const { return group_by_col_param_; }
-  OB_INLINE ObObjDatumMapType get_obj_datum_map_type() const {return group_by_col_expr_->obj_datum_map_; }
+  OB_INLINE SqlValueDatumMapType get_sql_value_datum_map_type() const {return group_by_col_expr_->obj_datum_map_; }
   OB_INLINE virtual bool is_exceed_sql_batch() const { return true; }
   virtual common::ObDatum *get_group_by_col_datums_to_fill() = 0;
   virtual const char **get_cell_datas() = 0;
@@ -359,6 +442,7 @@ public:
   OB_INLINE int64_t get_capacity() { return capacity_; }
   OB_INLINE common::ObDatum *get_datums() { return datums_; }
   OB_INLINE const char **get_cell_datas() { return cell_data_ptrs_; }
+  OB_INLINE char *get_view_scratch(int64_t index) { return buf_ + index * datum_size_; }
   static int new_agg_datum_buf(
       const int64_t size,
       const bool need_cell_data_ptr,
@@ -394,6 +478,8 @@ public:
   OB_INLINE common::ObDatum *get_extra_result_datums() { return nullptr == result_datum_buf_ ? nullptr : result_datum_buf_->get_datums(); }
   OB_INLINE common::ObDatum *get_group_by_datums() const { return is_use_extra_buf() ? result_datum_buf_->get_datums() : sql_result_datums_; }
   OB_INLINE const char **get_group_by_cell_datas() const { return is_use_extra_buf() ? result_datum_buf_->get_cell_datas() : nullptr; }
+  OB_INLINE char *get_view_scratch(int64_t index)
+  { return is_use_extra_buf() ? result_datum_buf_->get_view_scratch(index) : nullptr; }
   OB_INLINE bool is_use_extra_buf() const { return capacity_ > sql_datums_cnt_; }
   OB_INLINE int64_t get_extra_buf_size() const {return nullptr == result_datum_buf_ ? 0 : result_datum_buf_->get_size(); }
   TO_STRING_KV(K_(capacity), K_(sql_datums_cnt), KP_(sql_result_datums), KP_(result_datum_buf), K_(datum_size));
@@ -444,24 +530,25 @@ template<typename T>
 int ObGroupByExtendableBuf<T>::reserve(const int32_t size)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(size <= 0 || size > USE_GROUP_BY_MAX_DISTINCT_CNT)) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Unexpected size", K(ret), K(size));
-  } else {
-    capacity_ = MAX(basic_count_, size);
+  if (size <= 0 || size > USE_GROUP_BY_MAX_DISTINCT_CNT) { ret = OB_INVALID_ARGUMENT; }
+  else {
+    const int32_t candidate_capacity = std::max(basic_count_, size);
     int32_t cur_capacity = basic_count_ + extra_block_count_ * USE_GROUP_BY_BUF_BLOCK_SIZE;
-    if (capacity_ > cur_capacity) {
-      int32_t required_block_cnt = ceil((double)(size - cur_capacity) / USE_GROUP_BY_BUF_BLOCK_SIZE);
-      for (int64_t i = 0; OB_SUCC(ret) && i < required_block_cnt; ++i) {
-        if (OB_FAIL(alloc_bufblock(extra_blocks_[extra_block_count_]))) {
-        } else {
-          extra_block_count_++;
-        }
+    while (OB_SUCC(ret) && candidate_capacity > cur_capacity) {
+      if (OB_FAIL(alloc_bufblock(extra_blocks_[extra_block_count_]))) {
+        free_bufblock(extra_blocks_[extra_block_count_]);
+      } else {
+        ++extra_block_count_;
+        cur_capacity += USE_GROUP_BY_BUF_BLOCK_SIZE;
       }
     }
+    // Successfully allocated support blocks may be retained for retry, but a
+    // failed growth never publishes a logical range with missing blocks.
+    if (OB_SUCC(ret)) { capacity_ = candidate_capacity; }
   }
   return ret;
 }
+
 
 template<typename T>
 void ObGroupByExtendableBuf<T>::fill_items(const T item)

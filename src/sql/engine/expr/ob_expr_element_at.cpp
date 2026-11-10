@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_element_at.h"
 #include "common/udt/ob_collection_type.h"
 #include "common/udt/ob_array_type.h"
@@ -61,7 +62,7 @@ int ObExprElementAt::calc_result_type2(ObExprResType &type,
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -92,7 +93,7 @@ int ObExprElementAt::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprElementAt::eval_element_at(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprElementAt::eval_element_at(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -102,8 +103,8 @@ int ObExprElementAt::eval_element_at(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObIArrayType *src_arr = NULL;
   ObIArrayType* child_arr = NULL;
   int64_t idx = 0;
-  ObDatum *arr_datum = NULL;
-  ObDatum *idx_datum = NULL;
+  Datum *arr_datum = NULL;
+  Datum *idx_datum = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, idx_datum))) {
@@ -125,12 +126,9 @@ int ObExprElementAt::eval_element_at(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
       res.set_string(child_arr_str);
     }
   } else {
-    ObObj elem_obj;
-    if (OB_FAIL(src_arr->elem_at(idx, elem_obj))) {
-    } else {
-      res.from_obj(elem_obj);
-      if (elem_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
-      }
+    if (OB_FAIL(ObExprUtil::set_array_element(expr, ctx, *src_arr, idx, res))) {
+    } else if (ob_is_string_type(expr.datum_meta_.type_)
+               && OB_FAIL(expr.get_datum_copy_plan().deep_copy(res, res, res_alloc))) {
     }
   }
   return ret;
@@ -140,7 +138,7 @@ int ObExprElementAt::eval_element_at_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                            const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -152,8 +150,8 @@ int ObExprElementAt::eval_element_at_batch(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector idx_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector idx_array = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       int64_t idx = 0;
       if (skip.at(j) || eval_flags.at(j)) {
@@ -190,12 +188,9 @@ int ObExprElementAt::eval_element_at_batch(const ObExpr &expr, ObEvalCtx &ctx,
           }
         }
       } else {
-        ObObj elem_obj;
-        if (OB_FAIL(src_arr->elem_at(static_cast<uint32_t>(idx), elem_obj))) {
-        } else {
-          res_datum.at(j)->from_obj(elem_obj);
-          if (elem_obj.is_string_type() && OB_FAIL(res_datum.at(j)->deep_copy(*res_datum.at(j), res_alloc))) {
-          }
+        if (OB_FAIL(ObExprUtil::set_array_element(expr, ctx, *src_arr, static_cast<uint32_t>(idx), *res_datum.at(j), j))) {
+        } else if (ob_is_string_type(expr.datum_meta_.type_)
+                   && OB_FAIL(expr.get_datum_copy_plan().deep_copy(*res_datum.at(j), *res_datum.at(j), res_alloc))) {
         }
       }
     } // end for

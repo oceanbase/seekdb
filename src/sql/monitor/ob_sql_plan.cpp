@@ -24,6 +24,7 @@
 #include "sql/session/ob_inner_sql_connection.h"
 #include "sql/optimizer/ob_del_upd_log_plan.h"
 #include "ob_sql_plan.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
 using namespace oceanbase::common;
 using namespace oceanbase::json;
 
@@ -766,7 +767,7 @@ int ObSqlPlan::get_plan_other_info(PlanText &plan_text,
       OB_ISNULL(stmt=plan->get_stmt()) || OB_ISNULL(query_ctx=stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObjPrintParams print_params(query_ctx->get_timezone_info());
+    ObValuePrintParams print_params(query_ctx->get_timezone_info());
     ObPhyPlanType plan_type = plan->get_optimizer_context().get_phy_plan_type();
     ret = OB_E(EventTable::EN_PRINT_CONSTRAINTS_INFO) OB_SUCCESS;
     bool only_show_constraint = OB_SUCCESS != ret && EXPLAIN_UNINITIALIZED == plan_text.type_;
@@ -782,30 +783,44 @@ int ObSqlPlan::get_plan_other_info(PlanText &plan_text,
       } else {
         ret = BUF_PRINTF(NEW_LINE);
       }
-      const ParamStore *params = NULL;
+      const ObPhysicalPlanCtx *params = NULL;
       if (OB_FAIL(ret)) {
-      } else if (OB_ISNULL(params = plan->get_optimizer_context().get_params())) {
+      } else if (OB_ISNULL(params = plan->get_optimizer_context().get_parameter_context())) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (params->count() <= 0) {
+      } else if (params->get_parameter_count() <= 0) {
         //do nothing
       } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
       } else if (OB_FAIL(BUF_PRINTF("  Parameters:"))) {
       } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
       } else { /* Do nothing */ }
-      for (int64_t i = 0; OB_SUCC(ret) && NULL != params && i < params->count() && i < 100; i++) {
+      for (int64_t i = 0; OB_SUCC(ret) && NULL != params && i < params->get_parameter_count() && i < 100; i++) {
         if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
         } else if (OB_FAIL(BUF_PRINTF(":%ld => ", i))) {
         } else {
           int64_t save_pos = pos;
-          if (OB_FAIL(params->at(i).print_sql_literal(buf, 
-                                                      buf_len, 
-                                                      pos, 
-                                                      print_params))) {
-            //ignore size overflow error 
-            pos = save_pos;                                                  
+          DatumValue value;
+          alignas(8) char scratch[64];
+          ObDatum legacy;
+          if (!params->native_parameters_ready()) {
+            value = params->get_parameter_inputs().at(i).value_view();
+          } else {
+            const DatumParameterMetadata *attributes = params->get_parameter_metadata(i);
+            if (attributes == nullptr) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (OB_FAIL(params->export_runtime_parameter_legacy(i, legacy,
+                                                                      scratch, sizeof(scratch)))) {
+            } else {
+              ret = value.assign_legacy_borrowed(legacy, attributes->type_meta_);
+            }
           }
-          if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
-          } else { /* Do nothing */ }
+          if (OB_SUCC(ret)) {
+            if (OB_FAIL(value.print_sql_literal(buf, buf_len, pos, print_params))) {
+              // Preserve the previous print-error behavior and cursor rollback.
+              pos = save_pos;
+            }
+            if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
+            } else { /* Do nothing */ }
+          }
         }
       }
       const ObPlanNotes &notes = plan->get_optimizer_context().get_plan_notes();
@@ -904,13 +919,21 @@ int ObSqlPlan::print_constraint_info(char *buf,
                                     const ObPCConstParamInfo &info)
 {
   int ret = OB_SUCCESS;
+  if (!info.cache_eligible_) {
+    if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
+    } else if (OB_FAIL(BUF_PRINTF("plan cache disabled for constant constraint"))) {
+    } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
+    }
+    return ret;
+  }
   if (info.const_idx_.count() != info.const_params_.count()) {
     ret = OB_ERR_UNEXPECTED;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < info.const_idx_.count(); ++i) {
+    const common::NativeTypedDatum &value = info.const_params_.at(i);
     if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
     } else if (OB_FAIL(BUF_PRINTF(":%ld = ", info.const_idx_.at(i)))) {
-    } else if (OB_FAIL(info.const_params_.at(i).print_sql_literal(buf, buf_len, pos))) {
+    } else if (OB_FAIL(ObPCConstParamInfo::print_constant(value, buf, buf_len, pos))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else { /* Do nothing */ }
   }

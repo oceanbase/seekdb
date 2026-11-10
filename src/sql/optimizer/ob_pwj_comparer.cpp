@@ -180,7 +180,7 @@ int ObPwjComparer::is_partition_equal(const ObPartition *l_partition,
   if (OB_ISNULL(l_partition) || OB_ISNULL(r_partition)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (is_range_partition) {
-    if (OB_FAIL(is_row_equal(l_partition->get_high_bound_val(),
+    if (OB_FAIL(is_key_equal(l_partition->get_high_bound_val(),
                              r_partition->get_high_bound_val(),
                              is_equal))) {
     }
@@ -199,7 +199,7 @@ int ObPwjComparer::is_subpartition_equal(const ObSubPartition *l_subpartition,
   if (OB_ISNULL(l_subpartition) || OB_ISNULL(r_subpartition)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (is_range_partition) {
-    if (OB_FAIL(is_row_equal(l_subpartition->get_high_bound_val(),
+    if (OB_FAIL(is_key_equal(l_subpartition->get_high_bound_val(),
                              r_subpartition->get_high_bound_val(),
                              is_equal))) {
     }
@@ -208,21 +208,21 @@ int ObPwjComparer::is_subpartition_equal(const ObSubPartition *l_subpartition,
   return ret;
 }
 
-int ObPwjComparer::is_row_equal(const ObRowkey &first_row,
-                                const ObRowkey &second_row,
+int ObPwjComparer::is_key_equal(const common::PartitionBoundRow &first_row,
+                                const common::PartitionBoundRow &second_row,
                                 bool &is_equal)
 {
   int ret = OB_SUCCESS;
   is_equal = false;
-  if (OB_ISNULL(first_row.get_obj_ptr()) || OB_ISNULL(second_row.get_obj_ptr())) {
+  if (OB_ISNULL(first_row.get_cells()) || OB_ISNULL(second_row.get_cells())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (first_row.get_obj_cnt() != second_row.get_obj_cnt()) {
+  } else if (first_row.count() != second_row.count()) {
     is_equal = false;
   } else {
     is_equal = true;
-    for (int i = 0; OB_SUCC(ret) && is_equal && i < first_row.get_obj_cnt(); i++) {
-      if (OB_FAIL(is_obj_equal(first_row.get_obj_ptr()[i],
-                               second_row.get_obj_ptr()[i],
+    for (int i = 0; OB_SUCC(ret) && is_equal && i < first_row.count(); i++) {
+      if (OB_FAIL(is_obj_equal(first_row.get_cells()[i],
+                               second_row.get_cells()[i],
                                is_equal))) {
       } else { /*do nothing*/ }
     }
@@ -242,8 +242,8 @@ int ObPwjComparer::is_list_partition_equal(const ObBasePartition *first_part,
     is_equal = false;
   } else {
     is_equal = true;
-    const ObIArray<ObNewRow> &first_values = first_part->get_list_row_values();
-    const ObIArray<ObNewRow> &second_values = second_part->get_list_row_values();
+    const ObIArray<PartitionBoundRow> &first_values = first_part->get_list_row_values();
+    const ObIArray<PartitionBoundRow> &second_values = second_part->get_list_row_values();
     for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < first_values.count(); i++) {
       bool is_find = false;
       for (int64_t j = 0; OB_SUCC(ret) && !is_find && j < second_values.count(); j++) {
@@ -258,8 +258,8 @@ int ObPwjComparer::is_list_partition_equal(const ObBasePartition *first_part,
   return ret;
 }
 
-int ObPwjComparer::is_row_equal(const common::ObNewRow &first_row,
-                                const common::ObNewRow &second_row,
+int ObPwjComparer::is_row_equal(const common::PartitionBoundRow &first_row,
+                                const common::PartitionBoundRow &second_row,
                                 bool &is_equal)
 {
   int ret = OB_SUCCESS;
@@ -278,8 +278,8 @@ int ObPwjComparer::is_row_equal(const common::ObNewRow &first_row,
   return ret;
 }
 
-int ObPwjComparer::is_obj_equal(const common::ObObj &first_value,
-                                const common::ObObj &second_value,
+int ObPwjComparer::is_obj_equal(const common::DatumValue &first_value,
+                                const common::DatumValue &second_value,
                                 bool &is_equal)
 {
   int ret = OB_SUCCESS;
@@ -293,7 +293,7 @@ int ObPwjComparer::is_obj_equal(const common::ObObj &first_value,
   } else if (first_value.get_meta() != second_value.get_meta()) {
     is_equal = false;
   } else {
-    is_equal = (first_value == second_value);
+    ret = datum_values_equal(first_value, second_value, is_equal);
   }
   return ret;
 }

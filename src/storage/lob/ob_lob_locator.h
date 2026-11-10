@@ -18,6 +18,7 @@
 #define OB_STORAGE_LOB_LOCATOR_H
 
 #include "storage/access/ob_table_access_param.h"
+#include "common/datum/datum_value.h"
 #include "storage/access/ob_dml_param.h"
 
 namespace oceanbase
@@ -32,7 +33,6 @@ public:
   virtual ~ObLobLocatorHelper();
   void reuse() {
     locator_allocator_.reuse();
-    rowid_objs_.reuse();
     rowkey_str_.reset();
   }
   int init(const ObTableScanParam &scan_param,
@@ -51,7 +51,7 @@ public:
                           const ObColumnParam &col_param,
                           const ObTableIterParam &iter_param,
                           const ObTableAccessContext &access_ctx);
-  int fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, bool is_systable);
+  int fuse_mem_lob_header(common::DatumValue &value, uint64_t col_id, bool is_systable);
   void update_lob_locator_ctx(uint64_t table_id, uint64_t tablet_id, int64_t tx_id) {
     table_id_ = table_id;
     tablet_id_ = tablet_id;
@@ -62,8 +62,11 @@ public:
   TO_STRING_KV(K_(table_id), K_(tx_id), K_(snapshot_version), K_(tx_read_snapshot),
    K_(enable_locator_v2), K_(is_inited), K_(scan_flag), K_(tx_seq_base), K_(is_access_index));
 private:
-  static const int64_t DEFAULT_LOCATOR_OBJ_ARRAY_SIZE = 8;
   static const int64_t LOB_FORCE_INROW_SIZE = 64 * 1024L; // 64K
+  int fuse_mem_lob_header_impl(const common::ObString &data,
+                               common::ObCollationType collation_type,
+                               uint64_t col_id, bool is_systable,
+                               common::ObString &result);
   int init_rowid_version(const share::schema::ObTableSchema &table_schema);
   int build_lob_locatorv2(ObLobLocatorV2 &locator,
                           const common::ObString &payload,
@@ -81,7 +84,6 @@ private:
   int64_t snapshot_version_;
   transaction::ObTxReadSnapshot tx_read_snapshot_;
   share::SCN fb_snapshot_;
-  common::ObSEArray<common::ObObj, DEFAULT_LOCATOR_OBJ_ARRAY_SIZE> rowid_objs_;
   common::ObArenaAllocator locator_allocator_;
   ObString rowkey_str_; // for default values
   bool enable_locator_v2_;

@@ -139,8 +139,6 @@ public:
             ObLobLocatorV2& lob_right,
             ObLobCompareParams& cmp_params,
             bool& result);
-  // int insert(const common::ObTabletID &tablet_id, ObObj *obj, uint64_t offset, char *data, uint64_t len);
-  // int erase(const common::ObTabletID &tablet_id, ObObj *obj, uint64_t offset, uint64_t len);
   int erase(ObLobAccessParam& param);
   int getlength(ObLobAccessParam& param, uint64_t &len);
   int build_lob_param(ObLobAccessParam& param,
@@ -158,7 +156,7 @@ public:
                                        bool is_outrow,
                                        common::ObIAllocator *tmp_alloc) override;
   virtual int get_delta_lob_full_data(common::ObLobTextIterCtx &ctx,
-                                      common::ObObjType type,
+                                      common::SqlValueType type,
                                       common::ObCollationType cs_type,
                                       common::ObLobLocatorV2 &lob_locator,
                                       common::ObIAllocator *allocator,

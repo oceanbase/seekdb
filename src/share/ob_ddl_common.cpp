@@ -685,7 +685,7 @@ int ObDDLUtil::append_multivalue_extra_column(const ObTableSchema &dest_table_sc
 // DELETE FROM __all_ddl_checksum WHERE
 
 
-bool ObDDLUtil::need_reshape(const ObObjMeta &col_type)
+bool ObDDLUtil::need_reshape(const SqlTypeMeta &col_type)
 {
   return col_type.is_binary() || col_type.is_fixed_len_char_type();
 }
@@ -1099,7 +1099,7 @@ int ObDDLUtil::get_data_information(
 
 int ObDDLUtil::reshape_ddl_column_obj(
     common::ObDatum &datum,
-    const ObObjMeta &obj_meta)
+    const SqlTypeMeta &obj_meta)
 {
   int ret = OB_SUCCESS;
   if (datum.is_null()) {

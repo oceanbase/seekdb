@@ -72,25 +72,25 @@ int ObResourceLimitTable::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case RESOURCE_NAME: {
-          cur_row_.cells_[i].set_varchar(get_logic_res_type_name(iter_.get_curr_type()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, get_logic_res_type_name(iter_.get_curr_type())) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case CURRENT_UTILIZATION: {
-          cur_row_.cells_[i].set_int(info.curr_utilization_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, info.curr_utilization_) : ret);
           break;
         }
         case MAX_UTILIZATION:
-          cur_row_.cells_[i].set_int(info.max_utilization_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, info.max_utilization_) : ret);
           break;
         case RSERVED_VALUE:
-          cur_row_.cells_[i].set_int(info.reserved_value_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, info.reserved_value_) : ret);
           break;
         case LIMIT_VALUE:
-          cur_row_.cells_[i].set_int(info.min_constraint_value_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, info.min_constraint_value_) : ret);
           break;
         case EFFECTIVE_LIMIT_TYPE:
-          cur_row_.cells_[i].set_varchar(get_constraint_type_name(info.min_constraint_type_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, get_constraint_type_name(info.min_constraint_type_)) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         default:

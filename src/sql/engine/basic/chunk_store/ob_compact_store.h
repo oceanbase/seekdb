@@ -85,7 +85,7 @@ private:
   int init_writer_reader();
   int init_batch_ctx(const int64_t col_cnt, const int64_t max_batch_size);
 
-  int inner_add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,
+  int inner_add_batch(const common::Datum **datums, const common::ObIArray<ObExpr *> &exprs,
                       const uint16_t selector[], const int64_t size,
                       ObChunkDatumStore::StoredRow **stored_rows);
   

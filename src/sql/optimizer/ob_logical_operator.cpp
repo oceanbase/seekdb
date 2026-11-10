@@ -1070,21 +1070,21 @@ int ObLogicalOperator::get_limit_offset_value(ObRawExpr *percent_expr,
   } else if (NULL != percent_expr &&
              OB_FAIL(ObTransformUtils::get_percentage_value(percent_expr,
                                                             get_stmt(),
-                                                            opt_ctx->get_params(),
+                                                            opt_ctx->get_parameter_context(),
                                                             opt_ctx->get_exec_ctx(),
                                                             &opt_ctx->get_allocator(),
                                                             limit_percent,
                                                             is_null_value))) {
   } else if (!is_null_value && limit_expr != NULL &&
              OB_FAIL(ObTransformUtils::get_limit_value(limit_expr,
-                                                       opt_ctx->get_params(),
+                                                       opt_ctx->get_parameter_context(),
                                                        opt_ctx->get_exec_ctx(),
                                                        &opt_ctx->get_allocator(),
                                                        limit_count,
                                                        is_null_value))) {
   } else if (!is_null_value && offset_expr != NULL &&
              OB_FAIL(ObTransformUtils::get_limit_value(offset_expr,
-                                                       opt_ctx->get_params(),
+                                                       opt_ctx->get_parameter_context(),
                                                        opt_ctx->get_exec_ctx(),
                                                        &opt_ctx->get_allocator(),
                                                        offset_count,

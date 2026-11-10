@@ -95,7 +95,8 @@ int ObGroupByChecker::check_group_by(const ParamStore *param_store,
                                      ObSelectStmt *ref_stmt,
                                      bool has_having_self_column/*default false*/,
                                      bool has_group_by_clause,
-                                     bool only_need_constraints)
+                                     bool only_need_constraints,
+                                     common::ObIAllocator *owner, ObExecContext *actual_ctx)
 {
   int ret = OB_SUCCESS;
   // group by checker
@@ -107,7 +108,7 @@ int ObGroupByChecker::check_group_by(const ParamStore *param_store,
     } else if (OB_FAIL(append(all_rollup_exprs, ref_stmt->get_rollup_exprs()))) {
     }
     if (OB_SUCC(ret)) {
-      ObGroupByChecker checker(param_store,
+      ObGroupByChecker checker(param_store, owner, actual_ctx,
                                &ref_stmt->get_group_exprs(),
                                &all_rollup_exprs);
       checker.set_query_ctx(ref_stmt->get_query_ctx());
@@ -142,13 +143,16 @@ int ObGroupByChecker::add_pc_const_param_info(ObExprEqualCheckContext &check_ctx
   ObPCConstParamInfo const_param_info;
   if (OB_ISNULL(query_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (param_store_ != NULL && constraint_owner_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
   } else if (param_store_ != NULL) {
     for (int64_t i = 0; OB_SUCC(ret) && i < check_ctx.param_expr_.count(); i++) {
       ObExprEqualCheckContext::ParamExprPair &param_pair = check_ctx.param_expr_.at(i);
       if (OB_FAIL(const_param_info.const_idx_.push_back(param_pair.param_idx_))) {
       } else if (param_pair.param_idx_ < 0 || param_pair.param_idx_ >= param_store_->count()) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(const_param_info.const_params_.push_back(param_store_->at(param_pair.param_idx_)))) {
+      } else if (OB_FAIL(const_param_info.add_parameter(param_store_->at(param_pair.param_idx_),
+                                constraint_ctx_, *constraint_owner_))) {
       }
     }
     if (OB_FAIL(ret)) {

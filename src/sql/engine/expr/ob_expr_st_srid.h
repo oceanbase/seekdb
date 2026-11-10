@@ -36,8 +36,8 @@ public:
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx)
                                 const override;
-  static int eval_st_srid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);                         
-  static int eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const char *func_name);
+  static int eval_st_srid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
+  static int eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, const char *func_name);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

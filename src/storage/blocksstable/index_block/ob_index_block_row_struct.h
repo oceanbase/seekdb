@@ -32,7 +32,6 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
 class ObPointerSwizzleNode;
 }
 namespace storage

@@ -45,10 +45,10 @@ int ObExprToDays::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int calc_todays_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_todays_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *day_datum = NULL;
+  Datum *day_datum = NULL;
   // Here there is no judgment like in the old framework, whether the return value of cast is OB_INVALID_DATE_VALUE
   // If the conversion fails, the result will be set to ZERO_DATE (cast mode default is ZERO_ON_WARN)
   // MySQL's behavior is, when the result is zero date, it returns NULL

@@ -44,19 +44,19 @@ struct ObConstIntMapping<DEFAULT, K, V>
 #define SELECT_ALL(...) __VA_ARGS__
 #define SELECT_TYPE_TC(arg) SELECT_ALL arg
 typedef ObConstIntMapping<ObMaxTC,
-        LST_DO(SELECT_TYPE_TC, (,), OBJ_TYPE_TC_PAIRS)> ObObjTypeTCMap;
+        LST_DO(SELECT_TYPE_TC, (,), OBJ_TYPE_TC_PAIRS)> SqlValueTypeClassMap;
 #undef SELECT_TYPE_TC
 #undef SELECT_ALL
 
-template <ObObjType TYPE>
-struct ObObjTypeTraits
+template <SqlValueType TYPE>
+struct SqlValueTypeTraits
 {
-  constexpr static ObObjTypeClass tc_
-      = static_cast<ObObjTypeClass>(ObObjTypeTCMap::liner_search(TYPE));
+  constexpr static SqlTypeClass tc_
+      = static_cast<SqlTypeClass>(SqlValueTypeClassMap::liner_search(TYPE));
 };
 
-static_assert(ObObjTypeTraits<ObMaxType>::tc_ == ObMaxTC
-              && ObObjTypeTraits<static_cast<ObObjType>(ObMaxType - 1)>::tc_ != ObMaxTC,
+static_assert(SqlValueTypeTraits<ObMaxType>::tc_ == ObMaxTC
+              && SqlValueTypeTraits<static_cast<SqlValueType>(ObMaxType - 1)>::tc_ != ObMaxTC,
               "Wrong obj type to type class mapping");
 
 

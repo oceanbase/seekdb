@@ -23,6 +23,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/list/ob_dlist.h"
 #include "common/row/ob_row.h"
+#include "common/datum/datum_value_buffer.h"
 
 namespace oceanbase
 {
@@ -70,18 +71,19 @@ public:
 
   struct StoreRow
   {
-    StoreRow() : readable_(true), cnt_(0) {}
+    StoreRow() : readable_(true), cnt_(0), size_(0) {}
 
     static int64_t row_copy_size(const common::ObNewRow &row);
     int copy_row(const common::ObNewRow &row, char *buf, const int64_t size);
-    common::ObObj *cells() { return reinterpret_cast<common::ObObj *>(payload_); }
-    const common::ObObj *cells() const { return reinterpret_cast<const common::ObObj *>(payload_); }
+    common::DatumValue *cells() { return reinterpret_cast<common::DatumValue *>(payload_); }
+    const common::DatumValue *cells() const { return reinterpret_cast<const common::DatumValue *>(payload_); }
 
     int to_copyable();
     int to_readable();
 
     uint32_t readable_:1;
     uint32_t cnt_:31;
+    uint32_t size_;
     char payload_[0];
   } __attribute__((packed));
 

@@ -61,7 +61,7 @@ int ObExprJsonSet::calc_result_typeN(ObExprResType& type,
   return ret;
 }                   
 
-int ObExprJsonSet::eval_json_set(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonSet::eval_json_set(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObJsonExprHelper::eval_json_mutation(expr, ctx, res, JsonMutation::Set);
 }

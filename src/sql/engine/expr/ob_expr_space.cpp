@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_space.h"
 
 
@@ -39,11 +40,14 @@ inline int ObExprSpace::calc_result_type1(
   ObRawExpr * raw_expr = nullptr;
   ObRawExpr * child_raw_expr = nullptr;
   // space is mysql only expr
-  ObObjType res_type = ObMaxType;
+  SqlValueType res_type = ObMaxType;
   if (type1.is_null()) {
     res_type = ObVarcharType;
   } else if (type1.is_literal()) {
-    if (OB_FAIL(calc_result_type(type_ctx, type1.get_param(), res_type))) {
+    alignas(8) char parameter_scratch[64];
+    DatumValue parameter;
+    if (OB_FAIL(type1.export_param(parameter, parameter_scratch, sizeof(parameter_scratch)))) {
+    } else if (OB_FAIL(calc_result_type(type_ctx, parameter, res_type))) {
     }
   } else if (OB_ISNULL(raw_expr = type_ctx.get_raw_expr())) {
     ret = OB_INVALID_ARGUMENT;
@@ -62,9 +66,13 @@ inline int ObExprSpace::calc_result_type1(
     //      select c1 from space_t1;
     const ObConstRawExpr *const_expr =
               static_cast<const ObConstRawExpr*>(child_raw_expr->get_param_expr(0));
+    alignas(8) char parameter_scratch[64];
+    DatumValue parameter;
     if (child_raw_expr->get_param_expr(0)->get_result_type().is_null()) {
       res_type = ObVarcharType;
-    } else if (OB_FAIL(calc_result_type(type_ctx, const_expr->get_param(), res_type))) {
+    } else if (OB_FAIL(const_expr->export_bound_param(parameter, parameter_scratch,
+                                                     sizeof(parameter_scratch)))) {
+    } else if (OB_FAIL(calc_result_type(type_ctx, parameter, res_type))) {
     }
   } else {
     res_type = ObLongTextType;
@@ -87,7 +95,7 @@ inline int ObExprSpace::calc_result_type1(
   return ret;
 }
 
-int ObExprSpace::calc_result_type(ObExprTypeCtx &type_ctx, const ObObj &obj, ObObjType &res_type) const
+int ObExprSpace::calc_result_type(ObExprTypeCtx &type_ctx, const DatumValue &obj, SqlValueType &res_type) const
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator alloc(ObModIds::OB_SQL_RES_TYPE);
@@ -100,7 +108,13 @@ int ObExprSpace::calc_result_type(ObExprTypeCtx &type_ctx, const ObObj &obj, ObO
   ObCastCtx cast_ctx(
       &alloc, &dtc_params, cur_time, cast_mode, CS_TYPE_INVALID);
   int64_t count_val = 0;
-  EXPR_GET_INT64_V2(obj, count_val);
+  {
+        DatumValue converted_literal;
+        if (OB_SUCC(ret)) {
+          ret = DatumValueCaster::to_type(ObIntType, cast_ctx, obj, alloc, converted_literal);
+        }
+        if (OB_SUCC(ret)) { ret = converted_literal.get_int(count_val); }
+      }
   if (OB_SUCC(ret)) {
     res_type = get_result_type_mysql(count_val);
   }
@@ -115,10 +129,10 @@ int ObExprSpace::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) cons
   return ret;
 }
 
-int ObExprSpace::eval_space(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSpace::eval_space(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *count = NULL;
+  Datum *count = NULL;
   int64_t max_size = 0;
   bool is_null = false;
   ObString output;

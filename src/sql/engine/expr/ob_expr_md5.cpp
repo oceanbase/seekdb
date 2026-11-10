@@ -64,10 +64,10 @@ int ObExprMd5::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr
   return ret;
 }
 
-int ObExprMd5::calc_md5(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprMd5::calc_md5(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();

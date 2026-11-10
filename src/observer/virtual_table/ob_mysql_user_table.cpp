@@ -49,7 +49,7 @@ int ObMySQLUserTable::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "schema guard is NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
@@ -70,12 +70,12 @@ int ObMySQLUserTable::inner_get_next_row(common::ObNewRow *&row)
                 const uint64_t col_id = output_column_ids_.at(col_idx);
                 switch (col_id) {
                   case (HOST): {
-                    cells[col_idx].set_varchar(user_info->get_host_name_str());
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, user_info->get_host_name_str()) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
                   case (USER_NAME): {
-                    cells[col_idx].set_varchar(user_info->get_user_name_str());
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, user_info->get_user_name_str()) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
@@ -83,35 +83,35 @@ int ObMySQLUserTable::inner_get_next_row(common::ObNewRow *&row)
                     ObString upper_passwd_str;
                     if (OB_FAIL(ObCharset::toupper(ObCharset::get_default_collation(ObCharset::get_default_charset()), user_info->get_passwd_str(), upper_passwd_str, *allocator_))) {
                     } else {
-                      cells[col_idx].set_varchar(upper_passwd_str);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, upper_passwd_str) : ret);
                     }
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
                   case (MAX_CONNECTIONS): {
-                    cells[col_idx].set_int(static_cast<int64_t>(user_info->get_max_connections()));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, col_idx, static_cast<int64_t>(user_info->get_max_connections())) : ret);
                     break;
                   }
                   case (MAX_USER_CONNECTIONS): {
-                    cells[col_idx].set_int(static_cast<int64_t>(user_info->get_max_user_connections()));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, col_idx, static_cast<int64_t>(user_info->get_max_user_connections())) : ret);
                     break;
                   }
 #define EXIST_PRIV_CASE(PRIV_NAME) \
   case (PRIV_NAME##_PRIV): {    \
-    cells[col_idx].set_varchar((user_info->get_priv_set() & OB_PRIV_##PRIV_NAME) ? "Y" : "N"); \
+    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, (user_info->get_priv_set() & OB_PRIV_##PRIV_NAME) ? "Y" : "N") : ret); \
     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));\
     break;\
   }
 #define NO_EXIST_PRIV_CASE(PRIV_NAME) \
   case (PRIV_NAME##_PRIV): {    \
-    cells[col_idx].set_varchar("N"); \
+    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "N") : ret); \
     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));\
     break;\
   }
 #define COLUMN_SET_WITH_TYPE(COL_NAME, TYPE, VALUE) \
   case (COL_NAME): {    \
     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));\
-    cells[col_idx].set_##TYPE(VALUE); \
+    if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_##TYPE(cells, cur_row_.count_, col_idx, VALUE); } \
     break;\
   }
 
@@ -145,16 +145,16 @@ int ObMySQLUserTable::inner_get_next_row(common::ObNewRow *&row)
                   EXIST_PRIV_CASE(CREATE_TABLESPACE);
                   EXIST_PRIV_CASE(CREATE_ROLE);
                   EXIST_PRIV_CASE(DROP_ROLE);
-                  COLUMN_SET_WITH_TYPE(SSL_TYPE, varchar, ssl_type_str);
-                  COLUMN_SET_WITH_TYPE(SSL_CIPHER, varchar, user_info->get_ssl_cipher());
-                  COLUMN_SET_WITH_TYPE(X509_ISSUER, varchar, user_info->get_x509_issuer());
-                  COLUMN_SET_WITH_TYPE(X509_SUBJECT, varchar, user_info->get_x509_subject());
+                  COLUMN_SET_WITH_TYPE(SSL_TYPE, varchar_view, ssl_type_str);
+                  COLUMN_SET_WITH_TYPE(SSL_CIPHER, varchar_view, user_info->get_ssl_cipher());
+                  COLUMN_SET_WITH_TYPE(X509_ISSUER, varchar_view, user_info->get_x509_issuer());
+                  COLUMN_SET_WITH_TYPE(X509_SUBJECT, varchar_view, user_info->get_x509_subject());
                   COLUMN_SET_WITH_TYPE(MAX_QUESTIONS, int, 0);
                   COLUMN_SET_WITH_TYPE(MAX_UPDATES, int, 0);
-                  COLUMN_SET_WITH_TYPE(PLUGIN, varchar, "ob_native_password");
-                  COLUMN_SET_WITH_TYPE(AUTHENTICATION_STRING, varchar, "");
-                  COLUMN_SET_WITH_TYPE(PASSWORD_EXPIRED, varchar, "");
-                  COLUMN_SET_WITH_TYPE(ACCOUNT_LOCKED, varchar, user_info->get_is_locked() ? "Y" : "N");
+                  COLUMN_SET_WITH_TYPE(PLUGIN, varchar_view, "ob_native_password");
+                  COLUMN_SET_WITH_TYPE(AUTHENTICATION_STRING, varchar_view, "");
+                  COLUMN_SET_WITH_TYPE(PASSWORD_EXPIRED, varchar_view, "");
+                  COLUMN_SET_WITH_TYPE(ACCOUNT_LOCKED, varchar_view, user_info->get_is_locked() ? "Y" : "N");
 
 #undef EXIST_PRIV_CASE
 #undef NO_EXIST_PRIV_CASE

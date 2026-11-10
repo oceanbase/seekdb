@@ -43,10 +43,10 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const override;
   static int eval_st_astext(const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObDatum &res);
+                            Datum &res);
   static int eval_st_astext_common(const ObExpr &expr,
                                    ObEvalCtx &ctx,
-                                   ObDatum &res,
+                                   Datum &res,
                                    const char *func_name);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
@@ -68,7 +68,7 @@ public:
   virtual ~ObExprSTAsWkt() {}
   static int eval_st_astext(const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObDatum &res);
+                            Datum &res);
   int cg_expr(ObExprCGCtx &expr_cg_ctx,
               const ObRawExpr &raw_expr,
               ObExpr &rt_expr) const override;

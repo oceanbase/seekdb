@@ -32,7 +32,7 @@ public:
                                 ObExprResType &text,
                                 common::ObExprTypeCtx &type_ctx) const;
   static int eval_char_length(const ObExpr &expr, ObEvalCtx &ctx, 
-                              ObDatum &res);
+                              Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                               ObExpr &rt_expr) const override;
 private:

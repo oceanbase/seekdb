@@ -27,6 +27,7 @@
 #include "data_plane/ob_i_memory_pressure_service.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "share/ob_timezone_mgr.h"
+#include "share/datum/typed_datum_compare.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -247,12 +248,15 @@ int ObInsertValueGenerator::fill_field_expr(ObIArray<ObCSVGeneralParser::FieldVa
   if (OB_UNLIKELY(field_values.count() != field_exprs_.count())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    for (int i = 0; i < field_values.count(); ++i) {
+    for (int i = 0; OB_SUCC(ret) && i < field_values.count(); ++i) {
       auto expr = static_cast<ObConstRawExpr *>(field_exprs_.at(i));
-      ObLoadDataBase::field_to_obj(expr->get_value(),
-                                   field_values.at(i),
-                                   cs_type_,
-                                   string_values.has_member(i));
+      DatumValue field;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(expr->export_value(field, scratch, sizeof(scratch)))) {
+      } else {
+        ObLoadDataBase::field_to_value(field, field_values.at(i), cs_type_, string_values.has_member(i));
+        ret = expr->replace_value_borrowed(field);
+      }
     }
   }
   return ret;
@@ -272,9 +276,9 @@ int ObInsertValueGenerator::gen_insert_values(ObIArray<ObString> &insert_values,
     if (expr->get_expr_type() == T_DEFAULT) {
       OZ (str_buf.write_string("DEFAULT", &store_value));
     } else if (expr->is_const_raw_expr()
-               && (const_expr = static_cast<ObConstRawExpr *>(expr))->get_value().is_string_type()) {
-      ObString const_string = const_expr->get_value().get_string();
-      ObCollationType coll_type = const_expr->get_value().get_collation_type();
+               && (const_expr = static_cast<ObConstRawExpr *>(expr))->get_value_meta().is_string_type()) {
+      ObString const_string = const_expr->get_value_datum().get_string();
+      ObCollationType coll_type = const_expr->get_value_meta().get_collation_type();
       uint32_t pos = 0;
       if (ObCharset::charset_type_by_coll(coll_type) != CHARSET_UTF8MB4) {
         if (OB_FAIL(ObCharset::charset_convert(
@@ -321,7 +325,7 @@ int ObInsertValueGenerator::init(ObSQLSessionInfo &session,
                                  ObLoadFileBuffer *data_buffer,
                                  ObSchemaGetterGuard *schema_guard)
 {
-  ObObjPrintParams param = session.create_obj_print_params();
+  ObValuePrintParams param = session.create_obj_print_params();
   param.cs_type_ = CS_TYPE_UTF8MB4_BIN;
   expr_printer_.init(data_buffer->begin_ptr(),
                      data_buffer->get_buffer_size(),
@@ -412,10 +416,10 @@ public:
           ret = OB_ERR_UNEXPECTED;
         } else {
           ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(func_expr->get_param_expr(0));
-          if (c_expr->get_value().get_type() != ObVarcharType) {
+          if (c_expr->get_value_meta().get_type() != ObVarcharType) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            ref_name = c_expr->get_value().get_string();
+            ref_name = c_expr->get_value_datum().get_string();
           }
         }
       }
@@ -441,14 +445,18 @@ public:
             if (OB_ISNULL(c_expr = OB_NEWx(ObConstRawExpr, (&ctx_.get_allocator())))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
             } else {
-              ObObj var_obj;
+              DatumValue var_value;
               ObSessionVariable user_var;
               if (OB_FAIL(session->get_user_variable(ref_name, user_var))) {
+              } else if (OB_FAIL(clone_typed_value(user_var.value_, var_value,
+                                                   ctx_.get_allocator()))) {
               } else {
-                var_obj = user_var.value_;
-                var_obj.set_meta_type(user_var.meta_);
-                c_expr->set_value(var_obj);
-                new_expr = c_expr;
+                var_value.set_meta_type(user_var.meta_);
+                // Constant-frame generation uses the expression item type.
+                // A default-constructed T_INVALID expression has no value
+                // slot even when its declared result type is populated.
+                c_expr->set_expr_type(static_cast<ObItemType>(var_value.get_type()));
+                if (OB_SUCC(ret = c_expr->set_value_borrowed(var_value))) { new_expr = c_expr; }
               }
             }
           }
@@ -723,7 +731,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
     handle->err_records.reuse();
     expr_buffer = new(expr_buf) ObLoadFileBuffer(handle->data_buffer->get_buffer_size());
     ObSEArray<ObCSVGeneralParser::LineErrRec, 1> err_records;
-    ObSEArray<ObObj, 32> parse_result;
+    ObArenaAllocator row_eval_allocator(ObModIds::OB_SQL_LOAD_DATA);
 
     int64_t nrows = 1;
     const char *ptr = handle->data_buffer->begin_ptr();
@@ -742,7 +750,6 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
     struct Functor handle_one_line;
     if (OB_FAIL(handle->generator.init(*(handle->exec_ctx.get_my_session()), expr_buffer,
                                        handle->exec_ctx.get_sql_ctx()->schema_guard_))) {
-    } else if (OB_FAIL(parse_result.prepare_allocate(handle->generator.get_field_exprs().count()))) {
     } else {
       handle->exec_ctx.set_use_temp_expr_ctx_cache(true);
     }
@@ -767,7 +774,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
       if (OB_SUCC(ret) && nrows > 0) {
         int64_t cur_line_num = parsed_line_num++;
         // Calculate partition id
-        ObObj result;
+        ObDatum result;
         ObTabletID tablet_id;
         //insert_values.reuse();
         str_buf.reuse();
@@ -778,12 +785,19 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
           int64_t idx = task_id % handle->datafrag_mgr.get_tablet_ids().count();
           tablet_id = handle->datafrag_mgr.get_tablet_ids().at(idx);
         } else {
-          for (int i = 0; i < handle->parser.get_fields_per_line().count(); ++i) {
-            ObCSVGeneralParser::FieldValue &str_v = handle->parser.get_fields_per_line().at(i);
-            handle->row_in_file.get_cell(i) =
-              static_cast<ObConstRawExpr *>(handle->generator.get_field_exprs().at(i))->get_value();
+          for (int i = 0; OB_SUCC(ret) && i < handle->parser.get_fields_per_line().count(); ++i) {
+            const auto *field = static_cast<ObConstRawExpr *>(handle->generator.get_field_exprs().at(i));
+            // fill_field_expr publishes only NULL or parser-owned VARCHAR;
+            // this export therefore cannot retain a scalar scratch pointer.
+            alignas(8) char scratch[64];
+            if (!field->get_value_datum().is_null() && !field->get_value_meta().is_varchar()) {
+              ret = OB_ERR_UNEXPECTED;
+            } else { ret = field->export_value(handle->row_in_file.at(i), scratch, sizeof(scratch)); }
           }
-          if (OB_FAIL(handle->calc_tablet_id_expr->eval(handle->exec_ctx, handle->row_in_file, result))) {
+          row_eval_allocator.reuse();
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(handle->calc_tablet_id_expr->eval_datum(handle->exec_ctx,
+                      handle->row_in_file, row_eval_allocator, result))) {
           } else {
             tablet_id = ObTabletID(result.get_uint64());
             if (OB_UNLIKELY(!tablet_id.is_valid())) {
@@ -2003,17 +2017,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
                                                    shuffle_handle->generator.get_insert_exprs()))) {
     } else {
       shuffle_handle->calc_tablet_id_expr = calc_tablet_id_expr;
-      ObObj *obj_array = static_cast<ObObj *>(
-          shuffle_handle->allocator.alloc(sizeof(ObObj) * num_of_file_column));
-      if (OB_ISNULL(obj_array)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        for (ObObj *ptr = obj_array; ptr < obj_array + num_of_file_column; ++ptr) {
-          new(ptr) ObObj();
-          ptr->set_type(ObVarcharType);
-          ptr->set_collation_type(load_args.file_cs_type_);
-        }
-        shuffle_handle->row_in_file.assign(obj_array, num_of_file_column);
+      if (OB_FAIL(shuffle_handle->row_in_file.prepare_allocate(num_of_file_column))) {
       }
     }
   }

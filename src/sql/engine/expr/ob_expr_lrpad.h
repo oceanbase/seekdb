@@ -53,7 +53,7 @@ public:
                      common::ObIAllocator *allocator,
                      char* &result,
                      int64_t &size,
-                     ObObjType res_type,
+                     SqlValueType res_type,
                      bool has_lob_header);
   static int padding_inner(LRpadType type,
                            const char *text,
@@ -76,29 +76,29 @@ public:
                                     int64_t &size);
 
   static int calc_type_length_mysql(const ObExprResType result_type,
-                                    const common::ObObj &text,
-                                    const common::ObObj &pad_text,
-                                    const common::ObObj &len,
+                                    const common::DatumValue &text,
+                                    const common::DatumValue &pad_text,
+                                    const common::DatumValue &len,
                                     const ObExprTypeCtx &type_ctx,
                                     int64_t &result_size);
 
   // for engine 3.0
   static int calc_mysql_pad_expr(const ObExpr &expr, ObEvalCtx &ctx, LRpadType pad_type,
-                                 ObDatum &res);
+                                 Datum &res);
   static int calc_mysql(const LRpadType pad_type, const ObExpr &expr, ObEvalCtx &ctx,
-                        const common::ObDatum &text,
-                        const common::ObDatum &len, const common::ObDatum &pad_text,
+                        const common::Datum &text,
+                        const common::Datum &len, const common::Datum &pad_text,
                         const ObSQLSessionInfo &session, common::ObIAllocator &res_alloc,
-                        ObDatum &res);
+                        Datum &res);
   static int calc_mysql_inner(const LRpadType pad_type,
                               const ObExpr &expr,
-                              const ObDatum &len,
+                              const Datum &len,
                               int64_t &max_result_size,
                               const ObString &str_text,
                               const ObString &str_pad,
                               ObIAllocator &res_alloc,
-                              ObDatum &res);
-  int get_origin_len_obj(ObObj &len_obj) const;
+                              Datum &res);
+  int get_origin_len_obj(common::DatumValue &len_obj, void *scratch, int64_t capacity) const;
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprBaseLRpad);
@@ -119,7 +119,7 @@ public:
   // for engine 3.0
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_mysql_lpad_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int calc_mysql_lpad_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprLpad);
 };
@@ -144,7 +144,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const;
   static int calc_mysql_rpad_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                           ObDatum &res);
+                                           Datum &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprRpad);
 };

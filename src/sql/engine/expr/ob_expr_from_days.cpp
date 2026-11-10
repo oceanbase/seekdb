@@ -49,10 +49,10 @@ int ObExprFromDays::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprFromDays::calc_fromdays(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprFromDays::calc_fromdays(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();

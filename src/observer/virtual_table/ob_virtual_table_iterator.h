@@ -18,6 +18,7 @@
 #define OCEANBASE_COMMON_OB_ALL_VIRTUAL_TABLE_ITERATOR_
 
 #include "lib/container/ob_se_array.h"
+#include "common/datum/datum_value_buffer.h"
 #include "common/row/ob_row_iterator.h"
 #include "common/ob_common_types.h"
 #include "share/object/ob_obj_cast.h"
@@ -54,11 +55,13 @@ public:
       table_schema_(NULL),
       index_schema_(NULL),
       cur_row_(),
+      row_cells_(nullptr),
       session_(NULL),
       row_calc_buf_("VTITER_CALC_BUF"),
       convert_alloc_(),
       cast_ctx_(),
       convert_row_(),
+      convert_cells_(nullptr),
       need_convert_(false),
       scan_param_(NULL)
     {}
@@ -103,7 +106,11 @@ private:
   int convert_output_row(ObNewRow *&cur_row);
   int get_all_columns_schema();
   int init_sql_schema_guard_();
+  int check_output_value(const DatumValue &source, const share::schema::ObColumnSchemaV2 &column,
+                         ObCastCtx &context, DatumValue &output);
 protected:
+  static int convert_temporary_lob(DatumValue &value, common::ObIAllocator &owner);
+  int64_t row_cell_capacity() const { return reserved_column_cnt_ > 0 ? reserved_column_cnt_ : 1; }
   common::ObIAllocator *allocator_;
   common::ObSEArray<uint64_t, VT_COLUMN_COUNT> output_column_ids_;
   int64_t reserved_column_cnt_;
@@ -112,6 +119,7 @@ protected:
   const share::schema::ObTableSchema *table_schema_;
   const share::schema::ObTableSchema *index_schema_;
   common::ObNewRow cur_row_;
+  common::DatumValue *row_cells_;
   common::ObQueryFlag scan_flag_;
   sql::ObSQLSessionInfo *session_;
   common::ObSEArray<common::ObNewRange, 16> key_ranges_;
@@ -122,6 +130,7 @@ private:
   common::ObArenaAllocator convert_alloc_;
   common::ObCastCtx cast_ctx_;
   common::ObNewRow convert_row_;
+  common::DatumValue *convert_cells_;
   bool need_convert_;
   common::ObSEArray<const share::schema::ObColumnSchemaV2 *, 16> cols_schema_;
   const ObVTableScanParam *scan_param_;

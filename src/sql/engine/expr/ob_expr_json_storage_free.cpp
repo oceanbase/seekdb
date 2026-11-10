@@ -52,11 +52,11 @@ int ObExprJsonStorageFree::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonStorageFree::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta,
-                                bool has_lob_header, MultimodeAlloctor *allocator, ObDatum &res)
+int ObExprJsonStorageFree::calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta,
+                                bool has_lob_header, MultimodeAlloctor *allocator, Datum &res)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
 
   if (type == ObNullType || data.is_null()) {
@@ -90,11 +90,11 @@ int ObExprJsonStorageFree::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
 }
 
 // for new sql engine
-int ObExprJsonStorageFree::eval_json_storage_free(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonStorageFree::eval_json_storage_free(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
 
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObExpr *arg = expr.args_[0];
 
   if (OB_ISNULL(arg)) {

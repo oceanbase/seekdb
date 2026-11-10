@@ -99,115 +99,115 @@ int ObAllVirtualTmpFileInfo::fill_columns_(tmp_file::ObTmpFileInfo *tmp_file_inf
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case FILE_ID:
-          cur_row_.cells_[i].set_int(tmp_file_info->fd_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->fd_) : ret);
           break;
         case TRACE_ID:
           MEMSET(trace_id_buffer_, '\0', OB_MAX_TRACE_ID_BUFFER_SIZE);
           if (!tmp_file_info->trace_id_.is_invalid()) {
             tmp_file_info->trace_id_.to_string(trace_id_buffer_, OB_MAX_TRACE_ID_BUFFER_SIZE);
           }
-          cur_row_.cells_[i].set_varchar(trace_id_buffer_);
-          cur_row_.cells_[i].set_default_collation_type();
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, trace_id_buffer_) : ret);
+          cur_row_.cells_[i].meta_.set_default_collation_type();
           break;
         case DIR_ID:
-          cur_row_.cells_[i].set_int(tmp_file_info->dir_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->dir_id_) : ret);
           break;
         case DATA_BYTES:
-          cur_row_.cells_[i].set_int(tmp_file_info->file_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->file_size_) : ret);
           break;
         case START_OFFSET:
-          cur_row_.cells_[i].set_int(tmp_file_info->truncated_offset_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->truncated_offset_) : ret);
           break;
         case IS_DELETING:
-          cur_row_.cells_[i].set_bool(tmp_file_info->is_deleting_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->is_deleting_) : ret);
           break;
         case CACHED_DATA_PAGE_NUM:
-          cur_row_.cells_[i].set_int(tmp_file_info->cached_data_page_num_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->cached_data_page_num_) : ret);
           break;
         case WRITE_BACK_DATA_PAGE_NUM:
-          cur_row_.cells_[i].set_int(tmp_file_info->write_back_data_page_num_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->write_back_data_page_num_) : ret);
           break;
         case FLUSHED_DATA_PAGE_NUM:
-          cur_row_.cells_[i].set_int(tmp_file_info->flushed_data_page_num_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->flushed_data_page_num_) : ret);
           break;
         case REF_CNT:
-          cur_row_.cells_[i].set_int(tmp_file_info->ref_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->ref_cnt_) : ret);
           break;
         case TOTAL_WRITES:
-          cur_row_.cells_[i].set_int(tmp_file_info->write_info_.write_req_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->write_info_.write_req_cnt_) : ret);
           break;
         case UNALIGNED_WRITES:
-          cur_row_.cells_[i].set_int(tmp_file_info->write_info_.unaligned_write_req_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->write_info_.unaligned_write_req_cnt_) : ret);
           break;
         case TOTAL_READS:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.read_req_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.read_req_cnt_) : ret);
           break;
         case UNALIGNED_READS:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.unaligned_read_req_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.unaligned_read_req_cnt_) : ret);
           break;
         case TOTAL_READ_BYTES:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.total_read_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.total_read_size_) : ret);
           break;
         case LAST_ACCESS_TIME:
-          cur_row_.cells_[i].set_timestamp(tmp_file_info->read_info_.last_access_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.last_access_ts_) : ret);
           break;
         case LAST_MODIFY_TIME:
-          cur_row_.cells_[i].set_timestamp(tmp_file_info->write_info_.last_modify_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->write_info_.last_modify_ts_) : ret);
           break;
         case BIRTH_TIME:
-          cur_row_.cells_[i].set_timestamp(tmp_file_info->birth_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->birth_ts_) : ret);
           break;
         case TMP_FILE_PTR:
           if (NULL != tmp_file_info->tmp_file_ptr_) {
             MEMSET(file_ptr_buffer_, '\0', 20);
             snprintf(file_ptr_buffer_, 18, "0x%lx", (uint64_t)tmp_file_info->tmp_file_ptr_);
-            cur_row_.cells_[i].set_varchar(file_ptr_buffer_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, file_ptr_buffer_) : ret);
           } else {
-            cur_row_.cells_[i].set_varchar(ObString::make_string("nullptr"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ObString::make_string("nullptr")) : ret);
           }
-          cur_row_.cells_[i].set_default_collation_type();
+          cur_row_.cells_[i].meta_.set_default_collation_type();
           break;
         case LABEL:
           MEMSET(file_label_buffer_, '\0', OB_MAX_FILE_LABEL_SIZE);
           if (!tmp_file_info->label_.is_empty()) {
             tmp_file_info->label_.to_string(file_label_buffer_, OB_MAX_FILE_LABEL_SIZE);
           }
-          cur_row_.cells_[i].set_varchar(file_label_buffer_);
-          cur_row_.cells_[i].set_default_collation_type();
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, file_label_buffer_) : ret);
+          cur_row_.cells_[i].meta_.set_default_collation_type();
           break;
         case TYPE:
           break;
         case COMPRESSIBLE_FD:
           break;
         case PERSISTED_TAIL_PAGE_WRITES:
-          cur_row_.cells_[i].set_int(tmp_file_info->write_info_.write_persisted_tail_page_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->write_info_.write_persisted_tail_page_cnt_) : ret);
           break;
         case LACK_PAGE_CNT:
-          cur_row_.cells_[i].set_int(tmp_file_info->write_info_.lack_page_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->write_info_.lack_page_cnt_) : ret);
           break;
         case TOTAL_TRUNCATED_PAGE_READ_CNT:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.total_truncated_page_read_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.total_truncated_page_read_cnt_) : ret);
           break;
         case TRUNCATED_PAGE_HITS:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.truncated_page_read_hits_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.truncated_page_read_hits_) : ret);
           break;
         case TOTAL_KV_CACHE_PAGE_READ_CNT:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.total_kv_cache_page_read_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.total_kv_cache_page_read_cnt_) : ret);
           break;
         case KV_CACHE_PAGE_HITS:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.kv_cache_page_read_hits_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.kv_cache_page_read_hits_) : ret);
           break;
         case TOTAL_UNCACHED_PAGE_READ_CNT:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.total_uncached_page_read_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.total_uncached_page_read_cnt_) : ret);
           break;
         case UNCACHED_PAGE_HITS:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.uncached_page_read_hits_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.uncached_page_read_hits_) : ret);
           break;
         case TOTAL_WBP_PAGE_READ_CNT:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.total_wbp_page_read_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.total_wbp_page_read_cnt_) : ret);
           break;
         case WBP_PAGE_HITS:
-          cur_row_.cells_[i].set_int(tmp_file_info->read_info_.wbp_page_read_hits_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tmp_file_info->read_info_.wbp_page_read_hits_) : ret);
           break;
         /* columns in ss modes begin */
         case AGGREGATE_READ_IO_CNT:
@@ -246,22 +246,22 @@ int ObAllVirtualTmpFileInfo::fill_sn_column_(const uint64_t col_index, tmp_file:
     uint64_t col_id = output_column_ids_.at(col_index);
     switch (col_id) {
       case META_TREE_EPOCH:
-        cur_row_.cells_[col_index].set_int(tmp_file_info->meta_tree_epoch_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, col_index, tmp_file_info->meta_tree_epoch_) : ret);
         break;
       case META_TREE_LEVELS:
-        cur_row_.cells_[col_index].set_int(tmp_file_info->meta_tree_level_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, col_index, tmp_file_info->meta_tree_level_cnt_) : ret);
         break;
       case META_BYTES:
-        cur_row_.cells_[col_index].set_int(tmp_file_info->meta_size_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, col_index, tmp_file_info->meta_size_) : ret);
         break;
       case CACHED_META_PAGE_NUM:
-        cur_row_.cells_[col_index].set_int(tmp_file_info->cached_meta_page_num_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, col_index, tmp_file_info->cached_meta_page_num_) : ret);
         break;
       case WRITE_BACK_META_PAGE_NUM:
-        cur_row_.cells_[col_index].set_int(tmp_file_info->write_back_meta_page_num_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, col_index, tmp_file_info->write_back_meta_page_num_) : ret);
         break;
       case PAGE_FLUSH_CNT:
-        cur_row_.cells_[col_index].set_int(tmp_file_info->all_type_page_flush_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, col_index, tmp_file_info->all_type_page_flush_cnt_) : ret);
         break;
       default:
         ret = OB_ERR_UNEXPECTED;

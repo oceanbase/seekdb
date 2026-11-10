@@ -18,6 +18,7 @@
 #ifndef OCEANBASE_QUERY_VECTOR_INDEX_UTIL_H_
 #define OCEANBASE_QUERY_VECTOR_INDEX_UTIL_H_
 
+#include "common/datum/datum_value.h"
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
 #include "common/datum/ob_datum.h"
@@ -974,9 +975,9 @@ public:
 
 typedef struct ObExtraInfoIdxType {
   ObExtraInfoIdxType() : idx_(0), type_() {}
-  ObExtraInfoIdxType(const int64_t idx, const common::ObObjMeta type) : idx_(idx), type_(type) {}
+  ObExtraInfoIdxType(const int64_t idx, const common::SqlTypeMeta type) : idx_(idx), type_(type) {}
   int64_t idx_;
-  common::ObObjMeta type_;
+  common::SqlTypeMeta type_;
   TO_STRING_KV(K_(idx), K_(type));
 } ObExtraIdxType;
 
@@ -1037,23 +1038,23 @@ struct ObVecExtraInfoPtr {
 };
 
 struct ObVecExtraInfoObj {
-  ObVecExtraInfoObj() : ptr_(nullptr), len_(0), obj_map_type_(common::ObObjDatumMapType::OBJ_DATUM_NULL) {}
+  ObVecExtraInfoObj() : ptr_(nullptr), len_(0), obj_map_type_(common::SqlValueDatumMapType::OBJ_DATUM_NULL) {}
   inline void reset()
   {
     ptr_ = nullptr;
     len_ = 0;
-    obj_map_type_ = common::ObObjDatumMapType::OBJ_DATUM_NULL;
+    obj_map_type_ = common::SqlValueDatumMapType::OBJ_DATUM_NULL;
   }
-  int from_datum(const ObDatum &datum, const common::ObObjMeta &type, ObIAllocator *allocator = nullptr);
-  int from_obj(const ObObj &obj, ObIAllocator *allocator = nullptr);
+  int from_datum(const ObDatum &datum, const common::SqlTypeMeta &type, ObIAllocator *allocator = nullptr);
+  int from_value(const DatumValue &obj, ObIAllocator *allocator = nullptr);
   int from_vector(
       const ObIVector &vector,
       const int row_pos,
-      const common::ObObjMeta &type,
+      const common::SqlTypeMeta &type,
       ObIAllocator *allocator /*nullptr*/);
   const char *ptr_;
   int32_t len_;
-  common::ObObjDatumMapType obj_map_type_;
+  common::SqlValueDatumMapType obj_map_type_;
   TO_STRING_KV(KP(ptr_), K(len_), K(obj_map_type_));
 };
 
@@ -1063,11 +1064,11 @@ public:
                                 int64_t extra_column_count, int64_t extra_info_actual_size, int64_t count, char *&buf);
   // if obj is ordered by column id, extra_in_rowkey_idxs_ is nullptr, else if extra_in_rowkey_idxs_ is ordered by rowkey_id
   // extra_in_rowkey_idxs_ is not nullptr
-  static int extra_buf_to_obj(const char *buf, int64_t data_len, int64_t extra_column_count, ObObj *obj, const ObIArray<int64_t> *extra_in_rowkey_idxs_ = nullptr);
+  static int extra_buf_to_values(const char *buf, int64_t data_len, int64_t extra_column_count, DatumValue *obj, const ObIArray<int64_t> *extra_in_rowkey_idxs_ = nullptr);
   static int64_t get_encode_size(const ObIArray<ObVecExtraInfoObj> &extra_obj);
-  inline static bool is_obj_type_supported(const ObObjType obj_type)
+  inline static bool is_obj_type_supported(const SqlValueType obj_type)
   {
-    const common::ObObjDatumMapType &obj_map_type = common::ObDatum::get_obj_datum_map_type(obj_type);
+    const common::SqlValueDatumMapType &obj_map_type = common::ObDatum::get_sql_value_datum_map_type(obj_type);
     bool res = false;
     if (obj_type > 64) {
       res = false;
@@ -1079,11 +1080,11 @@ public:
     return res;
   }
 
-  inline static bool is_fixed_length_type(const common::ObObjDatumMapType obj_map_type)
+  inline static bool is_fixed_length_type(const common::SqlValueDatumMapType obj_map_type)
   {
-    return obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_8BYTE_DATA ||
-           obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_4BYTE_DATA ||
-           obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_1BYTE_DATA;
+    return obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_8BYTE_DATA ||
+           obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_4BYTE_DATA ||
+           obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_1BYTE_DATA;
   }
 
   static int extra_info_to_buf(ObIAllocator &allocator, const ObVecExtraInfo *extra_info, int64_t count,
@@ -1101,7 +1102,7 @@ public:
   const static int64_t UNIS_VERSION = 1;
   // now extra_info supports fixed-length types (1 byte, 4 bytes, 8 bytes)
   // as well as some variable-length types.
-  const static int64_t VARIABLE_LENGTH_TYPE_SUPPROT = int64_t(1) << common::ObObjType::ObVarcharType;
+  const static int64_t VARIABLE_LENGTH_TYPE_SUPPROT = int64_t(1) << common::SqlValueType::ObVarcharType;
   const static int64_t FIXED_TYPE_LENGTH = 8;
   const static int64_t EXTRA_INFO_PARAM_MAX_VALUE = 16384;
 };

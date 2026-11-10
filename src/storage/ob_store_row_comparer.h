@@ -17,6 +17,7 @@
 #ifndef OB_STORE_ROW_COMPARER_H_
 #define OB_STORE_ROW_COMPARER_H_
 #include "storage/ob_i_store.h"
+#include "common/datum/datum_key_ops.h"
 
 namespace oceanbase
 {
@@ -65,7 +66,10 @@ OB_INLINE bool ObStoreRowComparer::operator()(const ObStoreRow *left, const ObSt
     for (int64_t i = 0; OB_LIKELY(common::OB_SUCCESS == result_code_) && i < sort_column_index_.count(); ++i) {
       const int64_t index = sort_column_index_.at(i);
       if (index < left->row_val_.count_ && index < right->row_val_.count_) {
-        const int cmp = left->row_val_.cells_[index].compare(right->row_val_.cells_[index]);
+        int cmp = 0;
+        result_code_ = common::compare_key_value(
+            left->row_val_.cells_[index], right->row_val_.cells_[index], cmp);
+        if (common::OB_SUCCESS != result_code_) { break; }
         if (cmp < 0) {
           bool_ret = true;
           break;

@@ -39,8 +39,7 @@ ObExprMinus::ObExprMinus(ObIAllocator &alloc, ObExprOperatorType type)
                         2,
                         NOT_ROW_DIMENSION,
                         ObExprResultTypeUtil::get_minus_result_type,
-                        ObExprResultTypeUtil::get_minus_calc_type,
-                        minus_funcs_)
+                        ObExprResultTypeUtil::get_minus_calc_type)
 {
   param_lazy_eval_ = false;
 }
@@ -126,7 +125,7 @@ int ObExprMinus::calc_result_type2(ObExprResType &type,
       type.set_precision(precision);
     }
     if (is_no_unsigned_subtraction(session->get_sql_mode())) {
-      ObObjType convert_type = type.get_type();
+      SqlValueType convert_type = type.get_type();
       convert_unsigned_type_to_signed(convert_type);
       type.set_type(convert_type);
     }
@@ -160,240 +159,6 @@ int ObExprMinus::calc_result_type2(ObExprResType &type,
 
 
 
-ObArithFunc ObExprMinus::minus_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMinus::minus_int,
-  ObExprMinus::minus_uint,
-  NULL,
-  ObExprMinus::minus_double,
-  ObExprMinus::minus_number,
-  ObExprMinus::minus_datetime,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-};
-
-ObArithFunc ObExprMinus::agg_minus_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMinus::minus_int,
-  ObExprMinus::minus_uint,
-  NULL,
-  ObExprMinus::minus_double_no_overflow,
-  ObExprMinus::minus_number,
-  ObExprMinus::minus_datetime,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-};
-
-int ObExprMinus::minus_int(ObObj &res,
-                           const ObObj &left,
-                           const ObObj &right,
-                           ObIAllocator *allocator,
-                           ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  int64_t left_i = left.get_int();
-  int64_t right_i = right.get_int();
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (left.get_type_class() == right.get_type_class()) {
-    res.set_int(left_i - right_i);
-    if (OB_UNLIKELY(is_int_int_out_of_range(left_i, right_i, res.get_int()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld - %ld)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
-    }
-  } else if (OB_UNLIKELY(ObUIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    res.set_uint64(left_i - right_i);
-    if (OB_UNLIKELY(is_int_uint_out_of_range(left_i, right_i, res.get_uint64()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld - %lu)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMinus::minus_uint(ObObj &res,
-                            const ObObj &left,
-                            const ObObj &right,
-                            ObIAllocator *allocator,
-                            ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  uint64_t left_i = left.get_uint64();
-  uint64_t right_i = right.get_uint64();
-  res.set_uint64(left_i - right_i);
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (left.get_type_class() == right.get_type_class()) {
-    if (OB_UNLIKELY(is_uint_uint_out_of_range(left_i, right_i, res.get_uint64()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%lu - %lu)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-  } else if (OB_UNLIKELY(ObIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (OB_UNLIKELY(is_uint_int_out_of_range(right_i, left_i, res.get_uint64()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%lu - %ld)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMinus::minus_double(ObObj &res,
-                              const ObObj &left,
-                              const ObObj &right,
-                              ObIAllocator *allocator,
-                              ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    double left_d = left.get_double();
-    double right_d = right.get_double();
-    res.set_double(left_d - right_d);
-    if (OB_UNLIKELY(is_double_out_of_range(res.get_double()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%e - %e)'",
-                      left_d,
-                      right_d);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
-      LOG_WARN("double out of range", K(res), K(left), K(right), K(res));
-      res.set_null();
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMinus::minus_double_no_overflow(ObObj &res,
-                                          const ObObj &left,
-                                          const ObObj &right,
-                                          ObIAllocator *,
-                                          ObScale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    double left_d = left.get_double();
-    double right_d = right.get_double();
-    res.set_double(left_d - right_d);
-  }
-  return ret;
-}
-
-int ObExprMinus::minus_number(ObObj &res,
-                              const ObObj &left,
-                              const ObObj &right,
-                              ObIAllocator *allocator,
-                              ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  number::ObNumber res_nmb;
-  if (OB_UNLIKELY(NULL == allocator)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(left.get_number().sub_v3(right.get_number(), res_nmb, *allocator))) {
-  } else {
-    if (ObUNumberType == res.get_type()) {
-      res.set_unumber(res_nmb);
-    } else {
-      res.set_number(res_nmb);
-    }
-  }
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMinus::minus_datetime(ObObj &res, const ObObj &left, const ObObj &right,
-    ObIAllocator *allocator, ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  const int64_t left_i = left.get_datetime();
-  const int64_t right_i = right.get_datetime();
-  ObTime ob_time;
-  if (OB_LIKELY(left.get_type_class() == right.get_type_class())) {
-    int64_t round_value = left_i - right_i;
-    ObTimeConverter::round_datetime(OB_MAX_DATE_PRECISION, round_value);
-    res.set_datetime(round_value);
-    res.set_scale(OB_MAX_DATE_PRECISION);
-    if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL || res.get_datetime() < DATETIME_MIN_VAL)
-        || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld - %ld)'", left_i, right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DATE", expr_str);
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
 int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
                          const ObRawExpr &raw_expr,
                          ObExpr &rt_expr) const
@@ -411,11 +176,11 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
     OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     rt_expr.eval_func_ = NULL;
     rt_expr.may_not_need_raw_check_ = false;
-    const ObObjType left_type = rt_expr.args_[0]->datum_meta_.type_;
-    const ObObjType right_type = rt_expr.args_[1]->datum_meta_.type_;
-    const ObObjType result_type = rt_expr.datum_meta_.type_;
-    const ObObjTypeClass left_tc = ob_obj_type_class(left_type);
-    const ObObjTypeClass right_tc = ob_obj_type_class(right_type);
+    const SqlValueType left_type = rt_expr.args_[0]->datum_meta_.type_;
+    const SqlValueType right_type = rt_expr.args_[1]->datum_meta_.type_;
+    const SqlValueType result_type = rt_expr.datum_meta_.type_;
+    const SqlTypeClass left_tc = sql_type_class(left_type);
+    const SqlTypeClass right_tc = sql_type_class(right_type);
 
     switch (result_type) {
       case ObIntType:
@@ -496,7 +261,7 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
         case ObCollectionSQLType: {
           ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
           const uint16_t sub_id = rt_expr.obj_meta_.get_subschema_id();
-          ObObjType elem_type;
+          SqlValueType elem_type;
           uint32_t unused;
           bool is_vec = false;
           if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, sub_id, elem_type, unused, is_vec))) {
@@ -534,7 +299,9 @@ struct ObIntIntBatchMinusRaw : public ObArithOpRawType<int64_t, int64_t, int64_t
 {
   static void raw_op(int64_t &res, const int64_t l, const int64_t r)
   {
-    res = l - r;
+    // Produce a defined wrapped value for the unchanged sign-based check,
+    // even when accessor operands/results stay in compiler registers.
+    (void)__builtin_sub_overflow(l, r, &res);
   }
 
   static int raw_check(const int64_t res, const int64_t l, const int64_t r)
@@ -557,12 +324,12 @@ struct ObIntIntBatchMinusRaw : public ObArithOpRawType<int64_t, int64_t, int64_t
 //calc_type is IntTC  left and right has same TC
 int ObExprMinus::minus_int_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObSignedIntArithOpWrap<ObIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMinus::minus_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObSignedIntArithOpWrap<ObIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -594,12 +361,12 @@ struct ObIntUIntBatchMinusRaw : public ObArithOpRawType<uint64_t, int64_t, uint6
 // calc_type/left_type is IntTC, right is ObUIntTC, only mysql mode
 int ObExprMinus::minus_int_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntUIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObIntUIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMinus::minus_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -630,12 +397,12 @@ struct ObUIntUIntBatchMinusRaw : public ObArithOpRawType<uint64_t, uint64_t, uin
 //calc_type is UIntTC  left and right has same TC
 int ObExprMinus::minus_uint_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntUIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntUIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMinus::minus_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -666,12 +433,12 @@ struct ObUIntIntBatchMinusRaw : public ObArithOpRawType<uint64_t, uint64_t, int6
 // calc_type/left_tpee is UIntTC , right is intTC. only mysql mode
 int ObExprMinus::minus_uint_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMinus::minus_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -707,12 +474,12 @@ struct ObFloatBatchMinusRawWithCheck: public ObFloatBatchMinusRawNoCheck
 // calc type is floatTC, left and right have the same TC
 int ObExprMinus::minus_float_float(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObFloatBatchMinusRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObArithOpWrap<ObFloatBatchMinusRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMinus::minus_float_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObFloatBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObArithOpWrap<ObFloatBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
@@ -753,21 +520,21 @@ struct ObDoubleBatchMinusRawWithCheck: public ObDoubleBatchMinusRawNoCheck
 int ObExprMinus::minus_double_double(EVAL_FUNC_ARG_DECL)
 {
   return T_OP_AGG_MINUS == expr.type_
-      ? def_arith_eval_func<ObArithOpWrap<ObDoubleBatchMinusRawNoCheck>>(EVAL_FUNC_ARG_LIST)
-      : def_arith_eval_func<ObArithOpWrap<ObDoubleBatchMinusRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+      ? def_arith_eval_func<ObArithOpWrap<ObDoubleBatchMinusRawNoCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx)
+      : def_arith_eval_func<ObArithOpWrap<ObDoubleBatchMinusRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMinus::minus_double_double_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   return T_OP_AGG_MINUS == expr.type_
-      ? def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMinusRawNoCheck>>(BATCH_EVAL_FUNC_ARG_LIST)
-      : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
+      ? def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMinusRawNoCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx)
+      : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
 struct ObNumberMinusFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
     char local_buff[ObNumber::MAX_BYTE_LEN];
@@ -777,7 +544,7 @@ struct ObNumberMinusFunc
     number::ObNumber res_num;
     if (OB_FAIL(l_num.sub_v3(r_num, res_num, local_alloc))) {
     } else {
-      res.set_number(res_num);
+      ret = ObExprUtil::set_number(expr, ctx, res, res_num);
     }
     return ret;
   }
@@ -786,14 +553,14 @@ struct ObNumberMinusFunc
 //calc type TC is ObNumberTC
 int ObExprMinus::minus_number_number(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObNumberMinusFunc>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObNumberMinusFunc>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMinus::minus_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector l_datums;
-  ObDatumVector r_datums;
+  DatumVector l_datums;
+  DatumVector r_datums;
   const ObExpr &left = *expr.args_[0];
   const ObExpr &right = *expr.args_[1];
 
@@ -806,7 +573,7 @@ int ObExprMinus::minus_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
   if (OB_SUCC(ret)) {
     char local_buff[ObNumber::MAX_BYTE_LEN];
     ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN);
-    ObDatumVector results = expr.locate_expr_datumvector(ctx);
+    DatumVector results = expr.locate_expr_datumvector(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
     for (auto i = 0; OB_SUCC(ret) && i < size; i++) {
@@ -820,24 +587,23 @@ int ObExprMinus::minus_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       }
       ObNumber l_num(l_datums.at(i)->get_number());
       ObNumber r_num(r_datums.at(i)->get_number());
-      uint32_t *res_digits = const_cast<uint32_t *> (results.at(i)->get_number_digits());
-      ObNumber::Desc &desc_buf = const_cast<ObNumber::Desc &> (results.at(i)->get_number_desc());
-      // Notice that, space of desc_buf is allocated in frame but without memset operation, which causes random memory content.
-      // And the reserved in storage layer should be 0, thus you must replacement new here to avoid checksum error, etc.
-      ObNumber::Desc *res_desc = new (&desc_buf) ObNumberDesc();
+      char *number_buffer = expr.get_reference_res_mem(ctx, ObNumber::MAX_BYTE_LEN, i);
+      if (number_buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; break; }
+      uint32_t *res_digits = reinterpret_cast<uint32_t *>(number_buffer + sizeof(number::ObCompactNumber));
+      ObNumber::Desc *res_desc = new (number_buffer) ObNumber::Desc();
       // speedup detection
       if (ObNumber::try_fast_minus(l_num, r_num, res_digits, *res_desc)) {
-        results.at(i)->set_pack(sizeof(number::ObCompactNumber) +
-                                res_desc->len_ * sizeof(*res_digits));
-        eval_flags.set(i);
+        ret = results.at(i)->set_number_shallow(
+            *reinterpret_cast<const number::ObCompactNumber *>(number_buffer));
+        if (OB_SUCC(ret)) { eval_flags.set(i); }
         // LOG_INFO("mul speedup done", K(l_num.format()), K(r_num.format()));
       } else {
         // normal path: no speedup
         ObNumber res_num;
         if (OB_FAIL(l_num.sub_v3(r_num, res_num, local_alloc))) {
         } else {
-          results.at(i)->set_number(res_num);
-          eval_flags.set(i);
+          ret = ObExprUtil::set_number(expr, ctx, *results.at(i), res_num, i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
         local_alloc.free();
       }
@@ -863,7 +629,7 @@ struct NmbTryFastMinusOp
 
 struct ObDatetimeNumberMinusFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r) const
   {
     int ret = OB_SUCCESS;
     number::ObNumber right_nmb(r.get_number());
@@ -913,7 +679,7 @@ int ObExprMinus::minus_datetime_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
 struct ObDatetimeDatetimeNumberMinusFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
     const int64_t LOCAL_BUF_SIZE = ObNumber::MAX_CALC_BYTE_LEN * 5;
@@ -930,7 +696,7 @@ struct ObDatetimeDatetimeNumberMinusFunc
     } else if (OB_FAIL(left_datetime.sub_v3(right_datetime, sub_datetime, local_alloc))) {
     } else if (OB_FAIL(sub_datetime.div_v3(usecs_per_day, sub_date, local_alloc))) {
     } else {
-      res.set_number(sub_date);
+      ret = ObExprUtil::set_number(expr, ctx, res, sub_date);
     }
     return ret;
   }
@@ -939,18 +705,18 @@ struct ObDatetimeDatetimeNumberMinusFunc
 // left and right are both ObDateTimeTC. calc_type is ObNumberType.
 int ObExprMinus::minus_datetime_datetime_number_result(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObDatetimeDatetimeNumberMinusFunc>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObDatetimeDatetimeNumberMinusFunc>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMinus::minus_datetime_datetime_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   return def_batch_arith_op_by_datum_func<ObDatetimeDatetimeNumberMinusFunc>(
-      BATCH_EVAL_FUNC_ARG_LIST);
+      BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 struct ObDatetimeDatetimeMinusFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r) const
   {
     int ret = OB_SUCCESS;
     const int64_t left_i = l.get_datetime();
@@ -1023,11 +789,11 @@ struct ObDecimalIntBatchMinusRawWithCheck : public ObDecimalIntBatchMinusRaw<int
 #define DECINC_MINUS_EVAL_FUNC_DECL(TYPE) \
 int ObExprMinus::minus_decimal##TYPE(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMinusRaw<TYPE##_t>>>(EVAL_FUNC_ARG_LIST); \
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMinusRaw<TYPE##_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx); \
 }                                            \
 int ObExprMinus::minus_decimal##TYPE##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMinusRaw<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST); \
+  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMinusRaw<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx); \
 }
 
 
@@ -1039,12 +805,12 @@ DECINC_MINUS_EVAL_FUNC_DECL(int512)
 
 int ObExprMinus::minus_decimalint512_with_check(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMinusRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchMinusRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprMinus::minus_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchMinusRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
@@ -1053,15 +819,18 @@ int ObExprMinus::minus_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
 template<typename T>
 struct ObDecimalNumberMinusFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const int64_t scale,
-                 ObNumStackOnceAlloc &alloc) const
+  int operator()(Datum &res, const Datum &l, const Datum &r, const int64_t scale,
+                 ObNumStackOnceAlloc &alloc, const ObExpr &expr, ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
-    const T res_int = *reinterpret_cast<const T *>(l.ptr_) - *reinterpret_cast<const T *>(r.ptr_);
+    T left;
+    T right;
     number::ObNumber res_num;
-    if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
+    if (OB_FAIL(ObExprUtil::get_decimal_int(l, left))) {
+    } else if (OB_FAIL(ObExprUtil::get_decimal_int(r, right))) {
+    } else if (OB_FAIL(wide::to_number(T(left - right), scale, alloc, res_num))) {
     } else {
-      res.set_number(res_num);
+      ret = ObExprUtil::set_number(expr, ctx, res, res_num);
       alloc.free();  // for batch function reuse alloc
     }
     return ret;
@@ -1073,13 +842,13 @@ int ObExprMinus::minus_decimal##TYPE##_number_result(EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_arith_eval_func<ObDecimalNumberMinusFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_arith_eval_func<ObDecimalNumberMinusFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc, expr, ctx); \
 }                                            \
 int ObExprMinus::minus_decimal##TYPE##_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_batch_arith_op_by_datum_func<ObDecimalNumberMinusFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_batch_arith_op_by_datum_func<ObDecimalNumberMinusFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc, expr, ctx); \
 }
 
 DECINC_MINUS_EVAL_FUNC_NUMBER_DECL(int32)

@@ -596,7 +596,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             uint64_t show_db_id = OB_INVALID_ID;
             ObString show_table_name;
             uint64_t show_table_id = OB_INVALID_ID;
-            ObObj show_table_id_obj;
             bool is_view;
             bool is_extended = (1 == parse_tree.children_[3]->value_);
             show_resv_ctx.condition_node_ = parse_tree.children_[2];

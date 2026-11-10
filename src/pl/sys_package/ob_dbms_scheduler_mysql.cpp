@@ -98,7 +98,7 @@ int ObDBMSSchedulerMysql::execute_sql(sql::ObExecContext &ctx, ObSqlString &sql,
 }
 
 int ObDBMSSchedulerMysql::disable(
-  sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result)
+  sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -126,7 +126,7 @@ int ObDBMSSchedulerMysql::disable(
 }
 
 int ObDBMSSchedulerMysql::enable(
-  sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result)
+  sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -154,7 +154,7 @@ int ObDBMSSchedulerMysql::enable(
 }
 
 int ObDBMSSchedulerMysql::set_attribute(
-  sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result)
+  sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -216,14 +216,14 @@ int ObDBMSSchedulerMysql::set_attribute(
 int ObDBMSSchedulerMysql::get_and_increase_job_id(
     sql::ObExecContext &ctx,
     sql::ParamStore &params,
-    common::ObObj &result)
+    common::DatumValue &result)
 {
   UNUSED(params);
   int ret = OB_SUCCESS;
   
   int64_t job_id = 0;
   OZ (_generate_job_id(job_id));
-  OX (result.set_int(job_id));
+  OZ (result.set_int(job_id, ctx.get_allocator()));
   LOG_INFO("get and increase job id", K(ret), K(job_id));
   return ret; 
 }

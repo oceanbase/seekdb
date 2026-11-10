@@ -44,7 +44,9 @@
             ret = OB_ERR_UNEXPECTED;                   \
             LOG_WARN("con_expr should not be NULL", K(ret));  \
           } else {                                     \
-            con_expr->get_value().get_int(date_unit_type);  \
+            if (!con_expr->get_value_datum().is_null() && con_expr->get_value_meta().is_int()) { \
+              date_unit_type = con_expr->get_value_datum().get_int(); \
+            } \
             const static char *date_unit =             \
             ob_date_unit_type_str(static_cast<ObDateUnitType>(date_unit_type)); \
             if (OB_FAIL(BUF_PRINTF(" %s", date_unit))) { \

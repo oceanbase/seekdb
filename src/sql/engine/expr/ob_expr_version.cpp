@@ -46,7 +46,7 @@ int ObExprVersion::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
 }
 
 int ObExprVersion::eval_version(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();

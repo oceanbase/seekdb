@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_lrpad.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -42,9 +43,9 @@ ObExprBaseLRpad::~ObExprBaseLRpad()
 }
 // Reference ObExprBaseLRpad::calc_mysql
 int ObExprBaseLRpad::calc_type_length_mysql(const ObExprResType result_type,
-                                            const ObObj &text,
-                                            const ObObj &pad_text,
-                                            const ObObj &len,
+                                            const DatumValue &text,
+                                            const DatumValue &pad_text,
+                                            const DatumValue &len,
                                             const ObExprTypeCtx &type_ctx,
                                             int64_t &result_size)
 {
@@ -98,7 +99,7 @@ int ObExprBaseLRpad::calc_type_length_mysql(const ObExprResType result_type,
 }
 // Reference ObExprBaseLRpad padding calculation.
 
-int ObExprBaseLRpad::get_origin_len_obj(ObObj &len_obj) const
+int ObExprBaseLRpad::get_origin_len_obj(DatumValue &len_obj, void *scratch, int64_t capacity) const
 {
   int ret = OB_SUCCESS;
   ObRawExpr *expr = NULL;
@@ -117,7 +118,7 @@ int ObExprBaseLRpad::get_origin_len_obj(ObObj &len_obj) const
     } else if (!expr->is_const_raw_expr()) {
       len_obj.set_null();
     } else {
-      len_obj = static_cast<ObConstRawExpr *>(expr)->get_param();
+      ret = static_cast<ObConstRawExpr *>(expr)->export_bound_param(len_obj, scratch, capacity);
     }
   }
   return ret;
@@ -130,8 +131,8 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
                                ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType text_type = ObNullType;
-  ObObjType len_type = ObNullType;
+  SqlValueType text_type = ObNullType;
+  SqlValueType len_type = ObNullType;
   int64_t max_len = OB_MAX_VARCHAR_LENGTH;
   int64_t text_len = text.get_length();
   {
@@ -144,14 +145,16 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
   CK(OB_NOT_NULL(session));
 
   if (OB_SUCC(ret)) {
-    ObObj length_obj = len.get_param();
-    ObObj text_obj = text.get_param();
-    ObObj pad_obj;
+    DatumValue length_obj;
+    alignas(8) char length_scratch[64];
+    DatumValue text_obj;
+    alignas(8) char text_scratch[64];
+    DatumValue pad_obj;
+    alignas(8) char pad_scratch[64];
     ObString default_pad_str = ObString(" "); // default is ' '
     type.set_length(static_cast<ObLength>(max_len));
     len.set_calc_type(len_type);
     {
-      pad_obj = pad_text->get_param();
       ObSEArray<ObExprResType, 2> types;
       OZ(types.push_back(text));
       OZ(types.push_back(*pad_text));
@@ -160,9 +163,12 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
       OX(pad_text->set_calc_collation_type(type.get_collation_type()));
       if (OB_SUCC(ret)) {
         // len expr may add cast, search real len obj
-        if (OB_FAIL(get_origin_len_obj(length_obj))) {
+        if (OB_FAIL(len.export_param(length_obj, length_scratch, sizeof(length_scratch)))) {
+        } else if (OB_FAIL(get_origin_len_obj(length_obj, length_scratch, sizeof(length_scratch)))) {
         } else if (!length_obj.is_null()) {
-          if (OB_FAIL(calc_type_length_mysql(type, text_obj, pad_obj, length_obj, type_ctx, text_len))) {
+          if (OB_FAIL(text.export_param(text_obj, text_scratch, sizeof(text_scratch)))) {
+          } else if (OB_FAIL(pad_text->export_param(pad_obj, pad_scratch, sizeof(pad_scratch)))) {
+          } else if (OB_FAIL(calc_type_length_mysql(type, text_obj, pad_obj, length_obj, type_ctx, text_len))) {
           }
         } else {
           text_len = max_len;
@@ -180,7 +186,8 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
       }
     }
 
-    const int64_t buf_len = pad_obj.is_character_type() ? pad_obj.get_string_len() * 4 : 0;
+    const int64_t buf_len = pad_text->get_param_value_meta().is_character_type()
+        ? static_cast<int32_t>(pad_text->get_param_datum().length()) * 4 : 0;
     char buf[buf_len];
 
     if (OB_SUCC(ret)) {
@@ -190,7 +197,9 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
       text_len = (text_len > max_len)? max_len: text_len;
       type.set_length(static_cast<ObLength>(text_len));
 
-      LOG_DEBUG("ObExprBaseLRpad::calc_type()", K(ret), K(text), K(text_obj), K(pad_obj), K(len), K(length_obj), KP(pad_text),
+      LOG_DEBUG("ObExprBaseLRpad::calc_type()", K(ret), K(text), K(text.get_param_datum()),
+                                K(text.get_param_value_meta()), K(pad_text->get_param_datum()),
+                                K(pad_text->get_param_value_meta()), K(len), K(length_obj), KP(pad_text),
                                 K(type), K(text_len), K(max_len), K(type.get_length_semantics()));
     }
   }
@@ -262,7 +271,7 @@ int ObExprBaseLRpad::padding(LRpadType type,
                              ObIAllocator *allocator,
                              char* &result,
                              int64_t &size,
-                             ObObjType res_type,
+                             SqlValueType res_type,
                              bool has_lob_header)
 {
   int ret = OB_SUCCESS;
@@ -344,12 +353,12 @@ int ObExprBaseLRpad::get_padding_info_mysql(const ObCollationType &cs,
 
 // for engine 3.0
 int ObExprBaseLRpad::calc_mysql_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                           LRpadType pad_type, ObDatum &res)
+                                           LRpadType pad_type, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = NULL;
-  ObDatum *len = NULL;
-  ObDatum *pad_text = NULL;
+  Datum *text = NULL;
+  Datum *len = NULL;
+  Datum *pad_text = NULL;
   if (OB_UNLIKELY(3 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.eval_param_value(ctx, text, len, pad_text))) {
@@ -369,12 +378,12 @@ int ObExprBaseLRpad::calc_mysql_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
 
 int ObExprBaseLRpad::calc_mysql_inner(const LRpadType pad_type,
                                       const ObExpr &expr,
-                                      const ObDatum &len,
+                                      const Datum &len,
                                       int64_t &max_result_size,
                                       const ObString &str_text,
                                       const ObString &str_pad,
                                       ObIAllocator &res_alloc,
-                                      ObDatum &res)
+                                      Datum &res)
 {
   int ret = OB_SUCCESS;
   int64_t repeat_count = 0;
@@ -384,7 +393,7 @@ int ObExprBaseLRpad::calc_mysql_inner(const LRpadType pad_type,
   char *result_ptr = NULL;
   int64_t result_size = 0;
   const ObCollationType cs_type = expr.datum_meta_.cs_type_;
-  const ObObjType type = expr.datum_meta_.type_;
+  const SqlValueType type = expr.datum_meta_.type_;
   bool has_lob_header = expr.obj_meta_.has_lob_header();
   bool has_set_to_lob_locator = false;
   int64_t int_len = len.get_int();
@@ -451,9 +460,9 @@ int ObExprBaseLRpad::calc_mysql_inner(const LRpadType pad_type,
 }
 
 int ObExprBaseLRpad::calc_mysql(const LRpadType pad_type, const ObExpr &expr, ObEvalCtx &ctx, 
-                                const ObDatum &text, const ObDatum &len, const ObDatum &pad_text,
+                                const Datum &text, const Datum &len, const Datum &pad_text,
                                 const ObSQLSessionInfo &session, ObIAllocator &res_alloc,
-                                ObDatum &res)
+                                Datum &res)
 {
   int ret = OB_SUCCESS;
   int64_t max_result_size = -1;
@@ -537,7 +546,7 @@ int ObExprLpad::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 }
 
 int ObExprLpad::calc_mysql_lpad_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                          ObDatum &res)
+                                          Datum &res)
 {
   return calc_mysql_pad_expr(expr, ctx, LPAD_TYPE, res);
 }
@@ -580,7 +589,7 @@ int ObExprRpad::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 }
 
 int ObExprRpad::calc_mysql_rpad_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                           ObDatum &res)
+                                           Datum &res)
 {
   return calc_mysql_pad_expr(expr, ctx, RPAD_TYPE, res);
 }

@@ -450,7 +450,6 @@ int ObTransformLateMaterialization::evaluate_stmt_cost(ObIArray<ObParentDMLStmt>
                ctx_->sql_schema_guard_,
                ctx_->opt_stat_mgr_,
                CURRENT_CONTEXT->get_arena_allocator(),
-               &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                *ctx_->self_addr_,
                root_stmt->get_query_ctx()->get_global_hint(),
                tmp_expr_factory,

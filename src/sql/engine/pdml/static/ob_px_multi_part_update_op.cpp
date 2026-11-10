@@ -141,7 +141,7 @@ int ObPxMultiPartUpdateOp::read_row(ObExecContext &ctx,
         }
       } else if (child_->get_spec().output_.count() > part_id_idx) {
         ObExpr *expr = child_->get_spec().output_.at(part_id_idx);
-        ObDatum &expr_datum = expr->locate_expr_datum(get_eval_ctx());
+        Datum &expr_datum = expr->locate_expr_datum(get_eval_ctx());
         tablet_id = expr_datum.get_int();
       }
     } else {

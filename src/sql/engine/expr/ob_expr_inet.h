@@ -34,7 +34,7 @@ public:
   virtual ~ObExprInetAton();
   virtual int calc_result_type1(ObExprResType& type, ObExprResType& text, common::ObExprTypeCtx& type_ctx) const;
   virtual int cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObExpr& rt_expr) const override;
-  static int calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum);
+  static int calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
@@ -64,7 +64,7 @@ public:
   virtual ~ObExprInet6Ntoa();
   virtual int calc_result_type1(ObExprResType& type, ObExprResType& text, common::ObExprTypeCtx& type_ctx) const;
   virtual int cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObExpr& rt_expr) const override;
-  static int calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum);
+  static int calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprInet6Ntoa);
@@ -76,7 +76,7 @@ public:
   virtual ~ObExprInet6Aton();
   virtual int calc_result_type1(ObExprResType& type, ObExprResType& text, common::ObExprTypeCtx& type_ctx) const;
   virtual int cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObExpr& rt_expr) const override;
-  static int calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum);
+  static int calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
@@ -104,7 +104,7 @@ public:
   virtual ~ObExprIsIpv4();
   virtual int calc_result_type1(ObExprResType& type, ObExprResType& text, common::ObExprTypeCtx& type_ctx) const;
   virtual int cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObExpr& rt_expr) const override;
-  static int calc_is_ipv4(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum);
+  static int calc_is_ipv4(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum);
 
 private:
   // helper func
@@ -133,7 +133,7 @@ public:
   virtual ~ObExprIsIpv4Mapped();
   virtual int calc_result_type1(ObExprResType& type, ObExprResType& text, common::ObExprTypeCtx& type_ctx) const;
   virtual int cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObExpr& rt_expr) const override;
-  static int calc_is_ipv4_mapped(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum);
+  static int calc_is_ipv4_mapped(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum);
 
 private:
   // helper func
@@ -161,7 +161,7 @@ public:
   virtual ~ObExprIsIpv4Compat();
   virtual int calc_result_type1(ObExprResType& type, ObExprResType& text, common::ObExprTypeCtx& type_ctx) const;
   virtual int cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObExpr& rt_expr) const override;
-  static int calc_is_ipv4_compat(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum);
+  static int calc_is_ipv4_compat(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum);
 
 private:
   // helper func
@@ -189,7 +189,7 @@ public:
   virtual ~ObExprIsIpv6();
   virtual int calc_result_type1(ObExprResType& type, ObExprResType& text, common::ObExprTypeCtx& type_ctx) const;
   virtual int cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObExpr& rt_expr) const override;
-  static int calc_is_ipv6(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum);
+  static int calc_is_ipv6(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum);
 
 private:
   // helper func

@@ -54,7 +54,7 @@ int crypto_result_error(const crypto::OperationResult &result)
 
 int encrypt_des_value(const ObExpr &expr, ObEvalCtx &ctx, const ObString &src,
                      const ObString &password, bool has_password, uint8_t key_number,
-                     ObDatum &res, int64_t datum_idx)
+                     Datum &res, int64_t datum_idx)
 {
   int ret = OB_SUCCESS;
   const size_t src_length = static_cast<size_t>(src.length());
@@ -84,7 +84,7 @@ int encrypt_des_value(const ObExpr &expr, ObEvalCtx &ctx, const ObString &src,
 }
 
 int decrypt_des_value(const ObExpr &expr, ObEvalCtx &ctx, const ObString &src,
-                     const ObString &password, bool has_password, ObDatum &res,
+                     const ObString &password, bool has_password, Datum &res,
                      int64_t datum_idx)
 {
   int ret = OB_SUCCESS;
@@ -108,7 +108,7 @@ int decrypt_des_value(const ObExpr &expr, ObEvalCtx &ctx, const ObString &src,
 }
 
 int crypt_value(const ObExpr &expr, ObEvalCtx &ctx, const ObString &src,
-                const char *salt, ObDatum &res, int64_t datum_idx)
+                const char *salt, Datum &res, int64_t datum_idx)
 {
   int ret = OB_SUCCESS;
   const size_t res_length = 13;
@@ -179,18 +179,18 @@ int ObExprDesEncrypt::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprDesEncrypt::eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) {
+int ObExprDesEncrypt::eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCtx &ctx, Datum &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &src = expr.locate_param_datum(ctx, 0);
+    Datum &src = expr.locate_param_datum(ctx, 0);
     bool is_null = false;
     uint key_number = 0;
     if (src.is_null()) {
       res.set_null();
       is_null = true;
     } else if (2 == expr.arg_cnt_) {
-      ObDatum &key = expr.locate_param_datum(ctx, 1);
+      Datum &key = expr.locate_param_datum(ctx, 1);
       if (key.is_null()) {
         key_number = 0;
       } else if (key.get_int() > 9 || key.get_int() < 0) {
@@ -219,7 +219,7 @@ int ObExprDesEncrypt::eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCt
 int ObExprDesEncrypt::eval_des_encrypt_batch_with_default(const ObExpr &expr, ObEvalCtx &ctx,
                                     const ObBitVector &skip, const int64_t batch_size) {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   bool has_key = (2 == expr.arg_cnt_);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
@@ -229,8 +229,8 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_default(const ObExpr &expr, Ob
   } else {
   }
   if (OB_SUCC(ret)) {
-    ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector key_array;
+    DatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector key_array;
     if (has_key) {
       key_array = expr.args_[1]->locate_expr_datumvector(ctx);
     } else {}
@@ -268,13 +268,13 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_default(const ObExpr &expr, Ob
   return ret;
 }
 
-int ObExprDesEncrypt::eval_des_encrypt_with_key(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprDesEncrypt::eval_des_encrypt_with_key(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &src = expr.locate_param_datum(ctx, 0);
-    ObDatum &key = expr.locate_param_datum(ctx, 1);
+    Datum &src = expr.locate_param_datum(ctx, 0);
+    Datum &key = expr.locate_param_datum(ctx, 1);
     if (src.is_null()) {
       res.set_null();
     } else if (key.is_null()) {
@@ -298,13 +298,13 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_key(const ObExpr &expr, ObEval
                                     const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector key_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector key_array = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
@@ -391,13 +391,13 @@ int ObExprDesDecrypt::calc_result_typeN(ObExprResType& type,
 }
 
 int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
-                                       ObDatum &res)
+                                       Datum &res)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
     bool need_decrypt = false;
-    ObDatum &src = expr.locate_param_datum(ctx, 0);
+    Datum &src = expr.locate_param_datum(ctx, 0);
     ObString src_str;
     //get key and check if res should be null or empty
     if (src.is_null()) {
@@ -421,7 +421,7 @@ int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
           need_decrypt = true;
         }
       } else {
-        ObDatum &key = expr.locate_param_datum(ctx, 1);
+        Datum &key = expr.locate_param_datum(ctx, 1);
         if (key.is_null()) {
           ObString func_name(N_DES_DECRYPT);
           res.set_null();
@@ -446,10 +446,10 @@ int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
 int ObExprDesDecrypt::eval_des_decrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  ObDatumVector src_array;
-  ObDatumVector key_array;
+  DatumVector src_array;
+  DatumVector key_array;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
@@ -556,12 +556,12 @@ int ObExprEncrypt::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) {
+int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
     char salt[3];
-    ObDatum &src = expr.locate_param_datum(ctx, 0);
+    Datum &src = expr.locate_param_datum(ctx, 0);
     bool need_encrypt = false;
 
     if (src.is_null()) {
@@ -580,7 +580,7 @@ int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
         need_encrypt = true;
       }
     } else {
-      ObDatum &key = expr.locate_param_datum(ctx, 1);
+      Datum &key = expr.locate_param_datum(ctx, 1);
       if (key.is_null() || key.get_string().length() < 2) {
         res.set_null();
       } else {
@@ -602,9 +602,9 @@ int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
 
 int ObExprEncrypt::eval_encrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size) {
   int ret = OB_SUCCESS;
-  ObDatumVector src_array;
-  ObDatumVector key_array;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector src_array;
+  DatumVector key_array;
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   char salt[3];
   
@@ -714,12 +714,12 @@ int ObExprEncode::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprEncode::eval_encode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) {
+int ObExprEncode::eval_encode(const ObExpr &expr, ObEvalCtx &ctx, Datum &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &src = expr.locate_param_datum(ctx, 0);
-    ObDatum &key = expr.locate_param_datum(ctx, 1);
+    Datum &src = expr.locate_param_datum(ctx, 0);
+    Datum &key = expr.locate_param_datum(ctx, 1);
     if (src.is_null() || key.is_null()) {
       res.set_null();
     } else {
@@ -745,15 +745,15 @@ int ObExprEncode::eval_encode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
 int ObExprEncode::eval_encode_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   uint32_t password[2];
   ObCrypt crypt;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else if (!expr.args_[1]->is_batch_result()) {
-    ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatum &key = expr.locate_param_datum(ctx, 1);
+    DatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    Datum &key = expr.locate_param_datum(ctx, 1);
     if (!key.is_null()) {
       ObString key_str = key.get_string();
       crypt.init(key_str);
@@ -778,8 +778,8 @@ int ObExprEncode::eval_encode_batch(const ObExpr &expr, ObEvalCtx &ctx, const Ob
       }
     }
   } else {
-    ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector key_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector key_array = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
@@ -849,12 +849,12 @@ int ObExprDecode::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprDecode::eval_decode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) {
+int ObExprDecode::eval_decode(const ObExpr &expr, ObEvalCtx &ctx, Datum &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &src = expr.locate_param_datum(ctx, 0);
-    ObDatum &key = expr.locate_param_datum(ctx, 1);
+    Datum &src = expr.locate_param_datum(ctx, 0);
+    Datum &key = expr.locate_param_datum(ctx, 1);
     if (src.is_null() || key.is_null()) {
       res.set_null();
     } else {
@@ -880,15 +880,15 @@ int ObExprDecode::eval_decode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
 int ObExprDecode::eval_decode_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   uint32_t password[2];
   ObCrypt crypt;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else if (!expr.args_[1]->is_batch_result()) {
-    ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatum &key = expr.locate_param_datum(ctx, 1);
+    DatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    Datum &key = expr.locate_param_datum(ctx, 1);
     if (!key.is_null()) {
       ObString key_str = key.get_string();
       crypt.init(key_str);
@@ -913,8 +913,8 @@ int ObExprDecode::eval_decode_batch(const ObExpr &expr, ObEvalCtx &ctx, const Ob
       }
     }
   } else {
-    ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector key_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector key_array = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

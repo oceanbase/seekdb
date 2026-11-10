@@ -33,11 +33,11 @@ public:
                                 ObExprResType* types,
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx) const override;
-  static int eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int get_geog_box(ObEvalCtx &ctx,
                           lib::MemoryContext &mem_ctx,
                           ObString wkb,
-                          ObObjType input_type,
+                          SqlValueType input_type,
                           bool &is_geo_empty,
                           ObGeogBox *&geo_box);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

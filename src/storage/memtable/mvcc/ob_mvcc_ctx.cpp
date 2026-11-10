@@ -326,13 +326,14 @@ int ObIMvccCtx::register_ext_info_commit_cb(
     const transaction::ObTxSEQ &seq_no_st,
     const int64_t seq_no_cnt,
     const ObString &index_data,
-    const ObObjType index_data_type,
+    const SqlValueType index_data_type,
     const ObExtInfoLogHeader &header,
-    ObObj &ext_info_data)
+    const SqlValueType ext_info_data_type,
+    const ObDatum &ext_info_data)
 {
   int ret = OB_SUCCESS;
   storage::ObExtInfoCbRegister cb_register;
-  if (OB_FAIL(cb_register.register_cb(this, timeout, dml_flag, seq_no_st, seq_no_cnt, index_data, index_data_type, header, ext_info_data))) {
+  if (OB_FAIL(cb_register.register_cb(this, timeout, dml_flag, seq_no_st, seq_no_cnt, index_data, index_data_type, header, ext_info_data_type, ext_info_data))) {
   }
   return ret;
 }

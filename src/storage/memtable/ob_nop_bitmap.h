@@ -19,7 +19,6 @@
 
 #include "share/ob_define.h"
 #include "lib/container/ob_iarray.h"
-#include "common/object/ob_object.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/blocksstable/ob_datum_row.h"
 
@@ -79,7 +78,7 @@ public:
     nop_cnt_ = cnt_ - rowkey_cnt_;
   }
 
-  inline int set_nop_obj(common::ObObj *obj_ptr)
+  inline int set_nop_datums(blocksstable::ObStorageDatum *datum_ptr)
   {
     const int64_t block_cnt = size_ >> shift_bits;
     int64_t start_block = rowkey_cnt_ >> shift_bits;
@@ -88,27 +87,6 @@ public:
     // so `~0LU`, `1LU << pos` and `__builtin_ctzl` would all operate on
     // only the low 32 bits and corrupt bits in the upper half. Use the
     // 64-bit variants (`~0ULL`, `1ULL`, `__builtin_ctzll`).
-    bitmap_[start_block] &= ~0ULL << offset;
-    int64_t left = (64 - (cnt_ & mask)) & mask;
-    bitmap_[block_cnt - 1] &= ~0ULL >> left;
-    for (int64_t i = start_block; i < block_cnt; ++i) {
-      uint64_t tmp = bitmap_[i];
-      const int64_t base = i << shift_bits;
-      int pos = 0;
-      while (0 != tmp) {
-        pos = __builtin_ctzll(tmp);
-        obj_ptr[pos + base].set_nop_value();
-        tmp ^= (1ULL << pos);
-      }
-    }
-    return common::OB_SUCCESS;
-  }
-
-  inline int set_nop_datums(blocksstable::ObStorageDatum *datum_ptr)
-  {
-    const int64_t block_cnt = size_ >> shift_bits;
-    int64_t start_block = rowkey_cnt_ >> shift_bits;
-    int64_t offset = rowkey_cnt_ & mask;
     bitmap_[start_block] &= ~0ULL << offset;
     int64_t left = (64 - (cnt_ & mask)) & mask;
     bitmap_[block_cnt - 1] &= ~0ULL >> left;

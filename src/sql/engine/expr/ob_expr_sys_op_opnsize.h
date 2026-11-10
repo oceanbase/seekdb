@@ -36,8 +36,8 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
   static int calc_sys_op_opnsize_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                      ObDatum &res);
-  static int calc_sys_op_opnsize(const ObExpr *expr, const ObDatum *arg, int64_t &size);
+                                      Datum &res);
+  static int calc_sys_op_opnsize(const ObExpr *expr, const Datum *arg, int64_t &size);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSysOpOpnsize);
 };

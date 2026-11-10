@@ -84,12 +84,12 @@ public:
   bool is_error_default_const_;
   bool is_asis_;
   bool is_multivalue_;
-  ObDatum *empty_val_;
-  ObDatum *error_val_;
+  Datum *empty_val_;
+  Datum *error_val_;
   common::ObSEArray<int8_t, 1, common::ModulePageAllocator, true> on_mismatch_;
   common::ObSEArray<int8_t, 1, common::ModulePageAllocator, true> on_mismatch_type_;
   ObAccuracy accuracy_;
-  ObObjType dst_type_;
+  SqlValueType dst_type_;
   int8_t pretty_type_;
   int8_t ascii_type_;
   int8_t scalars_type_;
@@ -119,7 +119,7 @@ public:
 struct JsonMetadata
 {
   ObJsonNodeType type_;
-  ObObjType field_type_;
+  SqlValueType field_type_;
   uint32_t depth_;
   uint64_t length_;
 };
@@ -171,10 +171,10 @@ public:
   @param[out] is_null    the flag for null situation
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
-  static int eval_json_merge(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool patch);
+  static int eval_json_merge(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, bool patch);
   static int push_json_merge_argument(const ObExpr &expr, ObEvalCtx &ctx,
       MultimodeAlloctor &allocator, uint16_t index, BinaryMerge &merger, bool &is_null, bool *input_error = nullptr);
-  static int eval_json_mutation(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res,
+  static int eval_json_mutation(const ObExpr &expr, ObEvalCtx &ctx, Datum &res,
       JsonMutation operation);
   static int get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
                           MultimodeAlloctor &allocator,
@@ -191,7 +191,7 @@ public:
       const ObExpr &json_expr,
       ObEvalCtx &ctx,
       ObIAllocator &allocator,
-      ObDatum &json_datum,
+      Datum &json_datum,
       ObIJsonBase *&j_base);
 
   static int get_partial_json_bin(
@@ -204,7 +204,7 @@ public:
       const ObExpr &json_expr,
       ObEvalCtx &ctx,
       ObIAllocator &allocator,
-      ObDatum &json_datum,
+      Datum &json_datum,
       ObIJsonBase *&j_base);
 
 
@@ -223,13 +223,19 @@ public:
   static int append_json_value(const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator,
                                uint16_t index, common::JsonContainerBuilder &builder,
                                const common::ObString &key, bool &input_error);
-  static int datum_to_json_binary(const ObDatum &datum, const ObObjMeta &meta,
+  static int datum_to_json_binary(const Datum &datum, const SqlTypeMeta &meta,
+                                  const SqlType &type_context,
+                                  ObScale scale, bool is_bool, bool format_json, bool strict,
+                                  bool oracle, common::ObIAllocator &allocator,
+                                  ObBasicSessionInfo *session,
+                                  const common::ObLobReadOptions *lob_options, ObString &binary);
+  static int datum_to_json_binary(const ObDatum &datum, const SqlTypeMeta &meta,
                                   ObScale scale, bool is_bool, bool format_json, bool strict,
                                   bool oracle, common::ObIAllocator &allocator,
                                   ObBasicSessionInfo *session,
                                   const common::ObLobReadOptions *lob_options, ObString &binary);
 
-  static int get_const_json_schema(const common::ObObj &data,
+  static int get_const_json_schema(const common::DatumValue &data,
                                    const char *func_name,
                                    ObExecContext &exec_ctx,
                                    common::ObIAllocator *allocator,
@@ -246,7 +252,7 @@ public:
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
   static int refine_range_json_value_const(
-                          const common::ObObj &data, ObExecContext &ctx,
+                          const common::DatumValue &data, ObExecContext &ctx,
                           bool is_bool, common::ObIAllocator *allocator,
                           ObIJsonBase*& j_base);
   
@@ -273,7 +279,7 @@ public:
 
   static int get_sql_scalar_type(ObEvalCtx& ctx,
                                  int64_t origin, 
-                                 ObObjType& scalar_type, 
+                                 SqlValueType& scalar_type,
                                  int32_t& scalar_len,
                                  int32_t& precision,
                                  int32_t& scale,
@@ -304,13 +310,13 @@ public:
   */
 
 
-  static bool is_convertible_to_json(ObObjType &type);
+  static bool is_convertible_to_json(SqlValueType &type);
   static int is_valid_for_json(ObExprResType* types_stack, uint32_t index, const char* func_name);
   static int is_valid_for_json(ObExprResType& type, uint32_t index, const char* func_name);
   static int is_valid_for_path(ObExprResType* types_stack, uint32_t index);
   static void set_type_for_value(ObExprResType* types_stack, uint32_t index);
-  static int ensure_collation(ObObjType type, ObCollationType cs_type);
-  static ObJsonInType get_json_internal_type(ObObjType type);
+  static int ensure_collation(SqlValueType type, ObCollationType cs_type);
+  static ObJsonInType get_json_internal_type(SqlValueType type);
   static int convert_string_collation_type(ObCollationType in, 
                                            ObCollationType dst,
                                            ObIAllocator* allocator,
@@ -319,7 +325,7 @@ public:
   template <typename T>
   static int pack_json_str_res(const ObExpr &expr, 
                                ObEvalCtx &ctx, 
-                               ObDatum &res,
+                               Datum &res,
                                T &str, 
                                common::ObIAllocator *allocator = nullptr)
   {
@@ -338,7 +344,7 @@ public:
       ObEvalCtx &ctx,
       ObIAllocator &temp_allocator,
       ObIJsonBase *json_doc,
-      ObDatum &res);
+      Datum &res);
 
   /**
    * the following 3 functions is used for json_query and json_mergepatch 
@@ -351,7 +357,7 @@ public:
   */
   static int get_cast_type(const ObExprResType param_type2, ObExprResType &dst_type, ObExprTypeCtx &type_ctx);
   // check item function and returning type
-  static int check_item_func_with_return(ObJsonPathNodeType path_type, ObObjType dst_type, common::ObCollationType dst_coll_type, int8_t JSON_EXPR_FLAG);
+  static int check_item_func_with_return(ObJsonPathNodeType path_type, SqlValueType dst_type, common::ObCollationType dst_coll_type, int8_t JSON_EXPR_FLAG);
   static int set_dest_type(ObExprResType &type1, ObExprResType &type, 
                            ObExprResType &dst_type, ObExprTypeCtx &type_ctx);
   static int get_expr_option_value(const ObExprResType param_type2, int8_t &dst_type);
@@ -372,7 +378,7 @@ public:
                                  int32_t &res_len,
                                  int16_t &length_semantics,
                                  common::ObCollationType conn);
-  static int eval_and_check_res_type(int64_t value, ObObjType& type, int32_t& dst_len);
+  static int eval_and_check_res_type(int64_t value, SqlValueType& type, int32_t& dst_len);
   static int parse_res_type(ObExprResType& type1,
                             ObExprResType& json_res_type,
                             ObExprResType& result_type,
@@ -381,7 +387,7 @@ public:
                               ObExprResType& type1,
                               ObExprResType& res_type,
                               ObExprTypeCtx& type_ctx);
-  static int pre_default_value_check(ObObjType dst_type, ObString val_str, ObObjType val_type, size_t length);
+  static int pre_default_value_check(SqlValueType dst_type, ObString val_str, SqlValueType val_type, size_t length);
 
   static int character2_ascii_string(common::ObIAllocator *allocator, 
                                      const ObExpr &expr,
@@ -389,11 +395,11 @@ public:
                                      ObString& result,
                                      int32_t reserve_len = 0);
   static int cast_to_res(ObIAllocator &allocator, 
-                          ObDatum &src_datum, 
+                          Datum &src_datum,
                           const ObExpr &expr, 
                           const ObExpr &default_expr, 
                           ObEvalCtx &ctx, 
-                          ObDatum &res, 
+                          Datum &res,
                           bool xt_need_acc_check);
   static void get_accuracy_from_expr(const ObExpr &expr, ObAccuracy &accuracy);
   static int get_clause_opt(ObExpr *expr,
@@ -416,7 +422,7 @@ public:
     ObEvalCtx &ctx,
     ObIAllocator &temp_allocator,
     ObIJsonBase *json_doc,
-    ObDatum &res);
+    Datum &res);
 
 
   static int init_json_expr_extra_info(

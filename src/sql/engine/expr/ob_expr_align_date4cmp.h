@@ -46,9 +46,9 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
 
-  static int eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
-  static bool is_align_date4cmp_support_obj_type(const ObObjType& obj_type);
+  static bool is_align_date4cmp_support_obj_type(const SqlValueType& obj_type);
 
   enum DateArgType
   {
@@ -74,20 +74,20 @@ private:
   static int str_to_ob_time(const ObString &date, DateArgType &date_arg_type, ObTime &ob_time);
   static int datum_to_ob_time(ObExecContext &exec_ctx,
                               const ObExpr &expr,
-                              const ObDatum *date_datum,
-                              const ObObjType &date_arg_obj_type,
+                              const Datum *date_datum,
+                              const SqlValueType &date_arg_obj_type,
                               DateArgType &date_arg_type,
                               ObTime &ob_time);
   static bool is_zero_time(ObTime &ob_time);
-  static int set_res(ObDatum &res, ObTime &ob_time,
-                     const ObObjType &res_type,
+  static int set_res(Datum &res, ObTime &ob_time,
+                     const SqlValueType &res_type,
                      const bool is_valid_time,
                      const bool offset,
                      const bool is_zero_on_warn,
                      const bool is_no_zero_date,
                      const bool is_warn_on_fail);
-  static int set_zero_res(ObDatum &res, ObTime &ob_time,
-                          const ObObjType &res_type,
+  static int set_zero_res(Datum &res, ObTime &ob_time,
+                          const SqlValueType &res_type,
                           bool is_no_zero_date);
 };
 }

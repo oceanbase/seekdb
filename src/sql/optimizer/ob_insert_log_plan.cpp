@@ -306,7 +306,7 @@ int ObInsertLogPlan::check_need_online_stats_gather(bool &need_osg)
   need_osg = false;
   bool online_sys_var = false;
   bool need_gathering = true;
-  ObObj online_sys_var_obj;
+
   const ObInsertStmt *insert_stmt = NULL;
   TableItem *ins_table = NULL;
   bool disable_pdml = false;
@@ -327,9 +327,8 @@ int ObInsertLogPlan::check_need_online_stats_gather(bool &need_osg)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_optimizer_context().get_session_info()->get_sys_variable(share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD,
-                                                                                  online_sys_var_obj))) {
+                                                                                  online_sys_var))) {
   } else {
-    online_sys_var = online_sys_var_obj.get_bool();
     // shouldn't gather stats if the stmt is insert update.
     // if the online_opt_stat_gather is enable, should gather opt_stats even there is no hint.
     // if the online_opt_stat_gather is disable, only gather opt_stats when there is hint.
@@ -834,7 +833,7 @@ int ObInsertLogPlan::prepare_dml_infos()
           } else if (OB_FAIL(schema_guard->get_table_schema(
                                                             primary_upd_dml_info->ref_table_id_,
                                                             table_schema))) {
-          } else if (OB_NOT_NULL(table_schema) && OB_FAIL(ObVectorIndexUtil::check_table_has_vector_index(*table_schema, 
+          } else if (OB_NOT_NULL(table_schema) && OB_FAIL(share::ObVectorIndexUtil::check_table_has_vector_index(*table_schema,
                                                                                                           *schema_guard, 
                                                                                                           has_vec_index))) {
           } else if (has_vec_index && table_schema->is_table_with_hidden_pk_column()) {
@@ -1383,7 +1382,7 @@ int ObInsertLogPlan::build_column_conv_for_shadow_pk(const ObInsertTableInfo& ta
       // trim of '\0', so don't worry extra space usage.
       //
       // shadow pk can not be partition key, so padding is not need?
-      // if (ObObjMeta::is_binary(column_expr->get_data_type(), column_expr->get_collation_type())) {
+      // if (SqlTypeMeta::is_binary(column_expr->get_data_type(), column_expr->get_collation_type())) {
       //   const ObColumnSchemaV2 *column_schema = NULL;
       //   if (OB_FAIL(get_column_schema(column_expr->get_table_id(), column_expr->get_column_id(), column_schema, true))) {
       //     LOG_WARN("fail to get column schema", K(ret), K(*column_expr));

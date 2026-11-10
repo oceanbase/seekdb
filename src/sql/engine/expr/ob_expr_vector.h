@@ -85,8 +85,8 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
-  static int calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum, ObVecDisType dis_type);
+  static int calc_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
+  static int calc_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum, ObVecDisType dis_type);
   
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorDistance);
@@ -102,7 +102,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_l1_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_l1_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorL1Distance);
 };
@@ -117,7 +117,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_l2_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_l2_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorL2Distance);
 };
@@ -132,7 +132,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_l2_squared(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_l2_squared(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorL2Squared);
 };
@@ -147,7 +147,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_cosine_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_cosine_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorCosineDistance);
 };
@@ -162,7 +162,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_inner_product(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_inner_product(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorIPDistance);
 };
@@ -177,7 +177,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_negative_inner_product(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_negative_inner_product(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorNegativeIPDistance);
 };
@@ -195,7 +195,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_dims(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_dims(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorDims);
 };
@@ -210,7 +210,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc_norm(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_norm(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprVectorNorm);
 };

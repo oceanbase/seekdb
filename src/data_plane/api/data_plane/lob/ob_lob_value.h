@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_DATA_PLANE_API_LOB_OB_LOB_VALUE_H_
 #define OCEANBASE_DATA_PLANE_API_LOB_OB_LOB_VALUE_H_
 
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "lib/container/ob_iarray.h"
 
 namespace oceanbase
@@ -37,7 +37,7 @@ struct ObColDesc;
 namespace data_plane
 {
 
-void set_zero_lob_value(common::ObObjType type, common::ObObj &value);
+void set_zero_lob_value(common::SqlValueType type, common::DatumValue &value);
 int fill_lob_header(common::ObIAllocator &allocator,
                     common::ObString &data,
                     common::ObString &out);

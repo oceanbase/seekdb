@@ -27,38 +27,239 @@ using namespace oceanbase::sql::dtl;
 
 OB_SERIALIZE_MEMBER(ObQCMonitoringInfo, cur_sql_, qc_tid_);
 
-OB_SERIALIZE_MEMBER(ObPxSqcMeta,
-                    execution_id_,
-                    qc_id_,
-                    dfo_id_,
-                    sqc_id_,
-                    transmit_channel_,
-                    qc_ch_info_,
-                    sqc_ch_info_,
-                    max_task_count_,
-                    min_task_count_,
-                    px_int_id_,
-                    receive_channel_,
-                    is_fulltree_,
-                    parent_dfo_id_,
-                    px_sequence_id_,
-                    total_task_count_,
-                    total_part_count_,
-                    transmit_use_interm_result_,
-                    recieve_use_interm_result_,
-                    serial_receive_channels_,
-                    rescan_batch_params_,
-                    partition_pruning_access_plans_,
-                    ignore_vtable_error_,
-                    temp_table_ctx_,
-                    tablet_access_keys_,
-                    adjoining_root_dfo_,
-                    is_single_tsc_leaf_dfo_,
-                    sqc_count_,
-                    monitoring_info_,
-                    branch_id_base_,
-                    partition_random_affinitize_,
-                    tablet_access_order_);
+namespace
+{
+// Check the complete varint before the legacy decoder, which assumes a
+// terminating byte is available. Padded five-byte UNIS lengths remain valid.
+int decode_sqc_header_integer(const char *buf, int64_t length, int64_t &pos, int64_t &value)
+{
+  int64_t cursor = pos;
+  bool terminated = false;
+  for (int shift = 0; shift < 64 && !terminated; shift += 7) {
+    if (cursor >= length) { return OB_DESERIALIZE_ERROR; }
+    const uint8_t byte = static_cast<uint8_t>(buf[cursor++]);
+    if (64 - shift < 7 && (byte >> (64 - shift)) != 0) { return OB_DESERIALIZE_ERROR; }
+    terminated = (byte & 0x80) == 0;
+  }
+  return terminated ? serialization::decode(buf, length, pos, value) : OB_DESERIALIZE_ERROR;
+}
+} // namespace
+
+// SQC v2 transports the explicit typed batch protocol. The rest of the
+// established member order is unchanged. Version 1 remains a physical codec
+// boundary; it never fabricates missing FullType metadata during decode.
+int ObPxSqcMeta::serialize_body(char *buf, int64_t buf_len, int64_t &pos, int64_t version) const
+{
+  int ret = OB_SUCCESS;
+  OB_UNIS_ENCODE(execution_id_);
+  OB_UNIS_ENCODE(qc_id_);
+  OB_UNIS_ENCODE(dfo_id_);
+  OB_UNIS_ENCODE(sqc_id_);
+  OB_UNIS_ENCODE(transmit_channel_);
+  OB_UNIS_ENCODE(qc_ch_info_);
+  OB_UNIS_ENCODE(sqc_ch_info_);
+  OB_UNIS_ENCODE(max_task_count_);
+  OB_UNIS_ENCODE(min_task_count_);
+  OB_UNIS_ENCODE(px_int_id_);
+  OB_UNIS_ENCODE(receive_channel_);
+  OB_UNIS_ENCODE(is_fulltree_);
+  OB_UNIS_ENCODE(parent_dfo_id_);
+  OB_UNIS_ENCODE(px_sequence_id_);
+  OB_UNIS_ENCODE(total_task_count_);
+  OB_UNIS_ENCODE(total_part_count_);
+  OB_UNIS_ENCODE(transmit_use_interm_result_);
+  OB_UNIS_ENCODE(recieve_use_interm_result_);
+  OB_UNIS_ENCODE(serial_receive_channels_);
+  if (OB_SUCC(ret)) {
+    ret = version == 2 ? rescan_batch_params_.native_encode(buf, buf_len, pos)
+                       : rescan_batch_params_.serialize(buf, buf_len, pos);
+  }
+  OB_UNIS_ENCODE(partition_pruning_access_plans_);
+  OB_UNIS_ENCODE(ignore_vtable_error_);
+  OB_UNIS_ENCODE(temp_table_ctx_);
+  OB_UNIS_ENCODE(tablet_access_keys_);
+  OB_UNIS_ENCODE(adjoining_root_dfo_);
+  OB_UNIS_ENCODE(is_single_tsc_leaf_dfo_);
+  OB_UNIS_ENCODE(sqc_count_);
+  OB_UNIS_ENCODE(monitoring_info_);
+  OB_UNIS_ENCODE(branch_id_base_);
+  OB_UNIS_ENCODE(partition_random_affinitize_);
+  OB_UNIS_ENCODE(tablet_access_order_);
+  return ret;
+}
+
+int ObPxSqcMeta::deserialize_body(const char *buf, int64_t data_len, int64_t &pos, int64_t version)
+{
+  int ret = OB_SUCCESS;
+  OB_UNIS_DECODE(execution_id_);
+  OB_UNIS_DECODE(qc_id_);
+  OB_UNIS_DECODE(dfo_id_);
+  OB_UNIS_DECODE(sqc_id_);
+  OB_UNIS_DECODE(transmit_channel_);
+  OB_UNIS_DECODE(qc_ch_info_);
+  OB_UNIS_DECODE(sqc_ch_info_);
+  OB_UNIS_DECODE(max_task_count_);
+  OB_UNIS_DECODE(min_task_count_);
+  OB_UNIS_DECODE(px_int_id_);
+  OB_UNIS_DECODE(receive_channel_);
+  OB_UNIS_DECODE(is_fulltree_);
+  OB_UNIS_DECODE(parent_dfo_id_);
+  OB_UNIS_DECODE(px_sequence_id_);
+  OB_UNIS_DECODE(total_task_count_);
+  OB_UNIS_DECODE(total_part_count_);
+  OB_UNIS_DECODE(transmit_use_interm_result_);
+  OB_UNIS_DECODE(recieve_use_interm_result_);
+  OB_UNIS_DECODE(serial_receive_channels_);
+  if (OB_SUCC(ret) && (version == 2 || pos < data_len)) {
+    ret = version == 2 ? rescan_batch_params_.native_decode(buf, data_len, pos)
+                       : rescan_batch_params_.deserialize(buf, data_len, pos);
+  }
+  OB_UNIS_DECODE(partition_pruning_access_plans_);
+  OB_UNIS_DECODE(ignore_vtable_error_);
+  OB_UNIS_DECODE(temp_table_ctx_);
+  OB_UNIS_DECODE(tablet_access_keys_);
+  OB_UNIS_DECODE(adjoining_root_dfo_);
+  OB_UNIS_DECODE(is_single_tsc_leaf_dfo_);
+  OB_UNIS_DECODE(sqc_count_);
+  OB_UNIS_DECODE(monitoring_info_);
+  OB_UNIS_DECODE(branch_id_base_);
+  OB_UNIS_DECODE(partition_random_affinitize_);
+  OB_UNIS_DECODE(tablet_access_order_);
+  return ret;
+}
+
+int ObPxSqcMeta::serialized_body_size(int64_t version, int64_t &length) const
+{
+  int ret = OB_SUCCESS;
+  int64_t bytes = 0, batch_bytes = 0;
+  auto add = [&](int64_t size) {
+    if (OB_SUCC(ret) && (size < 0 || __builtin_add_overflow(bytes, size, &bytes))) {
+      ret = OB_SIZE_OVERFLOW;
+    }
+  };
+  add(serialization::encoded_length(execution_id_));
+  add(serialization::encoded_length(qc_id_));
+  add(serialization::encoded_length(dfo_id_));
+  add(serialization::encoded_length(sqc_id_));
+  add(serialization::encoded_length(transmit_channel_));
+  add(serialization::encoded_length(qc_ch_info_));
+  add(serialization::encoded_length(sqc_ch_info_));
+  add(serialization::encoded_length(max_task_count_));
+  add(serialization::encoded_length(min_task_count_));
+  add(serialization::encoded_length(px_int_id_));
+  add(serialization::encoded_length(receive_channel_));
+  add(serialization::encoded_length(is_fulltree_));
+  add(serialization::encoded_length(parent_dfo_id_));
+  add(serialization::encoded_length(px_sequence_id_));
+  add(serialization::encoded_length(total_task_count_));
+  add(serialization::encoded_length(total_part_count_));
+  add(serialization::encoded_length(transmit_use_interm_result_));
+  add(serialization::encoded_length(recieve_use_interm_result_));
+  add(serialization::encoded_length(serial_receive_channels_));
+  if (OB_SUCC(ret)) {
+    if (version == 2) { ret = rescan_batch_params_.native_size(batch_bytes); }
+    else { batch_bytes = rescan_batch_params_.get_serialize_size(); }
+    add(batch_bytes);
+  }
+  add(serialization::encoded_length(partition_pruning_access_plans_));
+  add(serialization::encoded_length(ignore_vtable_error_));
+  add(serialization::encoded_length(temp_table_ctx_));
+  add(serialization::encoded_length(tablet_access_keys_));
+  add(serialization::encoded_length(adjoining_root_dfo_));
+  add(serialization::encoded_length(is_single_tsc_leaf_dfo_));
+  add(serialization::encoded_length(sqc_count_));
+  add(serialization::encoded_length(monitoring_info_));
+  add(serialization::encoded_length(branch_id_base_));
+  add(serialization::encoded_length(partition_random_affinitize_));
+  add(serialization::encoded_length(tablet_access_order_));
+  // The established UNIS length slot contains five seven-bit groups.
+  if (OB_SUCC(ret) && static_cast<uint64_t>(bytes)
+      >= (uint64_t(1) << (7 * serialization::OB_SERIALIZE_SIZE_NEED_BYTES))) {
+    ret = OB_SIZE_OVERFLOW;
+  }
+  if (OB_SUCC(ret)) { length = bytes; }
+  return ret;
+}
+
+int ObPxSqcMeta::serialize_version(char *buf, int64_t length, int64_t &pos, int64_t version) const
+{
+  int64_t bytes = 0;
+  int ret = serialized_body_size(version, bytes);
+  const int64_t header = serialization::encoded_length(version) + serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+  int64_t total = 0;
+  if (OB_FAIL(ret)) {
+  } else if (buf == nullptr || pos < 0 || pos > length) { ret = OB_INVALID_ARGUMENT; }
+  else if (__builtin_add_overflow(bytes, header, &total)) { ret = OB_SIZE_OVERFLOW; }
+  else if (total > length - pos) { ret = OB_BUF_NOT_ENOUGH; }
+  else {
+    int64_t cursor = pos;
+    if (OB_FAIL(serialization::encode(buf, length, cursor, version))) {
+    } else {
+      const int64_t length_slot = cursor;
+      cursor += serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+      const int64_t body_start = cursor;
+      if (OB_FAIL(serialize_body(buf, length, cursor, version))) {
+      } else if (cursor - body_start != bytes) { ret = OB_ERR_UNEXPECTED; }
+      else {
+        int64_t header_pos = 0;
+        ret = serialization::encode_fixed_bytes_i64(buf + length_slot,
+            serialization::OB_SERIALIZE_SIZE_NEED_BYTES, header_pos, bytes);
+      }
+    }
+    if (OB_SUCC(ret)) { pos = cursor; }
+  }
+  return ret;
+}
+
+int ObPxSqcMeta::serialize(char *buf, const int64_t length, int64_t &pos) const
+{ return serialize_version(buf, length, pos, 2); }
+int ObPxSqcMeta::serialize_(char *buf, const int64_t length, int64_t &pos) const
+{ return serialize_body(buf, length, pos, 2); }
+int ObPxSqcMeta::serialize_legacy_v1(char *buf, int64_t length, int64_t &pos) const
+{ return serialize_version(buf, length, pos, 1); }
+
+int64_t ObPxSqcMeta::get_serialize_size_() const
+{
+  int64_t bytes = 0;
+  return serialized_body_size(2, bytes) == OB_SUCCESS ? bytes : -1;
+}
+int64_t ObPxSqcMeta::get_serialize_size() const
+{
+  int64_t bytes = get_serialize_size_();
+  const int64_t header = serialization::encoded_length(int64_t(2)) + serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+  return bytes < 0 || __builtin_add_overflow(bytes, header, &bytes) ? -1 : bytes;
+}
+int64_t ObPxSqcMeta::get_legacy_v1_serialize_size() const
+{
+  int64_t bytes = 0;
+  const int64_t header = serialization::encoded_length(int64_t(1)) + serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+  return serialized_body_size(1, bytes) != OB_SUCCESS
+      || __builtin_add_overflow(bytes, header, &bytes) ? -1 : bytes;
+}
+
+int ObPxSqcMeta::deserialize(const char *buf, const int64_t length, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  int64_t cursor = pos, version = 0, body_length = 0;
+  if (buf == nullptr || pos < 0 || pos >= length) { ret = OB_INVALID_ARGUMENT; }
+  else if (OB_FAIL(decode_sqc_header_integer(buf, length, cursor, version))) {
+  } else if (version != 1 && version != 2) { ret = OB_NOT_SUPPORTED; }
+  else if (cursor >= length) { ret = OB_DESERIALIZE_ERROR; }
+  else if (OB_FAIL(decode_sqc_header_integer(buf, length, cursor, body_length))) {
+  } else if (body_length < 0 || body_length > length - cursor) { ret = OB_DESERIALIZE_ERROR; }
+  else {
+    int64_t body_pos = 0;
+    ret = deserialize_body(buf + cursor, body_length, body_pos, version);
+    // Preserve the established UNIS body/omitted-tail handling. Members may
+    // have been partially assigned on failure; a caller must reject that object.
+    pos = cursor + body_length;
+  }
+  return ret;
+}
+
+int ObPxSqcMeta::deserialize_(const char *buf, const int64_t length, int64_t &pos)
+{ return deserialize_body(buf, length, pos, 2); }
+
 OB_SERIALIZE_MEMBER(ObPxTask,
                     qc_id_,
                     dfo_id_,
@@ -377,6 +578,7 @@ int ObPxInitSqcArgs::serialize_common_parts_2(
       frame_info = static_cast<ObPxTransmitSpec *>(op_spec_root_)->dfo_expr_frame_info_;
     }
     frame_info = NULL == frame_info ? &ser_phy_plan_->get_expr_frame_info() : frame_info;
+    ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
                 buf, buf_len, pos, *exec_ctx_, *frame_info))) {
@@ -456,6 +658,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitSqcArgs)
       } else {
         const ObExprFrameInfo *frame_info = static_cast<ObPxTransmitSpec *>(op_spec_root_)->dfo_expr_frame_info_;
         frame_info = NULL == frame_info ? &ser_phy_plan_->get_expr_frame_info() : frame_info;
+        ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
         len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(*exec_ctx_, *frame_info);
         len += ObPxTreeSerializer::get_tree_serialize_size(*op_spec_root_, false /* is_fulltree */, &seri_ctx);
         len += ObPxTreeSerializer::get_serialize_op_input_size(
@@ -521,6 +724,7 @@ int ObPxInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t d
 
       if (OB_SUCC(ret)) {
         const ObExprFrameInfo *frame_info = &des_phy_plan_->get_expr_frame_info();
+        ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
         if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<true>(
             buf, data_len, pos, *exec_ctx_, *frame_info))) {
         } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
@@ -587,6 +791,7 @@ OB_DEF_SERIALIZE(ObPxInitTaskArgs)
     // Serialize the core part of Task to the execution end: sub plan tree
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo *frame_info = &ser_phy_plan_->get_expr_frame_info();
+      ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
       if (OB_ISNULL(op_spec_root_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
@@ -606,6 +811,7 @@ OB_DEF_SERIALIZE(ObPxInitTaskArgs)
     // Serialize the core part of Task to the execution end: sub plan tree
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo &frame_info = ser_phy_plan_->get_expr_frame_info();
+      ObPxTreeSerializer::ExprArrayScope array_scope(frame_info);
       if (OB_ISNULL(op_spec_root_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<false>(
@@ -659,6 +865,7 @@ OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
 
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo *expr_frame_info = &inner_phy_plan_->get_expr_frame_info();
+      ObPxTreeSerializer::ExprArrayScope array_scope(*expr_frame_info);
       if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<true>(
           buf, data_len, pos, *exec_ctx_, *const_cast<ObExprFrameInfo*>(expr_frame_info)))) {
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
@@ -689,6 +896,7 @@ OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
 
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo &expr_frame_info = des_phy_plan_->get_expr_frame_info();
+      ObPxTreeSerializer::ExprArrayScope array_scope(expr_frame_info);
       if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<false>(
           buf, data_len, pos, *exec_ctx_, expr_frame_info))) {
       } else if (OB_FAIL(op_spec_root_->create_op_input(*exec_ctx_))) {
@@ -724,6 +932,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitTaskArgs)
         LOG_ERROR("unexpected status: op root is null", K(ret));
       } else {
         const ObExprFrameInfo *frame_info = &ser_phy_plan_->get_expr_frame_info();
+        ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
         len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(*exec_ctx_, *frame_info);
         len += ObPxTreeSerializer::get_tree_serialize_size(*op_spec_root_, false /* is_fulltree */);
         len += ObPxTreeSerializer::get_serialize_op_input_size(
@@ -739,6 +948,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitTaskArgs)
         LOG_ERROR("unexpected status: op root is null", K(ret));
       } else {
         const ObExprFrameInfo &frame_info = ser_phy_plan_->get_expr_frame_info();
+        ObPxTreeSerializer::ExprArrayScope array_scope(frame_info);
         len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<false>(*exec_ctx_, frame_info);
         len += ObPxTreeSerializer::get_serialize_op_input_size(
           *op_spec_root_, exec_ctx_->get_kit_store());

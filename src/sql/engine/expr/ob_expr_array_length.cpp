@@ -53,7 +53,7 @@ int ObExprArrayLength::calc_result_type1(ObExprResType &type,
     // do nothing
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -67,14 +67,14 @@ int ObExprArrayLength::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayLength::eval_array_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayLength::eval_array_length(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObCollectionArrayType *arr_type = NULL;
-  ObDatum *datum_arr = nullptr;
+  Datum *datum_arr = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum_arr))) {
   } else if (datum_arr->is_null()) {
     res.set_null();
@@ -110,7 +110,7 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
                                               const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -118,7 +118,7 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
   ObCollectionArrayType *arr_type = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

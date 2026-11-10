@@ -157,7 +157,7 @@ public:
   int match(ObPlanCacheCtx &pc_ctx,
             const common::ObIArray<PCVSchemaObj> &schema_array,
             bool &is_same);
-  // Convert parameterized parameters of fast parser to ObObjParam
+  // Convert parameterized parameters of fast parser to DatumParameter
   static int resolver_params(ObPlanCacheCtx &pc_ctx,
                              stmt::StmtType stmt_type,
                              const ObIArray<ObCharsetType> &param_charset_type,
@@ -166,7 +166,8 @@ public:
                              const ObBitSet<> &must_be_positive_idx,
                              const ObBitSet<> &fmt_int_or_ch_decint_idx,
                              ObIArray<ObPCParam *> &raw_params,
-                             ParamStore *obj_params);
+                             ParamStore *obj_params,
+                             common::ObIArray<const common::SqlType *> *resolved_types = nullptr);
 
   int resolve_multi_stmt_params(ObPlanCacheCtx &pc_ctx);
 
@@ -266,6 +267,9 @@ public:
   int lift_runtime_schema_version(int64_t new_schema_version);
   int check_contains_table(uint64_t db_id, common::ObString tab_name, bool &contains);
 private:
+  // Resolve the actual lookup source and bind it before PlanSet matching.
+  int prepare_lookup_parameters(ObPlanCacheCtx &pc_ctx);
+
   //used for add plan
   //check table version, view table version, merged version
   int check_value_version_for_add(const ObPlanCacheObject &cache_obj,

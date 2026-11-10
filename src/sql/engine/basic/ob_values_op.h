@@ -31,7 +31,7 @@ namespace sql
 //
 class ObValuesSpec : public ObOpSpec
 {
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(2);
 public:
   ObValuesSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type);
 

@@ -356,7 +356,7 @@ int ObDelUpdLogPlan::calculate_access_targets(const ObDelUpdStmt &stmt,
 {
   int ret = OB_SUCCESS;
   ObSqlSchemaGuard *sql_schema_guard = get_optimizer_context().get_sql_schema_guard();
-  const ParamStore *params = get_optimizer_context().get_params();
+  const ObPhysicalPlanCtx *params = get_optimizer_context().get_parameter_context();
   ObExecContext *exec_ctx = get_optimizer_context().get_exec_ctx();
   const common::ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(
       get_optimizer_context().get_session_info());

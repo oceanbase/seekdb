@@ -28,9 +28,9 @@ typedef enum ObItemType
 {
   T_INVALID = -1, //Attention: add a new type after T_INVALID
 
-  /* Literal data type tags, the same as ObObjType */
+  /* Literal data type tags, the same as SqlValueType */
   // Although some of the following types are not used in the parser,
-  // we define them here to make it the same as ObObjType!!!
+  // we define them here to make it the same as SqlValueType!!!
   T_NULL = 0,
 
   T_TINYINT = 1,
@@ -2360,7 +2360,7 @@ typedef enum ObOutlineType
     || T_OP_SIGN == (op) \
     || T_OP_CONNECT_BY_ROOT == (op))
 
-#define ITEM_TO_OBJ_TYPE(op) (static_cast<ObObjType>(op))
+#define ITEM_TO_SQL_VALUE_TYPE(op) (static_cast<SqlValueType>(op))
 
 #define IS_COMPARISON_OP(op)                            \
   (((op) >= T_OP_EQ && (op) <= T_OP_NE)                 \

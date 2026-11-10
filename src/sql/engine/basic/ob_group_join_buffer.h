@@ -45,7 +45,7 @@ struct ObBatchRowDatums
   void extend_save(ObEvalCtx &ctx, int64_t size);
   void to_exprs(ObEvalCtx &ctx);
   void to_exprs(ObEvalCtx &ctx, int64_t from_idx, int64_t to_idx);
-  ObDatum &get_datum(int64_t row_id, int64_t col_id)
+  Datum &get_datum(int64_t row_id, int64_t col_id)
   {
     return datums_[col_id * batch_size_ + row_id];
   }
@@ -57,7 +57,7 @@ private:
   common::ObIAllocator *alloc_;
   const ObExprPtrIArray *exprs_;
   int32_t batch_size_;
-  ObDatum *datums_;
+  Datum *datums_;
   ObBitVector *skip_;
   int32_t size_;
   int32_t saved_size_; // record  the saved size, include extend saved size
@@ -100,14 +100,18 @@ private:
   int get_next_left_iter();
   int add_row_to_store();
   int build_above_group_params(const common::ObIArray<ObDynamicParamSetter> &above_rescan_params,
-                               common::ObIArray<ObSqlArrayObj *> &above_group_params,
+                               common::ObIArray<const GroupRescanParam *> &above_group_params,
                                int64_t &group_size);
   int set_above_group_size();
   void reset_buffer_state();
-  int backup_above_params(common::ObIArray<ObObjParam> &left_params_backup,
-                          common::ObIArray<ObObjParam> &right_params_backup);
-  int restore_above_params(common::ObIArray<ObObjParam> &left_params_backup,
-                           common::ObIArray<ObObjParam> &right_params_backup);
+  int backup_above_params(common::ObIArray<common::NativeTypedDatum> &left_values,
+                          common::ObIArray<common::DatumParameterMetadata> &left_metadata,
+                          common::ObIArray<common::NativeTypedDatum> &right_values,
+                          common::ObIArray<common::DatumParameterMetadata> &right_metadata);
+  int restore_above_params(const common::ObIArray<common::NativeTypedDatum> &left_values,
+                           const common::ObIArray<common::DatumParameterMetadata> &left_metadata,
+                           const common::ObIArray<common::NativeTypedDatum> &right_values,
+                           const common::ObIArray<common::DatumParameterMetadata> &right_metadata);
 
 private:
   ObOperator *op_;
@@ -136,14 +140,14 @@ private:
   // store batch index corresponding to NLJ above this op
   common::ObSEArray<int64_t, 2> left_store_group_idx_;
   // for NLJ 2, above_left_batch_params_ stores batch rescan params used by TSC 2 and supplied by NLJ 1
-  common::ObSEArray<ObSqlArrayObj *, 2> above_left_group_params_;
+  common::ObSEArray<const GroupRescanParam *, 2> above_left_group_params_;
   // for NLJ 2, above_right_batch_params_ stores batch rescan params used by TSC 3 and supplied by NLJ 1
-  common::ObSEArray<ObSqlArrayObj *, 2> above_right_group_params_;
+  common::ObSEArray<const GroupRescanParam *, 2> above_right_group_params_;
   // batch rescan params supplied by this op
-  common::ObArrayWrap<ObSqlArrayObj> group_params_;
+  GroupParamArray group_params_;
   // for NLJ 2, we need to rewrite params in above_right_batch_params_ and align them with our rescan pace,
   // above_bnlj_params_ stores batch params supplied by NLJ 1 and overwritten by NLJ 2
-  common::ObArrayWrap<ObSqlArrayObj> above_group_params_;
+  GroupParamArray above_group_params_;
   ObChunkDatumStore::ShadowStoredRow last_row_;
   ObBatchRowDatums last_batch_;
   int64_t right_cnt_;
@@ -160,7 +164,6 @@ private:
   int64_t max_group_size_;
   int64_t group_scan_size_;
   int64_t group_rescan_cnt_;
-  GroupParamArray rescan_params_info_;
   union {
     uint64_t flags_;
     struct {

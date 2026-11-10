@@ -29,11 +29,11 @@ class ObDBMSSession
 {
 public:
   static int clear_identifier(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+    sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
   static int set_identifier(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+    sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
   static int reset_package(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+    sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 };
 
 } // end of pl

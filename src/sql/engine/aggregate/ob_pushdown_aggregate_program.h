@@ -90,6 +90,10 @@ private:
 // the aggregate seam.  Each Storage scan store creates its own mutable program
 // from this plan.  OB_NOT_SUPPORTED is a clean dispatch miss: the caller must
 // keep using the legacy path and plan remains null.
+// The expression array, EvalCtx, prepared Expr types, and allocator must outlive
+// all programs created from the plan. MIN/MAX own their native partial values;
+// segment storage views are copied before another segment call can invalidate
+// them. Hard program errors still require reset_scan() or destroy().
 int create_pushdown_aggregate_plan(
     ObEvalCtx &eval_ctx,
     const common::ObIArray<ObExpr *> &aggregate_exprs,

@@ -163,26 +163,26 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case TABLET_ID:
-          cur_row_.cells_[i].set_int(table_key.tablet_id_.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, table_key.tablet_id_.id()) : ret);
           break;
           //TODO:SCN
         case START_LOG_SCN: {
           uint64_t v = table_key.scn_range_.start_scn_.get_val_for_inner_table_field();
-          cur_row_.cells_[i].set_uint64(v);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
           break;
         }
         case END_LOG_SCN: {
           uint64_t v = table_key.scn_range_.end_scn_.get_val_for_inner_table_field();
-          cur_row_.cells_[i].set_uint64(v);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
         }
           break;
         case UPPER_TRANS_VERSION: {
           uint64_t v =  table->get_upper_trans_version() < 0 ? 0 : (uint64_t)table->get_upper_trans_version();
-          cur_row_.cells_[i].set_uint64(v);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
           break;
         }
         case TABLE_TYPE:
-          cur_row_.cells_[i].set_int(table_key.table_type_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, table_key.table_type_) : ret);
           break;
         case SIZE: {
           int64_t size = 0;
@@ -191,13 +191,13 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
           } else if (table->is_sstable()) {
             size = static_cast<blocksstable::ObSSTable *>(table)->get_occupy_size();
           }
-          cur_row_.cells_[i].set_int(size);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, size) : ret);
           break;
         }
         case DATA_BLOCK_CNT: {
           const int64_t blk_cnt = table->is_memtable() ? 0
             : static_cast<ObSSTable *>(table)->get_data_macro_block_count();
-          cur_row_.cells_[i].set_int(blk_cnt);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, blk_cnt) : ret);
           break;
         }
         case INDEX_BLOCK_CNT: {
@@ -206,7 +206,7 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
             blocksstable::ObSSTable * sstable = static_cast<blocksstable::ObSSTable *>(table);
             blk_cnt = sstable->get_total_macro_block_count() - sstable->get_data_macro_block_count();
           }
-          cur_row_.cells_[i].set_int(blk_cnt);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, blk_cnt) : ret);
           break;
         }
         case LINKED_BLOCK_CNT: {
@@ -218,18 +218,18 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
               blk_cnt = sst_meta_hdl.get_sstable_meta().get_linked_macro_block_count();
             }
           }
-          cur_row_.cells_[i].set_int(blk_cnt);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, blk_cnt) : ret);
           break;
         }
         case REF:
-          cur_row_.cells_[i].set_int(table->get_ref());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, table->get_ref()) : ret);
           break;
         case IS_ACTIVE: {
           bool is_active = false;
           if (table->is_memtable()) {
             is_active = static_cast<ObIMemtable *>(table)->is_active_memtable();
           }
-          cur_row_.cells_[i].set_varchar(is_active ? "YES" : "NO");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, is_active ? "YES" : "NO") : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
@@ -240,15 +240,15 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
           } else if (table->is_sstable()) {
             contain_uncommitted_row = static_cast<blocksstable::ObSSTable *>(table)->contain_uncommitted_row();
           }
-          cur_row_.cells_[i].set_varchar(contain_uncommitted_row ? "YES" : "NO");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, contain_uncommitted_row ? "YES" : "NO") : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case NESTED_OFFSET:
-          cur_row_.cells_[i].set_int(nested_offset);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, nested_offset) : ret);
           break;
         case NESTED_SIZE:
-          cur_row_.cells_[i].set_int(nested_size);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, nested_size) : ret);
           break;
         case DATA_CHECKSUM: {
           int64_t data_checksum = 0;
@@ -257,7 +257,7 @@ int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
           } else if (table->is_sstable()) {
             data_checksum = static_cast<blocksstable::ObSSTable *>(table)->get_data_checksum();
           }
-          cur_row_.cells_[i].set_int(data_checksum);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, data_checksum) : ret);
           break;
         }
         default:

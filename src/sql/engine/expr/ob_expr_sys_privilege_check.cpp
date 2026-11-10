@@ -116,13 +116,13 @@ int ObExprSysPrivilegeCheck::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &e
 }
 
 int ObExprSysPrivilegeCheck::eval_sys_privilege_check(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *level = NULL;
-  ObDatum *db = NULL;
-  ObDatum *obj = NULL;
-  ObDatum *routine_type = NULL;
+  Datum *level = NULL;
+  Datum *db = NULL;
+  Datum *obj = NULL;
+  Datum *routine_type = NULL;
   bool allow_show = true;
   if (OB_FAIL(expr.eval_param_value(ctx, level, db, obj, routine_type))) {
   } else if (OB_FAIL(check_show_priv(allow_show, ctx.exec_ctx_,

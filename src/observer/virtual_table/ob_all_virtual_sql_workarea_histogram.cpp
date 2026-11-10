@@ -131,32 +131,32 @@ int ObSqlWorkareaHistogram::fill_row(
   common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
       case LOW_OPTIMAL_SIZE: {
-        cells[cell_idx].set_int(wa_histogram.get_low_optimal_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_histogram.get_low_optimal_size()) : ret);
         break;
       }
       case HIGH_OPTIMAL_SIZE: {
-        cells[cell_idx].set_int(wa_histogram.get_high_optimal_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_histogram.get_high_optimal_size()) : ret);
         break;
       }
       case OPTIMAL_EXECUTIONS: {
-        cells[cell_idx].set_int(wa_histogram.get_optimal_executions());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_histogram.get_optimal_executions()) : ret);
         break;
       }
       case ONEPASS_EXECUTIONS: {
-        cells[cell_idx].set_int(wa_histogram.get_onepass_executions());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_histogram.get_onepass_executions()) : ret);
         break;
       }
       case MULTIPASSES_EXECUTIONS: {
-        cells[cell_idx].set_int(wa_histogram.get_multipass_executions());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_histogram.get_multipass_executions()) : ret);
         break;
       }
       case TOTAL_EXECUTIONS: {
-        cells[cell_idx].set_int(wa_histogram.get_total_executions());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_histogram.get_total_executions()) : ret);
         break;
       }
       default: {

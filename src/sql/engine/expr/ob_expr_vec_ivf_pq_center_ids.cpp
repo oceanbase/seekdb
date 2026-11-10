@@ -51,14 +51,6 @@ int ObExprVecIVFPQCenterIds::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprVecIVFPQCenterIds::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  // TODO by query ivf index
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprVecIVFPQCenterIds::cg_expr(
     ObExprCGCtx &expr_cg_ctx,
@@ -99,7 +91,7 @@ int ObExprVecIVFPQCenterIds::generate_empty_pq_ids(char *buf, int pq_m, int nbit
 int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (expr.arg_cnt_ == 1) {
@@ -134,7 +126,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     ObExpr *calc_pq_m_expr = expr.args_[6];
     ObExpr *calc_nbits_expr = expr.args_[7];
     // 0. init
-    ObDatum *res = nullptr;
+    Datum *res = nullptr;
     char *vb_buf = nullptr;
     int64_t res_len = 0;
     int64_t buf_pos = 0;

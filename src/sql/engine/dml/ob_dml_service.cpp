@@ -34,6 +34,11 @@
 #include "sql/engine/ob_batch_rows.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "query/vector/ob_vector_index_util.h"
+#include "common/datum/datum_value_projection.h"
+#include "common/datum/datum_value_buffer.h"
+#include "share/datum/typed_datum_compare.h"
+#include "lib/utility/data_buffer.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -41,6 +46,16 @@ using namespace share;
 using namespace transaction;
 namespace sql
 {
+
+namespace
+{
+bool same_dml_value(const ObExpr &expr, const Datum &left, const Datum &right, int &status)
+{
+  bool equal = false;
+  if (status == OB_SUCCESS) { status = expr.get_datum_copy_plan().binary_equal(left, right, equal); }
+  return equal;
+}
+}
 
 bool ObDMLService::check_cascaded_reference(const ObExpr *expr, const ObExprPtrIArray &row)
 {
@@ -78,7 +93,7 @@ int ObDMLService::check_row_null(const ObExprPtrIArray &row,
     ret = OB_ERR_UNEXPECTED;
   }
   for (int i = 0; OB_SUCC(ret) && i < column_infos.count(); i++) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     const bool is_nullable = column_infos.at(i).is_nullable_;
     uint64_t col_idx = column_infos.at(i).projector_index_;
     if (OB_FAIL(row.at(col_idx)->eval(eval_ctx, datum))) {
@@ -103,7 +118,7 @@ int ObDMLService::check_column_null(
     ObEvalCtx &eval_ctx,
     const ObExprPtrIArray &row,
     const ColumnContent &column_info,
-    ObDatum &datum,
+    Datum &datum,
     const bool is_ignore,
     const bool is_single_value,
     const ObSQLMode sql_mode)
@@ -115,9 +130,13 @@ int ObDMLService::check_column_null(
   if (!is_nullable && datum.is_null()) {
     if (is_ignore || (!is_single_value
                       && !is_strict_mode(sql_mode))) {
-      ObObj zero_obj;
+      DatumValue zero_value;
+      // The old zero-value builder needs addressable scalar bytes. These are
+      // temporary: inline SQL values must not allocate an Expr payload buffer.
+      alignas(8) char zero_buffer[64];
+      ObDataBuffer zero_alloc(zero_buffer, sizeof(zero_buffer));
       ObExprStrResAlloc res_alloc(*expr, eval_ctx);
-      ObDatum &row_datum = expr->locate_datum_for_write(eval_ctx);
+      Datum &row_datum = expr->locate_datum_for_write(eval_ctx);
       bool is_decimal_int = ob_is_decimal_int(expr->datum_meta_.type_);
       if (ob_is_geometry(expr->obj_meta_.get_type())) {
           ret = OB_BAD_NULL_ERROR;
@@ -133,24 +152,39 @@ int ObDMLService::check_column_null(
         ret = OB_BAD_NULL_ERROR;
         LOG_WARN("dml with ignore not supported with cascaded column", KPC(expr));
         LOG_USER_ERROR(OB_BAD_NULL_ERROR, column_info.column_name_.length(), column_info.column_name_.ptr());
-      } else if (OB_FAIL(sql::get_obj_zero_value(
+      } else if (OB_FAIL(sql::get_datum_zero_value(
           expr->obj_meta_.get_type(),
           expr->obj_meta_.get_collation_type(),
-          zero_obj))) {
+          zero_alloc,
+          zero_value))) {
       } else if (is_decimal_int) {
         ObDecimalIntBuilder dec_val;
         dec_val.set_zero(wide::ObDecimalIntConstValue::get_int_bytes_by_precision(
             expr->datum_meta_.precision_));
-        row_datum.set_decimal_int(dec_val.get_decimal_int(), dec_val.get_int_bytes());
+        char *buffer = expr->get_reference_res_mem(eval_ctx, dec_val.get_int_bytes());
+        ret = expr->get_datum_copy_plan().set_decimal(dec_val.get_decimal_int(), dec_val.get_int_bytes(),
+                                                     row_datum, buffer, dec_val.get_int_bytes());
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObDASUtils::padding_fixed_string_value(expr->max_length_,
                                                                 res_alloc,
-                                                                zero_obj))) {
-      } else if (!is_decimal_int && OB_FAIL(row_datum.from_obj(zero_obj))) {
-      } else if (zero_obj.is_lob_storage() && zero_obj.has_lob_header() != expr->obj_meta_.has_lob_header()) {
+                                                                zero_value))) {
+      } else if (!is_decimal_int) {
+        Datum native_zero;
+        alignas(8) char zero_scratch[64];
+        ObDatum zero_view;
+        if (OB_FAIL(zero_value.export_legacy(zero_view, zero_scratch, sizeof(zero_scratch)))) {
+        } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(zero_view, native_zero))) {
+        } else {
+          // Number/timestamp and other reference results must outlive the
+          // scratch above; strings padded in Expr memory are safe to recopy.
+          ret = expr->deep_copy_datum(eval_ctx, native_zero);
+        }
+      }
+      if (OB_SUCC(ret) && zero_value.is_lob_storage()
+          && zero_value.has_lob_header() != expr->obj_meta_.has_lob_header()) {
         ret = OB_ERR_UNEXPECTED;
-      } else {
+      } else if (OB_SUCC(ret)) {
         //output warning msg
         const ObString &column_name = column_info.column_name_;
         LOG_USER_WARN(OB_BAD_NULL_ERROR, column_name.length(), column_name.ptr());
@@ -182,7 +216,7 @@ int ObDMLService::check_column_type(const ExprFixedArray &dml_row,
     common::ObString column_name = column_infos.at(i).column_name_;
     dml_op.get_exec_ctx().set_cur_column_name(&column_name);
     ObExpr *expr = dml_row.at(column_info.projector_index_);
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     if (OB_FAIL(expr->eval(dml_op.get_eval_ctx(), datum))) {
       ret = ObDMLService::log_user_error_inner(ret, row_num, column_name, dml_op.get_exec_ctx(),
                                                expr->datum_meta_.type_);
@@ -203,7 +237,7 @@ int ObDMLService::check_geometry_type(
     const ExprFixedArray &dml_row,
     const ColumnContent &column_info,
     ObIAllocator &allocator,
-    ObDatum &datum)
+    Datum &datum)
 {
   int ret = OB_SUCCESS;
   ObExpr *expr = dml_row.at(column_info.projector_index_);
@@ -241,7 +275,7 @@ int ObDMLService::check_rowkey_is_null(const ObExprPtrIArray &row,
   int ret = OB_SUCCESS;
   is_null = false;
   CK(row.count() >= rowkey_cnt);
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && !is_null && i < rowkey_cnt; ++i) {
     if (OB_FAIL(row.at(i)->eval(eval_ctx, datum))) {
     } else {
@@ -304,21 +338,21 @@ int ObDMLService::check_rowkey_whether_distinct(const ObExprPtrIArray &row,
   if (T_DISTINCT_NONE != distinct_algo) {
     if (T_HASH_DISTINCT == distinct_algo) {
       ObIAllocator &allocator = root_ctx.get_allocator();
-      const int64_t rowkey_cnt = tmp_table_rowkey.get_obj_cnt();
+      const int64_t rowkey_cnt = tmp_table_rowkey.get_value_count();
       if (OB_ISNULL(rowkey_dist_ctx)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        //step1: Init ObObj of ObTableRowkey
-        ObObj *tmp_obj_ptr = tmp_table_rowkey.get_obj_ptr();
+        //step1: Init DatumValue of ObTableRowkey
+        DatumValue *tmp_obj_ptr = tmp_table_rowkey.get_values();
         for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
           ObExpr *expr = row.at(i);
-          ObDatum *col_datum = nullptr;
+          Datum *col_datum = nullptr;
           if (OB_ISNULL(expr)) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(expr->eval(eval_ctx, col_datum))) {
           } else if (OB_ISNULL(col_datum)) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(col_datum->to_obj(tmp_obj_ptr[i], expr->obj_meta_, expr->obj_datum_map_))) {
+          } else if (OB_FAIL(project_native_datum_value_view(*col_datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj_ptr[i].meta_, tmp_obj_ptr[i], allocator))) {
           }
         }
 
@@ -330,19 +364,19 @@ int ObDMLService::check_rowkey_whether_distinct(const ObExprPtrIArray &row,
             is_dist = false;
           } else if (OB_HASH_NOT_EXIST == ret) {
             //step3: if not exist, deep copy data and add ObRowkey to hash set
-            //step3.1: Init the buffer of ObObj Array
+            //step3.1: Init the buffer of DatumValue Array
             ret = OB_SUCCESS;
-            ObObj *obj_ptr = nullptr;
+            DatumValue *obj_ptr = nullptr;
             void *buf = nullptr;
-            if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * rowkey_cnt))) {
+            if (OB_ISNULL(buf = allocator.alloc(sizeof(DatumValue) * rowkey_cnt))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
             } else {
-              obj_ptr = new(buf) ObObj[rowkey_cnt];
+              obj_ptr = new(buf) DatumValue[rowkey_cnt];
             }
 
-            //step3.2: deep copy data to ObObj
+            //step3.2: deep copy data to DatumValue
             for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
-              if (OB_FAIL(ob_write_obj(allocator, tmp_obj_ptr[i], obj_ptr[i]))) {
+              if (OB_FAIL(clone_typed_value(tmp_obj_ptr[i], obj_ptr[i], allocator))) {
               }
             }
             ObRowkey table_rowkey(obj_ptr, rowkey_cnt);
@@ -397,8 +431,8 @@ int ObDMLService::create_rowkey_check_hashset(int64_t estimate_row,
 }
 
 int ObDMLService::check_lob_column_changed(ObEvalCtx &eval_ctx,
-            const ObExpr& old_expr, ObDatum& old_datum,
-            const ObExpr& new_expr, ObDatum& new_datum,
+            const ObExpr& old_expr, Datum& old_datum,
+            const ObExpr& new_expr, Datum& new_datum,
             int64_t& result) {
   INIT_SUCC(ret);
   int64_t timeout = 0;
@@ -424,7 +458,7 @@ int ObDMLService::check_lob_column_changed(ObEvalCtx &eval_ctx,
         result = is_equal ? 0 : 1;
       }
     } else {
-      result = ObDatum::binary_equal(old_datum, new_datum) ? 0 : 1;
+      result = same_dml_value(old_expr, old_datum, new_datum, ret) ? 0 : 1;
     }
   }
   return ret;
@@ -459,8 +493,8 @@ int ObDMLService::check_row_whether_changed(const ObUpdCtDef &upd_ctdef,
       const ObExprPtrIArray &new_row = upd_ctdef.new_row_;
       FOREACH_CNT_X(info, upd_ctdef.assign_columns_, OB_SUCC(ret) && !upd_rtdef.is_row_changed_) {
         const uint64_t idx = info->projector_index_;
-        ObDatum *old_datum = NULL;
-        ObDatum *new_datum = NULL;
+        Datum *old_datum = NULL;
+        Datum *new_datum = NULL;
         if (OB_FAIL(old_row.at(idx)->eval(eval_ctx, old_datum))
             || OB_FAIL(new_row.at(idx)->eval(eval_ctx, new_datum))) {
         } else {
@@ -473,7 +507,7 @@ int ObDMLService::check_row_whether_changed(const ObUpdCtDef &upd_ctdef,
               upd_rtdef.is_row_changed_ = (cmp_res != 0);
             }
           } else {
-            upd_rtdef.is_row_changed_ = !ObDatum::binary_equal(*old_datum, *new_datum);
+            upd_rtdef.is_row_changed_ = !same_dml_value(*old_row.at(idx), *old_datum, *new_datum, ret);
           }
         }
       }
@@ -485,8 +519,8 @@ int ObDMLService::check_row_whether_changed(const ObUpdCtDef &upd_ctdef,
     FOREACH_CNT_X(info, upd_ctdef.assign_columns_, OB_SUCC(ret) && !upd_rtdef.is_row_changed_) {
       const uint64_t idx = info->projector_index_;
       if (OB_LIKELY(!info->auto_filled_timestamp_)) {
-        ObDatum *old_datum = NULL;
-        ObDatum *new_datum = NULL;
+        Datum *old_datum = NULL;
+        Datum *new_datum = NULL;
         if (OB_FAIL(old_row.at(idx)->eval(eval_ctx, old_datum))
             || OB_FAIL(new_row.at(idx)->eval(eval_ctx, new_datum))) {
         } else {
@@ -499,7 +533,7 @@ int ObDMLService::check_row_whether_changed(const ObUpdCtDef &upd_ctdef,
               upd_rtdef.is_row_changed_ = (cmp_res != 0);
             }
           } else {
-            upd_rtdef.is_row_changed_ = !ObDatum::binary_equal(*old_datum, *new_datum);
+            upd_rtdef.is_row_changed_ = !same_dml_value(*old_row.at(idx), *old_datum, *new_datum, ret);
           }
         }
       }
@@ -515,14 +549,18 @@ int ObDMLService::check_row_whether_changed(const ObUpdCtDef &upd_ctdef,
     for (int64_t i = 0; OB_SUCC(ret) && i < upd_ctdef.assign_columns_.count(); ++i) {
       const ColumnContent &info = upd_ctdef.assign_columns_.at(i);
       uint64_t idx = info.projector_index_;
-      ObDatum *old_datum = NULL;
-      ObDatum *new_datum = NULL;
+      Datum *old_datum = NULL;
+      Datum *new_datum = NULL;
       if (info.is_predicate_column_) {
         if (OB_FAIL(old_row.at(idx)->eval(eval_ctx, old_datum))
             || OB_FAIL(new_row.at(idx)->eval(eval_ctx, new_datum))) {
-        } else if (!ObDatum::binary_equal(*old_datum, *new_datum)) {
-          //update the predicate column, will lead to the next stmt result change, need rollback
-          ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
+        } else {
+          bool equal = false;
+          if (OB_FAIL(old_row.at(idx)->get_datum_copy_plan().binary_equal(*old_datum, *new_datum, equal))) {
+          } else if (!equal) {
+            // Updating the predicate column changes the next statement's result.
+            ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
+          }
         }
       }
     }
@@ -542,7 +580,7 @@ int ObDMLService::filter_row_for_check_cst(const ExprFixedArray &cst_exprs,
   filtered = false;
   for (int64_t i = 0; OB_SUCC(ret) && !filtered && i < cst_exprs.count(); ++i) {
     ObExpr *expr = cst_exprs.at(i);
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     if (OB_FAIL(expr->eval(eval_ctx, datum))) {
       LOG_INFO("cover original errno while calulating check expr in mysql mode", K(ret));
       filtered = true;
@@ -565,7 +603,7 @@ int ObDMLService::filter_row_for_view_check(const ExprFixedArray &cst_exprs,
   filtered = false;
   for (int64_t i = 0; OB_SUCC(ret) && !filtered && i < cst_exprs.count(); ++i) {
     ObExpr *expr = cst_exprs.at(i);
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     if (OB_FAIL(expr->eval(eval_ctx, datum))) {
     } else {
       OB_ASSERT(ob_is_int_tc(expr->datum_meta_.type_));
@@ -587,7 +625,7 @@ int ObDMLService::init_heap_table_pk_for_ins(const ObInsCtDef &ins_ctdef, ObEval
     } else if (auto_inc_expr->type_ != T_TABLET_AUTOINC_NEXTVAL) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObDatum &datum = auto_inc_expr->locate_datum_for_write(eval_ctx);
+      Datum &datum = auto_inc_expr->locate_datum_for_write(eval_ctx);
       datum.set_null();
       auto_inc_expr->get_eval_info(eval_ctx).evaluated_ = true;
     }
@@ -1542,12 +1580,12 @@ int ObDMLService::init_upd_rtdef(
 int ObDMLService::init_ob_rowkey( ObIAllocator &allocator, const int64_t rowkey_cnt, ObRowkey &table_rowkey)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
-  if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * rowkey_cnt))) {
+  if (OB_ISNULL(buf = allocator.alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    obj_ptr = new(buf) ObObj[rowkey_cnt];
+    obj_ptr = new(buf) DatumValue[rowkey_cnt];
   }
   table_rowkey.assign(obj_ptr, rowkey_cnt);
   return ret;
@@ -1558,7 +1596,7 @@ int ObDMLService::add_trans_info_datum(ObExpr *trans_info_expr,
                                        ObChunkDatumStore::StoredRow *stored_row)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
 
   if (OB_ISNULL(trans_info_expr) || OB_ISNULL(stored_row)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1567,9 +1605,9 @@ int ObDMLService::add_trans_info_datum(ObExpr *trans_info_expr,
     ret = OB_ERR_UNEXPECTED;
   } else {
     char *buf = static_cast<char *>(stored_row->get_extra_payload());
-    *static_cast<int32_t *>(stored_row->get_extra_payload()) = datum->len_;
+    *static_cast<int32_t *>(stored_row->get_extra_payload()) = datum->length();
     int64_t pos = sizeof(int32_t);
-    MEMCPY(buf + pos, datum->ptr_, datum->len_);
+    MEMCPY(buf + pos, static_cast<const char *>(datum->get_reference()), datum->length());
   }
 
   return ret;
@@ -1810,7 +1848,7 @@ int ObDMLService::copy_heap_table_hidden_pk(ObEvalCtx &eval_ctx,
   int ret = OB_SUCCESS;
   ObExpr *old_hidden_pk = upd_ctdef.old_row_.at(0);
   ObExpr *new_hidden_pk = upd_ctdef.new_row_.at(0);
-  ObDatum *hidden_pk_datum = NULL;
+  Datum *hidden_pk_datum = NULL;
   if (OB_ISNULL(old_hidden_pk) || OB_ISNULL(new_hidden_pk)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!upd_ctdef.is_table_without_pk_) {
@@ -1822,7 +1860,7 @@ int ObDMLService::copy_heap_table_hidden_pk(ObEvalCtx &eval_ctx,
   } else if (!old_hidden_pk->obj_meta_.is_uint64()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObDatum &datum = new_hidden_pk->locate_datum_for_write(eval_ctx);
+    Datum &datum = new_hidden_pk->locate_datum_for_write(eval_ctx);
     datum.set_uint(hidden_pk_datum->get_uint());
     new_hidden_pk->get_eval_info(eval_ctx).evaluated_ = true;
   }
@@ -1845,7 +1883,7 @@ int ObDMLService::set_update_hidden_pk(ObEvalCtx &eval_ctx,
     } else if (auto_inc_expr->type_ != T_TABLET_AUTOINC_NEXTVAL) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObDatum &datum = auto_inc_expr->locate_datum_for_write(eval_ctx);
+      Datum &datum = auto_inc_expr->locate_datum_for_write(eval_ctx);
       datum.set_uint(autoinc_seq);
       auto_inc_expr->get_eval_info(eval_ctx).evaluated_ = true;
     }
@@ -1885,7 +1923,7 @@ int ObDMLService::set_heap_table_hidden_pk(const ObInsCtDef &ins_ctdef,
       if (auto_inc_expr->type_ != T_TABLET_AUTOINC_NEXTVAL) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObDatum &datum = auto_inc_expr->locate_datum_for_write(eval_ctx);
+        Datum &datum = auto_inc_expr->locate_datum_for_write(eval_ctx);
         datum.set_uint(autoinc_seq);
         auto_inc_expr->get_eval_info(eval_ctx).evaluated_ = true;
       }
@@ -2085,9 +2123,16 @@ int ObDMLService::convert_exprs_to_row(const ExprFixedArray &exprs,
     }
   }
   for (int i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     if (OB_FAIL(exprs.at(i)->eval(eval_ctx, datum))) {
-    } else if (OB_FAIL(datum->to_obj(dml_rtdef.check_row_->cells_[i], exprs.at(i)->obj_meta_))) {
+    } else {
+      DatumValue value = dml_rtdef.check_row_->cells_[i];
+      const SqlTypeMeta &meta = exprs.at(i)->obj_meta_;
+      if (OB_FAIL(project_native_datum_value_view(*datum, exprs.at(i)->get_sql_type(), meta,
+              common::ObDatum::get_sql_value_datum_map_type(meta.get_type()), value.meta_, value, allocator, true))) {
+      } else if (OB_FAIL(DatumValueBuffer::assign_view(value, dml_rtdef.check_row_->cells_,
+                                                     dml_rtdef.check_row_->count_, i))) {
+      }
     }
   }
   return ret;
@@ -2285,7 +2330,7 @@ int ObDMLService::log_user_error_inner(
     int64_t row_num,
     common::ObString &column_name,
     ObExecContext &ctx,
-    const ObObjType column_type)
+    const SqlValueType column_type)
 {
   if (OB_DATA_OUT_OF_RANGE == ret) {
     ObSQLUtils::copy_and_convert_string_charset(

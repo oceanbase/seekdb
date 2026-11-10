@@ -182,7 +182,7 @@ int ObInfoSchemaUserPrivilegesTable::fill_row_with_user_info(
     const share::schema::ObUserInfo &user_info)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
@@ -218,22 +218,22 @@ int ObInfoSchemaUserPrivilegesTable::fill_row_with_user_info(
             int64_t column_id = output_column_ids_.at(oc_id);
             switch (column_id) {
             case GRANTEE: {
-              cells[oc_id].set_varchar(user_name);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, oc_id, user_name) : ret);
               cells[oc_id].set_collation_type(ObCharset::get_system_collation());
               break;
             }
             case TABLE_CATALOG: {
-              cells[oc_id].set_varchar("def");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, oc_id, "def") : ret);
               cells[oc_id].set_collation_type(ObCharset::get_system_collation());
               break;
             }
             case PRIVILEGE_TYPE: {
-              cells[oc_id].set_varchar(priv_type_strs[shift]);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, oc_id, priv_type_strs[shift]) : ret);
               cells[oc_id].set_collation_type(ObCharset::get_system_collation());
               break;
             }
             case IS_GRANTABLE: {
-              cells[oc_id].set_varchar(with_grant_option ? "YES" : "NO");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, oc_id, with_grant_option ? "YES" : "NO") : ret);
               cells[oc_id].set_collation_type(ObCharset::get_system_collation());
               break;
             }

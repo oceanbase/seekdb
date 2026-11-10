@@ -136,7 +136,7 @@ private:
   int traverse_cells(T &integer_data);
 
 private:
-  ObObjTypeStoreClass store_class_;
+  SqlValueTypeStoreClass store_class_;
   int64_t type_store_size_;
   uint64_t mask_;
   uint64_t reverse_mask_;

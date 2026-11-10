@@ -21,6 +21,12 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/ob_expr_type_to_str.h"
+#include "sql/engine/expr/ob_expr_util.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
+#include "sql/engine/table/ob_table_scan_op.h"
+#include "sql/ob_sql_context.h"
 
 namespace oceanbase
 {
@@ -49,6 +55,453 @@ struct ObExprCallDepth
   int64_t max_call_depth_;
   int64_t checked_parent_cnt_;
 };
+
+namespace
+{
+struct NativePointExprs
+{
+  ObExpr *lanes[NativeI64PointLayout::LANE_COUNT] = {};
+  ObExpr *pack = nullptr;
+  int64_t parameters[NativeI64PointLayout::KEY_COUNT] = {};
+};
+
+bool native_point_member(const ObExpr *expr, ObExpr *const *members, int64_t count)
+{
+  bool found = false;
+  for (int64_t i = 0; expr != nullptr && !found && i < count; ++i) {
+    found = expr == members[i];
+  }
+  return found;
+}
+
+bool native_point_i64_type(const ObExpr &expr)
+{
+  return expr.sql_type_ != nullptr && expr.get_sql_type().kind() == ObIntType
+      && expr.get_sql_type().canonical_representation() == DatumRepresentation::Inline64;
+}
+
+bool native_point_exprs_in(const ObIArray<ObExpr *> &exprs, ObExpr *const *members, int64_t count)
+{
+  bool supported = true;
+  for (int64_t i = 0; supported && i < exprs.count(); ++i) {
+    supported = native_point_member(exprs.at(i), members, count);
+  }
+  return supported;
+}
+
+bool native_point_filter_tree(const ObPushdownFilterNode *node,
+                              const NativePointExprs &graph, int64_t depth = 0)
+{
+  bool supported = node == nullptr;
+  if (node != nullptr && depth < 8) {
+    if (node->type_ == AND_FILTER) {
+      supported = !static_cast<const ObPushdownAndFilterNode *>(node)->is_runtime_filter_root_node_
+          && node->n_child_ > 0 && node->n_child_ <= 3 && node->childs_ != nullptr;
+      for (uint32_t i = 0; supported && i < node->n_child_; ++i) {
+        supported = node->childs_[i] != nullptr
+            && native_point_filter_tree(node->childs_[i], graph, depth + 1);
+      }
+    } else if (node->n_child_ == 0 && node->type_ == WHITE_FILTER) {
+      const auto &white = *static_cast<const ObPushdownWhiteFilterNode *>(node);
+      supported = white.get_op_type() == WHITE_OP_EQ
+          && native_point_member(white.expr_, graph.lanes + 3, 3)
+          && native_point_exprs_in(white.column_exprs_, graph.lanes, 3);
+    } else if (node->n_child_ == 0 && node->type_ == BLACK_FILTER) {
+      const auto &black = *static_cast<const ObPushdownBlackFilterNode *>(node);
+      supported = black.mono_ == MON_NON && black.assist_exprs_.empty()
+          && native_point_exprs_in(black.column_exprs_, graph.lanes, 3)
+          && native_point_exprs_in(black.filter_exprs_, graph.lanes + 3, 3)
+          && (black.tmp_expr_ == nullptr || native_point_member(black.tmp_expr_, graph.lanes + 3, 3));
+    }
+  }
+  return supported;
+}
+
+// Validate the complete operator/Expr/storage graph before changing any offset.
+// In particular, a matching SQL type alone never grants a native lane.
+int collect_native_i64_point(ObPhysicalPlan &plan, const ObExecContext &exec,
+                             NativePointExprs &graph, bool &supported)
+{
+  int ret = OB_SUCCESS;
+  supported = false;
+  const ObOpSpec *root = plan.get_root_op_spec();
+  const ObPhysicalPlanCtx *parameters = exec.get_physical_plan_ctx();
+  const ObSqlCtx *sql = exec.get_sql_ctx();
+  if (!plan.is_local_plan() || !plan.is_plain_select() || plan.is_use_pdml()
+      || plan.get_px_dop() > 1 || plan.get_das_dop() > 1 || plan.has_nested_sql()
+      || plan.contain_pl_udf_or_trigger() || plan.contains_temp_table()
+      || plan.is_use_temp_table() || plan.has_link_sfd() || plan.get_is_batched_multi_stmt()
+      || sql == nullptr || sql->is_cursor_ || sql->is_from_pl_ || parameters == nullptr
+      || parameters->get_parameter_count() != 3 || parameters->get_native_group_count() != 0
+      || root == nullptr || root->get_type() != PHY_TABLE_SCAN || root->get_child_cnt() != 0
+      || root->need_check_output_datum_ || !root->startup_filters_.empty()) {
+    return ret;
+  }
+  const auto &scan = *static_cast<const ObTableScanSpec *>(root);
+  const auto &ctdef = scan.tsc_ctdef_;
+  const auto &das = ctdef.scan_ctdef_;
+  const auto &pd = das.pd_expr_spec_;
+  // A local SELECT creates a serial ObDASRef. DML/PX/lookup/attach, cursor,
+  // partition and rescan forms have different copy/retention consumers.
+  if (scan.use_dist_das() || scan.should_scan_index() || scan.gi_above_ || scan.batch_scan_flag_
+      || scan.report_col_checksum_ || scan.is_spatial_ddl_ || scan.is_fts_ddl_
+      || scan.is_fts_index_aux_ || scan.is_multivalue_ddl_ || scan.is_spiv_ddl_
+      || scan.can_be_paused_ || scan.is_scan_resumable_
+      || scan.limit_ != nullptr || scan.offset_ != nullptr
+      || scan.part_level_ != share::schema::PARTITION_LEVEL_ZERO
+      || scan.part_expr_ != nullptr || scan.subpart_expr_ != nullptr
+      || !scan.part_dep_cols_.empty() || !scan.subpart_dep_cols_.empty()
+      || scan.pdml_partition_id_ != nullptr || !scan.ddl_output_cids_.empty()
+      || ctdef.lookup_ctdef_ != nullptr || ctdef.lookup_access_meta_ != nullptr
+      || ctdef.attach_spec_.attach_ctdef_ != nullptr || ctdef.das_dppr_tbl_ != nullptr
+      || ctdef.calc_part_id_expr_ != nullptr || !ctdef.global_index_rowkey_exprs_.empty()
+      || !ctdef.bnlj_param_idxs_.empty() || ctdef.snapshot_item_.snapshot_query_expr_ != nullptr
+      || ctdef.use_index_merge_ || ctdef.ordering_used_by_parent_
+      || !das.is_get_ || scan.get_rowkey_cnt() != 3 || das.is_index_merge_
+      || das.table_param_.has_virtual_column() || das.table_param_.is_partition_table()
+      || das.table_param_.is_spatial_index() || das.table_param_.is_fts_index()
+      || das.table_param_.is_vec_index() || das.table_param_.is_multivalue_index()
+      || das.group_id_expr_ != nullptr || das.trans_info_expr_ != nullptr
+      || !das.aggregate_column_ids_.empty() || !das.group_by_column_ids_.empty()
+      || das.ir_scan_type_ != ObTSCIRScanType::OB_NOT_A_SPEC_SCAN
+      || das.doc_id_idx_ >= 0 || das.vec_vid_idx_ >= 0 || das.multivalue_idx_ >= 0
+      || !das.domain_id_idxs_.empty() || !das.domain_types_.empty() || !das.domain_tids_.empty()
+      || !pd.pd_storage_aggregate_output_.empty() || !pd.ext_file_column_exprs_.empty()
+      || !pd.ext_column_convert_exprs_.empty() || pd.trans_info_expr_ != nullptr
+      || pd.access_exprs_.empty() || pd.access_exprs_.count() > 3
+      || das.access_column_ids_.count() != pd.access_exprs_.count()) {
+    return ret;
+  }
+  bool range_supported = false;
+  if (OB_FAIL(ctdef.pre_range_graph_.get_native_bigint_point_parameters(
+      parameters->get_parameter_count(), graph.parameters, range_supported))) {
+    return ret;
+  } else if (!range_supported) {
+    return ret;
+  }
+  ObExprFrameInfo &info = plan.get_expr_frame_info();
+  if (!info.dynamic_frame_.empty() || !info.ser_expr_marks_.empty()
+      || info.native_i64_point_layout_ != nullptr) { return ret; }
+  const bool subset = pd.access_exprs_.count() < 3;
+  bool produced[3] = {};
+  int64_t access_columns[3] = {};
+  int64_t key_positions[3] = { -1, -1, -1 };
+  if (subset) {
+    // Range-only columns remain in the complete Expr graph even when storage
+    // only produces the two distinct columns of a repeated output projection.
+    int64_t column_count = 0;
+    for (int64_t i = 0; i < info.rt_exprs_.count(); ++i) {
+      ObExpr *expr = &info.rt_exprs_.at(i);
+      if (expr->type_ == T_REF_COLUMN) {
+        if (column_count == 3) { return ret; }
+        graph.lanes[column_count++] = expr;
+      }
+    }
+    if (column_count != 3) { return ret; }
+  } else {
+    for (int64_t i = 0; i < 3; ++i) { graph.lanes[i] = pd.access_exprs_.at(i); }
+  }
+  for (int64_t i = 0; i < 3; ++i) {
+    ObExpr *column = graph.lanes[i];
+    if (column == nullptr || column->type_ != T_REF_COLUMN || column->arg_cnt_ != 0
+        || column->native_parameter_alias_ || !native_point_i64_type(*column)
+        || column->eval_func_ != nullptr || column->eval_batch_func_ != nullptr
+        || column->res_buf_len_ != 0) { return ret; }
+    for (int64_t j = 0; j < i; ++j) { if (graph.lanes[j] == column) { return ret; } }
+  }
+  for (int64_t i = 0; i < pd.access_exprs_.count(); ++i) {
+    int64_t column = -1;
+    for (int64_t c = 0; c < 3; ++c) {
+      if (pd.access_exprs_.at(i) == graph.lanes[c]) { column = c; }
+    }
+    if (column < 0 || produced[column]) { return ret; }
+    produced[column] = true;
+    access_columns[i] = column;
+  }
+  for (int64_t i = 0; i < info.rt_exprs_.count(); ++i) {
+    ObExpr &expr = info.rt_exprs_.at(i);
+    if (expr.type_ == T_OP_EQ) {
+      if (expr.arg_cnt_ != 2 || expr.args_ == nullptr || expr.sql_type_ == nullptr
+          || (expr.get_sql_type().kind() != ObInt32Type && expr.get_sql_type().kind() != ObIntType)
+          || expr.get_sql_type().canonical_representation() != DatumRepresentation::Inline64
+          || expr.res_buf_len_ != 0 || expr.native_parameter_alias_) { return ret; }
+      int64_t column_index = -1;
+      const ObExpr *parameter = nullptr;
+      for (int64_t c = 0; c < 3; ++c) {
+        if (expr.args_[0] == graph.lanes[c]) { column_index = c; parameter = expr.args_[1]; }
+        if (expr.args_[1] == graph.lanes[c]) { column_index = c; parameter = expr.args_[0]; }
+      }
+      bool parameter_index = false;
+      int64_t key_position = -1;
+      for (int64_t p = 0; parameter != nullptr && p < 3; ++p) {
+        if (static_cast<int64_t>(parameter->extra_) == graph.parameters[p]) {
+          parameter_index = true;
+          key_position = p;
+        }
+      }
+      if (column_index < 0 || parameter == nullptr || !parameter->native_parameter_alias_
+          || parameter->type_ != T_QUESTIONMARK || parameter->eval_func_ != nullptr
+          || parameter->is_batch_result() || !native_point_i64_type(*parameter)
+          || !parameter_index || graph.lanes[3 + column_index] != nullptr) { return ret; }
+      graph.lanes[3 + column_index] = &expr;
+      key_positions[column_index] = key_position;
+    } else if (expr.type_ == T_OP_OUTPUT_PACK) {
+      if (graph.pack != nullptr || expr.args_ == nullptr || expr.arg_cnt_ <= 1) { return ret; }
+      // build_pack_expr puts a constant format selector before the data columns.
+      const ObExpr *format = expr.args_[0];
+      if (format == nullptr || format->type_ != T_INT || format->arg_cnt_ != 0
+          || format->is_batch_result() || !native_point_i64_type(*format)
+          || format->frame_idx_ >= info.const_frame_.count()
+          || format->frame_idx_ >= info.const_frame_ptrs_.count()
+          || info.const_frame_ptrs_.at(format->frame_idx_) == nullptr
+          || uint64_t(format->datum_off_) + sizeof(Datum)
+              > info.const_frame_.at(format->frame_idx_).frame_size_) { return ret; }
+      const Datum &encoding = *reinterpret_cast<const Datum *>(
+          info.const_frame_ptrs_.at(format->frame_idx_) + format->datum_off_);
+      if (encoding.state() != Datum::State::Present
+          || (encoding.get_int() != 0 && encoding.get_int() != 1)) { return ret; }
+      for (uint32_t a = 1; a < expr.arg_cnt_; ++a) {
+        if (!native_point_member(expr.args_[a], graph.lanes, 3)) { return ret; }
+      }
+      graph.pack = &expr;
+    } else if (!native_point_member(&expr, graph.lanes, 3)) {
+      if (expr.native_parameter_alias_) {
+        if (expr.type_ != T_QUESTIONMARK || !native_point_i64_type(expr)
+            || expr.eval_func_ != nullptr || expr.is_batch_result() || expr.extra_ >= 3) { return ret; }
+      } else if (expr.frame_idx_ >= info.const_frame_.count() || expr.arg_cnt_ != 0) {
+        return ret;
+      }
+    }
+  }
+  const uint32_t datum_begin = info.const_frame_.count() + info.param_frame_.count();
+  for (int64_t i = 0; i < 6; ++i) {
+    const ObExpr *expr = graph.lanes[i];
+    if (expr == nullptr || expr->frame_idx_ < datum_begin
+        || expr->is_batch_result() != graph.lanes[0]->is_batch_result()
+        || (expr->is_batch_result() && plan.get_batch_size() <= 0)) { return ret; }
+    for (uint32_t p = 0; p < expr->parent_cnt_; ++p) {
+      if (!native_point_member(expr->parents_[p], graph.lanes + 3, 3)
+          && expr->parents_[p] != graph.pack) { return ret; }
+    }
+  }
+  for (int64_t i = 0; i < info.rt_exprs_.count(); ++i) {
+    const ObExpr &expr = info.rt_exprs_.at(i);
+    if (expr.native_parameter_alias_) {
+      for (uint32_t p = 0; p < expr.parent_cnt_; ++p) {
+        if (!native_point_member(expr.parents_[p], graph.lanes + 3, 3)) { return ret; }
+      }
+    }
+  }
+  if (graph.pack != nullptr && (graph.pack->parent_cnt_ != 0 || graph.pack->frame_idx_ < datum_begin)) {
+    return ret;
+  }
+  if (subset) {
+    // Table read-info starts with all schema rowkeys, in key order. Match each
+    // produced Expr through its EQ parameter and the precise range's key
+    // position; ObExpr::extra_ does not carry a column ID for REF_COLUMN.
+    const auto &columns = scan.get_columns_desc();
+    if (columns.count() < 3) { return ret; }
+    for (int64_t c = 0; c < 3; ++c) {
+      if (key_positions[c] < 0) { return ret; }
+      for (int64_t other = 0; other < c; ++other) {
+        if (key_positions[c] == key_positions[other]
+            || graph.parameters[c] == graph.parameters[other]) { return ret; }
+      }
+    }
+    for (int64_t i = 0; i < pd.access_exprs_.count(); ++i) {
+      if (das.access_column_ids_.at(i)
+          != columns.at(key_positions[access_columns[i]]).col_id_) { return ret; }
+      bool returned = false;
+      for (int64_t r = 0; r < das.result_output_.count(); ++r) {
+        returned |= das.result_output_.at(r) == pd.access_exprs_.at(i);
+      }
+      if (!returned) { return ret; }
+    }
+  }
+  // The fixed six-lane descriptor retains the whole range graph. Only storage-
+  // produced columns and their EQs may be reached by execution consumers.
+  NativePointExprs consumers = graph;
+  for (int64_t c = 0; c < 3; ++c) {
+    if (!produced[c]) {
+      consumers.lanes[c] = nullptr;
+      consumers.lanes[3 + c] = nullptr;
+    }
+  }
+  if (graph.pack != nullptr) {
+    for (uint32_t a = 1; a < graph.pack->arg_cnt_; ++a) {
+      if (!native_point_member(graph.pack->args_[a], consumers.lanes, 3)) { return ret; }
+    }
+  }
+  if (root->output_.empty()
+      || !native_point_exprs_in(root->filters_, consumers.lanes + 3, 3)
+      || !native_point_exprs_in(pd.pushdown_filters_, consumers.lanes + 3, 3)
+      || !native_point_exprs_in(das.result_output_, consumers.lanes, 3)
+      || !native_point_exprs_in(das.rowkey_exprs_, consumers.lanes, 3)
+      || !native_point_filter_tree(pd.pd_storage_filters_.get_pushdown_filter(), consumers)) { return ret; }
+  for (int64_t i = 0; i < root->output_.count(); ++i) {
+    const ObExpr *expr = root->output_.at(i);
+    if (expr == nullptr
+        || (!native_point_member(expr, consumers.lanes, 3) && expr != graph.pack)) { return ret; }
+  }
+  const ObIArray<ObExpr *> *calc[] = { &root->calc_exprs_, &pd.calc_exprs_ };
+  for (int64_t a = 0; a < 2; ++a) {
+    for (int64_t i = 0; i < calc[a]->count(); ++i) {
+      const ObExpr *expr = calc[a]->at(i);
+      if (expr == nullptr || (!native_point_member(expr, consumers.lanes, 6)
+          && !(a == 0 && expr == graph.pack) && !expr->native_parameter_alias_)) { return ret; }
+    }
+  }
+  supported = true;
+  return ret;
+}
+
+void publish_native_point_offsets(ObExpr &destination, const ObExpr &source)
+{
+  destination.frame_idx_ = source.frame_idx_;
+  destination.datum_off_ = source.datum_off_;
+  destination.eval_info_off_ = source.eval_info_off_;
+  destination.eval_flags_off_ = source.eval_flags_off_;
+  destination.pvt_skip_off_ = source.pvt_skip_off_;
+  destination.dyn_buf_header_offset_ = source.dyn_buf_header_offset_;
+  destination.res_buf_off_ = source.res_buf_off_;
+}
+} // namespace
+
+int ObStaticEngineExprCG::finalize_native_i64_point(ObPhysicalPlan &plan, const ObExecContext &exec)
+{
+  int ret = OB_SUCCESS;
+  NativePointExprs graph;
+  bool supported = false;
+  if (OB_FAIL(collect_native_i64_point(plan, exec, graph, supported)) || !supported) { return ret; }
+  ObExprFrameInfo &info = plan.get_expr_frame_info();
+  NativeI64PointLayout staged = {};
+  ObExpr layouts[6];
+  ObExpr pack;
+  ObSEArray<ObFrameInfo, NativeI64PointLayout::LANE_COUNT + 1> frames;
+  const int64_t capacity = graph.lanes[0]->is_batch_result() ? plan.get_batch_size() : 1;
+  const bool batch = graph.lanes[0]->is_batch_result();
+  const int64_t bitmap = batch ? ObBitVector::memory_size(capacity) : 0;
+  if (capacity <= 0 || capacity > MAX_FRAME_SIZE / int64_t(sizeof(Datum))) { return OB_SUCCESS; }
+  const uint32_t first_frame = info.const_frame_.count() + info.param_frame_.count()
+      + info.dynamic_frame_.count();
+  for (int64_t i = 0; i < 3; ++i) { staged.parameter_indexes[i] = graph.parameters[i]; }
+  for (int64_t i = 0; i < 6; ++i) {
+    layouts[i] = *graph.lanes[i];
+    bool found = false;
+    for (int64_t j = 0; !found && j < info.rt_exprs_.count(); ++j) {
+      if (&info.rt_exprs_.at(j) == graph.lanes[i]) { staged.expr_indexes[i] = j; found = true; }
+    }
+    if (!found) { return OB_ERR_UNEXPECTED; }
+  }
+  for (int64_t begin = 0; OB_SUCC(ret) && begin < 6;) {
+    const int64_t per_generic = batch ? capacity * sizeof(Datum) + 2 * bitmap
+        + align_frame_part(sizeof(ObEvalInfo)) : ScalarFrameLayout::slot_size();
+    const int64_t count = MIN(int64_t(6) - begin,
+        (MAX_FRAME_SIZE - int64_t(sizeof(NativeI64FrameHeader))) / per_generic);
+    if (count <= 0) { return OB_SUCCESS; }
+    const uint32_t frame_index = first_frame + staged.frame_count;
+    int64_t generic = sizeof(NativeI64FrameHeader);
+    for (int64_t i = begin; i < begin + count; ++i) {
+      layouts[i].frame_idx_ = frame_index;
+      layouts[i].datum_off_ = generic;
+      generic += capacity * sizeof(Datum);
+      layouts[i].pvt_skip_off_ = batch ? generic : 0;
+      generic += bitmap;
+      if (!batch) {
+        layouts[i].eval_info_off_ = generic;
+        generic = align_frame_part(generic + sizeof(ObEvalInfo));
+      }
+    }
+    if (batch) {
+      for (int64_t i = begin; i < begin + count; ++i) {
+        layouts[i].eval_info_off_ = generic;
+        generic += align_frame_part(sizeof(ObEvalInfo));
+      }
+    }
+    for (int64_t i = begin; i < begin + count; ++i) {
+      layouts[i].eval_flags_off_ = batch ? generic : 0;
+      generic += bitmap;
+      layouts[i].dyn_buf_header_offset_ = 0;
+      layouts[i].res_buf_off_ = 0;
+    }
+    int64_t compact = sizeof(NativeI64FrameHeader);
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].capacity = capacity;
+      staged.lanes[i].value_off = compact;
+      compact += capacity * sizeof(int64_t);
+    }
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].state_off = compact;
+      compact += capacity;
+    }
+    compact = align_frame_part(compact);
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].eval_info_off = compact;
+      compact += batch ? align_frame_part(sizeof(ObEvalInfo)) : sizeof(ObEvalInfo);
+    }
+    compact = align_frame_part(compact);
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].eval_flags_off = batch ? compact : 0;
+      compact += bitmap;
+    }
+    for (int64_t i = begin; i < begin + count; ++i) {
+      staged.lanes[i].pvt_skip_off = batch ? compact : 0;
+      compact += bitmap;
+    }
+    staged.frames[staged.frame_count++] = { frame_index, static_cast<uint32_t>(generic),
+                                          static_cast<uint32_t>(compact) };
+    if (OB_FAIL(frames.push_back(ObFrameInfo(count, frame_index, generic, 0, generic)))) {
+    }
+    begin += count;
+  }
+  if (OB_SUCC(ret) && graph.pack != nullptr) {
+    pack = *graph.pack;
+    const int64_t count = get_expr_datums_count(pack, plan.get_batch_size());
+    const int64_t skip = get_expr_skip_vector_size(pack, plan.get_batch_size());
+    const int64_t flags = get_expr_bitmap_vector_size(pack, plan.get_batch_size());
+    int64_t bytes = count * sizeof(Datum);
+    pack.frame_idx_ = first_frame + staged.frame_count;
+    pack.datum_off_ = 0;
+    pack.pvt_skip_off_ = bytes;
+    bytes = align_frame_part(bytes + skip);
+    pack.eval_info_off_ = bytes;
+    bytes += align_frame_part(sizeof(ObEvalInfo));
+    pack.eval_flags_off_ = bytes;
+    bytes += flags;
+    pack.dyn_buf_header_offset_ = bytes;
+    bytes += dynamic_buf_header_size(pack, plan.get_batch_size());
+    pack.res_buf_off_ = bytes;
+    bytes += align_frame_part(count * pack.res_buf_len_);
+    if (bytes > UINT32_MAX) { return OB_SUCCESS; }
+    if (OB_FAIL(frames.push_back(ObFrameInfo(1, pack.frame_idx_, bytes, 0, bytes)))) {
+    }
+  }
+  NativeI64PointLayout *owned = nullptr;
+  if (OB_SUCC(ret)) {
+    owned = static_cast<NativeI64PointLayout *>(plan.get_allocator().alloc(sizeof(*owned)));
+    if (owned == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  }
+  // Constants and parameter pages have already been built. They keep their
+  // original frame numbers and offsets; only the unallocated datum group moves.
+  // FixedArray cannot grow an existing allocation. This plan is still being
+  // constructed: an allocation failure discards it before cache publication.
+  if (OB_SUCC(ret)) {
+    info.datum_frame_.reset();
+    ret = info.datum_frame_.assign(frames);
+  }
+  if (OB_SUCC(ret)) {
+    new (owned) NativeI64PointLayout(staged);
+    for (int64_t i = 0; i < 6; ++i) {
+      publish_native_point_offsets(*graph.lanes[i], layouts[i]);
+      graph.lanes[i]->native_i64_layout_ = &owned->lanes[i];
+    }
+    if (graph.pack != nullptr) { publish_native_point_offsets(*graph.pack, pack); }
+    info.native_i64_point_layout_ = owned;
+    ret = info.validate_and_mark_native_i64_layout();
+  }
+  return ret;
+}
+
 // 1. Expand all raw exprs
 //    cg: c1 + 1, c1 + c2  ==>  c1, 1, c1 + 1, c2, c1 + c2
 // 2. Construct ObExpr, and set the corresponding ObExpr to the corresponding ObRawExpr
@@ -217,17 +670,24 @@ int ObStaticEngineExprCG::cg_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
     if (OB_ISNULL(raw_exprs.at(i))
         || OB_ISNULL(rt_expr = get_rt_expr(*raw_exprs.at(i)))) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_INFO("expression code generation stage failed", "phase", "validate_expressions", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret)) {
     // init type_, datum_meta_, obj_meta_, obj_datum_map_, args_, arg_cnt_
     // row_dimension_, op_
     if (OB_FAIL(cg_expr_basic(raw_exprs))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_expr_basic", K(ret));
     } else if (OB_FAIL(cg_expr_basic_funcs(raw_exprs))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_expr_basic_funcs", K(ret));
     } else if (OB_FAIL(cg_expr_by_operator(raw_exprs, expr_info.need_ctx_cnt_))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_expr_by_operator", K(ret));
     } else if (OB_FAIL(cg_expr_parents(raw_exprs))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_expr_parents", K(ret));
     } else if (OB_FAIL(cg_all_frame_layout(raw_exprs, expr_info))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_all_frame_layout", K(ret));
     } else if (OB_FAIL(alloc_so_check_exprs(raw_exprs, expr_info))) {
+      LOG_INFO("expression code generation stage failed", "phase", "alloc_so_check_exprs", K(ret));
     }
   }
 
@@ -241,7 +701,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
   for (int64_t i = 0; OB_SUCC(ret) && i < raw_exprs.count(); i++) {
     ObRawExpr *raw_expr = raw_exprs.at(i);
     ObExpr *rt_expr = get_rt_expr(*raw_expr);
-    const ObObjMeta &result_meta = raw_expr->get_result_meta();
+    const SqlTypeMeta &result_meta = raw_expr->get_result_meta();
     // init type_
     rt_expr->type_ = raw_expr->get_expr_type();
     rt_expr->batch_result_ = batch_size_ > 0 && raw_expr->is_vectorize_result();
@@ -278,7 +738,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         rt_expr->obj_meta_.set_scale(rt_expr->datum_meta_.length_semantics_);
       }
       if (OB_SUCC(ret) && ob_is_enumset_tc(result_meta.get_type())) {
-        ObObjMeta org_obj_meta;
+        SqlTypeMeta org_obj_meta;
         if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(raw_expr->get_result_type(),
                                                                op_cg_ctx_.session_,
                                                                org_obj_meta))) {
@@ -289,7 +749,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
       // init max_length_
       rt_expr->max_length_ = raw_expr->get_result_type().get_length();
       // init obj_datum_map_
-      rt_expr->obj_datum_map_ = ObDatum::get_obj_datum_map_type(result_meta.get_type());
+      rt_expr->obj_datum_map_ = common::ObDatum::get_sql_value_datum_map_type(result_meta.get_type());
       if (ob_is_decimal_int(rt_expr->datum_meta_.type_)) {
         const int16_t precision = rt_expr->datum_meta_.precision_;
         const int16_t scale = rt_expr->datum_meta_.scale_;
@@ -334,7 +794,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
           }
           if (is_dyn_qm) {
             int64_t param_idx = 0;
-            ret = static_cast<ObConstRawExpr *>(raw_expr)->get_value().get_unknown(param_idx);
+            ret = static_cast<ObConstRawExpr *>(raw_expr)->get_questionmark_index(param_idx);
             LOG_DEBUG("generate rt expr basic", K(param_idx), K(*gen_questionmarks_.at(param_idx)));
             if (OB_FAIL(ret)) {
             } else if (OB_ISNULL(gen_questionmarks_.at(param_idx))) {
@@ -348,6 +808,33 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
     }
     if (OB_SUCC(ret)) {
       rt_expr->local_session_var_id_ = raw_expr->get_local_session_var_id();
+      if (T_OP_ROW == raw_expr->get_expr_type()) {
+        ret = rt_expr->prepare_scalar_type(rt_expr->obj_meta_, common::ObAccuracy(), allocator_);
+      } else if (T_FUN_ENUM_TO_INNER_TYPE == raw_expr->get_expr_type()
+                 || T_FUN_SET_TO_INNER_TYPE == raw_expr->get_expr_type()) {
+        // wrap_enum_set() has already formalized these labels in the actual
+        // operator. Inner metadata carries a real collation, not a SubSchema
+        // id, and cannot be resolved by interpreting it as an Enum declaration.
+        ObSysFunRawExpr *function = dynamic_cast<ObSysFunRawExpr *>(raw_expr);
+        const ObExprTypeToStr *operation = function == nullptr ? nullptr
+            : dynamic_cast<const ObExprTypeToStr *>(function->get_op());
+        const common::SqlType *type = nullptr;
+        if (operation == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObExprUtil::resolve_enum_sql_type(rt_expr->obj_meta_,
+            raw_expr->get_result_type().get_accuracy(), operation->get_str_values(), allocator_, type))) {
+        } else {
+          ret = rt_expr->bind_sql_type(*type, allocator_);
+        }
+      } else {
+        ret = rt_expr->prepare_resolved_type(raw_expr->get_result_type(), op_cg_ctx_.session_, allocator_,
+            op_cg_ctx_.schema_guard_, op_cg_ctx_.pl_declarations_);
+      }
+    }
+    if (OB_FAIL(ret)) {
+      LOG_INFO("expression basic preparation failed", K(ret), K(i),
+               "expr_type", raw_expr->get_expr_type(),
+               "result_type", raw_expr->get_result_type());
     }
   } // for end
 
@@ -439,7 +926,7 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
       // if the questionmark is from TABLE_ASSIGN, use eval_assign_question_mark_func
       ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(raw_expr);
       int64_t param_idx = 0;
-      OZ(c_expr->get_value().get_unknown(param_idx));
+      OZ(c_expr->get_questionmark_index(param_idx));
       if (OB_SUCC(ret)) {
         rt_expr->extra_ = param_idx;
         rt_expr->eval_func_ = raw_expr->has_flag(IS_TABLE_ASSIGN) ?
@@ -449,7 +936,7 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
     } else if (is_dynamic_eval_qm(*raw_expr)) {
       ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(raw_expr);
       int64_t param_idx = 0;
-      OZ(c_expr->get_value().get_unknown(param_idx));
+      OZ(c_expr->get_questionmark_index(param_idx));
       if (OB_SUCC(ret)) {
         rt_expr->extra_ = param_idx;
         if (OB_UNLIKELY(!ob_is_decimal_int(rt_expr->datum_meta_.type_))) {
@@ -581,20 +1068,7 @@ void ObStaticEngineExprCG::get_param_frame_idx(const int64_t idx,
                                                int64_t &frame_idx,
                                                int64_t &datum_idx)
 {
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-  int64_t cnt_per_frame = common::MAX_FRAME_SIZE / item_size;
-
-  if (idx < original_param_cnt_) {
-    frame_idx = idx / cnt_per_frame;
-    datum_idx = idx % cnt_per_frame;
-  } else {
-    const int64_t base = original_param_cnt_ <= 0
-        ? 0
-        : (original_param_cnt_ + cnt_per_frame - 1) / cnt_per_frame;
-
-    frame_idx = (idx - original_param_cnt_) / cnt_per_frame + base;
-    datum_idx = (idx - original_param_cnt_) % cnt_per_frame;
-  }
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, idx, frame_idx, datum_idx);
 }
 // Initialize param frame memory layout, no need for res_buf_, when generating param frame, always use dynamically allocated memory;
 // 1. According to param_expr, find the index of this expression in param store
@@ -610,7 +1084,7 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
   }
   int64_t frame_idx = 0;
   int64_t datum_idx = 0;
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  const int64_t item_size = ScalarFrameLayout::slot_size();
   for (int64_t i = 0; OB_SUCC(ret) && i < param_exprs.count(); i++) {
     ObExpr *rt_expr = get_rt_expr(*param_exprs.at(i));
     if (T_QUESTIONMARK != rt_expr->type_) {
@@ -618,14 +1092,15 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
     } else {
       ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(param_exprs.at(i));
       int64_t param_idx = 0;
-      if (OB_FAIL(c_expr->get_value().get_unknown(param_idx))) {
+      if (OB_FAIL(c_expr->get_questionmark_index(param_idx))) {
       } else if (param_idx < 0 || param_idx >= param_cnt_ + flying_param_cnt_) {
         ret = OB_INVALID_ARGUMENT;
       } else {
         get_param_frame_idx(param_idx, frame_idx, datum_idx);
         rt_expr->frame_idx_ = frame_index_pos + frame_idx;
-        rt_expr->datum_off_ = datum_idx * item_size;
-        rt_expr->eval_info_off_ = rt_expr->datum_off_ + sizeof(ObDatum);
+        rt_expr->native_parameter_alias_ = true;
+        rt_expr->datum_off_ = ScalarFrameLayout::datum_offset(datum_idx);
+        rt_expr->eval_info_off_ = ScalarFrameLayout::eval_info_offset(datum_idx);
         rt_expr->res_buf_off_ = 0;
         rt_expr->res_buf_len_ = 0;
         // For the param expression of T_QUESTIONMARK, use extra_ to record its actual value in
@@ -756,8 +1231,9 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
   //init res_buf_len_
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
     ObExpr *rt_expr = get_rt_expr(*exprs.at(i));
-    uint32_t def_res_len = ObDatum::get_reserved_size(rt_expr->obj_datum_map_,
-                                                      rt_expr->datum_meta_.precision_);
+    uint32_t def_res_len = rt_expr->get_sql_type().canonical_representation()
+        == common::DatumRepresentation::Reference
+        ? common::ObDatum::get_reserved_size(rt_expr->obj_datum_map_, rt_expr->datum_meta_.precision_) : 0;
     if (ObDynReserveBuf::supported(rt_expr->datum_meta_.type_)) {
       if (!reserve_empty_string) {
         // Some expressions do not set the accuracy length, here max_length_ is the default -1
@@ -840,18 +1316,19 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
 {
   int ret = OB_SUCCESS;
   if (continuous_datum) {
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    const int64_t item_size = ScalarFrameLayout::slot_size();
     int64_t data_off = frame.expr_cnt_ * item_size;
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *e = get_rt_expr(*exprs.at(i));
       e->frame_idx_ = frame.frame_idx_;
-      e->datum_off_ = i * item_size;
-      e->eval_info_off_ = e->datum_off_ + sizeof(ObDatum);
+      e->datum_off_ = ScalarFrameLayout::datum_offset(i);
+      e->eval_info_off_ = ScalarFrameLayout::eval_info_offset(i);
       const int64_t consume_size = reserve_data_consume(*e);
       if (consume_size > 0) {
+        const bool dynamic = ObDynReserveBuf::supported(e->datum_meta_.type_);
+        e->dyn_buf_header_offset_ = dynamic ? data_off : 0;
+        e->res_buf_off_ = data_off + (dynamic ? sizeof(ObDynReserveBuf) : 0);
         data_off += consume_size;
-        e->res_buf_off_ = data_off - e->res_buf_len_;
-        e->dyn_buf_header_offset_ = e->res_buf_off_ - sizeof(ObDynReserveBuf);
       } else {
         e->res_buf_off_ = 0;
       }
@@ -862,7 +1339,7 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
   } else {
     ret = OB_ERR_UNEXPECTED;
     // // FIXME bin.lb: ALIGN_SIZE may affect the performance, set to 1 if no affect
-    // // make sure all ObDatum is aligned with %ALIGN_SIZE
+    // // make sure all Datum is aligned with %ALIGN_SIZE
     // const static int64_t ALIGN_SIZE = 8;
     // // offset for data only area
     // int64_t data_off = 0;
@@ -870,7 +1347,7 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
     //   ObExpr *e = get_rt_expr(*exprs.at(i));
     //   data_off += DATUM_EVAL_INFO_SIZE;
     //   if (!ob_is_string_type(e->datum_meta_.type_) && 0 == (e->res_buf_len_ % ALIGN_SIZE)) {
-    //     // data follow ObDatum
+    //     // data follow Datum
     //     data_off += reserve_data_consume(*e);
     //   }
     // }
@@ -880,7 +1357,7 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
     //   ObExpr *e = get_rt_expr(*exprs.at(i));
     //   e->frame_idx_ = frame.frame_idx_;
     //   e->datum_off_ = datum_off;
-    //   e->eval_info_off_ = e->datum_off_ + sizeof(ObDatum);
+    //   e->eval_info_off_ = e->datum_off_ + sizeof(Datum);
     //   datum_off += DATUM_EVAL_INFO_SIZE;
     //   const int64_t consume_size = reserve_data_consume(*e);
     //   if (!ob_is_string_type(e->datum_meta_.type_) && 0 == (e->res_buf_len_ % ALIGN_SIZE)) {
@@ -960,8 +1437,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *e = get_rt_expr(*exprs.at(i));
       e->datum_off_ = cur_total_size;
-      cur_total_size += get_expr_skip_vector_size(*e) /* pvt skip bitmap */
-                          + get_datums_header_size(*e) /* datums */;
+      cur_total_size += align_frame_part(get_expr_skip_vector_size(*e) + get_datums_header_size(*e));
     }
 
 
@@ -969,7 +1445,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *e = get_rt_expr(*exprs.at(i));
       e->eval_info_off_ = cur_total_size + eval_info_total;
-      eval_info_total += sizeof(ObEvalInfo);
+      eval_info_total += align_frame_part(sizeof(ObEvalInfo));
     }
     cur_total_size += eval_info_total;
 
@@ -999,7 +1475,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
       // datum data part: reserved buf data + dynamic buf header
       e->res_buf_off_ =
           cur_total_size + expr_data_offset;
-      expr_data_offset += e->res_buf_len_ * get_expr_datums_count(*e);
+      expr_data_offset += align_frame_part(e->res_buf_len_ * get_expr_datums_count(*e));
       LOG_TRACE("expression details during CG", K(e->is_batch_result()), KPC(e),
                 K(expr_data_offset));
     }
@@ -1078,25 +1554,25 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
     for (int64_t j = 0; OB_SUCC(ret) && j < const_frames.at(i).expr_cnt_; j++) {
       ObRawExpr *raw_expr = exprs.at(expr_idx++);
       ObExpr *rt_expr = get_rt_expr(*raw_expr);
-      ObObj tmp_obj;
       if (!IS_CONST_LITERAL(raw_expr->get_expr_type())) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(ob_write_obj(allocator_,
-                                      static_cast<ObConstRawExpr *>(raw_expr)->get_value(),
-                                      tmp_obj))) {
       } else {
-        const int64_t item_size = DATUM_EVAL_INFO_SIZE;
-        ObDatum *datum = reinterpret_cast<ObDatum *>(frame_mem + j * item_size);
-        datum->ptr_ = frame_mem + rt_expr->res_buf_off_;
-        datum->from_obj(tmp_obj);
-        if (0 == datum->len_) {
-          datum->ptr_ = NULL;
-        } else {
-          if (is_lob_storage(tmp_obj.get_type())) {
-            if (OB_FAIL(ob_adjust_in_memory_lob_datum(
-                    tmp_obj, rt_expr->obj_meta_, allocator_, datum))) {
-            }
-          }
+        DatumValue source;
+        alignas(8) char source_scratch[64];
+        Datum *datum = new (frame_mem + ScalarFrameLayout::datum_offset(j)) Datum();
+        const DatumCopyPlan plan = rt_expr->get_datum_copy_plan();
+        Datum imported;
+        common::ObDatum physical;
+        if (OB_FAIL(static_cast<ObConstRawExpr *>(raw_expr)->export_value(
+                source, source_scratch, sizeof(source_scratch)))) {
+        } else if (OB_FAIL(source.export_legacy(physical, source_scratch, sizeof(source_scratch)))) {
+        } else if (OB_FAIL(plan.import_legacy(physical, imported))) {
+        } else if (OB_FAIL(ObExpr::clone_native_value(rt_expr->get_sql_type(), imported,
+                                                     allocator_, *datum))) {
+        } else if (is_lob_storage(source.get_type())) {
+          // The LOB helper reads the owned literal, not the shorter-lived AST.
+          const DatumValue owned_view(*datum, source.meta_);
+          ret = ob_adjust_in_memory_lob_datum(owned_view, rt_expr->obj_meta_, allocator_, datum);
         }
       }
     }
@@ -1114,13 +1590,13 @@ int ObStaticEngineExprCG::cg_expr_basic_funcs(const ObIArray<ObRawExpr *> &raw_e
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(i));
     if (OB_ISNULL(rt_expr)) {
       ret = OB_ERR_UNEXPECTED;
-    } else {
-      rt_expr->basic_funcs_ = ObDatumFuncs::get_basic_func(rt_expr->datum_meta_.type_,
-                                                        rt_expr->datum_meta_.cs_type_,
-                                                        rt_expr->datum_meta_.scale_,
-                                                        rt_expr->obj_meta_.has_lob_header(),
-                                                        rt_expr->datum_meta_.precision_);
-      CK(NULL != rt_expr->basic_funcs_);
+    } else if (rt_expr->basic_funcs_ == nullptr
+               || !rt_expr->basic_funcs_->default_hash_.is_valid()
+               || rt_expr->basic_funcs_->default_hash_.type() != rt_expr->sql_type_) {
+      // cg_expr_basic has already bound the complete Type and its functions.
+      // No operator or metadata mutation occurs before this stage. Reuse that
+      // binding; retain initialization for an absent or differently bound one.
+      ret = rt_expr->init_runtime_functions(allocator_);
     }
   }
   return ret;
@@ -1302,8 +1778,9 @@ int ObStaticEngineExprCG::calc_exprs_res_buf_len(const ObIArray<ObRawExpr *> &ra
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < raw_exprs.count(); i++) {
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(i));
-    uint32_t def_res_len = ObDatum::get_reserved_size(rt_expr->obj_datum_map_,
-                                                      rt_expr->datum_meta_.precision_);
+    uint32_t def_res_len = rt_expr->get_sql_type().canonical_representation()
+        == common::DatumRepresentation::Reference
+        ? common::ObDatum::get_reserved_size(rt_expr->obj_datum_map_, rt_expr->datum_meta_.precision_) : 0;
     if (ObDynReserveBuf::supported(rt_expr->datum_meta_.type_)) {
       if (rt_expr->max_length_ > 0) {
         rt_expr->res_buf_len_ = min(def_res_len,
@@ -1339,10 +1816,10 @@ int ObStaticEngineExprCG::create_tmp_frameinfo(const common::ObIArray<ObRawExpr 
   for (int64_t expr_idx = 0; OB_SUCC(ret) && expr_idx < raw_exprs.count(); expr_idx++) {
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(expr_idx));
     const int64_t expr_datums_size = get_expr_datums_size(*rt_expr);
-    const int64_t expr_zero_init_pos = get_datums_header_size(*rt_expr)
-                                       + get_expr_skip_vector_size(*rt_expr);
+    const int64_t expr_zero_init_pos = align_frame_part(get_datums_header_size(*rt_expr)
+                                       + get_expr_skip_vector_size(*rt_expr));
     const int64_t expr_zero_init_size = dynamic_buf_header_size(*rt_expr)
-                                        + sizeof(ObEvalInfo)
+                                        + align_frame_part(sizeof(ObEvalInfo))
                                         + get_expr_bitmap_vector_size(*rt_expr);
 
     if (expr_datums_size > MAX_FRAME_SIZE) {
@@ -1512,7 +1989,7 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
     int64_t param_cnt =
       (session->get_cur_exec_ctx() != NULL
        && session->get_cur_exec_ctx()->get_physical_plan_ctx() != NULL) ?
-        session->get_cur_exec_ctx()->get_physical_plan_ctx()->get_param_store().count() :
+        session->get_cur_exec_ctx()->get_physical_plan_ctx()->get_parameter_count() :
         0;
     temp_expr = new(buf)ObTempExpr(allocator);
     ObStaticEngineExprCG expr_cg(allocator,
@@ -1571,7 +2048,7 @@ static inline bool expr_is_added(ObExpr &e)
 int64_t ObStaticEngineExprCG::frame_max_offset(const ObExpr &e, const int64_t batch_size)
 {
   int64_t size = 0;
-  size = std::max<int64_t>(size, e.datum_off_ + sizeof(ObDatum));
+  size = std::max<int64_t>(size, e.datum_off_ + sizeof(Datum));
   size = CALC_MAX_FRAME_SIZE(e.eval_info_off_, sizeof(ObEvalInfo));
   size = CALC_MAX_FRAME_SIZE(e.dyn_buf_header_offset_, dynamic_buf_header_size(e, batch_size));
   size = CALC_MAX_FRAME_SIZE(e.res_buf_off_, get_expr_datums_count(e, batch_size) * e.res_buf_len_);
@@ -1703,7 +2180,7 @@ int ObStaticEngineExprCG::generate_partial_expr_frame(
     OZ(partial.param_frame_.assign(global.param_frame_));
     OZ(partial.dynamic_frame_.assign(global.dynamic_frame_));
     OZ(partial.datum_frame_.assign(global.datum_frame_));
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    const int64_t item_size = ScalarFrameLayout::slot_size();
     FOREACH_CNT_X(f, partial.param_frame_, OB_SUCC(ret)) {
       ObExpr *e = farthest_exprs.at(f->frame_idx_);
       int cnt = NULL == e
@@ -1756,7 +2233,7 @@ int ObStaticEngineExprCG::compute_max_batch_size(const ObRawExpr *raw_expr)
   // expr_datums_header_size
   int64_t irrelevant = sizeof(ObEvalInfo) + 1 + 1;
   // Per-row datum storage and bitmap contribution.
-  int64_t relevant = sizeof(ObDatum) + 1;
+  int64_t relevant = sizeof(Datum) + 1;
   // reserve_datums_buf_len
   const ObRawExprResType &result_type = raw_expr->get_result_type();
   relevant += reserve_data_consume(result_type.get_type(), result_type.get_precision());
@@ -1816,7 +2293,7 @@ int ObStaticEngineExprCG::generate_extra_questionmarks(ObRawExprUniqueSet &flatt
         ObRawExpr *gen_questionmark = all_exprs.at(i);
         int64_t param_idx = 0;
         ObRawExprResType orig_qm_type = static_cast<const ObConstRawExpr *>(all_exprs.at(i))->get_orig_qm_type();
-        ret = static_cast<ObConstRawExpr *>(all_exprs.at(i))->get_value().get_unknown(param_idx);
+        ret = static_cast<ObConstRawExpr *>(all_exprs.at(i))->get_questionmark_index(param_idx);
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(ObRawExprUtils::create_param_expr(expr_factory, param_idx, gen_questionmark))) {
         } else if (OB_UNLIKELY(param_idx >= param_cnt_)) {

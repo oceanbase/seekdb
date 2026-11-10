@@ -67,9 +67,6 @@ protected:
 private:
   int64_t get_user_id();
   int64_t get_database_id();
-  int get_conn_id(uint32_t &conn_id) const;
-
-
   int check_client_property(ObSMConnection &conn);
   int init_process_single_stmt(const sql::ObMultiStmtItem &multi_stmt_item,
                                sql::ObSQLSessionInfo &session,

@@ -177,13 +177,13 @@ public:
                       const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
 
-  static int like_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int like_varchar(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int eval_like_expr_batch_only_text_vectorized(BATCH_EVAL_FUNC_ARG_DECL);
-  static int like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum &expr_datum,
-                                ObDatum &text, ObDatum &pattern, ObDatum &escape);
+  static int like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  Datum &expr_datum,
+                                Datum &text, Datum &pattern, Datum &escape);
   static int like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
                                         const ObBitVector &skip, const int64_t size,
-                                        ObExpr &text, ObDatum *pattern_datum, ObDatum *escape_datum);
+                                        ObExpr &text, Datum *pattern_datum, Datum *escape_datum);
 
   static int set_instr_info(common::ObIAllocator *exec_allocator,
                             const common::ObCollationType cs_type,

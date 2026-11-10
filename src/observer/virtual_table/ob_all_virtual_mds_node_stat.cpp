@@ -126,7 +126,7 @@ int ObAllVirtualMdsNodeStat::convert_node_info_to_row_(const storage::mds::MdsNo
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
       case OB_APP_MIN_COLUMN_ID + 0: {// tablet_id
-        cur_row_.cells_[i].set_int(node_info.tablet_id_.id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_info.tablet_id_.id()) : ret);
         break;
       }
       
@@ -134,11 +134,11 @@ int ObAllVirtualMdsNodeStat::convert_node_info_to_row_(const storage::mds::MdsNo
         int64_t write_n = node_info.user_key_.to_string(buffer, buffer_size);
         buffer += write_n;
         buffer_size -= write_n;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(write_n, buffer - write_n));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(write_n, buffer - write_n)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 2: {// version_idx
-        cur_row_.cells_[i].set_int(node_info.version_idx_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_info.version_idx_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 3: {// writer_type
@@ -146,27 +146,27 @@ int ObAllVirtualMdsNodeStat::convert_node_info_to_row_(const storage::mds::MdsNo
         databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(node_info.writer_.writer_type_));
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 4: {// writer_id
-        cur_row_.cells_[i].set_int(node_info.writer_.writer_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_info.writer_.writer_id_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 5: {// seq_no
-        cur_row_.cells_[i].set_int(node_info.seq_no_.cast_to_int());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_info.seq_no_.cast_to_int()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 6: {// redo_scn
-        cur_row_.cells_[i].set_uint64(node_info.redo_scn_.get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, node_info.redo_scn_.get_val_for_inner_table_field()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 7: {// end_scn
-        cur_row_.cells_[i].set_uint64(node_info.end_scn_.get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, node_info.end_scn_.get_val_for_inner_table_field()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 8: {// trans_version
-        cur_row_.cells_[i].set_uint64(node_info.trans_version_.get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, node_info.trans_version_.get_val_for_inner_table_field()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 9: {// node_type
@@ -174,7 +174,7 @@ int ObAllVirtualMdsNodeStat::convert_node_info_to_row_(const storage::mds::MdsNo
         databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(node_info.node_type_));
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 10: {// state
@@ -182,7 +182,7 @@ int ObAllVirtualMdsNodeStat::convert_node_info_to_row_(const storage::mds::MdsNo
         databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(node_info.state_));
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 11: {// position
@@ -190,14 +190,14 @@ int ObAllVirtualMdsNodeStat::convert_node_info_to_row_(const storage::mds::MdsNo
         databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(node_info.position_));
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 12: {// user_data
         int64_t write_n = node_info.user_data_.to_string(buffer, buffer_size);
         buffer += write_n;
         buffer_size -= write_n;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(write_n, buffer - write_n));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(write_n, buffer - write_n)) : ret);
         break;
       }
     }
@@ -212,16 +212,16 @@ int ObAllVirtualMdsNodeStat::get_primary_key_ranges_()
   if (key_ranges_.count() >= 1) {
     for (int64_t i = 0; OB_SUCC(ret) && i < key_ranges_.count(); i++) {
       ObNewRange &key_range = key_ranges_.at(i);
-      if (OB_UNLIKELY(key_range.get_start_key().get_obj_cnt() < 1
-                      || key_range.get_end_key().get_obj_cnt() < 1)) {
+      if (OB_UNLIKELY(key_range.get_start_key().get_value_count() < 1
+                      || key_range.get_end_key().get_value_count() < 1)) {
         ret = OB_ERR_UNEXPECTED;
         MDS_LOG(ERROR, "unexpected  # of rowkey columns",
                   K(ret),
-                  "size of start key", key_range.get_start_key().get_obj_cnt(),
-                  "size of end key", key_range.get_end_key().get_obj_cnt());
+                  "size of start key", key_range.get_start_key().get_value_count(),
+                  "size of end key", key_range.get_end_key().get_value_count());
       } else {
-        ObObj tablet_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
-        ObObj tablet_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
+        const DatumValue &tablet_obj_low = (key_range.get_start_key().get_values()[0]);
+        const DatumValue &tablet_obj_high = (key_range.get_end_key().get_values()[0]);
 
         ObTabletID tablet_low = tablet_obj_low.is_min_value() ? ObTabletID(0) : ObTabletID(tablet_obj_low.get_uint64());
         ObTabletID tablet_high = tablet_obj_high.is_max_value() ? ObTabletID(UINT64_MAX) : ObTabletID(tablet_obj_high.get_uint64());

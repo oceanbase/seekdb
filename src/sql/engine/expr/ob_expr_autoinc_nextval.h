@@ -50,9 +50,9 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_nextval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_nextval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
-  static int get_uint_value(const ObExpr &input_expr, ObDatum *input_value,
+  static int get_uint_value(const ObExpr &input_expr, Datum *input_value,
                             bool &is_zero, uint64_t &casted_value);
 private:
   //check to generate auto-inc value or not and cast.
@@ -66,15 +66,10 @@ private:
   // get the input value && check need generate
   static int get_input_value(const ObExpr &expr,
                              ObEvalCtx &ctx,
-                             ObDatum *input_value,
+                             Datum *input_value,
                              share::AutoincParam &autoinc_param,
                              bool &is_to_generate,
                              uint64_t &casted_value);
-  static int get_casted_value_by_result_type(common::ObCastCtx &cast_ctx,
-                                             common::ObObjType result_type,
-                                             const common::ObObj &param,
-                                             uint64_t &casted_value,
-                                             bool &try_sync);
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprAutoincNextval);
 

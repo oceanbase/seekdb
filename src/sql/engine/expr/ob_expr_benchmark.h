@@ -38,7 +38,7 @@ public:
 
   static int eval_benchmark(const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObDatum &expr_datum);
+                            Datum &expr_datum);
 
   static int eval_benchmark_batch(const ObExpr &expr,
                                   ObEvalCtx &ctx,

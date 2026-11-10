@@ -68,7 +68,7 @@ int ObExprEmbeddedVec::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprEmbeddedVec::pack_embedded_res(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const ObString &str)
+int ObExprEmbeddedVec::pack_embedded_res(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
@@ -80,13 +80,6 @@ int ObExprEmbeddedVec::pack_embedded_res(const ObExpr &expr, ObEvalCtx &ctx, ObD
   return ret;
 }
 
-int ObExprEmbeddedVec::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprEmbeddedVec::cg_expr(
     ObExprCGCtx &expr_cg_ctx,
@@ -108,15 +101,15 @@ int ObExprEmbeddedVec::cg_expr(
 /*static*/ int ObExprEmbeddedVec::generate_embedded_vec(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *data_datum = nullptr;
-  ObDatum *model_datum = NULL;
-  ObDatum *url_datum = NULL;
-  ObDatum *user_key_datum = NULL;
-  ObDatum *sync_mode_datum = NULL;
-  ObDatum *dim_datum = NULL;
+  Datum *data_datum = nullptr;
+  Datum *model_datum = NULL;
+  Datum *url_datum = NULL;
+  Datum *user_key_datum = NULL;
+  Datum *sync_mode_datum = NULL;
+  Datum *dim_datum = NULL;
   if (raw_ctx.arg_cnt_ == 1) {
     if (OB_FAIL(raw_ctx.args_[0]->eval(eval_ctx, data_datum))) {
     } else {

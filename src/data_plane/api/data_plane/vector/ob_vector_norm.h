@@ -17,10 +17,10 @@
 #ifndef OCEANBASE_DATA_PLANE_API_OB_VECTOR_NORM_H_
 #define OCEANBASE_DATA_PLANE_API_OB_VECTOR_NORM_H_
 
+#include <math.h>
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/ob_define.h"
-#include "common/object/ob_obj_compare.h"
 
 namespace oceanbase
 {

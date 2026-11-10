@@ -36,6 +36,20 @@ namespace share
 {
 namespace
 {
+DatumValue make_default_expr_value(const ObString &expr)
+{
+  ObDatum datum;
+  datum.set_string(expr);
+  SqlTypeMeta meta;
+  meta.set_varchar();
+  meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
+}
+
 bool get_function_args(const ObString &expr_string,
                        const ObString &func_name,
                        ObString &args)
@@ -994,8 +1008,7 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
       if (OB_FAIL(databuff_printf(ft_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, "DOC_ID()"))) {
       } else {
         ObColumnSchemaV2 column_schema;
-        ObObj default_value;
-        default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+        const DatumValue default_value = make_default_expr_value(ObString(def_pos, ft_expr_def));
         column_schema.set_rowkey_position(0); //non-primary key column
         column_schema.set_index_position(0); // non-index column
         column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -1143,8 +1156,7 @@ int ObFtsIndexBuilderUtil::generate_word_segment_column(
                                     def_pos,
                                     ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+          const DatumValue default_value = make_default_expr_value(ObString(def_pos, ft_expr_def));
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -1248,8 +1260,7 @@ int ObFtsIndexBuilderUtil::generate_word_count_column(
                                     def_pos,
                                     ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+          const DatumValue default_value = make_default_expr_value(ObString(def_pos, ft_expr_def));
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -1348,8 +1359,7 @@ int ObFtsIndexBuilderUtil::generate_doc_length_column(
                                     def_pos,
                                     ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+          const DatumValue default_value = make_default_expr_value(ObString(def_pos, ft_expr_def));
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -2038,6 +2048,8 @@ int ObFtsIndexBuilderUtil::get_multivalue_index_column_name(
     const ObTableSchema &index_table_schema,
     ObIArray<ObString> &col_names)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   INIT_SUCC(ret);
   ObArray<std::pair<int64_t, ObString>> index_columns;
   col_names.reset();
@@ -2053,7 +2065,8 @@ int ObFtsIndexBuilderUtil::get_multivalue_index_column_name(
         const ObColumnSchemaV2 *ori_col_schema = data_table_schema.get_column_schema(col_schema->get_column_id());
          if (OB_ISNULL(ori_col_schema)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(ori_col_schema->get_orig_default_value().get_string(str))) {
+        } else if ((OB_FAIL(ori_col_schema->export_orig_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+            || OB_FAIL(schema_default_value.get_string(str)))) {
         } else if (OB_FAIL(index_columns.push_back(std::make_pair(col_schema->get_index_position(), str)))) {
         }
       } else if (!col_schema->is_user_specified_storing_column() && !col_schema->is_fulltext_column()
@@ -2126,13 +2139,16 @@ int ObFtsIndexBuilderUtil::get_index_column_ids_for_fts(
     const schema::ObColumnSchemaV2 &column_schema,
     common::ObIArray<uint64_t> &index_column_ids)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObString col_def;
   if (OB_UNLIKELY(!column_schema.is_valid() || !data_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(!column_schema.is_fulltext_column())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(column_schema.get_cur_default_value().get_string(col_def))) {
+  } else if ((OB_FAIL(column_schema.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+      || OB_FAIL(schema_default_value.get_string(col_def)))) {
   } else {
     
     common::ObArenaAllocator allocator(common::ObMemAttr("FtsIdxColIds"));
@@ -2595,7 +2611,7 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column(
     //real index expr, so generate hidden generated column in data table schema
     if (OB_FAIL(generate_multivalue_column(*expr, table_schema, schema_checker->get_schema_guard(), force_rebuild, gen_col, budy_col))) {
     } else if (OB_FAIL(ObRawExprUtils::check_generated_column_expr_str(
-        gen_col->get_cur_default_value().get_string(), session_info, table_schema))) {
+        gen_col->get_cur_default_datum().get_string(), session_info, table_schema))) {
     } else if (OB_FAIL(ob_write_string(allocator, gen_col->get_column_name_str(), sort_item.column_name_))) {
     } else {
       sort_item.is_func_index_ = true;
@@ -2637,10 +2653,9 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
         gen_budy_col = data_schema.get_column_schema(gen_col->get_column_id());
       } else {
         //need to add new generated column
-        ObObj default_value;
+        const DatumValue default_value = make_default_expr_value(expr_def);
         char col_name_buf[OB_MAX_COLUMN_NAMES_LENGTH] = {'\0'};
         pos = 0;
-        default_value.set_varchar(expr_def);
         multival_col.set_rowkey_position(0); //non-primary key column
         multival_col.set_index_position(0); //non-index column
         multival_col.set_tbl_part_key_pos(0); //not partition key
@@ -2698,14 +2713,13 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
           multival_arr_col.add_column_flag(MULTIVALUE_INDEX_GENERATED_ARRAY_COLUMN_FLAG);
 
           pos = 0;
-          ObObj default_value;
           char col_name_buf[OB_MAX_COLUMN_NAMES_LENGTH] = {'\0'};
           snprintf(expr_def_buf + expr_str_len - 1, OB_MAX_DEFAULT_VALUE_LENGTH - (expr_str_len - 1),
                  "%s", " multivalue)");
 
           expr_str_len = strlen(expr_def_buf);
           expr_def.assign_ptr(expr_def_buf, static_cast<ObString::obstr_size_t>(expr_str_len));
-          default_value.set_varchar(expr_def);
+          const DatumValue default_value = make_default_expr_value(expr_def);
 
           multival_arr_col.set_data_type(ObJsonType);
           multival_arr_col.set_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -2754,7 +2768,7 @@ bool ObMulValueIndexBuilderUtil::is_multivalue_array_column(const ObString& expr
 bool ObMulValueIndexBuilderUtil::is_multivalue_array_column(
    const share::schema::ObColumnSchemaV2 &column_schema)
 {
-  const ObObj& default_value = column_schema.get_orig_default_value();
+  const Datum &default_value = column_schema.get_orig_default_datum();
   const ObString orig_str = default_value.get_string();
   return is_multivalue_array_column(orig_str);
 }
@@ -2766,8 +2780,8 @@ int ObMulValueIndexBuilderUtil::is_matched_budy_column(
    bool& is_match)
 {
   int ret = OB_SUCCESS;
-  const ObObj& default_value = ori_column_schema.get_orig_default_value();
-  const ObObj& budy_default_value = budy_column_schema.get_orig_default_value();
+  const Datum &default_value = ori_column_schema.get_orig_default_datum();
+  const Datum &budy_default_value = budy_column_schema.get_orig_default_datum();
 
   const ObString orig_str = default_value.get_string();
   const ObString budy_orig_str = budy_default_value.get_string();

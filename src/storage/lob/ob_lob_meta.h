@@ -258,9 +258,9 @@ OB_INLINE int64_t ob_lob_writer_length_validation(const common::ObCollationType 
 class ObLobMetaWriteRowIter: public ObNewRowIterator
 {
 public:
-  ObLobMetaWriteRowIter() : param_(nullptr), meta_iter_(nullptr), new_row_(), row_cell_(), result_() {}
+  ObLobMetaWriteRowIter() : param_(nullptr), meta_iter_(nullptr), new_row_(), result_() {}
   ObLobMetaWriteRowIter(ObLobAccessParam *param, ObLobMetaWriteIter *meta_iter)
-    : param_(param), meta_iter_(meta_iter), new_row_(), row_cell_(), result_()
+    : param_(param), meta_iter_(meta_iter), new_row_(), result_()
   {}
   virtual ~ObLobMetaWriteRowIter() {}
   virtual int get_next_row(ObNewRow *&row);
@@ -276,7 +276,6 @@ private:
   ObLobAccessParam *param_;
   ObLobMetaWriteIter *meta_iter_;
   ObNewRow new_row_;
-  ObObj row_cell_[ObLobMetaUtil::LOB_META_COLUMN_CNT];
   ObLobMetaWriteResult result_;
 };
 

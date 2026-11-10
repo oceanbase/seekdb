@@ -163,8 +163,9 @@ int ObPushdownAggregateInput::get_null_count(
       if (!datum.is_nop()) {
         null_count = datum.is_null() ? 1 : 0;
       } else {
-        const common::ObObj &default_value = col_param.get_orig_default_value();
-        if (default_value.is_nop_value()) {
+        const common::Datum &default_value = col_param.get_orig_default_datum();
+        if (default_value.is_nop() || (default_value.has_ext_value()
+            && default_value.get_ext() == ObActionFlag::OP_NOP)) {
           ret = OB_NOT_SUPPORTED;
         } else {
           null_count = default_value.is_null() ? 1 : 0;
@@ -421,10 +422,12 @@ int ObPushdownAggregateInput::normalize_value(
   int ret = OB_SUCCESS;
   blocksstable::ObStorageDatum storage_datum;
   if (datum.is_nop()) {
-    const common::ObObj &default_value = col_param.get_orig_default_value();
-    if (default_value.is_nop_value()) {
+    common::DatumValue default_value;
+    alignas(8) char default_scratch[64];
+    if (OB_FAIL(col_param.export_orig_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+    } else if (default_value.is_nop_value()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(storage_datum.from_obj_enhance(default_value))) {
+    } else if (OB_FAIL(storage_datum.from_value(default_value))) {
     }
   } else {
     storage_datum.shallow_copy_from_datum(datum);

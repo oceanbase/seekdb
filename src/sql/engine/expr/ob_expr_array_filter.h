@@ -37,7 +37,7 @@ public:
                                 ObExprResType* types,
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx) const override;
-  static int eval_array_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int fill_array_by_filter(ObArenaAllocator &allocator, ObIArrayType *filter_arr,
                                   ObIArrayType *src_arr, ObIArrayType *res_arr);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

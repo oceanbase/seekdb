@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 #define OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 
+#include "common/datum/datum_value.h"
 #include <limits>
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
@@ -524,7 +525,7 @@ struct ObExchangeInfo
   ObRawExpr *calc_part_id_expr_;
   common::ObSEArray<HashExpr, 4> hash_dist_exprs_;
   // for hybrid hash distr
-  common::ObSEArray<ObObj, 20> popular_values_;
+  common::ObSEArray<DatumValue, 20> popular_values_;
   ObPQDistributeMethod::Type dist_method_;
   ObPQDistributeMethod::Type unmatch_row_dist_method_;
   ObNullDistributeMethod::Type null_row_dist_method_;

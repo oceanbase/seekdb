@@ -62,9 +62,9 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_next_int_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
-  static int eval_next_real_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
-  static int eval_next_number_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int eval_next_int_value(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
+  static int eval_next_real_value(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
+  static int eval_next_number_value(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
 	DISALLOW_COPY_AND_ASSIGN(ObExprUniform);
 };

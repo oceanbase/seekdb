@@ -560,7 +560,7 @@ public:
                                      ObSysFunRawExpr *&out_expr,
                                      const ObSQLSessionInfo *session_info,
                                      bool is_type_to_str,
-                                     ObObjType dst_type = ObMaxType);
+                                     SqlValueType dst_type = ObMaxType);
   
   static int wrap_enum_set_for_stmt(ObRawExprFactory &expr_factory,
                                     ObSelectStmt *stmt,
@@ -621,7 +621,7 @@ public:
                                     int64_t local_var_id = OB_INVALID_INDEX_INT64);
   static int build_column_conv_expr(const ObSQLSessionInfo *session_info,
                                     ObRawExprFactory &expr_factory,
-                                    const common::ObObjType &type,
+                                    const common::SqlValueType &type,
                                     const common::ObCollationType &collation,
                                     const int64_t &accuracy,
                                     const bool &is_nullable,
@@ -635,20 +635,20 @@ public:
   static int build_var_int_expr(ObRawExprFactory &expr_factory,
                                 ObConstRawExpr *&expr);
   static int build_default_expr(ObRawExprFactory &expr_factory,
-                                const common::ObObjType &type,
+                                const common::SqlValueType &type,
                                 const common::ObCollationType &collation,
                                 const int64_t &accuracy,
                                 ObRawExpr *&expr);
   static int build_const_int_expr(ObRawExprFactory &expr_factory,
-                                  common::ObObjType type,
+                                  common::SqlValueType type,
                                   int64_t int_value,
                                   ObConstRawExpr *&expr);
   static int build_const_uint_expr(ObRawExprFactory &expr_factory,
-                                   common::ObObjType type,
+                                   common::SqlValueType type,
                                    uint64_t uint_value,
                                    ObConstRawExpr *&expr);
   static int build_const_double_expr(ObRawExprFactory &expr_factory,
-                                    common::ObObjType type,
+                                    common::SqlValueType type,
                                     double value,
                                     ObConstRawExpr *&expr);
   static int build_const_datetime_expr(ObRawExprFactory &expr_factory,
@@ -664,11 +664,11 @@ public:
                                          int64_t int_value,
                                          ObConstRawExpr *&expr);
   static int build_const_number_expr(ObRawExprFactory &expr_factory,
-                                     ObObjType type,
+                                     SqlValueType type,
                                      number::ObNumber value,
                                      ObConstRawExpr *&expr);
   static int build_const_obj_expr(ObRawExprFactory &expr_factory,
-                                  const ObObj &obj,
+                                  const common::DatumValue &value,
                                   ObConstRawExpr *&expr);
   static int build_mul_expr(ObRawExprFactory &raw_expr_factory,
                             ObRawExpr *expr1,
@@ -687,7 +687,7 @@ public:
                                    ObRawExpr *&expr,
                                    bool b_value);
   static int build_const_string_expr(ObRawExprFactory &expr_factory,
-                                     common::ObObjType type,
+                                     common::SqlValueType type,
                                      const common::ObString &string_value,
                                      common::ObCollationType cs_type,
                                      ObConstRawExpr *&expr);
@@ -795,26 +795,26 @@ public:
   static int init_column_expr_subschema(const share::schema::ObColumnSchemaV2 &column_schema,
                                         const ObSQLSessionInfo *session_info,
                                         ObColumnRefRawExpr &column_expr);
-  static int init_enum_set_subschema_id(const ObObjMeta &obj_meta,
+  static int init_enum_set_subschema_id(const SqlTypeMeta &obj_meta,
                                         const ObIArray<common::ObString> &type_infos,
                                         ObSQLSessionInfo &session_info);
-  static int get_subschema_id(const ObObjMeta &obj_meta,
+  static int get_subschema_id(const SqlTypeMeta &obj_meta,
                               const ObIArray<common::ObString> &type_infos,
                               const ObSQLSessionInfo &session_info,
                               uint16_t &subschema_id);
-  static ObCollationLevel get_column_collation_level(const common::ObObjType &type);
+  static ObCollationLevel get_column_collation_level(const common::SqlValueType &type);
   /* Calculate the flag for basic columns */
   static uint32_t calc_column_result_flag(const share::schema::ObColumnSchemaV2 &column_schema);
   static int is_expr_comparable(const ObRawExpr *expr, bool &can_be);
   static int function_alias(ObRawExprFactory &expr_factory, ObSysFunRawExpr *&expr);
   //extract from const value
   //used for enum set type
-  static int need_wrap_to_string(const ObRawExprResType &src_res_type, common::ObObjType calc_type,
+  static int need_wrap_to_string(const ObRawExprResType &src_res_type, common::SqlValueType calc_type,
                                  const bool is_same_type_need, bool &need_wrap,
                                  const bool support_subschema = true);
   static int extract_enum_set_collation(const ObRawExprResType &src_res_type,
                                         const sql::ObSQLSessionInfo *session,
-                                        ObObjMeta &obj_meta);
+                                        SqlTypeMeta &obj_meta);
   static int extract_enum_set_meta(const ObRawExprResType &src_res_type,
                                    const sql::ObSQLSessionInfo *session,
                                    const ObEnumSetMeta *&meta);
@@ -1133,7 +1133,7 @@ public:
                                       const ObSqlCollectionInfo *&coll_info);
   static int iterate_collection_type(const ObCollectionTypeBase *coll_meta,
                                      ObCollectionTypeVisitor &visitor);
-  static int adjust_type_expr_with_subschema(const common::ObObjType type,
+  static int adjust_type_expr_with_subschema(const common::SqlValueType type,
                                              const uint16_t subschema_id,
                                              const bool is_in_pl,
                                              ObRawExpr *expr);

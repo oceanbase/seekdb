@@ -78,13 +78,13 @@ int ObSkipIndexColMeta::append_skip_index_meta(
 
 int ObSkipIndexColMeta::calc_skip_index_maximum_size(
     const share::schema::ObSkipIndexColumnAttr &skip_idx_attr,
-    const ObObjType obj_type,
+    const SqlValueType obj_type,
     const int16_t precision,
     int64_t &max_size)
 {
   int ret = OB_SUCCESS;
   max_size = 0;
-  const ObObjDatumMapType datum_type = ObDatum::get_obj_datum_map_type(obj_type);
+  const SqlValueDatumMapType datum_type = ObDatum::get_sql_value_datum_map_type(obj_type);
   if (OB_UNLIKELY(datum_type >= OBJ_DATUM_MAPPING_MAX)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -119,7 +119,7 @@ int ObSkipIndexColMeta::calc_skip_index_maximum_size(
 
 int get_prefix_for_string_tc_datum(
     const ObDatum &orig_datum,
-    const ObObjType obj_type,
+    const SqlValueType obj_type,
     const ObCollationType collation_type,
     const int64_t max_prefix_byte_len,
     ObDatum &prefix_datum)
@@ -142,7 +142,7 @@ int get_prefix_for_string_tc_datum(
 
 int get_prefix_for_text_tc_datum(
     const ObDatum &orig_datum,
-    const ObObjType obj_type,
+    const SqlValueType obj_type,
     const ObCollationType collation_type,
     const int64_t max_prefix_byte_len,
     ObDatum &prefix_datum,

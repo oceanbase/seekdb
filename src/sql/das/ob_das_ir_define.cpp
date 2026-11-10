@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_DAS
 #include "query/das/ob_block_max_spec_access.h"
 #include "ob_das_ir_define.h"
+#include "common/datum/datum_copy_plan.h"
 
 namespace oceanbase
 {
@@ -221,20 +222,21 @@ const ObDatum &ObDocIdExt::get_datum() const
   return datum_;
 }
 
-int ObDocIdExt::from_obj(const ObObj &obj)
-{
-  int ret = common::OB_SUCCESS;
-  if (OB_FAIL(datum_.from_obj(obj))) {
-  }
-  return ret;
-}
-
 int ObDocIdExt::from_datum(const ObDatum &datum)
 {
   int ret = common::OB_SUCCESS;
   int64_t dummy_pos = 0;
   if (OB_FAIL(datum_.deep_copy(datum, buf_, OB_DOC_ID_EXT_SIZE, dummy_pos))) {
   }
+  return ret;
+}
+
+int ObDocIdExt::from_native(const common::Datum &datum, const common::SqlType &type)
+{
+  alignas(8) char scratch[64];
+  common::ObDatum legacy;
+  int ret = common::DatumCopyPlan(type).legacy_view(datum, legacy, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = from_datum(legacy); }
   return ret;
 }
 

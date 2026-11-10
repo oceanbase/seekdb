@@ -51,43 +51,12 @@ int ObExprRandomBytes::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprRandomBytes::calc_result1(ObObj &result, const ObObj &len,
-                                    ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  if (len.is_null()) {
-    result.set_null();
-  } else if (len.is_int32()) {
-    ObString::obstr_size_t length = len.get_int32(); 
-    if (length >= 1 && length <= 1024) {
-      char *buf = (char *)expr_ctx.calc_buf_->alloc(length);
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        const auto random = crypto::random_fill(
-            rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(buf), length));
-        if (crypto::Code::Ok != random.code) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          ObString rand_str(length, length, buf);
-          result.set_binary(rand_str);
-        }
-      }
-    } else {
-      ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
-    }
-  } else {
-    ret = OB_OBJ_TYPE_ERROR;
-  }
-  return ret;
-}
-
 int ObExprRandomBytes::generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx, 
-                                             ObDatum &expr_datum)
+                                             Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (ObInt32Type == expr.args_[0]->datum_meta_.type_) {
-    ObDatum *num_datum = NULL;
+    Datum *num_datum = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, num_datum))) {
     } else if (num_datum->is_null()) {
       expr_datum.set_null();

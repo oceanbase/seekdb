@@ -42,13 +42,13 @@ struct ObArithRule {
         ;
   }
 
-  common::ObObjType result_type;
-  common::ObObjType param1_calc_type;
-  common::ObObjType param2_calc_type;
+  common::SqlValueType result_type;
+  common::SqlValueType param1_calc_type;
+  common::SqlValueType param2_calc_type;
 
-  TO_STRING_KV("result_type", inner_obj_type_str(result_type),
-               "param1_calc_type", inner_obj_type_str(param1_calc_type),
-               "param2_calc_type", inner_obj_type_str(param2_calc_type));
+  TO_STRING_KV("result_type", inner_sql_value_type_to_string(result_type),
+               "param1_calc_type", inner_sql_value_type_to_string(param1_calc_type),
+               "param2_calc_type", inner_sql_value_type_to_string(param2_calc_type));
 };
 
 template<int D1, int D2>
@@ -124,7 +124,7 @@ public:
   constexpr static int OP_CNT = __builtin_ctzll(MAX_OP);
   typedef common::ObFixedBitSet<TYPE_COUNT> TypeBitset;
 
-  typedef bool (*is_type_func)(common::ObObjType type);
+  typedef bool (*is_type_func)(common::SqlValueType type);
 
   static int flag2bit(uint64_t flag) {
     OB_ASSERT(0ULL != flag);
@@ -155,16 +155,16 @@ public:
     }
 
     inline int set_type(int64_t obj_type_or_choice,
-                        common::ObObjType type1,
-                        common::ObObjType type2,
-                        common::ObObjType &result_type)
+                        common::SqlValueType type1,
+                        common::SqlValueType type2,
+                        common::SqlValueType &result_type)
     {
       int ret = common::OB_SUCCESS;
       if (result_type != common::ObMaxType) {
         ret = common::OB_INIT_TWICE;
       } else if (obj_type_or_choice >= 0 && obj_type_or_choice < TYPE_COUNT) {
         // is a clearly specified
-        result_type = static_cast<common::ObObjType>(obj_type_or_choice);
+        result_type = static_cast<common::SqlValueType>(obj_type_or_choice);
       } else if (ObArithResultTypeChoice::is_valid_choice(obj_type_or_choice)) {
         // is a special option
         switch (obj_type_or_choice) {
@@ -186,7 +186,7 @@ public:
 
     inline RulesApplyer& result_as(int64_t obj_type_or_choice) {
       auto set_result =
-          [&] (ObArithRule &rule, common::ObObjType param1, common::ObObjType param2) -> int
+          [&] (ObArithRule &rule, common::SqlValueType param1, common::SqlValueType param2) -> int
       {
         return set_type(obj_type_or_choice, param1, param2, rule.result_type);
       };
@@ -195,7 +195,7 @@ public:
 
     inline RulesApplyer& cast_param1_as(int64_t obj_type_or_choice) {
       auto set_param1 =
-          [&] (ObArithRule &rule, common::ObObjType param1, common::ObObjType param2) -> int
+          [&] (ObArithRule &rule, common::SqlValueType param1, common::SqlValueType param2) -> int
       {
         return set_type(obj_type_or_choice, param1, param2, rule.param1_calc_type);
       };
@@ -204,7 +204,7 @@ public:
 
     inline RulesApplyer& cast_param2_as(int64_t obj_type_or_choice) {
       auto set_param2 =
-          [&] (ObArithRule &rule, common::ObObjType param1, common::ObObjType param2) -> int
+          [&] (ObArithRule &rule, common::SqlValueType param1, common::SqlValueType param2) -> int
       {
         return set_type(obj_type_or_choice, param1, param2, rule.param2_calc_type);
       };
@@ -223,8 +223,8 @@ public:
       for (int op_k = flags.pop(); OB_SUCC(ret) && op_k >= 0; op_k = flags.pop()) {
         for (type1_bitset_.find_first(i); OB_SUCC(ret) && i >= 0; type1_bitset_.find_next(i, i)) {
           for (type2_bitset_.find_first(j); OB_SUCC(ret) && j >= 0; type2_bitset_.find_next(j, j)) {
-            common::ObObjType type1 = static_cast<common::ObObjType>(i);
-            common::ObObjType type2 = static_cast<common::ObObjType>(j);
+            common::SqlValueType type1 = static_cast<common::SqlValueType>(i);
+            common::SqlValueType type2 = static_cast<common::SqlValueType>(j);
             if (op_k >= flag2bit(MAX_OP) || type1 >= TYPE_COUNT || type2 >= TYPE_COUNT) {
               ret = common::OB_ERR_UNEXPECTED;
             } else {
@@ -257,7 +257,7 @@ public:
     for (int64_t tc_idx = 0; OB_SUCC(ret) && tc_idx < TC_COUNT; ++tc_idx) {
       types_in_tc_set_[tc_idx].reset();
       for (int64_t type_idx = 0; OB_SUCC(ret) && type_idx < TYPE_COUNT; ++type_idx) {
-        if (tc_idx == ob_obj_type_class(static_cast<common::ObObjType>(type_idx))) {
+        if (tc_idx == sql_type_class(static_cast<common::SqlValueType>(type_idx))) {
           ret = types_in_tc_set_[tc_idx].add_member(type_idx);
         }
       }
@@ -279,20 +279,20 @@ public:
     int ret = common::OB_SUCCESS;
     type_set.reset();
     for (int64_t type_idx = 0; OB_SUCC(ret) && type_idx < TYPE_COUNT; ++type_idx) {
-      if (func2(static_cast<common::ObObjType>(type_idx))) {
+      if (func2(static_cast<common::SqlValueType>(type_idx))) {
         ret = type_set.add_member(type_idx);
       }
     }
     return ret;
   }
 
-  TypeBitset &get_type_set(common::ObObjType type, int param_idx, int &ret)
+  TypeBitset &get_type_set(common::SqlValueType type, int param_idx, int &ret)
   {
     UNUSED(param_idx);
     UNUSED(ret);
     return types_set_[type];
   }
-  TypeBitset &get_type_set(common::ObObjTypeClass type_class, int param_idx, int &ret)
+  TypeBitset &get_type_set(common::SqlTypeClass type_class, int param_idx, int &ret)
   {
     UNUSED(param_idx);
     UNUSED(ret);
@@ -320,8 +320,8 @@ public:
 
   //getter
 
-  inline const ObArithRule &get_rule(common::ObObjType type1,
-                                     common::ObObjType type2,
+  inline const ObArithRule &get_rule(common::SqlValueType type1,
+                                     common::SqlValueType type2,
                                      uint64_t flag) const
   {
     return arith_rule_maps_[flag2bit(flag)].get_rule(type1, type2);

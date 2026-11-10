@@ -36,7 +36,7 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
-  static int eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
 private:
   static int calc_prefix_pattern(const ObString &pattern,

@@ -37,7 +37,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_date_diff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int eval_date_diff(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprDateDiff);

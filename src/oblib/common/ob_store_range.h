@@ -256,7 +256,7 @@ int ObStoreRange::get_common_store_rowkey(ObStoreRowkey &store_rowkey) const
   int64_t prefix_len = 0;
   if (OB_FAIL(ObStoreRowkey::get_common_prefix_length(start_key_, end_key_, prefix_len))) {
   } else if (prefix_len > 0) {
-    ret = store_rowkey.assign(const_cast<ObObj *>(start_key_.get_obj_ptr()), prefix_len);
+    ret = store_rowkey.assign(const_cast<DatumValue *>(start_key_.get_values()), prefix_len);
   }
   return ret;
 }

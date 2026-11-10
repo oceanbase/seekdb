@@ -1,0 +1,74 @@
+# LIKE precision must retain its trailing-space filter across cached plans
+DROP TABLE IF EXISTS datum_parameter_constraints;
+CREATE TABLE datum_parameter_constraints(id INT PRIMARY KEY,v VARCHAR(64) COLLATE utf8mb4_bin,KEY kv(v));
+INSERT INTO datum_parameter_constraints VALUES(1,'literal'),(2,'literal '),(3,'prefix'),(4,'prefix-tail'),(5,''),(6,NULL),(7,'中文'),(8,'a_b'),(9,'a%b');
+PREPARE p FROM 'SELECT id,v FROM datum_parameter_constraints WHERE v LIKE CONCAT(?, ?) ORDER BY id';
+SET @a='literal',@b='';
+EXECUTE p USING @a,@b;
+id	v
+1	literal
+SET @b='%';
+EXECUTE p USING @a,@b;
+id	v
+1	literal
+2	literal 
+SET @a=NULL;
+EXECUTE p USING @a,@b;
+id	v
+SET @a='';
+EXECUTE p USING @a,@b;
+id	v
+1	literal
+2	literal 
+3	prefix
+4	prefix-tail
+5	
+7	中文
+8	a_b
+9	a%b
+SET @a='prefix',@b='';
+EXECUTE p USING @a,@b;
+id	v
+3	prefix
+SET @b='%';
+EXECUTE p USING @a,@b;
+id	v
+3	prefix
+4	prefix-tail
+SET @a='中';
+EXECUTE p USING @a,@b;
+id	v
+7	中文
+SET @a='a_b',@b='';
+EXECUTE p USING @a,@b;
+id	v
+8	a_b
+9	a%b
+DEALLOCATE PREPARE p;
+PREPARE p FROM 'SELECT id FROM datum_parameter_constraints WHERE (? IS NULL OR id < ?) AND (? = ?) ORDER BY id LIMIT ?';
+SET @a=NULL,@b=4,@c=1,@d=1,@n=0;
+EXECUTE p USING @a,@b,@c,@d,@n;
+id
+SET @n=3;
+EXECUTE p USING @a,@b,@c,@d,@n;
+id
+1
+2
+3
+SET @a=2;
+EXECUTE p USING @a,@b,@c,@d,@n;
+id
+1
+2
+3
+SET @d=0;
+EXECUTE p USING @a,@b,@c,@d,@n;
+id
+SET @d=NULL;
+EXECUTE p USING @a,@b,@c,@d,@n;
+id
+SET @a=NULL,@d=1,@n=0;
+EXECUTE p USING @a,@b,@c,@d,@n;
+id
+DEALLOCATE PREPARE p;
+DROP TABLE datum_parameter_constraints;

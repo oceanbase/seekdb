@@ -34,7 +34,7 @@ public:
   virtual ~ObExprPrivSTAsMVTGeom();
   virtual int calc_result_typeN(ObExprResType &type, ObExprResType *types, int64_t param_num,
       common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(
       ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
 

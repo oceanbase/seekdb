@@ -45,7 +45,7 @@ int ObAllVirtualPxTargetMonitor::inner_open()
 int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   ObPxTargetInfo target_info;
   if (row_emitted_) {
     ret = OB_ITER_END;
@@ -59,15 +59,15 @@ int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
       switch (col_id) {
 
         case LOCAL_TARGET: {
-          cur_row_.cells_[i].set_int(target_info.local_target_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, target_info.local_target_) : ret);
           break;
         }
         case LOCAL_TARGET_USED: {
-          cur_row_.cells_[i].set_int(target_info.target_used_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, target_info.target_used_) : ret);
           break;
         }
         case LOCAL_PARALLEL_SESSION_COUNT: {
-          cur_row_.cells_[i].set_int(target_info.local_parallel_session_count_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, target_info.local_parallel_session_count_) : ret);
           break;
         }
         default: {

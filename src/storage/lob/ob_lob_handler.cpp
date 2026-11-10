@@ -833,7 +833,7 @@ int ObLobDiffUpdateHandler::execute(ObLobLocatorV2& delta_locator, ObLobDiffHead
   }
   if (OB_FAIL(ret)) {
   } else {
-      param_.ext_info_log_.set_varchar(extra_diff_data);
+      param_.ext_info_log_.set_string(extra_diff_data);
   }
   return ret;
 }

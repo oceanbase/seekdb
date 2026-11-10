@@ -47,9 +47,9 @@ int ObExprWeightString::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
   } else {
     uint64_t max_length = OB_MAX_VARBINARY_LENGTH; // The maximum length of the result of WEIGHT_STRING()
-    uint64_t result_length = types_stack[1].get_param().get_int();
-    uint64_t nweight = types_stack[2].get_param().get_int();
-    bool as_binary = types_stack[4].get_param().get_int();
+    uint64_t result_length = types_stack[1].get_param_datum().get_int();
+    uint64_t nweight = types_stack[2].get_param_datum().get_int();
+    bool as_binary = types_stack[4].get_param_datum().get_int();
     ObCollationLevel coll_level = CS_LEVEL_INVALID;
     if (as_binary) {
       coll_level = CS_LEVEL_IMPLICIT;
@@ -94,14 +94,14 @@ int ObExprWeightString::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprWeightString::eval_weight_string(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprWeightString::eval_weight_string(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
-  ObDatum *result_length_arg = NULL;
-  ObDatum *nweights_arg = NULL;
-  ObDatum *flags_arg = NULL;
-  ObDatum *as_binary_arg = NULL;
+  Datum *arg = NULL;
+  Datum *result_length_arg = NULL;
+  Datum *nweights_arg = NULL;
+  Datum *flags_arg = NULL;
+  Datum *as_binary_arg = NULL;
   if (OB_ISNULL(expr.args_[0]) || OB_ISNULL(expr.args_[1]) || OB_ISNULL(expr.args_[2]) ||
       OB_ISNULL(expr.args_[3]) || OB_ISNULL(expr.args_[4])) {
     ret = OB_INVALID_ARGUMENT;

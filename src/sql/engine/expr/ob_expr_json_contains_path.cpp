@@ -76,7 +76,7 @@ int ObExprJsonContainsPath::calc_result_typeN(ObExprResType& type,
 
 int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
                                                     ObEvalCtx &ctx,
-                                                    ObDatum &res)
+                                                    Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_result = false;
@@ -86,9 +86,9 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   DEFER(if (partial_document != nullptr) { partial_document->reset(); });
-  ObDatum *doc_datum = NULL;
+  Datum *doc_datum = NULL;
   ObExpr *doc_arg = expr.args_[0];
-  ObObjType doc_type = doc_arg->datum_meta_.type_;
+  SqlValueType doc_type = doc_arg->datum_meta_.type_;
   ObCollationType doc_cs_type = doc_arg->datum_meta_.cs_type_;
   bool allow_partial_update = false;
   if (OB_FAIL(temp_allocator.eval_arg(doc_arg, ctx, doc_datum))) {
@@ -129,9 +129,9 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
   if (OB_SUCC(ret) && !is_null_result) {
     // get one_or_all flag
     bool one_flag;
-    ObDatum *json_datum = NULL;
+    Datum *json_datum = NULL;
     ObExpr *json_arg = expr.args_[1];
-    ObObjType val_type = json_arg->datum_meta_.type_;
+    SqlValueType val_type = json_arg->datum_meta_.type_;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
     } else if (val_type == ObNullType || json_datum->is_null()) {
       is_null_result = true;
@@ -154,7 +154,7 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
       path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
 
       for (int64_t i = 2; OB_SUCC(ret) && i < expr.arg_cnt_ && !is_null_result; i++) {
-        ObDatum *path_data = NULL;
+        Datum *path_data = NULL;
         if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, path_data))) {
         } else if (expr.args_[i]->datum_meta_.type_ == ObNullType || path_data->is_null()) {
           is_null_result = true;

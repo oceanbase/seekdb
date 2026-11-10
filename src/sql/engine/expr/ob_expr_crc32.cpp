@@ -48,7 +48,7 @@ int ObExprCrc32::calc_result_type1(ObExprResType& type, ObExprResType& type1, Ob
   return ret;
 }
 
-inline void calc_crc32_inner(const ObString &str_val, ObDatum &res_datum)
+inline void calc_crc32_inner(const ObString &str_val, Datum &res_datum)
 {
   if (str_val.empty()) {
     res_datum.set_uint(0ULL);
@@ -58,11 +58,11 @@ inline void calc_crc32_inner(const ObString &str_val, ObDatum &res_datum)
   }
 }
 
-int ObExprCrc32::calc_crc32_expr(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& res_datum)
+int ObExprCrc32::calc_crc32_expr(const ObExpr& expr, ObEvalCtx& ctx, Datum& res_datum)
 {
   int ret = OB_SUCCESS;
   unsigned char* buf = NULL;
-  ObDatum* s_datum = NULL;
+  Datum* s_datum = NULL;
   const ObDatumMeta &datum_meta = expr.args_[0]->datum_meta_;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum))) {
   } else if (s_datum->is_null()) {

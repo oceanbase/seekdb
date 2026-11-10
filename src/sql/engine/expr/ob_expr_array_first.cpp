@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_array_first.h"
 #include "common/udt/ob_collection_type.h"
 #include "common/udt/ob_array_type.h"
@@ -62,7 +63,7 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
   const ObSqlCollectionInfo *coll_info = NULL;
   ObCollectionArrayType *arr_type = NULL;
   bool is_null_res = false;
-  ObObjType lambda_type = types_stack[0].get_type();
+  SqlValueType lambda_type = types_stack[0].get_type();
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -112,14 +113,14 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   ObExprArrayMapInfo *info = static_cast<ObExprArrayMapInfo *>(expr.extra_info_);
   ObIArrayType *src_arrs[expr.arg_cnt_ - 1];
-  ObDatum *datum_val = NULL;
+  Datum *datum_val = NULL;
   bool is_null_res = false;
   uint32_t arr_dim = 0;
 
@@ -154,12 +155,10 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
             res.set_string(child_arr_str);
           }
         } else {
-          ObObj elem_obj;
-          if (OB_FAIL(src_arrs[0]->elem_at(i, elem_obj))) {
+          if (OB_FAIL(ObExprUtil::set_array_element(expr, ctx, *src_arrs[0], i, res))) {
           } else {
-            res.from_obj(elem_obj);
             ObExprStrResAlloc res_alloc(expr, ctx);
-            if (elem_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
+            if (expr.obj_meta_.is_string_type() && OB_FAIL(expr.get_datum_copy_plan().deep_copy(res, res, res_alloc))) {
             }
           }
         }

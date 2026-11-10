@@ -33,7 +33,7 @@ ObExprPrivSTGeographyFromText::~ObExprPrivSTGeographyFromText()
 {
 }
 
-int ObExprPrivSTGeographyFromText::eval_priv_st_geographyfromtext(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTGeographyFromText::eval_priv_st_geographyfromtext(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_priv_st_geogfromtext_common(expr, ctx, res, N_PRIV_ST_GEOGRAPHYFROMTEXT);
 }

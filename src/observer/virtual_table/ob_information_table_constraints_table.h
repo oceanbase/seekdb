@@ -22,7 +22,7 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
+struct DatumValue;
 
 }
 namespace share
@@ -55,27 +55,27 @@ public:
 
 private:
   int add_table_constraints(const share::schema::ObDatabaseSchema &database_schema,
-                            common::ObObj *cells,
+                            common::DatumValue *cells,
                             const int64_t col_count);
   int add_table_constraints(const share::schema::ObTableSchema &table_schema,
                            const common::ObString &database_name,
-                           common::ObObj *cells,
+                           common::DatumValue *cells,
                            const int64_t col_count);
   int add_rowkey_constraints(const share::schema::ObTableSchema &table_schema,
                              const common::ObString &database_name,
-                             common::ObObj *cells,
+                             common::DatumValue *cells,
                              const int64_t col_count);
   int add_index_constraints(const share::schema::ObTableSchema &table_schema,
                             const common::ObString &database_name,
-                            common::ObObj *cells,
+                            common::DatumValue *cells,
                             const int64_t col_count);
   int add_foreign_key_constraints(const share::schema::ObTableSchema &table_schema,
                                   const common::ObString &database_name,
-                                  common::ObObj *cells,
+                                  common::DatumValue *cells,
                                   const int64_t col_count);
   int add_check_constraints(const share::schema::ObTableSchema &table_schema,
                             const common::ObString &database_name,
-                            common::ObObj *cells,
+                            common::DatumValue *cells,
                             const int64_t col_count);
 
 private:

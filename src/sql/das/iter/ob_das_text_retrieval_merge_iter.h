@@ -147,13 +147,13 @@ protected:
   void release_iters();
   int init_total_doc_cnt_param(transaction::ObTxDesc *tx_desc, transaction::ObTxReadSnapshot *snapshot);
   int do_total_doc_cnt();
-  inline static void set_datum_int(ObDatum &datum, const ObDocIdExt &docid)
+  inline static void set_datum_int(common::Datum &datum, const ObDocIdExt &docid)
   {
     datum.set_int(docid.get_datum().get_int());
   }
-  inline static void set_datum_shallow(ObDatum &datum, const ObDocIdExt &docid)
+  inline static void set_datum_shallow(common::Datum &datum, const ObDocIdExt &docid)
   {
-    datum.set_datum(docid.get_datum());
+    datum.set_string(docid.get_datum().get_string());
   }
 protected:
   static const int64_t OB_DEFAULT_QUERY_TOKEN_ITER_CNT = 4;
@@ -186,7 +186,7 @@ protected:
   bool force_return_docid_; // for function lookup
   bool doc_cnt_calculated_;
   bool doc_cnt_iter_acquired_;
-  void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  void (*set_datum_func_)(common::Datum &, const ObDocIdExt &);
   bool is_inited_;
 };
 

@@ -18,6 +18,7 @@
 
 #include "rust/config.h"
 #include "ob_static_engine_cg.h"
+#include "sql/pl/ob_pl.h"
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_limit.h"
@@ -74,6 +75,7 @@
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/engine/subquery/ob_subplan_scan_op.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/aggregate/ob_merge_groupby_op.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/join/ob_merge_join_op.h"
@@ -645,7 +647,7 @@ int ObStaticEngineCG::generate_spec_basic(ObLogicalOperator &op,
         && OB_NOT_NULL(op.get_plan()->get_stmt()->get_query_ctx()));
     CK (OB_NOT_NULL(phy_plan_));
     if (OB_SUCC(ret)) {
-      ObObj val;
+      DatumValue val;
       ObLogPlan *log_plan = op.get_plan();
       const ObOptParamHint *opt_params = &log_plan->get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
       if (OB_FAIL(opt_params->get_opt_param(ObOptParamHint::WORKAREA_SIZE_POLICY, val))) {
@@ -669,7 +671,7 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
   } else {
     const ObOptParamHint *opt_params =
       &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
-    ObObj hint_val;
+    DatumValue hint_val;
     if (OB_FAIL(opt_params->get_opt_param(ObOptParamHint::SPILL_COMPRESSION_CODEC, hint_val))) {
     } else if (hint_val.is_nop_value()) { // get compression algorithm from configure
       configured_codec = config::spill_compression_codec();
@@ -869,7 +871,7 @@ int ObStaticEngineCG::generate_merge_distinct_spec(
       } else {
         ObCmpFunc cmp_func;
         // no matter null first or null last.
-        cmp_func.cmp_func_ = expr->basic_funcs_->null_last_cmp_;
+        cmp_func.cmp_func_ = expr->basic_funcs_->null_last_cmp_.legacy_function();
         CK(NULL != cmp_func.cmp_func_);
         OZ(spec.cmp_funcs_.push_back(cmp_func));
       }
@@ -885,10 +887,12 @@ int ObStaticEngineCG::generate_spec(
 }
 
 void ObStaticEngineCG::set_murmur_hash_func(
-     ObHashFunc &hash_func, const common::ObDatumBasicFuncs *basic_funcs_)
+     ObHashFunc &hash_func, const common::DatumBasicFuncs *basic_funcs_)
 {
-  hash_func.hash_func_ = basic_funcs_->murmur_hash_v2_;
-  hash_func.batch_hash_func_ = basic_funcs_->murmur_hash_v2_batch_;
+  // Wire wrappers contain the exact legacy callables selected during preparation.
+  const common::ObDatumBasicFuncs *legacy_functions = basic_funcs_->legacy_functions();
+  hash_func.hash_func_ = legacy_functions->murmur_hash_v2_;
+  hash_func.batch_hash_func_ = legacy_functions->murmur_hash_v2_batch_;
 }
 
 int ObStaticEngineCG::generate_spec(
@@ -1699,7 +1703,8 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
     ObIAllocator &allocator = phy_plan_->get_allocator();
     if (OB_FAIL(spec.column_exprs_.prepare_allocate(op.get_column_exprs().count()))) {
     } else if (OB_FAIL(spec.value_exprs_.prepare_allocate(table_def->access_exprs_.count()))) {
-    } else if (OB_FAIL(spec.obj_params_.prepare_allocate(table_def->access_objs_.count()))) {
+    } else if (OB_FAIL(spec.datum_values_.prepare_allocate(table_def->access_values_.count()))) {
+    } else if (OB_FAIL(spec.datum_value_types_.prepare_allocate(table_def->access_values_.count()))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < op.get_column_exprs().count(); i++) {
         ObColumnRefRawExpr *col_expr = op.get_column_exprs().at(i);
@@ -1727,10 +1732,22 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
           spec.value_exprs_.at(i) = expr;
         }
       }
-      for (int64_t i = 0; OB_SUCC(ret) && i < table_def->access_objs_.count(); i++) {
-        if (OB_FAIL(ob_write_obj(allocator,
-                                 table_def->access_objs_.at(i),
-                                 spec.obj_params_.at(i)))) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < table_def->access_values_.count(); i++) {
+        const DatumParameter &source = table_def->access_values_.at(i);
+        DatumValue &value = spec.datum_values_.at(i);
+        DatumParameter owned;
+        const SqlType *type = nullptr;
+        ObExecContext *execution = opt_ctx_ == nullptr ? nullptr : opt_ctx_->get_exec_ctx();
+        pl::ObPLContext *stack = execution == nullptr ? nullptr : execution->get_pl_stack_ctx();
+        const pl::ObPLINS *declarations = stack == nullptr ? nullptr : stack->get_current_ctx();
+        if (execution == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObExprUtil::resolve_sql_type(*execution,
+            source.get_type_meta(), source.get_accuracy(), source.get_subschema_id(), allocator, type, declarations))) {
+        } else if (OB_FAIL(DatumParameterArray::clone_parameter(source, owned, allocator))) {
+        } else {
+          value = owned.value_view();
+          spec.datum_value_types_.at(i) = type;
         }
       }
       if (OB_FAIL(ret)) {
@@ -2499,8 +2516,8 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
           ObHashFunc hash_func;
           ObCmpFunc null_first_cmp;
           ObCmpFunc null_last_cmp;
-          null_first_cmp.cmp_func_ = join_expr->basic_funcs_->null_first_cmp_;
-          null_last_cmp.cmp_func_ = join_expr->basic_funcs_->null_last_cmp_;
+          null_first_cmp.cmp_func_ = join_expr->basic_funcs_->null_first_cmp_.legacy_function();
+          null_last_cmp.cmp_func_ = join_expr->basic_funcs_->null_last_cmp_.legacy_function();
           set_murmur_hash_func(hash_func, join_expr->basic_funcs_);
           if (OB_ISNULL(hash_func.hash_func_) || OB_ISNULL(hash_func.batch_hash_func_) ||
               OB_ISNULL(null_first_cmp.cmp_func_) ||
@@ -2576,7 +2593,7 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
       common::ObIArray<ObRawExpr *> &join_use_exprs = join_filter_use->get_join_exprs();
 
       // we need objmeta to transform datum to obobj
-      ObSEArray<ObObjMeta, 8> prefix_col_obj_metas;
+      ObSEArray<SqlTypeMeta, 8> prefix_col_obj_metas;
       for (int64_t i = 0; i < op.get_rf_prefix_col_idxs().count() && OB_SUCC(ret); ++i) {
         int64_t prefix_col_idx = op.get_rf_prefix_col_idxs().at(i);
         ObExpr *join_use_rt_expr = static_cast<ObExpr *>(
@@ -2957,7 +2974,7 @@ int ObStaticEngineCG::generate_range_dist_spec(
 
 int ObStaticEngineCG::generate_popular_values_hash(
     const common::ObHashFunc &hash_func,
-    const ObIArray<ObObj> &popular_values_expr,
+    const ObIArray<DatumValue> &popular_values_expr,
     common::ObFixedArray<uint64_t, common::ObIAllocator> &popular_values_hash)
 {
   int ret = OB_SUCCESS;
@@ -2972,10 +2989,6 @@ int ObStaticEngineCG::generate_popular_values_hash(
       : exec_ctx->get_lob_read_service();
   popular_values_hash.set_capacity(popular_values_expr.count());
   popular_values_hash.set_allocator(&phy_plan_->get_allocator());
-  // we allocate a temp buffer for datum, it's enough to hold any datatype
-  ObDatum datum;
-  char buf[OBJ_DATUM_MAX_RES_SIZE];
-  datum.ptr_ = buf;
   uint64_t hash_val = 0;
   if (OB_ISNULL(lob_read_service)) {
     ret = OB_NOT_INIT;
@@ -2984,9 +2997,10 @@ int ObStaticEngineCG::generate_popular_values_hash(
         *lob_read_service, session->get_query_timeout_ts());
     const common::ObDatumAccessContext datum_access_ctx(lob_read_options);
     for (int64_t i = 0; OB_SUCC(ret) && i < popular_values_expr.count(); ++i) {
-      if (OB_FAIL(datum.from_obj(popular_values_expr.at(i)))) {
-      } else if (OB_FAIL(hash_func.hash_func_(
-                     datum, 0, hash_val, &datum_access_ctx))) {
+      ObDatum row_datum;
+      char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+      if (OB_FAIL(popular_values_expr.at(i).to_row_datum(row_datum, extended_payload))) {
+      } else if (OB_FAIL(hash_func.hash_func_(row_datum, 0, hash_val, &datum_access_ctx))) {
       } else if (OB_FAIL(popular_values_hash.push_back(hash_val))) {
       }
     }
@@ -3478,7 +3492,7 @@ int ObStaticEngineCG::generate_spec(ObLogGroupBy &op, ObHashGroupBySpec &spec,
       } else {
         ObCmpFunc cmp_func;
         // no matter null first or null last.
-        cmp_func.cmp_func_ = expr->basic_funcs_->null_last_cmp_;
+        cmp_func.cmp_func_ = expr->basic_funcs_->null_last_cmp_.legacy_function();
         CK(NULL != cmp_func.cmp_func_);
         OZ(spec.cmp_funcs_.push_back(cmp_func));
       }
@@ -3615,7 +3629,7 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
       } else if (OB_ISNULL(column_schema)) {
         ret = OB_ERR_COLUMN_NOT_FOUND;
       } else if (column_schema->get_meta_type().is_fixed_len_char_type() &&
-        (column_schema->is_virtual_generated_column() || !column_schema->get_orig_default_value().is_null())) {
+        (column_schema->is_virtual_generated_column() || !column_schema->get_orig_default_datum().is_null())) {
         // add flag in ddl_output_cids_ in this special scene.
         uint64_t VIRTUAL_GEN_FIX_LEN_TAG = 1ULL << 63;
         spec.ddl_output_cids_.at(i) = spec.ddl_output_cids_.at(i) | VIRTUAL_GEN_FIX_LEN_TAG;
@@ -3750,7 +3764,7 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
                                                  has_io_gap_percentage_hint))) {
     }
     if (OB_SUCC(ret) && has_io_batch_size_hint) {
-      ObObj io_read_batch_size_obj;
+      DatumValue io_read_batch_size_obj;
       bool is_valid = false;
       if (OB_FAIL(opt_params->get_opt_param(ObOptParamHint::IO_READ_BATCH_SIZE, io_read_batch_size_obj))) {
       } else if (FALSE_IT(hint_io_read_batch_size = ObConfigCapacityParser::get(io_read_batch_size_obj.get_varchar().ptr(), is_valid))) {
@@ -4051,8 +4065,8 @@ int ObStaticEngineCG::generate_join_spec(ObLogJoin &op, ObJoinSpec &spec)
           if (OB_FAIL(hj_spec.all_join_keys_.push_back(left_expr))) {
           } else if (OB_FAIL(right_key_exprs.push_back(right_expr))) {
           } else {
-            left_hash_func.hash_func_ = left_expr->basic_funcs_->murmur_hash_v2_;
-            right_hash_func.hash_func_ = right_expr->basic_funcs_->murmur_hash_v2_;
+            left_hash_func.hash_func_ = left_expr->basic_funcs_->legacy_functions()->murmur_hash_v2_;
+            right_hash_func.hash_func_ = right_expr->basic_funcs_->legacy_functions()->murmur_hash_v2_;
             if (OB_ISNULL(left_hash_func.hash_func_) || OB_ISNULL(right_hash_func.hash_func_)) {
               ret = OB_ERR_UNEXPECTED;
             } else if (OB_FAIL(hj_spec.all_hash_funcs_.push_back(left_hash_func))) {
@@ -4204,7 +4218,10 @@ int ObStaticEngineCG::set_partition_range_info(ObLogTableScan &op, ObTableScanSp
   } else if (OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!table_schema->is_partitioned_table()) {
-    /*do nothing*/
+    // MAX means partition pruning metadata was not prepared. Record the
+    // confirmed physical level so local point-get can distinguish this table
+    // from partitioned/special scans that still have the default sentinel.
+    spec.part_level_ = ObPartitionLevel::PARTITION_LEVEL_ZERO;
   } else if (OB_FAIL(index_schema->get_rowkey_info().get_column_ids(rowkey_column_ids))) {
   } else if (OB_ISNULL(part_expr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -4440,11 +4457,11 @@ int ObStaticEngineCG::generate_spec(
       if (OB_SUCC(ret)) {
         const ObRawExpr *from = child->get_output_exprs().at(idx);
         ObExpr *rt_expr = NULL;
-        ObObjType from_type = from->get_result_type().get_type();
-        ObObjType to_type = col_expr->get_result_type().get_type();
+        SqlValueType from_type = from->get_result_type().get_type();
+        SqlValueType to_type = col_expr->get_result_type().get_type();
         ObCollationType from_coll = from->get_result_type().get_collation_type();
         ObCollationType to_coll = col_expr->get_result_type().get_collation_type();
-        if (OB_UNLIKELY(ob_obj_type_class(from_type) != ob_obj_type_class(to_type) ||
+        if (OB_UNLIKELY(sql_type_class(from_type) != sql_type_class(to_type) ||
                         (ob_is_string_or_lob_type(from_type) && from_coll != to_coll))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (ob_is_decimal_int_tc(from_type) &&
@@ -5188,8 +5205,8 @@ int ObStaticEngineCG::fill_wf_info(ObIArray<ObExpr *> &all_expr,
       // ObFloatTC and ObDoubleTC may cause precision question
       if (common::REMOVE_STATISTICS == wf_info.remove_type_
           && !wf_info.aggr_info_.param_exprs_.empty()) {
-        const ObObjTypeClass column_tc =
-          ob_obj_type_class(wf_info.aggr_info_.get_first_child_type());
+        const SqlTypeClass column_tc =
+          sql_type_class(wf_info.aggr_info_.get_first_child_type());
         if (ObFloatTC == column_tc || ObDoubleTC == column_tc) {
           wf_info.remove_type_ = common::REMOVE_INVALID;
         }
@@ -5452,11 +5469,11 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != op.get_num_of_child())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_outfile_name(), spec.outfile_name_))) {
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_field_str(), spec.field_str_))) {
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_line_str(), spec.line_str_))) {
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_closed_cht(), spec.closed_cht_))) {
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_escaped_cht(), spec.escaped_cht_))) {
+  } else if (OB_FAIL(spec.set_outfile_name_native_value(op.get_outfile_name(), op.get_outfile_name_meta()))) {
+  } else if (OB_FAIL(spec.set_field_str_native_value(op.get_field_str(), op.get_field_str_meta()))) {
+  } else if (OB_FAIL(spec.set_line_str_native_value(op.get_line_str(), op.get_line_str_meta()))) {
+  } else if (OB_FAIL(spec.set_closed_cht_native_value(op.get_closed_cht(), op.get_closed_cht_meta()))) {
+  } else if (OB_FAIL(spec.set_escaped_cht_native_value(op.get_escaped_cht(), op.get_escaped_cht_meta()))) {
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {
@@ -5694,7 +5711,7 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
              || OB_ISNULL(exec_ctx->get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ret = phy_plan.set_params_info(*(log_plan.get_optimizer_context().get_params()));
+    ret = phy_plan.set_params_info(*plan_ctx);
   }
 
   if (OB_SUCC(ret)) {

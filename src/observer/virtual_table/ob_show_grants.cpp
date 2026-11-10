@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "observer/virtual_table/ob_show_grants.h"
 
 #include "sql/session/ob_sql_session_info.h"
@@ -147,7 +148,7 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "schema guard is NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       uint64_t show_user_id = OB_INVALID_ID;
       ObArray<uint64_t> role_ids;
       if (OB_FAIL(calc_show_user_id(show_user_id, role_ids))) {
@@ -692,18 +693,18 @@ int ObShowGrants::calc_show_user_id(uint64_t &show_user_id, ObIArray<uint64_t> &
   for (int64_t i = 0; OB_SUCC(ret) && i < key_ranges_.count(); ++i) {
     start_key = key_ranges_.at(i).start_key_;
     end_key = key_ranges_.at(i).end_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-    const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-    if (start_key.get_obj_cnt() > 0
-        && start_key.get_obj_cnt() == end_key.get_obj_cnt()
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
+    const DatumValue *end_key_obj_ptr = end_key.get_values();
+    if (start_key.get_value_count() > 0
+        && start_key.get_value_count() == end_key.get_value_count()
         && NULL != start_key_obj_ptr
         && NULL != end_key_obj_ptr) {
       if ((!start_key_obj_ptr[0].is_min_value() || !end_key_obj_ptr[0].is_max_value())
-          && start_key_obj_ptr[0] != end_key_obj_ptr[0]) {
+          && key_filter_not_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])) {
         ret = OB_NOT_IMPLEMENT;
         SERVER_LOG(WARN, "table id must be exact value", K(ret));
       } else {
-        if (start_key_obj_ptr[0] == end_key_obj_ptr[0]) {
+        if (key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])) {
           if (ObIntType == start_key_obj_ptr[0].get_type()
               && ObIntType == end_key_obj_ptr[0].get_type()) {
             if (OB_INVALID_ID != show_user_id) {
@@ -723,8 +724,8 @@ int ObShowGrants::calc_show_user_id(uint64_t &show_user_id, ObIArray<uint64_t> &
     } else {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "Key range not valid", K(ret),
-                                              "start key cnt", start_key.get_obj_cnt(),
-                                              "end key cnt", end_key.get_obj_cnt(),
+                                              "start key cnt", start_key.get_value_count(),
+                                              "end key cnt", end_key.get_value_count(),
                                               "start key obj ptr", start_key_obj_ptr,
                                               "end key obj ptr", end_key_obj_ptr);
     }
@@ -745,12 +746,12 @@ int ObShowGrants::fill_row_cells(uint64_t show_user_id, const ObString &grants_s
       switch(col_id) {
         // user_id
         case OB_APP_MIN_COLUMN_ID: {
-          cur_row_.cells_[cell_idx].set_int(static_cast<int64_t>(show_user_id));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, static_cast<int64_t>(show_user_id)) : ret);
           break;
         }
         // grants
         case OB_APP_MIN_COLUMN_ID + 1: {
-          cur_row_.cells_[cell_idx].set_varchar(grants_str);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, grants_str) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }

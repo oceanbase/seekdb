@@ -59,7 +59,7 @@ struct ObSkipIndexColMeta
   static constexpr int64_t MAX_SKIP_INDEX_COL_LENGTH = 40;
   static constexpr int64_t SKIP_INDEX_ROW_SIZE_LIMIT = 1 << 10; // 1kb
   static constexpr int64_t MAX_AGG_COLUMN_PER_ROW = 6; // min (loose_min) / max (loose_max) / null count / sum / bm25 params
-  static constexpr ObObjDatumMapType NULL_CNT_COL_TYPE = OBJ_DATUM_8BYTE_DATA;
+  static constexpr SqlValueDatumMapType NULL_CNT_COL_TYPE = OBJ_DATUM_8BYTE_DATA;
   static_assert(common::OBJ_DATUM_NUMBER_RES_SIZE == MAX_SKIP_INDEX_COL_LENGTH,
       "Buffer size of ObStorageDatum and maximum size of skip index data is equal to maximum size of ObNumber");
   ObSkipIndexColMeta() : pack_(0) {}
@@ -96,7 +96,7 @@ struct ObSkipIndexColMeta
       common::ObIArray<ObSkipIndexColMeta> &skip_idx_metas);
   static int calc_skip_index_maximum_size(
       const share::schema::ObSkipIndexColumnAttr &skip_idx_attr,
-      const ObObjType obj_type,
+      const SqlValueType obj_type,
       const int16_t precision,
       int64_t &max_size);
 
@@ -122,7 +122,7 @@ enum ObSkipIndexUpperStoreSize {
 };
 
 OB_INLINE static int get_skip_index_store_upper_size(
-    const ObObjDatumMapType type,
+    const SqlValueDatumMapType type,
     const int16_t precision,
     uint32_t &upper_size)
 {
@@ -135,12 +135,12 @@ OB_INLINE static int get_skip_index_store_upper_size(
     SKIP_INDEX_8BYTE_UPPER_SIZE,  // OBJ_DATUM_1BYTE_DATA
     SKIP_INDEX_4BYTE_LEN_DATA_UPPER_SIZE, // OBJ_DATUM_4BYTE_LEN_DATA
     SKIP_INDEX_2BYTE_LEN_DATA_UPPER_SIZE, // OBJ_DATUM_2BYTE_LEN_DATA
-    SKIP_INDEX_8BYTE_UPPER_SIZE,  // OBJ_DATUM_FULL
+    SKIP_INDEX_8BYTE_UPPER_SIZE,  // OBJ_DATUM_EXTEND
     SKIP_INDEX_VAR_LENGTH_UPPER_SIZE, // OBJ_DATUM_DECIMALINT
   };
   static_assert(sizeof(OBOBJ_DATUM_MAP_TYPE_TO_AGG_UPPER_SIZE_MAP)
                 / sizeof(OBOBJ_DATUM_MAP_TYPE_TO_AGG_UPPER_SIZE_MAP[0]) == OBJ_DATUM_MAPPING_MAX,
-      "new added ObObjDatumMapType should extend this map");
+      "new added SqlValueDatumMapType should extend this map");
   static const uint32_t OBOBJ_DECIMAL_INT_TO_AGG_UPPER_SIZE_MAP[] =
   {
     sizeof(int32_t),   // DECIMAL_INT_32
@@ -169,44 +169,44 @@ OB_INLINE static int get_skip_index_store_upper_size(
   return ret;
 }
 
-OB_INLINE static bool is_skip_index_black_list_type(const ObObjType &obj_type)
+OB_INLINE static bool is_skip_index_black_list_type(const SqlValueType &obj_type)
 {
   return ObNullType == obj_type || ob_is_json_tc(obj_type) || ob_is_geometry_tc(obj_type)
       || ob_is_collection_sql_type(obj_type);
 }
 
-OB_INLINE static bool is_skip_index_while_list_type(const ObObjType &obj_type)
+OB_INLINE static bool is_skip_index_while_list_type(const SqlValueType &obj_type)
 {
-  const ObObjTypeClass tc = ob_obj_type_class(obj_type);
+  const SqlTypeClass tc = sql_type_class(obj_type);
   return (ObIntTC <= tc && tc <= ObLobTC) || ObDecimalIntTC == tc || ObMySQLDateTC == tc
          || ObMySQLDateTimeTC == tc;
 }
 
-OB_INLINE static bool can_agg_sum(const ObObjType &obj_type)
+OB_INLINE static bool can_agg_sum(const SqlValueType &obj_type)
 {
   return is_skip_index_while_list_type(obj_type) && ob_is_numeric_type(obj_type)
-      && ob_obj_type_class(obj_type) != ObObjTypeClass::ObBitTC;
+      && sql_type_class(obj_type) != SqlTypeClass::ObBitTC;
 }
 
-OB_INLINE static int get_sum_store_size(const ObObjType &obj_type, uint32_t &sum_size)
+OB_INLINE static int get_sum_store_size(const SqlValueType &obj_type, uint32_t &sum_size)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObNullType > obj_type || ObMaxType < obj_type || !can_agg_sum(obj_type))) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "invalid type from sum", K(obj_type));
   } else {
-    switch(ob_obj_type_class(obj_type)) {
-      case ObObjTypeClass::ObIntTC:
-      case ObObjTypeClass::ObUIntTC:
-      case ObObjTypeClass::ObDecimalIntTC:
-      case ObObjTypeClass::ObNumberTC:
+    switch(sql_type_class(obj_type)) {
+      case SqlTypeClass::ObIntTC:
+      case SqlTypeClass::ObUIntTC:
+      case SqlTypeClass::ObDecimalIntTC:
+      case SqlTypeClass::ObNumberTC:
         sum_size = common::OBJ_DATUM_NUMBER_RES_SIZE;
         break;
-      case ObObjTypeClass::ObFloatTC: {
+      case SqlTypeClass::ObFloatTC: {
         sum_size = sizeof(float);
         break;
       }
-      case ObObjTypeClass::ObDoubleTC: {
+      case SqlTypeClass::ObDoubleTC: {
         sum_size = sizeof(double);
         break;
       }
@@ -229,14 +229,14 @@ OB_INLINE static bool non_baseline_enabled_agg_type(const ObSkipIndexColType &co
 
 int get_prefix_for_string_tc_datum(
     const ObDatum &orig_datum,
-    const ObObjType obj_type,
+    const SqlValueType obj_type,
     const ObCollationType collation_type,
     const int64_t max_prefix_byte_len,
     ObDatum &prefix_datum);
 
 int get_prefix_for_text_tc_datum(
     const ObDatum &orig_datum,
-    const ObObjType obj_type,
+    const SqlValueType obj_type,
     const ObCollationType collation_type,
     const int64_t max_prefix_byte_len,
     ObDatum &prefix_datum,

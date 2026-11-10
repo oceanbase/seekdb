@@ -23,7 +23,7 @@
 namespace oceanbase {
 namespace common {
 
-bool ObEnumSetMeta::is_same(const ObObjMeta &obj_meta, const ObStrValues &str_value) const
+bool ObEnumSetMeta::is_same(const SqlTypeMeta &obj_meta, const ObStrValues &str_value) const
 {
   bool is_same_meta = true;
   if (OB_LIKELY(!is_valid())) {
@@ -52,7 +52,7 @@ bool ObEnumSetMeta::is_same(const ObEnumSetMeta &other) const
   if (this == &other) {
     is_same_meta = true;
   } else if (other.is_valid()) {
-    is_same_meta = is_same(other.get_obj_meta(), *other.get_str_values());
+    is_same_meta = is_same(other.get_sql_type_meta(), *other.get_str_values());
   }
   return is_same_meta;
 }

@@ -62,55 +62,55 @@ int ObAllPlanCacheStat::fill_cells(ObPlanCache &plan_cache)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   const ObPlanCacheStat &pc_stat = plan_cache.get_plan_cache_stat();
   for (int64_t i =  0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch(col_id) {
       //sql_num
     case SQL_NUM: {
-      cells[i].set_int(plan_cache.get_cache_obj_size());
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, plan_cache.get_cache_obj_size()) : ret);
       break;
     }
       //mem_used
     case MEM_USED: {
-      cells[i].set_int(plan_cache.get_mem_used());
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, plan_cache.get_mem_used()) : ret);
       break;
     }
     case MEM_HOLD: {
-      cells[i].set_int(plan_cache.get_mem_hold());
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, plan_cache.get_mem_hold()) : ret);
       break;
     }
     case ACCESS_COUNT: {
-      cells[i].set_int(pc_stat.access_count_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pc_stat.access_count_) : ret);
       break;
     }
     case HIT_COUNT: {
-      cells[i].set_int(pc_stat.hit_count_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pc_stat.hit_count_) : ret);
       break;
     }
     //hit_rate
     case HIT_RATE: {
       if (pc_stat.access_count_ !=0) {
-        cells[i].set_int(pc_stat.hit_count_*100/pc_stat.access_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pc_stat.hit_count_*100/pc_stat.access_count_) : ret);
       } else {
-        cells[i].set_int(0);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, 0) : ret);
       }
       break;
     }
     //plan_num
     case PLAN_NUM: {//id->plan_stat map size;
-      cells[i].set_int(plan_cache.get_cache_obj_size());
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, plan_cache.get_cache_obj_size()) : ret);
       break;
     }
       //mem_limit
     case MEM_LIMIT: {
-      cells[i].set_int(plan_cache.get_mem_limit());
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, plan_cache.get_mem_limit()) : ret);
       break;
     }
       //hash_bucket
     case HASH_BUCKET: {
-      cells[i].set_int(plan_cache.get_bucket_num());
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, plan_cache.get_bucket_num()) : ret);
       break;
     }
     default: {

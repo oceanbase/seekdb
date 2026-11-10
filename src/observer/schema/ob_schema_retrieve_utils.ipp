@@ -15,6 +15,7 @@
  */
 
 #include "lib/worker.h"
+#include "share/datum/datum_value_cast.h"
 #include "share/schema/ob_schema_mgr.h"
 
 
@@ -972,6 +973,128 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
   return ret;
 }
 
+template<typename Result, typename Setter>
+int extract_default_value_as_datum(Result &result,
+                                   const char *field_name,
+                                   common::ColumnType data_type,
+                                   ObColumnSchemaV2 &column,
+                                   bool is_cur_default_value,
+                                   bool default_value_v2_version,
+                                   Setter &&setter)
+{
+  int ret = common::OB_SUCCESS;
+  ObString str_value;
+  DatumValue value;
+  ret = result.get_varchar(field_name, str_value);
+  if (OB_ERR_NULL_VALUE == ret) {
+    if (!default_value_v2_version) {
+      value.set_null();
+      ret = setter(value);
+    } else {
+      ret = OB_SUCCESS;
+    }
+  } else if (OB_ERR_COLUMN_NOT_FOUND == ret) {
+    SQL_LOG(WARN, "column not found, ignore", "column_name", field_name);
+    ret = OB_SUCCESS;
+  } else if (OB_SUCC(ret)) {
+    ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
+    ObTimeZoneInfo tz_info;
+    const ObDataTypeCastParams dtc_params(&tz_info);
+    const bool no_dtc_params = ob_is_bit_tc(data_type) || ob_is_enum_or_set_type(data_type);
+    ObCastCtx cast_ctx(&allocator, no_dtc_params ? NULL : &dtc_params, CM_NONE,
+                       column.get_collation_type());
+    if (ob_is_mysql_compact_dates_type(data_type)) {
+      cast_ctx.set_allow_invalid_dates_cast_mode();
+    }
+    if (is_cur_default_value && column.is_default_expr_v2_column()) {
+      ret = value.set_varchar(str_value, allocator);
+      if (OB_SUCC(ret)) {
+        value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+        ret = setter(value);
+      }
+    } else if (IS_DEFAULT_NOW_STR(data_type, str_value)) {
+      ret = value.set_extend(ObActionFlag::OP_DEFAULT_NOW_FLAG, 0, allocator);
+      if (OB_SUCC(ret)) {
+        value.set_scale(column.get_data_scale());
+        ret = setter(value);
+      }
+    } else if (column.is_generated_column()) {
+      ret = value.set_string(data_type, str_value, allocator);
+      if (OB_SUCC(ret)) {
+        value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+        value.set_collation_level(CS_LEVEL_IMPLICIT);
+        ret = setter(value);
+      }
+    } else if (ob_is_string_type(data_type) || ob_is_geometry(data_type)
+               || ob_is_collection_sql_type(data_type)) {
+      ret = value.set_string(data_type, str_value, allocator);
+      if (OB_SUCC(ret)) {
+        value.set_collation_type(column.get_collation_type());
+        value.set_collation_level(CS_LEVEL_IMPLICIT);
+        if (ob_is_text_tc(data_type) || ob_is_geometry(data_type)
+            || ob_is_collection_sql_type(data_type)) {
+          value.meta_.set_inrow();
+        }
+        ret = setter(value);
+      }
+    } else {
+      DatumValue input;
+      ret = input.set_varchar(str_value, allocator);
+      if (OB_SUCC(ret) && (ob_is_bit_tc(data_type) || ob_is_enum_or_set_type(data_type))) {
+        DatumValue uint_value;
+        ret = DatumValueCaster::to_type(ObUInt64Type, cast_ctx, input, allocator, uint_value);
+        if (OB_SUCC(ret)) {
+          const uint64_t raw_value = uint_value.datum_.get_uint();
+          if (ObBitType == data_type) {
+            ret = value.set_uint(ObBitType, raw_value, allocator);
+            if (OB_SUCC(ret)) { value.set_scale(column.get_data_precision()); }
+          } else if (ObEnumType == data_type) {
+            ret = value.set_uint(ObEnumType, raw_value, allocator);
+          } else {
+            ret = value.set_uint(ObSetType, raw_value, allocator);
+          }
+          if (OB_SUCC(ret)) { ret = setter(value); }
+        }
+      } else if (OB_SUCC(ret)) {
+        ObAccuracy res_acc;
+        if (ObDecimalIntType == data_type) {
+          res_acc = column.get_accuracy();
+          cast_ctx.res_accuracy_ = &res_acc;
+        }
+        if (ob_is_json(data_type)) {
+          ret = DatumValueCaster::to_type(data_type, cast_ctx, input, allocator, value);
+          if (OB_SUCC(ret)) { value.meta_.set_inrow(); }
+        } else if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_info.get_tz_map_wrap()))) {
+          SQL_LOG(WARN, "get timezone map failed", K(ret));
+        } else {
+          ret = DatumValueCaster::to_type(data_type, cast_ctx, input, allocator, value);
+          if (OB_SUCC(ret)) { value.set_scale(column.get_data_scale()); }
+        }
+        if (OB_SUCC(ret)) { ret = setter(value); }
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+    SHARE_SCHEMA_LOG(WARN, "fail to extract default value as DatumValue",
+                     "column_name", field_name, K(data_type), K(ret));
+  }
+  return ret;
+}
+
+#define EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, column_name, data_type, class_obj, is_cur_default_value, default_value_v2_version) \
+  if (OB_SUCC(ret)) { \
+    ret = extract_default_value_as_datum((result), #column_name, (data_type), column, \
+        (is_cur_default_value), (default_value_v2_version), \
+        [&](const common::DatumValue &value) { return (class_obj).set_##column_name(value); }); \
+  }
+
+#define EXTRACT_DEFAULT_VALUE_FIELD_MYSQL_V2(result, data_type, class_obj, is_cur_default_value, default_value_v2_version) \
+  if (OB_SUCC(ret)) { \
+    ret = extract_default_value_as_datum((result), "cur_default_value", (data_type), column, \
+        (is_cur_default_value), (default_value_v2_version), \
+        [&](const common::DatumValue &value) { return (class_obj).set_cur_default_value(value); }); \
+  }
+
 template<typename T>
 int fill_column_schema_default_value(T &result,
                                      ObColumnSchemaV2 &column,
@@ -1637,7 +1760,7 @@ int ObSchemaRetrieveUtils::fill_routine_param_schema(T &result, ObRoutineParam &
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
       result, param_name, schema, true, false, default_val);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, schema, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_type, schema, common::ObObjType);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_type, schema, common::SqlValueType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_length, schema, common::ObLength);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_precision, schema, common::ObPrecision);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, param_scale, schema, common::ObScale);
@@ -1813,9 +1936,9 @@ int ObSchemaRetrieveUtils::fill_schema_operation(T &result, ObSchemaService::Sch
  ***********************************************************************/
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_system_variable_obj(T &result,
+int ObSchemaRetrieveUtils::retrieve_system_variable_value(T &result,
     ObIAllocator &allocator,
-    ObObj &out_var_obj)
+    DatumValue &out_value)
 {
   int ret = common::OB_SUCCESS;
   int64_t vtype = 0;
@@ -1836,29 +1959,24 @@ int ObSchemaRetrieveUtils::retrieve_system_variable_obj(T &result,
       MEMCPY(value_buf, result_value.ptr(), result_value.length());
     }
     ObString svalue(result_value.length(), value_buf);
-    ObObj var_value;
-    var_value.set_varchar(svalue);
-    ObObjType var_type = static_cast<ObObjType>(vtype);
-    //checked with qianfu,there is no timestamp data in __all_sys_variables, so just pass timezone
-    //info as NULL
+    SqlValueType var_type = static_cast<SqlValueType>(vtype);
+    // There is no timestamp data in __all_sys_variables, so timezone is NULL.
+    DatumValue input;
+    input.meta_.set_varchar();
+    input.set_collation_level(CS_LEVEL_IMPLICIT);
+    input.datum_.set_string(svalue);
     ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-    ObObj casted_val;
-    const ObObj *res_val = NULL;
-    if (OB_FAIL(ObObjCaster::to_type(var_type, cast_ctx, var_value, casted_val, res_val))) {
-      ObCStringHelper helper;
-      _SHARE_SCHEMA_LOG(WARN,"failed to cast object, ret=%d cell=%s from_type=%s to_type=%s",
-                       ret, helper.convert(var_value), ob_obj_type_str(var_value.get_type()), ob_obj_type_str(var_type));
-    } else if (OB_ISNULL(res_val)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SHARE_SCHEMA_LOG(WARN,"casted success, but res_val is NULL", K(ret), K(var_value), K(var_type));
+    DatumValue result_value_datum;
+    if (OB_FAIL(DatumValueCaster::to_type(var_type, cast_ctx, input, allocator, result_value_datum))) {
+      _SHARE_SCHEMA_LOG(WARN,"failed to cast system variable text to DatumValue", K(ret), K(input), K(var_type));
     } else {
-      out_var_obj = *res_val;
-      if (ob_is_string_type(out_var_obj.get_type())) {
-        out_var_obj.set_collation_level(CS_LEVEL_SYSCONST);
-        if (CS_TYPE_INVALID == out_var_obj.get_collation_type()) {
-          out_var_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      if (ob_is_string_type(result_value_datum.get_type())) {
+        result_value_datum.set_collation_level(CS_LEVEL_SYSCONST);
+        if (CS_TYPE_INVALID == result_value_datum.get_collation_type()) {
+          result_value_datum.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         }
       }
+      out_value = result_value_datum;
     }
   }
   return ret;
@@ -1911,7 +2029,7 @@ int ObSchemaRetrieveUtils::fill_sysvar_schema(T &result, ObSysVarSchema &schema,
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, schema_version, schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, data_type, schema, ObObjType);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, data_type, schema, SqlValueType);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, value, schema);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, min_val, schema);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, max_val, schema);

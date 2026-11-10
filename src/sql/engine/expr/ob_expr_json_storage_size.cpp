@@ -51,11 +51,11 @@ int ObExprJsonStorageSize::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta,
-                                bool has_lob_header, MultimodeAlloctor *allocator, ObDatum &res)
+int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta,
+                                bool has_lob_header, MultimodeAlloctor *allocator, Datum &res)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
 
   if (type == ObNullType || data.is_null()) {
@@ -100,11 +100,11 @@ int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
 }
 
 // for new sql engine
-int ObExprJsonStorageSize::eval_json_storage_size(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonStorageSize::eval_json_storage_size(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
 
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObExpr *arg = expr.args_[0];
 
   if (OB_FAIL(arg->eval(ctx, datum))) {

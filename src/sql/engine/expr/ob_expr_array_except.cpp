@@ -33,7 +33,7 @@ ObExprArrayExcept::~ObExprArrayExcept()
 {
 }
 
-int ObExprArrayExcept::eval_array_except(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayExcept::eval_array_except(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_array_set_operation(expr, ctx, res, EXCEPT);
 }

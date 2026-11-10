@@ -124,44 +124,44 @@ int ObSqlWorkareaMemoryInfo::fill_row(
   common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
       case MAX_WORKAREA_SIZE: {
-        cells[cell_idx].set_int(memory_info.get_max_workarea_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_max_workarea_size()) : ret);
         break;
       }
       case WORKAREA_HOLD_SIZE: {
-        cells[cell_idx].set_int(memory_info.get_workarea_hold_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_workarea_hold_size()) : ret);
         break;
       }
       case MAX_AUTO_WORKAREA_SIZE: {
-        cells[cell_idx].set_int(memory_info.get_max_auto_workarea_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_max_auto_workarea_size()) : ret);
         break;
       }
       case MEM_TARGET: {
-        cells[cell_idx].set_int(memory_info.get_mem_target());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_mem_target()) : ret);
         break;
       }
       case TOTAL_MEM_USED: {
-        cells[cell_idx].set_int(memory_info.get_total_mem_used());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_total_mem_used()) : ret);
         break;
       }
       case GLOBAL_MEM_BOUND: {
-        cells[cell_idx].set_int(memory_info.get_global_bound_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_global_bound_size()) : ret);
         break;
       }
       case DRIFT_SIZE: {
-        cells[cell_idx].set_int(memory_info.get_drift_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_drift_size()) : ret);
         break;
       }
       case WORKAREA_COUNT: {
-        cells[cell_idx].set_int(memory_info.get_workarea_cnt());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_workarea_cnt()) : ret);
         break;
       }
       case MANUAL_CALC_COUNT: {
-        cells[cell_idx].set_int(memory_info.get_manual_calc_cnt());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, memory_info.get_manual_calc_cnt()) : ret);
         break;
       }
       default: {

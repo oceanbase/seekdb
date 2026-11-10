@@ -56,7 +56,8 @@ public:
     : ObDASIter(ObDASIterType::DAS_ITER_SCAN),
       tsc_service_(nullptr),
       result_(nullptr),
-      scan_param_(nullptr)
+      scan_param_(nullptr),
+      datum_lookup_keys_()
   {}
   virtual ~ObDASScanIter() {}
   common::ObNewRowIterator *&get_output_result_iter() { return result_; }
@@ -77,6 +78,14 @@ public:
                               const ObDASScanCtDef *lookup_ctdef,
                               ObIAllocator *alloc,
                               int64_t group_id) override;
+  // Ordinary local index-back only; functional/virtual scan callers keep their
+  // range-based contracts through set_scan_rowkey().
+  int set_scan_datum_rowkey(ObEvalCtx *eval_ctx,
+                           const ObIArray<ObExpr *> &rowkey_exprs,
+                           const ObDASScanCtDef *lookup_ctdef,
+                           ObIAllocator *alloc,
+                           int64_t group_id);
+
 protected:
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_reuse() override;
@@ -85,10 +94,15 @@ protected:
   virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
 
 private:
+  int add_datum_lookup_key(ObEvalCtx &eval_ctx,
+                           const ObIArray<ObExpr *> &rowkey_exprs,
+                           ObIAllocator &allocator,
+                           int64_t group_id);
   common::ObITabletScan *tsc_service_;
   common::ObNewRowIterator *result_;
   // must ensure the lifecycle of scan param is longer than scan iter.
   storage::ObTableScanParam *scan_param_;
+  ObSEArray<storage::DatumLookupKey, 8> datum_lookup_keys_;
 };
 
 

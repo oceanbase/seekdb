@@ -74,7 +74,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
-  static int eval_convert_tz(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_convert_tz(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int find_time_zone_pos(const ObString &tz_name,
                                         const ObTimeZoneInfo &tz_info,
                                         ObTimeZoneInfoPos &tz_info_pos);
@@ -84,11 +84,11 @@ public:
   static int calc_convert_tz(int64_t timestamp_data, const ObString &tz_str_s,//source time zone (input2)
                         const ObString &tz_str_d,//destination time zone (input3)
                         ObSQLSessionInfo *session,
-                        ObDatum &result);
+                        Datum &result);
   static int calc_convert_tz_const(const ObExpr &expr, ObEvalCtx &ctx, int64_t &timestamp_data, const ObString &tz_str_s,//source time zone (input2)
                         const ObString &tz_str_d,//destination time zone (input3)
                         ObSQLSessionInfo *session,
-                        ObDatum &result);
+                        Datum &result);
   static int calc(int64_t &timestamp_data, const ObTimeZoneInfoPos &tz_info_pos,
                  const bool input_utc_time);
   static int parse_string(int64_t &timestamp_data, const ObString &tz_str,

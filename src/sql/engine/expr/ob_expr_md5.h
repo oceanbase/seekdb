@@ -37,7 +37,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_md5(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_md5(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   static const common::ObString::obstr_size_t MD5_LENGTH = 16;

@@ -41,7 +41,7 @@ int ObExprHex::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
 
-  common::ObObjType param_type = text.get_type();
+  common::SqlValueType param_type = text.get_type();
   const int32_t mbmaxlen = 4;
   if (ObTextType == param_type
       || ObMediumTextType == param_type
@@ -98,18 +98,6 @@ int ObExprHex::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprHex::get_uint64(const ObObj &obj, ObCastCtx &cast_ctx, uint64_t &out)
-{
-  int ret = OB_SUCCESS;
-  out = 0;
-  if (OB_UNLIKELY(obj.is_number())) {
-    if (OB_FAIL(number_uint64(obj.get_number(), out))) {
-    }
-  } else {
-    EXPR_GET_UINT64_V2(obj, out);
-  }
-  return ret;
-}
 
 int ObExprHex::number_uint64(const number::ObNumber &num_val, uint64_t &out)
 {
@@ -131,7 +119,7 @@ int ObExprHex::number_uint64(const number::ObNumber &num_val, uint64_t &out)
 }
 
 int ObExprHex::decimalint_uint64(
-    const ObDatumMeta &in_meta, const ObDatum *datum, uint64_t &out)
+    const ObDatumMeta &in_meta, const SqlType &input_type, const Datum *datum, uint64_t &out)
 {
   int ret = OB_SUCCESS;
   int64_t tmp_int = 0;
@@ -139,10 +127,14 @@ int ObExprHex::decimalint_uint64(
   ObDecimalIntBuilder builder;
   bool is_valid_int64 = true;
   bool is_valid_uint64 = true;
-  if (OB_FAIL(ObExprFuncRound::do_round_decimalint(
+  common::ObDatum coefficient;
+  alignas(8) char coefficient_buf[64];
+  if (OB_FAIL(DatumCopyPlan(input_type).get_decimal(
+      *datum, coefficient, coefficient_buf, sizeof(coefficient_buf)))) {
+  } else if (OB_FAIL(ObExprFuncRound::do_round_decimalint(
               in_meta.precision_, in_meta.scale_,
               in_meta.precision_ - in_meta.scale_ + 1, 0, 0,
-              *datum, builder))) {
+              coefficient, builder))) {
   } else if (OB_FAIL(wide::check_range_valid_int64(
              builder.get_decimal_int(), builder.get_int_bytes(), is_valid_int64, tmp_int))) {
   } else if (is_valid_int64) {
@@ -164,21 +156,21 @@ int ObExprHex::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
   return ret;
 }
 
-int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else {
-    const ObObjType in_type = expr.args_[0]->datum_meta_.type_;
+    const SqlValueType in_type = expr.args_[0]->datum_meta_.type_;
     if (ObUInt64Type == in_type || ObNumberType == in_type || ObDecimalIntType == in_type) {
       uint64_t val = 0;
       if (ObNumberType == in_type) {
         OZ(number_uint64(number::ObNumber(arg->get_number()), val));
       } else if (ObDecimalIntType == in_type) {
-        if (OB_FAIL(decimalint_uint64(expr.args_[0]->datum_meta_, arg, val))) {
+        if (OB_FAIL(decimalint_uint64(expr.args_[0]->datum_meta_, expr.args_[0]->get_sql_type(), arg, val))) {
         }
       } else {
         val = arg->get_uint();

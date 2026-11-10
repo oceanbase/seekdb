@@ -19,7 +19,7 @@
 
 #include <cstdint>
 #include "share/ob_define.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_parameter.h"
 #include "lib/container/ob_array.h"
 #include "ob_pl_type.h"
 #include "ob_pl_allocator.h"
@@ -103,11 +103,14 @@ public:
   void reset(sql::ObSQLSessionInfo *session_info);
   common::ObIAllocator &get_pkg_allocator() { return inner_allocator_; }
   common::ObIAllocator &get_pkg_cursor_allocator() { return cursor_allocator_; }
-  int add_package_var_val(const common::ObObj &value, ObPLType type);
+  int add_package_var_val(const common::DatumParameter &value, ObPLType type);
   int set_package_var_val(int64_t var_idx,
-                          const common::ObObj &value,
-                          bool deep_copy_complex = true);
-  int get_package_var_val(int64_t var_idx, common::ObObj &value);
+                          const common::DatumParameter &value,
+                          bool deep_copy_complex = true,
+                          sql::ObSQLSessionInfo *session = nullptr);
+  // Borrow a view until this slot is replaced or state is reset. Callers that
+  // retain a result across evaluation/assignment must copy its Datum bytes.
+  int get_package_var_val(int64_t var_idx, common::DatumParameter &value);
   inline bool check_version(const ObPackageStateVersion &state_version)
   {
     return state_version_.equal(state_version);
@@ -121,7 +124,7 @@ public:
                            bool &match);
 
   uint64_t get_package_id() { return package_id_; }
-  ObIArray<ObObj> &get_vars() { return vars_; }
+  ObIArray<common::DatumValue> &get_vars() { return vars_; }
   ObPackageStateVersion &get_state_version() { return state_version_; }
 
   void set_has_instantiated(bool instantiated) { has_instantiated_ = instantiated; }
@@ -137,7 +140,8 @@ private:
   uint64_t package_id_;
   ObPackageStateVersion state_version_;
   common::ObSEArray<ObPLType, 64> types_;
-  common::ObSEArray<ObObj, 64> vars_;
+  // Payloads belong to the package allocator; declarations live in the spec.
+  common::ObSEArray<common::DatumValue, 64> vars_;
   bool has_instantiated_;
 };
 } // namespace pl

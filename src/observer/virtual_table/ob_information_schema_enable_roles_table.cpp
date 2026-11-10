@@ -66,7 +66,7 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
     MAX_COL_ID
   };
 
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   share::schema::ObSchemaGetterGuard *schema_guard = NULL;
   const int64_t col_count = output_column_ids_.count();
   
@@ -96,12 +96,12 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
         uint64_t col_id = output_column_ids_.at(j);
         switch (col_id){
           case ROLE_NAME:{
-            cells[j].set_varchar(user_info->get_user_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, j, user_info->get_user_name_str()) : ret);
             cells[j].set_collation_type(ObCharset::get_system_collation());
             break;
           }
           case ROLE_HOST: {
-            cells[j].set_varchar(user_info->get_host_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, j, user_info->get_host_name_str()) : ret);
             cells[j].set_collation_type(ObCharset::get_system_collation());
             break;
           }
@@ -113,12 +113,12 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
                              cur_user_info->get_role_id_option_array().at(idx)) == 0) {
               is_default_role = true;
             }
-            cells[j].set_varchar(is_default_role ? "YES" : "NO");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, j, is_default_role ? "YES" : "NO") : ret);
             cells[j].set_collation_type(ObCharset::get_system_collation());
             break;
           }
           case IS_MANDATORY: {
-            cells[j].set_varchar("NO");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, j, "NO") : ret);
             cells[j].set_collation_type(ObCharset::get_system_collation());
             break;
           }

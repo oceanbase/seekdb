@@ -84,7 +84,7 @@ int ObExprErrno::conv2errno(int64_t value)
 }
 
 // trigger and exception using `select errno(-4038) from dual`
-int ObExprErrno::eval_errno(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprErrno::eval_errno(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
@@ -92,7 +92,7 @@ int ObExprErrno::eval_errno(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     int64_t value = 0;
     res.set_null();
     if (1 == expr.arg_cnt_) {
-      ObDatum *val = &expr.locate_param_datum(ctx, 0);
+      Datum *val = &expr.locate_param_datum(ctx, 0);
       if (val->is_null()) {
       } else if (OB_FAIL(get_value(number::ObNumber(val->get_number()), value))) {
         ret = OB_SUCCESS;
@@ -101,8 +101,8 @@ int ObExprErrno::eval_errno(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
         res.set_int(value); // abritary value is OK
       }
     } else if (2 == expr.arg_cnt_) {
-      ObDatum *val = &expr.locate_param_datum(ctx, 0);
-      ObDatum *timeout_val = &expr.locate_param_datum(ctx, 1);
+      Datum *val = &expr.locate_param_datum(ctx, 0);
+      Datum *timeout_val = &expr.locate_param_datum(ctx, 1);
       int64_t timeout = 0;
       if (val->is_null() || timeout_val->is_null()) {
       } else if (OB_FAIL(get_value(number::ObNumber(val->get_number()), value))) {

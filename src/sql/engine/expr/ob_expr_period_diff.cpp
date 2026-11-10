@@ -95,16 +95,16 @@ int ObExprPeriodDiff::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprPeriodDiff::calc_perioddiff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprPeriodDiff::calc_perioddiff(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum1 = NULL;
-  ObDatum *param_datum2 = NULL;
+  Datum *param_datum1 = NULL;
+  Datum *param_datum2 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param_datum1, param_datum2))) {
   } else if (OB_UNLIKELY(param_datum1->is_null() || param_datum2->is_null())) {
     expr_datum.set_null();
   } else {
-    ObDatum *res_datum = static_cast<ObDatum *>(&expr_datum);
+    Datum *res_datum = static_cast<Datum *>(&expr_datum);
     ret = calc(*res_datum, *param_datum1, *param_datum2);
   }
   return ret;
@@ -183,16 +183,16 @@ int ObExprPeriodAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprPeriodAdd::calc_periodadd(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprPeriodAdd::calc_periodadd(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum1 = NULL;
-  ObDatum *param_datum2 = NULL;
+  Datum *param_datum1 = NULL;
+  Datum *param_datum2 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param_datum1, param_datum2))) {
   } else if (OB_UNLIKELY(param_datum1->is_null() || param_datum2->is_null())) {
     expr_datum.set_null();
   } else {
-    ObDatum *res_datum = static_cast<ObDatum *>(&expr_datum);
+    Datum *res_datum = static_cast<Datum *>(&expr_datum);
     ret = calc(*res_datum, *param_datum1, *param_datum2);
   }
   return ret;

@@ -53,7 +53,7 @@ int ObExprCeilFloor::calc_result_type1(ObExprResType &type,
                                        ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType res_type = ObMaxType;
+  SqlValueType res_type = ObMaxType;
   if (type1.is_column()
       && (type1.is_number() || type1.is_decimal_int())) {
     if (type1.is_number()) {
@@ -116,13 +116,17 @@ int ObExprCeilFloor::calc_result_type1(ObExprResType &type,
   }
 
 int ObExprCeilFloor::ceil_floor_decint(
-    const bool is_floor, const ObDatum *arg_datum,
+    const ObExpr &expr, ObEvalCtx &ctx,     const bool is_floor, const Datum *arg_datum,
     const ObDatumMeta &in_meta, const ObDatumMeta &out_meta,
-    ObDatum &res_datum)
+    Datum &res_datum, int64_t index)
 {
   int ret = OB_SUCCESS;
-  const ObDecimalInt *decint = arg_datum->get_decimal_int();
-  const int32_t int_bytes = arg_datum->get_int_bytes();
+  alignas(8) char coefficient_scratch[64];
+  common::ObDatum coefficient;
+  if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(*arg_datum, coefficient,
+      coefficient_scratch, sizeof(coefficient_scratch)))) { return ret; }
+  const ObDecimalInt *decint = coefficient.get_decimal_int();
+  const int32_t int_bytes = coefficient.get_int_bytes();
   const bool is_neg = wide::is_negative(decint, int_bytes);
   ObDecimalIntBuilder res_val;
   if (in_meta.scale_ < out_meta.scale_) {
@@ -130,7 +134,7 @@ int ObExprCeilFloor::ceil_floor_decint(
   } else if (in_meta.scale_ == out_meta.scale_) {
     res_val.from(decint, int_bytes);
   } else if (OB_FAIL(ObExprTruncate::do_trunc_decimalint(in_meta.precision_, in_meta.scale_,
-              out_meta.precision_, out_meta.scale_, out_meta.scale_, *arg_datum, res_val))) {
+              out_meta.precision_, out_meta.scale_, out_meta.scale_, coefficient, res_val))) {
   } else if ((is_floor && !is_neg) || (!is_floor && is_neg)) {
     // truncate to scale 0 directly when we floor a pos or ceil a neg, do nothing
   } else {
@@ -179,7 +183,7 @@ int ObExprCeilFloor::ceil_floor_decint(
   }
   if (OB_SUCC(ret)) {
     if (ob_is_decimal_int(out_meta.type_)) {
-      res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+      ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, res_val.get_decimal_int(), res_val.get_int_bytes(), index);
     } else if (ob_is_integer_type(out_meta.type_)) {
       int64_t res_int = 0;
       bool is_valid_int64 = true;
@@ -198,18 +202,18 @@ int ObExprCeilFloor::ceil_floor_decint(
 #undef DECIMAL_INT_INC
 #undef DECIMAL_INT_DEC
 
-int calc_ceil_floor(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_ceil_floor(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg_datum = NULL;
+  Datum *arg_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg_datum))) {
   } else if (arg_datum->is_null()) {
     res_datum.set_null();
   } else {
-    const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
-    const ObObjType res_type = expr.datum_meta_.type_;
+    const SqlValueType arg_type = expr.args_[0]->datum_meta_.type_;
+    const SqlValueType res_type = expr.datum_meta_.type_;
     const bool is_floor = (T_FUN_SYS_FLOOR == expr.type_) ? true : false;
-    if (ObNumberTC == ob_obj_type_class(arg_type)) {
+    if (ObNumberTC == sql_type_class(arg_type)) {
       ObNumStackOnceAlloc tmp_alloc;
       const number::ObNumber arg_nmb(arg_datum->get_number());
       number::ObNumber res_nmb;
@@ -223,8 +227,8 @@ int calc_ceil_floor(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
           }
         }
         if (OB_SUCC(ret)) {
-          if (ObNumberTC == ob_obj_type_class(res_type)) {
-            res_datum.set_number(res_nmb);
+          if (ObNumberTC == sql_type_class(res_type)) {
+            ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);
           } else if (ob_is_integer_type(res_type)) {
             int64_t res_int = 0;
             if (res_nmb.is_valid_int64(res_int)) {
@@ -239,7 +243,7 @@ int calc_ceil_floor(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       const ObDatumMeta &in_meta = expr.args_[0]->datum_meta_;
       const ObDatumMeta &out_meta = expr.datum_meta_;
       if (OB_FAIL(ObExprCeilFloor::ceil_floor_decint(
-                  is_floor, arg_datum, in_meta, out_meta, res_datum))) {
+                  expr, ctx, is_floor, arg_datum, in_meta, out_meta, res_datum))) {
       }
     } else if (ob_is_integer_type(arg_type) && ob_is_integer_type(res_type)) {
       res_datum.set_int(arg_datum->get_int());
@@ -277,8 +281,8 @@ int do_eval_batch_ceil_floor(const ObExpr &expr,
   int ret = OB_SUCCESS;
   static_assert(TYPE >= 0 && TYPE <= 4, "TYPE value out of range");
   ObBitVector &eval_flag = expr.get_evaluated_flags(ctx);
-  ObDatumVector arg_datums = expr.args_[0]->locate_expr_datumvector(ctx);
-  ObDatum *res_datums = expr.locate_batch_datums(ctx);
+  DatumVector arg_datums = expr.args_[0]->locate_expr_datumvector(ctx);
+  Datum *res_datums = expr.locate_batch_datums(ctx);
   for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; i++) {
     if (!eval_flag.contain(i) && !skip.contain(i)) {
       if (NUMBER_TYPE == TYPE) {
@@ -297,9 +301,10 @@ int do_eval_batch_ceil_floor(const ObExpr &expr,
               if (OB_FAIL(res_nmb.ceil(0))) {
               }
             }
-            const ObObjType res_type = expr.datum_meta_.type_;
-            if (ObNumberTC == ob_obj_type_class(res_type)) {
-              res_datums[i].set_number(res_nmb);
+            const SqlValueType res_type = expr.datum_meta_.type_;
+            if (OB_FAIL(ret)) {
+            } else if (ObNumberTC == sql_type_class(res_type)) {
+              ret = ObExprUtil::set_number(expr, ctx, res_datums[i], res_nmb, i);
             } else if (ob_is_integer_type(res_type)) {
               int64_t res_int = 0;
               if (res_nmb.is_valid_int64(res_int)) {
@@ -338,10 +343,10 @@ int do_eval_batch_ceil_floor(const ObExpr &expr,
         if (arg_datums.at(i)->is_null()) {
           res_datums[i].set_null();
         } else if (OB_FAIL(ObExprCeilFloor::ceil_floor_decint(
-                           IS_FLOOR, arg_datums.at(i), in_meta, out_meta, res_datums[i]))) {
+                           expr, ctx, IS_FLOOR, arg_datums.at(i), in_meta, out_meta, res_datums[i], i))) {
         }
       }
-      eval_flag.set(i);
+      if (OB_SUCC(ret)) { eval_flag.set(i); }
     }
   }
   return ret;
@@ -355,9 +360,9 @@ int eval_batch_ceil_floor(const ObExpr &expr,
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
+    const SqlValueType arg_type = expr.args_[0]->datum_meta_.type_;
     const bool is_floor = (T_FUN_SYS_FLOOR == expr.type_) ? true : false;
-    if (ObNumberTC == ob_obj_type_class(arg_type)) {
+    if (ObNumberTC == sql_type_class(arg_type)) {
       ret = is_floor
       ? do_eval_batch_ceil_floor<NUMBER_TYPE, true>(expr, ctx, skip, batch_size)
       : do_eval_batch_ceil_floor<NUMBER_TYPE, false>(expr, ctx, skip, batch_size);

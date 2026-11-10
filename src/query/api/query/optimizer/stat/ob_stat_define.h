@@ -20,6 +20,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/string/ob_string.h"
 #include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "common/rowkey/ob_rowkey_info.h"
 #include "share/schema/ob_schema_struct.h"
 #include "query/optimizer/stat/ob_opt_table_stat.h"
@@ -488,11 +489,11 @@ struct ObColumnStatParam {
   int64_t column_usage_flag_;
   int64_t gather_flag_;
   ObString index_name_;
-  ObObjType column_type_;
+  SqlValueType column_type_;
 
-  static bool is_valid_opt_col_type(const ObObjType type, bool is_online_stat = false);
-  static bool is_valid_avglen_type(const ObObjType type);
-  static bool is_valid_refine_min_max_type(const ObObjType type);
+  static bool is_valid_opt_col_type(const SqlValueType type, bool is_online_stat = false);
+  static bool is_valid_avglen_type(const SqlValueType type);
+  static bool is_valid_refine_min_max_type(const SqlValueType type);
   static const int64_t DEFAULT_HISTOGRAM_BUCKET_NUM;
 
   TO_STRING_KV(K_(column_name),
@@ -537,7 +538,7 @@ struct PrefixColumnPair {
   uint64_t prefix_column_id_;
   uint64_t related_column_id_;
   int64_t prefix_length_;
-  ObObjMeta related_column_meta_;
+  SqlTypeMeta related_column_meta_;
 };
 
 struct ObTableStatParam {
@@ -854,37 +855,35 @@ struct ObOptStat
 
 struct ObHistogramParam
 {
-  ObHistogramParam():
-    epc_(0),
-    minval_(NULL),
-    maxval_(NULL),
-    bkvals_(),
-    novals_(),
-    chvals_(),
-    eavals_(),
-    rpcnts_(),
-    eavs_(0)
-  {}
-  int64_t epc_;                       //Number of buckets in histogram
-  const ObObj *minval_;               //Minimum value
-  const ObObj *maxval_;               //Maximum value
-  ObSEArray<int64_t, 4> bkvals_;      //Array of bucket numbers
-  ObSEArray<int64_t, 4> novals_;      //Array of normalized end point values
-  ObSEArray<ObString, 4> chvals_;     //Array of dumped end point values
-  ObSEArray<ObString, 4> eavals_;     //Array of end point actual values
-  ObSEArray<int64_t, 4> rpcnts_;      //Array of end point value frequencies
-  int64_t eavs_;                      //A number indicating whether actual end point values are needed
-                                      //  in the histogram. If using the PREPARE_COLUMN_VALUES Procedures,
-                                      //  this field will be automatically filled.
-  TO_STRING_KV(K(epc_),
-               K(minval_),
-               K(maxval_),
-               K(bkvals_),
-               K(novals_),
-               K(chvals_),
-               K(eavals_),
-               K(rpcnts_),
-               K(eavs_));
+  ObHistogramParam() : epc_(0), bkvals_(), novals_(), chvals_(), eavals_(), rpcnts_(), eavs_(0),
+      minval_(), maxval_(), min_meta_(), max_meta_() {}
+  const Datum &get_min_datum() const { return minval_; }
+  const Datum &get_max_datum() const { return maxval_; }
+  const SqlTypeMeta &get_min_meta() const { return min_meta_; }
+  const SqlTypeMeta &get_max_meta() const { return max_meta_; }
+  int set_min_borrowed(const DatumValue &value);
+  int set_max_borrowed(const DatumValue &value);
+  int set_min_native_borrowed(const Datum &value, const SqlTypeMeta &meta);
+  int set_max_native_borrowed(const Datum &value, const SqlTypeMeta &meta);
+  int export_min_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_max_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  void clear_min_value() { minval_.set_null(); min_meta_.set_null(); }
+  void clear_max_value() { maxval_.set_null(); max_meta_.set_null(); }
+  int64_t epc_;                       // Number of buckets in histogram
+  ObSEArray<int64_t, 4> bkvals_;       // Array of bucket numbers
+  ObSEArray<int64_t, 4> novals_;       // Array of normalized end point values
+  ObSEArray<ObString, 4> chvals_;      // Array of dumped end point values
+  ObSEArray<ObString, 4> eavals_;      // Array of end point actual values
+  ObSEArray<int64_t, 4> rpcnts_;       // Array of end point value frequencies
+  int64_t eavs_;                      // Whether actual end point values are needed
+  DECLARE_TO_STRING;
+private:
+  // Borrowed parameter references; NULL means unspecified. The executor casts
+  // these original physical values to the actual column type before owning them.
+  Datum minval_;
+  Datum maxval_;
+  SqlTypeMeta min_meta_;
+  SqlTypeMeta max_meta_;
 };
 
 struct ObSetTableStatParam
@@ -960,7 +959,7 @@ struct ObSetColumnStatParam
   ObHistogramParam hist_param_;
   int64_t avgclen_;
   int64_t flags_;
-  common::ObObjMeta col_meta_;
+  common::SqlTypeMeta col_meta_;
   common::ObAccuracy col_accuracy_;
   static constexpr int64_t NULLOPT = -1;
 

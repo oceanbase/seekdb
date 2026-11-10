@@ -34,37 +34,8 @@ ObExprInt2ip::~ObExprInt2ip()
 }
 
 
-int ObExprInt2ip::int2ip(ObObj &result, const int64_t int_val, ObExprStringBuf &string_buf)
-{
-  int ret = OB_SUCCESS;
-  ObString str_result;
-  char *buf = static_cast<char *>(string_buf.alloc(16));
-  if (OB_ISNULL(buf)) {
-    result.set_null();
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc memory failed", K(ret));
-  } else {
-    if ((int_val >> 32) > 0 || int_val < 0) {
-      result.set_null();
-    } else {
-      in_addr addr;
-      addr.s_addr = htonl(static_cast<uint32_t>(int_val));
-      const char *iret = inet_ntop(AF_INET, &addr, buf, 16);
-      // Fixme : The problem with inet_ntop() is that it is available starting from Windows Vista,
-      // but the minimum supported version is Windows 2000.
-      if (OB_ISNULL(iret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("fail to inet_ntop", K(ret), K(int_val), K(addr.s_addr));
-      } else {
-        str_result.assign_ptr(buf, static_cast<ObString::obstr_size_t>(strlen(buf)));
-        result.set_varchar(str_result);
-      }
-    }
-  }
-  return ret;
-}
 
-int ObExprInt2ip::int2ip(ObDatum &result, const int64_t int_val)
+int ObExprInt2ip::int2ip(Datum &result, const int64_t int_val)
 {
   int ret = OB_SUCCESS;
   ObString str_result = result.get_string();
@@ -103,18 +74,25 @@ int ObExprInt2ip::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &text = expr.locate_param_datum(ctx, 0);
+    Datum &text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
       expr_datum.set_null();
     } else {
-      CK(expr.res_buf_len_ >= 16);
-      int64_t int_val = text.get_int();
-      if (OB_FAIL(int2ip(expr_datum, int_val))) {
+      char *buffer = nullptr;
+      if (OB_UNLIKELY(expr.res_buf_len_ < 16)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_ISNULL(buffer = expr.get_str_res_mem(ctx, 16))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        // Native Datum slots start null; the result buffer belongs to Expr,
+        // rather than being preinstalled in the value's payload.
+        expr_datum.set_string(buffer, 16);
+        ret = int2ip(expr_datum, text.get_int());
       }
     }
   }

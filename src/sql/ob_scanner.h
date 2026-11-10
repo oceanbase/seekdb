@@ -41,7 +41,7 @@ class ObIAllocator;
 // Serialized SQL query result.
 class ObScanner
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   static const int64_t DEFAULT_MAX_SERIALIZE_SIZE
     = (OB_MAX_PACKET_LENGTH - OB_MAX_ROW_KEY_LENGTH * 2 - 1024);

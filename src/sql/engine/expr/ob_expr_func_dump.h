@@ -37,7 +37,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_dump(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_dump(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
 private:
 

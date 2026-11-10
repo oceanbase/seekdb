@@ -43,8 +43,7 @@ ObExprDiv::ObExprDiv(ObIAllocator &alloc, ObExprOperatorType type)
                         2,
                         NOT_ROW_DIMENSION,
                         ObExprResultTypeUtil::get_div_result_type,
-                        ObExprResultTypeUtil::get_div_calc_type,
-                        div_funcs_)
+                        ObExprResultTypeUtil::get_div_calc_type)
 {
   param_lazy_eval_ = false;
 }
@@ -62,7 +61,7 @@ int ObExprDiv::calc_result_type2(ObExprResType &type,
 
   OC( (ObArithExprOperator::calc_result_type2)(type, type1, type2, type_ctx));
   if (OB_SUCC(ret)) {
-    const ObObjTypeClass result_tc = type.get_type_class();
+    const SqlTypeClass result_tc = type.get_type_class();
     bool use_decint_as_calc_type = (type1.get_calc_meta().is_decimal_int() && type2.get_calc_meta().is_decimal_int());
     if (ObNumberTC == result_tc || ObDecimalIntTC == result_tc) {
       if (type.has_result_flag(DECIMAL_INT_ADJUST_FLAG)) {
@@ -200,159 +199,14 @@ int ObExprDiv::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprDiv::calc(ObObj &res,
-                    const ObObj &left,
-                    const ObObj &right,
-                    ObIAllocator *allocator,
-                    ObScale calc_scale)
-{
-  ObCalcTypeFunc calc_type_func = ObExprResultTypeUtil::get_div_result_type;
-  return ObArithExprOperator::calc(res, left, right, allocator, calc_scale, calc_type_func,
-                                   div_funcs_);
-}
 
 
-
-ObArithFunc ObExprDiv::div_funcs_[ObMaxTC] =
-{
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    ObExprDiv::div_double,
-    ObExprDiv::div_number,
-    NULL,//datetime
-    NULL,//date
-    NULL,//time
-    NULL,//year
-    NULL,//varchar
-    NULL,//extend
-    NULL,//unknown
-    NULL,//text
-    NULL,//bit
-    NULL,//enumset
-    NULL,//enumsetInner
-    NULL,//otimestamp
-    NULL,//raw
-    NULL, //interval
-};
-
-ObArithFunc ObExprDiv::avg_div_funcs_[ObMaxTC] =
-{
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    ObExprDiv::div_double_no_overflow,
-    ObExprDiv::div_number,
-    NULL,//datetime
-    NULL,//date
-    NULL,//time
-    NULL,//year
-    NULL,//varchar
-    NULL,//extend
-    NULL,//unknown
-    NULL,//text
-    NULL,//bit
-    NULL,//enumset
-    NULL,//enumsetInner
-    NULL,//otimestamp
-    NULL,//raw
-    NULL, //interval
-};
-
-int ObExprDiv::div_double(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (fabs(right.get_double()) == 0.0) {
-      res.set_null();
-  } else {
-    res.set_double(left.get_double() / right.get_double());
-    if (OB_UNLIKELY(is_double_out_of_range(res.get_double()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%e / %e)'",
-                      left.get_double(),
-                      right.get_double());
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
-      LOG_WARN("double out of range", K(res), K(left), K(right), K(res));
-      res.set_null();
-    }
-    LOG_DEBUG("succ to div double", K(res.get_double()), K(left.get_double()),
-        K(right.get_double()));
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprDiv::div_double_no_overflow(ObObj &res,
-                                      const ObObj &left,
-                                      const ObObj &right,
-                                      ObIAllocator *,
-                                      ObScale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (fabs(right.get_double()) == 0.0) {
-      res.set_null();
-  } else {
-    res.set_double(left.get_double() / right.get_double());
-    LOG_DEBUG("succ to div double", K(res.get_double()), K(left.get_double()),
-              K(right.get_double()));
-  }
-  return ret;
-}
-
-int ObExprDiv::div_number(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale calc_scale)
-{
-  int ret = OB_SUCCESS;
-  number::ObNumber res_nmb;
-  if (OB_UNLIKELY(NULL == allocator)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("allocator is null", K(ret));
-  } else if (OB_UNLIKELY(right.get_number().is_zero())) {
-    res.set_null();
-  } else if (OB_FAIL(left.get_number().div_v3(right.get_number(), res_nmb, *allocator))) {
-  } else {
-
-    if (calc_scale >= 0) {
-      //calc_scale is calc_scale ,not res_scale.
-      //trunc with calc_scale and round with res_scale
-      if (OB_FAIL(res_nmb.trunc(calc_scale))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (ObUNumberType == res.get_type()) {
-        res.set_unumber(res_nmb);
-      } else {
-        res.set_number(res_nmb);
-      }
-    }
-  }
-  return ret;
-}
 
 const ObScale ObExprDiv::DIV_MAX_CALC_SCALE = 100;
 
 struct ObFloatDivFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r) const
   {
     int ret = OB_SUCCESS;
     const float left_f = l.get_float();
@@ -390,7 +244,7 @@ int ObExprDiv::div_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
 struct ObDoubleDivFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+  int operator()(Datum &res, const Datum &l, const Datum &r,
                  const ObExpr &expr) const
   {
     int ret = OB_SUCCESS;
@@ -448,7 +302,7 @@ int ObExprDiv::div_vec_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
 struct ObNumberDivFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr,
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr,
                  ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
@@ -480,7 +334,7 @@ struct ObNumberDivFunc
             //calc_scale is calc_scale ,not res_scale.
             //trunc with calc_scale and round with res_scale
           } else {
-            res.set_number(result_num);
+            ret = ObExprUtil::set_number(expr, ctx, res, result_num);
           }
         }
       }
@@ -606,24 +460,28 @@ template <typename Base>
 struct ObDecintDivWrap : public ObArithOpWrap<Base>
 {
   constexpr static bool is_raw_op_supported() { return false; }
-  static int datum_op(ObDatum &res, const ObDatum &l, const ObDatum &r,
+  static int datum_op(Datum &res, const Datum &l, const Datum &r,
+                      const ObExpr &expr, ObEvalCtx &ctx,
                       const bool is_error_div_by_zero)
   {
     int ret = OB_SUCCESS;
     if (l.is_null() || r.is_null()) {
       res.set_null();
-    } else if (*reinterpret_cast<const typename Base::R_RAW_TYPE *>(r.ptr_) == 0) {
-      if (is_error_div_by_zero) {
-        ret = OB_DIVISION_BY_ZERO;
-      } else {
-        res.set_null();
-      }
-    } else if (*reinterpret_cast<const typename Base::L_RAW_TYPE *>(l.ptr_) == 0) {
-      *const_cast<typename Base::RES_RAW_TYPE *>(
-        reinterpret_cast<const typename Base::RES_RAW_TYPE *>(res.ptr_)) = 0;
-      res.pack_ = sizeof(typename Base::RES_RAW_TYPE);
     } else {
-      ret = ObArithOpWrap<Base>()(res, l, r, is_error_div_by_zero);
+      typename Base::L_RAW_TYPE left;
+      typename Base::R_RAW_TYPE right;
+      if (OB_FAIL(ObExprUtil::get_decimal_int(l, left))) {
+      } else if (OB_FAIL(ObExprUtil::get_decimal_int(r, right))) {
+      } else if (right == 0) {
+        if (is_error_div_by_zero) { ret = OB_DIVISION_BY_ZERO; }
+        else { res.set_null(); }
+      } else if (left == 0) {
+        const typename Base::RES_RAW_TYPE zero = 0;
+        ret = ObExprUtil::set_decimal_int(expr, ctx, res,
+            reinterpret_cast<const ObDecimalInt *>(&zero), sizeof(zero));
+      } else {
+        ret = ObArithOpWrap<Base>()(res, l, r, expr, ctx, is_error_div_by_zero);
+      }
     }
     return ret;
   }
@@ -632,11 +490,11 @@ struct ObDecintDivWrap : public ObArithOpWrap<Base>
 #define DECINC_DIV_EVAL_FUNC_BASIC_DECL(L, R) \
 int ObExprDiv::div_decimalint_##L##_##R(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx, expr.is_error_div_by_zero_); \
 }                                            \
 int ObExprDiv::div_decimalint_##L##_##R##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx, expr.is_error_div_by_zero_); \
 }
 
 #define DECINC_DIV_EVAL_FUNC_DECL(TYPE)                \
@@ -649,11 +507,11 @@ int ObExprDiv::div_decimalint_##L##_##R##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 #define DECINC_DIV_EVAL_FUNC_WITH_CHECK_DECL(TYPE)                             \
 int ObExprDiv::div_decimalint_512_##TYPE##_with_check(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx, expr.is_error_div_by_zero_); \
 }                                            \
 int ObExprDiv::div_decimalint_512_##TYPE##_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx, expr.is_error_div_by_zero_); \
 }
 
 
@@ -800,8 +658,8 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
   OB_ASSERT(NULL != rt_expr.args_);
   OB_ASSERT(NULL != rt_expr.args_[0]);
   OB_ASSERT(NULL != rt_expr.args_[1]);
-  const common::ObObjType left = rt_expr.args_[0]->datum_meta_.type_;
-  const common::ObObjType right = rt_expr.args_[1]->datum_meta_.type_;
+  const common::SqlValueType left = rt_expr.args_[0]->datum_meta_.type_;
+  const common::SqlValueType right = rt_expr.args_[1]->datum_meta_.type_;
 
   rt_expr.inner_functions_ = NULL;
   rt_expr.may_not_need_raw_check_ = false;

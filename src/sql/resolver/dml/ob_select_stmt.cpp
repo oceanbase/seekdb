@@ -18,6 +18,8 @@
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
+#include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -50,15 +52,25 @@ int ObSelectIntoItem::deep_copy(ObIAllocator &allocator,
                                 const ObSelectIntoItem &other)
 {
   int ret = OB_SUCCESS;
+  auto copy_option = [&](const Datum &source, const SqlTypeMeta &meta,
+                         Datum &target, SqlTypeMeta &target_meta) {
+    Datum candidate;
+    const int result = DatumParameterCodec::clone_schema_native_value(source, meta, allocator, candidate);
+    if (OB_SUCCESS == result) { target = candidate; target_meta = meta; }
+    return result;
+  };
   into_type_ = other.into_type_;
-  outfile_name_ = other.outfile_name_;
-  field_str_ = other.field_str_;
-  line_str_ = other.line_str_;
-  closed_cht_ = other.closed_cht_;
+  if (OB_FAIL(copy_option(other.outfile_name_, other.outfile_name_meta_, outfile_name_, outfile_name_meta_))) {
+  } else if (OB_FAIL(copy_option(other.field_str_, other.field_str_meta_, field_str_, field_str_meta_))) {
+  } else if (OB_FAIL(copy_option(other.line_str_, other.line_str_meta_, line_str_, line_str_meta_))) {
+  } else if (OB_FAIL(copy_option(other.closed_cht_, other.closed_cht_meta_, closed_cht_, closed_cht_meta_))) {
+  }
   is_optional_ = other.is_optional_;
   is_single_ = other.is_single_;
   max_file_size_ = other.max_file_size_;
-  escaped_cht_ = other.escaped_cht_;
+  if (OB_SUCC(ret)) {
+    ret = copy_option(other.escaped_cht_, other.escaped_cht_meta_, escaped_cht_, escaped_cht_meta_);
+  }
   cs_type_ = other.cs_type_;
   buffer_size_ = other.buffer_size_;
   user_vars_.assign(other.user_vars_);
@@ -969,7 +981,7 @@ int ObSelectStmt::check_from_dup_insensitive(bool &is_from_dup_insens) const
              || NULL != limit_percent_expr_) {
     // do nothing
   } else if (T_INT != limit_count_expr_->get_expr_type()
-             || 1 != static_cast<const ObConstRawExpr *>(limit_count_expr_)->get_value().get_int()) {
+             || 1 != static_cast<const ObConstRawExpr *>(limit_count_expr_)->get_value_datum().get_int()) {
     // do nothing
   } else {
     is_from_dup_insens = true;

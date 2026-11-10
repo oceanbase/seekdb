@@ -127,18 +127,5 @@ int ObStringBufT<PageAllocatorT, PageArenaT> :: write_string(const ObRowkey &row
   return ret;
 }
 
-template <typename PageAllocatorT, typename PageArenaT>
-int ObStringBufT<PageAllocatorT, PageArenaT> :: write_obj(const ObObj &obj, ObObj *stored_obj)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(stored_obj)) {
-    ret = OB_BAD_NULL_ERROR;
-    _OB_LOG(WARN, "stored obj is null, ret=%d", ret);
-  } else if (OB_FAIL(ob_write_obj(arena_, obj, *stored_obj))) {
-  }
-  return ret;
-}
-
 } // namespace common
 } // namespace oceanbase

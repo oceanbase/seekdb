@@ -41,7 +41,7 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
+struct DatumValue;
 class ObNewRow;
 
 namespace hash

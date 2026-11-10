@@ -61,7 +61,7 @@ int ObExprArrayCompact::calc_result_type1(ObExprResType &type,
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -72,7 +72,7 @@ int ObExprArrayCompact::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayCompact::eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayCompact::eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -80,7 +80,7 @@ int ObExprArrayCompact::eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, O
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
 
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
@@ -105,20 +105,20 @@ int ObExprArrayCompact::eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &
                                                  const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
 
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
@@ -192,13 +192,9 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
     } // end for
   } else {
     const ObCollectionBasicType *src_type = dynamic_cast<const ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(src_arr->get_array_type())->element_type_);
-    ObObj last_elem;
-    ObObj this_elem;
     bool is_last_null = false;
     if (OB_UNLIKELY(!src_type)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
-    } else {
-      this_elem.set_meta_type(src_type->basic_meta_.get_meta_type());
     }
     for (int64_t i = 0; i < src_arr->size() && OB_SUCC(ret); i++) {
       if (src_arr->is_null(i)) {
@@ -208,13 +204,15 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
         } else {
           is_last_null = true;
         }
-      } else if (OB_FAIL(src_arr->elem_at(i, this_elem))) {
-      } else if (i > 0 && !is_last_null && this_elem == last_elem) {
-        // do nothing
-      } else if (OB_FAIL(res_arr->insert_from(*src_arr, i))) {
       } else {
-        is_last_null = false;
-        last_elem = this_elem;
+        int cmp_ret = 0;
+        if (i > 0 && !is_last_null && OB_FAIL(src_arr->compare_at(i - 1, 1, i, 1, *src_arr, cmp_ret))) {
+        } else if (i > 0 && !is_last_null && cmp_ret == 0) {
+          // do nothing
+        } else if (OB_FAIL(res_arr->insert_from(*src_arr, i))) {
+        } else {
+          is_last_null = false;
+        }
       }
     } // end for
   }

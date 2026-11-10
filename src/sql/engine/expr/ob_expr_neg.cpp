@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_neg.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "share/datum/ob_datum_util.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -26,10 +27,10 @@ using namespace common;
 namespace sql
 {
 
-template<ObObjTypeClass>
+template<SqlTypeClass>
 static int eval_neg_func(const ObExpr &expr,
                          ObEvalCtx &eval_ctx,
-                         ObDatum &expr_datum)
+                         Datum &expr_datum)
 {
   UNUSED(expr);
   UNUSED(eval_ctx);
@@ -40,7 +41,7 @@ static int eval_neg_func(const ObExpr &expr,
 
 static int check_expr_and_eval_param(const ObExpr &expr,
                                      ObEvalCtx &eval_ctx,
-                                     ObDatum *&param_datum,
+                                     Datum *&param_datum,
                                      bool &found_null)
 {
   int ret = OB_SUCCESS;
@@ -62,7 +63,7 @@ static int check_expr_and_eval_param(const ObExpr &expr,
 #define DEF_EVAL_NEG_FUNC(obj_tc)                                           \
   template <>                                                               \
   int eval_neg_func<obj_tc>(const ObExpr &expr, ObEvalCtx &eval_ctx, \
-                                   ObDatum &expr_datum)
+                                   Datum &expr_datum)
 
 DEF_EVAL_NEG_FUNC(ObNullTC) {
   int ret = OB_SUCCESS;
@@ -74,7 +75,7 @@ DEF_EVAL_NEG_FUNC(ObNullTC) {
 
 DEF_EVAL_NEG_FUNC(ObIntTC) {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
   } else if (found_null) {
@@ -94,7 +95,7 @@ DEF_EVAL_NEG_FUNC(ObIntTC) {
 
 DEF_EVAL_NEG_FUNC(ObUIntTC) {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
   } else if (found_null) {
@@ -111,7 +112,7 @@ DEF_EVAL_NEG_FUNC(ObUIntTC) {
 
 DEF_EVAL_NEG_FUNC(ObFloatTC) {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
   } else if (found_null) {
@@ -124,7 +125,7 @@ DEF_EVAL_NEG_FUNC(ObFloatTC) {
 
 DEF_EVAL_NEG_FUNC(ObDoubleTC) {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
   } else if (found_null) {
@@ -137,14 +138,14 @@ DEF_EVAL_NEG_FUNC(ObDoubleTC) {
 
 DEF_EVAL_NEG_FUNC(ObNumberTC) {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
   } else if (found_null) {
     expr_datum.set_null();
   } else {
     number::ObNumber param_nmb(param->get_number());
-    expr_datum.set_number(param_nmb.negate());
+    ret = ObExprUtil::set_number(expr, eval_ctx, expr_datum, param_nmb.negate());
   }
   return ret;
 }
@@ -158,14 +159,18 @@ DEF_EVAL_NEG_FUNC(ObNumberTC) {
 DEF_EVAL_NEG_FUNC(ObDecimalIntTC)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param_datum, found_null))) {
   } else if (found_null) {
     expr_datum.set_null();
   } else {
-    const ObDecimalInt *decint = param_datum->get_decimal_int();
-    const int32_t int_bytes = param_datum->get_int_bytes();
+    alignas(8) char decimal_scratch[64];
+    common::ObDatum coefficient_view;
+    if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(
+        *param_datum, coefficient_view, decimal_scratch, sizeof(decimal_scratch)))) { return ret; }
+    const ObDecimalInt *decint = coefficient_view.get_decimal_int();
+    const int32_t int_bytes = coefficient_view.get_int_bytes();
     ObDecimalIntBuilder res_val;
     switch (int_bytes) {
       MAKE_DECIMAL_INT_OPPOSITE(int32)
@@ -179,7 +184,7 @@ DEF_EVAL_NEG_FUNC(ObDecimalIntTC)
       }
     }
     if (OB_SUCC(ret)) {
-      expr_datum.set_decimal_int(res_val.get_decimal_int(), int_bytes);
+      ret = ObExprUtil::set_decimal_int(expr, eval_ctx, expr_datum, res_val.get_decimal_int(), int_bytes);
     }
   }
   return ret;
@@ -192,7 +197,7 @@ struct ObEvalNegFuncIniter
 {
   static int init_array()
   {
-    eval_neg_funcs[N] = &eval_neg_func<static_cast<ObObjTypeClass>(N)>;
+    eval_neg_funcs[N] = &eval_neg_func<static_cast<SqlTypeClass>(N)>;
     return 0;
   }
 };
@@ -214,7 +219,7 @@ int ObExprNeg::calc_result_type1(ObExprResType &type, ObExprResType &type1, ObEx
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_LIKELY(NOT_ROW_DIMENSION == row_dimension_)) {
     // result type
-    ObObjType itype = ObMaxType;
+    SqlValueType itype = ObMaxType;
     if (OB_SUCC(ObExprResultTypeUtil::get_neg_result_type(itype, type1.get_type()))) {
       if (ObMaxType == itype) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -239,8 +244,8 @@ int ObExprNeg::calc_result_type1(ObExprResType &type, ObExprResType &type1, ObEx
         }
       }
       
-      ObObjType res_param_type = ObMaxType;
-      ObObjType result_type = ObMaxType;
+      SqlValueType res_param_type = ObMaxType;
+      SqlValueType result_type = ObMaxType;
       if (type1.get_type() == ObJsonType) {
           type.set_type(ObDoubleType);
           type1.set_calc_type(ObDoubleType);
@@ -272,15 +277,15 @@ int ObExprNeg::cg_expr(ObExprCGCtx &op_cg_ctx,
       OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObjTypeClass param_tc = OBJ_TYPE_TO_CLASS[rt_expr.args_[0]->datum_meta_.type_];
+    SqlTypeClass param_tc = OBJ_TYPE_TO_CLASS[rt_expr.args_[0]->datum_meta_.type_];
     rt_expr.eval_func_ = eval_neg_funcs[param_tc];
   }
   return ret;
 }
 
 int ObExprNeg::calc_param_type(const ObExprResType &param_type,
-                               ObObjType &calc_type,
-                               ObObjType &result_type)
+                               SqlValueType &calc_type,
+                               SqlValueType &result_type)
 {
   int ret = OB_SUCCESS;
   switch (OBJ_TYPE_TO_CLASS[param_type.get_type()]) {
@@ -297,8 +302,8 @@ int ObExprNeg::calc_param_type(const ObExprResType &param_type,
   case ObYearTC:
   case ObIntTC: {
     if (ObIntType == param_type.get_type() && param_type.is_literal()) {
-      const ObObj &obj = param_type.get_param();
-      if (OB_UNLIKELY(!obj.is_int())) {
+      const Datum &obj = param_type.get_param_datum();
+      if (OB_UNLIKELY(!param_type.get_param_value_meta().is_int())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (INT64_MIN == obj.get_int()) {
         // select --9223372036854775808;

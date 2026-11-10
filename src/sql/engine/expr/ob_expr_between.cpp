@@ -29,13 +29,13 @@ ObExprBetween::ObExprBetween(ObIAllocator &alloc)
 {
 }
 
-int calc_between_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_between_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   // left <= val <= right
   int ret = OB_SUCCESS;
-  ObDatum *val = NULL;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *val = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, val))) {
@@ -50,8 +50,7 @@ int calc_between_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     bool right_cmp_succ = true; // is val <= right true or not
     int cmp_ret = 0;
     if (!left->is_null()) {
-      if (OB_FAIL((reinterpret_cast<DatumCmpFunc>(
-                       expr.inner_functions_[0]))(
+      if (OB_FAIL(expr.get_cmp_op(0)(
               *left, *val, cmp_ret, datum_access_ctx))) {
       } else {
         left_cmp_succ = cmp_ret <= 0 ? true : false;
@@ -59,8 +58,7 @@ int calc_between_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     }
     if (OB_FAIL(ret)) {
     } else if (left->is_null() || (left_cmp_succ && !right->is_null())) {
-      if (OB_FAIL((reinterpret_cast<DatumCmpFunc>(
-                       expr.inner_functions_[1]))(
+      if (OB_FAIL(expr.get_cmp_op(1)(
               *val, *right, cmp_ret, datum_access_ctx))) {
       } else {
         right_cmp_succ = cmp_ret <= 0 ? true : false;
@@ -82,50 +80,16 @@ int ObExprBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
                            const ObRawExpr &raw_expr,
                            ObExpr &rt_expr) const
 {
-  // left <= val <= right
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(3 != rt_expr.arg_cnt_) || OB_ISNULL(rt_expr.args_) ||
-      OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1]) ||
-      OB_ISNULL(rt_expr.args_[2]) || OB_ISNULL(expr_cg_ctx.allocator_)) {
+  if (rt_expr.arg_cnt_ != 3 || rt_expr.args_ == nullptr || rt_expr.args_[0] == nullptr
+      || rt_expr.args_[1] == nullptr || rt_expr.args_[2] == nullptr || expr_cg_ctx.allocator_ == nullptr) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    DatumCmpFunc cmp_func_1 = NULL;  // left <= val
-    DatumCmpFunc cmp_func_2 = NULL;  // val <= right
-    const ObDatumMeta &val_meta = rt_expr.args_[0]->datum_meta_;
-    const ObDatumMeta &left_meta = rt_expr.args_[1]->datum_meta_;
-    const ObDatumMeta &right_meta = rt_expr.args_[2]->datum_meta_;
-    const ObCollationType cmp_cs_type = val_meta.cs_type_;
-    const bool has_lob_header1 = rt_expr.args_[0]->obj_meta_.has_lob_header() ||
-                                 rt_expr.args_[1]->obj_meta_.has_lob_header();
-    const bool has_lob_header2 = rt_expr.args_[0]->obj_meta_.has_lob_header() ||
-                                 rt_expr.args_[2]->obj_meta_.has_lob_header();
-    if (OB_ISNULL(cmp_func_1 = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-                                                        left_meta.type_, val_meta.type_,
-                                                        left_meta.scale_, val_meta.scale_,
-                                                        left_meta.precision_, val_meta.precision_,
-                                                        cmp_cs_type,
-                                                        has_lob_header1))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_ISNULL(cmp_func_2 = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-                                                        val_meta.type_, right_meta.type_,
-                                                        val_meta.scale_, right_meta.scale_,
-                                                        val_meta.precision_, right_meta.precision_,
-                                                        cmp_cs_type,
-                                                        has_lob_header2))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      rt_expr.eval_func_ = calc_between_expr;
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(rt_expr.inner_functions_ = reinterpret_cast<void **>(
-              expr_cg_ctx.allocator_->alloc(sizeof(DatumCmpFunc) * 2)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        rt_expr.inner_func_cnt_ = 2;
-        rt_expr.inner_functions_[0] = reinterpret_cast<void *>(cmp_func_1);
-        rt_expr.inner_functions_[1] = reinterpret_cast<void *>(cmp_func_2);
-      }
-    }
+    const ObCollationType collation = rt_expr.args_[0]->datum_meta_.cs_type_;
+    OZ(rt_expr.prepare_cmp_ops(*expr_cg_ctx.allocator_, 2));
+    OZ(rt_expr.configure_cmp_op(0, 1, 0, NULL_LAST, collation));
+    OZ(rt_expr.configure_cmp_op(1, 0, 2, NULL_LAST, collation));
+    if (OB_SUCC(ret)) { rt_expr.eval_func_ = calc_between_expr; }
   }
   return ret;
 }

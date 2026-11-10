@@ -78,13 +78,13 @@ int ObExprArrayRange::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayRange::eval_array_range(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
 
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int64_t param_start = 0;
   int64_t param_end = 0;
   int64_t param_step = 1;

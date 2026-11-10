@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_sign.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
@@ -60,14 +61,14 @@ int ObExprSign::calc_result_type1(ObExprResType &type,
 }
 
 
-int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg_datum = NULL;
-  const ObObjType &arg_type = expr.args_[0]->datum_meta_.type_;
+  Datum *arg_datum = NULL;
+  const SqlValueType &arg_type = expr.args_[0]->datum_meta_.type_;
   const ObCollationType &arg_cs_type = expr.args_[0]->datum_meta_.cs_type_;
-  const ObObjType &res_type = expr.datum_meta_.type_;
-  const ObObjTypeClass &arg_tc = ob_obj_type_class(arg_type);
+  const SqlValueType &res_type = expr.datum_meta_.type_;
+  const SqlTypeClass &arg_tc = sql_type_class(arg_type);
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg_datum))) {
   } else if (arg_datum->is_null()) {
     res_datum.set_null();
@@ -89,8 +90,12 @@ int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         break;
       }
       case ObDecimalIntTC: {
-        const ObDecimalInt *decint = arg_datum->get_decimal_int();
-        const int32_t int_bytes = arg_datum->get_int_bytes();
+        alignas(8) char decimal_scratch[64];
+        common::ObDatum coefficient_view;
+        if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(
+            *arg_datum, coefficient_view, decimal_scratch, sizeof(decimal_scratch)))) { return ret; }
+        const ObDecimalInt *decint = coefficient_view.get_decimal_int();
+        const int32_t int_bytes = coefficient_view.get_int_bytes();
         res_int = wide::str_helper::is_negative(decint, int_bytes)
             ? -1 : (wide::str_helper::is_zero(decint, int_bytes) ? 0 : 1);
         break;
@@ -127,7 +132,7 @@ int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       ObNumStackOnceAlloc tmp_alloc;
       if (OB_FAIL(res_nmb.from(res_int, tmp_alloc))) {
       } else {
-        res_datum.set_number(res_nmb);
+        ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);
       }
     } else if (ObIntType == res_type) {
       res_datum.set_int(res_int);

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_array_max.h"
 #include "common/udt/ob_array_type.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
@@ -58,7 +59,7 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
     type.set_utinyint(); // default type
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), arr_meta))) {
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(arr_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
@@ -82,11 +83,11 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool is_max)
+int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, uint32_t &res_idx, bool is_max)
 {
   int ret = OB_SUCCESS;
   ObCollectionBasicType *elem_type = NULL;
-  res_obj.set_null();
+  res_idx = UINT32_MAX;
 
   if (OB_ISNULL(elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(src_arr->get_array_type())->element_type_))) {
     ret = OB_ERR_UNEXPECTED;
@@ -96,50 +97,41 @@ int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_max with nested array");
   } else {
     for (uint32_t i = 0; i < src_arr->size() && OB_SUCC(ret); ++i) {
-      ObObj elem_obj;
       int cmp = 0;
       if (src_arr->is_null(i)) {
         // do nothing
-      } else if (OB_FAIL(src_arr->elem_at(i, elem_obj))) {
-      } else if (res_obj.is_null()) {
-        res_obj = elem_obj;
-      } else if (elem_obj.is_varchar()) {
-        if (is_max && elem_obj.get_string() > res_obj.get_string()) {
-          res_obj = elem_obj;
-        } else if (!is_max && elem_obj.get_string() < res_obj.get_string()) {
-          res_obj = elem_obj;
-        }
-      } else {
-        if (is_max && elem_obj > res_obj) {
-          res_obj = elem_obj;
-        } else if (!is_max && elem_obj < res_obj) {
-          res_obj = elem_obj;
-        }
+      } else if (UINT32_MAX == res_idx) {
+        res_idx = i;
+      } else if (OB_FAIL(src_arr->compare_at(res_idx, 1, i, 1, *src_arr, cmp))) {
+      } else if ((is_max && cmp < 0) || (!is_max && cmp > 0)) {
+        res_idx = i;
       }
     } // end for
   }
   return ret;
 }
 
-int ObExprArrayExtreme::eval_array_extreme(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool is_max)
+int ObExprArrayExtreme::eval_array_extreme(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, bool is_max)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   ObExprStrResAlloc res_alloc(expr, ctx);
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
   ObIArrayType *src_arr = NULL;
-  ObObj res_obj;
+  uint32_t res_idx = UINT32_MAX;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
   } else if (arr_datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) {
-  } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
+  } else if (OB_FAIL(calc_extreme(src_arr, res_idx, is_max))) {
+  } else if (UINT32_MAX == res_idx) {
+    res.set_null();
+  } else if (OB_FAIL(ObExprUtil::set_array_element(expr, ctx, *src_arr, res_idx, res))) {
   } else {
-    res.from_obj(res_obj);
-    if (res_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
+    if (expr.obj_meta_.is_string_type() && OB_FAIL(expr.get_datum_copy_plan().deep_copy(res, res, res_alloc))) {
     }
   }
   return ret;
@@ -150,18 +142,18 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
                                                  bool is_max)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   ObExprStrResAlloc res_alloc(expr, ctx);
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObIArrayType *src_arr = NULL;
-  ObObj res_obj;
+  uint32_t res_idx = UINT32_MAX;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       int64_t idx = 0;
       if (skip.at(j) || eval_flags.at(j)) {
@@ -171,10 +163,12 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), src_arr))) {
-      } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
+      } else if (OB_FAIL(calc_extreme(src_arr, res_idx, is_max))) {
+      } else if (UINT32_MAX == res_idx) {
+        res_datum.at(j)->set_null();
+      } else if (OB_FAIL(ObExprUtil::set_array_element(expr, ctx, *src_arr, res_idx, *res_datum.at(j), j))) {
       } else {
-        res_datum.at(j)->from_obj(res_obj);
-        if (res_obj.is_string_type() && OB_FAIL(res_datum.at(j)->deep_copy(*res_datum.at(j), res_alloc))) {
+        if (expr.obj_meta_.is_string_type() && OB_FAIL(expr.get_datum_copy_plan().deep_copy(*res_datum.at(j), *res_datum.at(j), res_alloc))) {
         }
       }
     } // end for
@@ -191,7 +185,7 @@ ObExprArrayMax::~ObExprArrayMax()
 {
 }
 
-int ObExprArrayMax::eval_array_max(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayMax::eval_array_max(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObExprArrayExtreme::eval_array_extreme(expr, ctx, res, true);
 }
@@ -222,7 +216,7 @@ ObExprArrayMin::~ObExprArrayMin()
 {
 }
 
-int ObExprArrayMin::eval_array_min(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayMin::eval_array_min(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObExprArrayExtreme::eval_array_extreme(expr, ctx, res, false);
 }

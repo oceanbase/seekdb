@@ -71,79 +71,79 @@ int ObAllVirtualMacroBlockMarkerStatus::inner_get_next_row(common::ObNewRow *&ro
       switch (col_id) {
       case OB_APP_MIN_COLUMN_ID: {
         // total_block_count
-        cur_row_.cells_[i].set_int(marker_status_.total_block_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.total_block_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 1: {
         // reserved_block_count
-        cur_row_.cells_[i].set_int(marker_status_.reserved_block_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.reserved_block_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 2: {
         // meta_block_count
-        cur_row_.cells_[i].set_int(marker_status_.linked_block_count_
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.linked_block_count_
                                  + marker_status_.ids_block_count_
-                                 + marker_status_.index_block_count_);
+                                 + marker_status_.index_block_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 3: {
         // tmp_file_block_count
-        cur_row_.cells_[i].set_int(marker_status_.tmp_file_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.tmp_file_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 4: {
         // data_block_count
-        cur_row_.cells_[i].set_int(marker_status_.data_block_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.data_block_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 5: {
         // disk_block_count_
-        cur_row_.cells_[i].set_int(marker_status_.disk_block_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.disk_block_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 6: {
         // hold_count_
-        cur_row_.cells_[i].set_int(marker_status_.hold_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.hold_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 7: {
         // pending_free_count_
-        cur_row_.cells_[i].set_int(marker_status_.pending_free_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.pending_free_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 8: {
         // free_count_
-        cur_row_.cells_[i].set_int(marker_status_.free_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.free_count_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 9: {
         // mark_cost_time
-        cur_row_.cells_[i].set_int(marker_status_.mark_cost_time_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.mark_cost_time_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 10: {
         // sweep_cost_time
-        cur_row_.cells_[i].set_int(marker_status_.sweep_cost_time_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, marker_status_.sweep_cost_time_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 11: {
         // start_marker_time
-        cur_row_.cells_[i].set_timestamp(marker_status_.start_time_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, marker_status_.start_time_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 12: {
         // last_marker_end_time
-        cur_row_.cells_[i].set_timestamp(marker_status_.last_end_time_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, marker_status_.last_end_time_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 13: {
         // whether finished marking
-        cur_row_.cells_[i].set_bool(marker_status_.mark_finished_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cur_row_.cells_, cur_row_.count_, i, marker_status_.mark_finished_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 14: {
         // comment
-        cur_row_.cells_[i].set_varchar(comment_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, comment_) : ret);
         cur_row_.cells_[i].set_collation_type(collcation_type);
         break;
       }

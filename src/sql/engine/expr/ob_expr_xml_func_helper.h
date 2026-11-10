@@ -37,11 +37,11 @@ class ObEvalCtx;
 class ObXMLExprHelper final
 {
 public:
-  static int set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, ObString &res_str);
+  static int set_string_result(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, ObString &res_str);
   // get xmltype str from input expr
   static int get_xmltype_from_expr(const ObExpr *expr,
                                    ObEvalCtx &ctx,
-                                   ObDatum *&xml_datum);
+                                   Datum *&xml_datum);
   static int get_str_from_expr(const ObExpr *expr,
                                ObEvalCtx &ctx,
                                ObString &res,

@@ -57,7 +57,7 @@ protected:
   int64_t rangekey_size_;
   ObFixedArray<ObDocIdExt, ObIAllocator> cached_domain_ids_; // can be sorted or unsorted by id
   common::ObDatumCmpFuncType cmp_func_;
-  void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  void (*set_datum_func_)(common::Datum &, const ObDocIdExt &);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRLookupIter);
 };

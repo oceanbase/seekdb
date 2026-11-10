@@ -33,7 +33,7 @@ using namespace share;
 using namespace sql;
 namespace data_plane
 {
-int ObDatumReshape::pad_datum_value(const ObObjMeta &col_type,
+int ObDatumReshape::pad_datum_value(const SqlTypeMeta &col_type,
                                     const ObAccuracy &col_accuracy,
                                     ObIAllocator &allocator,
                                     blocksstable::ObStorageDatum &datum_value)
@@ -68,7 +68,7 @@ int ObDatumReshape::pad_datum_value(const ObObjMeta &col_type,
   return ret;
 }
 
-int ObDatumReshape::reshape_datum_value(const ObObjMeta &col_type,
+int ObDatumReshape::reshape_datum_value(const SqlTypeMeta &col_type,
                                     const ObAccuracy &col_accuracy,
                                     ObIAllocator &allocator,
                                     blocksstable::ObStorageDatum &datum_value)
@@ -103,7 +103,7 @@ int ObDatumReshape::reshape_datum_value(const ObObjMeta &col_type,
   return ret;
 }
 
-int ObDatumReshape::reshape_datum_vector_value(const ObObjMeta &col_type,
+int ObDatumReshape::reshape_datum_vector_value(const SqlTypeMeta &col_type,
                                            const ObAccuracy &col_accuracy,
                                            ObIAllocator &allocator,
                                            const ObDatumVector &datum_vector,
@@ -241,7 +241,7 @@ static int new_discrete_vector(VecValueTypeClass value_tc,
   return ret;
 }
 
-int ObDatumReshape::reshape_vector_value(const ObObjMeta &col_type,
+int ObDatumReshape::reshape_vector_value(const SqlTypeMeta &col_type,
                                      const ObAccuracy &col_accuracy,
                                      ObIAllocator &allocator,
                                      ObIVector *&vector,

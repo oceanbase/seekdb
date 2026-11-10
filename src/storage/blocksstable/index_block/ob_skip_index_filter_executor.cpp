@@ -41,7 +41,7 @@ int ObSkipIndexFilterExecutor::init(const int64_t batch_size, common::ObIAllocat
 int ObSkipIndexFilterExecutor::read_aggregate_data(const uint32_t col_idx,
                   common::ObIAllocator &allocator,
                   const share::schema::ObColumnParam *col_param,
-                  const ObObjMeta &obj_meta,
+                  const SqlTypeMeta &obj_meta,
                   const bool is_padding_mode,
                   ObStorageDatum &null_count,
                   ObStorageDatum &min_datum,
@@ -67,7 +67,7 @@ int ObSkipIndexFilterExecutor::read_aggregate_data(const uint32_t col_idx,
 
 int ObSkipIndexFilterExecutor::falsifiable_pushdown_filter(
     const uint32_t col_idx,
-    const ObObjMeta &obj_meta,
+    const SqlTypeMeta &obj_meta,
     const ObSkipIndexType index_type,
     const ObMicroIndexInfo &index_info,
     sql::ObPhysicalFilterExecutor &filter,
@@ -122,7 +122,7 @@ int ObSkipIndexFilterExecutor::falsifiable_pushdown_filter(
 int ObSkipIndexFilterExecutor::filter_on_min_max(
     const uint32_t col_idx,
     const uint64_t row_count,
-    const ObObjMeta &obj_meta,
+    const SqlTypeMeta &obj_meta,
     sql::ObWhiteFilterExecutor &filter,
     common::ObIAllocator &allocator)
 {
@@ -257,7 +257,7 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
   return ret;
 }
 
-inline int ObSkipIndexFilterExecutor::pad_column(const ObObjMeta &obj_meta,
+inline int ObSkipIndexFilterExecutor::pad_column(const SqlTypeMeta &obj_meta,
                                           const share::schema::ObColumnParam *col_param,
                                           const bool is_padding_mode,
                                           common::ObIAllocator &padding_alloc,
@@ -280,11 +280,15 @@ int ObSkipIndexFilterExecutor::eq_operator(const sql::ObWhiteFilterExecutor &fil
                                            sql::ObBoolMask &fal_desc)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum &ref_datum = datums.at(0);
+    alignas(8) char ref_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, ref_scratch, sizeof(ref_scratch)))) {
+      return ret;
+    }
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
@@ -312,11 +316,15 @@ int ObSkipIndexFilterExecutor::ne_operator(const sql::ObWhiteFilterExecutor &fil
                                            sql::ObBoolMask &fal_desc)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum &ref_datum = datums.at(0);
+    alignas(8) char ref_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, ref_scratch, sizeof(ref_scratch)))) {
+      return ret;
+    }
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
@@ -344,11 +352,15 @@ int ObSkipIndexFilterExecutor::gt_operator(const sql::ObWhiteFilterExecutor &fil
                                            sql::ObBoolMask &fal_desc)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum &ref_datum = datums.at(0);
+    alignas(8) char ref_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, ref_scratch, sizeof(ref_scratch)))) {
+      return ret;
+    }
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
@@ -382,11 +394,15 @@ int ObSkipIndexFilterExecutor::ge_operator(const sql::ObWhiteFilterExecutor &fil
                                            sql::ObBoolMask &fal_desc)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum &ref_datum = datums.at(0);
+    alignas(8) char ref_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, ref_scratch, sizeof(ref_scratch)))) {
+      return ret;
+    }
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
@@ -416,11 +432,15 @@ int ObSkipIndexFilterExecutor::lt_operator(const sql::ObWhiteFilterExecutor &fil
                                            sql::ObBoolMask &fal_desc)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum &ref_datum = datums.at(0);
+    alignas(8) char ref_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, ref_scratch, sizeof(ref_scratch)))) {
+      return ret;
+    }
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
@@ -450,11 +470,15 @@ int ObSkipIndexFilterExecutor::le_operator(const sql::ObWhiteFilterExecutor &fil
                                            sql::ObBoolMask &fal_desc)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 1 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum &ref_datum = datums.at(0);
+    alignas(8) char ref_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, ref_scratch, sizeof(ref_scratch)))) {
+      return ret;
+    }
     bool max_prefix = max_datum.len_ == ObSkipIndexColMeta::MAX_SKIP_INDEX_COL_LENGTH;
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
@@ -487,7 +511,7 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
                                            sql::ObBoolMask &fal_desc)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   const sql::ObExpr *col_expr = filter.get_filter_node().expr_; 
   if (OB_UNLIKELY(nullptr == col_expr)) {
     ret = OB_INVALID_ARGUMENT;
@@ -497,15 +521,29 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int cmp_res = 0;
     bool equal = false;
-    ObDatumComparator cmp_rev(cmp_func, ret, equal, nullptr, true);
-    int64_t pos = std::lower_bound(datums.get_data(), datums.get_data() + datums.count(), min_datum, cmp_rev) - datums.get_data();
+    const auto cmp_rev = [&ret, &equal, cmp_func](const common::DatumValue &value, const ObDatum &probe) {
+      alignas(8) char scratch[64];
+      ObDatum parameter;
+      int cmp = 0;
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(value.export_legacy(parameter, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(cmp_func(probe, parameter, cmp, nullptr))) {
+      } else if (cmp == 0) { equal = true; }
+      return OB_SUCC(ret) && cmp > 0;
+    };
+    const int64_t pos = std::lower_bound(datums.get_data(), datums.get_data() + datums.count(),
+                                       min_datum, cmp_rev) - datums.get_data();
     if (OB_FAIL(ret)) {
     } else {
       OB_ASSERT(pos >= 0 && pos <= datums.count());
       if (pos == datums.count()) { // datums[datums.count()-1] < min_datum <= max_datum
         fal_desc.set_always_false();
       } else {
-        const ObDatum &ref_datum = datums.at(pos);
+        alignas(8) char ref_scratch[64];
+        ObDatum ref_datum;
+        if (OB_FAIL(filter.export_parameter(pos, ref_datum, ref_scratch, sizeof(ref_scratch)))) {
+          return ret;
+        }
         if (OB_FAIL(cmp_func(max_datum, ref_datum, cmp_res, nullptr))) {
         } else if (cmp_res > 0) { // min_datum <= datums[pos] < max_datum
           fal_desc.set_uncertain();
@@ -533,12 +571,17 @@ int ObSkipIndexFilterExecutor::bt_operator(const sql::ObWhiteFilterExecutor &fil
                                            sql::ObBoolMask &fal_desc)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   if (OB_UNLIKELY(datums.count() != 2 || filter.null_param_contained())){
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum &ref_left_datum = datums.at(0);
-    const ObDatum &ref_right_datum = datums.at(1);
+    alignas(8) char left_scratch[64], right_scratch[64];
+    ObDatum ref_left_datum, ref_right_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_left_datum, left_scratch, sizeof(left_scratch)))) {
+      return ret;
+    } else if (OB_FAIL(filter.export_parameter(1, ref_right_datum, right_scratch, sizeof(right_scratch)))) {
+      return ret;
+    }
 
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_left_cmp_res = 0;
@@ -565,7 +608,7 @@ int ObSkipIndexFilterExecutor::bt_operator(const sql::ObWhiteFilterExecutor &fil
 int ObSkipIndexFilterExecutor::black_filter_on_min_max(
   const uint32_t col_idx,
   const uint64_t row_count,
-  const ObObjMeta &obj_meta,
+  const SqlTypeMeta &obj_meta,
   sql::ObBlackFilterExecutor &filter,
   common::ObIAllocator &allocator,
   const bool use_vectorize)

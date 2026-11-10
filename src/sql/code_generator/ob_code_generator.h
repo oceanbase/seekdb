@@ -40,8 +40,8 @@ class ObRawExprUniqueSet;
 class ObCodeGenerator
 {
 public:
-  explicit ObCodeGenerator(DatumParamStore *param_store)
-    : param_store_(param_store)
+  explicit ObCodeGenerator(int64_t parameter_count)
+    : parameter_count_(parameter_count)
   {}
   virtual ~ObCodeGenerator() {}
   //Generate execution plan
@@ -68,8 +68,8 @@ private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObCodeGenerator);
 private:
-  // All parameterized constant objects
-  DatumParamStore *param_store_;
+  // Compilation needs a count, not a second parameter-value directory.
+  int64_t parameter_count_;
 };
 
 } // end namespace sql

@@ -47,7 +47,7 @@ int ObIColumnEncoder::init(const ObColumnEncodingCtx &ctx,
     ctx_ = &ctx;
     column_index_ = column_index;
     rows_ = &rows;
-    const ObObjMeta& col_type = ctx_->encoding_ctx_->col_descs_->at(column_index).col_type_;
+    const SqlTypeMeta& col_type = ctx_->encoding_ctx_->col_descs_->at(column_index).col_type_;
     column_type_ = col_type;
     is_inited_ = true;
   }
@@ -77,7 +77,7 @@ int ObIColumnEncoder::get_row_checksum(int64_t &checksum) const
       checksum += r->get_datum(column_index_).checksum(0);
     }
     /*
-    const ObObjTypeStoreClass sc = get_store_class_map()[ob_obj_type_class(column_type_.get_type())];
+    const SqlValueTypeStoreClass sc = get_store_class_map()[sql_type_class(column_type_.get_type())];
     if (ObNumberSC == sc || ObStringSC == sc) {
       for (int64_t i = 0; i < rows_->count(); ++i) {
         checksum += rows_->at(i).row_val_.cells_[column_index_].checksum(0);

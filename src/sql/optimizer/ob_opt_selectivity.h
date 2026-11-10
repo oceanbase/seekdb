@@ -199,7 +199,7 @@ class OptSelectivityCtx
   {
     return const_cast<common::ObIAllocator &>(opt_ctx_.get_allocator()); 
   }
-  const ParamStore *get_params() const { return opt_ctx_.get_params(); }
+  const ObPhysicalPlanCtx *get_parameter_context() const { return opt_ctx_.get_parameter_context(); }
   bool use_default_stat() const { return opt_ctx_.use_default_stat(); }
 
   ObJoinType get_join_type() const { return join_type_; }
@@ -325,8 +325,8 @@ public:
     min_max_inited_(false),
     base_ndv_(-1.0)
   {
-    min_val_.set_min_value();
-    max_val_.set_max_value();
+    reset_min_value();
+    reset_max_value();
   }
   int assign(const OptColumnMeta &other);
   void init(const uint64_t column_id,
@@ -344,12 +344,21 @@ public:
   void set_avg_len(const double avg_len) { avg_len_ = avg_len; }
   double get_hist_scale() const { return hist_scale_; }
   void set_hist_scale(const double hist_scale) { hist_scale_ = hist_scale; }
-  ObObj& get_min_value() { return min_val_; }
-  const ObObj& get_min_value() const { return min_val_; }
-  void set_min_value(const ObObj& min_val) { min_val_ = min_val; }
-  ObObj& get_max_value() { return max_val_; }
-  const ObObj& get_max_value() const { return max_val_; }
-  void set_max_value(const ObObj& max_val) { max_val_ = max_val; }
+  const common::Datum &get_min_value_datum() const { return min_val_; }
+  const common::SqlTypeMeta &get_min_value_meta() const { return min_meta_; }
+  const common::Datum &get_max_value_datum() const { return max_val_; }
+  const common::SqlTypeMeta &get_max_value_meta() const { return max_meta_; }
+  int set_min_value(const common::Datum &value, const common::SqlTypeMeta &meta);
+  int set_max_value(const common::Datum &value, const common::SqlTypeMeta &meta);
+  int set_min_value(const DatumValue &value);
+  int set_max_value(const DatumValue &value);
+  int set_min_max_owned(const common::Datum &minimum, const common::SqlTypeMeta &min_meta,
+                         const common::Datum &maximum, const common::SqlTypeMeta &max_meta,
+                         ObIAllocator &owner);
+  int export_min_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_max_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  void reset_min_value() { min_val_.set_min(); min_meta_.set_ext(); }
+  void reset_max_value() { max_val_.set_max(); max_meta_.set_ext(); }
   bool get_min_max_inited() const { return min_max_inited_; }
   void set_min_max_inited(const bool inited) { min_max_inited_ = inited; }
   void set_default_meta(double rows)
@@ -362,7 +371,7 @@ public:
   void set_base_ndv(double ndv) { base_ndv_ = ndv; } 
 
   TO_STRING_KV(K_(column_id), K_(ndv), K_(num_null), K_(avg_len), K_(hist_scale),
-               K_(min_val), K_(max_val) , K_(min_max_inited), K_(base_ndv));
+               K_(min_val), K_(min_meta), K_(max_val), K_(max_meta), K_(min_max_inited), K_(base_ndv));
 private:
   uint64_t column_id_;
   double ndv_;
@@ -371,8 +380,10 @@ private:
   // the percentage of the histogram sample size that is available. For example, hist_scale = 0.5
   // means that current sample size of histogram is 50% of origin sample size.
   double hist_scale_;
-  ObObj min_val_;
-  ObObj max_val_;
+  common::Datum min_val_;
+  common::SqlTypeMeta min_meta_;
+  common::Datum max_val_;
+  common::SqlTypeMeta max_meta_;
   bool min_max_inited_;
   double base_ndv_;
 };
@@ -678,8 +689,8 @@ struct OptSelInfo
   uint64_t equal_count_;
   double range_selectivity_;
   bool has_range_exprs_;
-  ObObj min_;
-  ObObj max_;
+  DatumValue min_;
+  DatumValue max_;
   ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> quals_;
 };
 
@@ -819,14 +830,14 @@ public:
   static int get_column_range_min_max(const OptSelectivityCtx &ctx,
                                       const ObColumnRefRawExpr *col_expr,
                                       const ObIArray<ObRawExpr* > &quals,
-                                      ObObj &obj_min,
-                                      ObObj &obj_max);
+                                      DatumValue &obj_min,
+                                      DatumValue &obj_max);
 
   static int calc_column_range_selectivity(const OptTableMetas &table_metas,
                                            const OptSelectivityCtx &ctx,
                                            const ObRawExpr &column_expr,
-                                           const ObObj &start_obj,
-                                           const ObObj &end_obj,
+                                           const DatumValue &start_obj,
+                                           const DatumValue &end_obj,
                                            const bool discrete,
                                            const ObBorderFlag border_flag,
                                            bool &last_column,
@@ -834,8 +845,8 @@ public:
 
   static int do_calc_range_selectivity(const double min,
                                        const double max,
-                                       const ObObj &scalar_start,
-                                       const ObObj &scalar_end,
+                                       const DatumValue &scalar_start,
+                                       const DatumValue &scalar_end,
                                        const double ndv,
                                        const bool discrete,
                                        const ObBorderFlag &border_flag,
@@ -854,14 +865,14 @@ public:
                                       const OptSelectivityCtx &ctx,
                                       const ObColumnRefRawExpr &col_expr,
                                       const ObQueryRangeArray &ranges,
-                                      const ObObj &min_val,
-                                      const ObObj &max_val,
+                                      const DatumValue &min_val,
+                                      const DatumValue &max_val,
                                       double &selectivity);
 
-  static int get_single_range_out_of_bounds_sel(const ObObj &min_val,
-                                                const ObObj &max_val,
-                                                const ObObj &start_val,
-                                                const ObObj &end_val,
+  static int get_single_range_out_of_bounds_sel(const DatumValue &min_val,
+                                                const DatumValue &max_val,
+                                                const DatumValue &start_val,
+                                                const DatumValue &end_val,
                                                 const common::ObDatumAccessContext *datum_access_ctx,
                                                 double &selectivity);
 
@@ -892,8 +903,8 @@ public:
   static int get_column_min_max(const OptTableMetas &table_metas,
                                 const OptSelectivityCtx &ctx,
                                 const ObRawExpr &expr,  
-                                ObObj &min_obj,
-                                ObObj &max_obj);
+                                common::Datum &min_obj, common::SqlTypeMeta &min_meta,
+                                common::Datum &max_obj, common::SqlTypeMeta &max_meta);
 
   static int get_column_basic_info(const OptTableMetas &table_metas,
                                    const OptSelectivityCtx &ctx,
@@ -929,11 +940,11 @@ public:
   static int get_compare_value(const OptSelectivityCtx &ctx,
                                const ObColumnRefRawExpr *col,
                                const ObRawExpr *calc_expr,
-                               ObObj &expr_value,
+                               DatumValue &expr_value,
                                bool &can_cmp);
 
   static int get_bucket_bound_idx(const ObHistogram &hist,
-                                  const ObObj &value,
+                                  const DatumValue &value,
                                   int64_t &idx,
                                   bool &is_equal);
 
@@ -947,21 +958,21 @@ public:
 
   static int get_less_pred_sel(const OptSelectivityCtx &ctx,
                                const ObHistogram &histogram,
-                               const ObObj &maxv,
+                               const DatumValue &maxv,
                                const bool inclusive,
                                double &density);
 
   static int get_greater_pred_sel(const OptSelectivityCtx &ctx,
                                   const ObHistogram &histogram,
-                                  const ObObj &minv,
+                                  const DatumValue &minv,
                                   const bool inclusive,
                                   double &density);
 
   static int get_range_pred_sel(const OptSelectivityCtx &ctx,
                                 const ObHistogram &histogram,
-                                const ObObj &minv,
+                                const DatumValue &minv,
                                 const bool min_inclusive,
-                                const ObObj &maxv,
+                                const DatumValue &maxv,
                                 const bool max_inclusive,
                                 double &density);
 
@@ -1132,8 +1143,8 @@ public:
   static int calc_expr_min_max(const OptTableMetas &table_metas,
                                const OptSelectivityCtx &ctx,
                                const ObRawExpr *expr,
-                               ObObj &min_value,
-                               ObObj &max_value);
+                               common::Datum &min_value, common::SqlTypeMeta &min_meta,
+                               common::Datum &max_value, common::SqlTypeMeta &max_meta);
   static int calc_year_min_max(const OptTableMetas &table_metas,
                                const OptSelectivityCtx &ctx,
                                const ObRawExpr *expr,
@@ -1147,7 +1158,7 @@ public:
   static int convert_obj_to_expr_type(const OptSelectivityCtx &ctx,
                                       const ObRawExpr *expr,
                                       ObCastMode cast_mode,
-                                      ObObj &obj);
+                                      DatumValue &obj);
   static bool is_dense_time_expr_type(ObItemType type)
   {
     return T_FUN_SYS_YEAR == type ||
@@ -1254,7 +1265,7 @@ public:
     return ObOptSelectivity::get_compare_value(
               ctx, column_expr_, const_expr, compare_value_, is_valid);
   }
-  void set_compare_value(const ObObj &value) {
+  void set_compare_value(const DatumValue &value) {
     compare_value_ = value;
   }
   void set_not_eq(bool neq) { is_neq_ = neq; }
@@ -1264,11 +1275,11 @@ protected:
                             double &sel,
                             bool &is_rare_value) override;
   int refine_out_of_bounds_sel(const OptSelectivityCtx &ctx,
-                               const ObObj &value,
+                               const DatumValue &value,
                                double &sel,
                                bool &is_rare_value);
 private:
-  ObObj compare_value_;
+  DatumValue compare_value_;
   bool is_neq_;
 
   DISALLOW_COPY_AND_ASSIGN(ObHistEqualSelHelper);
@@ -1288,8 +1299,12 @@ public:
     return ranges_.assign(ranges);
   }
 
-  ObObj &get_min_value() { return hist_min_value_; }
-  ObObj &get_max_value() { return hist_max_value_; }
+  const common::Datum &get_min_value_datum() const { return hist_min_value_; }
+  const common::SqlTypeMeta &get_min_value_meta() const { return hist_min_meta_; }
+  const common::Datum &get_max_value_datum() const { return hist_max_value_; }
+  const common::SqlTypeMeta &get_max_value_meta() const { return hist_max_meta_; }
+  int export_min_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_max_value(DatumValue &output, void *scratch, int64_t capacity) const;
 protected:
   virtual int inner_get_sel(const OptSelectivityCtx &ctx,
                             const ObHistogram &histogram,
@@ -1297,8 +1312,10 @@ protected:
                             bool &is_rare_value) override;
 private:
   ObQueryRangeArray ranges_;
-  ObObj hist_min_value_;
-  ObObj hist_max_value_;
+  common::Datum hist_min_value_;
+  common::SqlTypeMeta hist_min_meta_;
+  common::Datum hist_max_value_;
+  common::SqlTypeMeta hist_max_meta_;
 
   DISALLOW_COPY_AND_ASSIGN(ObHistRangeSelHelper);
 };

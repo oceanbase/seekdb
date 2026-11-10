@@ -27,7 +27,7 @@ namespace sql
 
 // ==================================================================================
 // accuracy checker
-template <ObObjTypeClass out_tc>
+template <SqlTypeClass out_tc>
 struct BatchAccuracyChecker
 {
   static int check(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
@@ -46,26 +46,30 @@ struct BatchAccuracyChecker<ObDecimalIntTC>
     int ret = OB_SUCCESS;
     int warn = ret;
     ObAccuracy out_acc;
-    ObObjType out_type;
+    SqlValueType out_type;
     ObDecimalIntBuilder *res_arr = nullptr;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, out_acc, out_type))) {
     } else {
-      ObDatumVector result_dv = expr.locate_expr_datumvector(ctx);
+      DatumVector result_dv = expr.locate_expr_datumvector(ctx);
       ObDecimalIntBuilder res_val;
       for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         if (skip.at(i)) {
           continue;
         } else if (result_dv.at(i)->is_null()) {
           // do nothing
-        } else if (OB_FAIL(check_decimalint_accuracy(
-                     expr.extra_, result_dv.at(i)->get_decimal_int(),
-                     result_dv.at(i)->get_int_bytes(), out_acc.get_precision(), out_acc.get_scale(),
-                     res_val, warn))) {
         } else {
-          result_dv.at(i)->set_decimal_int(res_val.get_decimal_int(),
-                                           res_val.get_int_bytes());
+          alignas(8) char coefficient_scratch[64];
+          common::ObDatum coefficient;
+          if (OB_FAIL(expr.get_datum_copy_plan().get_decimal(*result_dv.at(i), coefficient,
+              coefficient_scratch, sizeof(coefficient_scratch)))) {
+          } else if (OB_FAIL(check_decimalint_accuracy(expr.extra_, coefficient.get_decimal_int(),
+              coefficient.get_int_bytes(), out_acc.get_precision(), out_acc.get_scale(), res_val, warn))) {
+          } else {
+            ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), res_val.get_decimal_int(),
+                                             res_val.get_int_bytes(), i);
+          }
         }
       } // end for
     }
@@ -82,18 +86,18 @@ struct BatchAccuracyChecker<ObNumberTC>
     int ret = OB_SUCCESS;
     int warning = ret;
     ObAccuracy out_acc;
-    ObObjType out_type;
+    SqlValueType out_type;
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, out_acc, out_type))) {
     } else {
-      ObDatumVector result_dv = expr.locate_expr_datumvector(ctx);
+      DatumVector result_dv = expr.locate_expr_datumvector(ctx);
       for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         if (skip.at(i)) {
           continue;
         } else if (result_dv.at(i)->is_null()) {
           // do nothing
         } else {
-          ObDatum in_datum = *result_dv.at(i);
-          if (OB_FAIL(number_range_check_v2(expr.extra_, out_acc, out_type, in_datum,
+          Datum in_datum = *result_dv.at(i);
+          if (OB_FAIL(number_range_check_v2(expr, ctx, expr.extra_, out_acc, out_type, in_datum,
                                             *result_dv.at(i), warning))) {
           }
         }
@@ -106,7 +110,7 @@ struct BatchAccuracyChecker<ObNumberTC>
 // ==================================================================================
 // helper functions
 
-template <ObObjTypeClass in_tc, ObObjTypeClass out_tc>
+template <SqlTypeClass in_tc, SqlTypeClass out_tc>
 int ObBatchCast::explicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                      const int64_t batch_size)
 {
@@ -120,11 +124,12 @@ int ObBatchCast::explicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
 }
 
 template <typename in_type, typename out_type>
-OB_NOINLINE void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
+OB_NOINLINE int batch_implicit_scale(const ObExpr &expr, ObEvalCtx &ctx, DatumVector &arg_dv, DatumVector &result_dv,
                                       unsigned scale, const bool is_scale_up,
                                       int64_t batch_size, const ObBitVector &skip,
                                       ObBitVector &eval_flags)
 {
+  int ret = OB_SUCCESS;
   static_assert(wide::IsIntegral<out_type>::value, "");
   static_assert(wide::IsIntegral<in_type>::value, "");
   LOG_DEBUG("batch implicit scale", K(lbt()), K(batch_size), K(is_scale_up));
@@ -135,10 +140,12 @@ OB_NOINLINE void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
       result_dv.at(i)->set_null();
       return;
     }
-    out_type res = *reinterpret_cast<const in_type *>(arg_dv.at(i)->get_decimal_int());
+    in_type input;
+    if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input))) { return; }
+    out_type res = input;
     res = res * sf;
-    result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&res),
-                                     sizeof(out_type));
+    ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&res),
+                                     sizeof(out_type), i);
   };
 
   auto fast_scale_up_task = [&](int i) __attribute__((always_inline))
@@ -148,11 +155,16 @@ OB_NOINLINE void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
       return;
     }
     if (sizeof(in_type) == sizeof(out_type) && wide::SignedConcept<in_type>::value) {
-      result_dv.at(i)->set_decimal_int(arg_dv.at(i)->get_decimal_int(), sizeof(in_type));
+      in_type input;
+      if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input))) { return; }
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i),
+          reinterpret_cast<const ObDecimalInt *>(&input), sizeof(input), i);
     } else {
-      out_type res = *reinterpret_cast<const in_type *>(arg_dv.at(i)->get_decimal_int());
-      result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&res),
-                                       sizeof(out_type));
+      in_type input;
+    if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input))) { return; }
+    out_type res = input;
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&res),
+                                       sizeof(out_type), i);
     }
   };
 
@@ -162,57 +174,60 @@ OB_NOINLINE void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
       result_dv.at(i)->set_null();
       return;
     }
-    out_type res = *reinterpret_cast<const in_type *>(arg_dv.at(i)->get_decimal_int());
+    in_type input;
+    if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input))) { return; }
+    out_type res = input;
     bool is_neg = res < 0;
     if (is_neg) { res = -res; }
     out_type remain = res % sf;
     res = res / sf;
     if (remain >= (sf >> 1)) { res = res + 1; }
     if (is_neg) { res = -res; }
-    result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&res),
-                                     sizeof(out_type));
+    ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&res),
+                                     sizeof(out_type), i);
   };
 
   if (is_scale_up) {
     if (OB_LIKELY(skip.accumulate_bit_cnt(batch_size) == 0
                   && eval_flags.accumulate_bit_cnt(batch_size) == 0)) {
       if (sf == 1) {
-        for (int i = 0; i < batch_size; i++) { fast_scale_up_task(i); }
+        for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) { fast_scale_up_task(i); }
       } else {
-        for (int i = 0; i < batch_size; i++) { scale_up_task(i); }
+        for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) { scale_up_task(i); }
       }
-      eval_flags.set_all(batch_size);
+      if (OB_SUCC(ret)) { eval_flags.set_all(batch_size); }
     } else {
-      for (int i = 0; i < batch_size; i++) {
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         if (skip.at(i) || eval_flags.at(i)) {
           continue;
         } else {
           scale_up_task(i);
-          eval_flags.set(i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
       }
     }
   } else {
     if (OB_LIKELY(skip.accumulate_bit_cnt(batch_size) == 0
                   && eval_flags.accumulate_bit_cnt(batch_size) == 0)) {
-      for (int i = 0; i < batch_size; i++) { scale_down_task(i); }
-      eval_flags.set_all(batch_size);
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) { scale_down_task(i); }
+      if (OB_SUCC(ret)) { eval_flags.set_all(batch_size); }
     } else {
-      for (int i = 0; i < batch_size; i++) {
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         if (skip.at(i) || eval_flags.at(i)) {
           continue;
         } else {
           scale_down_task(i);
-          eval_flags.set(i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
       }
     }
   }
+  return ret;
 }
 
 template <typename int_type>
-OB_NOINLINE int batch_implicit_integer_scale(const ObExpr &expr, ObDatumVector &arg_dv,
-                                             ObDatumVector &result_dv, const ObScale in_scale,
+OB_NOINLINE int batch_implicit_integer_scale(const ObExpr &expr, ObEvalCtx &ctx, DatumVector &arg_dv,
+                                             DatumVector &result_dv, const ObScale in_scale,
                                              const ObPrecision in_prec, const ObScale out_scale,
                                              const ObPrecision out_prec, const int64_t batch_size,
                                              const ObBitVector &skip, ObBitVector &eval_flags)
@@ -227,8 +242,7 @@ OB_NOINLINE int batch_implicit_integer_scale(const ObExpr &expr, ObDatumVector &
     } else if (arg_dv.at(i)->is_null()) {
       result_dv.at(i)->set_null();
     } else {
-      const int_type in_val = *reinterpret_cast<const int_type *>(
-          arg_dv.at(i)->get_decimal_int());
+      const int_type in_val = read_native_numeric<int_type>(*arg_dv.at(i));
       ObDecimalIntBuilder in_builder;
       ObDecimalIntBuilder res_builder;
       ObDecimalInt *decint = nullptr;
@@ -243,19 +257,19 @@ OB_NOINLINE int batch_implicit_integer_scale(const ObExpr &expr, ObDatumVector &
                    decint, int_bytes, in_scale, out_scale, out_prec, expr.extra_, res_builder))) {
       } else {
         OB_ASSERT(res_builder.get_int_bytes() == out_width);
-        result_dv.at(i)->set_decimal_int(res_builder.get_decimal_int(),
-                                         res_builder.get_int_bytes());
+        ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), res_builder.get_decimal_int(),
+                                         res_builder.get_int_bytes(), i);
       }
     }
     if (OB_SUCC(ret)) {
-      eval_flags.set(i);
+      if (OB_SUCC(ret)) { eval_flags.set(i); }
     }
   }
   return ret;
 }
 
 template <typename in_type, typename out_type>
-OB_NOINLINE void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
+OB_NOINLINE int batch_explicit_scale(const ObExpr &expr, ObEvalCtx &ctx, DatumVector &arg_dv, DatumVector &result_dv,
                                       unsigned scale, const bool is_scale_up,
                                       ObPrecision out_prec, int64_t batch_size,
                                       const ObBitVector &skip, ObBitVector &eval_flags)
@@ -276,21 +290,23 @@ OB_NOINLINE void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
       result_dv.at(i)->set_null();
       return;
     }
-    calc_type lhs = *reinterpret_cast<const in_type *>(arg_dv.at(i)->get_decimal_int());
+    in_type input;
+    if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input))) { return; }
+    calc_type lhs = input;
     calc_type res;
     bool is_neg = lhs < 0;
     bool overflow = wide::mul_overflow(lhs, sf, res);
     if (overflow) {
-      result_dv.at(i)->set_decimal_int((is_neg ? min_v : max_v), sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), (is_neg ? min_v : max_v), sizeof(out_type), i);
     } else if (res >= *reinterpret_cast<const out_type *>(max_v)) {
-      result_dv.at(i)->set_decimal_int(max_v, sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), max_v, sizeof(out_type), i);
     } else if (wide::SignedConcept<calc_type>::value
                && res <= *reinterpret_cast<const out_type *>(min_v)) {
-      result_dv.at(i)->set_decimal_int(min_v, sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), min_v, sizeof(out_type), i);
     } else {
       out_type tmp_res = static_cast<out_type>(res);
-      result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&tmp_res),
-                                       sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&tmp_res),
+                                       sizeof(out_type), i);
     }
   };
 
@@ -300,7 +316,9 @@ OB_NOINLINE void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
       result_dv.at(i)->set_null();
       return;
     }
-    calc_type res = *reinterpret_cast<const in_type *>(arg_dv.at(i)->get_decimal_int());
+    in_type input;
+    if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input))) { return; }
+    calc_type res = input;
     bool is_neg = res < 0;
     if (is_neg) { res = -res; }
     calc_type remain = res % sf;
@@ -308,61 +326,63 @@ OB_NOINLINE void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
     if (remain >= (sf >> 1)) { res = res + 1; }
     if (is_neg) { res = -res; }
     if (res >= *reinterpret_cast<const out_type *>(max_v)) {
-      result_dv.at(i)->set_decimal_int(max_v, sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), max_v, sizeof(out_type), i);
     } else if (wide::SignedConcept<calc_type>::value
                && res <= *reinterpret_cast<const out_type *>(min_v)) {
-      result_dv.at(i)->set_decimal_int(min_v, sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), min_v, sizeof(out_type), i);
     } else {
       out_type tmp_res = static_cast<out_type>(res);
-      result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&tmp_res),
-                                       sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&tmp_res),
+                                       sizeof(out_type), i);
     }
   };
 
   if (is_scale_up) {
     if (OB_LIKELY(skip.accumulate_bit_cnt(batch_size) == 0
                   && eval_flags.accumulate_bit_cnt(batch_size) == 0)) {
-      for (int i = 0; i < batch_size; i++) {
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         scale_up_task(i);
       }
-      eval_flags.set_all(batch_size);
+      if (OB_SUCC(ret)) { eval_flags.set_all(batch_size); }
     } else {
-      for (int i = 0; i < batch_size; i++) {
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         if (skip.at(i) || eval_flags.at(i)) {
           continue;
         } else {
           scale_up_task(i);
-          eval_flags.set(i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
       }
     }
   } else {
     if (OB_LIKELY(skip.accumulate_bit_cnt(batch_size) == 0
                   && eval_flags.accumulate_bit_cnt(batch_size) == 0)) {
-      for (int i = 0; i < batch_size; i++) {
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         scale_down_task(i);
       }
-      eval_flags.set_all(batch_size);
+      if (OB_SUCC(ret)) { eval_flags.set_all(batch_size); }
     } else {
-      for (int i = 0; i < batch_size; i++) {
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         if (skip.at(i) || eval_flags.at(i)) {
           continue;
         } else {
           scale_down_task(i);
-          eval_flags.set(i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
       }
     }
   }
+  return ret;
 }
 
 template <typename in_type, typename out_type>
-OB_NOINLINE void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
+OB_NOINLINE int batch_const_scale(const ObExpr &expr, ObEvalCtx &ctx, DatumVector &arg_dv, DatumVector &result_dv,
                                    const int64_t batch_size, const ObBitVector &skip,
                                    ObBitVector &eval_flags, unsigned scale,
                                    const bool is_scale_up, const ObScale out_prec,
                                    const ObCastMode cast_mode)
 {
+  int ret = OB_SUCCESS;
   static_assert(wide::IsIntegral<in_type>::value, "");
   static_assert(wide::IsIntegral<out_type>::value, "");
   using calc_type = typename wide::CommonType<in_type, out_type>::type;
@@ -378,21 +398,23 @@ OB_NOINLINE void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_
       result_dv.at(i)->set_null();
       return;
     }
-    calc_type lhs = *reinterpret_cast<const in_type *>(arg_dv.at(i)->get_decimal_int());
+    in_type input;
+    if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input))) { return; }
+    calc_type lhs = input;
     calc_type res;
     bool is_neg = lhs < 0;
     bool overflow = wide::mul_overflow(lhs, sf, res);
     if (overflow) {
-      result_dv.at(i)->set_decimal_int((is_neg ? min_v : max_v), sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), (is_neg ? min_v : max_v), sizeof(out_type), i);
     } else if (res >= *reinterpret_cast<const out_type *>(max_v)) {
-      result_dv.at(i)->set_decimal_int(max_v, sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), max_v, sizeof(out_type), i);
     } else if (wide::SignedConcept<calc_type>::value
                && res <= *reinterpret_cast<const out_type *>(min_v)) {
-      result_dv.at(i)->set_decimal_int(min_v, sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), min_v, sizeof(out_type), i);
     } else {
       out_type tmp_res = static_cast<out_type>(res);
-      result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&tmp_res),
-                                       sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&tmp_res),
+                                       sizeof(out_type), i);
     }
   };
 
@@ -402,7 +424,9 @@ OB_NOINLINE void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_
       result_dv.at(i)->set_null();
       return;
     }
-    calc_type res = *reinterpret_cast<const in_type *>(arg_dv.at(i)->get_decimal_int());
+    in_type input;
+    if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input))) { return; }
+    calc_type res = input;
     bool is_neg = res < 0;
     if (is_neg) { res = -res; }
     calc_type remain = res % sf;
@@ -414,19 +438,19 @@ OB_NOINLINE void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_
     }
     if ((cast_mode & CM_CONST_TO_DECIMAL_INT_EQ) != 0) {
       if (remain != 0) {
-        result_dv.at(i)->set_decimal_int((is_neg ? min_v : max_v), sizeof(out_type));
+        ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), (is_neg ? min_v : max_v), sizeof(out_type), i);
         return;
       }
     }
     if (res >= *reinterpret_cast<const out_type *>(max_v)) {
-      result_dv.at(i)->set_decimal_int(max_v, sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), max_v, sizeof(out_type), i);
     } else if (wide::SignedConcept<calc_type>::value
                && res <= *reinterpret_cast<const out_type *>(min_v)) {
-      result_dv.at(i)->set_decimal_int(min_v, sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), min_v, sizeof(out_type), i);
     } else {
       out_type tmp_res = static_cast<out_type>(res);
-      result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&tmp_res),
-                                       sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&tmp_res),
+                                       sizeof(out_type), i);
     }
   };
 
@@ -434,34 +458,35 @@ OB_NOINLINE void batch_const_scale(ObDatumVector &arg_dv, ObDatumVector &result_
   if (is_scale_up) {
     if (OB_LIKELY(skip.accumulate_bit_cnt(batch_size) == 0
         && eval_flags.accumulate_bit_cnt(batch_size) == 0)) {
-      for (int i = 0; i < batch_size; i++) { scale_up_task(i); }
-      eval_flags.set_all(batch_size);
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) { scale_up_task(i); }
+      if (OB_SUCC(ret)) { eval_flags.set_all(batch_size); }
     } else {
-      for (int i = 0; i < batch_size; i++) {
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         if (skip.at(i) || eval_flags.at(i)) {
           continue;
         } else {
           scale_up_task(i);
-          eval_flags.set(i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
       }
     }
   } else {
     if (OB_LIKELY(skip.accumulate_bit_cnt(batch_size) == 0
                   && eval_flags.accumulate_bit_cnt(batch_size) == 0)) {
-      for (int i = 0; i < batch_size; i++) { scale_down_task(i); }
-      eval_flags.set_all(batch_size);
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) { scale_down_task(i); }
+      if (OB_SUCC(ret)) { eval_flags.set_all(batch_size); }
     } else {
-      for (int i = 0; i < batch_size; i++) {
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
         if (skip.at(i) || eval_flags.at(i)) {
           continue;
         } else {
           scale_down_task(i);
-          eval_flags.set(i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
       }
     }
   }
+  return ret;
 }
 
 template <typename in_type, typename out_type>
@@ -497,16 +522,18 @@ inline static void scale_down_with_types(const ObDecimalInt *decint, unsigned sc
 // batch cast to decimalint types
 
 template<typename in_type>
-static void logging_truncated_decint(const ObExpr &expr, ObEvalCtx &ctx, int64_t batch_size,
+static int logging_truncated_decint(const ObExpr &expr, ObEvalCtx &ctx, int64_t batch_size,
                                      const ObBitVector &skip, const ObScale in_scale, const ObScale out_scale)
 {
-  ObDatumVector arg_dv = expr.args_[0]->locate_expr_datumvector(ctx);
+  int ret = OB_SUCCESS;
+  DatumVector arg_dv = expr.args_[0]->locate_expr_datumvector(ctx);
   if (CM_IS_COLUMN_CONVERT(expr.extra_) && in_scale > out_scale) {
     in_type sf = get_scale_factor<in_type>(in_scale - out_scale);
     int diff_len = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(in_scale - out_scale);
-    for (int i = 0; i < batch_size; i++) {
+    for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
       if (skip.at(i) || arg_dv.at(i)->is_null()) { continue; }
-      in_type input_val = *reinterpret_cast<const in_type *>(arg_dv.at(i)->get_decimal_int());
+      in_type input_val;
+      if (OB_FAIL(ObExprUtil::get_decimal_int(*arg_dv.at(i), input_val))) { break; }
       bool logging_warning = false;
       if (diff_len > sizeof(in_type)) {
         logging_warning = (input_val != 0);
@@ -520,6 +547,7 @@ static void logging_truncated_decint(const ObExpr &expr, ObEvalCtx &ctx, int64_t
       }
     }
   }
+  return ret;
 }
 
 template <typename in_type, typename out_type>
@@ -541,10 +569,10 @@ static int decimalint_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const 
       const bool is_scale_up = in_scale <= out_scale;
       const unsigned scale = static_cast<unsigned>(
           is_scale_up ? out_scale - in_scale : in_scale - out_scale);
-      batch_implicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,
+      ret = batch_implicit_scale<in_type, out_type>(expr, ctx, arg_dv, result_dv, scale, is_scale_up,
                                               batch_size, skip, eval_flags);
-      if (!is_scale_up) {
-        logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);
+      if (OB_SUCC(ret) && !is_scale_up) {
+        ret = logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);
       }
     }
   }
@@ -556,22 +584,26 @@ static int decimalint_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const 
 }
 
 template <typename in_type, typename out_type, bool is_up_scale>
-static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   EVAL_ARG()
   {
+    alignas(8) char input_scratch[64];
+    common::ObDatum input;
+    if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(
+        *child_res, input, input_scratch, sizeof(input_scratch)))) { return ret; }
     ObDecimalIntBuilder res_val;
     ObScale out_scale = expr.datum_meta_.scale_;
     ObScale in_scale = expr.args_[0]->datum_meta_.scale_;
     if (is_up_scale) {
-      scale_up_with_types<in_type, out_type>(child_res->get_decimal_int(), out_scale - in_scale,
+      scale_up_with_types<in_type, out_type>(input.get_decimal_int(), out_scale - in_scale,
                                              res_val);
-      res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+      ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, res_val.get_decimal_int(), res_val.get_int_bytes());
     } else {
       bool truncated = false;
-      scale_down_with_types<in_type, out_type>(child_res->get_decimal_int(), in_scale - out_scale,
+      scale_down_with_types<in_type, out_type>(input.get_decimal_int(), in_scale - out_scale,
                                                res_val, truncated);
-      res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+      ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, res_val.get_decimal_int(), res_val.get_int_bytes());
       if (truncated) {
         ObDataTypeCastUtil::log_user_error_warning(ctx.exec_ctx_.get_user_logging_ctx(),
           OB_ERR_DATA_TRUNCATED, ObString("") /*type_str*/, ObString("") /*input*/, expr.extra_);
@@ -583,11 +615,15 @@ static int decimalint_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
     ObScale out_scale = expr.datum_meta_.scale_;
     ObDecimalIntBuilder res_val;
     int warning = OB_SUCCESS;
-    if (OB_FAIL(check_decimalint_accuracy(expr.extra_, res_datum.get_decimal_int(),
-                                          res_datum.get_int_bytes(), out_prec, out_scale, res_val,
+    alignas(8) char result_scratch[64];
+    common::ObDatum result_view;
+    if (OB_FAIL(expr.get_datum_copy_plan().get_decimal(res_datum, result_view,
+        result_scratch, sizeof(result_scratch)))) {
+    } else if (OB_FAIL(check_decimalint_accuracy(expr.extra_, result_view.get_decimal_int(),
+                                          result_view.get_int_bytes(), out_prec, out_scale, res_val,
                                           warning))) {
     } else {
-      res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+      ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, res_val.get_decimal_int(), res_val.get_int_bytes());
     }
   }
   return ret;
@@ -611,10 +647,10 @@ static int int_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVe
         return;
       }
       out_type in_val =
-        static_cast<out_type>(*(reinterpret_cast<const int_type *>(arg_dv.at(i)->ptr_)));
+        static_cast<out_type>(read_native_numeric<int_type>(*arg_dv.at(i)));
       in_val = in_val * sf;
-      result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&in_val),
-                                       sizeof(out_type));
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&in_val),
+                                       sizeof(out_type), i);
     };
     int64_t skip_sz = skip.accumulate_bit_cnt(batch_size);
     int64_t eval_sz = eval_flags.accumulate_bit_cnt(batch_size);
@@ -623,15 +659,15 @@ static int int_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVe
       // do nothing
     } else {
       if (OB_LIKELY(skip_sz== 0 && eval_sz == 0)) {
-        for (int i = 0; i < batch_size; i++) { cast_task(i); }
-        eval_flags.set_all(batch_size);
+        for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) { cast_task(i); }
+        if (OB_SUCC(ret)) { eval_flags.set_all(batch_size); }
       } else {
-        for (int i = 0; i < batch_size; i++) {
+        for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
           if (skip.at(i) || eval_flags.at(i)) {
             continue;
           } else {
             cast_task(i);
-            eval_flags.set(i);
+            if (OB_SUCC(ret)) { eval_flags.set(i); }
           }
         }
       }
@@ -644,27 +680,31 @@ static int int_fast_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVe
   return ret;
 }
 template <typename in_type, typename out_type, typename int_type>
-static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   EVAL_ARG()
   {
     ObScale out_scale = expr.datum_meta_.scale_;
     ObScale in_scale = expr.args_[0]->datum_meta_.scale_;
     out_type res = get_scale_factor<out_type>(out_scale - in_scale);
-    in_type rhs = *reinterpret_cast<const int_type *>(child_res->ptr_);
+    in_type rhs = read_native_numeric<int_type>(*child_res);
     res = res * rhs;
-    res_datum.set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&res), sizeof(out_type));
+    ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, reinterpret_cast<const ObDecimalInt *>(&res), sizeof(out_type));
   }
   if (CM_IS_EXPLICIT_CAST(expr.extra_) && !res_datum.is_null() && OB_SUCC(ret)) {
     ObPrecision out_prec = expr.datum_meta_.precision_;
     ObScale out_scale = expr.datum_meta_.scale_;
     ObDecimalIntBuilder res_val;
     int warning = OB_SUCCESS;
-    if (OB_FAIL(check_decimalint_accuracy(expr.extra_, res_datum.get_decimal_int(),
-                                          res_datum.get_int_bytes(), out_prec, out_scale, res_val,
+    alignas(8) char result_scratch[64];
+    common::ObDatum result_view;
+    if (OB_FAIL(expr.get_datum_copy_plan().get_decimal(res_datum, result_view,
+        result_scratch, sizeof(result_scratch)))) {
+    } else if (OB_FAIL(check_decimalint_accuracy(expr.extra_, result_view.get_decimal_int(),
+                                          result_view.get_int_bytes(), out_prec, out_scale, res_val,
                                           warning))) {
     } else {
-      res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+      ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, res_val.get_decimal_int(), res_val.get_int_bytes());
     }
   }
   return ret;
@@ -674,7 +714,7 @@ static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 // common batch datum casting routines
 // ==================================================================================
 
-template <ObObjTypeClass in_tc, ObObjTypeClass out_tc>
+template <SqlTypeClass in_tc, SqlTypeClass out_tc>
 int ObBatchCast::implicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                      const int64_t batch_size)
 {
@@ -686,10 +726,10 @@ int ObBatchCast::implicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
     const bool is_scale_up = in_scale <= out_scale;                                                \
     const unsigned scale = static_cast<unsigned>(                                                  \
         is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
-    batch_explicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,                 \
+    ret = batch_explicit_scale<in_type, out_type>(expr, ctx, arg_dv, result_dv, scale, is_scale_up,                 \
                                              out_prec, batch_size, skip, eval_flags);              \
-    if (!is_scale_up) {                                                                            \
-      logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);         \
+    if (OB_SUCC(ret) && !is_scale_up) {                                                                            \
+      ret = logging_truncated_decint<in_type>(expr, ctx, batch_size, skip, in_scale, out_scale);         \
     }                                                                                              \
   } while (false)
 
@@ -698,7 +738,7 @@ int ObBatchCast::implicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
     const bool is_scale_up = in_scale <= out_scale;                                                \
     const unsigned scale = static_cast<unsigned>(                                                  \
         is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
-    batch_implicit_scale<in_type, out_type>(arg_dv, result_dv, scale, is_scale_up,                 \
+    ret = batch_implicit_scale<in_type, out_type>(expr, ctx, arg_dv, result_dv, scale, is_scale_up,                 \
                                              batch_size, skip, eval_flags);                        \
   } while (false)
 
@@ -707,7 +747,7 @@ int ObBatchCast::implicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const O
     const bool is_scale_up = in_scale <= out_scale;                                                \
     const unsigned scale = static_cast<unsigned>(                                                  \
         is_scale_up ? out_scale - in_scale : in_scale - out_scale);                               \
-    batch_const_scale<in_type, out_type>(arg_dv, result_dv, batch_size, skip, eval_flags,          \
+    ret = batch_const_scale<in_type, out_type>(expr, ctx, arg_dv, result_dv, batch_size, skip, eval_flags,          \
                                          scale, is_scale_up, out_prec, expr.extra_);                \
   } while (false)
 
@@ -739,17 +779,17 @@ DEF_BATCH_CAST_FUNC(ObDecimalIntTC, ObDecimalIntTC)
         }
       } else {
         if (skip_sz == 0 && eval_sz == 0) {
-          for (int i = 0; i < batch_size; i++) {
+          for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
             result_dv.at(i)->set_datum(*arg_dv.at(i));
           } // end for
-          eval_flags.set_all(batch_size);
+          if (OB_SUCC(ret)) { eval_flags.set_all(batch_size); }
         } else {
-          for (int i = 0; i < batch_size; i++) {
+          for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
             if (skip.at(i) || eval_flags.at(i)) {
               continue;
             } else {
               result_dv.at(i)->set_datum(*arg_dv.at(i));
-              eval_flags.set(i);
+              if (OB_SUCC(ret)) { eval_flags.set(i); }
             }
           } // end for
         }
@@ -762,17 +802,17 @@ DEF_BATCH_CAST_FUNC(ObDecimalIntTC, ObDecimalIntTC)
 DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
 {
 #define ASSIGN_INT(int_type)                                                                       \
-  for (int i = 0; i < batch_size; i++) {                                                           \
+  for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {                                                           \
     if (skip.at(i) || eval_flags.at(i)) {                                                          \
       continue;                                                                                    \
     } else if (arg_dv.at(i)->is_null()) {                                                          \
       result_dv.at(i)->set_null();                                                                 \
     } else {                                                                                       \
       int_type tmp_v = static_cast<int_type>(arg_dv.at(i)->get_int());                             \
-      result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&tmp_v),             \
-                                       sizeof(int_type));                                          \
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&tmp_v),             \
+                                       sizeof(int_type), i);                                          \
     }                                                                                              \
-    eval_flags.set(i);                                                                             \
+    if (OB_SUCC(ret)) { eval_flags.set(i); }                                                                             \
   }
 
   int ret = OB_SUCCESS;
@@ -798,7 +838,7 @@ DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
         } else if (CM_IS_EXPLICIT_CAST(expr.extra_) || CM_IS_COLUMN_CONVERT(expr.extra_)) {
           DISPATCH_INOUT_WIDTH_TASK(in_width, out_width, DO_EXPLICIT_CAST);
         } else if (out_width < in_width) {
-          OZ(batch_implicit_integer_scale<int64_t>(expr, arg_dv, result_dv, in_scale, in_prec,
+          OZ(batch_implicit_integer_scale<int64_t>(expr, ctx, arg_dv, result_dv, in_scale, in_prec,
                                                     out_scale, out_prec, batch_size, skip,
                                                     eval_flags));
         } else {
@@ -817,17 +857,17 @@ DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
 DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
 {
 #define ASSIGN_UINT(int_type)                                                                      \
-  for (int i = 0; i < batch_size; i++) {                                                           \
+  for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {                                                           \
     if (skip.at(i) || eval_flags.at(i)) {                                                          \
       continue;                                                                                    \
     } else if (arg_dv.at(i)->is_null()) {                                                          \
       result_dv.at(i)->set_null();                                                                 \
     } else {                                                                                       \
       int_type tmp_v = static_cast<int_type>(arg_dv.at(i)->get_uint64());                          \
-      result_dv.at(i)->set_decimal_int(reinterpret_cast<const ObDecimalInt *>(&tmp_v),             \
-                                       sizeof(int_type));                                          \
+      ret = ObExprUtil::set_decimal_int(expr, ctx, *result_dv.at(i), reinterpret_cast<const ObDecimalInt *>(&tmp_v),             \
+                                       sizeof(int_type), i);                                          \
     }                                                                                              \
-    eval_flags.set(i);                                                                             \
+    if (OB_SUCC(ret)) { eval_flags.set(i); }                                                                             \
   }
 
 #define CONST_CAST_UINT(int_type) DO_CONST_CAST(uint64_t, int_type)
@@ -856,7 +896,7 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
         } else if (CM_IS_EXPLICIT_CAST(expr.extra_) || CM_IS_COLUMN_CONVERT(expr.extra_)) {
           DISPATCH_WIDTH_TASK(out_width, EXPLICIT_CAST_UINT);
         } else if (out_width < in_width) {
-          OZ(batch_implicit_integer_scale<uint64_t>(expr, arg_dv, result_dv, in_scale, in_prec,
+          OZ(batch_implicit_integer_scale<uint64_t>(expr, ctx, arg_dv, result_dv, in_scale, in_prec,
                                                      out_scale, out_prec, batch_size, skip,
                                                      eval_flags));
         } else {
@@ -877,8 +917,8 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
 
 // ==================================================================================
 // helper function to get explicit/implicit cast functions
-ObBatchCast::batch_func_ ObBatchCast::get_explicit_cast_func(const ObObjTypeClass tc1,
-                                                             const ObObjTypeClass tc2)
+ObBatchCast::batch_func_ ObBatchCast::get_explicit_cast_func(const SqlTypeClass tc1,
+                                                             const SqlTypeClass tc2)
 {
   OB_ASSERT(tc1 < ObMaxTC && tc2 < ObMaxTC);
   ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT;
@@ -891,8 +931,8 @@ ObBatchCast::batch_func_ ObBatchCast::get_explicit_cast_func(const ObObjTypeClas
   }
 }
 
-ObBatchCast::batch_func_ ObBatchCast::get_implicit_cast_func(const ObObjTypeClass tc1,
-                                                             const ObObjTypeClass tc2)
+ObBatchCast::batch_func_ ObBatchCast::get_implicit_cast_func(const SqlTypeClass tc1,
+                                                             const SqlTypeClass tc2)
 {
   OB_ASSERT(tc1 < ObMaxTC && tc2 < ObMaxTC);
   ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT;
@@ -909,7 +949,7 @@ ObBatchCast::batch_func_ ObBatchCast::get_implicit_cast_func(const ObObjTypeClas
 ObBatchCast::batch_func_ ObBatchCast::implicit_batch_funcs_[ObMaxTC][ObMaxTC];
 ObBatchCast::batch_func_ ObBatchCast::explicit_batch_funcs_[ObMaxTC][ObMaxTC];
 
-template <ObObjTypeClass tc1, ObObjTypeClass tc2>
+template <SqlTypeClass tc1, SqlTypeClass tc2>
 struct init_batch_func
 {
   static int init()
@@ -922,14 +962,14 @@ struct init_batch_func
       ObBatchCast::implicit_batch_funcs_[tc1][tc2] = ObBatchCast::implicit_batch_cast<tc1, tc2>;
     }
     if (tc2 >= ObMaxTC - 1) {
-      return init_batch_func<static_cast<ObObjTypeClass>(tc1 + 1), ObNullTC>::init();
+      return init_batch_func<static_cast<SqlTypeClass>(tc1 + 1), ObNullTC>::init();
     } else {
-      return init_batch_func<tc1, static_cast<ObObjTypeClass>(tc2 + 1)>::init();
+      return init_batch_func<tc1, static_cast<SqlTypeClass>(tc2 + 1)>::init();
     }
   }
 };
 
-template <ObObjTypeClass tc1>
+template <SqlTypeClass tc1>
 struct init_batch_func<tc1, ObMaxTC>
 {
   static int init()
@@ -938,7 +978,7 @@ struct init_batch_func<tc1, ObMaxTC>
   }
 };
 
-template <ObObjTypeClass tc2>
+template <SqlTypeClass tc2>
 struct init_batch_func<ObMaxTC, tc2>
 {
   static int init()
@@ -951,7 +991,7 @@ static int init_batch_cast_funcs_ret = init_batch_func<ObNullTC, ObNullTC>::init
 
 // ==================================================================================
 // get_decint_cast
-void ObDatumCast::get_decint_cast(ObObjTypeClass in_tc, ObPrecision in_prec, ObScale in_scale,
+void ObDatumCast::get_decint_cast(SqlTypeClass in_tc, ObPrecision in_prec, ObScale in_scale,
                                   ObPrecision out_prec, ObScale out_scale, bool is_explicit,
                                   ObExpr::EvalBatchFunc &batch_cast_func,
                                   ObExpr::EvalFunc &cast_func)
@@ -1131,39 +1171,43 @@ static ObExpr::EvalBatchFunc g_decimalint_cast_batch_functions[] = {
   decimalint_fast_batch_cast<int512_t, int512_t>,
 };
 
-int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *child_eval_datum = NULL;
+  Datum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
   } else {
     // child is questionmark, do not need evaluation.
-    const ObDatum &child = expr.args_[0]->locate_expr_datum(ctx);
+    const Datum &child = expr.args_[0]->locate_expr_datum(ctx);
     ObScale in_scale = expr.args_[0]->datum_meta_.scale_;
     ObNumStackOnceAlloc tmp_alloc;
     number::ObNumber out_nmb;
-    if (OB_FAIL(wide::to_number(child.get_decimal_int(), child.get_int_bytes(), in_scale,
+    alignas(8) char input_scratch[64];
+    common::ObDatum input;
+    if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(child, input,
+        input_scratch, sizeof(input_scratch)))) {
+    } else if (OB_FAIL(wide::to_number(input.get_decimal_int(), input.get_int_bytes(), in_scale,
                                 tmp_alloc, out_nmb))) {
     } else {
-      expr_datum.set_number(out_nmb);
+      ret = ObExprUtil::set_number(expr, ctx, expr_datum, out_nmb);
     }
   }
   return ret;
 }
 
-static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum,
+static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum,
                                          const ObCastMode cm)
 {
   int ret = OB_SUCCESS;
-  ObDatum *child_eval_datum = NULL;
+  Datum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
   } else {
     // child is questionmark, do not need evaluation.
-    const ObDatum &child = expr.args_[0]->locate_expr_datum(ctx);
+    const Datum &child = expr.args_[0]->locate_expr_datum(ctx);
     ObDecimalIntBuilder tmp_alloc, res_val;
     number::ObNumber in_nmb(child.get_number());
     ObScale in_scale = in_nmb.get_scale();
@@ -1174,17 +1218,17 @@ static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, ObD
     if (OB_FAIL(wide::from_number(in_nmb, tmp_alloc, in_scale, decint, int_bytes))) {
     } else if (OB_FAIL(common::decint_scale::scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cm, res_val))) {
     } else {
-      expr_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+      ret = ObExprUtil::set_decimal_int(expr, ctx, expr_datum, res_val.get_decimal_int(), res_val.get_int_bytes());
     }
   }
   return ret;
 }
 
-static int _eval_questionmark_decint2decint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum,
+static int _eval_questionmark_decint2decint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum,
                                             const ObCastMode cm)
 {
   int ret = OB_SUCCESS;
-  ObDatum *child_eval_datum = NULL;
+  Datum *child_eval_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_eval_datum))) {
   } else if (child_eval_datum->is_null()) {
     expr_datum.set_null();
@@ -1193,11 +1237,15 @@ static int _eval_questionmark_decint2decint(const ObExpr &expr, ObEvalCtx &ctx, 
     ObPrecision out_prec = expr.datum_meta_.precision_;
     ObScale in_scale = expr.args_[0]->datum_meta_.scale_;
     ObDecimalIntBuilder res_val;
-    const ObDatum &child = expr.args_[0]->locate_expr_datum(ctx);
-    if (OB_FAIL(ObDatumCast::common_scale_decimalint(child.get_decimal_int(), child.get_int_bytes(),
+    const Datum &child = expr.args_[0]->locate_expr_datum(ctx);
+    alignas(8) char input_scratch[64];
+    common::ObDatum input;
+    if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(child, input,
+        input_scratch, sizeof(input_scratch)))) {
+    } else if (OB_FAIL(ObDatumCast::common_scale_decimalint(input.get_decimal_int(), input.get_int_bytes(),
                                                     in_scale, out_scale, out_prec, cm, res_val))) {
     } else {
-      expr_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+      ret = ObExprUtil::set_decimal_int(expr, ctx, expr_datum, res_val.get_decimal_int(), res_val.get_int_bytes());
     }
   }
   return ret;
@@ -1205,19 +1253,19 @@ static int _eval_questionmark_decint2decint(const ObExpr &expr, ObEvalCtx &ctx, 
 
 // nmb2decint
 
-int eval_questionmark_nmb2decint_eqcast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int eval_questionmark_nmb2decint_eqcast(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return _eval_questionmark_nmb2decint(expr, ctx, expr_datum, CM_CONST_TO_DECIMAL_INT_EQ);
 }
 
 // decint2decint
 
-int eval_questionmark_decint2decint_eqcast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int eval_questionmark_decint2decint_eqcast(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return _eval_questionmark_decint2decint(expr, ctx, expr_datum, CM_CONST_TO_DECIMAL_INT_EQ);
 }
 
-int eval_questionmark_decint2decint_normalcast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int eval_questionmark_decint2decint_normalcast(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return _eval_questionmark_decint2decint(expr, ctx, expr_datum, CM_NONE);
 }

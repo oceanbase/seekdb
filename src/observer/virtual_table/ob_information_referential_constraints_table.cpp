@@ -54,7 +54,7 @@ int ObInfoSchemaReferentialConstraintsTable::inner_get_next_row(common::ObNewRow
     ObSArray<const ObDatabaseSchema *> database_schemas;
     if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas))) {
     } else {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
       if (0 > col_count || col_count > REFERENTIAL_CONSTRAINTS_COLUMN_COUNT) {
         ret = OB_ERR_UNEXPECTED;
@@ -103,7 +103,7 @@ int ObInfoSchemaReferentialConstraintsTable::inner_get_next_row(common::ObNewRow
 
 int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_db(
     const share::schema::ObDatabaseSchema &database_schema,
-    common::ObObj *cells,
+    common::DatumValue *cells,
     const int64_t col_count)
 {
   int ret = OB_SUCCESS;
@@ -145,7 +145,7 @@ int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_db(
 int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_table(
     const share::schema::ObTableSchema &table_schema,
     const common::ObString &database_name,
-    common::ObObj *cells,
+    common::DatumValue *cells,
     const int64_t col_count)
 {
   int ret = OB_SUCCESS;
@@ -206,38 +206,38 @@ int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_table(
         uint64_t col_id = output_column_ids_.at(j);
         switch(col_id) {
           case CONSTRAINT_CATALOG: {
-            cells[cell_idx].set_varchar(ObString("def"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("def")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case CONSTRAINT_SCHEMA: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case CONSTRAINT_NAME: {
-            cells[cell_idx].set_varchar(foreign_key_info.foreign_key_name_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, foreign_key_info.foreign_key_name_) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case UNIQUE_CONSTRAINT_CATALOG: {
-            cells[cell_idx].set_varchar(ObString("def"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("def")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case UNIQUE_CONSTRAINT_SCHEMA: {
-            cells[cell_idx].set_varchar(parent_db_schema->get_database_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, parent_db_schema->get_database_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case UNIQUE_CONSTRAINT_NAME: {
             if (FK_REF_TYPE_PRIMARY_KEY == foreign_key_info.fk_ref_type_) {
-              cells[cell_idx].set_varchar(ObString("PRIMARY"));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("PRIMARY")) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                  ObCharset::get_default_charset()));
             } else if (FK_REF_TYPE_NON_UNIQUE_KEY == foreign_key_info.fk_ref_type_
@@ -251,12 +251,12 @@ int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_table(
                 SERVER_LOG(WARN, "index_schema is null");
                 break;
               } else if (index_schema->is_user_table()) {
-                cells[cell_idx].set_varchar(ObString("PRIMARY"));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("PRIMARY")) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                   ObCharset::get_default_charset()));
                 break;
               } else if (!index_schema->is_unique_index()) {
-                cells[cell_idx].set_varchar(ObString("NULL"));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("NULL")) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                   ObCharset::get_default_charset()));
                 break;
@@ -271,13 +271,13 @@ int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_table(
                   break;
                 }
                 if (OB_SUCC(ret)) {
-                  cells[cell_idx].set_varchar(index_name);
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, index_name) : ret);
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                      ObCharset::get_default_charset()));
                 }
               }
             } else if (foreign_key_info.is_parent_table_mock_) {
-              cells[cell_idx].set_varchar("NULL");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "NULL") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                                    ObCharset::get_default_charset()));
             } else {
@@ -289,31 +289,31 @@ int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_table(
             break;
           }
           case MATCH_OPTION: {
-            cells[cell_idx].set_varchar(ObString("NONE"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("NONE")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case UPDATE_RULE: {
-            cells[cell_idx].set_varchar(ObString(foreign_key_info.get_update_action_str()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(foreign_key_info.get_update_action_str())) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case DELETE_RULE: {
-            cells[cell_idx].set_varchar(ObString(foreign_key_info.get_delete_action_str()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(foreign_key_info.get_delete_action_str())) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case TABLE_NAME: {
-            cells[cell_idx].set_varchar(table_schema.get_table_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema.get_table_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;
           }
           case REFERENCED_TABLE_NAME: {
-            cells[cell_idx].set_varchar(table_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             break;

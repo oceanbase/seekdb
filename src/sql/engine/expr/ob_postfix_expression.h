@@ -23,6 +23,7 @@
 #include "share/ob_errno.h"
 #include "common/ob_string_buf.h"
 #include "common/object/ob_object.h"
+#include "share/datum/typed_datum_compare.h"
 #include "common/row/ob_row.h"
 #include "query/engine/expr/ob_sql_expression.h"
 #include "query/parser/ob_item_type.h"
@@ -167,18 +168,15 @@ public:
   // setters
   OB_INLINE void set_item_type(ObItemType item_type) { item_type_ = item_type; }
   OB_INLINE void set_accuracy(const common::ObAccuracy &accuracy) { accuracy_ = accuracy; }
-  int assign(const common::ObObj &obj);
+  // Borrow an AST value until the containing expression snapshots its payload.
+  int assign(const common::DatumValue &obj);
   int assign(ObExprOperator *op);
   int assign(ObItemType item_type);
   int set_column(int64_t index);
   // getters
   inline ObItemType get_item_type() const {return item_type_;}
-  inline const common::ObObj &get_obj() const { return *reinterpret_cast<const common::ObObj *>(&(v2_.v1_)); }
+  inline const common::DatumValue &get_obj() const { return *reinterpret_cast<const common::DatumValue *>(&(v2_.value_bytes_)); }
   OB_INLINE bool can_get_value_directly() const;
-  OB_INLINE int get_item_value_directly(const ObPhysicalPlanCtx &plan_ctx,
-                                        const common::ObNewRow &row,
-                                        const common::ObObj *&value) const;
-  OB_INLINE int get_indirect_const(const ObPhysicalPlanCtx &phy_plan_ctx, const common::ObObj *&obj) const;
   OB_INLINE int64_t get_column() const { return v2_.cell_index_; }
   inline ObExprOperator *get_expr_operator() {return v2_.op_;}
   inline const ObExprOperator *get_expr_operator() const {return v2_.op_;}
@@ -192,7 +190,11 @@ public:
                   int64_t &pos);
   int64_t get_serialize_size() const;
   // for testing
-  void set_int(int64_t v) { common::ObObj obj; obj.set_int(v); assign(obj); }
+  int set_int(int64_t v, common::ObIAllocator &owner) {
+    common::DatumValue value; int ret = value.set_int(v, owner);
+    if (common::OB_SUCCESS == ret) { ret = assign(value); }
+    return ret;
+  }
   /* for unittest only */
   ///* for unittest only */
 
@@ -200,13 +202,11 @@ public:
   uint16_t get_param_num() const { return 0; }
 
 protected:
-  //common::ObObj v1_;
-  // To save memory, considering that the members of v1_ and union are mutually exclusive, move v1_ inside the union
-  // But the members of union can only be simple data types, so it can only construct an obobj through one buf space;
-  // To ensure that the memory of v1_ is aligned.
+  // Value views and operator/column references are mutually exclusive.
+  // Payloads are owned by the containing expression's arena.
   union
   {
-    char v1_[sizeof(common::ObObj)]; // used to save obobj
+    alignas(common::DatumValue) char value_bytes_[sizeof(common::DatumValue)];
     int64_t query_id_;
     int64_t cell_index_;  // column reference, aka cell index in ObRow
     ObExprOperator *op_;  // expression operator
@@ -223,72 +223,9 @@ OB_INLINE bool ObPostExprItem::can_get_value_directly() const
   return IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_) || T_REF_COLUMN == item_type_;
 }
 // When item is column or constant (including param constant), you can directly get the value, avoiding redundant parameter checks
-OB_INLINE int ObPostExprItem::get_item_value_directly(const ObPhysicalPlanCtx &plan_ctx,
-                                                      const common::ObNewRow &row,
-                                                      const common::ObObj *&value) const
-{
-  int ret = common::OB_SUCCESS;
-  switch (item_type_) {
-    case T_REF_COLUMN: {
-      // Suffix calculation uses the row's actual position, not the logical position obtained through projection, here it is consistent with the addressing method of suffix calculation
-      // Directly use the real position to reduce the logic of one indirect addressing
-      if (OB_UNLIKELY(get_column() >= row.count_) || OB_UNLIKELY(get_column() < 0) || OB_ISNULL(row.cells_)) {
-        ret = common::OB_INVALID_ARGUMENT;
-        SQL_ENG_LOG(WARN, "value index is invalid", K(ret), K(get_column()), K_(row.count), K_(row.cells));
-      } else {
-        value = &row.cells_[get_column()];
-        if (OB_UNLIKELY(ObBitType == value->get_type())) {
-        //use object scale to store bit length
-        const_cast<common::ObObj*>(value)->set_scale(get_accuracy().get_precision());
-        } else if (-1 != get_accuracy().get_scale()) {
-        const_cast<common::ObObj*>(value)->set_scale(get_accuracy().get_scale());
-        }
-      }
-      break;
-    }
-    case T_QUESTIONMARK: {
-      // column convert's value comes from param store or itself
-      if (OB_FAIL(get_indirect_const(plan_ctx, value))) {
-      }
-      break;
-    }
-    default: {
-      if (IS_DATATYPE_OP(item_type_)) {
-        value = &get_obj();
-      } else {
-        ret = common::OB_ERR_UNEXPECTED;
-        SQL_ENG_LOG(WARN, "invalid item type", K(item_type_));
-      }
-      break;
-    }
-  }
-  return ret;
-}
 
-OB_INLINE int ObPostExprItem::get_indirect_const(const ObPhysicalPlanCtx &plan_ctx, const common::ObObj *&val) const
-{
-  int ret = common::OB_SUCCESS;
-  switch (item_type_) {
-    case T_QUESTIONMARK: {
-      int64_t param_idx = -1;
-      const auto &param_store = plan_ctx.get_param_store();
-      if (OB_FAIL(get_obj().get_unknown(param_idx))) {
-      } else if (OB_UNLIKELY(param_idx < 0 || param_idx >= param_store.count())) {
-        ret = common::OB_ARRAY_OUT_OF_RANGE;
-        SQL_ENG_LOG(WARN, "wrong index of question mark position", K(param_idx), "param_count", param_store.count());
-      } else {
-        val = &param_store.at(param_idx);
-      }
-      break;
-    }
-    default: {
-      ret = common::OB_ERR_UNEXPECTED;
-      SQL_ENG_LOG(WARN, "invalid type", K(ret), K_(item_type));
-      break;
-    }
-  }
-  return ret;
-}
+
+
 
 enum ObSqlParamNumFlag
 {
@@ -297,12 +234,6 @@ enum ObSqlParamNumFlag
   MORE_THAN_ZERO = -1,
 };
 
-struct ObExpressionCalcStack
-{
-  // should be larger than MAX_SQL_EXPRESSION_SYMBOL_COUNT(=256)
-  static const int64_t STACK_SIZE = 1024 * 8;
-  common::ObObj stack_[STACK_SIZE];
-};
 
 } // namespace sql
 }// namespace oceanbase

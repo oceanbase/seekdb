@@ -16,6 +16,7 @@
 
 #ifndef OB_STAT_ITEM_H
 #define OB_STAT_ITEM_H
+#include "common/datum/datum_value.h"
 #include "query/optimizer/stat/ob_stat_define.h"
 #include "query/optimizer/stat/ob_opt_column_stat.h"
 namespace oceanbase {
@@ -46,12 +47,12 @@ public:
     UNUSED(pos);
     return OB_NOT_IMPLEMENT;
   }
-  virtual int decode(ObObj &obj)
+  virtual int decode(DatumValue &obj)
   {
     UNUSED(obj);
     return OB_NOT_IMPLEMENT;
   }
-  virtual int decode(ObObj &obj,
+  virtual int decode(DatumValue &obj,
                      ObIAllocator &allocator,
                      const ObDatumAccessContext *datum_access_ctx)
   {
@@ -62,7 +63,7 @@ public:
 
   TO_STRING_KV(K(is_needed()));
 
-  int cast_int(const ObObj &obj, int64_t &ret_value);
+  int cast_int(const DatumValue &obj, int64_t &ret_value);
 };
 
 /**
@@ -89,7 +90,7 @@ public:
     ObStatTabItem(stat)
   {}
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj) override;
+  virtual int decode(DatumValue &obj) override;
 };
 
 class ObStatAvgRowLen : public ObStatTabItem
@@ -102,7 +103,7 @@ public:
     col_stats_(&col_stats)
   {}
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj) override;
+  virtual int decode(DatumValue &obj) override;
 
 protected:
   ObIArray<ObOptColumnStat*> *col_stats_;
@@ -137,7 +138,7 @@ public:
     ObStatColItem(param, stat)
   {}
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj,
+  virtual int decode(DatumValue &obj,
                      ObIAllocator &allocator,
                      const ObDatumAccessContext *datum_access_ctx) override;
 };
@@ -152,7 +153,7 @@ public:
   {}
 
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj,
+  virtual int decode(DatumValue &obj,
                      ObIAllocator &allocator,
                      const ObDatumAccessContext *datum_access_ctx) override;
 };
@@ -172,7 +173,7 @@ public:
   {
     return " COUNT(`%.*s`)";
   }
-  virtual int decode(ObObj &obj) override;
+  virtual int decode(DatumValue &obj) override;
 protected:
   ObOptTableStat *tab_stat_;
 };
@@ -195,7 +196,7 @@ public:
       return " COUNT(DISTINCT `%.*s`)";
     }
   }
-  virtual int decode(ObObj &obj) override;
+  virtual int decode(DatumValue &obj) override;
 private:
   bool need_approx_ndv_;
 };
@@ -213,7 +214,7 @@ public:
   {
     return " SUM_OPNSIZE(`%.*s`)/(case when COUNT(*) = 0 then 1 else COUNT(*) end)";
   }
-  virtual int decode(ObObj &obj) override;
+  virtual int decode(DatumValue &obj) override;
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
 };
 
@@ -230,7 +231,7 @@ public:
   {
     return " APPROX_COUNT_DISTINCT_SYNOPSIS(`%.*s`)";
   }
-  virtual int decode(ObObj &obj) override;
+  virtual int decode(DatumValue &obj) override;
 };
 
 class ObStatTopKHist : public ObStatColItem
@@ -272,7 +273,7 @@ public:
   // const bucket_size = 256;
   virtual bool is_needed() const override;
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj,
+  virtual int decode(DatumValue &obj,
                      ObIAllocator &allocator,
                      const ObDatumAccessContext *datum_access_ctx) override;
   static int64_t get_window_size(int64_t bucket_num) {
@@ -294,7 +295,7 @@ class ObPartitionId : public ObStatTabItem
     partition_id_(partition_id)
   {}
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj) override;
+  virtual int decode(DatumValue &obj) override;
 
   ObString calc_partition_id_str_;
   int64_t partition_id_;
@@ -310,7 +311,7 @@ public:
   {}
 
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj,
+  virtual int decode(DatumValue &obj,
                      ObIAllocator &allocator,
                      const ObDatumAccessContext *datum_access_ctx) override;
 };
@@ -420,53 +421,35 @@ private:
 class ObGlobalMaxEval
 {
 public:
-  ObGlobalMaxEval() : global_max_()
-  {
-    global_max_.set_null();
-  }
-
-  void add(const ObObj &obj);
-
-  bool is_valid() const
-  {
-    return !global_max_.is_null();
-  }
-
-  const ObObj &get() const
-  {
-    return global_max_;
-  }
-
-  int flush(common::ObIAllocator *alloc);
-
+  ObGlobalMaxEval() : global_max_(), meta_() { meta_.set_null(); }
+  int add(const DatumValue &value);
+  int add_native(const Datum &value, const SqlTypeMeta &meta);
+  bool is_valid() const { return !global_max_.is_null(); }
+  const Datum &get_datum() const { return global_max_; }
+  const SqlTypeMeta &get_meta() const { return meta_; }
+  int export_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_value(DatumValue &output, ObIAllocator &owner) const;
+  int flush(ObIAllocator *owner);
 private:
-  ObObj global_max_;
+  Datum global_max_;
+  SqlTypeMeta meta_;
 };
 
 class ObGlobalMinEval
 {
 public:
-  ObGlobalMinEval() : global_min_()
-  {
-    global_min_.set_null();
-  }
-
-  void add(const ObObj &obj);
-
-  bool is_valid() const
-  {
-    return !global_min_.is_null();
-  }
-
-  const ObObj &get() const
-  {
-    return global_min_;
-  }
-
-  int flush(common::ObIAllocator *alloc);
-
+  ObGlobalMinEval() : global_min_(), meta_() { meta_.set_null(); }
+  int add(const DatumValue &value);
+  int add_native(const Datum &value, const SqlTypeMeta &meta);
+  bool is_valid() const { return !global_min_.is_null(); }
+  const Datum &get_datum() const { return global_min_; }
+  const SqlTypeMeta &get_meta() const { return meta_; }
+  int export_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_value(DatumValue &output, ObIAllocator &owner) const;
+  int flush(ObIAllocator *owner);
 private:
-  ObObj global_min_;
+  Datum global_min_;
+  SqlTypeMeta meta_;
 };
 
 class ObGlobalAvglenEval
@@ -521,31 +504,38 @@ struct ObGlobalAllColEvals
   bool column_stat_valid_ = true;
   int flush(common::ObIAllocator *alloc);
 
-  void merge(const ObOptColumnStat &col_stats);
+  int merge(const ObOptColumnStat &col_stats);
 };
 
 struct ObGlobalColumnStat
 {
-  ObGlobalColumnStat() :
-    min_val_(),
-    max_val_(),
-    null_val_(0),
-    avglen_val_(0),
-    ndv_val_(0)
+  ObGlobalColumnStat() : null_val_(0), avglen_val_(0), ndv_val_(0),
+      min_val_(), max_val_(), min_meta_(), max_meta_()
   {
-    min_val_.set_min_value();
-    max_val_.set_max_value();
+    min_val_.set_min(); min_meta_.set_ext();
+    max_val_.set_max(); max_meta_.set_ext();
   }
-  TO_STRING_KV(K(min_val_),
-               K(max_val_),
-               K(null_val_),
-               K(avglen_val_),
-               K(ndv_val_));
-  ObObj min_val_;
-  ObObj max_val_;
+  const Datum &get_min_datum() const { return min_val_; }
+  const Datum &get_max_datum() const { return max_val_; }
+  const SqlTypeMeta &get_min_meta() const { return min_meta_; }
+  const SqlTypeMeta &get_max_meta() const { return max_meta_; }
+  int set_min_native(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner);
+  int set_max_native(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner);
+  int export_min_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_max_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_min_value(DatumValue &output, ObIAllocator &owner) const;
+  int copy_max_value(DatumValue &output, ObIAllocator &owner) const;
+  void clear_min_value() { min_val_.set_null(); min_meta_.set_null(); }
+  void clear_max_value() { max_val_.set_null(); max_meta_.set_null(); }
+  DECLARE_TO_STRING;
   int64_t null_val_;
   int64_t avglen_val_;
   int64_t ndv_val_;
+private:
+  Datum min_val_;
+  Datum max_val_;
+  SqlTypeMeta min_meta_;
+  SqlTypeMeta max_meta_;
 };
 
 template <class T>

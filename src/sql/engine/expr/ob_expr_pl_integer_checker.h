@@ -55,7 +55,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_pl_integer_checker(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_pl_integer_checker(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int assign(const ObExprOperator &other);
   void set_pl_integer_type(pl::ObPLIntegerType type) { info_.pl_integer_type_ = type; }
   void set_range(int32_t lower, int32_t upper)
@@ -63,15 +63,16 @@ public:
     info_.pl_integer_range_.set_range(lower, upper);
   }
   template<typename T>
-  static int check_range(const T &obj, const ObObjType type, int64_t range);
-  static int calc(ObObj &result,
-                  const ObObj &obj,
+  static int check_range(const T &obj, const SqlValueType type, int64_t range);
+  static int calc(common::DatumParameter &result,
+                  const common::DatumParameter &source,
                   const pl::ObPLIntegerType &pls_type,
                   const pl::ObPLIntegerRange &pls_range,
-                  ObIAllocator &calc_buf);
-  static int calc(ObDatum &expr_datum,
-                  const ObObjType type,
-                  const ObDatum &param,
+                  ObIAllocator &owner);
+  // PL DatumParameter callers keep their explicit legacy scalar boundary.
+  static int calc(common::ObDatum &expr_datum,
+                  const SqlValueType type,
+                  const common::ObDatum &param,
                   const pl::ObPLIntegerType &pls_type,
                   const pl::ObPLIntegerRange &pls_range,
                   ObIAllocator &calc_buf);

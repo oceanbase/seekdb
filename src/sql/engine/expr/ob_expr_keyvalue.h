@@ -37,7 +37,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int calc_key_value_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                        ObDatum &res);
+                                        Datum &res);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprKeyValue);

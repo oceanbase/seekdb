@@ -40,7 +40,7 @@ int ObExprInnerRowCmpVal::calc_result_type3(ObExprResType &type,
   if (!ob_is_decimal_int(type1.get_type())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    type2.set_calc_meta(type1.get_obj_meta());
+    type2.set_calc_meta(type1.get_sql_type_meta());
     type2.set_calc_accuracy(type1.get_accuracy());
     const uint64_t cast_mode = type1.get_cast_mode();
     if (0 != (cast_mode & CM_CONST_TO_DECIMAL_INT_UP)) {
@@ -52,7 +52,7 @@ int ObExprInnerRowCmpVal::calc_result_type3(ObExprResType &type,
     }
   }
   if (OB_SUCC(ret)) {
-    type.set_meta(type3.get_obj_meta());
+    type.set_meta(type3.get_sql_type_meta());
     type.set_accuracy(type3.get_accuracy());
   }
   return ret;
@@ -80,19 +80,19 @@ int ObExprInnerRowCmpVal::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw
   return ret;
 }
 
-int ObExprInnerRowCmpVal::eval_inner_row_cmp_val(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprInnerRowCmpVal::eval_inner_row_cmp_val(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum* left_datum = NULL;
-  ObDatum* right_datum = NULL;
-  ObDatum* real_val_datum = NULL;
+  Datum* left_datum = NULL;
+  Datum* right_datum = NULL;
+  Datum* real_val_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, left_datum))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, right_datum))) {
   } else if ((left_datum->is_null() != right_datum->is_null()) ||
-      left_datum->len_ != right_datum->len_) {
+      left_datum->length() != right_datum->length()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!left_datum->is_null() &&
-      (0 != MEMCMP(left_datum->ptr_, right_datum->ptr_, left_datum->len_))) {
+      (0 != MEMCMP(left_datum->get_string().ptr(), right_datum->get_string().ptr(), left_datum->length()))) {
     ret = -static_cast<int>(expr.extra_);
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, real_val_datum))) {
   } else {

@@ -24,6 +24,7 @@
 #include "lib/container/ob_bit_set.h"
 #include "lib/container/ob_vector.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
+#include "common/datum/datum.h"
 #include "sql/ob_sql_temp_table.h"
 
 namespace oceanbase
@@ -130,28 +131,35 @@ struct ObSelectIntoItem
         buffer_size_(DEFAULT_BUFFER_SIZE),
         external_properties_()
   {
-    field_str_.set_varchar(DEFAULT_FIELD_TERM_STR);
-    field_str_.set_collation_type(ObCharset::get_system_collation());
-    line_str_.set_varchar(DEFAULT_LINE_TERM_STR);
-    line_str_.set_collation_type(ObCharset::get_system_collation());
-    escaped_cht_.meta_.set_char();
-    escaped_cht_.set_char_value(&DEFAULT_FIELD_ESCAPED_CHAR, 1);
-    escaped_cht_.set_collation_type(ObCharset::get_system_collation());
-    closed_cht_.meta_.set_char();
-    closed_cht_.set_char_value(NULL, 0);
-    closed_cht_.set_collation_type(ObCharset::get_system_collation());
+    field_str_meta_.set_varchar();
+    field_str_meta_.set_collation_type(ObCharset::get_system_collation());
+    field_str_.set_string(ObString::make_string(DEFAULT_FIELD_TERM_STR));
+    line_str_meta_.set_varchar();
+    line_str_meta_.set_collation_type(ObCharset::get_system_collation());
+    line_str_.set_string(ObString::make_string(DEFAULT_LINE_TERM_STR));
+    escaped_cht_meta_.set_char();
+    escaped_cht_meta_.set_collation_type(ObCharset::get_system_collation());
+    escaped_cht_.set_string(&DEFAULT_FIELD_ESCAPED_CHAR, 1);
+    closed_cht_meta_.set_char();
+    closed_cht_meta_.set_collation_type(ObCharset::get_system_collation());
+    closed_cht_.set_string(NULL, 0);
     cs_type_ = ObCharset::get_system_collation();
   }
   int assign(const ObSelectIntoItem &other) {
     into_type_ = other.into_type_;
     outfile_name_ = other.outfile_name_;
+    outfile_name_meta_ = other.outfile_name_meta_;
     field_str_ = other.field_str_;
+    field_str_meta_ = other.field_str_meta_;
     line_str_ = other.line_str_;
+    line_str_meta_ = other.line_str_meta_;
     closed_cht_ = other.closed_cht_;
+    closed_cht_meta_ = other.closed_cht_meta_;
     is_optional_ = other.is_optional_;
     is_single_ = other.is_single_;
     max_file_size_ = other.max_file_size_;
     escaped_cht_ = other.escaped_cht_;
+    escaped_cht_meta_ = other.escaped_cht_meta_;
     cs_type_ = other.cs_type_;
     buffer_size_ = other.buffer_size_;
     external_properties_ = other.external_properties_;
@@ -173,16 +181,21 @@ struct ObSelectIntoItem
                K_(buffer_size),
                K_(external_properties));
   ObItemType into_type_;
-  common::ObObj outfile_name_;
-  common::ObObj field_str_; // field terminated str
-  common::ObObj line_str_; // line terminated str
+  common::Datum outfile_name_;
+  common::Datum field_str_; // field terminated str
+  common::Datum line_str_; // line terminated str
   common::ObSEArray<common::ObString, 16> user_vars_; // user variables
   common::ObSEArray<sql::ObRawExpr*, 16> pl_vars_; // pl variables
-  common::ObObj closed_cht_; // all fields, "123","ab"
+  common::Datum closed_cht_; // all fields, "123","ab"
   bool is_optional_; //  for string, closed character, such as "aa"
   bool is_single_;
   int64_t max_file_size_;
-  common::ObObj escaped_cht_;
+  common::Datum escaped_cht_;
+  common::SqlTypeMeta outfile_name_meta_;
+  common::SqlTypeMeta field_str_meta_;
+  common::SqlTypeMeta line_str_meta_;
+  common::SqlTypeMeta closed_cht_meta_;
+  common::SqlTypeMeta escaped_cht_meta_;
   common::ObCollationType cs_type_;
   int64_t buffer_size_;
   common::ObString external_properties_;

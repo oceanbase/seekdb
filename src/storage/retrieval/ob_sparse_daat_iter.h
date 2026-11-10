@@ -105,7 +105,7 @@ protected:
   ObFixedArray<double, ObIAllocator> buffered_relevances_;
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
-  void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  void (*set_datum_func_)(common::Datum &, const ObDocIdExt &);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
 };

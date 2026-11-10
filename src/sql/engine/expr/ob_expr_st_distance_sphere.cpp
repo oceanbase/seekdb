@@ -49,8 +49,8 @@ int ObExprSTDistanceSphere::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   type.set_type(ObDoubleType);
-  ObObjType type0 = types_stack[0].get_type();
-  ObObjType type1 = types_stack[1].get_type();
+  SqlValueType type0 = types_stack[0].get_type();
+  SqlValueType type1 = types_stack[1].get_type();
 
   if (ob_is_null(type0) || ob_is_null(type1)) {
     // do nothing
@@ -68,7 +68,7 @@ int ObExprSTDistanceSphere::calc_result_typeN(ObExprResType& type,
   }
 
   if (3 == param_num) {
-    ObObjType radius_type = types_stack[2].get_type();
+    SqlValueType radius_type = types_stack[2].get_type();
     if (ob_is_null(radius_type)) {
       // do nothing
     } else if (!ob_is_double_tc(radius_type)) {
@@ -81,7 +81,7 @@ int ObExprSTDistanceSphere::calc_result_typeN(ObExprResType& type,
 
 int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
                                                     ObEvalCtx &ctx,
-                                                    ObDatum &res)
+                                                    Datum &res)
 {
   int ret = OB_SUCCESS;
   uint32_t arg_num = expr.arg_cnt_;
@@ -92,8 +92,8 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = NULL;
   const ObSrsItem *srs2 = NULL;
-  ObDatum *wkb1_datum = NULL;
-  ObDatum *wkb2_datum = NULL;
+  Datum *wkb1_datum = NULL;
+  Datum *wkb2_datum = NULL;
   ObString wkb1;
   ObString wkb2;
   ObString wkb1_copy;
@@ -153,7 +153,7 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret) && !is_null_result && arg_num == 3) {
-    ObDatum *radius_datum = NULL;
+    Datum *radius_datum = NULL;
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[2], ctx, radius_datum))) {
     } else if (radius_datum->is_null()) {
       is_null_result = true;

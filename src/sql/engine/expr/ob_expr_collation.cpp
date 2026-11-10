@@ -55,10 +55,10 @@ int ObExprCharset::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int calc_charset_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_charset_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   ObString charset_str = ObString::make_string(ObCharset::collation_name(CS_TYPE_BINARY));
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
   } else {
@@ -127,10 +127,10 @@ int ObExprCollation::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int calc_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
   } else {
     const ObCollationType &cs_type = expr.args_[0]->datum_meta_.get_cs_type();
@@ -194,7 +194,7 @@ int ObExprCoercibility::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int calc_coercibility_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_coercibility_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(ctx);
@@ -284,12 +284,12 @@ int ObExprSetCollation::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int calc_set_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_set_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // set_collation(dst_arg, cs_arg)
-  ObDatum *dst_arg = NULL;
-  ObDatum *cs_arg = NULL;
+  Datum *dst_arg = NULL;
+  Datum *cs_arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, dst_arg)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, cs_arg))) {
   } else if (dst_arg->is_null()) {
@@ -370,7 +370,7 @@ int ObExprCmpMeta::calc_result_type1(ObExprResType &type,
   return OB_SUCCESS;
 }
 
-int calc_cmp_meta_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_cmp_meta_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObExprStrResAlloc res_alloc(expr, ctx);

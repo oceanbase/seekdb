@@ -417,14 +417,14 @@ int ObTransformSimplifyWinfunc::get_param_value(const ObDMLStmt *stmt,
 {
   int ret = OB_SUCCESS;
   is_valid = true;
-  ObObj obj_value;
+  DatumValue obj_value;
   bool got_result = false;
   ObPhysicalPlanCtx *plan_ctx = NULL;
-  const ParamStore *param_store = NULL;
+  const ObPhysicalPlanCtx *param_store = NULL;
   if (OB_ISNULL(stmt) || OB_ISNULL(param) || OB_ISNULL(ctx_) ||
       OB_ISNULL(ctx_->allocator_) || OB_ISNULL(ctx_->exec_ctx_) ||
       OB_ISNULL(plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx()) ||
-      OB_ISNULL(param_store = &plan_ctx->get_param_store())) {
+      OB_ISNULL(param_store = plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (param->is_static_scalar_const_expr() &&
              (param->get_result_type().is_integer_type() ||

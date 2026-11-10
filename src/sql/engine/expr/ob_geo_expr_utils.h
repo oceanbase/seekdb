@@ -188,10 +188,10 @@ public:
   static int zoom_in_geos_for_relation(const ObSrsItem *srs, common::ObGeometry &geo1, common::ObGeometry &geo2,
                                        bool is_geo1_cached = false, bool is_geo2_cached = false);
 
-  static int pack_geo_res(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const ObString &str);
+  static int pack_geo_res(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, const ObString &str);
   static int reverse_coordinate(ObGeometry *geo, const char *func_name);
   static int length_unit_conversion(const ObString &unit_str, const ObSrsItem *srs, double in_num, double &out_num);
-  static int get_input_geometry(const char* func_name, MultimodeAlloctor &allocator, ObDatum *gis_datum, ObEvalCtx &ctx, ObExpr *gis_arg,
+  static int get_input_geometry(const char* func_name, MultimodeAlloctor &allocator, Datum *gis_datum, ObEvalCtx &ctx, ObExpr *gis_arg,
     common::ObSrsCacheGuard &srs_guard, const ObSrsItem *&srs, ObGeometry *&geo);
   static int make_valid_polygon_inner(
     ObCartesianPolygon &poly, lib::MemoryContext &mem_ctx, ObGeometry *&valid_poly);
@@ -203,7 +203,7 @@ public:
   static void expr_get_const_param_cache(ObGeoConstParamCache* const_param_cache, ObGeometry *&geo, uint32_t& srid, bool& is_geo_cached, int cache_idx);
   static int expr_prepare_build_geometry(ObExecContext &exec_ctx,
                                          MultimodeAlloctor &allocator,
-                                         const ObDatum &datum,
+                                         const Datum &datum,
                                          const ObExpr &gis_arg,
                                          ObString &wkb,
                                          ObGeoType &type,

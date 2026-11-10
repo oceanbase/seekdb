@@ -109,7 +109,7 @@ int ObSSTableIndexFilter::is_filtered_by_skipping_index(
   } else {
     const uint32_t col_offset = node.filter_->get_col_offsets().at(0);
     const uint32_t col_idx = static_cast<uint32_t>(read_info->get_columns_index().at(col_offset));
-    const ObObjMeta obj_meta = read_info->get_columns_desc().at(col_offset).col_type_;
+    const SqlTypeMeta obj_meta = read_info->get_columns_desc().at(col_offset).col_type_;
     if (OB_FAIL(skip_filter_executor_.falsifiable_pushdown_filter(col_idx,
                                                                   obj_meta,
                                                                   node.skip_index_type_,

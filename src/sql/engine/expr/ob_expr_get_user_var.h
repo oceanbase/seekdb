@@ -34,7 +34,7 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                               ObExpr &expr) const override;
-  static int eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprGetUserVar);

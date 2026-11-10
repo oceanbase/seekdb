@@ -75,7 +75,8 @@ struct HashKey
       bret = false;
     }
     for (int64_t i = 0; bret && i < rowkey_.count(); ++i) {
-      if (rowkey_.at(i) != other.rowkey_.at(i)) {
+      bool equal = false;
+      if (OB_SUCCESS != datum_values_equal(rowkey_.at(i), other.rowkey_.at(i), equal) || !equal) {
         bret = false;
       }
     }
@@ -85,7 +86,7 @@ struct HashKey
   {
     uint64_t hash_ret = 0;
     for (int64_t i = 0; i < rowkey_.count(); ++i) {
-      rowkey_.at(i).hash(hash_ret, hash_ret);
+      if (OB_SUCCESS != hash_datum_value(rowkey_.at(i), hash_ret, hash_ret)) { return 0; }
     }
     return hash_ret;
   }
@@ -95,7 +96,7 @@ struct HashKey
     return OB_SUCCESS;
   }
   void reuse() { rowkey_.reuse(); }
-  common::ObSEArray<ObObj, 4> rowkey_;
+  common::ObSEArray<common::DatumValue, 4> rowkey_;
   TO_STRING_KV(K_(rowkey));
 };
 
@@ -105,7 +106,7 @@ struct ObPCUserVarMeta
 {
 public:
   ObPCUserVarMeta(): precision_(-1), obj_meta_() {}
-  ObPCUserVarMeta(const ObPrecision precision, const ObObjType type,
+  ObPCUserVarMeta(const ObPrecision precision, const SqlValueType type,
                   const ObCollationLevel coll_level,
                   const ObCollationType coll_type):
   precision_(precision), obj_meta_()
@@ -151,7 +152,7 @@ public:
 
 private:
   ObPrecision precision_;
-  ObObjMeta obj_meta_;
+  SqlTypeMeta obj_meta_;
 };
 
 //ObPlanSet is a set of ObPhysicalPlans with same PlanMetaInfo
@@ -183,6 +184,8 @@ public:
   virtual ~ObPlanSet();
 
 public:
+  int match_runtime_params_info(const ObPhysicalPlanCtx *params,
+                                ObPlanCacheCtx &pc_ctx, bool &is_same);
   int match_params_info(const ParamStore *params,
                         ObPlanCacheCtx &pc_ctx,
                         bool &is_same);
@@ -194,12 +197,12 @@ public:
   bool can_skip_params_match();
   bool can_delay_init_datum_store();
   int match_param_info(const ObParamInfo &param_info,
-                       const ObObjParam &param,
+                       const DatumParameter &param,
                        bool &is_same,
                        bool is_sql_planset) const;
   int copy_param_flag_from_param_info(ParamStore *params);
   int match_param_bool_value(const ObParamInfo &param_info,
-                             const ObObjParam &param,
+                             const DatumParameter &param,
                              bool &is_same) const;
   static int match_multi_stmt_info(const ParamStore &params,
                                    const common::ObIArray<int64_t> &multi_stmt_rowkey_pos,
@@ -235,6 +238,8 @@ public:
   bool get_can_delay_init_datum_store() { return can_delay_init_datum_store_; }
 
 private:
+  int match_ordinary_param_metadata(const ObParamInfo &param_info,
+      const common::DatumParameterMetadata &attributes, bool is_null, bool &is_same) const;
   /**
    * @brief set const param constraints
    *
@@ -257,6 +262,9 @@ private:
    * @retval is_matched Matching result
    */
   int match_constraint(const ParamStore &params, bool &is_matched);
+  int match_runtime_constraint(const ObPhysicalPlanCtx &params, bool &is_matched);
+  static int match_runtime_multi_stmt_info(const ObPhysicalPlanCtx &params,
+      const common::ObIArray<int64_t> &multi_stmt_rowkey_pos, bool &is_match);
 
   int init_pre_calc_exprs(const ObPlanCacheObject &cache_obj, common::ObIAllocator* pc_alloc_);
 
@@ -267,6 +275,7 @@ private:
 
   DISALLOW_COPY_AND_ASSIGN(ObPlanSet);
   friend class ::test::TestPlanSet_basic_Test;
+  friend struct NativePcConstValuesTestPeer;
 protected:
   common::ObArenaAllocator alloc_;
   ObPlanCacheValue *plan_cache_value_;

@@ -255,7 +255,7 @@ int ObAutoincrementService::get_handle(AutoincParam &param, CacheHandle *&handle
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sequence_load);
   int ret = OB_SUCCESS;
 
-  const ObObjType column_type  = param.autoinc_col_type_;
+  const SqlValueType column_type  = param.autoinc_col_type_;
   const uint64_t offset        = param.autoinc_offset_;
   const uint64_t increment     = param.autoinc_increment_;
   const uint64_t max_value     = get_max_value(column_type);
@@ -513,7 +513,7 @@ int ObAutoincrementService::calculate_idempotent_autoinc_val_for_ddl(
   } else {
     const int64_t range_id = slice_row_idx / autoinc_range_interval;
     const int64_t row_id_in_range = slice_row_idx % autoinc_range_interval;
-    const ObObjType column_type = autoinc_param->autoinc_col_type_;
+    const SqlValueType column_type = autoinc_param->autoinc_col_type_;
     // for now, only `offset` param is supported, `increment` param is not supported
     const uint64_t offset = autoinc_param->autoinc_offset_;
     const uint64_t max_value = get_max_value(column_type);
@@ -551,7 +551,7 @@ int ObAutoincrementService::clear_autoinc_cache(const uint64_t table_id,
   return ret;
 }
 
-uint64_t ObAutoincrementService::get_max_value(const common::ObObjType type)
+uint64_t ObAutoincrementService::get_max_value(const common::SqlValueType type)
 {
   static const uint64_t type_max_value[] =
   {
@@ -689,7 +689,7 @@ int ObAutoincrementService::fetch_table_node(const AutoincParam &param,
   
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
-  const ObObjType column_type  = param.autoinc_col_type_;
+  const SqlValueType column_type  = param.autoinc_col_type_;
   const uint64_t part_num      = param.autoinc_table_part_num_;
   const uint64_t desired_count = param.autoinc_desired_count_;
   const uint64_t offset        = param.autoinc_offset_;
@@ -771,7 +771,7 @@ int ObAutoincrementService::sync_insert_value_to_store(AutoincParam &param,
   
   const uint64_t table_id      = param.autoinc_table_id_;
   const uint64_t column_id     = param.autoinc_col_id_;
-  const ObObjType column_type  = param.autoinc_col_type_;
+  const SqlValueType column_type  = param.autoinc_col_type_;
   const uint64_t max_value     = get_max_value(column_type);
   const int64_t autoinc_version = param.autoinc_version_;
   TableNode *table_node = NULL;

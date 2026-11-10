@@ -47,7 +47,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_password_strength(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int eval_password_strength(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
   static int calc_password_strength(const common::ObString &password,
                                     const ObBasicSessionInfo &session,
                                     int &strength);

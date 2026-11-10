@@ -45,7 +45,7 @@ int ObExprCurrentUserPriv::calc_result_type0(ObExprResType &type,
   return ret;
 }
 
-int ObExprCurrentUserPriv::eval_current_user_priv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum) {
+int ObExprCurrentUserPriv::eval_current_user_priv(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum) {
   int ret = OB_SUCCESS;
   UNUSED(expr);
   const ObSQLSessionInfo *session_info = NULL;
@@ -95,7 +95,7 @@ int ObExprCurrentRole::calc_result_type0(ObExprResType &type, ObExprTypeCtx &typ
   return ret;
 }
 
-int ObExprCurrentRole::eval_current_role(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprCurrentRole::eval_current_role(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   
@@ -182,14 +182,14 @@ int ObExprIsEnabledRole::calc_result_type2(ObExprResType &type,
   return OB_SUCCESS;
 }
 
-int ObExprIsEnabledRole::eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIsEnabledRole::eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   
   ObSchemaGetterGuard schema_guard;
   ObSQLSessionInfo *session_info = NULL;
-  ObDatum *user = NULL;
-  ObDatum *host = NULL;
+  Datum *user = NULL;
+  Datum *host = NULL;
   ObString user_name;
   ObString host_name;
   bool is_enabled_role = false;

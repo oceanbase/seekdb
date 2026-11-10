@@ -66,7 +66,9 @@ int ObRawExprPartExprChecker::check_args_of_extract(const ObSysFunRawExpr &expr)
       } else if (OB_ISNULL(con_expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        con_expr->get_value().get_int(date_unit_type);
+        if (!con_expr->get_value_datum().is_null() && con_expr->get_value_meta().is_int()) {
+          date_unit_type = con_expr->get_value_datum().get_int();
+        }
         switch(date_unit_type) {
           case DATE_UNIT_YEAR:
           case DATE_UNIT_YEAR_MONTH:
@@ -174,7 +176,7 @@ int ObRawExprPartExprChecker::visit(ObColumnRefRawExpr &expr)
 int ObRawExprPartExprChecker::visit(ObOpRawExpr &expr)
 { 
   int ret = OB_SUCCESS;
-  const ObObjType type = expr.get_result_type().get_type();
+  const SqlValueType type = expr.get_result_type().get_type();
   if (PARTITION_FUNC_TYPE_RANGE_COLUMNS != func_type_ &&
       PARTITION_FUNC_TYPE_LIST_COLUMNS != func_type_ &&
       !ob_is_integer_type(type)) {

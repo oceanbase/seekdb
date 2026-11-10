@@ -60,7 +60,7 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
     // do nothing
   } else if (!ob_is_collection_sql_type(array_type->get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(array_type->get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(array_type->get_type()));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(array_type->get_subschema_id(), arr_meta))) {
   } else if (arr_meta.type_ != ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -76,7 +76,7 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
     delimiter_type->set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
   } else {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", ob_obj_type_str(delimiter_type->get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", sql_value_type_to_string(delimiter_type->get_type()));
   }
   if (OB_SUCC(ret) && param_num == 3) {
     ObExprResType *null_str_type = &types[2];
@@ -86,7 +86,7 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
       null_str_type->set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", ob_obj_type_str(null_str_type->get_type()));
+      LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", sql_value_type_to_string(null_str_type->get_type()));
     }
   }
 
@@ -100,15 +100,15 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayToString::eval_array_to_string(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayToString::eval_array_to_string(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-  ObDatum *arr_datum = NULL;
-  ObDatum *delimiter_datum = NULL;
-  ObDatum *null_str_datum = NULL;
+  Datum *arr_datum = NULL;
+  Datum *delimiter_datum = NULL;
+  Datum *null_str_datum = NULL;
   bool is_null_res = false;
   ObIArrayType *arr_obj = NULL;
   ObString delimiter;
@@ -147,7 +147,7 @@ int ObExprArrayToString::eval_array_to_string_batch(const ObExpr &expr, ObEvalCt
                                                     const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -158,9 +158,9 @@ int ObExprArrayToString::eval_array_to_string_batch(const ObExpr &expr, ObEvalCt
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.arg_cnt_ > 2 && expr.args_[2]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector delimiter_array = expr.args_[1]->locate_expr_datumvector(ctx);
-    ObDatumVector null_str_array = expr.arg_cnt_ > 2 ? expr.args_[2]->locate_expr_datumvector(ctx) : ObDatumVector();
+    DatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector delimiter_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector null_str_array = expr.arg_cnt_ > 2 ? expr.args_[2]->locate_expr_datumvector(ctx) : DatumVector();
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       bool is_null_res = false;
       ObString delimiter;

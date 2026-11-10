@@ -25,7 +25,7 @@ using namespace common;
 namespace sql
 {
 
-typedef int (*CheckIsMatchFunc)(const ObDatum *when_datum, bool &match_when);
+typedef int (*CheckIsMatchFunc)(const Datum *when_datum, bool &match_when);
 
 ObExprCase::ObExprCase(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_OP_CASE, N_CASE, MORE_THAN_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
@@ -79,8 +79,8 @@ int ObExprCase::calc_result_typeN(ObExprResType &type,
 
     if (OB_SUCC(ret)) {
       for (int64_t i = 0; i < cond_type_count; ++i) {
-        const ObObjType cond_type = types_stack[i].get_type();
-        const ObObjTypeClass cond_tc = ob_obj_type_class(cond_type);
+        const SqlValueType cond_type = types_stack[i].get_type();
+        const SqlTypeClass cond_tc = sql_type_class(cond_type);
         if (ObIntTC == cond_tc || ObUIntTC == cond_tc
             || ObNumberTC == cond_tc || ObDecimalIntTC == cond_tc
             || ObNullTC == cond_tc) {
@@ -101,12 +101,12 @@ int ObExprCase::calc_result_typeN(ObExprResType &type,
         if ((is_arg_integer_type && is_expr_integer_type) ||
             ObNullType == types_stack[i].get_type()) {
           // see ObExprCoalesce::calc_result_typeN
-          types_stack[i].set_calc_meta(types_stack[i].get_obj_meta());
+          types_stack[i].set_calc_meta(types_stack[i].get_sql_type_meta());
         } else {
-          types_stack[i].set_calc_meta(type.get_obj_meta());
-          if (ObNumberType == type.get_obj_meta().get_type()
-              || ObDecimalIntType == type.get_obj_meta().get_type()
-              || ob_is_double_type(type.get_obj_meta().get_type())) {
+          types_stack[i].set_calc_meta(type.get_sql_type_meta());
+          if (ObNumberType == type.get_sql_type_meta().get_type()
+              || ObDecimalIntType == type.get_sql_type_meta().get_type()
+              || ob_is_double_type(type.get_sql_type_meta().get_type())) {
             types_stack[i].set_calc_accuracy(type.get_accuracy());
           }
         }
@@ -127,7 +127,7 @@ int ObExprCase::cg_expr(ObExprCGCtx &op_cg_ctx,
   // New engine case expression when expr must return int/null, i.e., when expr is always a boolean semantic expression
   for (int64_t i = 0; OB_SUCC(ret) && i < case_expr.get_when_expr_size(); ++i) {
     const ObRawExpr *when_expr = case_expr.get_when_param_expr(i);
-    const ObObjType &when_expr_res_type = when_expr->get_result_type().get_type();
+    const SqlValueType &when_expr_res_type = when_expr->get_result_type().get_type();
     if (OB_UNLIKELY(ObNullType != when_expr_res_type &&
                     !ob_is_integer_type(when_expr_res_type))) {
       ret = OB_ERR_UNEXPECTED;
@@ -141,7 +141,7 @@ int ObExprCase::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-static int check_is_match(const ObDatum &when_datum, bool &match_when)
+static int check_is_match(const Datum &when_datum, bool &match_when)
 {
   int ret = OB_SUCCESS;
   if (when_datum.is_null()) {
@@ -153,14 +153,14 @@ static int check_is_match(const ObDatum &when_datum, bool &match_when)
   return ret;
 }
 
-int ObExprCase::calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprCase::calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   const bool has_else = (expr.arg_cnt_ % 2 != 0);
   int64_t loop = (has_else) ? expr.arg_cnt_ - 1 : expr.arg_cnt_;
   bool match_when = false;
-  ObDatum *when_datum = NULL;
-  ObDatum *then_datum = NULL;
+  Datum *when_datum = NULL;
+  Datum *then_datum = NULL;
   bool has_result = false;
   int64_t expr_idx = 0;
   for ( ; OB_SUCC(ret) && !match_when && expr_idx < loop; expr_idx += 2) {
@@ -207,7 +207,7 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
   const bool has_else = (expr.arg_cnt_ % 2 != 0);
   int64_t loop = (has_else) ? expr.arg_cnt_ - 1 : expr.arg_cnt_;
   bool match_when = false;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (batch_size <= 0) {
@@ -249,7 +249,7 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
     for (int64_t expr_idx = 0; OB_SUCC(ret) && expr_idx < loop; expr_idx += 2) {
       if (OB_FAIL(expr.args_[expr_idx]->eval_batch(ctx, *case_when_match, batch_size))) {
       } else {
-        ObDatumVector when_datums = expr.args_[expr_idx]->locate_expr_datumvector(ctx);
+        DatumVector when_datums = expr.args_[expr_idx]->locate_expr_datumvector(ctx);
         //first eval when datums
         for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
           if (case_when_match->at(j)) {
@@ -267,7 +267,7 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(expr.args_[expr_idx + 1]->eval_batch(ctx, *case_not_match, batch_size))) {
         } else {
-          ObDatumVector then_datums = expr.args_[expr_idx + 1]->locate_expr_datumvector(ctx);
+          DatumVector then_datums = expr.args_[expr_idx + 1]->locate_expr_datumvector(ctx);
           for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
             if (case_not_match->at(j)) {
               continue;
@@ -287,7 +287,7 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
       if (has_else) {
         if (OB_FAIL(expr.args_[expr.arg_cnt_ - 1]->eval_batch(ctx, *case_when_match, batch_size))) {
         } else {
-          ObDatumVector else_datums = expr.args_[expr.arg_cnt_ - 1]->locate_expr_datumvector(ctx);
+          DatumVector else_datums = expr.args_[expr.arg_cnt_ - 1]->locate_expr_datumvector(ctx);
           for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
             if (case_when_match->at(j)) {
               continue;

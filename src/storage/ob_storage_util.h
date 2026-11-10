@@ -23,7 +23,6 @@
 #include "share/datum/ob_datum_compare.h"
 #include "query/engine/expr/ob_expr.h"
 #include "common/ob_common_types.h"
-#include "storage/ob_obj_buf_array.h"
 
 namespace oceanbase
 {
@@ -55,14 +54,10 @@ namespace storage
 struct ObTableIterParam;
 struct ObTableAccessContext;
 
-int pad_column(const ObObjMeta &obj_meta,
+int pad_column(const SqlTypeMeta &obj_meta,
                const ObAccuracy accuracy,
                common::ObIAllocator &padding_alloc,
                blocksstable::ObStorageDatum &datum);
-
-int pad_column(const ObAccuracy accuracy,
-               common::ObIAllocator &padding_alloc,
-               common::ObObj &cell);
 
 int pad_column(const common::ObAccuracy accuracy,
                sql::ObEvalCtx &ctx,
@@ -90,7 +85,7 @@ int check_skip_by_monotonicity(sql::ObBlackFilterExecutor &filter,
                                sql::ObBoolMask &bool_mask);
 
 inline static common::ObDatumHashFuncType get_datum_hash_func(
-    const common::ObObjMeta &obj_meta)
+    const common::SqlTypeMeta &obj_meta)
 {
   common::ObDatumHashFuncType hash_func = nullptr;
   common::ObPrecision precision = common::PRECISION_UNKNOWN_YET;

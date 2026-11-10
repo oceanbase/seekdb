@@ -27,6 +27,39 @@ namespace blocksstable
 {
 using namespace common;
 
+namespace
+{
+// The caller reserves scalar/NUMBER/DECIMAL storage in datum. Only string
+// payloads may borrow the ColumnParam, whose lifetime covers the scan. Normalize
+// flags from the persisted metadata instead of inheriting SQL LOB header flags.
+int copy_column_default_datum(const DatumValue &value, ObDatum &datum)
+{
+  int ret = OB_SUCCESS;
+  if (value.is_null() || value.get_meta().is_null()) {
+    datum.set_null();
+  } else if (value.is_invalid_type()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    alignas(8) char scratch[64];
+    ObDatum source;
+    if (OB_FAIL(value.export_legacy(source, scratch, sizeof(scratch)))) {
+    } else if (value.is_ext()) {
+      datum.datum2datum<OBJ_DATUM_EXTEND>(source);
+    } else {
+      source.pack_ = source.len_;
+      const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(value.get_type());
+      if (OBJ_DATUM_STRING == mapping && value.get_meta().is_outrow()) {
+        source.set_outrow();
+      }
+      // Non-string mappings synchronously copy into the caller's reserved
+      // datum buffer; only strings borrow the ColumnParam's existing owner.
+      ret = datum.from_storage_datum(source, mapping);
+    }
+  }
+  return ret;
+}
+} // namespace
+
 int ObNewColumnCommonDecoder::decode(
     const ObColumnParam *col_param, 
     common::ObIAllocator *allocator, 
@@ -34,8 +67,10 @@ int ObNewColumnCommonDecoder::decode(
 {
   int ret = OB_SUCCESS;
   // it is sure that col_param can not be nullptr here
-  const ObObj &def_cell = col_param->get_orig_default_value();
-  if (OB_FAIL(datum.from_obj(def_cell))) {
+  DatumValue def_cell;
+  alignas(8) char default_scratch[64];
+  if (OB_FAIL(col_param->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+  } else if (OB_FAIL(copy_column_default_datum(def_cell, datum))) {
   } else if (def_cell.is_lob_storage() && !def_cell.is_null()) {
     // lob def value must have no lob header when not null
     // When do lob decode, should add lob header for default value
@@ -61,7 +96,7 @@ int ObNewColumnCommonDecoder::batch_decode(
     if (OB_FAIL(decode(col_param, allocator, datums[i]))) {
     }
   }
-  LOG_DEBUG("[NEW_COLUMN_DECODE] batch decode", K(col_param->get_orig_default_value()), K(row_cap), K(lbt()));
+  LOG_DEBUG("[NEW_COLUMN_DECODE] batch decode", K(col_param->get_orig_default_datum()), K(col_param->get_orig_default_meta()), K(row_cap), K(lbt()));
   return ret;
 }
 
@@ -103,12 +138,12 @@ int ObNewColumnCommonDecoder::get_null_count(
     int64_t &null_count) const
 {
   int ret = OB_SUCCESS;
-  if (col_param->get_orig_default_value().is_null()) {
+  if (col_param->get_orig_default_datum().is_null()) {
     null_count = row_cap;
   } else {
     null_count = 0;
   }
-  LOG_DEBUG("[NEW_COLUMN_DECODE] get null count", K(col_param->get_orig_default_value()), K(null_count), K(lbt()));
+  LOG_DEBUG("[NEW_COLUMN_DECODE] get null count", K(col_param->get_orig_default_datum()), K(col_param->get_orig_default_meta()), K(null_count), K(lbt()));
   return ret;
 }
 
@@ -118,7 +153,10 @@ int ObNewColumnCommonDecoder::read_distinct(
 {
   int ret = OB_SUCCESS;
   common::ObDatum *datums = group_by_cell.get_group_by_col_datums_to_fill();
-  if (OB_FAIL(datums[0].from_obj(col_param->get_orig_default_value(), ObDatum::get_obj_datum_map_type(col_param->get_orig_default_value().get_type())))) {
+  DatumValue def_cell;
+  alignas(8) char default_scratch[64];
+  if (OB_FAIL(col_param->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+  } else if (OB_FAIL(copy_column_default_datum(def_cell, datums[0]))) {
   } else {
     group_by_cell.set_distinct_cnt(1);
   }

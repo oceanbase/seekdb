@@ -293,8 +293,8 @@ int ObTransformPreProcess::add_all_rowkey_columns_to_stmt(const ObTableSchema &t
       column_item.base_tid_ = table_item.ref_id_;
       column_item.base_cid_ = rowkey->get_column_id();
       column_item.column_name_ = rowkey->get_column_name();
-      column_item.set_default_value(column_schema->get_cur_default_value());
-      if (OB_FAIL(stmt.add_column_item(column_item))) {
+      if (OB_FAIL(column_item.set_default_native_value(column_schema->get_cur_default_datum(), column_schema->get_cur_default_meta()))) {
+      } else if (OB_FAIL(stmt.add_column_item(column_item))) {
       } else if (OB_FAIL(column_items.push_back(column_item))) {
       } else if (FALSE_IT(rowkey->clear_explicited_referece())) {
       } else if (OB_ISNULL(ctx_)) {
@@ -326,7 +326,7 @@ int ObTransformPreProcess::formalize_limit_expr(ObDMLStmt &stmt)
     int64_t limit_value = 0;
     ObRawExpr *cmp_expr = NULL;
     if (OB_FAIL(ObTransformUtils::get_expr_int_value(limit_expr,
-                                                  &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
+                                                  ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                   ctx_->exec_ctx_,
                                                   ctx_->allocator_,
                                                   limit_value,
@@ -357,7 +357,7 @@ int ObTransformPreProcess::formalize_limit_expr(ObDMLStmt &stmt)
     ObConstRawExpr *double_zero_expr = NULL;
     if (OB_FAIL(ObTransformUtils::get_percentage_value(percent_expr,
                                                        &stmt,
-                                                       &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
+                                                       ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                        ctx_->exec_ctx_,
                                                        ctx_->allocator_,
                                                        limit_value,
@@ -390,7 +390,7 @@ int ObTransformPreProcess::formalize_limit_expr(ObDMLStmt &stmt)
     int64_t offset_value = 0;
     ObRawExpr *cmp_expr = NULL;
     if (OB_FAIL(ObTransformUtils::get_expr_int_value(offset_expr,
-                                                  &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
+                                                  ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                   ctx_->exec_ctx_,
                                                   ctx_->allocator_,
                                                   offset_value,
@@ -1060,12 +1060,12 @@ int ObTransformPreProcess::transform_in_or_notin_expr_without_row(ObRawExprFacto
     if (OB_ISNULL(param_expr)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ObObjType obj_type = param_expr->get_result_type().get_type();
+      SqlValueType obj_type = param_expr->get_result_type().get_type();
       ObCollationType coll_type = param_expr->get_result_type().get_collation_type();
       ObCollationLevel coll_level = param_expr->get_result_type().get_collation_level();
       ObScale scale = param_expr->get_result_type().get_scale();
       if (param_expr->is_enum_set_with_subschema()) {
-        ObObjMeta obj_meta;
+        SqlTypeMeta obj_meta;
         if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(param_expr->get_result_type(),
                                                                &session,
                                                                obj_meta))) {
@@ -1103,12 +1103,12 @@ int ObTransformPreProcess::transform_in_or_notin_expr_without_row(ObRawExprFacto
       DistinctObjMeta obj_meta = distinct_types.at(i);
       for (int j = 0; OB_SUCC(ret) && j < right_expr->get_param_count(); j++) {
         ObRawExpr *param_expr = right_expr->get_param_expr(j);
-        ObObjType obj_type = param_expr->get_result_type().get_type();
+        SqlValueType obj_type = param_expr->get_result_type().get_type();
         ObCollationType coll_type = param_expr->get_result_type().get_collation_type();
         ObCollationLevel coll_level = param_expr->get_result_type().get_collation_level();
         ObScale scale = param_expr->get_result_type().get_scale();
         if (param_expr->is_enum_set_with_subschema()) {
-          ObObjMeta enum_set_obj_meta;
+          SqlTypeMeta enum_set_obj_meta;
           if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(param_expr->get_result_type(),
                                                                 &session,
                                                                 enum_set_obj_meta))) {
@@ -1169,7 +1169,7 @@ int ObTransformPreProcess::transform_in_or_notin_expr_with_row(ObRawExprFactory 
           ret = OB_INVALID_ARGUMENT;
         } else {
           const ObRawExpr *param_expr = right_expr->get_param_expr(i)->get_param_expr(j);
-          const ObObjType obj_type = param_expr->get_result_type().get_type();
+          const SqlValueType obj_type = param_expr->get_result_type().get_type();
           const ObCollationType coll_type = param_expr->get_result_type().get_collation_type();
           const ObCollationLevel coll_level = param_expr->get_result_type().get_collation_level();
           const ObScale scale = param_expr->get_result_type().get_scale();
@@ -1357,7 +1357,7 @@ int ObTransformPreProcess::create_equal_expr_for_case_expr(ObRawExprFactory &exp
                                                            ObOpRawExpr *&equal_expr)
 {
   int ret = OB_SUCCESS;
-  ObObjType obj_type = ObMaxType;
+  SqlValueType obj_type = ObMaxType;
   const ObRawExprResType &arg_type = arg_expr->get_result_type();
   const ObRawExprResType &when_type = when_expr->get_result_type();
   ObRawExpr *new_when_expr = NULL; // cast expr may added
@@ -1596,7 +1596,7 @@ int ObTransformPreProcess::replace_cast_expr_align_date4cmp(ObRawExprFactory &ex
               // create third param_expr (a ObConstRawExpr used to represent res_type)
               // and add it to align_date4cmp_expr.
               ObConstRawExpr *res_type_expr = NULL;
-              ObObjType cast_res_type = expr->get_result_type().get_type();
+              SqlValueType cast_res_type = expr->get_result_type().get_type();
               int64_t cast_res_type_int = cast_res_type;
               if (OB_FAIL(ObRawExprUtils::build_const_int_expr(expr_factory,
                                                   ObIntType, cast_res_type_int, res_type_expr))) {
@@ -2157,11 +2157,12 @@ int ObTransformPreProcess::create_distance_type_const_expr(
     } else if (OB_ISNULL(const_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj obj;
-      obj.set_int(static_cast<int64_t>(vec_dis_type));
-      const_expr->set_value(obj);
-
-      dis_type = const_expr;
+      Datum value;
+      SqlTypeMeta meta;
+      value.set_int(vec_dis_type);
+      meta.set_int();
+      OZ (const_expr->set_value_borrowed(value, meta));
+      OX (dis_type = const_expr);
     }
   }
   return ret;
@@ -2247,14 +2248,14 @@ int ObTransformPreProcess::transform_for_insertup_batch_stmt(ObDMLStmt *batch_st
   ObSEArray<ObRawExpr*, 4> assignments_exprs;
   ObSEArray<ObRawExpr*, 4> group_param_exprs;
   ObPseudoColumnRawExpr *stmt_id_expr = NULL;
-  const ParamStore *param_store = nullptr;
+  const ObPhysicalPlanCtx *param_store = nullptr;
 
   if (OB_ISNULL(ctx_)
       || OB_ISNULL(exec_ctx = ctx_->exec_ctx_)
       || OB_ISNULL(plan_ctx = exec_ctx->get_physical_plan_ctx())
       || OB_ISNULL(session_info = ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (FALSE_IT(param_store = &plan_ctx->get_param_store())) {
+  } else if (FALSE_IT(param_store = plan_ctx)) {
     // do nothing
   } else if (OB_ISNULL(batch_stmt) ||
              OB_UNLIKELY(!batch_stmt->is_insert_stmt())) {
@@ -2270,10 +2271,12 @@ int ObTransformPreProcess::transform_for_insertup_batch_stmt(ObDMLStmt *batch_st
   // 1. record assignment params
   for (int64_t i = 0; OB_SUCC(ret) && i < assignment_params.count(); ++i) {
     ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(assignment_params.at(i));
-    int64_t param_idx = param_expr->get_value().get_unknown();
-    if (param_idx < 0 || param_idx >= param_store->count()) {
+    int64_t param_idx = param_expr->get_questionmark_index();
+    if (param_idx < 0 || param_idx >= param_store->get_parameter_count()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (param_store->at(param_idx).is_batch_parameters()
+    } else if (param_store->get_parameter_metadata(param_idx) == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (param_store->get_parameter_metadata(param_idx)->flag_.is_batch_parameter_
         && !has_exist_in_array(batch_stmt->get_query_ctx()->ab_param_exprs_,
                                static_cast<ObRawExpr*>(param_expr))) {
       ObPseudoColumnRawExpr *group_param_expr = nullptr;
@@ -2291,14 +2294,16 @@ int ObTransformPreProcess::transform_for_insertup_batch_stmt(ObDMLStmt *batch_st
   } else if (OB_FAIL(ObRawExprUtils::extract_params(insert_stmt->get_values_vector(), params))) {
   } else {
     common::ObIArray<ObRawExpr*> &value_vector = insert_stmt->get_values_vector();
-    const ParamStore &param_store = plan_ctx->get_param_store();
+    const ObPhysicalPlanCtx &param_store = *plan_ctx;
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
       ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
       ObPseudoColumnRawExpr *group_id = NULL;
-      int64_t param_idx = param_expr->get_value().get_unknown();
-      if (param_idx < 0 || param_idx >= param_store.count()) {
+      int64_t param_idx = param_expr->get_questionmark_index();
+      if (param_idx < 0 || param_idx >= param_store.get_parameter_count()) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (!param_store.at(param_idx).is_batch_parameters()) {
+      } else if (param_store.get_parameter_metadata(param_idx) == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!param_store.get_parameter_metadata(param_idx)->flag_.is_batch_parameter_) {
         // is not batch params
       } else {
         param_expr->set_is_batch_stmt_parameter();
@@ -2348,14 +2353,16 @@ int ObTransformPreProcess::transform_for_ins_batch_stmt(ObDMLStmt *batch_stmt,
   } else if (OB_FAIL(ObRawExprUtils::extract_params(insert_stmt->get_values_vector(), params))) {
   } else {
     common::ObIArray<ObRawExpr*> &value_vector = insert_stmt->get_values_vector();
-    const ParamStore &param_store = plan_ctx->get_param_store();
+    const ObPhysicalPlanCtx &param_store = *plan_ctx;
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
       ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
       ObPseudoColumnRawExpr *group_id = NULL;
-      int64_t param_idx = param_expr->get_value().get_unknown();
-      if (param_idx < 0 || param_idx >= param_store.count()) {
+      int64_t param_idx = param_expr->get_questionmark_index();
+      if (param_idx < 0 || param_idx >= param_store.get_parameter_count()) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (!param_store.at(param_idx).is_batch_parameters()) {
+      } else if (param_store.get_parameter_metadata(param_idx) == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!param_store.get_parameter_metadata(param_idx)->flag_.is_batch_parameter_) {
         // Not batch parameter, no need to mark
       } else {
         param_expr->set_is_batch_stmt_parameter();
@@ -2637,7 +2644,7 @@ int ObTransformPreProcess::mock_select_list_for_upd_del(ObDMLStmt &batch_stmt,
                                                         ObSelectStmt &inner_view)
 {
   int ret = OB_SUCCESS;
-  const ParamStore *param_store = nullptr;
+  const ObPhysicalPlanCtx *param_store = nullptr;
   ObExecContext *exec_ctx = nullptr;
   ObPhysicalPlanCtx *plan_ctx = nullptr;
   ObSEArray<ObRawExpr*, 4> params;
@@ -2648,7 +2655,7 @@ int ObTransformPreProcess::mock_select_list_for_upd_del(ObDMLStmt &batch_stmt,
       || OB_ISNULL(exec_ctx = ctx_->exec_ctx_)
       || OB_ISNULL(plan_ctx = exec_ctx->get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (FALSE_IT(param_store = &plan_ctx->get_param_store())) {
+  } else if (FALSE_IT(param_store = plan_ctx)) {
     // do nothing
   } else if (OB_FAIL(batch_stmt.get_relation_exprs(related_exprs))) {
   } else if (OB_FAIL(ObRawExprUtils::extract_params(related_exprs, params))) {
@@ -2656,10 +2663,12 @@ int ObTransformPreProcess::mock_select_list_for_upd_del(ObDMLStmt &batch_stmt,
 
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
     ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
-    int64_t param_idx = param_expr->get_value().get_unknown();
-    if (param_idx < 0 || param_idx >= param_store->count()) {
+    int64_t param_idx = param_expr->get_questionmark_index();
+    if (param_idx < 0 || param_idx >= param_store->get_parameter_count()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (param_store->at(param_idx).is_batch_parameters()
+    } else if (param_store->get_parameter_metadata(param_idx) == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (param_store->get_parameter_metadata(param_idx)->flag_.is_batch_parameter_
         && !has_exist_in_array(batch_stmt.get_query_ctx()->ab_param_exprs_,
                                static_cast<ObRawExpr*>(param_expr))) {
       ObPseudoColumnRawExpr *group_param_expr = nullptr;

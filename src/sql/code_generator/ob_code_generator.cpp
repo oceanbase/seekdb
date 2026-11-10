@@ -39,6 +39,10 @@ int ObCodeGenerator::generate(const ObLogPlan &log_plan,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(generate_exprs(log_plan, phy_plan))) {
   } else if (OB_FAIL(generate_operators(log_plan, phy_plan))) {
+  } else if (OB_ISNULL(log_plan.get_optimizer_context().get_exec_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ObStaticEngineExprCG::finalize_native_i64_point(
+      phy_plan, *log_plan.get_optimizer_context().get_exec_ctx()))) {
   }
 
   return ret;
@@ -60,7 +64,7 @@ int ObCodeGenerator::generate_exprs(const ObLogPlan &log_plan,
         log_plan.get_optimizer_context().get_session_info(),
         exec_ctx->get_sql_ctx()->schema_guard_,
         exec_ctx->get_physical_plan_ctx()->get_original_param_cnt(),
-        param_store_->count());
+        parameter_count_);
     // init ctx for operator cg
     expr_cg.set_batch_size(phy_plan.get_batch_size());
     if (OB_FAIL(expr_cg.generate(log_plan.get_optimizer_context().get_all_exprs(),

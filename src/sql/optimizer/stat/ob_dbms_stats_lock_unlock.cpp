@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
@@ -247,14 +249,14 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
         ret = OB_ERR_UNEXPECTED;
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
-          ObObj tmp;
+          DatumValue tmp;
           int64_t int_val = -1;
           int64_t idx1 = 0;
           int64_t idx2 = 1;
-          if (OB_FAIL(client_result->get_obj(idx1, tmp))) {
+          if (OB_FAIL(client_result->get_value(idx1, tmp))) {
           } else if (OB_FAIL(tmp.get_int(int_val))) {
           } else if (OB_FAIL(partition_ids.push_back(int_val))) {
-          } else if (OB_FAIL(client_result->get_obj(idx2, tmp))) {
+          } else if (OB_FAIL(client_result->get_value(idx2, tmp))) {
           } else if (OB_FAIL(tmp.get_int(int_val))) {
           } else if (OB_FAIL(stattype_locked_array.push_back(int_val))) {
           } else {/*do nothing*/}

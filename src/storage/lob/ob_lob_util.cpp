@@ -28,7 +28,7 @@ using namespace transaction;
 namespace storage
 {
 
-ObCollationType ObLobCharsetUtil::get_collation_type(ObObjType type, ObCollationType ori_coll_type)
+ObCollationType ObLobCharsetUtil::get_collation_type(SqlValueType type, ObCollationType ori_coll_type)
 {
   ObCollationType coll_type = ori_coll_type;
   if (ob_is_json(type)) {
@@ -97,7 +97,7 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
 
 int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
                                                const common::ObTabletID tablet_id,
-                                               const ObObjType &obj_type,
+                                               const SqlValueType &obj_type,
                                                const ObCollationType &cs_type,
                                                const ObLobStorageParam &lob_storage_param,
                                                blocksstable::ObStorageDatum &datum,
@@ -179,7 +179,7 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
                                                share::ObTabletCacheInterval &lob_id_geneator,
                                                const common::ObTabletID tablet_id,
                                                const common::ObTabletID lob_meta_tablet_id,
-                                               const ObObjType &obj_type,
+                                               const SqlValueType &obj_type,
                                                const ObCollationType collation_type,
                                                const ObLobStorageParam &lob_storage_param,
                                                blocksstable::ObStorageDatum &datum,

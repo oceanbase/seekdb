@@ -58,7 +58,7 @@ int ObExprPow::calc_result_type2(ObExprResType &type,
 }
 
 
-int ObExprPow::safe_set_double(ObDatum &datum, double value)
+int ObExprPow::safe_set_double(Datum &datum, double value)
 {
   int ret = OB_SUCCESS;
   if ((std::isinf(value) || isnan(static_cast<float>(value)))) {
@@ -69,12 +69,12 @@ int ObExprPow::safe_set_double(ObDatum &datum, double value)
   return ret;
 }
 
-int ObExprPow::calc_pow_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprPow::calc_pow_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // pow(base, exp)
-  ObDatum *base = NULL;
-  ObDatum *exp = NULL;
+  Datum *base = NULL;
+  Datum *exp = NULL;
   // Verified that when the first parameter is NULL, MySQL still calculates the second parameter
   int ret_base = expr.args_[0]->eval(ctx, base);
   int ret_exp  = expr.args_[1]->eval(ctx, exp);

@@ -72,7 +72,7 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t compression_ratio = 0;
   int64_t update_estimated_finish_time = 0;
   compaction::ObServerCompactionEvent tmp_event;
@@ -86,38 +86,38 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
     case MERGE_TYPE:
-      cells[i].set_varchar(merge_type_to_str(progress_.merge_type_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, merge_type_to_str(progress_.merge_type_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case COMPACTION_SCN:
-      cells[i].set_uint64(progress_.merge_version_ < 0 ? 0 : progress_.merge_version_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, i, progress_.merge_version_ < 0 ? 0 : progress_.merge_version_) : ret);
       break;
     case STATUS:
-      cells[i].set_varchar(share::ObIDag::get_dag_status_str(progress_.status_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, share::ObIDag::get_dag_status_str(progress_.status_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case TOTAL_PARTITION_CNT:
-      cells[i].set_int(progress_.total_tablet_cnt_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, progress_.total_tablet_cnt_) : ret);
       break;
     case UNFIINISHED_PARTITION_CNT:
-      cells[i].set_int(progress_.unfinished_tablet_cnt_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, progress_.unfinished_tablet_cnt_) : ret);
       break;
     case DATA_SIZE:
-      cells[i].set_int(progress_.data_size_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, progress_.data_size_) : ret);
       break;
     case UNFINISHED_DATA_SIZE:
-      cells[i].set_int(progress_.unfinished_data_size_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, progress_.unfinished_data_size_) : ret);
       break;
     case COMPRESSION_RATIO:
       if (0 == progress_.original_size_) {
-        cells[i].set_double(1);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cells, cur_row_.count_, i, 1) : ret);
       } else {
         compression_ratio = progress_.compressed_size_ * 1.0 / progress_.original_size_ * 100;
-        cells[i].set_double(compression_ratio * 1.0 / 100);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cells, cur_row_.count_, i, compression_ratio * 1.0 / 100) : ret);
       }
       break;
     case START_TIME:
-      cells[i].set_timestamp(progress_.start_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, progress_.start_time_) : ret);
       break;
     case ESTIMATED_FINISH_TIME:
       if (share::ObIDag::DAG_STATUS_FINISH != progress_.status_) {
@@ -133,7 +133,7 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
           progress_.estimated_finish_time_ = current_time + SERVER_PROGRESS_EXTRA_TIME;
         }
       }
-      cells[i].set_timestamp(progress_.estimated_finish_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, progress_.estimated_finish_time_) : ret);
       break;
     case COMMENTS:
       MEMSET(event_buf_, '\0', sizeof(event_buf_));
@@ -154,7 +154,7 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
         databuff_printf(event_buf_, sizeof(event_buf_), pos, "is_inited:%d,real_finish_cnt:%ld",
             progress_.is_inited_, progress_.real_finish_cnt_);
       }
-      cells[i].set_varchar(event_buf_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, event_buf_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     default:

@@ -845,7 +845,7 @@ int ObLogExchange::check_expr_is_need(const ObRawExpr *expr,
       if (OB_ISNULL(params.at(i))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        param_value = static_cast<ObConstRawExpr *>(params.at(i))->get_value().get_unknown();
+        param_value = static_cast<ObConstRawExpr *>(params.at(i))->get_questionmark_index();
         OZ(param_idxs.push_back(param_value));
       }
     }

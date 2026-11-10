@@ -140,11 +140,11 @@ int ObExprRegexp::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObE
 }
 
 template<typename RegExpCtx>
-int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = NULL;
-  ObDatum *pattern = NULL;
+  Datum *text = NULL;
+  Datum *pattern = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, text, pattern))) {
     if (ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
       ret = OB_SUCCESS;
@@ -161,7 +161,7 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
                          !RegExpCtx::is_regexp_calc_collation(expr.args_[0]->datum_meta_.cs_type_) ||
                          !RegExpCtx::is_regexp_calc_collation(expr.args_[1]->datum_meta_.cs_type_))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (0 == pattern->len_) {
+  } else if (0 == pattern->length()) {
     ret = OB_ERR_REGEXP_ERROR;
     expr_datum.set_null();
   } else {
@@ -217,7 +217,7 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
   return ret;
 }
 
-int ObExprRegexp::eval_regexp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexp::eval_regexp(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return regexp_match<ObExprRegexContext>(expr, ctx, expr_datum);
 }

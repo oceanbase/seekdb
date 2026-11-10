@@ -15,22 +15,435 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
 #include "ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/ob_timezone_mgr.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_subschema_ctx.h"
+#include "common/udt/ob_collection_type.h"
+#include "common/udt/ob_array_type.h"
+#include "common/enumset/ob_enum_set_meta.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "sql/session/ob_sql_session_info.h"
+#include "sql/pl/ob_pl.h"
+#include "sql/pl/ob_pl_user_type.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-int ObExprUtil::get_int64_from_obj(const ObObj &obj,
+namespace
+{
+// Collection schema nodes already retain the actual basic declaration and
+// nesting. This is preparation work; values only borrow the resulting Type.
+int resolve_collection_type(const ObCollectionTypeBase &node, const ObDataType &attributes,
+                            ObIAllocator &owner, const SqlType *&out, int64_t depth)
+{
+  int ret = OB_SUCCESS;
+  const SqlType *candidate = nullptr;
+  if (depth > 64) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (node.type_id_ == OB_BASIC_TYPE) {
+    ret = SqlType::from_legacy(static_cast<const ObCollectionBasicType &>(node).basic_meta_, owner, candidate);
+  } else {
+    SqlTypeSpec spec;
+    spec.attributes = attributes;
+    if (attributes.get_length() >= 0) { spec.specified |= SqlTypeSpec::Length; }
+    if (attributes.get_length_semantics() != LS_INVALIED) { spec.specified |= SqlTypeSpec::LengthSemantics; }
+    ObDataType child_attributes;
+    child_attributes.meta_.set_type(ObCollectionSQLType);
+    child_attributes.meta_.set_collation_type(CS_TYPE_BINARY);
+    if (node.type_id_ == OB_ARRAY_TYPE || node.type_id_ == OB_VECTOR_TYPE) {
+      const auto &array = static_cast<const ObCollectionArrayType &>(node);
+      spec.form = node.type_id_ == OB_VECTOR_TYPE ? SqlTypeForm::Vector : SqlTypeForm::Array;
+      spec.dimension = node.type_id_ == OB_VECTOR_TYPE ? array.dim_cnt_ : 0;
+      if (array.element_type_ == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ret = resolve_collection_type(*array.element_type_, child_attributes, owner, spec.element, depth + 1);
+      }
+    } else if (node.type_id_ == OB_MAP_TYPE || node.type_id_ == OB_SPARSE_VECTOR_TYPE) {
+      const auto &map = static_cast<const ObCollectionMapType &>(node);
+      spec.form = node.type_id_ == OB_MAP_TYPE ? SqlTypeForm::Map : SqlTypeForm::SparseVector;
+      if (map.key_type_ == nullptr || map.value_type_ == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(resolve_collection_type(*map.key_type_, child_attributes, owner, spec.key, depth + 1))) {
+      } else {
+        ret = resolve_collection_type(*map.value_type_, child_attributes, owner, spec.value, depth + 1);
+      }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    if (OB_SUCC(ret)) { ret = SqlType::create(spec, owner, candidate); }
+  }
+  if (OB_SUCC(ret)) { out = candidate; }
+  return ret;
+}
+
+// These definitions are compile/runtime declarations, never PL payloads. The
+// identity getters are populated at the real declaration producer and copied
+// with that declaration, including parent-local imports and cached versions.
+int check_pl_record_identity(const oceanbase::pl::ObUserDefinedType &definition, uint64_t declaration_id)
+{
+  int ret = OB_SUCCESS;
+  const SqlPLDeclarationIdentity &identity = definition.get_sql_declaration_identity();
+  const SqlNominalType &nominal = definition.get_sql_nominal_identity();
+  if (!identity.is_specified() || !identity.valid_with(nominal)
+      || identity.declaration_id != declaration_id || declaration_id == OB_INVALID_ID) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int resolve_pl_record_type(const ObDataType &attributes, const oceanbase::pl::ObPLINS &declarations,
+                           const ObExecContext *sql_metadata, ObIAllocator &owner,
+                           const SqlType *&out, int64_t depth);
+
+int resolve_pl_member_type(const oceanbase::pl::ObPLDataType &declaration, const oceanbase::pl::ObPLINS &declarations,
+                           const ObExecContext *sql_metadata, ObIAllocator &owner,
+                           const SqlType *&out, int64_t depth)
+{
+  int ret = OB_SUCCESS;
+  const SqlType *candidate = nullptr;
+  if (depth > 64) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (declaration.is_obj_type()) {
+    const ObDataType *attributes = declaration.get_data_type();
+    if (attributes == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (attributes->meta_.is_enum_or_set() || attributes->meta_.is_enumset_inner_type()) {
+      ObIArray<ObString> *labels = nullptr;
+      if (OB_FAIL(declaration.get_type_info(labels))) {
+      } else if (labels == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        SqlTypeSpec spec;
+        spec.attributes = *attributes;
+        spec.form = attributes->get_obj_type() == ObEnumType || attributes->get_obj_type() == ObEnumInnerType
+            ? SqlTypeForm::Enum : SqlTypeForm::Set;
+        ObSEArray<ObString, 16> values;
+        for (int64_t i = 0; OB_SUCC(ret) && i < labels->count(); ++i) { ret = values.push_back(labels->at(i)); }
+        if (OB_SUCC(ret)) {
+          spec.labels = values.empty() ? nullptr : &values.at(0);
+          spec.label_count = values.count();
+          ret = SqlType::create(spec, owner, candidate);
+        }
+      }
+    } else if (attributes->meta_.is_collection_sql_type()) {
+      if (sql_metadata == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else {
+        ret = ObExprUtil::resolve_sql_type(*const_cast<ObExecContext *>(sql_metadata), attributes->meta_, attributes->get_accuracy(),
+            attributes->meta_.get_subschema_id(), owner, candidate, &declarations);
+      }
+    } else if (attributes->meta_.is_ext_sql_array()) {
+      // T_EXT_SQL_ARRAY declares a heterogeneous SQL array, unlike a PL
+      // nested-table/varray whose element declaration lives in the PL namespace.
+      SqlTypeSpec spec;
+      spec.attributes = *attributes;
+      spec.form = SqlTypeForm::Array;
+      spec.heterogeneous = true;
+      ret = SqlType::create(spec, owner, candidate);
+    } else {
+      ret = SqlType::from_legacy(*attributes, owner, candidate);
+    }
+  } else if (declaration.is_record_type()) {
+    ObDataType attributes;
+    attributes.meta_.set_ext();
+    attributes.meta_.set_extend_type(oceanbase::pl::PL_RECORD_TYPE);
+    attributes.set_udt_id(declaration.get_user_type_id());
+    ret = resolve_pl_record_type(attributes, declarations, sql_metadata, owner, candidate, depth);
+  } else {
+    // Cursor and PL collection/opaque domains require their own declaration
+    // and retaining contracts. They are not a SQL Array or an empty Record.
+    ret = OB_NOT_SUPPORTED;
+  }
+  if (OB_SUCC(ret)) { out = candidate; }
+  return ret;
+}
+
+int resolve_pl_record_type(const ObDataType &attributes, const oceanbase::pl::ObPLINS &declarations,
+                           const ObExecContext *sql_metadata, ObIAllocator &owner,
+                           const SqlType *&out, int64_t depth)
+{
+  int ret = OB_SUCCESS;
+  const SqlType *candidate = nullptr;
+  const oceanbase::pl::ObUserDefinedType *definition = nullptr;
+  // Ext accuracy is the complete 64-bit declaration ID, not numeric precision
+  // and scale. This path is identical for NULL and non-NULL values.
+  const uint64_t declaration_id = attributes.get_udt_id();
+  if (depth > 64) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (!attributes.meta_.is_pl_extend_type()
+      || attributes.meta_.get_extend_type() != oceanbase::pl::PL_RECORD_TYPE) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(declarations.get_user_type(declaration_id, definition))) {
+  } else if (definition == nullptr || !definition->is_record_type()
+      || definition->get_user_type_id() != declaration_id) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(check_pl_record_identity(*definition, declaration_id))) {
+  } else {
+    const auto &record = static_cast<const oceanbase::pl::ObRecordType &>(*definition);
+    SqlTypeSpec spec;
+    spec.attributes = attributes;
+    spec.form = SqlTypeForm::Record;
+    spec.pl_declaration = definition->get_sql_declaration_identity();
+    spec.nominal = definition->get_sql_nominal_identity();
+    ObSEArray<SqlTypeMember, 16> members;
+    for (int64_t i = 0; OB_SUCC(ret) && i < record.get_record_member_count(); ++i) {
+      const ObString *name = record.get_record_member_name(i);
+      const oceanbase::pl::ObPLDataType *member = record.get_record_member_type(i);
+      SqlTypeMember resolved;
+      if (name == nullptr || member == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(resolve_pl_member_type(*member, declarations, sql_metadata, owner,
+                                               resolved.type, depth + 1))) {
+      } else {
+        resolved.name = *name;
+        resolved.nullable = !member->is_not_null();
+        ret = members.push_back(resolved);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      spec.members = members.empty() ? nullptr : &members.at(0);
+      spec.member_count = members.count();
+      // create() clones all member names and child types into the requested
+      // owner; no namespace or temporary descriptor escapes this preparation.
+      ret = SqlType::create(spec, owner, candidate);
+    }
+  }
+  if (OB_SUCC(ret)) { out = candidate; }
+  return ret;
+}
+} // namespace
+
+int ObExprUtil::resolve_pl_parameter_sql_type(const pl::ObPLDataType &declaration,
+    const pl::ObPLINS &declarations, const ObExecContext &sql_metadata,
+    ObIAllocator &owner, const SqlType *&out)
+{
+  return resolve_pl_member_type(declaration, declarations, &sql_metadata, owner, out, 0);
+}
+
+int ObExprUtil::resolve_enum_sql_type(const SqlTypeMeta &actual_meta,
+                                     const ObAccuracy &accuracy,
+                                     const ObIArray<ObString> &labels,
+                                     ObIAllocator &owner, const SqlType *&out)
+{
+  int ret = OB_SUCCESS;
+  const SqlType *candidate = nullptr;
+  if (!actual_meta.is_enum_or_set() && !actual_meta.is_enumset_inner_type()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    SqlTypeSpec spec;
+    spec.attributes.set_meta_type(actual_meta);
+    spec.attributes.set_accuracy(accuracy);
+    spec.attributes.set_charset_type(actual_meta.get_charset_type());
+    spec.form = actual_meta.get_type() == ObEnumType || actual_meta.get_type() == ObEnumInnerType
+        ? SqlTypeForm::Enum : SqlTypeForm::Set;
+    ObSEArray<ObString, 16> values;
+    for (int64_t i = 0; OB_SUCC(ret) && i < labels.count(); ++i) { ret = values.push_back(labels.at(i)); }
+    if (OB_SUCC(ret)) {
+      spec.labels = values.empty() ? nullptr : &values.at(0);
+      spec.label_count = values.count();
+      ret = SqlType::create(spec, owner, candidate);
+    }
+  }
+  if (OB_SUCC(ret)) { out = candidate; }
+  return ret;
+}
+
+int ObExprUtil::resolve_raw_sql_type(const ObRawExprResType &resolved,
+                                    const ObSQLSessionInfo *session,
+                                    share::schema::ObSchemaGetterGuard *schema_guard,
+                                    ObIAllocator &owner, const SqlType *&out,
+                                    const pl::ObPLINS *pl_declarations)
+{
+  int ret = OB_SUCCESS;
+  const SqlType *candidate = nullptr;
+  UNUSED(schema_guard); // PL origins retain the version of their actual definition.
+  if (resolved.is_pl_extend_type() && resolved.get_extend_type() == pl::PL_RECORD_TYPE) {
+    if (pl_declarations == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      ObDataType attributes;
+      attributes.set_meta_type(resolved.get_sql_type_meta());
+      attributes.set_accuracy(resolved.get_accuracy());
+      const ObExecContext *sql_metadata = session == nullptr ? nullptr : session->get_cur_exec_ctx();
+      ret = resolve_pl_record_type(attributes, *pl_declarations, sql_metadata, owner, candidate, 0);
+    }
+  } else if (resolved.is_ext_sql_array()) {
+    SqlTypeSpec spec;
+    spec.attributes.set_meta_type(resolved.get_sql_type_meta());
+    spec.attributes.set_accuracy(resolved.get_accuracy());
+    spec.form = SqlTypeForm::Array;
+    spec.heterogeneous = true;
+    ret = SqlType::create(spec, owner, candidate);
+  } else if (resolved.is_enum_or_set() || resolved.is_enumset_inner_type()) {
+    const ObEnumSetMeta *definition = nullptr;
+    if (OB_FAIL(ObRawExprUtils::extract_enum_set_meta(resolved, session, definition))) {
+    } else if (definition == nullptr || definition->get_str_values() == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      // Raw enum metadata carries the SubSchema ID in its collation bytes.
+      // The actual definition owns collation/charset; keep the requested kind.
+      SqlTypeMeta actual_meta = definition->get_sql_type_meta();
+      actual_meta.set_type_simple(resolved.get_type());
+      ret = resolve_enum_sql_type(actual_meta, resolved.get_accuracy(),
+                                  *definition->get_str_values(), owner, candidate);
+    }
+  } else if (resolved.is_collection_sql_type()) {
+    const ObExecContext *context = session == nullptr ? nullptr : session->get_cur_exec_ctx();
+    if (context == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      // Existing resolver/array CG paths own this same request SubSchema. The
+      // resolver below only reads it and copies its complete declaration tree.
+      ret = resolve_sql_type(*const_cast<ObExecContext *>(context), resolved.get_sql_type_meta(),
+          resolved.get_accuracy(), resolved.get_subschema_id(), owner, candidate, pl_declarations);
+    }
+  } else {
+    ret = SqlType::from_legacy(resolved.get_sql_type_meta(), resolved.get_accuracy(), owner, candidate);
+  }
+  if (OB_SUCC(ret)) { out = candidate; }
+  return ret;
+}
+
+int ObExprUtil::resolve_sql_type(ObExecContext &ctx, const SqlTypeMeta &meta,
+                                const ObAccuracy &accuracy, const uint16_t subschema_id,
+                                ObIAllocator &owner, const SqlType *&out,
+                                const pl::ObPLINS *pl_declarations)
+{
+  int ret = OB_SUCCESS;
+  const SqlType *candidate = nullptr;
+  if (meta.is_pl_extend_type() && meta.get_extend_type() == pl::PL_RECORD_TYPE) {
+    if (pl_declarations == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      ObDataType attributes;
+      attributes.set_meta_type(meta);
+      attributes.set_accuracy(accuracy);
+      ret = resolve_pl_record_type(attributes, *pl_declarations, &ctx, owner, candidate, 0);
+    }
+  } else if (meta.is_ext_sql_array()) {
+    SqlTypeSpec spec;
+    spec.attributes.set_meta_type(meta);
+    spec.attributes.set_accuracy(accuracy);
+    spec.form = SqlTypeForm::Array;
+    spec.heterogeneous = true;
+    ret = SqlType::create(spec, owner, candidate);
+  } else if (meta.is_enum_or_set() || meta.is_enumset_inner_type()) {
+    const ObEnumSetMeta *definition = nullptr;
+    if (OB_FAIL(ctx.get_enumset_meta_by_subschema_id(subschema_id, false, definition))) {
+    } else if (definition == nullptr || definition->get_str_values() == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      SqlTypeMeta actual_meta = definition->get_sql_type_meta();
+      actual_meta.set_type_simple(meta.get_type());
+      ret = resolve_enum_sql_type(actual_meta, accuracy, *definition->get_str_values(), owner, candidate);
+    }
+  } else if (meta.is_collection_sql_type()) {
+    ObSubSchemaValue value;
+    if (OB_FAIL(ctx.get_sqludt_meta_by_subschema_id(subschema_id, value))) {
+    } else if (value.type_ != OB_SUBSCHEMA_COLLECTION_TYPE || value.value_ == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const auto *collection = static_cast<const ObSqlCollectionInfo *>(value.value_);
+      ObDataType attributes;
+      attributes.set_meta_type(meta); attributes.set_accuracy(accuracy);
+      attributes.set_charset_type(meta.get_charset_type());
+      if (collection->collection_meta_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else { ret = resolve_collection_type(*collection->collection_meta_, attributes, owner, candidate, 0); }
+    }
+  } else {
+    // Scalar construction intentionally does not guess a PL/UDT nominal ID,
+    // schema version, record fields or an extended array's child declaration.
+    ret = SqlType::from_legacy(meta, accuracy, owner, candidate);
+  }
+  if (OB_SUCC(ret)) { out = candidate; }
+  return ret;
+}
+
+int ObExprUtil::set_number(const ObExpr &expr, ObEvalCtx &ctx, Datum &out,
+                           const number::ObNumber &value, const int64_t index)
+{
+  const uint32_t bytes = sizeof(number::ObCompactNumber) + value.get_length() * sizeof(uint32_t);
+  char *buffer = expr.get_reference_res_mem(ctx, bytes, index);
+  return buffer == nullptr ? OB_ALLOCATE_MEMORY_FAILED : out.set_number(value, buffer, bytes);
+}
+
+int ObExprUtil::set_number(const ObExpr &expr, ObEvalCtx &ctx, Datum &out,
+                           const number::ObCompactNumber &value, const int64_t index)
+{
+  const uint32_t bytes = sizeof(value) + value.desc_.len_ * sizeof(uint32_t);
+  char *buffer = expr.get_reference_res_mem(ctx, bytes, index);
+  return buffer == nullptr ? OB_ALLOCATE_MEMORY_FAILED : out.set_number(value, buffer, bytes);
+}
+
+int ObExprUtil::export_legacy_value(const ObExpr &expr, const Datum &value,
+                                    ObIAllocator &owner, common::ObDatum &output)
+{
+  const DatumCopyPlan plan = expr.get_datum_copy_plan();
+  int64_t bytes = 0;
+  int64_t position = 0;
+  int ret = plan.legacy_payload_size(value, bytes);
+  char *buffer = nullptr;
+  if (OB_SUCC(ret) && bytes > 0 && (buffer = static_cast<char *>(owner.alloc(bytes))) == nullptr) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
+  if (OB_SUCC(ret)) { ret = plan.export_legacy(value, output, buffer, bytes, position); }
+  return ret;
+}
+
+int ObExprUtil::set_array_element(const ObExpr &expr, ObEvalCtx &ctx,
+                                  const ObIArrayType &array, const uint32_t element,
+                                  Datum &out, const int64_t index)
+{
+  int ret = OB_SUCCESS;
+  alignas(8) char scratch[64];
+  common::ObDatum legacy;
+  legacy.ptr_ = scratch;
+  Datum value;
+  const DatumCopyPlan plan = expr.get_datum_copy_plan();
+  int64_t bytes = 0;
+  int64_t position = 0;
+  if (OB_FAIL(array.elem_at_datum(element, legacy))) {
+  } else if (OB_FAIL(plan.import_legacy(legacy, value))) {
+  } else if (OB_FAIL(plan.payload_copy_size(value, bytes))) {
+  } else {
+    char *buffer = bytes > 0 ? expr.get_reference_res_mem(ctx, bytes, index) : nullptr;
+    if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else { ret = plan.deep_copy(value, out, buffer, bytes, position); }
+  }
+  return ret;
+}
+
+int ObExprUtil::set_otimestamp_tiny(const ObExpr &expr, ObEvalCtx &ctx, Datum &out,
+                                   const ObOTimestampData &value, const int64_t index)
+{
+  const uint32_t bytes = sizeof(ObOTimestampTinyData);
+  char *buffer = expr.get_reference_res_mem(ctx, bytes, index);
+  return buffer == nullptr ? OB_ALLOCATE_MEMORY_FAILED : out.set_otimestamp_tiny(value, buffer, bytes);
+}
+
+int ObExprUtil::set_decimal_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &out,
+                                const ObDecimalInt *coefficient, const int32_t bytes,
+                                const int64_t index)
+{
+  if ((bytes > 0 && coefficient == nullptr)
+      || (bytes != 0 && bytes != 4 && bytes != 8 && bytes != 16 && bytes != 32 && bytes != 64)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const DatumCopyPlan &plan = expr.get_datum_copy_plan();
+  const bool inline_decimal = expr.get_sql_type().canonical_representation() == DatumRepresentation::Inline64;
+  char *buffer = inline_decimal || bytes == 0 ? nullptr : expr.get_reference_res_mem(ctx, bytes, index);
+  return !inline_decimal && bytes > 0 && buffer == nullptr ? OB_ALLOCATE_MEMORY_FAILED
+      : plan.set_decimal(coefficient, bytes, out, buffer, inline_decimal ? 0 : bytes);
+}
+
+int ObExprUtil::get_int64_from_value(const DatumValue &obj,
                                    ObExprCtx &expr_ctx,
                                    const bool is_trunc, //true: trunc; false: round
                                    int64_t &out)
 {
   int ret = OB_SUCCESS;
   out = 0;
-  ObObjType type = obj.get_type();
+  SqlValueType type = obj.get_type();
   if (OB_LIKELY(ob_is_int_tc(type))) {
     out = obj.get_int();
   } else if (ob_is_uint_tc(type)) {
@@ -50,7 +463,12 @@ int ObExprUtil::get_int64_from_obj(const ObObj &obj,
     // and trunc to an integer
     number::ObNumber nmb;
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    EXPR_GET_NUMBER_V2(obj, nmb);
+    DatumValue converted;
+    if (expr_ctx.calc_buf_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, obj,
+        *expr_ctx.calc_buf_, converted))) {
+    } else if (converted.is_null() || !converted.is_number()) { ret = OB_OBJ_TYPE_ERROR; }
+    else { nmb = converted.get_number(); }
     if (OB_SUCC(ret)) {
       ret = get_int64_from_num(nmb, expr_ctx, is_trunc, out);
     }
@@ -58,15 +476,10 @@ int ObExprUtil::get_int64_from_obj(const ObObj &obj,
   return ret;
 }
 
-int ObExprUtil::get_trunc_int64(const ObObj &obj, ObExprCtx &expr_ctx, int64_t &out)
-{
-  return get_int64_from_obj(obj, expr_ctx, true, out);
-}
-
-int ObExprUtil::get_round_int64(const ObObj &obj, ObExprCtx &expr_ctx, int64_t &out)
-{
-  return get_int64_from_obj(obj, expr_ctx, false, out);
-}
+int ObExprUtil::get_trunc_int64(const DatumValue &value, ObExprCtx &ctx, int64_t &out)
+{ return get_int64_from_value(value, ctx, true, out); }
+int ObExprUtil::get_round_int64(const DatumValue &value, ObExprCtx &ctx, int64_t &out)
+{ return get_int64_from_value(value, ctx, false, out); }
 
 
 
@@ -198,16 +611,21 @@ int ObExprUtil::round_num2int64(const common::number::ObNumber &nmb, int64_t &v)
 }
 
 
-int ObExprUtil::get_int_param_val(ObDatum *datum, bool is_decint, int64_t &int_val)
+int ObExprUtil::get_int_param_val(const Datum *datum, const ObExpr *input_expr, int64_t &int_val)
 {
   int ret = OB_SUCCESS;
   if (NULL != datum && !datum->is_null()) {
-    if (is_decint) {
+    if (input_expr == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (ob_is_decimal_int(input_expr->datum_meta_.type_)) {
       bool is_valid_int64 = false;
-      if (OB_FAIL(wide::check_range_valid_int64(datum->get_decimal_int(), datum->get_int_bytes(),
+      alignas(8) char scratch[64];
+      common::ObDatum coefficient;
+      if (OB_FAIL(input_expr->get_datum_copy_plan().get_decimal(*datum, coefficient, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(wide::check_range_valid_int64(coefficient.get_decimal_int(), coefficient.get_int_bytes(),
                                                 is_valid_int64, int_val))) {
       } else if (OB_UNLIKELY(!is_valid_int64)) {
-        if (wide::is_negative(datum->get_decimal_int(), datum->get_int_bytes())) {
+        if (wide::is_negative(coefficient.get_decimal_int(), coefficient.get_int_bytes())) {
           int_val = INT64_MIN;
         } else {
           int_val = INT64_MAX;
@@ -479,7 +897,7 @@ int ObExprUtil::set_expr_asscii_result(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum,
+int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum,
                                       const ObString &ascii, const int64_t datum_idx,
                                       const bool is_ascii,
                                       const common::ObCollationType src_coll_type)
@@ -533,7 +951,7 @@ int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
 }
 
 // for non batch mode
-int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum,
+int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum,
                                       const ObString &ascii_str, const bool is_ascii,
                                       const common::ObCollationType src_coll_type)
 {
@@ -637,7 +1055,7 @@ int ObExprUtil::deep_copy_str(const ObString &src, ObString &out, ObIAllocator &
 
 int ObExprUtil::eval_stack_overflow_check(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum &)
+                                          Datum &)
 {
   int ret = OB_SUCCESS;
 
@@ -650,7 +1068,7 @@ int ObExprUtil::eval_stack_overflow_check(const ObExpr &expr,
 
   if (OB_FAIL(SMART_CALL(expr.eval_param_value(ctx)))) {
   } else {
-    // Since stack overflow check expr has the same ObDatum with child,
+    // Since stack overflow check expr has the same Datum with child,
     // need do nothing here.
   }
   return ret;
@@ -711,7 +1129,7 @@ int ObSolidifiedVarsContext::get_local_tz_info(const sql::ObBasicSessionInfo *se
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(local_tz_wrap_ = OB_NEWx(ObTimeZoneInfoWrap, alloc_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else if (OB_FAIL(local_tz_wrap_->init_time_zone(local_var->val_.get_string(),
+        } else if (OB_FAIL(local_tz_wrap_->init_time_zone(local_var->get_value_datum().get_string(),
                                         OB_INVALID_VERSION,
                                         *(const_cast<ObTZInfoMap *>(tz_info_map))))) {
         }

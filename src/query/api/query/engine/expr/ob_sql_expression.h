@@ -28,7 +28,6 @@ class ObPhysicalPlanCtx;
 class ObSQLSessionInfo;
 class ObExecContext;
 class ObBasicSessionInfo;
-class ObInfixExpression;
 class ObRawExpr;
 struct ObExpr;
 }
@@ -41,7 +40,6 @@ namespace common
 {
 class ObNewRowIterator;
 class ObIAllocator;
-class ObNewRow;
 //The row-level context of the expression, the context content will be cleared each time the row is iterated
 struct ObRowCtx
 {
@@ -75,10 +73,6 @@ struct ObExprCtx
         is_pre_calculation_(false),
         phy_operator_ctx_id_ (-1),
         row_ctx_(),
-        infix_expr_(NULL),
-        stack_(NULL),
-        row1_(NULL),
-        row2_(NULL),
         cur_array_index_(0),
         pdml_partition_id_(OB_INVALID_INDEX_INT64)
   {}
@@ -98,10 +92,6 @@ struct ObExprCtx
         is_pre_calculation_(false),
         phy_operator_ctx_id_ (-1),
         row_ctx_(),
-        infix_expr_(NULL),
-        stack_(NULL),
-        row1_(NULL),
-        row2_(NULL),
         cur_array_index_(0),
         pdml_partition_id_(OB_INVALID_INDEX_INT64)
   {}
@@ -112,20 +102,13 @@ struct ObExprCtx
   //When an expression involves sub-query calculation, sub_row_iters_ stores the row iterators iterated from all sub-queries in the expression
   ObIArray<ObNewRowIterator*> *subplan_iters_;
   ObCastMode cast_mode_;
-  common::ObObjCastParams column_conv_ctx_;
+  common::DatumCastParams column_conv_ctx_;
   int64_t err_col_idx_;
   int64_t tz_offset_;
   bool is_pre_calculation_;
   int64_t phy_operator_ctx_id_;
   ObRowCtx row_ctx_; //Row-level context of the expression
 
-  // for expr parameters lazy evaluation
-  const sql::ObInfixExpression *infix_expr_;
-  // stack for infix expr evaluation
-  common::ObObj *stack_;
-  // row parameters for expr evaluation (see: ObSqlExpression::calc() interface)
-  const common::ObNewRow *row1_;
-  const common::ObNewRow *row2_;
   //cur_array_index_ use to switch the param in array binding
   //@TODO: yuchen.wyc in the multi query scheme, it will be removed
   int64_t cur_array_index_;
@@ -254,9 +237,6 @@ public:
    *
    * @return error code
    */
-  virtual int calc(ObExprCtx &expr_ctx, const common::ObNewRow &row, common::ObObj &result) const = 0;
-  virtual int calc(ObExprCtx &expr_ctx, const common::ObNewRow &row1, const common::ObNewRow &row2,
-                   common::ObObj &result) const = 0;
   /// Print expression
   virtual int64_t to_string(char *buf, const int64_t buf_len) const = 0;
 
@@ -267,7 +247,6 @@ class ObIColumnExpression
 {
 public:
   virtual int64_t get_result_index() const = 0;
-  virtual int calc_and_project(ObExprCtx &expr_ctx, common::ObNewRow &row) const = 0;
   /// Print expression
   virtual int64_t to_string(char *buf, const int64_t buf_len) const = 0;
 };

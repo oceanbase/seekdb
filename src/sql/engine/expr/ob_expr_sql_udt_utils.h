@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_SQL_UDT_UTILS_H_
 #define OCEANBASE_SQL_OB_EXPR_SQL_UDT_UTILS_H_
 
+#include "common/datum/datum_value.h"
 #include "share/ob_lob_access_utils.h"
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -79,92 +80,11 @@ private:
 class ObSqlUdtUtils final
 {
 public:
-  static int convert_result_for_client(common::ObObj &value, ObResultSet &result);
-  static int convert_result_for_client(common::ObObj &value,
-                                       common::ObIAllocator *allocator,
-                                       ObSQLSessionInfo *session_info,
-                                       ObExecContext *exec_context,
-                                       bool is_ps_protocol,
-                                       const ColumnsFieldIArray *fields = NULL,
-                                       share::schema::ObSchemaGetterGuard *schema_guard = NULL);
-
-  // functions to flattern nested udt to a single object array
-  static int ob_udt_flattern_pl_extend(const ObObj **flattern_objs,
-                                       const int32_t &flattern_object_count,
-                                       int32_t &pos,
-                                       ObSqlUdtNullBitMap &nested_udt_bitmap,
-                                       const ObObj *pl_ext_addr,
-                                       ObExecContext &exec_context,
-                                       ObSqlUDT &sql_udt);
-
-
-
-  // functions to reorder object array
-  static int ob_udt_reordering_leaf_objects(const ObObj **flattern_objs,
-                                            const ObObj **sorted_objs,
-                                            const int32_t &flattern_object_count,
-                                            ObSqlUDT &sql_udt);
-
-  // functions to calc sql udt length (from nested pl extend objects)
-  static int ob_udt_calc_total_len(const ObObj **sorted_objs,
-                                   const int32_t &flattern_object_count,
-                                   int64_t &sql_udt_total_len,
-                                   ObSqlUDT &sql_udt);
-  static int ob_udt_calc_sql_varray_length(const ObObj *cur_obj,
-                                           int64_t &sql_udt_total_len,
-                                           bool with_lob_header = true);
-
-  // functions to convert objects (basic type, varray) to sql udt type
-  static int ob_udt_convert_pl_varray_to_sql_varray(const ObObj *cur_obj,
-                                                    char *buf,
-                                                    const int64_t buf_len,
-                                                    int64_t &pos,
-                                                    bool with_lob_header = true);
-
-  static int ob_udt_convert_sorted_objs_array_to_udf_format(const ObObj **sorted_objs,
-                                                            char *buf,
-                                                            const int64_t buf_len,
-                                                            int64_t &pos, 
-                                                            ObSqlUDT &sql_udt);
-
-  // functions to convert sql udt to string (only used in text protocal)
-
-
-
-  static int convert_sql_udt_to_string(ObObj &sql_udt_obj, 
-                                       common::ObIAllocator *allocator,
-                                       sql::ObExecContext *exec_context,
-                                       ObSqlUDT &sql_udt,
-                                       ObString &res_str);
-  static int convert_collection_to_string(ObExecContext &exec_ctx,
-                                          ObObj &coll_obj,
-                                          const ObSqlCollectionInfo &coll_meta,
-                                          common::ObIAllocator *allocator,
-                                          ObString &res_str);
-
-  static bool ob_udt_util_check_same_type(ObObjType type1, ObObjType type2)
-  {
-    return (type1 == type2) || (ob_is_user_defined_type(type1) && ob_is_user_defined_type(type2));
-  }
-
-  static int ob_udt_build_nested_udt_bitmap_obj(ObObj &obj, ObSqlUdtNullBitMap &udt_bitmap)
-  {
-    int ret = OB_SUCCESS;
-    if (udt_bitmap.is_valid()) {
-      obj.set_hex_string_value(udt_bitmap.get_bitmap_ptr(), udt_bitmap.get_bitmap_bytelen());
-    }
-    return ret;
-  }
-
-
-
-
-
-  static int cast_sql_record_to_pl_record(sql::ObExecContext *exec_ctx,
-                                          ObObj &result,
-                                          ObString &udt_data,
-                                          ObSqlUDTMeta &udt_meta);
-
+  static int convert_result_for_client(common::DatumValue &value, ObResultSet &result);
+  static int convert_result_for_client(common::DatumValue &value,
+      common::ObIAllocator *owner, ObSQLSessionInfo *session, ObExecContext *exec_ctx,
+      bool is_ps_protocol, const ColumnsFieldIArray *fields = nullptr,
+      share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
 };
 
 class ObSqlUdtMetaUtils final

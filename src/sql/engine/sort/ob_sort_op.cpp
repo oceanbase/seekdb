@@ -141,7 +141,7 @@ int ObSortOp::inner_close()
 int ObSortOp::get_int_value(const ObExpr *in_val, int64_t &out_val)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   if (NULL != in_val) {
     if (OB_FAIL(in_val->eval(eval_ctx_, datum))) {
     } else if (OB_ISNULL(datum)) {
@@ -149,7 +149,7 @@ int ObSortOp::get_int_value(const ObExpr *in_val, int64_t &out_val)
     } else if (datum->is_null()) {
       out_val = 0;
     } else {
-      out_val = *datum->int_;
+      out_val = datum->get_int();
     }
   }
   return ret;

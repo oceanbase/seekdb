@@ -130,17 +130,17 @@ int ObSqlWorkareaHistoryStat::fill_row(
   common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
       case PLAN_ID: {
-        cells[cell_idx].set_int(wa_stat.get_plan_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_plan_id()) : ret);
         break;
       }
       case SQL_ID: {
         ObString sql_id(wa_stat.get_sql_id());
-        cells[cell_idx].set_varchar(sql_id);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sql_id) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
@@ -148,25 +148,25 @@ int ObSqlWorkareaHistoryStat::fill_row(
       case OPERATION_TYPE: {
         const char* operator_str = get_phy_op_name(wa_stat.get_op_type());
         ObString op_type(operator_str);
-        cells[cell_idx].set_varchar(op_type);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, op_type) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case OPERATION_ID: {
-        cells[cell_idx].set_int(wa_stat.get_operator_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_operator_id()) : ret);
         break;
       }
       case ESTIMATED_OPTIMAL_SIZE: {
-        cells[cell_idx].set_int(wa_stat.get_est_cache_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_est_cache_size()) : ret);
         break;
       }
       case ESTIMATED_ONEPASS_SIZE: {
-        cells[cell_idx].set_int(wa_stat.get_est_one_pass_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_est_one_pass_size()) : ret);
         break;
       }
       case LAST_MEMORY_USED: {
-        cells[cell_idx].set_int(wa_stat.get_last_memory_used());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_last_memory_used()) : ret);
         break;
       }
       case LAST_EXECUTION: {
@@ -179,41 +179,41 @@ int ObSqlWorkareaHistoryStat::fill_row(
         } else {
           exec_str.assign_ptr(EXECUTION_MULTIPASSES, static_cast<ObString::obstr_size_t>(strlen(EXECUTION_MULTIPASSES)));
         }
-        cells[cell_idx].set_varchar(exec_str);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, exec_str) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case LAST_DEGREE: {
-        cells[cell_idx].set_int(wa_stat.get_last_degree());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_last_degree()) : ret);
         break;
       }
       case TOTAL_EXECUTIONS: {
-        cells[cell_idx].set_int(wa_stat.get_total_executions());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_total_executions()) : ret);
         break;
       }
       case OPTIMAL_EXECUTIONS: {
-        cells[cell_idx].set_int(wa_stat.get_optimal_executions());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_optimal_executions()) : ret);
         break;
       }
       case ONEPASS_EXECUTIONS: {
-        cells[cell_idx].set_int(wa_stat.get_onepass_executions());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_onepass_executions()) : ret);
         break;
       }
       case MULTIPASSES_EXECUTIONS: {
-        cells[cell_idx].set_int(wa_stat.get_multipass_executions());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_multipass_executions()) : ret);
         break;
       }
       case ACTIVE_TIME: {
-        cells[cell_idx].set_int(wa_stat.get_active_avg_time());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_active_avg_time()) : ret);
         break;
       }
       case MAX_TEMPSEG_SIZE:{
-        cells[cell_idx].set_int(wa_stat.get_max_temp_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_max_temp_size()) : ret);
         break;
       }
       case LAST_TEMPSEG_SIZE: {
-        cells[cell_idx].set_int(wa_stat.get_last_temp_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_last_temp_size()) : ret);
         break;
       }
       case POLICY: {
@@ -223,13 +223,13 @@ int ObSqlWorkareaHistoryStat::fill_row(
         } else {
           exec_str.assign_ptr(EXECUTION_MANUAL_POLICY, static_cast<ObString::obstr_size_t>(strlen(EXECUTION_MANUAL_POLICY)));
         }
-        cells[cell_idx].set_varchar(exec_str);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, exec_str) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case DB_ID: {
-        cells[cell_idx].set_int(wa_stat.get_database_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_stat.get_database_id()) : ret);
         break;
       }
       default: {

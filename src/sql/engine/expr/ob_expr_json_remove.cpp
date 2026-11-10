@@ -54,7 +54,7 @@ int ObExprJsonRemove::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonRemove::eval_json_remove(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonRemove::eval_json_remove(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObJsonExprHelper::eval_json_mutation(expr, ctx, res, JsonMutation::Remove);
 }

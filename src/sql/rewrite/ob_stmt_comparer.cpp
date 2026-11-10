@@ -254,6 +254,15 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
 {
   int &ret = err_code_;
   bool bret = false;
+  DatumValue left_value, right_value, left_param, right_param;
+  alignas(8) char left_value_scratch[64], right_value_scratch[64];
+  alignas(8) char left_param_scratch[64], right_param_scratch[64];
+  if (OB_SUCC(ret) && (OB_FAIL(left.export_value(left_value, left_value_scratch, sizeof(left_value_scratch)))
+      || OB_FAIL(right.export_value(right_value, right_value_scratch, sizeof(right_value_scratch)))
+      || OB_FAIL(left.export_bound_param(left_param, left_param_scratch, sizeof(left_param_scratch)))
+      || OB_FAIL(right.export_bound_param(right_param, right_param_scratch, sizeof(right_param_scratch))))) {
+    return false;
+  }
   if (OB_SUCC(ret) && left.get_result_type() == right.get_result_type()) {
     if (&left == &right) {
       bret = true;
@@ -265,8 +274,8 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
       } else if (is_left_calc_item && is_right_calc_item) {
         const ObRawExpr *left_param = NULL;
         const ObRawExpr *right_param = NULL;
-        if (OB_FAIL(get_calc_expr(left.get_value().get_unknown(), left_param))) {
-        } else if (OB_FAIL(get_calc_expr(right.get_value().get_unknown(), right_param))) {
+        if (OB_FAIL(get_calc_expr(left.get_questionmark_index(), left_param))) {
+        } else if (OB_FAIL(get_calc_expr(right.get_questionmark_index(), right_param))) {
         } else if (OB_ISNULL(left_param) || OB_ISNULL(right_param)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
@@ -276,36 +285,55 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
         bret = false;
       } else if (ignore_param_) {
         bret = ObExprEqualCheckContext::compare_const(left, right);
-      } else if (left.get_param().is_equal(
-                   right.get_param(), CS_TYPE_BINARY)) {
+      } else if (common::binary_equal_datum_values(left_param, right_param)) {
         ObPCParamEqualInfo info;
-        info.first_param_idx_ = left.get_value().get_unknown();
-        info.second_param_idx_ = right.get_value().get_unknown();
+        info.first_param_idx_ = left.get_questionmark_index();
+        info.second_param_idx_ = right.get_questionmark_index();
         bret = true;
         if (info.first_param_idx_ != info.second_param_idx_ &&
             OB_FAIL(equal_param_info_.push_back(info))) {
         }
       }
     } else if (left.is_param_expr() || right.is_param_expr()) {
+      const ObConstRawExpr &parameter = left.is_param_expr() ? left : right;
+      const ObRawExprResType &original_type = parameter.is_dynamic_eval_questionmark()
+          ? parameter.get_orig_qm_type() : parameter.get_result_type();
+      const common::SqlTypeMeta &meta = original_type.get_sql_type_meta();
+      const common::SqlTypeMeta &value_meta = parameter.get_bound_param_value_meta();
+      // This structural-comparison context has no session/SubSchema/PL
+      // declarations. Decline the rewrite instead of dropping its constraint
+      // or inventing a scalar declaration for a complex/typed-NULL parameter.
+      if (meta.is_enum_or_set() || meta.is_enumset_inner_type() || meta.is_collection_sql_type()
+          || meta.is_ext_sql_array() || meta.is_pl_extend_type() || meta.get_type() == ObUserDefinedSQLType
+          || value_meta.is_enum_or_set() || value_meta.is_enumset_inner_type()
+          || value_meta.is_collection_sql_type() || value_meta.is_ext_sql_array()
+          || value_meta.is_pl_extend_type() || value_meta.get_type() == ObUserDefinedSQLType) {
+        return false;
+      }
       bret = ObExprEqualCheckContext::compare_const(left, right);
-      if (bret && (left.get_value().is_unknown() || right.get_value().is_unknown())) {
-        const ObConstRawExpr &unkonwn_expr = left.get_value().is_unknown() ? left : right;
+      if (bret && (left.get_value_meta().is_unknown() || right.get_value_meta().is_unknown())) {
+        const ObConstRawExpr &unkonwn_expr = left.get_value_meta().is_unknown() ? left : right;
         ObPCConstParamInfo const_param_info;
-        if (OB_FAIL(const_param_info.const_idx_.push_back(unkonwn_expr.get_value().get_unknown()))) {
-        } else if (OB_FAIL(const_param_info.const_params_.push_back(unkonwn_expr.get_param()))) {
+        if (OB_FAIL(const_param_info.const_idx_.push_back(unkonwn_expr.get_questionmark_index()))) {
+        } else if (OB_ISNULL(unkonwn_expr.get_expr_factory())) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(const_param_info.add_raw_constant((left.get_value_meta().is_unknown() ? left_param : right_param),
+                     unkonwn_expr.is_dynamic_eval_questionmark() ? unkonwn_expr.get_orig_qm_type()
+                                                                 : unkonwn_expr.get_result_type(),
+                     nullptr, nullptr, unkonwn_expr.get_expr_factory()->get_allocator()))) {
         } else if (OB_FAIL(const_param_info_.push_back(const_param_info))) {
         }
       }
     } else {
-      bret = left.get_value().is_equal(right.get_value(), CS_TYPE_BINARY);
+      bret = common::binary_equal_datum_values(left_value, right_value);
     }
   } else if (OB_SUCC(ret) && ora_numeric_cmp_for_grouping_items_) {
     // select (a - 1) from t group by grouping sets(a, 1);
     // `1` parsed as decimal int in `a - 1`
     // `1' parsed as number in grouping sets
     // special comparision is needed here to replace const `1`
-    const ObObj l_obj = left.get_value().is_unknown() ? left.get_param() : left.get_value();
-    const ObObj r_obj = right.get_value().is_unknown() ? right.get_param() : right.get_value();
+    const DatumValue l_obj = left.get_value_meta().is_unknown() ? left_param : left_value;
+    const DatumValue r_obj = right.get_value_meta().is_unknown() ? right_param : right_value;
     if ((l_obj.is_decimal_int() && r_obj.is_number())
         || (l_obj.is_number() && r_obj.is_decimal_int())) {
       ObNumber l_nmb, r_nmb;
@@ -343,7 +371,7 @@ int ObStmtCompareContext::is_pre_calc_item(const ObConstRawExpr &const_expr, boo
   } else if (const_expr.has_flag(IS_DYNAMIC_PARAM)) {
     is_calc = true;
   } else if (calc_count > 0) {
-    int64_t q_idx = const_expr.get_value().get_unknown();
+    int64_t q_idx = const_expr.get_questionmark_index();
     int64_t min_calc_index = calculable_items_->at(0).hidden_idx_;
     if (OB_UNLIKELY(q_idx < 0 || min_calc_index < 0)) {
       ret = OB_ERR_UNEXPECTED;

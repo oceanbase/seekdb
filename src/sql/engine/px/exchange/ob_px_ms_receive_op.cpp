@@ -925,20 +925,26 @@ bool ObPxMSReceiveOp::Compare::operator()(
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
   } else {
     const ObDatumAccessContext *access_ctx = nullptr;
-    const ObDatum *lcells = l->cells();
-    ObDatum *other_datum = nullptr;
+    const StoredDatumCell *lcells = l->stored_cells();
+    Datum *other_datum = nullptr;
     int cmp = 0;
     if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
     }
     for (int64_t i = 0; 0 == cmp && i < sort_cmp_funs_->count() && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(r->at(idx)->eval(eval_ctx, other_datum))) {
-      } else if (OB_FAIL(
-                     sort_cmp_funs_->at(i).cmp_func_(lcells[idx], *other_datum, cmp, access_ctx))) {
-      } else if (cmp < 0) {
-        less = !sort_collations_->at(i).is_ascending_;
-      } else if (cmp > 0) {
-        less = sort_collations_->at(i).is_ascending_;
+      } else {
+        const ObDatum stored_datum = StoredDatumCodec::decode_legacy_view(lcells[idx]);
+        alignas(8) char scratch[64];
+        ObDatum right;
+        if (OB_FAIL(r->at(idx)->get_datum_copy_plan().legacy_view(
+            *other_datum, right, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(stored_datum, right, cmp, access_ctx))) {
+        } else if (cmp < 0) {
+          less = !sort_collations_->at(i).is_ascending_;
+        } else if (cmp > 0) {
+          less = sort_collations_->at(i).is_ascending_;
+        }
       }
     }
   }

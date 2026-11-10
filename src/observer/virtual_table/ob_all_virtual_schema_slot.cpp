@@ -90,33 +90,33 @@ int ObAllVirtualSchemaSlot::inner_get_next_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case SLOT_ID: {
-          cur_row_.cells_[i].set_int(static_cast<int64_t>(slot_id));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, static_cast<int64_t>(slot_id)) : ret);
           break;
         }
         case SCHEMA_VERSION: {
-          cur_row_.cells_[i].set_int(static_cast<int64_t>(schema_version));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, static_cast<int64_t>(schema_version)) : ret);
           break;
         }
         case SCHEMA_COUNT: {
-          cur_row_.cells_[i].set_int(static_cast<int64_t>(schema_count));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, static_cast<int64_t>(schema_count)) : ret);
           break;
         }
         case REF_CNT: { 
-          cur_row_.cells_[i].set_int(static_cast<int64_t>(total_ref_cnt));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, static_cast<int64_t>(total_ref_cnt)) : ret);
           break;
         }
         case REF_INFO: {
           if (OB_NOT_NULL(schema_slot.get_mod_ref_infos().ptr())) {
-            cur_row_.cells_[i].set_varchar(schema_slot.get_mod_ref_infos());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, schema_slot.get_mod_ref_infos()) : ret);
           } else {
-            cur_row_.cells_[i].set_varchar("");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "") : ret);
           }
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
                                                 ObCharset::get_default_charset()));
           break;
         }
         case ALLOCATOR_IDX: {
-          cur_row_.cells_[i].set_int(static_cast<int64_t>(allocator_idx));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, static_cast<int64_t>(allocator_idx)) : ret);
           break;
         }
         default : {

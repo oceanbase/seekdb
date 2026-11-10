@@ -27,12 +27,12 @@ namespace sql
 class ObExecContext;
 struct ObUserLoggingCtx;
 
-class ObSqlObjCastRuntime final : public common::ObIObjCastRuntime
+class ObSqlDatumCastRuntime final : public common::ObIDatumCastRuntime
 {
 public:
-  explicit ObSqlObjCastRuntime(ObExecContext *exec_ctx);
-  explicit ObSqlObjCastRuntime(const ObUserLoggingCtx *user_logging_ctx);
-  ~ObSqlObjCastRuntime() override = default;
+  explicit ObSqlDatumCastRuntime(ObExecContext *exec_ctx);
+  explicit ObSqlDatumCastRuntime(const ObUserLoggingCtx *user_logging_ctx);
+  ~ObSqlDatumCastRuntime() override = default;
 
   int get_enum_set_values(
       uint16_t subschema_id,
@@ -40,9 +40,9 @@ public:
       common::ObCollationType &collation_type) const override;
 
   int cast_collection(
-      common::ObObjCastParams &params,
-      const common::ObObj &input,
-      common::ObObj &output,
+      common::DatumCastParams &params,
+      const common::DatumValue &input,
+      common::DatumValue &output,
       uint64_t cast_mode) const override;
 
   void report_warning(
@@ -55,7 +55,7 @@ private:
   ObExecContext *exec_ctx_;
   const ObUserLoggingCtx *user_logging_ctx_;
 
-  DISALLOW_COPY_AND_ASSIGN(ObSqlObjCastRuntime);
+  DISALLOW_COPY_AND_ASSIGN(ObSqlDatumCastRuntime);
 };
 
 }  // namespace sql

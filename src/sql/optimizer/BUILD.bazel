@@ -168,3 +168,23 @@ grouped_unity_cc_library(
         "//src/sql:__subpackages__",
     ],
 )
+
+# Reuse the production scalar algorithms without linking an entire SQL server.
+cc_library(
+    name = "native_scalar_test_runtime",
+    testonly = True,
+    srcs = ["ob_opt_est_utils.cpp"],
+    deps = [
+        ":optimizer_public_headers",
+        ":optimizer_internal_headers",
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//src/share:object_cast",
+        "//src/share:share_runtime",
+        "//src/share:datum",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_foundation",
+    ],
+    visibility = ["//unittest/sql:__pkg__"],
+)

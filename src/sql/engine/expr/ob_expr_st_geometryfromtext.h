@@ -31,7 +31,7 @@ class ObExprSTGeometryFromText : public ObExprSTGeomFromText
 public:
   explicit ObExprSTGeometryFromText(common::ObIAllocator &alloc);
   virtual ~ObExprSTGeometryFromText();
-  static int eval_st_geometryfromtext(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_geometryfromtext(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

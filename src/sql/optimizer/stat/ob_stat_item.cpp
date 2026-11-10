@@ -15,7 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "ob_stat_item.h"
+#include "common/datum/datum_parameter_codec.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/stat/ob_hybrid_hist_estimator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 namespace oceanbase
@@ -23,6 +27,110 @@ namespace oceanbase
 using namespace sql;
 namespace common
 {
+
+namespace {
+int export_stat_item_value(const Datum &value, const SqlTypeMeta &meta, DatumValue &output,
+                           void *scratch, int64_t capacity)
+{
+  ObDatum physical;
+  int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, physical, scratch, capacity);
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(physical, meta); }
+  return ret;
+}
+int copy_stat_item_value(const Datum &value, const SqlTypeMeta &meta,
+                         DatumValue &output, ObIAllocator &owner)
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_stat_item_value(value, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? clone_typed_value(view, output, owner) : ret;
+}
+int clone_stat_item_value(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner,
+                          Datum &output, SqlTypeMeta &output_meta)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::clone_schema_native_value(value, meta, owner, candidate);
+  if (ret == OB_SUCCESS) { output = candidate; output_meta = meta; }
+  return ret;
+}
+int borrow_stat_item_value(const DatumValue &value, Datum &output, SqlTypeMeta &output_meta)
+{
+  Datum candidate;
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  int ret = value.export_legacy(physical, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS) { ret = DatumParameterCodec::borrow_schema_native_value(physical, value.meta_, candidate); }
+  if (ret == OB_SUCCESS) { output = candidate; output_meta = value.meta_; }
+  return ret;
+}
+int borrow_stat_item_native(const Datum &value, const SqlTypeMeta &meta,
+                            Datum &output, SqlTypeMeta &output_meta)
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_stat_item_value(value, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? borrow_stat_item_value(view, output, output_meta) : ret;
+}
+} // namespace
+
+int ObGlobalColumnStat::set_min_native(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner)
+{ return clone_stat_item_value(value, meta, owner, min_val_, min_meta_); }
+int ObGlobalColumnStat::export_min_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(min_val_, min_meta_, output, scratch, capacity); }
+int ObGlobalColumnStat::copy_min_value(DatumValue &output, ObIAllocator &owner) const
+{ return copy_stat_item_value(min_val_, min_meta_, output, owner); }
+int ObHistogramParam::set_min_borrowed(const DatumValue &value)
+{ return borrow_stat_item_value(value, minval_, min_meta_); }
+int ObHistogramParam::set_min_native_borrowed(const Datum &value, const SqlTypeMeta &meta)
+{ return borrow_stat_item_native(value, meta, minval_, min_meta_); }
+int ObHistogramParam::export_min_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(minval_, min_meta_, output, scratch, capacity); }
+
+int ObGlobalColumnStat::set_max_native(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner)
+{ return clone_stat_item_value(value, meta, owner, max_val_, max_meta_); }
+int ObGlobalColumnStat::export_max_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(max_val_, max_meta_, output, scratch, capacity); }
+int ObGlobalColumnStat::copy_max_value(DatumValue &output, ObIAllocator &owner) const
+{ return copy_stat_item_value(max_val_, max_meta_, output, owner); }
+int ObHistogramParam::set_max_borrowed(const DatumValue &value)
+{ return borrow_stat_item_value(value, maxval_, max_meta_); }
+int ObHistogramParam::set_max_native_borrowed(const Datum &value, const SqlTypeMeta &meta)
+{ return borrow_stat_item_native(value, meta, maxval_, max_meta_); }
+int ObHistogramParam::export_max_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(maxval_, max_meta_, output, scratch, capacity); }
+
+DEF_TO_STRING(ObGlobalColumnStat)
+{
+  int64_t pos = 0;
+  alignas(8) char min_scratch[64], max_scratch[64];
+  DatumValue minimum, maximum;
+  const int min_ret = export_min_value(minimum, min_scratch, sizeof(min_scratch));
+  const int max_ret = export_max_value(maximum, max_scratch, sizeof(max_scratch));
+  J_OBJ_START();
+  if (min_ret == OB_SUCCESS && max_ret == OB_SUCCESS) { J_KV("min_val_", minimum, "max_val_", maximum); }
+  else { J_KV(K(min_ret), K(max_ret), K_(min_val), K_(min_meta), K_(max_val), K_(max_meta)); }
+  J_COMMA();
+  J_KV(K(null_val_), K(avglen_val_), K(ndv_val_));
+  J_OBJ_END();
+  return pos;
+}
+DEF_TO_STRING(ObHistogramParam)
+{
+  int64_t pos = 0;
+  alignas(8) char min_scratch[64], max_scratch[64];
+  DatumValue minimum, maximum;
+  const int min_ret = export_min_value(minimum, min_scratch, sizeof(min_scratch));
+  const int max_ret = export_max_value(maximum, max_scratch, sizeof(max_scratch));
+  J_OBJ_START();
+  J_KV(K(epc_));
+  J_COMMA();
+  if (min_ret == OB_SUCCESS && max_ret == OB_SUCCESS) { J_KV("minval_", minimum, "maxval_", maximum); }
+  else { J_KV(K(min_ret), K(max_ret), K_(minval), K_(min_meta), K_(maxval), K_(max_meta)); }
+  J_COMMA();
+  J_KV(K(bkvals_), K(novals_), K(chvals_), K(eavals_), K(rpcnts_), K(eavs_));
+  J_OBJ_END();
+  return pos;
+}
 
 int ObStatRowCount::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
 {
@@ -32,7 +140,7 @@ int ObStatRowCount::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObStatRowCount::decode(ObObj &obj)
+int ObStatRowCount::decode(DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   int64_t row_count = 0;
@@ -54,7 +162,7 @@ int ObStatAvgRowLen::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObStatAvgRowLen::decode(ObObj &obj)
+int ObStatAvgRowLen::decode(DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   int64_t avg_row_size = 0;
@@ -100,7 +208,7 @@ int ObStatMaxValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObStatMaxValue::decode(ObObj &obj,
+int ObStatMaxValue::decode(DatumValue &obj,
                            ObIAllocator &allocator,
                            const ObDatumAccessContext *datum_access_ctx)
 {
@@ -111,7 +219,7 @@ int ObStatMaxValue::decode(ObObj &obj,
   } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
                  obj, allocator, datum_access_ctx))) {
   } else {
-    col_stat_->set_max_value(obj);
+    ret = col_stat_->set_max_value(obj);
   }
   return ret;
 }
@@ -129,7 +237,7 @@ int ObStatMinValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObStatMinValue::decode(ObObj &obj,
+int ObStatMinValue::decode(DatumValue &obj,
                            ObIAllocator &allocator,
                            const ObDatumAccessContext *datum_access_ctx)
 {
@@ -140,12 +248,12 @@ int ObStatMinValue::decode(ObObj &obj,
   } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
                  obj, allocator, datum_access_ctx))) {
   } else {
-    col_stat_->set_min_value(obj);
+    ret = col_stat_->set_min_value(obj);
   }
   return ret;
 }
 
-int ObStatNumNull::decode(ObObj &obj)
+int ObStatNumNull::decode(DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   int64_t num_not_null = 0;
@@ -159,7 +267,7 @@ int ObStatNumNull::decode(ObObj &obj)
   return ret;
 }
 
-int ObStatNumDistinct::decode(ObObj &obj)
+int ObStatNumDistinct::decode(DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   int64_t num_distinct = 0;
@@ -172,7 +280,7 @@ int ObStatNumDistinct::decode(ObObj &obj)
   return ret;
 }
 
-int ObStatAvgLen::decode(ObObj &obj)
+int ObStatAvgLen::decode(DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   int64_t avg_len = 0;
@@ -185,7 +293,7 @@ int ObStatAvgLen::decode(ObObj &obj)
   return ret;
 }
 
-int ObStatLlcBitmap::decode(ObObj &obj)
+int ObStatLlcBitmap::decode(DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   ObString llc_bitmap_buf;
@@ -253,7 +361,13 @@ struct ObBucketCompare
     if (OB_FAIL(ret)) {
       // already fail
     } else {
-      bret = l.endpoint_value_.compare(r.endpoint_value_) < 0;
+      int cmp = 0;
+      alignas(8) char left_scratch[64], right_scratch[64];
+      DatumValue left, right;
+      if (OB_FAIL(l.export_endpoint_value(left, left_scratch, sizeof(left_scratch)))) {
+      } else if (OB_FAIL(r.export_endpoint_value(right, right_scratch, sizeof(right_scratch)))) {
+      } else if (OB_FAIL(compare_datum_values(left, right, cmp))) {
+      } else { bret = cmp < 0; }
     }
     return bret;
   }
@@ -274,7 +388,7 @@ public:
   ObBucketCompare &compare_;
 };
 
-int ObStatTopKHist::decode(ObObj &obj,
+int ObStatTopKHist::decode(DatumValue &obj,
                            ObIAllocator &allocator,
                            const ObDatumAccessContext *datum_access_ctx)
 {
@@ -310,10 +424,9 @@ int ObStatTopKHist::build_histogram_from_topk_items(ObIAllocator &allocator,
   histogram.reset();
   int64_t num_cnt = std::min(buckets.count(), max_bucket_num);
   for (int64_t i = 0; OB_SUCC(ret) && i < num_cnt; ++i) {
-    ObHistBucket bkt(buckets.at(i).col_obj_,
-                     buckets.at(i).fre_times_,
-                     buckets.at(i).fre_times_);
-    if (OB_FAIL(tmp.push_back(bkt))) {
+    ObHistBucket bkt(buckets.at(i).fre_times_, buckets.at(i).fre_times_);
+    if (OB_FAIL(bkt.set_endpoint_borrowed(buckets.at(i).col_obj_))) {
+    } else if (OB_FAIL(tmp.push_back(bkt))) {
     }
   }
   if (OB_SUCC(ret) && tmp.count() > 0) {
@@ -379,7 +492,7 @@ int ObStatTopKHist::try_build_topk_histogram(ObIAllocator &allocator,
                            num_distinct,
                            bkts.count());
     if (OB_FAIL(histogram.prepare_allocate_buckets(allocator, bkts.count()))) {
-    } else if (OB_FAIL(histogram.assign_buckets(bkts))) {
+    } else if (OB_FAIL(histogram.assign_buckets(bkts, allocator))) {
     } else {/*do nothing*/}
   } else if (num > 0 && bkts.at(num - 1).endpoint_num_ >=
              (not_null_count * (1 - 1.0 / max_bucket_num))) {
@@ -393,7 +506,7 @@ int ObStatTopKHist::try_build_topk_histogram(ObIAllocator &allocator,
     if (OB_FAIL(histogram.prepare_allocate_buckets(allocator, num))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < num; ++i) {
-        ret = histogram.add_bucket(bkts.at(i));
+        ret = histogram.add_bucket(bkts.at(i), allocator);
       }
     }
   } else {
@@ -405,7 +518,7 @@ int ObStatTopKHist::try_build_topk_histogram(ObIAllocator &allocator,
       histogram.set_sample_size(not_null_count);
       histogram.set_bucket_cnt(bkts.count());
       if (OB_FAIL(histogram.prepare_allocate_buckets(allocator, bkts.count()))) {
-      } else if (OB_FAIL(histogram.assign_buckets(bkts))) {
+      } else if (OB_FAIL(histogram.assign_buckets(bkts, allocator))) {
       } else {/*do nothing*/}
     }
   }
@@ -425,7 +538,7 @@ int ObPartitionId::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObPartitionId::decode(ObObj &obj)
+int ObPartitionId::decode(DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   int64_t partition_id = -1;
@@ -438,13 +551,13 @@ int ObPartitionId::decode(ObObj &obj)
   return ret;
 }
 
-int ObStatItem::cast_int(const ObObj &obj, int64_t &ret_value)
+int ObStatItem::cast_int(const DatumValue &obj, int64_t &ret_value)
 {
   int ret = OB_SUCCESS;
-  ObObj dest_obj;
+  DatumValue dest_obj;
   ObArenaAllocator calc_buffer(ObModIds::OB_BUFFER);
   ObCastCtx cast_ctx(&calc_buffer, NULL, CM_NONE, ObCharset::get_system_collation());
-  if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, obj, dest_obj))) {
+  if (OB_FAIL(DatumValueCaster::to_type(ObIntType, cast_ctx, obj, *cast_ctx.allocator_v2_, dest_obj))) {
   } else if (dest_obj.is_null()) {
     /*do nothing*/
   } else if (OB_FAIL(dest_obj.get_int(ret_value))) {
@@ -606,44 +719,77 @@ void ObGlobalNdvEval::get_llc_bitmap(char *llc_bitmap, const int64_t llc_bitmap_
   }
 }
 
-void ObGlobalMaxEval::add(const ObObj &obj)
-{
-  if (global_max_.is_null()) {
-    global_max_ = obj;
-  } else if (obj > global_max_) {
-    global_max_ = obj;
-  }
-}
-
-int ObGlobalMaxEval::flush(common::ObIAllocator *alloc)
+int ObGlobalMaxEval::add(const DatumValue &value)
 {
   int ret = OB_SUCCESS;
-  ObObj temp_value_;
-  if (is_valid() && OB_FAIL(ob_write_obj(*alloc, global_max_, temp_value_))) {
-  } else if (is_valid()) {
-    global_max_ = temp_value_;
+  int cmp = 0;
+  Datum candidate;
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(value.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(physical, value.meta_, candidate))) {
+  } else if (global_max_.is_null()) {
+    global_max_ = candidate; meta_ = value.meta_;
+  } else {
+    alignas(8) char current_scratch[64];
+    DatumValue current_view;
+    if (OB_FAIL(export_value(current_view, current_scratch, sizeof(current_scratch)))) {
+    } else if (OB_FAIL(compare_datum_values(value, current_view, cmp))) {
+    } else if (cmp > 0) { global_max_ = candidate; meta_ = value.meta_; }
   }
   return ret;
 }
-
-void ObGlobalMinEval::add(const ObObj &obj)
+int ObGlobalMaxEval::add_native(const Datum &value, const SqlTypeMeta &meta)
 {
-  if (global_min_.is_null()) {
-    global_min_ = obj;
-  } else if (global_min_ > obj) {
-    global_min_ = obj;
-  }
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_stat_item_value(value, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? add(view) : ret;
 }
-
-int ObGlobalMinEval::flush(common::ObIAllocator *alloc)
+int ObGlobalMaxEval::export_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(global_max_, meta_, output, scratch, capacity); }
+int ObGlobalMaxEval::copy_value(DatumValue &output, ObIAllocator &owner) const
+{ return copy_stat_item_value(global_max_, meta_, output, owner); }
+int ObGlobalMaxEval::flush(ObIAllocator *owner)
+{
+  return owner == nullptr ? OB_INVALID_ARGUMENT : !is_valid() ? OB_SUCCESS
+      : clone_stat_item_value(global_max_, meta_, *owner, global_max_, meta_);
+}
+int ObGlobalMinEval::add(const DatumValue &value)
 {
   int ret = OB_SUCCESS;
-  ObObj temp_value_;
-  if (is_valid() && OB_FAIL(ob_write_obj(*alloc, global_min_, temp_value_))) {
-  } else if (is_valid()) {
-    global_min_ = temp_value_;
+  int cmp = 0;
+  Datum candidate;
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(value.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(physical, value.meta_, candidate))) {
+  } else if (global_min_.is_null()) {
+    global_min_ = candidate; meta_ = value.meta_;
+  } else {
+    alignas(8) char current_scratch[64];
+    DatumValue current_view;
+    if (OB_FAIL(export_value(current_view, current_scratch, sizeof(current_scratch)))) {
+    } else if (OB_FAIL(compare_datum_values(current_view, value, cmp))) {
+    } else if (cmp > 0) { global_min_ = candidate; meta_ = value.meta_; }
   }
   return ret;
+}
+int ObGlobalMinEval::add_native(const Datum &value, const SqlTypeMeta &meta)
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_stat_item_value(value, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? add(view) : ret;
+}
+int ObGlobalMinEval::export_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(global_min_, meta_, output, scratch, capacity); }
+int ObGlobalMinEval::copy_value(DatumValue &output, ObIAllocator &owner) const
+{ return copy_stat_item_value(global_min_, meta_, output, owner); }
+int ObGlobalMinEval::flush(ObIAllocator *owner)
+{
+  return owner == nullptr ? OB_INVALID_ARGUMENT : !is_valid() ? OB_SUCCESS
+      : clone_stat_item_value(global_min_, meta_, *owner, global_min_, meta_);
 }
 
 int ObStatHybridHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
@@ -660,7 +806,7 @@ int ObStatHybridHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObStatHybridHist::decode(ObObj &obj,
+int ObStatHybridHist::decode(DatumValue &obj,
                              ObIAllocator &allocator,
                              const ObDatumAccessContext *datum_access_ctx)
 {
@@ -681,7 +827,7 @@ int ObStatHybridHist::decode(ObObj &obj,
     if (hybrid_hist.get_buckets().empty()) {
       //do nothing, maybe the sample data is all null
     } else if (OB_FAIL(col_stat_->get_histogram().prepare_allocate_buckets(allocator, hybrid_hist.get_buckets().count()))) {
-    } else if (OB_FAIL(col_stat_->get_histogram().assign_buckets(hybrid_hist.get_buckets()))) {
+    } else if (OB_FAIL(col_stat_->get_histogram().assign_buckets(hybrid_hist.get_buckets(), allocator))) {
     } else {
       col_stat_->get_histogram().set_type(ObHistType::HYBIRD);
       col_stat_->get_histogram().set_sample_size(hybrid_hist.get_total_count());
@@ -707,20 +853,23 @@ int ObGlobalAllColEvals::flush(common::ObIAllocator *alloc)
   return ret;
 }
 
-void ObGlobalAllColEvals::merge(const ObOptColumnStat &col_stats)
+int ObGlobalAllColEvals::merge(const ObOptColumnStat &col_stats)
 {
+  int ret = OB_SUCCESS;
   if (col_stats.get_last_analyzed() > 0) {
     ndv_eval_.add(col_stats.get_num_distinct(), col_stats.get_llc_bitmap());
     null_eval_.add(col_stats.get_num_null());
     avglen_eval_.add(col_stats.get_avg_len());
     // a partition has min/max values only when it contains a valid value in the other word, ndv is not zero
     if (col_stats.get_num_distinct() != 0) {
-      min_eval_.add(col_stats.get_min_value());
-      max_eval_.add(col_stats.get_max_value());
+      if (OB_FAIL(min_eval_.add_native(col_stats.get_min_datum(), col_stats.get_min_meta()))) {
+      } else if (OB_FAIL(max_eval_.add_native(col_stats.get_max_datum(), col_stats.get_max_meta()))) {
+      }
     }
   } else {
     column_stat_valid_ = false;
   }
+  return ret;
 }
 static const int32_t DEFAULT_DATA_TYPE_LEGNTH[] = 
 {

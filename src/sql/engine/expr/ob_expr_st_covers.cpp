@@ -184,17 +184,17 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   return ret;
 }
 
-int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum1 = NULL;
-  ObDatum *gis_datum2 = NULL;
+  Datum *gis_datum1 = NULL;
+  Datum *gis_datum2 = NULL;
   ObString wkb1;
   ObString wkb2;
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
-  ObObjType input_type1 = gis_arg1->datum_meta_.type_;
-  ObObjType input_type2 = gis_arg2->datum_meta_.type_;
+  SqlValueType input_type1 = gis_arg1->datum_meta_.type_;
+  SqlValueType input_type2 = gis_arg2->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());

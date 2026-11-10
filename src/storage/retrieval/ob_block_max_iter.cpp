@@ -278,9 +278,9 @@ int ObBlockMaxScoreIterator::inner_init(
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->scan_block_stat(block_stat_scan_param_, stat_iter_))) {
   } else {
     const int64_t dim_rowkey_idx = block_max_scan_param.dim_col_idx_in_rowkey_;
-    const ObObj &scan_dim_obj = block_stat_scan_param_.get_scan_param()->key_ranges_.at(0).end_key_.get_obj_ptr()[dim_rowkey_idx];
+    const DatumValue &scan_dim_value = block_stat_scan_param_.get_scan_param()->key_ranges_.at(0).end_key_.get_cell(dim_rowkey_idx);
     scan_dim_datum_.reuse();
-    if (OB_FAIL(scan_dim_datum_.from_obj(scan_dim_obj))) {
+    if (OB_FAIL(scan_dim_datum_.from_value(scan_dim_value))) {
     } else {
       switch (block_max_scan_param.ranking_type_) {
       case OB_MAX_SCORE_BM_25:
@@ -320,8 +320,8 @@ int ObBlockMaxScoreIterator::init_advance_rowkey(
 int ObBlockMaxScoreIterator::init_cmp_funcs(const ObBlockMaxScoreIterParam &block_max_scan_param)
 {
   int ret = OB_SUCCESS;
-  const ObObjMeta &id_obj_meta = block_max_scan_param.domain_id_obj_meta_;
-  const ObObjMeta &dim_obj_meta = block_max_scan_param.dim_obj_meta_;
+  const SqlTypeMeta &id_obj_meta = block_max_scan_param.domain_id_obj_meta_;
+  const SqlTypeMeta &dim_obj_meta = block_max_scan_param.dim_obj_meta_;
   common::ObDatumBasicFuncs *dim_basic_funcs = ObDatumFuncs::get_basic_func(
       dim_obj_meta.get_type(), dim_obj_meta.get_collation_type());
   if (OB_FAIL(domain_id_cmp_.init(id_obj_meta))) {
@@ -369,9 +369,9 @@ int ObBlockMaxScoreIterator::calc_domain_id_range(const ObDatumRow &agg_row, con
       } else {
         // Since micro block is not divided by dimension boundary, max_datum in first statistic range
         // might comes from other dimension and not aligned with the data range covered by upper bound of max score.
-        const ObObj &scan_dim_obj = block_stat_scan_param_.get_scan_param()->key_ranges_.at(0).end_key_.get_obj_ptr()[dim_rowkey_idx];
+        const DatumValue &scan_dim_value = block_stat_scan_param_.get_scan_param()->key_ranges_.at(0).end_key_.get_cell(dim_rowkey_idx);
         ObStorageDatum scan_dim_datum;
-        if (OB_FAIL(scan_dim_datum.from_obj(scan_dim_obj))) {
+        if (OB_FAIL(scan_dim_datum.from_value(scan_dim_value))) {
         } else if (OB_UNLIKELY(rowkey_dim_datum.is_ext() || scan_dim_datum.is_ext())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(dim_cmp_(

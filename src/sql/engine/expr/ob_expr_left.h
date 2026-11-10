@@ -37,9 +37,9 @@ public:
   	DECLARE_SET_LOCAL_SESSION_VARS;
   
 private:
-  int cast_param_type(const ObObj& in,
+  int cast_param_type(const common::DatumValue& in,
                       ObExprCtx& expr_ctx,
-                      ObObj& out) const;
+                      common::DatumValue& out) const;
 	DISALLOW_COPY_AND_ASSIGN(ObExprLeft);
 };
 } /* namespace sql */

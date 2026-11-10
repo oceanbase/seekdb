@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 #include "common/object/ob_object.h"
+#include "common/datum/datum.h"
+#include "common/datum/datum_parameter.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_unify_serialize.h"
@@ -154,20 +156,34 @@ private:
 
 public:
   inline void set_column_id(const uint64_t column_id) { column_id_ = column_id; }
-  inline void set_meta_type(const common::ObObjMeta meta_type) { meta_type_ = meta_type; }
+  inline void set_meta_type(const common::SqlTypeMeta meta_type) { meta_type_ = meta_type; }
   inline void set_column_order(const common::ObOrderType order) { order_ = order; }
   inline void set_accuracy(const common::ObAccuracy &accuracy) { accuracy_ = accuracy; }
-  inline int set_orig_default_value(const common::ObObj &default_value)
-  { return deep_copy_obj(default_value, orig_default_value_); }
-  inline int set_cur_default_value(const common::ObObj &default_value)
-  { return deep_copy_obj(default_value, cur_default_value_); }
+  template <typename Value>
+  int set_orig_default_value(const Value &value)
+  { return copy_default_value(value, orig_default_value_, orig_default_meta_); }
+  template <typename Value>
+  int set_cur_default_value(const Value &value)
+  { return copy_default_value(value, cur_default_value_, cur_default_meta_); }
+  int set_orig_default_datum(const common::Datum &value, const common::SqlTypeMeta &meta)
+  { return copy_default_datum(value, meta, orig_default_value_, orig_default_meta_); }
+  int set_cur_default_datum(const common::Datum &value, const common::SqlTypeMeta &meta)
+  { return copy_default_datum(value, meta, cur_default_value_, cur_default_meta_); }
   int32_t get_data_length() const;
   inline uint64_t get_column_id() const { return column_id_; }
-  inline const common::ObObjMeta &get_meta_type() const { return meta_type_; }
+  inline const common::SqlTypeMeta &get_meta_type() const { return meta_type_; }
   inline common::ObOrderType get_column_order() const { return order_; }
   inline const common::ObAccuracy &get_accuracy() const { return accuracy_; }
-  inline const common::ObObj &get_orig_default_value() const { return orig_default_value_; }
-  inline const common::ObObj &get_cur_default_value() const { return cur_default_value_; }
+  inline const common::Datum &get_orig_default_datum() const { return orig_default_value_; }
+  inline const common::Datum &get_cur_default_datum() const { return cur_default_value_; }
+  inline const common::SqlTypeMeta &get_orig_default_meta() const { return orig_default_meta_; }
+  inline const common::SqlTypeMeta &get_cur_default_meta() const { return cur_default_meta_; }
+  // Export borrows caller scratch for scalars and this owner for references.
+  // Copy instead retains the legacy value in the explicit destination owner.
+  int export_orig_default_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_cur_default_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_orig_default_value(common::DatumValue &output, common::ObIAllocator &owner) const;
+  int copy_cur_default_value(common::DatumValue &output, common::ObIAllocator &owner) const;
   inline bool is_nullable_for_write() const { return is_nullable_for_write_; }
   inline void set_nullable_for_write(const bool nullable) { is_nullable_for_write_ = nullable; }
   inline bool is_nullable_for_read() const { return is_nullable_for_read_; }
@@ -195,7 +211,9 @@ public:
                K_(order),
                K_(accuracy),
                K_(orig_default_value),
+               K_(orig_default_meta),
                K_(cur_default_value),
+               K_(cur_default_meta),
                K_(is_nullable_for_write),
                K_(is_nullable_for_read),
                K_(is_gen_col),
@@ -205,15 +223,25 @@ public:
                K_(lob_chunk_size),
                K_(is_data_table_rowkey));
 private:
-  int deep_copy_obj(const common::ObObj &src, common::ObObj &dest);
+  int copy_default_value(const common::DatumValue &source, common::Datum &target,
+                         common::SqlTypeMeta &target_meta);
+  int copy_default_value(const common::DatumParameter &source, common::Datum &target,
+                         common::SqlTypeMeta &target_meta);
+  int copy_default_datum(const common::Datum &source, const common::SqlTypeMeta &meta,
+                         common::Datum &target, common::SqlTypeMeta &target_meta);
+  void release_default_value(common::Datum &value, common::SqlTypeMeta &meta);
+  void move_fields_from(ObColumnParam &source);
+  int decode_fields(const char *buf, int64_t data_len, int64_t &pos);
 private:
   common::ObIAllocator &allocator_;
   uint64_t column_id_;
-  common::ObObjMeta meta_type_;
+  common::SqlTypeMeta meta_type_;
   common::ObOrderType order_;
   common::ObAccuracy accuracy_;
-  common::ObObj orig_default_value_;
-  common::ObObj cur_default_value_;
+  common::Datum orig_default_value_;
+  common::Datum cur_default_value_;
+  common::SqlTypeMeta orig_default_meta_;
+  common::SqlTypeMeta cur_default_meta_;
   bool is_nullable_for_write_;
   bool is_nullable_for_read_;
   bool is_gen_col_;

@@ -19,7 +19,10 @@
 
 
 #include "ob_table_scan_op.h"
+#include "sql/engine/native_param_utils.h"
+#include "sql/engine/table/native_point_get_input.h"
 #include "common/json_type/ob_json_bin.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "data_plane/blocksstable/ob_datum_row.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/das/ob_das_attach_define.h"
@@ -31,6 +34,8 @@
 #include "sql/engine/px/ob_granule_iterator_op.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
+#include "common/datum/datum_key_ops.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -40,6 +45,86 @@ using namespace share::schema;
 namespace sql
 {
 #define MY_CTDEF (MY_SPEC.tsc_ctdef_)
+
+namespace
+{
+// Compatibility adapters for DDL/storage consumers. Borrowed views are
+// consumed synchronously; retaining storage rows copy into their own owner.
+int scan_legacy_view(const ObExpr &expr, const Datum &source,
+                     common::ObDatum &destination, char (&scratch)[64])
+{
+  const DatumCopyPlan plan = expr.get_datum_copy_plan();
+  int ret = plan.borrow_legacy(source, destination);
+  if (ret == OB_NOT_SUPPORTED) {
+    int64_t position = 0;
+    ret = plan.export_legacy(source, destination, scratch, sizeof(scratch), position);
+  }
+  return ret;
+}
+
+int scan_import_storage(const ObExpr &expr, ObEvalCtx &ctx,
+                         const common::ObDatum &source, Datum &destination)
+{
+  int ret = OB_SUCCESS;
+  Datum value;
+  if (source.is_ext()) { ret = OB_INVALID_ARGUMENT; }
+  else if (expr.obj_datum_map_ == OBJ_DATUM_NULL) { value.set_null(); }
+  else { ret = expr.get_datum_copy_plan().import_legacy(source, value); }
+  if (OB_SUCC(ret)) {
+    if (expr.obj_datum_map_ == OBJ_DATUM_STRING) { destination = value; }
+    else { ret = expr.deep_copy_datum(ctx, value); }
+  }
+  return ret;
+}
+
+int scan_copy_to_storage(const ObExpr &expr, const Datum &source,
+                          blocksstable::ObStorageDatum &destination, ObIAllocator &owner)
+{
+  alignas(8) char scratch[64];
+  common::ObDatum legacy;
+  const int ret = scan_legacy_view(expr, source, legacy, scratch);
+  return ret == OB_SUCCESS ? destination.deep_copy_from_datum(legacy, owner) : ret;
+}
+
+// A zero-count non-unique MVI still decodes one MIN scalar. The old reader
+// replaced its type with the column metadata before creating the storage row:
+// fixed-width destinations used the scalar bits, while strings had length zero.
+// Normalize those native payload descriptors explicitly; do not retain Ext
+// flags after that metadata replacement or reinterpret an Ext-sized Datum.
+int normalize_scan_multivalue_scalar(DatumValue &value, const SqlTypeMeta &column_meta,
+                                     ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  if (!value.is_null()) {
+    const SqlValueDatumMapType target = ObDatum::get_sql_value_datum_map_type(column_meta.get_type());
+    if (value.is_ext()) {
+      if (!value.is_min_value()) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (target == OBJ_DATUM_STRING) {
+        value.datum_.set_string(ObString());
+      } else if (target == OBJ_DATUM_8BYTE_DATA || target == OBJ_DATUM_4BYTE_DATA
+                 || target == OBJ_DATUM_1BYTE_DATA) {
+        // Preserve the old scalar-bit interpretation at an explicit codec
+        // boundary. Native state/payload headers are never a legacy pack word.
+        const int64_t bits = value.get_ext();
+        alignas(8) char scalar[sizeof(bits)];
+        MEMCPY(scalar, &bits, sizeof(bits));
+        ObDatum legacy;
+        legacy.ptr_ = scalar; legacy.pack_ = ObDatum::get_reserved_size(target);
+        Datum candidate;
+        if (OB_FAIL(DatumParameterCodec::import_native_value(legacy, column_meta, owner, candidate))) {
+        } else { value.get_datum() = candidate; }
+      } else {
+        ret = OB_DESERIALIZE_ERROR;
+      }
+    } else if (ObDatum::get_sql_value_datum_map_type(value.get_type()) != target) {
+      ret = OB_DESERIALIZE_ERROR;
+    }
+    if (OB_SUCC(ret)) { value.set_meta_type(column_meta); }
+  }
+  return ret;
+}
+} // namespace
 
 namespace
 {
@@ -65,7 +150,7 @@ bool find_skip_delta_buffer_in_ctdef(const ObDASBaseCtDef *ctdef)
 int SnapshotScanItem::set_snapshot_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   const ObExpr *expr = snapshot_query_expr_;
   scan_rtdef.need_scn_ = need_scn_;
   if (TableItem::NOT_USING == snapshot_query_type_) {
@@ -686,7 +771,9 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     group_id_(0),
     tsc_monitor_info_(),
     need_check_outrow_lob_(false),
-    rand_scan_processor_()
+    rand_scan_processor_(),
+    native_point_get_input_(nullptr),
+    native_point_get_ready_(false)
 {
 }
 
@@ -881,7 +968,7 @@ int ObTableScanOp::prepare_das_task()
     ObSEArray<ObObjectID, 1> partition_ids;
     ObSEArray<ObObjectID, 1> first_level_part_ids;
     if (OB_FAIL(das_access.calculate_tablet_ids(ctx_,
-                                                  plan_ctx->get_param_store(),
+                                                  *plan_ctx,
                                                   tablet_ids,
                                                   partition_ids,
                                                   first_level_part_ids,
@@ -907,7 +994,7 @@ int ObTableScanOp::prepare_all_das_tasks()
   // get grop size of batch rescan
   int ret = OB_SUCCESS;
   if (need_perform_real_batch_rescan()) {
-    tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_;
+    tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).group_->count_;
     if (OB_UNLIKELY(tsc_rtdef_.group_size_ > tsc_rtdef_.max_group_size_)) {
       ret = OB_ERR_UNEXPECTED;
     }
@@ -920,22 +1007,26 @@ int ObTableScanOp::prepare_all_das_tasks()
     } else {
       int64_t group_size = (output_ == iter_tree_) ?  1: tsc_rtdef_.group_size_;
       bool need_sort = MY_CTDEF.ordering_used_by_parent_;
-      GroupRescanParamGuard grp_guard(tsc_rtdef_, GET_PHY_PLAN_CTX(ctx_)->get_param_store_for_update());
+      GroupRescanParamGuard grp_guard(tsc_rtdef_, *GET_PHY_PLAN_CTX(ctx_), ctx_.get_allocator());
+      if (OB_SUCC(ret)) { ret = grp_guard.status(); }
       for (int64_t i = 0; OB_SUCC(ret) && i < group_size; ++i) {
         if (need_perform_real_batch_rescan()) {
-          grp_guard.switch_group_rescan_param(i);
+          ret = grp_guard.switch_group_rescan_param(i);
         }
 
         // When using batch rescan, the actual scan order of storage must be KEEP_ORDER，thus the original ordering
         // may be disrupted when dealing with multiple range segments.
         // Therefore we need to sort the scan ranges when upper operator used the tsc ordering.
-        if (MY_CTDEF.use_index_merge_ && OB_FAIL(prepare_index_merge_scan_range(i, need_sort))) {
+        if (OB_FAIL(ret)) {
+        } else if (MY_CTDEF.use_index_merge_ && OB_FAIL(prepare_index_merge_scan_range(i, need_sort))) {
         } else if (!MY_CTDEF.use_index_merge_ && OB_FAIL(prepare_single_scan_range(i, need_sort))) {
         } else if (OB_FAIL(prepare_das_task())) {
         } else {
           MY_INPUT.key_ranges_.reuse();
         }
       }
+      const int restore_ret = grp_guard.restore();
+      if (OB_SUCC(ret)) { ret = restore_ret; }
     }
   }
 
@@ -1196,7 +1287,7 @@ int ObTableScanOp::prepare_batch_scan_range()
   int64_t batch_size = 0;
   if (OB_SUCC(ret)) {
     if (!tsc_rtdef_.bnlj_params_.empty()) {
-      tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_;
+      tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).group_->count_;
       if (OB_UNLIKELY(tsc_rtdef_.group_size_ > tsc_rtdef_.max_group_size_)) {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -1205,18 +1296,21 @@ int ObTableScanOp::prepare_batch_scan_range()
     }
   }
   bool need_sort = MY_CTDEF.ordering_used_by_parent_;
-  GroupRescanParamGuard grp_guard(tsc_rtdef_, GET_PHY_PLAN_CTX(ctx_)->get_param_store_for_update());
+  GroupRescanParamGuard grp_guard(tsc_rtdef_, *GET_PHY_PLAN_CTX(ctx_), ctx_.get_allocator());
+  if (OB_SUCC(ret)) { ret = grp_guard.status(); }
   for (int64_t i = 0; OB_SUCC(ret) && i < tsc_rtdef_.group_size_; ++i) {
     //replace real param to param store to extract scan range
-    grp_guard.switch_group_rescan_param(i);
-    LOG_DEBUG("replace bnlj param to extract range", K(plan_ctx->get_param_store()));
+    ret = grp_guard.switch_group_rescan_param(i);
+    LOG_DEBUG("replace bnlj param to extract range", K(plan_ctx->get_parameter_count()));
 
     // When using batch rescan, the actual scan order of storage must be KEEP_ORDER，thus the original ordering
     // may be disrupted when dealing with multiple range segments.
     // Therefore we need to sort the scan ranges when upper operator used the tsc ordering.
-    if (OB_FAIL(prepare_single_scan_range(i, need_sort))) {
+    if (OB_SUCC(ret) && OB_FAIL(prepare_single_scan_range(i, need_sort))) {
     }
   }
+  const int restore_ret = grp_guard.restore();
+  if (OB_SUCC(ret)) { ret = restore_ret; }
   return ret;
 }
 
@@ -1238,7 +1332,7 @@ int ObTableScanOp::build_bnlj_params()
         // LOG_WARN("failed to find group param", K(ret), K(exist), K(i), K(array_idx));
       } else {
         const GroupRescanParam &group_param = group_params_above->at(array_idx);
-        OZ(tsc_rtdef_.bnlj_params_.push_back(GroupRescanParamInfo(param_idx, group_param.gr_param_)));
+        OZ(tsc_rtdef_.bnlj_params_.push_back(GroupRescanParamInfo(param_idx, &group_param)));
       }
     }
     if (OB_SUCC(ret) && !tsc_rtdef_.bnlj_params_.empty() && (OB_ISNULL(fold_iter_))) {
@@ -1259,6 +1353,12 @@ int ObTableScanOp::build_bnlj_params()
 int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
 {
   int ret = OB_SUCCESS;
+  bool native_handled = false;
+  if (OB_FAIL(try_prepare_native_point_get(group_idx, need_sort, native_handled))) {
+    return ret;
+  } else if (native_handled) {
+    return ret;
+  }
   ObQueryRangeArray key_ranges;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   ObIAllocator &range_allocator = (table_rescan_allocator_ != nullptr ?
@@ -1280,7 +1380,7 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
               tsc_rtdef_.fast_final_nlj_range_ctx_,
               range_allocator,
               ctx_,
-              plan_ctx->get_param_store(),
+              *plan_ctx,
               tsc_rtdef_.range_buffer_idx_,
               locate_range_buffer(),
               key_ranges,
@@ -1305,6 +1405,48 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
       key_range->table_id_ = MY_CTDEF.scan_ctdef_.ref_table_id_;
       key_range->group_idx_ = group_idx;
       if (OB_FAIL(MY_INPUT.key_ranges_.push_back(*key_range))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableScanOp::try_prepare_native_point_get(int64_t group_idx, bool need_sort, bool &handled)
+{
+  int ret = OB_SUCCESS;
+  handled = false;
+  native_point_get_ready_ = false;
+  ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
+  DASRuntimeTableAccess *access = tsc_rtdef_.scan_rtdef_.table_access_;
+  // Start with one local, unpartitioned base-table point lookup. Other shapes
+  // keep their existing range generation and lifecycle (including rescan).
+  if (!need_extract_range() || need_sort || group_idx != 0 || in_rescan_
+      || MY_SPEC.use_dist_das_ || MY_SPEC.gi_above_ || MY_SPEC.batch_scan_flag_
+      || MY_SPEC.part_level_ != ObPartitionLevel::PARTITION_LEVEL_ZERO
+      || MY_SPEC.should_scan_index() || MY_CTDEF.lookup_ctdef_ != nullptr
+      || MY_CTDEF.attach_spec_.attach_ctdef_ != nullptr || MY_CTDEF.use_index_merge_
+      || MY_CTDEF.das_dppr_tbl_ != nullptr || MY_CTDEF.ordering_used_by_parent_
+      || !MY_CTDEF.scan_ctdef_.is_get_ || is_virtual_table(MY_SPEC.ref_table_id_)
+      || !MY_INPUT.key_ranges_.empty() || !MY_INPUT.mbr_filters_.empty()
+      || access == nullptr || access->get_tablet_accesses().size() != 1
+      || plan_ctx == nullptr || plan_ctx->has_for_update()
+      || MY_CTDEF.scan_ctdef_.table_param_.get_read_info().get_schema_rowkey_count() != 3) {
+    // Fall back before allocating or publishing any native input.
+  } else {
+    int64_t values[3];
+    bool supported = false;
+    if (OB_FAIL(MY_CTDEF.get_query_range_provider().try_get_native_bigint_point(
+        *plan_ctx, values, supported))) {
+    } else if (supported) {
+      if (native_point_get_input_ == nullptr) {
+        // Use the execution allocator, not the table-rescan scratch arena.
+        native_point_get_input_ = OB_NEWx(NativePointGetInput, &ctx_.get_allocator());
+        if (native_point_get_input_ == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(native_point_get_input_->init(values, group_idx))) {
+      } else if (OB_SUCC(ret)) {
+        native_point_get_ready_ = true;
+        handled = true;
       }
     }
   }
@@ -1460,7 +1602,7 @@ int ObTableScanOp::inner_open()
     tsc_rtdef_.max_group_size_ = OB_MAX_BULK_JOIN_ROWS + MY_SPEC.plan_->get_batch_size();
     if (MY_CTDEF.get_query_range_provider().is_fast_nlj_range()) {
       int64_t column_count = MY_CTDEF.get_query_range_provider().get_column_count();
-      size_t range_size = sizeof(ObNewRange) + sizeof(ObObj) * column_count * 2;
+      size_t range_size = sizeof(ObNewRange) + sizeof(DatumValue) * column_count * 2;
       tsc_rtdef_.fast_final_nlj_range_ctx_.max_group_size_ = tsc_rtdef_.max_group_size_;
       if (!MY_SPEC.batch_scan_flag_) {
         tsc_rtdef_.range_buffers_ = ctx_.get_allocator().alloc(range_size);
@@ -1471,10 +1613,14 @@ int ObTableScanOp::inner_open()
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (!MY_SPEC.batch_scan_flag_) {
         ObNewRange *key_range = new(tsc_rtdef_.range_buffers_) ObNewRange();
+        DatumValue *values = reinterpret_cast<DatumValue *>(static_cast<char *>(tsc_rtdef_.range_buffers_) + sizeof(ObNewRange));
+        new (values) DatumValue[column_count * 2];
       } else {
         for (int64_t i = 0; i < tsc_rtdef_.max_group_size_; ++i) {
           char *range_buffers_off = static_cast<char*>(tsc_rtdef_.range_buffers_) + i * range_size;
           ObNewRange *key_range = new(range_buffers_off) ObNewRange();
+          DatumValue *values = reinterpret_cast<DatumValue *>(range_buffers_off + sizeof(ObNewRange));
+          new (values) DatumValue[column_count * 2];
         }
       }
     }
@@ -1517,6 +1663,7 @@ int ObTableScanOp::inner_close()
     iter_end_ = false;
     need_init_before_get_row_ = true;
     rand_scan_processor_.reset();
+    native_point_get_ready_ = false;
   }
   return ret;
 }
@@ -1565,6 +1712,11 @@ void ObTableScanOp::destroy()
     fold_iter_->release();
     fold_iter_ = nullptr;
   }
+  if (native_point_get_input_ != nullptr) {
+    native_point_get_input_->~NativePointGetInput();
+    native_point_get_input_ = nullptr;
+  }
+  native_point_get_ready_ = false;
   output_ = nullptr;
   scan_iter_ = nullptr;
   domain_index_.~ObDomainIndexCache();
@@ -1684,7 +1836,7 @@ int ObTableScanOp::inner_rescan_for_tsc()
       ret = local_iter_rescan();
     }
     if (OB_SUCC(ret) && need_perform_real_batch_rescan()) {
-      fold_iter_->init_group_range(0, tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_);
+      fold_iter_->init_group_range(0, tsc_rtdef_.bnlj_params_.at(0).group_->count_);
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(rand_scan_processor_.use_rand_scan())) {
@@ -1909,11 +2061,11 @@ int ObTableScanOp::check_need_real_rescan(bool &bret)
         int64_t partition_cnt = 0;
         int64_t group_size = 0;
         if (OB_UNLIKELY(tsc_rtdef_.bnlj_params_.empty()) ||
-            OB_ISNULL(tsc_rtdef_.bnlj_params_.at(0).gr_param_)) {
+            OB_ISNULL(tsc_rtdef_.bnlj_params_.at(0).group_)) {
           ret = OB_INVALID_ARGUMENT;
         } else if (OB_ISNULL(tsc_rtdef_.scan_rtdef_.table_access_)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (FALSE_IT(group_size = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_)) {
+        } else if (FALSE_IT(group_size = tsc_rtdef_.bnlj_params_.at(0).group_->count_)) {
         } else {
           DASRuntimeTableAccess *table_access = tsc_rtdef_.scan_rtdef_.table_access_;
           for (DASRuntimeTabletListIter node = table_access->tablet_accesses_begin();
@@ -2305,13 +2457,13 @@ int ObTableScanOp::calc_expr_int_value(const ObExpr &expr, int64_t &retval, bool
   int ret = OB_SUCCESS;
   is_null_value = false;
   OB_ASSERT(ob_is_int_tc(expr.datum_meta_.type_));
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   if (OB_FAIL(expr.eval(eval_ctx_, datum))) {
-  } else if (datum->null_) {
+  } else if (datum->is_null()) {
     is_null_value = true;
     retval = 0;
   } else {
-    retval = *datum->int_;
+    retval = datum->get_int();
   }
   return ret;
 }
@@ -2336,6 +2488,18 @@ OB_INLINE int ObTableScanOp::do_table_scan()
 int ObTableScanOp::cherry_pick_range_by_tablet_id(ObDASScanOp *scan_op)
 {
   int ret = OB_SUCCESS;
+  storage::ObTableScanParam &scan_param = scan_op->get_scan_param();
+  if (native_point_get_ready_) {
+    if (native_point_get_input_ == nullptr || !scan_param.key_ranges_.empty()
+        || !MY_INPUT.key_ranges_.empty()) {
+      return OB_ERR_UNEXPECTED;
+    }
+    scan_op->set_native_point_get_keys(&native_point_get_input_->lookup_keys());
+    return OB_SUCCESS;
+  }
+  // DAS reuse completes before the next range is prepared. Clear the prior
+  // native view when a rebind/rescan selects an existing range path.
+  scan_op->set_native_point_get_keys(nullptr);
   ObIArray<ObNewRange> &scan_ranges = scan_op->get_scan_param().key_ranges_;
   ObIArray<ObSpatialMBR> &mbr_filters = scan_op->get_scan_param().mbr_filters_;
   const ObIArray<ObNewRange> &input_ranges = MY_INPUT.key_ranges_;
@@ -2449,7 +2613,7 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
     batch_info_guard.set_batch_size(1);
     batch_info_guard.set_batch_idx(0);
   }
-  if (OB_ISNULL(scan_range.start_key_.get_obj_ptr()) || OB_ISNULL(scan_range.end_key_.get_obj_ptr())) {
+  if (OB_ISNULL(scan_range.start_key_.get_values()) || OB_ISNULL(scan_range.end_key_.get_values())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(scan_range.start_key_.is_min_row())
       || OB_UNLIKELY(scan_range.start_key_.is_max_row())
@@ -2457,40 +2621,49 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
       || OB_UNLIKELY(scan_range.end_key_.is_max_row())) {
     //the range contain min value or max value can not be pruned
     can_prune = false;
-  } else if (OB_UNLIKELY(scan_range.start_key_.get_obj_cnt() != scan_range.end_key_.get_obj_cnt())) {
+  } else if (OB_UNLIKELY(scan_range.start_key_.get_value_count() != scan_range.end_key_.get_value_count())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (part_range_pos.count() > 0) {
     int64_t range_key_count = part_range_pos.count();
-    ObObj *start_row_key = NULL;
-    ObObj *end_row_key = NULL;
-    ObObj *function_obj = NULL;
-    if (OB_ISNULL(start_row_key = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * range_key_count)))) {
+    DatumValue *start_row_key = NULL;
+    DatumValue *end_row_key = NULL;
+    DatumValue *function_obj = NULL;
+    if (OB_ISNULL(start_row_key = static_cast<DatumValue*>(allocator.alloc(sizeof(DatumValue) * range_key_count)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(end_row_key = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * range_key_count)))) {
+    } else if (OB_ISNULL(end_row_key = static_cast<DatumValue*>(allocator.alloc(sizeof(DatumValue) * range_key_count)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(function_obj = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj))))) {
+    } else if (OB_ISNULL(function_obj = static_cast<DatumValue*>(allocator.alloc(sizeof(DatumValue))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
+      new (start_row_key) DatumValue[range_key_count];
+      new (end_row_key) DatumValue[range_key_count];
+      new (function_obj) DatumValue();
       for (int64_t i = 0; OB_SUCC(ret) && can_prune && i < range_key_count; i++) {
         int64_t pos = part_range_pos.at(i);
-        if (OB_UNLIKELY(pos < 0) || OB_UNLIKELY(pos >= scan_range.start_key_.get_obj_cnt())) {
+        bool same = false;
+        if (OB_UNLIKELY(pos < 0) || OB_UNLIKELY(pos >= scan_range.start_key_.get_value_count())) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (scan_range.start_key_.get_obj_ptr()[pos].is_max_value() ||
-                   scan_range.start_key_.get_obj_ptr()[pos].is_min_value() ||
-                   scan_range.end_key_.get_obj_ptr()[pos].is_max_value() ||
-                   scan_range.end_key_.get_obj_ptr()[pos].is_min_value()) {
+        } else if (scan_range.start_key_.get_values()[pos].is_max_value() ||
+                   scan_range.start_key_.get_values()[pos].is_min_value() ||
+                   scan_range.end_key_.get_values()[pos].is_max_value() ||
+                   scan_range.end_key_.get_values()[pos].is_min_value()) {
           can_prune = false;
-        } else if (scan_range.start_key_.get_obj_ptr()[pos] != scan_range.end_key_.get_obj_ptr()[pos]) {
+        } else if (OB_FAIL(sql_equal_key_value(scan_range.start_key_.get_cell(pos), scan_range.end_key_.get_cell(pos), same))) {
+        } else if (!same) {
           can_prune = false;
         } else {
-          start_row_key[i] = scan_range.start_key_.get_obj_ptr()[pos];
-          end_row_key[i] = scan_range.end_key_.get_obj_ptr()[pos];
+          start_row_key[i] = scan_range.start_key_.get_values()[pos];
+          end_row_key[i] = scan_range.end_key_.get_values()[pos];
           sql::ObExpr *expr = part_dep_cols.at(i);
-          sql::ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
-          if (OB_FAIL(datum.from_obj(start_row_key[i], expr->obj_datum_map_))) {
+          Datum &datum = expr->locate_datum_for_write(eval_ctx_);
+          char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+          ObDatum projected;
+          if (OB_FAIL(start_row_key[i].to_row_datum(projected, extended_payload))) {
+          } else if (OB_FAIL(assign_parameter_to_expr(eval_ctx_, *expr, projected,
+                                                       start_row_key[i].meta_))) {
           } else if (is_lob_storage(start_row_key[i].get_type()) &&
-                     OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), start_row_key[i],
-                                                 expr->obj_meta_, expr->obj_datum_map_,
+                     OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), datum,
+                                                 start_row_key[i].meta_, expr->obj_meta_,
                                                  get_exec_ctx().get_allocator(), datum))) {
           }else {
             expr->set_evaluated_projected(eval_ctx_);
@@ -2739,14 +2912,15 @@ int ObTableScanOp::add_ddl_column_checksum()
       LOG_WARN("error unexpected, column cnt mismatch", K(ret), K(cnt), K(col_need_reshape_.count()));
     }
     // convert datanum to obj
-    ObDatum store_datum;
+    common::ObDatum store_datum;
+    alignas(8) char checksum_scratch[64];
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_.count(); ++i) {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       const ObExpr *e = MY_SPEC.output_[i];
       if (OB_ISNULL(e)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(e->eval(eval_ctx_, datum))) {
-      } else if (FALSE_IT(store_datum = *datum)) {
+      } else if (OB_FAIL(scan_legacy_view(*e, *datum, store_datum, checksum_scratch))) {
 #ifdef ERRSIM
       // TODO@hanhui: fix this errsim later
       // } else if (OB_FAIL(corrupt_obj(store_datum))) {
@@ -2783,18 +2957,19 @@ int ObTableScanOp::add_ddl_column_checksum_batch(const int64_t row_count)
       LOG_WARN("error unexpected, column cnt mismatch", K(ret), K(cnt), K(col_need_reshape_.count()));
     }
 
-    ObDatum store_datum;
+    common::ObDatum store_datum;
+    alignas(8) char checksum_scratch[64];
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_.count(); ++i) {
       const ObExpr *e = MY_SPEC.output_[i];
       if (OB_ISNULL(e)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(e->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
       } else {
-        ObDatumVector datum_array = e->locate_expr_datumvector(eval_ctx_);
+        DatumVector datum_array = e->locate_expr_datumvector(eval_ctx_);
         for (int64_t j = 0; OB_SUCC(ret) && j < row_count; j++) {
           if (brs_.skip_->at(j)) {
             continue;
-          } else if (FALSE_IT(store_datum = *datum_array.at(j))) {
+          } else if (OB_FAIL(scan_legacy_view(*e, *datum_array.at(j), store_datum, checksum_scratch))) {
 #ifdef ERRSIM
           // TODO@hanhui: fix this errsim later
           // } else if (OB_FAIL(corrupt_obj(store_datum))) {
@@ -2836,9 +3011,9 @@ int ObTableScanOp::check_has_invalid_outrow_lob(const bool is_batch)
 {
   int ret = OB_SUCCESS;
   if (need_check_outrow_lob_) {
-    ObDatum store_datum;
+    Datum store_datum;
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_.count(); ++i) {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       const ObExpr *e = MY_SPEC.output_[i];
       if (OB_ISNULL(e)) {
         ret = OB_ERR_UNEXPECTED;
@@ -2846,7 +3021,7 @@ int ObTableScanOp::check_has_invalid_outrow_lob(const bool is_batch)
       } else if (is_batch) {
         if (OB_FAIL(e->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
         } else {
-          ObDatumVector datum_array = e->locate_expr_datumvector(eval_ctx_);
+          DatumVector datum_array = e->locate_expr_datumvector(eval_ctx_);
           for (int64_t j = 0; OB_SUCC(ret) && j < brs_.size_; j++) {
             if (brs_.skip_->at(j)) {
               continue;
@@ -3091,7 +3266,7 @@ int ObTableScanOp::multivalue_get_pure_data(
   is_save_rowkey = true;
 
   ObExpr *array_expr = exprs.at(column_count);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObString json_arr_data;
 
   if (OB_FAIL(array_expr->eval(eval_ctx_, json_datum))) {
@@ -3109,7 +3284,14 @@ int ObTableScanOp::multivalue_get_pure_data(
     } else {
       data = bin.get_data();
       data_len = bin.get_data_length();
-      record_num = *reinterpret_cast<const uint32_t*>(data);
+      if (OB_ISNULL(data) || data_len < static_cast<int64_t>(sizeof(record_num))) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else {
+        MEMCPY(&record_num, data, sizeof(record_num));
+        if (record_num > (data_len - sizeof(record_num)) / 4) {
+          ret = OB_DESERIALIZE_ERROR;
+        }
+      }
     }
   }
 
@@ -3119,18 +3301,22 @@ int ObTableScanOp::multivalue_get_pure_data(
     uint32_t pure_data_size = 0;
     rowkey_end = column_count - 1;
     rowkey_start = rowkey_end - data_rowkey_cnt;
-    ObObj tmp_objs[column_count];
-
     for (uint32_t j = rowkey_start; OB_SUCC(ret) && j < rowkey_end; ++j) {
-      tmp_objs[j].set_nop_value();
-      ObDatum *datum = nullptr;
+      Datum *datum = nullptr;
       ObExpr *expr = exprs.at(j);
+      int64_t wire_size = 0;
+      common::ObDatum legacy;
+      alignas(8) char scratch[64];
 
       if (j == domain_index_.domain_column_idx_) {
       } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(datum->to_obj(tmp_objs[j], expr->obj_meta_))) {
+      } else if (!datum->is_null() && expr->obj_meta_.is_decimal_int()
+                 && expr->obj_meta_.get_scale() < 0) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(scan_legacy_view(*expr, *datum, legacy, scratch))) {
+      } else if (OB_FAIL(DatumParameterCodec::value_size(legacy, expr->obj_meta_, wire_size))) {
       } else {
-        pure_data_size += tmp_objs[j].get_serialize_size();
+        pure_data_size += wire_size;
       }
     }
 
@@ -3202,30 +3388,31 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
             for (uint32_t j = 0; OB_SUCC(ret) && j < column_count; ++j) {
               ObExpr *expr = exprs.at(j);
               if (j == multivalue_idx) {
-                ObObj tmp_obj;
-                tmp_obj.set_nop_value();
+                DatumValue value;
                 is_none_unique_done = true;
-                if (OB_FAIL(tmp_obj.deserialize(data, data_len, pos))) {
+                // Keep decoded bytes in the current row-batch arena, which is
+                // reset only after all domain rows for this source row drain.
+                if (OB_FAIL(DatumParameterCodec::decode_native_value(data, data_len, pos,
+                              domain_index_.alloc_, value.datum_, value.meta_))) {
                 } else {
-                  ObObjMeta col_type = expr->obj_meta_;
+                  SqlTypeMeta col_type = expr->obj_meta_;
                   if (ob_is_number_or_decimal_int_tc(col_type.get_type()) || ob_is_temporal_type(col_type.get_type())) {
                     col_type.set_collation_level(CS_LEVEL_NUMERIC);
                   } else {
                     col_type.set_collation_level(CS_LEVEL_IMPLICIT);
                   }
-                  if (!tmp_obj.is_null()) {
-                    tmp_obj.set_meta_type(col_type);
-                  }
-                  if (OB_FAIL(domain_index_.rows_[i].storage_datums_[j].from_obj_enhance(tmp_obj))) {
+                  if (OB_FAIL(normalize_scan_multivalue_scalar(value, col_type, domain_index_.alloc_))) {
+                  } else if (OB_FAIL(domain_index_.rows_[i].storage_datums_[j].from_value(value))) {
                   }
                 }
               } else {
-                ObDatum *datum = nullptr;
+                Datum *datum = nullptr;
                 if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
                 } else if (!is_save_rowkey && rowkey_start >= j && rowkey_end < j) {
                   domain_index_.rows_[i].storage_datums_[j].set_null();
                 } else {
-                  domain_index_.rows_[i].storage_datums_[j].shallow_copy_from_datum(*datum);
+                  ret = scan_copy_to_storage(*expr, *datum,
+                      domain_index_.rows_[i].storage_datums_[j], domain_index_.alloc_);
                 }
               }
             }
@@ -3257,14 +3444,14 @@ int ObTableScanOp::fill_generated_multivalue_column(blocksstable::ObStorageDatum
 
   for (int64_t i = 0; i < count && OB_SUCC(ret); i++) {
     ObExpr *expr = exprs.at(i);
-    ObDatum *datum = &expr->locate_datum_for_write(get_eval_ctx());
+    Datum *datum = &expr->locate_datum_for_write(get_eval_ctx());
     ObEvalInfo *eval_info = &expr->get_eval_info(get_eval_ctx());
 
     if (i == count - 1) {
       datum->set_null();
     } else {
-      ObObjDatumMapType type = ObDatum::get_obj_datum_map_type(expr->obj_meta_.get_type());
-      if (OB_FAIL(datum->from_storage_datum(store_datums[i], type))) {
+      SqlValueDatumMapType type = ObDatum::get_sql_value_datum_map_type(expr->obj_meta_.get_type());
+      if (OB_FAIL(scan_import_storage(*expr, get_eval_ctx(), store_datums[i], *datum))) {
       }
     }
     eval_info->evaluated_ = true;
@@ -3401,8 +3588,8 @@ int ObTableScanOp::get_sparse_vector_data(
   int ret = OB_SUCCESS;
   ObExpr *sparse_vec_expr = nullptr;
   ObExpr *docid_expr = nullptr;
-  ObDatum *sparse_vec_datum = nullptr;
-  ObDatum *docid = nullptr;
+  Datum *sparse_vec_datum = nullptr;
+  Datum *docid = nullptr;
   const ObExprPtrIArray &exprs = MY_SPEC.output_;
 
   sparse_vec_expr = exprs.at(sparse_vec_idx);
@@ -3415,7 +3602,10 @@ int ObTableScanOp::get_sparse_vector_data(
                                                               sparse_vec_data))) {
   } else if (OB_FAIL(docid_expr->eval(eval_ctx_, docid))) {
   } else {
-    docid_datum = *docid;
+    common::ObDatum view;
+    alignas(8) char scratch[64];
+    if (OB_FAIL(scan_legacy_view(*docid_expr, *docid, view, scratch))) {
+    } else { ret = docid_datum.deep_copy(view, allocator); }
   }
   return ret;
 }
@@ -3465,10 +3655,10 @@ int ObTableScanOp::inner_get_next_spiv_index_row()
       const ObExprPtrIArray &exprs = MY_SPEC.output_;
       for (int64_t i = 0; i < exprs.count() && OB_SUCC(ret); i++) {
         ObExpr *expr = exprs.at(i);
-        ObDatum *datum = &expr->locate_datum_for_write(get_eval_ctx());
+        Datum *datum = &expr->locate_datum_for_write(get_eval_ctx());
         ObEvalInfo *eval_info = &expr->get_eval_info(get_eval_ctx());
-        ObObjDatumMapType type = ObDatum::get_obj_datum_map_type(expr->obj_meta_.get_type());
-        if (OB_FAIL(datum->from_storage_datum(store_datums[i], type))) {
+        SqlValueDatumMapType type = ObDatum::get_sql_value_datum_map_type(expr->obj_meta_.get_type());
+        if (OB_FAIL(scan_import_storage(*expr, get_eval_ctx(), store_datums[i], *datum))) {
         }
         eval_info->evaluated_ = true;
         eval_info->projected_ = true;
@@ -3496,7 +3686,7 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
         domain_index_.domain_row_index_ = 0;
         const ObExprPtrIArray &exprs = MY_SPEC.output_;
         ObExpr *expr = exprs.at(domain_index_.geo_idx_);
-        ObDatum *in_datum = NULL;
+        Datum *in_datum = NULL;
         ObString geo_wkb;
         if (OB_FAIL(expr->eval(eval_ctx_, in_datum))) {
         } else if (OB_FALSE_IT(geo_wkb = in_datum->get_string())) {
@@ -3607,13 +3797,13 @@ int ObTableScanOp::fill_generated_cellid_mbr(
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (uint8_t i = 0; i < 2 && OB_SUCC(ret); i++) {
-      ObObjDatumMapType type = i == 0 ? OBJ_DATUM_8BYTE_DATA : OBJ_DATUM_STRING;
+      SqlValueDatumMapType type = i == 0 ? OBJ_DATUM_8BYTE_DATA : OBJ_DATUM_STRING;
       const blocksstable::ObStorageDatum &value = i == 0 ? cellid : mbr;
       uint32_t idx = i == 0 ? domain_index_.cell_idx_ : domain_index_.mbr_idx_;
       ObExpr *expr = exprs.at(idx);
-      ObDatum *datum = &expr->locate_datum_for_write(get_eval_ctx());
+      Datum *datum = &expr->locate_datum_for_write(get_eval_ctx());
       ObEvalInfo *eval_info = &expr->get_eval_info(get_eval_ctx());
-      if (OB_FAIL(datum->from_storage_datum(value, type))) {
+      if (OB_FAIL(scan_import_storage(*expr, get_eval_ctx(), value, *datum))) {
       } else {
         eval_info->evaluated_ = true;
         eval_info->projected_ = true;
@@ -3649,8 +3839,8 @@ int ObTableScanOp::fetch_next_fts_index_rows()
   while (OB_SUCC(ret) && !has_segment_word) {
     ObExpr *ft_expr = nullptr;
     ObExpr *doc_id_expr = nullptr;
-    ObDatum *ft_datum = nullptr;
-    ObDatum *doc_id_datum = nullptr;
+    Datum *ft_datum = nullptr;
+    Datum *doc_id_datum = nullptr;
 
     if (OB_FAIL(ObTableScanOp::inner_get_next_row_implement())) {
       if (OB_ITER_END != ret) {
@@ -3672,11 +3862,17 @@ int ObTableScanOp::fetch_next_fts_index_rows()
                                                             ft_expr->datum_meta_,
                                                             ft_expr->obj_meta_.has_lob_header(),
                                                             ft))) {
-      } else if (OB_FAIL(fts_index_.segment(ft_expr->obj_meta_, *doc_id_datum, ft)) &&OB_ITER_END != ret) {
-      } else if (OB_ITER_END == ret) {
+      } else {
+        // DOC_ID is a scalar/reference borrowed from its stable expression
+        // frame. Generated rows drain before that source frame is advanced.
+        common::ObDatum legacy_doc_id;
+        if (OB_FAIL(doc_id_expr->get_datum_copy_plan().borrow_legacy(*doc_id_datum, legacy_doc_id))) {
+        } else { ret = fts_index_.segment(ft_expr->obj_meta_, legacy_doc_id, ft); }
+      }
+      if (OB_ITER_END == ret) {
         has_segment_word = false;
         ret = OB_SUCCESS;
-      } else {
+      } else if (OB_SUCC(ret)) {
         has_segment_word = true;
       }
     }
@@ -3687,7 +3883,7 @@ int ObTableScanOp::fetch_next_fts_index_rows()
 int ObTableScanOp::fill_generated_fts_cols(blocksstable::ObDatumRow *row)
 {
   int ret = OB_SUCCESS;
-  const ObObjDatumMapType *types = MY_SPEC.is_fts_index_aux_ ? ObFTIndexRowCache::FTS_INDEX_TYPES : ObFTIndexRowCache::FTS_DOC_WORD_TYPES;
+  const SqlValueDatumMapType *types = MY_SPEC.is_fts_index_aux_ ? ObFTIndexRowCache::FTS_INDEX_TYPES : ObFTIndexRowCache::FTS_DOC_WORD_TYPES;
   const ObExprOperatorType *expr_types = MY_SPEC.is_fts_index_aux_ ? ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE : ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE;
   if (OB_ISNULL(row)) {
     ret = OB_INVALID_ARGUMENT;
@@ -3696,9 +3892,9 @@ int ObTableScanOp::fill_generated_fts_cols(blocksstable::ObDatumRow *row)
       ObExpr *expr = nullptr;
       if (OB_FAIL(get_output_fts_col_expr_by_type(expr_types[i], expr))) {
       } else {
-        ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
+        Datum &datum = expr->locate_datum_for_write(eval_ctx_);
         ObEvalInfo &eval_info = expr->get_eval_info(eval_ctx_);
-        if (OB_FAIL(datum.from_storage_datum(row->storage_datums_[i], types[i]))) {
+        if (OB_FAIL(scan_import_storage(*expr, eval_ctx_, row->storage_datums_[i], datum))) {
         } else {
           eval_info.evaluated_ = true;
           eval_info.projected_ = true;

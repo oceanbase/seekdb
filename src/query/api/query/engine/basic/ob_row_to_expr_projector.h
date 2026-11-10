@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_QUERY_API_ENGINE_BASIC_OB_ROW_TO_EXPR_PROJECTOR_H_
 #define OCEANBASE_QUERY_API_ENGINE_BASIC_OB_ROW_TO_EXPR_PROJECTOR_H_
 
-#include "common/datum/ob_datum.h"
+#include "common/datum/datum.h"
 #include "lib/container/ob_se_array.h"
 #include "query/engine/basic/ob_pushdown_filter.h"
 
@@ -37,8 +37,7 @@ class ObRow2ExprsProjector
 {
 public:
   explicit ObRow2ExprsProjector(common::ObIAllocator &allocator)
-    : other_idx_(0),
-      has_virtual_(false),
+    : has_virtual_(false),
       op_(nullptr),
       outputs_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, common::ModulePageAllocator(allocator))
   {}
@@ -59,38 +58,16 @@ private:
   {
     int32_t obj_idx_;
     int32_t expr_idx_;
-    sql::ObDatum *datum_;
+    sql::ObExprFrameWriteTarget target_;
     sql::ObEvalInfo *eval_info_;
     sql::ObBitVector *eval_flags_;
-    const char *data_;
+
 
     Item() = default;
     DECLARE_TO_STRING;
   };
+  static_assert(sizeof(Item) == 56, "Projection cache includes its 32-byte selected destination");
 
-  template <common::ObObjDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
-  struct MapConvert
-  {
-    int32_t start_;
-    int32_t end_;
-    static const common::ObObjDatumMapType map_type_ = OBJ_DATUM_MAP_TYPE;
-
-    MapConvert() : start_(0), end_(0) {}
-    OB_INLINE void project(const Item *items,
-                           const blocksstable::ObStorageDatum *datums,
-                           int16_t *nop_pos,
-                           int64_t &nop_cnt) const;
-    OB_INLINE void project_batch_datum(const Item *items,
-                                       const blocksstable::ObStorageDatum *datums,
-                                       int16_t *nop_pos,
-                                       int64_t &nop_cnt,
-                                       int64_t idx) const;
-  };
-
-  MapConvert<common::OBJ_DATUM_NUMBER, true> num_;
-  MapConvert<common::OBJ_DATUM_STRING, false> str_;
-  MapConvert<common::OBJ_DATUM_8BYTE_DATA, true> int_;
-  int32_t other_idx_;
   bool has_virtual_;
   sql::ObPushdownOperator *op_;
   common::ObSEArray<Item, 4> outputs_;

@@ -335,7 +335,7 @@ int ObColumnVector::construct_column_vector(
     int64_t &pos,
     const int64_t buf_size,
     const int64_t row_cnt,
-    const ObObjMeta *obj_meta,
+    const SqlTypeMeta *obj_meta,
     ObColumnVector &vector)
 {
   int ret = OB_SUCCESS;
@@ -948,7 +948,7 @@ int ObRowkeyVector::construct_rowkey_vector(
       buf_size < pos + sizeof(ObRowkeyVector) + sizeof(ObColumnVector) * col_cnt)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObjMeta multi_version_col_meta_type;
+    SqlTypeMeta multi_version_col_meta_type;
     multi_version_col_meta_type.set_int();
     ObRowkeyVector * tmp_rowkey_vector = new (buf + pos) ObRowkeyVector();
     tmp_rowkey_vector->col_cnt_ = col_cnt;
@@ -957,7 +957,7 @@ int ObRowkeyVector::construct_rowkey_vector(
     tmp_rowkey_vector->columns_ = new (buf + pos) ObColumnVector[col_cnt];
     pos += sizeof(ObColumnVector) * col_cnt;
     const bool all_cols_is_integer = is_all_integer_cols(col_cnt, table_read_info);
-    const ObObjMeta *obj_meta = nullptr;
+    const SqlTypeMeta *obj_meta = nullptr;
     for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < col_cnt; ++col_idx) {
       ObColumnVector &vector = tmp_rowkey_vector->columns_[col_idx];
       if (nullptr == table_read_info || !all_cols_is_integer) {

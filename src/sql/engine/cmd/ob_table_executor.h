@@ -69,7 +69,7 @@ class ObCreateTableExecutor
   public:
     ObInsSQLPrinter(ObCreateTableStmt *stmt,
                     ObSchemaGetterGuard *schema_guard,
-                    ObObjPrintParams print_params,
+                    ObValuePrintParams print_params,
                     const ParamStore *param_store,
                     bool do_osg) :
       stmt_(stmt),
@@ -82,7 +82,7 @@ class ObCreateTableExecutor
   private:
     ObCreateTableStmt *stmt_;
     ObSchemaGetterGuard *schema_guard_;
-    ObObjPrintParams print_params_;
+    ObValuePrintParams print_params_;
     const ParamStore *param_store_;
     bool do_osg_;
   };

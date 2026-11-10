@@ -18,6 +18,7 @@
 #define OB_STORAGE_BLOCKSSTABLE_DATUM_ROW_H
 
 #include "common/row/ob_row.h"
+#include "common/datum/datum_value_buffer.h"
 #include "data_plane/blocksstable/ob_datum_row.h"
 #include "storage/ob_storage_util.h"
 #include "storage/blocksstable/ob_datum_rowkey.h"
@@ -43,7 +44,7 @@ public:
   ObNewRowBuilder()
     : cols_descs_(nullptr),
       new_row_(),
-      obj_buf_()
+      value_buf_()
   {}
   ~ObNewRowBuilder() = default;
   OB_INLINE int init(
@@ -52,7 +53,7 @@ public:
   {
     int ret = OB_SUCCESS;
     cols_descs_ = &cols_descs;
-    if (OB_FAIL(obj_buf_.init(&allocator))) {
+    if (OB_FAIL(value_buf_.init(&allocator))) {
     }
     return ret;
   }
@@ -66,7 +67,7 @@ public:
 private:
   const common::ObIArray<share::schema::ObColDesc> *cols_descs_;
   common::ObNewRow new_row_;
-  storage::ObObjBufArray obj_buf_;
+  common::DatumValueBuffer value_buf_;
 };
 
 struct ObConstDatumRow

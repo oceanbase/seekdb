@@ -18,6 +18,8 @@
 #define SRC_SQL_ENGINE_BASIC_OB_SELECT_INTO_OP_H_
 
 #include "sql/engine/ob_operator.h"
+#include "common/datum/datum.h"
+#include "common/object/ob_type_metadata.h"
 #include "lib/file/ob_file.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/basic/ob_select_into_basic.h"
@@ -52,7 +54,8 @@ private:
 
 class ObSelectIntoSpec : public ObOpSpec
 {
-  OB_UNIS_VERSION_V(1);
+  // Version 2 serializes typed Datum payloads and metadata separately.
+  OB_UNIS_VERSION_V(2);
 public:
   ObSelectIntoSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
     : ObOpSpec(alloc, type),
@@ -71,28 +74,41 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
-      external_properties_(alloc)
+      external_properties_(alloc),
+      value_owner_(alloc)
   {
   }
 
   ObItemType into_type_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> user_vars_;
-  common::ObObj outfile_name_;
-  common::ObObj field_str_;
-  common::ObObj line_str_;
-  common::ObObj closed_cht_;
+  common::Datum outfile_name_;
+  common::Datum field_str_;
+  common::Datum line_str_;
+  common::Datum closed_cht_;
   bool is_optional_;
   common::ObFixedArray<ObExpr*, common::ObIAllocator> select_exprs_;
   bool is_single_;
   int64_t max_file_size_;
-  common::ObObj escaped_cht_;
+  common::Datum escaped_cht_;
+  common::SqlTypeMeta outfile_name_meta_;
+  common::SqlTypeMeta field_str_meta_;
+  common::SqlTypeMeta line_str_meta_;
+  common::SqlTypeMeta closed_cht_meta_;
+  common::SqlTypeMeta escaped_cht_meta_;
   common::ObCollationType cs_type_;
   int64_t parallel_;
   int64_t buffer_size_;
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
+  int set_outfile_name_native_value(const common::Datum &, const common::SqlTypeMeta &);
+  int set_field_str_native_value(const common::Datum &, const common::SqlTypeMeta &);
+  int set_line_str_native_value(const common::Datum &, const common::SqlTypeMeta &);
+  int set_closed_cht_native_value(const common::Datum &, const common::SqlTypeMeta &);
+  int set_escaped_cht_native_value(const common::Datum &, const common::SqlTypeMeta &);
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
+private:
+  common::ObIAllocator &value_owner_;
 };
 
 class ObSelectIntoOp : public ObOperator
@@ -203,17 +219,19 @@ private:
   int into_dumpfile(ObExternalFileWriter *data_writer);
   int into_outfile(ObExternalFileWriter *data_writer);
   int into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFileWriter *data_writer);
-  int extract_fisrt_wchar_from_varhcar(const ObObj &obj, int32_t &wchar);
+  int extract_fisrt_wchar_from_varhcar(const common::ObString &str,
+                                       common::ObCollationType coll_type,
+                                       int32_t &wchar);
   int print_wchar_to_buf(char *buf,
                          const int64_t buf_len,
                          int64_t &pos,
                          int32_t wchar,
                          ObString &str,
                          ObCollationType coll_type);
-  int print_field(const ObObj &obj, ObCsvFileWriter &data_writer);
-  int print_lob_field(const ObObj &obj,
+  int print_field(const common::DatumValue &value, ObCsvFileWriter &data_writer);
+  int print_lob_field(const common::DatumValue &value,
                       const ObExpr &expr,
-                      const ObDatum &datum,
+                      const Datum &datum,
                       ObCsvFileWriter &data_writer);
   int get_buf(char* &buf, int64_t &buf_len, int64_t &pos, ObCsvFileWriter &data_writer);
   int use_shared_buf(ObCsvFileWriter &data_writer, char* &buf, int64_t &buf_len, int64_t &pos);
@@ -231,18 +249,27 @@ private:
                            int64_t &buf_len,
                            int64_t &pos,
                            int64_t str_len);
-  int write_obj_to_file(const ObObj &obj, ObCsvFileWriter &data_writer, bool need_escape = false);
-  int print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWriter &data_writer);
-  int print_normal_obj_without_escape(const ObObj &obj, ObCsvFileWriter &data_writer);
-  int print_json_to_json_buf(const ObObj &obj,
+  int write_value_to_file(const common::DatumValue &value,
+                          ObCsvFileWriter &data_writer,
+                          bool need_escape = false);
+  int write_raw_string_to_file(const common::ObString &value,
+                               ObCsvFileWriter &data_writer);
+  int print_value_with_escape(const common::DatumValue &value,
+                              ObCsvFileWriter &data_writer);
+  int print_complex_value_with_escape(const common::DatumValue &value,
+                                      ObCsvFileWriter &data_writer,
+                                      bool need_escape);
+  int print_normal_value_without_escape(const common::DatumValue &value,
+                                        ObCsvFileWriter &data_writer);
+  int print_json_to_json_buf(const common::DatumValue &value,
                              char* &buf,
                              int64_t &buf_len,
                              int64_t &pos,
                              ObCsvFileWriter &data_writer);
   int write_single_char_to_file(const char *wchar, ObCsvFileWriter &data_writer);
-  int write_lob_to_file(const ObObj &obj,
+  int write_lob_to_file(const common::DatumValue &value,
                         const ObExpr &expr,
-                        const ObDatum &datum,
+                        const Datum &datum,
                         ObCsvFileWriter &data_writer);
   int into_varlist();
   int calc_next_file_path(ObExternalFileWriter &data_writer);
@@ -266,9 +293,9 @@ private:
 private:
   int64_t top_limit_cnt_;
   bool is_first_;
-  ObObj field_str_;
-  ObObj line_str_;
-  ObObj file_name_;
+  common::ObString field_str_;
+  common::ObString line_str_;
+  common::ObString file_name_;
   common::ObCollationType cs_type_;
   ObString basic_url_; // url without partition expr
   ObExternalFileWriter* data_writer_;
@@ -280,7 +307,7 @@ private:
   bool has_lob_;
   bool has_json_;
   bool has_coll_;
-  common::ObObjPrintParams print_params_;
+  common::ObValuePrintParams print_params_;
   ObEscapePrinter escape_printer_;
   char *json_buf_;  // json needs one more buffer to hold the string before escaping
   int64_t json_buf_len_;

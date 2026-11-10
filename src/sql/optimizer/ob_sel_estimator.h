@@ -18,49 +18,13 @@
 #define OCEANBASE_SQL_OPTIMIZER_OB_SEL_ESTIMATOR_
 
 #include "sql/optimizer/ob_opt_selectivity.h"
+#include "sql/optimizer/simple_range.h"
 
 namespace oceanbase
 {
 namespace sql
 {
 
-struct SimpleRange
-{
-public:
-  SimpleRange()
-  {
-    set_whole_range();
-  }
-
-  void set_whole_range();
-  
-  void set_false_range();
-
-  int compare_with_end(const SimpleRange &r, int &cmp) const;
-
-  int compare_with_start(const SimpleRange &r, int &cmp) const;
-
-  bool intersect(const SimpleRange &r);
-
-  void set_bound(ObItemType item_type, ObObj bound);
-
-  void set_bound(ObItemType item_type, double bound);
-
-  bool is_valid_range();
-
-  bool is_superset(const SimpleRange &r) const;
-
-  void multiply_double(double coff);
-
-  TO_STRING_KV(K_(start), K_(end),
-               K_(inclusive_start),
-               K_(inclusive_end));
-
-  ObObj start_;
-  ObObj end_;
-  bool inclusive_start_;
-  bool inclusive_end_;
-};
 
 enum class ObSelEstType
 {
@@ -292,25 +256,25 @@ private:
                                      double &selectivity,
                                      const double rows_per_group);
 
-  static double get_agg_eq_sel(const ObObj &maxobj,
-                               const ObObj &minobj,
-                               const ObObj &constobj,
+  static double get_agg_eq_sel(const DatumValue &maxobj,
+                               const DatumValue &minobj,
+                               const DatumValue &constobj,
                                const double distinct_sel,
                                const double rows_per_group,
                                const bool is_eq,
                                const bool is_sum);
 
-  static double get_agg_range_sel(const ObObj &maxobj,
-                                  const ObObj &minobj,
-                                  const ObObj &constobj,
+  static double get_agg_range_sel(const DatumValue &maxobj,
+                                  const DatumValue &minobj,
+                                  const DatumValue &constobj,
                                   const double rows_per_group,
                                   const ObItemType type,
                                   const bool is_sum);
 
-  static double get_agg_btw_sel(const ObObj &maxobj,
-                                const ObObj &minobj,
-                                const ObObj &constobj1,
-                                const ObObj &constobj2,
+  static double get_agg_btw_sel(const DatumValue &maxobj,
+                                const DatumValue &minobj,
+                                const DatumValue &constobj1,
+                                const DatumValue &constobj2,
                                 const double rows_per_group,
                                 const ObItemType type,
                                 const bool is_sum);  
@@ -500,7 +464,7 @@ public:
 private:
   bool can_calc_sel_;
   const ObRawExpr *left_expr_;
-  common::ObObj right_const_obj_;
+  common::DatumValue right_const_obj_;
   DISABLE_COPY_ASSIGN(ObIsSelEstimator);
 };
 
@@ -767,8 +731,8 @@ public:
   VIRTUAL_TO_STRING_KV(K_(type), KPC_(column_expr), K_(range_exprs));
 
   inline int get_min_max(const OptSelectivityCtx &ctx,
-                         ObObj &obj_min,
-                         ObObj &obj_max) {
+                         DatumValue &obj_min,
+                         DatumValue &obj_max) {
     return ObOptSelectivity::get_column_range_min_max(ctx, column_expr_, range_exprs_, obj_min, obj_max);
   }
 
@@ -988,8 +952,8 @@ public:
 
   int refine_out_of_bounds_sel(const OptTableMetas &table_metas,
                                const OptSelectivityCtx &ctx,
-                               const ObObj &min_value,
-                               const ObObj &max_value,
+                               const DatumValue &min_value,
+                               const DatumValue &max_value,
                                const double min_scalar,
                                const double max_scalar,
                                const double start_scalar,

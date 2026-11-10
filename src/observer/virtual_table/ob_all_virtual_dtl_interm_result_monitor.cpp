@@ -61,7 +61,7 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
     int64_t dump_dir_id = -1;
     int64_t owner_len = 0;
     const char *owner = NULL;
-    ObObj *cells = cur_row_.cells_;
+    DatumValue *cells = cur_row_.cells_;
     if (info.is_store_valid()) {
       GET_CHUNK_STORE_INFO(info.datum_store_);
     }
@@ -77,7 +77,7 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
             SERVER_LOG(WARN, "allocate memory failed", K(ret));
           } else {
             int len = info.trace_id_.to_string(buf, OB_MAX_TRACE_ID_BUFFER_SIZE);
-            cells[cell_idx].set_varchar(buf, len);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(len, buf)) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -86,7 +86,7 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::OWNER: {
           char *buf = NULL;
           if (OB_UNLIKELY(0 == owner_len || NULL == owner)) {
-            cells[cell_idx].set_varchar(ObString());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString()) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(owner_len)))) {
@@ -94,7 +94,7 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
             SERVER_LOG(WARN, "allocate memory failed", K(ret), K(owner_len));
           } else {
             MEMCPY(buf, owner, owner_len);
-            cells[cell_idx].set_varchar(buf, owner_len);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(owner_len, buf)) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -102,29 +102,29 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::START_TIME: {
           int64_t start_time = key.start_time_;
-          cells[cell_idx].set_timestamp(start_time);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, start_time) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::EXPIRE_TIME: {
           int64_t expire_time = key.timeout_ts_;
-          cells[cell_idx].set_timestamp(expire_time);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, expire_time) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::HOLD_MEMORY: {
-          cells[cell_idx].set_int(hold_mem);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, hold_mem) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::DUMP_SIZE: {
-          cells[cell_idx].set_int(dump_size);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dump_size) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::DUMP_COST: {
-          cells[cell_idx].set_int(info.dump_cost_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, info.dump_cost_) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::DUMP_TIME: {
           if (0 != info.dump_time_) {
-            cells[cell_idx].set_timestamp(info.dump_time_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, info.dump_time_) : ret);
           } else {
             // not dump.
             cells[cell_idx].set_null();
@@ -132,35 +132,35 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::DUMP_FD: {
-          cells[cell_idx].set_int(dump_fd);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dump_fd) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::DUMP_DIR_ID: {
-          cells[cell_idx].set_int(dump_dir_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dump_dir_id) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::CHANNEL_ID: {
-          cells[cell_idx].set_int(key.channel_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, key.channel_id_) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::QC_ID: {
-          cells[cell_idx].set_int(info.monitor_info_.qc_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, info.monitor_info_.qc_id_) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::DFO_ID: {
-          cells[cell_idx].set_int(info.monitor_info_.dfo_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, info.monitor_info_.dfo_id_) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::SQC_ID: {
-          cells[cell_idx].set_int(info.monitor_info_.sqc_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, info.monitor_info_.sqc_id_) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::BATCH_ID: {
-          cells[cell_idx].set_int(key.batch_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, key.batch_id_) : ret);
           break;
         }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::MAX_HOLD_MEM: {
-          cells[cell_idx].set_int(max_hold_mem);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, max_hold_mem) : ret);
           break;
         }
         default: {
@@ -181,7 +181,7 @@ int ObDTLIntermResultMonitorInfoGetter::consume(
 int ObAllDtlIntermResultMonitor::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
     } else {
@@ -204,7 +204,7 @@ int ObAllDtlIntermResultMonitor::inner_get_next_row(ObNewRow *&row)
 int ObAllDtlIntermResultMonitor::fill_scanner()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
     if (OB_ISNULL(allocator_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ or null", K_(allocator), K(ret));

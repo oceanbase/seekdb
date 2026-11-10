@@ -19,9 +19,14 @@
 #include "table_access_plan.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
+#include "sql/ob_sql_utils.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "share/ob_timezone_mgr.h"
+#include "common/datum/datum_parameter_codec.h"
+#include "share/datum/typed_datum_compare.h"
+#include "share/datum/datum_value_cast.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/rewrite/ob_transform_utils.h"
 
 using namespace oceanbase::transaction;
@@ -30,6 +35,124 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 
+
+namespace
+{
+// A partition row may outlive this synchronous physical export. Import the
+// selected value into the actual cast/row owner before the scratch expires.
+int copy_runtime_partition_value(const ObPhysicalPlanCtx &parameters, int64_t index,
+                                 ObIAllocator &owner, DatumValue &output)
+{
+  int ret = OB_SUCCESS;
+  const DatumParameterMetadata *attributes = parameters.get_parameter_metadata(index);
+  ObDatum legacy;
+  alignas(8) char scratch[64];
+  DatumValue candidate;
+  if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(parameters.export_runtime_parameter_legacy(index, legacy, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(candidate.assign_legacy_owned(legacy, attributes->type_meta_, owner))) {
+  } else { output = candidate; }
+  return ret;
+}
+
+// Own native partition inputs before a row producer can advance or reset.
+int read_partition_values(const ObNewRow &source, ObIAllocator &owner,
+                          ObIArray<DatumValue> &result, bool physical_cells = false)
+{
+  int ret = OB_SUCCESS;
+  result.reset();
+  const int64_t count = physical_cells ? source.count_ : source.get_count();
+  if (count < 0 || (count > 0 && source.cells_ == nullptr)) { ret = OB_ERR_UNEXPECTED; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    const DatumValue &stored = physical_cells ? source.cells_[i] : source.get_cell(i);
+    DatumValue value;
+    if (OB_FAIL(clone_typed_value(stored, value, owner))) {
+    } else { ret = result.push_back(value); }
+  }
+  return ret;
+}
+
+int read_partition_values(const ObRowkey &source, ObIAllocator &owner,
+                          ObIArray<DatumValue> &result)
+{
+  int ret=source.is_legal()?OB_SUCCESS:OB_ERR_UNEXPECTED;result.reset();
+  for(int64_t i=0;OB_SUCC(ret)&&i<source.count();++i){
+    DatumValue value;
+    if(OB_FAIL(clone_typed_value(source.get_cell(i),value,owner))){}
+    else ret=result.push_back(value);
+  }
+  return ret;
+}
+
+int evaluate_partition_expr(const ObTempExpr &expr, ObExecContext &context,
+    const ObIArray<DatumValue> &row, ObIAllocator &owner, DatumValue &value)
+{
+  int ret = OB_SUCCESS;
+  ObDatum result;
+  if (expr.expr_idx_ < 0 || expr.expr_idx_ >= expr.rt_exprs_.count()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(expr.eval_datum(context, row, owner, result))) {
+  } else if (result.is_null()) {
+    value.set_null();
+  } else {
+    // The explicit old TempExpr result is already owned by the caller owner.
+    // Import scalars inline and borrow only those stable physical references.
+    ret = value.assign_legacy_borrowed(result, expr.rt_exprs_.at(expr.expr_idx_).obj_meta_);
+  }
+  return ret;
+}
+
+int cast_partition_value(ObCastCtx &cast_ctx, ObExecContext &context,
+                        const ValueItemExpr &vie, DatumValue &value)
+{
+  int ret = OB_SUCCESS;
+  ObIAllocator *owner = cast_ctx.allocator_v2_;
+  if (owner == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (vie.dst_type_ != value.get_type()
+             || vie.dst_cs_type_ != value.get_collation_type()) {
+    if (ob_is_enum_or_set_type(vie.dst_type_)) {
+      ObSEArray<ObString, 8> names;
+      for (int64_t i = 0; OB_SUCC(ret) && i < vie.enum_set_values_cnt_; ++i) {
+        ret = names.push_back(vie.enum_set_values_[i]);
+      }
+      ObExprResType target;
+      target.set_type(vie.dst_type_);
+      target.set_collation_type(vie.dst_cs_type_);
+      DatumParameter input, output;
+      input.assign_value(value);
+      input.set_param_meta();
+      ObDatumCaster *caster = nullptr;
+      ObDatumCaster nested;
+      if (OB_SUCC(ret)) { ret = context.get_native_datum_caster(caster); }
+      if (OB_SUCC(ret) && caster->native_cast_active()) {
+        ret = nested.init(context, false);
+        if (OB_SUCC(ret)) { caster = &nested; }
+      }
+      if (OB_SUCC(ret)) {
+        ret = caster->to_value(input, target, cast_ctx.cast_mode_, *owner, output, &names);
+      }
+      if (OB_SUCC(ret)) {
+        if (output.is_null()) {
+          value.set_null();
+        } else {
+          SqlTypeMeta meta = value.meta_;
+          if (vie.dst_type_ == ObEnumType) { meta.set_enum(); }
+          else { meta.set_set(); }
+          output.set_type_meta(meta);
+          value = output.value_view();
+        }
+      }
+    } else {
+      if (vie.dst_cs_type_ != CS_TYPE_INVALID) { cast_ctx.dest_collation_ = vie.dst_cs_type_; }
+      DatumValue converted;
+      ret = DatumValueCaster::to_type(vie.dst_type_, cast_ctx, value, *owner, converted);
+      if (OB_SUCC(ret)) { value = converted; }
+    }
+  }
+  return ret;
+}
+} // namespace
 
 static int is_all_ranges_empty(const ObQueryRangeArray &query_array, bool &is_empty)
 {
@@ -123,57 +246,51 @@ int TableAccessPlan::PartProjector::init_part_projector(ObExecContext *exec_ctx,
 }
 
 int TableAccessPlan::PartProjector::calc_part_row(ObExecContext &ctx,
-                                                  const ObNewRow &input_row,
-                                                  ObNewRow *&part_row) const
+    const ObIArray<DatumValue> &input_row, ObIArray<DatumValue> *&part_row) const
 {
   int ret = OB_SUCCESS;
-  ObNewRow &cur_part_row = ctx.get_part_row_manager().get_part_row();
-  int64_t virtual_col_size = se_virtual_column_exprs_.count();
-  if (virtual_col_size <= 0) {
-    cur_part_row.cells_ = input_row.cells_;
-    cur_part_row.count_ = column_cnt_;
-  } else {
-    cur_part_row.count_ = column_cnt_;
-    if (OB_ISNULL(cur_part_row.cells_)) {
-      // part row's cells are not allocated, here we first allocate space for cells
-      int64_t row_size = sizeof(ObObj) * column_cnt_;
-      cur_part_row.cells_ = static_cast<ObObj*>(ctx.get_allocator().alloc(row_size));
-      if (OB_ISNULL(cur_part_row.cells_)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      int64_t copy_row_size = (column_cnt_ - virtual_col_size) * sizeof(ObObj);
-      memcpy(cur_part_row.cells_, input_row.cells_, copy_row_size);
-    }
-    if (OB_SUCC(ret)) {
-      CK(se_virtual_column_exprs_.count() == virtual_column_result_idx_.count());
-      for (int64_t i = 0; OB_SUCC(ret) && i < se_virtual_column_exprs_.count(); i++) {
-        ObTempExpr *expr = se_virtual_column_exprs_.at(i);
-        int64_t result_idx = virtual_column_result_idx_.at(i);
-        OZ(expr->eval(ctx, cur_part_row, cur_part_row.cells_[result_idx]));
-      }
+  ObSEArray<DatumValue, 8> candidate;
+  const int64_t virtual_count = se_virtual_column_exprs_.count();
+  if (column_cnt_ < virtual_count || input_row.count() < column_cnt_ - virtual_count) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
+    ret = candidate.push_back(i < column_cnt_ - virtual_count ? input_row.at(i) : DatumValue());
+  }
+  if (OB_SUCC(ret) && virtual_count != virtual_column_result_idx_.count()) { ret = OB_ERR_UNEXPECTED; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < virtual_count; ++i) {
+    const int64_t index = virtual_column_result_idx_.at(i);
+    if (se_virtual_column_exprs_.at(i) == nullptr || index < 0 || index >= candidate.count()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ret = evaluate_partition_expr(*se_virtual_column_exprs_.at(i), ctx, candidate,
+                                    ctx.get_allocator(), candidate.at(index));
     }
   }
   if (OB_SUCC(ret)) {
-    part_row = &cur_part_row;
+    ObSEArray<DatumValue, 8> &cached = ctx.get_part_row_manager().get_part_row();
+    if (OB_FAIL(cached.assign(candidate))) {
+    } else { part_row = &cached; }
   }
   return ret;
 }
 
-void TableAccessPlan::PartProjector::project_part_row(ObPartitionLevel part_level, ObNewRow &part_row) const
+int TableAccessPlan::PartProjector::project_part_row(ObPartitionLevel level,
+    const ObIArray<DatumValue> &input, ObIArray<DatumValue> &output) const
 {
-  int32_t *projector = NULL;
-  int64_t projector_size = 0;
-  if (part_level == PARTITION_LEVEL_ONE) {
-    projector = part_projector_;
-    projector_size = part_projector_size_;
-  } else if (part_level == PARTITION_LEVEL_TWO) {
-    projector = subpart_projector_;
-    projector_size = subpart_projector_size_;
-  } else { /*do nothing*/ }
-  part_row.projector_ = projector;
-  part_row.projector_size_ = projector_size;
+  int ret = OB_SUCCESS;
+  const int32_t *projector = level == PARTITION_LEVEL_ONE ? part_projector_
+      : level == PARTITION_LEVEL_TWO ? subpart_projector_ : nullptr;
+  const int64_t count = level == PARTITION_LEVEL_ONE ? part_projector_size_
+      : level == PARTITION_LEVEL_TWO ? subpart_projector_size_ : 0;
+  output.reset();
+  const int64_t n = count > 0 ? count : input.count();
+  for (int64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
+    const int64_t index = count > 0 ? projector[i] : i;
+    if (index < 0 || index >= input.count()) { ret = OB_ERR_UNEXPECTED; }
+    else { ret = output.push_back(input.at(index)); }
+  }
+  return ret;
 }
 
 int TableAccessPlan::PartProjector::deep_copy(const PartProjector &other)
@@ -1264,7 +1381,7 @@ int TableAccessPlan::get_is_weak_read(const ObDMLStmt &dml_stmt,
 
 int TableAccessPlan::calculate_tablet_targets(
     ObExecContext &exec_ctx,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     TabletAccessTargetIArray &tablet_targets,
     const ObDataTypeCastParams &dtc_params) const
 {
@@ -1290,7 +1407,7 @@ int TableAccessPlan::calculate_tablet_targets(
 }
 
 int TableAccessPlan::calculate_single_tablet_partition(ObExecContext &exec_ctx,
-                                                       const ParamStore &params,
+                                                       const ObPhysicalPlanCtx &params,
                                                        const ObDataTypeCastParams &dtc_params) const
 {
   int ret = OB_SUCCESS;
@@ -1326,7 +1443,7 @@ int TableAccessPlan::calculate_single_tablet_partition(ObExecContext &exec_ctx,
 }
 
 int TableAccessPlan::calculate_final_tablet_accesses(ObExecContext &exec_ctx,
-                                                      const ParamStore &params,
+                                                      const ObPhysicalPlanCtx &params,
                                                       const ObDataTypeCastParams &dtc_params) const
 {
   int ret = OB_SUCCESS;
@@ -1559,7 +1676,7 @@ int TableAccessPlan::calculate_tablet_id_by_row(ObExecContext &exec_ctx,
 }
 
 int TableAccessPlan::calculate_tablet_ids(ObExecContext &exec_ctx,
-                                          const ParamStore &params,
+                                          const ObPhysicalPlanCtx &params,
                                           ObIArray<ObTabletID> &tablet_ids,
                                           ObIArray<ObObjectID> &partition_ids,
                                           ObIArray<ObObjectID> &first_level_part_ids,
@@ -1657,7 +1774,7 @@ int TableAccessPlan::calculate_tablet_ids(ObExecContext &exec_ctx,
 }
 
 int TableAccessPlan::set_is_das_empty_part(ObExecContext &exec_ctx,
-                                           const ParamStore &params,
+                                           const ObPhysicalPlanCtx &params,
                                            const ObDataTypeCastParams &dtc_params)
 {
   int ret = OB_SUCCESS;
@@ -1720,7 +1837,7 @@ int TableAccessPlan::add_final_tablet_accesses(ObDASCtx &das_ctx,
 }
 
 int TableAccessPlan::get_part_col_type(const ObRawExpr *expr,
-                                       ObObjType &col_type,
+                                       SqlValueType &col_type,
                                        ObCollationType &collation_type,
                                        const ObTableSchema *table_schema,
                                        bool &is_valid)
@@ -1748,22 +1865,23 @@ int TableAccessPlan::get_part_col_type(const ObRawExpr *expr,
 }
 
 
-int TableAccessPlan::convert_row_obj_type(const ObNewRow &from,
-                                          ObNewRow &to,
-                                          ObObjType col_type,
+int TableAccessPlan::convert_partition_value_type(const ObIArray<DatumValue> &from,
+                                          ObIArray<DatumValue> &to,
+                                          SqlValueType col_type,
                                           ObCollationType collation_type,
                                           const ObDataTypeCastParams &dtc_params,
+                                          ObIAllocator &owner,
                                           bool &is_all,
                                           bool &is_none) const
 {
   int ret = OB_SUCCESS;
-  const ObObj &tmp  = from.get_cell(0);
-  ObObj &out_obj = to.get_cell(0);
-  ObObj tmp_out_obj;
-  ObObj tmp_out_obj2;
-  ObObjType res_type = ObNullType;
+  const DatumValue tmp = from.at(0);
+  DatumValue &out_obj = to.at(0);
+  DatumValue tmp_out_obj;
+  DatumValue tmp_out_obj2;
+  SqlValueType res_type = ObNullType;
   is_none = false;
-  if (ob_obj_type_class(tmp.get_type()) == ob_obj_type_class(col_type) &&
+  if (sql_type_class(tmp.get_type()) == sql_type_class(col_type) &&
       tmp.get_collation_type() == collation_type) {
     is_all = false;
     out_obj = tmp;
@@ -1771,20 +1889,20 @@ int TableAccessPlan::convert_row_obj_type(const ObNewRow &from,
     if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(res_type, col_type, tmp.get_type()))) {
     } else {
       bool is_cast_monotonic = false;
-      if (OB_FAIL(ObObjCaster::is_cast_monotonic(col_type, res_type, is_cast_monotonic))) {
+      if (OB_FAIL(ObTypeCastRules::is_cast_monotonic(col_type, res_type, is_cast_monotonic))) {
       } else if (is_cast_monotonic) {
-        if (OB_FAIL(ObObjCaster::is_cast_monotonic(res_type, col_type, is_cast_monotonic))) {
+        if (OB_FAIL(ObTypeCastRules::is_cast_monotonic(res_type, col_type, is_cast_monotonic))) {
         }
       }
 
-      int64_t result = 0;
+      int result = 0;
       if (OB_SUCC(ret)) {
         if (is_cast_monotonic) {
           is_all = false;
-          ObCastCtx cast_ctx(&allocator_, &dtc_params, CM_NONE, collation_type);
-          if (OB_FAIL(ObObjCaster::to_type(res_type, cast_ctx, tmp, tmp_out_obj))) {
-          } else if (OB_FAIL(ObObjCaster::to_type(col_type, cast_ctx, tmp_out_obj, tmp_out_obj2))) {
-          } else if (OB_FAIL(ObRelationalExprOperator::compare_nullsafe(result, tmp_out_obj, tmp_out_obj2, cast_ctx, res_type, collation_type))) {
+          ObCastCtx cast_ctx(&owner, &dtc_params, CM_NONE, collation_type);
+          if (OB_FAIL(DatumValueCaster::to_type(res_type, cast_ctx, tmp, owner, tmp_out_obj))) {
+          } else if (OB_FAIL(DatumValueCaster::to_type(col_type, cast_ctx, tmp_out_obj, owner, tmp_out_obj2))) {
+          } else if (OB_FAIL(DatumValueComparator::compare(tmp_out_obj, tmp_out_obj2, cast_ctx, res_type, collation_type, result))) {
           }
 
           if (OB_SUCC(ret)) {
@@ -1825,14 +1943,14 @@ int TableAccessPlan::calc_partition_ids_by_in_expr(ObExecContext &exec_ctx,
     ObArenaAllocator allocator(CURRENT_CONTEXT->get_malloc_allocator());
     allocator.set_label("CalcByInExpr");
     ObExprCtx expr_ctx;
-    ObNewRow part_row;
-    ObNewRow subpart_row;
+    ObSEArray<DatumValue, 8> part_row;
+    ObSEArray<DatumValue, 8> subpart_row;
 
     //init expr ctx
     if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt_type_, exec_ctx, allocator, expr_ctx))) {
     }
 
-    //init all ObNewRow
+    // Prepare the native partition-value rows.
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_row(allocator, 1, part_row))) {
     } { }//do nothing
@@ -1843,7 +1961,7 @@ int TableAccessPlan::calc_partition_ids_by_in_expr(ObExecContext &exec_ctx,
       } else { }//do nothing
     }
 
-    //calc ObNewRow for calc partition id
+    // Evaluate native partition values for routing.
     int64_t key_expr_cnt = vies_.count();
     for (int64_t value_idx = 0; OB_SUCC(ret) && value_idx < key_expr_cnt; ++value_idx) {
       OZ(se_calc_value_item_row(expr_ctx, exec_ctx, vies_, 1, value_idx, part_row, part_row));
@@ -1854,8 +1972,8 @@ int TableAccessPlan::calc_partition_ids_by_in_expr(ObExecContext &exec_ctx,
       bool is_all = false;
       bool is_none = false;
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(convert_row_obj_type(part_row, part_row, part_col_type_, part_collation_type_,
-            dtc_params, is_all, is_none))) {
+        if (OB_FAIL(convert_partition_value_type(part_row, part_row, part_col_type_, part_collation_type_,
+            dtc_params, allocator, is_all, is_none))) {
         } else if (!is_none) {
           if (is_all) {
             if (OB_FAIL(get_all_part_ids(tablet_mapper, tmp_tablet_ids, part_ids))) {
@@ -1867,8 +1985,8 @@ int TableAccessPlan::calc_partition_ids_by_in_expr(ObExecContext &exec_ctx,
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(convert_row_obj_type(subpart_row, subpart_row, subpart_col_type_,
-            subpart_collation_type_, dtc_params, is_all, is_none))) {
+        if (OB_FAIL(convert_partition_value_type(subpart_row, subpart_row, subpart_col_type_,
+            subpart_collation_type_, dtc_params, allocator, is_all, is_none))) {
         } else if (!is_none) {
           if (is_all) {
             if (OB_FAIL(get_all_part_ids(tablet_mapper, tablet_ids, partition_ids, &part_ids))) {
@@ -2153,10 +2271,13 @@ int TableAccessPlan::add_se_value_expr(const ObRawExpr *value_expr,
   } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(value_expr->get_expr_type())) { // is const
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(value_expr);
     if (T_QUESTIONMARK == const_expr->get_expr_type()) {
-      vie.idx_ = const_expr->get_value().get_unknown();
+      vie.idx_ = const_expr->get_questionmark_index();
       OX(vie.type_ = QUESTMARK_TYPE);
     } else {
-      OZ(deep_copy_obj(allocator_, const_expr->get_value(), vie.obj_));
+      DatumValue view;
+      alignas(8) char scratch[64];
+      OZ(const_expr->export_value(view, scratch, sizeof(scratch)));
+      OZ(clone_typed_value(view, vie.value_, allocator_));
       OX(vie.type_ = CONST_OBJ_TYPE);
     }
   } else { // not const, generate expr
@@ -2555,9 +2676,11 @@ int TableAccessPlan::extract_eq_op(ObExecContext *exec_ctx,
                      || T_QUESTIONMARK == param_pair.expr_->get_expr_type()) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            const ObObj &expect_val = static_cast<const ObConstRawExpr*>(param_pair.expr_)->get_value();
-            ObObj dst;
-            if (OB_FAIL(deep_copy_obj(allocator_, expect_val, dst))) {
+            DatumValue expect_val, dst;
+            alignas(8) char scratch[64];
+            if (OB_FAIL(static_cast<const ObConstRawExpr*>(param_pair.expr_)->export_value(
+                expect_val, scratch, sizeof(scratch)))) {
+            } else if (OB_FAIL(clone_typed_value(expect_val, dst, allocator_))) {
             } else if (OB_FAIL(node->param_value_.push_back(
                 ObPLFuncValueNode::ParamValuePair(param_pair.param_idx_, dst)))) {
             } else { }//do nothing
@@ -2605,10 +2728,13 @@ int TableAccessPlan::extract_value_item_expr(ObExecContext *exec_ctx,
   } else if (expr->is_const_or_param_expr()) {
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(expr);
     if (T_QUESTIONMARK == const_expr->get_expr_type()) {
-      vie.idx_ = const_expr->get_value().get_unknown();
+      vie.idx_ = const_expr->get_questionmark_index();
       vie.type_ = QUESTMARK_TYPE;
     } else {
-      if (OB_FAIL(deep_copy_obj(allocator_, const_expr->get_value(), vie.obj_))) {
+      DatumValue view;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(clone_typed_value(view, vie.value_, allocator_))) {
       } else {
         vie.type_ = CONST_OBJ_TYPE;
       }
@@ -2894,7 +3020,7 @@ int TableAccessPlan::add_partition_column(const ObDMLStmt &stmt,
 
 int TableAccessPlan::calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
                                                      ObDASTabletMapper &tablet_mapper,
-                                                     const ParamStore &params,
+                                                     const ObPhysicalPlanCtx &params,
                                                      const PartitionCalcNode *calc_node,
                                                      const PartitionCalcNode *gen_col_node,
                                                      const ObTempExpr *se_gen_col_expr,
@@ -2983,7 +3109,7 @@ int TableAccessPlan::intersect_partition_ids(
 
 int TableAccessPlan::calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
                                                      ObDASTabletMapper &tablet_mapper,
-                                                     const ParamStore &params,
+                                                     const ObPhysicalPlanCtx &params,
                                                      const PartitionCalcNode *calc_node,
                                                      ObIArray<ObTabletID> &tablet_ids,
                                                      ObIArray<ObObjectID> &partition_ids,
@@ -3046,7 +3172,7 @@ int TableAccessPlan::calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
 int TableAccessPlan::calc_and_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLAndNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -3104,7 +3230,7 @@ int TableAccessPlan::calc_and_partition_ids(
 int TableAccessPlan::calc_or_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLOrNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -3146,7 +3272,7 @@ int TableAccessPlan::calc_or_partition_ids(
 
 int TableAccessPlan::calc_pre_range_graph_partition_ids(ObExecContext &exec_ctx,
                                                         ObDASTabletMapper &tablet_mapper,
-                                                        const ParamStore &params,
+                                                        const ObPhysicalPlanCtx &params,
                                                         const ObPLPreRangeGraphNode *calc_node,
                                                         ObIArray<ObTabletID> &tablet_ids,
                                                         ObIArray<ObObjectID> &partition_ids,
@@ -3191,7 +3317,7 @@ int TableAccessPlan::calc_pre_range_graph_partition_ids(ObExecContext &exec_ctx,
 int TableAccessPlan::calc_func_value_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLFuncValueNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -3206,19 +3332,28 @@ int TableAccessPlan::calc_func_value_partition_ids(
     bool value_satisfy = true;
     for (int64_t idx = 0; OB_SUCC(ret) && idx < calc_node->param_value_.count(); ++idx) {
       const ObPLFuncValueNode::ParamValuePair &pair = calc_node->param_value_.at(idx);
-      if (pair.param_idx_ < 0 || pair.param_idx_ >= params.count()) {
+      if (pair.param_idx_ < 0 || pair.param_idx_ >= params.get_parameter_count()) {
         ret = OB_INVALID_INDEX;
-      } else if (!params.at(pair.param_idx_).is_equal(pair.obj_value_, CS_TYPE_BINARY)) {
-        value_satisfy = false;
-        break;
-      } else { } //do nothing
+      } else {
+        const DatumParameterMetadata *attributes = params.get_parameter_metadata(pair.param_idx_);
+        ObDatum legacy;
+        alignas(8) char scratch[64];
+        DatumValue view;
+        if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+        else if (OB_FAIL(params.export_runtime_parameter_legacy(pair.param_idx_, legacy, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(view.assign_legacy_borrowed(legacy, attributes->type_meta_))) {
+        } else if (!binary_equal_datum_values(view, pair.value_)) {
+          value_satisfy = false;
+          break;
+        }
+      }
     }
     if (OB_FAIL(ret)) {
     } else if (!value_satisfy) {
       all_part = true;
     } else {
-      ObObj tmp;
-      ObNewRow tmp_row;
+      DatumValue tmp;
+      ObSEArray<DatumValue, 1> tmp_row;
       ObArenaAllocator allocator(CURRENT_CONTEXT->get_malloc_allocator());
       allocator.set_label("CalcFVPartIds");
       ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, calc_node->vie_.dst_cs_type_);
@@ -3238,7 +3373,7 @@ int TableAccessPlan::calc_func_value_partition_ids(
 int TableAccessPlan::calc_column_value_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLColumnValueNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -3249,30 +3384,17 @@ int TableAccessPlan::calc_column_value_partition_ids(
   if (OB_ISNULL(calc_node)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObj tmp;
-    ObNewRow tmp_row;
+    DatumValue tmp;
+    ObSEArray<DatumValue, 1> tmp_row;
     ObArenaAllocator allocator(CURRENT_CONTEXT->get_malloc_allocator());
     allocator.set_label("CalcCVPartIds");
     ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, calc_node->vie_.dst_cs_type_);
     if (OB_FAIL(se_calc_value_item(cast_ctx, exec_ctx, params, calc_node->vie_, tmp_row, tmp))) {
     } else {
-      ObNewRow result_row;
-      // allocate obj first
-      void *ptr = NULL;
-      if (NULL == (ptr = allocator.alloc(sizeof(ObObj)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("failed to allocate obj", K(ret));
-      } else {
-        result_row.cells_ = new (ptr) ObObj();
-        result_row.count_ = 1;
-        result_row.cells_[0] = tmp;
-        if (OB_FAIL(calc_partition_id_by_row(exec_ctx,
-                                              tablet_mapper,
-                                              result_row,
-                                              tablet_ids,
-                                              partition_ids,
-                                              part_ids))) {
-        }
+      ObSEArray<DatumValue, 1> result_row;
+      if (OB_FAIL(result_row.push_back(tmp))) {
+      } else if (OB_FAIL(calc_partition_id_by_row(exec_ctx, tablet_mapper, result_row,
+                                                tablet_ids, partition_ids, part_ids))) {
       }
     }
   }
@@ -3362,23 +3484,22 @@ int TableAccessPlan::calc_partition_ids_by_ranges(ObExecContext &exec_ctx,
       const ObIArray<ObNewRange*> &single_ranges = need_try_split_range ? splited_ranges : ranges;
       for (int64_t i = 0; OB_SUCC(ret) && !all_part && i < single_ranges.count(); ++i) {
         ObNewRange *range = single_ranges.at(i);
-        ObNewRow input_row;
+        ObSEArray<DatumValue, 8> input_row;
         if (OB_ISNULL(range)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          input_row.cells_ = const_cast<ObObj*>(range->start_key_.get_obj_ptr());
-          input_row.count_ = (range->start_key_.get_obj_cnt());
-          if (NULL != se_gen_col_expr) {
-            ObObj gen_col_val;
-            if (OB_SUCCESS != se_gen_col_expr->eval(exec_ctx, input_row, gen_col_val)) {
-              // If a generated column encounters a calculation error, 
-              // suppress the error code and quit partition pruning.
+          if (OB_FAIL(read_partition_values(range->start_key_, allocator_for_range, input_row))) {
+          } else if (NULL != se_gen_col_expr) {
+            DatumValue generated;
+            if (OB_SUCCESS != evaluate_partition_expr(*se_gen_col_expr, exec_ctx,
+                                                      input_row, allocator_for_range, generated)) {
+              // Preserve the old fallback when evaluating a generated column
+              // fails: stop pruning instead of returning an evaluation error.
               all_part = true;
             } else {
-              ObNewRow result_row;
-              result_row.cells_ = &gen_col_val;
-              result_row.count_ = 1;
-              if (OB_FAIL(calc_partition_id_by_row(exec_ctx, tablet_mapper, result_row,
+              ObSEArray<DatumValue, 1> result_row;
+              if (OB_FAIL(result_row.push_back(generated))) {
+              } else if (OB_FAIL(calc_partition_id_by_row(exec_ctx, tablet_mapper, result_row,
                                                    tablet_ids, partition_ids, part_ids))) {
               }
             }
@@ -3416,14 +3537,15 @@ int TableAccessPlan::get_part_ids_by_ranges(ObDASTabletMapper &tablet_mapper,
 
 int TableAccessPlan::calc_partition_id_by_func_value(
    ObDASTabletMapper &tablet_mapper,
-   const ObObj &func_value,
+   const DatumValue &func_value,
    const bool calc_hash,
    ObIArray<ObTabletID> &tablet_ids,
    ObIArray<ObObjectID> &partition_ids,
    const ObIArray<ObObjectID> *part_ids) const
 {
   int ret = OB_SUCCESS;
-  ObObj result = func_value;
+  DatumValue result = func_value;
+  ObArenaAllocator owner;
   if (OB_SUCC(ret) && !is_inner_table(access_meta_.ref_table_id_)) {
     bool hash_type = false;
     if (NULL == part_ids) {
@@ -3432,9 +3554,7 @@ int TableAccessPlan::calc_partition_id_by_func_value(
       hash_type = (PARTITION_FUNC_TYPE_HASH == subpart_type_);
     }
     if (hash_type) {
-      if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(func_value, result,
-                  func_value.get_type()))) {
-      }
+      ret = ObSQLUtils::revise_hash_part_object(result, owner);
     }
   }
   if (OB_FAIL(ret)) {
@@ -3459,14 +3579,13 @@ int TableAccessPlan::calc_partition_ids_by_rowkey(ObExecContext &exec_ctx,
                                                   ObIArray<ObObjectID> &part_ids) const
 {
   int ret = OB_SUCCESS;
-  ObNewRow cur_row;
+  ObSEArray<DatumValue, 8> cur_row;
   ObSEArray<ObObjectID, 1> tmp_part_ids;
   ObSEArray<ObTabletID, 1> tmp_tablet_ids;
-  ObNewRow *part_row = NULL;
+  ObIArray<DatumValue> *part_row = nullptr;
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkeys.count(); ++i) {
-    cur_row.cells_ = const_cast<ObObj*>(rowkeys.at(i).get_obj_ptr());
-    cur_row.count_ = rowkeys.at(i).get_obj_cnt();
-    if (OB_FAIL(part_projector_.calc_part_row(exec_ctx, cur_row, part_row))
+    if (OB_FAIL(read_partition_values(rowkeys.at(i), exec_ctx.get_allocator(), cur_row))) {
+    } else if (OB_FAIL(part_projector_.calc_part_row(exec_ctx, cur_row, part_row))
         || OB_ISNULL(part_row)) {
       ret = COVER_SUCC(OB_ERR_UNEXPECTED);
     } else if (PARTITION_LEVEL_ONE == part_level_) {
@@ -3492,23 +3611,40 @@ int TableAccessPlan::calc_partition_ids_by_rowkey(ObExecContext &exec_ctx,
 }
 
 int TableAccessPlan::calc_partition_id_by_row(ObExecContext &exec_ctx,
+    ObDASTabletMapper &tablet_mapper, ObNewRow &legacy_row,
+    ObIArray<ObTabletID> &tablet_ids, ObIArray<ObObjectID> &partition_ids,
+    const ObIArray<ObObjectID> *part_ids) const
+{
+  ObSEArray<DatumValue, 8> row;
+  // The old column path replaced the incoming projector with PartProjector;
+  // the old expression path also addressed row.cells_ directly. Forward the
+  // physical legacy cells so the native projector is applied exactly once.
+  int ret = read_partition_values(legacy_row, exec_ctx.get_allocator(), row, true);
+  if (OB_SUCC(ret)) {
+    ret = calc_partition_id_by_row(exec_ctx, tablet_mapper, row, tablet_ids, partition_ids, part_ids);
+  }
+  return ret;
+}
+
+int TableAccessPlan::calc_partition_id_by_row(ObExecContext &exec_ctx,
                                               ObDASTabletMapper &tablet_mapper,
-                                              ObNewRow &row,
+                                              const ObIArray<DatumValue> &row,
                                               ObIArray<ObTabletID> &tablet_ids,
                                               ObIArray<ObObjectID> &partition_ids,
                                               const ObIArray<ObObjectID> *part_ids) const
 {
   int ret = OB_SUCCESS;
-  ObObj func_result;
+  DatumValue func_result;
+  ObSEArray<DatumValue, 8> projected;
   bool range_columns = false;
   if (NULL == part_ids) {
     if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type_
        || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type_) {
-      part_projector_.project_part_row(PARTITION_LEVEL_ONE, row);
+      OZ(part_projector_.project_part_row(PARTITION_LEVEL_ONE, row, projected));
       ObObjectID partition_id = OB_INVALID_ID;
       ObTabletID tablet_id(ObTabletID::INVALID_TABLET_ID);
       OZ(tablet_mapper.get_tablet_and_object_id(PARTITION_LEVEL_ONE, OB_INVALID_ID,
-                          row, tablet_id, partition_id));
+                          projected, tablet_id, partition_id));
       if (OB_INVALID_ID != partition_id) {
         OZ(add_var_to_array_no_dup(partition_ids, partition_id));
         OZ(add_var_to_array_no_dup(tablet_ids, tablet_id));
@@ -3516,15 +3652,15 @@ int TableAccessPlan::calc_partition_id_by_row(ObExecContext &exec_ctx,
       range_columns = true;
     } else {
       CK(OB_NOT_NULL(se_part_expr_));
-      OZ(se_part_expr_->eval(exec_ctx, row, func_result));
+      OZ(evaluate_partition_expr(*se_part_expr_, exec_ctx, row, exec_ctx.get_allocator(), func_result));
     }
   } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == subpart_type_ || PARTITION_FUNC_TYPE_LIST_COLUMNS == subpart_type_) {
-    part_projector_.project_part_row(PARTITION_LEVEL_TWO, row);
+    OZ(part_projector_.project_part_row(PARTITION_LEVEL_TWO, row, projected));
     for (int64_t idx = 0; OB_SUCC(ret) && idx < part_ids->count(); ++idx) {
       ObObjectID partition_id = OB_INVALID_ID;
       ObTabletID tablet_id(ObTabletID::INVALID_TABLET_ID);
       OZ(tablet_mapper.get_tablet_and_object_id(PARTITION_LEVEL_TWO, part_ids->at(idx),
-                 row, tablet_id, partition_id));
+                 projected, tablet_id, partition_id));
       if (OB_INVALID_ID != partition_id) {
         OZ(add_var_to_array_no_dup(partition_ids, partition_id));
         OZ(add_var_to_array_no_dup(tablet_ids, tablet_id));
@@ -3533,7 +3669,7 @@ int TableAccessPlan::calc_partition_id_by_row(ObExecContext &exec_ctx,
     range_columns = true;
   } else {
     CK(OB_NOT_NULL(se_subpart_expr_));
-    OZ(se_subpart_expr_->eval(exec_ctx, row, func_result));
+    OZ(evaluate_partition_expr(*se_subpart_expr_, exec_ctx, row, exec_ctx.get_allocator(), func_result));
   }
   if (OB_FAIL(ret) || range_columns) {
   } else if (OB_FAIL(calc_partition_id_by_func_value(tablet_mapper, func_result, false,
@@ -3664,122 +3800,78 @@ int TableAccessPlan::clear_columnlized_in_row_desc(RowDesc &row_desc)
   return ret;
 }
 
-int TableAccessPlan::init_row(
-    ObIAllocator &allocator,
-    const int64_t column_num,
-    ObNewRow &row) const
+int TableAccessPlan::init_row(ObIAllocator &allocator, const int64_t count,
+    ObIArray<DatumValue> &row) const
 {
+  UNUSED(allocator);
   int ret = OB_SUCCESS;
-  void *ptr = NULL;
-  if (column_num <= 0) {
-  } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObObj) * column_num))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("failed to allocate pkey values", K(ret), K(column_num));
-  } else {
-    row.cells_ = new (ptr) ObObj[column_num];
-    row.count_ = column_num;
-  }
+  row.reset();
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) { ret = row.push_back(DatumValue()); }
   return ret;
 }
 
 
 int TableAccessPlan::se_calc_value_item(ObCastCtx cast_ctx,
-                                        ObExecContext &exec_ctx,
-                                        const ParamStore &params,
-                                        const ValueItemExpr &vie,
-                                        const ObNewRow &input_row,
-                                        ObObj &value)
+    ObExecContext &context, const ObPhysicalPlanCtx &params, const ValueItemExpr &vie,
+    const ObIArray<DatumValue> &input_row, DatumValue &value)
 {
   int ret = OB_SUCCESS;
-  if (QUESTMARK_TYPE == vie.type_) {
-    if (vie.idx_ < 0 || vie.idx_ >= params.count()) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
-      value = params.at(vie.idx_);
-    }
+  if (cast_ctx.allocator_v2_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (QUESTMARK_TYPE == vie.type_) {
+    if (vie.idx_ >= params.get_parameter_count()) { ret = OB_INVALID_ARGUMENT; }
+    else { ret = copy_runtime_partition_value(params, vie.idx_, *cast_ctx.allocator_v2_, value); }
   } else if (CONST_OBJ_TYPE == vie.type_) {
-    value = vie.obj_;
+    value = vie.value_;
   } else if (CONST_EXPR_TYPE == vie.type_) {
-    if (OB_ISNULL(vie.expr_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(vie.expr_->eval(exec_ctx, input_row, value))) {
-    }
+    if (vie.expr_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else { ret = evaluate_partition_expr(*vie.expr_, context, input_row, *cast_ctx.allocator_v2_, value); }
   }
-  // implicit cast values to value desc column type
-  if (OB_SUCC(ret)) {
-    if (vie.dst_type_ != value.get_type() || vie.dst_cs_type_ != value.get_collation_type()) {
-      if (ob_is_enum_or_set_type(vie.dst_type_)) {
-        ObExpectType expect_type;
-        expect_type.set_type(vie.dst_type_);
-        expect_type.set_collation_type(vie.dst_cs_type_);
-        ObSEArray<ObString, 8> type_infos;
-        for (int64_t i = 0; OB_SUCC(ret) && i < vie.enum_set_values_cnt_; ++i) {
-          OZ(type_infos.push_back(vie.enum_set_values_[i]));
-        }
-        expect_type.set_type_infos(&type_infos);
-        OZ(ObObjCaster::to_type(expect_type, cast_ctx, value, value));
-      } else {
-        OZ(ObObjCaster::to_type(vie.dst_type_, vie.dst_cs_type_, cast_ctx, value, value));
-      }
-    }
-  }
+  if (OB_SUCC(ret) && value.is_null()) { value.set_null(); }
+  if (OB_SUCC(ret)) { ret = cast_partition_value(cast_ctx, context, vie, value); }
   return ret;
 }
 
 //calc row use new static type engine expr
-int TableAccessPlan::se_calc_value_item_row(common::ObExprCtx &expr_ctx,
-                                            ObExecContext &exec_ctx,
-                                            const ISeValueItemExprs &vies,
-                                            const int64_t key_count,
-                                            const int64_t value_idx,
-                                            ObNewRow &input_row,
-                                            ObNewRow &output_row) const
+int TableAccessPlan::se_calc_value_item_row(ObExprCtx &expr_ctx,
+    ObExecContext &context, const ISeValueItemExprs &vies, const int64_t key_count,
+    const int64_t value_index, const ObIArray<DatumValue> &input_row,
+    ObIArray<DatumValue> &output_row) const
 {
   int ret = OB_SUCCESS;
   if (key_count <= 0) {
-    //do  nothing
-  } else if (OB_ISNULL(output_row.cells_) || output_row.count_ < key_count
-             || OB_ISNULL(exec_ctx.get_physical_plan_ctx())) {
+  } else if (output_row.count() < key_count || context.get_physical_plan_ctx() == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const int64_t start_pos = value_idx * key_count;
-    const auto &param_store = exec_ctx.get_physical_plan_ctx()->get_param_store();
+    const auto &params = *context.get_physical_plan_ctx();
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    for (int64_t key_idx = 0; OB_SUCC(ret) && key_idx < key_count; ++key_idx) {
+    for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
       ValueItemExpr vie;
-      OZ(vies.at(key_idx + start_pos, vie));
-      if (QUESTMARK_TYPE == vie.type_) {
-        output_row.cells_[key_idx] = param_store.at(vie.idx_);
-      } else if (CONST_OBJ_TYPE == vie.type_) {
-        output_row.cells_[key_idx] = vie.obj_;
-      } else if (CONST_EXPR_TYPE == vie.type_) {
-        CK(OB_NOT_NULL(vie.expr_));
-        OZ(vie.expr_->eval(exec_ctx, input_row, output_row.cells_[key_idx]));
-      }
-      // implicit cast values to value desc column type
-      if (OB_SUCC(ret)) {
-        if (vie.dst_type_ != output_row.cells_[key_idx].get_type()
-            || vie.dst_cs_type_ != output_row.cells_[key_idx].get_collation_type()) {
-          if (ob_is_enum_or_set_type(vie.dst_type_)) {
-            ObExpectType expect_type;
-            expect_type.set_type(vie.dst_type_);
-            expect_type.set_collation_type(vie.dst_cs_type_);
-            ObSEArray<ObString, 8> type_infos;
-            for (int64_t i = 0; OB_SUCC(ret) && i < vie.enum_set_values_cnt_; ++i) {
-              OZ(type_infos.push_back(vie.enum_set_values_[i]));
-            }
-            expect_type.set_type_infos(&type_infos);
-            OZ(ObObjCaster::to_type(expect_type, cast_ctx,
-                                    output_row.cells_[key_idx], output_row.cells_[key_idx]));
+      if (OB_FAIL(vies.at(key + value_index * key_count, vie))) {
+      } else {
+        DatumValue value;
+        if (QUESTMARK_TYPE == vie.type_) {
+          if (vie.idx_ >= params.get_parameter_count()) { ret = OB_INVALID_ARGUMENT; }
+          else if (cast_ctx.allocator_v2_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+          else { ret = copy_runtime_partition_value(params, vie.idx_, *cast_ctx.allocator_v2_, value); }
+        } else if (CONST_OBJ_TYPE == vie.type_) {
+          value = vie.value_;
+        } else if (CONST_EXPR_TYPE == vie.type_) {
+          if (vie.expr_ == nullptr || cast_ctx.allocator_v2_ == nullptr) {
+            ret = OB_ERR_UNEXPECTED;
           } else {
-            OZ(ObObjCaster::to_type(vie.dst_type_, vie.dst_cs_type_, cast_ctx,
-                                    output_row.cells_[key_idx], output_row.cells_[key_idx]));
+            ret = evaluate_partition_expr(*vie.expr_, context, input_row,
+                                           *cast_ctx.allocator_v2_, value);
           }
         }
+        // A parameter's declaration metadata is separate from a NULL value.
+        if (OB_SUCC(ret) && value.is_null()) { value.set_null(); }
+        // Keep this cast context across columns, as the old row evaluator did.
+        if (OB_SUCC(ret)) { ret = cast_partition_value(cast_ctx, context, vie, value); }
+        if (OB_SUCC(ret)) { output_row.at(key) = value; }
       }
     }
   }
-
   return ret;
 }
 
@@ -3946,7 +4038,47 @@ OB_DEF_DESERIALIZE(ObPLOrNode)
   }
   return ret;
 }
-OB_SERIALIZE_MEMBER(ObPLFuncValueNode::ParamValuePair, param_idx_, obj_value_);
+OB_DEF_SERIALIZE(ObPLFuncValueNode::ParamValuePair)
+{
+  int ret = OB_SUCCESS;
+  OB_UNIS_ENCODE(param_idx_);
+  if (OB_SUCC(ret)) {
+    ret = DatumParameterCodec::encode_native_value(value_.datum_, value_.meta_, buf, buf_len, pos);
+  }
+  return ret;
+}
+OB_DEF_SERIALIZE_SIZE(ObPLFuncValueNode::ParamValuePair)
+{
+  int64_t len = 0, value_size = 0;
+  OB_UNIS_ADD_LEN(param_idx_);
+  if (DatumParameterCodec::native_value_size(value_.datum_, value_.meta_, value_size) == OB_SUCCESS) {
+    len += value_size;
+  }
+  return len;
+}
+int ObPLFuncValueNode::ParamValuePair::deserialize(ObIAllocator &owner,
+    const char *buf, int64_t data_len, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  int64_t version = 0, len = 0;
+  OB_UNIS_DECODE(version);
+  OB_UNIS_DECODE(len);
+  CHECK_VERSION_LENGTH(ObPLFuncValueNode::ParamValuePair, version, len);
+  if (OB_SUCC(ret)) {
+    const int64_t original = pos;
+    const char *body = buf + original;
+    int64_t body_pos = 0, index = param_idx_;
+    DatumValue value = value_;
+    if (body_pos < len) { ret = serialization::decode(body, len, body_pos, index); }
+    if (OB_SUCC(ret) && body_pos < len) {
+      ret = DatumParameterCodec::decode_unis_native_value(body, len, body_pos, owner,
+                                                 value.datum_, value.meta_);
+    }
+    if (OB_SUCC(ret)) { param_idx_ = index; value_ = value; }
+    pos = original + len;
+  }
+  return ret;
+}
 OB_SERIALIZE_MEMBER(PartitionCalcNode, node_type_);
 OB_SERIALIZE_MEMBER((ObPLPreRangeGraphNode, PartitionCalcNode), pre_range_graph_);
 
@@ -3975,7 +4107,19 @@ OB_DEF_DESERIALIZE(ObPLFuncValueNode)
   int ret = OB_SUCCESS;
   BASE_DESER(PartitionCalcNode);
   OZ (vie_.deserialize(allocator_, buf, data_len, pos));
-  OB_UNIS_DECODE(param_value_);
+  // Match the old optional UNIS array member: an omitted trailing field
+  // preserves the previous list. Once present, the old array decoder resets
+  // the list even if decoding the count or a subsequent member fails.
+  if (OB_SUCC(ret) && pos < data_len) {
+    int64_t count = 0;
+    param_value_.reset();
+    if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
+    } else if (OB_FAIL(param_value_.prepare_allocate(count))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      ret = param_value_.at(i).deserialize(allocator_, buf, data_len, pos);
+    }
+  }
   return ret;
 }
 
@@ -4088,7 +4232,9 @@ int ValueItemExpr::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
   int ret = OB_SUCCESS;
   OB_UNIS_ENCODE(type_);
   if (CONST_OBJ_TYPE == type_) {
-    OB_UNIS_ENCODE(obj_);
+    if (OB_SUCC(ret)) {
+      ret = DatumParameterCodec::encode_native_value(value_.datum_, value_.meta_, buf, buf_len, pos);
+    }
   } else if (CONST_EXPR_TYPE == type_) {
     OB_UNIS_ENCODE(*expr_);
   } else if (QUESTMARK_TYPE == type_) {
@@ -4109,7 +4255,10 @@ int64_t ValueItemExpr::get_serialize_size() const
   int64_t len = 0;
   OB_UNIS_ADD_LEN(type_);
   if (CONST_OBJ_TYPE == type_) {
-    OB_UNIS_ADD_LEN(obj_);
+    int64_t value_size = 0;
+    if (DatumParameterCodec::native_value_size(value_.datum_, value_.meta_, value_size) == OB_SUCCESS) {
+      len += value_size;
+    }
   } else if (CONST_EXPR_TYPE == type_) {
     OB_UNIS_ADD_LEN(*expr_);
   } else if (QUESTMARK_TYPE == type_) {
@@ -4129,7 +4278,10 @@ int ValueItemExpr::deserialize(common::ObIAllocator &allocator, const char *buf,
   int ret = OB_SUCCESS;
   OB_UNIS_DECODE(type_);
   if (CONST_OBJ_TYPE == type_) {
-    OB_UNIS_DECODE(obj_);
+    if (OB_SUCC(ret) && pos < data_len) {
+      ret = DatumParameterCodec::decode_unis_native_value(buf, data_len, pos, allocator,
+                                                 value_.datum_, value_.meta_);
+    }
   } else if (CONST_EXPR_TYPE == type_) {
     char *mem = static_cast<char *>(allocator.alloc(sizeof(ObTempExpr)));
     CK(OB_NOT_NULL(mem));
@@ -4145,8 +4297,15 @@ int ValueItemExpr::deserialize(common::ObIAllocator &allocator, const char *buf,
       enum_set_values_ =
         static_cast<ObString *>(allocator.alloc(sizeof(ObString) * enum_set_values_cnt_));
       CK(OB_NOT_NULL(enum_set_values_));
-      MEMSET(enum_set_values_, 0, sizeof(ObString) * enum_set_values_cnt_);
-      OB_UNIS_DECODE_ARRAY(enum_set_values_, enum_set_values_cnt_)
+      if (OB_SUCC(ret)) {
+        MEMSET(enum_set_values_, 0, sizeof(ObString) * enum_set_values_cnt_);
+        OB_UNIS_DECODE_ARRAY(enum_set_values_, enum_set_values_cnt_)
+        for (int64_t i = 0; OB_SUCC(ret) && i < enum_set_values_cnt_; ++i) {
+          ObString owned;
+          if (OB_FAIL(ob_write_string(allocator, enum_set_values_[i], owned))) {
+          } else { enum_set_values_[i] = owned; }
+        }
+      }
     }
   }
 
@@ -4158,7 +4317,7 @@ int ValueItemExpr::deep_copy(ObIAllocator &allocator, ValueItemExpr &dst) const
   int ret = OB_SUCCESS;
   dst = *this;
   if (CONST_OBJ_TYPE == type_) {
-    OZ(deep_copy_obj(allocator, obj_, dst.obj_));
+    OZ(clone_typed_value(value_, dst.value_, allocator));
   } else if (CONST_EXPR_TYPE == type_) {
     OZ(expr_->deep_copy(allocator, dst.expr_));
   }
@@ -4712,27 +4871,31 @@ int TableAccessPlan::calc_range_by_part_expr(ObExecContext &exec_ctx,
       if (range->start_key_.is_min_row()) {
         new_range->start_key_.set_min_row();
       } else {
-        ObNewRow input_row;
-        ObObj *func_result = NULL;
-        input_row.cells_ = const_cast<ObObj *>(range->start_key_.get_obj_ptr());
-        input_row.count_ = (range->start_key_.get_obj_cnt());
-        OV (OB_NOT_NULL(func_result = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj)))),
-            OB_ALLOCATE_MEMORY_FAILED);
-        OZ(se_expr->eval(exec_ctx, input_row, *func_result), input_row, access_meta_);
-        OX(new_range->start_key_.assign(func_result, 1));
+        ObSEArray<DatumValue, 8> input_row;
+        DatumValue *func_result = nullptr;
+        if (OB_ISNULL(func_result = static_cast<DatumValue *>(allocator.alloc(sizeof(DatumValue))))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          new (func_result) DatumValue();
+          OZ(read_partition_values(range->start_key_, allocator, input_row));
+          OZ(evaluate_partition_expr(*se_expr, exec_ctx, input_row, allocator, *func_result));
+          OX(new_range->start_key_.assign(func_result, 1));
+        }
       }
       if (OB_FAIL(ret)) {
       } else if (range->end_key_.is_max_row()) {
         new_range->end_key_.set_max_row();
       } else {
-        ObNewRow input_row;
-        ObObj *func_result = NULL;
-        input_row.cells_ = const_cast<ObObj *>(range->end_key_.get_obj_ptr());
-        input_row.count_ = (range->end_key_.get_obj_cnt());
-        OV (OB_NOT_NULL(func_result = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj)))),
-            OB_ALLOCATE_MEMORY_FAILED);
-        OZ(se_expr->eval(exec_ctx, input_row, *func_result), input_row, access_meta_);
-        OX(new_range->end_key_.assign(func_result, 1));
+        ObSEArray<DatumValue, 8> input_row;
+        DatumValue *func_result = nullptr;
+        if (OB_ISNULL(func_result = static_cast<DatumValue *>(allocator.alloc(sizeof(DatumValue))))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          new (func_result) DatumValue();
+          OZ(read_partition_values(range->end_key_, allocator, input_row));
+          OZ(evaluate_partition_expr(*se_expr, exec_ctx, input_row, allocator, *func_result));
+          OX(new_range->end_key_.assign(func_result, 1));
+        }
       }
       OZ(new_ranges.push_back(new_range));
       if (OB_SUCC(ret) && is_all_single_value_ranges) {
@@ -4762,7 +4925,7 @@ int TableAccessPlan::pruning_single_partition(int64_t tablet_id,
     ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(exec_ctx.get_my_session());
     ObSEArray<ObObjectID, 8> partition_ids;
     ObSEArray<ObObjectID, 8> first_level_part_ids;
-    if (OB_FAIL(calculate_tablet_ids(exec_ctx, plan_ctx->get_param_store(), tablet_ids,
+    if (OB_FAIL(calculate_tablet_ids(exec_ctx, *plan_ctx, tablet_ids,
                                         partition_ids, first_level_part_ids, dtc_params))) {
     } else {
       pruning = true;
@@ -4785,7 +4948,7 @@ int TableAccessPlan::try_split_integer_range(const common::ObIArray<common::ObNe
   int ret = OB_SUCCESS;
   const static int64_t MAX_INTEGER_RANGE_SPLITE_COUNT = 32;
   uint64_t table_id = OB_INVALID_ID;
-  ObObjType obj_type = ObMaxType;
+  SqlValueType obj_type = ObMaxType;
   ObSEArray<std::pair<int64_t, int64_t>, 2> int_ranges;
   for (int64_t i = 0; OB_SUCC(ret) && !all_part && i < ranges.count(); ++i) {
     ObNewRange *range = ranges.at(i);
@@ -4797,11 +4960,11 @@ int TableAccessPlan::try_split_integer_range(const common::ObIArray<common::ObNe
       LOG_WARN("invalid rowkey");
     } else if (range->start_key_.is_min_row() || range->end_key_.is_max_row()) {
       all_part = true;
-    } else if (range->start_key_.get_obj_cnt() != 1 || range->end_key_.get_obj_cnt() != 1) {
+    } else if (range->start_key_.get_value_count() != 1 || range->end_key_.get_value_count() != 1) {
       all_part = true;
     } else {
-      ObObj &start_obj = range->start_key_.get_obj_ptr()[0];
-      ObObj &end_obj = range->end_key_.get_obj_ptr()[0];
+      const DatumValue &start_obj = range->start_key_.get_cell(0);
+      const DatumValue &end_obj = range->end_key_.get_cell(0);
       table_id = range->table_id_;
       if (!start_obj.is_integer_type() || !end_obj.is_integer_type()) {
         all_part = true;
@@ -4827,22 +4990,22 @@ int TableAccessPlan::try_split_integer_range(const common::ObIArray<common::ObNe
     int64_t end_val = int_ranges.at(i).second;
     for (int64_t obj_val = start_val; OB_SUCC(ret) && obj_val <= end_val; ++obj_val) {
       ObNewRange *new_range = static_cast<ObNewRange *>(allocator.alloc(sizeof(ObNewRange)));
-      ObObj *obj = NULL;
+      DatumValue *obj = nullptr;
       if (OB_ISNULL(new_range)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("alloc memory failed", K(ret));
-      } else if (OB_ISNULL(obj = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj))))) {
+      } else if (OB_ISNULL(obj = static_cast<DatumValue *>(allocator.alloc(sizeof(DatumValue))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("alloc memory failed", K(ret));
       } else {
         new(new_range) ObNewRange();
-        obj->set_type(obj_type);
-        obj->set_int_value(obj_val);
+        new (obj) DatumValue();
+        OZ(obj->set_int(obj_type, obj_val, allocator));
         new_range->table_id_ = table_id;
         new_range->border_flag_.set_inclusive_start();
         new_range->border_flag_.set_inclusive_end();
-        new_range->start_key_.assign(obj, 1);
-        new_range->end_key_.assign(obj, 1);
+        OX(new_range->start_key_.assign(obj, 1));
+        OX(new_range->end_key_.assign(obj, 1));
         OZ(new_ranges.push_back(new_range));
       }
     }
@@ -5117,7 +5280,7 @@ int TableAccessPlan::try_get_gather_stat_partition_info(
 int TableAccessPlan::calc_list_value_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLListValueNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -5146,7 +5309,7 @@ int TableAccessPlan::calc_list_value_partition_ids(
 int TableAccessPlan::calc_gather_stat_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLGatherStatNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -5160,8 +5323,8 @@ int TableAccessPlan::calc_gather_stat_partition_ids(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected part_ids", KPC(part_ids));
   } else {
-    ObObj tmp;
-    ObNewRow tmp_row;
+    DatumValue tmp;
+    ObSEArray<DatumValue, 1> tmp_row;
     ObArenaAllocator allocator(CURRENT_CONTEXT->get_malloc_allocator());
     allocator.set_label("CalcCVPartIds");
     ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, calc_node->vie_.dst_cs_type_);

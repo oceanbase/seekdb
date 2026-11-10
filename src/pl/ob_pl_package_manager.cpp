@@ -817,7 +817,7 @@ int ObPLPackageManager::get_package_var_val(const ObPLResolveCtx &resolve_ctx,
                                             int64_t spec_version,
                                             int64_t body_version,
                                             int64_t var_idx,
-                                            ObObj &var_val)
+                                            DatumParameter &var_val)
 {
   int ret = OB_SUCCESS;
   const ObPLVar *var = NULL;
@@ -842,34 +842,18 @@ int ObPLPackageManager::set_package_var_val(const ObPLResolveCtx &resolve_ctx,
                                             sql::ObExecContext &exec_ctx,
                                             uint64_t package_id,
                                             int64_t var_idx,
-                                            const ObObj &var_val)
+                                            const DatumParameter &var_val)
 {
   int ret = OB_SUCCESS;
-  bool need_free_old = false;
   ObPLPackageState *package_state = NULL;
-  ObObj old_var_val;
   const ObPLVar *var = NULL;
   CK (package_id != OB_INVALID_ID);
   CK (var_idx != OB_INVALID_INDEX);
-  OZ (get_package_state(resolve_ctx, exec_ctx, package_id, package_state),
-                        K(package_id), K(var_idx), K(var_val));
-  OZ (package_state->get_package_var_val(var_idx, old_var_val), K(package_id), K(var_idx));
+  OZ (get_package_state(resolve_ctx, exec_ctx, package_id, package_state), K(package_id), K(var_idx));
   OZ (get_package_var(resolve_ctx, package_id, var_idx, var), K(package_id), K(var_idx));
   OV (OB_NOT_NULL(var), OB_ERR_UNEXPECTED, K(package_id), K(var_idx));
-  if (OB_SUCC(ret) && var->is_not_null() && var_val.is_null()) {
-    ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
-  }
-  OZ (package_state->set_package_var_val(var_idx, var_val));
-  OX (need_free_old = true);
-  if (need_free_old) {
-    if (var_val.is_null() &&
-        old_var_val.is_pl_extend() &&
-        var->get_type().get_type() != PL_CURSOR_TYPE) {
-      // do nothing
-    } else {
-      ObUserDefinedType::destruct_objparam(package_state->get_pkg_allocator(), old_var_val, &(resolve_ctx.session_info_));
-    }
-  }
+  if (OB_SUCC(ret) && var->is_not_null() && var_val.is_null()) { ret = OB_ERR_NUMERIC_OR_VALUE_ERROR; }
+  OZ (package_state->set_package_var_val(var_idx, var_val, true, &resolve_ctx.session_info_));
   OX (resolve_ctx.session_info_.set_pl_can_retry(false));
   return ret;
 }

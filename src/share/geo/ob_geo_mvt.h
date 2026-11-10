@@ -21,6 +21,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_allocator.h"
+#include "common/datum/datum_value.h"
 #include "rust/cxx.h"
 
 namespace oceanbase
@@ -41,10 +42,11 @@ public:
   inline common::ObString& get_geom_name() { return geom_name_; } 
   int init_layer();
   int add_key(const ObString &key);
-  int generate_feature(ObObj *tmp_obj, uint32_t obj_cnt);
+  int generate_feature(const DatumValue *values, uint32_t value_cnt);
   int transform_geom(const ObGeometry &geo);
-  int transform_other_column(ObObj *tmp_obj, uint32_t obj_cnt);
-  int transform_json_column(ObObj &json);
+  int geometry_to_varchar(const DatumValue &value, ObIAllocator &scratch, ObString &result);
+  int transform_other_column(const DatumValue *values, uint32_t obj_cnt);
+  int transform_json_column(const DatumValue &json);
   int mvt_pack(ObString &blob_res);
   void set_tmp_allocator(common::ObIAllocator *temp_allocator) { temp_allocator_ = temp_allocator;}
   static bool is_upper_char_exist(const ObString &str);

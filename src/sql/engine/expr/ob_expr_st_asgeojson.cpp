@@ -43,7 +43,7 @@ int ObExprSTAsGeoJson::calc_result_typeN(ObExprResType &type, ObExprResType *typ
     LOG_USER_ERROR(OB_ERR_PARAM_SIZE, func_name_.length(), func_name_.ptr());
   } else {
     for (uint8_t i = 0; i < param_num && OB_SUCC(ret); i++) {
-      ObObjType type = types_stack[i].get_type();
+      SqlValueType type = types_stack[i].get_type();
       if (i == 0) {
         // geometry
         if (!ob_is_geometry(type) && !ob_is_string_type(type) && !ob_is_null(type)) {
@@ -74,9 +74,9 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   // geometry
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   ObExpr *arg1 = expr.args_[0];
-  ObObjType type1 = arg1->datum_meta_.type_;
+  SqlValueType type1 = arg1->datum_meta_.type_;
   is_null_res = false;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
@@ -144,7 +144,7 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;

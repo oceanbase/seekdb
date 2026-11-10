@@ -269,11 +269,22 @@ private:
 class ObPLUserTypeTable
 {
 public:
-  ObPLUserTypeTable() : type_start_gen_id_(0), user_types_(), external_user_types_() {}
+  ObPLUserTypeTable() : type_start_gen_id_(0), user_types_(), external_user_types_(), sql_compilation_scope_() {}
   virtual ~ObPLUserTypeTable() {}
 
   inline void set_type_start_gen_id(uint64_t type_start_gen_id) { type_start_gen_id_ = type_start_gen_id; }
   inline uint64_t get_type_start_gen_id() const { return type_start_gen_id_; }
+  const common::SqlPLCompilationScope &get_sql_compilation_scope() const
+  { return sql_compilation_scope_; }
+  int set_sql_compilation_scope(const common::SqlPLCompilationScope &scope)
+  {
+    int ret = OB_SUCCESS;
+    if (!scope.is_valid()) { ret = OB_INVALID_ARGUMENT; }
+    else if (sql_compilation_scope_.is_valid() && !sql_compilation_scope_.equals(scope)) {
+      ret = OB_STATE_NOT_MATCH;
+    } else { sql_compilation_scope_ = scope; }
+    return ret;
+  }
   inline int64_t get_count() const { return user_types_.count(); }
   const common::ObIArray<const ObUserDefinedType *> &get_types() const { return user_types_; }
   int add_type(const ObUserDefinedType *user_defined_type);
@@ -288,6 +299,7 @@ private:
   uint64_t type_start_gen_id_;
   common::ObSEArray<const ObUserDefinedType *, 4> user_types_;
   common::ObSEArray<const ObUserDefinedType *, 4> external_user_types_;
+  common::SqlPLCompilationScope sql_compilation_scope_;
 };
 
 

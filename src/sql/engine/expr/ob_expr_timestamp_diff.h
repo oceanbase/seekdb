@@ -35,7 +35,7 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual common::ObCastMode get_cast_mode() const { return CM_NULL_ON_WARN;}
 
-  static int eval_timestamp_diff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_timestamp_diff(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   DECLARE_SET_LOCAL_SESSION_VARS;

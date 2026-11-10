@@ -1,4 +1,4 @@
-static constexpr ObObjType DIV_RESULT_TYPE[ObMaxType][ObMaxType] =
+static constexpr SqlValueType DIV_RESULT_TYPE[ObMaxType][ObMaxType] =
 {
   /*NullType*/
   {

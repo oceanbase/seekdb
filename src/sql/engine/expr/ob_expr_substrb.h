@@ -33,20 +33,13 @@ public:
                                 ObExprResType *types_stack,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc(common::ObObj &result,
-                  const common::ObString &text,
-                  int64_t start_pos,
-                  int64_t length,
-                  common::ObCollationType cs_type,
-                  const common::ObObjType &res_type,
-                  common::ObExprCtx &expr_ctx);
   static int calc(common::ObString &res_str, const common::ObString &text,
                   int64_t start, int64_t length, common::ObCollationType cs_type,
                   common::ObIAllocator &alloc);
 
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                         ObExpr &rt_expr) const;
-  static int calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int handle_invalid_byte(char* ptr,
                                  const int64_t text_len,
                                  int64_t &start,

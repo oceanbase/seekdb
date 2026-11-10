@@ -222,27 +222,62 @@ int ObFakeCTETableOp::inner_close()
   return ret;
 }
 
-int ObFakeCTETableOp::copy_datums(ObChunkDatumStore::StoredRow *row, common::ObDatum *datums,
+namespace
+{
+int chosen_row_size(const StoredDatumCell *cells, int64_t count,
+                   const ObIArray<int64_t> &chosen, uint32_t extra_size, int64_t &size)
+{
+  int ret = OB_SUCCESS;
+  int64_t required = sizeof(ObChunkDatumStore::StoredRow) + int64_t(extra_size);
+  if (cells == nullptr || count < 0 || chosen.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (required > UINT32_MAX
+      || chosen.count() > (UINT32_MAX - required) / int64_t(sizeof(StoredDatumCell))) {
+    ret = OB_SIZE_OVERFLOW;
+  } else {
+    required += sizeof(StoredDatumCell) * chosen.count();
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < chosen.count(); ++i) {
+    const int64_t index = chosen.at(i);
+    if (index < 0 || index >= count) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (!cells[index].is_null()) {
+      if (cells[index].len_ > 0 && cells[index].ptr_ == nullptr) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (cells[index].len_ > UINT32_MAX - required) {
+        ret = OB_SIZE_OVERFLOW;
+      } else {
+        required += cells[index].len_;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) { size = required; }
+  return ret;
+}
+}
+
+int ObFakeCTETableOp::copy_stored_cells(ObChunkDatumStore::StoredRow *row, const StoredDatumCell *cells,
   int64_t cnt, const common::ObIArray<int64_t> &chosen_datums, char *buf, const int64_t size,
   const int64_t row_size, const uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == row || row->payload_ != buf
-                  || size < 0 || nullptr == datums || chosen_datums.empty())) {
+  int64_t required = 0;
+  if (OB_UNLIKELY(nullptr == row || row->payload_ != buf || size < 0)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(chosen_row_size(cells, cnt, chosen_datums, row_extend_size, required))) {
+  } else if (row_size != required) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (required - int64_t(sizeof(*row)) > size) {
+    ret = OB_BUF_NOT_ENOUGH;
   } else {
     row->cnt_ = static_cast<uint32_t>(chosen_datums.count());
-    int64_t pos = sizeof(ObDatum) * row->cnt_ + row_extend_size;
-    row->row_size_ = static_cast<int32_t>(row_size);
+    int64_t pos = sizeof(StoredDatumCell) * row->cnt_ + row_extend_size;
+    // size is the payload capacity, whereas row_size_ includes the header and
+    // reserved extra bytes. StoredRow::assign() copies exactly row_size_ bytes.
+    row->row_size_ = static_cast<uint32_t>(required);
     for (int64_t i = 0; OB_SUCC(ret) && i < row->cnt_; ++i) {
-      int64_t idx = chosen_datums.at(i);
-      if (OB_UNLIKELY(idx >= cnt)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        ObDatum *datum = new (&row->cells()[i])ObDatum();
-        if (OB_FAIL(datum->deep_copy(datums[idx], buf, size, pos))) {
-        }
-      }
+      ret = StoredDatumCodec::copy_stored_payload(cells[chosen_datums.at(i)],
+          row->stored_cells()[i], buf, size, pos);
     }
   }
   return ret;
@@ -255,37 +290,31 @@ int ObFakeCTETableOp::deep_copy_row(const ObChunkDatumStore::StoredRow *src_row,
                                     ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(src_row) || OB_ISNULL(src_row->cells())) {
+  if (OB_ISNULL(src_row)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (extra_size < 0 || extra_size > UINT32_MAX) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (chosen_index.empty()) {
     dst_row = nullptr;
   } else {
     char *buf = nullptr;
-    int64_t row_size = sizeof(ObDatum) * chosen_index.count();
-    for (int64_t i = 0; OB_SUCC(ret) && i < chosen_index.count(); i++) {
-      int64_t idx = chosen_index.at(i);
-      if (OB_UNLIKELY(idx >= src_row->cnt_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        row_size += src_row->cells()[idx].len_;
-      }
-    }
+    int64_t row_size = 0;
+    ret = chosen_row_size(src_row->stored_cells(), src_row->cnt_, chosen_index,
+                          static_cast<uint32_t>(extra_size), row_size);
     if (OB_SUCC(ret)) {
-      int64_t buffer_len = 0;
-      int64_t head_size = sizeof(ObChunkDatumStore::StoredRow);
-      int64_t pos = head_size;
+      const int64_t head_size = sizeof(ObChunkDatumStore::StoredRow);
       ObChunkDatumStore::StoredRow *new_row = nullptr;
-      buffer_len = row_size + head_size + extra_size;
-      if (OB_ISNULL(buf = reinterpret_cast<char*>(allocator.alloc(buffer_len)))) {
+      if (OB_ISNULL(buf = reinterpret_cast<char*>(allocator.alloc(row_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_ISNULL(new_row = new(buf)ObChunkDatumStore::StoredRow())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(copy_datums(new_row, const_cast<ObDatum *>(src_row->cells()),
-                                    src_row->cnt_, chosen_index, buf + pos,
-                                    buffer_len - head_size, row_size, extra_size))) {
+      } else if (OB_FAIL(copy_stored_cells(new_row, src_row->stored_cells(),
+                                    src_row->cnt_, chosen_index, buf + head_size,
+                                    row_size - head_size, row_size, static_cast<uint32_t>(extra_size)))) {
       } else {
         dst_row = new_row;
       }
+      if (ret != OB_SUCCESS && buf != nullptr) { allocator.free(buf); }
     }
   }
   return ret;
@@ -297,26 +326,22 @@ int ObFakeCTETableOp::to_expr(
   ObChunkDatumStore::StoredRow *row, ObEvalCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(row)) {
+  if (OB_ISNULL(row) || exprs.count() != chosen_index.count()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+      if (exprs.at(i) == nullptr || (!exprs.at(i)->is_const_expr()
+          && (chosen_index.at(i) < 0 || chosen_index.at(i) >= row->cnt_))) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+    }
     for (int64_t i = 0;  OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *expr = exprs.at(i);
       if (expr->is_const_expr()) {
         continue;
-      } else if (chosen_index.at(i) >= row->cnt_) {
-        ret = OB_ERR_UNEXPECTED;
       } else {
-        const ObDatum &src = row->cells()[chosen_index.at(i)];
-        if (OB_LIKELY(expr->is_variable_res_buf())) {
-          ObDatum &dst = expr->locate_expr_datum(ctx);
-          dst = src;
-        } else {
-          ObDatum &dst = expr->locate_datum_for_write(ctx);
-          dst.pack_ = src.pack_;
-          MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-        }
-        expr->set_evaluated_projected(ctx);
+        ret = restore_expr_cell(row->stored_cells()[chosen_index.at(i)], *expr, ctx, true);
+        if (OB_SUCC(ret)) { expr->set_evaluated_projected(ctx); }
       }
     } 
   }
@@ -330,51 +355,36 @@ int ObFakeCTETableOp::attach_rows(
     const int64_t rows_offset, ObEvalCtx &ctx, const int64_t read_rows)
 {
   int ret = OB_SUCCESS;
+  if (exprs.count() != chosen_index.count() || rows_offset < 0 || read_rows < 0
+      || rows_offset > srows.count() || read_rows > srows.count() - rows_offset) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  // Preflight every accessed row before publishing any expression descriptor.
+  for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < exprs.count(); ++col_idx) {
+    const ObExpr *expr = exprs.at(col_idx);
+    if (expr == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!expr->is_const_expr()) {
+      const int64_t index = chosen_index.at(col_idx);
+      const int64_t count = expr->is_batch_result() ? read_rows : std::min(int64_t(1), read_rows);
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        const ObChunkDatumStore::StoredRow *row = srows.at(rows_offset + i);
+        if (row == nullptr || index < 0 || index >= row->cnt_) { ret = OB_ERR_UNEXPECTED; }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && read_rows == 0) { return ret; }
   for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < exprs.count(); col_idx++) {
     ObExpr *e = exprs.at(col_idx);
     int64_t idx = chosen_index.at(col_idx);
     if (e->is_const_expr()) {
       continue;
-    } else if (OB_LIKELY(e->is_variable_res_buf())) {
-      ObDatum *datums = e->locate_batch_datums(ctx);
-      if (!e->is_batch_result()) {
-        if (OB_UNLIKELY(idx >= srows.at(0)->cnt_)) { 
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          datums[0] = srows.at(0)->cells()[idx];
-        }
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < read_rows; i++) {
-          if  (OB_UNLIKELY(idx >= srows.at(rows_offset+i)->cnt_)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            datums[i] = srows.at(rows_offset+i)->cells()[idx];
-          }
-        }
-      }
     } else {
-      if (!e->is_batch_result()) {
-        ObDatum *datums = e->locate_datums_for_update(ctx, 1);
-        if (OB_UNLIKELY(idx >= srows.at(0)->cnt_)) { 
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          const ObDatum &src = srows.at(0)->cells()[idx];
-          ObDatum &dst = datums[0];
-          dst.pack_ = src.pack_;
-          MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-        }
-      } else {
-        ObDatum *datums = e->locate_datums_for_update(ctx, read_rows);
-        for (int64_t i = 0; OB_SUCC(ret) && i < read_rows; i++) {
-          if  (OB_UNLIKELY(idx >= srows.at(rows_offset+i)->cnt_)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            const ObDatum &src = srows.at(rows_offset+i)->cells()[idx];
-            ObDatum &dst = datums[i];
-            dst.pack_ = src.pack_;
-            MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-          }
-        }
+      ObEvalCtx::BatchInfoScopeGuard guard(ctx);
+      const int64_t count = e->is_batch_result() ? read_rows : 1;
+      for (int64_t row = 0; OB_SUCC(ret) && row < count; ++row) {
+        guard.set_batch_idx(row);
+        ret = restore_expr_cell(srows.at(rows_offset + row)->stored_cells()[idx], *e, ctx, true);
       }
     }
     if (OB_SUCC(ret)) {

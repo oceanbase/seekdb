@@ -70,11 +70,6 @@ public:
 
   int set_with_str(const int64_t compaction_scn_val, const ObString &str);
   int set_with_str(const ObDataChecksumType type, const ObString &str);
-  int get_str_obj(
-      const ObDataChecksumType type,
-      common::ObIAllocator &allocator,
-      ObObj &obj,
-      common::ObString &str) const;
   int get_hex_str(
       common::ObIAllocator &allocator,
       common::ObString &column_meta_hex_str) const;

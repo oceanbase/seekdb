@@ -18,6 +18,7 @@
 #define OCEANBASE_SUBQUERY_OB_SUBPLAN_FILTER_OP_H_
 
 #include "sql/engine/ob_operator.h"
+#include "sql/engine/expr/ob_native_pl_value.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/ob_sql_define.h"
@@ -30,30 +31,23 @@ namespace sql
 class DatumRow
 {
 public:
-  DatumRow() : elems_(NULL), cnt_(0) {}
+  DatumRow() : elems_(NULL), cnt_(0), types_(nullptr) {}
   ~DatumRow() {}
   bool operator==(const DatumRow &other) const;
   int hash(uint64_t &hash_val, uint64_t seed=0) const;
   TO_STRING_KV(KP(elems_));
-  ObDatum *elems_;
+  common::Datum *elems_;
   int64_t cnt_;
+  const common::SqlType **types_;
 };
 
 // iterator subquery rows
 class ObSubQueryIterator
 {
+  friend class NativeSubqueryCacheTestPeer;
 public:
   explicit ObSubQueryIterator(ObOperator &op);
-  ~ObSubQueryIterator()
-  {
-    if (hashmap_.created()) {
-      hashmap_.destroy();
-    }
-    if (nullptr != mem_entity_) {
-      DESTROY_CONTEXT(mem_entity_);
-      mem_entity_ = NULL;
-    }
-  }
+  ~ObSubQueryIterator();
   enum RescanStatus
   {
     INVALID_STATUS = 0,
@@ -89,11 +83,25 @@ public:
   void set_iter_id(const int64_t id) { id_ = id; }
   int64_t get_iter_id() const { return id_; }
   //use curr probe_row_ to probe hashmap
-  int get_refactored(common::ObDatum &out);
+  int get_refactored(common::Datum &out, const ObExpr &result_expr);
   //set row into hashmap
-  int set_refactored(const DatumRow &row, const ObDatum &result, const int64_t deep_copy_size);
-  void set_parent(const ObSubPlanFilterOp *filter) { parent_ = filter; }
+  struct PendingCacheEntry
+  {
+    PendingCacheEntry() : key_(), value_(), result_type_(nullptr), ready_(false) {}
+    DatumRow key_;
+    common::Datum value_;
+    const common::SqlType *result_type_;
+    bool ready_;
+  };
+  int prepare_cache_result(const common::Datum &result, const ObExpr &result_expr,
+                           PendingCacheEntry &pending);
+  int publish_cache_result(PendingCacheEntry &pending);
+  int cache_result(const common::Datum &result, const ObExpr &result_expr);
+  void set_parent(ObSubPlanFilterOp *filter) { parent_ = filter; }
   int reset_hash_map();
+  int close_cache_values();
+  int retain_scalar_result(const common::Datum &source, const common::SqlType &type,
+                           common::Datum &output);
   int64_t cur_idx() const { return batch_row_pos_ - 1; }
 
   bool check_can_insert(const int64_t deep_copy_size)
@@ -119,9 +127,12 @@ public:
 private:
 
   int get_next_row_from_child();
+  int cache_key_eligible(bool &eligible) const;
+  int get_cache_value_owner(NativeSqlValueOwner *&owner);
+  int store_retained_resource_row();
+  int validate_stored_output_types() const;
   int get_next_row_vecrorizely();
   // for das batch spf
-  int alloc_das_batch_store();
   // for das batch spf end
   ObOperator &op_;
   bool onetime_plan_;
@@ -130,12 +141,19 @@ private:
 
   ObChunkDatumStore store_;
   ObChunkDatumStore::Iterator store_it_;
+  common::ObSEArray<const common::SqlType *, 8> stored_output_types_;
 
   //cache optimizer for spf, the same exec_param into queryref_expr will return directly
-  common::hash::ObHashMap<DatumRow, common::ObDatum, common::hash::NoPthreadDefendMode> hashmap_;
+  struct CachedResult
+  {
+    common::Datum value_;
+    const common::SqlType *type_ = nullptr;
+  };
+  common::hash::ObHashMap<DatumRow, CachedResult, common::hash::NoPthreadDefendMode> hashmap_;
   lib::MemoryContext mem_entity_;
+  NativeSqlValueOwner *cache_value_owner_;
   int64_t id_; // curr op_id in spf
-  const ObSubPlanFilterOp *parent_; //needs to get exec_param_idxs_ from op
+  ObSubPlanFilterOp *parent_; //needs to get exec_param_idxs_ from op
   int64_t memory_used_;
   ObEvalCtx &eval_ctx_;
 
@@ -147,7 +165,6 @@ private:
   ObBatchResultHolder brs_holder_;
   // for vectorized end
   
-  common::ObArrayWrap<ObObjParam> das_batch_params_recovery_;
   // for das batch spf end
 };
 
@@ -200,6 +217,9 @@ public:
   virtual void destroy() override;
 
   const common::ObIArray<Iterator *> &get_subplan_iters() const { return subplan_iters_; }
+  int retain_scalar_result(const common::Datum &source, const common::SqlType &type,
+                           common::Datum &output);
+  int close_owned_values();
   int reset_batch_rescan_param()
   {
     rescan_batch_params_.reset();
@@ -229,10 +249,11 @@ public:
   ObBatchRescanCtl &get_batch_rescan_ctl() { return batch_rescan_ctl_; }
   int handle_next_batch_with_px_rescan(const int64_t op_max_batch_size);
   int handle_next_batch_with_group_rescan(const int64_t op_max_batch_size);
-  virtual const GroupParamArray *get_rescan_params_info() const { return &rescan_params_info_; }
+  virtual const GroupParamArray *get_rescan_params_info() const { return &das_batch_params_; }
 private:
   void set_param_null() { set_pushdown_param_null(MY_SPEC.rescan_params_); };
   void destroy_subplan_iters();
+  void enforce_empty_before_destroy();
   void destroy_px_batch_rescan_status();
   void destroy_update_set_mem()
   {
@@ -265,6 +286,7 @@ protected:
   uint64_t max_group_size_; //Das batch rescan size;
 
 private:
+  NativeSqlValueOwner *execution_value_owner_;
   lib::MemoryContext update_set_mem_;
   // for px batch rescan
   bool enable_left_px_batch_;
@@ -272,7 +294,7 @@ private:
   // for das batch rescan
   uint64_t current_group_;  //The group id in this time right iter rescan;
   
-  common::ObArrayWrap<ObSqlArrayObj> das_batch_params_;
+  GroupParamArray das_batch_params_;
   // for das batch rescan end
   ObChunkDatumStore left_rows_;
   ObChunkDatumStore::Iterator left_rows_iter_;
@@ -282,9 +304,6 @@ private:
   ObBatchRescanParams rescan_batch_params_;
   int64_t left_row_idx_;
   ObBatchRescanCtl batch_rescan_ctl_;
-  sql::ObTMArray<common::ObObjParam> cur_params_;
-  common::ObSArray<int64_t> cur_param_idxs_;
-  common::ObSArray<int64_t> cur_param_expr_idxs_;
   common::ObSEArray<Iterator*, 8> subplan_iters_to_check_;
   lib::MemoryContext last_store_row_mem_;
   ObBatchResultHolder brs_holder_;
@@ -295,7 +314,6 @@ public:
   // Count of reals rescan initiated by the spf operator; for batch rescan, it was plus one for each batch;
   // For normal rescan, it was plus one  for each rescan
   int64_t group_rescan_cnt_;
-  GroupParamArray rescan_params_info_;
 };
 } // end namespace sql
 } // end namespace oceanbase

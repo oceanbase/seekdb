@@ -41,6 +41,7 @@ class ObString;
 namespace sql
 {
 class ObPhysicalPlan;
+class ObPhysicalPlanCtx;
 
 typedef common::ObSEArray<ObString, 1, common::ModulePageAllocator, true> TmpTableNameArray;
 
@@ -199,7 +200,7 @@ typedef common::ObSEArray<NotParamInfoList, 4> TplSqlConstCons;
 struct PsNotParamInfo
 {
   int64_t idx_;
-  common::ObObjParam ps_param_;
+  common::DatumParameter ps_param_;
   TO_STRING_KV(K_(idx), K_(ps_param));
 };
 
@@ -223,15 +224,15 @@ public:
   ObFastParserResult()
     : inner_alloc_("FastParserRes"),
       parameterized_params_(&inner_alloc_),
-      cache_params_(NULL),
+      parameter_context_(NULL),
       values_token_pos_(0)
   {
     reset_question_mark_ctx();
   }
   ObPlanCacheKey pc_key_; //plan cache key, parameterized by fast parser
   common::ObSEArray<ObPCParam *, 16> raw_params_;
-  common::ObFixedArray<const common::ObObjParam *, common::ObIAllocator> parameterized_params_;
-  ParamStore *cache_params_;
+  common::ObFixedArray<const common::DatumParameter *, common::ObIAllocator> parameterized_params_;
+  ObPhysicalPlanCtx *parameter_context_;
   ObQuestionMarkCtx question_mark_ctx_;
   int64_t values_token_pos_; // for insert values
   common::ObSEArray<ObValuesTokenPos, 4> values_tokens_; // for values table
@@ -241,7 +242,7 @@ public:
     pc_key_.reset();
     raw_params_.reuse();
     parameterized_params_.reuse();
-    cache_params_ = NULL;
+    parameter_context_ = NULL;
     values_token_pos_ = 0;
     values_tokens_.reset();
     array_params_.reuse();
@@ -260,7 +261,7 @@ public:
     int ret = OB_SUCCESS;
     pc_key_ = other.pc_key_;
     parameterized_params_.set_allocator(&inner_alloc_);
-    cache_params_ = other.cache_params_;
+    parameter_context_ = other.parameter_context_;
     question_mark_ctx_ = other.question_mark_ctx_;
     if (OB_FAIL(raw_params_.assign(other.raw_params_))) {
     } else if (OB_FAIL(parameterized_params_.assign(other.parameterized_params_))) {
@@ -269,7 +270,7 @@ public:
     }
     return ret;
   }
-  TO_STRING_KV(K(pc_key_), K(raw_params_), K(parameterized_params_), K(cache_params_), K(values_token_pos_),
+  TO_STRING_KV(K(pc_key_), K(raw_params_), K(parameterized_params_), KP(parameter_context_), K(values_token_pos_),
                K(values_tokens_), K(array_params_));
 };
 

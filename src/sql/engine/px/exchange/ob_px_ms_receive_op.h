@@ -63,6 +63,7 @@ public:
 
 class ObPxMSReceiveOp : public ObPxReceiveOp
 {
+  friend struct FixedPxReceiveCompareTestAccess;
 public:
   ObPxMSReceiveOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input);
   virtual ~ObPxMSReceiveOp() {}

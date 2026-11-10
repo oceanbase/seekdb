@@ -59,7 +59,7 @@ int ObExprUuidShort::cg_expr(ObExprCGCtx &expr_cg_ctx,
 
 int ObExprUuidShort::eval_uuid_short(const ObExpr &expr,
                       ObEvalCtx &ctx,
-                      ObDatum &expr_datum)
+                      Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

@@ -31,7 +31,7 @@ public:
   virtual int calc_result_type0(ObExprResType &type, common::ObExprTypeCtx &type_ctx) const;
 
   // for new engine
-  static int eval_version(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_version(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

@@ -31,10 +31,6 @@ public:
                                 ObExprResType *types,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  virtual int calc_resultN(common::ObObj &result,
-                           const common::ObObj *objs_array,
-                           int64_t param_num,
-                           common::ObExprCtx &expr_ctx) const override;
   virtual common::ObCastMode get_cast_mode() const override { return CM_NULL_ON_WARN;}
   virtual int cg_expr(
       ObExprCGCtx &expr_cg_ctx,
@@ -43,7 +39,7 @@ public:
   static int generate_vec_scn(
           const ObExpr &raw_ctx,
           ObEvalCtx &eval_ctx,
-          ObDatum &expr_datum);
+          Datum &expr_datum);
 
 private :
   //disallow copy

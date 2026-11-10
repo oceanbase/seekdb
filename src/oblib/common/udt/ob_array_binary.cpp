@@ -103,14 +103,16 @@ int ObArrayBinary::insert_from(const ObIArrayType &src, uint32_t begin, uint32_t
   return ret;
 }
 
-int ObArrayBinary::elem_at(uint32_t idx, ObObj &elem_obj) const
+int ObArrayBinary::elem_at_datum(uint32_t idx, ObDatum &value) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(idx >= this->length_)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "unexpected idx", K(ret), K(idx), K(this->length_));
+  } else if (this->is_null(idx)) {
+    value.set_null();
   } else {
-    elem_obj.set_varchar(operator[](idx));
+    value.set_string(operator[](idx));
   }
   return ret;
 }

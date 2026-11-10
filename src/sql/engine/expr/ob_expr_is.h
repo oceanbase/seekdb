@@ -39,7 +39,7 @@ public:
 
   int cg_expr_internal(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr, const ObConstRawExpr *&const_param2) const;
-  int cg_result_type_class(common::ObObjType type, ObExpr::EvalFunc &eval_func,
+  int cg_result_type_class(common::SqlValueType type, ObExpr::EvalFunc &eval_func,
                           bool is_not, bool is_true) const;
   int calc_result_type2(ObExprResType &type,
                         ObExprResType &type1,
@@ -48,7 +48,7 @@ public:
 
   template <typename T>
   static int is_zero(T number, const uint32_t len);
-  static int is_infinite_nan(const common::ObObjType, common::ObDatum *, bool &, Ieee754);
+  static int is_infinite_nan(const common::SqlValueType, common::Datum *, bool &, Ieee754);
   private:
   // types and constants
 private:
@@ -70,22 +70,22 @@ class ObExprIs: public ObExprIsBase
                   const ObRawExpr &raw_expr,
                   ObExpr &rt_expr) const override;
 
-  static int calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int int_is_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int int_is_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int json_is_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int json_is_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int float_is_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int float_is_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int double_is_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int double_is_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int number_is_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int number_is_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int int_is_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int int_is_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int json_is_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int json_is_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int float_is_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int float_is_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int double_is_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int double_is_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int number_is_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int number_is_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
-  static int decimal_int_is_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int decimal_int_is_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int decimal_int_is_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int decimal_int_is_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
 private:
   // types and constants
@@ -106,24 +106,24 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                   const ObRawExpr &raw_expr,
                   ObExpr &rt_expr) const override;
-  static int calc_is_not_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int int_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int int_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int json_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int json_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int float_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int float_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int double_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int double_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int number_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int number_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int calc_is_not_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_is_not_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int int_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int int_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int json_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int json_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int float_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int float_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int double_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int double_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int number_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int number_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int calc_is_not_nan(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   static int calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
                                     const ObBitVector &skip, const int64_t batch_size);
-  static int decimal_int_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int decimal_int_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int decimal_int_is_not_true(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int decimal_int_is_not_false(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
 private:
   // types and constants
@@ -159,18 +159,18 @@ class ObExprInnerIsTrue: public ObExprIsBase
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int int_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int int_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int float_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int float_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int double_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int double_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int number_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int number_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int decimal_int_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int decimal_int_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int json_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int json_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int int_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int int_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int float_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int float_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int double_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int double_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int number_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int number_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int decimal_int_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int decimal_int_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int json_is_true_start(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int json_is_true_end(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   // types and constants
 private:

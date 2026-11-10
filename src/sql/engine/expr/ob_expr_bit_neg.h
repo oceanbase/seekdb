@@ -31,7 +31,7 @@ public:
 
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_bitneg_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum& res_datum);
+  static int calc_bitneg_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum& res_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprBitNeg);

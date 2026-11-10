@@ -68,7 +68,7 @@ public:
            const ObMicroBlockHeader &micro_block_header,
            const ObColumnHeader &column_header,
            const char *meta);
-  int init(const common::ObObjType &store_obj_type, const char *meta_header);
+  int init(const common::SqlValueType &store_obj_type, const char *meta_header);
   virtual int decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, const int64_t row_id,
       const ObBitStream &bs, const char *data, const int64_t len) const override;
 
@@ -90,10 +90,10 @@ public:
 
   virtual int update_pointer(const char *old_block, const char *cur_block) override;
 
-  int decode(const common::ObObjType &obj_type, common::ObDatum &datum, const int64_t ref, const int64_t meta_legnth) const;
+  int decode(const common::SqlValueType &obj_type, common::ObDatum &datum, const int64_t ref, const int64_t meta_legnth) const;
 
   int batch_decode_dict(
-      const common::ObObjType &obj_type,
+      const common::SqlValueType &obj_type,
       const char **cell_datas,
       const int64_t row_cap,
       const int64_t meta_length,
@@ -291,7 +291,7 @@ private:
   int check_has_null(const ObColumnDecoderCtx &ctx, const int64_t meta_length, bool &has_null) const;
 
 private:
-  ObObjTypeStoreClass store_class_;
+  SqlValueTypeStoreClass store_class_;
   uint64_t integer_mask_;
   const ObDictMetaHeader *meta_header_;
   const char *var_data_;
@@ -384,7 +384,7 @@ OB_INLINE int ObDictDecoder::init(
     ret = common::OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else {
-    const common::ObObjTypeClass type_class = ob_obj_type_class(column_header.get_store_obj_type());
+    const common::SqlTypeClass type_class = sql_type_class(column_header.get_store_obj_type());
     store_class_ = get_store_class_map()[type_class];
     if (common::ObIntTC == type_class) {
       int64_t type_store_size = get_type_size_map()[column_header.get_store_obj_type()];

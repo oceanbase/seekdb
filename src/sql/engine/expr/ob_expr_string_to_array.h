@@ -34,7 +34,7 @@ public:
                                 ObExprResType *types,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_string_to_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_string_to_array(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_string_to_array_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                         const ObBitVector &skip, const int64_t batch_size);
   static int add_value_str_to_array(ObArrayBinary *binary_array, std::string value_str, bool has_null_str, std::string null_str);

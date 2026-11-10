@@ -56,14 +56,14 @@ int ObExprPrivSTMakeValid::calc_result_typeN(
   return ret;
 }
 
-int ObExprPrivSTMakeValid::eval_priv_st_makevalid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTMakeValid::eval_priv_st_makevalid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *gis_datum1 = nullptr;
+  Datum *gis_datum1 = nullptr;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
   ObGeometry *geo = NULL;

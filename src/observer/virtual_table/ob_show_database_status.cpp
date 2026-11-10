@@ -42,7 +42,7 @@ void ObShowDatabaseStatus::reset()
 
 int ObShowDatabaseStatus::add_database_status(const ObAddr &server_addr,
                                               const ObDatabaseSchema &database_schema,
-                                              ObObj *cells,
+                                              DatumValue *cells,
                                               const int64_t col_count)
 {
   int ret = OB_SUCCESS;
@@ -56,15 +56,15 @@ int ObShowDatabaseStatus::add_database_status(const ObAddr &server_addr,
     int64_t col_id = output_column_ids_.at(j);
     switch(col_id) {
       case DATABASE_NAME: {
-        cells[cell_idx].set_varchar(database_schema.get_database_name());//db_name
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_schema.get_database_name()) : ret);//db_name
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case READ_ONLY: {
         if (database_schema.is_read_only()) {
-          cells[cell_idx].set_int(1);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 1) : ret);
         } else {
-          cells[cell_idx].set_int(0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 0) : ret);
         }
         break;
       }
@@ -89,7 +89,7 @@ int ObShowDatabaseStatus::add_database_status(const ObAddr &server_addr,
 int ObShowDatabaseStatus::add_all_database_status()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   const int64_t col_count = output_column_ids_.count();
   if (0 > col_count || col_count > DATABASE_STATUS_COLUMN_COUNT) {
     ret = OB_ERR_UNEXPECTED;

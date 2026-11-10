@@ -35,7 +35,7 @@ ObExprSTGeometryFromText::~ObExprSTGeometryFromText()
 
 int ObExprSTGeometryFromText::eval_st_geometryfromtext(const ObExpr &expr,
                                                        ObEvalCtx &ctx,
-                                                       ObDatum &res)
+                                                       Datum &res)
 {
   return eval_st_geomfromtext_common(expr, ctx, res, N_ST_GEOMETRYFROMTEXT);
 }

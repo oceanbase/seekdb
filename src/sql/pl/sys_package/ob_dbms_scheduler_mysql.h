@@ -32,7 +32,7 @@ public:
 
 public:
 #define DECLARE_FUNC(func) \
-  static int func(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int func(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
   DECLARE_FUNC(disable);
   DECLARE_FUNC(enable);
   DECLARE_FUNC(set_attribute);

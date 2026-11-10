@@ -36,27 +36,27 @@ public:
   //                                      level        IN  INT,
   //                                      sample_pct   IN  NUMBER,
   //                                      record_policy IN VARCHAR2);
-  static int session_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int session_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
   //DBMS_MONITOR.OB_SESSION_TRACE_DISABLE(session_id   IN  BINARY_INTEGER);
-  static int session_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int session_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 
   // DBMS_MONITOR.OB_CLIENT_ID_TRACE_ENABLE(client_id    IN  VARCHAR2,
   //                                        level        IN  INT,
   //                                        sample_pct   IN  NUMBER,
   //                                        record_policy IN VARCHAR2);
-  static int client_id_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int client_id_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
   // DBMS_MONITOR.OB_CLIENT_ID_TRACE_DISABLE(client_id IN  VARCHAR2);
-  static int client_id_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int client_id_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 
   // DBMS_MONITOR.OB_MOD_ACT_TRACE_ENABLE(module_name     IN VARCHAR2 DEFAULT ANY_MODULE,
   //                                      action_name     IN VARCHAR2 DEFAULT ANY_ACTION,
   //                                      level        IN  INT,
   //                                      sample_pct   IN  NUMBER,
   //                                      record_policy IN VARCHAR2);
-  static int mod_act_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int mod_act_trace_enable(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
   // DBMS_MONITOR.OB_MOD_ACT_TRACE_DISABLE(module_name     IN  VARCHAR2,
   //                                       action_name     IN  VARCHAR2 DEFAULT ALL_ACTIONS)
-  static int mod_act_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int mod_act_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 
 };
 

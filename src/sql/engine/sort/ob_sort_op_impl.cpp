@@ -51,7 +51,7 @@ int ObSortOpImpl::ObAdaptiveQS::init(common::ObIArray<ObChunkDatumStore::StoredR
   } else {
     for (int64_t i = 0; can_encode && i < rows_end - rows_begin; i++) {
       AQSItem &item = sort_rows_[i];
-      ObDatum cell = sort_rows.at(i + rows_begin)->cells()[0];
+      const StoredDatumCell &cell = sort_rows.at(i + rows_begin)->stored_cells()[0];
       if (cell.is_null()) {
         can_encode=false;
         break;
@@ -408,20 +408,25 @@ bool ObSortOpImpl::Compare::operator()(
   } else if (OB_FAIL(fast_check_status())) {
     less = l < r;
   } else if (enable_encode_sortkey_) {
-    const ObDatum l_cell = l->cells()[0];
-    const ObDatum r_cell = r->cells()[0];
+    const StoredDatumCell &l_cell = l->stored_cells()[0];
+    const StoredDatumCell &r_cell = r->stored_cells()[0];
     int cmp = 0;
     cmp = MEMCMP(l_cell.ptr_, r_cell.ptr_, min(l_cell.len_, r_cell.len_));
     less = cmp != 0 ? (cmp < 0) : (l_cell.len_ - r_cell.len_) < 0;
   } else {
-    const ObDatum *lcells = l->cells();
-    const ObDatum *rcells = r->cells();
+    // Existing comparison functions still consume legacy execution values.
+    // Decode only the current descriptors; payload and LOB ownership stay
+    // with the fixed row, whose cell stride is independent of ObDatum.
+    const StoredDatumCell *lcells = l->stored_cells();
+    const StoredDatumCell *rcells = r->stored_cells();
     int cmp = 0;
     for (int64_t i = cmp_start_; 0 == cmp && i < cmp_end_ && OB_SUCC(ret); i++) {
       const ObSortFieldCollation& sort_collation = sort_collations_->at(i);
       const int64_t idx = sort_collation.field_idx_;
+      const ObDatum left = StoredDatumCodec::decode_legacy_view(lcells[idx]);
+      const ObDatum right = StoredDatumCodec::decode_legacy_view(rcells[idx]);
       if (OB_FAIL(
-              sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp, access_ctx_))) {
+              sort_cmp_funs_->at(i).cmp_func_(left, right, cmp, access_ctx_))) {
       } else if (cmp < 0) {
         less = sort_collation.is_ascending_;
       } else if (cmp > 0) {
@@ -445,17 +450,21 @@ bool ObSortOpImpl::Compare::operator()(
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(fast_check_status())) {
   } else {
-    const ObDatum *rcells = r->cells();
-    ObDatum *other_datum = nullptr;
+    const StoredDatumCell *rcells = r->stored_cells();
+    Datum *other_datum = nullptr;
     int cmp = 0;
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; 0 == cmp && i < cnt && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(l->at(idx)->eval(eval_ctx, other_datum))) {
-      } else if (OB_FAIL(
-                     sort_cmp_funs_->at(i).cmp_func_(*other_datum, rcells[idx], cmp, access_ctx_))) {
       } else {
-        if (cmp < 0) {
+        const ObDatum right = StoredDatumCodec::decode_legacy_view(rcells[idx]);
+        alignas(8) char scratch[64];
+        ObDatum left;
+        if (OB_FAIL(l->at(idx)->get_datum_copy_plan().legacy_view(
+            *other_datum, left, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(left, right, cmp, access_ctx_))) {
+        } else if (cmp < 0) {
           less = sort_collations_->at(i).is_ascending_;
         } else if (cmp > 0) {
           less = !sort_collations_->at(i).is_ascending_;
@@ -478,16 +487,22 @@ int ObSortOpImpl::Compare::with_ties_cmp(const common::ObIArray<ObExpr*> *l,
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum *rcells = r->cells();
-    ObDatum *other_datum = nullptr;
+    const StoredDatumCell *rcells = r->stored_cells();
+    Datum *other_datum = nullptr;
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; 0 == cmp && i < cnt && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(l->at(idx)->eval(eval_ctx, other_datum))) {
-      } else if (OB_FAIL(
-                     sort_cmp_funs_->at(i).cmp_func_(*other_datum, rcells[idx], cmp, access_ctx_))) {
       } else {
-        cmp = sort_collations_->at(i).is_ascending_ ? -cmp : cmp;
+        const ObDatum right = StoredDatumCodec::decode_legacy_view(rcells[idx]);
+        alignas(8) char scratch[64];
+        ObDatum left;
+        if (OB_FAIL(l->at(idx)->get_datum_copy_plan().legacy_view(
+            *other_datum, left, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(left, right, cmp, access_ctx_))) {
+        } else {
+          cmp = sort_collations_->at(i).is_ascending_ ? -cmp : cmp;
+        }
       }
     }
   }
@@ -504,13 +519,15 @@ int ObSortOpImpl::Compare::with_ties_cmp(const ObChunkDatumStore::StoredRow *l,
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
   } else {
-    const ObDatum *rcells = r->cells();
-    const ObDatum *lcells = l->cells();
+    const StoredDatumCell *rcells = r->stored_cells();
+    const StoredDatumCell *lcells = l->stored_cells();
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; 0 == cmp && i < cnt && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
+      const ObDatum left = StoredDatumCodec::decode_legacy_view(lcells[idx]);
+      const ObDatum right = StoredDatumCodec::decode_legacy_view(rcells[idx]);
       if (OB_FAIL(
-              sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp, access_ctx_))) {
+              sort_cmp_funs_->at(i).cmp_func_(left, right, cmp, access_ctx_))) {
       } else {
         cmp = sort_collations_->at(i).is_ascending_ ? -cmp : cmp;
       }
@@ -669,7 +686,8 @@ int ObSortOpImpl::enlarge_partition_topn_buckets()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get unexpected hash idx", K(hash_idx), K(top_row->cnt_));
           } else {
-            int64_t new_pos = top_row->cells()[hash_idx].get_uint64() >> shift_right;
+            const ObDatum hash = StoredDatumCodec::decode_legacy_view(top_row->stored_cells()[hash_idx]);
+            int64_t new_pos = hash.get_uint64() >> shift_right;
             hash_node->hash_node_next_ = new_pt_buckets[new_pos];
             new_pt_buckets[new_pos] = hash_node;
           }
@@ -1316,16 +1334,18 @@ int ObSortOpImpl::is_equal_part(const ObChunkDatumStore::StoredRow *l,
   is_equal = true;
   if (OB_ISNULL(l) && OB_ISNULL(r)) {
     // do nothing
-  } else if (OB_ISNULL(l) || OB_ISNULL(r)
-             || (l->cells()[sort_collations_->at(0).field_idx_].get_uint64()
-                 != r->cells()[sort_collations_->at(0).field_idx_].get_uint64())) {
+  } else if (OB_ISNULL(l) || OB_ISNULL(r)) {
     is_equal = false; // offest 0 is hash value.
   } else {
+    const int64_t hash_idx = sort_collations_->at(0).field_idx_;
+    const ObDatum lhash = StoredDatumCodec::decode_legacy_view(l->stored_cells()[hash_idx]);
+    const ObDatum rhash = StoredDatumCodec::decode_legacy_view(r->stored_cells()[hash_idx]);
+    is_equal = lhash.get_uint64() == rhash.get_uint64();
     int cmp_ret = 0;
     for (int64_t i = 1; is_equal && i <= part_cnt_; ++i) {
       int64_t idx = sort_collations_->at(i).field_idx_;
-      const ObDatum &ld = l->cells()[idx];
-      const ObDatum &rd = r->cells()[idx];
+      const ObDatum ld = StoredDatumCodec::decode_legacy_view(l->stored_cells()[idx]);
+      const ObDatum rd = StoredDatumCodec::decode_legacy_view(r->stored_cells()[idx]);
       if (ld.pack_ == rd.pack_ && 0 == memcmp(ld.ptr_, rd.ptr_, ld.len_)) {
         // do nothing
       } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
@@ -1388,7 +1408,8 @@ int ObSortOpImpl::do_partition_sort(common::ObIArray<ObChunkDatumStore::StoredRo
       ret = OB_ERR_UNEXPECTED;
     } else {
       int64_t hash_idx = sort_collations_->at(0).field_idx_;
-      const uint64_t hash_value = rows.at(i)->cells()[hash_idx].get_uint64();
+      const ObDatum hash = StoredDatumCodec::decode_legacy_view(rows.at(i)->stored_cells()[hash_idx]);
+      const uint64_t hash_value = hash.get_uint64();
       uint64_t pos = hash_value >> shift_right; // high n bit
       PartHashNode &insert_node = part_hash_nodes_->at(i - rows_begin);
       PartHashNode *&bucket = buckets_->at(pos);
@@ -2026,7 +2047,7 @@ int ObSortOpImpl::locate_current_heap(const common::ObIArray<ObExpr*> &exprs)
   int64_t hash_idx = sort_collations_->at(0).field_idx_;
   uint64_t bucket_cnt = max_bucket_cnt_;
   uint64_t shift_right = __builtin_clzll(bucket_cnt) + 1;
-  ObDatum *part_datum = NULL;
+  Datum *part_datum = NULL;
   uint64_t pos = 0;
   if (OB_ISNULL(exprs.at(hash_idx))) {
     pos = 0;
@@ -2067,13 +2088,13 @@ int ObSortOpImpl::locate_current_heap_in_bucket(PartHeapNode *first_node,
                                                 PartHeapNode *&exist)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObDatum *, 4> part_datums;
+  ObSEArray<Datum *, 4> part_datums;
   exist = first_node;
   bool find_same_heap = false;
   if (NULL != exist) {
     for (int64_t i = 0; OB_SUCC(ret) && i <= part_cnt_; ++i) {
       int64_t idx = sort_collations_->at(i).field_idx_;
-      ObDatum *part_datum = NULL;
+      Datum *part_datum = NULL;
       if (OB_ISNULL(exprs.at(idx))) {
         if (OB_FAIL(part_datums.push_back(NULL))) {
         }
@@ -2092,14 +2113,19 @@ int ObSortOpImpl::locate_current_heap_in_bucket(PartHeapNode *first_node,
       for (int64_t i = 0; OB_SUCC(ret) && find_same_heap && i <= part_cnt_; ++i) {
         uint32_t idx = sort_collations_->at(i).field_idx_;
         int cmp_ret = 0;
+        const ObDatum stored = StoredDatumCodec::decode_legacy_view(top_row->stored_cells()[idx]);
         if (OB_ISNULL(part_datums.at(i))) {
-          find_same_heap = top_row->cells()[idx].is_null();
-        } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(*part_datums.at(i),
-                                                            top_row->cells()[idx],
-                                                            cmp_ret,
-                                                            datum_access_ctx_))) {
+          find_same_heap = stored.is_null();
         } else {
-          find_same_heap = (0 == cmp_ret);
+          alignas(8) char scratch[64];
+          ObDatum candidate;
+          if (OB_FAIL(exprs.at(idx)->get_datum_copy_plan().legacy_view(
+              *part_datums.at(i), candidate, scratch, sizeof(scratch)))) {
+          } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(candidate, stored,
+                                                          cmp_ret, datum_access_ctx_))) {
+          } else {
+            find_same_heap = (0 == cmp_ret);
+          }
         }
       }
     }
@@ -2233,7 +2259,7 @@ int ObSortOpImpl::get_next_batch(const common::ObIArray<ObExpr*> &exprs,
     }
   } else if (read_rows > 0 && !use_partition_topn_sort_ && OB_FAIL(adjust_topn_read_rows(stored_rows_, read_rows))) {
   } else {
-    ObChunkDatumStore::Iterator::attach_rows(exprs, *eval_ctx_,
+    ret = ObChunkDatumStore::Iterator::attach_rows(exprs, *eval_ctx_,
         const_cast<const ObChunkDatumStore::StoredRow **>(stored_rows_), read_rows);
   }
   return ret;
@@ -2833,16 +2859,22 @@ int ObPrefixSortImpl::fetch_rows(const common::ObIArray<ObExpr *> &all_exprs)
         // check the prefix is the same with previous row
         bool same_prefix = true;
         if (NULL != prev_row_) {
-          const ObDatum *rcells = prev_row_->cells();
-          ObDatum *l_datum = nullptr;
+          const StoredDatumCell *rcells = prev_row_->stored_cells();
+          Datum *l_datum = nullptr;
           int cmp_ret = 0;
           for (int64_t i = 0; same_prefix && i < prefix_pos_ && OB_SUCC(ret); i++) {
             const int64_t idx = full_sort_collations_->at(i).field_idx_;
             if (OB_FAIL(all_exprs.at(idx)->eval(*eval_ctx_, l_datum))) {
-            } else if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(
-                           *l_datum, rcells[idx], cmp_ret, datum_access_ctx_))) {
             } else {
-              same_prefix = (0 == cmp_ret);
+              const ObDatum right = StoredDatumCodec::decode_legacy_view(rcells[idx]);
+              alignas(8) char scratch[64]; ObDatum left;
+              if (OB_FAIL(all_exprs.at(idx)->get_datum_copy_plan().legacy_view(
+                           *l_datum, left, scratch, sizeof(scratch)))) {
+              } else if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(
+                           left, right, cmp_ret, datum_access_ctx_))) {
+              } else {
+                same_prefix = (0 == cmp_ret);
+              }
             }
           }
         }
@@ -2904,10 +2936,12 @@ int ObPrefixSortImpl::is_same_prefix(const ObChunkDatumStore::StoredRow *store_r
     ObExpr *e = all_exprs.at(idx);
     // for non batch result expression, datum should always be the same.
     if (e->is_batch_result()) {
-      if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(store_row->cells()[idx],
-                                                       e->locate_batch_datums(*eval_ctx_)[datum_idx],
-                                                       cmp_ret,
-                                                       datum_access_ctx_))) {
+      const ObDatum stored = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[idx]);
+      alignas(8) char scratch[64];
+      ObDatum current;
+      if (OB_FAIL(e->get_datum_copy_plan().legacy_view(
+              e->locate_batch_datums(*eval_ctx_)[datum_idx], current, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(stored, current, cmp_ret, datum_access_ctx_))) {
       } else {
         same = (0 == cmp_ret);
       }
@@ -2928,11 +2962,14 @@ int ObPrefixSortImpl::is_same_prefix(const common::ObIArray<ObExpr *> &all_exprs
     const int64_t idx = full_sort_collations_->at(i).field_idx_;
     ObExpr *e = all_exprs.at(idx);
     if (e->is_batch_result()) {
-      if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(
-              e->locate_batch_datums(*eval_ctx_)[datum_idx1],
-              e->locate_batch_datums(*eval_ctx_)[datum_idx2],
-              cmp_ret,
-              datum_access_ctx_))) {
+      alignas(8) char left_scratch[64], right_scratch[64];
+      ObDatum left, right;
+      const DatumCopyPlan plan = e->get_datum_copy_plan();
+      if (OB_FAIL(plan.legacy_view(e->locate_batch_datums(*eval_ctx_)[datum_idx1],
+                                   left, left_scratch, sizeof(left_scratch)))) {
+      } else if (OB_FAIL(plan.legacy_view(e->locate_batch_datums(*eval_ctx_)[datum_idx2],
+                                          right, right_scratch, sizeof(right_scratch)))) {
+      } else if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(left, right, cmp_ret, datum_access_ctx_))) {
       } else {
         same = (0 == cmp_ret);
       }
@@ -3130,7 +3167,7 @@ int ObPrefixSortImpl::get_next_batch(const common::ObIArray<ObExpr*> &exprs,
       if (OB_SUCC(ret)) {
         if (read_rows > 0 && OB_FAIL(adjust_topn_read_rows(stored_rows_, read_rows))) {
         } else if (read_rows > 0) {
-          ObChunkDatumStore::Iterator::attach_rows(exprs, *eval_ctx_,
+          ret = ObChunkDatumStore::Iterator::attach_rows(exprs, *eval_ctx_,
               const_cast<const ObChunkDatumStore::StoredRow **>(stored_rows_), read_rows);
         } else {
           if (0 == loop && (NULL == brs_ || !brs_->end_) && outputted_rows_cnt_ < topn_cnt_) {
@@ -3167,15 +3204,17 @@ int ObUniqueSortImpl::get_next_batch(const common::ObIArray<ObExpr*> &exprs,
       for (int64_t nth_row = 0; OB_SUCC(ret) && nth_row < read_rows; ++nth_row) {
         ObChunkDatumStore::StoredRow *cur_row = stored_rows_[nth_row];
         if (NULL != prev_row_ || 0 < nth_row) {
-          const ObDatum *lcells = NULL != prev_row_
-                                  ? prev_row_->cells()
-                                  : stored_rows_[nth_row - 1]->cells();
-          const ObDatum *rcells = cur_row->cells();
+          const StoredDatumCell *lcells = NULL != prev_row_
+                                  ? prev_row_->stored_cells()
+                                  : stored_rows_[nth_row - 1]->stored_cells();
+          const StoredDatumCell *rcells = cur_row->stored_cells();
           int cmp = 0;
           for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
             const int64_t idx = sort_collations_->at(i).field_idx_;
+            const ObDatum left = StoredDatumCodec::decode_legacy_view(lcells[idx]);
+            const ObDatum right = StoredDatumCodec::decode_legacy_view(rcells[idx]);
             if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
-                    lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
+                    left, right, cmp, datum_access_ctx_))) {
             }
           }
           if (OB_FAIL(ret)) {
@@ -3200,7 +3239,7 @@ int ObUniqueSortImpl::get_next_batch(const common::ObIArray<ObExpr*> &exprs,
       } else if (0 < tmp_read_rows || OB_ISNULL(prev_row_)) {
         if (OB_FAIL(save_prev_row(*(stored_rows_[read_rows - 1])))) {
         } else {
-          ObChunkDatumStore::Iterator::attach_rows(exprs, *eval_ctx_,
+          ret = ObChunkDatumStore::Iterator::attach_rows(exprs, *eval_ctx_,
               const_cast<const ObChunkDatumStore::StoredRow **>(stored_rows_), tmp_read_rows);
           read_rows = tmp_read_rows;
         }
@@ -3224,13 +3263,15 @@ int ObUniqueSortImpl::get_next_row(const common::ObIArray<ObExpr*> &exprs)
       ret = OB_ERR_UNEXPECTED;
     } else {
       if (NULL != prev_row_) {
-        const ObDatum *lcells = prev_row_->cells();
-        const ObDatum *rcells = sr->cells();
+        const StoredDatumCell *lcells = prev_row_->stored_cells();
+        const StoredDatumCell *rcells = sr->stored_cells();
         int cmp = 0;
         for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
           const int64_t idx = sort_collations_->at(i).field_idx_;
+          const ObDatum left = StoredDatumCodec::decode_legacy_view(lcells[idx]);
+          const ObDatum right = StoredDatumCodec::decode_legacy_view(rcells[idx]);
           if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
-                  lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
+                  left, right, cmp, datum_access_ctx_))) {
           }
         }
         if (0 == cmp) {
@@ -3258,13 +3299,15 @@ int ObUniqueSortImpl::get_next_stored_row(const ObChunkDatumStore::StoredRow *&s
       ret = OB_ERR_UNEXPECTED;
     } else {
       if (NULL != prev_row_) {
-        const ObDatum *lcells = prev_row_->cells();
-        const ObDatum *rcells = sr->cells();
+        const StoredDatumCell *lcells = prev_row_->stored_cells();
+        const StoredDatumCell *rcells = sr->stored_cells();
         int cmp = 0;
         for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
           const int64_t idx = sort_collations_->at(i).field_idx_;
+          const ObDatum left = StoredDatumCodec::decode_legacy_view(lcells[idx]);
+          const ObDatum right = StoredDatumCodec::decode_legacy_view(rcells[idx]);
           if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
-                  lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
+                  left, right, cmp, datum_access_ctx_))) {
           }
         }
         if (0 == cmp) {

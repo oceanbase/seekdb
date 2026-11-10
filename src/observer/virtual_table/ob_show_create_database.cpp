@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "observer/virtual_table/ob_show_create_database.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -85,12 +86,12 @@ int ObShowCreateDatabase::calc_show_database_id(uint64_t &show_database_id)
        OB_SUCCESS == ret && OB_INVALID_ID == show_database_id && i < key_ranges_.count(); ++i) {
     ObRowkey start_key = key_ranges_.at(i).start_key_;
     ObRowkey end_key = key_ranges_.at(i).end_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-    const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-    if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
+    const DatumValue *end_key_obj_ptr = end_key.get_values();
+    if (start_key.get_value_count() > 0 && start_key.get_value_count() == end_key.get_value_count()) {
       if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
+      } else if (key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])
                  && ObIntType == start_key_obj_ptr[0].get_type()) {
         show_database_id = start_key_obj_ptr[0].get_int();
       } else {/*do nothing*/}
@@ -135,12 +136,12 @@ int ObShowCreateDatabase::fill_row_cells(uint64_t show_database_id,
       switch(col_id) {
         case OB_APP_MIN_COLUMN_ID: {
           // database_id
-          cur_row_.cells_[cell_idx].set_int(show_database_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, show_database_id) : ret);
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 1: {
           // database_name
-          cur_row_.cells_[cell_idx].set_varchar(database_name);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, database_name) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
@@ -157,7 +158,7 @@ int ObShowCreateDatabase::fill_row_cells(uint64_t show_database_id,
           } else {
             ObString value_str(static_cast<int32_t>(db_def_buf_size),
                                static_cast<int32_t>(pos), db_def_buf);
-            cur_row_.cells_[cell_idx].set_varchar(value_str);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, value_str) : ret);
             cur_row_.cells_[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -175,7 +176,7 @@ int ObShowCreateDatabase::fill_row_cells(uint64_t show_database_id,
           } else {
             ObString value_str(static_cast<int32_t>(db_def_buf_size),
                                static_cast<int32_t>(pos), db_def_buf);
-            cur_row_.cells_[cell_idx].set_varchar(value_str);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, value_str) : ret);
             cur_row_.cells_[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }

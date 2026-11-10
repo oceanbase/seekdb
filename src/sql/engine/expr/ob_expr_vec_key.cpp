@@ -46,13 +46,6 @@ int ObExprVecKey::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprVecKey::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprVecKey::cg_expr(
     ObExprCGCtx &expr_cg_ctx,
@@ -72,7 +65,7 @@ int ObExprVecKey::cg_expr(
 /*static*/ int ObExprVecKey::generate_vec_key(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSEDx(raw_ctx, eval_ctx);

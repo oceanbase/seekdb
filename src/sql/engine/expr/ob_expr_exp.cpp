@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_exp.h"
+#include "sql/engine/expr/ob_expr_util.h"
 
 namespace oceanbase
 {
@@ -40,10 +41,10 @@ int ObExprExp::calc_result_type1(ObExprResType &type,
 }
 
 int calc_exp_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
   } else if (arg->is_null()) {
     res_datum.set_null();
@@ -60,10 +61,10 @@ int calc_exp_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 int calc_exp_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
   } else if (arg->is_null()) {
     res_datum.set_null();
@@ -73,7 +74,7 @@ int calc_exp_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(arg_nmb.e_power(res_nmb, alloc_guard.get_allocator()))) {
     } else {
-      res_datum.set_number(res_nmb);
+      ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);
     }
   }
   return ret;
@@ -87,7 +88,7 @@ int ObExprExp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   {
     OB_ASSERT(1 == rt_expr.arg_cnt_);
-    ObObjType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
+    SqlValueType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
     if (ObDoubleType == arg_res_type) {
       rt_expr.eval_func_ = calc_exp_expr_double;
     } else if (ObNumberType == arg_res_type) {

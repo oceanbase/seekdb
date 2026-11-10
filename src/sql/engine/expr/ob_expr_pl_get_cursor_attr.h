@@ -38,7 +38,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_pl_get_cursor_attr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_pl_get_cursor_attr(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int assign(const ObExprOperator &other);
   void set_pl_get_cursor_attr_info(const pl::ObPLGetCursorAttrInfo &cursor_info)
   {

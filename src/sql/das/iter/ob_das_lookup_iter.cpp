@@ -18,6 +18,9 @@
 #include "sql/das/iter/ob_das_lookup_iter.h"
 #include "src/sql/engine/ob_exec_context.h"
 
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -258,24 +261,24 @@ int ObDASLookupIter::build_lookup_range(ObNewRange &range)
   if (OB_ISNULL(eval_ctx_) || OB_UNLIKELY(rowkey_exprs_.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObj *obj_ptr = nullptr;
+    DatumValue *obj_ptr = nullptr;
     void *buf = nullptr;
     int64_t rowkey_cnt = rowkey_exprs_.count();
     common::ObArenaAllocator& lookup_alloc = lookup_memctx_->get_arena_allocator();
-    if (OB_ISNULL(buf = lookup_alloc.alloc(sizeof(ObObj) * rowkey_cnt))) {
+    if (OB_ISNULL(buf = lookup_alloc.alloc(sizeof(DatumValue) * rowkey_cnt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      obj_ptr = new (buf) ObObj[rowkey_cnt];
+      obj_ptr = new (buf) DatumValue[rowkey_cnt];
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; i++) {
-      ObObj tmp_obj;
+      DatumValue tmp_obj;
       const ObExpr *expr = rowkey_exprs_.at(i);
-      ObDatum &col_datum = expr->locate_expr_datum(*eval_ctx_);
+      Datum &col_datum = expr->locate_expr_datum(*eval_ctx_);
       if (OB_UNLIKELY(T_PSEUDO_GROUP_ID == expr->type_ || T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_)) {
         // skip.
-      } else if (OB_FAIL(col_datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(ob_write_obj(lookup_alloc, tmp_obj, obj_ptr[i]))) {
+      } else if (OB_FAIL(project_native_datum_value_view(col_datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, lookup_alloc))) {
+      } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], lookup_alloc))) {
       }
     }
 
@@ -297,13 +300,23 @@ int ObDASLookupIter::build_trans_info_datum(const ObExpr *trans_info_expr, ObDat
     ret = OB_ERR_UNEXPECTED;
   } else {
     void *buf = nullptr;
-    ObDatum &col_datum = trans_info_expr->locate_expr_datum(*eval_ctx_);
-    int64_t pos = sizeof(ObDatum);
-    int64_t len = sizeof(ObDatum) + col_datum.len_;
-    if (OB_ISNULL(buf = lookup_memctx_->get_arena_allocator().alloc(len))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (FALSE_IT(datum_ptr = new (buf) ObDatum)) {
-    } else if (OB_FAIL(datum_ptr->deep_copy(col_datum, static_cast<char*>(buf), len, pos))) {
+    const Datum &source = trans_info_expr->locate_expr_datum(*eval_ctx_);
+    const DatumCopyPlan plan = trans_info_expr->get_datum_copy_plan();
+    int64_t payload = 0;
+    if (OB_FAIL(plan.legacy_payload_size(source, payload))) {
+    } else if (payload > INT64_MAX - static_cast<int64_t>(sizeof(ObDatum))) {
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      const int64_t len = sizeof(ObDatum) + payload;
+      int64_t pos = sizeof(ObDatum);
+      ObDatum *candidate = nullptr;
+      if (OB_ISNULL(buf = lookup_memctx_->get_arena_allocator().alloc(len))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (FALSE_IT(candidate = new (buf) ObDatum)) {
+      } else if (OB_FAIL(plan.export_legacy(source, *candidate, static_cast<char *>(buf), len, pos))) {
+      } else {
+        datum_ptr = candidate;
+      }
     }
   }
 

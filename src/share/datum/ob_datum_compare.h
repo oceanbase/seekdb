@@ -26,8 +26,8 @@ namespace oceanbase
 namespace common
 {
 
-inline ObDatumCmpFuncType get_datum_cmp_func(const ObObjMeta &column_type,
-                                             const ObObjMeta &parameter_type)
+inline ObDatumCmpFuncType get_datum_cmp_func(const SqlTypeMeta &column_type,
+                                             const SqlTypeMeta &parameter_type)
 {
   ObDatumCmpFuncType cmp_func = nullptr;
   const bool not_both_lob_storage =

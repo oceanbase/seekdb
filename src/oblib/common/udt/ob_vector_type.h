@@ -39,8 +39,6 @@ public :
                     bool has_null_str = true, ObString null_str = ObString("NULL")) const = 0;
   virtual int print_element_at(ObStringBuffer &format_str, uint32_t idx) const = 0;
   virtual int clone_empty(ObIAllocator &alloc, ObIArrayType *&output, bool read_only = true) const = 0;
-  virtual int elem_at(uint32_t idx, ObObj &elem_obj) const = 0;
-
 public:
   T operator[](const int64_t i) const { return data_[i]; }
   uint32_t cardinality() const { return this->length_; }
@@ -161,7 +159,7 @@ public:
                     bool has_null_str = true, ObString null_str = ObString("NULL")) const override;
   virtual int print_element_at(ObStringBuffer &format_str, uint32_t idx) const override;
   virtual int clone_empty(ObIAllocator &alloc, ObIArrayType *&output, bool read_only = true) const override;
-  virtual int elem_at(uint32_t idx, ObObj &elem_obj) const override;
+  virtual int elem_at_datum(uint32_t idx, ObDatum &value) const override;
 };
 
 class ObVectorU8Data : public ObVectorData<uint8_t> {
@@ -180,7 +178,7 @@ public:
                     bool has_null_str = true, ObString null_str = ObString("NULL")) const override;
   virtual int print_element_at(ObStringBuffer &format_str, uint32_t idx) const override;
   virtual int clone_empty(ObIAllocator &alloc, ObIArrayType *&output, bool read_only = true) const override;
-  virtual int elem_at(uint32_t idx, ObObj &elem_obj) const override;
+  virtual int elem_at_datum(uint32_t idx, ObDatum &value) const override;
 };
 
 //////////////////////////////////

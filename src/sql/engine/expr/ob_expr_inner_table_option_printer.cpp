@@ -61,13 +61,13 @@ int ObExprInnerTableOptionPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObE
   return ret;
 }
 
-int ObExprInnerTableOptionPrinter::eval_inner_table_option_printer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerTableOptionPrinter::eval_inner_table_option_printer(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  ObDatum *database_id = nullptr;
-  ObDatum *table_id = nullptr;
+  Datum *database_id = nullptr;
+  Datum *table_id = nullptr;
   const ObTableSchema *table_schema = nullptr;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
@@ -142,13 +142,13 @@ int ObExprInnerTableSequenceGetter::cg_expr(ObExprCGCtx &, const ObRawExpr &, Ob
   return ret;
 }
 
-int ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  ObDatum *table_id = nullptr;
-  ObDatum *auto_inc_col_id = nullptr;
+  Datum *table_id = nullptr;
+  Datum *auto_inc_col_id = nullptr;
   const ObTableSchema *table_schema = nullptr;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;

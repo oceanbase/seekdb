@@ -14,6 +14,7 @@
  * limitations under the License.
  */
  
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "observer/ob_server_utils.h"
 #include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
 #include "share/rc/ob_server_runtime.h"
@@ -141,7 +142,7 @@ int ObAllVirtualSqlPlan::fill_cells(ObSqlPlanItem *plan_item)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   #define REFINE_LENGTH(len) ((len) > MAX_LENGTH ? MAX_LENGTH : (len))
   if (OB_ISNULL(cells) || OB_ISNULL(plan_item)) {
     ret = OB_INVALID_ARGUMENT;
@@ -151,229 +152,229 @@ int ObAllVirtualSqlPlan::fill_cells(ObSqlPlanItem *plan_item)
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
     case PLAN_ID: {
-      cells[cell_idx].set_int(plan_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_id_) : ret);
       break;
     }
     case SQL_ID: {
-      cells[cell_idx].set_varchar(sql_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sql_id_) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case DB_ID: {
-      cells[cell_idx].set_int(db_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, db_id_) : ret);
       break;
     }
     case PLAN_HASH: {
-      cells[cell_idx].set_uint64(plan_hash_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, plan_hash_) : ret);
       break;
     }
     case GMT_CREATE: {
-      cells[cell_idx].set_timestamp(gmt_create_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, gmt_create_) : ret);
       break;
     }
     case OPERATOR: {
-      cells[cell_idx].set_varchar(plan_item->operation_, plan_item->operation_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->operation_len_, plan_item->operation_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case OPTIONS: {
-      cells[cell_idx].set_varchar(plan_item->options_, plan_item->options_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->options_len_, plan_item->options_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case OBJECT_NODE: {
-      cells[cell_idx].set_varchar(plan_item->object_node_, plan_item->object_node_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->object_node_len_, plan_item->object_node_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case OBJECT_ID: {
-      cells[cell_idx].set_int(plan_item->object_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->object_id_) : ret);
       break;
     }
     case OBJECT_OWNER: {
-      cells[cell_idx].set_varchar(plan_item->object_owner_, plan_item->object_owner_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->object_owner_len_, plan_item->object_owner_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case OBJECT_NAME: {
-      cells[cell_idx].set_varchar(plan_item->object_name_, plan_item->object_name_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->object_name_len_, plan_item->object_name_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case OBJECT_ALIAS: {
-      cells[cell_idx].set_varchar(plan_item->object_alias_, plan_item->object_alias_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->object_alias_len_, plan_item->object_alias_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case OBJECT_TYPE: {
-      cells[cell_idx].set_varchar(plan_item->object_type_, plan_item->object_type_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->object_type_len_, plan_item->object_type_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case OPTIMIZER: {
-      cells[cell_idx].set_varchar(plan_item->optimizer_, REFINE_LENGTH(plan_item->optimizer_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->optimizer_len_), plan_item->optimizer_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case ID: {
-      cells[cell_idx].set_int(plan_item->id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->id_) : ret);
       break;
     }
     case PARENT_ID: {
-      cells[cell_idx].set_int(plan_item->parent_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->parent_id_) : ret);
       break;
     }
     case DEPTH: {
-      cells[cell_idx].set_int(plan_item->depth_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->depth_) : ret);
       break;
     }
     case POSITION: {
-      cells[cell_idx].set_int(plan_item->position_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->position_) : ret);
       break;
     }
     case SEARCH_COLUMNS: {
-      cells[cell_idx].set_int(plan_item->search_columns_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->search_columns_) : ret);
       break;
     }
     case IS_LAST_CHILD: {
-      cells[cell_idx].set_int((int)plan_item->is_last_child_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, (int)plan_item->is_last_child_) : ret);
       break;
     }
     case COST: {
       if (plan_item->cost_ < 0) {
-        cells[cell_idx].set_int(INT64_MAX);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, INT64_MAX) : ret);
       } else {
-        cells[cell_idx].set_int(plan_item->cost_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->cost_) : ret);
       }
       break;
     }
     case REAL_COST: {
-      cells[cell_idx].set_int(plan_item->real_cost_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->real_cost_) : ret);
       break;
     }
     case CARDINALITY: {
       if (plan_item->cardinality_ < 0) {
-        cells[cell_idx].set_int(INT64_MAX);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, INT64_MAX) : ret);
       } else {
-        cells[cell_idx].set_int(plan_item->cardinality_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->cardinality_) : ret);
       }
       break;
     }
     case REAL_CARDINALITY: {
-      cells[cell_idx].set_int(plan_item->real_cardinality_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->real_cardinality_) : ret);
       break;
     }
     case BYTES: {
-      cells[cell_idx].set_int(plan_item->bytes_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->bytes_) : ret);
       break;
     }
     case ROWSET: {
-      cells[cell_idx].set_int(plan_item->rowset_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->rowset_) : ret);
       break;
     }
     case OTHER_TAG: {
-      cells[cell_idx].set_varchar(plan_item->other_tag_, REFINE_LENGTH(plan_item->other_tag_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->other_tag_len_), plan_item->other_tag_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case PARTITION_START: {
-      cells[cell_idx].set_varchar(plan_item->partition_start_, REFINE_LENGTH(plan_item->partition_start_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->partition_start_len_), plan_item->partition_start_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case PARTITION_STOP: {
-      cells[cell_idx].set_varchar(plan_item->partition_stop_, REFINE_LENGTH(plan_item->partition_stop_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->partition_stop_len_), plan_item->partition_stop_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case PARTITION_ID: {
-      cells[cell_idx].set_int(plan_item->partition_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->partition_id_) : ret);
       break;
     }
     case OTHER: {
-      cells[cell_idx].set_varchar(plan_item->other_, REFINE_LENGTH(plan_item->other_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->other_len_), plan_item->other_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case DISTRIBUTION: {
-      cells[cell_idx].set_varchar(plan_item->distribution_, plan_item->distribution_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->distribution_len_, plan_item->distribution_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case CPU_COST: {
-      cells[cell_idx].set_int(plan_item->cpu_cost_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->cpu_cost_) : ret);
       break;
     }
     case IO_COST: {
-      cells[cell_idx].set_int(plan_item->io_cost_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->io_cost_) : ret);
       break;
     }
     case TEMP_SPACE: {
-      cells[cell_idx].set_int(plan_item->temp_space_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->temp_space_) : ret);
       break;
     }
     case ACCESS_PREDICATES: {
-      cells[cell_idx].set_varchar(plan_item->access_predicates_, REFINE_LENGTH(plan_item->access_predicates_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->access_predicates_len_), plan_item->access_predicates_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case FILTER_PREDICATES: {
-      cells[cell_idx].set_varchar(plan_item->filter_predicates_, REFINE_LENGTH(plan_item->filter_predicates_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->filter_predicates_len_), plan_item->filter_predicates_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case STARTUP_PREDICATES: {
-      cells[cell_idx].set_varchar(plan_item->startup_predicates_, REFINE_LENGTH(plan_item->startup_predicates_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->startup_predicates_len_), plan_item->startup_predicates_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case PROJECTION: {
-      cells[cell_idx].set_varchar(plan_item->projection_, REFINE_LENGTH(plan_item->projection_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->projection_len_), plan_item->projection_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case SPECIAL_PREDICATES: {
-      cells[cell_idx].set_varchar(plan_item->special_predicates_, REFINE_LENGTH(plan_item->special_predicates_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->special_predicates_len_), plan_item->special_predicates_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case TIME: {
-      cells[cell_idx].set_int(plan_item->time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, plan_item->time_) : ret);
       break;
     }
     case QBLOCK_NAME: {
-      cells[cell_idx].set_varchar(plan_item->qblock_name_, plan_item->qblock_name_len_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(plan_item->qblock_name_len_, plan_item->qblock_name_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case REMARKS: {
-      cells[cell_idx].set_varchar(plan_item->remarks_, REFINE_LENGTH(plan_item->remarks_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->remarks_len_), plan_item->remarks_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
     }
     case OTHER_XML: {
-      cells[cell_idx].set_varchar(plan_item->other_xml_, REFINE_LENGTH(plan_item->other_xml_len_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(REFINE_LENGTH(plan_item->other_xml_len_), plan_item->other_xml_)) : ret);
       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                          ObCharset::get_default_charset()));
       break;
@@ -402,13 +403,13 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
     end_key.reset();
     start_key = ranges.at(i).start_key_;
     end_key = ranges.at(i).end_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-    const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
+    const DatumValue *end_key_obj_ptr = end_key.get_values();
 
-    if (start_key.get_obj_cnt() != end_key.get_obj_cnt() || 
-        start_key.get_obj_cnt() != ROWKEY_COUNT) {
+    if (start_key.get_value_count() != end_key.get_value_count() ||
+        start_key.get_value_count() != ROWKEY_COUNT) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid range", K(ret), K(start_key.get_obj_cnt()), K(ROWKEY_COUNT));
+      SERVER_LOG(WARN, "invalid range", K(ret), K(start_key.get_value_count()), K(ROWKEY_COUNT));
     } else if (OB_ISNULL(start_key_obj_ptr) || OB_ISNULL(end_key_obj_ptr)) {
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "invalid arguments", K(ret));
@@ -422,10 +423,10 @@ int ObAllVirtualSqlPlan::extract_plan_ids(const common::ObIArray<common::ObNewRa
       is_always_false = true;
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() ||
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() ||
-               start_key_obj_ptr[KEY_PLAN_ID_IDX] != end_key_obj_ptr[KEY_PLAN_ID_IDX]) {
+               key_filter_not_equal(start_key_obj_ptr[KEY_PLAN_ID_IDX], end_key_obj_ptr[KEY_PLAN_ID_IDX])) {
       ret = OB_NOT_IMPLEMENT;
       SERVER_LOG(WARN, "plan id only supports exact value", K(ret));
-    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX] == end_key_obj_ptr[KEY_PLAN_ID_IDX]) {
+    } else if (key_filter_equal(start_key_obj_ptr[KEY_PLAN_ID_IDX], end_key_obj_ptr[KEY_PLAN_ID_IDX])) {
       if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() || 
           (start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() != end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type())) {
         ret = OB_ERR_UNEXPECTED;

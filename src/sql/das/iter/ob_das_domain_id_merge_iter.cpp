@@ -25,6 +25,10 @@
 
 using namespace oceanbase::common;
 
+#include "common/datum/datum_value_projection.h"
+#include "data_plane/native_key_value_buffer.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 namespace sql
@@ -358,13 +362,14 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
                   // do nothing
                 } else {
                   int64_t padding_num = 1; // add vid col
-                  const int64_t old_objs_num = p_key->get_obj_cnt();
+                  const int64_t old_objs_num = p_key->get_value_count();
                   const int64_t new_objs_num = old_objs_num + padding_num;
-                  ObObj *new_objs = static_cast<ObObj*>(get_arena_allocator().alloc(sizeof(ObObj)*new_objs_num));
+                  DatumValue *new_objs = static_cast<DatumValue*>(get_arena_allocator().alloc(sizeof(DatumValue)*new_objs_num));
                   if (OB_ISNULL(new_objs)) {
                     ret = OB_ALLOCATE_MEMORY_FAILED;
                   } else {
-                    const ObObj *old_objs = p_key->get_obj_ptr();
+                    new (new_objs) DatumValue[new_objs_num];
+                    const DatumValue *old_objs = p_key->get_values();
                     for (int64_t k = 0; k < old_objs_num; ++k) {
                       new_objs[k] = old_objs[k];  // shallow copy
                     }
@@ -372,9 +377,9 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
                       for (int64_t k = 0; k < padding_num; ++k) {
                         // if inclusive start, should padding min value. else padding max value
                         if (key_range.border_flag_.inclusive_start()) {
-                          new_objs[k+old_objs_num] = ObObj::make_min_obj();
+                          new_objs[k+old_objs_num] = ObRowkey::MIN_VALUE;
                         } else {
-                          new_objs[k+old_objs_num] = ObObj::make_max_obj();
+                          new_objs[k+old_objs_num] = ObRowkey::MAX_VALUE;
                         }
                       }
                       key_range.start_key_.assign(new_objs, new_objs_num);
@@ -382,9 +387,9 @@ int ObDASDomainIdMergeIter::build_rowkey_domain_range()
                       for (int64_t k = 0; k < padding_num; ++k) {
                         // if inclusive end, should padding max value. else padding min value
                         if (key_range.border_flag_.inclusive_end()) {
-                          new_objs[k+old_objs_num] = ObObj::make_max_obj();
+                          new_objs[k+old_objs_num] = ObRowkey::MAX_VALUE;
                         } else {
-                          new_objs[k+old_objs_num] = ObObj::make_min_obj();
+                          new_objs[k+old_objs_num] = ObRowkey::MIN_VALUE;
                         }
                       }
                       key_range.end_key_.assign(new_objs, new_objs_num);
@@ -752,10 +757,9 @@ int ObDASDomainIdMergeIter::get_rowkey(
     const int64_t rowkey_cnt = ctdef->table_param_.get_read_info().get_schema_rowkey_count();
     const int64_t output_cnt = ctdef->pd_expr_spec_.access_exprs_.count();
     void *buf = nullptr;
-    if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * rowkey_cnt))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+    DatumValue *obj_ptr = nullptr;
+    if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(allocator, rowkey_cnt, obj_ptr))) {
     } else {
-      ObObj *obj_ptr = new (buf) ObObj[rowkey_cnt];
       int64_t j = 0;
       for (int64_t i = 0; OB_SUCC(ret) && j < rowkey_cnt && i < output_cnt; ++i) {
         ObExpr *expr = ctdef->pd_expr_spec_.access_exprs_.at(i);
@@ -764,8 +768,10 @@ int ObDASDomainIdMergeIter::get_rowkey(
         } else if (T_PSEUDO_GROUP_ID == expr->type_ || T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_) {
           // nothing to do.
         } else {
-          ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
-          if (OB_FAIL(datum.to_obj(obj_ptr[j], expr->obj_meta_, expr->obj_datum_map_))) {
+          common::Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+          DatumValue value;
+          if (OB_FAIL(project_native_datum_value_view(datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, obj_ptr[j].meta_, value, allocator))) {
+          } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(value, obj_ptr, rowkey_cnt, j))) {
           } else {
             ++j;
           }
@@ -841,18 +847,23 @@ int ObDASDomainIdMergeIter::get_domain_id(
       if (OB_ISNULL(expr = ctdef->result_output_.at(rowkey_cnt + part_key_num + i))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
-        if (datum.get_string().length() == 0) {
+        common::Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+        // DomainIds is a legacy byte-span boundary. Inline execution values
+        // must be exported using the actual expression type before copying.
+        alignas(8) char scratch[64];
+        ObDatum physical;
+        if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(datum, physical, scratch, sizeof(scratch)))) {
+        } else if (physical.is_null() || physical.len_ == 0) {
           if (OB_FAIL(domain_id.push_back(ObString()))) {
           }
         } else {
-          void *buf = allocator.alloc(datum.get_string().length());
+          void *buf = allocator.alloc(physical.len_);
           if (OB_ISNULL(buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
           } else {
-            memcpy(buf, datum.get_string().ptr(), datum.get_string().length());
+            memcpy(buf, physical.ptr_, physical.len_);
             ObString tmp_domain_id;
-            tmp_domain_id.assign_ptr(reinterpret_cast<char*>(buf), datum.get_string().length());
+            tmp_domain_id.assign_ptr(reinterpret_cast<char*>(buf), physical.len_);
             if (OB_FAIL(domain_id.push_back(tmp_domain_id))) {
             }
           }
@@ -1132,14 +1143,15 @@ int ObDASDomainIdMergeIter::multi_get_rows(int64_t &count, int64_t capacity)
             } else {
               if (is_emb_vec_domain && rowkey_domain_ctdefs_.at(i)->semantic_index_info_.use_rowkey_vid_tbl_) {
                 // [rowkey] [vid] -> [rowkey]
-                ObObj *extend_end_key_obj_ptr = static_cast<ObObj *>(get_arena_allocator().alloc(sizeof(ObObj) * (data_table_rowkey.get_obj_cnt())));
+                DatumValue *extend_end_key_obj_ptr = static_cast<DatumValue *>(get_arena_allocator().alloc(sizeof(DatumValue) * (data_table_rowkey.get_value_count())));
                 if (OB_ISNULL(extend_end_key_obj_ptr)) {
                   ret = OB_ALLOCATE_MEMORY_FAILED;
                 } else {
-                  for (int64_t j = 0; OB_SUCC(ret) && j < data_table_rowkey.get_obj_cnt(); j++) {
-                    extend_end_key_obj_ptr[j] = rowkey_domain_rowkey.get_obj_ptr()[j];
+                  new (extend_end_key_obj_ptr) DatumValue[data_table_rowkey.get_value_count()];
+                  for (int64_t j = 0; OB_SUCC(ret) && j < data_table_rowkey.get_value_count(); j++) {
+                    extend_end_key_obj_ptr[j] = rowkey_domain_rowkey.get_values()[j];
                   }
-                  rowkey_domain_rowkey.assign(extend_end_key_obj_ptr, data_table_rowkey.get_obj_cnt());
+                  rowkey_domain_rowkey.assign(extend_end_key_obj_ptr, data_table_rowkey.get_value_count());
                 }
               }
             }
@@ -1247,7 +1259,7 @@ int ObDASDomainIdMergeIter::fill_null_domain_id_in_data_table(
         } else if (OB_ISNULL(domain_id_expr = data_table_ctdef_->result_output_.at(domain_id_idx))) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ObDatum &datum = domain_id_expr->locate_expr_datum(*data_table_rtdef_->eval_ctx_);
+          common::Datum &datum = domain_id_expr->locate_expr_datum(*data_table_rtdef_->eval_ctx_);
           datum.set_null();
           domain_id_expr->set_evaluated_projected(*data_table_rtdef_->eval_ctx_);
         }
@@ -1278,25 +1290,27 @@ int ObDASDomainIdMergeIter::reset_rowkey_domain_iter_scan_range(int64_t iter_idx
       key_range.border_flag_.set_inclusive_end();
 
       if (is_emb_vec_domain && rowkey_domain_ctdefs_.at(iter_idx)->semantic_index_info_.use_rowkey_vid_tbl_) {
-        ObObj *extend_start_key_obj_ptr = static_cast<ObObj *>(get_arena_allocator().alloc(sizeof(ObObj) * (data_table_rowkey.get_obj_cnt() + 1)));
+        DatumValue *extend_start_key_obj_ptr = static_cast<DatumValue *>(get_arena_allocator().alloc(sizeof(DatumValue) * (data_table_rowkey.get_value_count() + 1)));
         if (OB_ISNULL(extend_start_key_obj_ptr)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else {
-          for (int64_t j = 0; j < data_table_rowkey.get_obj_cnt(); j++) {
-            extend_start_key_obj_ptr[j] = data_table_rowkey.get_obj_ptr()[j];
+          new (extend_start_key_obj_ptr) DatumValue[data_table_rowkey.get_value_count()+1];
+          for (int64_t j = 0; j < data_table_rowkey.get_value_count(); j++) {
+            extend_start_key_obj_ptr[j] = data_table_rowkey.get_values()[j];
           }
-          extend_start_key_obj_ptr[data_table_rowkey.get_obj_cnt()].set_min_value();
-          key_range.start_key_.assign(extend_start_key_obj_ptr, data_table_rowkey.get_obj_cnt() + 1);
+          extend_start_key_obj_ptr[data_table_rowkey.get_value_count()].set_min_value();
+          key_range.start_key_.assign(extend_start_key_obj_ptr, data_table_rowkey.get_value_count() + 1);
 
-          ObObj *extend_end_key_obj_ptr = static_cast<ObObj *>(get_arena_allocator().alloc(sizeof(ObObj) * (data_table_rowkey.get_obj_cnt() + 1)));
+          DatumValue *extend_end_key_obj_ptr = static_cast<DatumValue *>(get_arena_allocator().alloc(sizeof(DatumValue) * (data_table_rowkey.get_value_count() + 1)));
           if (OB_ISNULL(extend_end_key_obj_ptr)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
           } else {
-            for (int64_t j = 0; j < data_table_rowkey.get_obj_cnt(); j++) {
-              extend_end_key_obj_ptr[j] = data_table_rowkey.get_obj_ptr()[j];
+            new (extend_end_key_obj_ptr) DatumValue[data_table_rowkey.get_value_count()+1];
+            for (int64_t j = 0; j < data_table_rowkey.get_value_count(); j++) {
+              extend_end_key_obj_ptr[j] = data_table_rowkey.get_values()[j];
             }
-            extend_end_key_obj_ptr[data_table_rowkey.get_obj_cnt()].set_max_value();
-            key_range.end_key_.assign(extend_end_key_obj_ptr, data_table_rowkey.get_obj_cnt() + 1);
+            extend_end_key_obj_ptr[data_table_rowkey.get_value_count()].set_max_value();
+            key_range.end_key_.assign(extend_end_key_obj_ptr, data_table_rowkey.get_value_count() + 1);
             
             if (OB_FAIL(scan_param.key_ranges_.push_back(key_range))) {
             }

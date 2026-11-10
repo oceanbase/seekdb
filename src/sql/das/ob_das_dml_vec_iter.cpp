@@ -73,10 +73,12 @@ int ObVecIndexDMLIterator::get_vec_data(
   if (OB_UNLIKELY(vec_id_idx >= row_projector_->count() || vector_idx >= row_projector_->count())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    vec_id = store_row->cells()[row_projector_->at(vec_id_idx)].get_int();
+    const ObDatum id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(vec_id_idx)]);
+    vec_id = id_datum.get_int();
     // get vec data without lob
     // here expect always has lob header
-    vector = store_row->cells()[row_projector_->at(vector_idx)].get_string();
+    const ObDatum vector_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(vector_idx)]);
+    vector = vector_datum.get_string();
     if (das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_DELETE) {
       // do nothing, delete do not need to read vector
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
@@ -87,7 +89,7 @@ int ObVecIndexDMLIterator::get_vec_data(
                                                                 true,
                                                                 vector))) {
     } else {
-      LOG_DEBUG("succeed to get vector id and vector", K(vec_id), K(store_row->cells()[row_projector_->at(vector_idx)]));
+      LOG_DEBUG("succeed to get vector id and vector", K(vec_id), K(vector_datum));
     }
   }
   return ret;
@@ -110,14 +112,17 @@ int ObVecIndexDMLIterator::get_vec_data_for_update(
     // get vec id
     const int64_t vec_id_old_proj_idx = das_ctdef_->old_row_projector_.at(vec_id_idx);
     const int64_t vec_id_new_proj_idx = das_ctdef_->new_row_projector_.at(vec_id_idx);
-    int64_t old_vec_id = store_row->cells()[vec_id_old_proj_idx].get_int();
-    int64_t new_vec_id = store_row->cells()[vec_id_new_proj_idx].get_int();
+    const ObDatum old_id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[vec_id_old_proj_idx]);
+    const ObDatum new_id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[vec_id_new_proj_idx]);
+    int64_t old_vec_id = old_id_datum.get_int();
+    int64_t new_vec_id = new_id_datum.get_int();
     vec_id = is_old_row_ ? old_vec_id : new_vec_id;
     // get vec data
     const int64_t vector_old_proj_idx = das_ctdef_->old_row_projector_.at(vector_idx);
     const int64_t vector_new_proj_idx = das_ctdef_->new_row_projector_.at(vector_idx);
-    vector = is_old_row_ ? store_row->cells()[vector_old_proj_idx].get_string()
-                         : store_row->cells()[vector_new_proj_idx].get_string();
+    const int64_t vector_proj_idx = is_old_row_ ? vector_old_proj_idx : vector_new_proj_idx;
+    const ObDatum vector_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[vector_proj_idx]);
+    vector = vector_datum.get_string();
     // get vec data without lob
     // here expect always has lob header
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
@@ -129,7 +134,7 @@ int ObVecIndexDMLIterator::get_vec_data_for_update(
                                                           vector))) {
     } else {
       LOG_DEBUG("succeed to get vector data", K(vec_id), K(old_vec_id), K(new_vec_id), K(is_old_row_),
-                K(store_row->cells()[row_projector_->at(vector_idx)]));
+                K(StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(vector_idx)])));
     }
   }
   return ret;
@@ -168,7 +173,7 @@ int ObVecIndexDMLIterator::generate_vec_delta_buff_row(common::ObIAllocator &all
     ObString ins(1, VEC_DELTA_INSERT); // "I"
     ObString del(1, VEC_DELTA_DELETE); // "D"
     // set type charset
-    // ObObjMeta col_type = das_ctdef_->column_types_.at(type_idx);
+    // SqlTypeMeta col_type = das_ctdef_->column_types_.at(type_idx);
     // obj_arr[type_idx].set_collation_level(col_type.get_collation_level());
     // obj_arr[type_idx].set_collation_type(col_type.get_collation_type());
     switch (das_ctdef_->op_type_) {
@@ -314,8 +319,9 @@ int ObSparseVecIndexDMLIterator::get_sparse_vec_data(
   if (OB_UNLIKELY(docid_idx >= row_projector_->count() || sparse_vec_idx >= row_projector_->count())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    docid = store_row->cells()[row_projector_->at(docid_idx)];
-    sparse_vec = store_row->cells()[row_projector_->at(sparse_vec_idx)].get_string();
+    docid = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(docid_idx)]);
+    const ObDatum vector_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(sparse_vec_idx)]);
+    sparse_vec = vector_datum.get_string();
     
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                                                           *lob_read_options_,
@@ -347,8 +353,9 @@ int ObSparseVecIndexDMLIterator::get_sparse_vec_data_for_update(
   } else {
     const int64_t docid_proj_idx = row_projector_->at(docid_idx);
     const int64_t sparse_vec_proj_idx = row_projector_->at(sparse_vec_idx);
-    docid = store_row->cells()[docid_proj_idx];
-    sparse_vec = store_row->cells()[sparse_vec_proj_idx].get_string();
+    docid = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[docid_proj_idx]);
+    const ObDatum vector_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[sparse_vec_proj_idx]);
+    sparse_vec = vector_datum.get_string();
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                                                           *lob_read_options_,
@@ -463,13 +470,15 @@ int ObHybridVecLogDMLIterator::get_vec_id(
       ret = OB_INVALID_ARGUMENT;
     } else {
       const int64_t vec_id_new_proj_idx = das_ctdef_->new_row_projector_.at(vec_id_idx);
-      vec_id = store_row->cells()[vec_id_new_proj_idx].get_int();
+      const ObDatum id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[vec_id_new_proj_idx]);
+      vec_id = id_datum.get_int();
     }
   } else {
     if (OB_UNLIKELY(vec_id_idx >= row_projector_->count())) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      vec_id = store_row->cells()[row_projector_->at(vec_id_idx)].get_int();
+      const ObDatum id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(vec_id_idx)]);
+      vec_id = id_datum.get_int();
     }
   }
   return ret;
@@ -488,8 +497,10 @@ int ObHybridVecLogDMLIterator::get_vec_data_for_update(
   } else {
     const int64_t vec_id_old_proj_idx = das_ctdef_->old_row_projector_.at(vec_id_idx);
     const int64_t vec_id_new_proj_idx = das_ctdef_->new_row_projector_.at(vec_id_idx);
-    int64_t old_vec_id = store_row->cells()[vec_id_old_proj_idx].get_int();
-    int64_t new_vec_id = store_row->cells()[vec_id_new_proj_idx].get_int();
+    const ObDatum old_id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[vec_id_old_proj_idx]);
+    const ObDatum new_id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[vec_id_new_proj_idx]);
+    int64_t old_vec_id = old_id_datum.get_int();
+    int64_t new_vec_id = new_id_datum.get_int();
     vec_id = is_old_row_ ? old_vec_id : new_vec_id;
   }
   return ret;
@@ -702,7 +713,8 @@ int ObEmbeddedVecDMLIterator::get_vid(const ObChunkDatumStore::StoredRow *store_
     ret = OB_INVALID_ARGUMENT;
   } else {
     const int64_t main_table_vid_idx = row_projector_->at(vid_idx);
-    vid = store_row->cells()[main_table_vid_idx].get_int();
+    const ObDatum id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[main_table_vid_idx]);
+    vid = id_datum.get_int();
   }
   return ret;
 }
@@ -716,7 +728,8 @@ int ObEmbeddedVecDMLIterator::get_chunk_data(const ObChunkDatumStore::StoredRow 
     ret = OB_INVALID_ARGUMENT;
   } else {
     const int64_t main_table_embedded_idx = row_projector_->at(embedded_vec_idx);
-    chunk = store_row->cells()[main_table_embedded_idx].get_string();
+    const ObDatum chunk_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[main_table_embedded_idx]);
+    chunk = chunk_datum.get_string();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                                                           *lob_read_options_,
                                                           &allocator_,

@@ -16,6 +16,7 @@
 
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_TABLET_MAPPER_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_TABLET_MAPPER_H_
+#include "common/datum/datum_value.h"
 #include "share/ob_define.h"
 #include "share/schema/ob_schema_struct.h"
 #include "lib/container/ob_fixed_array.h"
@@ -32,6 +33,7 @@ namespace sql
 struct DASTableAccessMeta;
 struct DASRuntimeTabletAccess;
 class ObDASCtx;
+class ObPhysicalPlanCtx;
 struct ValueItemExpr;
 typedef common::hash::ObHashMap<common::ObObjectID, common::ObObjectID, common::hash::NoPthreadDefendMode> ObPartitionIdMap;
 
@@ -144,7 +146,7 @@ public:
 
   int get_tablet_and_object_id(const share::schema::ObPartitionLevel part_level,
                                const common::ObPartID part_id,
-                               const common::ObObj &value,
+                               const common::DatumValue &value,
                                common::ObIArray<common::ObTabletID> &tablet_ids,
                                common::ObIArray<common::ObObjectID> &out_part_ids);
 
@@ -189,6 +191,13 @@ public:
       const share::schema::ObPartitionLevel part_level,
       const common::ObPartID part_id,
       const common::ObNewRow &row,
+      common::ObTabletID &tablet_id,
+      common::ObObjectID &object_id);
+
+  int get_tablet_and_object_id(
+      const share::schema::ObPartitionLevel part_level,
+      const common::ObPartID part_id,
+      const common::ObIArray<common::DatumValue> &row,
       common::ObTabletID &tablet_id,
       common::ObObjectID &object_id);
 
@@ -242,7 +251,7 @@ public:
       const share::schema::ObPartitionLevel part_level,
       const ObPartID part_id,
       ObExecContext &exec_ctx,
-      const ParamStore &params,
+      const ObPhysicalPlanCtx &params,
       const ObDataTypeCastParams &dtc_params,
       const common::ObIArray<ValueItemExpr*> &vies,
       ObIArray<ObTabletID> &tablet_ids,
@@ -266,7 +275,7 @@ public:
   int get_tablet_and_part_id_for_list_part(
     const share::schema::ObTableSchema &table_schema,
     ObExecContext &exec_ctx,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObDataTypeCastParams &dtc_params,
     const common::ObIArray<ValueItemExpr*> &vies,
     common::ObIArray<common::ObTabletID> &tablet_ids,
@@ -292,7 +301,7 @@ public:
       const share::schema::ObTableSchema &table_schema,
       const common::ObPartID &part_id,
       ObExecContext &exec_ctx,
-      const ParamStore &params,
+      const ObPhysicalPlanCtx &params,
       const ObDataTypeCastParams &dtc_params,
       const common::ObIArray<ValueItemExpr*> &vies,
       common::ObIArray<common::ObTabletID> &tablet_ids,

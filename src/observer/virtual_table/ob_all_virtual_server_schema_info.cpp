@@ -47,15 +47,15 @@ int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case REFRESHED_SCHEMA_VERSION: {
-          cur_row_.cells_[i].set_int(refreshed_schema_version);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, refreshed_schema_version) : ret);
           break;
         }
         case RECEIVED_SCHEMA_VERSION: {
-          cur_row_.cells_[i].set_int(received_schema_version);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, received_schema_version) : ret);
           break;
         }
         case SCHEMA_COUNT: {
-          cur_row_.cells_[i].set_int(schema_count);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, schema_count) : ret);
           break;
         }
         default : {

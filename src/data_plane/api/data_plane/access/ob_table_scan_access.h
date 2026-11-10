@@ -86,8 +86,8 @@ struct ObSparseVectorBlockSourceSpec
   int32_t score_index_;
   int32_t domain_id_rowkey_index_;
   int32_t dimension_rowkey_index_;
-  common::ObObjMeta domain_id_meta_;
-  common::ObObjMeta dimension_meta_;
+  common::SqlTypeMeta domain_id_meta_;
+  common::SqlTypeMeta dimension_meta_;
   double query_value_;
   TO_STRING_KV(KP_(columns), K_(column_count), K_(min_domain_id_index),
       K_(max_domain_id_index), K_(score_index), K_(domain_id_rowkey_index),

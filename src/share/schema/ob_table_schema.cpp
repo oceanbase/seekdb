@@ -2279,35 +2279,6 @@ int ObTableSchema::get_simple_index_infos(
   return ret;
 }
 
-int ObTableSchema::get_default_row(
-    get_default_value func,
-    const common::ObIArray<ObColDesc> &column_ids,
-    ObNewRow &default_row) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(default_row.cells_) || default_row.count_ != column_ids.count() || column_ids.count() > column_cnt_) {
-    ret = OB_INVALID_ARGUMENT;
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
-    bool found = false;
-    for (int64_t j = 0; OB_SUCC(ret) && !found && j < column_cnt_; ++j) {
-      ObColumnSchemaV2 *column = column_array_[j];
-      if (NULL == column) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (column->get_column_id() == column_ids.at(i).col_id_) {
-        default_row.cells_[i] = (column->*func)();
-        found = true;
-      }
-    }
-    if (OB_SUCC(ret) && !found) {
-      ret = OB_ERR_SYS;
-    }
-  }
-  return ret;
-}
-
-
 int ObTableSchema::get_column_schema_in_same_col_group(uint64_t column_id, uint64_t udt_set_id,
                                                        common::ObIArray<ObColumnSchemaV2 *> &column_group) const
 {
@@ -3363,8 +3334,8 @@ bool ObTableSchema::is_same_type_category(
                    const ObColumnSchemaV2 &dst_column) const
 {
   bool ret_bool = false;
-  const ObObjMeta src_meta = src_column.get_meta_type();
-  const ObObjMeta dst_meta = dst_column.get_meta_type();
+  const SqlTypeMeta src_meta = src_column.get_meta_type();
+  const SqlTypeMeta dst_meta = dst_column.get_meta_type();
   const ColumnTypeClass src_col_type_class = src_column.get_data_type_class();
   const ColumnTypeClass dst_col_type_class = dst_column.get_data_type_class();
   if ((src_meta.is_integer_type() && dst_meta.is_integer_type()) || //integer
@@ -3420,7 +3391,7 @@ int ObTableSchema::check_alter_column_in_foreign_key(const ObColumnSchemaV2 &src
           dst_accuracy.get_length() < src_accuracy.get_length())) {
         ret = OB_NOT_SUPPORTED;
         (void)snprintf(err_msg, sizeof(err_msg), "Alter the precision of foreign key columns,"
-        "column type %s", ob_obj_type_str(src_col_type));
+        "column type %s", sql_value_type_to_string(src_col_type));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg);
       }
     }
@@ -3492,7 +3463,7 @@ int ObTableSchema::check_alter_column_accuracy(
   const ColumnType src_col_type = src_column.get_data_type();
   const ObAccuracy &src_accuracy = src_column.get_accuracy();
   const ObAccuracy &dst_accuracy = dst_column.get_accuracy();
-  const ObObjMeta &src_meta = src_column.get_meta_type();
+  const SqlTypeMeta &src_meta = src_column.get_meta_type();
   if (src_column.get_data_type() == dst_column.get_data_type()) {
     bool is_type_reduction = false;
     if (ob_is_number_or_decimal_int_tc(src_col_type)) {
@@ -3571,8 +3542,8 @@ int ObTableSchema::check_alter_column_type(const ObColumnSchemaV2 &src_column,
   const ColumnType dst_col_type = dst_column.get_data_type();
   const ObAccuracy &src_accuracy = src_column.get_accuracy();
   const ObAccuracy &dst_accuracy = dst_column.get_accuracy();
-  const ObObjMeta &src_meta = src_column.get_meta_type();
-  const ObObjMeta &dst_meta = dst_column.get_meta_type();
+  const SqlTypeMeta &src_meta = src_column.get_meta_type();
+  const SqlTypeMeta &dst_meta = dst_column.get_meta_type();
   if (src_column.get_data_type() != dst_column.get_data_type()) {
     char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE] = {0};
     bool is_same_category = is_same_type_category(src_column, dst_column);
@@ -3746,8 +3717,8 @@ int ObTableSchema::check_ddl_type_change_rules(const ObColumnSchemaV2 &src_colum
   bool is_same = false;
   const ColumnType src_col_type = src_column.get_data_type();
   const ColumnType dst_col_type = dst_column.get_data_type();
-  const ObObjMeta &src_meta = src_column.get_meta_type();
-  const ObObjMeta &dst_meta = dst_column.get_meta_type();
+  const SqlTypeMeta &src_meta = src_column.get_meta_type();
+  const SqlTypeMeta &dst_meta = dst_column.get_meta_type();
   OZ (check_alter_column_in_rowkey(src_column, dst_column, is_rowkey));
   OZ (check_alter_column_in_index(src_column, dst_column, schema_guard, is_index));
   if (OB_FAIL(ret)) {
@@ -4562,8 +4533,6 @@ int ObTableSchema::get_column_default_checksums(
   ObArray<ObColDesc> columns;
   if (OB_FAIL(get_multi_version_column_descs(columns))) {
   } else {
-    common::ObDatum datum;
-    alignas(common::ObObj) char datum_buf[common::OBJ_DATUM_MAX_RES_SIZE];
     for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
       const uint64_t col_id = columns.at(i).col_id_;
       int64_t default_checksum = 0;
@@ -4582,12 +4551,13 @@ int ObTableSchema::get_column_default_checksums(
                    && !is_storage_index_table()) {
           ret = OB_ERR_UNEXPECTED;
         } else if (!ob_is_large_text(col_schema->get_data_type())) {
-          datum.reset();
-          datum.ptr_ = datum_buf;
-          const ObObj &default_value = col_schema->get_orig_default_value();
-          if (OB_FAIL(datum.from_obj(default_value))) {
-          }
-          if (OB_SUCC(ret)) {
+          DatumValue default_value;
+          alignas(8) char default_scratch[64];
+          ObDatum datum;
+          char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+          if (OB_FAIL(col_schema->export_orig_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+          } else if (OB_FAIL(default_value.to_row_datum(datum, extended_payload))) {
+          } else {
             default_checksum = datum.checksum(0);
           }
         }
@@ -5227,6 +5197,8 @@ int ObTableSchema::get_generated_column_by_define(const ObString &col_def,
                                                   const bool only_hidden_column,
                                                   ObColumnSchemaV2 *&gen_col)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 8> gen_column_ids;
   if (OB_FAIL(get_generated_column_ids(gen_column_ids))) {
@@ -5238,7 +5210,8 @@ int ObTableSchema::get_generated_column_by_define(const ObString &col_def,
       ret = OB_ERR_COLUMN_NOT_FOUND;
     } else if (!tmp_col->is_hidden() && only_hidden_column) {
       //do nothing, continue
-    } else if (OB_FAIL(tmp_col->get_cur_default_value().get_string(tmp_def))) {
+    } else if ((OB_FAIL(tmp_col->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+        || OB_FAIL(schema_default_value.get_string(tmp_def)))) {
     } else if (ObCharset::case_insensitive_equal(tmp_def, col_def)) {
       gen_col = tmp_col;
     }
@@ -5605,16 +5578,16 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   // Consume the two removed interval-partition rowkey slots.
   if (OB_SUCC(ret)) {
     static int64_t ROW_KEY_CNT = 1;
-    ObObj obj_array[ROW_KEY_CNT];
-    obj_array[0].reset();
+    DatumValue native_values[ROW_KEY_CNT];
+    native_values[0].reset();
 
     ObRowkey rowkey;
-    rowkey.assign(obj_array, ROW_KEY_CNT);
+    rowkey.assign(native_values, ROW_KEY_CNT);
     if (FAILEDx(rowkey.deserialize(buf, data_len, pos, true))) {
     }
 
-    obj_array[0].reset();
-    rowkey.assign(obj_array, ROW_KEY_CNT);
+    native_values[0].reset();
+    rowkey.assign(native_values, ROW_KEY_CNT);
     if (FAILEDx(rowkey.deserialize(buf, data_len, pos, true))) {
     }
   }
@@ -5864,7 +5837,7 @@ int ObTableSchema::is_range_col_part_type(bool &is_range_column_type) const
       is_range_column_type = true;
     } else if (OB_FAIL(rowkey_info.get_column(0, rowkey_column))) {
     } else {
-      const ObObjType type = rowkey_column.get_meta_type().get_type();
+      const SqlValueType type = rowkey_column.get_meta_type().get_type();
       is_range_column_type =
           ob_is_float_tc(type)
           || ob_is_double_tc(type)
@@ -5882,7 +5855,7 @@ int ObTableSchema::is_range_col_part_type(bool &is_range_column_type) const
       is_range_column_type = true;
     } else if (OB_FAIL(index_info.get_column(0, index_column))) {
     } else {
-      const ObObjType type = index_column.get_meta_type().get_type();
+      const SqlValueType type = index_column.get_meta_type().get_type();
       is_range_column_type =
           ob_is_float_tc(type)
           || ob_is_double_tc(type)
@@ -7102,7 +7075,7 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
     const ObColumnSchemaV2 *col = column_array_[i];
     J_KV("column_id", col->get_column_id(), "column_name", col->get_column_name(), "rowkey_pos", col->get_rowkey_position(),
           "index_pos", col->get_index_position(), "meta_type", col->get_meta_type(), "accuracy", col->get_accuracy(),
-          "is_nullable", col->is_nullable(), "is_zero_fill", col->is_zero_fill(), "cur_default_value", col->get_cur_default_value());
+          "is_nullable", col->is_nullable(), "is_zero_fill", col->is_zero_fill(), "cur_default_value", col->get_cur_default_datum(), "cur_default_meta", col->get_cur_default_meta());
     J_COMMA();
   }
   J_KV(K_(rowkey_split_pos),

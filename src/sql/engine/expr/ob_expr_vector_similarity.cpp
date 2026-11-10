@@ -61,12 +61,12 @@ int ObExprVectorSimilarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &r
   return ret;
 }
 
-int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObVecSimilarityType similarity_type = ObVecSimilarityType::COSINE; // default metric
   if (3 == expr.arg_cnt_) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
     } else if (datum->is_null()) {
       ret = OB_INVALID_ARGUMENT;
@@ -79,7 +79,7 @@ int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, 
   return ret;
 }
 
-int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum, ObVecSimilarityType similarity_type)
+int ObExprVectorSimilarity::calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum, ObVecSimilarityType similarity_type)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -151,7 +151,7 @@ int ObExprVectorL2Similarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr 
     return ret;
 }
 
-int ObExprVectorL2Similarity::calc_l2_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorL2Similarity::calc_l2_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   return ObExprVectorSimilarity::calc_similarity(expr, ctx, res_datum, ObVecSimilarityType::EUCLIDEAN);
 }
@@ -167,7 +167,7 @@ int ObExprVectorCosineSimilarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawE
     return ret;
 }
 
-int ObExprVectorCosineSimilarity::calc_cosine_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorCosineSimilarity::calc_cosine_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   return ObExprVectorSimilarity::calc_similarity(expr, ctx, res_datum, ObVecSimilarityType::COSINE);
 }
@@ -183,7 +183,7 @@ int ObExprVectorIPSimilarity::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr 
     return ret;
 }
 
-int ObExprVectorIPSimilarity::calc_ip_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorIPSimilarity::calc_ip_similarity(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   return ObExprVectorSimilarity::calc_similarity(expr, ctx, res_datum, ObVecSimilarityType::DOT);
 }

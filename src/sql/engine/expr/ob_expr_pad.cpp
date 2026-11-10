@@ -43,8 +43,8 @@ int ObExprPad::calc_result_type3(ObExprResType &type,
                                  common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType text_type = ObNullType;
-  ObObjType len_type = ObNullType;
+  SqlValueType text_type = ObNullType;
+  SqlValueType len_type = ObNullType;
   int64_t max_len = -1;
 
   len_type = ObIntType;
@@ -80,12 +80,12 @@ int ObExprPad::calc_result_type3(ObExprResType &type,
 }
 
 int ObExprPad::calc_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                          ObDatum &res)
+                                          Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *src = NULL;
-  ObDatum *pad = NULL;
-  ObDatum *len = NULL;
+  Datum *src = NULL;
+  Datum *pad = NULL;
+  Datum *len = NULL;
   if (OB_UNLIKELY(3 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, pad, len))) {
@@ -99,9 +99,8 @@ int ObExprPad::calc_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
                                                   src_str.ptr(), src_str.length());
 
     if (OB_SUCC(ret) && src_char_len < len_int) {
-      ObDatum len_char;
-      len_char.ptr_ = reinterpret_cast<const char*>(&len_int);
-      len_char.pack_ = sizeof(len_int);
+      Datum len_char;
+      len_char.set_int(len_int);
       const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
       ObExprStrResAlloc res_alloc(expr, ctx); // make sure alloc() is called only once
       if (OB_ISNULL(session)) {

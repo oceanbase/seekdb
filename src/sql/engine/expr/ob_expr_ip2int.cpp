@@ -91,12 +91,12 @@ int ObExprIp2int::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprIp2int::ip2int_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIp2int::ip2int_varchar(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &text = expr.locate_param_datum(ctx, 0);
+    Datum &text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
       expr_datum.set_null();
     } else {

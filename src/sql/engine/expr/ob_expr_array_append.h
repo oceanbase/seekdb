@@ -35,14 +35,14 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_append(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool is_preappend = false);
+  static int eval_append(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, bool is_preappend = false);
   static int eval_append_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                const ObBitVector &skip, const int64_t batch_size,
                                bool is_preappend = false);
 
   static int append_elem(ObIAllocator &tmp_allocator, ObEvalCtx &ctx,
-                         ObDatum *val_datum, uint16_t val_subschema_id,
-                         ObIArrayType *val_arr, ObIArrayType *res_arr);
+                         Datum *val_datum, uint16_t val_subschema_id,
+                         ObIArrayType *val_arr, ObIArrayType *res_arr, const ObExpr &value_expr);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprArrayAppendCommon);
@@ -55,7 +55,7 @@ public:
   explicit ObExprArrayAppend(common::ObIAllocator &alloc, ObExprOperatorType type, 
                              const char *name, int32_t param_num, int32_t dimension);
   virtual ~ObExprArrayAppend();
-  static int eval_array_append(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_append(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_append_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                      const ObBitVector &skip, const int64_t batch_size);
 
@@ -73,7 +73,7 @@ public:
   explicit ObExprArrayPrepend(common::ObIAllocator &alloc, ObExprOperatorType type, 
                               const char *name, int32_t param_num, int32_t dimension);
   virtual ~ObExprArrayPrepend();
-  static int eval_array_prepend(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_prepend(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_prepend_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                       const ObBitVector &skip, const int64_t batch_size);
 

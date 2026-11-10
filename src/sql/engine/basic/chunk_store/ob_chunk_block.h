@@ -159,7 +159,7 @@ public:
   BatchCtx() : datums_(nullptr), stored_rows_(nullptr), row_size_array_(nullptr), selector_(nullptr) {}
   ~BatchCtx() {}
 public:
-  const ObDatum **datums_;
+  const Datum **datums_;
   ObChunkDatumStore::StoredRow **stored_rows_;
   uint32_t *row_size_array_;
   uint16_t *selector_;

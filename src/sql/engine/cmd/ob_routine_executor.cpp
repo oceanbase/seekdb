@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "common/datum/datum_value_buffer.h"
+#include "share/datum/typed_datum_compare.h"
 #include "ob_routine_executor.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/command/ob_root_command_service.h"
@@ -26,11 +28,35 @@
 #include "sql/pl/ob_pl_package.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/pl/pl_cache/ob_pl_cache_mgr.h"
+#include "common/datum/datum_copy_plan.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+namespace {
+// OUT is an actual physical PL result plus a Type prepared from the executed
+// callee's declarations. Convert once at this explicit semantic frame boundary.
+int publish_routine_parameter(ObExecContext &ctx, int64_t index,
+    const DatumParameter &source, const SqlType *type)
+{
+  int ret = OB_SUCCESS;
+  ObPhysicalPlanCtx *parameters = ctx.get_physical_plan_ctx();
+  alignas(8) char scratch[64];
+  ObDatum legacy;
+  Datum native;
+  if (parameters == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else if (!parameters->native_parameters_ready()) {
+    // Actual PL/construction variables remain in their existing physical
+    // domain. This does not initialize SQL pages or request a resource Type.
+    ret = parameters->set_parameter_input(index, source);
+  } else if (type == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(source.export_legacy(legacy, scratch, sizeof(scratch)))) {}
+  else if (OB_FAIL(DatumCopyPlan(*type).import_legacy(legacy, native))) {}
+  else { ret = parameters->set_runtime_parameter(index, native, *type, source.get_metadata()); }
+  return ret;
+}
+} // namespace
 int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &stmt)
 {
   int ret = OB_SUCCESS;
@@ -83,13 +109,19 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
     ParamStore params( (ObWrapperAllocator(ctx.get_allocator())) );
     const share::schema::ObRoutineInfo *routine_info = NULL;
     ObArray<bool> null_params;
+    ObPhysicalPlanCtx &bindings = *ctx.get_physical_plan_ctx();
 
     if (!call_proc_info->can_direct_use_param()) {
-      ObObjParam param;
-      const ParamStore &origin_params = ctx.get_physical_plan_ctx()->get_param_store_for_update();
+      DatumParameter param;
+      const ObPhysicalPlanCtx &origin_params = bindings;
       pl::ExecCtxBak exec_ctx_bak;
       sql::ObPhysicalPlanCtx phy_plan_ctx(ctx.get_allocator());
       phy_plan_ctx.set_timeout_timestamp(ctx.get_physical_plan_ctx()->get_timeout_timestamp());
+      if (origin_params.native_parameters_ready()) {
+        OZ (origin_params.clone_runtime_parameters_to(phy_plan_ctx));
+      } else {
+        OZ (phy_plan_ctx.assign_parameter_inputs(origin_params.get_parameter_inputs()));
+      }
       exec_ctx_bak.backup(ctx);
       ctx.set_physical_plan_ctx(&phy_plan_ctx);
       if (call_proc_info->get_expr_op_size() > 0)  {
@@ -97,9 +129,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
       }
       OZ (call_proc_info->get_frame_info().pre_alloc_exec_memory(ctx));
 
-      for (int64_t i = 0; OB_SUCC(ret) && i < origin_params.count(); ++i) {
-        OZ (phy_plan_ctx.get_param_store_for_update().push_back(origin_params.at(i)));
-      }
 
       for (int64_t i = 0; OB_SUCC(ret) && i < call_proc_info->get_expressions().count(); ++i) {
         const ObSqlExpression *expr = call_proc_info->get_expressions().at(i);
@@ -107,7 +136,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
           ret = OB_ERR_UNEXPECTED;
         } else {
           param.reset();
-          param.ObObj::reset();
           if (OB_FAIL(ObSQLUtils::calc_sql_expression_without_row(ctx, *expr, param))) {
           } else {
             if (expr->get_is_pl_mock_default_expr()) {
@@ -140,17 +168,21 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
       }
       exec_ctx_bak.restore(ctx);
     } else {
-      int64_t param_cnt = ctx.get_physical_plan_ctx()->get_param_store().count();
-      if (call_proc_info->get_param_cnt() != param_cnt) {
-        ret = OB_ERR_SP_WRONG_ARG_NUM;
+      const int64_t param_cnt = bindings.get_parameter_count();
+      ObArenaAllocator descriptor_owner("CallProcInputs");
+      ParamStore resolution_inputs((ObWrapperAllocator(descriptor_owner)));
+      if (call_proc_info->get_param_cnt() != param_cnt) { ret = OB_ERR_SP_WRONG_ARG_NUM; }
+      if (bindings.native_parameters_ready()) {
+        OZ (bindings.build_resolution_inputs(resolution_inputs, ctx.get_allocator()));
+      } else {
+        OZ (resolution_inputs.assign(bindings.get_parameter_inputs()));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
-        LOG_DEBUG("params", "param", ctx.get_physical_plan_ctx()->get_param_store().at(i), K(i));
-        ObObjParam param = ctx.get_physical_plan_ctx()->get_param_store().at(i);
+        const DatumParameter &param = resolution_inputs.at(i);
+        LOG_DEBUG("params", K(param), K(i));
         if (OB_FAIL(params.push_back(param))) {
         } else if (call_proc_info->get_output_count() > 0) {
-          if (OB_FAIL(null_params.push_back(param.is_null()))) {
-          }
+          OZ (null_params.push_back(param.is_null()));
         }
       }
     }
@@ -160,7 +192,8 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
     }
     if (OB_SUCC(ret)) {
       ObArray<int64_t> path;
-      ObObj result;
+      DatumParameter result;
+      ObSEArray<const SqlType *, 8> out_parameter_types;
       int64_t pkg_id = package_id;
       if (OB_FAIL(ctx.get_pl_engine()->execute(ctx,
                                               ctx.get_allocator(),
@@ -168,21 +201,20 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                                               routine_id,
                                               path,
                                               params,
-                                              result))) {
+                                              result, nullptr, false, false, 0, false,
+                                              call_proc_info->get_output_count() > 0 && bindings.native_parameters_ready() ? &out_parameter_types : nullptr))) {
       }
       if (OB_FAIL(ret)) {
       } else if (call_proc_info->get_output_count() > 0) {
         int64_t client_output_cnt = call_proc_info->get_client_output_count();
         ctx.get_output_row()->count_ = client_output_cnt;
-        if (client_output_cnt > 0
-            && OB_ISNULL(ctx.get_output_row()->cells_ = static_cast<ObObj *>(
-                             ctx.get_allocator().alloc(sizeof(ObObj) * client_output_cnt)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
+        if (OB_FAIL(DatumValueBuffer::allocate(ctx.get_allocator(), client_output_cnt,
+                            ctx.get_output_row()->cells_))) {
         } else {
           int64_t out_idx = -1;    // index for out params
           int64_t c_out_idx = -1;  // index for out params which would be returned to client
           for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
-            ObObj out_value;
+            DatumParameter out_value;
             if (call_proc_info->is_out_param(i)) {
               OX (out_idx++);
               if (ob_is_enum_or_set_type(params.at(i).get_type())) {
@@ -195,7 +227,9 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
               }
 
               if (call_proc_info->is_client_out_param_by_param_id(i)) {
-                OX (ctx.get_output_row()->cells_[++c_out_idx] = out_value);
+                DatumValue owned;
+                OZ (clone_typed_value(out_value.value_view(), owned, ctx.get_allocator()));
+                OX (ctx.get_output_row()->cells_[++c_out_idx] = owned);
               }
 
               if (OB_FAIL(ret)) {
@@ -203,10 +237,11 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                 const ObSqlExpression *expr = call_proc_info->get_expressions().at(i);
                 ObItemType expr_type = expr->get_expr_items().at(0).get_item_type();
                 if (OB_LIKELY(IS_CONST_TYPE(expr_type))) {
-                  const ObObj &value = expr->get_expr_items().at(0).get_obj();
+                  const DatumValue &value = expr->get_expr_items().at(0).get_obj();
                   if (T_QUESTIONMARK == expr_type) {
                     int64_t param_idx = value.get_unknown();
-                    ctx.get_physical_plan_ctx()->get_param_store_for_update().at(param_idx) = out_value;
+                    const SqlType *type = i < out_parameter_types.count() ? out_parameter_types.at(i) : nullptr;
+                    OZ (publish_routine_parameter(ctx, param_idx, out_value, type));
                   } else {
                     /* do nothing */
                   }
@@ -217,14 +252,15 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                   } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt.get_stmt_type(), ctx, ctx.get_allocator(), expr_ctx))) {
                   } else {
                     const ObString var_name = expr->get_expr_items().at(1).get_obj().get_string();
-                    if (FAILEDx(ObVariableSetExecutor::set_user_variable(out_value, var_name, expr_ctx))) {
+                    if (FAILEDx(ObVariableSetExecutor::set_user_variable(out_value.value_view(), var_name, expr_ctx))) {
                     }
                   }
                 } else {
                   ret = OB_ERR_OUT_PARAM_NOT_BIND_VAR;
                 }
               } else {
-                ctx.get_physical_plan_ctx()->get_param_store_for_update().at(i) = out_value;
+                const SqlType *type = i < out_parameter_types.count() ? out_parameter_types.at(i) : nullptr;
+                OZ (publish_routine_parameter(ctx, i, out_value, type));
               }
             }
           }  // for end
@@ -327,20 +363,28 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
   } else if (stmt.is_prepare_protocol()) {
     ObArray<bool> null_params;
     ObBitSet<OB_DEFAULT_BITSET_SIZE> out_args;
+    ObSEArray<const SqlType *, 8> out_parameter_types;
+    const bool restore_parameters = stmt.get_params()->count() > 0
+        && ctx.get_my_session()->get_pl_context() != nullptr;
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_params()->count(); ++i) {
       OZ (null_params.push_back(stmt.get_params()->at(i).is_null()));
     }
     OZ (ctx.get_pl_engine()->execute(
-      ctx, *stmt.get_params(), stmt.get_stmt_id(), stmt.get_sql(), out_args),
+      ctx, *stmt.get_params(), stmt.get_stmt_id(), stmt.get_sql(), out_args,
+      restore_parameters && ctx.get_physical_plan_ctx() != nullptr
+          && ctx.get_physical_plan_ctx()->native_parameters_ready() ? &out_parameter_types : nullptr),
       K(stmt), KPC(stmt.get_params()));
     // Handle the scenario of anonymous block out parameters, if the anonymous block is executed via execute immediate, need to overwrite the modifications of parameters in the anonymous block to param_store of the parent call
     if (OB_SUCC(ret)
         && stmt.get_params()->count() > 0
         && OB_NOT_NULL(ctx.get_my_session()->get_pl_context())) {
       CK (OB_NOT_NULL(ctx.get_physical_plan_ctx()));
-      CK (ctx.get_physical_plan_ctx()->get_param_store().count() == stmt.get_params()->count());
+      CK (ctx.get_physical_plan_ctx()->get_parameter_count() == stmt.get_params()->count());
+      CK (!ctx.get_physical_plan_ctx()->native_parameters_ready()
+          || out_parameter_types.count() == stmt.get_params()->count());
       for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_params()->count(); ++i) {
-        ctx.get_physical_plan_ctx()->get_param_store_for_update().at(i) = stmt.get_params()->at(i);
+        const SqlType *type = i < out_parameter_types.count() ? out_parameter_types.at(i) : nullptr;
+        OZ (publish_routine_parameter(ctx, i, stmt.get_params()->at(i), type));
       }
     }
     // Process the output parameters of the top-level anonymous block, the output parameters of the top-level anonymous block need to be returned to the client
@@ -350,10 +394,8 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
         && !out_args.is_empty()) {
       bool need_push = false;
       ctx.get_output_row()->count_ = out_args.num_members();
-      if (OB_ISNULL(ctx.get_output_row()->cells_ =
-        static_cast<ObObj *>(ctx.get_allocator().alloc(sizeof(ObObj) * out_args.num_members())))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
+      OZ (DatumValueBuffer::allocate(ctx.get_allocator(), out_args.num_members(),
+                                    ctx.get_output_row()->cells_));
       CK (OB_NOT_NULL(ctx.get_field_columns()));
 
       // prepare of prexecue protocol fill "field_columns" with question mark count.
@@ -370,10 +412,13 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
       for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_params()->count(); ++i) {
         if (out_args.has_member(i)) {
           ObField field;
-          ObObjParam &value = stmt.get_params()->at(i);
-          ctx.get_output_row()->cells_[out_idx] = stmt.get_params()->at(i);
+          DatumParameter &value = stmt.get_params()->at(i);
+          const DatumParameter &parameter = stmt.get_params()->at(i);
+          DatumValue owned;
+          OZ (clone_typed_value(parameter.value_view(), owned, ctx.get_allocator()));
+          OX (ctx.get_output_row()->cells_[out_idx] = owned);
           field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI;
-          field.type_.set_type(value.get_type());
+          field.type_meta_.set_type(value.get_type());
           field.accuracy_ = value.get_accuracy();
           if (value.get_type() != ObExtendType) { // basic data type
             if (ObVarcharType == value.get_type()
@@ -386,7 +431,7 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
               }
             } else {
               OZ (common::ObField::get_field_mb_length(
-                field.type_.get_type(), field.accuracy_, common::CS_TYPE_INVALID, field.length_));
+                field.type_meta_.get_type(), field.accuracy_, common::CS_TYPE_INVALID, field.length_));
             }
             ObCollationType collation = CS_TYPE_INVALID;
             OZ (ObCharset::get_default_collation(value.get_collation_type(), collation));

@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_CONTEXT_
 #define OCEANBASE_SQL_CONTEXT_
 
+#include "common/datum/datum_value.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_sql_utils.h"
 #include "lib/net/ob_addr.h"
@@ -698,7 +699,7 @@ public:
   common::ObSArray<ObPCPrivInfo, common::ModulePageAllocator, true> all_priv_constraints_;
   common::ObSArray<ObLocalSessionVar, common::ModulePageAllocator, true> all_local_session_vars_;
   common::ObSArray<ObUserVarIdentRawExpr *, common::ModulePageAllocator, true> all_user_variable_;
-  common::hash::ObHashMap<uint64_t, ObObj, common::hash::NoPthreadDefendMode> calculable_expr_results_;
+  common::hash::ObHashMap<uint64_t, common::DatumValue, common::hash::NoPthreadDefendMode> calculable_expr_results_;
   bool need_match_all_params_; //only used for matching plans
   bool has_udf_;
   bool disable_udf_parallel_; //used to deterministic pl udf parallel execute

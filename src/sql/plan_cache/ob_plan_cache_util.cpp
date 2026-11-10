@@ -18,6 +18,10 @@
 
 #include "rust/config.h"
 #include "ob_plan_cache_util.h"
+#include "sql/engine/expr/ob_expr.h"
+#include "sql/engine/expr/ob_expr_util.h"
+#include "common/datum/datum_copy_plan.h"
+#include "sql/pl/ob_pl_type.h"
 #include "sql/optimizer/ob_log_plan.h"
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
@@ -27,8 +31,254 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace {
+int constraint_legacy_view(const common::NativeTypedDatum &source,
+                           common::DatumValue &view, char (&scratch)[64])
+{
+  int ret = OB_SUCCESS;
+  if (source.type_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const common::DatumCopyPlan plan(*source.type_);
+    common::ObDatum datum;
+    if (OB_FAIL(plan.legacy_view(source.datum_, datum, scratch, sizeof(scratch)))) {
+    } else {
+      ret = view.assign_legacy_borrowed(datum, source.type_->legacy_meta());
+    }
+  }
+  return ret;
+}
 
+bool simple_constraint_type(const common::SqlTypeMeta &meta)
+{
+  return !meta.is_enum_or_set() && !meta.is_enumset_inner_type()
+      && !meta.is_collection_sql_type() && !meta.is_ext_sql_array()
+      && !meta.is_pl_extend_type() && meta.get_type() != common::ObUserDefinedSQLType;
+}
+// The existing comparison preflight with a NULL peer validates the legacy
+// descriptor before its no-comparison NULL branch. It reads no resource graph.
+// Only this already-unsupported/absent-declaration path uses the admission
+// marker; malformed inputs must remain errors instead of becoming cache misses.
+int mark_uncapturable_constraint(const common::DatumValue &value, bool &eligible)
+{
+  const common::DatumValue null;
+  const int ret = common::can_compare_datum_values(value, null)
+      ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+  if (ret == OB_SUCCESS) { eligible = false; }
+  return ret;
+}
+} // namespace
 
+int ObPCConstParamInfo::add_constant(const common::Datum &value, const common::SqlType &type,
+                                     common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  const common::DatumCopyPlan plan(type);
+  int64_t span = 0;
+  if (OB_FAIL(plan.carrier_span_size(value, span))) {
+  } else if (value.is_present() && type.requires_resource_clone()) {
+    // Such values were never comparable cache keys. Retain neither their
+    // wrappers nor resources; the entire query is explicitly cache-ineligible.
+    cache_eligible_ = false;
+  } else if (cache_eligible_) {
+    common::NativeTypedDatum owned;
+    // Each API call names its actual owner. Equality alone does not establish
+    // that an earlier slot's Type belongs to this allocator.
+    if (OB_FAIL(type.clone_to(allocator, owned.type_))) {
+    } else if (OB_FAIL(plan.deep_copy(value, owned.datum_, allocator))) {
+    } else { ret = const_params_.push_back(owned); }
+  }
+  return ret;
+}
+
+int ObPCConstParamInfo::add_constant(const common::ObDatum &value, const common::SqlType &type,
+                                     common::ObIAllocator &allocator)
+{
+  common::Datum imported;
+  const common::DatumCopyPlan plan(type);
+  const int ret = plan.import_legacy(value, imported);
+  return ret == OB_SUCCESS ? add_constant(imported, type, allocator) : ret;
+}
+
+int ObPCConstParamInfo::add_runtime_parameter(const ObPhysicalPlanCtx &parameters,
+                                              int64_t index,
+                                              common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  common::NativeTypedDatum value;
+  common::DatumParameterMetadata attributes;
+  if (OB_FAIL(parameters.capture_native_parameter(index, value, attributes))) {
+  } else if (value.type_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    int64_t span = 0;
+    const common::DatumCopyPlan plan(*value.type_);
+    if (OB_FAIL(plan.carrier_span_size(value.datum_, span))) {
+    } else if (value.type_->requires_resource_clone()
+        || parameters.get_group_parameter_input(index) != nullptr) {
+      // P1 does not broaden cache admission for resource/PL typed NULL or
+      // original grouped arrays merely because a complete bound Type exists.
+      // Execution keeps its value; no cache key or synthetic Type is published.
+      cache_eligible_ = false;
+    } else {
+      ret = add_constant(value.datum_, *value.type_, allocator);
+    }
+  }
+  return ret;
+}
+
+int ObPCConstParamInfo::add_parameter(const common::DatumParameter &value,
+                                      const ObExecContext *actual_ctx,
+                                      common::ObIAllocator &allocator,
+                                      const pl::ObPLINS *actual_declarations)
+{
+  int ret = OB_SUCCESS;
+  auto add_prepared = [&](const common::SqlType &type) {
+    alignas(8) char scratch[64];
+    common::ObDatum legacy;
+    const int code = value.export_legacy(legacy, scratch, sizeof(scratch));
+    // The wrapper is generic physical (Decimal keeps actual bytes, Unknown
+    // is Reference8). The actual prepared Type chooses semantic representation.
+    return code == OB_SUCCESS ? add_constant(legacy, type, allocator) : code;
+  };
+  // A runtime NULL has no payload type, but its protocol/declaration metadata
+  // and full accuracy remain available independently of initialized frames.
+  const common::SqlTypeMeta &meta = value.is_null() && value.get_type_meta().is_null()
+      && !value.get_param_meta().is_null() ? value.get_param_meta() : value.get_type_meta();
+  if (simple_constraint_type(meta)) {
+    common::SqlType type;
+    if (OB_FAIL(common::SqlType::from_legacy(meta, value.get_accuracy(), type))) {
+    } else { ret = add_prepared(type); }
+  } else if (meta.get_type() == common::ObUserDefinedSQLType
+      || actual_ctx == nullptr || (meta.is_pl_extend_type()
+      && (meta.get_extend_type() != pl::PL_RECORD_TYPE || actual_declarations == nullptr))) {
+    ret = mark_uncapturable_constraint(value.value_view(), cache_eligible_);
+  } else {
+    common::ObArenaAllocator temporary("PCConstType");
+    const common::SqlType *type = nullptr;
+    if (OB_FAIL(ObExprUtil::resolve_sql_type(*const_cast<ObExecContext *>(actual_ctx), meta, value.get_accuracy(),
+          meta.get_subschema_id(), temporary, type, actual_declarations))) {
+    } else { ret = add_prepared(*type); }
+  }
+  return ret;
+}
+
+int ObPCConstParamInfo::add_raw_constant(const common::DatumValue &value,
+                                         const ObRawExprResType &original_type,
+                                         const ObSQLSessionInfo *session,
+                                         share::schema::ObSchemaGetterGuard *schema_guard,
+                                         common::ObIAllocator &allocator,
+                                         const pl::ObPLINS *actual_declarations)
+{
+  int ret = OB_SUCCESS;
+  auto add_prepared = [&](const common::SqlType &type) {
+    alignas(8) char scratch[64];
+    common::ObDatum legacy;
+    const int code = value.export_legacy(legacy, scratch, sizeof(scratch));
+    // The wrapper is generic physical (Decimal keeps actual bytes, Unknown
+    // is Reference8). The actual prepared Type chooses semantic representation.
+    return code == OB_SUCCESS ? add_constant(legacy, type, allocator) : code;
+  };
+  const common::SqlTypeMeta &meta = value.is_null()
+      ? original_type.get_sql_type_meta() : value.get_meta();
+  if (simple_constraint_type(meta)) {
+    common::SqlType type;
+    if (OB_FAIL(common::SqlType::from_legacy(meta, original_type.get_accuracy(), type))) {
+    } else { ret = add_prepared(type); }
+  } else if (meta.get_type() == common::ObUserDefinedSQLType
+      || (meta.is_pl_extend_type()
+      && (meta.get_extend_type() != pl::PL_RECORD_TYPE || actual_declarations == nullptr))
+      || (!meta.is_pl_extend_type() && (session == nullptr || session->get_cur_exec_ctx() == nullptr))) {
+    ret = mark_uncapturable_constraint(value, cache_eligible_);
+  } else {
+    common::ObArenaAllocator temporary("PCConstType");
+    const common::SqlType *type = nullptr;
+    if (OB_FAIL(ObExprUtil::resolve_raw_sql_type(original_type, session, schema_guard,
+                                               temporary, type, actual_declarations))) {
+    } else { ret = add_prepared(*type); }
+  }
+  return ret;
+}
+
+int ObPCConstParamInfo::add_int_constant(int64_t value, common::ObIAllocator &allocator)
+{
+  common::SqlTypeMeta meta;
+  meta.set_int();
+  common::SqlType type;
+  common::Datum datum;
+  datum.set_int(value);
+  const int ret = common::SqlType::from_legacy(meta,
+      common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType], type);
+  return ret == OB_SUCCESS ? add_constant(datum, type, allocator) : ret;
+}
+
+int ObPCConstParamInfo::clone_constant(const common::NativeTypedDatum &source,
+                                       common::ObIAllocator &allocator,
+                                       common::NativeTypedDatum &output)
+{
+  int ret = OB_SUCCESS;
+  common::NativeTypedDatum owned;
+  if (source.type_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(source.type_->clone_to(allocator, owned.type_))) {
+  } else {
+    const common::DatumCopyPlan plan(*owned.type_);
+    if (OB_FAIL(plan.deep_copy(source.datum_, owned.datum_, allocator))) {
+    } else { output = owned; }
+  }
+  return ret;
+}
+
+int ObPCConstParamInfo::compare_constant(const common::NativeTypedDatum &left,
+                                         const common::DatumParameter &right,
+                                         int &comparison)
+{
+  int ret = OB_SUCCESS;
+  common::DatumValue view;
+  alignas(8) char scratch[64];
+  if (OB_FAIL(constraint_legacy_view(left, view, scratch))) {
+  } else { ret = common::compare_datum_values(view, right.value_view(), comparison); }
+  return ret;
+}
+
+int ObPCConstParamInfo::equal_constants(const common::NativeTypedDatum &left,
+                                        const common::NativeTypedDatum &right, bool &equal)
+{
+  int ret = OB_SUCCESS;
+  common::DatumValue l, r;
+  alignas(8) char left_scratch[64], right_scratch[64];
+  if (OB_FAIL(constraint_legacy_view(left, l, left_scratch))) {
+  } else if (OB_FAIL(constraint_legacy_view(right, r, right_scratch))) {
+  } else { ret = common::datum_values_equal(l, r, equal); }
+  return ret;
+}
+
+int ObPCConstParamInfo::print_constant(const common::NativeTypedDatum &value,
+                                       char *buffer, int64_t capacity, int64_t &position)
+{
+  int ret = OB_SUCCESS;
+  common::DatumValue view;
+  alignas(8) char scratch[64];
+  if (OB_FAIL(constraint_legacy_view(value, view, scratch))) {
+  } else { ret = view.print_sql_literal(buffer, capacity, position); }
+  return ret;
+}
+
+bool ObPCConstParamInfo::operator==(const ObPCConstParamInfo &other) const
+{
+  bool same = cache_eligible_ && other.cache_eligible_
+      && const_idx_.count() == other.const_idx_.count()
+      && const_params_.count() == other.const_params_.count();
+  for (int64_t i = 0; same && i < const_idx_.count(); ++i) {
+    same = const_idx_.at(i) == other.const_idx_.at(i);
+  }
+  for (int64_t i = 0; same && i < const_params_.count(); ++i) {
+    bool equal = false;
+    same = OB_SUCCESS == equal_constants(const_params_.at(i), other.const_params_.at(i), equal)
+        && equal;
+  }
+  return same;
+}
 
 int ObGetAllCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID, ObILibCacheObject *> &entry)
 {
@@ -79,7 +329,7 @@ int TableAccessTargetBuilder::collect_access_targets(const ObIArray<TableAccessP
   } else {
     ObSEArray<const TableAccessPlan *, 2> table_access_plan_ptrs;
     ObSEArray<TableAccessTargets *, 2> target_ptrs;
-    const ParamStore &params = plan_ctx->get_param_store();
+    const ObPhysicalPlanCtx &params = *plan_ctx;
     if (OB_FAIL(table_targets.prepare_allocate(N))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
@@ -145,7 +395,7 @@ int TableAccessTargetBuilder::build_related_tablet_info(const TableAccessPlan &t
   ObArray<ObTabletID> tablet_ids;
 
   if (OB_FAIL(table_access_plan.calculate_tablet_ids(exec_ctx,
-                                                  plan_ctx->get_param_store(),
+                                                  *plan_ctx,
                                                   tablet_ids,
                                                   partition_ids,
                                                   first_level_part_ids,

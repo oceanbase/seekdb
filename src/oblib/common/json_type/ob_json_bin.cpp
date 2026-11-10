@@ -389,7 +389,7 @@ int ObJsonBin::init_bin_data()
       case json::StoredValueClass::Text:
       case json::StoredValueClass::Opaque: {
         meta_.str_data_offset_ = info.data_offset;
-        meta_.field_type_ = static_cast<ObObjType>(info.field_type);
+        meta_.field_type_ = static_cast<SqlValueType>(info.field_type);
         ret = cursor_->get(pos_ + info.data_offset, info.count, data);
         break;
       }

@@ -148,13 +148,13 @@ public:
   }
   VIRTUAL_TO_STRING_KV(K_(input_row_cnt), K_(output_row_cnt));
 public:
-  inline static void set_datum_int(ObDatum &datum, const ObDocIdExt &id)
+  inline static void set_datum_int(common::Datum &datum, const ObDocIdExt &id)
   {
     datum.set_int(id.get_datum().get_int());
   }
-  inline static void set_datum_shallow(ObDatum &datum, const ObDocIdExt &id)
+  inline static void set_datum_shallow(common::Datum &datum, const ObDocIdExt &id)
   {
-    datum.set_datum(id.get_datum());
+    datum.set_string(id.get_datum().get_string());
   }
 protected:
   int64_t input_row_cnt_; // iterated row count

@@ -73,10 +73,10 @@ int ObExprCompress::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) c
   return ret;
 }
 
-int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_null();
@@ -150,7 +150,7 @@ int ObExprUncompress::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr)
 
 static int eval_uncompress_length(const ObExpr &expr,
                                   ObEvalCtx &ctx,
-                                  ObDatum &expr_datum,
+                                  Datum &expr_datum,
                                   const ObString &str_val,
                                   uint64_t &orig_len, 
                                   bool &not_final)
@@ -178,11 +178,11 @@ static int eval_uncompress_length(const ObExpr &expr,
   return ret;
 }
 
-int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
-  ObObjType type = expr.args_[0]->datum_meta_.type_;
+  Datum *arg = NULL;
+  SqlValueType type = expr.args_[0]->datum_meta_.type_;
   uint64_t orig_len = 0;
   bool not_final = false;
   if (OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
@@ -254,16 +254,16 @@ int ObExprUncompressedLength::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &
   return ret;
 }
 
-int ObExprUncompressedLength::eval_uncompressed_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprUncompressedLength::eval_uncompressed_length(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else if (arg->get_string().empty()) {
     expr_datum.set_int(0);
-  } else if (OB_UNLIKELY((arg->len_ <= COMPRESS_HEADER_LEN))) {
+  } else if (OB_UNLIKELY((arg->length() <= COMPRESS_HEADER_LEN))) {
     expr_datum.set_int(0);
     LOG_USER_WARN(OB_ERR_ZLIB_DATA);
   } else {

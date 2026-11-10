@@ -54,6 +54,7 @@ class ObSQLSessionInfo;
 }
 namespace common
 {
+struct ObDatum;
 class ObTimeZoneInfo;
 }
 
@@ -264,7 +265,7 @@ public:
       charsetnr_(CS_TYPE_UTF8MB4_GENERAL_CI)
   {
   }
-  ObPLDataType(common::ObObjType type)
+  ObPLDataType(common::SqlValueType type)
     : type_(PL_OBJ_TYPE),
       type_from_(PL_TYPE_LOCAL),
       type_from_origin_(PL_TYPE_LOCAL),
@@ -325,10 +326,10 @@ public:
   inline ObPLTypeFrom get_type_from_origin() const { return type_from_origin_; }
   const common::ObDataType *get_data_type() const { return is_obj_type() ? &obj_type_ : NULL; }
   common::ObDataType *get_data_type() { return is_obj_type() ? &obj_type_ : NULL; }
-  const common::ObObjMeta *get_meta_type() const { return  is_obj_type() ? &(obj_type_.meta_) : NULL; }
+  const common::SqlTypeMeta *get_meta_type() const { return  is_obj_type() ? &(obj_type_.meta_) : NULL; }
   void set_data_type(const common::ObDataType &obj_type);
 
-  common::ObObjType get_obj_type() const;
+  common::SqlValueType get_obj_type() const;
   ObPLIntegerType get_pl_integer_type() const { return pls_type_; }
   inline void set_pl_integer_type(ObPLIntegerType integer_type, const common::ObDataType &obj_type);
   uint64_t get_user_type_id() const;
@@ -449,7 +450,7 @@ public:
                                sql::ObExecContext &exec_ctx,
                                const sql::ObSqlExpression *default_expr,
                                bool default_construct,
-                               common::ObObj &obj) const;
+                               common::DatumParameter &obj) const;
   virtual int add_package_routine_schema_param(const ObPLResolveCtx &resolve_ctx,
                                                const ObPLBlockNS &block_ns,
                                                const common::ObString &package_name,
@@ -460,7 +461,7 @@ public:
   virtual int get_all_depended_user_type(const ObPLResolveCtx &resolve_ctx,
                                          const ObPLBlockNS &current_ns) const;
 
-  int convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const;
+  int convert(ObPLResolveCtx &ctx, DatumValue *&src, DatumValue *&dst) const;
   static int get_table_type_by_name(uint64_t owner_id,
                                   const ObString &table,
                                   const ObString &type,
@@ -484,8 +485,8 @@ public:
                                   share::schema::ObRoutineInfo &routine_info);
   static int deep_copy_pl_type(ObIAllocator &allocator, const ObPLDataType &src, ObPLDataType *&dst);
 
-  static int obj_is_null(ObObj &obj, bool &is_null);
-  static int datum_is_null(ObDatum* param, bool is_udt_type, bool &is_null);
+  static int obj_is_null(const DatumParameter &obj, bool &is_null);
+  static int datum_is_null(common::ObDatum* param, bool is_udt_type, bool &is_null);
 
   DECLARE_TO_STRING;
 

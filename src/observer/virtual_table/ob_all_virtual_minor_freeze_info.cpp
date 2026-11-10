@@ -71,51 +71,51 @@ int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID + 0:
           // tablet_id
-          cur_row_.cells_[i].set_int(freeze_stat.get_tablet_id().id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, freeze_stat.get_tablet_id().id()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 1:
           // is_force
-          cur_row_.cells_[i].set_varchar(freeze_stat.need_rewrite_meta() ? "YES" : "NO");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, freeze_stat.need_rewrite_meta() ? "YES" : "NO") : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case OB_APP_MIN_COLUMN_ID + 2:
           // freeze_clock
           freeze_clock = freeze_stat.get_freeze_clock();
-          cur_row_.cells_[i].set_int(freeze_clock);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, freeze_clock) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 3:
           // freeze_snapshot_version
-          cur_row_.cells_[i].set_int(freeze_stat.get_freeze_snapshot_version().get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, freeze_stat.get_freeze_snapshot_version().get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 4:
           // start_time
-          cur_row_.cells_[i].set_timestamp(freeze_stat.get_start_time());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, freeze_stat.get_start_time()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 5:
           // end_time
-          cur_row_.cells_[i].set_timestamp(freeze_stat.get_end_time());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, freeze_stat.get_end_time()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 6:
           // ret_code
-          cur_row_.cells_[i].set_int(freeze_stat.get_ret_code());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, freeze_stat.get_ret_code()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 7:
           // state
           switch (freeze_stat.get_state()) {
             case ObFreezeState::INVALID:
-              cur_row_.cells_[i].set_varchar("INVALID");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "INVALID") : ret);
               break;
             case ObFreezeState::NOT_SET_FREEZE_FLAG:
-              cur_row_.cells_[i].set_varchar("NOT_SET_FREEZE_FLAG");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "NOT_SET_FREEZE_FLAG") : ret);
               break;
             case ObFreezeState::NOT_SUBMIT_LOG:
-              cur_row_.cells_[i].set_varchar("NOT_SUBMIT_LOG");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "NOT_SUBMIT_LOG") : ret);
               break;
             case ObFreezeState::WAIT_READY_FOR_FLUSH:
-              cur_row_.cells_[i].set_varchar("WAIT_READY_FOR_FLUSH");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "WAIT_READY_FOR_FLUSH") : ret);
               break;
             case ObFreezeState::FINISH:
-              cur_row_.cells_[i].set_varchar("FINISH");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "FINISH") : ret);
               break;
             default:
               ret = OB_ERR_UNEXPECTED;
@@ -127,7 +127,7 @@ int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
         case OB_APP_MIN_COLUMN_ID + 8:
           // diagnose_info
           if (OB_SUCC(freeze_stat.get_diagnose_info(diagnose_info_))) {
-            cur_row_.cells_[i].set_varchar(diagnose_info_.get_ob_string());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, diagnose_info_.get_ob_string()) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -136,7 +136,7 @@ int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(freeze_stat.get_memtables_info(memtables_info_))) {
           } else {
             generate_memtables_info();
-            cur_row_.cells_[i].set_varchar(memtables_info_string_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, memtables_info_string_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;

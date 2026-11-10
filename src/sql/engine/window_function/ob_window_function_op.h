@@ -609,6 +609,16 @@ public:
     Stores res_;
 
     Frame last_valid_frame_;
+    // Fixed result-row staging: each cell owns the inline/coefficient view until
+    // RowsStore synchronously encodes it. Reference spans keep their original owner.
+    alignas(8) char legacy_result_scratch_[64];
+    int legacy_result(const ObExpr &expr, const Datum &value, common::ObDatum &out)
+    {
+      int ret = expr.get_datum_copy_plan().legacy_view(value, out,
+          legacy_result_scratch_, sizeof(legacy_result_scratch_));
+      if (OB_SUCC(ret)) { expr.set_evaluated_flag(op_.eval_ctx_); }
+      return ret;
+    }
   };
 
   class AggrCell : public WinFuncCell
@@ -619,10 +629,18 @@ public:
         finish_prepared_(false),
         aggr_processor_(op_.eval_ctx_, aggr_infos, "WindowAggProc", op.get_monitor_info()),
         result_(),
+        result_buffer_(nullptr),
+        result_capacity_(0),
         got_result_(false),
         remove_type_(wf_info.remove_type_)
     {}
-    virtual ~AggrCell() { aggr_processor_.destroy(); }
+    virtual ~AggrCell()
+    {
+      result_.set_null();
+      result_buffer_ = nullptr;
+      result_capacity_ = 0;
+      aggr_processor_.destroy();
+    }
     int trans(const ObRADatumStore::StoredRow &row)
     {
       return trans_self(row);
@@ -654,14 +672,18 @@ public:
     virtual void reset_for_restart_self() override
     {
       finish_prepared_ = false;
-      aggr_processor_.reuse();
-      result_.reset();
+      result_.set_null();
+      result_buffer_ = nullptr;
+      result_capacity_ = 0;
       got_result_ = false;
+      aggr_processor_.reuse();
     }
   public:
     bool finish_prepared_;
     ObAggregateProcessor aggr_processor_;
-    ObDatum result_;
+    common::Datum result_;
+    char *result_buffer_;
+    int64_t result_capacity_;
     bool got_result_;
     uint64_t remove_type_;
   };
@@ -896,6 +918,8 @@ protected:
   int parallel_winbuf_process();
   int get_whole_msg(bool is_end, ObWinbufWholeMsg &whole,
       const ObRADatumStore::StoredRow *row = NULL);
+  // Copy the readable RA body to an owned Chunk row. Publish the row and its
+  // message sizes together after preflight; the RA block-tail index is excluded.
   int copy_datum_row(const ObRADatumStore::StoredRow &row, ObWinbufPieceMsg &piece,
       int64_t buf_len, char *buf);
   void restore_all_expr_datums();
@@ -999,8 +1023,8 @@ private:
   // shadow copy the next and restore it before get next row from child.
   ObChunkDatumStore::ShadowStoredRow next_row_; // for backup & restore datum ptr of child output
   DatumFixedArray curr_row_collect_values_;
-  common::ObFixedArray<ObDatum*, common::ObIAllocator> all_expr_datums_copy_;
-  common::ObFixedArray<ObDatum*, common::ObIAllocator> all_expr_datums_;
+  common::ObFixedArray<Datum*, common::ObIAllocator> all_expr_datums_copy_;
+  common::ObFixedArray<Datum*, common::ObIAllocator> all_expr_datums_;
   int64_t restore_row_cnt_;
   // previous output line
   int64_t last_output_row_idx_;
@@ -1092,8 +1116,11 @@ int ObWindowFunctionSpec::rd_sort_cmp(const STORE_ROW_L *l,
     cmp_ret = -1;
   } else {
     for (int64_t i = begin; 0 == cmp_ret && i < end && OB_SUCC(ret); i++) {
-      if (OB_FAIL(rd_sort_cmp_funcs_.at(i).cmp_func_(
-              l->cells()[i], r->cells()[i], cmp_ret, access_ctx))) {
+      // Chunk partial rows and RA input rows have distinct headers, but
+      // both expose the same fixed stored-cell representation here.
+      const ObDatum left = StoredDatumCodec::decode_legacy_view(l->stored_cells()[i]);
+      const ObDatum right = StoredDatumCodec::decode_legacy_view(r->stored_cells()[i]);
+      if (OB_FAIL(rd_sort_cmp_funcs_.at(i).cmp_func_(left, right, cmp_ret, access_ctx))) {
       } else if (!rd_sort_collations_.at(i).is_ascending_) {
         cmp_ret = cmp_ret * (-1);
       }

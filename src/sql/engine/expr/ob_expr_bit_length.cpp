@@ -59,8 +59,8 @@ int ObExprBitLength::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, 
   {
     OB_ASSERT(rt_expr.arg_cnt_ == 1);
     OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
-    ObObjType text_type = rt_expr.args_[0]->datum_meta_.type_;
-    ObObjTypeClass type_class = ob_obj_type_class(text_type);
+    SqlValueType text_type = rt_expr.args_[0]->datum_meta_.type_;
+    SqlTypeClass type_class = sql_type_class(text_type);
 
     if (!ob_is_castable_type_class(type_class)) {
       rt_expr.eval_func_ = ObExprBitLength::calc_null;
@@ -72,7 +72,7 @@ int ObExprBitLength::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, 
   return ret;
 }
 
-int ObExprBitLength::calc_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprBitLength::calc_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   UNUSED(expr);
   UNUSED(ctx);
@@ -80,15 +80,15 @@ int ObExprBitLength::calc_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
   return OB_SUCCESS;
 }
 
-int ObExprBitLength::calc_bit_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprBitLength::calc_bit_length(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text_datum = NULL;
+  Datum *text_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text_datum))) {
   } else if (text_datum->is_null()) {
     expr_datum.set_null();
   } else {
-    expr_datum.set_int(static_cast<int64_t>(text_datum->len_ * 8));
+    expr_datum.set_int(static_cast<int64_t>(text_datum->length() * 8));
   }
   return ret;
 }

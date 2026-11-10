@@ -18,6 +18,7 @@
 
 #include "ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/session/ob_system_variable.h"
 #include "sql/pl/ob_pl.h"
 
 namespace oceanbase
@@ -69,27 +70,29 @@ int ObExprPLSQLVariable::calc_result_type0(
     type.set_length_semantics(LS_BYTE);
   } else {
     const sql::ObSQLSessionInfo *session_info = type_ctx.get_session();
-    ObObj value;
+    Datum value;
+    SqlTypeMeta value_meta;
     CK (OB_NOT_NULL(session_info));
     // may plsql relative system variables, try it.
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(session_info->get_sys_variable_by_name(plsql_variable_, value))) {
+    } else if (OB_FAIL(session_info->get_sys_variable_by_name(plsql_variable_, value, value_meta))) {
       // not system variable
       if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
         ret = OB_SUCCESS;
         value.set_null();
-        OX (type.set_meta(value.get_meta()));
+        value_meta.set_null();
+        OX (type.set_meta(value_meta));
         OX (type.set_collation_type(ObCharset::get_system_collation()));
-        if (OB_SUCC(ret) && value.is_string_type()) {
-          type.set_length(value.get_string_len());
+        if (OB_SUCC(ret) && value_meta.is_string_type()) {
+          type.set_length(value.get_string().length());
           type.set_length_semantics(LS_BYTE);
         }
       } else {
       }
     } else {
-      type.set_meta(value.get_meta());
-      if (value.is_string_type()) {
-        type.set_length(value.get_string_len());
+      type.set_meta(value_meta);
+      if (value_meta.is_string_type()) {
+        type.set_length(value.get_string().length());
         type.set_length_semantics(LS_BYTE);
       }
     }
@@ -97,10 +100,8 @@ int ObExprPLSQLVariable::calc_result_type0(
   return ret;
 }
 
-int ObExprPLSQLVariable::get_plsql_unit(common::ObObj &result,
-                                        common::ObIAllocator &alloc,
+int ObExprPLSQLVariable::get_plsql_unit(common::ObString &result,
                                         ObSQLSessionInfo &session_info,
-                                        const ObExprResType &result_type,
                                         const ObString &plsql_variable)
 {
   int ret = OB_SUCCESS;
@@ -115,23 +116,16 @@ int ObExprPLSQLVariable::get_plsql_unit(common::ObObj &result,
   if (OB_FAIL(ret)) {
   } else if (0 == plsql_variable.case_compare("PLSQL_UNIT")) {
     if (pl_state->get_function().get_package_name().empty()) {
-      OZ (ob_write_string(alloc,
-                          pl_state->get_function().get_function_name(),
-                          plsql_unit));
+      plsql_unit = pl_state->get_function().get_function_name();
     } else {
-      OZ (ob_write_string(alloc,
-                          pl_state->get_function().get_package_name(),
-                          plsql_unit));
+      plsql_unit = pl_state->get_function().get_package_name();
     }
   } else if (0 == plsql_variable.case_compare("PLSQL_UNIT_OWNER")) {
     if (!pl_state->get_function().get_database_name().empty()) {
-      OZ (ob_write_string(alloc,
-                          pl_state->get_function().get_database_name(),
-                          plsql_unit));
+      plsql_unit = pl_state->get_function().get_database_name();
     }
   }
-  OX (result.set_varchar(plsql_unit));
-  OX (result.set_collation(result_type));
+  OX (result = plsql_unit);
   return ret;
 }
 
@@ -153,40 +147,56 @@ int ObExprPLSQLVariable::cg_expr(ObExprCGCtx &op_cg_ctx,
   rt_expr.eval_func_ = eval_plsql_variable;
   return ret;
 }
-int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   const ObPLSQLVariableInfo *info = static_cast<ObPLSQLVariableInfo *>(expr.extra_info_);
-  ObObj result;
+  Datum result;
+  result.set_null();
+  int64_t line = 0;
+  char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
   if (OB_ISNULL(info) || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (0 == info->plsql_variable_.case_compare("PLSQL_LINE")) {
-    result.set_int32(info->plsql_line_);
+    line = static_cast<int32_t>(info->plsql_line_);
+    // Int32 expression values use the common eight-byte integer row Datum.
+    result.set_int(line);
   } else if (0 == info->plsql_variable_.case_compare("PLSQL_UNIT")
              || 0 == info->plsql_variable_.case_compare("PLSQL_UNIT_OWNER")) {
-    OZ (get_plsql_unit(result, ctx.exec_ctx_.get_allocator(),
-                       *ctx.exec_ctx_.get_my_session(), info->result_type_,
+    ObString unit;
+    OZ (get_plsql_unit(unit, *ctx.exec_ctx_.get_my_session(),
                        info->plsql_variable_));
+    OX (result.set_string(unit));
   } else {
     // may plsql relative system variables, try it.
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_sys_variable_by_name(info->plsql_variable_,
-                                                                                result))) {
+    DatumValue value;
+    alignas(8) char value_scratch[64];
+    ObBasicSysVar *sys_var = nullptr;
+    if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_sys_variable_by_name(
+            info->plsql_variable_, sys_var))) {
       // not system variable
       if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
         ret = OB_SUCCESS;
-        result.set_null();
-        OX (result.set_collation_type(ObCharset::get_system_collation()));
+        value.set_null();
       } else {
       }
+    } else if (OB_ISNULL(sys_var)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      OZ(sys_var->export_value(value, value_scratch, sizeof(value_scratch)));
+    }
+    common::ObDatum legacy_result;
+    OZ(value.to_row_datum(legacy_result, extended_payload));
+    OZ(expr.get_datum_copy_plan().import_legacy(legacy_result, result));
+    if (OB_SUCC(ret) && is_lob_storage(value.get_type())) {
+      OZ (ob_adjust_lob_datum(ctx.exec_ctx_, result, value.get_meta(),
+                             expr.obj_meta_, ctx.exec_ctx_.get_allocator()));
     }
   }
-  OZ(res.from_obj(result, expr.obj_datum_map_));
-  if (is_lob_storage(result.get_type())) {
-    OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
-                           ctx.exec_ctx_.get_allocator(), res));
-  }
-  OZ(expr.deep_copy_datum(ctx, res));
+  // System-variable values and PL names borrow their owning scope; normalized
+  // Extend bytes and PLSQL_LINE borrow this stack. Publish only the frame copy.
+  OZ(expr.deep_copy_datum(ctx, result));
+  OX(res.set_datum(expr.locate_expr_datum(ctx)));
   return ret;
 }
 

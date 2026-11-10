@@ -102,13 +102,12 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
 
-  static int eval_subquery(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_subquery(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
 private:
-  static int fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, common::ObObj *objs);
-  static int fill_param_store(const ObObj *objs_stack, int64_t param_num, ParamStore& params);
+  static int fill_param_store(const ObExpr &expr, ObEvalCtx &ctx, ParamStore &params, ObIAllocator &owner);
   static int fetch_row(void *result_ret, int64_t &row_count, ObNewRow &cur_row);
-  static int get_result(void *result_set, ObObj &result, ObIAllocator &alloc);
+  static int get_result(void *result_set, DatumParameter &result, ObIAllocator &alloc);
 
   common::ObString ps_sql_;
   stmt::StmtType type_; // statement type for prepare

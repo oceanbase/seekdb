@@ -662,6 +662,27 @@ public:
     distinct_map_.destroy();
   }
 
+  int prepare_native_hash_functions(const common::ObIArray<ObExpr *> &exprs)
+  {
+    int ret = OB_SUCCESS;
+    if (hash_funcs_ == nullptr || sort_collations_ == nullptr
+        || hash_funcs_->count() != sort_collations_->count()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (native_hash_funcs_.count() != hash_funcs_->count()) {
+      native_hash_funcs_.reuse();
+      for (int64_t i = 0; OB_SUCC(ret) && i < hash_funcs_->count(); ++i) {
+        const int64_t column = sort_collations_->at(i).field_idx_;
+        common::DatumHashOp operation;
+        if (column < 0 || column >= exprs.count() || exprs.at(column) == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(common::ObDatumFuncs::bind_legacy_hash(
+            exprs.at(column)->get_sql_type(), hash_funcs_->at(i).hash_func_, operation))) {
+        } else { ret = native_hash_funcs_.push_back(operation); }
+      }
+    }
+    return ret;
+  }
+
   int set_funcs(const common::ObIArray<ObHashFunc> *hash_funcs,
     const common::ObIArray<ObSortFieldCollation> *sort_collations,
     const common::ObIArray<ObCmpFunc> *cmp_funcs,
@@ -673,6 +694,7 @@ public:
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "unexpected status: funcs is null", K(ret));
     } else {
+      native_hash_funcs_.reuse();
       hash_funcs_ = hash_funcs;
       sort_collations_ = sort_collations;
       cmp_funcs_ = cmp_funcs;
@@ -785,6 +807,7 @@ private:
   ObIOEventObserver *io_event_observer_;
   ObSqlMemMgrProcessor *sql_mem_processor_;
   const common::ObIArray<ObHashFunc> *hash_funcs_;
+  common::ObSEArray<common::DatumHashOp, 4> native_hash_funcs_;
   // Here temporarily save one, if it is a multi-operator, part_col_idxs are different, need to distinguish
   const common::ObIArray<ObSortFieldCollation> *sort_collations_;
   const common::ObIArray<ObCmpFunc> *cmp_funcs_;
@@ -1052,6 +1075,7 @@ void ObHashPartInfrastructure<HashCol, HashRowStore>::reset()
   preprocess_part_.store_.reset();
   left_part_map_.clear();
   right_part_map_.clear();
+  native_hash_funcs_.reuse();
   hash_funcs_ = nullptr;
   sort_collations_ = nullptr;
   cmp_funcs_ = nullptr;
@@ -1856,6 +1880,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value(
   uint64_t &hash_value)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(prepare_native_hash_functions(exprs))) { return ret; }
   const common::ObDatumAccessContext *access_ctx = nullptr;
   hash_value = DEFAULT_PART_HASH_VALUE;
   if (OB_ISNULL(hash_funcs_) || OB_ISNULL(sort_collations_) || OB_ISNULL(eval_ctx_)) {
@@ -1863,12 +1888,12 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value(
     SQL_ENG_LOG(WARN, "unexpect status: hash funcs is null", K(ret));
   } else if (OB_FAIL(eval_ctx_->get_datum_access_ctx(access_ctx))) {
   } else if (0 != sort_collations_->count()) {
-    ObDatum *datum = nullptr;
+    common::Datum *datum = nullptr;
     for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); ++i) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(exprs.at(idx)->eval(*eval_ctx_, datum))) {
       } else if (OB_FAIL(
-                     hash_funcs_->at(i).hash_func_(*datum, hash_value, hash_value, access_ctx))) {
+                     native_hash_funcs_.at(i)(*datum, hash_value, hash_value, access_ctx))) {
       }
     }
   }
@@ -1886,6 +1911,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value_for_batch(
   uint64_t *hash_vals)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(prepare_native_hash_functions(exprs))) { return ret; }
   const common::ObDatumAccessContext *access_ctx = nullptr;
   uint64_t default_hash_value = DEFAULT_PART_HASH_VALUE;
   if (OB_ISNULL(hash_funcs_) || OB_ISNULL(sort_collations_) || OB_ISNULL(skip)
@@ -1914,16 +1940,16 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value_for_batch(
           hash_values_for_batch[i] = hash_vals[i];
         }
       }
-      for (int64_t j = start_idx; j < sort_collations_->count(); ++j) {
+      for (int64_t j = start_idx; OB_SUCC(ret) && j < sort_collations_->count(); ++j) {
         bool is_batch_seed = (0 != j);
         const int64_t idx = sort_collations_->at(j).field_idx_;
-        ObBatchDatumHashFunc hash_func = hash_funcs_->at(j).batch_hash_func_;
-        ObDatum &curr_datum = exprs.at(idx)->locate_batch_datums(*eval_ctx_)[0];
+        const common::DatumHashOp &hash_func = native_hash_funcs_.at(j);
+        common::Datum &curr_datum = exprs.at(idx)->locate_batch_datums(*eval_ctx_)[0];
         if (0 == j) {
-          hash_func(hash_values_for_batch, &curr_datum, exprs.at(idx)->is_batch_result(),
+          ret = hash_func(hash_values_for_batch, &curr_datum, exprs.at(idx)->is_batch_result(),
                     *skip, batch_size, &default_hash_value, is_batch_seed, access_ctx);
         } else {
-          hash_func(hash_values_for_batch, &curr_datum, exprs.at(idx)->is_batch_result(),
+          ret = hash_func(hash_values_for_batch, &curr_datum, exprs.at(idx)->is_batch_result(),
                     *skip, batch_size, hash_values_for_batch, is_batch_seed, access_ctx);
         }
       }

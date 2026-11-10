@@ -53,7 +53,7 @@ int ObExprSpatialCollection::calc_result_typeN(ObExprResType &type,
   type.set_geometry();
   type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObGeometryType]).get_length());
   for (uint32_t i = 0; i < param_num && OB_SUCC(ret); i++) {
-    ObObjType in_type = types_stack[i].get_type();
+    SqlValueType in_type = types_stack[i].get_type();
     if (ob_is_null(in_type)) {
       ret = OB_ERR_ILLEGAL_VALUE_FOR_TYPE;
       LOG_USER_ERROR(OB_ERR_ILLEGAL_VALUE_FOR_TYPE, "non geometric",
@@ -67,71 +67,6 @@ int ObExprSpatialCollection::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprSpatialCollection::calc_resultN(common::ObObj &result,
-                                          const common::ObObj *objs,
-                                          int64_t param_num,
-                                          common::ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  ObWkbBuffer res_wkb_buf(tmp_allocator);
-  uint32_t srid = 0;
-  ObGeoType geo_type = get_geo_type();
-
-  if (ObGeoType::GEOMETRY >= geo_type || ObGeoType::GEOTYPEMAX <= geo_type) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(res_wkb_buf.reserve(WKB_OFFSET + WKB_COMMON_WKB_HEADER_LEN))) {
-  } else if (OB_FAIL(res_wkb_buf.append(srid))) {
-  } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
-  } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
-  } else if (OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(geo_type)))) {
-  } else if (OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(param_num)))) {
-  } else if (ObGeoType::GEOMETRYCOLLECTION == geo_type && param_num == 0) {
-    // construct an empty geometry by calling GeometryCollection().
-  } else {
-    for (uint32_t i = 0; OB_SUCC(ret) && i < param_num; i++) {
-      ObString wkb = objs[i].get_string();
-      if (OB_ISNULL(expr_ctx.exec_ctx_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                     *expr_ctx.exec_ctx_, &tmp_allocator, objs[i], wkb))) {
-      } else if (ObGeoType::LINESTRING == geo_type) { // linestring
-        if (OB_FAIL(calc_linestring(wkb, res_wkb_buf))) {
-        }
-      } else if (ObGeoType::POLYGON == geo_type) { // polygon
-        if (OB_FAIL(calc_polygon(wkb, res_wkb_buf))) {
-        }
-      } else if ((ObGeoType::MULTIPOINT == geo_type
-          || ObGeoType::MULTILINESTRING == geo_type
-          || ObGeoType::MULTIPOLYGON == geo_type)) { // multi
-        if (OB_FAIL(calc_multi(wkb, res_wkb_buf))) {
-        }
-      } else if (ObGeoType::GEOMETRYCOLLECTION == geo_type) { // geometrycollection
-        const ObString wkb_sub = wkb;
-        const char *data = wkb_sub.ptr() + WKB_OFFSET;
-        const uint64_t len = wkb_sub.length() - WKB_OFFSET;
-        if (OB_FAIL(res_wkb_buf.append(data, len))) {
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    common::ObTextStringObObjResult text_result(ObGeometryType, nullptr, &result, true);
-    if (OB_FAIL(text_result.init(res_wkb_buf.length(), expr_ctx.calc_buf_))) {
-    } else if (OB_FAIL(text_result.append(res_wkb_buf.ptr(), res_wkb_buf.length()))) {
-    } else {
-      text_result.set_result();
-    }
-  }
-
-  if (OB_SUCC(ret) && ObGeoType::LINESTRING == geo_type && param_num < 2) { // adapt mysql, check arg count at last.
-    ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, get_func_name());
-  }
-
-  return ret;
-}
 
 int ObExprSpatialCollection::calc_linestring(const ObString &wkb_point,
                                              ObWkbBuffer &res_wkb_buf) const
@@ -226,7 +161,7 @@ int ObExprSpatialCollection::calc_polygon(const ObString wkb_linestring,
 
 int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
                                                      ObEvalCtx &ctx,
-                                                     ObDatum &res)
+                                                     Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -248,7 +183,7 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
   } else if (ObGeoType::GEOMETRYCOLLECTION == geo_type && expr.arg_cnt_ == 0) {
     // construct an empty geometry by calling GeometryCollection().
   } else {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     ObString wkb;
     for (uint32_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_ && !is_null_result; i++) {
       if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[i], ctx, datum))) {
@@ -310,7 +245,7 @@ ObExprLineString::~ObExprLineString()
 
 int ObExprLineString::eval_linestring(const ObExpr &expr,
                                       ObEvalCtx &ctx,
-                                      ObDatum &res)
+                                      Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -344,7 +279,7 @@ ObExprPolygon::~ObExprPolygon()
 
 int ObExprPolygon::eval_polygon(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                ObDatum &res)
+                                Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -378,7 +313,7 @@ ObExprMultiPoint::~ObExprMultiPoint()
 
 int ObExprMultiPoint::eval_multipoint(const ObExpr &expr,
                                       ObEvalCtx &ctx,
-                                      ObDatum &res)
+                                      Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -412,7 +347,7 @@ ObExprMultiLineString::~ObExprMultiLineString()
 
 int ObExprMultiLineString::eval_multilinestring(const ObExpr &expr,
                                                 ObEvalCtx &ctx,
-                                                ObDatum &res)
+                                                Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -446,7 +381,7 @@ ObExprMultiPolygon::~ObExprMultiPolygon()
 
 int ObExprMultiPolygon::eval_multipolygon(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum &res)
+                                          Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -480,7 +415,7 @@ ObExprGeomCollection::~ObExprGeomCollection()
 
 int ObExprGeomCollection::eval_geomcollection(const ObExpr &expr,
                                               ObEvalCtx &ctx,
-                                              ObDatum &res)
+                                              Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -514,7 +449,7 @@ ObExprGeometryCollection::~ObExprGeometryCollection()
 
 int ObExprGeometryCollection::eval_geometrycollection(const ObExpr &expr,
                                                       ObEvalCtx &ctx,
-                                                      ObDatum &res)
+                                                      Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();

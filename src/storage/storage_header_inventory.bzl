@@ -424,7 +424,6 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
     "ob_i_store.h",
     "ob_i_tablet_memtable.h",
     "ob_memtable_ctx_obj_pool.h",
-    "ob_obj_buf_array.h",
     "ob_parallel_external_sort.h",
     "ob_protected_memtable_mgr_handle.h",
     "ob_relative_table.h",
@@ -582,6 +581,7 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
 
 
 STORAGE_SEMANTIC_HEADERS = [
+    "ob_storage_column_schema.h",
     "blocksstable/ob_io_bench_controller.h",
     "ls/ob_i_ls_runtime_adapter.h",
     "memtable/ob_i_multi_source_data_unit.h",

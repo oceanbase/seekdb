@@ -25,12 +25,16 @@
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_print_utils.h"
 #include "common/object/ob_object.h"
+#include "share/datum/typed_datum_compare.h"
+#include "common/datum/native_typed_datum.h"
 #include "sql/ob_sql_define.h"
 #include "sql/ob_sql_utils.h"
 #include "sql/parser/parse_node.h"
 #include "sql/plan_cache/ob_pre_calc_expr_handler.h"
 #include "sql/das/ob_das_define.h"
 #include "lib/utility/serialization.h"
+#include <cstddef>
+#include <cstdint>
 
 namespace oceanbase
 {
@@ -38,11 +42,16 @@ namespace oceanbase
 namespace common
 {
 class ObString;
-class ObObj;
 }
 
+namespace pl { class ObPLINS; }
+namespace share { namespace schema { class ObSchemaGetterGuard; } }
 namespace sql
 {
+class ObPhysicalPlanCtx;
+class ObRawExprResType;
+class ObSQLSessionInfo;
+class ObExecContext;
 class ObPCVSet;
 class ObPhysicalPlan;
 struct ObSqlCtx;
@@ -102,14 +111,14 @@ typedef common::ObSEArray<LCKeyValue , 16> LCKeyValueArray;
 
 struct ObSysVarInPC
 {
-  common::ObSEArray<common::ObObj, 32> system_variables_;
+  common::ObSEArray<common::DatumValue, 32> system_variables_;
   char *buf_;
   int64_t buf_size_;
 
   ObSysVarInPC() : buf_(NULL), buf_size_(0) {
   }
 
-  int push_back(const common::ObObj &value) {
+  int push_back(const common::DatumValue &value) {
     return system_variables_.push_back(value);
   }
 
@@ -119,14 +128,14 @@ struct ObSysVarInPC
 
   int deep_copy_to_self() {
     int ret = common::OB_SUCCESS;
-    int64_t pos = 0;
-    common::ObObj obj;
+    ValueBufferOwner owner(buf_, buf_size_);
+    common::DatumValue obj;
     if (NULL == buf_ || buf_size_ <= 0) {
       ret = common::OB_INVALID_ARGUMENT;
       SQL_PC_LOG(WARN, "invalid argument", K_(buf), K_(buf_size));
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < system_variables_.count(); i ++) {
-      if OB_FAIL(obj.deep_copy(system_variables_.at(i), buf_, buf_size_, pos)) {
+      if OB_FAIL(common::clone_typed_value(system_variables_.at(i), obj, owner)) {
       } else {
         system_variables_.at(i) = obj;
       }
@@ -136,15 +145,15 @@ struct ObSysVarInPC
 
   int deep_copy(const ObSysVarInPC &other) {
     int ret = common::OB_SUCCESS;
-    common::ObObj obj;
-    int64_t pos = 0;
+    common::DatumValue obj;
+    ValueBufferOwner owner(buf_, buf_size_);
     if (NULL == buf_ || buf_size_ <= 0 || system_variables_.count() != 0) {
       ret = common::OB_INVALID_ARGUMENT;
       SQL_PC_LOG(WARN, "invalid argument", K_(buf), K_(buf_size),
                  "system variables count", system_variables_.count());
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < other.system_variables_.count(); i ++) {
-      if (OB_FAIL(obj.deep_copy(other.system_variables_.at(i), buf_, buf_size_, pos))) {
+      if (OB_FAIL(common::clone_typed_value(other.system_variables_.at(i), obj, owner))) {
       } else if (OB_FAIL(system_variables_.push_back(obj))) {
       }
     }
@@ -156,7 +165,9 @@ struct ObSysVarInPC
     bool ret = true;
     if (system_variables_.count() == other.system_variables_.count()) {
       for (int64_t i = 0; i < system_variables_.count(); ++i) {
-        if (system_variables_.at(i) == other.system_variables_.at(i)) {
+        bool equal = false;
+        if (common::OB_SUCCESS == common::datum_values_equal(
+              system_variables_.at(i), other.system_variables_.at(i), equal) && equal) {
           continue;
         } else {
           ret = false;
@@ -173,7 +184,10 @@ struct ObSysVarInPC
   {
     uint64_t hash_val = seed;
     for (int64_t i = 0; i < system_variables_.count(); ++i) {
-      system_variables_.at(i).hash(hash_val, hash_val);
+      const int ret = common::hash_datum_value(system_variables_.at(i), hash_val, hash_val);
+      if (ret != common::OB_SUCCESS) {
+        SQL_PC_LOG(ERROR, "invalid native system variable in cache key", K(ret), K(i));
+      }
     }
     return static_cast<int64_t>(hash_val);
   }
@@ -219,6 +233,33 @@ struct ObSysVarInPC
     return ret;
   }
 
+private:
+  class ValueBufferOwner final : public common::ObIAllocator {
+  public:
+    ValueBufferOwner(char *data, int64_t capacity) : data_(data), capacity_(capacity), pos_(0) {}
+    void *alloc(int64_t bytes) override
+    {
+      void *result = nullptr;
+      if (data_ != nullptr && bytes > 0 && pos_ <= capacity_) {
+        const uintptr_t address = reinterpret_cast<uintptr_t>(data_ + pos_);
+        const int64_t alignment = alignof(std::max_align_t);
+        const int64_t padding = (alignment - address % alignment) % alignment;
+        if (padding <= capacity_ - pos_ && bytes <= capacity_ - pos_ - padding) {
+          pos_ += padding;
+          result = data_ + pos_;
+          pos_ += bytes;
+        }
+      }
+      return result;
+    }
+    void *alloc(int64_t bytes, const common::ObMemAttr &) override { return alloc(bytes); }
+    void free(void *) override {}
+  private:
+    char *data_;
+    int64_t capacity_;
+    int64_t pos_;
+  };
+public:
   TO_STRING_KV(K_(system_variables));
 };
 
@@ -268,21 +309,41 @@ struct ObPCParseInfo
 
 struct ObPCConstParamInfo
 {
+  ObPCConstParamInfo() : cache_eligible_(true) {}
+  // An explicit admission result, never an empty constraint meaning match.
+  bool cache_eligible_;
   common::ObSEArray<int64_t, 4> const_idx_;
-  common::ObSEArray<common::ObObj, 4> const_params_;
-  TO_STRING_KV(K_(const_idx), K_(const_params));
-  bool operator==(const ObPCConstParamInfo &other) const
-  {
-    bool cmp_ret = const_idx_.count() == other.const_idx_.count()
-                   && const_params_.count() == other.const_params_.count();
-    for (int i=0; cmp_ret && i < const_idx_.count(); i++) {
-      cmp_ret = const_idx_.at(i) == other.const_idx_.at(i);
-    }
-    for (int i=0; cmp_ret && i < const_params_.count(); i++) {
-      cmp_ret = const_params_.at(i) == other.const_params_.at(i);
-    }
-    return cmp_ret;
-  }
+  common::ObSEArray<common::NativeTypedDatum, 4> const_params_;
+  // Capture both declaration and value in allocator before publishing a slot.
+  int add_constant(const common::Datum &value, const common::SqlType &type,
+                   common::ObIAllocator &allocator);
+  int add_constant(const common::ObDatum &value, const common::SqlType &type,
+                   common::ObIAllocator &allocator);
+  // Capture an already bound value and its complete effective declaration.
+  int add_runtime_parameter(const ObPhysicalPlanCtx &parameters, int64_t index,
+                            common::ObIAllocator &allocator);
+  int add_parameter(const common::DatumParameter &value, const ObExecContext *actual_ctx,
+                    common::ObIAllocator &allocator,
+                    const pl::ObPLINS *actual_declarations = nullptr);
+  int add_raw_constant(const common::DatumValue &value, const ObRawExprResType &original_type,
+                       const ObSQLSessionInfo *session,
+                       share::schema::ObSchemaGetterGuard *schema_guard,
+                       common::ObIAllocator &allocator,
+                       const pl::ObPLINS *actual_declarations = nullptr);
+  int add_int_constant(int64_t value, common::ObIAllocator &allocator);
+
+  // Explicit cache-owner copy and synchronous legacy mathematical boundaries.
+  static int clone_constant(const common::NativeTypedDatum &source,
+                            common::ObIAllocator &allocator,
+                            common::NativeTypedDatum &output);
+  static int compare_constant(const common::NativeTypedDatum &left,
+                              const common::DatumParameter &right, int &comparison);
+  static int equal_constants(const common::NativeTypedDatum &left,
+                             const common::NativeTypedDatum &right, bool &equal);
+  static int print_constant(const common::NativeTypedDatum &value,
+                            char *buffer, int64_t capacity, int64_t &position);
+  TO_STRING_KV(K_(cache_eligible), K_(const_idx), K_(const_params));
+  bool operator==(const ObPCConstParamInfo &other) const;
 };
 
 struct ObPCParamEqualInfo
@@ -874,14 +935,6 @@ struct ObPlanStat
                K_(plan_hash_value),
                K_(hints_all_worked),
                K_(vec_index_exec_ctx));
-};
-
-struct SysVarNameVal
-{
-  common::ObString name_;
-  common::ObObj value_;
-
-  TO_STRING_KV(K_(name), K_(value));
 };
 
 struct ObGetAllPlanIdOp

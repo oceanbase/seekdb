@@ -53,14 +53,6 @@ int ObExprVecIVFMetaVector::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprVecIVFMetaVector::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  // TODO by query ivf index
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprVecIVFMetaVector::cg_expr(
     ObExprCGCtx &expr_cg_ctx,
@@ -80,10 +72,10 @@ int ObExprVecIVFMetaVector::cg_expr(
 int ObExprVecIVFMetaVector::generate_meta_vector(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(eval_ctx, datum))) {
   } else if (OB_ISNULL(datum)) {
     ret = OB_ERR_UNEXPECTED;

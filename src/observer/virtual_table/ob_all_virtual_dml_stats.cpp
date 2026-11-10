@@ -29,28 +29,28 @@ namespace observer
 int ObOptDmlStatMapGetter::consume(ObOptDmlStat &dml_stat)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
       case ObAllVirtualDMmlStats::COLUMNS::TABLE_ID: {
-        cells[cell_idx].set_int(dml_stat.table_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dml_stat.table_id_) : ret);
         break;
       }
       case ObAllVirtualDMmlStats::COLUMNS::TABLET_ID: {
-        cells[cell_idx].set_int(dml_stat.tablet_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dml_stat.tablet_id_) : ret);
         break;
       }
       case ObAllVirtualDMmlStats::COLUMNS::INSERT_ROW_COUNT: {
-        cells[cell_idx].set_int(dml_stat.insert_row_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dml_stat.insert_row_count_) : ret);
         break;
       }
       case ObAllVirtualDMmlStats::COLUMNS::UPDATE_ROW_COUNT: {
-        cells[cell_idx].set_int(dml_stat.update_row_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dml_stat.update_row_count_) : ret);
         break;
       }
       case ObAllVirtualDMmlStats::COLUMNS::DELETE_ROW_COUNT: {
-        cells[cell_idx].set_int(dml_stat.delete_row_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dml_stat.delete_row_count_) : ret);
         break;
       }
       default: {
@@ -112,7 +112,7 @@ int ObAllVirtualDMmlStats::inner_get_next_row(ObNewRow *&row)
 int ObAllVirtualDMmlStats::fill_scanner()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   const common::ObAddr &addr = GCTX.self_addr();
   if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;

@@ -2314,7 +2314,6 @@ int ObTransformTempTable::evaluate_cte_cost(ObDMLStmt &root_stmt,
                                                   *root_stmt.get_query_ctx(), *ctx_))) {
   } else {
     ctx_->eval_cost_ = true;
-    ParamStore &param_store = ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store_for_update();
     lib::ContextParam param;
     ObArray<ObParentDMLStmt> dummy;
     ObDMLStmt *copy_root_stmt = NULL;
@@ -2342,8 +2341,7 @@ int ObTransformTempTable::evaluate_cte_cost(ObDMLStmt &root_stmt,
                 ctx_->sql_schema_guard_,
                 ctx_->opt_stat_mgr_,
                 CURRENT_CONTEXT->get_arena_allocator(),
-                &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
-                *ctx_->self_addr_,
+                 *ctx_->self_addr_,
                 root_stmt.get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
                 copy_root_stmt,
@@ -2490,7 +2488,6 @@ int ObTransformTempTable::evaluate_cte_cost_partially(ObDMLStmt *root_stmt,
   } else {
     BEGIN_OPT_TRACE_EVA_COST;
     ctx_->eval_cost_ = true;
-    ParamStore &param_store = ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store_for_update();
     lib::ContextParam param;
     ObTransformerImpl trans(ctx_);
     bool trans_happended = false;
@@ -2528,8 +2525,7 @@ int ObTransformTempTable::evaluate_cte_cost_partially(ObDMLStmt *root_stmt,
                 ctx_->sql_schema_guard_,
                 ctx_->opt_stat_mgr_,
                 CURRENT_CONTEXT->get_arena_allocator(),
-                &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
-                *ctx_->self_addr_,
+                 *ctx_->self_addr_,
                 root_stmt->get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
                 root_stmt,
@@ -2578,7 +2574,6 @@ int ObTransformTempTable::evaluate_cte_cost_globally(ObDMLStmt *origin_root,
   } else {
     BEGIN_OPT_TRACE_EVA_COST;
     ctx_->eval_cost_ = true;
-    ParamStore &param_store = ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store_for_update();
     lib::ContextParam param;
     ObTransformerImpl trans(ctx_);
     bool trans_happended = false;
@@ -2603,8 +2598,7 @@ int ObTransformTempTable::evaluate_cte_cost_globally(ObDMLStmt *origin_root,
                 ctx_->sql_schema_guard_,
                 ctx_->opt_stat_mgr_,
                 CURRENT_CONTEXT->get_arena_allocator(),
-                &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
-                *ctx_->self_addr_,
+                 *ctx_->self_addr_,
                 root_stmt->get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
                 root_stmt,

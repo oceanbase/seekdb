@@ -61,7 +61,7 @@ int ObVirtualWarning::inner_get_next_row(ObNewRow *&row)
 int ObVirtualWarning::fill_scanner()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   if (OB_UNLIKELY(NULL == allocator_ || NULL == session_ || NULL == cur_row_.cells_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN,
@@ -95,31 +95,31 @@ int ObVirtualWarning::fill_scanner()
           uint64_t col_id = output_column_ids_.at(j);
           switch(col_id) {
             case OB_APP_MIN_COLUMN_ID: {// level
-              cells[cell_idx].set_varchar(ObString::make_string(SHOW_ERROR_STR));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(SHOW_ERROR_STR)) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 1: {// code
-              cells[cell_idx].set_int(ob_errpkt_errno(warn_buff.get_err_code()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, ob_errpkt_errno(warn_buff.get_err_code())) : ret);
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 2: {// message
-              cells[cell_idx].set_varchar(ObString::make_string(warn_buff.get_err_msg()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(warn_buff.get_err_msg())) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 3: {// origin code
-              cells[cell_idx].set_int(warn_buff.get_err_code());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, warn_buff.get_err_code()) : ret);
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 4: {// sqlstate
-              cells[cell_idx].set_varchar(ObString::make_string(warn_buff.get_sql_state()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(warn_buff.get_sql_state())) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
               //no need, delete later @hualong
               //case OB_APP_MIN_COLUMN_ID + 3: {// type
-              //  cells[cell_idx].set_varchar(ObString::make_string("error"));
+              //  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string("error")) : ret);
               //  break;
               // }
             default: {
@@ -149,10 +149,10 @@ int ObVirtualWarning::fill_scanner()
           switch(col_id) {
             case OB_APP_MIN_COLUMN_ID: {// level
               if (USER_WARN == item->log_level_) {
-                cells[cell_idx].set_varchar(ObString::make_string(SHOW_WARNING_STR));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(SHOW_WARNING_STR)) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               } else if (USER_NOTE == item->log_level_) {
-                cells[cell_idx].set_varchar(ObString::make_string(SHOW_NOTE_STR));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(SHOW_NOTE_STR)) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               } else {
                 ret = OB_ERR_UNEXPECTED;
@@ -161,26 +161,26 @@ int ObVirtualWarning::fill_scanner()
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 1: {// code
-              cells[cell_idx].set_int(ob_errpkt_errno(item->code_));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, ob_errpkt_errno(item->code_)) : ret);
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 2: {// message
-              cells[cell_idx].set_varchar(ObString::make_string(item->msg_));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(item->msg_)) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 3: {// origin code
-              cells[cell_idx].set_int(item->code_);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, item->code_) : ret);
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 4: {// sqlstate
-              cells[cell_idx].set_varchar(ObString::make_string(item->sql_state_));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(item->sql_state_)) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
               //no need, delete later @hualong
               // case OB_APP_MIN_COLUMN_ID + 3: {// type
-              //   cells[cell_idx].set_varchar(ObString::make_string("warning"));
+              //   (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string("warning")) : ret);
               //   break;
               // }
             default: {

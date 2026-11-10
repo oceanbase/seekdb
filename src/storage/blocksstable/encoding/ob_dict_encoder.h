@@ -130,15 +130,11 @@ public:
 private:
   int build_dict();
   int store_dict(const common::ObDatum &datum, char *buf, int64_t &len);
-  inline int64_t number_store_size(const common::ObObj &obj)
-  {
-    return sizeof(obj.nmb_desc_) + obj.nmb_desc_.len_ * sizeof(obj.v_.nmb_digits_[0]);
-  }
   bool store_var_dict() const { return 0 > dict_fix_data_size_ || UINT16_MAX < dict_fix_data_size_; }
 
   struct FixedDataFiller;
 private:
-  ObObjTypeStoreClass store_class_;
+  SqlValueTypeStoreClass store_class_;
   int64_t type_store_size_;
   int64_t dict_fix_data_size_;
   // size of all var values

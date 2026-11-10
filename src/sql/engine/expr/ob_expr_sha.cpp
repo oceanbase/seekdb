@@ -64,10 +64,10 @@ int ObExprSha::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
   return ret;
 }
 
-int ObExprSha::eval_sha(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSha::eval_sha(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (OB_ISNULL(arg)) {
     ret = OB_ERR_UNEXPECTED;
@@ -129,11 +129,11 @@ int ObExprSha2::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
   return ret;
 }
 
-int ObExprSha2::eval_sha2(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSha2::eval_sha2(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg0 = NULL;
-  ObDatum *arg1 = NULL;
+  Datum *arg0 = NULL;
+  Datum *arg1 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg0, arg1))) {
   } else if (OB_ISNULL(arg0) || OB_ISNULL(arg1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -198,10 +198,10 @@ int ObExprSm3::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
   return ret;
 }
 
-int ObExprSm3::eval_sm3(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSm3::eval_sm3(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (OB_ISNULL(arg)) {
     ret = OB_ERR_UNEXPECTED;

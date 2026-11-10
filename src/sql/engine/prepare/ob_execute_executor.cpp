@@ -39,7 +39,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
   } else if (stmt::T_CALL_PROCEDURE != stmt.get_prepare_type()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObjParam result;
+    DatumParameter result;
     ParamStore params_array( (ObWrapperAllocator(ctx.get_allocator())) );
     if (OB_FAIL(params_array.reserve(stmt.get_params().count()))) {
     }
@@ -115,7 +115,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                       ObItemType expr_type = call_param_expr->get_expr_items().at(0).get_item_type();
                       if (OB_LIKELY(IS_CONST_TYPE(expr_type))) {
                         if (T_QUESTIONMARK == expr_type) {
-                          const ObObj &value = call_param_expr->get_expr_items().at(0).get_obj();
+                          const DatumValue &value = call_param_expr->get_expr_items().at(0).get_obj();
                           int64_t idx = value.get_unknown();
                           int64_t origin_param_cnt = 0;
                           for (int64_t n = 0; n < idx; ++n) {
@@ -124,7 +124,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                             }
                           }
                           int64_t using_idx = idx - origin_param_cnt;
-                          if (using_idx >= stmt.get_params().count()) {
+                          if (using_idx < 0 || using_idx >= stmt.get_params().count()) {
                             ret = OB_ERR_UNEXPECTED;
                           } else {
                             const ObRawExpr *expr = stmt.get_params().at(using_idx);
@@ -137,13 +137,29 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                               if (OB_ISNULL(expr->get_param_expr(0))) {
                                 ret = OB_ERR_UNEXPECTED;
                               } else if (OB_UNLIKELY(!expr->get_param_expr(0)->is_const_raw_expr()
-                                || !static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().is_varchar())) {
+                                || !static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value_meta().is_varchar())) {
                                 ret = OB_ERR_UNEXPECTED;
                               } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_CALL_PROCEDURE, ctx, ctx.get_allocator(), expr_ctx))) {
                               } else {
-                                const ObString var_name = static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().get_varchar();
-                                if (OB_FAIL(ObVariableSetExecutor::set_user_variable(result_set.get_exec_context().get_physical_plan_ctx()->get_param_store_for_update().at(idx),
-                                                                                      var_name, expr_ctx))) {
+                                const ObString var_name = static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value_datum().get_string();
+                                const ObPhysicalPlanCtx *parameters = result_set.get_exec_context().get_physical_plan_ctx();
+                                alignas(8) char scratch[64];
+                                ObDatum physical;
+                                DatumValue out;
+                                if (parameters == nullptr || idx < 0 || idx >= parameters->get_parameter_count()) {
+                                  ret = OB_ERR_UNEXPECTED;
+                                } else if (!parameters->native_parameters_ready()) {
+                                  out = parameters->get_parameter_inputs().at(idx).value_view();
+                                } else {
+                                  const DatumParameterMetadata *attributes = parameters->get_parameter_metadata(idx);
+                                  if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+                                  else if (OB_FAIL(parameters->export_runtime_parameter_legacy(idx, physical, scratch, sizeof(scratch)))) {
+                                  } else { ret = out.assign_legacy_borrowed(physical, attributes->type_meta_); }
+                                }
+                                // replace_user_variable clones into its session owner before
+                                // this single-cell legacy scratch goes out of scope.
+                                if (OB_SUCC(ret)) {
+                                  ret = ObVariableSetExecutor::set_user_variable(out, var_name, expr_ctx);
                                 }
                               }
                             }

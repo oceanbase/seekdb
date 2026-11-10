@@ -69,18 +69,18 @@ int ObAllVirtualTabletCompactionProgress::fill_cells()
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t n = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
     case MERGE_TYPE:
-      cells[i].set_varchar(merge_type_to_str(progress_.merge_type_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, merge_type_to_str(progress_.merge_type_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case MERGE_VERSION:
       //TODO:SCN
-      cells[i].set_uint64(progress_.merge_version_ < 0 ? 0 : progress_.merge_version_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, i, progress_.merge_version_ < 0 ? 0 : progress_.merge_version_) : ret);
       break;
     case TASK_ID:
       n = progress_.dag_id_.to_string(dag_id_buf_, sizeof(dag_id_buf_));
@@ -88,34 +88,34 @@ int ObAllVirtualTabletCompactionProgress::fill_cells()
         ret = OB_BUF_NOT_ENOUGH;
         SERVER_LOG(WARN, "buffer not enough", K(ret));
       } else {
-        cells[i].set_varchar(dag_id_buf_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, dag_id_buf_) : ret);
         cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       }
       break;
     case STATUS:
-      cells[i].set_varchar(share::ObIDag::get_dag_status_str(progress_.status_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, share::ObIDag::get_dag_status_str(progress_.status_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case TABLET_ID:
-      cells[i].set_int(progress_.tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, progress_.tablet_id_) : ret);
       break;
     case DATA_SIZE:
-      cells[i].set_int(progress_.data_size_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, progress_.data_size_) : ret);
       break;
     case UNFINISHED_DATA_SIZE:
-      cells[i].set_int(progress_.unfinished_data_size_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, progress_.unfinished_data_size_) : ret);
       break;
     case PROGRESSIVE_MERGE_ROUND:
-      cells[i].set_int(progress_.progressive_merge_round_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, progress_.progressive_merge_round_) : ret);
       break;
     case CREATE_TIME:
-      cells[i].set_timestamp(progress_.create_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, progress_.create_time_) : ret);
       break;
     case START_TIME:
-      cells[i].set_timestamp(progress_.start_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, progress_.start_time_) : ret);
       break;
     case ESTIMATED_FINISH_TIME:
-      cells[i].set_timestamp(progress_.estimated_finish_time_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, progress_.estimated_finish_time_) : ret);
       break;
     default:
       ret = OB_ERR_UNEXPECTED;

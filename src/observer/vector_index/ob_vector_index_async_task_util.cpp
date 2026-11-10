@@ -1354,11 +1354,10 @@ int ObVecIndexAsyncTask::process_data_for_index(ObPluginVectorIndexAdaptor &adap
               ret = OB_ERR_UNEXPECTED;
             }
             for (int i = 0; OB_SUCC(ret) && i < extra_column_count; ++i) {
-              ObObj tmp_obj;
               if (out_idxs.at(i + extra_column_offset) >= out_col_param->count()) {
                 ret = OB_ERR_UNEXPECTED;
               } else {
-                ObObjMeta meta_type = out_col_param->at(out_idxs.at(i + extra_column_offset))->get_meta_type();
+                SqlTypeMeta meta_type = out_col_param->at(out_idxs.at(i + extra_column_offset))->get_meta_type();
                 const ObDatum &extra_datum = datum_row->storage_datums_[i + extra_column_offset];
                 if (OB_FALSE_IT(out_extra_obj[current_count * extra_column_count + i].reset())) {
                 } else if (OB_FAIL(out_extra_obj[current_count * extra_column_count + i].from_datum(

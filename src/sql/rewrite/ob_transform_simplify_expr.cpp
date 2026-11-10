@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
+#include "share/datum/datum_value_cast.h"
 #include "sql/rewrite/ob_transform_simplify_expr.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
@@ -380,7 +381,7 @@ int ObTransformSimplifyExpr::replace_op_null_condition(ObDMLStmt *stmt, bool &tr
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(replace_cmp_null_condition(stmt->get_condition_exprs().at(i),
                                                   *stmt,
-                                                  plan_ctx->get_param_store(),
+                                                  *plan_ctx,
                                                   is_happened))) {
     } else {
       trans_happened |= is_happened;
@@ -391,7 +392,7 @@ int ObTransformSimplifyExpr::replace_op_null_condition(ObDMLStmt *stmt, bool &tr
     for (int64_t i = 0; OB_SUCC(ret) && i < sel_stmt->get_having_expr_size(); ++i) {
       if (OB_FAIL(replace_cmp_null_condition(sel_stmt->get_having_exprs().at(i),
                                              *stmt,
-                                             plan_ctx->get_param_store(),
+                                             *plan_ctx,
                                              is_happened))) {
       } else {
         trans_happened |= is_happened;
@@ -403,7 +404,7 @@ int ObTransformSimplifyExpr::replace_op_null_condition(ObDMLStmt *stmt, bool &tr
 
 int ObTransformSimplifyExpr::replace_cmp_null_condition(ObRawExpr *&expr,
                                                         const ObDMLStmt &stmt,
-                                                        const ParamStore &param_store,
+                                                        const ObPhysicalPlanCtx &param_store,
                                                         bool &trans_happened)
 {
   int ret = OB_SUCCESS;
@@ -453,7 +454,7 @@ int ObTransformSimplifyExpr::replace_cmp_null_condition(ObRawExpr *&expr,
 
 int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
                                                const ObDMLStmt &stmt,
-                                               const ParamStore &param_store,
+                                               const ObPhysicalPlanCtx &param_store,
                                                ObIArray<const ObRawExpr *> &null_expr_lists)
 {
   int ret = OB_SUCCESS;
@@ -465,7 +466,7 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
   } else if (expr->is_static_scalar_const_expr()) {
-    ObObj result;
+    DatumValue result;
     bool got_result = false;
     bool has_warning = false;
     if (OB_FAIL(ObTransformUtils::calc_const_expr_result(expr,
@@ -622,7 +623,7 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
     } else {
       //check if has wildcard or lob column
       bool got_result = false;
-      ObObj result;
+      DatumValue result;
       if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                           pattern_expr,
                                                           result,
@@ -773,11 +774,13 @@ int ObTransformSimplifyExpr::remove_dummy_filter_exprs(common::ObIArray<ObRawExp
     } else if (transed_expr != NULL) {
       exprs.reset();
       bool is_true = false;
+      DatumValue constant;
+      alignas(8) char scratch[64];
       if (!transed_expr->is_const_raw_expr()) {
         if (OB_FAIL(exprs.push_back(transed_expr))) {
         }
-      } else if (OB_FAIL(ObObjEvaluator::is_true(
-                           static_cast<ObConstRawExpr*>(transed_expr)->get_value(), is_true))) {
+      } else if (OB_FAIL(static_cast<ObConstRawExpr*>(transed_expr)->export_value(constant, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(DatumValueEvaluator::is_true(constant, is_true))) {
       } else if (is_true) {
       } else if (OB_FAIL(exprs.push_back(transed_expr))) {
       }
@@ -845,6 +848,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
       for (int64_t i = 0; OB_SUCC(ret) && i < op_expr->get_param_count(); ++i) {
         ObRawExpr *temp = op_expr->get_param_expr(i);
         bool is_true = false;
+        DatumValue constant;
+        alignas(8) char scratch[64];
         bool is_error_free = true;
         bool has_in = false;
         if (OB_ISNULL(temp)) {
@@ -863,8 +868,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
           /* do nothing */
         } else if (!temp->is_const_raw_expr()) {
           /* do nothing */
-        } else if (OB_FAIL(ObObjEvaluator::is_true(
-                   static_cast<ObConstRawExpr*>(temp)->get_value(), is_true))) {
+        } else if (OB_FAIL(static_cast<ObConstRawExpr*>(temp)->export_value(constant, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(DatumValueEvaluator::is_true(constant, is_true))) {
         } else if ((T_OP_AND == expr->get_expr_type() && !is_true)
                    || (T_OP_OR == expr->get_expr_type() && is_true)) {
           has_short_circuit_const = true;
@@ -1343,7 +1348,7 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
             new_expr = child_0;
           }
         } else if (child_0->is_static_const_expr()) {
-          ObObj result;
+          DatumValue result;
           bool got_result = false;
           if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                                 child_0,
@@ -1532,7 +1537,7 @@ int ObTransformSimplifyExpr::do_convert_nvl_predicate(ObDMLStmt *stmt,
                                                               nvl_at_left? exp2 : exp3,
                                                               nvl_at_left? exp3 : exp2))) {
     } else if (exp2_cmp_exp3->is_static_const_expr()){
-      ObObj result;
+      DatumValue result;
       bool got_result = false;
       if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                             exp2_cmp_exp3,
@@ -1862,14 +1867,15 @@ int ObTransformSimplifyExpr::is_filter_exprs_false(common::ObIArray<ObRawExpr*>&
           OB_ISNULL(ctx_->exec_ctx_->get_physical_plan_ctx())) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObObj result;
+        DatumParameter result;
         bool is_cal_true = false;
         if (OB_FAIL(ObSQLUtils::calc_const_expr(
-          filter_expr, &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(), result, is_cal_true))) {
+          *ctx_->exec_ctx_, filter_expr, result,
+          is_cal_true, *ctx_->allocator_))) {
         } else if ((!is_cal_true) || (!result.is_integer_type())) {
         // do nothing if plan cache does not check the bool value, or the result is not integer type
           LOG_TRACE("plan cache does not check this bool value, ignore it", K(is_cal_true), K(result.get_type()));
-        } else if (OB_FAIL(ObObjEvaluator::is_true(result, is_cal_true))) {
+        } else if (OB_FAIL(DatumValueEvaluator::is_true(result.value_view(), is_cal_true))) {
         } else if (!is_cal_true) {
           is_false = true;
         } else {
@@ -1899,7 +1905,7 @@ int ObTransformSimplifyExpr::check_limit_value(ObSelectStmt* stmt,
     int64_t limit_value = 0;
     limit_expr = stmt->get_limit_expr();
     if (OB_FAIL(ObTransformUtils::get_expr_int_value(limit_expr,
-                                                     &plan_ctx->get_param_store(),
+                                                     plan_ctx,
                                                      ctx_->exec_ctx_,
                                                      ctx_->allocator_,
                                                      limit_value,
@@ -2148,7 +2154,7 @@ int ObTransformSimplifyExpr::remove_false_true(ObRawExpr *expr,
              OB_ISNULL(param_right = expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    bool is_true = static_cast<const ObConstRawExpr *>(param_right)->get_value().get_bool();
+    bool is_true = static_cast<const ObConstRawExpr *>(param_right)->get_value_datum().get_bool();
     is_true = (is_true && T_OP_IS == expr->get_expr_type()) ||
               (!is_true && T_OP_IS_NOT == expr->get_expr_type());
     if (is_true) {
@@ -3231,7 +3237,7 @@ int ObTransformSimplifyExpr::check_convert_then_exprs_validity(ObRawExpr *parent
                                                               is_case_at_left ? sibling_expr : enum_expr))) {
       } else if (cur_then_filter->is_static_const_expr()) {
         bool got_result = false;
-        ObObj result;
+        DatumValue result;
         if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                               cur_then_filter,
                                                               result,

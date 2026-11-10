@@ -302,7 +302,7 @@ private:
       const VecColType col_type, 
       int64_t &def_pos, 
       ObCollationType &collation_type, 
-      ObObjType &obj_type, 
+      SqlValueType &obj_type,
       int64_t &col_flag);
   static int construct_ivf_col_name(
       const obcall::ObCreateIndexArg *index_arg,

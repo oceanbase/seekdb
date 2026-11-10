@@ -28,6 +28,23 @@ using namespace share::schema;
 
 namespace share
 {
+namespace
+{
+DatumValue make_varchar_datum_view(const char *ptr, const int64_t len)
+{
+  ObDatum datum;
+  datum.set_string(ptr, static_cast<uint32_t>(len));
+  SqlTypeMeta meta;
+  meta.set_varchar();
+  meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
+}
+}
+
 // hnsw
 const char * ObVecIndexBuilderUtil::ROWKEY_VID_TABLE_NAME = "rowkey_vid_table";
 const char * ObVecIndexBuilderUtil::VID_ROWKEY_TABLE_NAME = "vid_rowkey_table";
@@ -2673,7 +2690,7 @@ int ObVecIndexBuilderUtil::construct_ivf_partial_column_info(
     const VecColType col_type,
     int64_t &def_pos,
     ObCollationType &collation_type,
-    ObObjType &obj_type,
+    SqlValueType &obj_type,
     int64_t &col_flag)
 {
   int ret = OB_SUCCESS;
@@ -2788,7 +2805,7 @@ int ObVecIndexBuilderUtil::generate_vec_ivf_column(
   } else if (OB_FAIL(check_vec_gen_col(data_schema, col_id, col_name_buf, name_pos, col_exists))) {
   } else if (!col_exists) {
     ObCollationType collection_type;
-    ObObjType obj_type;
+    SqlValueType obj_type;
     int64_t col_flag;
     ObColumnSchemaV2 column_schema;
     SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], vec_expr_def) {
@@ -2841,8 +2858,7 @@ int ObVecIndexBuilderUtil::generate_vec_ivf_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -2910,8 +2926,7 @@ int ObVecIndexBuilderUtil::generate_vid_column(
       if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, "VEC_VID()"))) {
       } else {
         ObColumnSchemaV2 column_schema;
-        ObObj default_value;
-        default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+        DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
         column_schema.set_rowkey_position(0); //non-primary key column
         column_schema.set_index_position(0); //non-index column
         column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -2997,8 +3012,7 @@ int ObVecIndexBuilderUtil::generate_type_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -3080,8 +3094,7 @@ int ObVecIndexBuilderUtil::generate_spiv_dim_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -3160,8 +3173,7 @@ int ObVecIndexBuilderUtil::generate_spiv_value_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -3243,8 +3255,7 @@ int ObVecIndexBuilderUtil::generate_vector_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -3329,8 +3340,7 @@ int ObVecIndexBuilderUtil::generate_scn_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -3415,8 +3425,7 @@ int ObVecIndexBuilderUtil::generate_key_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -3500,8 +3509,7 @@ int ObVecIndexBuilderUtil::generate_data_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -3585,8 +3593,7 @@ int ObVecIndexBuilderUtil::generate_chunk_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0);
           column_schema.set_index_position(0);
           column_schema.set_tbl_part_key_pos(0);
@@ -3692,8 +3699,7 @@ int ObVecIndexBuilderUtil::generate_embedded_vec_column(
         def_pos -= 2; // remove last ", "
         if (OB_FAIL(databuff_printf(vec_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
+          DatumValue default_value = make_varchar_datum_view(vec_expr_def, def_pos);
           column_schema.set_rowkey_position(0);
           column_schema.set_index_position(0);
           column_schema.set_tbl_part_key_pos(0);

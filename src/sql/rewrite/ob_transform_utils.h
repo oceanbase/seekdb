@@ -1353,14 +1353,14 @@ public:
   static int add_table_item(ObDMLStmt *stmt, ObIArray<TableItem *> &table_items);
 
   static int get_limit_value(ObRawExpr *limit_expr,
-                                      const ParamStore *param_store,
+                                      const ObPhysicalPlanCtx *param_store,
                                       ObExecContext *exec_ctx,
                                       ObIAllocator *allocator,
                                       int64_t &limit_value,
                                       bool &is_null_value);
 
   static int get_expr_int_value(ObRawExpr *expr,
-                             const ParamStore *param_store,
+                             const ObPhysicalPlanCtx *param_store,
                              ObExecContext *exec_ctx,
                              ObIAllocator *allocator,
                              int64_t &value,
@@ -1368,7 +1368,7 @@ public:
 
   static int get_percentage_value(ObRawExpr *percent_expr,
                                   const ObDMLStmt *stmt,
-                                  const ParamStore *param_store,
+                                  const ObPhysicalPlanCtx *param_store,
                                   ObExecContext *exec_ctx,
                                   ObIAllocator *allocator,
                                   double &percent_value,
@@ -1381,7 +1381,7 @@ public:
                                                   ObTransformerCtx *trans_ctx);
 
 
-  static bool check_objparam_abs_equal(const ObObjParam &obj1, const ObObjParam &obj2,
+  static bool check_objparam_abs_equal(const DatumParameter &obj1, const DatumParameter &obj2,
                                        const bool ovrride_ora_const_numeric_cmp = false);
   static int add_compare_int_constraint(ObTransformerCtx *trans_ctx,
                                         ObRawExpr *expr,
@@ -1390,7 +1390,7 @@ public:
   static int add_equal_expr_value_constraint(ObTransformerCtx *trans_ctx,
                                              ObRawExpr *left,
                                              ObRawExpr *right);
-  static bool check_objparam_negative(const ObObjParam &obj1);
+  static bool check_objparam_negative(const DatumParameter &obj1);
   static int add_param_bool_constraint(ObTransformerCtx *ctx,
                                        ObRawExpr *bool_expr,
                                        const bool is_true,
@@ -1598,7 +1598,7 @@ public:
                                          ObIArray<ObRawExpr*> &target_exprs);
   static int calc_const_expr_result(ObRawExpr * expr,
                                     ObTransformerCtx *ctx,
-                                    ObObj &result,
+                                    DatumValue &result,
                                     bool &calc_happend,
                                     bool *has_warning = NULL);
   static int check_static_expr_has_warning(ObTransformerCtx *ctx,

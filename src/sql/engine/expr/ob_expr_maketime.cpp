@@ -67,11 +67,11 @@ int ObExprMakeTime::eval_batch_maketime(const ObExpr &expr, ObEvalCtx &ctx,
                           const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector results  = expr.locate_expr_datumvector(ctx);
+  DatumVector results  = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  ObDatumVector input_hours;
-  ObDatumVector input_mins;
-  ObDatumVector input_secs;
+  DatumVector input_hours;
+  DatumVector input_mins;
+  DatumVector input_secs;
   if (OB_FAIL(expr.eval_batch_param_value(ctx, skip, batch_size, input_hours,
                                           input_mins, input_secs))) {
     ret = OB_ERR_UNEXPECTED;
@@ -86,9 +86,9 @@ int ObExprMakeTime::eval_batch_maketime(const ObExpr &expr, ObEvalCtx &ctx,
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       }
-      ObDatum * hour = input_hours.at(i);
-      ObDatum * min  = input_mins.at(i);
-      ObDatum * sec  = input_secs.at(i);
+      Datum * hour = input_hours.at(i);
+      Datum * min  = input_mins.at(i);
+      Datum * sec  = input_secs.at(i);
       if (OB_UNLIKELY(hour->is_null()) ||
           OB_UNLIKELY(min->is_null()) ||
           OB_UNLIKELY(sec->is_null())) {
@@ -133,12 +133,12 @@ int ObExprMakeTime::eval_batch_maketime(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 int ObExprMakeTime::eval_maketime(const ObExpr &expr, ObEvalCtx &ctx,
-                                  ObDatum &result)
+                                  Datum &result)
 {
   int ret = OB_SUCCESS;
-  ObDatum * hour = NULL;
-  ObDatum * minute = NULL;
-  ObDatum * second = NULL;
+  Datum * hour = NULL;
+  Datum * minute = NULL;
+  Datum * second = NULL;
   // Fetch input argument, hour, minute, second
   if (OB_FAIL(expr.eval_param_value(ctx, hour, minute, second))) {
   } else if (OB_UNLIKELY(hour->is_null()) ||

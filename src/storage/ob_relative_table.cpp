@@ -246,7 +246,9 @@ int ObRelativeTable::is_nop_default_value(const uint64_t column_id, bool &is_nop
     const ObColumnParam *param = NULL;
     if (OB_ISNULL(param = schema_param_->get_column(column_id))) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (param->get_cur_default_value().is_nop_value()) {
+    } else if (param->get_cur_default_datum().is_nop()
+        || (param->get_cur_default_datum().has_ext_value()
+            && param->get_cur_default_datum().get_ext() == ObActionFlag::OP_NOP)) {
       is_nop = true;
     }
   }

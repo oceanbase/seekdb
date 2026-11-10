@@ -159,92 +159,92 @@ int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID:
           // tablet_id
-          cur_row_.cells_[i].set_int(mt->get_key().tablet_id_.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt->get_key().tablet_id_.id()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 1:
           // is_active
-          cur_row_.cells_[i].set_varchar(mt->is_active_memtable() ? "YES" : "NO");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, mt->is_active_memtable() ? "YES" : "NO") : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case OB_APP_MIN_COLUMN_ID + 2:
           // start_ts
-          cur_row_.cells_[i].set_uint64(mt->get_key().scn_range_.start_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, mt->get_key().scn_range_.start_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 3:
           // end_ts
-          cur_row_.cells_[i].set_uint64(mt->get_key().scn_range_.end_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, mt->get_key().scn_range_.end_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 4:
           // logging_blocked
-          cur_row_.cells_[i].set_varchar(mt->get_logging_blocked() ? "YES" : "NO");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, mt->get_logging_blocked() ? "YES" : "NO") : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case OB_APP_MIN_COLUMN_ID + 5:
           // freeze_clock
-          cur_row_.cells_[i].set_int(mt->get_freeze_clock());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt->get_freeze_clock()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 6:
           // unsubmitted_count
-          cur_row_.cells_[i].set_int(mt->get_unsubmitted_cnt());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt->get_unsubmitted_cnt()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 7:
           // unsynced_count, since 4.3 memtable's unsynced_count is not used
           // reuse this field for max_end_scn
-          cur_row_.cells_[i].set_uint64(mt->get_max_end_scn().get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, mt->get_max_end_scn().get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 8:
           // write_ref_count
-          cur_row_.cells_[i].set_int(mt->get_write_ref());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt->get_write_ref()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 9:
           // mem_used
-          cur_row_.cells_[i].set_int(mt->get_occupied_size());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt->get_occupied_size()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 10:
           // btree_item_count
           if (nullptr != data_memtable) {
-            cur_row_.cells_[i].set_int(data_memtable->get_btree_item_count());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, data_memtable->get_btree_item_count()) : ret);
           } else {
-            cur_row_.cells_[i].set_int(0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, 0) : ret);
           }
           break;
         case OB_APP_MIN_COLUMN_ID + 11:
           // btree_mem_used
           if (nullptr != data_memtable) {
-            cur_row_.cells_[i].set_int(data_memtable->get_btree_alloc_memory());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, data_memtable->get_btree_alloc_memory()) : ret);
           } else {
-            cur_row_.cells_[i].set_int(0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, 0) : ret);
           }
           break;
         case OB_APP_MIN_COLUMN_ID + 12:
           // insert_row_count
-          cur_row_.cells_[i].set_int(mt_stat.insert_row_count_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt_stat.insert_row_count_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 13:
           // update_row_count
-          cur_row_.cells_[i].set_int(mt_stat.update_row_count_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt_stat.update_row_count_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 14:
           // delete_row_count
-          cur_row_.cells_[i].set_int(mt_stat.delete_row_count_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt_stat.delete_row_count_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 15:
-          cur_row_.cells_[i].set_int(mt_stat.frozen_time_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, mt_stat.frozen_time_) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 16:
           // freeze_state
-          cur_row_.cells_[i].set_varchar(storage::TABLET_MEMTABLE_FREEZE_STATE_TO_STR(mt->get_freeze_state()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, storage::TABLET_MEMTABLE_FREEZE_STATE_TO_STR(mt->get_freeze_state())) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case OB_APP_MIN_COLUMN_ID + 17:
           // freeze_time_dist
           get_freeze_time_dist(mt_stat);
-          cur_row_.cells_[i].set_varchar(freeze_time_dist_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, freeze_time_dist_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case OB_APP_MIN_COLUMN_ID + 18: {
           // compaction info list
-          cur_row_.cells_[i].set_varchar("-");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "-") : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }

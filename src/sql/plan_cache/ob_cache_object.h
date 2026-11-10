@@ -42,6 +42,7 @@ struct ObExprCtx;
 namespace sql
 {
 class ObSqlExpression;
+class ObPhysicalPlanCtx;
 struct ObPreCalcExprFrameInfo;
 struct ObPreCalcExprConstraint;
 
@@ -127,8 +128,8 @@ struct ObParamInfo
   // Store whether to check type and bool value, as well as the expected bool value
   common::ParamFlag flag_;
   common::ObScale scale_;
-  common::ObObjType type_;
-  common::ObObjType ext_real_type_; // use as high 4 bytes of udt id if type is sql udt
+  common::SqlValueType type_;
+  common::SqlValueType ext_real_type_; // use as high 4 bytes of udt id if type is sql udt
   // Process typed null value matching in plan cache.
   bool is_typed_null_value_;
   common::ObCollationType col_type_;
@@ -157,6 +158,7 @@ public:
   inline const ObOutlineState &get_outline_state() const { return outline_state_; }
   inline void set_outline_state(const ObOutlineState &state) { outline_state_ = state; }
   int set_params_info(const ParamStore &params);
+  int set_params_info(const ObPhysicalPlanCtx &parameters);
   const common::Ob2DArray<ObParamInfo,
                           common::OB_MALLOC_BIG_BLOCK_SIZE,
                           common::ObWrapperAllocator, false> &get_params_info() const { return params_info_; }

@@ -30,7 +30,7 @@ class ObDomainIdCmp
 public:
   ObDomainIdCmp() : cmp_func_(nullptr) {}
   ~ObDomainIdCmp() {}
-  inline int init(const ObObjMeta &obj_meta);
+  inline int init(const SqlTypeMeta &obj_meta);
   inline int compare(const ObDatum &lhs, const ObDatum &rhs, int &cmp_ret) const;
   inline void reset() { cmp_func_ = nullptr; }
 private:
@@ -38,7 +38,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObDomainIdCmp);
 };
 
-int ObDomainIdCmp::init(const ObObjMeta &obj_meta)
+int ObDomainIdCmp::init(const SqlTypeMeta &obj_meta)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!obj_meta.is_valid())) {

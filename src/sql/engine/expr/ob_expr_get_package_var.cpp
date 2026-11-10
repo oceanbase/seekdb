@@ -27,7 +27,7 @@ using namespace pl;
 namespace sql
 {
 
-int ObExprGetPackageVar::calc(ObObj &result,
+int ObExprGetPackageVar::calc(DatumParameter &result,
                               uint64_t package_id,
                               int64_t spec_version,
                               int64_t body_version,
@@ -86,7 +86,7 @@ int ObExprGetPackageVar::calc_result_typeN(ObExprResType &type,
                                            ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObExprResType *result_type = reinterpret_cast<ObExprResType *>(types_stack[2].get_param().get_int());
+  ObExprResType *result_type = reinterpret_cast<ObExprResType *>(types_stack[2].get_param_datum().get_int());
   type.set_type(result_type->get_type());
   if (ob_is_string_tc(result_type->get_type())
       || ob_is_raw_tc(result_type->get_type())) {
@@ -112,14 +112,14 @@ int ObExprGetPackageVar::calc_result_typeN(ObExprResType &type,
 
 int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
                                               ObEvalCtx &ctx,
-                                              ObDatum &res)
+                                              Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *package_id = NULL;
-  ObDatum *var_idx = NULL;
-  ObDatum *result_type = NULL;
-  ObDatum *spec_version = NULL;
-  ObDatum *body_version = NULL;
+  Datum *package_id = NULL;
+  Datum *var_idx = NULL;
+  Datum *result_type = NULL;
+  Datum *spec_version = NULL;
+  Datum *body_version = NULL;
   if (OB_FAIL(expr.eval_param_value(
       ctx, package_id, var_idx, result_type, spec_version, body_version))) {
   } else if (package_id->is_null()
@@ -128,7 +128,7 @@ int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
              || spec_version->is_null()) {
     res.set_null();
   } else {
-    ObObj res_obj;
+    DatumParameter res_obj;
     OZ(calc(res_obj,
             package_id->get_uint(),
             spec_version->get_int(),
@@ -159,11 +159,17 @@ int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
           }
         }
       } else {
-        OZ(res.from_obj(res_obj));
+        Datum adjusted;
+        alignas(8) char result_scratch[64];
+        ObDatum result_view;
+        OZ(res_obj.export_legacy(result_view, result_scratch, sizeof(result_scratch)));
+        OZ(expr.get_datum_copy_plan().import_legacy(result_view, adjusted));
         if (is_lob_storage(res_obj.get_type())) {
-          OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res_obj, expr.obj_meta_,
-                                 ctx.exec_ctx_.get_allocator(), res));
+          OZ(ob_adjust_lob_datum(ctx.exec_ctx_, adjusted, res_obj.get_meta(), expr.obj_meta_,
+                                ctx.exec_ctx_.get_allocator(), adjusted));
         }
+        OZ(expr.deep_copy_datum(ctx, adjusted));
+        if (OB_SUCC(ret)) { res = expr.locate_expr_datum(ctx); }
       }
     }
   }

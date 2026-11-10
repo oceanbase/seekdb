@@ -44,8 +44,8 @@ struct HashMapMeta {
   ~HashMapMeta() {}
   int idx_;
   int64_t row_dimension_;
-  void **hash_funcs_;
-  void **cmp_funcs_;
+  common::DatumHashOp *hash_funcs_;
+  common::DatumCmpOp *cmp_funcs_;
   const common::ObDatumAccessContext *datum_access_ctx_;
 };
 
@@ -60,18 +60,18 @@ public:
   Row() : elems_(NULL) {}
   ~Row() {}
   bool equal_key(const Row &other,
-                 void **cmp_funcs,
+                 common::DatumCmpOp *cmp_funcs,
                  const int idx,
                  const common::ObDatumAccessContext *datum_access_ctx) const;
   // hash function and cmp function, specialized for datum and obj
-  int hash_key(void **hash_funcs,
+  int hash_key(common::DatumHashOp *hash_funcs,
                const int idx,
                uint64_t seed,
                uint64_t &hash_val,
                const common::ObDatumAccessContext *datum_access_ctx) const;
   int compare_with_null(
       const Row &other,
-      void **cmp_funcs,
+      common::DatumCmpOp *cmp_funcs,
       const int64_t row_dimension,
       int &exist_ret,
       const common::ObDatumAccessContext *datum_access_ctx) const;
@@ -126,8 +126,8 @@ const static int HASH_CMP_UNKNOWN = 1;
   int exist_refactored(const Row<T> &row, int &exist_ret);
   void set_meta_idx(int idx) { meta_.idx_ = idx; }
   void set_meta_dimension(int64_t row_dimension) { meta_.row_dimension_ = row_dimension; }
-  void set_meta_hash(void **hash_funcs) { meta_.hash_funcs_ = hash_funcs; }
-  void set_meta_cmp(void **cmp_funcs) { meta_.cmp_funcs_= cmp_funcs; }
+  void set_meta_hash(common::DatumHashOp *hash_funcs) { meta_.hash_funcs_ = hash_funcs; }
+  void set_meta_cmp(common::DatumCmpOp *cmp_funcs) { meta_.cmp_funcs_= cmp_funcs; }
   void set_meta_access_ctx(const common::ObDatumAccessContext *datum_access_ctx)
   {
     meta_.datum_access_ctx_ = datum_access_ctx;
@@ -164,8 +164,8 @@ public:
   int exist_refactored(const Row<T> &row, bool &is_exist);
   void set_meta_idx(int idx) { meta_.idx_ = idx; }
   void set_meta_dimension(int64_t row_dimension) { meta_.row_dimension_ = row_dimension; }
-  void set_meta_hash(void **hash_funcs) { meta_.hash_funcs_ = hash_funcs; }
-  void set_meta_cmp(void **cmp_funcs) { meta_.cmp_funcs_= cmp_funcs; }
+  void set_meta_hash(common::DatumHashOp *hash_funcs) { meta_.hash_funcs_ = hash_funcs; }
+  void set_meta_cmp(common::DatumCmpOp *cmp_funcs) { meta_.cmp_funcs_= cmp_funcs; }
   void set_meta_access_ctx(const common::ObDatumAccessContext *datum_access_ctx)
   {
     meta_.datum_access_ctx_ = datum_access_ctx;
@@ -219,12 +219,12 @@ class ObExprInOrNotIn : public ObVectorExprOperator
                                         ObExecContext *exec_ctx,
                                         const common::ObDatumAccessContext *datum_access_ctx);
 
-    int add_to_static_engine_hashset(const Row<common::ObDatum> &row);
-    int add_to_static_engine_hashset_vecs(const Row<common::ObDatum> &row,
+    int add_to_static_engine_hashset(const Row<common::Datum> &row);
+    int add_to_static_engine_hashset_vecs(const Row<common::Datum> &row,
                                           const int idx);
-    int exist_in_static_engine_hashset(const Row<common::ObDatum> &row,
+    int exist_in_static_engine_hashset(const Row<common::Datum> &row,
                                        bool &is_exist);
-    int exist_in_static_engine_hashset_vecs(const Row<common::ObDatum> &row,
+    int exist_in_static_engine_hashset_vecs(const Row<common::Datum> &row,
                                              const int idx,
                                              int &exist_ret);
     int init_hashset_vecs_all_null(const int64_t row_dimension,
@@ -245,19 +245,19 @@ class ObExprInOrNotIn : public ObVectorExprOperator
     int set_right_datum(int64_t row_num,
                         int64_t col_num,
                         const int right_param_num,
-                        const common::ObDatum &datum);
-    inline common::ObDatum *get_datum_row(int64_t row_num) { return right_datums_[row_num]; }
-    void set_hash_funcs_ptr(int64_t idx, void **hash_funcs_ptr)
+                        const common::Datum &datum);
+    inline common::Datum *get_datum_row(int64_t row_num) { return right_datums_[row_num]; }
+    void set_hash_funcs_ptr(int64_t idx, common::DatumHashOp *hash_funcs_ptr)
     {
       static_engine_hashset_vecs_[idx].set_meta_hash(hash_funcs_ptr);
     }
-    void set_cmp_funcs_ptr(int64_t idx, void **cmp_funcs_ptr) {
+    void set_cmp_funcs_ptr(int64_t idx, common::DatumCmpOp *cmp_funcs_ptr) {
       static_engine_hashset_vecs_[idx].set_meta_cmp(cmp_funcs_ptr);
     }
-    void set_hash_funcs_ptr_for_set(void **hash_funcs_ptr) {
+    void set_hash_funcs_ptr_for_set(common::DatumHashOp *hash_funcs_ptr) {
       static_engine_hashset_.set_meta_hash(hash_funcs_ptr);
     }
-    void set_cmp_funcs_ptr_for_set(void **cmp_funcs_ptr) {
+    void set_cmp_funcs_ptr_for_set(common::DatumCmpOp *cmp_funcs_ptr) {
       static_engine_hashset_.set_meta_cmp(cmp_funcs_ptr);
     }
     void set_datum_access_ctx(const common::ObDatumAccessContext *datum_access_ctx)
@@ -276,14 +276,14 @@ class ObExprInOrNotIn : public ObVectorExprOperator
     }
     int row_dimension_;
     bool right_has_null_;
-    void **hash_func_buff_;
-    void **cmp_functions_;
+    common::DatumHashOp *hash_func_buff_;
+    common::DatumCmpOp *cmp_functions_;
     bool funcs_ptr_set_;
     bool ctx_hash_null_;
   private:
-    common::ObDatum **right_datums_;//IN right constants are stored here
-    ObExprInHashSet<common::ObDatum> static_engine_hashset_;
-    ObExprInHashMap<common::ObDatum> *static_engine_hashset_vecs_;
+    common::Datum **right_datums_;//IN right constants are stored here
+    ObExprInHashSet<common::Datum> static_engine_hashset_;
+    ObExprInHashMap<common::Datum> *static_engine_hashset_vecs_;
     common::ObFixedArray<bool, common::ObIAllocator> hashset_vecs_all_null_; // Index represents the column that is all null
     ObExprCalcType cmp_type_;
     const common::ObDatumAccessContext *datum_access_ctx_;
@@ -324,19 +324,19 @@ public:
   static void set_datum_result(const bool is_expr_in,
                                const bool is_exist,
                                const bool param_exists_null,
-                               ObDatum &result);
+                               Datum &result);
   virtual bool need_rt_ctx() const override { return true; }
 public:
-  static int eval_in_with_row(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_in_with_row(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int eval_in_without_row(const ObExpr &expr,
                                  ObEvalCtx &ctx,
-                                 ObDatum &expr_datum);
+                                 Datum &expr_datum);
   static int eval_in_with_row_fallback(const ObExpr &expr,
                                       ObEvalCtx &ctx,
-                                      ObDatum &expr_datum);
+                                      Datum &expr_datum);
   static int eval_in_without_row_fallback(const ObExpr &expr,
                                          ObEvalCtx &ctx,
-                                         ObDatum &expr_datum);
+                                         Datum &expr_datum);
   static int eval_batch_in_without_row_fallback(const ObExpr &expr,
                                                 ObEvalCtx &ctx,
                                                 const ObBitVector &skip,
@@ -346,10 +346,10 @@ public:
                                        const ObBitVector &skip,
                                        const int64_t batch_size);
   // like "select 1 from dual where (select 1, 2) in ((1,2), (3,4))"
-  static int eval_in_with_subquery(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_in_with_subquery(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int calc_for_row_static_engine(const ObExpr &expr,
                                         ObEvalCtx &ctx,
-                                        ObDatum &expr_datum,
+                                        Datum &expr_datum,
                                         ObExpr **l_row);
   static int eval_pl_udt_in(EVAL_FUNC_ARG_DECL);
   static int build_right_hash_without_row(const int64_t in_id,
@@ -389,12 +389,12 @@ protected:
   // Get row from subquery iter
   static int setup_row(ObExpr **expr, ObEvalCtx &ctx, const bool is_iter,
                        const int64_t cmp_func_cnt, ObSubQueryIterator *&iter, ObExpr **&row);
-  static void check_right_can_cmp_mem(const ObDatum &datum,
-                                      const common::ObObjMeta &meta,
+  static void check_right_can_cmp_mem(const Datum &datum,
+                                      const common::SqlTypeMeta &meta,
                                       bool &can_cmp_mem,
                                       bool &cnt_null);
   static void check_left_can_cmp_mem(const ObExpr &expr,
-                                     const ObDatum *datum,
+                                     const Datum *datum,
                                      const ObBitVector &skip,
                                      const ObBitVector &eval_flags,
                                      const int64_t batch_size,

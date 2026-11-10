@@ -156,7 +156,7 @@ protected:
   int check_generate_column_conditions_(const ObColumnSchemaV2 *base_table_col_schema, const ObColumnSchemaV2 *inc_table_col_schema, bool &is_equal);
   int check_column_flags_(const ObColumnSchemaV2 *base_table_col_schema, const ObColumnSchemaV2 *inc_table_col_schema, bool &is_equal);
   int check_column_default_value_(const ObColumnSchemaV2 *base_table_col_schema, const ObColumnSchemaV2 *inc_table_col_schema, bool &is_equal);
-  int compare_default_value_(ObObj &l_value, ObObj &r_value, bool &is_equal);
+  int compare_default_value_(const common::DatumValue &l_value, const common::DatumValue &r_value, bool &is_equal);
   int get_next_pair_column_schema_(ObTableSchema::const_column_iterator &base_iter_begin,
                                    ObTableSchema::const_column_iterator &base_iter_end,
                                    ObTableSchema::const_column_iterator &inc_iter_begin,

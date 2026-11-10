@@ -33,7 +33,7 @@ namespace oceanbase
 {
 namespace common
 {
-struct ObObjCastParams;
+struct DatumCastParams;
 }
 
 namespace sql
@@ -101,9 +101,9 @@ struct ObColumnResolveStat
 
 struct ObDefaultValueRes
 {
-  ObDefaultValueRes(common::ObObjParam &value): is_literal_(true), value_(value) {}
+  ObDefaultValueRes(common::DatumParameter &value): is_literal_(true), value_(value) {}
   bool is_literal_;
-  common::ObObjParam &value_;
+  common::DatumParameter &value_;
 };
 
 class ObDDLResolver : public ObStmtResolver
@@ -188,15 +188,15 @@ public:
       ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
       ObIAllocator *allocator);
   static int check_text_length(ObCharsetType cs_type, ObCollationType co_type,
-                               const char *name, ObObjType &type,
+                               const char *name, SqlValueType &type,
                                int32_t &length,
                                bool need_rewrite_length,
                                const bool is_byte_length = false);
-  static int rewrite_text_length_mysql(ObObjType &type, int32_t &length);
+  static int rewrite_text_length_mysql(SqlValueType &type, int32_t &length);
   // check whether the column is allowed to be primary key.
   int check_add_column_as_pk_allowed(const ObColumnSchemaV2 &column_schema);
   static bool is_valid_prefix_key_type(
-      const common::ObObjTypeClass column_type_class);
+      const common::SqlTypeClass column_type_class);
   static int check_prefix_key(
       const int32_t prefix_len,
       const share::schema::ObColumnSchemaV2 &column_schema);
@@ -214,10 +214,11 @@ public:
       const bool is_prepare_stage=false);
   static int check_default_value_length(
       const share::schema::ObColumnSchemaV2 &column,
-      common::ObObj &default_value);
+      common::DatumValue &default_value,
+      common::ObIAllocator &allocator);
   static int cast_default_value(
       ObSQLSessionInfo *session_info,
-      common::ObObj &default_value,
+      common::DatumValue &default_value,
       const common::ObTimeZoneInfo *tz_info,
       common::ObIAllocator &allocator,
       share::schema::ObColumnSchemaV2 &column_schema,
@@ -233,7 +234,7 @@ public:
                                 const ObSQLMode sql_mode,
                                 ObSchemaChecker *schema_checker,
                                 ObSQLSessionInfo &session_info);
-  static int reformat_generated_column_expr(ObObj &default_value,
+  static int reformat_generated_column_expr(DatumValue &default_value,
                                             const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                             const ObLocalSessionVar &local_session_var,
                                             common::ObIAllocator &allocator,
@@ -253,7 +254,7 @@ public:
       ObRawExprFactory &expr_factory,
       bool coltype_not_defined = false);
   static int check_default_value(
-      common::ObObj &default_value,
+      common::DatumValue &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
       const ObLocalSessionVar *local_session_var,
       common::ObIAllocator &allocator,
@@ -266,7 +267,7 @@ public:
       common::ObILobReadService *lob_read_service,
       share::schema::ObColumnSchemaV2 *hidden_col = NULL);
   static int check_default_value(
-      common::ObObj &default_value,
+      common::DatumValue &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
       const ObLocalSessionVar *local_session_var,
       common::ObIAllocator &allocator,
@@ -281,7 +282,7 @@ public:
       common::ObILobReadService *lob_read_service,
       bool coltype_not_defined = false);
   static int check_default_value(
-      common::ObObj &default_value,
+      common::DatumValue &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
       common::ObIAllocator &allocator,
       share::schema::ObTableSchema &table_schema,
@@ -296,10 +297,10 @@ public:
       bool coltype_not_defined = false);
   static int calc_default_value(
       share::schema::ObColumnSchemaV2 &column_schema,
-      common::ObObj &default_value,
+      common::DatumValue &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
       common::ObIAllocator &allocator);
-  static int check_udt_default_value(ObObj &default_value,
+  static int check_udt_default_value(DatumValue &default_value,
                                      const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                      ObIAllocator &allocator,
                                      ObTableSchema &table_schema,
@@ -310,7 +311,7 @@ public:
                                      common::ObISrsProvider *srs_provider,
                                      common::ObILobReadService *lob_read_service,
                                      obcall::ObDDLArg &ddl_arg);
-  static int get_udt_column_default_values(const ObObj &default_value,
+  static int get_udt_column_default_values(const DatumValue &default_value,
                                            const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                            ObIAllocator &allocator,
                                            ObColumnSchemaV2 &column,
@@ -319,7 +320,7 @@ public:
                                            ObSchemaChecker *schema_checker,
                                            common::ObISrsProvider *srs_provider,
                                            common::ObILobReadService *lob_read_service,
-                                           ObObj &extend_result,
+                                           DatumValue &extend_result,
                                            obcall::ObDDLArg &ddl_arg);
   static int ob_add_ddl_dependency(const uint64_t schema_id,
                                    const ObSchemaType schema_type,
@@ -347,7 +348,7 @@ public:
   static int calc_enum_or_set_data_length(
       const ObIArray<common::ObString> &type_info,
       const ObCollationType &collation_type,
-      const ObObjType &type,
+      const SqlValueType &type,
       int32_t &length);
   static int calc_enum_or_set_data_length(
       share::schema::ObColumnSchemaV2 &column);
@@ -357,7 +358,8 @@ public:
       bool &is_incremental);
   static int cast_enum_or_set_default_value(
       const share::schema::ObColumnSchemaV2 &column,
-      common::ObObjCastParams &params, common::ObObj &def_val);
+      ObSQLSessionInfo &session_info, common::ObCastMode cast_mode,
+      common::DatumValue &def_val, common::ObIAllocator &allocator);
   int check_partition_name_duplicate(ParseNode *node);
   static int check_text_column_length_and_promote(share::schema::ObColumnSchemaV2 &column,
                                                   int64_t table_id,
@@ -525,7 +527,7 @@ protected:
   int resolve_normal_column_attribute_constr_default(ObColumnSchemaV2 &column,
                                                      ParseNode *attr_node,
                                                      ObColumnResolveStat &resolve_stat,
-                                                     ObObjParam& default_value,
+                                                     DatumParameter& default_value,
                                                      bool& is_set_cur_default);
   int resolve_normal_column_attribute_constr_null(ObColumnSchemaV2 &column,
                                                   ObColumnResolveStat &resolve_stat);
@@ -829,7 +831,7 @@ protected:
   static int trim_space_for_default_value(
       const bool is_char_type,
       const ObCollationType &collation_type,
-      ObObj &default_value, ObString &str);
+      DatumValue &default_value, ObString &str, common::ObIAllocator &allocator);
   bool is_organization_set_to_heap() { return table_organization_ == ObTableOrganizationType::OB_HEAP_ORGANIZATION; }
   int64_t block_size_;
   int64_t consistency_level_;

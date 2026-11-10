@@ -38,23 +38,5 @@ int ObExprEqual::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprEqual::calc(ObObj &result, const ObObj &obj1, const ObObj &obj2,
-                      const ObCompareCtx &cmp_ctx, ObCastCtx &cast_ctx)
-{
-  return ObRelationalExprOperator::compare(result, obj1, obj2, cmp_ctx, cast_ctx, CO_EQ);
-}
-
-int ObExprEqual::calc_cast(ObObj &result, const ObObj &obj1, const ObObj &obj2,
-                           const ObCompareCtx &cmp_ctx, ObCastCtx &cast_ctx)
-{
-  return ObRelationalExprOperator::compare_cast(result, obj1, obj2, cmp_ctx, cast_ctx, CO_EQ);
-}
-
-int ObExprEqual::calc_without_cast(ObObj &result, const ObObj &obj1, const ObObj &obj2,
-                           const ObCompareCtx &cmp_ctx, bool &need_cast)
-{
-  return ObRelationalExprOperator::compare_nocast(result, obj1, obj2, cmp_ctx, CO_EQ, need_cast);
-}
-
 }
 }

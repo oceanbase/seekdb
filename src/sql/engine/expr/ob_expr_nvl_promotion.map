@@ -1,4 +1,4 @@
-static const ObObjType NVL_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
+static const SqlValueType NVL_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
 {
   {
     /*null -> XXX*/

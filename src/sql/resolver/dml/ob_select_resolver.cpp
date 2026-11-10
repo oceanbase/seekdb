@@ -572,7 +572,8 @@ int ObSelectResolver::check_group_by()
                                                  select_stmt,
                                                  having_has_self_column_,
                                                  has_group_by_clause(),
-                                                 only_need_constraints))) {
+                                                 only_need_constraints,
+                                                 params_.allocator_, session_info_->get_cur_exec_ctx()))) {
     }
   }
 
@@ -1480,8 +1481,10 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
           } else if (name_expr->is_const_raw_expr() && T_QUESTIONMARK != name_expr->get_expr_type()) {
             char buf[OB_MAX_ALIAS_NAME_LENGTH + 1];
             int64_t pos = 0;
-            const ObObj &value = static_cast<const ObConstRawExpr*>(name_expr)->get_value();
-            if (value.is_numeric_type() && OB_FAIL(prepare_get_child_at(expr_list_node, 0))) {
+            DatumValue value;
+            alignas(8) char scratch[64];
+            if (OB_FAIL(static_cast<const ObConstRawExpr*>(name_expr)->export_value(value, scratch, sizeof(scratch)))) {
+            } else if (value.is_numeric_type() && OB_FAIL(prepare_get_child_at(expr_list_node, 0))) {
             } else if (value.is_numeric_type()) {
               const ParseNode *alias_node = expr_list_node->children_[0];
               if (OB_ISNULL(alias_node)) {
@@ -1598,13 +1601,13 @@ int ObSelectResolver::add_alias_from_dot_notation(ObRawExpr *sel_expr, SelectIte
   ObConstRawExpr* path_expr = NULL;
   // whether is dot notation
   if (OB_NOT_NULL(sel_expr->get_param_expr(JSN_QUE_MISMATCH))
-      && JSN_QUERY_MISMATCH_DOT == static_cast<ObConstRawExpr*>(sel_expr->get_param_expr(JSN_QUE_MISMATCH))->get_value().get_int()) {
+      && JSN_QUERY_MISMATCH_DOT == static_cast<ObConstRawExpr*>(sel_expr->get_param_expr(JSN_QUE_MISMATCH))->get_value_datum().get_int()) {
     if (!select_item.alias_name_.empty()) {
       select_item.is_real_alias_ = true;
     } else if (OB_NOT_NULL(sel_expr->get_param_expr(JSN_QUE_PATH))
                && T_CHAR == sel_expr->get_param_expr(JSN_QUE_PATH)->get_expr_type()) {
       path_expr = static_cast<ObConstRawExpr*>(sel_expr->get_param_expr(JSN_QUE_PATH));
-      path_str = path_expr->get_value().get_string();
+      path_str = path_expr->get_value_datum().get_string();
       pos = path_str.length() - 1;
       len = 0;
       char *buf = NULL;
@@ -2855,27 +2858,41 @@ int ObSelectResolver::resolve_named_windows_clause(const ParseNode *node)
   return ret;
 }
 
-int ObSelectResolver::resolve_into_const_node(const ParseNode *node, ObObj &obj)
+int ObSelectResolver::resolve_into_const_node(const ParseNode *node, Datum &value,
+                                             SqlTypeMeta &meta)
 {
   int ret = OB_SUCCESS;
+  Datum candidate;
+  SqlTypeMeta candidate_meta = meta;
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (T_CHAR == node->type_ || T_VARCHAR == node->type_) {
-    ObCollationType cs_type = params_.session_info_->get_local_collation_connection();
-    ObString node_str(node->str_len_, node->str_value_);
-    if (OB_SUCC(ret)) {
-      obj.set_varchar(node_str);
-      obj.set_collation_type(cs_type);
-    }
+    candidate_meta.set_varchar();
+    candidate_meta.set_collation_type(params_.session_info_->get_local_collation_connection());
+    ret = candidate.set_string(ObString(node->str_len_, node->str_value_));
   } else if (T_HEX_STRING == node->type_) {
-    ObString node_str(node->str_len_, node->str_value_);
-    obj.set_varchar(node_str);
-    obj.set_collation_type(CS_TYPE_BINARY);
+    candidate_meta.set_varchar();
+    candidate_meta.set_collation_type(CS_TYPE_BINARY);
+    ret = candidate.set_string(ObString(node->str_len_, node->str_value_));
   } else if (T_QUESTIONMARK == node->type_) {
-    obj.set_unknown(node->value_);
+    char *index = nullptr;
+    if (OB_ISNULL(params_.expr_factory_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_ISNULL(index = static_cast<char *>(
+                   params_.expr_factory_->get_allocator().alloc(sizeof(int64_t))))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      // This option uses the generic historical Unknown domain, not Raw's
+      // inline structural-index representation.
+      const int64_t value_index = node->value_;
+      MEMCPY(index, &value_index, sizeof(value_index));
+      ret = candidate.set_reference(index, sizeof(value_index));
+      candidate_meta.set_unknown();
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
   }
+  if (OB_SUCC(ret)) { value = candidate; meta = candidate_meta; }
   return ret;
 }
 
@@ -2892,17 +2909,17 @@ int ObSelectResolver::resolve_into_field_node(
       if (OB_ISNULL(node)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (T_FIELD_TERMINATED_STR == node->type_) {
-        if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.field_str_))) {
+        if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.field_str_, into_item.field_str_meta_))) {
         }
       } else if (T_OPTIONALLY_CLOSED_STR == node->type_
                  || T_CLOSED_STR == node->type_) {
         if (node->num_child_ != 1) {
           ret = OB_ERR_UNEXPECTED;
         } else if (node->children_[0]->str_len_ == 0 || node->children_[0]->str_len_ == 1) {
-          into_item.closed_cht_.meta_.set_char();
-          into_item.closed_cht_.set_char_value(node->children_[0]->str_value_,
-                                               node->children_[0]->str_len_);
-          into_item.closed_cht_.set_collation_type(params_.session_info_->get_local_collation_connection());
+          into_item.closed_cht_meta_.set_char();
+          into_item.closed_cht_.set_string(node->children_[0]->str_value_,
+                                                  node->children_[0]->str_len_);
+          into_item.closed_cht_meta_.set_collation_type(params_.session_info_->get_local_collation_connection());
         } else {
           ret = OB_WRONG_FIELD_TERMINATORS;
         }
@@ -2913,10 +2930,10 @@ int ObSelectResolver::resolve_into_field_node(
         if (node->num_child_ != 1) {
           ret = OB_ERR_UNEXPECTED;
         } else if (node->children_[0]->str_len_ == 0 || node->children_[0]->str_len_ == 1) {
-          into_item.escaped_cht_.meta_.set_char();
-          into_item.escaped_cht_.set_char_value(node->children_[0]->str_value_,
-                                                node->children_[0]->str_len_);
-          into_item.escaped_cht_.set_collation_type(params_.session_info_->get_local_collation_connection());
+          into_item.escaped_cht_meta_.set_char();
+          into_item.escaped_cht_.set_string(node->children_[0]->str_value_,
+                                                   node->children_[0]->str_len_);
+          into_item.escaped_cht_meta_.set_collation_type(params_.session_info_->get_local_collation_connection());
         } else {
           ret = OB_WRONG_FIELD_TERMINATORS;
         }
@@ -2940,7 +2957,7 @@ int ObSelectResolver::resolve_into_line_node(const ParseNode *list_node, ObSelec
       if (OB_ISNULL(str_node)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (T_LINE_TERMINATED_STR == str_node->type_) {
-        if (OB_FAIL(resolve_into_const_node(str_node->children_[0], into_item.line_str_))) {
+        if (OB_FAIL(resolve_into_const_node(str_node->children_[0], into_item.line_str_, into_item.line_str_meta_))) {
         }
       } else {
         // escape
@@ -2990,7 +3007,7 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
   ParseNode* option_node = NULL;
   if (node->num_child_ != 3) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
+  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_, into_item.outfile_name_meta_))) {
   }
   if (OB_SUCC(ret) && NULL != (format_node = node->children_[1])) { // format
     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
@@ -3044,7 +3061,7 @@ int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
   int ret = OB_SUCCESS;
   if (node->num_child_ != 5) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
+  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_, into_item.outfile_name_meta_))) {
   }
   if (OB_SUCC(ret) && NULL != node->children_[1]) { // charset
     ObCharsetType charset_type = CHARSET_INVALID;
@@ -3112,7 +3129,7 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
       } else if (T_INTO_DUMPFILE  == node->type_) { // into dumpfile
         if (is_in_set_query()) {
           ret = OB_INAPPROPRIATE_INTO;
-        } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item->outfile_name_))) {
+        } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item->outfile_name_, into_item->outfile_name_meta_))) {
         }
       } else if (T_INTO_VARIABLES == node->type_) { // into @x,@y....
         if (OB_FAIL(resolve_into_variables(node,
@@ -3973,7 +3990,7 @@ int ObSelectResolver::check_window_exprs()
           ret = OB_ERR_UNEXPECTED;
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < 2; ++ i) {
-            const ObObjType &order_res_type = order_items.at(0).expr_->get_data_type();
+            const SqlValueType &order_res_type = order_items.at(0).expr_->get_data_type();
             if (bound_expr_arr[i] != NULL) {
               if (ob_is_numeric_type(bound_expr_arr[i]->get_data_type())
                   || ob_is_string_tc(bound_expr_arr[i]->get_data_type())
@@ -4534,7 +4551,7 @@ int ObSelectResolver::check_union_leaf_to_values_table_valid(const ParseNode &pa
       const ObCollationType nchar_collation = session_info_->get_nls_collation_nation();
       for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < project_list->num_child_; i++) {
         const ParseNode *param_node = NULL;
-        ObObjType param_type;
+        SqlValueType param_type;
         ObCollationType dummy_collation_type;
         ObCollationLevel dummy_collation_level;
         if (OB_ISNULL(project_list->children_[i]) ||

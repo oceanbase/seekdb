@@ -56,13 +56,19 @@ public:
   ObDMLStmtPrinter()=delete;
   ObDMLStmtPrinter(char *buf, int64_t buf_len, int64_t *pos, const ObDMLStmt *stmt,
                    ObSchemaGetterGuard *schema_guard,
-                   common::ObObjPrintParams print_params,
+                   common::ObValuePrintParams print_params,
                    const ParamStore *param_store = NULL,
                    const ObSQLSessionInfo *session = NULL);
   virtual ~ObDMLStmtPrinter();
   void enable_print_temp_table_as_cte() { print_cte_ = true; }
   void disable_print_temp_table_as_cte() { print_cte_ = false; }
   void init(char *buf, int64_t buf_len, int64_t *pos, ObDMLStmt *stmt);
+  void bind_runtime_parameters(const ObPhysicalPlanCtx *parameters)
+  {
+    parameter_context_ = parameters;
+    if (nullptr != parameters) { param_store_ = nullptr; }
+    expr_printer_.bind_runtime_parameters(parameters);
+  }
   virtual int do_print() = 0;
 
   int print_from(bool need_from = true);
@@ -82,7 +88,7 @@ public:
   int print_hint();
   void set_is_root(bool is_root) { is_root_ = is_root; }
   void set_is_first_stmt_for_hint(bool is_first_stmt) { is_first_stmt_for_hint_ = is_first_stmt; }
-  void set_print_params(const ObObjPrintParams& obj_print_params)
+  void set_print_params(const ObValuePrintParams& obj_print_params)
   {
     print_params_ = obj_print_params;
   }
@@ -126,9 +132,10 @@ protected:
   bool is_first_stmt_for_hint_;
   bool print_cte_;
   ObSchemaGetterGuard *schema_guard_;
-  ObObjPrintParams print_params_;
+  ObValuePrintParams print_params_;
   ObRawExprPrinter expr_printer_;
-  const ParamStore *param_store_;
+  const ParamStore *param_store_; // construction inputs only
+  const ObPhysicalPlanCtx *parameter_context_;
   const ObSQLSessionInfo *session_;
 };
 

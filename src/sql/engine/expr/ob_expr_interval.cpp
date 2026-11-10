@@ -64,7 +64,7 @@ int ObExprInterval::calc_result_typeN(ObExprResType &type,
     type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].precision_);
     type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].scale_);
     //set calc type
-    common::ObObjType calc_type = types[0].get_type();
+    common::SqlValueType calc_type = types[0].get_type();
 
     if (calc_type != ObNumberType && calc_type != ObUNumberType && calc_type !=  ObDecimalIntType) {
       calc_type = ObDoubleType;
@@ -86,31 +86,27 @@ int ObExprInterval::calc_result_typeN(ObExprResType &type,
 }
 
 int ObExprInterval::calc_interval_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                       ObDatum &res)
+                                       Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg0 = NULL;
+  Datum *arg0 = NULL;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  if (OB_UNLIKELY(2 > expr.arg_cnt_ || 1 != expr.inner_func_cnt_) ||
-      OB_ISNULL(expr.inner_functions_) || OB_ISNULL(expr.inner_functions_[0])) {
+  if (OB_UNLIKELY(2 > expr.arg_cnt_ || expr.arg_cnt_ - 1 != expr.get_cmp_op_count())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg0))) {
   } else if (arg0->is_null()) {
     res.set_int(-1);
   } else {
-    ObDatumCmpFuncType cmp_func = reinterpret_cast<ObDatumCmpFuncType>(
-                                    expr.inner_functions_[0]);
     bool use_binary_search = static_cast<bool>(expr.extra_);
     int cmp_ret = 0;
     if (!use_binary_search) {
       int64_t i = 1;
       for (; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
-        const ObDatum &arg_i = expr.locate_param_datum(ctx, static_cast<int>(i));
+        const Datum &arg_i = expr.locate_param_datum(ctx, static_cast<int>(i));
         if (arg_i.is_null()) {
           continue;
-        } else if (OB_FAIL(cmp_func(
-                       arg_i, *arg0, cmp_ret, datum_access_ctx))) {
+        } else if (OB_FAIL(expr.get_cmp_op(i - 1)(arg_i, *arg0, cmp_ret, datum_access_ctx))) {
         } else if (cmp_ret > 0) {
           // if arg_i > *arg0 break
           break;
@@ -124,8 +120,8 @@ int ObExprInterval::calc_interval_expr(const ObExpr &expr, ObEvalCtx &ctx,
       int64_t low = 1;
       while (low <= high && OB_SUCC(ret)) {
         int64_t mid = (low + high) / 2;
-        const ObDatum &arg_i = expr.locate_param_datum(ctx, static_cast<int>(mid));
-        if (OB_FAIL(cmp_func(arg_i, *arg0, cmp_ret, datum_access_ctx))) {
+        const Datum &arg_i = expr.locate_param_datum(ctx, static_cast<int>(mid));
+        if (OB_FAIL(expr.get_cmp_op(mid - 1)(arg_i, *arg0, cmp_ret, datum_access_ctx))) {
         } else if (cmp_ret <= 0) {
           low = mid + 1;
         } else if (low == high) {
@@ -149,13 +145,11 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   if (OB_UNLIKELY(2 > rt_expr.arg_cnt_) || OB_ISNULL(expr_cg_ctx.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(rt_expr.inner_functions_ =
-        reinterpret_cast<void**>(expr_cg_ctx.allocator_->alloc(sizeof(void*))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(rt_expr.prepare_cmp_ops(*expr_cg_ctx.allocator_, rt_expr.arg_cnt_ - 1))) {
   } else {
     // make sure all arg type is same
     for (int64_t i = 0; OB_SUCC(ret) && i < rt_expr.arg_cnt_; ++i) {
-      const ObObjType &arg_type = rt_expr.args_[i]->datum_meta_.type_;
+      const SqlValueType &arg_type = rt_expr.args_[i]->datum_meta_.type_;
       if (!(ObNumberType == arg_type
             || ObUNumberType == arg_type
             || ObDecimalIntType == arg_type
@@ -189,19 +183,12 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
     }
 
     if (OB_SUCC(ret)) {
-      const ObObjType &arg_type = rt_expr.args_[0]->datum_meta_.type_;
-      // Number comparison does not consider collation,
-      // do not care NULL_FIRST or NULL_LAST, will ignore null in calc_interval_expr()
-      rt_expr.inner_functions_[0] = reinterpret_cast<void*>(
-          ObDatumFuncs::get_nullsafe_cmp_func(arg_type, arg_type, default_null_pos(),
-                                              CS_TYPE_BINARY, rt_expr.args_[0]->datum_meta_.scale_,
-                                              rt_expr.args_[0]->obj_meta_.has_lob_header(),
-                                              rt_expr.args_[0]->datum_meta_.precision_,
-                                              rt_expr.args_[0]->datum_meta_.precision_));
-      if (OB_ISNULL(rt_expr.inner_functions_[0])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        rt_expr.inner_func_cnt_ = 1;
+      // Preserve each argument's resolved comparison domain. The evaluator
+      // ignores SQL NULL before invoking the selected operation.
+      for (int64_t i = 1; OB_SUCC(ret) && i < rt_expr.arg_cnt_; ++i) {
+        OZ(rt_expr.configure_cmp_op(i - 1, i, 0, default_null_pos(), CS_TYPE_BINARY));
+      }
+      if (OB_SUCC(ret)) {
         rt_expr.eval_func_ = calc_interval_expr;
         rt_expr.extra_ = static_cast<uint64_t>(use_binary_search);
       }

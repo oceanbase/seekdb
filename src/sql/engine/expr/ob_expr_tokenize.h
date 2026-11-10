@@ -40,7 +40,7 @@ public:
    * @param expr_datum expression result
    * @note see cg_expr REG_OP and g_expr_eval_functions
    */
-  static int eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   int calc_result_typeN(ObExprResType &type,
                         ObExprResType *types,
@@ -71,7 +71,7 @@ private:
     mutable ObArenaAllocator allocator_;
     ObString parser_name_;
     ObString properties_;
-    ObObjMeta meta_;
+    SqlTypeMeta meta_;
     ObString fulltext_;
     enum OUTPUT_MODE
     {

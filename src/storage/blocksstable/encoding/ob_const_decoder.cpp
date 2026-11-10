@@ -38,8 +38,8 @@ int ObConstDecoder::decode_without_dict(
     int64_t ref = meta_header_->const_ref_;
     if (0 == ref) {
       const int64_t len = ctx.col_header_->length_ - sizeof(*meta_header_);
-      const ObObjType obj_type = ctx.col_header_->get_store_obj_type();
-      const ObObjTypeClass tc = ob_obj_type_class(obj_type);
+      const SqlValueType obj_type = ctx.col_header_->get_store_obj_type();
+      const SqlTypeClass tc = sql_type_class(obj_type);
       uint64_t integer_mask;
       if (ObIntTC == tc) {
         int64_t type_store_size = get_type_size_map()[obj_type];
@@ -61,8 +61,7 @@ int ObConstDecoder::decode_without_dict(
     } else if (1 == ref) { // null
       datum.set_null();
     } else if (2 == ref) { // nope
-      datum.set_ext();
-      datum.no_cv(datum.extend_obj_)->set_ext(common::ObActionFlag::OP_NOP);
+      datum.set_ext_value(common::ObActionFlag::OP_NOP);
 
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -167,7 +166,7 @@ int ObConstDecoder::batch_decode_without_dict(
     if (0 == ref) {
       if (OB_FAIL(decode_without_dict(ctx, datums[0]))) {
       } else {
-        switch (get_store_class_map()[ob_obj_type_class(ctx.obj_meta_.get_type())]) {
+        switch (get_store_class_map()[sql_type_class(ctx.obj_meta_.get_type())]) {
         case ObIntSC:
         case ObUIntSC:
         case ObOTimestampSC:
@@ -302,7 +301,9 @@ int ObConstDecoder::const_only_operator(
     ObBitmap &result_bitmap) const
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
+  alignas(8) char param_scratch[2][64];
+  ObDatum params[2];
   if (OB_UNLIKELY(result_bitmap.size() != pd_filter_info.count_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -346,7 +347,8 @@ int ObConstDecoder::const_only_operator(
                             filter.null_param_contained())) {
               ret = OB_INVALID_ARGUMENT;
             } else if (ref == 1) {
-            } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), cmp_res, nullptr))) {
+            } else if (OB_FAIL(filter.export_parameter(0, params[0], param_scratch[0], sizeof(param_scratch[0])))) {
+            } else if(OB_FAIL(cmp_func(const_datum, params[0], cmp_res, nullptr))) {
             } else if (get_cmp_ret(cmp_res)) {
               if (OB_FAIL(result_bitmap.bit_not())) {
               }
@@ -361,8 +363,10 @@ int ObConstDecoder::const_only_operator(
             if (OB_UNLIKELY(datums.count() != 2)) {
               ret = OB_INVALID_ARGUMENT;
             } else if (ref == 1) {
-            } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), left_cmp_res, nullptr))) {
-            } else if(OB_FAIL(cmp_func(const_datum, datums.at(1), right_cmp_res, nullptr))) {
+            } else if (OB_FAIL(filter.export_parameter(0, params[0], param_scratch[0], sizeof(param_scratch[0])))) {
+            } else if (OB_FAIL(filter.export_parameter(1, params[1], param_scratch[1], sizeof(param_scratch[1])))) {
+            } else if(OB_FAIL(cmp_func(const_datum, params[0], left_cmp_res, nullptr))) {
+            } else if(OB_FAIL(cmp_func(const_datum, params[1], right_cmp_res, nullptr))) {
             } else if (get_ge_cmp_ret(left_cmp_res) && get_le_cmp_ret(right_cmp_res)) {
               if (OB_FAIL(result_bitmap.bit_not())) {
               }
@@ -453,7 +457,11 @@ int ObConstDecoder::comparison_operator(
     ret = OB_INVALID_ARGUMENT;
   } else {
     const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
-    const ObDatum &ref_datum = filter.get_datums().at(0);
+    alignas(8) char param_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, param_scratch, sizeof(param_scratch)))) {
+      return ret;
+    }
     const ObIntArrayFuncTable &row_ids = ObIntArrayFuncTable::instance(meta_header_->row_id_byte_);
     const int64_t dict_meta_length = col_ctx.col_header_->length_ - meta_header_->offset_;
     int64_t dict_count = dict_decoder_.get_dict_header()->count_;
@@ -535,7 +543,13 @@ int ObConstDecoder::bt_operator(
                   || filter.get_datums().count() != 2)) {
   } else {
     const int64_t dict_count = dict_decoder_.get_dict_header()->count_;
-    const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+    alignas(8) char param_scratch[2][64];
+    ObDatum datums[2];
+    if (OB_FAIL(filter.export_parameter(0, datums[0], param_scratch[0], sizeof(param_scratch[0])))) {
+      return ret;
+    } else if (OB_FAIL(filter.export_parameter(1, datums[1], param_scratch[1], sizeof(param_scratch[1])))) {
+      return ret;
+    }
     const ObIntArrayFuncTable &row_ids = ObIntArrayFuncTable::instance(meta_header_->row_id_byte_);
     const int64_t dict_meta_length = col_ctx.col_header_->length_ - meta_header_->offset_;
     bool const_in_result_set = false;
@@ -552,8 +566,8 @@ int ObConstDecoder::bt_operator(
         }
       }
       if (OB_FAIL(ret)) {
-      } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), left_cmp_res, nullptr))) {
-      } else if(OB_FAIL(cmp_func(const_datum, datums.at(1), right_cmp_res, nullptr))) {
+      } else if(OB_FAIL(cmp_func(const_datum, datums[0], left_cmp_res, nullptr))) {
+      } else if(OB_FAIL(cmp_func(const_datum, datums[1], right_cmp_res, nullptr))) {
       } else if ((left_cmp_res >= 0) && (right_cmp_res <= 0)) {
         if (OB_FAIL(result_bitmap.bit_not())) {
         } else {
@@ -574,8 +588,8 @@ int ObConstDecoder::bt_operator(
       while (OB_SUCC(ret) && trav_it != end_it) {
         if (OB_UNLIKELY((*trav_it).is_null())) {
           ret = OB_ERR_UNEXPECTED;
-        } else if(OB_FAIL(cmp_func(*trav_it, datums.at(0), left_cmp_res, nullptr))) {
-        } else if(OB_FAIL(cmp_func(*trav_it, datums.at(1), right_cmp_res, nullptr))) {
+        } else if(OB_FAIL(cmp_func(*trav_it, datums[0], left_cmp_res, nullptr))) {
+        } else if(OB_FAIL(cmp_func(*trav_it, datums[1], right_cmp_res, nullptr))) {
         } else if (!const_in_result_set == ((left_cmp_res >= 0)
                    && (right_cmp_res <= 0))) {
           found = true;

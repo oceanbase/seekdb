@@ -1,4 +1,4 @@
-static constexpr ObObjType ABS_RESULT_TYPE[ObMaxType] =
+static constexpr SqlValueType ABS_RESULT_TYPE[ObMaxType] =
 {
     ObDoubleType,   /* NullType             */
     ObIntType,      /* TinyIntType          */

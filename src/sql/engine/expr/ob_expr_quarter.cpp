@@ -60,10 +60,10 @@ int ObExprQuarter::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprQuarter::calc_quater(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprQuarter::calc_quater(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   ObTime ot;
   ObDateSqlMode date_sql_mode;
   const ObSQLSessionInfo *session = NULL;
@@ -83,7 +83,7 @@ int ObExprQuarter::calc_quater(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
                  tz_info,
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
                  date_sql_mode,
-                 expr.args_[0]->obj_meta_.has_lob_header()))) {
+                 expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),

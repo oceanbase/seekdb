@@ -63,11 +63,11 @@ int ObExprCharLength::calc_result_type1(ObExprResType &type,
 }
 
 int ObExprCharLength::eval_char_length(const ObExpr &expr, ObEvalCtx &ctx, 
-                                       ObDatum &res)
+                                       Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
-  ObObjTypeClass in_tc = ob_obj_type_class(expr.args_[0]->datum_meta_.type_);
+  Datum *arg = NULL;
+  SqlTypeClass in_tc = sql_type_class(expr.args_[0]->datum_meta_.type_);
   if (!ob_is_castable_type_class(in_tc)) {
     res.set_null();
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {

@@ -26,6 +26,7 @@
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
 #include "rust/config.h"
+#include "share/datum/datum_value_cast.h"
 
 namespace oceanbase
 {
@@ -591,7 +592,7 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                 }
 
                 // config value
-                ObObjParam val;
+                DatumParameter val;
                 ObDefaultValueRes resolve_res(val);
                 if (OB_UNLIKELY(NULL == action_node->children_[1])) {
                   ret = OB_ERR_UNEXPECTED;
@@ -619,7 +620,12 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                                    CM_NONE,
                                    cast_coll_type,
                                    NULL);
-                EXPR_GET_VARCHAR_V2(val, str_val);
+                DatumValue text;
+                if (OB_FAIL(DatumValueCaster::to_type(ObVarcharType, cast_ctx,
+                        val.value_view(), allocator, text))) {
+                } else {
+                  ret = text.get_varchar(str_val);
+                }
                 if (OB_FAIL(ret)) {
                   break;
                 } else if (OB_FAIL(item.value_.assign(str_val))) {
@@ -885,7 +891,7 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                 if (OB_ISNULL(value_node = set_param_node->children_[1])) {
                   ret = OB_INVALID_ARGUMENT;
                 } else {
-                  ObObjParam val;
+                  DatumParameter val;
                   ObDefaultValueRes resolve_res(val);
                   if (OB_FAIL(ddl_resolver.resolve_default_value(value_node, resolve_res))) {
                     break;
@@ -908,7 +914,12 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                                      CM_NONE,
                                      cast_coll_type,
                                      NULL);
-                  EXPR_GET_VARCHAR_V2(val, str_val);
+                  DatumValue text;
+                  if (OB_FAIL(DatumValueCaster::to_type(ObVarcharType, cast_ctx,
+                          val.value_view(), allocator, text))) {
+                  } else {
+                    ret = text.get_varchar(str_val);
+                  }
                   if (OB_FAIL(ret)) {
                     break;
                   } else if (OB_FAIL(item.value_.assign(str_val))) {

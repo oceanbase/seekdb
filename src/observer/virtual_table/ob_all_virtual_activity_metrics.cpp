@@ -85,7 +85,7 @@ int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
       SERVER_LOG(WARN, "get next freezer stat failed", KR(ret));
     }
   } else {
-    ObObj *cells = NULL;
+    DatumValue *cells = NULL;
     // allocator_ is allocator of PageArena type, no need to free
     if (NULL == (cells = cur_row_.cells_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -95,31 +95,31 @@ int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
         case ACTIVITY_TIMESTAMP:
-          cells[i].set_timestamp(stat.last_captured_timestamp_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, stat.last_captured_timestamp_) : ret);
           break;
         case MODIFICATION_SIZE:
-          cells[i].set_int(stat.captured_data_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stat.captured_data_size_) : ret);
           break;
         case FREEZE_TIMES:
-          cells[i].set_int(stat.captured_freeze_times_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stat.captured_freeze_times_) : ret);
           break;
         case MINI_MERGE_COST:
-          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINI_MERGE]);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINI_MERGE]) : ret);
           break;
         case MINI_MERGE_TIMES:
-          cells[i].set_int(stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINI_MERGE]);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINI_MERGE]) : ret);
           break;
         case MINOR_MERGE_COST:
-          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINOR_MERGE]);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINOR_MERGE]) : ret);
           break;
         case MINOR_MERGE_TIMES:
-          cells[i].set_int(stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINOR_MERGE]);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MINOR_MERGE]) : ret);
           break;
         case MAJOR_MERGE_COST:
-          cells[i].set_int(stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MAJOR_MERGE]);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stat.captured_merge_time_cost_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MAJOR_MERGE]) : ret);
           break;
         case MAJOR_MERGE_TIMES:
-          cells[i].set_int(stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MAJOR_MERGE]);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stat.captured_merge_times_[storage::ObMemstoreFreezerStat::ObFreezerMergeType::MAJOR_MERGE]) : ret);
           break;
         default:
           // abnormal column id

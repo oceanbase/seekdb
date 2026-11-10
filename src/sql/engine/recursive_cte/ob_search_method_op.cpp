@@ -49,8 +49,8 @@ int ObSearchMethodOp::is_same_row(ObChunkDatumStore::StoredRow &row_1st,
                                   ObChunkDatumStore::StoredRow &row_2nd, bool &is_cycle)
 {
   int ret = OB_SUCCESS;
-  const ObDatum *cells_1st = row_1st.cells();
-  const ObDatum *cells_2nd = row_2nd.cells();
+  const StoredDatumCell *cells_1st = row_1st.stored_cells();
+  const StoredDatumCell *cells_2nd = row_2nd.stored_cells();
   int cmp_ret = 0;
   if (OB_UNLIKELY(0 == row_1st.cnt_ || 0 == row_2nd.cnt_)
       || OB_ISNULL(cells_1st) || OB_ISNULL(cells_2nd)) {
@@ -59,14 +59,16 @@ int ObSearchMethodOp::is_same_row(ObChunkDatumStore::StoredRow &row_1st,
     // detect whole row
     is_cycle = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < left_output_.count(); i++) {
-      if (OB_FAIL(left_output_.at(i)->basic_funcs_->null_first_cmp_(
-              cells_1st[i], cells_2nd[i], cmp_ret, datum_access_ctx_))) {
+      const ObDatum datum_1st = StoredDatumCodec::decode_legacy_view(cells_1st[i]);
+      const ObDatum datum_2nd = StoredDatumCodec::decode_legacy_view(cells_2nd[i]);
+      if (OB_FAIL(left_output_.at(i)->basic_funcs_->null_first_cmp_.legacy_function()(
+              datum_1st, datum_2nd, cmp_ret, datum_access_ctx_))) {
       } else if (0 != cmp_ret) {
         is_cycle = false;
         break;
       }
     }
-    if (is_cycle) {
+    if (OB_SUCC(ret) && is_cycle) {
       ret = OB_ERR_CYCLE_FOUND_IN_RECURSIVE_CTE;
     }
   }

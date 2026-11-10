@@ -53,7 +53,7 @@ public:
 
   static int shadow_uk_project(const ObExpr &expr,
                                ObEvalCtx &ctx,
-                               ObDatum &datum);
+                               Datum &datum);
 };
 }  // namespace sql
 }  // namespace oceanbase

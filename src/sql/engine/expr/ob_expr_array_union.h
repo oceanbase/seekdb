@@ -45,7 +45,7 @@ public:
                   ObExprResType* types,
                   int64_t param_num, 
                   common::ObExprTypeCtx& type_ctx) const override;
-  static int eval_array_set_operation(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, SetOperation operation);
+  static int eval_array_set_operation(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, SetOperation operation);
   static int eval_array_set_operation_batch(const ObExpr &expr, 
                 ObEvalCtx &ctx,
                 const ObBitVector &skip, 
@@ -60,7 +60,7 @@ class ObExprArrayUnion : public ObExprArraySetOperation
 public:
   explicit ObExprArrayUnion(common::ObIAllocator &alloc);
   virtual ~ObExprArrayUnion();
-  static int eval_array_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_union(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_union_batch(const ObExpr &expr, 
                 ObEvalCtx &ctx,
                 const ObBitVector &skip, 

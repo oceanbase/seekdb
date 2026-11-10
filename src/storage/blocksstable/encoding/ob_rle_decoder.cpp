@@ -214,7 +214,11 @@ int ObRLEDecoder::eq_ne_operator(
   } else {
     const int64_t dict_count = dict_decoder_.get_dict_header()->count_;
     const int64_t dict_meta_length = col_ctx.col_header_->length_ - meta_header_->offset_;
-    const ObDatum &ref_datum = filter.get_datums().at(0);
+    alignas(8) char param_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, param_scratch, sizeof(param_scratch)))) {
+      return ret;
+    }
     if (dict_count > 0) {
       ObDatumCmpFuncType cmp_func = filter.cmp_func_;
       ObDictDecoderIterator traverse_it = dict_decoder_.begin(&col_ctx, filter.is_padding_mode(), dict_meta_length);
@@ -257,7 +261,11 @@ int ObRLEDecoder::comparison_operator(
   } else {
     const int64_t dict_count = dict_decoder_.get_dict_header()->count_;
     const int64_t dict_meta_length = col_ctx.col_header_->length_ - meta_header_->offset_;
-    const ObDatum &ref_datum = filter.get_datums().at(0);
+    alignas(8) char param_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, param_scratch, sizeof(param_scratch)))) {
+      return ret;
+    }
     const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
     if (dict_count > 0) {
       bool found = false;
@@ -306,7 +314,13 @@ int ObRLEDecoder::bt_operator(
       // Unsorted dictionary
       bool found = false;
       const int64_t dict_meta_length = col_ctx.col_header_->length_ - meta_header_->offset_;
-      const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+      alignas(8) char param_scratch[2][64];
+      ObDatum datums[2];
+      if (OB_FAIL(filter.export_parameter(0, datums[0], param_scratch[0], sizeof(param_scratch[0])))) {
+        return ret;
+      } else if (OB_FAIL(filter.export_parameter(1, datums[1], param_scratch[1], sizeof(param_scratch[1])))) {
+        return ret;
+      }
       ObDictDecoderIterator end_it = dict_decoder_.end(&col_ctx, filter.is_padding_mode(), dict_meta_length);
       ObDictDecoderIterator traverse_it = dict_decoder_.begin(&col_ctx, filter.is_padding_mode(), dict_meta_length);
       const int64_t ref_bitset_size = dict_count + 1;
@@ -318,8 +332,8 @@ int ObRLEDecoder::bt_operator(
       int left_cmp_res = 0;
       int right_cmp_res = 0;
       while (OB_SUCC(ret) && traverse_it != end_it) {
-        if (OB_FAIL(cmp_func(*traverse_it, datums.at(0), left_cmp_res, nullptr))) {
-        } else if (OB_FAIL(cmp_func(*traverse_it, datums.at(1), right_cmp_res, nullptr))) {
+        if (OB_FAIL(cmp_func(*traverse_it, datums[0], left_cmp_res, nullptr))) {
+        } else if (OB_FAIL(cmp_func(*traverse_it, datums[1], right_cmp_res, nullptr))) {
         } else if ((left_cmp_res >= 0)
                   && (right_cmp_res <= 0)) {
           found = true;

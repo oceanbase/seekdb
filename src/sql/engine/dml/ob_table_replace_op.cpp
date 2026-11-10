@@ -928,7 +928,7 @@ int ObTableReplaceOp::check_values(bool &is_equal,
   OZ(eval_ctx_.get_datum_access_ctx(access_ctx));
   for (int64_t i = 0; OB_SUCC(ret) && i < new_row.count(); ++i) {
     const UIntFixedArray &column_ids = MY_SPEC.replace_ctdefs_.at(0)->ins_ctdef_->column_ids_;
-    CK(new_row.at(i)->basic_funcs_->null_first_cmp_ == old_row.at(i)->basic_funcs_->null_first_cmp_);
+    CK(new_row.at(i)->basic_funcs_->null_first_cmp_.legacy_function() == old_row.at(i)->basic_funcs_->null_first_cmp_.legacy_function());
     if (OB_SUCC(ret)) {
       ObDocIDType type = ObDocIDUtils::get_type_by_col_id(MY_SPEC.doc_id_col_id_);
       if (share::schema::ObColumnSchemaV2::is_hidden_pk_column_id(column_ids[i])) {
@@ -936,9 +936,9 @@ int ObTableReplaceOp::check_values(bool &is_equal,
       } else if ((type == ObDocIDType::TABLET_SEQUENCE) && (MY_SPEC.doc_id_col_id_ == column_ids[i])) {
         // skip doc id (only for current doc id)
       } else {
-        const ObDatum &insert_datum = replace_row->cells()[i];
-        const ObDatum &del_datum = delete_row->cells()[i];
-        if (OB_FAIL(new_row.at(i)->basic_funcs_->null_first_cmp_(
+        const ObDatum insert_datum = StoredDatumCodec::decode_legacy_view(replace_row->stored_cells()[i]);
+        const ObDatum del_datum = StoredDatumCodec::decode_legacy_view(delete_row->stored_cells()[i]);
+        if (OB_FAIL(new_row.at(i)->basic_funcs_->null_first_cmp_.legacy_function()(
                 insert_datum, del_datum, cmp_ret, access_ctx))) {
         } else if (0 != cmp_ret) {
           is_equal = false;

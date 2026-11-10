@@ -93,16 +93,16 @@ int ObResourceLimitDetailTable::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case RESOURCE_NAME: {
-          cur_row_.cells_[i].set_varchar(get_logic_res_type_name(iter_.get_curr_type()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, get_logic_res_type_name(iter_.get_curr_type())) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case LIMIT_TYPE:
-          cur_row_.cells_[i].set_varchar(get_constraint_type_name(constraint_iter_.get_curr_type()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, get_constraint_type_name(constraint_iter_.get_curr_type())) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case LIMIT_VALUE:
-          cur_row_.cells_[i].set_int(limit_value);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, limit_value) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

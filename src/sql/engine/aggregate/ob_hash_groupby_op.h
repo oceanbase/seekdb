@@ -460,7 +460,7 @@ private:
                  const ObBatchRows *&child_brs);
   int eval_groupby_exprs_batch(const ObChunkDatumStore::StoredRow **store_rows,
                                const ObBatchRows &child_brs);
-  void calc_groupby_exprs_hash_batch(ObIArray<ObExpr *> &groupby_exprs,
+  int calc_groupby_exprs_hash_batch(ObIArray<ObExpr *> &groupby_exprs,
                                      const ObBatchRows &child_brs);
 
   int group_child_batch_rows(const ObChunkDatumStore::StoredRow **store_rows,
@@ -521,11 +521,11 @@ private:
     {
       bool res = true;
       for (int64_t i = 0; i < groupby_cnt_ && res; i++) {
-        ObDatum &datum = groupby_datums_[i][batch_idx];
-        if (datum.is_null() || 1 != datum.len_) {
+        Datum &datum = groupby_datums_[i][batch_idx];
+        if (datum.is_null() || 1 != datum.length()) {
           res = false;
         } else {
-          groupby_values_[i] = static_cast<uint16_t>(static_cast<uint8_t>(*datum.ptr_));
+          groupby_values_[i] = static_cast<uint16_t>(static_cast<uint8_t>(*datum.get_string().ptr()));
         }
       }
       return res;
@@ -567,7 +567,7 @@ private:
     int64_t array_size_;
     int64_t groupby_cnt_;
     uint16_t groupby_values_[2];
-    ObDatum *groupby_datums_[2];
+    Datum *groupby_datums_[2];
     // This is a (ObGroupRowItem *) array and size is 256 ^ group_exprs_count
     ObGroupRowItem **grs_array_;
   };

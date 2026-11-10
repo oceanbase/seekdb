@@ -346,7 +346,24 @@ int ObResultSet::get_next_row(const common::ObNewRow *&row)
   return inner_get_next_row(row);
 }
 
-OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
+int ObResultSet::get_next_result_row(ResultRowView &view)
+{
+  LinkExecCtxGuard link_guard(my_session_, get_exec_context());
+  const common::ObNewRow *row = nullptr;
+  view = ResultRowView();
+  return inner_get_next_row(row, &view);
+}
+
+int ObResultSet::get_next_native_result_row(ResultRowView &view)
+{
+  LinkExecCtxGuard link_guard(my_session_, get_exec_context());
+  const common::ObNewRow *row = nullptr;
+  view = ResultRowView();
+  return inner_get_next_row(row, &view, true);
+}
+
+OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row, ResultRowView *view,
+                                            bool native_only)
 {
   int &ret = errcode_;
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
@@ -354,7 +371,11 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
   if (OB_LIKELY(NULL != physical_plan_)) { // take this branch more frequently
     if (OB_ISNULL(exec_result_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(exec_result_->get_next_row(get_exec_context(), row))) {
+    } else if (OB_FAIL(native_only && nullptr != view
+                          ? exec_result_->get_next_native_result_row(get_exec_context(), *view)
+                          : nullptr != view && !physical_plan_->is_packed()
+                            ? exec_result_->get_next_result_row(get_exec_context(), *view)
+                            : exec_result_->get_next_row(get_exec_context(), row))) {
       if (OB_ITER_END != ret) {
         // marked last execute status
         physical_plan_->set_is_last_exec_succ(false);
@@ -380,6 +401,10 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
   }
   // Record access errors for retry bookkeeping before statement cleanup.
   DAS_CTX(get_exec_context()).record_access_error(ret);
+
+  if (OB_SUCC(ret) && nullptr != view && !view->is_datum_row() && nullptr == view->legacy_row()) {
+    view->set_legacy(row);
+  }
 
   return ret;
 }
@@ -622,11 +647,12 @@ int ObResultSet::store_last_insert_id(ObExecContext &ctx)
               "last_insert_id_changed", plan_ctx->get_last_insert_id_changed());
 
       if (plan_ctx->get_last_insert_id_changed()) {
-        ObObj last_insert_id;
-        last_insert_id.set_uint64(last_insert_id_session);
+        DatumValue last_insert_id;
+        OZ(last_insert_id.set_uint64(last_insert_id_session, my_session_.get_allocator()));
         // FIXME @qianfu temporarily written as update_sys_variable function, to be implemented with an ability to pass ObSysVarClassType and
         // and set system variable statement follow the same logic function, call here
-        if (OB_FAIL(my_session_.update_sys_variable(SYS_VAR_LAST_INSERT_ID, last_insert_id))) {
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(my_session_.update_sys_variable(SYS_VAR_LAST_INSERT_ID, last_insert_id))) {
         } else if (OB_FAIL(my_session_.update_sys_variable(SYS_VAR_IDENTITY, last_insert_id))) {
         } else {
           NG_TRACE_EXT(last_insert_id, OB_ID(last_insert_id), last_insert_id_session);
@@ -971,7 +997,7 @@ int ObResultSet::from_plan(const ObPhysicalPlan &phy_plan, const ObIArray<ObPCPa
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < ps_param_count; ++i) {
         ObField param_field;
-        param_field.type_.set_type(ObIntType); // @bug
+        param_field.type_meta_.set_type(ObIntType); // @bug
         param_field.cname_ = ObString::make_string("?");
         OZ (add_param_column(param_field), K(param_field), K(i), K(ps_param_count));
       }
@@ -1099,8 +1125,8 @@ int ObResultSet::ExternalRetrieveInfo::recount_dynamic_param_info(
     ObRawExpr *into = into_exprs_.at(i);
     if (OB_NOT_NULL(into)
         && T_QUESTIONMARK == into->get_expr_type()
-        && static_cast<ObConstRawExpr *>(into)->get_value().get_unknown() < current_position) {
-      current_position = static_cast<ObConstRawExpr *>(into)->get_value().get_unknown();
+        && static_cast<ObConstRawExpr *>(into)->get_questionmark_index() < current_position) {
+      current_position = static_cast<ObConstRawExpr *>(into)->get_questionmark_index();
     }
   }
 
@@ -1111,21 +1137,21 @@ int ObResultSet::ExternalRetrieveInfo::recount_dynamic_param_info(
     ObRawExpr *param = param_info.at(i).element<0>();
     if (OB_NOT_NULL(param)
         && T_QUESTIONMARK == param->get_expr_type()
-        && static_cast<ObConstRawExpr *>(param)->get_value().get_unknown() > current_position) {
+        && static_cast<ObConstRawExpr *>(param)->get_questionmark_index() > current_position) {
       OZ (recount_params.push_back(static_cast<ObConstRawExpr *>(param)));
     }
   }
   if (OB_SUCC(ret) && recount_params.count() >= 2) {
     lib::ob_sort(recount_params.begin(), recount_params.end(),
         [](ObConstRawExpr *a, ObConstRawExpr *b) {
-          return a->get_value().get_unknown() < b->get_value().get_unknown();
+          return a->get_questionmark_index() < b->get_questionmark_index();
         });
   }
 
   for (int64_t i = 0;
       current_position != INT64_MAX && OB_SUCC(ret) && i < recount_params.count(); ++i) {
-    recount_params.at(i)->get_value().set_unknown(current_position);
-    current_position ++;
+    OZ (recount_params.at(i)->set_questionmark_index(current_position));
+    OX (current_position ++);
   }
   return ret;
 }
@@ -1183,13 +1209,13 @@ int ObResultSet::ExternalRetrieveInfo::build(
         } else if (OB_FAIL(external_params_.push_back(param_info.at(i).element<0>()))) {
         } else if (T_QUESTIONMARK == param_info.at(i).element<0>()->get_expr_type()) {
           ObConstRawExpr *const_expr = static_cast<ObConstRawExpr *>(param_info.at(i).element<0>());
-          if (OB_FAIL(param_info.at(i).element<1>()->get_value().apply(const_expr->get_value()))) {
-          }
+          OZ (param_info.at(i).element<1>()->replace_value_borrowed(
+              const_expr->get_value_datum(), const_expr->get_value_meta()));
         } else {
           // If it is not a local variable of PL, the value of QUESTIONMARK needs to be changed to an invalid value to prevent the proxy from being confused
-          param_info.at(i).element<1>()->get_value().set_unknown(OB_INVALID_INDEX);
+          OZ (param_info.at(i).element<1>()->set_questionmark_index(OB_INVALID_INDEX));
           param_info.at(i).element<1>()->set_expr_obj_meta(
-                              param_info.at(i).element<1>()->get_value().get_meta());
+                              param_info.at(i).element<1>()->get_value_meta());
           if (stmt_sql_.empty()) {
             OZ (ob_write_string(allocator_, stmt.get_query_ctx()->get_sql_stmt(), stmt_sql_));
           }

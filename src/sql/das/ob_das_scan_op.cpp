@@ -22,6 +22,9 @@
 #include "sql/das/iter/ob_das_iter_utils.h"
 
 
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 namespace common
@@ -180,6 +183,7 @@ int ObDASScanRtDef::init_pd_op(ObExecContext &exec_ctx,
 ObDASScanOp::ObDASScanOp(ObIAllocator &op_alloc)
   : ObIDASTaskOp(op_alloc),
     scan_param_(),
+    native_point_get_keys_(nullptr),
     scan_ctdef_(nullptr),
     scan_rtdef_(nullptr),
     result_(nullptr),
@@ -203,11 +207,11 @@ int ObDASScanOp::init_scan_param()
 {
   int ret = OB_SUCCESS;
   
-  
   scan_param_.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
   scan_param_.tx_lock_timeout_ = scan_rtdef_->tx_lock_timeout_;
   scan_param_.index_id_ = scan_ctdef_->ref_table_id_;
   scan_param_.is_get_ = scan_ctdef_->is_get_;
+  scan_param_.datum_lookup_keys_ = native_point_get_keys_;
   scan_param_.is_for_foreign_check_ = scan_rtdef_->is_for_foreign_check_;
   scan_param_.timeout_ = scan_rtdef_->timeout_ts_;
   scan_param_.scan_flag_ = scan_rtdef_->scan_flag_;
@@ -439,19 +443,18 @@ void ObDASScanOp::reset_access_datums_ptr(const ObDASBaseCtDef *ctdef, ObEvalCtx
   if (ctdef != nullptr) {
     if (ctdef->op_type_== DAS_OP_TABLE_SCAN) {
       const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(ctdef);
+      // Datum and native I64 values already live in the execution frame.
+      // Only restore its ownership marker; no discarded legacy Datum* is needed.
       FOREACH_CNT(e, scan_ctdef->pd_expr_spec_.access_exprs_) {
-        (*e)->locate_datums_for_update(eval_ctx, capacity);
         ObEvalInfo &info = (*e)->get_eval_info(eval_ctx);
         info.point_to_frame_ = true;
       }
       FOREACH_CNT(e, scan_ctdef->pd_expr_spec_.pd_storage_aggregate_output_) {
-        (*e)->locate_datums_for_update(eval_ctx, capacity);
         ObEvalInfo &info = (*e)->get_eval_info(eval_ctx);
         info.point_to_frame_ = true;
       }
       if (scan_ctdef->trans_info_expr_ != nullptr) {
         ObExpr *trans_expr = scan_ctdef->trans_info_expr_;
-        trans_expr->locate_datums_for_update(eval_ctx, capacity);
         ObEvalInfo &info = trans_expr->get_eval_info(eval_ctx);
         info.point_to_frame_ = true;
       }
@@ -573,6 +576,11 @@ int ObDASScanOp::reuse_iter()
     ret = OB_INVALID_ARGUMENT;
   }
 
+  if (OB_SUCC(ret)) {
+    // Unlike release_op(), reuse finishes the preceding input generation.
+    // Do not clear it until storage has stopped borrowing its cells.
+    set_native_point_get_keys(nullptr);
+  }
   return ret;
 }
 
@@ -1069,10 +1077,35 @@ int ObDASScanOp::get_index_merge_tablet_ids(common::ObIArray<common::ObTabletID>
   return ret;
 }
 
-OB_SERIALIZE_MEMBER((ObDASScanOp, ObIDASTaskOp),
-                    scan_param_.key_ranges_,
-                    scan_ctdef_,
-                    scan_rtdef_);
+OB_DEF_SERIALIZE(ObDASScanOp)
+{
+  int ret = OB_SUCCESS;
+  if (native_point_get_keys_ != nullptr) {
+    // A local-only key must not become an empty GET in a copied DAS task.
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_FAIL(ObIDASTaskOp::serialize(buf, buf_len, pos))) {
+  } else {
+    LST_DO_CODE(OB_UNIS_ENCODE, scan_param_.key_ranges_, scan_ctdef_, scan_rtdef_);
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObDASScanOp)
+{
+  int ret = ObIDASTaskOp::deserialize(buf, data_len, pos);
+  if (OB_SUCC(ret)) {
+    set_native_point_get_keys(nullptr);
+    LST_DO_CODE(OB_UNIS_DECODE, scan_param_.key_ranges_, scan_ctdef_, scan_rtdef_);
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObDASScanOp)
+{
+  int64_t len = ObIDASTaskOp::get_serialize_size();
+  LST_DO_CODE(OB_UNIS_ADD_LEN, scan_param_.key_ranges_, scan_ctdef_, scan_rtdef_);
+  return len;
+}
 
 ObLocalIndexLookupOp::~ObLocalIndexLookupOp()
 {
@@ -1161,26 +1194,26 @@ int ObLocalIndexLookupOp::process_data_table_rowkey()
     rowkey_cnt -= 1;
   }
   int64_t group_idx = 0;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
   common::ObArenaAllocator& lookup_alloc = lookup_memctx_->get_arena_allocator();
   ObNewRange lookup_range;
-  if (OB_ISNULL(buf = lookup_alloc.alloc(sizeof(ObObj) * rowkey_cnt))) {
+  if (OB_ISNULL(buf = lookup_alloc.alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    obj_ptr = new (buf) ObObj[rowkey_cnt];
+    obj_ptr = new (buf) DatumValue[rowkey_cnt];
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < index_ctdef_->result_output_.count(); ++i) {
-    ObObj tmp_obj;
+    DatumValue tmp_obj;
     ObExpr *expr = index_ctdef_->result_output_.at(i);
     if (T_PSEUDO_GROUP_ID == expr->type_) {
       group_idx = ObNewRange::get_group_idx(expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_).get_int());
     } else if (T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_) {
       // do nothing
     } else {
-      ObDatum &col_datum = expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
-      if (OB_FAIL(col_datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(ob_write_obj(lookup_alloc, tmp_obj, obj_ptr[i]))) {
+      Datum &col_datum = expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
+      if (OB_FAIL(project_native_datum_value_view(col_datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, lookup_alloc))) {
+      } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], lookup_alloc))) {
       }
     }
   }

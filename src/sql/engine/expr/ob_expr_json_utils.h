@@ -56,7 +56,7 @@ typedef enum JsnValueMisMatch {
 } JsnValueMisMatch;
 
 struct ObJsonCastParam {
-  ObJsonCastParam(ObObjType dst_type, ObCollationType in_coll_type, ObCollationType dst_coll_type, int8_t ascii_type) : 
+  ObJsonCastParam(SqlValueType dst_type, ObCollationType in_coll_type, ObCollationType dst_coll_type, int8_t ascii_type) :
     in_coll_type_(in_coll_type), 
     dst_coll_type_(dst_coll_type),
     dst_type_(dst_type),
@@ -67,12 +67,12 @@ struct ObJsonCastParam {
     is_pretty_(false),
     is_only_check_(false),
     relaxed_time_convert_(false),
-    rt_expr_(nullptr)
+    rt_expr_(nullptr), result_type_(nullptr)
   {}
   ~ObJsonCastParam() {}
   ObCollationType in_coll_type_;
   ObCollationType dst_coll_type_;
-  ObObjType dst_type_;
+  SqlValueType dst_type_;
   int8_t ascii_type_;
   bool is_quote_;
   bool is_const_;
@@ -80,7 +80,8 @@ struct ObJsonCastParam {
   bool is_pretty_;
   bool is_only_check_; // only check cast, not set result
   bool relaxed_time_convert_; // relaxed_time_convert_ for json_table and multivalue index.
-  const ObExpr *rt_expr_; // get nls format expr
+  const ObExpr *rt_expr_; // prepared Expr result owner and NLS format
+  const common::SqlType *result_type_; // explicit cold DatumValue boundary, call lifetime
 };
 
 struct ObExprJsonQueryParamInfo : public ObIExprExtraInfo
@@ -100,7 +101,7 @@ public:
                         ObIExprExtraInfo *&copied_info) const override;
   int init_jsn_val_expr_param(ObIAllocator &alloc, ObExprCGCtx &op_cg_ctx, const ObRawExpr* raw_expr);
   int init_jsn_query_expr_param(ObIAllocator &alloc, ObExprCGCtx &op_cg_ctx, const ObRawExpr* raw_expr);
-  int get_int_val_from_raw(ObIAllocator &alloc, ObExecContext *exec_ctx, const ObRawExpr* raw_expr, ObObj &const_data);
+  int get_int_val_from_raw(ObIAllocator &alloc, ObExecContext *exec_ctx, const ObRawExpr* raw_expr, DatumValue &const_data);
   int init_mismatch_array(const ObRawExpr* raw_expr, 
                           ObExecContext *exec_ctx);
   int parse_json_path(ObString path_str, ObJsonPath*& j_path_);
@@ -130,14 +131,14 @@ public:
                          ObIJsonBase *j_base,
                          common::ObAccuracy &accuracy,
                          ObJsonCastParam &cast_param,
-                         ObDatum &res,
+                         Datum &res,
                          uint8_t &is_type_mismatch);
   static int set_lob_datum(common::ObIAllocator *allocator,
                             const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObObjType dst_type,
+                            SqlValueType dst_type,
                             uint8_t ascii_type,
-                            ObDatum &res);
+                            Datum &res);
   static int time_scale_check(const common::ObAccuracy &accuracy, int64_t &value,
                               bool strict = false);
   static int cast_to_number_type(common::ObIAllocator *allocator,
@@ -147,53 +148,42 @@ public:
                                 uint8_t &is_type_mismatch,
                                 number::ObNumber &val);
 
-  static int cast_json_scalar_to_sql_obj(common::ObIAllocator *allocator,
-                                         ObExecContext* exec_ctx,
-                                         ObIJsonBase *j_base,
-                                         ObExprResType col_res_type,
-                                         ObObj &res_obj);
-
-  static int cast_json_scalar_to_sql_obj(common::ObIAllocator *allocator,
-                                         ObEvalCtx& eval_ctx,
+  // Native JSON scalar result. Payload bytes, including fixed-width cells,
+  // belong to owner; no view into the conversion's stack buffer escapes.
+  // Keep caller-provided value metadata just as the existing in-place helper.
+  static int cast_json_scalar_to_sql_value(common::ObIAllocator &owner,
+                                         ObEvalCtx &eval_ctx,
                                          ObIJsonBase *j_base,
                                          ObCollationType collation,
                                          ObAccuracy &accuracy,
-                                         ObObjType obj_type,
+                                         SqlValueType type,
                                          ObScale scale,
-                                         ObObj &res_obj);
+                                         common::DatumValue &result);
 
   typedef int (*ObJsonCastSqlDatum)(common::ObIAllocator *allocator,
                                     ObEvalCtx &ctx,
                                     ObIJsonBase *j_base,
                                     common::ObAccuracy &accuracy,
                                     ObJsonCastParam &cast_param,
-                                    ObDatum &res,
+                                    Datum &res,
                                     uint8_t &is_type_mismatch,
                                     const ObExpr *rt_expr);
-  typedef int (*ObJsonCastSqlObj)(common::ObIAllocator *allocator,
-                                  ObEvalCtx &ctx,
-                                  ObIJsonBase *j_base,
-                                  common::ObAccuracy &accuracy,
-                                  ObJsonCastParam &cast_param,
-                                  ObObj &res,
-                                  uint8_t &is_type_mismatch,
-                                  const ObExpr *rt_expr);
   typedef int (*ObJsonCastSqlScalar)(common::ObIAllocator *allocator,
                                     ObEvalCtx &ctx,
                                     ObIJsonBase *j_base,
                                     common::ObAccuracy &accuracy,
                                     ObJsonCastParam &cast_param,
-                                    ObDatum &res,
+                                    Datum &res,
                                     uint8_t &is_type_mismatch);
   static int get_accuracy_internal(common::ObAccuracy &accuracy,
                                   ObEvalCtx& ctx,
-                                  ObObjType &dest_type,
+                                  SqlValueType &dest_type,
                                   const int64_t value,
                                   const ObLengthSemantics &length_semantics);
   static int get_accuracy(const ObExpr &expr,
                           ObEvalCtx& ctx,
                           common::ObAccuracy &accuracy,
-                          ObObjType &dest_type,
+                          SqlValueType &dest_type,
                           bool &is_cover_by_error);
   static int number_range_check(const common::ObAccuracy &accuracy,
                                 ObIAllocator *allocator,
@@ -205,9 +195,7 @@ public:
   static int mdatetime_scale_check(const common::ObAccuracy &accuracy,
                                   ObMySQLDateTime &value,
                                   bool strict = false);
-  static ObJsonUtil::ObJsonCastSqlObj get_json_obj_cast_func(ObObjType dst_type);
-  static ObJsonUtil::ObJsonCastSqlDatum get_json_datum_cast_func(ObObjType dst_type);
-  static ObJsonUtil::ObJsonCastSqlScalar get_json_cast_func(ObObjType dst_type);
+  static ObJsonUtil::ObJsonCastSqlScalar get_json_cast_func(SqlValueType dst_type);
   static int get_json_path(ObExpr* expr,
                           ObEvalCtx &ctx, 
                           bool &is_null_result, 
@@ -228,9 +216,9 @@ public:
                                    ObString &padding_res);
   static int set_mismatch_val(ObIArray<int8_t>& val, ObIArray<int8_t>& type, int64_t& opt_val, uint32_t& pos);
   template<typename T>
-  static void wrapper_set_uint(ObObjType type, uint64_t val, T& obj);
+  static void wrapper_set_uint(SqlValueType type, uint64_t val, T& obj);
   template<typename T>
-  static void wrapper_set_string(ObObjType type, ObString& val, T& obj);
+  static void wrapper_set_string(SqlValueType type, ObString& val, T& obj);
   template<typename T>
   static void wrapper_set_decimal_int(const ObDecimalInt *decint, ObScale scale, int32_t int_bytes, T& obj);
   

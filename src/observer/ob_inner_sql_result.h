@@ -53,6 +53,11 @@ public:
   virtual int close();
   virtual int next();
   int force_close();
+  void set_native_result(bool native_result) { native_result_ = native_result; }
+  bool is_native_result() const { return native_result_; }
+  // Clone before advance/close releases expression frames or a legacy row.
+  int get_native_value(int64_t col_idx, common::ObIAllocator &owner,
+                       common::DatumValue &value) const;
 
   virtual int print_info() const;
 
@@ -68,11 +73,9 @@ public:
   virtual int get_double(const int64_t col_idx, double &double_val) const;
   virtual int get_timestamp(const int64_t col_idx, const common::ObTimeZoneInfo *tz_info, int64_t &timestamp) const;
   virtual int get_number(const int64_t col_idx, common::number::ObNumber &nmb_val) const override;
-  virtual int get_type(const int64_t col_idx, ObObjMeta &type) const override;
+  virtual int get_type(const int64_t col_idx, SqlTypeMeta &type) const override;
   virtual int64_t get_column_count() const override;
-  virtual int get_obj(const int64_t col_idx, ObObj &obj,
-                      const common::ObTimeZoneInfo *tz_info = NULL,
-                      common::ObIAllocator *allocator = NULL) const override;
+  virtual int get_value(int64_t col_idx, common::DatumValue &value) const override;
 
   virtual int get_int(const char *col_name, int64_t &int_val) const;
   virtual int get_uint(const char *col_name, uint64_t &int_val) const;
@@ -86,8 +89,8 @@ public:
   virtual int get_double(const char *col_name, double &double_val) const;
   virtual int get_timestamp(const char *col_name, const common::ObTimeZoneInfo *tz_info, int64_t &timestamp) const;
   virtual int get_number(const char *col_name, common::number::ObNumber &nmb_val) const override;
-  virtual int get_type(const char* col_name, ObObjMeta &type) const override;
-  virtual int get_obj(const char* col_name, ObObj &obj) const override;
+  virtual int get_type(const char* col_name, SqlTypeMeta &type) const override;
+  virtual int get_value(const char *col_name, common::DatumValue &value) const override;
 
   sql::ObSqlCtx &sql_ctx() { return sql_ctx_; }
 
@@ -100,7 +103,6 @@ public:
   void set_execute_end_ts(int64_t ts) { execute_end_ts_ = ts; }
   int64_t get_execute_end_ts() { return execute_end_ts_; }
 
-  int get_obj(const int64_t col_idx, const common::ObObj *&obj) const;
   const ObNewRow *get_row() const { return row_; };
 
   bool is_inited() const { return is_inited_; }
@@ -122,7 +124,7 @@ private:
   int build_column_map() const;
   int inner_close();
 
-  static inline int check_extend_value(const common::ObObj &obj);
+  static inline int check_extend_value(const common::DatumValue &obj);
 private:
   class MemEntifyDestroyGuard
   {
@@ -157,6 +159,8 @@ private:
   query::ObIPlanCacheAccessService &plan_cache_access_service_;
   sql::ObResultSet *result_set_;
   const common::ObNewRow *row_;
+  sql::ResultRowView native_row_;
+  bool native_result_;
   int64_t execute_start_ts_;
   int64_t execute_end_ts_;
   bool is_inited_;

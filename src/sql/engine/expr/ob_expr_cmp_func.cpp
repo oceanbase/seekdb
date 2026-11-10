@@ -117,9 +117,9 @@ int get_fixed_double_tolerance(const ObExpr &expr, double &tolerance)
 
 struct RuntimeFixedDoubleCmp
 {
-  int operator()(ObDatum &res,
-                 const ObDatum &l_datum,
-                 const ObDatum &r_datum,
+  int operator()(Datum &res,
+                 const Datum &l_datum,
+                 const Datum &r_datum,
                  const double &tolerance,
                  const ObCmpOp &cmp_op) const
   {
@@ -144,105 +144,12 @@ struct RuntimeFixedDoubleCmp
   }
 };
 
-int get_runtime_decint_cmp_func(const ObExpr &expr, decint_cmp_fp &cmp_func)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(2 != expr.arg_cnt_)
-      || OB_ISNULL(expr.args_)
-      || OB_ISNULL(expr.args_[0])
-      || OB_ISNULL(expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    const ObDatumMeta &left_meta = expr.args_[0]->datum_meta_;
-    const ObDatumMeta &right_meta = expr.args_[1]->datum_meta_;
-    const ObDecimalIntWideType left_width = get_decimalint_type(left_meta.precision_);
-    const ObDecimalIntWideType right_width = get_decimalint_type(right_meta.precision_);
-    if (OB_UNLIKELY(!ob_is_decimal_int(left_meta.type_)
-                    || !ob_is_decimal_int(right_meta.type_)
-                    || left_width < DECIMAL_INT_32
-                    || left_width >= DECIMAL_INT_MAX
-                    || right_width < DECIMAL_INT_32
-                    || right_width >= DECIMAL_INT_MAX)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      const int32_t left_bytes = 2 << (static_cast<int32_t>(left_width) + 1);
-      const int32_t right_bytes = 2 << (static_cast<int32_t>(right_width) + 1);
-      cmp_func = wide::ObDecimalIntCmpSet::get_decint_decint_cmp_func(
-          left_bytes, right_bytes);
-      if (OB_ISNULL(cmp_func)) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-  }
-  return ret;
-}
-
-struct RuntimeDecintCmp
-{
-  int operator()(ObDatum &res,
-                 const ObDatum &l_datum,
-                 const ObDatum &r_datum,
-                 const decint_cmp_fp &cmp_func,
-                 const ObCmpOp &cmp_op) const
-  {
-    OB_ASSERT(nullptr != cmp_func);
-    const int cmp_ret = cmp_func(l_datum.get_decimal_int(), r_datum.get_decimal_int());
-    res.set_int(get_cmp_ret(cmp_op, cmp_ret));
-    return OB_SUCCESS;
-  }
-};
-
-int get_runtime_tc_cmp_func(const ObExpr &expr, ObDatumCmpFuncType &cmp_func)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(2 != expr.arg_cnt_)
-      || OB_ISNULL(expr.args_)
-      || OB_ISNULL(expr.args_[0])
-      || OB_ISNULL(expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    const ObObjType left_type = expr.args_[0]->datum_meta_.type_;
-    const ObObjType right_type = expr.args_[1]->datum_meta_.type_;
-    if (OB_UNLIKELY(left_type < ObNullType || left_type >= ObMaxType
-                    || right_type < ObNullType || right_type >= ObMaxType)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      const ObObjTypeClass left_tc = ob_obj_type_class(left_type);
-      const ObObjTypeClass right_tc = ob_obj_type_class(right_type);
-      if (OB_UNLIKELY(ob_is_invalid_obj_tc(left_tc) || ob_is_invalid_obj_tc(right_tc))) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(cmp_func = DATUM_TC_CMP_FUNCS[left_tc][right_tc])) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-  }
-  return ret;
-}
-
-struct RuntimeTCCmp
-{
-  int operator()(ObDatum &res,
-                 const ObDatum &l_datum,
-                 const ObDatum &r_datum,
-                 const ObDatumCmpFuncType &cmp_func,
-                 const ObDatumAccessContext *access_ctx,
-                 const ObCmpOp &cmp_op) const
-  {
-    int cmp_ret = 0;
-    int ret = cmp_func(l_datum, r_datum, cmp_ret, access_ctx);
-    if (OB_FAIL(ret)) {
-    } else {
-      res.set_int(get_cmp_ret(cmp_op, cmp_ret));
-    }
-    return ret;
-  }
-};
 
 } // namespace
 
 int ObFixedDoubleRelationFunc::eval(const ObExpr &expr,
                                     ObEvalCtx &ctx,
-                                    ObDatum &expr_datum)
+                                    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   double tolerance = 0;
@@ -270,66 +177,26 @@ int ObFixedDoubleRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
 int ObDecintRelationFunc::eval(const ObExpr &expr,
                                ObEvalCtx &ctx,
-                               ObDatum &expr_datum)
+                               Datum &expr_datum)
 {
-  int ret = OB_SUCCESS;
-  decint_cmp_fp cmp_func = nullptr;
-  if (OB_FAIL(get_runtime_decint_cmp_func(expr, cmp_func))) {
-  } else {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    ret = def_relational_eval_func<RuntimeDecintCmp>(
-        expr, ctx, expr_datum, cmp_func, cmp_op);
-  }
-  return ret;
+  return eval_native_relation(expr, ctx, expr_datum);
 }
 
 int ObDecintRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  int ret = OB_SUCCESS;
-  decint_cmp_fp cmp_func = nullptr;
-  if (OB_FAIL(get_runtime_decint_cmp_func(expr, cmp_func))) {
-  } else {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    ret = def_relational_eval_batch_func<RuntimeDecintCmp>(
-        BATCH_EVAL_FUNC_ARG_LIST, cmp_func, cmp_op);
-  }
-  return ret;
+  return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 int ObTCRelationFunc::eval(const ObExpr &expr,
                            ObEvalCtx &ctx,
-                           ObDatum &expr_datum)
+                           Datum &expr_datum)
 {
-  int ret = OB_SUCCESS;
-  ObDatumCmpFuncType cmp_func = NULL;
-  if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
-  } else {
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_func<RuntimeTCCmp>(
-          expr, ctx, expr_datum, cmp_func, access_ctx, cmp_op);
-    }
-  }
-  return ret;
+  return eval_native_relation(expr, ctx, expr_datum);
 }
 
 int ObTCRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  int ret = OB_SUCCESS;
-  ObDatumCmpFuncType cmp_func = NULL;
-  if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
-  } else {
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_batch_func<RuntimeTCCmp>(
-          BATCH_EVAL_FUNC_ARG_LIST, cmp_func, access_ctx, cmp_op);
-    }
-  }
-  return ret;
+  return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 OB_NOINLINE void init_expr_cmp_func_array(ObExpr::EvalFunc *eval_funcs,
@@ -377,9 +244,9 @@ static int64_t fill_type_with_tc_eval_func(void)
 {
   int64_t cnt = 0;
   for (int64_t i = 0; i < ObMaxType; i++) {
-    ObObjTypeClass i_tc = ob_obj_type_class((ObObjType)i);
+    SqlTypeClass i_tc = sql_type_class((SqlValueType)i);
     for (int64_t j = 0; j < ObMaxType; j++) {
-      ObObjTypeClass j_tc = ob_obj_type_class((ObObjType)j);
+      SqlTypeClass j_tc = sql_type_class((SqlValueType)j);
       if (NULL == EVAL_TYPE_CMP_FUNCS[i][j][0]) {
         const int64_t size = sizeof(void *) * CO_MAX;
         memcpy(&EVAL_TYPE_CMP_FUNCS[i][j][0],
@@ -435,8 +302,8 @@ ObCmpOp ObExprCmpFuncsHelper::get_cmp_op(const ObExprOperatorType type)
   return cmp_op;
 }
 
-ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType type1,
-                                                              const ObObjType type2,
+ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const SqlValueType type1,
+                                                              const SqlValueType type2,
                                                               const ObScale scale1,
                                                               const ObScale scale2,
                                                               const ObPrecision prec1,
@@ -449,12 +316,12 @@ ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType ty
   OB_ASSERT(type2 >= ObNullType && type2 < ObMaxType);
   OB_ASSERT(cmp_op >= CO_EQ && cmp_op <= CO_MAX);
 
-  ObObjTypeClass tc1 = ob_obj_type_class(type1);
-  ObObjTypeClass tc2 = ob_obj_type_class(type2);
+  SqlTypeClass tc1 = sql_type_class(type1);
+  SqlTypeClass tc2 = sql_type_class(type2);
   ObExpr::EvalFunc func_ptr = NULL;
   if (OB_UNLIKELY(ob_is_invalid_cmp_op(cmp_op)) ||
-      OB_UNLIKELY(ob_is_invalid_obj_tc(tc1) ||
-      OB_UNLIKELY(ob_is_invalid_obj_tc(tc2)))) {
+      OB_UNLIKELY(is_invalid_sql_type_class(tc1) ||
+      OB_UNLIKELY(is_invalid_sql_type_class(tc2)))) {
     func_ptr = NULL;
   } else if (tc1 == ObJsonTC && tc2 == ObJsonTC) {
     func_ptr = EVAL_JSON_CMP_FUNCS[cmp_op][has_lob_header];
@@ -494,8 +361,8 @@ ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType ty
 }
 
 ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
-    const ObObjType type1,
-    const ObObjType type2,
+    const SqlValueType type1,
+    const SqlValueType type2,
     const ObScale scale1,
     const ObScale scale2,
     const ObPrecision prec1,
@@ -508,12 +375,12 @@ ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
   OB_ASSERT(type2 >= ObNullType && type2 < ObMaxType);
   OB_ASSERT(cmp_op >= CO_EQ && cmp_op <= CO_MAX);
 
-  ObObjTypeClass tc1 = ob_obj_type_class(type1);
-  ObObjTypeClass tc2 = ob_obj_type_class(type2);
+  SqlTypeClass tc1 = sql_type_class(type1);
+  SqlTypeClass tc2 = sql_type_class(type2);
   ObExpr::EvalBatchFunc func_ptr = NULL;
   if (OB_UNLIKELY(ob_is_invalid_cmp_op(cmp_op)) ||
-      OB_UNLIKELY(ob_is_invalid_obj_tc(tc1) ||
-      OB_UNLIKELY(ob_is_invalid_obj_tc(tc2)))) {
+      OB_UNLIKELY(is_invalid_sql_type_class(tc1) ||
+      OB_UNLIKELY(is_invalid_sql_type_class(tc2)))) {
     func_ptr = NULL;
   } else if (type1 == ObJsonType && type2 == ObJsonType) {
     if (NULL != EVAL_JSON_CMP_FUNCS[cmp_op][has_lob_header]) {
@@ -562,8 +429,8 @@ ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
   return func_ptr;
 }
 
-DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const ObObjType type1,
-                                           const ObObjType type2,
+DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const SqlValueType type1,
+                                           const SqlValueType type2,
                                            const ObScale scale1,
                                            const ObScale scale2,
                                            const ObPrecision prec1,
@@ -574,8 +441,8 @@ DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const ObObjType type1
   OB_ASSERT(type1 >= ObNullType && type1 < ObMaxType);
   OB_ASSERT(type2 >= ObNullType && type2 < ObMaxType);
 
-  ObObjTypeClass tc1 = ob_obj_type_class(type1);
-  ObObjTypeClass tc2 = ob_obj_type_class(type2);
+  SqlTypeClass tc1 = sql_type_class(type1);
+  SqlTypeClass tc2 = sql_type_class(type2);
   ObDatumCmpFuncType func_ptr = NULL;
   if (type1 == ObJsonType && type2 == ObJsonType) {
     func_ptr = DATUM_JSON_CMP_FUNCS[has_lob_header];

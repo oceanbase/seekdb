@@ -1095,13 +1095,13 @@ int ObTransformAggrSubquery::add_constraints_for_limit(TransformParam &param)
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(true_expr->set_param_exprs(value_expr, zero_expr))) {
   } else {
-    ObObj obj_zero;
-    obj_zero.set_int(ObIntType, 0);
-    zero_expr->set_value(obj_zero);
-
-    ObObj obj_value;
-    obj_value.set_int(ObIntType, param.limit_value_);
-    value_expr->set_value(obj_value);
+    Datum zero, value;
+    SqlTypeMeta meta;
+    meta.set_int();
+    zero.set_int(0);
+    value.set_int(param.limit_value_);
+    OZ (zero_expr->set_value_borrowed(zero, meta));
+    OZ (value_expr->set_value_borrowed(value, meta));
   }
   if (OB_SUCC(ret) && param.limit_for_exists_) {
     if (OB_FAIL(true_expr->formalize(ctx_->exec_ctx_->get_my_session()))) {
@@ -1403,20 +1403,27 @@ int ObTransformAggrSubquery::check_limit_validity(ObSelectStmt &subquery,
                            && T_QUESTIONMARK != limit_expr->get_expr_type())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (T_INT == limit_expr->get_expr_type() && 
-              0 == static_cast<ObConstRawExpr *>(limit_expr)->get_value().get_int()) {
+              0 == static_cast<ObConstRawExpr *>(limit_expr)->get_value_datum().get_int()) {
     is_valid = false;
   } else if (T_QUESTIONMARK == limit_expr->get_expr_type()) {
     int64_t const_value = 0;
-    ObObj value;
-    int64_t idx = static_cast<ObConstRawExpr *>(limit_expr)->get_value().get_unknown();
-    const ParamStore &param_store = plan_ctx->get_param_store();
+    DatumParameter value;
+    int64_t idx = static_cast<ObConstRawExpr *>(limit_expr)->get_questionmark_index();
+    const ObPhysicalPlanCtx &param_store = *plan_ctx;
       
-    if (idx < 0 || idx >= param_store.count()) {
+    if (idx < 0 || idx >= param_store.get_parameter_count()) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       number::ObNumber number;
-      value = param_store.at(idx);
-      if (value.is_integer_type()) {
+      ObDatum legacy;
+      alignas(8) char scratch[64];
+      const DatumParameterMetadata *attributes = param_store.get_parameter_metadata(idx);
+      if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else if (OB_FAIL(param_store.export_runtime_parameter_legacy(idx, legacy, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(value.assign_legacy_borrowed(legacy, attributes->type_meta_))) {
+      } else { value.set_metadata(*attributes); }
+      if (OB_FAIL(ret)) {
+      } else if (value.is_integer_type()) {
         const_value = value.get_int();
       } else if (value.is_number()) {
         if (OB_FAIL(value.get_number(number))) {
@@ -1766,7 +1773,7 @@ int ObTransformAggrSubquery::check_single_set_subquery(const ObSelectStmt &subqu
         OB_ISNULL(ctx_->allocator_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(ObTransformUtils::get_expr_int_value(limit_expr,
-                                                            &plan_ctx->get_param_store(),
+                                                            plan_ctx,
                                                             ctx_->exec_ctx_,
                                                             ctx_->allocator_,
                                                             limit_value,

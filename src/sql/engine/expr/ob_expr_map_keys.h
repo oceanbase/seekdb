@@ -36,7 +36,7 @@ public:
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx,
                                 bool is_key = true);
-  static int eval_map_components(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool is_key = true);
+  static int eval_map_components(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, bool is_key = true);
   static  int get_map_components_arr(ObIAllocator &tmp_allocator,
                                 ObEvalCtx &ctx,
                                 ObString &map_blob, 
@@ -59,7 +59,7 @@ public:
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx)
                                 const override;
-  static int eval_map_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_map_keys(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -77,7 +77,7 @@ public:
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx)
                                 const override;
-  static int eval_map_values(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_map_values(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

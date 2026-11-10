@@ -38,7 +38,7 @@ public:
                       ObExpr &rt_expr) const override;
   static int time_to_str_format(const int64_t &time_value, const common::ObString &format,
                                 char *buf, int64_t buf_len, int64_t &pos, bool &res_null);
-  static int calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual common::ObCastMode get_cast_mode() const override { return CM_NULL_ON_WARN;}
   DECLARE_SET_LOCAL_SESSION_VARS;
   

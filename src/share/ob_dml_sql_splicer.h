@@ -211,7 +211,6 @@ private:
   int append_value(const common::ObString &str, bool &is_null);
   int append_value(const common::ObHexEscapeSqlStr &escape_str, bool &is_null);
   int append_value(const ObRealUInt64 &value, bool &is_null);
-  int append_value(const common::ObObj &obj, bool &is_null);
   template<typename T> int append_value(const T &obj, bool &is_null, common::FalseType);
   template<typename T> int append_value(const T &obj, bool &is_null, common::TrueType);
   template<typename T> int append_value(const T &obj, bool &is_null);

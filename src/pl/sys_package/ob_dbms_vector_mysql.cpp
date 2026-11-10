@@ -37,7 +37,7 @@ PROCEDURE refresh_index(
   IN       REFRESH_TYPE        VARCHAR(65535) DEFAULT NULL   ---- Reserved: Current default behavior is incremental refresh: FAST
 );
 */
-int ObDBMSVectorMySql::refresh_index(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
+int ObDBMSVectorMySql::refresh_index(ObPLExecCtx &ctx, ParamStore &params, DatumValue &result)
 {
   UNUSED(result);
   int ret = OB_SUCCESS;
@@ -45,7 +45,7 @@ int ObDBMSVectorMySql::refresh_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
   if (!params.at(0).is_varchar()
       || !params.at(1).is_varchar()
       || (!params.at(2).is_null() && !params.at(2).is_varchar())
-      || !(!params.at(3).is_null() && params.at(3).is_int32())
+      || !(!params.at(3).is_null() && params.at(3).get_type_meta().is_int32())
       || (!params.at(4).is_null() && !params.at(4).is_varchar())) {
       ret = OB_INVALID_ARGUMENT;
   }
@@ -75,7 +75,7 @@ PROCEDURE rebuild_index (
     IN      IDX_PARALLEL_CREATION   INT DEFAULT 1                        ---- Parallelism degree for parallel index creation, reserved for future use, syntax support only
 );
 */
-int ObDBMSVectorMySql::rebuild_index(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
+int ObDBMSVectorMySql::rebuild_index(ObPLExecCtx &ctx, ParamStore &params, DatumValue &result)
 {
   UNUSED(result);
   int ret = OB_SUCCESS;
@@ -86,8 +86,8 @@ int ObDBMSVectorMySql::rebuild_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
       || !(!params.at(3).is_null() && params.at(3).is_float())
       || (!params.at(4).is_null() && !params.at(4).is_varchar())
       || !params.at(5).is_varchar()
-      || (!params.at(6).is_null() && !params.at(6).is_text())
-      || !(!params.at(7).is_null() && params.at(7).is_int32())) {
+      || (!params.at(6).is_null() && !params.at(6).get_type_meta().is_text())
+      || !(!params.at(7).is_null() && params.at(7).get_type_meta().is_int32())) {
       ret = OB_INVALID_ARGUMENT;
   }
   if (OB_SUCC(ret)) {
@@ -102,20 +102,20 @@ int ObDBMSVectorMySql::rebuild_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
       rebuild_arg.idx_parallel_creation_ = params.at(7).get_int();
 
       rebuild_arg.idx_parameters_ = NULL;
-      if (params.at(6).is_text() && OB_FAIL(params.at(6).get_string(rebuild_arg.idx_parameters_))) {
+      if (params.at(6).get_type_meta().is_text() && OB_FAIL(params.at(6).get_string(rebuild_arg.idx_parameters_))) {
       } else if (OB_FAIL(rebuild_executor.execute_rebuild(ctx.exec_ctx_, ctx.allocator_, rebuild_arg))) {
       }
   }
   return ret;
 }
 
-int ObDBMSVectorMySql::refresh_index_inner(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
+int ObDBMSVectorMySql::refresh_index_inner(ObPLExecCtx &ctx, ParamStore &params, DatumValue &result)
 {
   UNUSED(result);
   int ret = OB_SUCCESS;
   CK(OB_LIKELY(3 == params.count()));
   CK(OB_LIKELY(params.at(0).is_int()),
-      OB_LIKELY(params.at(1).is_int32()),
+      OB_LIKELY(params.at(1).get_type_meta().is_int32()),
       OB_LIKELY(params.at(2).is_null() || params.at(2).is_varchar()));
   if (OB_SUCC(ret)) {
     ObVectorRefreshIndexInnerArg refresh_arg;
@@ -129,7 +129,7 @@ int ObDBMSVectorMySql::refresh_index_inner(ObPLExecCtx &ctx, ParamStore &params,
   return ret;
 }
 
-int ObDBMSVectorMySql::rebuild_index_inner(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
+int ObDBMSVectorMySql::rebuild_index_inner(ObPLExecCtx &ctx, ParamStore &params, DatumValue &result)
 {
   UNUSED(result);
   int ret = OB_SUCCESS;
@@ -138,8 +138,8 @@ int ObDBMSVectorMySql::rebuild_index_inner(ObPLExecCtx &ctx, ParamStore &params,
       OB_LIKELY(params.at(1).is_float()),
       OB_LIKELY(params.at(2).is_null() || params.at(2).is_varchar()),
       OB_LIKELY(params.at(3).is_varchar()),
-      OB_LIKELY(params.at(4).is_null() || params.at(4).is_text()),
-      OB_LIKELY(params.at(5).is_int32()));
+      OB_LIKELY(params.at(4).is_null() || params.at(4).get_type_meta().is_text()),
+      OB_LIKELY(params.at(5).get_type_meta().is_int32()));
   if (OB_SUCC(ret)) {
     ObVectorRebuildIndexInnerArg rebuild_arg;
     ObVectorRefreshIndexExecutor rebuild_executor;
@@ -150,7 +150,7 @@ int ObDBMSVectorMySql::rebuild_index_inner(ObPLExecCtx &ctx, ParamStore &params,
     rebuild_arg.idx_parallel_creation_ = params.at(5).get_int();
 
     rebuild_arg.idx_parameters_ = NULL;
-    if (params.at(4).is_text() && OB_FAIL(params.at(4).get_string(rebuild_arg.idx_parameters_))) {
+    if (params.at(4).get_type_meta().is_text() && OB_FAIL(params.at(4).get_string(rebuild_arg.idx_parameters_))) {
     } else if (OB_FAIL(rebuild_executor.execute_rebuild_inner(ctx.exec_ctx_, ctx.allocator_, rebuild_arg))) {
     }
   }
@@ -167,16 +167,16 @@ FUNCTION index_vector_memory_advisor (
     IN     max_tablet_vectors BIGINT UNSIGNED DEFAULT 0)
 RETURN VARCHAR(65535);
 */
-int ObDBMSVectorMySql::index_vector_memory_advisor(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
+int ObDBMSVectorMySql::index_vector_memory_advisor(ObPLExecCtx &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   CK(OB_LIKELY(6 == params.count()));
   if (OB_FAIL(ret)) {
   } else if (!params.at(0).is_varchar()
              || !params.at(1).is_uint64()
-             || !params.at(2).is_uint32()
+             || !params.at(2).get_type_meta().is_uint32()
              || !params.at(3).is_varchar()
-             || (!params.at(4).is_text() && !params.at(4).is_null())
+             || (!params.at(4).get_type_meta().is_text() && !params.at(4).is_null())
              || !params.at(5).is_uint64()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -187,7 +187,7 @@ int ObDBMSVectorMySql::index_vector_memory_advisor(ObPLExecCtx &ctx, ParamStore 
     if (max_tablet_vectors == 0) {
       max_tablet_vectors = num_vectors;
     }
-    uint32_t dim_count = params.at(2).get_uint32();
+    uint32_t dim_count = static_cast<uint32_t>(params.at(2).get_uint64());
     ObString dim_type_str = params.at(3).get_varchar();
     ObString idx_param_str;
     share::ObVectorIndexParam index_param;
@@ -197,7 +197,7 @@ int ObDBMSVectorMySql::index_vector_memory_advisor(ObPLExecCtx &ctx, ParamStore 
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "max_tablet_vectors large than num_vectors");
     } else if (dim_type_str.case_compare("FLOAT32") != 0) { // for future use
       ret = OB_NOT_SUPPORTED;
-    } else if (params.at(4).is_text() && OB_FAIL(params.at(4).get_string(idx_param_str))) {
+    } else if (params.at(4).get_type_meta().is_text() && OB_FAIL(params.at(4).get_string(idx_param_str))) {
     } else if (OB_FAIL(parse_idx_param(idx_type_str, idx_param_str, dim_count, index_param))) {
     } else if (OB_ISNULL(allocator)) {
       ret = OB_ERR_UNEXPECTED;
@@ -205,8 +205,14 @@ int ObDBMSVectorMySql::index_vector_memory_advisor(ObPLExecCtx &ctx, ParamStore 
       ObStringBuffer res_buf(allocator);
       if (OB_FAIL(get_estimate_memory_str(index_param, num_vectors, max_tablet_vectors, res_buf))) {
       } else {
-        result.set_varchar(res_buf.ptr(), res_buf.length());
-        result.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        ObString response;
+        if (OB_FAIL(res_buf.get_result_string(response))) {
+        } else {
+          // Transfer the execution-allocator bytes before res_buf destruction.
+          result.meta_.set_varchar();
+          result.datum_.set_string(response);
+          result.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        }
       }
     }
   }
@@ -221,7 +227,7 @@ FUNCTION index_vector_memory_estimate (
     IN     idx_parameters    LONGTEXT DEFAULT NULL)
 RETURN VARCHAR(65535);
 */
-int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
+int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   CK(OB_LIKELY(4 == params.count()));
@@ -229,7 +235,7 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
   } else if (!params.at(0).is_varchar()
              || !params.at(1).is_varchar()
              || !params.at(2).is_varchar()
-             || (!params.at(3).is_text() && !params.at(4).is_null())) {
+             || (!params.at(3).get_type_meta().is_text() && !params.at(4).is_null())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObIAllocator *allocator = &ctx.exec_ctx_->get_allocator();
@@ -291,8 +297,8 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       // get row count of the target table
       const int64_t sum_pos = 0;
       const int64_t max_pos = 1;
-      ObObj sum_result_obj;
-      ObObj max_result_obj;
+      DatumValue sum_result_obj;
+      DatumValue max_result_obj;
 
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObSqlString query_string;
@@ -305,8 +311,8 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(result->next())) {
-        } else if (OB_FAIL(result->get_obj(sum_pos, sum_result_obj))) {
-        } else if (OB_FAIL(result->get_obj(max_pos, max_result_obj))) {
+        } else if (OB_FAIL(result->get_value(sum_pos, sum_result_obj))) {
+        } else if (OB_FAIL(result->get_value(max_pos, max_result_obj))) {
         } else if ((!sum_result_obj.is_null() && OB_UNLIKELY(!sum_result_obj.is_integer_type())) ||
                    (!max_result_obj.is_null() && OB_UNLIKELY(!max_result_obj.is_integer_type()))) {
           ret = OB_ERR_UNEXPECTED;
@@ -317,7 +323,7 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
     }
 
     if (OB_FAIL(ret)) {
-    } else if (params.at(3).is_text() && OB_FAIL(params.at(3).get_string(idx_param_str))) {
+    } else if (params.at(3).get_type_meta().is_text() && OB_FAIL(params.at(3).get_string(idx_param_str))) {
     } else if (idx_param_str.empty()) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(parse_idx_param(idx_type_str, idx_param_str, dim_count, index_param))) {
@@ -327,8 +333,14 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       ObStringBuffer res_buf(allocator);
       if (OB_FAIL(get_estimate_memory_str(index_param, num_vectors, tablet_max_num_vectors, res_buf))) {
       } else {
-        result.set_varchar(res_buf.ptr(), res_buf.length());
-        result.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        ObString response;
+        if (OB_FAIL(res_buf.get_result_string(response))) {
+        } else {
+          // Transfer the execution-allocator bytes before res_buf destruction.
+          result.meta_.set_varchar();
+          result.datum_.set_string(response);
+          result.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        }
       }
     }
   }

@@ -27,7 +27,7 @@ namespace
 {
 int full_link_trace_not_supported(sql::ObExecContext &ctx,
                                   sql::ParamStore &params,
-                                  common::ObObj &result)
+                                  common::DatumValue &result)
 {
   UNUSED(ctx);
   UNUSED(params);
@@ -40,42 +40,42 @@ int full_link_trace_not_supported(sql::ObExecContext &ctx,
 
 int ObDBMSMonitor::session_trace_enable(sql::ObExecContext &ctx,
                                         sql::ParamStore &params,
-                                        common::ObObj &result)
+                                        common::DatumValue &result)
 {
   return full_link_trace_not_supported(ctx, params, result);
 }
 
 int ObDBMSMonitor::session_trace_disable(sql::ObExecContext &ctx,
                                          sql::ParamStore &params,
-                                         common::ObObj &result)
+                                         common::DatumValue &result)
 {
   return full_link_trace_not_supported(ctx, params, result);
 }
 
 int ObDBMSMonitor::client_id_trace_enable(sql::ObExecContext &ctx,
                                           sql::ParamStore &params,
-                                          common::ObObj &result)
+                                          common::DatumValue &result)
 {
   return full_link_trace_not_supported(ctx, params, result);
 }
 
 int ObDBMSMonitor::client_id_trace_disable(sql::ObExecContext &ctx,
                                            sql::ParamStore &params,
-                                           common::ObObj &result)
+                                           common::DatumValue &result)
 {
   return full_link_trace_not_supported(ctx, params, result);
 }
 
 int ObDBMSMonitor::mod_act_trace_enable(sql::ObExecContext &ctx,
                                         sql::ParamStore &params,
-                                        common::ObObj &result)
+                                        common::DatumValue &result)
 {
   return full_link_trace_not_supported(ctx, params, result);
 }
 
 int ObDBMSMonitor::mod_act_trace_disable(sql::ObExecContext &ctx,
                                          sql::ParamStore &params,
-                                         common::ObObj &result)
+                                         common::DatumValue &result)
 {
   return full_link_trace_not_supported(ctx, params, result);
 }

@@ -29,6 +29,7 @@ class ObGroupByChecker: public ObRawExprVisitor
 public:
 // if param_store is not null, group by checker will extract plan cache const constraint
   ObGroupByChecker(const ParamStore *param_store,
+                   common::ObIAllocator *owner, ObExecContext *actual_ctx,
                    ObIArray<ObRawExpr*> *group_by_exprs,
                    ObIArray<ObRawExpr*> *rollup_exprs = nullptr,
                    ObIArray<ObGroupbyExpr> *groupby_exprs = nullptr)
@@ -43,7 +44,9 @@ public:
       has_nested_aggr_(false),
       is_check_order_by_(false),
       only_need_contraints_(false),
-      param_store_(param_store)
+      param_store_(param_store),
+      constraint_owner_(owner),
+      constraint_ctx_(actual_ctx)
       
   {}
   virtual ~ObGroupByChecker()
@@ -83,6 +86,8 @@ private:
   // if true, only add constraints for shared exprs which will be replaced in replace_stmt_expr_with_groupby_exprs
   bool only_need_contraints_;
   const ParamStore *param_store_;
+  common::ObIAllocator *constraint_owner_;
+  ObExecContext *constraint_ctx_;
 private:
   // Top select stmt refers to the current select_stmt calling the group by checker, not the level of the select_stmt
   // Other select_stmt will increment by one level each time it enters a layer, and decrement by one level when checking for exit and exiting
@@ -109,7 +114,8 @@ public:
                             ObSelectStmt *ref_stmt,
                             bool has_having_self_column,
                             bool has_group_by_clause,
-                            bool only_need_constraints);
+                            bool only_need_constraints,
+                            common::ObIAllocator *owner, ObExecContext *actual_ctx);
   static int check_analytic_function(const ParamStore *param_store,
                                      ObSelectStmt *ref_stmt,
                                      common::ObIArray<ObRawExpr *> &arg_exp_arr,        // equivalent to expressions in the query items

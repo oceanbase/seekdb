@@ -72,12 +72,12 @@ int do_right(const ObString &input_value, const ObCollationType &cs_type,
   return ret;
 }
 
-int calc_right_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_right_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // right(s, n)
-  ObDatum *s_datum = NULL;
-  ObDatum *n_datum = NULL;
+  Datum *s_datum = NULL;
+  Datum *n_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, n_datum))) {
   } else if (s_datum->is_null() || n_datum->is_null()) {

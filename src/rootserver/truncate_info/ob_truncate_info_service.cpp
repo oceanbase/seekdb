@@ -544,7 +544,7 @@ int ObTruncatePartSchemaUtil::build_truncate_part_of_default_part(
       if (OB_ISNULL(other_part_array.at(idx))) {
         ret = OB_INVALID_DATA;
       } else {
-        const common::ObIArray<common::ObNewRow>& values = other_part_array.at(idx)->get_list_row_values();
+        const common::ObIArray<common::PartitionBoundRow>& values = other_part_array.at(idx)->get_list_row_values();
         for (int64_t j = 0; OB_SUCC(ret) && j < values.count(); ++j) {
           if (OB_FAIL(list_row_values.push_back(values.at(j)))) {
           }
@@ -584,7 +584,7 @@ int ObTruncatePartSchemaUtil::check_is_default_part(
   int ret = OB_SUCCESS;
   is_default_part = false;
   if (1 == list_row_values.count() && 1 == list_row_values.at(0).get_count()) {
-    const ObObj &obj = list_row_values.at(0).get_cell(0);
+    const DatumValue &obj = list_row_values.at(0).get_cell(0);
     if (obj.is_max_value()) {
       is_default_part = true;
     }

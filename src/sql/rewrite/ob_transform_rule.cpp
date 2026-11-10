@@ -362,7 +362,6 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
                                                   *stmt->get_query_ctx(), *ctx_))) {
   } else {
     ctx_->eval_cost_ = true;
-    ParamStore &param_store = ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store_for_update();
     ObDMLStmt *root_stmt = NULL;
     lib::ContextParam param;
     ObTransformerImpl trans(ctx_);
@@ -384,7 +383,6 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
                 ctx_->sql_schema_guard_,
                 ctx_->opt_stat_mgr_,
                 CURRENT_CONTEXT->get_arena_allocator(),
-                &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                 *ctx_->self_addr_,
                 stmt->get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
@@ -903,7 +901,7 @@ int ObEvalCostHelper::recover_context(ObPhysicalPlanCtx &phy_plan_ctx,
   int ret = OB_SUCCESS;
   
   // query context
-  query_ctx.question_marks_count_ = phy_plan_ctx.get_param_store().count();
+  query_ctx.question_marks_count_ = phy_plan_ctx.get_parameter_count();
   if (OB_FAIL(try_trans_helper_.recover(&query_ctx))) {
   }
 

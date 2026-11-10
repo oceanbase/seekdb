@@ -22,7 +22,7 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
+struct DatumValue;
 
 }
 namespace share
@@ -51,12 +51,12 @@ public:
 private:
   int add_fk_constraints_in_db(
       const share::schema::ObDatabaseSchema &database_schema,
-      common::ObObj *cells,
+      common::DatumValue *cells,
       const int64_t col_count);
   int add_fk_constraints_in_table(
       const share::schema::ObTableSchema &table_schema,
       const common::ObString &database_name,
-      common::ObObj *cells,
+      common::DatumValue *cells,
       const int64_t col_count);
 
 private:

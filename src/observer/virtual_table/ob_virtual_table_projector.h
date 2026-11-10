@@ -18,7 +18,7 @@
 #define OCEANBASE_COMMON_OB_ALL_VIRTUAL_TABLE_PROJECTOR_H_
 
 #include "lib/container/ob_iarray.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value_buffer.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/schema/ob_schema_getter_guard.h"
 namespace oceanbase
@@ -39,13 +39,28 @@ public:
   virtual ~ObVirtualTableProjector() {}
 protected:
   struct Column {
-    Column() : column_id_(common::OB_INVALID_ID), column_value_() {}
+    Column() : column_id_(common::OB_INVALID_ID), column_value_(), fixed_payload_{} {}
+    Column(const Column &other) : Column() { *this = other; }
+    Column &operator=(const Column &other)
+    {
+      if (this != &other) {
+        column_id_ = other.column_id_;
+        // Array relocation must rebind small native values to this Column's
+        // reserved slot; variable payloads keep the producer's borrowed life.
+        const int ret = common::DatumValueBuffer::assign_view(other.column_value_, &column_value_, 1, 0);
+        OB_ASSERT(common::OB_SUCCESS == ret);
+      }
+      return *this;
+    }
 
     TO_STRING_KV(K_(column_id), K_(column_value));
 
     uint64_t column_id_;
-    common::ObObj column_value_;
+    common::DatumValue column_value_;
+    alignas(8) char fixed_payload_[16];
   };
+  static_assert(offsetof(Column, fixed_payload_) == offsetof(Column, column_value_) + sizeof(common::DatumValue),
+                "Column reserves the native buffer scalar slot immediately after its descriptor");
   virtual int project_row(const common::ObIArray<Column> &columns, common::ObNewRow &row,
                           const bool full_columns = true);
   virtual int check_column_exist(const share::schema::ObTableSchema *table,
@@ -67,10 +82,10 @@ private:
     } else if (NULL == (column_schema = table_schema->get_column_schema(column_name))) { \
       LOG_WARN("column not exist, ignore this column", K(column_name), K(ret)); \
     } else { \
-      column.column_value_.set_lob_value(type, column_value.ptr(), column_value.length()); \
+      ret = common::DatumValueBuffer::set_lob_view(&column.column_value_, 1, 0, type, column_value); \
       column.column_value_.set_collation_type(column_schema->get_collation_type()); \
       column.column_id_ = column_schema->get_column_id(); \
-      if (OB_FAIL(columns.push_back(column))) { \
+      if (OB_SUCC(ret) && OB_FAIL(columns.push_back(column))) { \
         LOG_WARN("push_back failed", K(ret)); \
       } \
     } \
@@ -87,10 +102,10 @@ private:
     } else if (NULL == (column_schema = table_schema->get_column_schema(column_name))) { \
       LOG_WARN("column not exist, ignore this column", K(column_name), K(ret)); \
     } else { \
-      column.column_value_.set_value_func(column_value); \
+      ret = common::DatumValueBuffer::set_value_func(&column.column_value_, 1, 0, column_value); \
       column.column_value_.set_collation_type(column_schema->get_collation_type()); \
       column.column_id_ = column_schema->get_column_id(); \
-      if (OB_FAIL(columns.push_back(column))) { \
+      if (OB_SUCC(ret) && OB_FAIL(columns.push_back(column))) { \
         LOG_WARN("push_back failed", K(ret)); \
       } \
     } \
@@ -109,7 +124,7 @@ private:
     } else { \
       column.column_value_.set_null(); \
       column.column_id_ = column_schema->get_column_id(); \
-      if (OB_FAIL(columns.push_back(column))) { \
+      if (OB_SUCC(ret) && OB_FAIL(columns.push_back(column))) { \
         LOG_WARN("push_back failed", K(ret)); \
       } \
     } \

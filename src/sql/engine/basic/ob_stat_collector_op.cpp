@@ -292,14 +292,21 @@ int ObStatCollectorOp::split_partition_range()
         if (0 == cur_row_count % step) {
           for (int64_t i = is_none_partition()? 0 : 1;
               OB_SUCC(ret) && i < MY_SPEC.sort_exprs_.count(); ++i) {
-            ObDatum *cur_datum = nullptr;
+            Datum *cur_datum = nullptr;
             if (OB_FAIL(MY_SPEC.sort_exprs_.at(i)->eval(eval_ctx_, cur_datum))) {
             } else if (OB_ISNULL(cur_datum)) {
               ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(border_vals.at(i - (int64_t)!is_none_partition()).
-                  deep_copy(*cur_datum, ctx_.get_allocator()))) {
             } else {
-              datum_len_sum += cur_datum->get_deep_copy_size();
+              const DatumCopyPlan plan = MY_SPEC.sort_exprs_.at(i)->get_datum_copy_plan();
+              int64_t bytes = 0;
+              ObPxRangeCell &cell = border_vals.at(i - (int64_t)!is_none_partition());
+              if (OB_FAIL(cell.assign_expr_owned(*cur_datum, plan, ctx_.get_allocator()))) {
+              } else if (OB_FAIL(cell.payload_size(bytes))) {
+              } else if (bytes > INT64_MAX - datum_len_sum) {
+                ret = OB_SIZE_OVERFLOW;
+              } else {
+                datum_len_sum += bytes;
+              }
             }
           }
           if (OB_SUCC(ret)) {
@@ -380,7 +387,7 @@ int ObStatCollectorOp::update_partition_row_count()
 int ObStatCollectorOp::get_tablet_id(int64_t &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   tablet_id = 0;
   if (!is_none_partition()) {
     if (OB_FAIL(MY_SPEC.sort_exprs_.at(0)->eval(eval_ctx_, datum))) {

@@ -19,6 +19,7 @@
 
 #include "share/ob_rpc_struct.h"
 #include "share/config/ob_server_config.h"
+#include "common/datum/datum_value.h"
 
 namespace oceanbase
 {
@@ -49,7 +50,7 @@ struct ObSysStat
 
     TO_STRING_KV("name", common::ObString(name_), K_(value), "info", common::ObString(info_));
     const char *name_;
-    common::ObObj value_;
+    common::DatumValue value_;
     const char *info_;
   };
 

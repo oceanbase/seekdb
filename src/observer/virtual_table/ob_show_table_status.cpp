@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "observer/virtual_table/ob_show_table_status.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "share/ob_autoincrement_service.h"
@@ -95,13 +96,13 @@ int ObShowTableStatus::inner_open()
       end_key.reset();
       start_key = key_ranges_.at(i).start_key_;
       end_key = key_ranges_.at(i).end_key_;
-      const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-      const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-      if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
+      const DatumValue *start_key_obj_ptr = start_key.get_values();
+      const DatumValue *end_key_obj_ptr = end_key.get_values();
+      if (start_key.get_value_count() > 0 && start_key.get_value_count() == end_key.get_value_count()) {
         if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(ERROR, "key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
-        } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
+        } else if (key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])
                    && ObIntType == start_key_obj_ptr[0].get_type()) {
           database_id_ = start_key_obj_ptr[0].get_int();
         }
@@ -287,7 +288,7 @@ int ObShowTableStatus::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   const int64_t col_count = output_column_ids_.count();
   ObString database_name;
   if (OB_UNLIKELY(NULL == allocator_
@@ -339,20 +340,20 @@ int ObShowTableStatus::inner_get_next_row()
               uint64_t col_id = output_column_ids_.at(j);
               switch(col_id) {
                 case DATABASE_ID: {
-                  cells[cell_idx].set_int(database_id_);
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, database_id_) : ret);
                   break;
                 }
                 case TABLE_NAME: {
-                  cells[cell_idx].set_varchar(table_schema->get_table_name_str());
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema->get_table_name_str()) : ret);
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                   break;
                 }
                 case TABLE_TYPE: {
                   if (is_mysql_database_id(table_schema->get_database_id())) {
-                    cells[cell_idx].set_varchar(table_schema->is_user_view() ?
-                    ObString::make_string("VIEW") : ObString::make_string("BASE TABLE"));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema->is_user_view() ?
+                    ObString::make_string("VIEW") : ObString::make_string("BASE TABLE")) : ret);
                   } else {
-                    cells[cell_idx].set_varchar(ObString::make_string(ob_mysql_table_type_str(table_schema->get_table_type())));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(ob_mysql_table_type_str(table_schema->get_table_type()))) : ret);
                   }
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                   break;
@@ -364,7 +365,7 @@ int ObShowTableStatus::inner_get_next_row()
                     // ENGINE is accepted only as MySQL-compatible syntax. Keep
                     // SHOW TABLE STATUS consistent with the historical server
                     // behavior instead of exposing a per-table engine value.
-                    cells[cell_idx].set_varchar(ObString::make_string("oceanbase"));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string("oceanbase")) : ret);
                     cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                   }
                   break;
@@ -374,7 +375,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (OB_SUCCESS == stat_ret) {
-                      cells[cell_idx].set_uint64(tstat.data_version_);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, tstat.data_version_) : ret);
                     } else {
                       cells[cell_idx].set_null();
                     }
@@ -386,7 +387,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (ObStoreFormat::is_store_format_valid(table_schema->get_store_format())) {
-                      cells[cell_idx].set_varchar(ObString::make_string(ObStoreFormat::get_store_format_name(table_schema->get_store_format())));
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(ObStoreFormat::get_store_format_name(table_schema->get_store_format()))) : ret);
                       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     } else {
                       cells[cell_idx].set_null();
@@ -399,7 +400,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (OB_SUCCESS == stat_ret) {
-                      cells[cell_idx].set_int(tstat.row_count_);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, tstat.row_count_) : ret);
                     } else {
                       cells[cell_idx].set_null();
                     }
@@ -412,9 +413,9 @@ int ObShowTableStatus::inner_get_next_row()
                   } else {
                     if (OB_SUCCESS == stat_ret) {
                       if (0 == tstat.row_count_) {
-                        cells[cell_idx].set_int(0);
+                        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 0) : ret);
                       } else {
-                        cells[cell_idx].set_int(tstat.data_size_ / tstat.row_count_);
+                        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, tstat.data_size_ / tstat.row_count_) : ret);
                       }
                     } else {
                       cells[cell_idx].set_null();
@@ -427,7 +428,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (OB_SUCCESS == stat_ret) {
-                      cells[cell_idx].set_int(tstat.data_size_);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, tstat.data_size_) : ret);
                     } else {
                       cells[cell_idx].set_null();
                     }
@@ -465,7 +466,7 @@ int ObShowTableStatus::inner_get_next_row()
                       if (OB_HASH_NOT_EXIST == err) {
                         cells[cell_idx].set_null();
                       } else {
-                        cells[cell_idx].set_uint64(auto_increment);
+                        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, auto_increment) : ret);
                       }
                     }
                   }
@@ -476,7 +477,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (OB_SUCCESS == stat_ret) {
-                      cells[cell_idx].set_timestamp(tstat.create_time_);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, tstat.create_time_) : ret);
                     } else {
                       cells[cell_idx].set_null();
                     }
@@ -488,7 +489,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (OB_SUCCESS == stat_ret) {
-                      cells[cell_idx].set_timestamp(tstat.update_time_);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, tstat.update_time_) : ret);
                     } else {
                       cells[cell_idx].set_null();
                     }
@@ -504,7 +505,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (CS_TYPE_INVALID != table_schema->get_collation_type()) {
-                      cells[cell_idx].set_varchar(ObString::make_string(ObCharset::collation_name(table_schema->get_collation_type())));
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(ObCharset::collation_name(table_schema->get_collation_type()))) : ret);
                       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     } else {
                       cells[cell_idx].set_null();
@@ -517,7 +518,7 @@ int ObShowTableStatus::inner_get_next_row()
                     cells[cell_idx].set_null();
                   } else {
                     if (OB_SUCCESS == stat_ret) {
-                      cells[cell_idx].set_int(tstat.data_checksum_);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, tstat.data_checksum_) : ret);
                     } else {
                       cells[cell_idx].set_null();
                     }
@@ -536,7 +537,7 @@ int ObShowTableStatus::inner_get_next_row()
                                                                                     pos,
                                                                                     true))) {
                     } else if (strlen(option_buf_) > 0) {
-                      cells[cell_idx].set_varchar(ObString::make_string(option_buf_));
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(option_buf_)) : ret);
                       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     } else {
                       cells[cell_idx].set_null();
@@ -547,14 +548,14 @@ int ObShowTableStatus::inner_get_next_row()
                 case COMMENT: {
                   //For the comment column, MySQL displays normally for both system view and base table; while user view only displays VIEW
                   if (table_schema->is_user_view()) {
-                    cells[cell_idx].set_varchar(ObString::make_string("VIEW"));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string("VIEW")) : ret);
                     cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                   } else {
                     if (table_schema->get_comment_str().length() > 0) {
-                      cells[cell_idx].set_varchar(table_schema->get_comment_str());
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema->get_comment_str()) : ret);
                       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     } else {
-                      cells[cell_idx].set_varchar(ObString::make_string(""));
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string("")) : ret);
                       cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     }
                   }

@@ -65,38 +65,38 @@ int ObAllVirtualPalfStat::insert_log_stat_(const palf::PalfStat &palf_stat)
       case OB_APP_MIN_COLUMN_ID: {
         if (OB_FAIL(palf::access_mode_to_string(palf_stat.access_mode_, access_mode_str_, sizeof(access_mode_str_)))) {
         } else {
-          cur_row_.cells_[i].set_varchar(ObString::make_string(access_mode_str_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ObString::make_string(access_mode_str_)) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
                                                 ObCharset::get_default_charset()));
         }
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 1: {
-        cur_row_.cells_[i].set_uint64(palf_stat.base_lsn_.val_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, palf_stat.base_lsn_.val_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 2: {
-        cur_row_.cells_[i].set_uint64(palf_stat.begin_lsn_.val_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, palf_stat.begin_lsn_.val_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 3: {
-        cur_row_.cells_[i].set_uint64(palf_stat.begin_scn_.get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, palf_stat.begin_scn_.get_val_for_inner_table_field()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 4: {
-        cur_row_.cells_[i].set_uint64(palf_stat.end_lsn_.val_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, palf_stat.end_lsn_.val_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 5: {
-        cur_row_.cells_[i].set_uint64(palf_stat.end_scn_.get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, palf_stat.end_scn_.get_val_for_inner_table_field()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 6: {
-        cur_row_.cells_[i].set_uint64(palf_stat.max_lsn_.val_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, palf_stat.max_lsn_.val_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 7: {
-        cur_row_.cells_[i].set_uint64(palf_stat.max_scn_.get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, palf_stat.max_scn_.get_val_for_inner_table_field()) : ret);
         break;
       }
       default:

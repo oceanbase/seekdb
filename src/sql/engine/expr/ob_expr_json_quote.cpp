@@ -61,11 +61,11 @@ int ObExprJsonQuote::calc_result_type1(ObExprResType &type,
 }
 
 
-int ObExprJsonQuote::calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, const ObDatum &data,
+int ObExprJsonQuote::calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, const Datum &data,
                           ObDatumMeta meta, bool has_lob_header, ObJsonBuffer &j_buf, bool &is_null)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
   if (type == ObIntType || type == ObDoubleType) {
     // special for mathematical function, consistent with mysql
@@ -95,7 +95,7 @@ int ObExprJsonQuote::calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, con
   return ret;
 }
 
-int ObExprJsonQuote::eval_json_quote(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonQuote::eval_json_quote(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -104,7 +104,7 @@ int ObExprJsonQuote::eval_json_quote(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObJsonBuffer j_buf(&temp_allocator);
   ObExpr *arg = expr.args_[0];
-  ObDatum* json_datum = NULL;
+  Datum* json_datum = NULL;
   bool is_null = false;
 
   if (OB_FAIL(temp_allocator.eval_arg(arg, ctx, json_datum))) {

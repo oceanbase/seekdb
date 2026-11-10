@@ -369,7 +369,7 @@ public:
   TO_STRING_KV(K_(is_valid), K_(col_type), K_(col_accuracy), K_(column_flags), K_(is_rowkey_column), K_(is_nullable));
 public:
   bool is_valid_;
-  common::ObObjMeta col_type_;
+  common::SqlTypeMeta col_type_;
   ObAccuracy col_accuracy_;
   int64_t column_flags_;
   bool is_rowkey_column_;

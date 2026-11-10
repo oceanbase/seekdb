@@ -30,7 +30,7 @@ public:
   ObExprDayOfMonth();
   explicit ObExprDayOfMonth(common::ObIAllocator &alloc);
   virtual ~ObExprDayOfMonth();
-  static int calc_dayofmonth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_dayofmonth(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDayOfMonth);
 };
@@ -51,7 +51,7 @@ public:
   ObExprDayOfWeek();
   explicit ObExprDayOfWeek(common::ObIAllocator &alloc);
   virtual ~ObExprDayOfWeek();
-  static int calc_dayofweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_dayofweek(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDayOfWeek);
 };
@@ -62,7 +62,7 @@ public:
   ObExprDayOfYear();
   explicit ObExprDayOfYear(common::ObIAllocator &alloc);
   virtual ~ObExprDayOfYear();
-  static int calc_dayofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_dayofyear(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDayOfYear);
 };
@@ -79,7 +79,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprToSeconds);
@@ -112,7 +112,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSecToTime);
@@ -142,7 +142,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_timetosec(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_timetosec(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprTimeToSec);
 };
@@ -169,24 +169,20 @@ public:
                                 ObExprResType &date_arg,
                                 ObExprResType &time_arg,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  virtual int calc_result2(common::ObObj &result,
-                           const common::ObObj &date_arg,
-                           const common::ObObj &time_arg,
-                           common::ObExprCtx &expr_ctx) const override;
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual common::ObCastMode get_cast_mode() const override { return CM_NULL_ON_WARN; }
   static int subaddtime_common(const ObExpr &expr, ObEvalCtx &ctx,
-                            ObDatum &expr_datum,
+                            Datum &expr_datum,
                             bool &null_res,
-                            common::ObDatum *&date_arg,
-                            common::ObDatum *&time_arg,
+                            common::Datum *&date_arg,
+                            common::Datum *&time_arg,
                             int64_t &time_val,
                             const common::ObTimeZoneInfo *tz_info,
                             ObSQLMode sql_mode);
-  static int subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSubAddtime);
@@ -219,7 +215,7 @@ public:
   virtual int calc_result_type1(ObExprResType &type,
                                ObExprResType &type1,
                                common::ObExprTypeCtx &type_ctx) const;
-  static int calc_dayname(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_dayname(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDayName);
 };

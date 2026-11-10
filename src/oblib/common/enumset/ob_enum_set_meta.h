@@ -56,13 +56,13 @@ public:
 public:
   ObEnumSetMeta(common::ObIAllocator *alloc = NULL) : obj_meta_(), str_values_(NULL),
     allocator_(alloc) {}
-  ObEnumSetMeta(ObObjMeta obj_meta, const ObStrValues *str_value) :
+  ObEnumSetMeta(SqlTypeMeta obj_meta, const ObStrValues *str_value) :
       obj_meta_(obj_meta), str_values_(str_value), allocator_(NULL) {}
   inline bool is_valid() const
   {
     return obj_meta_.is_enum_or_set() && NULL != str_values_ && !str_values_->empty();
   }
-  bool is_same(const ObObjMeta &obj_meta, const ObStrValues &str_value) const;
+  bool is_same(const SqlTypeMeta &obj_meta, const ObStrValues &str_value) const;
   bool is_same(const ObEnumSetMeta &other) const;
   uint64_t hash() const;
   int hash(uint64_t &res) const
@@ -81,8 +81,8 @@ public:
     }
   }
   inline uint64_t get_signature() const { return udt_id_; }
-  inline const common::ObObjMeta &get_obj_meta() const { return obj_meta_; }
-  inline ObObjType get_type() const { return obj_meta_.get_type(); }
+  inline const common::SqlTypeMeta &get_sql_type_meta() const { return obj_meta_; }
+  inline SqlValueType get_type() const { return obj_meta_.get_type(); }
   inline ObCollationType get_collation_type() const { return obj_meta_.get_collation_type(); }
   inline ObCollationLevel get_collation_level() const { return obj_meta_.get_collation_level(); }
   inline const ObStrValues *get_str_values() const { return str_values_; }
@@ -90,7 +90,7 @@ public:
   TO_STRING_KV(K_(obj_meta), KP_(str_values), KP_(allocator));
 
 private:
-  common::ObObjMeta obj_meta_;  // original type obj meta
+  common::SqlTypeMeta obj_meta_;  // original type obj meta
   union
   {
     const ObStrValues *str_values_; // pointer to extended type info

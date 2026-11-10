@@ -16,11 +16,14 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "common/datum/datum_value_projection.h"
+
 #include "ob_table_modify_op.h"
 #include "share/ob_autoincrement_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/dml/ob_dml_service.h"
+#include "common/datum/datum_sql_print.h"
 
 namespace oceanbase
 {
@@ -32,6 +35,35 @@ using namespace share::schema;
 using namespace observer;
 namespace sql
 {
+namespace
+{
+int print_datum_sql_literal_with_extend(const DatumValue &value,
+                                       char *&buf,
+                                       int64_t &len,
+                                       int64_t &pos,
+                                       ObIAllocator &alloc,
+                                       const ObValuePrintParams &print_params)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || len <= 0) {
+    ret = multiple_extend_buf(buf, len, alloc);
+  }
+  const int64_t saved_pos = pos;
+  while (OB_SUCC(ret)) {
+    ret = print_datum_sql_literal(value, buf, len, pos, print_params);
+    if (OB_SIZE_OVERFLOW == ret) {
+      ret = multiple_extend_buf(buf, len, alloc);
+      if (OB_SUCC(ret)) {
+        pos = saved_pos;
+      }
+    } else {
+      break;
+    }
+  }
+  return ret;
+}
+} // namespace
+
 int ForeignKeyHandle::do_handle(ObTableModifyOp &op,
                                 const ObDMLBaseCtDef &dml_ctdef,
                                 ObDMLBaseRtDef &dml_rtdef)
@@ -93,11 +125,11 @@ int ForeignKeyHandle::do_handle(ObTableModifyOp &op,
               const int32_t val_idx = fk_arg.columns_.at(i).idx_;
               const int32_t name_idx = fk_arg.columns_.at(i).name_idx_;
               if (OB_SUCC(ret)) {
-                const ObDatum &updated_value = new_row.at(val_idx)->
+                const Datum &updated_value = new_row.at(val_idx)->
                                                     locate_expr_datum(op.get_eval_ctx());
-                ObDatum &new_row_name_col = new_row.at(name_idx)->
+                Datum &new_row_name_col = new_row.at(name_idx)->
                                                   locate_expr_datum(op.get_eval_ctx());
-                ObDatum &old_row_name_col = old_row.at(name_idx)->
+                Datum &old_row_name_col = old_row.at(name_idx)->
                                                   locate_expr_datum(op.get_eval_ctx());
 
                 OX(new_row_name_col = updated_value);
@@ -129,8 +161,8 @@ int ForeignKeyHandle::value_changed(ObTableModifyOp &op,
   int ret = OB_SUCCESS;
   has_changed = false;
   if (!old_row.empty() && !new_row.empty()) {
-    ObDatum *old_row_col = NULL;
-    ObDatum *new_row_col = NULL;
+    Datum *old_row_col = NULL;
+    Datum *new_row_col = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && !has_changed && i < columns.count(); ++i) {
       int64_t col_idx = columns.at(i).idx_;
       CK(col_idx < old_row.count());
@@ -139,7 +171,9 @@ int ForeignKeyHandle::value_changed(ObTableModifyOp &op,
       CK(OB_NOT_NULL(new_row.at(col_idx)));
       OZ(old_row.at(col_idx)->eval(op.get_eval_ctx(), old_row_col));
       OZ(new_row.at(col_idx)->eval(op.get_eval_ctx(), new_row_col));
-      OX(has_changed = (false == ObDatum::binary_equal(*old_row_col, *new_row_col)));
+      bool equal = false;
+      OZ(old_row.at(col_idx)->get_datum_copy_plan().binary_equal(*old_row_col, *new_row_col, equal));
+      OX(has_changed = !equal);
     }
   } else {
     has_changed = true;
@@ -442,7 +476,7 @@ int ForeignKeyHandle::gen_set(ObEvalCtx &eval_ctx, char *&buf, int64_t &len, int
                               const ObIArray<ObForeignKeyColumn> &columns,
                               const ObExprPtrIArray &row,
                               ObIAllocator &alloc,
-                              const ObObjPrintParams &print_params)
+                              const ObValuePrintParams &print_params)
 {
   return gen_column_value(eval_ctx, buf, len, pos, columns, row, ", ", alloc, print_params, false);
 }
@@ -451,7 +485,7 @@ int ForeignKeyHandle::gen_where(ObEvalCtx &eval_ctx, char *&buf, int64_t &len, i
                                 const ObIArray<ObForeignKeyColumn> &columns,
                                 const ObExprPtrIArray &row,
                                 ObIAllocator &alloc,
-                                const ObObjPrintParams &print_params)
+                                const ObValuePrintParams &print_params)
 {
   return gen_column_value(eval_ctx, buf, len, pos, columns, row, " and ", alloc, print_params, true);
 }
@@ -461,12 +495,12 @@ int ForeignKeyHandle::gen_column_value(ObEvalCtx &eval_ctx, char *&buf, int64_t 
                                        const ObExprPtrIArray &row,
                                        const char *delimiter,
                                        ObIAllocator &alloc,
-                                       const ObObjPrintParams &print_params,
+                                       const ObValuePrintParams &print_params,
                                        bool forbid_null)
 {
   const char *column_fmt = "`%.*s` = ";
   int ret = OB_SUCCESS;
-  ObDatum *col_datum = NULL;
+  Datum *col_datum = NULL;
   if (OB_ISNULL(delimiter) || OB_ISNULL(print_params.tz_info_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (columns.count() <= 0) {
@@ -477,15 +511,19 @@ int ForeignKeyHandle::gen_column_value(ObEvalCtx &eval_ctx, char *&buf, int64_t 
     OZ(row.at(columns.at(i).idx_)->eval(eval_ctx, col_datum));
     if (OB_SUCC(ret)) {
       const ObString &col_name = columns.at(i).name_;
-      const ObObjMeta &col_obj_meta = row.at(columns.at(i).idx_)->obj_meta_;
-      ObObj col_obj;
+      const ObExpr &column_expr = *row.at(columns.at(i).idx_);
+      const SqlTypeMeta &col_obj_meta = column_expr.obj_meta_;
+      DatumValue value;
       if (forbid_null && col_datum->is_null()) {
         ret = OB_ERR_NULL_VALUE;
         // NO LOG.
       } else if (OB_FAIL(databuff_printf(buf, len, pos, alloc, column_fmt,
                                         col_name.length(), col_name.ptr()))) {
-      } else if (OB_FAIL(col_datum->to_obj(col_obj, col_obj_meta))) {
-      } else if (OB_FAIL(col_obj.print_sql_literal(buf, len, pos, alloc, print_params))) {
+      } else if (OB_FAIL(project_native_datum_value_view(*col_datum,
+                     column_expr.get_sql_type(), col_obj_meta, column_expr.obj_datum_map_,
+                     value.meta_, value, alloc))) {
+      } else if (OB_FAIL(print_datum_sql_literal_with_extend(
+                     value, buf, len, pos, alloc, print_params))) {
       } else if (OB_FAIL(databuff_printf(buf, len, pos, alloc, "%s", delimiter))) {
       }
     }
@@ -500,7 +538,7 @@ int ForeignKeyHandle::gen_column_value(ObEvalCtx &eval_ctx, char *&buf, int64_t 
 int  ForeignKeyHandle::gen_column_null_value(ObEvalCtx &ctx, char *&buf, int64_t &len, int64_t &pos,
                               const common::ObIArray<ObForeignKeyColumn> &columns,
                               common::ObIAllocator &alloc,
-                              const common::ObObjPrintParams &print_params)
+                              const common::ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   const char *column_fmt = "`%.*s` = ";
@@ -511,14 +549,14 @@ int  ForeignKeyHandle::gen_column_null_value(ObEvalCtx &ctx, char *&buf, int64_t
     ret= OB_ERR_UNEXPECTED;
     LOG_ERROR("columns count of fk is zero or less than zero", K(ret), K(columns.count()), K(columns));
   }
-  ObObj col_obj;
-  col_obj.set_null();
+  const DatumValue null_value;
   for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); i++) {
     if (OB_SUCC(ret)) {
       const ObString &col_name = columns.at(i).name_;
       if (OB_FAIL(databuff_printf(buf, len, pos, alloc, column_fmt,
                                         col_name.length(), col_name.ptr()))) {
-      } else if (OB_FAIL(col_obj.print_sql_literal(buf, len, pos, alloc, print_params))) {
+      } else if (OB_FAIL(print_datum_sql_literal_with_extend(
+                     null_value, buf, len, pos, alloc, print_params))) {
       } else if (OB_FAIL(databuff_printf(buf, len, pos, alloc, "%s", delimiter))) {
       }
     }
@@ -538,8 +576,8 @@ int ForeignKeyHandle::is_self_ref_row(ObEvalCtx &eval_ctx,
   int ret = OB_SUCCESS;
   const common::ObDatumAccessContext *access_ctx = nullptr;
   is_self_ref = fk_arg.is_self_ref_;
-  ObDatum *name_col = NULL;
-  ObDatum *val_col = NULL;
+  Datum *name_col = NULL;
+  Datum *val_col = NULL;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_self_ref && i < fk_arg.columns_.count(); i++) {
@@ -725,7 +763,7 @@ int ObTableModifyOp::replace_implict_cursor(int64_t affected_rows,
   bool is_ins_val_opt = ctx_.get_sql_ctx()->is_do_insert_batch_opt();
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   if (MY_SPEC.ab_stmt_id_ != nullptr && !is_ins_val_opt) {
-    ObDatum *stmt_id_datum = nullptr;
+    Datum *stmt_id_datum = nullptr;
     ObImplicitCursorInfo implicit_cursor;
     if (OB_FAIL(prepare_implict_cursor(affected_rows,
                                        found_rows,
@@ -745,7 +783,7 @@ int ObTableModifyOp::prepare_implict_cursor(int64_t affected_rows,
                                             ObImplicitCursorInfo &implicit_cursor)
 {
   int ret = OB_SUCCESS;
-  ObDatum *stmt_id_datum = nullptr;
+  Datum *stmt_id_datum = nullptr;
   if (OB_FAIL(MY_SPEC.ab_stmt_id_->eval(eval_ctx_, stmt_id_datum))) {
   } else {
     ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
@@ -769,7 +807,7 @@ int ObTableModifyOp::merge_implict_cursor(int64_t affected_rows,
   bool is_ins_val_opt = ctx_.get_sql_ctx()->is_do_insert_batch_opt();
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   if (MY_SPEC.ab_stmt_id_ != nullptr && !is_ins_val_opt) {
-    ObDatum *stmt_id_datum = nullptr;
+    Datum *stmt_id_datum = nullptr;
     ObImplicitCursorInfo implicit_cursor;
     if (OB_FAIL(prepare_implict_cursor(affected_rows,
                                        found_rows,

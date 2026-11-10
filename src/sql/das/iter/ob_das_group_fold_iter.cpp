@@ -101,8 +101,13 @@ int ObGroupResultSaveRows::to_expr(bool is_vectorized, int64_t start_pos, int64_
 
 int64_t ObGroupResultSaveRows::cur_group_idx()
 {
-  return start_pos_ >= saved_size_ ? OB_INVALID_INDEX :
-      ObNewRange::get_group_idx(store_rows_[start_pos_].store_row_->cells()[group_id_idx_].get_int());
+  int64_t group_idx = OB_INVALID_INDEX;
+  if (start_pos_ < saved_size_) {
+    const ObDatum group_id = StoredDatumCodec::decode_legacy_view(
+        store_rows_[start_pos_].store_row_->stored_cells()[group_id_idx_]);
+    group_idx = ObNewRange::get_group_idx(group_id.get_int());
+  }
+  return group_idx;
 }
 
 
@@ -268,7 +273,7 @@ int ObDASGroupFoldIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     if (OB_SUCC(ret)) {
       const ObBitVector *skip = nullptr;
       PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, storage_count, skip);
-      ObDatum *group_idx_batch = group_id_expr_->locate_batch_datums(*group_save_rows_.eval_ctx_);
+      Datum *group_idx_batch = group_id_expr_->locate_batch_datums(*group_save_rows_.eval_ctx_);
       for (int64_t i = 0; OB_SUCC(ret) && i < storage_count; i++) {
         group_idx = ObNewRange::get_group_idx(group_idx_batch[i].get_int());
         if (group_idx >= cur_group_idx_) {
@@ -321,7 +326,7 @@ int ObDASGroupFoldIter::inner_get_next_row()
     available_group_idx_ = MIN_GROUP_INDEX;
   } else {
     // fetch new data from storage layer.
-    ObDatum *group_idx = NULL;
+    Datum *group_idx = NULL;
     while (OB_SUCC(ret) && available_group_idx_ < cur_group_idx_) {
       if (OB_FAIL(iter_tree_->get_next_row())) {
         if (OB_ITER_END != ret) {

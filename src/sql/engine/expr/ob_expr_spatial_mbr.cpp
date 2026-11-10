@@ -55,19 +55,10 @@ int ObExprSpatialMbr::calc_result_type1(ObExprResType &type,
 }
 
 // for old sql engine
-int ObExprSpatialMbr::calc_result1(common::ObObj &result,
-                                   const common::ObObj &obj,
-                                   common::ObExprCtx &expr_ctx) const
-{
-  UNUSED(obj);
-  UNUSED(expr_ctx);
-  result.set_null();
-  return OB_SUCCESS;
-}
 
 int ObExprSpatialMbr::eval_spatial_mbr(const ObExpr &expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &res)
+                                       Datum &res)
 {
   UNUSED(expr);
   UNUSED(ctx);

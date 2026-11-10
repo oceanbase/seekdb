@@ -46,15 +46,15 @@ int ObExprInnerDecodeLike::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum) {
+int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum) {
   int ret = OB_SUCCESS;
-  ObDatum *pattern = NULL;
-  ObDatum *escape = NULL;
-  ObDatum *is_start = NULL;
-  ObDatum *col_type = NULL;
-  ObDatum *col_collation = NULL;
-  ObDatum *col_length = NULL;
-  ObDatum *pattern_val = NULL;
+  Datum *pattern = NULL;
+  Datum *escape = NULL;
+  Datum *is_start = NULL;
+  Datum *col_type = NULL;
+  Datum *col_collation = NULL;
+  Datum *col_length = NULL;
+  Datum *pattern_val = NULL;
   const ObDataTypeCastParams &dtc_params = ctx.exec_ctx_.get_my_session()->get_dtc_params();
   if (OB_ISNULL(expr.args_[0]) ||OB_ISNULL(expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
@@ -203,14 +203,14 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
   if (param_num != 6) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObObj &dest_type = types_stack[3].get_param();
-    const ObObj &dest_collation = types_stack[4].get_param();
-    const ObObj &dest_length = types_stack[5].get_param();
+    const Datum &dest_type = types_stack[3].get_param_datum();
+    const Datum &dest_collation = types_stack[4].get_param_datum();
+    const Datum &dest_length = types_stack[5].get_param_datum();
     if (!types_stack[2].is_int() || !types_stack[3].is_int() || !types_stack[4].is_int() || !types_stack[5].is_int()
         || !types_stack[1].is_string_type() || !types_stack[0].is_string_type()) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ObObjType expected_type = static_cast<ObObjType>(dest_type.get_int());
+      SqlValueType expected_type = static_cast<SqlValueType>(dest_type.get_int());
       ObCollationType cs_type = static_cast<ObCollationType>(dest_collation.get_int());
       int64_t length = dest_length.get_int();
       type.set_type(expected_type);
@@ -218,11 +218,11 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
       type.set_collation_level(CS_LEVEL_COERCIBLE);
       type.set_collation_type(cs_type);
       //pattern
-      types_stack[0].set_calc_meta(types_stack[0].get_obj_meta());
+      types_stack[0].set_calc_meta(types_stack[0].get_sql_type_meta());
       types_stack[0].set_calc_collation_type(types_stack[0].get_collation_type());
       types_stack[0].set_calc_collation_level(CS_LEVEL_COERCIBLE);
       //escape
-      types_stack[1].set_calc_meta(types_stack[1].get_obj_meta());
+      types_stack[1].set_calc_meta(types_stack[1].get_sql_type_meta());
       types_stack[1].set_calc_collation_type(types_stack[1].get_collation_type());
       types_stack[1].set_calc_collation_level(CS_LEVEL_COERCIBLE);
       //is_start
@@ -238,8 +238,8 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprInnerDecodeLike::cast_like_obj_if_needed(ObEvalCtx &ctx, const ObExpr &pattern_expr, ObDatum *pattern_datum,
-                                                   const ObExpr &dst_expr, ObDatum * &cast_datum) {
+int ObExprInnerDecodeLike::cast_like_obj_if_needed(ObEvalCtx &ctx, const ObExpr &pattern_expr, Datum *pattern_datum,
+                                                   const ObExpr &dst_expr, Datum * &cast_datum) {
   int ret = OB_SUCCESS;
   ObCastMode cm = CM_NONE;
   if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false /*is_explicit_cast*/,

@@ -74,7 +74,7 @@ public:
   bool is_valid() const;
   int init(
       const ObDataStoreDesc &desc,
-      common::ObObjMeta *col_types,
+      common::SqlTypeMeta *col_types,
       common::ObOrderType *col_orders,
       int64_t *col_checksum);
   int serialize(char *buf, const int64_t buf_len, int64_t& pos) const;
@@ -93,7 +93,7 @@ private:
 public:
   FixedHeader fixed_header_;
   // column_types_ and column_orders_ contain rowkey columns only.
-  common::ObObjMeta *column_types_;
+  common::SqlTypeMeta *column_types_;
   common::ObOrderType *column_orders_;
   int64_t *column_checksum_;
   bool is_inited_;

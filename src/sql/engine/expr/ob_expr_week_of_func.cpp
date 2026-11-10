@@ -50,10 +50,10 @@ int ObExprWeekOfYear::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprWeekOfYear::calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprWeekOfYear::calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   int64_t week = 0;
   ObTime ot;
   ObDateSqlMode date_sql_mode;
@@ -74,7 +74,7 @@ int ObExprWeekOfYear::calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                  expr.args_[0]->datum_meta_.scale_,
                  tz_info,
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), date_sql_mode,
-                 expr.args_[0]->obj_meta_.has_lob_header()))) {
+                 expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),
@@ -125,10 +125,10 @@ int ObExprWeekDay::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprWeekDay::calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprWeekDay::calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   ObTime ot;
   ObDateSqlMode date_sql_mode;
   const ObSQLSessionInfo *session = NULL;
@@ -148,7 +148,7 @@ int ObExprWeekDay::calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
                  expr.args_[0]->datum_meta_.scale_,
                  tz_info,
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), date_sql_mode,
-                 expr.args_[0]->obj_meta_.has_lob_header()))) {
+                 expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),
@@ -290,10 +290,10 @@ int ObExprYearWeek::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   int64_t mode_value = 0;
   int64_t week = 0;
   ObTime ot;
@@ -315,7 +315,7 @@ int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                      expr.args_[0]->datum_meta_.scale_,
                      tz_info,
                      ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
-                     date_sql_mode, expr.args_[0]->obj_meta_.has_lob_header()))) {
+                     date_sql_mode, expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),
@@ -329,7 +329,7 @@ int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   } else {
     // Short-circuit evaluation
     if (2 == expr.arg_cnt_) {
-      ObDatum *param_datum2 = NULL;
+      Datum *param_datum2 = NULL;
       if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
       } else if (OB_LIKELY(!param_datum2->is_null())) {
         mode_value = param_datum2->get_int();
@@ -407,10 +407,10 @@ int ObExprWeek::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   int64_t mode_value = 0;
   int64_t week = 0;
   ObTime ot;
@@ -432,7 +432,7 @@ int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
                  expr.args_[0]->datum_meta_.scale_,
                  tz_info,
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), date_sql_mode,
-                 expr.args_[0]->obj_meta_.has_lob_header()))) {
+                 expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),
@@ -448,7 +448,7 @@ int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   } else {
     // Short-circuit evaluation
     if (2 == expr.arg_cnt_) {
-      ObDatum *param_datum2 = NULL;
+      Datum *param_datum2 = NULL;
       if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
       } else if (OB_LIKELY(!param_datum2->is_null())) {
         mode_value = param_datum2->get_int();

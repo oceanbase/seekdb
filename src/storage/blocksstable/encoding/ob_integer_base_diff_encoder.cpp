@@ -108,8 +108,8 @@ int ObIntegerBaseDiffEncoder::init(
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else {
-    const ObObjTypeStoreClass sc = get_store_class_map()[
-        ob_obj_type_class(column_type_.get_type())];
+    const SqlValueTypeStoreClass sc = get_store_class_map()[
+        sql_type_class(column_type_.get_type())];
     type_store_size_ = get_type_size_map()[column_type_.get_type()];
     if ((ObIntSC != sc && ObUIntSC != sc) || type_store_size_ < 0) {
       ret = OB_NOT_SUPPORTED;

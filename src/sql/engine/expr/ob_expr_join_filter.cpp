@@ -57,6 +57,7 @@ ObExprJoinFilter::ObExprJoinFilterContext::~ObExprJoinFilterContext()
   hash_funcs_.reset();
   cmp_funcs_.reset();
   cur_row_.reset();
+  native_hash_values_.reset();
 }
 
 ObExprJoinFilter::ObExprJoinFilter(ObIAllocator& alloc)
@@ -210,22 +211,22 @@ int ObExprJoinFilter::prepare_storage_white_filter_data(const ObExpr &expr,
   return ret;
 }
 
-int ObExprJoinFilter::eval_bloom_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJoinFilter::eval_bloom_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_filter_internal(expr, ctx, res);
 }
 
-int ObExprJoinFilter::eval_range_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJoinFilter::eval_range_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_filter_internal(expr, ctx, res);
 }
 
-int ObExprJoinFilter::eval_in_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJoinFilter::eval_in_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_filter_internal(expr, ctx, res);
 }
 
-int ObExprJoinFilter::eval_filter_internal(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJoinFilter::eval_filter_internal(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_match = true;
@@ -296,7 +297,7 @@ int ObExprJoinFilter::eval_filter_batch_internal(
   uint64_t op_id = expr.expr_ctx_id_;
   ObExecContext &exec_ctx = ctx.exec_ctx_;
   ObExprJoinFilterContext *join_filter_ctx = NULL;
-  ObDatum *results = expr.locate_batch_datums(ctx); // for batch
+  Datum *results = expr.locate_batch_datums(ctx); // for batch
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx); // for batch
   if (OB_ISNULL(join_filter_ctx = static_cast<ObExprJoinFilterContext *>(
             exec_ctx.get_expr_op_ctx(op_id)))) { // get expr_ctx from exec_ctx

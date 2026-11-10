@@ -18,6 +18,7 @@
 #include "lib/ob_define.h"
 #include "lib/container/ob_array.h"
 #include "common/datum/ob_datum.h"
+#include "common/datum/datum.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
 
@@ -38,7 +39,7 @@ public:
     common::ObDatumCmpFuncType cmp_func_;
     sql::serializable_function ser_cmp_func_;
   };
-  ObObjMeta obj_meta_;
+  SqlTypeMeta obj_meta_;
   TO_STRING_KV(K(obj_meta_), K(ser_cmp_func_));
 };
 
@@ -134,7 +135,7 @@ public:
   int merge(ObP2PDatahubMsgBase &) override;
 
   int filter_out_data(const ObExpr &expr, ObEvalCtx &ctx, ObExprTopNFilterContext &filter_ctx,
-                      ObDatum &res);
+                      Datum &res);
   int filter_out_data_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                           const int64_t batch_size,
                           ObExprTopNFilterContext &filter_ctx);
@@ -156,18 +157,14 @@ public:
 private:
   bool check_has_null(ObChunkDatumStore::StoredRow *store_row);
   // for merge p2p msg in consumer
-  int merge_heap_top_datums(ObIArray<ObDatum> &incomming_datums);
-  int copy_heap_top_datums_from(ObIArray<ObDatum> &incomming_datums);
+  int merge_heap_top_datums(const ObIArray<Datum> &incomming_datums);
+  int copy_heap_top_datums_from(const ObIArray<Datum> &incomming_datums);
 
   // for update from local thread in producer
   int copy_heap_top_datums_from(ObChunkDatumStore::StoredRow *store_row);
 
   // for filter out data
-  inline int compare(int64_t col_idx, ObDatum &prob_datum, int &cmp_res)
-  {
-    return compares_.at(col_idx).compare_for_filter(prob_datum, heap_top_datums_.at(col_idx),
-                                                    cmp_res, datum_access_ctx_);
-  }
+  int compare(int64_t col_idx, const ObDatum &prob_datum, int &cmp_res);
 
   inline int get_compare_result(int64_t col_idx, ObDatum &datum, int &cmp_res) {
     int ret = OB_SUCCESS;
@@ -187,8 +184,8 @@ private:
     return ret;
   }
 
-  int dynamic_copy_cell(const ObDatum &src, ObDatum &target, int64_t &cell_size);
   int adjust_cell_size();
+  int append_storage_value(int64_t col_idx, ObIAllocator &owner, ObRuntimeFilterParams &params) const;
 
   int do_filter_out_data_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                              const int64_t batch_size,
@@ -198,7 +195,8 @@ private:
   int64_t total_sk_cnt_;
   const common::ObDatumAccessContext *datum_access_ctx_;
   ObTopNFilterCompares compares_;
-  ObFixedArray<ObDatum, common::ObIAllocator> heap_top_datums_;
+  // Physical values use build_meta_; filter_meta_ belongs to the probe domain.
+  ObFixedArray<Datum, common::ObIAllocator> heap_top_datums_;
   ObFixedArray<int64_t, common::ObIAllocator> cells_size_;
   int64_t data_version_;
   bool is_fetch_with_ties_;

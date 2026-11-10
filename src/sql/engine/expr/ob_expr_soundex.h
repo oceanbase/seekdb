@@ -44,9 +44,9 @@ public:
                   const ObCollationType res_cs_type,
                   common::ObIAllocator &tmp_alloc, common::ObIAllocator &res_alloc,
                   ObString &out);
-  static int calc_text(const ObDatum &input_datum,
-                       const ObObjType input_type,
-                       const ObObjType res_type,
+  static int calc_text(const Datum &input_datum,
+                       const SqlValueType input_type,
+                       const SqlValueType res_type,
                        const ObCollationType input_cs_type,
                        const ObCollationType res_cs_type,
                        const bool input_has_lob_header,
@@ -54,7 +54,7 @@ public:
                        ObString &out,
                        bool has_lob_header,
                        const common::ObLobReadOptions &lob_read_options);
-  static int eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
   
 private:

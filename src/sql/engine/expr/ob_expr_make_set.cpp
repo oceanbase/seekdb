@@ -79,10 +79,10 @@ int ObExprMakeSet::calc_result_typeN(ObExprResType &type,
 }
 
 int ObExprMakeSet::calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                        ObDatum &res)
+                                        Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *input_bits_dat = NULL;
+  Datum *input_bits_dat = NULL;
   if (OB_UNLIKELY(expr.arg_cnt_ < 2)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(expr.eval_param_value(ctx, input_bits_dat))) {
@@ -100,7 +100,7 @@ int ObExprMakeSet::calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
     ObSEArray<ObString, 32> words;
     for (int64_t pos = 1, temp_input_bits = input_bits; OB_SUCC(ret) && temp_input_bits > 0;
          temp_input_bits >>= 1, ++pos) {
-      const ObDatum &dat = expr.locate_param_datum(ctx, pos);
+      const Datum &dat = expr.locate_param_datum(ctx, pos);
       if (((temp_input_bits & 1) > 0) && (!dat.is_null())) {
         if (OB_FAIL(words.push_back(dat.get_string()))) {
         }
@@ -125,7 +125,7 @@ int ObExprMakeSet::calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprMakeSet::calc_text(const ObExpr &expr, ObEvalCtx &ctx, const ObDatum &input_bits_dat, ObDatum &res)
+int ObExprMakeSet::calc_text(const ObExpr &expr, ObEvalCtx &ctx, const Datum &input_bits_dat, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -140,7 +140,7 @@ int ObExprMakeSet::calc_text(const ObExpr &expr, ObEvalCtx &ctx, const ObDatum &
   }
   for (int64_t pos = 1, temp_input_bits = input_bits; OB_SUCC(ret) && temp_input_bits > 0;
         temp_input_bits >>= 1, ++pos) {
-    const ObDatum &dat = expr.locate_param_datum(ctx, pos);
+    const Datum &dat = expr.locate_param_datum(ctx, pos);
     if (((temp_input_bits & 1) > 0) && (!dat.is_null())) {
       if (OB_FAIL(words.push_back(expr.args_[pos]))) {
       }

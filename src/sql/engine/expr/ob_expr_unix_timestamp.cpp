@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 
+#include "share/datum/datum_value_cast.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_unix_timestamp.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -81,10 +83,10 @@ int ObExprUnixTimestamp::calc_result_type_literal(ObExprResType &type,
                              ObExprResType &type1) const
 {
   int ret = OB_SUCCESS;
-  ObObj date_obj = type1.get_param();
+  const Datum &date_obj = type1.get_param_datum();
   bool is_number_res_type = false;
   int64_t utz_value = 0;
-  if (date_obj.is_string_type()) { //string
+  if (ob_is_string_type(type1.get_param_value_meta().get_type())) { //string
     int16_t scale = DEFAULT_SCALE_FOR_INTEGER;
     ObTimeConvertCtx cvrt_ctx(NULL, false);
     if (OB_FAIL(ObTimeConverter::str_to_datetime(
@@ -102,7 +104,17 @@ int ObExprUnixTimestamp::calc_result_type_literal(ObExprResType &type,
                        CM_NONE,
                        CS_TYPE_INVALID,
                        NULL);
-    EXPR_GET_DATETIME_V2(date_obj, utz_value);
+    DatumValue converted_literal;
+    DatumValue legacy_date;
+    alignas(8) char date_scratch[64];
+    OZ (type1.export_param(legacy_date, date_scratch, sizeof(date_scratch)));
+    if (OB_SUCC(ret)) {
+      ret = DatumValueCaster::to_type(ObDateTimeType, cast_ctx, legacy_date, oballocator, converted_literal);
+    }
+    if (OB_SUCC(ret)) {
+      if (converted_literal.is_null() || !converted_literal.is_datetime()) { ret = OB_OBJ_TYPE_ERROR; }
+      else { utz_value = converted_literal.get_datetime(); }
+    }
     if (OB_FAIL(ret)) {
       utz_value = 0;
     }
@@ -149,7 +161,7 @@ int ObExprUnixTimestamp::calc_result_type_column(ObExprResType &type,
 }
 
 int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx, 
-                                       ObDatum &res)
+                                       Datum &res)
 {
   int ret = OB_SUCCESS;
   int64_t utz_value = 0;
@@ -157,11 +169,11 @@ int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
   if (0 == expr.arg_cnt_) {
     CK(OB_NOT_NULL(ctx.exec_ctx_.get_physical_plan_ctx()));
     if (OB_SUCC(ret)) {
-      const ObObj &date = ctx.exec_ctx_.get_physical_plan_ctx()->get_cur_time();
+      const StatementTime &date = ctx.exec_ctx_.get_physical_plan_ctx()->get_cur_time();
       utz_value = date.get_timestamp();
     }
   } else if (1 == expr.arg_cnt_) {
-    ObDatum *arg = NULL;
+    Datum *arg = NULL;
     if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
     } else if (arg->is_null()) {
       is_null = true;
@@ -174,7 +186,7 @@ int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
   }
 
   if (OB_SUCC(ret) && !is_null) {
-    ObObjType res_type = expr.datum_meta_.type_;
+    SqlValueType res_type = expr.datum_meta_.type_;
     utz_value = utz_value < 0 ? 0 : utz_value;
     if (ObIntType == res_type) {
       res.set_int(utz_value/ 1000000);
@@ -188,7 +200,7 @@ int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
       OZ(usec_nmb.from(usec, calc_alloc));
       OZ(tmp_nmb.from(utz_value, calc_alloc));
       OZ(tmp_nmb.div(usec_nmb, res_nmb, calc_alloc));
-      OX(res.set_number(res_nmb));
+      OZ(ObExprUtil::set_number(expr, ctx, res, res_nmb));
     } else {
       ret = OB_ERR_UNEXPECTED;
     }

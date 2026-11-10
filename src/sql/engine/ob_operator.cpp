@@ -16,7 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "sql/engine/expr/native_frame_value_codec.h"
 #include "ob_operator.h"
+#include "sql/engine/native_param_utils.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "ob_operator_factory.h"
 #include "query/runtime/ob_query_runtime_environment.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
@@ -30,10 +33,23 @@ namespace sql
 OB_SERIALIZE_MEMBER(ObDynamicParamSetter, param_idx_, src_, dst_);
 OB_SERIALIZE_MEMBER(ObOpSchemaObj, obj_type_, is_not_null_, order_type_);
 
+int assign_parameter_to_expr(ObEvalCtx &ctx, const ObExpr &expr,
+                             const common::ObDatum &source, const SqlTypeMeta &meta)
+{
+  // This is the construction/compatibility input boundary, not an execution
+  // frame alias. Inline scalars are loaded once; same-statement resources keep
+  // their existing owner while any wrapper bytes live in the expression arena.
+  UNUSED(meta);
+  Datum value;
+  int ret = expr.get_datum_copy_plan().import_legacy(source, value);
+  if (OB_SUCC(ret)) { ret = expr.deep_copy_datum(ctx, value); }
+  return ret;
+}
+
 int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObDatum *res = NULL;
+  Datum *res = NULL;
   if (OB_ISNULL(src_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(src_->eval(eval_ctx, res))) {
@@ -42,62 +58,93 @@ int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx) const
   return ret;
 }
 
-int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx, ObObjParam *&param) const
+int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx,
+    NativeTypedDatum &value, DatumParameterMetadata &attributes) const
+{
+  int ret = set_dynamic_param(eval_ctx);
+  if (OB_SUCC(ret)) { ret = capture_dynamic_param(eval_ctx, value, attributes); }
+  return ret;
+}
+
+int ObDynamicParamSetter::capture_dynamic_param(ObEvalCtx &eval_ctx,
+    NativeTypedDatum &value, DatumParameterMetadata &attributes) const
+{
+  const ObPhysicalPlanCtx *plan_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
+  return plan_ctx == nullptr || dst_ == nullptr || param_idx_ < 0
+      || param_idx_ >= plan_ctx->get_parameter_count() ? OB_INVALID_ARGUMENT
+      : plan_ctx->capture_native_parameter(param_idx_, value, attributes);
+}
+
+int ObDynamicParamSetter::restore_dynamic_param(ObEvalCtx &eval_ctx,
+    const NativeTypedDatum &value, const DatumParameterMetadata &attributes) const
 {
   int ret = OB_SUCCESS;
-  ObPhysicalPlanCtx *phy_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
-  if (OB_ISNULL(phy_ctx)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(set_dynamic_param(eval_ctx))) {
+  ObPhysicalPlanCtx *plan_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
+  if (plan_ctx == nullptr || dst_ == nullptr || value.type_ == nullptr
+      || param_idx_ < 0 || param_idx_ >= plan_ctx->get_parameter_count()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (dst_->native_parameter_alias_
+      && OB_FAIL(dst_->prepare_native_parameter_write(eval_ctx, param_idx_))) {
+  } else if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx_, value.datum_, *value.type_, attributes))) {
   } else {
-    ParamStore &param_store = phy_ctx->get_param_store_for_update();
-    param = &param_store.at(param_idx_);
+    Datum current;
+    if (OB_FAIL(plan_ctx->read_native_parameter(param_idx_, current))) {
+    } else {
+      // A failed preparation must not invalidate the old expression or parents.
+      clear_parent_evaluated_flag(eval_ctx, *dst_);
+      dst_->locate_datum_for_write(eval_ctx) = current;
+      dst_->get_eval_info(eval_ctx).evaluated_ = true;
+    }
   }
   return ret;
 }
 
-int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, ObDatum &datum) const
+int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, const Datum &datum) const
 {
   int ret = OB_SUCCESS;
-  ObPhysicalPlanCtx *phy_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
-  if (OB_ISNULL(phy_ctx) || OB_ISNULL(dst_)) {
+  ObPhysicalPlanCtx *plan_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
+  if (plan_ctx == nullptr || dst_ == nullptr || param_idx_ < 0
+      || param_idx_ >= plan_ctx->get_parameter_count()
+      || plan_ctx->get_parameter_metadata(param_idx_) == nullptr) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    clear_parent_evaluated_flag(eval_ctx, *dst_);
-    ObDatum &param_datum = dst_->locate_expr_datum(eval_ctx);
-    dst_->get_eval_info(eval_ctx).evaluated_ = true;
-    if (0 == dst_->res_buf_off_) {
-      // Fixed-width datums do not reserve an external result buffer.
-      param_datum.set_datum(datum);
-    } else {
-      if (OB_FAIL(dst_->deep_copy_datum(eval_ctx, datum))) {
-      }
+    const Datum candidate = datum;
+    // A direct alias writer is an actual generic ABI consumer. Snapshot the
+    // input before refreshing a possibly aliased projection, then prepare its
+    // stable result before any owner or parent-state publication.
+    if (dst_->native_parameter_alias_
+        && OB_FAIL(dst_->prepare_native_parameter_write(eval_ctx, param_idx_))) { return ret; }
+    const SqlType &target_type = dst_->get_sql_type();
+    DatumParameterMetadata attributes = *plan_ctx->get_parameter_metadata(param_idx_);
+    if (target_type.legacy_meta().is_pl_extend_type() || target_type.kind() == ObDecimalIntType) {
+      // These declarations use their complete prepared accuracy: Decimal needs
+      // its target scale/precision, and PL needs the full declaration-id word.
+      // Ordinary slot attributes and the restore path retain their producer.
+      attributes.accuracy_ = target_type.accuracy();
+      attributes.param_meta_ = target_type.legacy_meta();
     }
-    // Initialize param store, used for query range calculation
-    ParamStore &param_store = phy_ctx->get_param_store_for_update();
-    if (OB_FAIL(ret)) {
-    } else if (OB_UNLIKELY(param_idx_ < 0 || param_idx_ >= param_store.count())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(param_datum.to_obj(param_store.at(param_idx_),
-                                   dst_->obj_meta_,
-                                   dst_->obj_datum_map_))) {
+    if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx_, candidate, target_type, attributes))) {
     } else {
-      // if exec param is decimal int, accuracy must be properly set
-      if (dst_->obj_meta_.is_decimal_int()) {
-        ObAccuracy acc(dst_->datum_meta_.precision_, dst_->datum_meta_.scale_);
-        param_store.at(param_idx_).set_param_meta(dst_->obj_meta_);
-        param_store.at(param_idx_).set_accuracy(acc);
+      Datum current;
+      if (OB_FAIL(plan_ctx->read_native_parameter(param_idx_, current))) {
       } else {
-        param_store.at(param_idx_).set_param_meta();
+        clear_parent_evaluated_flag(eval_ctx, *dst_);
+        dst_->locate_datum_for_write(eval_ctx) = current;
+        dst_->get_eval_info(eval_ctx).evaluated_ = true;
       }
     }
   }
-
   return ret;
 }
 
 void ObDynamicParamSetter::clear_parent_evaluated_flag(ObEvalCtx &eval_ctx, const ObExpr &expr)
 {
+  // Marked PX directories retain global parent indices, but unselected Exprs
+  // decode as empty placeholders. They have no EvalInfo; their default offset
+  // zero may instead address a selected constant's Datum payload.
+  if (expr.type_ == T_INVALID && expr.sql_type_ == nullptr) {
+    return;
+  }
   for (int64_t i = 0; i < expr.parent_cnt_; i++) {
     clear_parent_evaluated_flag(eval_ctx, *expr.parents_[i]);
   }
@@ -529,7 +576,7 @@ int ObOperator::output_expr_decint_datum_len_check()
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < spec_.output_.count(); ++i) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     const ObExpr *expr = spec_.output_[i];
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -539,9 +586,9 @@ int ObOperator::output_expr_decint_datum_len_check()
     } else {
       const int16_t precision = expr->datum_meta_.precision_;
       if (OB_UNLIKELY(precision < 0)) {
-      } else if (!datum->is_null() && datum->len_ != 0) {
-        const int len = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
-        OB_ASSERT (len == datum->len_);
+      } else {
+        int64_t bytes = 0;
+        ret = expr->get_datum_copy_plan().legacy_payload_size(*datum, bytes);
       }
     }
   }
@@ -565,15 +612,15 @@ int ObOperator::output_expr_decint_datum_len_check_batch()
       } else if (GET_MY_SESSION(eval_ctx_.exec_ctx_)->is_diagnosis_enabled() &&
                 OB_FAIL(do_diagnosis(eval_ctx_.exec_ctx_, *brs_.skip_))) {
       } else if (!expr->is_batch_result()) {
-        const ObDatum &datum = expr->locate_expr_datum(eval_ctx_);
-        if (!datum.is_null() && datum.len_ != 0) {
-          OB_ASSERT (len == datum.len_);
-        }
+        const Datum &datum = expr->locate_expr_datum(eval_ctx_);
+        int64_t bytes = 0;
+        ret = expr->get_datum_copy_plan().legacy_payload_size(datum, bytes);
       } else {
-        const ObDatum *datums = expr->locate_batch_datums(eval_ctx_);
+        const Datum *datums = expr->locate_batch_datums(eval_ctx_);
         for (int64_t j = 0; j < brs_.size_; j++) {
           if (!brs_.skip_->at(j) && !datums[j].is_null()) {
-            OB_ASSERT (len == datums[j].len_);
+            int64_t bytes = 0;
+            ret = expr->get_datum_copy_plan().legacy_payload_size(datums[j], bytes);
           }
         }
       }
@@ -953,9 +1000,12 @@ int ObOperator::get_next_row()
     } else if (OB_SUCC(ret)) {
       if (spec_.get_phy_plan()->is_vectorized()
           || spec_.get_phy_plan()->is_contains_assignment()) {
-        ObDatum *res = NULL;
+        Datum *res = NULL;
         FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
-          if (OB_FAIL((*e)->eval(eval_ctx_, res))) {
+          Datum caller_value;
+          if ((*e)->native_i64_layout_ != nullptr
+              ? OB_FAIL((*e)->eval_value(eval_ctx_, caller_value))
+              : OB_FAIL((*e)->eval(eval_ctx_, res))) {
           } else {
             (*e)->get_eval_info(eval_ctx_).projected_ = true;
           }
@@ -1158,15 +1208,25 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
 
 int ObOperator::filter_row(ObEvalCtx &eval_ctx, const ObIArray<ObExpr *> &exprs, bool &filtered)
 {
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int ret = OB_SUCCESS;
   filtered = false;
   FOREACH_CNT_X(e, exprs, OB_SUCC(ret)) {
     OB_ASSERT(NULL != *e);
-    if (OB_FAIL((*e)->eval(eval_ctx, datum))) {
+    bool native = false;
+    if ((*e)->native_i64_layout_ != nullptr && OB_FAIL((*e)->get_native_i64_mode(eval_ctx, native))) {
+    } else if (native) {
+      int64_t value = 0;
+      Datum::State state = Datum::State::Null;
+      if (OB_FAIL((*e)->eval_i64(eval_ctx, value, state))) {
+      } else if (state == Datum::State::Null || value == 0) {
+        filtered = true;
+        break;
+      }
+    } else if (OB_FAIL((*e)->eval(eval_ctx, datum))) {
     } else {
       OB_ASSERT(ob_is_int_tc((*e)->datum_meta_.type_));
-      if (datum->null_ || 0 == *datum->int_) {
+      if (datum->is_null() || 0 == datum->get_int()) {
         filtered = true;
         break;
       }
@@ -1201,20 +1261,41 @@ int ObOperator::filter_batch_rows(const ObExprPtrIArray &exprs,
   bool tmp_all_active = true;
   FOREACH_CNT_X(e, exprs, OB_SUCC(ret) && !all_filtered) {
     OB_ASSERT(ob_is_int_tc((*e)->datum_meta_.type_));
-    if (OB_FAIL((*e)->eval_batch(eval_ctx_, skip, bsize))) {
+    bool native = false;
+    if ((*e)->native_i64_layout_ != nullptr && OB_FAIL((*e)->get_native_i64_mode(eval_ctx_, native))) {
+    } else if (OB_FAIL((*e)->eval_batch(eval_ctx_, skip, bsize))) {
+    } else if (native) {
+      NativeI64Lane lane{};
+      if (OB_FAIL((*e)->get_native_i64_lane(eval_ctx_, lane))) {
+      } else {
+        int64_t output_rows = 0;
+        for (int64_t i = 0; OB_SUCC(ret) && i < bsize; ++i) {
+          if (!skip.at(i)) {
+            const int64_t index = lane.batch ? i : 0;
+            if (index >= lane.capacity) { ret = OB_INVALID_ARGUMENT; }
+            else if (lane.states[index] != static_cast<uint8_t>(Datum::State::Null)
+                     && lane.states[index] != static_cast<uint8_t>(Datum::State::Present)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (lane.states[index] == static_cast<uint8_t>(Datum::State::Null) || lane.values[index] == 0) {
+              skip.set(i); tmp_all_active = false;
+            } else { ++output_rows; }
+          }
+        }
+        if (OB_SUCC(ret)) { all_filtered = output_rows == 0; }
+      }
     } else if (!(*e)->is_batch_result()) {
-      const ObDatum &d = (*e)->locate_expr_datum(eval_ctx_);
-      if (d.null_ || 0 == *d.int_) {
+      const Datum &d = (*e)->locate_expr_datum(eval_ctx_);
+      if (d.is_null() || 0 == d.get_int()) {
         all_filtered = true;
         skip.set_all(bsize);
         tmp_all_active = false;
       }
     } else {
       int64_t output_rows = 0;
-      const ObDatum *datums = (*e)->locate_batch_datums(eval_ctx_);
+      const Datum *datums = (*e)->locate_batch_datums(eval_ctx_);
       for (int64_t i = 0; i < bsize; i++) {
         if (!skip.at(i)) {
-          if (datums[i].null_ || 0 == *datums[i].int_) {
+          if (datums[i].is_null() || 0 == datums[i].get_int()) {
             skip.set(i);
             tmp_all_active = false;
           } else {
@@ -1293,10 +1374,22 @@ void ObOperator::do_clear_datum_eval_flag()
 void ObOperator::set_pushdown_param_null(const ObIArray<ObDynamicParamSetter> &rescan_params)
 {
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-  ParamStore &param_store = plan_ctx->get_param_store_for_update();
   FOREACH_CNT(param, rescan_params) {
-    param_store.at(param->param_idx_).set_null();
-    param->dst_->locate_expr_datum(eval_ctx_, 0).set_null();
+    const int64_t index = param->param_idx_;
+    int ret = OB_SUCCESS;
+    NativeTypedDatum value;
+    DatumParameterMetadata attributes;
+    if (OB_FAIL(plan_ctx->capture_native_parameter(index, value, attributes))) {
+      LOG_ERROR("invalid pushdown parameter", K(ret), K(index));
+    } else {
+      Datum null_value;
+      null_value.set_null();
+      if (OB_FAIL(plan_ctx->set_runtime_parameter(index, null_value, *value.type_, attributes))) {
+        LOG_ERROR("failed to clear pushdown parameter", K(ret), K(index));
+      } else {
+        param->dst_->locate_expr_datum(eval_ctx_, 0).set_null();
+      }
+    }
   }
 }
 
@@ -1404,8 +1497,8 @@ int ObBatchRowIter::get_next_row(ObEvalCtx &eval_ctx, const ObOpSpec &spec)
     }
     if (idx_ >= brs_->size_) {
       if (!brs_->end_) {
-        brs_holder_.restore();
-        if (OB_FAIL(op_->get_next_batch(max_row_cnt, brs_))) {
+        if (OB_FAIL(brs_holder_.restore())) {
+        } else if (OB_FAIL(op_->get_next_batch(max_row_cnt, brs_))) {
         } else {
           idx_ = 0;
           if (0 == brs_->size_ && brs_->end_) {
@@ -1426,66 +1519,444 @@ int ObBatchRowIter::get_next_row(ObEvalCtx &eval_ctx, const ObOpSpec &spec)
   for (auto i = 0; OB_SUCC(ret) && i < spec.output_.count(); i++) {
     ObExpr *expr = spec.output_.at(i);
     if (expr->is_batch_result() && 0 != cur_idx()) {
-      ObDatum *datums = expr->locate_batch_datums(eval_ctx);
-      datums[0] = datums[cur_idx()];
-      LOG_DEBUG("copy datum to datum[0], details: ", K(cur_idx()), K(datums[0]),
-               K(expr->locate_batch_datums(eval_ctx)),
-               KPC(expr->locate_batch_datums(eval_ctx)), K(expr), KPC(expr));
+      bool native = false;
+      if (OB_FAIL(expr->get_native_i64_mode(eval_ctx, native))) {
+      } else if (native) {
+        NativeI64Lane lane;
+        if (OB_FAIL(expr->get_native_i64_lane(eval_ctx, lane))) {
+        } else if (cur_idx() < 0 || cur_idx() >= lane.capacity) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          const Datum::State state = static_cast<Datum::State>(lane.states[cur_idx()]);
+          if (state != Datum::State::Present && state != Datum::State::Null) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            if (state == Datum::State::Present) { lane.values[0] = lane.values[cur_idx()]; }
+            lane.states[0] = static_cast<uint8_t>(state);
+            LOG_DEBUG("copy native batch value to row zero", K(cur_idx()), K(state), KPC(expr));
+          }
+        }
+      } else {
+        Datum *datums = expr->locate_batch_datums(eval_ctx);
+        datums[0] = datums[cur_idx()];
+        LOG_DEBUG("copy datum to datum[0], details: ", K(cur_idx()), K(datums[0]),
+                 KP(datums), KPC(datums), K(expr), KPC(expr));
+      }
     } // non batch expr always point to offset 0, do nothing for else brach
   }
 
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObBatchRescanParams, params_, param_idxs_, param_expr_idxs_);
-
-int ObBatchRescanParams::assign(const ObBatchRescanParams &other)
+namespace {
+int decode_batch_index_array(const char *buf, int64_t length, int64_t &pos,
+                             ObIArray<int64_t> &output, bool one_based)
 {
   int ret = OB_SUCCESS;
-  OZ(params_.assign(other.params_));
-  OZ(param_idxs_.assign(other.param_idxs_));
-  OZ(param_expr_idxs_.assign(other.param_expr_idxs_));
-  return ret;
-}
-
-int ObBatchRescanParams::deep_copy_param(const common::ObObjParam &org_param,
-    common::ObObjParam &new_param)
-{
-  int ret = OB_SUCCESS;
-  int64_t obj_size = org_param.get_deep_copy_size();
-  char *buf = NULL;
-  int64_t pos = 0;
-  new_param = org_param;
-  if (obj_size <= 0) {
-    /*do nothing*/
-  } else if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(obj_size)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(new_param.deep_copy(org_param, buf, obj_size, pos))) {
+  int64_t count = 0;
+  if (OB_FAIL(serialization::decode(buf, length, pos, count))) {
+  } else if (count < 0 || count > length - pos) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else if (OB_FAIL(output.reserve(count))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    int64_t index = 0;
+    if (OB_FAIL(serialization::decode(buf, length, pos, index))) {
+    } else if (index < (one_based ? 1 : 0)) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(output.push_back(index))) {
+    }
   }
   return ret;
 }
+}
 
-int ObBatchRescanParams::append_batch_rescan_param(const ObIArray<int64_t> &param_idxs,
-    const ObTMArray<common::ObObjParam> &res_objs)
+namespace {
+// Stack-only old parameter view for the historical v1 field codec. Its scalar
+// scratch is consumed synchronously; neither descriptor nor scratch is stored.
+int batch_wire_parameter(const NativeTypedDatum &value, const DatumParameterMetadata &attributes,
+                         DatumParameter &output, void *scratch, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(params_.push_back(res_objs))) {
-  } else if (param_idxs.count() != param_idxs_.count()) {
-    if (param_idxs_.count() != 0) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(param_idxs_.assign(param_idxs))) {
+  DatumParameter candidate;
+  if (value.type_ == nullptr) {
+    ret = candidate.assign_native_borrowed(value.datum_, attributes.type_meta_);
+  } else {
+    ObDatum legacy;
+    if (OB_FAIL(DatumCopyPlan(*value.type_).legacy_view(value.datum_, legacy, scratch, capacity))) {
+    } else { ret = candidate.assign_legacy_borrowed(legacy, attributes.type_meta_); }
+  }
+  if (OB_SUCC(ret)) { candidate.set_metadata(attributes); output = candidate; }
+  return ret;
+}
+}
+
+int ObBatchRescanParams::validate_shape() const
+{
+  int ret = OB_SUCCESS;
+  if (params_.count() != metadata_rows_.count()
+      || (param_expr_idxs_.count() != 0 && param_expr_idxs_.count() != param_idxs_.count())) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_idxs_.count(); ++i) {
+    if (param_idxs_.at(i) < 0) { ret = OB_INVALID_ARGUMENT; }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_expr_idxs_.count(); ++i) {
+    if (param_expr_idxs_.at(i) <= 0) { ret = OB_INVALID_ARGUMENT; }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < params_.count(); ++i) {
+    if (params_.at(i).count() != param_idxs_.count()
+        || metadata_rows_.at(i).count() != param_idxs_.count()) { ret = OB_INVALID_ARGUMENT; }
+    for (int64_t j = 0; OB_SUCC(ret) && j < params_.at(i).count(); ++j) {
+      if (native_ready_ && params_.at(i).at(j).type_ == nullptr) { ret = OB_INVALID_ARGUMENT; }
     }
   }
   return ret;
 }
 
-int ObBatchRescanParams::append_batch_rescan_param(const ObIArray<int64_t> &param_idxs,
-    const ObTMArray<ObObjParam> &res_objs,
-    const common::ObIArray<int64_t> &param_expr_idxs)
+OB_DEF_SERIALIZE(ObBatchRescanParams)
+{
+  int ret = validate_shape();
+  OB_UNIS_ENCODE(params_.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < params_.count(); ++i) {
+    const auto &row = params_.at(i);
+    OB_UNIS_ENCODE(row.count());
+    for (int64_t j = 0; OB_SUCC(ret) && j < row.count(); ++j) {
+      alignas(8) char scratch[64];
+      DatumParameter parameter;
+      if (OB_FAIL(batch_wire_parameter(row.at(j), metadata_rows_.at(i).at(j), parameter, scratch, sizeof(scratch)))) {
+      } else { ret = DatumParameterCodec::encode_parameter(parameter, buf, buf_len, pos); }
+    }
+  }
+  OB_UNIS_ENCODE(param_idxs_);
+  OB_UNIS_ENCODE(param_expr_idxs_);
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObBatchRescanParams)
+{
+  int ret = validate_shape();
+  int64_t len = 0;
+  OB_UNIS_ADD_LEN(params_.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < params_.count(); ++i) {
+    const auto &row = params_.at(i);
+    OB_UNIS_ADD_LEN(row.count());
+    for (int64_t j = 0; OB_SUCC(ret) && j < row.count(); ++j) {
+      alignas(8) char scratch[64];
+      DatumParameter parameter;
+      int64_t bytes = 0;
+      if (OB_FAIL(batch_wire_parameter(row.at(j), metadata_rows_.at(i).at(j), parameter, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(DatumParameterCodec::parameter_size(parameter, bytes))) {
+      } else if (__builtin_add_overflow(len, bytes, &len)) { ret = OB_SIZE_OVERFLOW; }
+    }
+  }
+  OB_UNIS_ADD_LEN(param_idxs_);
+  OB_UNIS_ADD_LEN(param_expr_idxs_);
+  if (OB_FAIL(ret)) { LOG_WARN("batch has no supported v1 wire size", K(ret)); len = 0; }
+  return len;
+}
+
+OB_DEF_DESERIALIZE(ObBatchRescanParams)
 {
   int ret = OB_SUCCESS;
-  OZ(append_batch_rescan_param(param_idxs, res_objs));
-  OZ(param_expr_idxs_.assign(param_expr_idxs));
+  reset();
+  native_ready_ = false;
+  int64_t row_count = 0;
+  if (OB_FAIL(serialization::decode(buf, data_len, pos, row_count))) {
+  } else if (row_count < 0 || row_count > data_len - pos) { ret = OB_DESERIALIZE_ERROR; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < row_count; ++i) {
+    int64_t count = 0;
+    Row row(4 * sizeof(NativeTypedDatum));
+    MetadataRow attributes(4 * sizeof(DatumParameterMetadata));
+    if (OB_FAIL(serialization::decode(buf, data_len, pos, count))) {
+    } else if (count < 0 || count > (data_len - pos) / 6) { ret = OB_DESERIALIZE_ERROR; }
+    else if (OB_FAIL(row.reserve(count))) {
+    } else if (OB_FAIL(attributes.reserve(count))) {
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < count; ++j) {
+      DatumParameter physical;
+      NativeTypedDatum value;
+      if (OB_FAIL(DatumParameterCodec::decode_parameter(buf, data_len, pos, allocator_, physical))) {
+      } else {
+        value.datum_ = physical.get_datum(); // sole physical value, not a second wrapper row
+        if (OB_FAIL(row.push_back(value))) {
+        } else { ret = attributes.push_back(physical.get_metadata()); }
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(params_.push_back(row))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(metadata_rows_.push_back(attributes))) { params_.pop_back(); }
+  }
+  if (OB_SUCC(ret)) { ret = decode_batch_index_array(buf, data_len, pos, param_idxs_, false); }
+  if (OB_SUCC(ret) && pos < data_len) { ret = decode_batch_index_array(buf, data_len, pos, param_expr_idxs_, true); }
+  if (OB_SUCC(ret) && validate_shape() != OB_SUCCESS) { ret = OB_DESERIALIZE_ERROR; }
+  if (OB_FAIL(ret)) { reset(); }
+  return ret;
+}
+
+int ObBatchRescanParams::bind_received_types(const ObIArray<TypeRow> &row_types)
+{
+  int ret = validate_shape();
+  if (native_ready_ || row_types.count() != params_.count()) { return OB_INVALID_ARGUMENT; }
+  ObSArray<Row> prepared;
+  for (int64_t i = 0; OB_SUCC(ret) && i < params_.count(); ++i) {
+    Row row(4 * sizeof(NativeTypedDatum));
+    if (row_types.at(i).count() != params_.at(i).count()) { ret = OB_INVALID_ARGUMENT; }
+    else { ret = row.reserve(params_.at(i).count()); }
+    for (int64_t j = 0; OB_SUCC(ret) && j < params_.at(i).count(); ++j) {
+      const SqlType *type = row_types.at(i).at(j);
+      alignas(8) char scratch[64];
+      ObDatum legacy;
+      NativeTypedDatum value, owned;
+      if (type == nullptr) { ret = OB_INVALID_ARGUMENT; }
+      else if (OB_FAIL(DatumParameterCodec::export_native_value(params_.at(i).at(j).datum_,
+          metadata_rows_.at(i).at(j).type_meta_, legacy, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(DatumCopyPlan(*type).import_legacy(legacy, value.datum_))) {
+      } else {
+        value.type_ = type;
+        if (OB_FAIL(clone_native_parameter_value(value, allocator_, owned))) {
+        } else { ret = row.push_back(owned); }
+      }
+    }
+    if (OB_SUCC(ret)) { ret = prepared.push_back(row); }
+  }
+  // Final publication consists only of trivial descriptors; it cannot allocate
+  // or partially replace the old physical matrix on a preparation error.
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; i < params_.count(); ++i) {
+      for (int64_t j = 0; j < params_.at(i).count(); ++j) { params_.at(i).at(j) = prepared.at(i).at(j); }
+    }
+    native_ready_ = true;
+  }
+  return ret;
+}
+
+int ObBatchRescanParams::assign(const ObBatchRescanParams &other)
+{
+  int ret = OB_SUCCESS;
+  if (this != &other) {
+    reset();
+    if (OB_FAIL(other.validate_shape())) {
+    } else if (!other.native_ready_) { ret = OB_NOT_INIT; }
+    else if (other.params_.empty()) {
+      if (OB_FAIL(param_idxs_.assign(other.param_idxs_))) {
+      } else { ret = param_expr_idxs_.assign(other.param_expr_idxs_); }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < other.params_.count(); ++i) {
+      ret = append_batch_rescan_param(other.param_idxs_, other.params_.at(i),
+          other.metadata_rows_.at(i), other.param_expr_idxs_);
+    }
+    if (OB_FAIL(ret)) { reset(); }
+  }
+  return ret;
+}
+
+int ObBatchRescanParams::append_batch_rescan_param(const ObIArray<int64_t> &param_idxs,
+    const ObIArray<NativeTypedDatum> &values, const ObIArray<DatumParameterMetadata> &attributes)
+{
+  return append_batch_rescan_param(param_idxs, values, attributes, param_expr_idxs_);
+}
+
+int ObBatchRescanParams::append_batch_rescan_param(const ObIArray<int64_t> &param_idxs,
+    const ObIArray<NativeTypedDatum> &values, const ObIArray<DatumParameterMetadata> &attributes,
+    const ObIArray<int64_t> &param_expr_idxs)
+{
+  int ret = validate_append(param_idxs, values.count(), param_expr_idxs);
+  if (values.count() != attributes.count()) { ret = OB_INVALID_ARGUMENT; }
+  RowBuilder builder(*this);
+  for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) { ret = builder.append(values.at(i), attributes.at(i)); }
+  if (OB_SUCC(ret)) { ret = builder.finish(param_idxs, param_expr_idxs); }
+  return ret;
+}
+
+int ObBatchRescanParams::validate_append(const ObIArray<int64_t> &param_idxs, int64_t count,
+                                       const ObIArray<int64_t> &param_expr_idxs) const
+{
+  int ret = OB_SUCCESS;
+  if (!native_ready_ || param_idxs.count() != count
+      || (param_expr_idxs.count() != 0 && param_expr_idxs.count() != count)) { ret = OB_INVALID_ARGUMENT; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_idxs.count(); ++i) {
+    if (param_idxs.at(i) < 0) { ret = OB_INVALID_ARGUMENT; }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_expr_idxs.count(); ++i) {
+    if (param_expr_idxs.at(i) <= 0) { ret = OB_INVALID_ARGUMENT; }
+  }
+  if (OB_SUCC(ret) && !params_.empty()) {
+    if (param_idxs.count() != param_idxs_.count() || param_expr_idxs.count() != param_expr_idxs_.count()) { ret = OB_INVALID_ARGUMENT; }
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_idxs.count(); ++i) {
+      if (param_idxs.at(i) != param_idxs_.at(i)) { ret = OB_INVALID_ARGUMENT; }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_expr_idxs.count(); ++i) {
+      if (param_expr_idxs.at(i) != param_expr_idxs_.at(i)) { ret = OB_INVALID_ARGUMENT; }
+    }
+  }
+  return ret;
+}
+
+int ObBatchRescanParams::append_captured_row(const ObIArray<int64_t> &param_idxs,
+    const Row &values, const MetadataRow &attributes, const ObIArray<int64_t> &param_expr_idxs)
+{
+  int ret = validate_append(param_idxs, values.count(), param_expr_idxs);
+  const bool first = params_.empty();
+  if (attributes.count() != values.count()) { ret = OB_INVALID_ARGUMENT; }
+  if (OB_SUCC(ret) && first) {
+    if (&param_idxs != &param_idxs_ && OB_FAIL(param_idxs_.assign(param_idxs))) {
+    } else if (&param_expr_idxs != &param_expr_idxs_) { ret = param_expr_idxs_.assign(param_expr_idxs); }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(params_.push_back(values))) {
+  } else if (OB_SUCC(ret) && OB_FAIL(metadata_rows_.push_back(attributes))) { params_.pop_back(); }
+  if (OB_FAIL(ret) && first) { param_idxs_.reuse(); param_expr_idxs_.reuse(); }
+  return ret;
+}
+
+int ObBatchRescanParams::RowBuilder::append(const NativeTypedDatum &value,
+                                          const DatumParameterMetadata &attributes)
+{
+  int ret = OB_SUCCESS;
+  NativeTypedDatum owned;
+  if (finished_) { ret = OB_STATE_NOT_MATCH; }
+  else if (OB_FAIL(clone_native_parameter_value(value, owner_.allocator_, owned))) {
+  } else if (OB_FAIL(values_.push_back(owned))) {
+  } else if (OB_FAIL(metadata_.push_back(attributes))) { values_.pop_back(); }
+  return ret;
+}
+
+int ObBatchRescanParams::RowBuilder::finish(const ObIArray<int64_t> &param_idxs,
+                                          const ObIArray<int64_t> &param_expr_idxs)
+{
+  int ret = OB_SUCCESS;
+  if (finished_) { ret = OB_STATE_NOT_MATCH; }
+  else if (OB_FAIL(owner_.append_captured_row(param_idxs, values_, metadata_, param_expr_idxs))) {
+  } else { finished_ = true; }
+  return ret;
+}
+
+// Explicit typed batch protocol. The enclosing PX transport selects this port;
+// historical serialize/deserialize remain the unchanged v1 physical protocol.
+namespace {
+// Typed-batch headers are varints. Check every byte before reading it; the
+// historical generic decoder inspects its next continuation byte too early.
+int decode_native_batch_integer(const char *buf, int64_t length, int64_t &pos, int64_t &output)
+{
+  if (buf == nullptr || pos < 0 || pos > length) { return OB_INVALID_ARGUMENT; }
+  int64_t cursor = pos;
+  uint64_t bits = 0;
+  for (int shift = 0; shift < 70; shift += 7) {
+    if (cursor >= length) { return OB_DESERIALIZE_ERROR; }
+    const uint8_t byte = static_cast<uint8_t>(buf[cursor++]);
+    if (shift == 63 && (byte & 0xfe) != 0) { return OB_DESERIALIZE_ERROR; }
+    bits |= uint64_t(byte & 0x7f) << shift;
+    if ((byte & 0x80) == 0) {
+      output = static_cast<int64_t>(bits); pos = cursor; return OB_SUCCESS;
+    }
+  }
+  return OB_DESERIALIZE_ERROR;
+}
+int decode_native_batch_indexes(const char *buf, int64_t length, int64_t &pos,
+    ObIArray<int64_t> &output, bool one_based)
+{
+  int64_t count = 0;
+  int ret = decode_native_batch_integer(buf, length, pos, count);
+  if (ret == OB_SUCCESS && (count < 0 || count > length - pos)) { ret = OB_DESERIALIZE_ERROR; }
+  if (ret == OB_SUCCESS) { ret = output.reserve(count); }
+  for (int64_t i = 0; ret == OB_SUCCESS && i < count; ++i) {
+    int64_t value = 0;
+    if (OB_FAIL(decode_native_batch_integer(buf, length, pos, value))) {
+    } else if (value < (one_based ? 1 : 0)) { ret = OB_DESERIALIZE_ERROR; }
+    else { ret = output.push_back(value); }
+  }
+  return ret;
+}
+}
+
+int ObBatchRescanParams::native_size(int64_t &output) const
+{
+  int ret = validate_shape();
+  int64_t size = 0;
+  auto add = [&](int64_t bytes) {
+    if (OB_SUCC(ret) && (bytes < 0 || __builtin_add_overflow(size, bytes, &size))) { ret = OB_SIZE_OVERFLOW; }
+  };
+  if (!native_ready_) { ret = OB_NOT_INIT; }
+  add(serialization::encoded_length(int64_t(2)));
+  add(serialization::encoded_length(params_.count()));
+  for (int64_t i = 0; OB_SUCC(ret) && i < params_.count(); ++i) {
+    add(serialization::encoded_length(params_.at(i).count()));
+    for (int64_t j = 0; OB_SUCC(ret) && j < params_.at(i).count(); ++j) {
+      const auto &value = params_.at(i).at(j);
+      int64_t bytes = 0;
+      if (OB_FAIL(NativeFrameValueCodec::size(*value.type_, value.datum_, bytes))) {
+      } else {
+        add(bytes);
+        add(NativeFrameValueCodec::metadata_size());
+      }
+    }
+  }
+  add(serialization::encoded_length(param_idxs_));
+  add(serialization::encoded_length(param_expr_idxs_));
+  if (OB_SUCC(ret)) { output = size; }
+  return ret;
+}
+
+int ObBatchRescanParams::native_encode(char *buf, int64_t length, int64_t &pos) const
+{
+  int64_t bytes = 0;
+  int ret = native_size(bytes);
+  int64_t cursor = pos;
+  if (OB_FAIL(ret)) {
+  } else if (buf == nullptr || pos < 0 || pos > length) { ret = OB_INVALID_ARGUMENT; }
+  else if (bytes > length - pos) { ret = OB_BUF_NOT_ENOUGH; }
+  else if (OB_FAIL(serialization::encode(buf, length, cursor, int64_t(2)))) {
+  } else if (OB_FAIL(serialization::encode(buf, length, cursor, params_.count()))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < params_.count(); ++i) {
+    if (OB_FAIL(serialization::encode(buf, length, cursor, params_.at(i).count()))) {
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < params_.at(i).count(); ++j) {
+      const auto &value = params_.at(i).at(j);
+      const auto &attributes = metadata_rows_.at(i).at(j);
+      if (OB_FAIL(NativeFrameValueCodec::encode(*value.type_, value.datum_, buf, length, cursor))) {
+      } else { ret = NativeFrameValueCodec::encode_metadata(attributes, buf, length, cursor); }
+    }
+  }
+  if (OB_SUCC(ret)) { ret = serialization::encode(buf, length, cursor, param_idxs_); }
+  if (OB_SUCC(ret)) { ret = serialization::encode(buf, length, cursor, param_expr_idxs_); }
+  if (OB_SUCC(ret)) { pos = cursor; }
+  return ret;
+}
+
+int ObBatchRescanParams::native_decode(const char *buf, int64_t length, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  int64_t cursor = pos, version = 0, rows = 0;
+  reset();
+  if (buf == nullptr || pos < 0 || pos > length) { ret = OB_INVALID_ARGUMENT; }
+  else if (OB_FAIL(decode_native_batch_integer(buf, length, cursor, version))) {
+  } else if (version != 2) { ret = OB_DESERIALIZE_ERROR; }
+  else if (OB_FAIL(decode_native_batch_integer(buf, length, cursor, rows))) {
+  } else if (rows < 0 || rows > length - cursor) { ret = OB_DESERIALIZE_ERROR; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < rows; ++i) {
+    int64_t columns = 0;
+    Row row(4 * sizeof(NativeTypedDatum));
+    MetadataRow attributes(4 * sizeof(DatumParameterMetadata));
+    if (OB_FAIL(decode_native_batch_integer(buf, length, cursor, columns))) {
+    } else if (columns < 0 || columns > length - cursor) { ret = OB_DESERIALIZE_ERROR; }
+    else if (OB_FAIL(row.reserve(columns))) {
+    } else { ret = attributes.reserve(columns); }
+    for (int64_t j = 0; OB_SUCC(ret) && j < columns; ++j) {
+      NativeTypedDatum value;
+      DatumParameterMetadata metadata;
+      if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, allocator_, value.type_, value.datum_))) {
+      } else if (OB_FAIL(NativeFrameValueCodec::decode_metadata(buf, length, cursor, metadata))) {
+      } else if (OB_FAIL(row.push_back(value))) {
+      } else { ret = attributes.push_back(metadata); }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(params_.push_back(row))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(metadata_rows_.push_back(attributes))) { params_.pop_back(); }
+  }
+  if (OB_SUCC(ret)) { ret = decode_native_batch_indexes(buf, length, cursor, param_idxs_, false); }
+  if (OB_SUCC(ret) && cursor < length) { ret = decode_native_batch_indexes(buf, length, cursor, param_expr_idxs_, true); }
+  if (OB_SUCC(ret)) { ret = validate_shape(); }
+  if (OB_SUCC(ret)) { pos = cursor; }
+  else { reset(); }
   return ret;
 }
 

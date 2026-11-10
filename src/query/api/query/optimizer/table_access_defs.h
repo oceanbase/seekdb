@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "common/row/ob_row.h"
+#include "common/datum/datum_value.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash_func/murmur_hash.h"
@@ -47,17 +47,17 @@ public:
   };
   typedef common::ObSEArray<MapEntry, 1> ObPartRowManager;
   const ObRowIdList* get_row_id_list(int64_t part_index);
-  void reset() { manager_.reset(); part_idx_ = common::OB_INVALID_INDEX; }
+  void reset() { manager_.reset(); part_row_.reset(); part_idx_ = common::OB_INVALID_INDEX; }
   int64_t get_part_count() const { return manager_.count(); }
   int64_t get_part_idx() const { return part_idx_; }
   void set_part_idx(int64_t part_idx) { part_idx_ = part_idx; }
   const MapEntry &at(int64_t i) const { return manager_.at(i); }
-  common::ObNewRow &get_part_row() { return part_row_; }
+  common::ObSEArray<common::DatumValue, 8> &get_part_row() { return part_row_; }
   TO_STRING_KV(K_(manager), K_(part_idx));
 private:
   ObPartRowManager manager_;
   int64_t part_idx_; // Used for parameter passing only.
-  common::ObNewRow part_row_;
+  common::ObSEArray<common::DatumValue, 8> part_row_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPartIdRowMapManager);
 };

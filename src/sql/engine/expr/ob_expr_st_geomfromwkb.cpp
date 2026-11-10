@@ -90,13 +90,13 @@ int ObIExprSTGeomFromWKB::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   ObGeoAxisOrder axis_order = ObGeoAxisOrder::INVALID;
@@ -280,7 +280,7 @@ int ObIExprSTGeomFromWKB::get_type_bo_from_wkb_without_srid(const ObString &wkb,
   return ret;
 }
 
-int ObExprSTGeomFromWKB::eval_st_geomfromwkb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTGeomFromWKB::eval_st_geomfromwkb(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -299,7 +299,7 @@ int ObExprSTGeomFromWKB::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return OB_SUCCESS;
 }
 
-int ObExprSTGeometryFromWKB::eval_st_geometryfromwkb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTGeometryFromWKB::eval_st_geometryfromwkb(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();

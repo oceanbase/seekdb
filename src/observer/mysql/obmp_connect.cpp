@@ -564,34 +564,6 @@ int64_t ObMPConnect::get_database_id()
   return OB_SYS_DATABASE_ID;
 }
 
-int ObMPConnect::get_conn_id(uint32_t &conn_id) const
-{
-  int ret = OB_SUCCESS;
-  bool is_found = false;
-  ObString key_str;
-  key_str.assign_ptr(OB_MYSQL_CONNECTION_ID , static_cast<int32_t>(STRLEN(OB_MYSQL_CONNECTION_ID)));
-  for (int64_t i = 0; i < hsr_.get_connect_attrs().count() && OB_SUCC(ret) && !is_found; ++i) {
-    ObStringKV kv =  hsr_.get_connect_attrs().at(i);
-    if (key_str == kv.key_) {
-      ObObj value;
-      value.set_varchar(kv.value_);
-      ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
-      ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-      EXPR_GET_UINT32_V2(value, conn_id);
-      if (OB_FAIL(ret)) {
-      } else {
-        is_found = true;
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && !is_found) {
-    ret = OB_ENTRY_NOT_EXIST;
-  }
-
-  return ret;
-}
-
 int ObMPConnect::check_client_property(ObSMConnection &conn)
 {
   int ret = OB_SUCCESS;

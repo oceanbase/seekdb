@@ -67,11 +67,11 @@ OB_INLINE int get_cmp_ret(const ObCmpOp cmp_op, const int ret)
 }
 
 template <typename DatumFunc, typename... Args>
-int def_relational_eval_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum, Args &...args)
+int def_relational_eval_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum, Args &...args)
 {
   int ret = OB_SUCCESS;
-  ObDatum *l = NULL;
-  ObDatum *r = NULL;
+  Datum *l = NULL;
+  Datum *r = NULL;
   bool contain_null = false;
   if (OB_FAIL(ObRelationalExprOperator::get_comparator_operands(
               expr, ctx, l, r, expr_datum, contain_null))) {
@@ -98,8 +98,45 @@ int def_relational_eval_batch_func(BATCH_EVAL_FUNC_ARG_DECL, Args &...args)
   return ret;
 }
 
+struct NativeBoundRelationalCmp
+{
+  int operator()(Datum &result, const Datum &left, const Datum &right,
+                  const DatumCmpOp &operation, const ObDatumAccessContext *access,
+                  const ObCmpOp cmp_op) const
+  {
+    int comparison = 0;
+    int ret = operation(left, right, comparison, access);
+    if (OB_SUCC(ret)) { result.set_int(get_cmp_ret(cmp_op, comparison)); }
+    return ret;
+  }
+};
+
+inline int eval_native_relation(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+{
+  int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access = nullptr;
+  const DatumCmpOp &operation = expr.get_cmp_op();
+  ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+  if (!operation.is_valid()) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(ctx.get_datum_access_ctx(access))) {}
+  else { ret = def_relational_eval_func<NativeBoundRelationalCmp>(expr, ctx, result, operation, access, cmp_op); }
+  return ret;
+}
+
+inline int eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access = nullptr;
+  const DatumCmpOp &operation = expr.get_cmp_op();
+  ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+  if (!operation.is_valid()) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(ctx.get_datum_access_ctx(access))) {}
+  else { ret = def_relational_eval_batch_func<NativeBoundRelationalCmp>(BATCH_EVAL_FUNC_ARG_LIST, operation, access, cmp_op); }
+  return ret;
+}
+
 template <typename DatumFunc>
-int def_oper_cmp_func(ObDatum &res, const ObDatum &l, const ObDatum &r,
+int def_oper_cmp_func(Datum &res, const Datum &l, const Datum &r,
                       const ObCmpOp cmp_op)
 {
   int cmp_ret = 0;
@@ -112,7 +149,7 @@ int def_oper_cmp_func(ObDatum &res, const ObDatum &l, const ObDatum &r,
 }
 
 template <typename DatumFunc>
-int def_oper_cmp_func(ObDatum &res, const ObDatum &l, const ObDatum &r,
+int def_oper_cmp_func(Datum &res, const Datum &l, const Datum &r,
                       const ObDatumAccessContext *access_ctx,
                       const ObCmpOp cmp_op)
 {
@@ -128,7 +165,7 @@ int def_oper_cmp_func(ObDatum &res, const ObDatum &l, const ObDatum &r,
 template <typename DatumFunc>
 struct ObDatumCmpContextAdapter
 {
-  static int cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
+  static int cmp(const common::ObDatum &l, const common::ObDatum &r, int &cmp_ret,
                  const ObDatumAccessContext *access_ctx)
   {
     UNUSED(access_ctx);
@@ -138,7 +175,7 @@ struct ObDatumCmpContextAdapter
 
 struct ObDummyRelationalFunc
 {
-  inline static int eval(const ObExpr &, ObEvalCtx &, ObDatum &) { return 0;};
+  inline static int eval(const ObExpr &, ObEvalCtx &, Datum &) { return 0;};
   inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
     UNUSEDx(BATCH_EVAL_FUNC_ARG_LIST);
@@ -146,47 +183,31 @@ struct ObDummyRelationalFunc
   }
 };
 
-template<bool, ObObjType L_T, ObObjType R_T>
+template<bool, SqlValueType L_T, SqlValueType R_T>
 struct ObRelationalTypeFunc {};
 
-template<ObObjType L_T, ObObjType R_T>
+template<SqlValueType L_T, SqlValueType R_T>
 struct ObRelationalTypeFunc<false, L_T, R_T> : public ObDummyRelationalFunc {};
 
-template<ObObjType L_T, ObObjType R_T>
+template<SqlValueType L_T, SqlValueType R_T>
 struct ObRelationalTypeFunc<true, L_T, R_T>
+
 {
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumTypeCmp<L_T, R_T>>(res, l, r, cmp_op);
-    }
-  };
-
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
-  }
-
-
-  inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST, cmp_op);
-  }
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+  { return eval_native_relation(expr, ctx, result); }
+  static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+  { return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST); }
 };
 
 struct ObTCRelationFunc
 {
-  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
 struct ObDecintRelationFunc
 {
-  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
@@ -198,72 +219,80 @@ struct ObRelationalStrFunc<false, CS_TYPE, WITH_END_SPACE> : ObDummyRelationalFu
 
 template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
 struct ObRelationalStrFunc<true, CS_TYPE, WITH_END_SPACE>
+
 {
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumStrCmp<CS_TYPE, WITH_END_SPACE>>(
-          res, l, r, cmp_op);
-    }
-  };
-
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
-  }
-
-
-  // defined in ObRelationalExtraFunc
-  // inline static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
-  // {
-  //   return def_relational_eval_batch_func<DatumCmp>(BATCH_EVAL_FUNC_ARG_LIST);
-  // }
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+  { return eval_native_relation(expr, ctx, result); }
+  static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+  { return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST); }
 };
 
 template<typename T, bool WITH_END_SPACE>
 struct ObNewRelationalStrFunc
 {
-  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+  struct EndSpaceCmp
   {
-    int ret = OB_SUCCESS;
-    ObDatum *l = NULL;
-    ObDatum *r = NULL;
-    bool contain_null = false;
-    int cmp_ret = 0;
-    const ObDatumAccessContext *access_ctx = nullptr;
-    if (OB_FAIL(ObRelationalExprOperator::get_comparator_operands(
-                expr, ctx, l, r, expr_datum, contain_null))) {
-    } else if (!contain_null) {
-      if (OB_ISNULL(l) || OB_ISNULL(r)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if constexpr (std::is_invocable_r_v<
-                               int, decltype(&T::cmp), const ObDatum &, const ObDatum &,
-                               int &, ObCollationType, bool,
-                               const ObDatumAccessContext *>) {
-        if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-        } else if (OB_FAIL(T::cmp(*l, *r, cmp_ret,
-                                  expr.args_[0]->datum_meta_.cs_type_,
-                                  WITH_END_SPACE, access_ctx))) {
-        } else {
-          expr_datum.set_int(
-              get_cmp_ret(ObExprCmpFuncsHelper::get_cmp_op(expr.type_), cmp_ret));
-        }
-      } else if (OB_FAIL(T::cmp(*l, *r, cmp_ret,
-                                expr.args_[0]->datum_meta_.cs_type_, WITH_END_SPACE))) {
-      } else {
-        expr_datum.set_int(get_cmp_ret(ObExprCmpFuncsHelper::get_cmp_op(expr.type_), cmp_ret));
+    int operator()(Datum &result, const Datum &left, const Datum &right,
+                    const ObExpr &expr, const ObDatumAccessContext *access,
+                    const ObCmpOp cmp_op) const
+    {
+      // Keep the registered end-space variant's selected library policy.
+      // These are synchronous byte-span views, never executable legacy slots.
+      common::ObDatum legacy_left;
+      common::ObDatum legacy_right;
+      alignas(8) char left_scratch[64];
+      alignas(8) char right_scratch[64];
+      int comparison = 0;
+      int ret = expr.args_[0]->get_datum_copy_plan().legacy_view(
+          left, legacy_left, left_scratch, sizeof(left_scratch));
+      if (OB_SUCC(ret)) {
+        ret = expr.args_[1]->get_datum_copy_plan().legacy_view(
+            right, legacy_right, right_scratch, sizeof(right_scratch));
       }
+      if (OB_SUCC(ret)) {
+        const ObCollationType collation = expr.args_[0]->datum_meta_.cs_type_;
+        if constexpr (std::is_same<T, datum_cmp::ObDatumStrCmpImpl>::value) {
+          ret = T::cmp(legacy_left, legacy_right, comparison, collation, WITH_END_SPACE);
+        } else {
+          ret = T::cmp(legacy_left, legacy_right, comparison, collation, WITH_END_SPACE, access);
+        }
+      }
+      if (OB_SUCC(ret)) { result.set_int(get_cmp_ret(cmp_op, comparison)); }
+      return ret;
     }
-    return ret;
+  };
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+  {
+    if constexpr (!WITH_END_SPACE) { return eval_native_relation(expr, ctx, result); }
+    else {
+      const ObDatumAccessContext *access = nullptr;
+      const ObCmpOp operation = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+      int ret = ctx.get_datum_access_ctx(access);
+      if (OB_SUCC(ret)) {
+        ret = def_relational_eval_func<EndSpaceCmp>(expr, ctx, result, expr, access, operation);
+      }
+      return ret;
+    }
+  }
+  static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+  {
+    if constexpr (!WITH_END_SPACE) { return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST); }
+    else {
+      const ObDatumAccessContext *access = nullptr;
+      const ObCmpOp operation = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
+      int ret = ctx.get_datum_access_ctx(access);
+      if (OB_SUCC(ret)) {
+        ret = def_relational_eval_batch_func<EndSpaceCmp>(
+            BATCH_EVAL_FUNC_ARG_LIST, expr, access, operation);
+      }
+      return ret;
+    }
   }
 };
 
 template <bool WITH_END_SPACE>
 struct ObStrRelationEvalWrap {
-  static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
   {
     return ObNewRelationalStrFunc<datum_cmp::ObDatumStrCmpImpl,
            WITH_END_SPACE>::eval(expr, ctx, expr_datum);
@@ -272,7 +301,7 @@ struct ObStrRelationEvalWrap {
 
 struct ObFixedDoubleRelationFunc
 {
-  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static OB_NOINLINE int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static OB_NOINLINE int eval_batch(BATCH_EVAL_FUNC_ARG_DECL);
 };
 
@@ -284,35 +313,17 @@ struct ObRelationalTextFunc<false, CS_TYPE, WITH_END_SPACE> : ObDummyRelationalF
 
 template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
 struct ObRelationalTextFunc<true, CS_TYPE, WITH_END_SPACE>
-{
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObDatumAccessContext *access_ctx,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumTextCmp<CS_TYPE, WITH_END_SPACE>>(
-          res, l, r, access_ctx, cmp_op);
-    }
-  };
 
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    int ret = OB_SUCCESS;
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_func<DatumCmp>(
-          expr, ctx, expr_datum, access_ctx, cmp_op);
-    }
-    return ret;
-  }
+{
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+  { return eval_native_relation(expr, ctx, result); }
+  static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+  { return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST); }
 };
 
 template <bool WITH_END_SPACE>
 struct ObTextRelationEvalWrap {
-  static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
   {
     return ObNewRelationalStrFunc<datum_cmp::ObDatumTextCmpImpl,
            WITH_END_SPACE>::eval(expr, ctx, expr_datum);
@@ -327,35 +338,17 @@ struct ObRelationalTextStrFunc<false, CS_TYPE, WITH_END_SPACE> : ObDummyRelation
 
 template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
 struct ObRelationalTextStrFunc<true, CS_TYPE, WITH_END_SPACE>
-{
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObDatumAccessContext *access_ctx,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumTextStringCmp<CS_TYPE, WITH_END_SPACE>>(
-          res, l, r, access_ctx, cmp_op);
-    }
-  };
 
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    int ret = OB_SUCCESS;
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_func<DatumCmp>(
-          expr, ctx, expr_datum, access_ctx, cmp_op);
-    }
-    return ret;
-  }
+{
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+  { return eval_native_relation(expr, ctx, result); }
+  static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+  { return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST); }
 };
 
 template <bool WITH_END_SPACE>
 struct ObTextStrRelationEvalWrap {
-  static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
   {
     return ObNewRelationalStrFunc<datum_cmp::ObDatumTextStringCmpImpl,
            WITH_END_SPACE>::eval(expr, ctx, expr_datum);
@@ -371,35 +364,17 @@ struct ObRelationalStrTextFunc<false, CS_TYPE, WITH_END_SPACE> : ObDummyRelation
 
 template<ObCollationType CS_TYPE, bool WITH_END_SPACE>
 struct ObRelationalStrTextFunc<true, CS_TYPE, WITH_END_SPACE>
-{
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObDatumAccessContext *access_ctx,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumStringTextCmp<CS_TYPE, WITH_END_SPACE>>(
-          res, l, r, access_ctx, cmp_op);
-    }
-  };
 
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    int ret = OB_SUCCESS;
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_func<DatumCmp>(
-          expr, ctx, expr_datum, access_ctx, cmp_op);
-    }
-    return ret;
-  }
+{
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+  { return eval_native_relation(expr, ctx, result); }
+  static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+  { return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST); }
 };
 
 template <bool WITH_END_SPACE>
 struct ObStrTextRelationEvalWrap {
-  static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
   {
     return ObNewRelationalStrFunc<datum_cmp::ObDatumStringTextCmpImpl,
            WITH_END_SPACE>::eval(expr, ctx, expr_datum);
@@ -415,30 +390,12 @@ struct ObRelationalJsonFunc<false, HAS_LOB_HEADER> : ObDummyRelationalFunc {};
 
 template<bool HAS_LOB_HEADER>
 struct ObRelationalJsonFunc<true, HAS_LOB_HEADER>
-{
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObDatumAccessContext *access_ctx,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumJsonCmp<HAS_LOB_HEADER>>(
-          res, l, r, access_ctx, cmp_op);
-    }
-  };
 
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    int ret = OB_SUCCESS;
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_func<DatumCmp>(
-          expr, ctx, expr_datum, access_ctx, cmp_op);
-    }
-    return ret;
-  }
+{
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+  { return eval_native_relation(expr, ctx, result); }
+  static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+  { return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST); }
 };
 
 template<bool, bool HAS_LOB_HEADER>
@@ -449,30 +406,12 @@ struct ObRelationalGeoFunc<false, HAS_LOB_HEADER> : ObDummyRelationalFunc {};
 
 template<bool HAS_LOB_HEADER>
 struct ObRelationalGeoFunc<true, HAS_LOB_HEADER>
-{
-  struct DatumCmp
-  {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   const ObDatumAccessContext *access_ctx,
-                   const ObCmpOp cmp_op) const
-    {
-      return def_oper_cmp_func<datum_cmp::ObDatumGeoCmp<HAS_LOB_HEADER>>(
-          res, l, r, access_ctx, cmp_op);
-    }
-  };
 
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-  {
-    int ret = OB_SUCCESS;
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_func<DatumCmp>(
-          expr, ctx, expr_datum, access_ctx, cmp_op);
-    }
-    return ret;
-  }
+{
+  static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
+  { return eval_native_relation(expr, ctx, result); }
+  static int eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
+  { return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST); }
 };
 
 // cmp for collection
@@ -487,7 +426,7 @@ struct ObRelationalCollectionFunc<true, HAS_LOB_HEADER>
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr,
+    int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr,
                    ObEvalCtx &ctx, const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
@@ -510,7 +449,7 @@ struct ObRelationalCollectionFunc<true, HAS_LOB_HEADER>
     }
   };
 
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
   {
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
     return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, expr, ctx, cmp_op);
@@ -530,25 +469,12 @@ struct ObRelationalExtraFunc
 {
   struct NullExtendCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr,
+    int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr,
                    const ObCmpOp cmp_op) const
     {
-      int ret = OB_SUCCESS;
-      ObObjType lt = expr.args_[0]->datum_meta_.type_;
-      ObObjType rt = expr.args_[1]->datum_meta_.type_;
-      int cmp_ret = 0;
-      if (ObExtendType == lt && ObExtendType == rt) {
-        ret = datum_cmp::ObDatumTCCmp<ObExtendTC, ObExtendTC>::cmp(l, r, cmp_ret);
-      } else if (ObExtendType == lt) {
-        ret = datum_cmp::ObDatumTCCmp<ObExtendTC, ObIntTC>::cmp(l, r, cmp_ret);
-      } else if (ObExtendType == rt) {
-        ret = datum_cmp::ObDatumTCCmp<ObExtendTC, ObIntTC>::cmp(r, l, cmp_ret);
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-      }
-      if (OB_SUCC(ret)) {
-        res.set_int(get_cmp_ret(cmp_op, cmp_ret));
-      }
+      int comparison = 0;
+      int ret = expr.get_cmp_op()(l, r, comparison);
+      if (OB_SUCC(ret)) { res.set_int(get_cmp_ret(cmp_op, comparison)); }
       return ret;
     }
   };
@@ -561,12 +487,12 @@ struct ObRelationalExtraFunc
 
   struct StrCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+    int operator()(Datum &res, const Datum &l, const Datum &r,
                    const ObCollationType cs_type, bool with_end_space,
                    const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
-      int cmp_ret = ObCharset::strcmpsp(cs_type, l.ptr_, l.len_, r.ptr_, r.len_, with_end_space);
+      int cmp_ret = ObCharset::strcmpsp(cs_type, l.get_string().ptr(), l.length(), r.get_string().ptr(), r.length(), with_end_space);
       res.set_int(get_cmp_ret(cmp_op, cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
       return ret;
     }
@@ -584,7 +510,7 @@ struct ObRelationalExtraFunc
 
   struct TextCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+    int operator()(Datum &res, const Datum &l, const Datum &r,
                    const ObCollationType cs_type, bool with_end_space,
                    const ObLobReadOptions &lob_options,
                    const ObCmpOp cmp_op) const
@@ -625,7 +551,7 @@ struct ObRelationalExtraFunc
 
   struct TextStrCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+    int operator()(Datum &res, const Datum &l, const Datum &r,
                    const ObCollationType cs_type, bool with_end_space,
                    const ObLobReadOptions &lob_options,
                    const ObCmpOp cmp_op) const
@@ -638,7 +564,7 @@ struct ObRelationalExtraFunc
       } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
       } else {
         int cmp_ret = ObCharset::strcmpsp(cs_type, l_data.ptr(), l_data.length(), 
-                                          r.ptr_, r.len_, with_end_space);
+                                          r.get_string().ptr(), r.length(), with_end_space);
         res.set_int(get_cmp_ret(cmp_op, cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
       }
       return ret;
@@ -662,7 +588,7 @@ struct ObRelationalExtraFunc
 
   struct StrTextCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+    int operator()(Datum &res, const Datum &l, const Datum &r,
                    const ObCollationType cs_type, bool with_end_space,
                    const ObLobReadOptions &lob_options,
                    const ObCmpOp cmp_op) const
@@ -674,7 +600,7 @@ struct ObRelationalExtraFunc
       if (OB_FAIL(r_instr_iter.init(0, &lob_options, &allocator))) {
       } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
       } else {
-        int cmp_ret = ObCharset::strcmpsp(cs_type, l.ptr_, l.len_, 
+        int cmp_ret = ObCharset::strcmpsp(cs_type, l.get_string().ptr(), l.length(),
                                           r_data.ptr(), r_data.length(), with_end_space);
         res.set_int(get_cmp_ret(cmp_op, cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0)));
       }
@@ -699,7 +625,7 @@ struct ObRelationalExtraFunc
 
   struct JsonCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+    int operator()(Datum &res, const Datum &l, const Datum &r,
                    bool has_lob_header, const ObLobReadOptions &lob_options,
                    const ObCmpOp cmp_op) const
     {
@@ -748,7 +674,7 @@ struct ObRelationalExtraFunc
 
   struct GeoCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+    int operator()(Datum &res, const Datum &l, const Datum &r,
                    bool has_lob_header, const ObLobReadOptions &lob_options,
                    const ObCmpOp cmp_op) const
     {
@@ -791,7 +717,7 @@ struct ObRelationalVecFunc
 {
   struct DatumCmp
   {
-    int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr,
+    int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr,
                    ObEvalCtx &ctx, const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
@@ -835,11 +761,11 @@ struct ObRelationalVecFunc
     }
   };
 
-  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+  inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
   {
     int ret = OB_SUCCESS;
-    ObDatum *l = NULL;
-    ObDatum *r = NULL;
+    Datum *l = NULL;
+    Datum *r = NULL;
     bool contain_null = false;
     if (OB_FAIL(ObRelationalExprOperator::get_comparator_operands(
                 expr, ctx, l, r, expr_datum, contain_null))) {
@@ -947,11 +873,11 @@ template<int X, int Y, bool defined = true>
 struct TypeExprCmpFuncIniter
 {
   using Def = datum_cmp::ObDatumTypeCmp<
-      static_cast<ObObjType>(X),
-      static_cast<ObObjType>(Y)>;
+      static_cast<SqlValueType>(X),
+      static_cast<SqlValueType>(Y)>;
 
   using EvalCmp = ObRelationalTypeFunc<Def::defined_,
-        static_cast<ObObjType>(X), static_cast<ObObjType>(Y)>;
+        static_cast<SqlValueType>(X), static_cast<SqlValueType>(Y)>;
   static void init_array()
   {
     using ContextAdapter = ObDatumCmpContextAdapter<Def>;
@@ -969,14 +895,14 @@ template<int X, int Y>
 struct TypeExprCmpFuncIniter<X, Y, false>: public ExprDummyIniter {};
 
 template<int X, int Y>
-using TypeExprCmpIniter = TypeExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTypeCmp<static_cast<ObObjType>(X),static_cast<ObObjType>(Y)>::defined_>;
+using TypeExprCmpIniter = TypeExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTypeCmp<static_cast<SqlValueType>(X),static_cast<SqlValueType>(Y)>::defined_>;
 
 template<int X, int Y, bool defined = true>
 struct TCExprCmpFuncIniter
 {
   using Def = datum_cmp::ObDatumTCCmp<
-      static_cast<ObObjTypeClass>(X),
-      static_cast<ObObjTypeClass>(Y)>;
+      static_cast<SqlTypeClass>(X),
+      static_cast<SqlTypeClass>(Y)>;
 
   static void init_array()
   {
@@ -998,7 +924,7 @@ template<int X, int Y>
 struct TCExprCmpFuncIniter<X, Y, false>: public ExprDummyIniter{};
 
 template<int X, int Y>
-using TCExprCmpIniter = TCExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTCCmp<static_cast<ObObjTypeClass>(X),static_cast<ObObjTypeClass>(Y)>::defined_>;
+using TCExprCmpIniter = TCExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTCCmp<static_cast<SqlTypeClass>(X),static_cast<SqlTypeClass>(Y)>::defined_>;
 
 template<int X, bool defined =
     datum_cmp::SupportedCollection<static_cast<ObCollationType>(X)>::defined_>

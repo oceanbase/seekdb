@@ -122,7 +122,7 @@ int ObAllVirtualVectorIndexInfo::inner_get_next_row(ObNewRow *&row)
   int ret = OB_SUCCESS;
   row = nullptr;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   info_.reset();
   if (!iter_.is_opened() && OB_FAIL(iter_.open())) {
     SERVER_LOG(WARN, "failed to open iter", K(ret));
@@ -140,48 +140,48 @@ int ObAllVirtualVectorIndexInfo::inner_get_next_row(ObNewRow *&row)
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
     case ROWKEY_VID_TABLE_ID:
-      cells[i].set_int(info_.rowkey_vid_table_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.rowkey_vid_table_id_) : ret);
       break;
     case VID_ROWKEY_TABLE_ID:
-      cells[i].set_int(info_.vid_rowkey_table_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.vid_rowkey_table_id_) : ret);
       break;
     case INC_INDEX_TABLE_ID:
-      cells[i].set_int(info_.inc_index_table_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.inc_index_table_id_) : ret);
       break;
     case VBITMAP_TABLE_ID:
-      cells[i].set_int(info_.vbitmap_table_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.vbitmap_table_id_) : ret);
       break;
     case SNAPSHOT_INDEX_TABLE_ID:
-      cells[i].set_int(info_.snapshot_index_table_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.snapshot_index_table_id_) : ret);
       break;
     case DATA_TABLE_ID:
-      cells[i].set_int(info_.data_table_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.data_table_id_) : ret);
       break;
     case ROWKEY_VID_TABLET_ID:
-      cells[i].set_int(info_.rowkey_vid_tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.rowkey_vid_tablet_id_) : ret);
       break;
     case VID_ROWKEY_TABLET_ID:
-      cells[i].set_int(info_.vid_rowkey_tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.vid_rowkey_tablet_id_) : ret);
       break;
     case INC_INDEX_TABLET_ID:
-      cells[i].set_int(info_.inc_index_tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.inc_index_tablet_id_) : ret);
       break;
     case VBITMAP_TABLET_ID:
-      cells[i].set_int(info_.vbitmap_tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.vbitmap_tablet_id_) : ret);
       break;
     case SNAPSHOT_INDEX_TABLET_ID:
-      cells[i].set_int(info_.snapshot_index_tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.snapshot_index_tablet_id_) : ret);
       break;
     case DATA_TABLET_ID: {
-      cells[i].set_int(info_.data_tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info_.data_tablet_id_) : ret);
       break;
     }
     case STATISTICS:
-      cells[i].set_varchar(info_.statistics_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, info_.statistics_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case SYNC_INFO:
-      cells[i].set_varchar(info_.sync_info_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, info_.sync_info_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     default:

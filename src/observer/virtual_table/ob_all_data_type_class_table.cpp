@@ -41,7 +41,7 @@ int ObAllDataTypeClassTable::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator is NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -55,8 +55,8 @@ int ObAllDataTypeClassTable::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(WARN, "cells count error", K(ret), K(col_count),
                    K(reserved_column_cnt_));
       } else {
-        for (ObObjTypeClass tc = ObNullTC; OB_SUCC(ret) && tc < ObMaxTC;
-            tc = static_cast<ObObjTypeClass>(tc + 1)) {
+        for (SqlTypeClass tc = ObNullTC; OB_SUCC(ret) && tc < ObMaxTC;
+            tc = static_cast<SqlTypeClass>(tc + 1)) {
           if (ObEnumSetInnerTC == tc) {
             //do nothing: enumsetinner is inner tc
           } else {
@@ -65,11 +65,11 @@ int ObAllDataTypeClassTable::inner_get_next_row(common::ObNewRow *&row)
               uint64_t col_id = output_column_ids_.at(k);
               switch (col_id) {
                 case DATA_TYPE_CLASS: {
-                  cells[cell_idx].set_int(tc);
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, tc) : ret);
                   break;
                 }
                 case DATA_TYPE_CLASS_STR: {
-                  cells[cell_idx].set_varchar(ob_obj_tc_str(tc));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sql_type_class_to_string(tc)) : ret);
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                           ObCharset::get_default_charset()));
                   break;

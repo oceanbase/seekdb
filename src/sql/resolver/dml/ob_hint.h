@@ -19,6 +19,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/hash_func/ob_hash_func.h"
 #include "lib/container/ob_se_array.h"
+#include "common/datum/datum_value.h"
 #include "query/optimizer/ob_optimizer_algo_defs.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 
@@ -155,12 +156,12 @@ struct ObOptParamHint
 
   DECLARE_ENUM(OptParamType, opt_param, OPT_PARAM_TYPE_DEF, static);
 
-  static bool is_param_val_valid(const OptParamType param_type, const ObObj &val);
+  static bool is_param_val_valid(const OptParamType param_type, const common::DatumValue &val);
   int merge_opt_param_hint(const ObOptParamHint &other);
-  int add_opt_param_hint(const ObString &param_name, const ObObj &val)
+  int add_opt_param_hint(const ObString &param_name, const common::DatumValue &val)
   { return add_opt_param_hint(get_opt_param_value(param_name), val);  }
-  int add_opt_param_hint(const OptParamType param_type, const ObObj &val);
-  int get_opt_param(const OptParamType param_type, ObObj &val) const;
+  int add_opt_param_hint(const OptParamType param_type, const common::DatumValue &val);
+  int get_opt_param(const OptParamType param_type, common::DatumValue &val) const;
   int has_enable_opt_param(const OptParamType param_type, bool &enabled) const;
   int print_opt_param_hint(PlanText &plan_text) const;
   int get_bool_opt_param(const OptParamType param_type, bool &val, bool &is_exists) const;
@@ -169,7 +170,7 @@ struct ObOptParamHint
   int get_integer_opt_param(const OptParamType param_type, int64_t &val, bool &is_exists) const;
   int get_integer_opt_param(const OptParamType param_type, int64_t &val) const;
   int get_opt_param_runtime_filter_type(int64_t &rf_type) const;
-  int get_hash_rollup_param(ObObj &val, bool &has_opt_param) const;
+  int get_hash_rollup_param(common::DatumValue &val, bool &has_opt_param) const;
   int get_enum_opt_param(const OptParamType param_type, int64_t &val) const;
   int has_opt_param(const OptParamType param_type, bool &has_hint) const;
 
@@ -193,7 +194,7 @@ struct ObOptParamHint
   void reset();
   TO_STRING_KV(K_(param_types), K_(param_vals));
   common::ObSEArray<OptParamType, 1, common::ModulePageAllocator, true> param_types_;
-  common::ObSEArray<ObObj, 1, common::ModulePageAllocator, true> param_vals_;
+  common::ObSEArray<common::DatumValue, 1, common::ModulePageAllocator, true> param_vals_;
 };
 
 struct ObTableInHint

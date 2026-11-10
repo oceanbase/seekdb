@@ -34,13 +34,13 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
-  static int eval_format_pico_time(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_format_pico_time(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int eval_format_pico_time_batch(const ObExpr &expr,
                                   ObEvalCtx &ctx,
                                   const ObBitVector &skip,
                                   const int64_t batch_size);
-  static int eval_format_pico_time_util(const ObExpr &expr, ObDatum &res_datum,
-                                        ObDatum *param1, ObEvalCtx &ctx, int64_t index = 0);
+  static int eval_format_pico_time_util(const ObExpr &expr, Datum &res_datum,
+                                        Datum *param1, ObEvalCtx &ctx, int64_t index = 0);
   static const common::ObLength VALUE_BUF_LEN = 20;  //value's string buffer length
   static const common::ObLength LENGTH_FORMAT_PICO_TIME = 11;
 private:

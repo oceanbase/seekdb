@@ -40,7 +40,7 @@ public:
                                 const override;
   static int eval_map(const ObExpr &expr,
                         ObEvalCtx &ctx,
-                        ObDatum &res);
+                        Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -48,7 +48,7 @@ private:
   static int deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types_stack,
                                  int64_t param_num, uint16_t &key_subid, uint16_t &value_subid);
   static int construct_key_array(ObEvalCtx &ctx, const ObExpr &expr,
-                                 const ObObjType elem_type, ObIArrayType *&full_key_arr,
+                                 const SqlValueType elem_type, ObIArrayType *&full_key_arr,
                                  uint32_t *&idx_arr, uint32_t &idx_count);
 
   DISALLOW_COPY_AND_ASSIGN(ObExprMap);

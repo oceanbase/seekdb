@@ -23,6 +23,95 @@ namespace oceanbase
 namespace common
 {
 
+DatumValue make_inner_table_default_null()
+{
+  return DatumValue();
+}
+
+DatumValue make_inner_table_default_int(SqlValueType type, int64_t value)
+{
+  // Actual generated Int/TinyInt values import inline. Keep the historical
+  // source span stable for a physical Reference kind supplied to this helper.
+  thread_local int64_t payload;
+  ObDatum datum;
+  datum.ptr_ = reinterpret_cast<char *>(&payload);
+  datum.set_int(value);
+  SqlTypeMeta meta;
+  meta.set_type(type);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
+}
+
+DatumValue make_inner_table_default_uint64(uint64_t value)
+{
+  uint64_t payload;
+  ObDatum datum;
+  datum.ptr_ = reinterpret_cast<char *>(&payload);
+  datum.set_uint(value);
+  SqlTypeMeta meta;
+  meta.set_uint64();
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
+}
+
+DatumValue make_inner_table_default_timestamp(int64_t value)
+{
+  int64_t payload;
+  ObDatum datum;
+  datum.ptr_ = reinterpret_cast<char *>(&payload);
+  datum.set_timestamp(value);
+  SqlTypeMeta meta;
+  meta.set_timestamp();
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
+}
+
+DatumValue make_inner_table_default_string(SqlValueType type, const ObString &value,
+                                          ObCollationType collation, bool is_lob)
+{
+  ObDatum datum;
+  datum.set_string(value);
+  SqlTypeMeta meta;
+  meta.set_type(type);
+  if (is_lob) {
+    meta.set_inrow();
+    meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  }
+  if (collation == CS_TYPE_BINARY) { meta.set_collation_type(CS_TYPE_BINARY); }
+  meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
+}
+
+DatumValue make_inner_table_default_now()
+{
+  // The schema setters clone this value synchronously. Keep the stack payload
+  // alive in thread-local storage until both generated defaults are copied.
+  thread_local char payload[DATUM_EXTEND_PAYLOAD_SIZE];
+  ObDatum datum;
+  datum.ptr_ = payload;
+  datum.set_extend(ObActionFlag::OP_DEFAULT_NOW_FLAG, 0);
+  SqlTypeMeta meta;
+  meta.set_ext();
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
+}
+
 int ADD_COLUMN_SCHEMA_FULL(share::schema::ObTableSchema &table_schema,
                            const char *col_name,
                            const uint64_t col_id,
@@ -58,7 +147,7 @@ int ADD_COLUMN_SCHEMA_FULL(share::schema::ObTableSchema &table_schema,
   }
  
   if(OB_SUCC(ret)) {
-    ObObj orig_default_value;
+    DatumValue orig_default_value;
     
     column.set_table_id(table_schema.get_table_id());
     column.set_column_id(col_id);
@@ -148,8 +237,8 @@ int ADD_COLUMN_SCHEMA_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_sch
                                          const common::ObOrderType order,
                                          const bool nullable,
                                          const bool is_autoincrement,
-                                         ObObj &orig_default_value,
-                                         ObObj &cur_default_value,
+                                         DatumValue &orig_default_value,
+                                         DatumValue &cur_default_value,
                                          const bool is_hidden,
                                          const bool is_storing_column)
 {
@@ -257,8 +346,8 @@ int ADD_COLUMN_SCHEMA_TS_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_
                                             const bool nullable,
                                             const bool is_autoincrement,
                                             const bool is_on_update_for_timestamp,
-                                            ObObj &orig_default_value,
-                                            ObObj &cur_default_value,
+                                            DatumValue &orig_default_value,
+                                            DatumValue &cur_default_value,
                                             const bool is_hidden,
                                             const bool is_storing_column)
 {
@@ -378,7 +467,7 @@ int ADD_COLUMN_SCHEMA_TS_FULL(share::schema::ObTableSchema &table_schema,
   }
  
   if(OB_SUCC(ret)) {
-    ObObj orig_default_value;
+    DatumValue orig_default_value;
     
     column.set_table_id(table_schema.get_table_id());
     column.set_column_id(col_id);

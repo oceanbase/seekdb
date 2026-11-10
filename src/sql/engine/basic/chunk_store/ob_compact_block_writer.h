@@ -111,7 +111,7 @@ public:
   virtual int add_row(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
               const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row) override;
 
-  virtual int add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,
+  virtual int add_batch(const common::Datum **datums, const common::ObIArray<ObExpr *> &exprs,
                         const uint16_t selector[], const int64_t size,
                         ObChunkDatumStore::StoredRow **stored_rows, BatchCtx *batch_ctx) override { return OB_NOT_IMPLEMENT; }
 
@@ -145,6 +145,9 @@ private:
   template <typename T>
   int inner_process_datum(const ObDatum &src_datum, const int64_t cur_pos, const ChunkRowMeta &row_meta,
                           CurRowInfo &row_info);
+  template <typename T>
+  int inner_process_datum(const StoredDatumCell &src_datum, const int64_t cur_pos,
+                          const ChunkRowMeta &row_meta, CurRowInfo &row_info);
   template <typename T>
   int inner_build_from_stored_row(const ObChunkDatumStore::StoredRow &sr);
   inline uint8_t get_offset_width(const int64_t data_size) {

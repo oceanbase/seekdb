@@ -60,7 +60,7 @@ public:
   virtual int might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,
-      ObDatum &res)
+      Datum &res)
   { return OB_SUCCESS; }
   virtual int might_contain_batch(
       const ObExpr &expr,

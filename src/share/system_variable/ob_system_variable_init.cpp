@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/system_variable/ob_system_variable_init.h"
 #include "ob_sys_var_meta.h"
-#include "share/object/ob_obj_cast.h"
+#include "share/datum/datum_value_cast.h"
+#include "common/datum/datum_parameter_codec.h"
 using namespace oceanbase::common;
 
 namespace oceanbase
@@ -25,9 +26,11 @@ namespace oceanbase
 namespace share
 {
 static ObSysVarFromJson ObSysVars[ObSysVarMeta::ALL_SYS_VARS_COUNT];
-static ObObj ObSysVarDefaultValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];
+static Datum ObSysVarDefaultValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];
+static SqlTypeMeta ObSysVarDefaultMetas[ObSysVarMeta::ALL_SYS_VARS_COUNT];
 static ObArenaAllocator ObSysVarAllocator(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);
-static ObObj ObSysVarBaseValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];
+static Datum ObSysVarBaseValues[ObSysVarMeta::ALL_SYS_VARS_COUNT];
+static SqlTypeMeta ObSysVarBaseMetas[ObSysVarMeta::ALL_SYS_VARS_COUNT];
 static ObArenaAllocator ObBaseSysVarAllocator(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);
 static int64_t ObSysVarsIdToArrayIdx[ObSysVarMeta::OB_MAX_SYS_VAR_ID];
 // In VarsInit, it is necessary to determine whether the id corresponding to the current maximum SysVars is greater than OB_MAX_SYS_VAR_ID
@@ -9906,7 +9909,7 @@ static int64_t var_amount = 718;
 int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}
 ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}
 ObString ObSysVariables::get_name(int64_t i){ return ObSysVars[i].name_;}
-ObObjType ObSysVariables::get_type(int64_t i){ return ObSysVars[i].data_type_;}
+SqlValueType ObSysVariables::get_type(int64_t i){ return ObSysVars[i].data_type_;}
 ObString ObSysVariables::get_value(int64_t i){ return ObSysVars[i].default_value_;}
 ObString ObSysVariables::get_base_str_value(int64_t i){ return ObSysVars[i].base_value_;}
 ObString ObSysVariables::get_min(int64_t i){ return ObSysVars[i].min_val_;}
@@ -9916,8 +9919,35 @@ int64_t ObSysVariables::get_flags(int64_t i){ return ObSysVars[i].flags_;}
 bool ObSysVariables::need_serialize(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::NEED_SERIALIZE;}
 bool ObSysVariables::is_mysql_only(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::MYSQL_ONLY;}
 ObString ObSysVariables::get_alias(int64_t i){ return ObSysVars[i].alias_;}
-const ObObj &ObSysVariables::get_default_value(int64_t i){ return ObSysVarDefaultValues[i];}
-const ObObj &ObSysVariables::get_base_value(int64_t i){ return ObSysVarBaseValues[i];}
+const Datum &ObSysVariables::get_default_datum(int64_t i){ return ObSysVarDefaultValues[i];}
+const SqlTypeMeta &ObSysVariables::get_default_meta(int64_t i){ return ObSysVarDefaultMetas[i];}
+const Datum &ObSysVariables::get_base_datum(int64_t i){ return ObSysVarBaseValues[i];}
+const SqlTypeMeta &ObSysVariables::get_base_meta(int64_t i){ return ObSysVarBaseMetas[i];}
+
+static int export_global_sysvar_value(const Datum &value, const SqlTypeMeta &meta,
+    DatumValue &out, void *scratch, int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  DatumValue candidate;
+  ObDatum physical;
+  if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
+          value, meta, physical, scratch, capacity))) {
+  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, meta))) {
+  } else {
+    out = candidate;
+  }
+  return ret;
+}
+
+int ObSysVariables::export_default_value(int64_t i, DatumValue &out, void *scratch, int64_t capacity)
+{
+  return export_global_sysvar_value(ObSysVarDefaultValues[i], ObSysVarDefaultMetas[i], out, scratch, capacity);
+}
+
+int ObSysVariables::export_base_value(int64_t i, DatumValue &out, void *scratch, int64_t capacity)
+{
+  return export_global_sysvar_value(ObSysVarBaseValues[i], ObSysVarBaseMetas[i], out, scratch, capacity);
+}
 int64_t ObSysVariables::get_amount(){ return var_amount;}
 ObCollationType ObSysVariables::get_default_sysvar_collation() { return CS_TYPE_UTF8MB4_GENERAL_CI;}
 
@@ -9973,52 +10003,57 @@ int ObSysVariables::init_default_values()
 {
   int ret = OB_SUCCESS;
   int64_t sys_var_count = get_amount();
+  // Cast outputs are transient. Reuse one scratch arena across indices; only
+  // final native reference bytes belong to the two long-lived global owners.
+  ObArenaAllocator calc_owner(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);
   for (int64_t i = 0; OB_SUCC(ret) && i < sys_var_count; ++i) {
+    calc_owner.reuse();
     const ObString &sys_var_val_str = ObSysVariables::get_value(i);
     const ObString &base_sys_var_val_str = ObSysVariables::get_base_str_value(i);
-    const ObObjType sys_var_type = ObSysVariables::get_type(i);
+    const SqlValueType sys_var_type = ObSysVariables::get_type(i);
     if (OB_UNLIKELY(sys_var_type == ObTimestampType)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("need tz_info when cast to timestamp", K(ret), K(sys_var_val_str));
     } else {
-      ObObj in_obj;
-      ObObj out_obj;
-      in_obj.set_varchar(sys_var_val_str);
+      DatumValue in_obj, base_in_obj, out_obj, base_out_obj;
+      in_obj.meta_.set_varchar();
+      in_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+      in_obj.datum_.set_string(sys_var_val_str);
       in_obj.set_collation_type(ObSysVariables::get_default_sysvar_collation());
-      ObObj base_in_obj;
-      ObObj base_out_obj;
-      base_in_obj.set_varchar(base_sys_var_val_str);
+      base_in_obj.meta_.set_varchar();
+      base_in_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+      base_in_obj.datum_.set_string(base_sys_var_val_str);
       base_in_obj.set_collation_type(ObSysVariables::get_default_sysvar_collation());
-      //varchar to others. so, no need to get collation from session
-      ObCastCtx cast_ctx(&ObSysVarAllocator,
-                         NULL,
-                         0,
-                         CM_NONE,
-                         CS_TYPE_INVALID,
-                         NULL);
-      ObCastCtx fixed_cast_ctx(&ObBaseSysVarAllocator,
-                    NULL,
-                    0,
-                    CM_NONE,
-                    CS_TYPE_INVALID,
-                    NULL);
-      if (OB_FAIL(ObObjCaster::to_type(sys_var_type, cast_ctx, in_obj, out_obj))) {
-        ObString sys_var_name = ObSysVariables::get_name(i);
-        LOG_WARN("fail to cast object",
-                 K(ret), "cell", in_obj, "from_type", ob_obj_type_str(in_obj.get_type()),
-                 "to_type", ob_obj_type_str(sys_var_type), K(sys_var_name), K(i));
-      } else if (OB_FAIL(ObObjCaster::to_type(sys_var_type, fixed_cast_ctx, base_in_obj, base_out_obj))) {
-        ObString sys_var_name = ObSysVariables::get_name(i);
-        LOG_WARN("fail to cast object",
-                 K(ret), "cell", base_in_obj, "from_type", ob_obj_type_str(base_in_obj.get_type()),
-                 "to_type", ob_obj_type_str(sys_var_type), K(sys_var_name), K(i));
+      ObCastCtx cast_ctx(&calc_owner, NULL, 0, CM_NONE, CS_TYPE_INVALID, NULL);
+      ObCastCtx fixed_cast_ctx(&calc_owner, NULL, 0, CM_NONE, CS_TYPE_INVALID, NULL);
+      if (OB_FAIL(DatumValueCaster::to_type(sys_var_type, cast_ctx, in_obj,
+                                           calc_owner, out_obj))) {
+        const ObString sys_var_name = ObSysVariables::get_name(i);
+        LOG_WARN("fail to cast system variable default", K(ret), K(in_obj), K(sys_var_type), K(sys_var_name), K(i));
+      } else if (OB_FAIL(DatumValueCaster::to_type(sys_var_type, fixed_cast_ctx, base_in_obj,
+                                                  calc_owner, base_out_obj))) {
+        const ObString sys_var_name = ObSysVariables::get_name(i);
+        LOG_WARN("fail to cast system variable base", K(ret), K(base_in_obj), K(sys_var_type), K(sys_var_name), K(i));
       } else {
         if (ob_is_string_type(out_obj.get_type())) {
           out_obj.set_collation_level(CS_LEVEL_SYSCONST);
           base_out_obj.set_collation_level(CS_LEVEL_SYSCONST);
         }
-        ObSysVarDefaultValues[i] = out_obj;
-        ObSysVarBaseValues[i] = base_out_obj;
+        Datum candidate, base_candidate;
+        if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
+                out_obj.datum_, out_obj.meta_, ObSysVarAllocator, candidate))) {
+          LOG_WARN("fail to own system variable default", K(ret), K(i));
+        } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
+                base_out_obj.datum_, base_out_obj.meta_, ObBaseSysVarAllocator, base_candidate))) {
+          LOG_WARN("fail to own system variable base", K(ret), K(i));
+        } else {
+          // Publish this index only after both casts and ownership operations.
+          // Earlier successful indices retain the original prefix semantics.
+          ObSysVarDefaultValues[i] = candidate;
+          ObSysVarDefaultMetas[i] = out_obj.meta_;
+          ObSysVarBaseValues[i] = base_candidate;
+          ObSysVarBaseMetas[i] = base_out_obj.meta_;
+        }
       }
     }
   }

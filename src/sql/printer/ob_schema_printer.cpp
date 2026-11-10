@@ -234,9 +234,11 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
         if (OB_SUCC(ret) && !col->is_generated_column()) {
           //if column is not permit null and default value does not specify , don't  display DEFAULT NULL
           if (OB_SUCC(ret)) {
-            if (!(ObNullType == col->get_cur_default_value().get_type() && !col->is_nullable())
+            if (!(ObNullType == col->get_cur_default_meta().get_type() && !col->is_nullable())
                 && !col->is_autoincrement()) {
-              if (IS_DEFAULT_NOW_OBJ(col->get_cur_default_value())) {
+              if (ObExtendType == col->get_cur_default_meta().get_type()
+                  && !col->get_cur_default_meta().is_ext_sql_array()
+                  && ObActionFlag::OP_DEFAULT_NOW_FLAG == col->get_cur_default_datum().get_ext()) {
                 int16_t scale = col->get_data_scale();
                 if (0 == scale) {
                   if (OB_FAIL(databuff_printf(buf, buf_len, pos, " DEFAULT %s", N_UPPERCASE_CUR_TIMESTAMP))) {
@@ -246,15 +248,20 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
                   }
                 }
               } else if (col->is_default_expr_v2_column()) {
-                ObString default_value = col->get_cur_default_value().get_string();
+                ObString default_value = col->get_cur_default_datum().get_string();
                 if (OB_FAIL(databuff_printf(buf, buf_len, pos, " DEFAULT (%.*s)", default_value.length(), default_value.ptr()))) {
                 }
               } else {
                 if (OB_FAIL(databuff_printf(buf, buf_len, pos, " DEFAULT "))) {
                 } else {
-                  ObObj default_value = col->get_cur_default_value();
-                  default_value.set_scale(col->get_data_scale());
-                  if (ob_is_enum_or_set_type(default_value.get_type())) {
+                  DatumValue default_value;
+                  alignas(8) char default_scratch[64];
+                  if (OB_FAIL(col->export_cur_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+                  } else {
+                    default_value.set_scale(col->get_data_scale());
+                  }
+                  if (OB_FAIL(ret)) {
+                  } else if (ob_is_enum_or_set_type(default_value.get_type())) {
                     if (OB_FAIL(default_value.print_varchar_literal(col->get_extended_type_info(), buf, buf_len, pos))) {
                     }
                   } else if (ob_is_string_tc(default_value.get_type())) {
@@ -339,6 +346,8 @@ int ObSchemaPrinter::print_generated_column_definition(const ObColumnSchemaV2 &g
                                                        const ObTableSchema &table_schema,
                                                        int64_t &pos) const
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObString expr_str;
   ObArenaAllocator allocator("SchemaPrinter");
@@ -350,7 +359,8 @@ int ObSchemaPrinter::print_generated_column_definition(const ObColumnSchemaV2 &g
                (ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
     LinkExecCtxGuard link_guard(session, exec_ctx);
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, " GENERATED ALWAYS AS ("))) {
-    } else if (OB_FAIL(gen_col.get_cur_default_value().get_string(expr_str))) {
+    } else if ((OB_FAIL(gen_col.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+        || OB_FAIL(schema_default_value.get_string(expr_str)))) {
     } else if (OB_FAIL(session.init(0 /*default session id*/, &allocator))) {
     } else if (OB_FAIL(session.load_default_sys_variable(false, false))) {
     } else if (FALSE_IT(exec_ctx.set_physical_plan_ctx(&phy_plan_ctx))) {
@@ -728,9 +738,12 @@ int ObSchemaPrinter::print_multivalue_index_column(const ObTableSchema &table_sc
                                                    int64_t buf_len,
                                                    int64_t &pos) const
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObString expr_def;
-  if (OB_FAIL(column.get_cur_default_value().get_string(expr_def))) {
+  if ((OB_FAIL(column.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+      || OB_FAIL(schema_default_value.get_string(expr_def)))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                      is_last ? "(%.*s))" : "(%.*s), ",
                                      expr_def.length(),
@@ -746,7 +759,7 @@ int ObSchemaPrinter::print_spatial_index_column(const ObTableSchema &table_schem
                                                 int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-  ObObjType type = column.get_meta_type().get_type();
+  SqlValueType type = column.get_meta_type().get_type();
 
   if (ObVarcharType != type && ObUInt64Type != type) {
     STORAGE_LOG(WARN, "Invalid type for spatial index column", K(ret), K(type));
@@ -776,9 +789,9 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
                                                int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-  const ObString &expr_str = column.get_cur_default_value().is_null() ?
-      column.get_orig_default_value().get_string() :
-      column.get_cur_default_value().get_string();
+  const ObString &expr_str = column.get_cur_default_datum().is_null() ?
+      column.get_orig_default_datum().get_string() :
+      column.get_cur_default_datum().get_string();
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
   sql::ObRawExprFactory expr_factory(allocator);
   sql::ObRawExpr *expr = NULL;
@@ -818,7 +831,7 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
                   column_name,
                   new_col_name))) {
       }else {
-        const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value().get_int();
+        const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value_datum().get_int();
         if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
         } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                            is_last ? "(%ld))" : "(%ld), ", const_value))) {
@@ -836,9 +849,12 @@ int ObSchemaPrinter::print_ordinary_index_column_expr(const ObColumnSchemaV2 &co
                                                       int64_t buf_len,
                                                       int64_t &pos) const
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObString expr_def;
-  if (OB_FAIL(column.get_cur_default_value().get_string(expr_def))) {
+  if ((OB_FAIL(column.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+      || OB_FAIL(schema_default_value.get_string(expr_def)))) {
   } else if (expr_def.length() >= 2 &&
              (expr_def[0] != '(' || expr_def[expr_def.length() - 1] != ')')) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
@@ -1663,17 +1679,17 @@ int ObSchemaPrinter::print_index_definition_columns(
                             buf, buf_len, pos, is_first))) {
               }
             } else if (data_col->is_func_idx_column()) {
-              const ObString &expr_str = data_col->get_cur_default_value().is_null() ?
-                data_col->get_orig_default_value().get_string() :
-                data_col->get_cur_default_value().get_string();
+              const ObString &expr_str = data_col->get_cur_default_datum().is_null() ?
+                data_col->get_orig_default_datum().get_string() :
+                data_col->get_cur_default_datum().get_string();
               if(OB_FAIL(print_func_index_columns_definition(
                       expr_str, buf, buf_len, pos))) {
               }
             } else {
               // prefix index
-              const ObString &expr_str = data_col->get_cur_default_value().is_null() ?
-                data_col->get_orig_default_value().get_string() :
-                data_col->get_cur_default_value().get_string();
+              const ObString &expr_str = data_col->get_cur_default_datum().is_null() ?
+                data_col->get_orig_default_datum().get_string() :
+                data_col->get_cur_default_datum().get_string();
               ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
               sql::ObRawExprFactory expr_factory(allocator);
               sql::ObRawExpr *expr = NULL;
@@ -1712,7 +1728,7 @@ int ObSchemaPrinter::print_index_definition_columns(
                     ret = OB_ERR_UNEXPECTED;
                     OB_LOG(WARN, "expr type is not int", K(ret));
                   } else {
-                    const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value().get_int();
+                    const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value_datum().get_int();
                     if (OB_FAIL(print_identifier(buf, buf_len, pos, column_name))) {
                     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "(%ld)", const_value))) {
                     }

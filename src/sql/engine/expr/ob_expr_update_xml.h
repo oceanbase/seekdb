@@ -47,7 +47,7 @@ enum XmlUpdateNodeType
 
 struct ObXmlUpdateNodeInfo
 {
-  ObObjType update_type;
+  SqlValueType update_type;
   ObString update_str;
   ObXmlNode *update_node;
 };
@@ -64,7 +64,7 @@ public:
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
   
-  static int eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, 
                       const ObRawExpr &raw_expr, 
                       ObExpr &rt_expr) 
@@ -106,7 +106,7 @@ private:
   static int update_pi_node(ObMulModeMemCtx* xml_mem_ctx, ObXmlNode *xml_node, const ObExpr *expr, ObEvalCtx &ctx, ObXmlUpdateNodeInfo *&update_info);
   static int pack_long_text_res(const ObExpr &expr, 
                                 ObEvalCtx &ctx, 
-                                ObDatum &res, 
+                                Datum &res,
                                 ObIAllocator &allocator,
                                 ObString input_res);
 

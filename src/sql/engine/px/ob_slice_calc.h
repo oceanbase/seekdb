@@ -53,7 +53,7 @@ public:
       K_(expr_idx), K_(cmp_type));
 
   int64_t expr_idx_;
-  common::ObObjType cmp_type_;
+  common::SqlValueType cmp_type_;
 };
 
 class ObSliceIdxCalc
@@ -114,7 +114,7 @@ public:
   // Get the target partition corresponding to the row passed in the previous call to get_slice_indexes
   // This interface is currently only used for ObRepartSliceIdxCalc and ObAffinitizedRepartSliceIdxCalc
   // The calculated tablet_id is used to tell the target operator which partition the current row belongs to
-  virtual int get_previous_row_tablet_id(ObObj &tablet_id);
+  virtual int get_previous_row_tablet_id(int64_t &tablet_id);
 
   // support vectorized slice indexes calculation.
   bool support_vectorized_calc() const { return support_vectorized_calc_; }
@@ -243,7 +243,7 @@ public:
   int get_tablet_id(ObEvalCtx &eval_ctx, int64_t &tablet_id, ObBitVector *skip = NULL);
   int get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
                                 const int64_t batch_size, int64_t *&tablet_ids);
-  virtual int get_previous_row_tablet_id(ObObj &tablet_id) override;
+  virtual int get_previous_row_tablet_id(int64_t &tablet_id) override;
 
   int init_partition_cache_map();
 
@@ -640,7 +640,8 @@ public:
         dist_exprs_(dist_exprs),
         sort_cmp_funs_(sort_cmp_funs),
         sort_collations_(sort_collations),
-        ddl_slice_id_expr_(ddl_slice_id_expr)
+        ddl_slice_id_expr_(ddl_slice_id_expr),
+        ranges_bound_(false)
   {
     support_vectorized_calc_ = true;
   }
@@ -650,12 +651,15 @@ public:
   int get_slice_idx_batch_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                     ObBitVector &skip, const int64_t batch_size,
                     int64_t *&indexes);
+  int prepare_bound_ranges();
   int64 task_cnt_;
   const ObPxTabletRange *range_;
   const ObIArray<ObExpr*> *dist_exprs_;
   const ObSortFuncs &sort_cmp_funs_;
   const ObSortCollations &sort_collations_;
   ObExpr *ddl_slice_id_expr_;
+  ObPxTabletRange::RangeCut bound_ranges_;
+  bool ranges_bound_;
 };
 
 class ObHashSliceIdCalc : public ObSliceIdxCalc
@@ -704,7 +708,7 @@ public:
                      ObBitVector *skip = NULL);
   int get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                               SliceIdxArray &slice_idx_array, ObBitVector *skip = NULL);
-  virtual void set_calc_hash_keys(int64_t n_keys) { n_keys_ = n_keys; }
+  virtual void set_calc_hash_keys(int64_t n_keys) { n_keys_ = n_keys; native_hash_funcs_.reuse(); }
   int get_slice_idx_batch_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                         ObBitVector &skip, const int64_t batch_size,
                         int64_t *&indexes);
@@ -740,6 +744,9 @@ public:
   ObBitVector *null_bitmap_;
   ObIAllocator *malloc_alloc_;
   bool fast_calc_hash_slice_;
+  int prepare_native_hash_functions();
+  common::ObSEArray<common::DatumHashOp, 4> native_hash_funcs_;
+
 };
 
 class ObHybridHashSliceIdCalcBase

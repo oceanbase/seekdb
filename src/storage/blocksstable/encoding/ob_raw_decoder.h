@@ -314,7 +314,7 @@ private:
 
 
 private:
-  ObObjTypeStoreClass store_class_;
+  SqlValueTypeStoreClass store_class_;
   uint64_t integer_mask_;
   const char *meta_data_;
 };
@@ -447,8 +447,8 @@ OB_INLINE int ObRawDecoder::init(
     ret = common::OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else {
-    const ObObjType store_type = column_header.get_store_obj_type();
-    const common::ObObjTypeClass type_class = ob_obj_type_class(store_type);
+    const SqlValueType store_type = column_header.get_store_obj_type();
+    const common::SqlTypeClass type_class = sql_type_class(store_type);
     store_class_ = get_store_class_map()[type_class];
     if (common::ObIntTC == type_class) {
       int64_t type_store_size = get_type_size_map()[store_type];

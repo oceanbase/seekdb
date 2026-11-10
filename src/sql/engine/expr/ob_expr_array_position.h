@@ -35,12 +35,12 @@ public:
   virtual int calc_result_type2(ObExprResType &type, ObExprResType &type1, ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const override;
 
-  static int eval_array_position(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_position(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_position_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                        const int64_t batch_size);
 
   static int array_position(const ObExpr &expr, ObIAllocator &alloc, ObEvalCtx &ctx,
-                            ObIArrayType *src_arr, ObDatum *val_datum, int &idx);
+                            ObIArrayType *src_arr, Datum *val_datum, int &idx);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 

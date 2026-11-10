@@ -67,7 +67,7 @@ int ObExprJsonMergePatch::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonMergePatch::eval_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonMergePatch::eval_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObJsonExprHelper::eval_json_merge(expr, ctx, res, true);
 }
@@ -80,7 +80,7 @@ int ObExprJsonMergePatch::eval_json_merge_patch(const ObExpr &expr, ObEvalCtx &c
   } \
 }
 
-int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -94,9 +94,9 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
   // eval option original int64 type value
   int64_t opt_array[OPT_MAX_ID] = {0};
   for (size_t i = 2; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
-    ObDatum *opt_datum = NULL;
+    Datum *opt_datum = NULL;
     ObExpr *opt_expr = expr.args_[i];
-    ObObjType val_type = opt_expr->datum_meta_.type_;
+    SqlValueType val_type = opt_expr->datum_meta_.type_;
     ObCollationType cs_type = opt_expr->datum_meta_.cs_type_;
     if (OB_FAIL(temp_allocator.eval_arg(opt_expr, ctx, opt_datum))) {
     } else if (val_type == ObNullType || opt_datum->is_null()) {
@@ -115,7 +115,7 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
   const int64_t& return_type = opt_array[OPT_RES_TYPE_ID];
 
   // some constraint check
-  ObObjType dst_type;
+  SqlValueType dst_type;
   int32_t dst_len;
   if (OB_FAIL(ret)) {
   } else if (return_type == 0) {

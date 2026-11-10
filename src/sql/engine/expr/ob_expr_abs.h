@@ -25,7 +25,6 @@ namespace sql
 {
 class ObExprAbs : public ObExprOperator
 {
-  typedef int (*abs_func)(common::ObObj &res, const common::ObObj &param, common::ObExprCtx &expr_ctx);
 public:
   explicit  ObExprAbs(common::ObIAllocator &alloc);
   ~ObExprAbs() {};
@@ -53,20 +52,10 @@ private:
   //null
   //hexstring
   //year
-  //others(datetime, time, varchar,etc)
-  //bit
-  //bit
-  //json
-  static int abs_json(common::ObObj &res,
-                      const common::ObObj &param,
-                      common::ObExprCtx &expr_ctx);
-
-  static common::ObObjType calc_param_type(const common::ObObjType orig_param_type);
+  static common::SqlValueType calc_param_type(const common::SqlValueType orig_param_type);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprAbs);
-private:
-  abs_func func_;
 };
 
 } // namespace sql

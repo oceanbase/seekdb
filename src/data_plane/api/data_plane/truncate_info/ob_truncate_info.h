@@ -17,7 +17,7 @@
 #define OB_STORAGE_TRUNCATE_INFO_H_
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/ob_print_utils.h"
-#include "common/rowkey/ob_rowkey.h"
+#include "common/datum/partition_bound_row.h"
 #include "share/schema/ob_list_row_values.h" // ObListRowValues
 namespace oceanbase
 {
@@ -89,15 +89,15 @@ public:
   }
   bool is_valid() const { return 0 == cnt_ || (cnt_ > 0 && nullptr != values_); }
   int64_t count() const { return cnt_; }
-  const ObNewRow *get_values() const { return values_; }
-  const common::ObNewRow &at(const int64_t idx) const
+  const PartitionBoundRow *get_values() const { return values_; }
+  const common::PartitionBoundRow &at(const int64_t idx) const
   {
     OB_ASSERT(idx >= 0 && idx < cnt_ && nullptr != values_);
     return values_[idx];
   }
   int init(
     ObIAllocator &allocator,
-    const common::ObIArray<common::ObNewRow> &row_values);
+    const common::ObIArray<common::PartitionBoundRow> &row_values);
   int assign(ObIAllocator &allocator, const ObStorageListRowValues &other);
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize(common::ObIAllocator &allocator, const char *buf, const int64_t data_len, int64_t &pos);
@@ -118,7 +118,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
 private:
   int64_t cnt_;
-  ObNewRow *values_; // row array & new rows memory is allocated together
+  PartitionBoundRow *values_; // row array & new rows memory is allocated together
   DISALLOW_COPY_AND_ASSIGN(ObStorageListRowValues);
 };
 
@@ -238,8 +238,8 @@ struct ObTruncatePartition
   int init_range_part(
     ObIAllocator &allocator,
     const TruncatePartType part_type,
-    const common::ObRowkey &low_bound_val,
-    const common::ObRowkey &high_bound_val);
+    const common::PartitionBoundRow &low_bound_val,
+    const common::PartitionBoundRow &high_bound_val);
   int init_list_part(
     ObIAllocator &allocator,
     const TruncatePartType part_type,
@@ -267,8 +267,8 @@ struct ObTruncatePartition
   TruncatePartType part_type_;
   TruncatePartOp part_op_;
   ObPartKeyIdxArray part_key_idxs_;
-  common::ObRowkey low_bound_val_;
-  common::ObRowkey high_bound_val_;
+  common::PartitionBoundRow low_bound_val_;
+  common::PartitionBoundRow high_bound_val_;
   ObStorageListRowValues list_row_values_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTruncatePartition);
@@ -348,7 +348,7 @@ int ObTruncatePartition::init_truncate_part(
     if (OB_FAIL(init_range_part(
           allocator,
           part_type,
-          nullptr == prev_part ? ObRowkey::MIN_ROWKEY : prev_part->get_high_bound_val(),
+          nullptr == prev_part ? PartitionBoundRow::MIN_ROW : prev_part->get_high_bound_val(),
           found_part.get_high_bound_val()))) {
     } else {
       STORAGE_LOG(INFO, "success to init range part", K(ret), KPC(this), KPC(prev_part));

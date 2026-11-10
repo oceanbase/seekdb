@@ -33,14 +33,14 @@ public:
   explicit ObExprJsonUnquote(common::ObIAllocator &alloc);
   virtual ~ObExprJsonUnquote();
 
-  static int calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, bool has_lob_header,
+  static int calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta, bool has_lob_header,
                   MultimodeAlloctor *allocator, ObJsonBuffer &j_buf, bool &is_null);
 
   virtual int calc_result_type1(ObExprResType &type,
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx) const override;
 
-  static int eval_json_unquote(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_json_unquote(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

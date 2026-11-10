@@ -69,7 +69,7 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
       const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
               ? type_ctx.get_session()->get_actual_length_semantics()
               : common::LS_BYTE);
-      ObObjMeta real_types[2] = {text, pattern};
+      SqlTypeMeta real_types[2] = {text, pattern};
       if (text.is_blob()) {
         type.set_blob();
       } else if (pattern.is_blob()) {
@@ -182,15 +182,15 @@ int ObExprRegexpReplace::is_valid_for_generated_column(const ObRawExpr*expr,
 }
 
 template<typename RegExpCtx>
-int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = NULL;
-  ObDatum *pattern = NULL;
-  ObDatum *to = NULL;
-  ObDatum *position = NULL;
-  ObDatum *occurrence = NULL;
-  ObDatum *match_type = NULL;
+  Datum *text = NULL;
+  Datum *pattern = NULL;
+  Datum *to = NULL;
+  Datum *position = NULL;
+  Datum *occurrence = NULL;
+  Datum *match_type = NULL;
   ObString res_replace;
   bool is_no_pattern_to_replace = false;
   bool need_convert = false;
@@ -208,7 +208,8 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     } else {
     }
   } else if (expr.args_[0]->datum_meta_.is_clob()
-             && ob_is_empty_lob(expr.args_[0]->datum_meta_.type_, *text, expr.args_[0]->obj_meta_.has_lob_header())) {
+             && is_lob_storage(expr.args_[0]->datum_meta_.type_)
+             && ObLobLocatorV2(text->get_string(), expr.args_[0]->obj_meta_.has_lob_header()).is_empty_lob()) {
     expr_datum.set_datum(*text);
   } else if (!pattern->is_null() && pattern->get_string().empty()) {
     if (NULL == match_type || !match_type->is_null()) {
@@ -223,9 +224,9 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
                        (occurrence != NULL && occurrence->is_null()) ||
                        (match_type != NULL && match_type->is_null());
     if (OB_FAIL(ObExprUtil::get_int_param_val(
-          position, expr.arg_cnt_ > 3 && expr.args_[3]->obj_meta_.is_decimal_int(), pos))
+          position, (expr.arg_cnt_ > 3 ? expr.args_[3] : nullptr), pos))
         || OB_FAIL(ObExprUtil::get_int_param_val(
-          occurrence, expr.arg_cnt_ > 4 && expr.args_[4]->obj_meta_.is_decimal_int(), occur))) {
+          occurrence, (expr.arg_cnt_ > 4 ? expr.args_[4] : nullptr), occur))) {
     } else if (!null_result && (pos <= 0 || occur < 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "use position or occurrence in regexp_replace");
@@ -338,7 +339,7 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
       } else {
         expr_datum.set_string(out.ptr(), out.length());
       }
-      LOG_DEBUG("replace result", K(ObString(expr_datum.len_, expr_datum.ptr_)));
+      LOG_DEBUG("replace result", K(ObString(expr_datum.length(), expr_datum.get_string().ptr())));
     } else { // output is text type
       ObTextStringDatumResult text_res(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
       if (OB_FAIL(ObExprRegexContext::convert_from_regexp_utf16(tmp_alloc,
@@ -355,7 +356,7 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   return ret;
 }
 
-int ObExprRegexpReplace::eval_regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexpReplace::eval_regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return regexp_replace<ObExprRegexContext>(expr, ctx, expr_datum);
 }

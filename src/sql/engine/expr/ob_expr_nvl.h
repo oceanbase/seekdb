@@ -32,14 +32,14 @@ public:
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx);
   static int calc_nvl_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                           ObDatum &res_datum);
+                           Datum &res_datum);
   static int calc_nvl_expr_batch(const ObExpr &expr,
                                   ObEvalCtx &ctx,
                                   const ObBitVector &skip,
                                   const int64_t batch_size);
   // for nvl2()
   static int calc_nvl_expr2(const ObExpr &expr, ObEvalCtx &ctx,
-                            ObDatum &res_datum);
+                            Datum &res_datum);
 };
 
 class ObExprNvl: public ObFuncExprOperator

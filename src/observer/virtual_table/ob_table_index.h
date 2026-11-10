@@ -25,7 +25,7 @@ namespace oceanbase
 namespace common
 {
 class ObString;
-class ObObj;
+struct DatumValue;
 }
 namespace share
 {
@@ -50,17 +50,17 @@ private:
 
   int add_table_indexes(const share::schema::ObTableSchema &table_schema,
                         const common::ObString &database_name,
-                        common::ObObj *cells,
+                        common::DatumValue *cells,
                         int64_t col_count,
                         bool &is_end);
   int add_database_indexes(const share::schema::ObDatabaseSchema &database_schema,
-                           common::ObObj *cells,
+                           common::DatumValue *cells,
                            int64_t col_count,
                            bool &is_end);
 
   int add_rowkey_indexes(const share::schema::ObTableSchema &table_schema,
                          const common::ObString &database_name,
-                         common::ObObj *cells,
+                         common::DatumValue *cells,
                          int64_t col_count,
                          bool &is_end);
   int get_rowkey_index_column(const ObTableSchema &table_schema,
@@ -69,7 +69,7 @@ private:
                               bool &is_end);
   int add_normal_indexes(const share::schema::ObTableSchema &table_schema,
                          const common::ObString &database_name,
-                         common::ObObj *cells,
+                         common::DatumValue *cells,
                          int64_t col_count,
                          bool &is_end);
   int get_normal_index_column(const ObTableSchema &table_schema,
@@ -80,19 +80,19 @@ private:
   int add_normal_index_column(const common::ObString &database_name,
                               const share::schema::ObTableSchema &table_schema,
                               const share::schema::ObTableSchema *index_schema,
-                              common::ObObj *cells,
+                              common::DatumValue *cells,
                               int64_t col_count,
                               bool &is_end);
   int add_fulltext_index_column(const common::ObString &database_name,
                                 const share::schema::ObTableSchema &table_schema,
                                 const share::schema::ObTableSchema *index_schema,
-                                common::ObObj *cells,
+                                common::DatumValue *cells,
                                 int64_t col_count,
                                 const uint64_t column_id);
   int add_vec_index_column(const common::ObString &database_name,
                            const share::schema::ObTableSchema &table_schema,
                            const share::schema::ObTableSchema *index_schema,
-                           common::ObObj *cells,
+                           common::DatumValue *cells,
                            int64_t col_count,
                            const uint64_t column_id);
   int get_show_column_name(const share::schema::ObTableSchema &table_schema,

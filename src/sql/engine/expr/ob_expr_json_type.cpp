@@ -69,7 +69,7 @@ static constexpr const char *json_type_string_map[] = {
 
    @return an index into json_type_string_map
 */
-uint32_t ObExprJsonType::opaque_index(ObObjType field_type)
+uint32_t ObExprJsonType::opaque_index(SqlValueType field_type)
 {
   uint32_t idx = 0;
 
@@ -122,11 +122,11 @@ int ObExprJsonType::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, bool has_lob_header,
+int ObExprJsonType::calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta, bool has_lob_header,
                          ObIAllocator *allocator, uint32_t &type_idx, bool &is_null)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
 
   if (data.is_null()) {
@@ -186,10 +186,10 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
 }                      
 
 // for new sql engine
-int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObExpr *arg = expr.args_[0];
 
   if (OB_FAIL(arg->eval(ctx, datum))) {

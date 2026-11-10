@@ -35,7 +35,7 @@ template<class Op>
 int ObExpVisitor::add_row(const Op &cur_op)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   const int64_t col_count = output_column_ids_.count();
   if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -46,7 +46,7 @@ int ObExpVisitor::add_row(const Op &cur_op)
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
       case ObPlanCachePlanExplain::PLAN_ID_COL: {
-        cells[i].set_int(plan_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, plan_id_) : ret);
         break;
       }
       case ObPlanCachePlanExplain::OP_NAME_COL: {
@@ -65,7 +65,7 @@ int ObExpVisitor::add_row(const Op &cur_op)
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "fail to gen operator name");
           } else {
-            cells[i].set_varchar(buf);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, buf) : ret);
             cells[i].set_collation_type(ObCharset::get_default_collation(
                                         ObCharset::get_default_charset()));
           }
@@ -76,36 +76,36 @@ int ObExpVisitor::add_row(const Op &cur_op)
         ObString tbl_name;
         ret = get_table_name(cur_op, tbl_name);
         if (OB_SUCC(ret)) {
-          cells[i].set_varchar(tbl_name);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, tbl_name) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(
                                       ObCharset::get_default_charset()));
         }
         break;
       }
       case ObPlanCachePlanExplain::ROWS_COL: {
-        cells[i].set_int(cur_op.get_rows());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_op.get_rows()) : ret);
         break;
       }
       case ObPlanCachePlanExplain::COST_COL: {
-        cells[i].set_int(cur_op.get_cost());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_op.get_cost()) : ret);
         break;
       }
       case ObPlanCachePlanExplain::PROPERTY_COL: {
         ObString property;
         ret = get_property(cur_op, property);
         if (OB_SUCC(ret)) {
-          cells[i].set_varchar(property);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, property) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(
                                       ObCharset::get_default_charset()));
         }
         break;
       }
       case ObPlanCachePlanExplain::PLAN_DEPTH_COL: {
-        cells[i].set_int(cur_op.get_plan_depth());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_op.get_plan_depth()) : ret);
         break;
       }
       case ObPlanCachePlanExplain::PLAN_LINE_ID_COL: {
-        cells[i].set_int(cur_op.get_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_op.get_id()) : ret);
         break;
       }
       default: {
@@ -315,16 +315,16 @@ int ObPlanCachePlanExplain::set_plan_id_filter(const common::ObIArray<common::Ob
   // In single-node mode, rowkey only has plan_id (index 0)
   if (ranges.count() == 1 && ranges.at(0).is_single_rowkey()) {
     ObRowkey start_key = ranges.at(0).start_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
     scan_all_plan_ = false;
     if (OB_ISNULL(start_key_obj_ptr)
-        || start_key.get_obj_cnt() < 1) {
+        || start_key.get_value_count() < 1) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN,
                  "fail to init plan visitor",
                  K(ret),
                  K(start_key_obj_ptr),
-                 "count", start_key.get_obj_cnt());
+                 "count", start_key.get_value_count());
     } else {
       
       plan_id_ = start_key_obj_ptr[0].get_int();  // plan_id is at index 0

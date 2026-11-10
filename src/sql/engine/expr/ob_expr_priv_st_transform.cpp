@@ -40,7 +40,7 @@ int ObExprPrivSTTransform::calc_result_typeN(ObExprResType& type,
   UNUSED(type_ctx); 
   int ret = OB_SUCCESS;
 
-  const ObObjType &type1 = types_stack[0].get_type();
+  const SqlValueType &type1 = types_stack[0].get_type();
   if (!ob_is_string_type(type1) &&
       !ob_is_geometry(type1) &&
       !ob_is_null(type1)) {
@@ -70,11 +70,11 @@ int ObExprPrivSTTransform::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum = NULL;
-  ObDatum *datum2 = NULL;
+  Datum *gis_datum = NULL;
+  Datum *datum2 = NULL;
   ObGeometry *src_geo = NULL;
   ObGeometry *dest_geo = NULL;
   common::ObSrsCacheGuard srs_guard;
@@ -156,7 +156,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
       }
 
       if (OB_SUCC(ret) && (param_num == 3)) {
-        ObDatum *datum3 = NULL;
+        Datum *datum3 = NULL;
         src_proj4_param = datum2->get_string();
         src_srs_item = NULL;
         if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *datum2,

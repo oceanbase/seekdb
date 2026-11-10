@@ -56,53 +56,53 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case TABLET_ID:
-          cur_row_.cells_[i].set_int(node_iter_->tablet_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->tablet_id_) : ret);
           break;
         case ROWKEY:
           {
             snprintf(rowkey_, sizeof(rowkey_), "%s", node_iter_->key_);
-            cur_row_.cells_[i].set_varchar(rowkey_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, rowkey_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
         case ADDR:
-          cur_row_.cells_[i].set_uint64((uint64_t)node_iter_->addr_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, (uint64_t)node_iter_->addr_) : ret);
           break;
         case NEED_WAIT:
-          cur_row_.cells_[i].set_bool(node_iter_->need_wait_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cur_row_.cells_, cur_row_.count_, i, node_iter_->need_wait_) : ret);
           break;
         case RECV_TS:
-          cur_row_.cells_[i].set_int(node_iter_->recv_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->recv_ts_) : ret);
           break;
         case LOCK_TS:
-          cur_row_.cells_[i].set_int(node_iter_->lock_ts_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->lock_ts_) : ret);
           break;
         case ABS_TIMEOUT:
-          cur_row_.cells_[i].set_int(node_iter_->abs_timeout_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->abs_timeout_) : ret);
           break;
         case TRY_LOCK_TIMES:
-          cur_row_.cells_[i].set_int(node_iter_->try_lock_times_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->try_lock_times_) : ret);
           break;
         case TIME_AFTER_RECV:
           {
             int64_t cur_ts = ObTimeUtility::current_time();
-            cur_row_.cells_[i].set_int(cur_ts - node_iter_->recv_ts_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, cur_ts - node_iter_->recv_ts_) : ret);
             break;
           }
         case SESSION_ID:
           {
-            cur_row_.cells_[i].set_int(node_iter_->sessid_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->sessid_) : ret);
             break;
           }
         case BLOCK_SESSION_ID:
-          cur_row_.cells_[i].set_int(node_iter_->block_sessid_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->block_sessid_) : ret);
           break;
         case TYPE:
-          cur_row_.cells_[i].set_int(type);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, type) : ret);
           break;
         case LMODE: {
           if (type == 1 || type == 2) {
-            cur_row_.cells_[i].set_varchar("X");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "X") : ret);
           } else if (type == 3) {
             char lock_mode_tmp[MAX_LOCK_MODE_BUF_LENGTH];
             if (OB_FAIL(lock_mode_to_string(node_iter_->lock_mode_,
@@ -110,7 +110,7 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
                                             sizeof(lock_mode_tmp)))) {
             } else {
               snprintf(lock_mode_, sizeof(lock_mode_), "%s", lock_mode_tmp);
-              cur_row_.cells_[i].set_varchar(lock_mode_);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, lock_mode_) : ret);
             }
           }
           if (OB_SUCC(ret)) {
@@ -123,13 +123,13 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case LAST_COMPACT_CNT:
-          cur_row_.cells_[i].set_int(node_iter_->last_compact_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->last_compact_cnt_) : ret);
           break;
         case TOTAL_UPDATE_CNT:
-          cur_row_.cells_[i].set_int(node_iter_->total_update_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->total_update_cnt_) : ret);
           break;
         case TRANS_ID:
-          cur_row_.cells_[i].set_int(node_iter_->tx_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->tx_id_) : ret);
           break;
         case HOLDER_TRANS_ID: {
           // The default value is holder_tx_id on the ObLockWaitNode,
@@ -147,11 +147,11 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
             if (OB_TMP_FAIL(get_rowkey_holder(node_iter_->hash_, holder_tx_id))) {
             }
           }
-          cur_row_.cells_[i].set_int(holder_tx_id.get_id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, holder_tx_id.get_id()) : ret);
           break;
         }
         case HOLDER_SESSION_ID:
-          cur_row_.cells_[i].set_int(node_iter_->holder_sessid_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, node_iter_->holder_sessid_) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

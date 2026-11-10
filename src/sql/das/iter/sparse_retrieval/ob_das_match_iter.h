@@ -143,7 +143,7 @@ private:
   ObDASIREsMatchRtDef *ir_match_part_score_rtdef_;
   ObEvalCtx *eval_ctx_;
   ObExpr *domain_id_expr_;
-  void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  void (*set_datum_func_)(common::Datum &, const ObDocIdExt &);
   ObDASMatchRelevanceCollector *relevance_collector_;
   ObFixedArray<ObExpr *, ObIAllocator> children_relevance_exprs_;
   ObFixedArray<ObExpr *, ObIAllocator> children_domain_id_exprs_;

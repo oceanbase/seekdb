@@ -101,10 +101,10 @@ int ObExprSleep::get_usec(const number::ObNumber &nmb, int64_t &value, ObIAlloca
   return ret;
 }
 
-int ObExprSleep::eval_sleep(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSleep::eval_sleep(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *sec = NULL;
+  Datum *sec = NULL;
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
   int64_t usec = 0;

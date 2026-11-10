@@ -55,7 +55,7 @@ int ObAllVirtualNicInfo::inner_get_next_row(common::ObNewRow *&row)
   } else if (is_end_) {
     ret = OB_ITER_END;
   } else {
-    ObObj *cells = cur_row_.cells_;
+    DatumValue *cells = cur_row_.cells_;
     if (OB_UNLIKELY(nullptr == cells)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
@@ -65,7 +65,7 @@ int ObAllVirtualNicInfo::inner_get_next_row(common::ObNewRow *&row)
         switch (col_id) {
           case SPEED_MBPS: {
             // bytes/sec --> Mbits/sec: speed_Mbps = speed_byte_ps * 8 / 1024 / 1024 
-            cells[i].set_int((ObServer::get_instance().get_network_speed()) >> 17);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, (ObServer::get_instance().get_network_speed()) >> 17) : ret);
             break;
           }
           default: {

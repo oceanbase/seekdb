@@ -17,8 +17,9 @@
 #ifndef OCEANBASE_COMMON_OB_CELL_READER_H_
 #define OCEANBASE_COMMON_OB_CELL_READER_H_
 #include "common/cell/ob_cell_writer.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value_buffer.h"
 #include "lib/ob_define.h"
+#include <type_traits>
 namespace oceanbase
 {
 namespace common
@@ -30,23 +31,41 @@ public:
   virtual ~ObCellReader() {}
   int init(const char *buf, int64_t buf_size, ObCompactStoreType store_type);
   int next_cell();
-  int get_cell(uint64_t &column_id, ObObj &obj, bool *is_row_finished = NULL, ObString *row = NULL);
-  int get_cell(const ObObj *&obj, bool *is_row_finished = NULL, ObString *row = NULL);
-  int get_cell(uint64_t &column_id, const ObObj *&obj, bool *is_row_finished = NULL, ObString *row = NULL);
+  int get_cell(uint64_t &column_id, DatumValue &obj, bool *is_row_finished = NULL, ObString *row = NULL);
+  int get_cell(const DatumValue *&obj, bool *is_row_finished = NULL, ObString *row = NULL);
+  int get_cell(uint64_t &column_id, const DatumValue *&obj, bool *is_row_finished = NULL, ObString *row = NULL);
   void set_pos(const int64_t pos) { pos_ = pos; }
   int64_t get_pos() const { return pos_; }
 private:
-  int read_decimal_int(ObObj &);
+  int read_decimal_int(DatumValue &);
+  template<typename T> void set_scalar(DatumValue &output, T value, void (SqlTypeMeta::*setter)())
+  {
+    (output.meta_.*setter)();
+    // Compact integer widths belong to the wire only. Native scalars use
+    // their prepared signed/unsigned/floating active member, never a span.
+    if constexpr (std::is_same<T, float>::value) { output.datum_.set_float(value); }
+    else if constexpr (std::is_same<T, double>::value) { output.datum_.set_double(value); }
+    else if constexpr (std::is_signed<T>::value) { output.datum_.set_int(value); }
+    else { output.datum_.set_uint(value); }
+  }
+  void set_string_view(DatumValue &output, const ObString &value, void (SqlTypeMeta::*setter)())
+  {
+    (output.meta_.*setter)();
+    if (output.get_type() == ObVarcharType || output.get_type() == ObCharType) { output.meta_.set_collation_level(CS_LEVEL_IMPLICIT); }
+    output.datum_.set_string(value);
+  }
+  void set_extend_value(DatumValue &output, int64_t value);
   int parse(uint64_t *column_id);
   template<class T>
   int read(const T *&ptr);
-  inline int is_es_end_object(const common::ObObj &obj, bool &is_end_obj);
+  inline int is_es_end_object(const common::DatumValue &obj, bool &is_end_obj);
 private:
   const char *buf_;
   int64_t buf_size_;
   int64_t pos_;
   uint64_t column_id_;
-  ObObj obj_;
+  DatumValue obj_;
+  char scalar_payload_[16];
   ObCompactStoreType store_type_;
   int64_t row_start_;
   bool is_inited_;

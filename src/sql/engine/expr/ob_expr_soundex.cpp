@@ -37,10 +37,10 @@ int ObExprSoundex::calc_result_type1(
 {
   int ret = OB_SUCCESS;
   const ObSQLSessionInfo *session = NULL;
-  ObObjType param_calc_type = type1.get_type();
+  SqlValueType param_calc_type = type1.get_type();
   ObCollationType param_calc_cs_type = type1.get_collation_type();
 
-  ObObjType res_type = ObMaxType;
+  SqlValueType res_type = ObMaxType;
   ObCollationType res_cs_type = CS_TYPE_INVALID;
   int64_t res_length = OB_INVALID_SIZE;
   const ObLengthSemantics res_len_semantics = LS_CHAR;
@@ -260,9 +260,9 @@ int ObExprSoundex::calc(const ObString &input, const ObCollationType intput_cs_t
   return ret;
 }
 
-int ObExprSoundex::calc_text(const ObDatum &input_datum,
-                             const ObObjType input_type,
-                             const ObObjType res_type,
+int ObExprSoundex::calc_text(const Datum &input_datum,
+                             const SqlValueType input_type,
+                             const SqlValueType res_type,
                              const ObCollationType input_cs_type,
                              const ObCollationType res_cs_type,
                              const bool input_has_lob_header,
@@ -345,10 +345,10 @@ int ObExprSoundex::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) co
   return ret;
 }
 
-int ObExprSoundex::eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSoundex::eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   ObExprStrResAlloc expr_res_alloc(expr, ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_guard(ctx);
   if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
@@ -358,8 +358,8 @@ int ObExprSoundex::eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     const ObCollationType res_cs_type = expr.datum_meta_.cs_type_;
     const ObCollationType input_cs_type = expr.args_[0]->datum_meta_.cs_type_;
     ObString out;
-    const ObObjType input_type = expr.args_[0]->datum_meta_.type_;
-    const ObObjType res_type = expr.datum_meta_.type_;
+    const SqlValueType input_type = expr.args_[0]->datum_meta_.type_;
+    const SqlValueType res_type = expr.datum_meta_.type_;
     if (!ob_is_text_tc(input_type) && !ob_is_text_tc(res_type)) {
       ret = calc(param->get_string(), input_cs_type, res_cs_type,
                  tmp_alloc_guard.get_allocator(),

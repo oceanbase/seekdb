@@ -36,7 +36,7 @@ int ObExprGetSubprogramVar::calc_result_typeN(ObExprResType &type,
   CK (OB_NOT_NULL(types));
   CK (OB_LIKELY(4 == param_num));
   if (OB_SUCC(ret)) {
-    ObExprResType *result_type = reinterpret_cast<ObExprResType *>(types[3].get_param().get_int());
+    ObExprResType *result_type = reinterpret_cast<ObExprResType *>(types[3].get_param_datum().get_int());
     type.set_type(result_type->get_type());
     type.set_udt_id(result_type->get_udt_id());
     type.set_extend_type(result_type->get_extend_type());
@@ -72,15 +72,15 @@ int ObExprGetSubprogramVar::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 
 int ObExprGetSubprogramVar::calc_get_subprogram_var(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int64_t ret = OB_SUCCESS;
   ObPLContext *pl_context = NULL;
-  ObObjParam res_var;
+  DatumParameter res_var;
   ObSQLSessionInfo *session_info = ctx.exec_ctx_.get_my_session();
-  ObDatum *pkg_id_datum = NULL;
-  ObDatum *subprogram_id_datum = NULL;
-  ObDatum *var_idx_datum = NULL;
+  Datum *pkg_id_datum = NULL;
+  Datum *subprogram_id_datum = NULL;
+  Datum *var_idx_datum = NULL;
   CK (OB_NOT_NULL(session_info));
   CK (OB_LIKELY(4 == expr.arg_cnt_));
   CK (OB_NOT_NULL(pl_context = session_info->get_pl_context()));
@@ -94,12 +94,21 @@ int ObExprGetSubprogramVar::calc_get_subprogram_var(
     int64_t var_idx = var_idx_datum->get_int();
     OZ (pl_context->get_subprogram_var_from_local(
     *session_info, package_id, subprogram_id, var_idx, res_var));
-    OZ (expr_datum.from_obj(res_var));
+    alignas(8) char result_scratch[64];
+    ObDatum result_view;
+    OZ(res_var.export_legacy(result_view, result_scratch, sizeof(result_scratch)));
+    OZ(expr.get_datum_copy_plan().import_legacy(result_view, expr_datum));
+    if (OB_SUCC(ret) && expr_datum.is_present() && res_var.datum_.is_inline_extended()) {
+      // The resource is still borrowed until deep_copy_datum below, but its
+      // carrier must not borrow result_scratch after this block ends.
+      expr_datum = res_var.datum_;
+    }
     if (is_lob_storage(res_var.get_type())) {
-      OZ (ob_adjust_lob_datum(ctx.exec_ctx_, res_var, expr.obj_meta_,
+      OZ (ob_adjust_lob_datum(ctx.exec_ctx_, expr_datum, res_var.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), expr_datum));
     }
   }
+  OZ(expr.deep_copy_datum(ctx, expr_datum));
   return ret;
 }
 

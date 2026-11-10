@@ -1261,6 +1261,7 @@ private:
   */
   bool skip_left_null_;
   bool skip_right_null_;
+  common::ObSEArray<common::DatumHashOp, 8> native_hash_funcs_;
   ObChunkDatumStore::IterationAge iter_age_;
 };
 

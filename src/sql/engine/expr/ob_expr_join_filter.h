@@ -41,6 +41,7 @@ enum RuntimeFilterType
 };
 // Do NOT restore IN - keep it undefined for all uses of RuntimeFilterType::IN
 
+// The storage decoder consumes an explicit legacy parameter array.
 using ObRuntimeFilterParams = common::ObSEArray<common::ObDatum, 4>;
 
 class ObExprJoinFilter : public ObExprOperator
@@ -53,9 +54,10 @@ public:
           rf_msg_(nullptr), rf_key_(), hash_funcs_(), cmp_funcs_(), start_time_(0),
           filter_count_(0), total_count_(0), check_count_(0),
           n_times_(0), ready_ts_(0), by_pass_count_before_ready_(0), slide_window_(total_count_), flag_(0), max_wait_time_ms_(0),
-          cur_row_()
+          cur_row_(), native_hash_values_()
         {
           cur_row_.set_attr(ObMemAttr("RfCurRow"));
+          native_hash_values_.set_attr(ObMemAttr("RfNativeHash"));
           need_wait_rf_ = true;
           need_check_ready_ = true;
           is_first_ = true;
@@ -148,7 +150,10 @@ public:
         };
       };
       int64_t max_wait_time_ms_;
-      ObTMArray<ObDatum> cur_row_;
+      // Synchronous probe inputs borrow actual native Expr values; no legacy
+      // scalar payload or per-column export scratch survives the probe call.
+      ObTMArray<common::Datum> cur_row_;
+      ObTMArray<uint64_t> native_hash_values_;
   };
   ObExprJoinFilter();
   explicit ObExprJoinFilter(common::ObIAllocator& alloc);
@@ -158,11 +163,11 @@ public:
                                 int64_t param_num,
                                 common::ObExprTypeCtx& type_ctx)
                                 const override;
-  static int eval_bloom_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_bloom_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
-  static int eval_range_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_range_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
-  static int eval_in_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_in_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
   static int eval_bloom_filter_batch(
              const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
@@ -171,7 +176,7 @@ public:
   static int eval_in_filter_batch(
              const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
 
-  static int eval_filter_internal(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_filter_internal(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
 
   static int eval_filter_batch_internal(

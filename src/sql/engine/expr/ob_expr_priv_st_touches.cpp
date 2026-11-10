@@ -71,7 +71,7 @@ int ObExprPrivSTTouches::calc_result_type2(ObExprResType &type, ObExprResType &t
 }
 
 int ObExprPrivSTTouches::get_input_geometry(common::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &temp_allocator, ObEvalCtx &ctx, ObExpr *gis_arg,
-    ObDatum *gis_datum, const ObSrsItem *&srs, ObGeometry *&geo, bool &is_geo_empty)
+    Datum *gis_datum, const ObSrsItem *&srs, ObGeometry *&geo, bool &is_geo_empty)
 {
   int ret = OB_SUCCESS;
   ObString wkb = gis_datum->get_string();
@@ -99,7 +99,7 @@ int ObExprPrivSTTouches::get_input_geometry(common::ObSrsCacheGuard &srs_guard, 
   return ret;
 }
 
-int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObExpr *gis_arg1 = expr.args_[0];
@@ -116,8 +116,8 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *gis_datum1 = nullptr;
-  ObDatum *gis_datum2 = nullptr;
+  Datum *gis_datum1 = nullptr;
+  Datum *gis_datum2 = nullptr;
   if (OB_FAIL(gis_arg1->eval(ctx, gis_datum1)) || OB_FAIL(gis_arg2->eval(ctx, gis_datum2))) {
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {
     res.set_null();

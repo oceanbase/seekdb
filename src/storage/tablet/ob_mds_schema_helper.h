@@ -37,7 +37,7 @@ class ObColumnSchemaV2;
 
 namespace common
 {
-class ObObjMeta;
+class SqlTypeMeta;
 class ObIAllocator;
 }
 
@@ -74,7 +74,7 @@ private:
       const int64_t schema_version,
       const int64_t rowkey_position,
       const common::ObOrderType &order_in_rowkey,
-      const common::ObObjMeta &meta_type,
+      const common::SqlTypeMeta &meta_type,
       const int64_t data_length,
       share::schema::ObColumnSchemaV2 &column_schema);
 public:

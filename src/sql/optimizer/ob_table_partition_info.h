@@ -56,7 +56,7 @@ public:
                                         common::ObIArray<ObRawExpr *> *sort_exprs) const;
 
   int calculate_access_targets(ObExecContext &exec_ctx,
-                                        const ParamStore &params,
+                                        const ObPhysicalPlanCtx &params,
                                         const common::ObDataTypeCastParams &dtc_params);
 
   int replace_access_source(ObExecContext &exec_ctx, uint64_t ref_table_id, bool is_local_index);

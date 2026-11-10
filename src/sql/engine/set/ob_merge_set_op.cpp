@@ -120,7 +120,7 @@ int ObMergeSetOp::convert_row(const common::ObIArray<ObExpr*> &src_exprs,
     LOG_WARN("unexpected status: exprs is not match", K(ret), K(src_exprs.count()),
       K(dst_exprs.count()));
   } else {
-    ObDatum *src_datum = nullptr;
+    Datum *src_datum = nullptr;
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
     batch_info_guard.set_batch_idx(src_idx);
     for (uint32_t i = 0; i < dst_exprs.count() && OB_SUCC(ret); ++i) {
@@ -152,6 +152,32 @@ int ObMergeSetOp::Compare::init(
   return ret;
 }
 
+namespace
+{
+int compare_native_values(const ObExpr &left_expr, const Datum &left,
+                          const ObExpr &right_expr, const Datum &right,
+                          common::ObDatumCmpFuncType function,
+                          const common::ObDatumAccessContext *access, int &result)
+{
+  alignas(8) char left_scratch[64], right_scratch[64];
+  ObDatum l, r;
+  int ret = left_expr.get_datum_copy_plan().legacy_view(left, l, left_scratch, sizeof(left_scratch));
+  if (OB_SUCC(ret)) { ret = right_expr.get_datum_copy_plan().legacy_view(right, r, right_scratch, sizeof(right_scratch)); }
+  if (OB_SUCC(ret)) { ret = function(l, r, result, access); }
+  return ret;
+}
+int compare_stored_native_value(const ObDatum &left, const ObExpr &expr, const Datum &right,
+                               common::ObDatumCmpFuncType function,
+                               const common::ObDatumAccessContext *access, int &result)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  int ret = expr.get_datum_copy_plan().legacy_view(right, view, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = function(left, view, result, access); }
+  return ret;
+}
+}
+
 int ObMergeSetOp::Compare::operator()(
   const ObChunkDatumStore::StoredRow &l,
   const common::ObIArray<ObExpr*> &r,
@@ -161,15 +187,16 @@ int ObMergeSetOp::Compare::operator()(
   int ret = OB_SUCCESS;
   cmp = 0;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  const ObDatum *lcells = l.cells();
-  ObDatum *r_datum = nullptr;
+  const StoredDatumCell *lcells = l.stored_cells();
+  Datum *r_datum = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
+    const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(lcells[idx]);
     if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
-    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-                   lcells[idx], *r_datum, cmp, datum_access_ctx))) {
+    } else if (OB_FAIL(compare_stored_native_value(l_datum, *r.at(idx), *r_datum,
+                                                   cmp_funcs_->at(i).cmp_func_, datum_access_ctx, cmp))) {
     } else {
       if (0 != cmp) {
         cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
@@ -189,16 +216,16 @@ int ObMergeSetOp::Compare::operator()(
   int ret = OB_SUCCESS;
   cmp = 0;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  ObDatum *l_datum = nullptr;
-  ObDatum *r_datum = nullptr;
+  Datum *l_datum = nullptr;
+  Datum *r_datum = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
     if (OB_FAIL(l.at(idx)->eval(eval_ctx, l_datum))) {
     } else if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
-    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-                   *l_datum, *r_datum, cmp, datum_access_ctx))) {
+    } else if (OB_FAIL(compare_native_values(*l.at(idx), *l_datum, *r.at(idx), *r_datum,
+                                               cmp_funcs_->at(i).cmp_func_, datum_access_ctx, cmp))) {
     } else {
       LOG_DEBUG("debug compare merge set op", K(EXPR2STR(eval_ctx, *l.at(idx))),
         K(EXPR2STR(eval_ctx, *r.at(idx))), K(cmp));
@@ -221,8 +248,8 @@ int ObMergeSetOp::Compare::operator() (const common::ObIArray<ObExpr*> &l,
   int ret = OB_SUCCESS;
   cmp = 0;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  ObDatum *l_datum = nullptr;
-  ObDatum *r_datum = nullptr;
+  Datum *l_datum = nullptr;
+  Datum *r_datum = nullptr;
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
@@ -232,8 +259,8 @@ int ObMergeSetOp::Compare::operator() (const common::ObIArray<ObExpr*> &l,
     if (OB_FAIL(l.at(idx)->eval(eval_ctx, l_datum))) {
     } else if (FALSE_IT(batch_info_guard.set_batch_idx(r_idx))) {
     } else if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
-    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-                   *l_datum, *r_datum, cmp, datum_access_ctx))) {
+    } else if (OB_FAIL(compare_native_values(*l.at(idx), *l_datum, *r.at(idx), *r_datum,
+                                               cmp_funcs_->at(i).cmp_func_, datum_access_ctx, cmp))) {
     } else if (0 != cmp) {
       cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
       break;
@@ -251,20 +278,19 @@ int ObMergeSetOp::Compare::operator() (const ObChunkDatumStore::StoredRow &l,
   int ret = OB_SUCCESS;
   cmp = 0;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  const ObDatum *l_datum = nullptr;
-  ObDatum *r_datum = nullptr;
-  const ObDatum *l_cells = l.cells();
+  Datum *r_datum = nullptr;
+  const StoredDatumCell *l_cells = l.stored_cells();
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
   batch_info_guard.set_batch_idx(r_idx);
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
-    l_datum = &l_cells[idx];
+    const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(l_cells[idx]);
     batch_info_guard.set_batch_idx(r_idx);
     if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
-    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-                   *l_datum, *r_datum, cmp, datum_access_ctx))) {
+    } else if (OB_FAIL(compare_stored_native_value(l_datum, *r.at(idx), *r_datum,
+                                                   cmp_funcs_->at(i).cmp_func_, datum_access_ctx, cmp))) {
     } else if (0 != cmp) {
       cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
       break;
@@ -294,7 +320,7 @@ int ObMergeSetOp::convert_batch(const common::ObIArray<ObExpr*> &src_exprs,
           continue;
         }
         for (uint32_t i = 0; i < dst_exprs.count(); ++i) {
-          ObDatum &src = src_exprs.at(i)->locate_expr_datum(eval_ctx_, j);
+          Datum &src = src_exprs.at(i)->locate_expr_datum(eval_ctx_, j);
           dst_exprs.at(i)->locate_expr_datum(eval_ctx_, size) = src;
         }
         ++size;
@@ -306,9 +332,9 @@ int ObMergeSetOp::convert_batch(const common::ObIArray<ObExpr*> &src_exprs,
       brs.size_ = size;
     } else {
       for (uint32_t i = 0; i < dst_exprs.count(); ++i) {
-        ObDatum *dst = dst_exprs.at(i)->locate_batch_datums(eval_ctx_);
+        Datum *dst = dst_exprs.at(i)->locate_batch_datums(eval_ctx_);
         if (!src_exprs.at(i)->is_batch_result()) {
-          ObDatum &src = src_exprs.at(i)->locate_expr_datum(eval_ctx_, 0);
+          Datum &src = src_exprs.at(i)->locate_expr_datum(eval_ctx_, 0);
           for (int64_t j = 0; j < brs.size_; ++j) {
             if (brs.skip_->at(j)) {
               continue;
@@ -316,8 +342,8 @@ int ObMergeSetOp::convert_batch(const common::ObIArray<ObExpr*> &src_exprs,
             dst_exprs.at(i)->locate_expr_datum(eval_ctx_, j) = src;
           }
         } else {
-          ObDatum *src = src_exprs.at(i)->locate_batch_datums(eval_ctx_);
-          MEMCPY(dst, src, sizeof(ObDatum) * brs.size_);
+          Datum *src = src_exprs.at(i)->locate_batch_datums(eval_ctx_);
+          MEMCPY(dst, src, sizeof(Datum) * brs.size_);
         }
         dst_exprs.at(i)->set_evaluated_projected(eval_ctx_);
       } // end for

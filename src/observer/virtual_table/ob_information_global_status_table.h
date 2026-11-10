@@ -39,7 +39,7 @@ class ObInfoSchemaGlobalStatusTable : public common::ObVirtualTableScannerIterat
     UPTIME
   };
 
-  typedef common::hash::ObHashMap<common::ObString, common::ObObj> AllStatus;
+  typedef common::hash::ObHashMap<common::ObString, common::DatumValue> AllStatus;
 public:
   ObInfoSchemaGlobalStatusTable();
   virtual ~ObInfoSchemaGlobalStatusTable();

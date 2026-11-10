@@ -18,6 +18,7 @@
 #define __OCEANBASE_SQL_ENGINE_PX_UTIL_H__
 
 #include "lib/container/ob_array.h"
+#include "query/engine/expr/expr_extra_serialize_info.h"
 #include "sql/engine/px/ob_dfo.h"
 #include "sql/dtl/ob_dtl_task.h"
 #include "sql/dtl/ob_dtl_flow_control.h"
@@ -39,18 +40,6 @@ public:
   virtual int on_root_data_channel_setup() = 0;
 };
 
-
-struct ObExprExtraSerializeInfo
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObExprExtraSerializeInfo() :
-    current_time_(nullptr),
-    last_trace_id_(nullptr)
-    { }
-  common::ObObj *current_time_;
-  common::ObCurTraceId::TraceId *last_trace_id_;
-};
 
 class ObBaseOrderMap
 {
@@ -349,432 +338,269 @@ public:
   static int64_t get_tree_serialize_size(const ObOpSpec &root, bool is_fulltree,
       ObPhyOpSeriCtx *seri_ctx = NULL);
 
+  struct ExprArrayScope
+  {
+    ExprArrayScope() : saved_(ObExpr::get_serialize_array()) {}
+    // A frame and its following tree/input records share this pointer-index
+    // directory. Nested frame helpers restore to this same outer binding.
+    explicit ExprArrayScope(const ObExprFrameInfo &info) : ExprArrayScope()
+    { ObExpr::get_serialize_array() = &info.rt_exprs_; }
+    ~ExprArrayScope() { ObExpr::get_serialize_array() = saved_; }
+    ObIArray<ObExpr> *saved_;
+  };
+
   template <bool SERIALIZE_PLAN_PART>
-  static int serialize_expr_frame_info(char *buf,
-                                       int64_t buf_len,
-                                       int64_t &pos,
-                                       ObExecContext &ctx,
-                                       const ObExprFrameInfo &expr_frame_info)
+  static int serialize_expr_frame_info(char *buf, int64_t buf_len, int64_t &position,
+      ObExecContext &ctx, const ObExprFrameInfo &expr_frame_info)
   {
     int ret = OB_SUCCESS;
-    if (SERIALIZE_PLAN_PART) {
-      int64_t need_ctx_cnt = expr_frame_info.need_ctx_cnt_;
-      OB_UNIS_ENCODE(need_ctx_cnt);
-    }
-    // expr extra info
-    ObExprExtraSerializeInfo expr_info;
+    int64_t pos = position;
+    ExprArrayScope array_scope;
     ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
+    if (plan_ctx == nullptr || buf == nullptr || pos < 0 || pos > buf_len) { return OB_INVALID_ARGUMENT; }
+    if (SERIALIZE_PLAN_PART) {
+      OB_UNIS_ENCODE(expr_frame_info.need_ctx_cnt_);
+    }
+    ObExprExtraSerializeInfo expr_info;
     expr_info.current_time_ = &plan_ctx->get_cur_time();
     expr_info.last_trace_id_ = &plan_ctx->get_last_trace_id();
-    if (OB_SUCC(ret) && OB_FAIL(expr_info.serialize(buf, buf_len, pos))) {
-      SQL_LOG(WARN, "fail to serialize expr extra info", K(ret));
-    }
-    // rt exprs
-    if (SERIALIZE_PLAN_PART) {
+    if (OB_SUCC(ret)) { ret = expr_info.serialize(buf, buf_len, pos); }
+    if (OB_SUCC(ret) && SERIALIZE_PLAN_PART) {
       const ObIArray<ObExpr> &exprs = expr_frame_info.rt_exprs_;
-      const int32_t expr_cnt = expr_frame_info.is_mark_serialize()
-          ? expr_frame_info.ser_expr_marks_.count()
-          : exprs.count();
-      ObExpr::get_serialize_array() = &(const_cast<ObIArray<ObExpr> &>(exprs));
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, expr_cnt))) {
-      } else if (nullptr == ObExpr::get_serialize_array()) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "serialize array is null", K(ret), K(pos), K(expr_cnt));
+      const int64_t count = expr_frame_info.is_mark_serialize()
+          ? expr_frame_info.ser_expr_marks_.count() : exprs.count();
+      ObExpr::get_serialize_array() = &const_cast<ObIArray<ObExpr> &>(exprs);
+      if (count < 0 || count > INT32_MAX || count > exprs.count()) { ret = OB_SIZE_OVERFLOW; }
+      else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, static_cast<int32_t>(count)))) {
       } else {
-        if (!expr_frame_info.is_mark_serialize()) {
-          for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
-            if (OB_FAIL(exprs.at(i).serialize(buf, buf_len, pos))) {
-            }
-          }
-        } else {
-          SQL_LOG(TRACE, "exprs mark serialization", K(expr_cnt), K(exprs.count()));
-          for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
-            if (expr_frame_info.ser_expr_marks_.at(i)) {
-              if (OB_FAIL(exprs.at(i).serialize(buf, buf_len, pos))) {
-              }
-            } else if (OB_FAIL(ObEmptyExpr::instance().serialize(buf, buf_len, pos))) {
-            }
-          }
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+          const ObExpr &expr = exprs.at(i);
+          // A decoded partial directory owns its array, but still contains
+          // genuine empty slots. Preserve their envelope on the next PX hop.
+          const bool selected = !expr_frame_info.is_mark_serialize()
+              || expr_frame_info.ser_expr_marks_.at(i);
+          ret = selected && !(expr.type_ == T_INVALID && expr.sql_type_ == nullptr)
+              ? expr.serialize(buf, buf_len, pos)
+              : ObEmptyExpr::instance().serialize(buf, buf_len, pos);
         }
       }
     }
-    // frames
-    int64_t frame_count = 0;
-    char **frames = nullptr;
-    if (ctx.get_ori_frame_cnt() != 0 && ctx.get_ori_frames() != nullptr) {
-      frame_count = ctx.get_ori_frame_cnt();
-      frames = ctx.get_ori_frames();
-    } else {
-      frame_count = ctx.get_frame_cnt();
-      frames = ctx.get_frames();
-    }
+    const bool original = ctx.get_ori_frame_cnt() != 0 && ctx.get_ori_frames() != nullptr;
+    const int64_t frame_count = original ? ctx.get_ori_frame_cnt() : ctx.get_frame_cnt();
+    char **frames = original ? ctx.get_ori_frames() : ctx.get_frames();
     OB_UNIS_ENCODE(frame_count);
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.const_frame_, frames, frame_count))) {
-      } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.param_frame_, frames, frame_count))) {
-      } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.dynamic_frame_, frames, frame_count))) {
-      } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.datum_frame_, frames, frame_count, true))) {
-      }
+      ret = serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos,
+          expr_frame_info.const_frame_, expr_frame_info, frames, frame_count);
     }
+    if (OB_SUCC(ret) && SERIALIZE_PLAN_PART) {
+      ret = NativeFrameCodec::serialize_metadata(expr_frame_info.param_frame_, buf, buf_len, pos);
+    }
+    if (OB_SUCC(ret)) { ret = NativeFrameCodec::serialize_parameters(*plan_ctx, buf, buf_len, pos); }
+    if (OB_SUCC(ret)) {
+      ret = serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos,
+          expr_frame_info.dynamic_frame_, expr_frame_info, frames, frame_count);
+    }
+    if (OB_SUCC(ret)) {
+      ret = serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos,
+          expr_frame_info.datum_frame_, expr_frame_info, frames, frame_count, true);
+    }
+    if (OB_SUCC(ret)) { position = pos; }
     return ret;
   }
 
   template <bool SERIALIZE_PLAN_PART>
-  static int serialize_frame_info(char *buf,
-                                       int64_t buf_len,
-                                       int64_t &pos,
-                                       const ObIArray<ObFrameInfo> &all_frames,
-                                       char **frames,
-                                       const int64_t frame_cnt,
-                                       bool no_ser_data = false)
+  static int serialize_frame_info(char *buf, int64_t buf_len, int64_t &pos,
+      const ObIArray<ObFrameInfo> &all_frames, const ObExprFrameInfo &expressions,
+      char *const *frames, int64_t frame_count, bool no_ser_data = false)
   {
-    int ret = OB_SUCCESS;
-    int64_t need_extra_mem_size = 0;
-    if (SERIALIZE_PLAN_PART) {
-      OB_UNIS_ENCODE(all_frames.count());
-      for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
-        OB_UNIS_ENCODE(all_frames.at(i));
-      }
-    }
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-    for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
-      const ObFrameInfo &frame_info = all_frames.at(i);
-      //TODO shengle seri can opt, only serialize: sizeof(ObDatum) + sizeof(ObEvalInfo)
-      if (frame_info.frame_idx_ >= frame_cnt) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "frame index exceed frame count", K(ret), K(frame_cnt), K(frame_info.frame_idx_));
-      } else {
-        char *frame_buf = frames[frame_info.frame_idx_];
-        int64_t expr_mem_size = no_ser_data ? 0 : frame_info.expr_cnt_ * item_size;
-        OB_UNIS_ENCODE(expr_mem_size);
-        if (pos + expr_mem_size > buf_len) {
-          ret = OB_SIZE_OVERFLOW;
-          SQL_LOG(WARN, "ser frame info size overflow", K(ret), K(pos),
-                   K(expr_mem_size), K(buf_len));
-        } else if (!no_ser_data && 0 < expr_mem_size) {
-          MEMCPY(buf + pos, frame_buf, expr_mem_size);
-          pos += expr_mem_size;
-        }
-        for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
-          ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-            (frame_buf + j * item_size);
-          need_extra_mem_size += no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
-        }
-      }
-    }
-    OB_UNIS_ENCODE(need_extra_mem_size);
-    int64_t expr_datum_size = 0;
-    int64_t ser_mem_size = 0;
-    for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
-      const ObFrameInfo &frame_info = all_frames.at(i);
-      char *frame_buf = frames[frame_info.frame_idx_];
-      for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
-        ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-          (frame_buf + j * item_size);
-        expr_datum_size = no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
-        OB_UNIS_ENCODE(expr_datum_size);
-        if (pos + expr_datum_size > buf_len) {
-          ret = OB_SIZE_OVERFLOW;
-          SQL_LOG(WARN, "ser frame info size overflow", K(ret), K(pos),
-                   K(expr_datum_size), K(buf_len));
-        } else if (0 < expr_datum_size) {
-          // Append the out-of-line datum payload after the serialized frame.
-          MEMCPY(buf + pos, expr_datum->ptr_, expr_datum_size);
-          pos += expr_datum_size;
-          ser_mem_size += expr_datum_size;
-        }
-      }
-    }
-    if (OB_SUCC(ret) && ser_mem_size != need_extra_mem_size) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected status: serialize size is not match", K(ret),
-               K(ser_mem_size), K(need_extra_mem_size));
-    }
-    return ret;
+    return NativeFrameCodec::serialize_group(buf, buf_len, pos, SERIALIZE_PLAN_PART,
+        all_frames, expressions, frames, frame_count, no_ser_data);
   }
+
   template <bool DESERIALIZE_PLAN_PART>
-  static int deserialize_expr_frame_info(const char *buf,
-                                       int64_t data_len,
-                                       int64_t &pos,
-                                       ObExecContext &ctx,
-                                       const ObExprFrameInfo &expr_frame_info)
+  static int deserialize_expr_frame_info(const char *buf, int64_t data_len, int64_t &position,
+      ObExecContext &ctx, const ObExprFrameInfo &expr_frame_info)
   {
     int ret = OB_SUCCESS;
-    int32_t expr_cnt = 0;
+    int64_t pos = position;
+    ExprArrayScope array_scope;
+    ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
+    if (plan_ctx == nullptr || buf == nullptr || pos < 0 || pos > data_len) { return OB_INVALID_ARGUMENT; }
     if (DESERIALIZE_PLAN_PART) {
       int64_t need_ctx_cnt = 0;
       OB_UNIS_DECODE(need_ctx_cnt);
-      const_cast<ObExprFrameInfo &>(expr_frame_info).need_ctx_cnt_ = need_ctx_cnt;
+      if (OB_SUCC(ret) && need_ctx_cnt < 0) { ret = OB_DESERIALIZE_ERROR; }
+      if (OB_SUCC(ret)) { const_cast<ObExprFrameInfo &>(expr_frame_info).need_ctx_cnt_ = need_ctx_cnt; }
     }
-    // deserialize expr extra info.
     ObExprExtraSerializeInfo expr_info;
-    ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
     expr_info.current_time_ = &plan_ctx->get_cur_time();
     expr_info.last_trace_id_ = &plan_ctx->get_last_trace_id();
-    if (OB_SUCC(ret) && OB_FAIL(expr_info.deserialize(buf, data_len, pos))) {
-      SQL_LOG(WARN, "fail to deserialize expr extra info", K(ret));
-    }
-
-    if (DESERIALIZE_PLAN_PART) {
+    if (OB_SUCC(ret)) { ret = expr_info.deserialize(buf, data_len, pos); }
+    if (OB_SUCC(ret) && DESERIALIZE_PLAN_PART) {
+      int32_t count = 0;
       ObIArray<ObExpr> &exprs = const_cast<ObArray<ObExpr> &>(expr_frame_info.rt_exprs_);
-      ObExpr::get_serialize_array() = &(const_cast<ObIArray<ObExpr> &>(exprs));
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &expr_cnt))) {
-      } else if (OB_FAIL(exprs.prepare_allocate(expr_cnt))) {
+      ObExpr::get_serialize_array() = &exprs;
+      if (data_len - pos < 4) { ret = OB_DESERIALIZE_ERROR; }
+      else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &count))) {
+      } else if (count < 0 || count > data_len - pos) { ret = OB_DESERIALIZE_ERROR; }
+      else if (OB_FAIL(exprs.prepare_allocate(count))) {
       } else {
-        for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
-          ObExpr &expr = exprs.at(i);
-          if (OB_FAIL(expr.deserialize(buf, data_len, pos))) {
-          }
-        }
-      }
-    }
-
-    // frames
-    int64_t frame_cnt = 0;
-    char **frames = nullptr;
-    const ObIArray<char*> *param_frame_ptrs = &plan_ctx->get_param_frame_ptrs();
-    OB_UNIS_DECODE(frame_cnt);
-    ObIArray<char *> *const_char_ptrs = DESERIALIZE_PLAN_PART ?
-                                &(const_cast<ObExprFrameInfo &>(expr_frame_info)).const_frame_ptrs_ :
-                                NULL;
-    if (OB_FAIL(ret)) {
-    } else if (nullptr == (frames = static_cast<char**>(
-                ctx.get_allocator().alloc(sizeof(char*) * frame_cnt)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      SQL_LOG(WARN, "failed allocate frames", K(ret));
-    } else if (FALSE_IT(MEMSET(frames, 0, sizeof(char*) * frame_cnt))) {
-    } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
-        buf, data_len, pos, ctx.get_allocator(), expr_frame_info.const_frame_,
-        const_char_ptrs, frames, frame_cnt))) {
-    } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
-        buf, data_len, pos, ctx.get_allocator(), expr_frame_info.param_frame_,
-        const_cast<ObIArray<char*>*>(param_frame_ptrs), frames, frame_cnt))) {
-    } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
-        buf, data_len, pos, ctx.get_allocator(),expr_frame_info.dynamic_frame_,
-        nullptr, frames, frame_cnt))) {
-    } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
-        buf, data_len, pos, ctx.get_allocator(),expr_frame_info.datum_frame_,
-        nullptr, frames, frame_cnt, true))) {
-    } else {
-      ctx.set_frames(frames);
-      ctx.set_frame_cnt(frame_cnt);
-    }
-    return ret;
-  }
-  template <bool DESERIALIZE_PLAN_PART>
-  static int deserialize_frame_info(const char *buf,
-                                    int64_t data_len,
-                                    int64_t &pos,
-                                    ObIAllocator &allocator,
-                                    const ObIArray<ObFrameInfo> &all_frames,
-                                    ObIArray<char *> *char_ptrs,
-                                    char **&frames,
-                                    int64_t &frame_cnt,
-                                    bool no_deser_data = false)
-  {
-    int ret = OB_SUCCESS;
-    int64_t frame_info_cnt = all_frames.count();
-    if (DESERIALIZE_PLAN_PART) {
-      OB_UNIS_DECODE(frame_info_cnt);
-      ObIArray<ObFrameInfo> &non_const_all_frames = const_cast<ObIArray<ObFrameInfo> &>(all_frames);
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(non_const_all_frames.reserve(frame_info_cnt))) {
-      } else {
-        ObFrameInfo frame_info;
-        for (int64_t i = 0; i < frame_info_cnt && OB_SUCC(ret); ++i) {
-          OB_UNIS_DECODE(frame_info);
-          if (OB_FAIL(non_const_all_frames.push_back(frame_info))) {
-          }
-        }
-      }
-    }
-    if (OB_SUCC(ret) && nullptr != char_ptrs && OB_FAIL(char_ptrs->reserve(frame_info_cnt))) {
-      SQL_LOG(WARN, "failed to reserve const frame", K(ret));
-    }
-    int64_t need_extra_mem_size = 0;
-    for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
-      const ObFrameInfo &frame_info = all_frames.at(i);
-      int64_t expr_mem_size = 0;
-      OB_UNIS_DECODE(expr_mem_size);
-      if (frame_info.frame_idx_ >= frame_cnt) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "frame index exceed frame count", K(ret), K(frame_cnt), K(frame_info.frame_idx_));
-      } else if (0 < frame_info.expr_cnt_) {
-        char *frame_buf = nullptr;
-        if (nullptr == (frame_buf = static_cast<char*>(allocator.alloc(frame_info.frame_size_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          SQL_LOG(WARN, "failed to allocate frame buf", K(ret));
-        } else if (pos + expr_mem_size > data_len) {
-          ret = OB_SIZE_OVERFLOW;
-          SQL_LOG(WARN, "ser frame info size overflow", K(ret), K(pos),
-                   K(frame_info.frame_size_), K(data_len));
-        } else {
-          MEMSET(frame_buf, 0, frame_info.frame_size_);
-          frames[frame_info.frame_idx_] = frame_buf;
-          if (nullptr != char_ptrs && OB_FAIL(char_ptrs->push_back(frame_buf))) {
-            SQL_LOG(WARN, "failed to push back frame buf", K(ret));
-          }
-          if (!no_deser_data && 0 < expr_mem_size) {
-            MEMCPY(frame_buf, buf + pos, expr_mem_size);
-            pos += expr_mem_size;
-          }
-        }
-      }
-    }
-    OB_UNIS_DECODE(need_extra_mem_size);
-    int64_t expr_datum_size = 0;
-    int64_t des_mem_size = 0;
-    char *expr_datum_buf = nullptr;
-    if (0 < need_extra_mem_size
-        && nullptr == (expr_datum_buf = static_cast<char*>(allocator.alloc(need_extra_mem_size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      SQL_LOG(WARN, "failed to alloc memory", K(ret));
-    }
-    for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
-      const ObFrameInfo &frame_info = all_frames.at(i);
-      const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-      char *frame_buf = frames[frame_info.frame_idx_];
-      for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
-        ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-          (frame_buf + j * item_size);
-        OB_UNIS_DECODE(expr_datum_size);
-        if (pos + expr_datum_size > data_len) {
-          ret = OB_SIZE_OVERFLOW;
-          SQL_LOG(WARN, "ser frame info size overflow", K(ret), K(pos),
-                   K(expr_datum_size), K(data_len));
-        } else if (0 == expr_datum_size) {
-          // For this serialized data, the len_ of datum is 0, ObDatum has already been deserialized before, no further processing is needed
-        } else {
-          // Restore the out-of-line datum payload into the destination frame buffer.
-          MEMCPY(expr_datum_buf, buf + pos, expr_datum_size);
-          expr_datum->ptr_ = expr_datum_buf;
-          pos += expr_datum_size;
-          des_mem_size += expr_datum_size;
-          expr_datum_buf += expr_datum_size;
-        }
-      }
-    }
-    if (OB_SUCC(ret) && des_mem_size != need_extra_mem_size) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected status: serialize size is not match", K(ret),
-               K(des_mem_size), K(need_extra_mem_size));
-    }
-    return ret;
-  }
-  template <bool SERIALIZE_PLAN_PART>
-  static int64_t get_serialize_expr_frame_info_size(
-                                      ObExecContext &ctx,
-                                      const ObExprFrameInfo &expr_frame_info)
-  {
-    int ret = OB_SUCCESS;
-    int64_t len = 0;
-    if (SERIALIZE_PLAN_PART) {
-      int64_t need_ctx_cnt = expr_frame_info.need_ctx_cnt_;
-      OB_UNIS_ADD_LEN(need_ctx_cnt);
-    }
-    ObExprExtraSerializeInfo expr_info;
-    ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
-    expr_info.current_time_ = &plan_ctx->get_cur_time();
-    expr_info.last_trace_id_ = &plan_ctx->get_last_trace_id();
-    len += expr_info.get_serialize_size();
-
-    if (SERIALIZE_PLAN_PART) {
-      const ObIArray<ObExpr> &exprs = expr_frame_info.rt_exprs_;
-      int32_t expr_cnt = expr_frame_info.is_mark_serialize()
-          ? expr_frame_info.ser_expr_marks_.count()
-          : exprs.count();
-      ObExpr::get_serialize_array() = &(const_cast<ObIArray<ObExpr> &>(exprs));
-      len += serialization::encoded_length_i32(expr_cnt);
-      if (!expr_frame_info.is_mark_serialize()) {
-        for (int64_t i = 0; i < expr_cnt; ++i) {
-          len += exprs.at(i).get_serialize_size();
-        }
-      } else {
-        for (int64_t i = 0; i < expr_cnt; ++i) {
-          if (expr_frame_info.ser_expr_marks_.at(i)) {
-            len += exprs.at(i).get_serialize_size();
-          } else {
-            len += ObEmptyExpr::instance().get_serialize_size();
-          }
-        }
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) { ret = exprs.at(i).deserialize(buf, data_len, pos); }
       }
     }
     int64_t frame_count = 0;
     char **frames = nullptr;
-    if (ctx.get_ori_frame_cnt() != 0 && ctx.get_ori_frames() != nullptr) {
-      frame_count = ctx.get_ori_frame_cnt();
-      frames = ctx.get_ori_frames();
-    } else {
-      frame_count = ctx.get_frame_cnt();
-      frames = ctx.get_frames();
+    OB_UNIS_DECODE(frame_count);
+    if (OB_SUCC(ret) && (frame_count < 0 || frame_count > INT64_MAX / sizeof(char *)
+        || frame_count > data_len - pos)) { ret = OB_DESERIALIZE_ERROR; }
+    if (OB_SUCC(ret) && frame_count > 0) {
+      frames = static_cast<char **>(ctx.get_allocator().alloc(sizeof(char *) * frame_count));
+      if (frames == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { MEMSET(frames, 0, sizeof(char *) * frame_count); }
     }
-    OB_UNIS_ADD_LEN(frame_count);
-    len += get_serialize_frame_info_size<SERIALIZE_PLAN_PART>(expr_frame_info.const_frame_, frames, frame_count);
-    len += get_serialize_frame_info_size<SERIALIZE_PLAN_PART>(expr_frame_info.param_frame_, frames, frame_count);
-    len += get_serialize_frame_info_size<SERIALIZE_PLAN_PART>(expr_frame_info.dynamic_frame_, frames, frame_count);
-    len += get_serialize_frame_info_size<SERIALIZE_PLAN_PART>(expr_frame_info.datum_frame_, frames, frame_count, true);
-    return len;
+    ObSEArray<char *, 4> const_pointers;
+    ObSEArray<char *, 4> parameter_pages;
+    ObSEArray<const common::SqlType *, 16> parameter_types;
+    ObSEArray<common::DatumParameterMetadata, 8> parameter_metadata;
+    ObSEArray<NativeParameterGroup, 2> parameter_groups;
+    int32_t parameter_wire_version = 0;
+    int64_t original_count = 0;
+    if (OB_SUCC(ret)) {
+      ret = deserialize_frame_info<DESERIALIZE_PLAN_PART>(buf, data_len, pos, ctx.get_allocator(),
+          expr_frame_info.const_frame_, expr_frame_info, &const_pointers, frames, frame_count);
+    }
+    if (OB_SUCC(ret) && DESERIALIZE_PLAN_PART) {
+      ret = NativeFrameCodec::deserialize_metadata(buf, data_len, pos,
+          const_cast<ObExprFrameInfo &>(expr_frame_info).param_frame_, frame_count);
+    }
+    if (OB_SUCC(ret)) {
+      ret = NativeFrameCodec::deserialize_parameters(buf, data_len, pos, ctx.get_allocator(),
+          parameter_pages, parameter_types, original_count,
+          &parameter_metadata, &parameter_groups, &parameter_wire_version);
+    }
+    if (OB_SUCC(ret)) {
+      ret = NativeFrameCodec::bind_parameter_pages(expr_frame_info.param_frame_, parameter_pages,
+          parameter_types.count(), original_count, frames, frame_count, &expr_frame_info,
+          DESERIALIZE_PLAN_PART);
+    }
+    if (OB_SUCC(ret)) {
+      ret = deserialize_frame_info<DESERIALIZE_PLAN_PART>(buf, data_len, pos, ctx.get_allocator(),
+          expr_frame_info.dynamic_frame_, expr_frame_info, nullptr, frames, frame_count);
+    }
+    if (OB_SUCC(ret)) {
+      ret = deserialize_frame_info<DESERIALIZE_PLAN_PART>(buf, data_len, pos, ctx.get_allocator(),
+          expr_frame_info.datum_frame_, expr_frame_info, nullptr, frames, frame_count, true);
+    }
+    // Prepare all fallible plan-container work before adopting the sole native
+    // parameter owner. Any truncated later frame leaves PlanCtx/ctx untouched.
+    if (OB_SUCC(ret) && DESERIALIZE_PLAN_PART) {
+      ret = const_cast<ObExprFrameInfo &>(expr_frame_info).const_frame_ptrs_.assign(const_pointers);
+    }
+    if (OB_SUCC(ret)) {
+      ret = plan_ctx->restore_native_parameter_frames(parameter_pages, parameter_types, original_count,
+          parameter_wire_version >= 2 ? &parameter_metadata : nullptr,
+          parameter_wire_version >= 2 ? &parameter_groups : nullptr);
+    }
+    if (OB_SUCC(ret)) {
+      // PlanCtx expands short beyond pages before publishing stable slots.
+      // Bind this newly decoded directory to the adopted pages as well.
+      for (int64_t i = 0; i < frame_count; ++i) {
+        for (int64_t j = 0; j < parameter_pages.count(); ++j) {
+          if (frames[i] == parameter_pages.at(j)) {
+            frames[i] = plan_ctx->get_param_frame_ptrs().at(j);
+            break;
+          }
+        }
+      }
+      ctx.set_frames(frames);
+      ctx.set_frame_cnt(frame_count);
+      position = pos;
+    }
+    return ret;
   }
+
+  template <bool DESERIALIZE_PLAN_PART>
+  static int deserialize_frame_info(const char *buf, int64_t data_len, int64_t &pos,
+      ObIAllocator &allocator, const ObIArray<ObFrameInfo> &all_frames,
+      const ObExprFrameInfo &expressions, ObIArray<char *> *pointers,
+      char **frames, int64_t frame_count, bool no_deser_data = false)
+  {
+    return NativeFrameCodec::deserialize_group(buf, data_len, pos, allocator,
+        DESERIALIZE_PLAN_PART, all_frames, expressions, pointers, frames, frame_count, no_deser_data);
+  }
+
   template <bool SERIALIZE_PLAN_PART>
-  static int64_t get_serialize_frame_info_size(
-                                       const ObIArray<ObFrameInfo> &all_frames,
-                                       char **frames,
-                                       const int64_t frame_cnt,
-                                       bool no_ser_data = false)
+  static int64_t get_serialize_expr_frame_info_size(ObExecContext &ctx,
+      const ObExprFrameInfo &expr_frame_info)
   {
     int ret = OB_SUCCESS;
     int64_t len = 0;
-    int64_t need_extra_mem_size = 0;
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    ExprArrayScope array_scope;
+    ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
+    if (plan_ctx == nullptr) { return 0; }
+    if (SERIALIZE_PLAN_PART) { OB_UNIS_ADD_LEN(expr_frame_info.need_ctx_cnt_); }
+    ObExprExtraSerializeInfo expr_info;
+    expr_info.current_time_ = &plan_ctx->get_cur_time();
+    expr_info.last_trace_id_ = &plan_ctx->get_last_trace_id();
+    len += expr_info.get_serialize_size();
     if (SERIALIZE_PLAN_PART) {
-      OB_UNIS_ADD_LEN(all_frames.count());
-      for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
-        OB_UNIS_ADD_LEN(all_frames.at(i));
-      }
-    }
-    for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
-      const ObFrameInfo &frame_info = all_frames.at(i);
-      if (frame_info.frame_idx_ >= frame_cnt) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(ERROR, "frame index exceed frame count", K(ret), K(frame_cnt), K(frame_info.frame_idx_));
-      } else {
-        int64_t expr_mem_size = no_ser_data ? 0 : frame_info.expr_cnt_ * item_size;
-        OB_UNIS_ADD_LEN(expr_mem_size);
-        len += expr_mem_size;
-        char *frame_buf = frames[frame_info.frame_idx_];
-        for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
-          ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-                                    (frame_buf + j * item_size);
-          need_extra_mem_size += no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
+      const ObIArray<ObExpr> &exprs = expr_frame_info.rt_exprs_;
+      const int64_t count = expr_frame_info.is_mark_serialize()
+          ? expr_frame_info.ser_expr_marks_.count() : exprs.count();
+      ObExpr::get_serialize_array() = &const_cast<ObIArray<ObExpr> &>(exprs);
+      if (count < 0 || count > INT32_MAX || count > exprs.count()) { ret = OB_SIZE_OVERFLOW; }
+      else {
+        len += serialization::encoded_length_i32(static_cast<int32_t>(count));
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+          const ObExpr &expr = exprs.at(i);
+          const bool selected = !expr_frame_info.is_mark_serialize()
+              || expr_frame_info.ser_expr_marks_.at(i);
+          const int64_t bytes = selected && !(expr.type_ == T_INVALID && expr.sql_type_ == nullptr)
+              ? expr.get_serialize_size() : ObEmptyExpr::instance().get_serialize_size();
+          if (bytes < 0 || __builtin_add_overflow(len, bytes, &len)) { ret = OB_SIZE_OVERFLOW; }
         }
       }
     }
-    OB_UNIS_ADD_LEN(need_extra_mem_size);
-    int64_t expr_datum_size = 0;
-    int64_t ser_mem_size = 0;
-    for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
-      const ObFrameInfo &frame_info = all_frames.at(i);
-      char *frame_buf = frames[frame_info.frame_idx_];
-      for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
-        ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-                                  (frame_buf + j * item_size);
-        expr_datum_size = no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
-        OB_UNIS_ADD_LEN(expr_datum_size);
-        if (0 < expr_datum_size) {
-          // Include the out-of-line datum payload in the serialized size.
-          len += expr_datum_size;
-          ser_mem_size += expr_datum_size;
-        }
-      }
+    const bool original = ctx.get_ori_frame_cnt() != 0 && ctx.get_ori_frames() != nullptr;
+    const int64_t frame_count = original ? ctx.get_ori_frame_cnt() : ctx.get_frame_cnt();
+    char **frames = original ? ctx.get_ori_frames() : ctx.get_frames();
+    OB_UNIS_ADD_LEN(frame_count);
+    int64_t bytes = 0;
+    if (OB_SUCC(ret) && OB_FAIL(NativeFrameCodec::group_size(SERIALIZE_PLAN_PART,
+        expr_frame_info.const_frame_, expr_frame_info, frames, frame_count, false, bytes))) {
+    } else if (OB_SUCC(ret) && __builtin_add_overflow(len, bytes, &len)) { ret = OB_SIZE_OVERFLOW; }
+    if (OB_SUCC(ret) && SERIALIZE_PLAN_PART) {
+      if (OB_FAIL(NativeFrameCodec::metadata_size(expr_frame_info.param_frame_, bytes))) {
+      } else if (__builtin_add_overflow(len, bytes, &len)) { ret = OB_SIZE_OVERFLOW; }
     }
-    if (OB_SUCC(ret) && ser_mem_size != need_extra_mem_size) {
-      SQL_LOG(ERROR, "unexpected status: serialize size is not match", K(ret),
-        K(ser_mem_size), K(need_extra_mem_size));
+    if (OB_SUCC(ret) && OB_FAIL(NativeFrameCodec::parameter_size(*plan_ctx, bytes))) {
+    } else if (OB_SUCC(ret) && __builtin_add_overflow(len, bytes, &len)) { ret = OB_SIZE_OVERFLOW; }
+    if (OB_SUCC(ret) && OB_FAIL(NativeFrameCodec::group_size(SERIALIZE_PLAN_PART,
+        expr_frame_info.dynamic_frame_, expr_frame_info, frames, frame_count, false, bytes))) {
+    } else if (OB_SUCC(ret) && __builtin_add_overflow(len, bytes, &len)) { ret = OB_SIZE_OVERFLOW; }
+    if (OB_SUCC(ret) && OB_FAIL(NativeFrameCodec::group_size(SERIALIZE_PLAN_PART,
+        expr_frame_info.datum_frame_, expr_frame_info, frames, frame_count, true, bytes))) {
+    } else if (OB_SUCC(ret) && __builtin_add_overflow(len, bytes, &len)) { ret = OB_SIZE_OVERFLOW; }
+    if (OB_FAIL(ret)) {
+      SQL_LOG(WARN, "native frame has no valid wire size", K(ret));
+      len = 0;
     }
     return len;
   }
+
+  template <bool SERIALIZE_PLAN_PART>
+  static int64_t get_serialize_frame_info_size(const ObIArray<ObFrameInfo> &all_frames,
+      const ObExprFrameInfo &expressions, char *const *frames, int64_t frame_count,
+      bool no_ser_data = false)
+  {
+    int64_t size = 0;
+    const int ret = NativeFrameCodec::group_size(SERIALIZE_PLAN_PART,
+        all_frames, expressions, frames, frame_count, no_ser_data, size);
+    if (ret != OB_SUCCESS) { SQL_LOG(WARN, "native frame group has no valid wire size", K(ret)); }
+    return size;
+  }
+
 };
 
 class ObPxChannelUtil

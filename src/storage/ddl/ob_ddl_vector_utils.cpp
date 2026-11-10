@@ -232,7 +232,7 @@ int ObDDLVectorUtils::to_datum(ObIVector *vector, const int64_t idx, ObDatum &da
   return ret;
 }
 
-int ObDDLVectorUtils::reshape_storage_vector(const ObObjMeta &col_type,
+int ObDDLVectorUtils::reshape_storage_vector(const SqlTypeMeta &col_type,
                                              const ObAccuracy &col_accuracy,
                                              ObIAllocator &allocator,
                                              ObIVector *&vector,

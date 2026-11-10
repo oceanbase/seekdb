@@ -39,7 +39,7 @@ public:
                       ObExpr &rt_expr) const override;
   static int eval_xor(const ObExpr &expr,
                       ObEvalCtx &ctx,
-                      ObDatum &expr_datum);
+                      Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprXor);
 

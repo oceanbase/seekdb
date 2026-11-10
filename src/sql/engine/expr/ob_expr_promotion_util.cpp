@@ -58,11 +58,11 @@ int ObExprPromotionUtil::get_nvl_type(ObExprResType &type, const ObExprResType &
 int ObExprPromotionUtil::get_calc_type(ObExprResType &type,
                                        const ObExprResType &type1,
                                        const ObExprResType &type2,
-                                       const ObObjType map[ObMaxTC][ObMaxTC])
+                                       const SqlValueType map[ObMaxTC][ObMaxTC])
 {
   int ret = OB_SUCCESS;
-  ObObjTypeClass l_tc = type1.get_type_class();
-  ObObjTypeClass r_tc = type2.get_type_class();
+  SqlTypeClass l_tc = type1.get_type_class();
+  SqlTypeClass r_tc = type2.get_type_class();
   if (OB_UNLIKELY(l_tc < ObNullTC || l_tc >= ObMaxTC || r_tc < ObNullTC || r_tc >= ObMaxTC
                   || OB_ISNULL(map))) {
     ret = OB_ERR_UNEXPECTED;

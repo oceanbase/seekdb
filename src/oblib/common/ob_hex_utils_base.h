@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_LIB_OB_HEX_UTILS_BASE_H_
 #define OCEANBASE_LIB_OB_HEX_UTILS_BASE_H_
 
-namespace oceanbase { namespace common { class ObObj; } }
 #include "lib/string/ob_string.h"
 #include "lib/allocator/ob_allocator.h"
 
@@ -33,7 +32,9 @@ namespace common
 class ObHexUtilsBase
 {
 public:
-  static int unhex(const ObString &text, ObIAllocator &alloc, ObObj &result);
+  // valid is false for malformed input or allocation failure; decoded bytes
+  // are owned by alloc and remain live after the result descriptor is destroyed.
+  static int unhex(const ObString &text, ObIAllocator &alloc, ObString &result, bool &valid);
   static int unhex(const ObString &text, ObIAllocator &alloc, char *&binary_buf, int64_t &binary_len);
   static int hex(ObString &text, ObIAllocator &alloc, const char *binary_buf, int64_t binary_len);
 };

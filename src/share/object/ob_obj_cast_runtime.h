@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OBJECT_OB_OBJ_CAST_RUNTIME_H_
 
 #include <stdint.h>
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "lib/container/ob_iarray.h"
 
 namespace oceanbase
@@ -26,14 +26,14 @@ namespace oceanbase
 namespace common
 {
 
-struct ObObjCastParams;
+struct DatumCastParams;
 
 // Runtime semantics that cannot be implemented from Share value types alone.
 // Callers own the Adapter and keep it alive for the complete cast operation.
-class ObIObjCastRuntime
+class ObIDatumCastRuntime
 {
 public:
-  virtual ~ObIObjCastRuntime() = default;
+  virtual ~ObIDatumCastRuntime() = default;
 
   virtual int get_enum_set_values(
       uint16_t subschema_id,
@@ -41,9 +41,9 @@ public:
       ObCollationType &collation_type) const = 0;
 
   virtual int cast_collection(
-      ObObjCastParams &params,
-      const ObObj &input,
-      ObObj &output,
+      DatumCastParams &params,
+      const DatumValue &input,
+      DatumValue &output,
       uint64_t cast_mode) const = 0;
 
   virtual void report_warning(

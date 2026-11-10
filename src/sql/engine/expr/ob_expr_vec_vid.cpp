@@ -43,13 +43,6 @@ int ObExprVecVid::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprVecVid::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprVecVid::cg_expr(
     ObExprCGCtx &cg_ctx,
@@ -70,7 +63,7 @@ int ObExprVecVid::cg_expr(
 /*static*/ int ObExprVecVid::generate_vec_id(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (raw_ctx.arg_cnt_ == 0) {

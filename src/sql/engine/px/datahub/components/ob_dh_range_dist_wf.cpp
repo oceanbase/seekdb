@@ -203,7 +203,7 @@ int ObRDWFPieceMsgCtx::formalize_store_row()
     int64_t extra_payload_size = sizeof(ExtType);
     if (NULL != s) {
       int64_t size = ObChunkDatumStore::Block::row_store_size(
-          s->cells(), s->cnt_, extra_payload_size);
+          s->stored_cells(), s->cnt_, extra_payload_size);
       auto ns = static_cast<ObStoredDatumRow *>(arena_alloc_.alloc(size));
       if (NULL == ns) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -215,7 +215,8 @@ int ObRDWFPieceMsgCtx::formalize_store_row()
         int64_t buf_len = size - (buf - (char *)ns);
         int64_t pos = 0;
         for (int64_t i = 0; OB_SUCC(ret) && i < s->cnt_; i++) {
-          OZ(ns->cells()[i].deep_copy(s->cells()[i], buf, buf_len, pos));
+          OZ(StoredDatumCodec::copy_stored_payload(
+              s->stored_cells()[i], ns->stored_cells()[i], buf, buf_len, pos));
         }
       }
       if (OB_SUCC(ret)) {

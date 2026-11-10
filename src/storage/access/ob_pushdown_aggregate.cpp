@@ -28,6 +28,34 @@ namespace oceanbase
 using namespace common;
 namespace storage
 {
+namespace
+{
+constexpr int64_t NATIVE_LEGACY_SCALAR_BYTES = 64;
+
+int publish_storage_result(const sql::ObExpr &expr, sql::ObEvalCtx &ctx, const ObDatum &source,
+                           int64_t row = -1)
+{
+  int ret = OB_SUCCESS;
+  Datum value;
+  const DatumCopyPlan plan = expr.get_datum_copy_plan();
+  const int64_t index = row < 0 ? ctx.get_batch_idx() : row;
+  if (OB_FAIL(plan.import_legacy(source, value))) {
+  } else {
+    int64_t bytes = 0;
+    Datum &destination = expr.locate_expr_datum(ctx, index);
+    if (OB_FAIL(plan.carrier_span_size(value, bytes))) {
+    } else if (bytes == 0) { destination = value; }
+    else {
+      char *buffer = expr.get_reference_res_mem(ctx, bytes, index);
+      int64_t position = 0;
+      if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { ret = plan.copy_carrier_span_borrowing_resources(value, destination, buffer, bytes, position); }
+    }
+  }
+  return ret;
+}
+}
+
 ObAggCell::ObAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
     : ObAggCellBase(allocator),
       basic_info_(basic_info),
@@ -36,6 +64,8 @@ ObAggCell::ObAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator 
       aggregated_(false),
       agg_datum_buf_(nullptr),
       col_datums_(nullptr),
+      legacy_input_owner_(nullptr), native_eval_ctx_(nullptr),
+      native_projection_offset_(0),
       group_by_result_datum_buf_(nullptr),
       group_by_result_cnt_(0),
       padding_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
@@ -56,6 +86,10 @@ void ObAggCell::reset()
     allocator_.free(agg_datum_buf_);
     agg_datum_buf_ = nullptr;
   }
+  for (ObAggDatumBuf **owner : {&legacy_input_owner_}) {
+    if (*owner != nullptr) { (*owner)->~ObAggDatumBuf(); allocator_.free(*owner); *owner = nullptr; }
+  }
+  native_eval_ctx_ = nullptr;
   col_datums_ = nullptr;
   free_group_by_buf(allocator_, group_by_result_datum_buf_);
   group_by_result_cnt_ = 0;
@@ -66,6 +100,9 @@ void ObAggCell::reuse()
 {
   ObAggCellBase::reuse();
   aggregated_ = false;
+  native_projection_offset_ = 0;
+  if (group_by_result_datum_buf_ != nullptr) { group_by_result_datum_buf_->reuse(); }
+  clear_group_by_info();
   group_by_result_cnt_ = 0;
   if (nullptr != col_datums_) {
     for (int64_t i = 0; i < basic_info_.batch_size_; ++i) {
@@ -86,32 +123,74 @@ void ObAggCell::clear_group_by_info()
   }
 }
 
+int ObAggCell::init_legacy_frame_buffers()
+{
+  int ret = ObAggDatumBuf::new_agg_datum_buf(basic_info_.batch_size_, false,
+      allocator_, legacy_input_owner_, NATIVE_LEGACY_SCALAR_BYTES);
+  if (OB_SUCC(ret)) { col_datums_ = legacy_input_owner_->get_datums(); }
+  return ret;
+}
+
 int ObAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
   int ret = OB_SUCCESS;
-  if (is_group_by) {
-    if (PD_FIRST_ROW != agg_type_) {
-      common::ObDatum *result_datums = basic_info_.agg_expr_->locate_batch_datums(*eval_ctx);
-      if (OB_ISNULL(result_datums)) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "Unexpected null agg datums", K(ret));
-      } else if (OB_FAIL(new_group_by_buf(result_datums, basic_info_.batch_size_,
-          common::OBJ_DATUM_NUMBER_RES_SIZE, allocator_, group_by_result_datum_buf_))) {
-      } else if (OB_UNLIKELY(nullptr == basic_info_.agg_expr_->args_ ||
-          nullptr == basic_info_.agg_expr_->args_[0] ||
-          basic_info_.agg_expr_->args_[0]->type_ != T_REF_COLUMN)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(col_datums_ = basic_info_.agg_expr_->args_[0]->locate_batch_datums(*eval_ctx))) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "Unexpected null col datums", K(ret));
-      }
-    } else if (OB_ISNULL(col_datums_ = basic_info_.agg_expr_->locate_batch_datums(*eval_ctx))) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "Unexpected null col datums", K(ret));
+  native_eval_ctx_ = eval_ctx;
+  if (basic_info_.agg_expr_ == nullptr || basic_info_.agg_expr_->sql_type_ == nullptr) { ret = OB_INVALID_ARGUMENT; }
+  else {
+    result_datum_.configure(&basic_info_.agg_expr_->get_sql_type(),
+        PD_COUNT == agg_type_ ? ObAggNativeDomain::Signed : ObAggNativeDomain::Semantic);
+    if (is_group_by) {
+      if (OB_FAIL(init_legacy_frame_buffers())) {
+      } else { ret = init_native_result_buffer(); }
     }
   }
-  if (OB_SUCC(ret)) {
-    is_inited_ = true;
+  if (OB_SUCC(ret)) { is_inited_ = true; }
+  return ret;
+}
+
+int ObAggCell::init_native_result_buffer()
+{
+  int ret = OB_SUCCESS;
+  void *memory = allocator_.alloc(sizeof(ObNativeAggDatumBuf));
+  if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  else {
+    auto *candidate = new(memory) ObNativeAggDatumBuf(allocator_);
+    ret = candidate->init(basic_info_.batch_size_, &basic_info_.agg_expr_->get_sql_type(),
+        PD_COUNT == agg_type_ ? ObAggNativeDomain::Signed : ObAggNativeDomain::Semantic);
+    if (OB_FAIL(ret)) { candidate->~ObNativeAggDatumBuf(); allocator_.free(candidate); }
+    else { group_by_result_datum_buf_ = candidate; }
+  }
+  return ret;
+}
+
+int ObAggCell::import_native_inputs(sql::ObEvalCtx &ctx, int64_t begin, int64_t end)
+{
+  int ret = OB_SUCCESS;
+  const sql::ObExpr &expr = *(PD_FIRST_ROW == agg_type_ ? basic_info_.agg_expr_
+      : basic_info_.agg_expr_->args_[0]);
+  if (begin < 0 || end > basic_info_.batch_size_) { ret = OB_INVALID_ARGUMENT; }
+  if (begin == 0) { legacy_input_owner_->reuse(); }
+  for (int64_t row = begin; OB_SUCC(ret) && row < end; ++row) {
+    const Datum &source = expr.locate_expr_datum(ctx, row);
+    // The owner already reserves enough space for storage scalar/Number/Decimal
+    // output. References can borrow the existing frame for this synchronous use.
+    char *buffer = legacy_input_owner_->get_view_scratch(row);
+    ret = expr.get_datum_copy_plan().legacy_view(source, col_datums_[row], buffer,
+                                                NATIVE_LEGACY_SCALAR_BYTES);
+  }
+  return ret;
+}
+
+int ObAggCell::publish_native_rows(sql::ObEvalCtx &ctx, int64_t count)
+{
+  int ret = OB_SUCCESS;
+  if (count < 0 || group_by_result_datum_buf_ == nullptr
+      || native_projection_offset_ > group_by_result_datum_buf_->get_capacity() - count) { return OB_INVALID_ARGUMENT; }
+  for (int64_t row = 0; OB_SUCC(ret) && row < count; ++row) {
+    ObDatum view;
+    alignas(8) char scratch[64];
+    if (OB_FAIL(group_by_result_datum_buf_->at(native_projection_offset_ + row).export_legacy(view, scratch, sizeof(scratch)))) {
+    } else { ret = publish_storage_result(*basic_info_.agg_expr_, ctx, view, row); }
   }
   return ret;
 }
@@ -148,17 +227,13 @@ int ObAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 int ObAggCell::copy_output_rows(const int32_t start_offset, const int32_t end_offset)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(end_offset <= start_offset || end_offset > group_by_result_datum_buf_->get_basic_count())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    common::ObDatum *result_datums = group_by_result_datum_buf_->get_basic_buf();
-    for (int64_t i = start_offset; OB_SUCC(ret) && i < end_offset; i++) {
-      // Although one batch of rows will be returned to SQL layer directly
-      // it's needed to use 'from_storage_datum' to avoid overrided prevous memory of datum
-      // as the ptr of datum may be not redirected to SQL memory and will be overrided in following 'eval_batch_in_group_by'
-      if (OB_FAIL(result_datums[i].from_storage_datum(
-          col_datums_[i], basic_info_.agg_expr_->obj_datum_map_))) {
-      }
+  if (native_eval_ctx_ != nullptr) { ret = import_native_inputs(*native_eval_ctx_, start_offset, end_offset); }
+  if (OB_FAIL(ret)) {
+  } else if (end_offset <= start_offset || end_offset > group_by_result_datum_buf_->get_basic_count()) { ret = OB_INVALID_ARGUMENT; }
+  else {
+    native_projection_offset_ = 0;
+    for (int64_t i = start_offset; OB_SUCC(ret) && i < end_offset; ++i) {
+      ret = group_by_result_datum_buf_->at(i).capture_legacy(col_datums_[i]);
     }
   }
   return ret;
@@ -167,27 +242,19 @@ int ObAggCell::copy_output_rows(const int32_t start_offset, const int32_t end_of
 int ObAggCell::copy_single_output_row(sql::ObEvalCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_info_.agg_expr_->args_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    sql::ObDatum &datum = basic_info_.agg_expr_->args_[0]->locate_expr_datum(ctx);
-    common::ObDatum &result_datum = basic_info_.agg_expr_->locate_datum_for_write(ctx);
-    if (OB_FAIL(result_datum.from_storage_datum(datum, basic_info_.agg_expr_->obj_datum_map_))) {
-    }
-  }
+  if (basic_info_.agg_expr_->args_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else { ret = basic_info_.agg_expr_->deep_copy_datum(ctx,
+      basic_info_.agg_expr_->args_[0]->locate_expr_datum(ctx)); }
   return ret;
 }
 
 int ObAggCell::collect_result(sql::ObEvalCtx &ctx)
 {
-  int ret = OB_SUCCESS;
-  ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
-  if (OB_FAIL(fill_default_if_need(result_datum_))) {
-  } else if (OB_FAIL(result.from_storage_datum(result_datum_, basic_info_.agg_expr_->obj_datum_map_))) {
-  } else {
-    sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
-    eval_info.evaluated_ = true;
-  }
+  ObDatum view;
+  alignas(8) char scratch[64];
+  int ret = result_datum_.export_legacy(view, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = publish_storage_result(*basic_info_.agg_expr_, ctx, view); }
+  if (OB_SUCC(ret)) { basic_info_.agg_expr_->get_eval_info(ctx).evaluated_ = true; }
   return ret;
 }
 
@@ -209,23 +276,11 @@ int ObAggCell::reserve_group_by_buf(const int64_t size)
 
 int ObAggCell::output_extra_group_by_result(const int64_t start, const int64_t count)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(start < group_by_result_datum_buf_->get_basic_count() ||
-      start + count > group_by_result_datum_buf_->get_capacity())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(!group_by_result_datum_buf_->is_use_extra_data())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    common::ObDatum *sql_result_datums = group_by_result_datum_buf_->get_basic_buf();
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      if (OB_FAIL(sql_result_datums[i].from_storage_datum(
-          group_by_result_datum_buf_->at(start + i), basic_info_.agg_expr_->obj_datum_map_))) {
-      }
-    }
-    LOG_DEBUG("[GROUP BY PUSHDOWN]", K(ret), K(start), K(count),
-        K(common::ObArrayWrap<common::ObDatum>(sql_result_datums, count)));
-  }
-  return ret;
+  if (start < group_by_result_datum_buf_->get_basic_count() || count < 0
+      || start > group_by_result_datum_buf_->get_capacity() - count
+      || !group_by_result_datum_buf_->is_use_extra_data()) { return OB_INVALID_ARGUMENT; }
+  native_projection_offset_ = start;
+  return OB_SUCCESS;
 }
 
 int ObAggCell::pad_column_in_group_by(const int64_t row_cap, common::ObIAllocator &allocator)
@@ -238,9 +293,11 @@ int ObAggCell::prepare_def_datum()
   int ret = OB_SUCCESS;
   if (def_datum_.is_nop()) {
     def_datum_.reuse();
-    const ObObj &def_cell = basic_info_.col_param_->get_orig_default_value();
-    if (!def_cell.is_nop_value()) {
-      if (OB_FAIL(def_datum_.from_obj_enhance(def_cell))) {
+    common::DatumValue def_cell;
+    alignas(8) char default_scratch[64];
+    if (OB_FAIL(basic_info_.col_param_->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+    } else if (!def_cell.is_nop_value()) {
+      if (OB_FAIL(def_datum_.from_value(def_cell))) {
       } else if (OB_FAIL(pad_column_if_need(def_datum_, allocator_, false))) {
       } else if (def_cell.is_lob_storage() && !def_cell.is_null()) {
         // lob def value must have no lob header when not null, should add lob header for default value
@@ -267,7 +324,7 @@ int ObAggCell::fill_default_if_need(blocksstable::ObStorageDatum &datum)
     if (OB_FAIL(prepare_def_datum())) {
     } else {
       datum.reuse();
-      const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(basic_info_.col_param_->get_meta_type().get_type());
+      const SqlValueDatumMapType map_type = ObDatum::get_sql_value_datum_map_type(basic_info_.col_param_->get_meta_type().get_type());
       if (OB_FAIL(datum.from_storage_datum(def_datum_, map_type))) {
       }
     }
@@ -291,17 +348,8 @@ int ObAggCell::pad_column_if_need(blocksstable::ObStorageDatum &datum, common::O
 
 int ObAggCell::deep_copy_datum(const blocksstable::ObStorageDatum &src, common::ObIAllocator &tmp_alloc)
 {
-  int ret = OB_SUCCESS;
-  if (src.is_null() || src.is_nop()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    if (!result_datum_.is_local_buf()) {
-      tmp_alloc.reuse();
-    }
-    if (OB_FAIL(result_datum_.deep_copy(src, tmp_alloc))) {
-    }
-  }
-  return ret;
+  UNUSED(tmp_alloc);
+  return src.is_null() || src.is_nop() ? OB_ERR_UNEXPECTED : result_datum_.capture_legacy(src);
 }
 
 int ObAggCell::read_agg_datum(
@@ -379,20 +427,7 @@ void ObCountAggCell::reuse()
 
 int ObCountAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
-  int ret = OB_SUCCESS;
-  if (exclude_null_) {
-    if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
-    }
-  } else if (is_group_by) {
-    common::ObDatum *result_datums = basic_info_.agg_expr_->locate_batch_datums(*eval_ctx);
-    if (OB_ISNULL(result_datums)) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "Unexpected null agg datums", K(ret));
-    } else if (OB_FAIL(new_group_by_buf(result_datums, basic_info_.batch_size_,
-        common::OBJ_DATUM_NUMBER_RES_SIZE, allocator_, group_by_result_datum_buf_))) {
-    }
-  }
-  return ret;
+  return ObAggCell::init(is_group_by, eval_ctx);
 }
 
 int ObCountAggCell::eval(
@@ -480,7 +515,7 @@ void eval_batch_for_count(
     const common::ObDatum *datums,
     const int64_t count,
     const uint32_t *refs,
-    ObGroupByExtendableBuf<ObDatum> *result_datums)
+    ObNativeAggDatumBuf *result_datums)
 {}
 
 template<>
@@ -488,10 +523,10 @@ void eval_batch_for_count<false, false>(
     const common::ObDatum *datums,
     const int64_t count,
     const uint32_t *refs,
-    ObGroupByExtendableBuf<ObDatum> *result_datums)
+    ObNativeAggDatumBuf *result_datums)
 {
   for (int64_t i = 0; i < count; ++i) {
-    common::ObDatum &result_datum = result_datums->at(refs[i]);
+    ObAggNativeCell &result_datum = result_datums->at(refs[i]);
     result_datum.set_int(result_datum.get_int() + 1);
   }
 }
@@ -501,10 +536,10 @@ void eval_batch_for_count<true, false>(
     const common::ObDatum *datums,
     const int64_t count,
     const uint32_t *refs,
-    ObGroupByExtendableBuf<ObDatum> *result_datums)
+    ObNativeAggDatumBuf *result_datums)
 {
   for (int64_t i = 0; i < count; ++i) {
-    common::ObDatum &result_datum = result_datums->at(refs[i]);
+    ObAggNativeCell &result_datum = result_datums->at(refs[i]);
     if (!datums[i].is_null()) {
       result_datum.set_int(result_datum.get_int() + 1);
     }
@@ -516,10 +551,10 @@ void eval_batch_for_count<true, true>(
     const common::ObDatum *datums,
     const int64_t count,
     const uint32_t *refs,
-    ObGroupByExtendableBuf<ObDatum> *result_datums)
+    ObNativeAggDatumBuf *result_datums)
 {
   for (int64_t i = 0; i < count; ++i) {
-    common::ObDatum &result_datum = result_datums->at(refs[i]);
+    ObAggNativeCell &result_datum = result_datums->at(refs[i]);
     if (!datums[refs[i]].is_null()) {
       result_datum.set_int(result_datum.get_int() + 1);
     }
@@ -530,7 +565,7 @@ typedef void (*eval_batch_for_count_func) (
     const common::ObDatum *datums,
     const int64_t count,
     const uint32_t *refs,
-    ObGroupByExtendableBuf<ObDatum> *result_datums);
+    ObNativeAggDatumBuf *result_datums);
 static eval_batch_for_count_func EVAL_BATCH_COUNT_FUNCS[2][2] = {
   {eval_batch_for_count<false, false>, eval_batch_for_count<false, false>},
   {eval_batch_for_count<true, false>, eval_batch_for_count<true, true>}
@@ -549,7 +584,7 @@ int ObCountAggCell::eval_batch_in_group_by(
     const bool should_inc = !exclude_null_ || !datums[0].is_null();
     if (should_inc) {
       for (int64_t i = 0; i < count; ++i) {
-        common::ObDatum &result_datum = group_by_result_datum_buf_->at(refs[i]);
+        ObAggNativeCell &result_datum = group_by_result_datum_buf_->at(refs[i]);
         result_datum.set_int(result_datum.get_int() + 1);
       }
     }
@@ -563,10 +598,12 @@ int ObCountAggCell::eval_batch_in_group_by(
 int ObCountAggCell::copy_output_rows(const int32_t start_offset, const int32_t end_offset)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(end_offset <= start_offset || end_offset > group_by_result_datum_buf_->get_basic_count())) {
+  if (exclude_null_ && native_eval_ctx_ != nullptr) { ret = import_native_inputs(*native_eval_ctx_, start_offset, end_offset); }
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(end_offset <= start_offset || end_offset > group_by_result_datum_buf_->get_basic_count())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    common::ObDatum *result_datums = group_by_result_datum_buf_->get_basic_buf();
+    ObAggNativeCell *result_datums = group_by_result_datum_buf_->get_basic_buf();
     if (exclude_null_) {
       for (int64_t i = start_offset; i < end_offset; i++) {
         col_datums_[i].is_null() ? result_datums[i].set_int(0) : result_datums[i].set_int(1);
@@ -578,7 +615,7 @@ int ObCountAggCell::copy_output_rows(const int32_t start_offset, const int32_t e
     }
     LOG_DEBUG("[GROUP BY PUSHDOWN]", K(ret), K(start_offset), K(end_offset),
         K(common::ObArrayWrap<common::ObDatum>(col_datums_ + start_offset, end_offset - start_offset)),
-        K(common::ObArrayWrap<common::ObDatum>(result_datums + start_offset, end_offset - start_offset)));
+        K(common::ObArrayWrap<ObAggNativeCell>(result_datums + start_offset, end_offset - start_offset)));
   }
   return ret;
 }
@@ -586,12 +623,12 @@ int ObCountAggCell::copy_output_rows(const int32_t start_offset, const int32_t e
 int ObCountAggCell::copy_single_output_row(sql::ObEvalCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  common::ObDatum &result_datum = basic_info_.agg_expr_->locate_datum_for_write(ctx);
+  common::Datum &result_datum = basic_info_.agg_expr_->locate_datum_for_write(ctx);
   if (exclude_null_) {
     if (OB_ISNULL(basic_info_.agg_expr_->args_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      sql::ObDatum &datum = basic_info_.agg_expr_->args_[0]->locate_expr_datum(ctx);
+      common::Datum &datum = basic_info_.agg_expr_->args_[0]->locate_expr_datum(ctx);
       if (!datum.is_null()) {
         result_datum.set_int(1);
       } else {
@@ -616,11 +653,32 @@ int ObCountAggCell::collect_batch_result_in_group_by(const int64_t distinct_cnt)
 int ObCountAggCell::collect_result(sql::ObEvalCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
+  ObDatum result;
+  alignas(8) char result_buffer[NATIVE_LEGACY_SCALAR_BYTES];
+  result.ptr_ = result_buffer;
   sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
   result.set_int(row_count_);
   eval_info.evaluated_ = true;
+  if (OB_SUCC(ret)) { ret = publish_storage_result(*basic_info_.agg_expr_, ctx, result); }
   return ret;
+}
+
+namespace {
+int update_native_extreme(ObAggNativeCell &result, const ObDatum &input,
+    ObDatumCmpFuncType compare, const ObDatumAccessContext *access, bool minimum)
+{
+  if (input.is_null()) { return OB_SUCCESS; }
+  ObDatum retained;
+  alignas(8) char retained_scratch[64];
+  int ret = result.export_legacy(retained, retained_scratch, sizeof(retained_scratch));
+  int compared = 0;
+  if (OB_FAIL(ret)) {
+  } else if (!retained.is_null() && OB_FAIL(compare(retained, input, compared, access))) {
+  } else if (retained.is_null() || (minimum ? compared > 0 : compared < 0)) {
+    ret = result.capture_legacy(input);
+  }
+  return ret;
+}
 }
 
 ObMinAggCell::ObMinAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
@@ -656,13 +714,13 @@ int ObMinAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(eval_ctx) ||
-      OB_ISNULL(basic_info_.agg_expr_->basic_funcs_) ||
-      OB_ISNULL(basic_info_.agg_expr_->basic_funcs_->null_first_cmp_)) {
+      OB_ISNULL(sql::storage_predicate_functions(*basic_info_.agg_expr_)) ||
+      OB_ISNULL(sql::storage_predicate_functions(*basic_info_.agg_expr_)->null_first_cmp_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
   } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
   } else {
-    cmp_fun_ = basic_info_.agg_expr_->basic_funcs_->null_first_cmp_;
+    cmp_fun_ = sql::storage_predicate_functions(*basic_info_.agg_expr_)->null_first_cmp_;
   }
   return ret;
 }
@@ -672,61 +730,22 @@ int ObMinAggCell::eval(
     const int64_t row_count,
     const int64_t agg_row_idx)
 {
-  UNUSEDx(row_count, agg_row_idx);
-  int ret = OB_SUCCESS;
-  int cmp_ret = 0;
-  if (OB_UNLIKELY(row_count < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(fill_default_if_need(storage_datum))) {
-  } else if (storage_datum.is_null()) {
-  } else if (OB_FAIL(pad_column_if_need(storage_datum, padding_allocator_))) {
-  } else if (result_datum_.is_null()) {
-    if (OB_FAIL(result_datum_.deep_copy(storage_datum, datum_allocator_))) {
-    }
-  } else if (OB_FAIL(cmp_fun_(
-                 result_datum_, storage_datum, cmp_ret, datum_access_ctx_))) {
-  } else if (cmp_ret > 0 && OB_FAIL(deep_copy_datum(storage_datum, datum_allocator_))) {
-  }
-  if (OB_SUCC(ret)) {
-    aggregated_ = true;
-  }
+  UNUSED(agg_row_idx);
+  int ret = row_count < 0 ? OB_INVALID_ARGUMENT : fill_default_if_need(storage_datum);
+  if (OB_SUCC(ret) && !storage_datum.is_null()) { ret = pad_column_if_need(storage_datum, padding_allocator_); }
+  if (OB_SUCC(ret)) { ret = update_native_extreme(result_datum_, storage_datum, cmp_fun_, datum_access_ctx_, true); }
+  if (OB_SUCC(ret)) { aggregated_ = true; }
   return ret;
 }
 
 int ObMinAggCell::eval_batch(const common::ObDatum *datums, const int64_t count)
 {
+  if (datums == nullptr || count < 0) { return OB_INVALID_ARGUMENT; }
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == datums || count < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int cmp_ret = 0;
-    blocksstable::ObStorageDatum tmp_min_datum;
-    tmp_min_datum.set_null();
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      const common::ObDatum &datum = datums[i];
-      if (datum.is_null()) {
-      } else if (tmp_min_datum.is_null()) {
-        tmp_min_datum.shallow_copy_from_datum(datum);
-      } else if (OB_FAIL(cmp_fun_(
-                     tmp_min_datum, datum, cmp_ret, datum_access_ctx_))) {
-      } else if (cmp_ret > 0) {
-        tmp_min_datum.shallow_copy_from_datum(datum);
-      }
-    }
-    if (OB_FAIL(ret) || tmp_min_datum.is_null()) {
-    } else if (result_datum_.is_null()) {
-      if (OB_FAIL(deep_copy_datum(tmp_min_datum, datum_allocator_))) {
-      }
-    } else if (OB_FAIL(cmp_fun_(
-                   result_datum_, tmp_min_datum, cmp_ret, datum_access_ctx_))) {
-    } else if (cmp_ret > 0) {
-      if (OB_FAIL(deep_copy_datum(tmp_min_datum, datum_allocator_))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      aggregated_ = true;
-    }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    ret = update_native_extreme(result_datum_, datums[i], cmp_fun_, datum_access_ctx_, true);
   }
+  if (OB_SUCC(ret)) { aggregated_ = true; }
   return ret;
 }
 
@@ -738,63 +757,14 @@ int ObMinAggCell::eval_batch_in_group_by(
     const bool is_group_by_col,
     const bool is_default_datum)
 {
+  if (datums == nullptr || refs == nullptr || count < 0 || count > basic_info_.batch_size_
+      || distinct_cnt < 0 || distinct_cnt > group_by_result_datum_buf_->get_capacity()) { return OB_INVALID_ARGUMENT; }
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(count > basic_info_.batch_size_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(nullptr == cmp_fun_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    const bool read_distinct_val = is_group_by_col || is_default_datum;
-    const bool need_deep_copy = !read_distinct_val && OBJ_DATUM_STRING == basic_info_.agg_expr_->obj_datum_map_;
-    if (need_deep_copy && nullptr == group_by_ref_array_) {
-      void *buf = nullptr;
-      if (OB_ISNULL(buf = allocator_.alloc(sizeof(uint32_t) * basic_info_.batch_size_))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        group_by_ref_array_ = static_cast<uint32_t*>(buf);
-        MEMSET(group_by_ref_array_, -1, basic_info_.batch_size_);
-      }
-    }
-    int64_t updated_cnt = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      const uint32_t distinct_ref = refs[i];
-      const uint32_t dictinct_datum_offset = is_default_datum ? 0 : refs[i];
-      const common::ObDatum &datum = read_distinct_val ? datums[dictinct_datum_offset] : datums[i];
-      if (datum.is_null()) {
-      } else {
-        common::ObDatum &result_datum = group_by_result_datum_buf_->at(distinct_ref);
-        int cmp_ret = 0;
-        if (!result_datum.is_null() &&
-            OB_FAIL(cmp_fun_(result_datum, datum, cmp_ret, datum_access_ctx_))) {
-        } else if (result_datum.is_null() || cmp_ret > 0) {
-          // This function may be invoked for many times in one micro block,
-          // so instead of '=', it's needed to use 'from_storage_datum' to avoid overrided prevous memory of datum
-          if (OB_FAIL(result_datum.from_storage_datum(datum, basic_info_.agg_expr_->obj_datum_map_))) {
-          } else if (need_deep_copy) {
-            group_by_ref_array_[updated_cnt++] = distinct_ref;
-          }
-        }
-      }
-    }
-    // deep copy updated distinct values
-    // as there is no guarantee of the validness of the previous memory in next round
-    if (OB_FAIL(ret)) {
-    } else if (updated_cnt > 0) {
-      lib::ob_sort(group_by_ref_array_, group_by_ref_array_ + updated_cnt);
-      int64_t last_ref_cnt = -1;
-      for (int64_t i = 0; OB_SUCC(ret) && i < updated_cnt; ++i) {
-        if (-1 == group_by_ref_array_[i]) {
-        } else if (last_ref_cnt == group_by_ref_array_[i]) {
-          group_by_ref_array_[i] = -1;
-        } else {
-          common::ObDatum &result_datum = group_by_result_datum_buf_->at(group_by_ref_array_[i]);
-          if (OB_FAIL(result_datum.deep_copy(result_datum, datum_allocator_))) {
-          } else {
-            last_ref_cnt = group_by_ref_array_[i];
-            group_by_ref_array_[i] = -1;
-          }
-        }
-      }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    if (refs[i] >= distinct_cnt) { ret = OB_INVALID_ARGUMENT; }
+    else {
+      const ObDatum &input = datums[is_default_datum ? 0 : is_group_by_col ? refs[i] : i];
+      ret = update_native_extreme(group_by_result_datum_buf_->at(refs[i]), input, cmp_fun_, datum_access_ctx_, true);
     }
   }
   return ret;
@@ -802,15 +772,17 @@ int ObMinAggCell::eval_batch_in_group_by(
 
 int ObMinAggCell::pad_column_in_group_by(const int64_t row_cap, common::ObIAllocator &allocator)
 {
+  if (!basic_info_.need_padding()) { return OB_SUCCESS; }
   int ret = OB_SUCCESS;
-  common::ObDatum *sql_result_datums = group_by_result_datum_buf_->get_basic_buf(); 
-  if (basic_info_.need_padding() && 
-      OB_FAIL(storage::pad_on_datums(
-              basic_info_.col_param_->get_accuracy(),
-              basic_info_.col_param_->get_meta_type().get_collation_type(),
-              allocator,
-              row_cap,
-              sql_result_datums))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
+    ObDatum view;
+    alignas(8) char scratch[64];
+    ObAggNativeCell &cell = group_by_result_datum_buf_->at(native_projection_offset_ + i);
+    ObDatum *view_ptr = &view;
+    if (OB_FAIL(cell.export_legacy(view, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(storage::pad_on_datums(basic_info_.col_param_->get_accuracy(),
+        basic_info_.col_param_->get_meta_type().get_collation_type(), allocator, 1, view_ptr))) {
+    } else { ret = cell.capture_legacy(*view_ptr); }
   }
   return ret;
 }
@@ -848,13 +820,13 @@ int ObMaxAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(eval_ctx) ||
-      OB_ISNULL(basic_info_.agg_expr_->basic_funcs_) ||
-      OB_ISNULL(basic_info_.agg_expr_->basic_funcs_->null_first_cmp_)) {
+      OB_ISNULL(sql::storage_predicate_functions(*basic_info_.agg_expr_)) ||
+      OB_ISNULL(sql::storage_predicate_functions(*basic_info_.agg_expr_)->null_first_cmp_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
   } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
   } else {
-    cmp_fun_ = basic_info_.agg_expr_->basic_funcs_->null_first_cmp_;
+    cmp_fun_ = sql::storage_predicate_functions(*basic_info_.agg_expr_)->null_first_cmp_;
   }
   return ret;
 }
@@ -864,61 +836,22 @@ int ObMaxAggCell::eval(
     const int64_t row_count,
     const int64_t agg_row_idx)
 {
-  UNUSEDx(row_count, agg_row_idx);
-  int ret = OB_SUCCESS;
-  int cmp_ret = 0;
-  if (OB_UNLIKELY(row_count < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(fill_default_if_need(storage_datum))) {
-  } else if (storage_datum.is_null()) {
-  } else if (OB_FAIL(pad_column_if_need(storage_datum, padding_allocator_))) {
-  } else if (result_datum_.is_null()) {
-    if (OB_FAIL(result_datum_.deep_copy(storage_datum, datum_allocator_))) {
-    }
-  } else if (OB_FAIL(cmp_fun_(
-                 result_datum_, storage_datum, cmp_ret, datum_access_ctx_))) {
-  } else if (cmp_ret < 0 && OB_FAIL(deep_copy_datum(storage_datum, datum_allocator_))) {
-  }
-  if (OB_SUCC(ret)) {
-    aggregated_ = true;
-  }
+  UNUSED(agg_row_idx);
+  int ret = row_count < 0 ? OB_INVALID_ARGUMENT : fill_default_if_need(storage_datum);
+  if (OB_SUCC(ret) && !storage_datum.is_null()) { ret = pad_column_if_need(storage_datum, padding_allocator_); }
+  if (OB_SUCC(ret)) { ret = update_native_extreme(result_datum_, storage_datum, cmp_fun_, datum_access_ctx_, false); }
+  if (OB_SUCC(ret)) { aggregated_ = true; }
   return ret;
 }
 
 int ObMaxAggCell::eval_batch(const common::ObDatum *datums, const int64_t count)
 {
+  if (datums == nullptr || count < 0) { return OB_INVALID_ARGUMENT; }
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == datums || count < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int cmp_ret = 0;
-    blocksstable::ObStorageDatum tmp_min_datum;
-    tmp_min_datum.set_null();
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      const common::ObDatum &datum = datums[i];
-      if (datum.is_null()) {
-      } else if (tmp_min_datum.is_null()) {
-        tmp_min_datum.shallow_copy_from_datum(datum);
-      } else if (OB_FAIL(cmp_fun_(
-                     tmp_min_datum, datum, cmp_ret, datum_access_ctx_))) {
-      } else if (cmp_ret < 0) {
-        tmp_min_datum.shallow_copy_from_datum(datum);
-      }
-    }
-    if (OB_FAIL(ret) || tmp_min_datum.is_null()) {
-    } else if (result_datum_.is_null()) {
-      if (OB_FAIL(deep_copy_datum(tmp_min_datum, datum_allocator_))) {
-      }
-    } else if (OB_FAIL(cmp_fun_(
-                   result_datum_, tmp_min_datum, cmp_ret, datum_access_ctx_))) {
-    } else if (cmp_ret < 0) {
-      if (OB_FAIL(deep_copy_datum(tmp_min_datum, datum_allocator_))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      aggregated_ = true;
-    }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    ret = update_native_extreme(result_datum_, datums[i], cmp_fun_, datum_access_ctx_, false);
   }
+  if (OB_SUCC(ret)) { aggregated_ = true; }
   return ret;
 }
 
@@ -930,59 +863,14 @@ int ObMaxAggCell::eval_batch_in_group_by(
     const bool is_group_by_col,
     const bool is_default_datum)
 {
+  if (datums == nullptr || refs == nullptr || count < 0 || count > basic_info_.batch_size_
+      || distinct_cnt < 0 || distinct_cnt > group_by_result_datum_buf_->get_capacity()) { return OB_INVALID_ARGUMENT; }
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(count > basic_info_.batch_size_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(nullptr == cmp_fun_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    const bool read_distinct_val = is_group_by_col || is_default_datum;
-    const bool need_deep_copy = !read_distinct_val && OBJ_DATUM_STRING == basic_info_.agg_expr_->obj_datum_map_;
-    if (need_deep_copy && nullptr == group_by_ref_array_) {
-      void *buf = nullptr;
-      if (OB_ISNULL(buf = allocator_.alloc(sizeof(uint32_t) * basic_info_.batch_size_))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        group_by_ref_array_ = static_cast<uint32_t*>(buf);
-        MEMSET(group_by_ref_array_, -1, basic_info_.batch_size_);
-      }
-    }
-    int64_t updated_cnt = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      const uint32_t distinct_ref = refs[i];
-      const uint32_t dictinct_datum_offset = is_default_datum ? 0 : refs[i];
-      const common::ObDatum &datum = read_distinct_val ? datums[dictinct_datum_offset] : datums[i];
-      if (datum.is_null()) {
-      } else {
-        common::ObDatum &result_datum = group_by_result_datum_buf_->at(distinct_ref);
-        int cmp_ret = 0;
-        if (!result_datum.is_null() &&
-            OB_FAIL(cmp_fun_(result_datum, datum, cmp_ret, datum_access_ctx_))) {
-        } else if (result_datum.is_null() || cmp_ret < 0) {
-          if (OB_FAIL(result_datum.from_storage_datum(datum, basic_info_.agg_expr_->obj_datum_map_))) {
-          } else if (need_deep_copy) {
-            group_by_ref_array_[updated_cnt++] = distinct_ref;
-          }
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (updated_cnt > 0) {
-      lib::ob_sort(group_by_ref_array_, group_by_ref_array_ + updated_cnt);
-      int64_t last_ref_cnt = -1;
-      for (int64_t i = 0; OB_SUCC(ret) && i < updated_cnt; ++i) {
-        if (-1 == group_by_ref_array_[i]) {
-        } else if (last_ref_cnt == group_by_ref_array_[i]) {
-          group_by_ref_array_[i] = -1;
-        } else {
-          common::ObDatum &result_datum = group_by_result_datum_buf_->at(group_by_ref_array_[i]);
-          if (OB_FAIL(result_datum.deep_copy(result_datum, datum_allocator_))) {
-          } else {
-            last_ref_cnt = group_by_ref_array_[i];
-            group_by_ref_array_[i] = -1;
-          }
-        }
-      }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    if (refs[i] >= distinct_cnt) { ret = OB_INVALID_ARGUMENT; }
+    else {
+      const ObDatum &input = datums[is_default_datum ? 0 : is_group_by_col ? refs[i] : i];
+      ret = update_native_extreme(group_by_result_datum_buf_->at(refs[i]), input, cmp_fun_, datum_access_ctx_, false);
     }
   }
   return ret;
@@ -990,15 +878,17 @@ int ObMaxAggCell::eval_batch_in_group_by(
 
 int ObMaxAggCell::pad_column_in_group_by(const int64_t row_cap, common::ObIAllocator &allocator)
 {
+  if (!basic_info_.need_padding()) { return OB_SUCCESS; }
   int ret = OB_SUCCESS;
-  common::ObDatum *sql_result_datums = group_by_result_datum_buf_->get_basic_buf(); 
-  if (basic_info_.need_padding() && 
-      OB_FAIL(storage::pad_on_datums(
-              basic_info_.col_param_->get_accuracy(),
-              basic_info_.col_param_->get_meta_type().get_collation_type(),
-              allocator,
-              row_cap,
-              sql_result_datums))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
+    ObDatum view;
+    alignas(8) char scratch[64];
+    ObAggNativeCell &cell = group_by_result_datum_buf_->at(native_projection_offset_ + i);
+    ObDatum *view_ptr = &view;
+    if (OB_FAIL(cell.export_legacy(view, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(storage::pad_on_datums(basic_info_.col_param_->get_accuracy(),
+        basic_info_.col_param_->get_meta_type().get_collation_type(), allocator, 1, view_ptr))) {
+    } else { ret = cell.capture_legacy(*view_ptr); }
   }
   return ret;
 }
@@ -1040,8 +930,8 @@ int ObHyperLogLogAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
   if (OB_ISNULL(eval_ctx) ||
       OB_ISNULL(basic_info_.agg_expr_->args_) ||
       OB_ISNULL(basic_info_.agg_expr_->args_[0]) ||
-      OB_ISNULL(basic_info_.agg_expr_->args_[0]->basic_funcs_) ||
-      OB_ISNULL(basic_info_.agg_expr_->args_[0]->basic_funcs_->murmur_hash_) ||
+      OB_ISNULL(sql::storage_predicate_functions(*basic_info_.agg_expr_->args_[0])) ||
+      OB_ISNULL(sql::storage_predicate_functions(*basic_info_.agg_expr_->args_[0])->murmur_hash_) ||
       OB_UNLIKELY(T_REF_COLUMN != basic_info_.agg_expr_->args_[0]->type_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
@@ -1052,12 +942,14 @@ int ObHyperLogLogAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
     ndv_calculator_ = new (buf) ObHyperLogLogCalculator();
     if (OB_FAIL(ndv_calculator_->init(&allocator_, LLC_BUCKET_BITS))) {
     } else {
-      hash_func_ = basic_info_.agg_expr_->args_[0]->basic_funcs_->murmur_hash_;
+      hash_func_ = sql::storage_predicate_functions(*basic_info_.agg_expr_->args_[0])->murmur_hash_;
     }
   }
 
   if (OB_SUCC(ret) && nullptr != basic_info_.col_param_ &&
-        !(basic_info_.col_param_->get_orig_default_value().is_nop_value())) {
+        !(basic_info_.col_param_->get_orig_default_datum().is_nop()
+          || (basic_info_.col_param_->get_orig_default_datum().has_ext_value()
+              && basic_info_.col_param_->get_orig_default_datum().get_ext() == ObActionFlag::OP_NOP))) {
     uint64_t hash_value = 0;
     if (OB_FAIL(prepare_def_datum())) {
     } else if (def_datum_.is_null()) {
@@ -1128,10 +1020,13 @@ int ObHyperLogLogAggCell::eval_batch(const common::ObDatum *datums, const int64_
 int ObHyperLogLogAggCell::collect_result(sql::ObEvalCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
+  ObDatum result;
+  alignas(8) char result_buffer[NATIVE_LEGACY_SCALAR_BYTES];
+  result.ptr_ = result_buffer;
   sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
   result.set_string(ndv_calculator_->get_buckets(), ndv_calculator_->get_bucket_num());
   eval_info.evaluated_ = true;
+  if (OB_SUCC(ret)) { ret = publish_storage_result(*basic_info_.agg_expr_, ctx, result); }
   return ret;
 }
 
@@ -1169,7 +1064,9 @@ int ObSumOpSizeAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
   if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
   } else if (OB_FAIL(set_op_size())) {
   } else if (nullptr != basic_info_.col_param_ &&
-             !(basic_info_.col_param_->get_orig_default_value().is_nop_value())) {
+             !(basic_info_.col_param_->get_orig_default_datum().is_nop()
+               || (basic_info_.col_param_->get_orig_default_datum().has_ext_value()
+                   && basic_info_.col_param_->get_orig_default_datum().get_ext() == ObActionFlag::OP_NOP))) {
     if (OB_FAIL(prepare_def_datum())) {
     } else if (OB_FAIL(get_datum_op_size(def_datum_, def_op_size_))) {
     }
@@ -1180,7 +1077,7 @@ int ObSumOpSizeAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 int ObSumOpSizeAggCell::set_op_size()
 {
   int ret = OB_SUCCESS;
-  ObObjDatumMapType type = OBJ_DATUM_MAPPING_MAX;
+  SqlValueDatumMapType type = OBJ_DATUM_MAPPING_MAX;
   if (OB_ISNULL(basic_info_.agg_expr_->args_) ||
       OB_ISNULL(basic_info_.agg_expr_->args_[0]) ||
       OB_UNLIKELY(T_REF_COLUMN != basic_info_.agg_expr_->args_[0]->type_)) {
@@ -1210,7 +1107,7 @@ int ObSumOpSizeAggCell::set_op_size()
         op_size_ = sizeof(ObDatum) + 10;
         break;
       }
-      case common::OBJ_DATUM_FULL : {
+      case common::OBJ_DATUM_EXTEND : {
         op_size_ = sizeof(ObDatum) + 16;
         break;
       }
@@ -1339,12 +1236,15 @@ int ObSumOpSizeAggCell::eval_index_info(const blocksstable::ObMicroIndexInfo &in
 int ObSumOpSizeAggCell::collect_result(sql::ObEvalCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
+  ObDatum result;
+  alignas(8) char result_buffer[NATIVE_LEGACY_SCALAR_BYTES];
+  result.ptr_ = result_buffer;
   sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
   {
     result.set_uint(total_size_);
     eval_info.evaluated_ = true;
   }
+ if (OB_SUCC(ret)) { ret = publish_storage_result(*basic_info_.agg_expr_, ctx, result); }
  return ret;
 }
 
@@ -1361,7 +1261,6 @@ ObSumAggCell::ObSumAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllo
       copy_datum_func_(nullptr),
       exec_ctx_(nullptr),
       cast_datum_(),
-      sum_temp_buffer_(nullptr),
       cast_temp_buffer_(nullptr),
       datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
@@ -1381,10 +1280,6 @@ void ObSumAggCell::reset()
   copy_datum_func_ = nullptr;
   exec_ctx_ = nullptr;
   if (is_sum_use_temp_buf_) {
-    if (nullptr != sum_temp_buffer_) {
-      allocator_.free(sum_temp_buffer_);
-      sum_temp_buffer_ = nullptr;
-    }
     if (nullptr != cast_temp_buffer_) {
       allocator_.free(cast_temp_buffer_);
       cast_temp_buffer_ = nullptr;
@@ -1400,12 +1295,11 @@ void ObSumAggCell::reuse()
 {
   ObAggCell::reuse();
   if (is_sum_use_temp_buf_) {
-    result_datum_.ptr_ = sum_temp_buffer_;
     cast_datum_.ptr_ = cast_temp_buffer_;
   }
   sum_use_int_flag_ = false;
   num_int_ = 0;
-  // reset_aggregate_info();
+  clear_group_by_info();
   datum_allocator_.reset();
 }
 
@@ -1431,21 +1325,21 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
   } else {
     exec_ctx_ = &eval_ctx->exec_ctx_;
-    obj_tc_ = ob_obj_type_class(basic_info_.agg_expr_->args_[0]->datum_meta_.type_);
-    const ObObjTypeClass res_tc = ob_obj_type_class(basic_info_.agg_expr_->datum_meta_.type_);
+    obj_tc_ = sql_type_class(basic_info_.agg_expr_->args_[0]->datum_meta_.type_);
+    const SqlTypeClass res_tc = sql_type_class(basic_info_.agg_expr_->datum_meta_.type_);
     const int16_t precision = basic_info_.agg_expr_->datum_meta_.precision_;
     eval_skip_index_func_ = nullptr;
     switch (obj_tc_) {
-      case ObObjTypeClass::ObIntTC: {
+      case SqlTypeClass::ObIntTC: {
         switch (res_tc) {
-          case ObObjTypeClass::ObNumberTC: {
+          case SqlTypeClass::ObNumberTC: {
             eval_func_ = &ObSumAggCell::eval_int<number::ObNumber>;
             eval_batch_func_ = &ObSumAggCell::eval_int_batch<number::ObNumber>;
             copy_datum_func_ = &ObSumAggCell::copy_int_to_number;
             eval_skip_index_func_ = &ObSumAggCell::eval_number;
             break;
           }
-          case ObObjTypeClass::ObDecimalIntTC: {
+          case SqlTypeClass::ObDecimalIntTC: {
             if (OB_UNLIKELY(precision < OB_DECIMAL_LONGLONG_DIGITS ||
                               precision > MAX_PRECISION_DECIMAL_INT_256)) {
               ret = OB_ERR_UNEXPECTED;
@@ -1467,16 +1361,16 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
         }
         break;
       }
-      case ObObjTypeClass::ObUIntTC: {
+      case SqlTypeClass::ObUIntTC: {
         switch (res_tc) {
-          case ObObjTypeClass::ObNumberTC: {
+          case SqlTypeClass::ObNumberTC: {
             eval_func_ = &ObSumAggCell::eval_uint<number::ObNumber>;
             eval_batch_func_ = &ObSumAggCell::eval_uint_batch<number::ObNumber>;
             copy_datum_func_ = &ObSumAggCell::copy_uint_to_number;
             eval_skip_index_func_ = &ObSumAggCell::eval_number;
             break;
           }
-          case ObObjTypeClass::ObDecimalIntTC: {
+          case SqlTypeClass::ObDecimalIntTC: {
             if (OB_UNLIKELY(precision < OB_DECIMAL_LONGLONG_DIGITS ||
                               precision > MAX_PRECISION_DECIMAL_INT_256)) {
               ret = OB_ERR_UNEXPECTED;
@@ -1498,32 +1392,32 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
         }
         break;
       }
-      case ObObjTypeClass::ObFloatTC: {
+      case SqlTypeClass::ObFloatTC: {
         eval_func_ = &ObSumAggCell::eval_float;
         eval_batch_func_ = &ObSumAggCell::eval_float_batch;
         copy_datum_func_ = &ObSumAggCell::copy_float;
         eval_skip_index_func_ = &ObSumAggCell::eval_float;
         break;
       }
-      case ObObjTypeClass::ObDoubleTC: {
+      case SqlTypeClass::ObDoubleTC: {
         eval_func_ = &ObSumAggCell::eval_double;
         eval_batch_func_ = &ObSumAggCell::eval_double_batch;
         copy_datum_func_ = &ObSumAggCell::copy_double;
         eval_skip_index_func_ = &ObSumAggCell::eval_double;
         break;
       }
-      case ObObjTypeClass::ObNumberTC: {
+      case SqlTypeClass::ObNumberTC: {
         eval_func_ = &ObSumAggCell::eval_number;
         eval_batch_func_ = &ObSumAggCell::eval_number_batch;
         copy_datum_func_ = &ObSumAggCell::copy_number;
         eval_skip_index_func_ = &ObSumAggCell::eval_number;
         break;
       }
-      case ObObjTypeClass::ObDecimalIntTC: {
+      case SqlTypeClass::ObDecimalIntTC: {
         ret = ObSumAggCell::init_decimal_int_func();
         break;
       }
-      case ObObjTypeClass::ObCollectionSQLTC: {
+      case SqlTypeClass::ObCollectionSQLTC: {
         eval_func_ = &ObSumAggCell::eval_collection;
         eval_batch_func_ = &ObSumAggCell::eval_collection_batch;
         copy_datum_func_ = &ObSumAggCell::copy_vector;
@@ -1540,13 +1434,27 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
   } else if (eval_skip_index_func_ == nullptr && OB_FAIL(init_eval_skip_index_func_for_decimal())) {
   } else if (is_group_by) {
     const int64_t datum_size = is_sum_use_temp_buf_ ? common::OBJ_DATUM_DECIMALINT_MAX_RES_SIZE : common::OBJ_DATUM_NUMBER_RES_SIZE;
-    group_by_result_datum_buf_->set_item_size(datum_size);
-    if (ObObjTypeClass::ObIntTC == obj_tc_ || ObObjTypeClass::ObUIntTC == obj_tc_) {
+    UNUSED(datum_size); // native cells carry their actual kernel span independently
+    if (SqlTypeClass::ObIntTC == obj_tc_ || SqlTypeClass::ObUIntTC == obj_tc_) {
       if (OB_FAIL(new_group_by_buf((bool*)nullptr, 0, sizeof(bool), allocator_, sum_use_int_flag_buf_))) {
       } else if (OB_FAIL(sum_use_int_flag_buf_->reserve(basic_info_.batch_size_))) {
       } else if (OB_FAIL(new_group_by_buf((int64_t*)(nullptr), 0, sizeof(int64_t), allocator_, num_int_buf_))) {
       } else if (OB_FAIL(num_int_buf_->reserve(basic_info_.batch_size_))) {
       }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    const SqlTypeClass result_class = sql_type_class(basic_info_.agg_expr_->datum_meta_.type_);
+    ObAggNativeDomain domain = result_class == ObFloatTC ? ObAggNativeDomain::Float32
+        : result_class == ObDoubleTC ? ObAggNativeDomain::Float64
+        : result_class == ObNumberTC ? ObAggNativeDomain::Number
+        : result_class == ObDecimalIntTC ? ObAggNativeDomain::DecimalCoefficient
+        : ObAggNativeDomain::Semantic;
+    const int32_t width = domain == ObAggNativeDomain::DecimalCoefficient
+        ? wide::ObDecimalIntConstValue::get_int_bytes_by_precision(basic_info_.agg_expr_->datum_meta_.precision_) : 0;
+    result_datum_.configure(&basic_info_.agg_expr_->get_sql_type(), domain, width);
+    if (group_by_result_datum_buf_ != nullptr) {
+      group_by_result_datum_buf_->configure(&basic_info_.agg_expr_->get_sql_type(), domain, width);
     }
   }
   return ret;
@@ -1649,7 +1557,7 @@ int ObSumAggCell::init_decimal_int_func()
     }
   };
 
-  const ObObjTypeClass res_tc = ob_obj_type_class(basic_info_.agg_expr_->datum_meta_.type_);
+  const SqlTypeClass res_tc = sql_type_class(basic_info_.agg_expr_->datum_meta_.type_);
   const int16_t arg_prec = basic_info_.agg_expr_->args_[0]->datum_meta_.precision_;
   const int16_t res_prec = basic_info_.agg_expr_->datum_meta_.precision_;
   const int16_t buffer_prec = get_max_decimalint_precision(arg_prec) - arg_prec;
@@ -1658,7 +1566,7 @@ int ObSumAggCell::init_decimal_int_func()
                            get_scale_factor<int64_t>(buffer_prec) < basic_info_.batch_size_;
   if (OB_UNLIKELY(arg_type > 3 || arg_type < 0)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ObObjTypeClass::ObNumberTC == res_tc) {
+  } else if (SqlTypeClass::ObNumberTC == res_tc) {
     eval_func_ = AGG_FUNCS[arg_type][2];
     eval_batch_func_ = AGG_BATCH_FUNCS[arg_type][2][need_cast];
     copy_datum_func_ = COPY_FUNCS[arg_type][2];
@@ -1694,23 +1602,16 @@ int ObSumAggCell::init_decimal_int_func()
     if (OB_ISNULL(eval_func_) || OB_ISNULL(eval_batch_func_) || OB_ISNULL(copy_datum_func_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (res_prec > MAX_PRECISION_DECIMAL_INT_256) {
-      // Special scenarios: ObStorageDatum can only store 40 bytes, and int512 has 64 bytes,
-      // so need to allocate temporary memory to store result
+      // Native cells own the 64-byte coefficient. This buffer serves only
+      // synchronous storage input conversion, independently of retained state.
       is_sum_use_temp_buf_ = true;
-      if (OB_ISNULL(sum_temp_buffer_ = static_cast<char*>(allocator_.alloc(sizeof(int512_t))))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_ISNULL(cast_temp_buffer_ = static_cast<char*>(allocator_.alloc(sizeof(int512_t))))) {
+      if (OB_ISNULL(cast_temp_buffer_ = static_cast<char*>(allocator_.alloc(sizeof(int512_t))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        result_datum_.ptr_ = sum_temp_buffer_;
         cast_datum_.ptr_ = cast_temp_buffer_;
       }
 
       if (OB_FAIL(ret)) {
-        if (nullptr != sum_temp_buffer_) {
-          allocator_.free(sum_temp_buffer_);
-          sum_temp_buffer_ = nullptr;
-        }
         if (nullptr != cast_temp_buffer_) {
           allocator_.free(cast_temp_buffer_);
           cast_temp_buffer_ = nullptr;
@@ -1803,21 +1704,21 @@ bool ObSumAggCell::can_use_index_info() const
 
 int ObSumAggCell::copy_output_rows(const int32_t start_offset, const int32_t end_offset)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(end_offset <= start_offset || end_offset > group_by_result_datum_buf_->get_basic_count())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    common::ObDatum *result_datums = group_by_result_datum_buf_->get_basic_buf();
+  int ret = native_eval_ctx_ == nullptr ? OB_ERR_UNEXPECTED
+      : import_native_inputs(*native_eval_ctx_, start_offset, end_offset);
+  if (OB_FAIL(ret)) {
+  } else if (start_offset < 0 || end_offset <= start_offset || end_offset > group_by_result_datum_buf_->get_basic_count()) { ret = OB_INVALID_ARGUMENT; }
+  else {
+    native_projection_offset_ = 0;
     for (int64_t i = start_offset; OB_SUCC(ret) && i < end_offset; ++i) {
-      const common::ObDatum &datum = col_datums_[i];
-      if (datum.is_null()) {
-        result_datums[i].set_null();
-      } else if (OB_FAIL((this->*copy_datum_func_)(datum, result_datums[i]))) {
-      }
+      ObAggNativeCell &cell = group_by_result_datum_buf_->at(i);
+      ObDatum converted;
+      alignas(8) char scratch[64];
+      converted.ptr_ = scratch;
+      if (col_datums_[i].is_null()) { cell.set_null(); }
+      else if (OB_FAIL((this->*copy_datum_func_)(col_datums_[i], converted))) {
+      } else { ret = cell.capture_legacy(converted); }
     }
-    LOG_DEBUG("[GROUP BY PUSHDOWN]", K(ret), K(end_offset),
-        K(common::ObArrayWrap<common::ObDatum>(col_datums_ + start_offset, end_offset - start_offset)),
-        K(common::ObArrayWrap<common::ObDatum>(result_datums + start_offset, end_offset - start_offset)));
   }
   return ret;
 }
@@ -1825,15 +1726,17 @@ int ObSumAggCell::copy_output_rows(const int32_t start_offset, const int32_t end
 int ObSumAggCell::copy_single_output_row(sql::ObEvalCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_info_.agg_expr_->args_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    sql::ObDatum &datum = basic_info_.agg_expr_->args_[0]->locate_expr_datum(ctx);
-    common::ObDatum &result_datum = basic_info_.agg_expr_->locate_datum_for_write(ctx);
-    if (datum.is_null()) {
-      result_datum.set_null();
-    } else if (OB_FAIL((this->*copy_datum_func_)(datum, result_datum))) {
-    }
+  if (basic_info_.agg_expr_->args_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else {
+    const sql::ObExpr &arg = *basic_info_.agg_expr_->args_[0];
+    const Datum &native = arg.locate_expr_datum(ctx);
+    ObDatum source, result;
+    alignas(8) char input_buffer[64], output_buffer[64];
+    result.ptr_ = output_buffer;
+    if (OB_FAIL(arg.get_datum_copy_plan().legacy_view(native, source, input_buffer, sizeof(input_buffer)))) {
+    } else if (source.is_null()) { result.set_null(); }
+    else { ret = (this->*copy_datum_func_)(source, result); }
+    if (OB_SUCC(ret)) { ret = publish_storage_result(*basic_info_.agg_expr_, ctx, result); }
   }
   return ret;
 }
@@ -1952,11 +1855,15 @@ int ObSumAggCell::collect_batch_result_in_group_by(const int64_t distinct_cnt)
 int ObSumAggCell::collect_result(sql::ObEvalCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
+  ObDatum accumulator;
+  alignas(8) char accumulator_scratch[64];
+  if (OB_FAIL(result_datum_.export_legacy(accumulator, accumulator_scratch, sizeof(accumulator_scratch)))) { return ret; }
+  ObDatum result;
+  alignas(8) char result_buffer[NATIVE_LEGACY_SCALAR_BYTES];
+  result.ptr_ = result_buffer;
   sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
   if (!sum_use_int_flag_) {
-    if (OB_FAIL(ObAggCell::collect_result(ctx))) {
-    }
+    return ObAggCell::collect_result(ctx);
   } else if (ObIntTC != obj_tc_ && ObUIntTC != obj_tc_) {
     ret = OB_ERR_UNEXPECTED;
   } else if (ob_is_decimal_int(basic_info_.agg_expr_->datum_meta_.type_)) {
@@ -1966,7 +1873,7 @@ int ObSumAggCell::collect_result(sql::ObEvalCtx &ctx)
     } else {
       right_nmb = num_uint_;
     }
-    if (OB_FAIL(collect_result_to_decimal_int(right_nmb, result_datum_, result))) {
+    if (OB_FAIL(collect_result_to_decimal_int(right_nmb, accumulator, result))) {
     } else {
       eval_info.evaluated_ = true;
     }
@@ -1980,10 +1887,10 @@ int ObSumAggCell::collect_result(sql::ObEvalCtx &ctx)
     } else if (OB_FAIL(right_nmb.from(num_uint_, tmp_alloc))) {
     }
     if (OB_SUCC(ret)) {
-      if (result_datum_.is_null()) {
+      if (accumulator.is_null()) {
         result.set_number(right_nmb);
       } else {
-        common::number::ObNumber left_nmb(result_datum_.get_number());
+        common::number::ObNumber left_nmb(accumulator.get_number());
         common::number::ObNumber result_nmb;
         if (OB_FAIL(left_nmb.add_v3(right_nmb, result_nmb, tmp_alloc, strict_mode))) {
         } else {
@@ -1993,6 +1900,7 @@ int ObSumAggCell::collect_result(sql::ObEvalCtx &ctx)
       eval_info.evaluated_ = true;
     }
   }
+  if (OB_SUCC(ret)) { ret = publish_storage_result(*basic_info_.agg_expr_, ctx, result); }
   return ret;
 }
 
@@ -2031,7 +1939,10 @@ int ObSumAggCell::eval_double(const common::ObDatum &datum, const int32_t datum_
 int ObSumAggCell::eval_number(const common::ObDatum &datum, const int32_t datum_offset)
 {
   int ret = OB_SUCCESS;
-  common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+  ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   if (datum.is_null()) {
   } else if (result_datum.is_null()) {
     result_datum.set_number(datum.get_number());
@@ -2047,27 +1958,38 @@ int ObSumAggCell::eval_number(const common::ObDatum &datum, const int32_t datum_
       result_datum.set_number(result_nmb);
     }
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
 int ObSumAggCell::eval_collection(const common::ObDatum &datum, const int32_t datum_offset)
 {
   int ret = OB_SUCCESS;
-  common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+  ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   if (datum.is_null()) {
   } else if (result_datum.is_null()) {
     if (OB_FAIL(result_datum.deep_copy(datum, datum_allocator_))) {
     }
-  } else if (OB_FAIL(sql::ObArrayExprUtils::vector_datum_add(
-                 *exec_ctx_, result_datum, datum, datum_allocator_))) {
+  } else {
+    Datum native_result, native_input;
+    const DatumCopyPlan plan = basic_info_.agg_expr_->get_datum_copy_plan();
+    if (OB_FAIL(plan.import_legacy(result_datum, native_result))) {
+    } else if (OB_FAIL(plan.import_legacy(datum, native_input))) {
+    } else if (OB_FAIL(sql::ObArrayExprUtils::vector_datum_add(
+        *exec_ctx_, native_result, native_input, datum_allocator_))) {
+    } else { ret = plan.borrow_legacy(native_result, result_datum); }
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
 int ObSumAggCell::init_eval_skip_index_func_for_decimal()
 {
   int ret = OB_SUCCESS;
-  const ObObjTypeClass res_tc = ob_obj_type_class(basic_info_.agg_expr_->datum_meta_.type_);
+  const SqlTypeClass res_tc = sql_type_class(basic_info_.agg_expr_->datum_meta_.type_);
   const int16_t res_prec = basic_info_.agg_expr_->datum_meta_.precision_;
   const int res_type = static_cast<int>(get_decimalint_type(res_prec));
   switch (res_type) {
@@ -2121,7 +2043,10 @@ template<typename RES_T, typename ARG_T>
 int ObSumAggCell::eval_decimal_int(const common::ObDatum &datum, const int32_t datum_offset)
 {
   int ret = OB_SUCCESS;
-  common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+  ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   if (datum.is_null()) {
   } else if (result_datum.is_null()) {
     DATUM_TO_DECIMAL_INT(result_datum, RES_T) = DATUM_TO_CONST_DECIMAL_INT(datum, ARG_T);
@@ -2129,6 +2054,7 @@ int ObSumAggCell::eval_decimal_int(const common::ObDatum &datum, const int32_t d
   } else {
     DATUM_TO_DECIMAL_INT(result_datum, RES_T) += DATUM_TO_CONST_DECIMAL_INT(datum, ARG_T);
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
@@ -2136,7 +2062,10 @@ template<typename ARG_T>
 int ObSumAggCell::eval_decimal_int_number(const common::ObDatum &datum, const int32_t datum_offset)
 {
   int ret = OB_SUCCESS;
-  common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+  ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   if (!datum.is_null()) {
     sql::ObNumStackAllocator<2> tmp_alloc;
     number::ObNumber right_nmb;
@@ -2153,6 +2082,7 @@ int ObSumAggCell::eval_decimal_int_number(const common::ObDatum &datum, const in
       }
     }
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
@@ -2205,6 +2135,10 @@ int ObSumAggCell::eval_double_batch(const common::ObDatum *datums, const int64_t
 int ObSumAggCell::eval_number_batch(const common::ObDatum *datums, const int64_t count)
 {
   int ret = OB_SUCCESS;
+  ObAggNativeCell &native_result = result_datum_;
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   common::number::ObNumber result_nmb;
   char buf_alloc1[common::number::ObNumber::MAX_CALC_BYTE_LEN];
   char buf_alloc2[common::number::ObNumber::MAX_CALC_BYTE_LEN];
@@ -2213,17 +2147,18 @@ int ObSumAggCell::eval_number_batch(const common::ObDatum *datums, const int64_t
   ObDataBuffer allocator1(buf_alloc1, common::number::ObNumber::MAX_CALC_BYTE_LEN);
   ObDataBuffer allocator2(buf_alloc2, common::number::ObNumber::MAX_CALC_BYTE_LEN);
   bool all_skip = true;
-  if (!result_datum_.is_null()) {
-      result_nmb.assign(result_datum_.get_number_desc().desc_,
-                        const_cast<uint32_t *>(result_datum_.get_number_digits()));
+  if (!result_datum.is_null()) {
+      result_nmb.assign(result_datum.get_number_desc().desc_,
+                        const_cast<uint32_t *>(result_datum.get_number_digits()));
   }
   ObAggSource src(datums);
   ObAggSelector selector(count);
   if (OB_FAIL(sql::number_accumulator(src, allocator1, allocator2, result_nmb,
                                       sum_digits_buf, all_skip, selector))) {
   } else if (!all_skip) {
-    result_datum_.set_number(result_nmb);
+    result_datum.set_number(result_nmb);
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
@@ -2241,6 +2176,10 @@ template<typename RES_T, typename CALC_T, typename ARG_T>
 int ObSumAggCell::eval_decimal_int_batch(const common::ObDatum *datums, const int64_t count)
 {
   int ret = OB_SUCCESS;
+  ObAggNativeCell &native_result = result_datum_;
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   CALC_T accum = 0;
   bool accumulated = false;
   for (int64_t i = 0; i < count; ++i) {
@@ -2251,13 +2190,14 @@ int ObSumAggCell::eval_decimal_int_batch(const common::ObDatum *datums, const in
     accumulated = true;
   }
   if (accumulated) {
-    if (result_datum_.is_null()) {
-      DATUM_TO_DECIMAL_INT(result_datum_, RES_T) = accum;
-      result_datum_.pack_ = sizeof(RES_T);
+    if (result_datum.is_null()) {
+      DATUM_TO_DECIMAL_INT(result_datum, RES_T) = accum;
+      result_datum.pack_ = sizeof(RES_T);
     } else {
-      DATUM_TO_DECIMAL_INT(result_datum_, RES_T) += accum;
+      DATUM_TO_DECIMAL_INT(result_datum, RES_T) += accum;
     }
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
@@ -2265,6 +2205,10 @@ template<typename CALC_T, typename ARG_T>
 int ObSumAggCell::eval_decimal_int_number_batch(const common::ObDatum *datums, const int64_t count)
 {
   int ret = OB_SUCCESS;
+  ObAggNativeCell &native_result = result_datum_;
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   CALC_T accum = 0;
   bool accumulated = false;
   for (int64_t i = 0; i < count; ++i) {
@@ -2278,28 +2222,33 @@ int ObSumAggCell::eval_decimal_int_number_batch(const common::ObDatum *datums, c
     sql::ObNumStackAllocator<2> tmp_alloc;
     number::ObNumber right_nmb;
     if (OB_FAIL(wide::to_number(accum, child_scale(), tmp_alloc, right_nmb))) {
-    } else if (result_datum_.is_null()) {
-      result_datum_.set_number(right_nmb);
+    } else if (result_datum.is_null()) {
+      result_datum.set_number(right_nmb);
     } else {
-      number::ObNumber left_nmb(result_datum_.get_number());
+      number::ObNumber left_nmb(result_datum.get_number());
       number::ObNumber result_nmb;
       if (OB_FAIL(left_nmb.add_v3(right_nmb, result_nmb, tmp_alloc, false))) {
       } else {
-        result_datum_.set_number(result_nmb);
+        result_datum.set_number(result_nmb);
       }
     }
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
 int ObSumAggCell::collect_result_in_group_by(const int64_t datum_offset)
 {
   int ret = OB_SUCCESS;
+  ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   if (OB_UNLIKELY(datum_offset > group_by_result_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ObObjTypeClass::ObIntTC != obj_tc_ && ObObjTypeClass::ObUIntTC != obj_tc_) {
+  } else if (SqlTypeClass::ObIntTC != obj_tc_ && SqlTypeClass::ObUIntTC != obj_tc_) {
   } else if (ob_is_decimal_int(basic_info_.agg_expr_->datum_meta_.type_)) {
-    common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+
     if (sum_use_int_flag_buf_->at(datum_offset)) {
       int128_t right_nmb = 0;
       if (ObIntTC == obj_tc_) {
@@ -2311,7 +2260,7 @@ int ObSumAggCell::collect_result_in_group_by(const int64_t datum_offset)
       }
     }
   } else {
-    common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+
     if (sum_use_int_flag_buf_->at(datum_offset)) {
       sql::ObNumStackAllocator<2> tmp_alloc;
       common::number::ObNumber right_nmb;
@@ -2339,6 +2288,7 @@ int ObSumAggCell::collect_result_in_group_by(const int64_t datum_offset)
       }
     }
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
@@ -2346,42 +2296,18 @@ int ObSumAggCell::reserve_group_by_buf(const int64_t size)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(group_by_result_datum_buf_->reserve(size))) {
-  } else if (FALSE_IT(ObAggCell::clear_group_by_info())) {
-  } else if (nullptr != sum_use_int_flag_buf_) {
-    if (OB_FAIL(sum_use_int_flag_buf_->reserve(size))) {
-    } else if (OB_FAIL(num_int_buf_->reserve(size))) {
-    } else {
-      clear_group_by_info();
-    }
+  } else if (nullptr != sum_use_int_flag_buf_ && OB_FAIL(sum_use_int_flag_buf_->reserve(size))) {
+  } else if (nullptr != num_int_buf_ && OB_FAIL(num_int_buf_->reserve(size))) {
+  } else {
+    ObAggCell::clear_group_by_info();
+    clear_group_by_info();
   }
   return ret;
 }
 
 int ObSumAggCell::output_extra_group_by_result(const int64_t start, const int64_t count)
 {
-  int ret = OB_SUCCESS;
-  common::ObDatum *sql_result_datums = group_by_result_datum_buf_->get_basic_buf();
-  if (OB_UNLIKELY(start < group_by_result_datum_buf_->get_basic_count() ||
-      start + count > group_by_result_datum_buf_->get_capacity())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (ob_is_decimal_int(basic_info_.agg_expr_->datum_meta_.type_)) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      common::ObDatum &result_datum = group_by_result_datum_buf_->at(start + i);
-      if (result_datum.is_null()) {
-        sql_result_datums[i].set_null();
-      } else if (OB_FAIL((this->*copy_datum_func_)(result_datum, sql_result_datums[i]))) {
-      }
-    }
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      common::ObDatum &result_datum = group_by_result_datum_buf_->at(start + i);
-      if (OB_FAIL(sql_result_datums[i].from_storage_datum(
-          result_datum, basic_info_.agg_expr_->obj_datum_map_))) {
-      }
-    }
-  }
-  LOG_DEBUG("[GROUP BY PUSHDOWN]", K(ret), K(start), K(count), K(ObArrayWrap<common::ObDatum>(sql_result_datums, count)));
-  return ret;
+  return ObAggCell::output_extra_group_by_result(start, count);
 }
 
 int ObSumAggCell::collect_result_to_decimal_int(
@@ -2438,6 +2364,7 @@ void ObFirstRowAggCell::reuse()
 {
   ObAggCell::reuse();
   aggregated_flag_cnt_ = 0;
+  clear_group_by_info();
   datum_allocator_.reuse();
   if (is_determined_value_) {
     set_determined_value();
@@ -2453,15 +2380,10 @@ void ObFirstRowAggCell::clear_group_by_info()
 
 int ObFirstRowAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
-  } else if (is_group_by) {
-    if (OB_FAIL(new_group_by_buf((bool*)nullptr, 0, sizeof(bool), allocator_, aggregated_flag_buf_))) {
-    } else if (OB_FAIL(aggregated_flag_buf_->reserve(basic_info_.batch_size_))) {
-    } else if (OB_FAIL(ObAggDatumBuf::new_agg_datum_buf(basic_info_.batch_size_, false, allocator_, agg_datum_buf_))) {
-    } else if (OB_FAIL(new_group_by_buf(agg_datum_buf_->get_datums(), basic_info_.batch_size_,
-        common::OBJ_DATUM_NUMBER_RES_SIZE, allocator_, group_by_result_datum_buf_))) {
-    }
+  int ret = ObAggCell::init(is_group_by, eval_ctx);
+  if (OB_SUCC(ret) && is_group_by) {
+    if (OB_FAIL(new_group_by_buf((bool *)nullptr, 0, sizeof(bool), allocator_, aggregated_flag_buf_))) {
+    } else { ret = aggregated_flag_buf_->reserve(basic_info_.batch_size_); }
   }
   return ret;
 }
@@ -2478,7 +2400,7 @@ int ObFirstRowAggCell::eval(
   } else if (!aggregated_) {
     if (OB_FAIL(fill_default_if_need(datum))) {
     } else if (OB_FAIL(pad_column_if_need(datum, padding_allocator_))) {
-    } else if (OB_FAIL(result_datum_.deep_copy(datum, datum_allocator_))) {
+    } else if (OB_FAIL(result_datum_.capture_legacy(datum))) {
     } else {
       aggregated_ = true;
     }
@@ -2503,7 +2425,7 @@ int ObFirstRowAggCell::eval_micro_block(
       if (OB_FAIL(reader->get_column_datum(iter_param, context, *basic_info_.col_param_, col_offset, row_ids[0], datum))) {
       } else if (OB_FAIL(fill_default_if_need(datum))) {
       } else if (OB_FAIL(pad_column_if_need(datum, padding_allocator_))) {
-      } else if (OB_FAIL(result_datum_.deep_copy(datum, datum_allocator_))) {
+      } else if (OB_FAIL(result_datum_.capture_legacy(datum))) {
       } else {
         aggregated_ = true;
       }
@@ -2530,33 +2452,20 @@ int ObFirstRowAggCell::eval_batch_in_group_by(
     const bool is_group_by_col,
     const bool is_default_datum)
 {
+  if (datums == nullptr || refs == nullptr || count < 0 || count > basic_info_.batch_size_
+      || distinct_cnt > group_by_result_datum_buf_->get_capacity()) { return OB_INVALID_ARGUMENT; }
   int ret = OB_SUCCESS;
-  const bool read_distinct_val = is_group_by_col || is_default_datum;
-  const bool need_deep_copy = !read_distinct_val && OBJ_DATUM_STRING == basic_info_.agg_expr_->obj_datum_map_;
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    const uint32_t distinct_ref = refs[i];
-    const uint32_t dictinct_datum_offset = is_default_datum ? 0 : refs[i];
-    const common::ObDatum &datum = read_distinct_val ? datums[dictinct_datum_offset] : datums[i];
-    bool &aggregated_flag = aggregated_flag_buf_->at(distinct_ref);
-    ObDatum &result_datum = group_by_result_datum_buf_->at(distinct_ref);
-    if (aggregated_flag) {
-    } else if (datum.is_null()) {
-    } else if (need_deep_copy) {
-      if (OB_FAIL(result_datum.deep_copy(datum, datum_allocator_))) {
-      } else {
-        aggregated_flag_cnt_++;
-        aggregated_flag = true;
-      }
-    } else if (OB_FAIL(result_datum.from_storage_datum(datum, basic_info_.agg_expr_->obj_datum_map_))) {
-    } else {
-      aggregated_flag_cnt_++;
-      aggregated_flag = true;
-    }
-    if (OB_SUCC(ret) && aggregated_flag_cnt_ == distinct_cnt) {
-      // this micro block is finished, no need do eval any more
-      aggregated_ = true;
+    const uint32_t group = refs[i];
+    if (group >= distinct_cnt) { ret = OB_INVALID_ARGUMENT; }
+    else if (!aggregated_flag_buf_->at(group)) {
+      const ObDatum &input = datums[is_default_datum ? 0 : is_group_by_col ? group : i];
+      if (input.is_null()) {
+      } else if (OB_FAIL(group_by_result_datum_buf_->at(group).capture_legacy(input))) {
+      } else { aggregated_flag_buf_->at(group) = true; ++aggregated_flag_cnt_; }
     }
   }
+  if (OB_SUCC(ret) && aggregated_flag_cnt_ == distinct_cnt) { aggregated_ = true; }
   return ret;
 }
 
@@ -2572,47 +2481,26 @@ int ObFirstRowAggCell::collect_result(sql::ObEvalCtx &ctx)
 
 int ObFirstRowAggCell::collect_batch_result_in_group_by(const int64_t distinct_cnt)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(distinct_cnt > group_by_result_datum_buf_->get_capacity())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const int collected_cnt = MIN(distinct_cnt, basic_info_.batch_size_);
-    common::ObDatum *result_datums = group_by_result_datum_buf_->get_basic_buf();
-    for (int64_t i = 0; OB_SUCC(ret) && i < collected_cnt; ++i) {
-      if (OB_FAIL(col_datums_[i].from_storage_datum(result_datums[i], basic_info_.agg_expr_->obj_datum_map_))) {
-      }
-    }
-  }
-  return ret;
+  return distinct_cnt < 0 || distinct_cnt > group_by_result_datum_buf_->get_capacity()
+      ? OB_INVALID_ARGUMENT : OB_SUCCESS;
 }
 
 int ObFirstRowAggCell::reserve_group_by_buf(const int64_t size)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObAggCell::reserve_group_by_buf(size))) {
-  } else if (nullptr != aggregated_flag_buf_) {
-    if (OB_FAIL(aggregated_flag_buf_->reserve(size))) {
-    } else {
-      clear_group_by_info();
-    }
+  if (OB_FAIL(group_by_result_datum_buf_->reserve(size))) {
+  } else if (nullptr != aggregated_flag_buf_ && OB_FAIL(aggregated_flag_buf_->reserve(size))) {
+  } else {
+    ObAggCell::clear_group_by_info();
+    clear_group_by_info();
+    aggregated_flag_cnt_ = 0;
   }
   return ret;
 }
 
 int ObFirstRowAggCell::output_extra_group_by_result(const int64_t start, const int64_t count)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(start < group_by_result_datum_buf_->get_basic_count() ||
-      start + count > group_by_result_datum_buf_->get_capacity())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      common::ObDatum &result_datum = group_by_result_datum_buf_->at(start + i);
-      if (OB_FAIL(col_datums_[i].from_storage_datum(result_datum, basic_info_.agg_expr_->obj_datum_map_))) {
-      }
-    }
-  }
-  return ret;
+  return ObAggCell::output_extra_group_by_result(start, count);
 }
 
 int ObPDAggFactory::alloc_cell(
@@ -2646,7 +2534,7 @@ int ObPDAggFactory::alloc_cell(
       }
       case T_FUN_INNER_PREFIX_MIN:
       case T_FUN_MIN: {
-        const ObDatumCmpFuncType cmp_fun = basic_info.agg_expr_->basic_funcs_->null_first_cmp_;
+        const ObDatumCmpFuncType cmp_fun = sql::storage_predicate_functions(*basic_info.agg_expr_)->null_first_cmp_;
         if (OB_ISNULL(cmp_fun)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObMinAggCell))) ||
@@ -2657,7 +2545,7 @@ int ObPDAggFactory::alloc_cell(
       }
       case T_FUN_INNER_PREFIX_MAX:
       case T_FUN_MAX: {
-        const ObDatumCmpFuncType cmp_fun = basic_info.agg_expr_->basic_funcs_->null_first_cmp_;
+        const ObDatumCmpFuncType cmp_fun = sql::storage_predicate_functions(*basic_info.agg_expr_)->null_first_cmp_;
         if (OB_ISNULL(cmp_fun)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObMaxAggCell))) ||
@@ -2695,6 +2583,7 @@ int ObPDAggFactory::alloc_cell(
     } else if (OB_FAIL(cell->init(is_group_by, eval_ctx))) {
     } else if (OB_FAIL(agg_cells.push_back(cell))) {
     }
+    if (OB_FAIL(ret) && cell != nullptr) { cell->reset(); allocator_.free(cell); }
   }
   return ret;
 }
@@ -2712,7 +2601,9 @@ void ObPDAggFactory::release(common::ObIArray<ObAggCell*> &agg_cells)
 
 ObGroupByCell::ObGroupByCell(const int64_t batch_size, common::ObIAllocator &allocator)
   : ObGroupByCellBase(batch_size, allocator),
-    group_by_col_datum_buf_(nullptr),
+    group_by_col_datum_buf_(nullptr), legacy_group_owner_(nullptr),
+    native_group_keys_(allocator), native_dictionary_keys_(allocator),
+    native_key_projection_(0), key_input_captured_(false), native_eval_ctx_(nullptr),
     tmp_group_by_datum_buf_(nullptr),
     agg_datum_buf_(nullptr),
     agg_cell_factory_(allocator)
@@ -2721,9 +2612,14 @@ ObGroupByCell::ObGroupByCell(const int64_t batch_size, common::ObIAllocator &all
 
 void ObGroupByCell::reset()
 {
+  native_group_keys_.reset(); native_dictionary_keys_.reset();
+  native_key_projection_ = 0; key_input_captured_ = false;
   ObGroupByCellBase::reset();
   agg_cell_factory_.release(agg_cells_);
   free_group_by_buf(allocator_, group_by_col_datum_buf_);
+  if (legacy_group_owner_ != nullptr) {
+    legacy_group_owner_->~ObAggDatumBuf(); allocator_.free(legacy_group_owner_); legacy_group_owner_ = nullptr;
+  }
   free_group_by_buf(allocator_, tmp_group_by_datum_buf_);
   if (nullptr != agg_datum_buf_) {
     agg_datum_buf_->reset();
@@ -2734,6 +2630,9 @@ void ObGroupByCell::reset()
 
 void ObGroupByCell::reuse()
 {
+  release_group_key_views();
+  native_group_keys_.reuse(); native_dictionary_keys_.reuse();
+  native_key_projection_ = 0; key_input_captured_ = false;
   ObGroupByCellBase::reuse();
   for (int64_t i = 0; i < agg_cells_.count(); ++i) {
     agg_cells_.at(i)->reuse();
@@ -2743,6 +2642,7 @@ void ObGroupByCell::reuse()
 int ObGroupByCell::init(const ObTableAccessParam &param, const ObTableAccessContext &context, sql::ObEvalCtx &eval_ctx)
 {
   int ret = OB_SUCCESS;
+  native_eval_ctx_ = &eval_ctx;
   const common::ObIArray<share::schema::ObColumnParam *> *out_cols_param = param.iter_param_.get_col_params();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -2764,18 +2664,23 @@ int ObGroupByCell::init(const ObTableAccessParam &param, const ObTableAccessCont
         ObAggCellBasicInfo basic_info(col_offset, col_index, col_param, expr,
                                       batch_size_, is_pad_char_to_full_length(context.sql_mode_));
         if (group_by_col_offset_ == col_offset) {
-          group_by_col_datums = expr->locate_batch_datums(eval_ctx);
-          if (OB_ISNULL(group_by_col_datums)) {
+          ret = ObAggDatumBuf::new_agg_datum_buf(batch_size_, false, allocator_, legacy_group_owner_, NATIVE_LEGACY_SCALAR_BYTES);
+          group_by_col_datums = OB_SUCC(ret) ? legacy_group_owner_->get_datums() : nullptr;
+          if (OB_FAIL(ret)) {
+          } else if (OB_ISNULL(group_by_col_datums)) {
             ret = OB_ERR_UNEXPECTED;
             STORAGE_LOG(WARN, "Unexpected null datums", K(ret), K(i), KPC(expr));
           } else if (OB_FAIL(new_group_by_buf(group_by_col_datums, batch_size_,
-              common::OBJ_DATUM_NUMBER_RES_SIZE, allocator_, group_by_col_datum_buf_))) {
+              NATIVE_LEGACY_SCALAR_BYTES, allocator_, group_by_col_datum_buf_))) {
           } else {
-            const common::ObObjMeta &obj_meta = col_param->get_meta_type();
+            const common::SqlTypeMeta &obj_meta = col_param->get_meta_type();
             if (is_pad_char_to_full_length(context.sql_mode_) && obj_meta.is_fixed_len_char_type()) {
               group_by_col_param_ = col_param;
             }
             group_by_col_expr_ = expr;
+            native_group_keys_.configure(&expr->get_sql_type(), ObAggNativeDomain::Semantic);
+            native_dictionary_keys_.configure(&expr->get_sql_type(), ObAggNativeDomain::Semantic);
+            ret = native_group_keys_.init(batch_size_, &expr->get_sql_type());
           }
         } else if (OB_FAIL(agg_cell_factory_.alloc_cell(basic_info, agg_cells_, false, true, &eval_ctx))) {
         }
@@ -2842,10 +2747,63 @@ int ObGroupByCell::eval_batch(
   return ret;
 }
 
+int ObGroupByCell::capture_group_key_input()
+{
+  if (!is_inited_ || group_by_col_expr_ == nullptr || distinct_cnt_ < 0
+      || distinct_cnt_ > group_by_col_datum_buf_->get_capacity()) { return OB_INVALID_ARGUMENT; }
+  ObNativeAggDatumBuf candidate(allocator_);
+  int ret = OB_SUCCESS;
+  if (distinct_cnt_ > 0) {
+    ret = candidate.init(distinct_cnt_, &group_by_col_expr_->get_sql_type());
+  } else { candidate.configure(&group_by_col_expr_->get_sql_type(), ObAggNativeDomain::Semantic); }
+  ObDatum *input = get_group_by_col_datums_to_fill();
+  for (int64_t i = 0; OB_SUCC(ret) && i < distinct_cnt_; ++i) { ret = candidate.at(i).capture_legacy(input[i]); }
+  // References in these synchronous decoder views point at candidate payload.
+  // Moving its directory into the owner does not move those payload spans.
+  ObAggGroupByDatumBuf *views = need_extract_distinct_ ? tmp_group_by_datum_buf_ : group_by_col_datum_buf_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < distinct_cnt_; ++i) {
+    char *scratch = views->is_use_extra_buf() ? views->get_view_scratch(i)
+        : (need_extract_distinct_ ? agg_datum_buf_->get_view_scratch(i) : legacy_group_owner_->get_view_scratch(i));
+    ret = candidate.at(i).export_legacy(input[i], scratch, NATIVE_LEGACY_SCALAR_BYTES);
+  }
+  if (OB_SUCC(ret)) {
+    if (need_extract_distinct_) { native_dictionary_keys_.swap(candidate); }
+    else { native_group_keys_.swap(candidate); }
+    key_input_captured_ = true;
+    native_key_projection_ = 0;
+  }
+  return ret;
+}
+
+void ObGroupByCell::release_group_key_views()
+{
+  for (ObAggGroupByDatumBuf *views : {group_by_col_datum_buf_, tmp_group_by_datum_buf_}) {
+    if (views == nullptr) { continue; }
+    ObDatum *basic = views->get_sql_result_datums();
+    for (int64_t i = 0; basic != nullptr && i < batch_size_; ++i) { basic[i].set_null(); }
+    ObDatum *extra = views->get_extra_result_datums();
+    for (int64_t i = 0; extra != nullptr && i < views->get_extra_buf_size(); ++i) { extra[i].set_null(); }
+  }
+  for (int64_t i = 0; i < agg_cells_.count(); ++i) { agg_cells_.at(i)->release_input_views(); }
+}
+
+int ObGroupByCell::import_native_keys(int64_t begin, int64_t end)
+{
+  if (native_eval_ctx_ == nullptr || group_by_col_expr_ == nullptr || begin < 0 || end < begin || end > batch_size_) { return OB_INVALID_ARGUMENT; }
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(native_group_keys_.reserve(std::max<int64_t>(end, 1)))) { return ret; }
+  for (int64_t row = begin; OB_SUCC(ret) && row < end; ++row) {
+    ret = native_group_keys_.at(row).capture_native(group_by_col_expr_->locate_expr_datum(*native_eval_ctx_, row));
+  }
+  if (OB_SUCC(ret)) { key_input_captured_ = true; native_key_projection_ = 0; }
+  return ret;
+}
+
 int ObGroupByCell::copy_output_row(const int64_t batch_idx, const ObTableIterParam &iter_param)
 {
   UNUSED(iter_param);
   int ret = OB_SUCCESS;
+  ret = import_native_keys(batch_idx - 1, batch_idx);
   // just shallow copy output datum to agg
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -2865,6 +2823,7 @@ int ObGroupByCell::copy_output_rows(const int64_t batch_idx, const ObTableIterPa
 {
   UNUSED(iter_param);
   int ret = OB_SUCCESS;
+  ret = import_native_keys(0, batch_idx);
   // just shallow copy output datums to agg
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -2901,7 +2860,7 @@ int ObGroupByCell::collect_result()
     ret = OB_NOT_INIT;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
-    agg_cells_.at(i)->collect_batch_result_in_group_by(distinct_cnt_);
+    ret = agg_cells_.at(i)->collect_batch_result_in_group_by(distinct_cnt_);
   }
   return ret;
 }
@@ -2929,9 +2888,9 @@ int ObGroupByCell::prepare_tmp_group_by_buf(const int64_t size)
   if (OB_ISNULL(distinct_projector_buf_)) {
     if (OB_FAIL(new_group_by_buf((int16_t*)nullptr, 0, sizeof(int16_t), allocator_, distinct_projector_buf_))) {
     } else if (OB_FAIL(distinct_projector_buf_->reserve(batch_size_))) {
-    } else if (OB_FAIL(ObAggDatumBuf::new_agg_datum_buf(batch_size_, false, allocator_, agg_datum_buf_))) {
+    } else if (OB_FAIL(ObAggDatumBuf::new_agg_datum_buf(batch_size_, false, allocator_, agg_datum_buf_, NATIVE_LEGACY_SCALAR_BYTES))) {
     } else if (OB_FAIL(new_group_by_buf(agg_datum_buf_->get_datums(), batch_size_,
-        common::OBJ_DATUM_NUMBER_RES_SIZE, allocator_, tmp_group_by_datum_buf_))) {
+        NATIVE_LEGACY_SCALAR_BYTES, allocator_, tmp_group_by_datum_buf_))) {
     } else {
       distinct_projector_buf_->fill_items(-1);
     }
@@ -2945,7 +2904,8 @@ int ObGroupByCell::prepare_tmp_group_by_buf(const int64_t size)
 int ObGroupByCell::reserve_group_by_buf(const int64_t size)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(group_by_col_datum_buf_->reserve(size))) {
+  if (OB_FAIL(native_group_keys_.reserve(size))) {
+  } else if (OB_FAIL(group_by_col_datum_buf_->reserve(size))) {
   } else if (nullptr != distinct_projector_buf_) {
     if (OB_FAIL(distinct_projector_buf_->reserve(size))) {
     } else if (FALSE_IT(distinct_projector_buf_->fill_items(-1))) {
@@ -2962,95 +2922,75 @@ int ObGroupByCell::reserve_group_by_buf(const int64_t size)
 int ObGroupByCell::output_extra_group_by_result(int64_t &count, const ObTableIterParam &iter_param)
 {
   UNUSED(iter_param);
-  int ret = OB_SUCCESS;
   count = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!group_by_col_datum_buf_->is_use_extra_buf())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(0 == projected_cnt_ && row_capacity_ != batch_size_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (projected_cnt_ >= distinct_cnt_) {
-    ret = OB_ITER_END;
-  } else {
-    count = MIN(row_capacity_, distinct_cnt_ - projected_cnt_);
-    common::ObDatum *result_datum = nullptr;
-    common::ObDatum *sql_result_datums = group_by_col_datum_buf_->get_sql_result_datums();
-    common::ObDatum *extra_result_datums = group_by_col_datum_buf_->get_extra_result_datums();
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      if (OB_FAIL(sql_result_datums[i].from_storage_datum(
-          extra_result_datums[projected_cnt_ + i], group_by_col_expr_->obj_datum_map_))) {
-      }
-    }
-    // do nothing for the first batch, the aggregated values is already in the sql datum
-    if (OB_SUCC(ret) && projected_cnt_ >= batch_size_) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
-        if (OB_FAIL(agg_cells_.at(i)->output_extra_group_by_result(projected_cnt_, count))) {
-        }
-      }
-    }
+  if (!is_inited_) { return OB_NOT_INIT; }
+  if (!group_by_col_datum_buf_->is_use_extra_buf() || (projected_cnt_ == 0 && row_capacity_ != batch_size_)) { return OB_ERR_UNEXPECTED; }
+  if (projected_cnt_ >= distinct_cnt_) { return OB_ITER_END; }
+  count = std::min(row_capacity_, distinct_cnt_ - projected_cnt_);
+  int ret = OB_SUCCESS;
+  if (projected_cnt_ >= batch_size_) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) { ret = agg_cells_.at(i)->output_extra_group_by_result(projected_cnt_, count); }
   }
   if (OB_SUCC(ret)) {
+    native_key_projection_ = projected_cnt_;
     projected_cnt_ += count;
-    if (projected_cnt_ >= distinct_cnt_) {
-      ret = OB_ITER_END;
-    }
+    if (projected_cnt_ >= distinct_cnt_) { ret = OB_ITER_END; }
   }
+  return ret;
+}
+
+int ObGroupByCell::publish_native_rows(sql::ObEvalCtx &ctx, int64_t count)
+{
+  if (count < 0 || native_key_projection_ > native_group_keys_.get_capacity() - count) { return OB_INVALID_ARGUMENT; }
+  int ret = OB_SUCCESS;
+  for (int64_t row = 0; OB_SUCC(ret) && row < count; ++row) {
+    ObDatum view;
+    alignas(8) char scratch[64];
+    if (OB_FAIL(native_group_keys_.at(native_key_projection_ + row).export_legacy(view, scratch, sizeof(scratch)))) {
+    } else { ret = publish_storage_result(*group_by_col_expr_, ctx, view, row); }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) { ret = agg_cells_.at(i)->publish_native_rows(ctx, count); }
   return ret;
 }
 
 int ObGroupByCell::pad_column_in_group_by(const int64_t row_cap)
 {
+  if (!is_inited_) { return OB_NOT_INIT; }
   int ret = OB_SUCCESS;
-  common::ObDatum *sql_result_datums = group_by_col_datum_buf_->get_sql_result_datums();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (nullptr != group_by_col_param_ && 
-      group_by_col_param_->get_meta_type().is_fixed_len_char_type() &&
-      OB_FAIL(storage::pad_on_datums(
-              group_by_col_param_->get_accuracy(),
-              group_by_col_param_->get_meta_type().get_collation_type(),
-              padding_allocator_,
-              row_cap,
-              sql_result_datums))) {
-  }
-  for (int i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
-    if (OB_FAIL(agg_cells_.at(i)->pad_column_in_group_by(row_cap, padding_allocator_))) {
+  if (group_by_col_param_ != nullptr && group_by_col_param_->get_meta_type().is_fixed_len_char_type()) {
+    for (int64_t row = 0; OB_SUCC(ret) && row < row_cap; ++row) {
+      ObDatum view;
+      alignas(8) char scratch[64];
+      ObAggNativeCell &cell = native_group_keys_.at(native_key_projection_ + row);
+      ObDatum *view_ptr = &view;
+      if (OB_FAIL(cell.export_legacy(view, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(storage::pad_on_datums(group_by_col_param_->get_accuracy(),
+          group_by_col_param_->get_meta_type().get_collation_type(), padding_allocator_, 1, view_ptr))) {
+      } else { ret = cell.capture_legacy(*view_ptr); }
     }
   }
+  for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) { ret = agg_cells_.at(i)->pad_column_in_group_by(row_cap, padding_allocator_); }
   return ret;
 }
 
 int ObGroupByCell::extract_distinct()
 {
+  if (!is_inited_) { return OB_NOT_INIT; }
+  if (ref_cnt_ <= 0 || !key_input_captured_) { return OB_ERR_UNEXPECTED; }
   int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(ref_cnt_ <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    common::ObDatum *group_by_col_datums = group_by_col_datum_buf_->get_group_by_datums();
-    common::ObDatum *tmp_group_by_datums = tmp_group_by_datum_buf_->get_group_by_datums();
-    for (int64_t i = 0; OB_SUCC(ret) && i < ref_cnt_; ++i) {
-      uint32_t &ref = refs_buf_[i];
-      if (OB_UNLIKELY(ref >= group_by_col_datum_buf_->get_capacity())) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        int16_t &distinct_projector = distinct_projector_buf_->at(ref);
-        if (-1 == distinct_projector) {
-          // distinct val is not extracted yet
-          if (OB_FAIL(group_by_col_datums[distinct_cnt_].from_storage_datum(tmp_group_by_datums[ref], group_by_col_expr_->obj_datum_map_))) {
-          } else {
-            distinct_projector = distinct_cnt_;
-            ref = distinct_cnt_;
-            distinct_cnt_++;
-          }
-        } else {
-          // distinct val is already extracted
-          ref = distinct_projector;
-        }
-
-      }
+  ObDatum *views = group_by_col_datum_buf_->get_group_by_datums();
+  for (int64_t i = 0; OB_SUCC(ret) && i < ref_cnt_; ++i) {
+    uint32_t &ref = refs_buf_[i];
+    if (ref >= native_dictionary_keys_.get_capacity()) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      int16_t &projected = distinct_projector_buf_->at(ref);
+      if (projected == -1) {
+        if (OB_FAIL(native_group_keys_.at(distinct_cnt_).capture_native(native_dictionary_keys_.at(ref).native_value()))) {
+        } else if (OB_FAIL(native_group_keys_.at(distinct_cnt_).export_legacy(views[distinct_cnt_],
+            group_by_col_datum_buf_->is_use_extra_buf() ? group_by_col_datum_buf_->get_view_scratch(distinct_cnt_)
+                : legacy_group_owner_->get_view_scratch(distinct_cnt_), 64))) {
+        } else { projected = distinct_cnt_; ref = distinct_cnt_++; }
+      } else { ref = projected; }
     }
   }
   return ret;

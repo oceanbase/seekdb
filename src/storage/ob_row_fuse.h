@@ -59,28 +59,6 @@ public:
   int16_t *nops_;
 };
 
-class ObObjShallowCopy
-{
-public:
-  OB_INLINE int operator () (const common::ObObj &src_obj, common::ObObj &dst_obj)
-  {
-    dst_obj = src_obj;
-    return common::OB_SUCCESS;
-  }
-};
-
-class ObObjDeepCopy
-{
-public:
-  ObObjDeepCopy(common::ObArenaAllocator &allocator) : allocator_(allocator) {}
-  OB_INLINE int operator() (const common::ObObj &src_obj, common::ObObj &dst_obj)
-  {
-    return common::deep_copy_obj(allocator_, src_obj, dst_obj);
-  }
-private:
-  common::ObArenaAllocator &allocator_;
-};
-
 class ObRowFuse
 {
 public:
@@ -88,7 +66,7 @@ public:
                             ObStoreRow &result,
                             ObNopPos &nop_pos,
                             bool &final_result,
-                            ObObjDeepCopy *obj_copy = nullptr);
+                            common::ObIAllocator *owner = nullptr);
 
   static int fuse_row(const blocksstable::ObDatumRow &former,
                             blocksstable::ObDatumRow &result,
@@ -96,7 +74,6 @@ public:
                             bool &final_result,
                             common::ObIAllocator *allocator = nullptr);
 
-  static ObObjShallowCopy shallow_copy_;
 };
 
 

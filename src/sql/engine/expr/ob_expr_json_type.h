@@ -34,12 +34,12 @@ public:
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx)
                                 const override;
-  static uint32_t opaque_index(ObObjType field_type);
-  static int eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static uint32_t opaque_index(SqlValueType field_type);
+  static int eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, bool has_lob_header,
+  static int calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta, bool has_lob_header,
                   ObIAllocator *allocator, uint32_t &type_idx, bool &is_null);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprJsonType);
