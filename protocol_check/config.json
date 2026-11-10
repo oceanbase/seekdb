@@ -1,0 +1,12 @@
+{
+  "startup_timeout": 120,
+  "request_timeout": 60,
+  "case_timeout": 600,
+  "max_response_bytes": 16777216,
+  "cpus": "2",
+  "memory": "2g",
+  "pids_limit": 128,
+  "abs_tol": 1e-05,
+  "rel_tol": 1e-05,
+  "error_codes": {}
+}

@@ -408,3 +408,5 @@ seekdb_data/
 
 # Local Python bytecode for the iOS build helpers.
 deps/ios-build/__pycache__/
+/protocol-results/
+/protocol_check/__pycache__/
