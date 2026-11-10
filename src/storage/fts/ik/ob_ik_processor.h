@@ -80,6 +80,10 @@ private:
   const char *fulltext_;
   int64_t fulltext_len_;
 
+  // resolved once in init() so that the per character path is free of charset dispatch
+  const ObCharsetInfo *cs_;
+  int (*classify_)(const char *input, const uint8_t char_len, ObFTCharUtil::CharType &type);
+
   int64_t cursor_;
   int64_t next_char_len_;
   ObFTCharUtil::CharType next_char_type_;

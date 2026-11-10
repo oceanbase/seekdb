@@ -51,9 +51,9 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cs_(nullptr),
+      classify_(nullptr), cursor_(0), next_char_len_(0), handle_size_(0), is_smart_(is_smart),
+      token_list_(allocator), result_list_(allocator)
 {
 }
 
@@ -63,6 +63,9 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(cs_ = ObCharset::get_charset(coll_type_))) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_FAIL(ObFTCharUtil::get_classifier(coll_type_, &classify_))) {
   } else if (OB_FAIL(prepare_next_char())) {
   }
   return ret;
@@ -102,14 +105,23 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
+  int error = 0;
+  int64_t char_len = 0;
+  // Equivalent to ObCharset::first_valid_char + ObFTCharUtil::classify_first_char, but the
+  // charset info and the classifier are resolved once in init() instead of per character.
+  if (OB_UNLIKELY(nullptr == cs_ || nullptr == cs_->cset || nullptr == classify_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("tokenize context not inited", K(ret));
+  } else if (OB_UNLIKELY(cursor_ >= fulltext_len_)) {
+    ret = OB_ITER_END;
+  } else if (FALSE_IT(char_len = static_cast<int64_t>(cs_->cset->well_formed_len(
+                          cs_, fulltext_ + cursor_, fulltext_ + fulltext_len_, 1, &error)))) {
+  } else if (OB_UNLIKELY(0 != error || char_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid encoding found", K(ret), K(cursor_), K(fulltext_len_));
+  } else {
+    next_char_len_ = char_len;
+    ret = classify_(fulltext_ + cursor_, static_cast<uint8_t>(char_len), next_char_type_);
   }
   return ret;
 }

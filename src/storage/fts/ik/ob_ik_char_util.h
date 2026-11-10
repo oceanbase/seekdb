@@ -52,6 +52,27 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
+  // Resolve the charset specific classifier only once, so the tokenize hot path does not
+  // have to dispatch on the charset type again for every character.
+  static int get_classifier(
+      ObCollationType coll_type,
+      int (**classify)(const char *input, const uint8_t char_len, CharType &type));
+
+  static int classify_utf8mb4(const char *input, const uint8_t char_len, CharType &type)
+  {
+    return do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+  }
+
+  static int classify_utf16(const char *input, const uint8_t char_len, CharType &type)
+  {
+    return do_classify<CHARSET_UTF16>(input, char_len, type);
+  }
+
+  static int classify_utf16le(const char *input, const uint8_t char_len, CharType &type)
+  {
+    return do_classify<CHARSET_UTF16LE>(input, char_len, type);
+  }
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,
@@ -495,6 +516,38 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
     break;
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::get_classifier(
+    ObCollationType coll_type,
+    int (**classify)(const char *input, const uint8_t char_len, CharType &type))
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(classify)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    switch (ObCharset::charset_type_by_coll(coll_type)) {
+    case CHARSET_UTF8MB4: {
+      *classify = &ObFTCharUtil::classify_utf8mb4;
+      break;
+    }
+    case CHARSET_UTF16: {
+      *classify = &ObFTCharUtil::classify_utf16;
+      break;
+    }
+    case CHARSET_UTF16LE: {
+      *classify = &ObFTCharUtil::classify_utf16le;
+      break;
+    }
+    default: {
+      *classify = nullptr;
+      ret = OB_NOT_SUPPORTED;
+      STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(coll_type));
+      break;
+    }
+    }
   }
   return ret;
 }

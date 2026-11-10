@@ -69,15 +69,23 @@ int ObFTDictHub::get_shared_dict(const ObFTDictDesc &desc, ObIFTDict *&dict)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fts dict type for shared dict", K(ret), K(desc.type_));
   } else {
-    lib::ObMutexGuard guard(shared_dict_lock_);
     ObFTSharedDict &shared_dict = shared_dicts_[idx];
-    if (nullptr == shared_dict.dict_) {
-      if (OB_FAIL(build_shared_dict(desc, shared_dict))) {
+    // The dict is immutable once it is published, so the steady state is a lock free read
+    // and only the first builder takes the lock.
+    ObIFTDict *cached_dict = ATOMIC_LOAD(&shared_dict.dict_);
+    if (nullptr == cached_dict) {
+      lib::ObMutexGuard guard(shared_dict_lock_);
+      if (nullptr == shared_dict.dict_ && OB_FAIL(build_shared_dict(desc, shared_dict))) {
         LOG_WARN("failed to build shared fts dict", K(ret), K(desc.type_));
       }
+      cached_dict = shared_dict.dict_;
     }
     if (OB_SUCC(ret)) {
-      dict = shared_dict.dict_;
+      if (OB_ISNULL(cached_dict)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        dict = cached_dict;
+      }
     }
   }
   return ret;
@@ -116,7 +124,8 @@ int ObFTDictHub::build_shared_dict(const ObFTDictDesc &desc, ObFTSharedDict &sha
     LOG_WARN("failed to init fts range dict", K(ret), K(desc.type_));
   } else {
     shared_dict.container_ = container;
-    shared_dict.dict_ = range_dict;
+    // publish the fully built dict after its container, readers load it without the lock
+    ATOMIC_STORE(&shared_dict.dict_, range_dict);
   }
   return ret;
 }
