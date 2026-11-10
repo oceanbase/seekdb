@@ -1330,7 +1330,6 @@ int ObTableLockService::pack_and_execute_task_(LocalExecutor &executor,
   } else if (OB_FAIL(executor.execute(request))) {
   } else {
     retry_ctx.task_executed_ = true;
-    ALLOW_NEXT_LOG();
     LOG_INFO("execute table lock task", KR(ret), K(retry_ctx), "request", request);
   }
   return ret;
@@ -1350,7 +1349,6 @@ int ObTableLockService::pack_and_execute_task_(ObLocalBatchLockExecutor<ObLockTa
   } else if (OB_FAIL(executor.execute(request))) {
   } else {
     retry_ctx.task_executed_ = true;
-    ALLOW_NEXT_LOG();
     LOG_INFO("execute table lock task", KR(ret), K(retry_ctx), "request", request);
   }
   return ret;

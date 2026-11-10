@@ -550,32 +550,8 @@
   xingxing4@163.com
   xingxing5@163.com
   14844887@sina.com
-**/tools/deploy/deploy.py
-  http://pre-gw.obrde.alibaba-inc.com/cmd-trace/api/v1/audit/add
 **/mittest/logservice/archiveservice/create_restore_tenant.h
   VjIDX5kAR6DDhGgnL3YuVA==
-**/tools/deploy/h/mysqltest.py
-  http://11.166.86.153:8877/mytest10.jar
-  http://11.166.86.153:8877/mytest_for_oracle.jar
-  http://11.166.86.153:8877/mytest_for_oracle.md5
-**/tools/deploy/mysqltest_config.yaml
-  http://11.166.86.153:8877/mytest10.jar
-**/tools/obtest/copy_for_compat.sh
-  http://11.166.86.153:8877/obproxy*
-  http://11.166.86.153:8877/mytest_workaround_version/mytest40.jar
-  http://11.166.86.153:8877/oceanbase_released/
-  http://11.166.86.153:8877/obproxy.support_4.0
-  http://11.166.86.153:8877/obproxy-ce-4.1.0.0_dev
-  http://11.166.86.153:8877/mytest_latest.jar
-**/tools/deploy/h/obi.py
-  http://ocp-cfg.alibaba.net:8080/services?User_ID=alibaba&UID=test
-  http://11.166.86.153:8877/obproxy
-  http://10.244.4.22:8080/oceanbase_configer/v2/
-  http://10.244.4.22:8080/diamond/cgi/a.py?key=
-  http://11.166.86.153:8877
-  root
-  f0455d5edb4833fa2e91762e71b61bc35d45cf0b
-  D8GVpapRiOtG4Am/rgHexdE7QIdMGxSndRdedotfU2VYuI+gYHDBNDFyaIpoafUE
 **/deps/init/oceanbase.el7.x86_64.deps
   https://ob-yum.oceanbase-dev.com/7/x86_64/test/corebolt/
 **/deps/init/oceanbase.el7.aarch64.deps
@@ -625,23 +601,14 @@
   dlt6@my_link1.id
   dlt4@my_link1.name
   dlt6@my_link1.name
-**/tools/deploy/copy.sh
-  http://11.166.86.153:8877/obproxy.support_4.0
 **/.github/**
   https://ce-farm.oceanbase-dev.com/*
   https://obfarm-ce.oss-cn-hongkong.aliyuncs.com*
   https://rust-lang.github.io/*
   https://sh.rustup.rs*
-**/cmake/Rust.cmake
-  https://rustup.rs
 **/.github/actions/setup-rust/action.yml
   https://rsproxy.cn/index/
 **/.github/workflows/seekdb.yml
-  https://rsproxy.cn/rustup-init.sh
-  https://rsproxy.cn
-  https://rsproxy.cn/rustup
-**/test/ci/templates/farm_for_standalone_src.yml
-  https://rsproxy.cn/index/
   https://rsproxy.cn/rustup-init.sh
   https://rsproxy.cn
   https://rsproxy.cn/rustup
@@ -667,11 +634,6 @@
   dlt6@my_link1.id
   dlt4@my_link1.name
   dlt6@my_link1.name
-**tools/obtest/upgrade_farm_ss/configure_upgrade_temp.ini
-  http://ob-jenkins.alibaba.net:8081/oceanbase_configer/v2/
-  http://ob-jenkins.alibaba.net:8081/diamond/cgi/a.py
-**/tools/systemd/profile/post_install.sh.template
-  https://www.oceanbase.ai/*
 **/tools/deploy/mysql_test/test_suite/auto_inc/t/innodb-autoinc-44030.test
   http://lists.mysql.com/commits/75268)
 **/tools/obtest/conf/{configure.ak_obtest.ini,configure.ak_obtest2.ini}

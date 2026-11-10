@@ -537,7 +537,7 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
           dfo->set_out_slave_mapping_type(transmit->get_slave_mapping_type());
           parent_dfo->set_in_slave_mapping_type(transmit->get_slave_mapping_type());
         }
-        dfo->set_pkey_table_loc_id(
+        dfo->set_pkey_table_ref_id(
           (reinterpret_cast<const ObPxTransmitSpec *>(transmit))->repartition_table_id_);
         if (OB_ISNULL(parent_dfo)) {
           ret = OB_ERR_UNEXPECTED;

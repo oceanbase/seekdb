@@ -406,7 +406,7 @@ int ObMPStmtFetch::process()
   bool need_response_error = true;
   ObSQLSessionInfo *sess = NULL;
   int64_t query_timeout = 0;
-  ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
+  const ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
   ObSMConnection *conn = get_conn();
   bool cursor_fetched = false;
   reset_close_cursor();

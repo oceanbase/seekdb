@@ -181,7 +181,6 @@ void ObContextAllocatorV2::print_usage() const
               l_item->hold_, l_item->used_, l_item->count_, l_item->used_ / l_item->count_, l_item->block_cnt_, l_item->chunk_cnt_,
               label.str_);
           if (pos > BUFLEN / 2) {
-            allow_next_syslog();
             _LOG_INFO("%s", buf);
             pos = 0;
           }
@@ -200,7 +199,6 @@ void ObContextAllocatorV2::print_usage() const
     }
 
     if (OB_SUCC(ret) && pos > 0) {
-      allow_next_syslog();
       _LOG_INFO("%s", buf);
     }
   }

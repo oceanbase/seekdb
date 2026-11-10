@@ -1987,7 +1987,7 @@ int ObTableSchema::create_idx_name_automatically(common::ObString &idx_name,
     tmp_table_name = table_name;
   }
   if (OB_SUCC(ret)) {
-    if (snprintf(temp_str_buf, sizeof(temp_str_buf), "%.*s_OBIDX_%ld", tmp_table_name.length(), tmp_table_name.ptr(),
+    if (snprintf(temp_str_buf, sizeof(temp_str_buf), "%.*s_OBIDX_%" PRId64, tmp_table_name.length(), tmp_table_name.ptr(),
                  ObTimeUtility::current_time()) < 0) {
       ret = OB_SIZE_OVERFLOW;
       SQL_RESV_LOG(WARN, "failed to generate buffer for temp_str_buf", K(ret));
@@ -2074,6 +2074,33 @@ int ObTableSchema::create_cons_name_automatically(ObString &cst_name,
   return ret;
 }
 
+
+int ObTableSchema::create_cons_name_for_recyclebin(ObString &cst_name,
+                                                 ObIAllocator &allocator,
+                                                 ObConstraintType cst_type,
+                                                 const uint64_t table_id,
+                                                 const uint64_t constraint_id)
+{
+  int ret = OB_SUCCESS;
+  const char *type_name = nullptr;
+  switch (cst_type) {
+    case CONSTRAINT_TYPE_PRIMARY_KEY: type_name = "_OBPK_"; break;
+    case CONSTRAINT_TYPE_CHECK: type_name = "_OBCHECK_"; break;
+    case CONSTRAINT_TYPE_UNIQUE_KEY: type_name = "_OBUNIQUE_"; break;
+    case CONSTRAINT_TYPE_NOT_NULL: type_name = "_OBNOTNULL_"; break;
+    default: ret = OB_ERR_UNEXPECTED; break;
+  }
+  ObSqlString full_name;
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(full_name.append_fmt("__recycle_$_C%" PRIu64 "%s%" PRIu64,
+                                    table_id, type_name, constraint_id))) {
+    } else if (full_name.length() > OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ob_write_string(allocator, full_name.string(), cst_name))) {
+    }
+  }
+  return ret;
+}
 
 int ObTableSchema::create_cons_name_automatically_with_dup_check(ObString &cst_name,
                                                   const ObString &table_name,

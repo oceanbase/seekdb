@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TABLET_MACRO_INFO_ITERATOR
 
 #include "storage/tablet/ob_tablet_block_aggregated_info.h"
-#include "storage/slog_ckpt/ob_linked_macro_block_reader.h"
+#include "storage/blockstore/ob_linked_macro_block_reader.h"
 #include "storage/tablet/ob_tablet.h"
 
 namespace oceanbase

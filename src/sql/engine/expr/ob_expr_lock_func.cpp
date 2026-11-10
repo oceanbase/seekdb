@@ -158,7 +158,7 @@ int ObExprGetLock::get_lock(const ObExpr &expr,
   int ret = OB_SUCCESS;
 
   // NOTICE: use this to make it same like never timeout.
-  static const int64_t MAX_LOCK_TIME = 365L * 24 * 3600 * 1000 * 1000;
+  static const int64_t MAX_LOCK_TIME = 365LL * 24 * 3600 * 1000 * 1000;
   ObDatum *lock_name = NULL;
   ObDatum *lock_timeout = NULL;
 

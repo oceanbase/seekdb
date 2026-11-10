@@ -1,4 +1,4 @@
-load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
+load("//bazel:defs.bzl", "cc_library")
 
 cc_library(
     name = "objit_api_interface",

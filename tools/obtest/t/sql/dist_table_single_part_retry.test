@@ -100,7 +100,7 @@ select /*+ no_use_px parallel(2) */ * from case1_t_1;
 --enable_result_log
 explain select /*+ no_use_px parallel(2) */ * from case1_t_1;
 
-# 下面切走副本，查询（刷location cache），再切回，（但不刷 location cache），查询，预期查询能成功（局部副本重试）
+# Exercise query retry after replica/role state changes.
 connection conn_admin;
 --disable_result_log
 --disable_query_log

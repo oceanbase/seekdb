@@ -109,13 +109,13 @@ public:
   virtual bool is_dml_operator() const override { return true; }
   //This interface is only allowed to be used in a single-table DML operator,
   //it is invalid when multiple tables are modified in one DML operator
-  int get_single_table_loc_id(common::ObTableID &table_loc_id,
+  int get_single_table_ref_id(common::ObTableID &table_ref_id,
                               common::ObTableID &ref_table_id) const
   {
     const ObDMLBaseCtDef *dml_ctdef = nullptr;
     int ret = get_single_dml_ctdef(dml_ctdef);
     if (common::OB_SUCCESS == ret) {
-      table_loc_id = dml_ctdef->das_base_ctdef_.table_id_;
+      table_ref_id = dml_ctdef->das_base_ctdef_.table_id_;
       ref_table_id = dml_ctdef->das_base_ctdef_.index_tid_;
     }
     return ret;
@@ -127,8 +127,8 @@ public:
     UNUSED(dml_ctdef);
     return common::OB_NOT_IMPLEMENT;
   }
-  void set_table_location_uncertain(bool v) { table_location_uncertain_ = v; }
-  bool is_table_location_uncertain() const { return table_location_uncertain_; }
+  void set_has_dynamic_tablets(bool v) { has_dynamic_tablets_ = v; }
+  bool has_dynamic_tablets() const { return has_dynamic_tablets_; }
   inline bool use_dist_das() const { return use_dist_das_; }
 public:
   // Expr frame info for partial expr serialization. (serialize is not need for it self)
@@ -141,7 +141,7 @@ public:
       uint64_t gi_above_                        : 1;
       uint64_t is_returning_                    : 1;
       uint64_t is_pdml_index_maintain_          : 1; // indicates whether the current dml operator is the operator used for index maintenance in pdml (index maintain)
-      uint64_t table_location_uncertain_        : 1; // Target access partition location uncertain, need full table scan
+      uint64_t has_dynamic_tablets_             : 1; // Prepare all possible target tablets for PDML row movement or upsert.
       uint64_t use_dist_das_                    : 1;
       uint64_t is_pdml_update_split_            : 1; // Mark whether delete, insert op is split from update
       uint64_t check_fk_batch_                  : 1; // mark if the foreign key constraint can be checked in batch    
@@ -164,26 +164,26 @@ public:
 public:
   ObTableModifyOpInput(ObExecContext &ctx, const ObOpSpec &spec)
     : ObOpInput(ctx, spec),
-      table_loc_(nullptr),
-      tablet_loc_(nullptr)
+      table_access_(nullptr),
+      tablet_access_(nullptr)
   { }
   virtual ~ObTableModifyOpInput() { }
   virtual void reset()
   {
-    table_loc_ = nullptr;
-    tablet_loc_ = nullptr;
+    table_access_ = nullptr;
+    tablet_access_ = nullptr;
   }
-  inline void set_tablet_loc(ObDASTabletLoc *tablet_loc) { tablet_loc_ = tablet_loc; }
-  inline ObDASTabletLoc *get_tablet_loc() { return tablet_loc_; }
-  inline ObDASTableLoc *get_table_loc() { return table_loc_; }
+  inline void set_tablet_access(DASRuntimeTabletAccess *tablet_access) { tablet_access_ = tablet_access; }
+  inline DASRuntimeTabletAccess *get_tablet_access() { return tablet_access_; }
+  inline DASRuntimeTableAccess *get_table_access() { return table_access_; }
   const ObTableModifySpec &get_spec() const
   {
     return static_cast<const ObTableModifySpec &>(spec_);
   }
-  TO_STRING_KV(KPC_(table_loc), KPC_(tablet_loc));
+  TO_STRING_KV(KPC_(table_access), KPC_(tablet_access));
 protected:
-  ObDASTableLoc *table_loc_;
-  ObDASTabletLoc *tablet_loc_; //for single table modify op
+  DASRuntimeTableAccess *table_access_;
+  DASRuntimeTabletAccess *tablet_access_; //for single table modify op
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableModifyOpInput);
 };
@@ -261,8 +261,8 @@ protected:
   int get_gi_task();
   //It is used for the execution without routing through DAS.
   //In this case, the DML operator only allows to modify a single table,
-  //and the table location is specified by the scheduling framework.
-  int calc_single_table_loc();
+  //and the table access is specified by the scheduling framework.
+  int resolve_single_table_access();
 
   virtual int inner_rescan() override;
   virtual int inner_get_next_row() override;

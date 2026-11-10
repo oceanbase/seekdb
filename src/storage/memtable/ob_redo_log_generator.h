@@ -205,8 +205,6 @@ private:
   ObTransCallbackMgr *callback_mgr_;
   ObMemtableCtx *mem_ctx_;
 
-  // logging block bug detector
-  int64_t last_logging_blocked_time_;
 };
 
 }; // end namespace memtable

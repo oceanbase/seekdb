@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SHARE_LOG_PALF_LOG_DEFINE_
 #define OCEANBASE_SHARE_LOG_PALF_LOG_DEFINE_
+#include <cinttypes>                                     // PRIu64
 #include <cstdint>                                       // UINT64_MAX
 #include <string.h>                                      // strncmp...
 #include <dirent.h>                                      // dirent
@@ -78,13 +79,11 @@ const int64_t MIN_DISK_SIZE_PER_PALF_INSTANCE = 512 * 1024 * 1024ul;
 // ==================== block and log start ========================
 constexpr offset_t MAX_LOG_HEADER_SIZE = 4 * 1024;
 constexpr offset_t MAX_INFO_BLOCK_SIZE = 4 * 1024;
-constexpr offset_t MAX_META_ENTRY_SIZE = 4 * 1024;
 constexpr offset_t MAX_LOG_BODY_SIZE = 3 * 1024 * 1024 + 512 * 1024;                 // The max size of one log body is 3.5MB.
 
 constexpr offset_t MAX_NORMAL_LOG_BODY_SIZE = 2 * 1024 * 1024 + 16 * 1024;
 const int64_t PALF_PHY_BLOCK_SIZE = 1 << 26;                                        // 64MB
 const int64_t PALF_BLOCK_SIZE = PALF_PHY_BLOCK_SIZE - MAX_INFO_BLOCK_SIZE;          // log block size is 64M-MAX_INFO_BLOCK_SIZE by default.
-const int64_t PALF_META_BLOCK_SIZE = PALF_PHY_BLOCK_SIZE - MAX_INFO_BLOCK_SIZE;     // meta block size is 64M-MAX_INFO_BLOCK_SIZE by default.
 const int64_t DEFAULT_LOG_UTL_THRESHOLD = 80;
 
 constexpr int64_t CLOG_FILE_TAIL_PADDING_TRIGGER = 4096;     // Threshold for padding the remaining space at the end of the file
@@ -97,7 +96,6 @@ constexpr offset_t MAX_LOG_BUFFER_SIZE = MAX_LOG_BODY_SIZE + MAX_LOG_HEADER_SIZE
 
 constexpr offset_t LOG_DIO_ALIGN_SIZE = 4 * 1024;
 constexpr offset_t LOG_DIO_ALIGNED_BUF_SIZE_REDO = MAX_LOG_BUFFER_SIZE + LOG_DIO_ALIGN_SIZE;
-constexpr offset_t LOG_DIO_ALIGNED_BUF_SIZE_META = MAX_META_ENTRY_SIZE + LOG_DIO_ALIGN_SIZE;
 const block_id_t LOG_INITIAL_BLOCK_ID = 0;
 constexpr block_id_t LOG_MAX_BLOCK_ID = UINT64_MAX/PALF_BLOCK_SIZE - 1;
 constexpr block_id_t LOG_INVALID_BLOCK_ID = LOG_MAX_BLOCK_ID + 1;
@@ -199,7 +197,7 @@ inline int convert_to_tmp_block(const char *log_dir,
                                const int64_t buf_len)
 {
   int64_t pos = 0;
-  return databuff_printf(buf, buf_len, pos, "%s/%lu%s", log_dir,
+  return databuff_printf(buf, buf_len, pos, "%s/%" PRIu64 "%s", log_dir,
           block_id, TMP_SUFFIX);
 }
 
@@ -209,7 +207,7 @@ inline int convert_to_normal_block(const char *log_dir,
                                    const int64_t buf_len)
 {
   int64_t pos = 0;
-  return databuff_printf(buf, buf_len, pos, "%s/%lu", log_dir, block_id);
+  return databuff_printf(buf, buf_len, pos, "%s/%" PRIu64, log_dir, block_id);
 }
 
 struct TimeoutChecker
@@ -263,27 +261,6 @@ int construct_absolute_tmp_block_path(const char *dir_path, const block_id_t blo
 int convert_sys_errno();
 
 bool is_number(const char *);
-
-enum PurgeThrottlingType
-{
-  INVALID_PURGE_TYPE = 0,
-  PURGE_BY_CHECK_BARRIER_CONDITION = 1,
-  MAX_PURGE_TYPE
-};
-
-inline const char *purge_throttling_type_2_str(const PurgeThrottlingType type)
-{
-#define EXTRACT_PURGE_TYPE(type_var) case(type_var): return #type_var
-  switch(type)
-  {
-    EXTRACT_PURGE_TYPE(INVALID_PURGE_TYPE);
-    EXTRACT_PURGE_TYPE(PURGE_BY_CHECK_BARRIER_CONDITION);
-
-    default:
-      return "Invalid Type";
-  }
-#undef EXTRACT_PURGE_TYPE
-}
 
 } // end namespace palf
 } // end namespace oceanbase

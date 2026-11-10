@@ -624,7 +624,6 @@ int ObTabletMergePrepareTask::process()
 {
   int ret = OB_SUCCESS;
   ObBasicTabletMergeCtx *ctx = NULL;
-  ObTaskController::get().switch_task(share::ObTaskType::DATA_MAINTAIN);
   bool finish_flag = false;
 #ifdef ERRSIM
   DEBUG_SYNC(MERGE_PARTITION_TASK);
@@ -755,7 +754,6 @@ int ObTabletMergeFinishTask::process()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObTaskController::get().switch_task(share::ObTaskType::DATA_MAINTAIN);
   ObTabletMergeCtx *ctx_ptr = nullptr;
   DEBUG_SYNC(MERGE_PARTITION_FINISH_TASK);
 
@@ -892,7 +890,6 @@ int ObTabletMergeTask::generate_next_task(ObITask *&next_task)
 int ObTabletMergeTask::process()
 {
   int ret = OB_SUCCESS;
-  ObTaskController::get().switch_task(share::ObTaskType::DATA_MAINTAIN);
 
 #ifdef ERRSIM
   ret = OB_E(EventTable::EN_COMPACTION_MERGE_TASK) OB_SUCCESS;

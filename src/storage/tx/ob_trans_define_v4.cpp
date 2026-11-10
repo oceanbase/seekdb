@@ -584,7 +584,6 @@ void ObTxDesc::dump_and_print_trace()
   int ret = OB_SUCCESS;
   if (OB_FAIL(lock_.trylock())) {
   } else {
-    share::ObTaskController::get().allow_next_syslog();
     TRANS_LOG(INFO, "[tx desc dump]", KPC(this));
     print_trace_();
     lock_.unlock();

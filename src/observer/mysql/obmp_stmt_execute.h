@@ -249,7 +249,6 @@ protected:
                                 sql::TypeInfo &param_type_info,
                                 ObObjParam &param,
                                 const char *bitmap);
-  int store_params_value_to_str(ObIAllocator &alloc, sql::ObSQLSessionInfo &session);
   int execute_response(sql::ObSQLSessionInfo &session,
                         ObMySQLResultSet &result,
                         bool &need_response_error,
@@ -371,8 +370,6 @@ protected:
   int64_t exec_end_timestamp_;
   bool prepare_packet_sent_;
   uint64_t params_num_; 
-  int64_t params_value_len_;
-  char *params_value_;
   int64_t curr_sql_idx_; // only for arraybinding
   ObPSAnalysisChecker analysis_checker_;
 private:

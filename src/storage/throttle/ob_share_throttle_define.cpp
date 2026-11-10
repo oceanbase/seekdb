@@ -20,7 +20,6 @@
 #include "lib/alloc/alloc_func.h"
 #include "storage/throttle/ob_throttle_info.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_task_define.h"
 
 
 namespace oceanbase {
@@ -93,7 +92,6 @@ void PrintThrottleUtil::pirnt_throttle_info(const int err_code,
               KPC(module_ti_guard.throttle_info()));
     if (!has_printed_lbt) {
       has_printed_lbt = true;
-      oceanbase::share::ObTaskController::get().allow_next_syslog();
       SHARE_LOG(INFO,
                 "[Throttling] (report write throttle info) LBT Info",
                 "Throttle Unit Name",

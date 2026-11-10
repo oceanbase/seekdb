@@ -290,7 +290,7 @@ int ObITmpFile::init(const int64_t dir_id,
     callback_allocator_ = callback_allocator;
 
     /******for virtual table begin******/
-    ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
+    const ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
     if (nullptr != cur_trace_id) {
       trace_id_ = *cur_trace_id;
     } else {

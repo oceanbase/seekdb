@@ -383,13 +383,7 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
 bool ObServerRuntime::is_hidden()
 {
   TCRLockGuard guard(meta_lock_);
-  return runtime_meta_.super_block_.is_hidden_;
-}
-
-ObServerRuntimeMeta ObServerRuntime::get_runtime_meta()
-{
-  TCRLockGuard guard(meta_lock_);
-  return runtime_meta_;
+  return runtime_meta_.is_hidden_;
 }
 
 ObServerRuntimeConfig ObServerRuntime::get_runtime_config()
@@ -398,22 +392,16 @@ ObServerRuntimeConfig ObServerRuntime::get_runtime_config()
   return runtime_meta_.runtime_config_;
 }
 
-ObServerRuntimeSuperBlock ObServerRuntime::get_super_block()
-{
-  TCRLockGuard guard(meta_lock_);
-  return runtime_meta_.super_block_;
-}
-
 void ObServerRuntime::set_server_resources(const ObServerRuntimeConfig &runtime_config)
 {
   TCWLockGuard guard(meta_lock_);
   runtime_meta_.runtime_config_ = runtime_config;
 }
 
-void ObServerRuntime::set_server_super_block(const ObServerRuntimeSuperBlock &super_block)
+void ObServerRuntime::activate()
 {
   TCWLockGuard guard(meta_lock_);
-  runtime_meta_.super_block_ = super_block;
+  runtime_meta_.is_hidden_ = false;
 }
 
 ERRSIM_POINT_DEF(CREATE_MODULES_FAIL)

@@ -56,7 +56,7 @@ MySQL 兼容 · 嵌入式 / 服务器双模式 · 向量 + 全文混合搜索 ·
 
 [English](README.md) | **中文版** | [日本語](README_JP.md)
 
-[30 秒体验](#30-秒体验) · [快速开始](#快速开始) · [为什么选择 seekdb](#为什么-ai-agent-要选择-seekdb) · [生态系统](#生态系统与集成) · [开发](#开发)
+[30 秒体验](#30-秒体验) · [快速开始](#快速开始) · [嵌入式 SDK](#embedded-sdks) · [为什么选择 seekdb](#为什么-ai-agent-要选择-seekdb) · [生态系统](#生态系统与集成) · [开发](#开发)
 
 <sub>如果你觉得 seekdb 有用，请给一个 <a href="https://github.com/oceanbase/seekdb/stargazers">star</a> — 让更多人发现这个项目。</sub>
 
@@ -88,7 +88,7 @@ pip install -U pyseekdb   # pyseekdb 是 seekdb 的 Python SDK
 
 > 📋 [查看 demo.py 源码 →](images/demo.py)
 
-无需服务器、无需定义 Schema、无需配置 Embedding。嵌入式模式直接在进程内运行；一行代码切换到服务器模式或 OceanBase 分布式模式。[更多示例 →](#更多示例)
+这个 Python 演示无需手动部署服务器、定义 Schema 或配置 Embedding。[使用 Python、JavaScript 或 Go 运行本地数据库 →](#embedded-sdks)
 
 ---
 
@@ -153,9 +153,191 @@ ORDER BY dist APPROXIMATE LIMIT 10;
 
 ## 🎬 快速开始
 
-### 安装
+<a id="embedded-sdks"></a>
 
-选择你的平台：
+### 嵌入式使用
+
+通过 Python、Node.js 或 Go 在应用中使用本地 seekdb，无需手动部署数据库服务。数据保存在指定的本地目录中，再次打开即可继续使用。
+
+<details open>
+<summary><b>🐍 Python</b></summary>
+
+使用 [pylibseekdb](https://pypi.org/project/pylibseekdb/) 启动本地 seekdb，再通过 PyMySQL 执行 SQL。需要 Python 3.11 或更高版本。
+
+```bash
+python3 -m pip install -U pylibseekdb pymysql
+```
+
+将下面的示例保存为 `example.py`。它通过 `connection_options()` 获取连接参数并传给 PyMySQL。上下文管理器会先关闭游标和 SQL 连接，再释放运行时句柄：
+
+```python
+from contextlib import closing
+
+import pylibseekdb
+import pymysql
+
+with closing(pylibseekdb.open("./seekdb.db")) as db:
+    options = db.connection_options()
+    with pymysql.connect(
+        database="test",
+        autocommit=True,
+        cursorclass=pymysql.cursors.DictCursor,
+        **options,
+    ) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1 AS value")
+            print(cursor.fetchall())
+```
+
+运行后输出 `[{'value': 1}]`：
+
+```bash
+python3 example.py
+```
+
+[完整使用指南](https://github.com/oceanbase/seekdb-bindings/blob/main/python/README.md) · [支持平台与环境要求](https://pypi.org/project/pylibseekdb/#requirements)
+
+如需更高层的 Collection API、文本 Embedding 和混合检索，可参考 [pyseekdb](https://github.com/oceanbase/pyseekdb)。
+
+</details>
+
+<details open>
+<summary><b>🟨 JavaScript / TypeScript (Node.js)</b></summary>
+
+使用 [@oceanbase/seekdb-node](https://www.npmjs.com/package/@oceanbase/seekdb-node) 启动本地 seekdb，再通过 `mysql2` 执行 SQL。需要 Node.js 22 或更高版本，同时支持 JavaScript 和 TypeScript。
+
+```bash
+npm install @oceanbase/seekdb-node mysql2
+```
+
+请启用 npm 可选依赖，以自动安装匹配的原生运行时。该绑定管理独立的本地 seekdb 进程；释放运行时句柄前，先关闭 SQL 连接。
+
+将下面的示例保存为 `example.mjs`（使用 ES modules，同时提供 TypeScript 类型声明）：
+
+```javascript
+import { seekdb } from "@oceanbase/seekdb-node";
+import mysql from "mysql2/promise";
+
+const db = await seekdb.open("./seekdb.db");
+let connection;
+try {
+  const endpoint = db.connectionOptions();
+  const location = endpoint.transport === "tcp"
+    ? { host: endpoint.host, port: endpoint.port }
+    : { socketPath: endpoint.transport === "unix_socket"
+        ? endpoint.unixSocket : endpoint.namedPipe };
+  connection = await mysql.createConnection({
+    ...location,
+    user: endpoint.user,
+    password: "",
+    database: "test",
+  });
+  const [rows] = await connection.query("SELECT 1 AS value");
+  console.log(rows);
+} finally {
+  try {
+    if (connection) await connection.end();
+  } finally {
+    db.close();
+  }
+}
+```
+
+运行后输出 `[ { value: 1 } ]`：
+
+```bash
+node example.mjs
+```
+
+[完整使用指南与支持平台](https://www.npmjs.com/package/@oceanbase/seekdb-node)
+
+如需更高层的 JavaScript Collection API，可参考 [seekdb-js](https://github.com/oceanbase/seekdb-js)。
+
+</details>
+
+<details open>
+<summary><b>🐹 Go</b></summary>
+
+使用 [seekdb-go](https://github.com/oceanbase/seekdb-go) 启动本地 seekdb，再通过 `go-sql-driver/mysql` 执行 SQL。本示例需要 Go 1.24 或更高版本、`CGO_ENABLED=1` 和 C 编译器。
+
+```bash
+mkdir seekdb-go-example
+cd seekdb-go-example
+go mod init example.com/seekdb-demo
+```
+
+将下面的示例保存为 `main.go`。示例使用 `ConnectionOptions` 返回的端点，并在释放运行时句柄前关闭 SQL 连接：
+
+```go
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net"
+
+	"github.com/go-sql-driver/mysql"
+	seekdb "github.com/oceanbase/seekdb-go"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	db, err := seekdb.Open("./seekdb.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	endpoint, err := db.ConnectionOptions()
+	if err != nil {
+		return err
+	}
+	cfg := mysql.NewConfig()
+	cfg.User, cfg.DBName = endpoint.User, "test"
+	switch endpoint.Transport {
+	case "unix_socket":
+		cfg.Net, cfg.Addr = "unix", endpoint.UnixSocket
+	case "tcp":
+		cfg.Net, cfg.Addr = "tcp", net.JoinHostPort(endpoint.Host, fmt.Sprint(endpoint.Port))
+	default:
+		return fmt.Errorf("unsupported transport %q", endpoint.Transport)
+	}
+	connection, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+
+	var value int
+	if err := connection.QueryRow("SELECT 1 AS value").Scan(&value); err != nil {
+		return err
+	}
+	fmt.Println(value)
+	return nil
+}
+```
+
+运行时 Go 会自动解析依赖，并下载当前平台的原生包，输出 `1`：
+
+```bash
+go run -mod=mod .
+```
+
+常规的 seekdb-go `go get` 或 `go mod tidy` 可能下载所有支持平台的原生包。
+
+[完整使用指南](https://github.com/oceanbase/seekdb-go#install) · [支持平台与环境要求](https://github.com/oceanbase/seekdb-go/blob/main/docs/support.md)
+
+</details>
+
+这些示例均将数据保存在 `./seekdb.db`，可以重复运行。该路径是数据库目录。首次初始化新目录通常比后续打开耗时更长。
+
+### 部署服务器
 
 <details open>
 <summary><b>☁️ 云服务（零安装）</b></summary>
@@ -167,15 +349,6 @@ curl -X POST https://d0.seekdb.ai/api/v1/instances
 ```
 
 免费使用 7 天。[了解更多 →](https://d0.seekdb.ai)
-
-</details>
-
-<details open>
-<summary><b>🐍 Python（推荐用于 AI/ML）</b></summary>
-
-```bash
-pip install -U pyseekdb
-```
 
 </details>
 
@@ -214,9 +387,9 @@ DEB/RPM 离线安装和配置详情请参见[部署文档](https://docs.seekdb.a
 
 ### 📝 更多示例
 
-完整的 Python SDK 指南 — 连接模式、嵌入函数、元数据过滤 — 请参见 [pyseekdb 用户指南](https://github.com/oceanbase/pyseekdb)。
+首次使用请先运行上面的 [Python、JavaScript 和 Go 示例](#embedded-sdks)。下面的应用模式假设你已有 Agent 实现。
 
-<details open>
+<details>
 <summary><b>🤖 Agent 记忆模式（持续写入 + 即时检索）</b></summary>
 
 Agent 的经典循环：写入一条观察，毫秒后检索相关上下文，周而复始。seekdb 的异步索引流水线确保在持续并发下读写两端均保持高吞吐。
@@ -369,9 +542,10 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 # 克隆仓库
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
-./build.sh release --init --make
+./build.py init
+./build.py build seekdb
 mkdir -p ~/seekdb/bin
-cp build_release/src/observer/seekdb ~/seekdb/bin
+cp build/bin/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
 ./bin/seekdb
 ```

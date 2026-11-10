@@ -229,12 +229,6 @@ public:
   // get phy plan total mem size
   int set_pcv_set(ObPCVSet *pcv_set);
   ObPCVSet *get_pcv_set() const { return pcv_set_; }
-  //cut when length of stmt is more than MAX_SQL_LENGTH;
-  //void set_use_global_location_cache(bool use_global_location_cache)
-  //{
-  //  use_global_location_cache_ = use_global_location_cache;
-  //}
-  //bool get_use_global_location_cache() { return use_global_location_cache_; }
   //StmtStat *get_stmt_stat() { return &stmt_stat_;}
   void set_runtime_schema_version(int64_t version) { runtime_schema_version_ = version; }
   void set_sys_schema_version(int64_t version) { sys_schema_version_ = version; }
@@ -360,7 +354,6 @@ private:
   // a list of plan sets with different param types combination
   common::ObDList<ObPlanSet> plan_sets_;
   // if there is no virtual table in ObPhysicalPlan, set true(default), or set false
-  // bool use_global_location_cache_;
   int64_t runtime_schema_version_;
   int64_t sys_schema_version_;
   ObOutlineState outline_state_;

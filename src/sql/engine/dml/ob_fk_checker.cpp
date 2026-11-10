@@ -141,7 +141,7 @@ int ObForeignKeyChecker::build_fk_check_das_task(const ObIArray<ObForeignKeyColu
 {
   int ret = OB_SUCCESS;
   ObDASScanOp *das_scan_op = nullptr;
-  ObDASTabletLoc *tablet_loc = nullptr;
+  DASRuntimeTabletAccess *tablet_access = nullptr;
   ObNewRange lookup_range;
   need_check = true;
   bool is_all_null = false;
@@ -153,8 +153,8 @@ int ObForeignKeyChecker::build_fk_check_das_task(const ObIArray<ObForeignKeyColu
     need_check = false;
   } else if (OB_FAIL(build_table_range(columns, row, lookup_range, need_check))) {
   } else if (!need_check) {
-  } else if (OB_FAIL(calc_lookup_tablet_loc(tablet_loc))) {
-  } else if (OB_FAIL(get_das_scan_op(tablet_loc, das_scan_op))) {
+  } else if (OB_FAIL(resolve_lookup_tablet_access(tablet_access))) {
+  } else if (OB_FAIL(get_das_scan_op(tablet_access, das_scan_op))) {
   } else if (OB_ISNULL(das_scan_op)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -169,16 +169,16 @@ int ObForeignKeyChecker::build_fk_check_das_task(const ObIArray<ObForeignKeyColu
   return ret;
 }
 
-int ObForeignKeyChecker::calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc)
+int ObForeignKeyChecker::resolve_lookup_tablet_access(DASRuntimeTabletAccess *&tablet_access)
 {
   int ret = OB_SUCCESS;
   ObExpr *part_id_expr = NULL;
   ObTabletID tablet_id;
   ObObjectID partition_id = OB_INVALID_ID;
-  tablet_loc = nullptr;
+  tablet_access = nullptr;
   if (OB_ISNULL(part_id_expr = checker_ctdef_.calc_part_id_expr_)) {
-    tablet_loc = local_tablet_loc_;
-    if (OB_ISNULL(tablet_loc)) {
+    tablet_access = local_tablet_access_;
+    if (OB_ISNULL(tablet_access)) {
       ret = OB_ERR_UNEXPECTED;
     }
   }
@@ -189,16 +189,16 @@ int ObForeignKeyChecker::calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc)
       ret = OB_ERR_NO_REFERENCED_ROW;
     } else {
     }
-  } else if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).extended_tablet_loc(*table_loc_, tablet_id, tablet_loc))) {
+  } else if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).ensure_tablet_access(*table_access_, tablet_id, tablet_access))) {
   }
   return ret;
 }
 
-int ObForeignKeyChecker::get_das_scan_op(ObDASTabletLoc *tablet_loc, ObDASScanOp *&das_scan_op)
+int ObForeignKeyChecker::get_das_scan_op(DASRuntimeTabletAccess *tablet_access, ObDASScanOp *&das_scan_op)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!das_ref_.has_das_op(tablet_loc, das_scan_op))) {
-    if (OB_FAIL(das_ref_.prepare_das_task(tablet_loc, das_scan_op))) {
+  if (OB_UNLIKELY(!das_ref_.has_das_op(tablet_access, das_scan_op))) {
+    if (OB_FAIL(das_ref_.prepare_das_task(tablet_access, das_scan_op))) {
     } else {
       das_scan_op->set_scan_ctdef(&checker_ctdef_.das_scan_ctdef_);
       das_scan_op->set_scan_rtdef(&das_scan_rtdef_);
@@ -214,14 +214,14 @@ int ObForeignKeyChecker::init_foreign_key_checker(int64_t estimate_row,
                                                   common::ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  const ObDASTableLocMeta &loc_meta = fk_ctdef.loc_meta_;
+  const DASTableAccessMeta &access_meta = fk_ctdef.access_meta_;
   ObMemAttr mem_attr;
   
   mem_attr.label_ = "SqlFKeyCkr";
   das_ref_.set_expr_frame_info(expr_frame_info);
   das_ref_.set_mem_attr(mem_attr);
-  if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).extended_table_loc(loc_meta, table_loc_))) {
-  } else if (OB_ISNULL(table_loc_)) {
+  if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).ensure_table_access(access_meta, table_access_))) {
+  } else if (OB_ISNULL(table_access_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(init_das_scan_rtdef())) {
   } else if (OB_FAIL(ObDMLService::create_rowkey_check_hashset(estimate_row, &das_ref_.get_exec_ctx(), se_rowkey_dist_ctx_))) {
@@ -231,11 +231,11 @@ int ObForeignKeyChecker::init_foreign_key_checker(int64_t estimate_row,
     ret = OB_ERR_UNEXPECTED;
   } else {
     allocator_ = allocator;
-    table_loc_->is_fk_check_ = true; //mark the table location with fk checking action
+    table_access_->is_fk_check_ = true; //mark the table access with fk checking action
   }
 
   if (OB_SUCC(ret) && !fk_ctdef.is_part_table_) {
-    if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).extended_tablet_loc(*table_loc_, fk_ctdef.tablet_id_, local_tablet_loc_))) {
+    if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).ensure_tablet_access(*table_access_, fk_ctdef.tablet_id_, local_tablet_access_))) {
     }
   }
   return ret;

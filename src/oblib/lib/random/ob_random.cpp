@@ -45,6 +45,15 @@ namespace oceanbase
 {
 namespace common
 {
+static int64_t random_value_in_range(const int64_t value, const int64_t min, const int64_t max)
+{
+  const uint64_t magnitude = value < 0 ? uint64_t(0) - static_cast<uint64_t>(value)
+                                     : static_cast<uint64_t>(value);
+  const uint64_t width = static_cast<uint64_t>(max) - static_cast<uint64_t>(min) + 1;
+  const uint64_t offset = width == 0 ? magnitude : magnitude % width;
+  return static_cast<int64_t>(static_cast<uint64_t>(min) + offset);
+}
+
 ObRandom::ObRandom()
     : seed_(), is_inited(false)
 {
@@ -90,11 +99,7 @@ int64_t ObRandom::rand(const int64_t a, const int64_t b)
   const int64_t r2 = jrand48(seed);
   int64_t min = a < b ? a : b;
   int64_t max = a < b ? b : a;
-#ifdef _WIN32
-  return min + llabs((r1 << 32) | r2) % (max - min + 1);
-#else
-  return min + labs((r1 << 32) | r2) % (max - min + 1);
-#endif
+  return random_value_in_range((r1 << 32) | r2, min, max);
 }
 
 int64_t ObRandom::get()
@@ -111,11 +116,7 @@ int64_t ObRandom::get(const int64_t a, const int64_t b)
 {
   int64_t min = a < b ? a : b;
   int64_t max = a < b ? b : a;
-#ifdef _WIN32
-  return min + llabs(get()) % (max - min + 1);
-#else
-  return min + labs(get()) % (max - min + 1);
-#endif
+  return random_value_in_range(get(), min, max);
 }
 
 int32_t ObRandom::get_int32()

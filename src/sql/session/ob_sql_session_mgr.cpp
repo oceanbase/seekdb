@@ -146,7 +146,7 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(
           snapshot_version.get_val_for_tx() / 1000;
       if (snapshot_version_ts < current_timestamp
           && current_timestamp - snapshot_version_ts
-                 > 100L * 60L * 1000L * 1000L) {
+                 > 100LL * 60L * 1000L * 1000L) {
         LOG_INFO("found a small snapshot transaction",
                  KPC(sess_info), K(snapshot_version),
                  K(current_timestamp), K(min_active_snapshot_version_));

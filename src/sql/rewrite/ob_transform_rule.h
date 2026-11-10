@@ -388,7 +388,7 @@ public:
   }
   static inline void add_trans_type(uint64_t &types, TRANSFORM_TYPE type)
   {
-    types = (types | (1L << type));
+    types = (types | (1ULL << type));
   }
   int transform_self(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                      const int64_t current_level,

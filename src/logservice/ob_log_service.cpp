@@ -55,6 +55,7 @@ ObLogService::~ObLogService()
 int ObLogService::server_module_init(
     ObLogService *&logservice,
     const palf::PalfOptions &palf_options,
+    share::LocalStore &store,
     const char *runtime_clog_dir,
     const char *clog_dir,
     const common::ObAddr &self,
@@ -77,7 +78,7 @@ int ObLogService::server_module_init(
         KP(runtime_clog_dir), KP(clog_dir), KP(log_storage),
         KP(log_block_pool), KP(log_local_device), KP(io_manager), K(self));
   } else if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
-  } else if (OB_FAIL(logservice->init(palf_options,
+  } else if (OB_FAIL(logservice->init(palf_options, store,
                                       runtime_clog_dir,
                                       self,
                                       alloc_mgr,
@@ -159,6 +160,7 @@ int check_and_prepare_dir(const char *dir)
 }
 
 int ObLogService::init(const PalfOptions &options,
+                       share::LocalStore &store,
                        const char *base_dir,
                        const common::ObAddr &self,
                        common::ObILogAllocator *alloc_mgr,
@@ -185,7 +187,7 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
              KP(alloc_mgr), KP(log_storage), KP(log_block_pool),
              KP(log_local_device), KP(io_manager));
-  } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self,
+  } else if (OB_FAIL(PalfEnv::create_palf_env(options, store, base_dir, self,
                                               alloc_mgr, log_block_pool, &monitor_,
                                               log_local_device, io_manager, palf_env_))) {
   } else if (OB_ISNULL(palf_env_)) {

@@ -349,7 +349,7 @@ ObLogicalOperator::ObLogicalOperator(ObLogPlan &plan)
     traverse_ctx_(NULL),
     exchange_allocated_(false),
     phy_plan_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
-    location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
+    access_shape_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
     is_partition_wise_(false),
     px_est_size_factor_(),
     plan_depth_(0),
@@ -782,8 +782,8 @@ int ObLogicalOperator::compute_plan_type()
       if (child->is_exchange_allocated()) {
         child_has_exchange = true;
       }
-      if (ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN == child->get_location_type()) {
-        location_type_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;
+      if (ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN == child->get_access_shape()) {
+        access_shape_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;
       }
     }
   }
@@ -904,7 +904,7 @@ int ObLogicalOperator::compute_property(Path *path)
     set_strong_sharding(path->strong_sharding_);
     set_exchange_allocated(path->exchange_allocated_);
     set_phy_plan_type(path->phy_plan_type_);
-    set_location_type(path->location_type_);
+    set_access_shape(path->access_shape_);
     set_contains_fake_cte(path->contain_fake_cte_);
     set_contains_pw_merge_op(path->contain_pw_merge_op_);
     set_contains_das_op(path->contain_das_op_);
@@ -939,7 +939,7 @@ int ObLogicalOperator::compute_property(Path *path)
                 K(weak_sharding_),
                 K(fd_item_set_),
                 K(phy_plan_type_),
-                K(location_type_));
+                K(access_shape_));
     }
   }
   return ret;
@@ -1133,7 +1133,7 @@ int ObLogicalOperator::compute_property()
               K(weak_sharding_),
               K(fd_item_set_),
               K(phy_plan_type_),
-              K(location_type_),
+              K(access_shape_),
               K(contain_fake_cte_),
               K(contain_pw_merge_op_),
               K(contain_das_op_),
@@ -1371,7 +1371,7 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
     case GEN_SIGNATURE: {
       break;
     }
-    case GEN_LOCATION_CONSTRAINT: {
+    case GEN_ACCESS_CONSTRAINT: {
       break;
     }
     case PX_ESTIMATE_SIZE: {
@@ -1481,7 +1481,7 @@ int ObLogicalOperator::do_post_traverse_operation(const TraverseOp &op, void *ct
         } else if (LOG_EXCHANGE == type_) {
           if (OB_FAIL(numbering_exchange_post(*static_cast<NumberingExchangeCtx *>(ctx)))) {
           } else if (static_cast<ObLogExchange*>(this)->is_rescanable() &&
-             OB_FAIL(static_cast<ObLogExchange*>(this)->gen_px_pruning_table_locations())) {
+             OB_FAIL(static_cast<ObLogExchange*>(this)->gen_px_pruning_access_plans())) {
           }
         }
         break;
@@ -1496,8 +1496,8 @@ int ObLogicalOperator::do_post_traverse_operation(const TraverseOp &op, void *ct
         }
         break;
       }
-      case GEN_LOCATION_CONSTRAINT: {
-        ret = gen_location_constraint(ctx);
+      case GEN_ACCESS_CONSTRAINT: {
+        ret = gen_access_constraint(ctx);
         break;
       }
       case PX_ESTIMATE_SIZE: {
@@ -2240,9 +2240,9 @@ int ObLogicalOperator::reorder_filters_exprs(common::ObIArray<ObExprSelPair> &pr
 }
 
 /**
- * Generate location constraints for the plan, there are three types of constraints:
+ * Generate access constraints for the plan, there are three types of constraints:
  * base_table_constraints_:
- *    Base table location constraints, including base tables on TABLE_SCAN operators and base tables on INSERT operators
+ *    Base table access constraints, including base tables on TABLE_SCAN operators and base tables on INSERT operators
  * strict_pwj_constraint_:
  *    Strict partition wise join constraint, requiring that base table partitions within the same group are logically and physically equal.
  *    Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
@@ -2250,7 +2250,7 @@ int ObLogicalOperator::reorder_filters_exprs(common::ObIArray<ObExprSelPair> &pr
  *    Non-strict partition wise join constraint, requiring that base table partitions within one group are physically equal.
  *    Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
  */
-int ObLogicalOperator::gen_location_constraint(void *ctx)
+int ObLogicalOperator::gen_access_constraint(void *ctx)
 {
   int ret = OB_SUCCESS;
   bool is_non_strict_pw = false;
@@ -2259,23 +2259,23 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
   if (OB_ISNULL(ctx) || OB_ISNULL(get_stmt()) || OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObLocationConstraintContext *loc_cons_ctx = reinterpret_cast<ObLocationConstraintContext *>(ctx);
+    TableAccessConstraintContext *access_constraint_ctx = reinterpret_cast<TableAccessConstraintContext *>(ctx);
 
     if (get_num_of_child() == 0) {
       if (log_op_def::LOG_TABLE_SCAN == get_type()) {
         // base table constraints for TABLE SCAN
-        LocationConstraint loc_cons;
+        TableAccessConstraint access_constraints;
         ObLogTableScan *log_scan_op = dynamic_cast<ObLogTableScan *>(this);
         if (log_scan_op->get_contains_fake_cte()) {
           // do nothing
         } else if (log_scan_op->use_das()) {
           // not add to constraints for das
-        } else if (OB_FAIL(get_tbl_loc_cons_for_scan(loc_cons))) {
-        } else if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
+        } else if (OB_FAIL(get_access_constraint_for_scan(access_constraints))) {
+        } else if (OB_FAIL(access_constraint_ctx->base_table_constraints_.push_back(access_constraints))) {
         } else if (OB_FAIL(strict_pwj_constraint_.push_back(
-                    loc_cons_ctx->base_table_constraints_.count() - 1))) {
+                    access_constraint_ctx->base_table_constraints_.count() - 1))) {
         } else if (OB_FAIL(non_strict_pwj_constraint_.push_back(
-                    loc_cons_ctx->base_table_constraints_.count() - 1))) {
+                    access_constraint_ctx->base_table_constraints_.count() - 1))) {
         }
       } else if (log_op_def::LOG_TEMP_TABLE_ACCESS == get_type()) {
         ObLogTempTableAccess *access = static_cast<ObLogTempTableAccess*>(this);
@@ -2328,22 +2328,22 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
       if (log_op_def::LOG_INSERT == get_type() &&
           static_cast<ObLogInsert*>(this)->is_insert_select()) {
         // base table constraints for INSERT
-        // multi part insert only records the base table location constraint, non-multi part insert needs to record both simultaneously
-        // Base table location constraint and partition wise join constraint
+        // multi part insert only records the base table access constraint, non-multi part insert needs to record both simultaneously
+        // Base table access constraint and partition wise join constraint
         bool is_multi_part_dml = false;
-        LocationConstraint loc_cons;
-        if (OB_FAIL(get_tbl_loc_cons_for_insert(loc_cons, is_multi_part_dml))) {
+        TableAccessConstraint access_constraints;
+        if (OB_FAIL(get_access_constraint_for_insert(access_constraints, is_multi_part_dml))) {
         } else if (!is_multi_part_dml) {
           // non-multi part insert
           // A local source may span several tablets while the target has only
           // one tablet.  They need to be on the same server, but their
           // partition layouts do not need to match one-to-one.
           is_non_strict_pw = is_local();
-          if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
+          if (OB_FAIL(access_constraint_ctx->base_table_constraints_.push_back(access_constraints))) {
           } else if (OB_FAIL(strict_pwj_constraint_.push_back(
-                      loc_cons_ctx->base_table_constraints_.count() - 1))) {
+                      access_constraint_ctx->base_table_constraints_.count() - 1))) {
           } else if (OB_FAIL(non_strict_pwj_constraint_.push_back(
-                      loc_cons_ctx->base_table_constraints_.count() - 1))) {
+                      access_constraint_ctx->base_table_constraints_.count() - 1))) {
           } else {
             ++add_count;
           }
@@ -2354,21 +2354,21 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
           for (int64_t i = 0; !find && i < partition_infos.count(); ++i) {
             const ObTablePartitionInfo *cur_info = partition_infos.at(i);
             if (OB_NOT_NULL(cur_info) &&
-                cur_info->get_table_id() == loc_cons.key_.table_id_ &&
-                cur_info->get_ref_table_id() == loc_cons.key_.ref_table_id_) {
+                cur_info->get_table_id() == access_constraints.key_.table_id_ &&
+                cur_info->get_ref_table_id() == access_constraints.key_.ref_table_id_) {
               find = true;
             }
           }
           if (!find) {
-            // local multi part insert, remove location constraint of insert table because 
-            // we didn't add it's table location.
-          } else if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
+            // local multi part insert, remove access constraint of insert table because
+            // we didn't add it's table access.
+          } else if (OB_FAIL(access_constraint_ctx->base_table_constraints_.push_back(access_constraints))) {
           }
         }
       }
-      // processing pdml index maintained location constraint
+      // processing pdml index maintained access constraint
       // Currently supported pdml logical op include (insert, update, delete)
-      // pdml logical op needs to maintain phy table location under the condition that:
+      // pdml logical op needs to maintain phy table access under the condition that:
       // 1. The current logical operator is pdml
       // 2. The current operator is used to maintain global index table
       if (OB_SUCC(ret)) {
@@ -2376,19 +2376,19 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
             || log_op_def::LOG_UPDATE == get_type()) {
           ObLogDelUpd *dml_log_op = static_cast<ObLogDelUpd *>(this);
           if (dml_log_op->is_pdml()) {
-            LocationConstraint loc_cons;
+            TableAccessConstraint access_constraints;
             is_pdml = true;
-            if (OB_FAIL(get_tbl_loc_cons_for_pdml_index(loc_cons))) {
-            } else if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
+            if (OB_FAIL(get_access_constraint_for_pdml_index(access_constraints))) {
+            } else if (OB_FAIL(access_constraint_ctx->base_table_constraints_.push_back(access_constraints))) {
             } else if (OB_FAIL(strict_pwj_constraint_.push_back(
-                        loc_cons_ctx->base_table_constraints_.count() - 1))) {
+                        access_constraint_ctx->base_table_constraints_.count() - 1))) {
             } else if (OB_FAIL(non_strict_pwj_constraint_.push_back(
-                        loc_cons_ctx->base_table_constraints_.count() - 1))) {
+                        access_constraint_ctx->base_table_constraints_.count() - 1))) {
             } else {
               ++add_count;
-              LOG_TRACE("add location constraint for pdml index maintain op",
-                K(ret), K(loc_cons), K(get_name()),
-                "base_table_cons", loc_cons_ctx->base_table_constraints_);
+              LOG_TRACE("add access constraint for pdml index maintain op",
+                K(ret), K(access_constraints), K(get_name()),
+                "base_table_cons", access_constraint_ctx->base_table_constraints_);
             }
           }
         }
@@ -2419,7 +2419,7 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
           *  The partition of t1 and the partition of idx_t2 need to be on the same node, otherwise partition wise join reports 4016
           *  Therefore table lookup needs to inherit the constraints of the child node
           */
-          LOG_TRACE("get child location constraint", K(i),
+          LOG_TRACE("get child access constraint", K(i),
               K(get_child(i)->strict_pwj_constraint_), K(get_child(i)->non_strict_pwj_constraint_));
           if (get_child(i)->strict_pwj_constraint_.count() <= 0 &&
               get_child(i)->non_strict_pwj_constraint_.count() <= 0) {
@@ -2450,9 +2450,9 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
 
       if (OB_SUCC(ret) && add_count > 1) {
         if (is_non_strict_pw) {
-          if (OB_FAIL(loc_cons_ctx->non_strict_constraints_.push_back(&non_strict_pwj_constraint_))) {
+          if (OB_FAIL(access_constraint_ctx->non_strict_constraints_.push_back(&non_strict_pwj_constraint_))) {
           }
-        } else if (OB_FAIL(loc_cons_ctx->strict_constraints_.push_back(&strict_pwj_constraint_))) {
+        } else if (OB_FAIL(access_constraint_ctx->strict_constraints_.push_back(&strict_pwj_constraint_))) {
         }
       }
     } else { /* do nothing */ }
@@ -2461,48 +2461,48 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
   return ret;
 }
 
-int ObLogicalOperator::get_tbl_loc_cons_for_pdml_index(LocationConstraint &loc_cons)
+int ObLogicalOperator::get_access_constraint_for_pdml_index(TableAccessConstraint &access_constraints)
 {
   int ret = OB_SUCCESS;
   ObLogDelUpd *dml_log_op = static_cast<ObLogDelUpd *>(this);
-  ObTableLocationType location_type = OB_TBL_LOCATION_UNINITIALIZED;
+  TableAccessShape access_shape = TABLE_ACCESS_UNINITIALIZED;
   ObShardingInfo *sharding = nullptr;
   if (OB_ISNULL(dml_log_op) || OB_ISNULL(sharding = dml_log_op->get_sharding())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(dml_log_op->get_table_location_type(location_type))) {
+  } else if (OB_FAIL(dml_log_op->get_table_access_shape(access_shape))) {
   } else {
-    loc_cons.phy_loc_type_ = location_type;
-    loc_cons.key_.table_id_ = dml_log_op->get_loc_table_id();
-    loc_cons.key_.ref_table_id_ = dml_log_op->get_index_tid();
-    loc_cons.table_partition_info_ = dml_log_op->get_table_partition_info();
+    access_constraints.access_shape_ = access_shape;
+    access_constraints.key_.table_id_ = dml_log_op->get_target_table_ref_id();
+    access_constraints.key_.ref_table_id_ = dml_log_op->get_index_tid();
+    access_constraints.table_partition_info_ = dml_log_op->get_table_partition_info();
     if (sharding->get_part_cnt() > 1 && sharding->is_distributed()) {
       if (sharding->is_partition_single()) {
-        loc_cons.add_constraint_flag(LocationConstraint::SinglePartition);
+        access_constraints.add_constraint_flag(TableAccessConstraint::SinglePartition);
       } else if (sharding->is_subpartition_single()) {
-        loc_cons.add_constraint_flag(LocationConstraint::SingleSubPartition);
+        access_constraints.add_constraint_flag(TableAccessConstraint::SingleSubPartition);
       }
     }
   }
   return ret;
 }
 
-int ObLogicalOperator::get_tbl_loc_cons_for_scan(LocationConstraint &loc_cons)
+int ObLogicalOperator::get_access_constraint_for_scan(TableAccessConstraint &access_constraints)
 {
   int ret = OB_SUCCESS;
   ObLogTableScan *log_scan_op = dynamic_cast<ObLogTableScan *>(this);
   ObShardingInfo *sharding = nullptr;
   if (OB_ISNULL(log_scan_op) || OB_ISNULL(sharding = log_scan_op->get_sharding())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(log_scan_op->get_phy_location_type(loc_cons.phy_loc_type_))) {
+  } else if (OB_FAIL(log_scan_op->get_physical_access_shape(access_constraints.access_shape_))) {
   } else {
-    loc_cons.key_.table_id_ = log_scan_op->get_table_id();
-    loc_cons.table_partition_info_ = log_scan_op->get_table_partition_info();
-    loc_cons.key_.ref_table_id_ = log_scan_op->get_real_index_table_id();
+    access_constraints.key_.table_id_ = log_scan_op->get_table_id();
+    access_constraints.table_partition_info_ = log_scan_op->get_table_partition_info();
+    access_constraints.key_.ref_table_id_ = log_scan_op->get_real_index_table_id();
     if (sharding->get_part_cnt() > 1 && sharding->is_distributed()) {
       if (sharding->is_partition_single()) {
-        loc_cons.add_constraint_flag(LocationConstraint::SinglePartition);
+        access_constraints.add_constraint_flag(TableAccessConstraint::SinglePartition);
       } else if (sharding->is_subpartition_single()) {
-        loc_cons.add_constraint_flag(LocationConstraint::SingleSubPartition);
+        access_constraints.add_constraint_flag(TableAccessConstraint::SingleSubPartition);
       }
     }
 
@@ -2510,28 +2510,28 @@ int ObLogicalOperator::get_tbl_loc_cons_for_scan(LocationConstraint &loc_cons)
   return ret;
 }
 
-int ObLogicalOperator::get_tbl_loc_cons_for_insert(LocationConstraint &loc_cons, bool &is_multi_part_dml)
+int ObLogicalOperator::get_access_constraint_for_insert(TableAccessConstraint &access_constraints, bool &is_multi_part_dml)
 {
   int ret = OB_SUCCESS;
-  ObTableLocationType location_type = OB_TBL_LOCATION_UNINITIALIZED;
+  TableAccessShape access_shape = TABLE_ACCESS_UNINITIALIZED;
   ObLogInsert *log_insert_op = static_cast<ObLogInsert *>(this);
   ObShardingInfo *sharding = nullptr;
   if (OB_ISNULL(log_insert_op) || OB_ISNULL(sharding = log_insert_op->get_sharding())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(log_insert_op->get_table_location_type(location_type))) {
+  } else if (OB_FAIL(log_insert_op->get_table_access_shape(access_shape))) {
   } else {
     is_multi_part_dml = log_insert_op->is_multi_part_dml();
-    loc_cons.phy_loc_type_ = location_type;
-    loc_cons.key_.table_id_ = log_insert_op->get_loc_table_id();
-    loc_cons.key_.ref_table_id_ = log_insert_op->get_index_tid();
-    loc_cons.table_partition_info_ = log_insert_op->get_table_partition_info();
+    access_constraints.access_shape_ = access_shape;
+    access_constraints.key_.table_id_ = log_insert_op->get_target_table_ref_id();
+    access_constraints.key_.ref_table_id_ = log_insert_op->get_index_tid();
+    access_constraints.table_partition_info_ = log_insert_op->get_table_partition_info();
     if (is_multi_part_dml) {
-      loc_cons.add_constraint_flag(LocationConstraint::IsMultiPartInsert);
+      access_constraints.add_constraint_flag(TableAccessConstraint::IsMultiPartInsert);
     } else if (sharding->get_part_cnt() > 1 && sharding->is_distributed()) {
       if (sharding->is_partition_single()) {
-        loc_cons.add_constraint_flag(LocationConstraint::SinglePartition);
+        access_constraints.add_constraint_flag(TableAccessConstraint::SinglePartition);
       } else if (sharding->is_subpartition_single()) {
-        loc_cons.add_constraint_flag(LocationConstraint::SingleSubPartition);
+        access_constraints.add_constraint_flag(TableAccessConstraint::SingleSubPartition);
       }
     }
   }
@@ -3267,9 +3267,9 @@ int ObLogicalOperator::explain_print_partitions(ObTablePartitionInfo &table_part
                                                 char *buf, int64_t &buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  const ObCandiTabletLocIArray &partitions =
-    table_partition_info.get_phy_tbl_location_info().get_phy_part_loc_info_list();
-  uint64_t ref_table_id = table_partition_info.get_phy_tbl_location_info().get_ref_table_id();
+  const TabletAccessTargetIArray &partitions =
+    table_partition_info.get_access_targets().get_tablets();
+  uint64_t ref_table_id = table_partition_info.get_access_targets().get_ref_table_id();
   uint64_t table_id = table_partition_info.get_table_id();
   const bool two_level = (share::schema::PARTITION_LEVEL_TWO
                           == table_partition_info.get_part_level());
@@ -3290,19 +3290,19 @@ int ObLogicalOperator::explain_print_partitions(ObTablePartitionInfo &table_part
   int64_t N = partitions.count();
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     ObLogicalOperator::PartInfo part_info;
-    const ObOptTabletLoc &part_loc = partitions.at(i).get_partition_location();
+    const TabletAccessTarget &tablet_target = partitions.at(i);
     if (is_virtual_table(ref_table_id)) {
-      if (EMPTY_VIRTUAL_TABLE_TABLET_ID == part_loc.get_partition_id()) {
+      if (EMPTY_VIRTUAL_TABLE_TABLET_ID == tablet_target.get_partition_id()) {
 
       } else {
-        part_info.part_id_ = part_loc.get_partition_id();
+        part_info.part_id_ = tablet_target.get_partition_id();
         OZ(part_infos.push_back(part_info));
       }
     } else if (!table_schema->is_partitioned_table()) {
       part_info.part_id_ = 0;
       OZ(part_infos.push_back(part_info));
     } else {
-      const ObTabletID &tablet_id = part_loc.get_tablet_id();
+      const ObTabletID &tablet_id = tablet_target.get_tablet_id();
       OZ(table_schema->get_part_idx_by_tablet(tablet_id, part_info.part_id_, part_info.subpart_id_));
       OZ(part_infos.push_back(part_info));
     }

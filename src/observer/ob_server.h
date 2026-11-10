@@ -67,7 +67,7 @@
 #include "observer/ob_srv_network_frame.h"
 #include "observer/ob_service.h"
 #include "observer/ob_server_reload_config.h"
-#include "storage/slog_ckpt/ob_startup_accel_task_handler.h"
+#include "storage/meta_store/ob_startup_accel_task_handler.h"
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
 
 #include "storage/ob_disk_usage_reporter.h"
@@ -250,7 +250,7 @@ public:
   static ObServer &get_instance();
 
 public:
-  int init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg);
+  int init(const ObServerOptions &opts);
   void destroy();
 
   // Start OceanBase server, this function is blocked after invoking
@@ -395,7 +395,6 @@ private:
   void deinit_fts();
 
 public:
-  static int get_network_speed_from_config_file(int64_t &network_speed);
 public:
   volatile bool need_ctas_cleanup_; //true: ObCTASCleanUpTask should traverse all table schemas to find the one need be dropped
 private:

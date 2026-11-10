@@ -56,12 +56,7 @@ function variables_prepare {
   fi
   IPADDRESS="127.0.0.1"
   COMPONENT="seekdb"
-  if grep 'dep_create.sh' $BASE_DIR/build.sh 2>&1 >/dev/null
-  then
-    DEP_PATH=$BASE_DIR/deps/3rd
-  else
-    DEP_PATH=$BASE_DIR/rpm/.dep_create/var
-  fi
+  DEP_PATH=$BASE_DIR/deps/3rd
 
   export LD_LIBRARY_PATH=$DEP_PATH/u01/obclient/lib:$LD_LIBRARY_PATH
 
@@ -109,7 +104,6 @@ function mirror_create {
   mirror_path=$DEPLOY_PATH/mirror_create
   mkdir -p $mirror_path/bin/ && \
     cp -rf $DEPLOY_PATH/etc $mirror_path/ && \
-    rm -f $mirror_path/etc/seekdb.data_version.bin && \
     cp -rf $DEPLOY_PATH/admin $mirror_path/ && \
     ln -sf $DEPLOY_PATH/bin/seekdb $mirror_path/bin/seekdb && \
     success=1
@@ -568,7 +562,7 @@ function main() {
   fi
   if [[ ! -f $OBD_HOME/.obd/.obd_environ || "$(grep '"OBD_DEV_MODE": "1"' $OBD_HOME/.obd/.obd_environ)" == "" ]]
   then
-  obd devmode enable || (echo "Exec obd cmd failed. If your branch is based on 3.1_opensource_release, please go to the deps/3rd directory and execute 'bash dep_create.sh all' to install obd." && exit 1)
+  obd devmode enable || (echo "Exec obd devmode enable failed." && exit 1)
   [[ "$OBD_LOCK_MODE" ]] || obd env set OBD_LOCK_MODE 0
   fi
   if [[  "$(grep '"OBD_DEPLOY_BASE_DIR":' $DEPLOY_PATH/.obd/.obd_environ)" == "" ]]

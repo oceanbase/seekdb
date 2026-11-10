@@ -85,7 +85,7 @@ class ObDmlTableInfo
 public:
 ObDmlTableInfo(ObDmlTableType table_type)
   : table_id_(OB_INVALID_ID),
-    loc_table_id_(OB_INVALID_ID),
+    target_table_ref_id_(OB_INVALID_ID),
     ref_table_id_(OB_INVALID_ID),
     table_name_(),
     table_type_(table_type),
@@ -110,7 +110,7 @@ ObDmlTableInfo(ObDmlTableType table_type)
   inline bool is_insert_table() const { return ObDmlTableType::INSERT_TABLE == table_type_; }
 
   TO_STRING_KV(K_(table_id),
-               K_(loc_table_id),
+               K_(target_table_ref_id),
                K_(ref_table_id),
                K_(table_name),
                K_(table_type),
@@ -124,12 +124,12 @@ ObDmlTableInfo(ObDmlTableType table_type)
   //   update V set ...;
   //
   //   table_id_: table_id_ of V table item
-  //   loc_table_id_: table_id_ of T table item
+  //   target_table_ref_id_: table_id_ of T table item
   //   ref_table_id: ref_id_ of T table item
   //
   //
   uint64_t table_id_; // table id for the view table item
-  uint64_t loc_table_id_; // table id for the updated table
+  uint64_t target_table_ref_id_; // table id for the updated table
   uint64_t ref_table_id_; // refer table id for the updated table
   common::ObString table_name_;
   ObDmlTableType table_type_;
@@ -174,7 +174,7 @@ public:
   int iterate_stmt_expr(ObStmtExprVisitor &visitor) override;
 
   TO_STRING_KV(K_(table_id),
-               K_(loc_table_id),
+               K_(target_table_ref_id),
                K_(ref_table_id),
                K_(table_name),
                K_(table_type),
@@ -221,7 +221,7 @@ public:
   int iterate_stmt_expr(ObStmtExprVisitor &visitor) override;
 
   TO_STRING_KV(K_(table_id),
-               K_(loc_table_id),
+               K_(target_table_ref_id),
                K_(ref_table_id),
                K_(table_name),
                K_(table_type),
@@ -274,7 +274,7 @@ public:
   int iterate_stmt_expr(ObStmtExprVisitor &visitor) override;
 
   TO_STRING_KV(K_(table_id),
-               K_(loc_table_id),
+               K_(target_table_ref_id),
                K_(ref_table_id),
                K_(table_name),
                K_(table_type),

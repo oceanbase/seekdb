@@ -126,8 +126,6 @@ ObMPStmtExecute::ObMPStmtExecute(const share::ObGlobalContext &gctx)
       exec_end_timestamp_(0),
       prepare_packet_sent_(false),
       params_num_(0),
-      params_value_len_(0),
-      params_value_(NULL),
       curr_sql_idx_(0)
 {
   ctx_.exec_type_ = MpQuery;
@@ -565,7 +563,6 @@ int ObMPStmtExecute::before_process()
       ret = OB_ERR_UNEXPECTED;
     } else {
       OZ (request_params(session, pos, ps_stmt_checksum, alloc));
-      OZ (store_params_value_to_str(alloc, *session));
     }
     if (session != NULL) {
       revert_session(session);
@@ -591,11 +588,6 @@ int ObMPStmtExecute::after_process(int error_code)
   if (OB_FAIL(ObMPBase::after_process(error_code))) {
   }
   return ret;
-}
-
-int ObMPStmtExecute::store_params_value_to_str(ObIAllocator &alloc, sql::ObSQLSessionInfo &session)
-{
-  return sql::store_params_value_to_str(alloc, session, params_, params_value_, params_value_len_);
 }
 
 int ObMPStmtExecute::parse_request_type(const char *&pos, int64_t num_of_params,
@@ -1913,7 +1905,7 @@ int ObMPStmtExecute::process()
   bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
 
-  ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
+  const ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
   ObSMConnection *conn = get_conn();
   if (OB_ISNULL(req_) || OB_ISNULL(conn) || OB_ISNULL(cur_trace_id)) {
     ret = OB_ERR_UNEXPECTED;

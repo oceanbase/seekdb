@@ -18,6 +18,9 @@
 #include "block_set.h"
 #include "lib/alloc/ob_ctx_allocator.h"
 #include "lib/time/ob_time_utility.h"
+#ifdef __EMSCRIPTEN__
+#include "lib/resource/wasm_memory.h"
+#endif
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -55,6 +58,14 @@ inline int ob_wash_memory(void *addr, size_t length, int &error_code)
       error_code = static_cast<int>(::GetLastError());
     }
   }
+  return result;
+}
+
+#elif defined(__EMSCRIPTEN__)
+inline int ob_wash_memory(void *addr, size_t length, int &error_code)
+{
+  const int result = release_wasm_pages(length);
+  error_code = result == 0 ? 0 : errno;
   return result;
 }
 

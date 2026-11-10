@@ -433,12 +433,8 @@ int ObLobAccessParam::get_tx_read_snapshot(ObLobLocatorV2 &locator, transaction:
     }
   }
 
-  if (OB_SUCC(ret) && extern_header->flags_.has_retry_info_) {
-    ObMemLobRetryInfo *retry_info = nullptr;
-    if (OB_FAIL(locator.get_retry_info(retry_info))) {
-    } else if (retry_info->read_latest_) {
-      this->read_latest_ = retry_info->read_latest_;
-    }
+  if (OB_SUCC(ret) && extern_header->flags_.read_latest_) {
+    this->read_latest_ = true;
   }
   return ret;
 }

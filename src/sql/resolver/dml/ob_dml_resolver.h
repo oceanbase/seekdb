@@ -865,7 +865,7 @@ protected:
    * For example:
    * with cte (select * from t1) select 1 from dual;
    * If added, the above statement will enter trans_service, and an error will be reported later because it actually detects that the related table's
-   * partition location is empty.
+   * partition target set is empty.
    * */
   bool with_clause_without_record_;
   bool is_prepare_stage_;

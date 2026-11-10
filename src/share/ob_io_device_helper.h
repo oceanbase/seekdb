@@ -128,7 +128,6 @@ public:
       free_block_array_(free_block_array), block_bitmap_(block_bitmap),
       free_block_cnt_(free_block_cnt), free_block_push_pos_(free_block_push_pos),
       free_block_pop_pos_(free_block_pop_pos), device_name_(device_name) {}
-  virtual ~BlockFileAttr() {}
   TO_STRING_KV(K_(store_path), K_(block_sstable_dir_name), K_(block_sstable_file_name), K_(block_fd),
     K_(block_file_size), K_(block_size), K_(total_block_cnt), KP_(free_block_array), KP_(block_bitmap),
     K_(free_block_cnt), K_(free_block_push_pos), K_(free_block_pop_pos), K_(device_name));
@@ -230,7 +229,6 @@ public:
                              const int64_t file_size,
                              const int64_t disk_percentage,
                              const int64_t reserved_size,
-                             bool &is_exist,
                              BlockFileAttr &block_file_attr);
 };
 

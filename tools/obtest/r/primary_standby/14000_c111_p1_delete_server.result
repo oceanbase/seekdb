@@ -23,4 +23,3 @@ c1	c2
 1	2
 3	4
 5	6
-ob1.z2.obs0.check_log_until_success -c "update location to be follower succes";

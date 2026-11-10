@@ -44,6 +44,10 @@
 #include <processthreadsapi.h>
 #include <io.h>       // for _commit (fsync equivalent)
 #include <direct.h>   // for _mkdir
+#ifndef _MODE_T_DEFINED
+typedef int mode_t;
+#define _MODE_T_DEFINED
+#endif
 // Windows doesn't have POSIX fsync(); _commit() is the equivalent for file descriptors
 #ifndef fsync
 #define fsync(fd) _commit(fd)
@@ -112,7 +116,7 @@ static inline int ob_win_setsockopt(SOCKET s, int level, int optname,
 #endif
 #endif
 // Platform-specific headers - pthread
-#if defined(__APPLE__) || defined(_WIN32)
+#if defined(__APPLE__) || defined(_WIN32) || defined(__EMSCRIPTEN__)
 #include <pthread.h>
 #endif
 // Define __INT64_C if not available (e.g., on macOS)
@@ -728,7 +732,6 @@ const uint64_t OB_NOT_EXIST_TABLE_TID = 0;
 ///////////////////////////////////////////////////////////
 //            ini schema                                 //
 ///////////////////////////////////////////////////////////
-const char *const OB_BACKUP_SCHEMA_FILE_PATTERN = "etc/%s.schema.bin";
 
 ////////////////////////////////////////////////////////////
 //                  schema variables length               //
@@ -1482,6 +1485,9 @@ const int32_t OB_MAX_SYS_BKGD_THREAD_NUM = 64;
 const int64_t OB_MAX_CPU_NUM = 64;
 #elif __aarch64__
 const int64_t OB_MAX_CPU_NUM = 128;
+#elif defined(__EMSCRIPTEN__)
+// Capacity of CPU-indexed tables, not a probe of browser hardware concurrency.
+const int64_t OB_MAX_CPU_NUM = 64;
 #endif
 
 const int64_t OB_MAX_STATICS_PER_TABLE = 128;
@@ -1911,6 +1917,9 @@ OB_INLINE int64_t ob_syscall_gettid()
 #ifdef _WIN32
   // Windows: use GetCurrentThreadId
   return static_cast<int64_t>(GetCurrentThreadId());
+#elif defined(__EMSCRIPTEN__)
+  // Emscripten pthread identities are unique for the lifetime of a thread.
+  return static_cast<int64_t>(reinterpret_cast<uintptr_t>(pthread_self()) >> 2);
 #elif defined(__APPLE__)
   // macOS doesn't have gettid, use pthread_threadid_np instead
   uint64_t thread_id = 0;

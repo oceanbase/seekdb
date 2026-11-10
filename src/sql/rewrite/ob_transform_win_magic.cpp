@@ -1077,7 +1077,7 @@ int ObTransformWinMagic::adjust_column_and_table(ObDMLStmt *main_stmt,
         // do nothing
       } else {
         table_infos.at(i)->table_id_ = view->table_id_;
-        table_infos.at(i)->loc_table_id_ = view_tables.at(idx)->table_id_;
+        table_infos.at(i)->target_table_ref_id_ = view_tables.at(idx)->table_id_;
       }
     }
   }

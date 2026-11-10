@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "config_bridge.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
@@ -296,7 +297,7 @@ int ObDDLTaskUtil::generate_order_by_str(
     for (int64_t i = 0; OB_SUCC(ret) && i < order_column_ids.count(); ++i) {
       for (int64_t j = 0; OB_SUCC(ret) && j < select_column_ids.count(); ++j) {
         if (select_column_ids.at(j) == order_column_ids.at(i)) {
-          if (OB_FAIL(sql_string.append_fmt("%s %ld", append_comma ? "," : "", j + 1))) {
+          if (OB_FAIL(sql_string.append_fmt("%s %" PRId64, append_comma ? "," : "", j + 1))) {
           } else if (!append_comma) {
             append_comma = true;
           }
@@ -534,7 +535,7 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
         }
         if (OB_FAIL(ret)) {
         } else {
-          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', 'false') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
+          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ enable_parallel_dml parallel(%" PRId64 ") opt_param('ddl_execution_id', %" PRId64 ") opt_param('ddl_task_id', %" PRId64 ") opt_param('enable_newsort', 'false') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %" PRId64 " %.*s",
               real_parallelism, execution_id, task_id,
               static_cast<int>(strlen(io_read_hint)), io_read_hint,
               static_cast<int>(new_dest_database_name.length()), new_dest_database_name.ptr(), static_cast<int>(new_dest_table_name.length()), new_dest_table_name.ptr(),

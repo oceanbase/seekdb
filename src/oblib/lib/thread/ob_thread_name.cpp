@@ -26,6 +26,9 @@
 #endif
 #endif
 #include "lib/ob_define.h"
+#ifdef __EMSCRIPTEN__
+#include "lib/utility/ob_platform_utils.h"
+#endif
 
 namespace oceanbase
 {
@@ -36,6 +39,8 @@ void set_thread_name_inner(const char* name)
 {
 #ifdef __APPLE__
   pthread_setname_np(name);
+#elif defined(__EMSCRIPTEN__)
+  ob_set_thread_name(name);
 #elif defined(_WIN32)
   wchar_t wname[16] = {0};
   int len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, 15);

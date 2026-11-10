@@ -1,0 +1,21 @@
+[package]
+name = "in-process"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "seekdb.h implemented in process: starts ObServer on its own thread and hands out Unix socket paths"
+
+[lib]
+crate-type = ["rlib"]
+test = false
+
+[dependencies]
+cxx = "1"
+libc = "0.2"
+
+[build-dependencies]
+cbindgen = "=0.29.4"
+cxx-build = "1"
+
+[lints.clippy]
+missing_safety_doc = "allow"

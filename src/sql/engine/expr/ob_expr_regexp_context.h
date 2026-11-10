@@ -23,11 +23,7 @@
 #include <sys/types.h>
 #include <assert.h>
 #include "lib/charset/ob_charset.h"
-#ifdef _WIN32
 #include <unicode/uregex.h>
-#else
-#include <icu/i18n/unicode/uregex.h>
-#endif
 #include <unicode/ustring.h>
 #include "sql/engine/expr/ob_expr_operator.h"
 

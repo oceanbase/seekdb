@@ -47,6 +47,11 @@ public:
 
 int scan_dir(const char *dir_name, ObBaseDirFunctor &functor);
 
+// On Windows, confirm wildcard enumeration results with an exact-name lookup.
+// Missing names are not directory members; lookup errors and reparse entries
+// must not be interpreted as an empty log directory.
+int check_log_directory_entry(const char *dir_name, const char *entry_name, bool &exists);
+
 class GetBlockCountFunctor : public ObBaseDirFunctor
 {
 public:

@@ -581,6 +581,41 @@ int ObLSTxCtxMgr::block_normal(bool &is_all_tx_cleaned_up)
   return ret;
 }
 
+int ObLSTxCtxMgr::takeover_replayed_transactions()
+{
+  int ret = OB_SUCCESS;
+  bool all_cleaned_up = false;
+  ObLSTxCtxIterator iter;
+  ObTxCtx *ctx = nullptr;
+
+  // Activation follows the replay barrier. Keep transaction admission closed
+  // until every surviving replay context has a local completion driver.
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(block_tx(all_cleaned_up))) {
+  } else if (OB_FAIL(iter.set_ready(this))) {
+  } else {
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(iter.get_next_tx_ctx(ctx))) {
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
+      // The iterator owns a context reference. Do not hold the manager lock
+      // across MDS notifications or transaction log submission.
+      ret = ctx->takeover_from_replay();
+      const int tmp_ret = iter.revert_tx_ctx(ctx);
+      ctx = nullptr;
+      if (OB_SUCCESS != tmp_ret && OB_SUCC(ret)) {
+        ret = tmp_ret;
+      }
+    }
+  }
+  TRANS_LOG(INFO, "take over replayed local transactions", K(ret), KPC(this));
+  return ret;
+}
+
 int ObLSTxCtxMgr::online()
 {
   int ret = OB_SUCCESS;

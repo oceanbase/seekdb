@@ -1,0 +1,82 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load(":archives.bzl", "sdk_archives")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["*.BUILD"]) + [
+    "dependencies.json",
+    "prepare.py",
+    "icu/embed_data.py",
+    "openblas/blas_abi.h",
+    "openmp/kmp_config.h",
+])
+
+cc_library(
+    name = "ios_cblas",
+    hdrs = ["vsag/ios/cblas.h"],
+    includes = ["vsag/ios"],
+    target_compatible_with = ["@platforms//os:ios"],
+)
+
+alias(
+    name = "base_crypto",
+    actual = select({
+        "@platforms//os:emscripten": "@third_party_wasm//:libcrypto",
+        "//bazel:ios_simulator": "@third_party_ios_simulator//:libcrypto",
+        "//conditions:default": "@third_party_ios//:libcrypto",
+    }),
+    target_compatible_with = select({
+        "@platforms//os:ios": [],
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+sdk_archives(
+    name = "source_sdk",
+    target_compatible_with = select({
+        "@platforms//os:ios": [],
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = ["@sdk_roaring//:library"] + select({
+        "@platforms//os:emscripten": [
+            "@sdk_icu//:library",
+            "@sdk_s2_wasm//:library",
+            "@sdk_vsag_wasm//:library",
+        ],
+        "//conditions:default": [
+            "@sdk_s2_ios//:library",
+            "@sdk_vsag_ios//:library",
+        ],
+    }),
+)
+
+_IOS_SOURCE_REPOSITORIES = [
+    "@sdk_abseil",
+    "@sdk_antlr4",
+    "@sdk_boost",
+    "@sdk_cpuinfo",
+    "@sdk_fmt",
+    "@sdk_lapack",
+    "@sdk_nlohmann_json",
+    "@sdk_openmp",
+    "@sdk_roaring",
+    "@sdk_robin_map",
+    "@sdk_s2_ios",
+    "@sdk_spdlog",
+    "@sdk_thread_pool",
+    "@sdk_vsag_ios",
+]
+
+filegroup(
+    name = "ios_source_metadata",
+    srcs = [repo + "//:source_metadata" for repo in _IOS_SOURCE_REPOSITORIES],
+    target_compatible_with = ["@platforms//os:ios"],
+)
+
+filegroup(
+    name = "ios_licenses",
+    srcs = [repo + "//:licenses" for repo in _IOS_SOURCE_REPOSITORIES],
+    target_compatible_with = ["@platforms//os:ios"],
+)

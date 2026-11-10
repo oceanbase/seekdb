@@ -43,7 +43,7 @@
 #undef ERROR
 #undef DELETE
 #endif
-#include "grpc/standbyservice.grpc.pb.h"
+#include "grpc/proto/standbyservice.grpc.pb.h"
 #include "storage/tablet/ob_tablet_common.h"
 #include "ob_standby_restore_storage_struct.h"
 #include "storage/ob_i_table.h"

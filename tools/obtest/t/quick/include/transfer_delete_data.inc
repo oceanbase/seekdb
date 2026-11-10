@@ -3,12 +3,12 @@
 #owner group: rs
 #description: quick test
 # 测试点：
-#   删除transfer_prepare_data.inc中所构建表里面的所有内容
+#   删除the transfer data setup中所构建表里面的所有内容
 #########################################################################################
 connection conn_mysql;
 set recyclebin = off;
 
-# transfer_prepare_data.inc 中所构建的表
+# the transfer data setup 中所构建的表
 let $i = 1;
 while ($i <= 6)
 {

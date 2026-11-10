@@ -24,7 +24,6 @@
 #include "lib/container/ob_fixed_array.h"           // ObSEArrayy
 #include "lib/hash/ob_array_hash_map.h"             // ObArrayHashMap
 #include "lib/atomic/ob_atomic.h"                   // ATOMIC_LOAD
-#include "lib/function/ob_function.h"               // ObFunction
 #include "share/ob_thread_pool.h"                   // ObThreadPool
 #include "lib/time/ob_clock_generator.h"              // ObClockGenerator
 #include "log_io_task.h"                            // LogBatchIOFlushLogTask
@@ -76,7 +75,6 @@ public:
            LogIOTaskCbThreadPool *cb_thread_pool,
            ObIAllocator *allocaotr,
            LogWritingThrottle *throttle,
-           const bool need_ignore_throttle,
            IPalfEnvImpl *palf_env_impl);
   void destroy();
 
@@ -84,9 +82,8 @@ public:
   int submit_io_task(LogIOTask *io_task);
   int64_t get_last_working_time() const { return ATOMIC_LOAD(&last_working_time_); }
 
- int notify_need_writing_throttling(const bool &need_throtting);
   static constexpr int64_t MAX_THREAD_NUM = 1;
-  TO_STRING_KV(KP_(cb_thread_pool), K_(purge_throttling_task_handled_seq), K_(purge_throttling_task_submitted_seq));
+  TO_STRING_KV(KP_(cb_thread_pool));
 private:
   bool need_reduce_(LogIOTask *task);
   int reduce_io_task_(ObLink *task);
@@ -94,9 +91,6 @@ private:
   int handle_io_task_with_throttling_(LogIOTask *io_task);
   int update_throttling_options_();
   int run_loop_();
-  int64_t inc_and_fetch_purge_throttling_submitted_seq_();
-  void dec_purge_throttling_submitted_seq_();
-  bool has_purge_throttling_tasks_() const;
 private:
   static constexpr int64_t QUEUE_WAIT_TIME = 100 * 1000;
 private:
@@ -116,8 +110,6 @@ private:
     int64_t handle_count_;
     ObMiniStat::ObStatItem *wait_cost_stat_;
   };
-  typedef common::ObSpinLock SpinLock;
-  typedef common::ObSpinLockGuard SpinLockGuard;
 
   // TODO: io_task_queue used to store all LogIOTask objects, and the LogIOWorker
   //       will consume it, at nowdays, the io_task_queue is single consumer and mutil
@@ -133,16 +125,6 @@ private:
   int64_t last_working_time_;
   LogWritingThrottle *throttle_;
   ObMiniStat::ObStatItem log_io_worker_queue_size_stat_;
-  // Each LogIOTask except LogIOFlushLogTask hold a unique sequence, when 'purge_throttling_task_submitted_seq_' minus
-  // 'purge_throttling_task_handled_seq_' is greater than zero, purge throttling.
-  // 1. Only incrementing 'purge_throttling_submitted_seq_' when submit LogIOTask which need purge throttling.
-  // 2. Set 'purge_throttling_task_handled_seq_' to 'purge_throttling_task_submitted_seq_' after handle the LogIOTask successfully.
-  mutable int64_t purge_throttling_task_submitted_seq_;
-  mutable int64_t purge_throttling_task_handled_seq_;
-  // ignoring throttline whatever(ie: for sys log stream, no need throttling)
-  bool need_ignoring_throttling_;
-  NeedPurgingThrottlingFunc need_purging_throttling_func_;
-  SpinLock lock_;
   ObMiniStat::ObStatItem wait_cost_stat_;
   bool is_inited_;
 };

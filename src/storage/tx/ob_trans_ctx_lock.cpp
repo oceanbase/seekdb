@@ -16,6 +16,7 @@
 
 #include "ob_trans_ctx_lock.h"
 #include "ob_trans_service.h"
+#include "lib/utility/ob_platform_utils.h"
 #ifdef __APPLE__
 #include <pthread.h>
 #endif
@@ -66,6 +67,8 @@ static inline void init_lock_thread_id()
     uint64_t thread_id = 0;
     pthread_threadid_np(NULL, &thread_id);
     lock_thread_id_ = (pid_t)thread_id;
+#elif defined(__EMSCRIPTEN__)
+    lock_thread_id_ = static_cast<pid_t>(lib::ob_get_thread_id());
 #elif defined(_WIN32)
     lock_thread_id_ = (pid_t)GetCurrentThreadId();
 #else

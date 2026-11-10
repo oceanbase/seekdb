@@ -23,7 +23,7 @@
 #include "storage/blocksstable/ob_macro_block_common_header.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_imicro_block_reader.h"
-#include "storage/slog_ckpt/ob_linked_macro_block_struct.h"
+#include "storage/blockstore/ob_linked_macro_block_struct.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
 #include "lib/hash/ob_hashset.h"
 

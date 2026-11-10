@@ -445,26 +445,25 @@ template <ObCharsetType CS_TYPE>
 inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, CharType &type)
 {
   int ret = OB_SUCCESS;
-  bool checker = false;
+  // Decode the code point once.  The previous implementation called each
+  // checker with the raw bytes, and every checker decoded the same UTF-8
+  // sequence again; a Chinese character paid up to four decodes before the
+  // character type was known.  The checks below preserve the same order and
+  // the same range predicates, so the resulting classification is identical.
+  ob_wc_t unicode = 0;
   type = CharType::USELESS;
-
-  if (OB_FAIL(is_alpha<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
+  } else if (ObUnicodeBlockUtils::is_alpha(unicode)) {
     type = CharType::ENGLISH_LETTER;
-  } else if (OB_FAIL(is_arabic<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
     type = CharType::ARABIC_LETTER;
-  } else if (OB_FAIL(is_chinese<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
     type = CharType::CHINESE;
-  } else if (OB_FAIL(is_other_cjk<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
     type = CharType::OTHER_CJK;
-  } else if (OB_FAIL(is_surrogate_high<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
     type = CharType::SURROGATE_HIGH;
-  } else if (OB_FAIL(is_surrogate_low<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
     type = CharType::SURROGATE_LOW;
   }
   return ret;

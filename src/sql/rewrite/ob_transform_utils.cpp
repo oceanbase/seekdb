@@ -5748,9 +5748,9 @@ int ObTransformUtils::adjust_updatable_view(ObRawExprFactory &expr_factory,
     } else if (NULL == origin_table_ids ||
                ObOptimizerUtil::find_item(*origin_table_ids, table_info->table_id_)) {
       table_info->table_id_ = view_table_item.table_id_;
-      uint64_t loc_table_id = table_info->loc_table_id_;
+      uint64_t target_table_ref_id = table_info->target_table_ref_id_;
       // create partition exprs for index dml infos
-      if (OB_FAIL(view_stmt->get_part_expr_items(loc_table_id, part_exprs))) {
+      if (OB_FAIL(view_stmt->get_part_expr_items(target_table_ref_id, part_exprs))) {
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < part_exprs.count(); ++i) {
         PartExprItem part_item;

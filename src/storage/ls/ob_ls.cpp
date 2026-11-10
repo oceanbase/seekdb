@@ -61,8 +61,7 @@ ObLS::ObLS()
     state_seq_(-1),
     switch_epoch_(0),
     is_local_append_mode_(false),
-    ls_meta_(),
-    ls_epoch_(0)
+    ls_meta_()
 {}
 
 ObLS::~ObLS()
@@ -390,7 +389,6 @@ void ObLS::destroy()
   checkpoint_executor_.reset();
   log_handler_.destroy();
   ls_meta_.reset();
-  ls_epoch_ = 0;
   ls_sync_tablet_seq_handler_.reset();
   ls_ddl_log_handler_.reset();
   tablet_gc_handler_.reset();
@@ -464,7 +462,7 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
     log_handler_.set_local_append_enabled(true);
     if (!activate_handlers) {
       is_local_append_mode_ = true;
-    } else if (OB_FAIL(local_log_handler_set_.activate())) {
+    } else if (OB_FAIL(activate_local_append_())) {
       log_handler_.set_local_append_enabled(false);
     } else {
       is_local_append_mode_ = true;
@@ -942,7 +940,7 @@ int ObLS::update_meta_for_physical_restore(const ObLSMeta &source_meta)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ls is not inited", K(ret));
-  } else if (OB_FAIL(ls_meta_.update_for_physical_restore(ls_epoch_, source_meta))) {
+  } else if (OB_FAIL(ls_meta_.update_for_physical_restore(source_meta))) {
     LOG_WARN("failed to update ls meta for physical restore", K(ret), K(source_meta));
   } else if (OB_FAIL(ls_meta_.get_all_id_meta(all_id_meta))) {
     LOG_WARN("failed to get restored id meta", K(ret), K_(ls_meta));
@@ -951,17 +949,6 @@ int ObLS::update_meta_for_physical_restore(const ObLSMeta &source_meta)
   }
   return ret;
 }
-int ObLS::set_ls_epoch(const int64_t ls_epoch)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    ls_epoch_ = ls_epoch;
-  }
-  return ret;
-}
-
 int ObLS::get_ls_meta(ObLSMeta &ls_meta) const
 {
   int ret = OB_SUCCESS;
@@ -1222,7 +1209,7 @@ int ObLS::finish_storage_meta_replay()
 
   if (OB_FAIL(running_state_.create_finish())) {
   } else {
-    // after slog replayed, the ls must be offlined state.
+    // after local metadata is loaded, the ls must be offlined state.
     update_state_seq_();
   }
   return ret;
@@ -1611,7 +1598,7 @@ int ObLS::set_restore_status(const ObRestoreStatus &restore_status)
   } else if (!ls_meta_.get_persistent_state().can_update_ls_meta()) {
     ret = OB_STATE_NOT_MATCH;
     STORAGE_LOG(WARN, "state not match, cannot update ls meta", K(ret), K(ls_meta_));
-  } else if (OB_FAIL(ls_meta_.set_restore_status(ls_epoch_, restore_status))) {
+  } else if (OB_FAIL(ls_meta_.set_restore_status(restore_status))) {
   }
   return ret;
 }

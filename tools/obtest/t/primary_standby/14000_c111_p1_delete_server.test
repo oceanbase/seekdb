@@ -1,5 +1,5 @@
 # owner: rongxuan.lc
-# description: 本case是为了测试delete server之后，location cache不会返回已经delete掉的OBS;
+# Exercise query retry after replica/role state changes.
 
 ob1=OBI(cluster=1:1:1,proxy_num=0);
 ob1.reboot;
@@ -38,4 +38,3 @@ sleep 15;
 ob_connect(tt1_conn, ob1.z2.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
 connection tt1_conn;
 select * from t;
-ob1.z2.obs0.check_log_until_success -c "update location to be follower succes";

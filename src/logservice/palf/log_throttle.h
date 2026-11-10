@@ -21,7 +21,6 @@
 #include "lib/utility/ob_print_utils.h"             // TO_STRING_KV
 #include "lib/lock/ob_spin_lock.h"                  // SpinLock
 #include "lib/time/ob_clock_generator.h"              // ObClockGenerator
-#include "lib/function/ob_function.h"               // ObFunction
 #include "share/log/palf/log_define.h"                             // MAX_LOG_BUFFER_SIZE
 #include "share/log/palf/palf_options.h"                           // PalfThrottleOptions
 
@@ -30,7 +29,6 @@ namespace oceanbase
 namespace palf
 {
 class IPalfEnvImpl;
-typedef ObFunction<bool()> NeedPurgingThrottlingFunc;
 class LogThrottlingStat
 {
 public:
@@ -102,7 +100,6 @@ public:
   inline bool need_writing_throttling_notified() const;
   int update_throttling_options(IPalfEnvImpl *palf_env_impl);
   int throttling(const int64_t io_size,
-                 const NeedPurgingThrottlingFunc &need_purging_throttling_func,
                  IPalfEnvImpl *palf_env_impl);
   int after_append_log(const int64_t log_size);
   TO_STRING_KV(K_(last_update_ts),
@@ -115,7 +112,6 @@ public:
 private:
   int update_throtting_options_guarded_by_lock_(IPalfEnvImpl *palf_env_impl, bool &has_recycled_log_disk);
   inline bool need_throttling_with_options_not_guarded_by_lock_() const;
-  inline bool need_throttling_not_guarded_by_lock_(const NeedPurgingThrottlingFunc &need_purge_throttling) const;
   //reset throttling related member
   void clean_up_not_guarded_by_lock_();
   bool check_need_update_throtting_options_guarded_by_lock_();
@@ -150,15 +146,6 @@ inline bool LogWritingThrottle::need_writing_throttling_notified() const {
 inline bool LogWritingThrottle::need_throttling_with_options_not_guarded_by_lock_() const
 {
   return ATOMIC_LOAD(&need_writing_throttling_notified_) && throttling_options_.need_throttling();
-}
-
-inline bool LogWritingThrottle::need_throttling_not_guarded_by_lock_(
-  const NeedPurgingThrottlingFunc &need_purge_throttling) const
-{
-  // Only need throttle under following conditions:
-  // 1. when log writing throttling has been enabled and triggered;
-  // 2. when there is no need to purge throttle.
-  return need_throttling_with_options_not_guarded_by_lock_() && !need_purge_throttling();
 }
 
 } // end namespace palf

@@ -69,7 +69,11 @@ public:
             expression_hash_(0)
     {
     }
-    uint64_t hash() const { return common::murmurhash(this, sizeof(Key), 0); }
+    uint64_t hash() const
+    {
+      const uint64_t values[] = {table_id_, partition_hash_, ds_level_, sample_block_, expression_hash_};
+      return common::murmurhash(values, sizeof(values), 0);
+    }
     int hash(uint64_t &result) const { result = hash(); return OB_SUCCESS; }
     bool operator==(const ObIKVCacheKey &other) const
     {

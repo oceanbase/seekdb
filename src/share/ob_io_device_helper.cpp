@@ -15,6 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include <errno.h>
+#include <stdlib.h>
+#include <ctype.h>
+#ifdef __EMSCRIPTEN__
+#include "lib/file/wasm_file.h"
+#endif
 #ifdef __APPLE__
 #include <sys/mount.h> // For statfs on macOS, replaces sys/vfs.h
 #include <fcntl.h> // For fcntl on macOS (fallocate replacement)
@@ -50,6 +56,8 @@
 #include "share/ob_device_manager.h"
 #include "share/ob_io_device_helper.h"
 #include "share/ob_local_device.h"
+#include "lib/checksum/ob_crc64.h"
+#include "lib/file/file_directory_utils.h"
 #include "lib/utility/ob_smart_call.h"
 
 using namespace oceanbase::common;
@@ -72,19 +80,30 @@ int ObGetFileIdRangeFunctor::func(const dirent *entry)
     for (int64_t i = 0; is_number && i < sizeof(entry->d_name); ++i) {
       if ('\0' == entry_name[i]) {
         break;
-      } else if (!isdigit(entry_name[i])) {
+      } else if (!isdigit(static_cast<unsigned char>(entry_name[i]))) {
         is_number = false;
       }
     }
     if (!is_number) {
       // do nothing, skip invalid file like tmp
     } else {
-      uint32_t file_id = static_cast<uint32_t>(strtol(entry->d_name, nullptr, 10));
-      if (OB_INVALID_FILE_ID == min_file_id_ || file_id < min_file_id_) {
-        min_file_id_ = file_id;
-      }
-      if (OB_INVALID_FILE_ID == max_file_id_ || file_id > max_file_id_) {
-        max_file_id_ = file_id;
+      // long is 32 bits on wasm32. Parse before narrowing so high valid file
+      // IDs survive directory scans and overflow cannot alias a different log.
+      char *end = nullptr;
+      errno = 0;
+      const unsigned long long parsed_id = strtoull(entry_name, &end, 10);
+      if (errno == ERANGE || end == entry_name || *end != '\0'
+          || parsed_id == 0 || parsed_id >= OB_INVALID_FILE_ID) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid numeric log file name", K(ret), K(entry_name));
+      } else {
+        const uint32_t file_id = static_cast<uint32_t>(parsed_id);
+        if (OB_INVALID_FILE_ID == min_file_id_ || file_id < min_file_id_) {
+          min_file_id_ = file_id;
+        }
+        if (OB_INVALID_FILE_ID == max_file_id_ || file_id > max_file_id_) {
+          max_file_id_ = file_id;
+        }
       }
     }
   }
@@ -587,6 +606,14 @@ int ObIODeviceLocalFileOp::fallocate(
   if (OB_UNLIKELY(!fd.is_normal_file())) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid args, not normal file", K(ret), K(fd));
+#ifdef __EMSCRIPTEN__
+  } else {
+    // Browser file growth is explicit at the owned data/log allocation sites.
+    // It cannot promise Linux reservation, KEEP_SIZE, or hole-punch semantics
+    // for arbitrary ranges through this generic device API.
+    ret = OB_NOT_SUPPORTED;
+    SHARE_LOG(WARN, "range reservation is unsupported by Wasm device", K(ret), K(mode), K(offset), K(len));
+#else
   } else {
     int sys_ret = 0;
 #ifdef __APPLE__
@@ -630,6 +657,7 @@ int ObIODeviceLocalFileOp::fallocate(
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "fail to fallocate", K(ret), K(sys_ret), K(fd), K(offset), K(len), KERRMSG);
     }
+#endif
 #endif
   }
   return ret;
@@ -1128,6 +1156,52 @@ int ObIODeviceLocalFileOp::check_disk_space_available(
   return ret;
 }
 
+namespace
+{
+// Written once, before the data file is used. Capacity comes from the file length.
+struct BlockFileHeader
+{
+  uint64_t magic_;
+  uint64_t version_;
+  uint64_t block_size_;
+  uint64_t checksum_;
+};
+static_assert(sizeof(BlockFileHeader) == 32, "fixed block file header layout");
+
+int prepare_block_file_header(const int fd, const int64_t block_size, const bool create)
+{
+  int ret = OB_SUCCESS;
+  const uint64_t magic = UINT64_C(0x424c4f434b46494c);
+  alignas(DIO_READ_ALIGN_SIZE) char buf[DIO_READ_ALIGN_SIZE] = {};
+  BlockFileHeader header = {magic, 1, static_cast<uint64_t>(block_size), 0};
+  int64_t io_size = 0;
+  if (create) {
+    header.checksum_ = ob_crc64(&header, offsetof(BlockFileHeader, checksum_));
+    MEMCPY(buf, &header, sizeof(header));
+    if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(fd, buf, sizeof(buf), 0, io_size))) {
+    } else if (io_size != sizeof(buf)) {
+      ret = OB_IO_ERROR;
+    } else {
+      ret = ObIODeviceLocalFileOp::fsync(ObIOFd(nullptr, ObIOFd::NORMAL_FILE_ID, fd));
+    }
+  } else if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(fd, buf, sizeof(buf), 0, io_size))) {
+  } else if (io_size != sizeof(buf)) {
+    ret = OB_INVALID_DATA;
+  } else {
+    MEMCPY(&header, buf, sizeof(header));
+    if (header.magic_ != magic || header.version_ != 1 || header.block_size_ != block_size) {
+      ret = OB_INVALID_DATA;
+    } else if (header.checksum_ != ob_crc64(&header, offsetof(BlockFileHeader, checksum_))) {
+      ret = OB_PHYSIC_CHECKSUM_ERROR;
+    }
+  }
+  if (OB_FAIL(ret)) {
+    SHARE_LOG(WARN, "prepare block file header failed", K(ret), K(fd), K(block_size), K(create));
+  }
+  return ret;
+}
+} // namespace
+
 int ObIODeviceLocalFileOp::open_block_file(
     const char *store_dir,
     const char *sstable_dir,
@@ -1135,15 +1209,15 @@ int ObIODeviceLocalFileOp::open_block_file(
     const int64_t file_size,
     const int64_t disk_percentage,
     const int64_t reserved_size,
-    bool &is_exist,
     BlockFileAttr &block_file_attr)
 {
   int ret = OB_SUCCESS;
-  int sys_ret = 0;
-  is_exist = false;
+  bool is_exist = false;
   int64_t adjust_file_size = 0; // The original data file size is 0 because of the first initialization.
 
-  if (OB_FAIL(databuff_printf(block_file_attr.store_path_, OB_MAX_FILE_NAME_LENGTH, "%s/%s/%s",
+  if (block_size < DIO_READ_ALIGN_SIZE || block_size % DIO_READ_ALIGN_SIZE != 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(databuff_printf(block_file_attr.store_path_, OB_MAX_FILE_NAME_LENGTH, "%s/%s/%s",
     store_dir, block_file_attr.block_sstable_dir_name_, block_file_attr.block_sstable_file_name_))) {
   } else if (OB_FAIL(exist(block_file_attr.store_path_, is_exist))) {
   } else if (!is_exist
@@ -1151,6 +1225,8 @@ int ObIODeviceLocalFileOp::open_block_file(
           file_size, disk_percentage, adjust_file_size))) {
     SHARE_LOG(WARN, "Fail to get block file size", K(ret), K(block_size), K(file_size),
         K(adjust_file_size), K(disk_percentage));
+  } else if (!is_exist && adjust_file_size <= block_size) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
     int open_flag = is_exist ? O_DIRECT | O_RDWR | O_LARGEFILE
                           : O_CREAT | O_EXCL | O_DIRECT | O_RDWR | O_LARGEFILE;
@@ -1162,47 +1238,43 @@ int ObIODeviceLocalFileOp::open_block_file(
       ret = OB_IO_ERROR;
       SHARE_LOG(ERROR, "open file error", K(ret), "store_path", block_file_attr.store_path_, K(errno), KERRMSG);
     } else {
+      const ObIOFd fd(nullptr, ObIOFd::NORMAL_FILE_ID, block_file_attr.block_fd_);
       if (!is_exist) {
-#ifdef __APPLE__
-        // macOS doesn't have fallocate, use fcntl F_PREALLOCATE instead
-        fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, adjust_file_size, 0};
-        sys_ret = fcntl(block_file_attr.block_fd_, F_PREALLOCATE, &store);
-        if (-1 == sys_ret) {
-          store.fst_flags = F_ALLOCATEALL;
-          sys_ret = fcntl(block_file_attr.block_fd_, F_PREALLOCATE, &store);
-        }
-        if (0 == sys_ret) {
-          sys_ret = ::ftruncate(block_file_attr.block_fd_, adjust_file_size);
-        }
-        if (0 != sys_ret) {
-#elif defined(_WIN32)
-        HANDLE h = (HANDLE)_get_osfhandle(block_file_attr.block_fd_);
-        if (h != INVALID_HANDLE_VALUE) {
-          LARGE_INTEGER li;
-          li.QuadPart = adjust_file_size;
-          if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
-            sys_ret = -1;
+#ifdef __EMSCRIPTEN__
+        // This file was just created with O_EXCL; write the full allocation.
+        if (0 != common::wasm::extend_file_with_zeros(block_file_attr.block_fd_, adjust_file_size)) {
+          ret = convert_sys_errno();
+          SHARE_LOG(ERROR, "write data file allocation failed", K(ret), K(adjust_file_size), K(errno));
+          if (0 != ::close(block_file_attr.block_fd_)) {
+            SHARE_LOG(ERROR, "close failed data file allocation failed", K(ret), K(errno));
           }
-        } else {
-          sys_ret = -1;
-        }
-        if (0 != sys_ret) {
+          block_file_attr.block_fd_ = -1;
+          if (0 != ::unlink(block_file_attr.store_path_)) {
+            SHARE_LOG(ERROR, "remove failed data file allocation failed", K(ret), K(errno));
+          }
 #else
-        if (0 != (sys_ret = ::fallocate(block_file_attr.block_fd_, 0/*MODE*/, 0/*offset*/, adjust_file_size))) {
+        if (OB_FAIL(fallocate(fd, 0, 0, adjust_file_size))) {
 #endif
-          ret = ObIODeviceLocalFileOp::convert_sys_errno();
-          SHARE_LOG(ERROR, "Fail to fallocate block file, ", K(ret), K(sys_ret), "store_path",
-                    block_file_attr.store_path_, K(adjust_file_size), KERRMSG);
         } else {
           block_file_attr.block_file_size_ = adjust_file_size;
         }
       } else {
         ObIODFileStat f_stat;
-        if (OB_FAIL(stat(block_file_attr.store_path_, f_stat))) {
+        if (OB_FAIL(fstat(fd, f_stat))) {
+        } else if (f_stat.size_ <= block_size || f_stat.size_ > INT64_MAX || f_stat.size_ % block_size != 0) {
+          ret = OB_INVALID_DATA;
+          SHARE_LOG(WARN, "invalid block file length", K(ret), K(f_stat), K(block_size));
         } else {
-          block_file_attr.block_file_size_ = lower_align(f_stat.size_, block_size);
+          block_file_attr.block_file_size_ = f_stat.size_;
         }
       }
+    }
+
+    if (OB_SUCC(ret)) {
+      ret = prepare_block_file_header(block_file_attr.block_fd_, block_size, !is_exist);
+    }
+    if (OB_SUCC(ret) && !is_exist) {
+      ret = FileDirectoryUtils::fsync_dir(sstable_dir);
     }
 
     if (OB_SUCC(ret)) {

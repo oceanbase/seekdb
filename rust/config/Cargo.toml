@@ -7,7 +7,7 @@ description = "Durable instance parameter configuration for seekdb"
 
 [lib]
 name = "config"
-crate-type = ["staticlib", "rlib"]
+crate-type = ["rlib"]
 
 [build-dependencies]
 cxx-build = "1"

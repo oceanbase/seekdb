@@ -1082,6 +1082,8 @@ int ObHashGroupByOp::alloc_group_row(const int64_t group_id, ObGroupRowItem &ite
   } else if (OB_FAIL(aggr_processor_.get_group_row(group_id, item.group_row_))) {
   } else if (OB_ISNULL(item.group_row_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else {
+    item.is_expr_row_ = false;
   }
   return ret;
 }

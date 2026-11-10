@@ -218,12 +218,10 @@ constexpr int OB_INDEX_COUNT_REACH_THE_LIMIT = -4613;
 constexpr int OB_TASK_EXPIRED = -4614;
 constexpr int OB_MACHINE_RESOURCE_NOT_ENOUGH = -4624;
 constexpr int OB_RS_NOT_MASTER = -4638;
-constexpr int OB_LOCATION_NOT_EXIST = -4653;
-constexpr int OB_LOCATION_LEADER_NOT_EXIST = -4654;
+constexpr int OB_ACCESS_TARGET_NOT_EXIST = -4653;
 constexpr int OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT = -4659;
 constexpr int OB_SESSION_ENTRY_EXIST = -4661;
 constexpr int OB_GOT_SIGNAL_ABORTING = -4662;
-constexpr int OB_GET_LOCATION_TIME_OUT = -4664;
 constexpr int OB_RUN_JOB_NOT_SUCCESS = -4674;
 constexpr int OB_NEED_REMOVE_UNNEED_TABLE = -4676;
 constexpr int OB_NO_NEED_MERGE = -4677;
@@ -239,8 +237,7 @@ constexpr int OB_ERR_PARAM_INVALID = -4701;
 constexpr int OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX = -4713;
 constexpr int OB_ERR_ATLER_TABLE_ILLEGAL_FK = -4714;
 constexpr int OB_LS_NOT_EXIST = -4719;
-constexpr int OB_LS_LOCATION_NOT_EXIST = -4721;
-constexpr int OB_LS_LOCATION_LEADER_NOT_EXIST = -4722;
+constexpr int OB_LOG_STREAM_ACCESS_NOT_READY = -4722;
 constexpr int OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST = -4723;
 constexpr int OB_TABLET_EXIST = -4724;
 constexpr int OB_TABLET_NOT_EXIST = -4725;
@@ -1526,12 +1523,10 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_TASK_EXPIRED__USER_ERROR_MSG "task expired"
 #define OB_MACHINE_RESOURCE_NOT_ENOUGH__USER_ERROR_MSG "zone '%s' server \'%s\' %s resource is not enough to hold a new unit"
 #define OB_RS_NOT_MASTER__USER_ERROR_MSG "The RootServer is not the master"
-#define OB_LOCATION_NOT_EXIST__USER_ERROR_MSG "location not exist"
-#define OB_LOCATION_LEADER_NOT_EXIST__USER_ERROR_MSG "location leader not exist"
+#define OB_ACCESS_TARGET_NOT_EXIST__USER_ERROR_MSG "access target does not exist"
 #define OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT__USER_ERROR_MSG "invalid %s value, min value is %s"
 #define OB_SESSION_ENTRY_EXIST__USER_ERROR_MSG "Session already exist"
 #define OB_GOT_SIGNAL_ABORTING__USER_ERROR_MSG "%s: Got signal %d. Aborting!"
-#define OB_GET_LOCATION_TIME_OUT__USER_ERROR_MSG "Timeout"
 #define OB_RUN_JOB_NOT_SUCCESS__USER_ERROR_MSG "run job not success yet"
 #define OB_NEED_REMOVE_UNNEED_TABLE__USER_ERROR_MSG "need remove unneed table"
 #define OB_NO_NEED_MERGE__USER_ERROR_MSG "no need to merge"
@@ -1547,8 +1542,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX__USER_ERROR_MSG "rebuild global index:'%.*s' failed when drop/truncate partitions"
 #define OB_ERR_ATLER_TABLE_ILLEGAL_FK__USER_ERROR_MSG "unique/primary keys in table referenced by enabled foreign keys"
 #define OB_LS_NOT_EXIST__USER_ERROR_MSG "log stream does not exist"
-#define OB_LS_LOCATION_NOT_EXIST__USER_ERROR_MSG "log stream location does not exist"
-#define OB_LS_LOCATION_LEADER_NOT_EXIST__USER_ERROR_MSG "log stream location leader does not exist"
+#define OB_LOG_STREAM_ACCESS_NOT_READY__USER_ERROR_MSG "log stream access is not ready"
 #define OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST__USER_ERROR_MSG "mapping between tablet and log stream does not exist"
 #define OB_TABLET_EXIST__USER_ERROR_MSG "unexpected tablet existence"
 #define OB_TABLET_NOT_EXIST__USER_ERROR_MSG "tablet does not exist"
@@ -2769,11 +2763,8 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[1545];
 
   const char *ob_error_name(const int oberr);
-  const char* ob_error_cause(const int oberr);
-  const char* ob_error_solution(const int oberr);
 
   int ob_mysql_errno(const int oberr);
   int ob_mysql_errno_with_check(const int oberr);

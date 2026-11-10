@@ -61,6 +61,7 @@
 #endif
 #endif
 #include "lib/hash/ob_hashutils.h"
+#include "lib/utility/ob_platform_utils.h"
 
 namespace oceanbase
 {
@@ -157,7 +158,7 @@ public:
   static const int FILE_OPEN_RFLAG = O_CREAT | O_RDONLY;
   static const int FILE_OPEN_WFLAG = O_CREAT | O_TRUNC | O_WRONLY;
 private:
-  static const mode_t FILE_OPEN_MODE = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+  static const int FILE_OPEN_MODE = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
 private:
   int fd_;
 };

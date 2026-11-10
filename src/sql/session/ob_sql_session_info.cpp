@@ -706,9 +706,9 @@ void ObSQLSessionInfo::update_show_warnings_buf()
   for (int64_t i = 0; i < warnings_buf_.get_readable_warning_count(); i++) {
     const ObWarningBuffer::WarningItem *item = warnings_buf_.get_warning_item(i);
     if (OB_ISNULL(item)) {
-    } else if (item->log_level_ == common::ObLogger::UserMsgLevel::USER_WARN) {
+    } else if (item->log_level_ == common::USER_WARN) {
       show_warnings_buf_.append_warning(item->msg_, item->code_);
-    } else if (item->log_level_ == common::ObLogger::UserMsgLevel::USER_NOTE) {
+    } else if (item->log_level_ == common::USER_NOTE) {
       show_warnings_buf_.append_note(item->msg_, item->code_);
     }
   }

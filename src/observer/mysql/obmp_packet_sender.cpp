@@ -769,7 +769,7 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
         ok_param.take_trace_id_to_client_ = is_slow;
       }
       if (ok_param.take_trace_id_to_client_) {
-        ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+        const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
         if (NULL != trace_id) {
           session.set_last_trace_id(trace_id);
         }

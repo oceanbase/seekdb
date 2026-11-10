@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include <inttypes.h>
 #include "sql/engine/expr/ob_expr_func_dump.h"
 #include "sql/session/ob_sql_session_info.h"
 
@@ -162,14 +163,14 @@ static int databuff_print_decimalint(
           break;
         }
         case sizeof(int64_t): {
-          if (OB_FAIL(databuff_printf(buffer, length, pos, "%ld", *(decint->int64_v_)))) {
+          if (OB_FAIL(databuff_printf(buffer, length, pos, "%" PRId64, *(decint->int64_v_)))) {
           }
           break;
         }
         case sizeof(int128_t): {
           for (int i = 0; OB_SUCC(ret) && i < 2; ++i) {
             if (OB_FAIL(databuff_printf(
-                buffer, length, pos, "%lu,", decint->int128_v_->items_[i]))) {
+                buffer, length, pos, "%" PRIu64 ",", decint->int128_v_->items_[i]))) {
             }
           }
           break;
@@ -177,7 +178,7 @@ static int databuff_print_decimalint(
         case sizeof(int256_t): {
           for (int i = 0; OB_SUCC(ret) && i < 4; ++i) {
             if (OB_FAIL(databuff_printf(
-                buffer, length, pos, "%lu,", decint->int256_v_->items_[i]))) {
+                buffer, length, pos, "%" PRIu64 ",", decint->int256_v_->items_[i]))) {
             }
           }
           break;
@@ -185,7 +186,7 @@ static int databuff_print_decimalint(
         case sizeof(int512_t): {
           for (int i = 0; OB_SUCC(ret) && i < 8; ++i) {
             if (OB_FAIL(databuff_printf(
-                buffer, length, pos, "%lu,", decint->int512_v_->items_[i]))) {
+                buffer, length, pos, "%" PRIu64 ",", decint->int512_v_->items_[i]))) {
             }
           }
           break;

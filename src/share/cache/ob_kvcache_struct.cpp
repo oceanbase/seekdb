@@ -93,6 +93,12 @@ int64_t ObKVStoreMemBlock::upper_align(int64_t input, int64_t align)
   return (input + align - 1) & ~(align - 1);
 }
 
+static int64_t aligned_cache_key_size(const int64_t key_size)
+{
+  return sizeof(size_t) >= alignof(int64_t)
+      ? key_size : ObKVStoreMemBlock::upper_align(key_size, alignof(int64_t));
+}
+
 /**
  * we could create key and value struct instance in memblock, if
  * we can ensure that the start address of each block data is 8
@@ -110,7 +116,10 @@ int64_t ObKVStoreMemBlock::get_align_size(const ObIKVCacheKey &key, const ObIKVC
 
 int64_t ObKVStoreMemBlock::get_align_size(const int64_t key_size, const int64_t value_size)
 {
-  return upper_align(sizeof(ObKVCachePair) + key_size + value_size, ALIGN_SIZE);
+  constexpr int64_t alignment = ALIGN_SIZE < alignof(int64_t) ? alignof(int64_t) : ALIGN_SIZE;
+  static_assert(sizeof(ObKVStoreMemBlock) % alignof(int64_t) == 0);
+  static_assert(sizeof(ObKVCachePair) % alignof(int64_t) == 0);
+  return upper_align(sizeof(ObKVCachePair) + aligned_cache_key_size(key_size) + value_size, alignment);
 }
 
 int ObKVStoreMemBlock::store(
@@ -162,7 +171,7 @@ int ObKVStoreMemBlock::store(
             store_pair.key_))) {
     } else if (OB_FAIL(value.deep_copy(&buffer_[old_atomic_pos.buffer
             + sizeof(ObKVCachePair)
-            + key.size()],
+            + aligned_cache_key_size(key.size())],
             value.size(),
             store_pair.value_))) {
     } else {
@@ -236,7 +245,7 @@ int ObKVStoreMemBlock::alloc(
     kvpair->size_ = static_cast<int32_t>(align_kv_size);
     kvpair->key_ = reinterpret_cast<ObIKVCacheKey *>(&(buffer_[old_atomic_pos.buffer + sizeof(ObKVCachePair)]));
     kvpair->value_ = reinterpret_cast<ObIKVCacheValue *>(&(buffer_[old_atomic_pos.buffer
-        + sizeof(ObKVCachePair) + key_size]));
+        + sizeof(ObKVCachePair) + aligned_cache_key_size(key_size)]));
   }
 
   return ret;

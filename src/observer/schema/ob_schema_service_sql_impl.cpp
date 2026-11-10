@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "config_bridge.h"
 #include "ob_schema_service_sql_impl.h"
+#include <inttypes.h>
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_share_util.h"
 // TODO, move basic structs to ob_schema_struct.h
@@ -30,8 +31,8 @@
 
 #define FETCH_ALL_DDL_OPERATION_SQL         "SELECT * FROM %s"
 #define FETCH_ALL_DDL_OPERATION_SQL_WITH_VERSION_RANGE                  \
-    FETCH_ALL_DDL_OPERATION_SQL" WHERE schema_version > %lu AND schema_version <= %lu"
-#define FETCH_ALL_SYS_VARIABLE_HISTORY_SQL  "SELECT * FROM %s WHERE 0 = %lu %% 1 and schema_version <= %ld"
+    FETCH_ALL_DDL_OPERATION_SQL" WHERE schema_version > %" PRId64 " AND schema_version <= %" PRId64
+#define FETCH_ALL_SYS_VARIABLE_HISTORY_SQL  "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1 and schema_version <= %" PRId64
 
 #define FETCH_ALL_TABLE_SQL                     COMMON_SCHEMA_SQL
 #define FETCH_ALL_TABLE_HISTORY_SQL             COMMON_SCHEMA_SQL
@@ -59,7 +60,7 @@
     "WHERE 0 = %lu %% 1 and time_to_usec(gmt_create) < %ld order by gmt_create"
 
 #define FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE (0 = %lu %% 1 or TYPE = 7) and time_to_usec(gmt_create) < %ld order by gmt_create"
+    "WHERE (0 = %lu %% 1 or TYPE = 7) and time_to_usec(gmt_create) < %" PRId64 " order by gmt_create"
 
 #define FETCH_ALL_RECYCLEBIN_SQL_WITH_CONDITION COMMON_SCHEMA_SQL
 
@@ -77,7 +78,7 @@
 #define FETCH_ALL_ROUTINE_HISTORY_SQL                     COMMON_SCHEMA_SQL
 #define FETCH_ALL_ROUTINE_PARAM_HISTORY_SQL               COMMON_SCHEMA_SQL
 #define FETCH_ALL_TRIGGER_HISTORY_SQL                     COMMON_SCHEMA_SQL
-#define FETCH_ALL_TRIGGER_ID_HISTORY_SQL                  "SELECT trigger_id, is_deleted FROM %s WHERE 0 = %lu %% 1 "
+#define FETCH_ALL_TRIGGER_ID_HISTORY_SQL                  "SELECT trigger_id, is_deleted FROM %s WHERE 0 = %" PRIu64 " %% 1 "
 
 #define FETCH_ALL_TYPE_HISTORY_SQL                        COMMON_SCHEMA_SQL
 #define FETCH_ALL_TYPE_ATTR_HISTORY_SQL                   COMMON_SCHEMA_SQL
@@ -95,33 +96,33 @@
   "SELECT * FROM %s WHERE 0 = %lu %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_HISTORY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu %% 1"
+  "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_COLUMN_SQL \
   "SELECT * FROM %s WHERE 0 = %lu %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_COLUMN_HISTORY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu %% 1"
+  "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1"
 
 #define FETCH_ALL_CONSTRAINT_COLUMN_HISTORY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu %% 1"
+  "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1"
 
 #define FETCH_TABLE_ID_AND_NAME_FROM_ALL_FOREIGN_KEY_SQL \
-  "SELECT is_deleted, foreign_key_id, child_table_id, foreign_key_name FROM %s WHERE 0 = %lu %% 1"
+  "SELECT is_deleted, foreign_key_id, child_table_id, foreign_key_name FROM %s WHERE 0 = %" PRIu64 " %% 1"
 // foreign key end
 
 #define FETCH_TABLE_ID_AND_CST_NAME_FROM_ALL_CONSTRAINT_HISTORY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu %% 1"
+  "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1"
 
 #define FETCH_RECYCLE_TABLE_OBJECT \
     "SELECT table_name, database_id FROM %s \
-     WHERE 0 = %lu %% 1 and table_id = %lu and schema_version <= %ld and \
+     WHERE 0 = %lu %% 1 and table_id = %" PRIu64 " and schema_version <= %" PRId64 " and \
            table_name is not null and table_name != "" and table_name != %s \
      ORDER BY SCHEMA_VERSION DESC LIMIT 1"
 
 #define FETCH_RECYCLE_DATABASE_OBJECT \
     "SELECT database_name FROM %s \
-     WHERE 0 = %lu %% 1 and database_id = %lu and schema_version <= %ld and \
+     WHERE 0 = %lu %% 1 and database_id = %" PRIu64 " and schema_version <= %" PRId64 " and \
            database_name is not null and database_name != "" and database_name != %s \
      ORDER BY SCHEMA_VERSION DESC LIMIT 1"
 
@@ -969,9 +970,9 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_schema_from_inner_table(
 #define FETCH_ALL_TABLE_HISTORY_SQL3            COMMON_SCHEMA_SQL
 #define FETCH_ALL_TABLE_HISTORY_FULL_SCHEMA     "SELECT /*+ leading(b a) use_nl(b a) no_rewrite() */ a.* FROM %s AS a JOIN "\
                                                "(SELECT table_id, MAX(schema_version) AS schema_version FROM %s "\
-                                               "WHERE schema_version <= %ld GROUP BY table_id) AS b "\
+                                               "WHERE schema_version <= %" PRId64 " GROUP BY table_id) AS b "\
                                                "ON a.table_id = b.table_id AND a.schema_version = b.schema_version "\
-                                               "WHERE a.is_deleted = 0 and a.table_id != %lu"
+                                               "WHERE a.is_deleted = 0 and a.table_id != %" PRIu64
 
 // when optimizer statistics is disabled, to prevent incorrect selection of the larger table as the driving table of join,
 // we use leading hint to fix the value list as the driving table.
@@ -986,7 +987,7 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_schema_from_inner_table(
                                                "( "\
                                                "  SELECT * FROM %s "\
                                                "  WHERE table_id = tlist.table_id "\
-                                               "  AND schema_version <= %ld "\
+                                               "  AND schema_version <= %" PRId64 " "\
                                                "  ORDER BY schema_version DESC LIMIT 1 "\
                                                ") AS a "\
                                                "ORDER BY table_id DESC, schema_version DESC"
@@ -1083,7 +1084,7 @@ int ObSchemaServiceSQLImpl::get_system_variable(const ObRefreshSchemaStatus &sch
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(sql.assign_fmt("SELECT data_type, value, is_deleted"
-                                 " FROM %s where name = '%.*s' and schema_version <= %ld",
+                                 " FROM %s where name = '%.*s' and schema_version <= %" PRId64,
                                  OB_ALL_SYS_VARIABLE_HISTORY_TNAME,
                                  var_name.length(), var_name.ptr(), schema_version))) {
       } else if (OB_FAIL(sql.append(" order by schema_version desc;"))) {
@@ -1285,7 +1286,7 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
       // While cluster is in upgradation, __all_sys_variable_history may not be modified yet,
       // so we try to use __all_sys_variable to fetch system variable schema.
       LOG_INFO("__all_sys_variable_history is empty, get system variable from __all_sys_variable");
-      if (OB_FAIL(sql.append_fmt("select *, 0 as is_deleted, 0 as schema_version from %s where 0=%lu %% 1",
+      if (OB_FAIL(sql.append_fmt("select *, 0 as is_deleted, 0 as schema_version from %s where 0=%" PRIu64 " %% 1",
                                  OB_ALL_SYS_VARIABLE_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
@@ -1355,7 +1356,7 @@ int ObSchemaServiceSQLImpl::fetch_all_column_info(
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+        if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
         } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID, COLUMN_ID, SCHEMA_VERSION"))) {
         }
       }
@@ -1439,7 +1440,7 @@ int ObSchemaServiceSQLImpl::fetch_aux_tables(
                                                 "FROM ( "\
                                                 "  SELECT /*+ index(%s idx_data_table_id) */ DISTINCT table_id AS tid "\
                                                 "  FROM %s "\
-                                                "  WHERE data_table_id = %lu "\
+                                                "  WHERE data_table_id = %" PRIu64 " "\
                                                 ") l "\
                                                 "JOIN %s r "\
                                                 "ON r.table_id = l.tid "\
@@ -1447,7 +1448,7 @@ int ObSchemaServiceSQLImpl::fetch_aux_tables(
                                                 "  SELECT /*+ no_rewrite */ schema_version "\
                                                 "  FROM %s "\
                                                 "  WHERE table_id = l.tid "\
-                                                "  AND schema_version <= %ld "\
+                                                "  AND schema_version <= %" PRId64 " "\
                                                 "  ORDER BY schema_version DESC LIMIT 1 "\
                                                 ") "\
                                                 "AND is_deleted = 0 "\
@@ -1515,7 +1516,7 @@ int ObSchemaServiceSQLImpl::fetch_all_constraint_info(
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+          if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
           } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID, CONSTRAINT_ID, SCHEMA_VERSION"))) {
           }
         }
@@ -1596,7 +1597,7 @@ int ObSchemaServiceSQLImpl::fetch_all_part_info(
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+          if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
           } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID, PART_ID, SCHEMA_VERSION"))) {
           }
         }
@@ -1658,7 +1659,7 @@ int ObSchemaServiceSQLImpl::fetch_all_def_subpart_info(
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld"
+          if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64
                                      " ORDER BY table_id, sub_part_id, schema_version",
                                      schema_version))) {
           }
@@ -1719,7 +1720,7 @@ int ObSchemaServiceSQLImpl::fetch_all_subpart_info(
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld"
+          if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64
                                      " ORDER BY table_id, part_id, sub_part_id, schema_version",
                                      schema_version))) {
           }
@@ -2023,14 +2024,14 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
       LOG_WARN("append sql failed", K(ret)); \
     } else { \
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {  \
-        if (OB_FAIL(sql.append_fmt("%s(%lu, ", 0 == i ? "" : ", ", \
+        if (OB_FAIL(sql.append_fmt("%s(%" PRIu64 ", ", 0 == i ? "" : ", ", \
                                    schema_keys[i].user_id_))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } else if (OB_FAIL(sql_append_hex_escape_str(schema_keys[i].obj_name_, sql))) { \
           LOG_WARN("fail to append obj name", K(ret)); \
         } else if (OB_FAIL(sql.append(", "))) { \
           LOG_WARN("append sql failed", K(ret)); \
-        } else if (OB_FAIL(sql.append_fmt("%lu ", schema_keys[i].obj_type_))) { \
+        } else if (OB_FAIL(sql.append_fmt("%" PRIu64 " ", schema_keys[i].obj_type_))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } else if (OB_FAIL(sql.append(")"))) { \
           LOG_WARN("append sql failed", K(ret)); \
@@ -2053,7 +2054,7 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
     } else { \
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {  \
         const uint64_t schema_id = schema_keys[i].SCHEMA##_id_; \
-        if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", \
+        if (OB_FAIL(sql.append_fmt("%s%" PRIu64, 0 == i ? "" : ", ", \
                                    schema_id))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } \
@@ -2074,7 +2075,7 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
       LOG_WARN("append sql failed", K(ret)); \
     } else { \
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {  \
-        if (OB_FAIL(sql.append_fmt("%s(%lu, ", 0 == i ? "" : ", ", \
+        if (OB_FAIL(sql.append_fmt("%s(%" PRIu64 ", ", 0 == i ? "" : ", ", \
                                    schema_keys[i].user_id_))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } else if (OB_FAIL(sql_append_hex_escape_str(schema_keys[i].database_name_, sql))) { \
@@ -2099,7 +2100,7 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
       LOG_WARN("append sql failed", K(ret)); \
     } else { \
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {  \
-        if (OB_FAIL(sql.append_fmt("%s(%lu)", 0 == i ? "" : ", ", \
+        if (OB_FAIL(sql.append_fmt("%s(%" PRIu64 ")", 0 == i ? "" : ", ", \
                       schema_keys[i].grantee_id_))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } \
@@ -2120,7 +2121,7 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
       LOG_WARN("append sql failed", K(ret)); \
     } else { \
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {  \
-        if (OB_FAIL(sql.append_fmt("%s(%lu, ", 0 == i ? "" : ", ", \
+        if (OB_FAIL(sql.append_fmt("%s(%" PRIu64 ", ", 0 == i ? "" : ", ", \
                                    schema_keys[i].user_id_))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } else if (OB_FAIL(sql_append_hex_escape_str(schema_keys[i].database_name_, sql))) { \
@@ -2149,7 +2150,7 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
       LOG_WARN("append sql failed", K(ret)); \
     } else { \
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {  \
-        if (OB_FAIL(sql.append_fmt("%s(%lu, ", 0 == i ? "" : ", ", \
+        if (OB_FAIL(sql.append_fmt("%s(%" PRIu64 ", ", 0 == i ? "" : ", ", \
                                    schema_keys[i].user_id_))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } else if (OB_FAIL(sql_append_hex_escape_str(schema_keys[i].database_name_, sql))) { \
@@ -2160,7 +2161,7 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
           LOG_WARN("fail to append database name", K(ret)); \
         } else if (OB_FAIL(sql.append(", "))) { \
           LOG_WARN("append sql failed", K(ret)); \
-        } else if (OB_FAIL(sql.append_fmt("%lu ", schema_keys[i].get_routine_priv_key().routine_type_))) { \
+        } else if (OB_FAIL(sql.append_fmt("%" PRId64 " ", schema_keys[i].get_routine_priv_key().routine_type_))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } else if (OB_FAIL(sql.append(")"))) { \
           LOG_WARN("append sql failed", K(ret)); \
@@ -2182,7 +2183,7 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
       LOG_WARN("append sql failed", K(ret)); \
     } else { \
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {  \
-        if (OB_FAIL(sql.append_fmt("%s(%lu) ", 0 == i ? "" : ", ", \
+        if (OB_FAIL(sql.append_fmt("%s(%" PRIu64 ") ", 0 == i ? "" : ", ", \
                                    schema_keys[i].column_priv_id_))) { \
           LOG_WARN("append sql failed", K(ret)); \
         } \
@@ -2204,7 +2205,7 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
     } else { \
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {  \
         if (OB_FAIL(sql.append_fmt(\
-            "%s(%lu, %lu, %lu, %lu, %lu)", 0 == i ? "" : ", ", \
+            "%s(%" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 ")", 0 == i ? "" : ", ", \
             schema_keys[i].table_id_, \
             schema_keys[i].obj_type_, \
             schema_keys[i].col_id_, \
@@ -2247,7 +2248,7 @@ int ObSchemaServiceSQLImpl::fetch_all_database_info(
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append(" ORDER BY DATABASE_ID DESC, SCHEMA_VERSION DESC"))) {
       }
     }
@@ -2310,13 +2311,13 @@ int ObSchemaServiceSQLImpl::fetch_all_table_info(const ObRefreshSchemaStatus &sc
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_SQL,
                                           table_name,
                                           OB_INVALID_RUNTIME_ID))) {
-        } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+        } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
         } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID DESC, SCHEMA_VERSION DESC"))) {
         }
       } else {
         ObSqlString table_id_list;
         for (int64_t i = 0; OB_SUCC(ret) && i < table_ids_size; i++) {
-          if (OB_FAIL(table_id_list.append_fmt("%srow(%lu)", 0 == i ? "" : ", ", table_ids[i]))) {
+          if (OB_FAIL(table_id_list.append_fmt("%srow(%" PRIu64 ")", 0 == i ? "" : ", ", table_ids[i]))) {
           }
         }
         if (FAILEDx(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_WITH_ROWKEY,
@@ -2498,14 +2499,14 @@ int ObSchemaServiceSQLImpl::check_sys_schema_change(
       if (!check_inner_stat()) {
         ret = OB_NOT_INIT;
         LOG_WARN("check inner stat fail");
-      } else if (OB_FAIL(sql.append_fmt("SELECT 1 FROM %s WHERE SCHEMA_VERSION > %lu "
-              "AND SCHEMA_VERSION <= %lu AND OPERATION_TYPE > %d AND OPERATION_TYPE < %d "
+      } else if (OB_FAIL(sql.append_fmt("SELECT 1 FROM %s WHERE SCHEMA_VERSION > %" PRId64 " "
+              "AND SCHEMA_VERSION <= %" PRId64 " AND OPERATION_TYPE > %d AND OPERATION_TYPE < %d "
               "AND TABLE_ID IN (", OB_ALL_DDL_OPERATION_TNAME, schema_version, new_schema_version,
               OB_DDL_TABLE_OPERATION_BEGIN, OB_DDL_TABLE_OPERATION_END))) {
       } else {
         // no need to change table_id
         for (int64_t i = 0; OB_SUCC(ret) && i < sys_table_ids.count(); ++i) {
-          if (OB_FAIL(sql.append_fmt("%s%lu%s", (0 == i) ? "" : ",",
+          if (OB_FAIL(sql.append_fmt("%s%" PRIu64 "%s", (0 == i) ? "" : ",",
                       sys_table_ids.at(i),
                       (sys_table_ids.count() - 1 == i) ? ")" : ""))) {
           }
@@ -2707,7 +2708,7 @@ int ObSchemaServiceSQLImpl::sql_append_pure_ids(
     if (OB_FAIL(sql.append("("))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ids_size; ++i) {
-        if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ",
+        if (OB_FAIL(sql.append_fmt("%s%" PRIu64, 0 == i ? "" : ", ",
                                    ids[i].table_id_))) {
         }
       }
@@ -2736,7 +2737,7 @@ int ObSchemaServiceSQLImpl::sql_append_pure_ids(
     if (OB_FAIL(sql.append("("))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ids_size; ++i) {
-        if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ",
+        if (OB_FAIL(sql.append_fmt("%s%" PRIu64, 0 == i ? "" : ", ",
                                    ids[i]))) {
         }
       }
@@ -2768,7 +2769,7 @@ int ObSchemaServiceSQLImpl::sql_append_ids_and_truncate_version(
       for (int64_t i = 0; OB_SUCC(ret) && i < ids_size; ++i) {
         if (ids[i].truncate_version_ > schema_version) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(sql.append_fmt("%s(table_id = %lu AND schema_version >= %ld)", 0 == i ? "" : "OR ",
+        } else if (OB_FAIL(sql.append_fmt("%s(table_id = %" PRIu64 " AND schema_version >= %" PRId64 ")", 0 == i ? "" : "OR ",
                                    ids[i].table_id_,
                                    ids[i].truncate_version_))) {
         }
@@ -2968,7 +2969,7 @@ int ObSchemaServiceSQLImpl::fetch_all_outline_info(
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < outlines_size; ++i) {
           const uint64_t outline_id = outline_keys[i];
-          if (OB_FAIL(sql.append_fmt("%s%lu",
+          if (OB_FAIL(sql.append_fmt("%s%" PRIu64,
                                      0 == i ? "" : ", ",
                                      outline_id))) {
           }
@@ -2980,7 +2981,7 @@ int ObSchemaServiceSQLImpl::fetch_all_outline_info(
       }
     } else { }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append(" ORDER BY OUTLINE_ID DESC, SCHEMA_VERSION DESC"))) {
       }
     }
@@ -3120,7 +3121,7 @@ int ObSchemaServiceSQLImpl::fetch_all_routine_info(
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < routine_ids_size; ++i) {
           const uint64_t routine_id = routine_ids[i];
-          if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", routine_id))) {
+          if (OB_FAIL(sql.append_fmt("%s%" PRIu64, 0 == i ? "" : ", ", routine_id))) {
           }
         }
         if (OB_SUCC(ret)) {
@@ -3130,7 +3131,7 @@ int ObSchemaServiceSQLImpl::fetch_all_routine_info(
       }
     } else { }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append(" ORDER BY ROUTINE_ID ASC, SCHEMA_VERSION DESC"))) {
       }
     }
@@ -3167,7 +3168,7 @@ int ObSchemaServiceSQLImpl::fetch_all_routine_param_info(const ObRefreshSchemaSt
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < object_ids_size; ++i) {
           const uint64_t routine_id = object_ids[i];
-          if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", routine_id))) {
+          if (OB_FAIL(sql.append_fmt("%s%" PRIu64, 0 == i ? "" : ", ", routine_id))) {
           }
         }
         if (OB_SUCC(ret)) {
@@ -3177,7 +3178,7 @@ int ObSchemaServiceSQLImpl::fetch_all_routine_param_info(const ObRefreshSchemaSt
       }
     } else { }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append(" ORDER BY ROUTINE_ID ASC, SEQUENCE ASC, SCHEMA_VERSION DESC"))) {
       }
     }
@@ -3215,7 +3216,7 @@ int ObSchemaServiceSQLImpl::fetch_all_user_info(
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < users_size; ++i) {
           const uint64_t user_id = user_keys[i];
-          if (OB_FAIL(sql.append_fmt("%s%lu",
+          if (OB_FAIL(sql.append_fmt("%s%" PRIu64,
                                      0 == i ? "" : ", ",
                                      user_id))) {
           }
@@ -3227,7 +3228,7 @@ int ObSchemaServiceSQLImpl::fetch_all_user_info(
       }
     } else { }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append(" ORDER BY USER_ID DESC, SCHEMA_VERSION DESC"))) {
       }
     }
@@ -3292,7 +3293,7 @@ int ObSchemaServiceSQLImpl::fetch_all_package_info(
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < packages_size; ++i) {
           const uint64_t package_id = package_keys[i];
-          if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", package_id))) {
+          if (OB_FAIL(sql.append_fmt("%s%" PRIu64, 0 == i ? "" : ", ", package_id))) {
           }
         }
         if (OB_SUCC(ret)) {
@@ -3303,7 +3304,7 @@ int ObSchemaServiceSQLImpl::fetch_all_package_info(
     } else {}
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(
           sql.append(" ORDER BY PACKAGE_ID DESC, SCHEMA_VERSION DESC"))) {
       }
@@ -3344,7 +3345,7 @@ int ObSchemaServiceSQLImpl::fetch_all_trigger_info(
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < triggers_size; ++i) {
           const uint64_t trigger_id = trigger_keys[i];
-          if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", trigger_id))) {
+          if (OB_FAIL(sql.append_fmt("%s%" PRIu64, 0 == i ? "" : ", ", trigger_id))) {
           }
         }
         if (OB_SUCC(ret)) {
@@ -3355,7 +3356,7 @@ int ObSchemaServiceSQLImpl::fetch_all_trigger_info(
     } else {}
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(
           sql.append(" ORDER BY TRIGGER_ID DESC, SCHEMA_VERSION DESC"))) {
       }
@@ -3399,20 +3400,20 @@ int ObSchemaServiceSQLImpl::fetch_role_grantee_map_info(
         const uint64_t user_id = ObSchemaUtils::get_extract_schema_id(user_keys[i]);
         if (is_fetch_role) {
           if (!is_need_inc_fetch) {
-            if (OB_FAIL(sql.append_fmt(" AND grantee_id IN (%lu", user_id))) {
+            if (OB_FAIL(sql.append_fmt(" AND grantee_id IN (%" PRIu64, user_id))) {
             } else {
               is_need_inc_fetch = true;
             }
-          } else if (OB_FAIL(sql.append_fmt(", %lu", user_id))) {
+          } else if (OB_FAIL(sql.append_fmt(", %" PRIu64, user_id))) {
           }
         } else {
           {
             if (!is_need_inc_fetch) {
-              if (OB_FAIL(sql.append_fmt(" AND role_id IN (%lu", user_id))) {
+              if (OB_FAIL(sql.append_fmt(" AND role_id IN (%" PRIu64, user_id))) {
               } else {
                 is_need_inc_fetch = true;
               }
-            } else if (OB_FAIL(sql.append_fmt(", %lu", user_id))) {
+            } else if (OB_FAIL(sql.append_fmt(", %" PRIu64, user_id))) {
             }
           }
         }
@@ -3429,7 +3430,7 @@ int ObSchemaServiceSQLImpl::fetch_role_grantee_map_info(
     }
 
     if (OB_SUCC(ret) && !sql.empty()) {
-      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+      if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append(is_fetch_role ? " ORDER BY GRANTEE_ID DESC, ROLE_ID DESC, SCHEMA_VERSION DESC"
                                    : " ORDER BY ROLE_ID DESC, GRANTEE_ID DESC, SCHEMA_VERSION DESC"))) {
       }
@@ -3475,7 +3476,7 @@ int ObSchemaServiceSQLImpl::fetch_sys_variable_version(
     fetch_schema_version = OB_INVALID_VERSION;
     
     if (OB_FAIL(sql.append_fmt("SELECT max(schema_version) as max_schema_version "
-                               "FROM %s WHERE schema_version <= %ld",
+                               "FROM %s WHERE schema_version <= %" PRId64,
                                OB_ALL_SYS_VARIABLE_HISTORY_TNAME,
                                schema_version))) {
     } else {
@@ -3539,7 +3540,7 @@ int ObSchemaServiceSQLImpl::fetch_tables(
     } else {
       ObSqlString table_id_list;
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; i++) {
-        if (OB_FAIL(table_id_list.append_fmt("%srow(%lu)", 0 == i ? "" : ", ", schema_keys[i].table_id_))) {
+        if (OB_FAIL(table_id_list.append_fmt("%srow(%" PRIu64 ")", 0 == i ? "" : ", ", schema_keys[i].table_id_))) {
         }
       }
       if (FAILEDx(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_WITH_ROWKEY,
@@ -3629,7 +3630,7 @@ int ObSchemaServiceSQLImpl::fetch_tables(
       const char *sql_str_fmt = "SELECT * FROM %s"; \
       if (OB_FAIL(sql.append_fmt(sql_str_fmt, table_name_str))) {  \
         LOG_WARN("append sql failed", K(ret));                            \
-      } else if (OB_FAIL(sql.append_fmt(" WHERE SCHEMA_VERSION <= %ld", schema_version))) { \
+      } else if (OB_FAIL(sql.append_fmt(" WHERE SCHEMA_VERSION <= %" PRId64, schema_version))) { \
         LOG_WARN("append sql failed", K(ret));                                            \
       } else if (NULL != schema_keys && schema_key_size > 0) {              \
         if (OB_FAIL(sql.append_fmt(" AND "#SCHEMA"_id in"))) {              \
@@ -3690,7 +3691,7 @@ int ObSchemaServiceSQLImpl::fetch_all_mock_fk_parent_table_info(
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {
             const uint64_t mock_fk_parent_table_id = schema_keys[i];
-            if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", mock_fk_parent_table_id))) {
+            if (OB_FAIL(sql.append_fmt("%s%" PRIu64, 0 == i ? "" : ", ", mock_fk_parent_table_id))) {
             }
           }
           if (OB_SUCC(ret)) {
@@ -3700,7 +3701,7 @@ int ObSchemaServiceSQLImpl::fetch_all_mock_fk_parent_table_info(
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+        if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
         } else if (OB_FAIL(sql.append(" ORDER BY mock_fk_parent_table_id desc, schema_version desc"))) {
         } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
@@ -3747,7 +3748,7 @@ int ObSchemaServiceSQLImpl::fetch_mock_fk_parent_table_column_info(
                                OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(
-      " AND mock_fk_parent_table_id = %lu AND schema_version <= %ld",
+      " AND mock_fk_parent_table_id = %" PRIu64 " AND schema_version <= %" PRId64,
       mock_fk_parent_table.get_mock_fk_parent_table_id(),
       schema_version))) {
     } else if (OB_FAIL(sql.append(" ORDER BY parent_column_id asc, schema_version desc"))) {
@@ -3778,7 +3779,7 @@ int ObSchemaServiceSQLImpl::fetch_db_privs(
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_DB_PRIV_HISTORY_SQL,
                                OB_ALL_DATABASE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
     } else if (NULL != schema_keys && schema_key_size > 0) {
       // database_name is case sensitive
       if (OB_FAIL(sql.append_fmt(" AND (user_id, BINARY database_name) in"))) {
@@ -3817,7 +3818,7 @@ int ObSchemaServiceSQLImpl::fetch_sys_privs(
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_SYS_PRIV_HISTORY_SQL,
                                OB_ALL_SYSAUTH_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
     } else if (NULL != schema_keys && schema_key_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND (grantee_id) in"))) {
       } else if (OB_FAIL(SQL_APPEND_SYS_PRIV_ID(schema_keys, schema_key_size, sql))) {
@@ -3856,7 +3857,7 @@ int ObSchemaServiceSQLImpl::fetch_table_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_PRIV_HISTORY_SQL, OB_ALL_TABLE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
     } else if (NULL != schema_keys && schema_key_size > 0) {
       // database_name/table_name is case sensitive
       if (OB_FAIL(sql.append_fmt(" AND (user_id, BINARY database_name, \
@@ -3896,7 +3897,7 @@ int ObSchemaServiceSQLImpl::fetch_routine_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROUTINE_PRIV_HISTORY_SQL, OB_ALL_ROUTINE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
     } else if (NULL != schema_keys && schema_key_size > 0) {
       // database_name/routine_name is case sensitive
       if (OB_FAIL(sql.append_fmt(" AND (user_id, BINARY database_name, \
@@ -3937,7 +3938,7 @@ int ObSchemaServiceSQLImpl::fetch_obj_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_PRIV_HISTORY_SQL, OB_ALL_OBJAUTH_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
     } else if (NULL != schema_keys && schema_key_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND (obj_id, objtype, col_id, grantor_id, \
                                         grantee_id) in"))) {
@@ -3977,7 +3978,7 @@ int ObSchemaServiceSQLImpl::fetch_obj_mysql_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_MYSQL_PRIV_HISTORY_SQL, OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME,
                               OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
     } else if (NULL != schema_keys && schema_key_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND (user_id, obj_name, obj_type) in"))) {
       } else if (OB_FAIL(SQL_APPEND_OBJ_MYSQL_PRIV_ID(schema_keys, schema_key_size, sql))) {
@@ -4012,7 +4013,7 @@ int ObSchemaServiceSQLImpl::fetch_column_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_PRIV_HISTORY_SQL, OB_ALL_COLUMN_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %" PRId64, schema_version))) {
     } else if (NULL != schema_keys && schema_key_size > 0) {
       // database_name/routine_name is case sensitive
       if (OB_FAIL(sql.append_fmt(" AND (priv_id) in"))) {
@@ -4122,7 +4123,7 @@ int ObSchemaServiceSQLImpl::fetch_table_info(
   } else if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_SQL,
                                     table_name,
                                     OB_INVALID_RUNTIME_ID))) {
-  } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld order by schema_version desc limit 1",
+  } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " and schema_version <= %" PRId64 " order by schema_version desc limit 1",
                                     table_id,
                                     schema_version))) {
   } else {
@@ -4155,7 +4156,7 @@ int ObSchemaServiceSQLImpl::fetch_column_info(const ObRefreshSchemaStatus &schem
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_HISTORY_SQL, OB_ALL_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld"
+    } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " and schema_version <= %" PRId64
                                       " ORDER BY TABLE_ID, COLUMN_ID, SCHEMA_VERSION",
                                       table_id,
                                       schema_version))) {
@@ -4188,7 +4189,7 @@ int ObSchemaServiceSQLImpl::fetch_constraint_info(
       
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_HISTORY_SQL, OB_ALL_CONSTRAINT_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld"
+      } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " and schema_version <= %" PRId64
                                         " ORDER BY table_id, constraint_id, schema_version",
                                         table_id,
                                         schema_version))) {
@@ -4231,7 +4232,7 @@ int ObSchemaServiceSQLImpl::fetch_constraint_column_info(const ObRefreshSchemaSt
 
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_COLUMN_HISTORY_SQL, OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu AND constraint_id = %lu AND schema_version <= %ld "
+    } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " AND constraint_id = %" PRIu64 " AND schema_version <= %" PRId64 " "
                                       " ORDER BY table_id, constraint_id, column_id, schema_version desc",
                                       table_id,
                                       cst->get_constraint_id(),
@@ -4336,7 +4337,7 @@ int ObSchemaServiceSQLImpl::fetch_part_info(
       //fetch part info
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_PART_HISTORY_SQL, OB_ALL_PART_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu AND schema_version >= %ld AND schema_version <= %ld",
+      } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " AND schema_version >= %" PRId64 " AND schema_version <= %" PRId64,
                                         schema_id,
                                         schema->get_truncate_version(),
                                         schema_version))) {
@@ -4380,7 +4381,7 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
       sql.reuse();
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_DEF_SUBPART_HISTORY_SQL, OB_ALL_DEF_SUB_PART_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld "
+      } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " and schema_version <= %" PRId64 " "
                                         " ORDER BY table_id, sub_part_id, schema_version",
                                         schema_id,
                                         schema_version))) {
@@ -4401,7 +4402,7 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
       sql.reuse();
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_SUB_PART_HISTORY_SQL, OB_ALL_SUB_PART_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu AND schema_version >= %ld AND schema_version <= %ld "
+      } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " AND schema_version >= %" PRId64 " AND schema_version <= %" PRId64 " "
                  " ORDER BY table_id, part_id, sub_part_id, schema_version",
                  schema_id,
                  schema->get_truncate_version(),
@@ -4470,7 +4471,7 @@ int ObSchemaServiceSQLImpl::delete_recycle_object(const ObRecycleObject &recycle
     int64_t affected_rows = 0;
     if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE 0 = %lu %% 1 and object_name = '%.*s' AND type = %d",
                                OB_ALL_RECYCLEBIN_TNAME,
-                               1UL,
+                               uint64_t(1),
                                recycle_object.get_object_name().length(),
                                recycle_object.get_object_name().ptr(),
                                recycle_object.get_type()))) {
@@ -4500,7 +4501,7 @@ int ObSchemaServiceSQLImpl::fetch_recycle_object(const ObString &object_name,
       
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_RECYCLEBIN_SQL,
                                  OB_ALL_RECYCLEBIN_TNAME,
-                                 1UL,
+                                 uint64_t(1),
                                  object_name.length(),
                                  object_name.ptr(),
                                  recycle_obj_type))) {
@@ -4535,7 +4536,7 @@ int ObSchemaServiceSQLImpl::fetch_expire_recycle_objects(const int64_t expire_ti
       {
         if (OB_FAIL(sql.append_fmt(FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL,
                                    OB_ALL_RECYCLEBIN_TNAME,
-                                   1UL,
+                                   uint64_t(1),
                                    expire_time))) {
         }
       }
@@ -4570,7 +4571,7 @@ int ObSchemaServiceSQLImpl::fetch_recycle_objects_of_db(const uint64_t database_
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_RECYCLEBIN_SQL_WITH_CONDITION,
                                  OB_ALL_RECYCLEBIN_TNAME,
                                  1UL))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND database_id = %ld AND (type = %d OR type = %d)",
+      } else if (OB_FAIL(sql.append_fmt(" AND database_id = %" PRIu64 " AND (type = %d OR type = %d)",
                                         ObSchemaUtils::get_extract_schema_id(database_id),
                                         ObRecycleObject::TABLE,
                                         ObRecycleObject::VIEW))) {
@@ -4615,7 +4616,7 @@ int ObSchemaServiceSQLImpl::construct_recycle_table_object(
       if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(history_table_name,
                                                             schema_service_))) {
       } else if (OB_FAIL(sql.append_fmt(FETCH_RECYCLE_TABLE_OBJECT, history_table_name,
-                                 1UL,
+                                 uint64_t(1),
                                  ObSchemaUtils::get_extract_schema_id(table_id),
                                  schema_version, table_name.ptr()))) {
       } else {
@@ -4676,7 +4677,7 @@ int ObSchemaServiceSQLImpl::construct_recycle_database_object(
       ObMySQLResult *result = NULL;
       ObSqlString sql;
       if (OB_FAIL(sql.append_fmt(FETCH_RECYCLE_DATABASE_OBJECT, OB_ALL_DATABASE_HISTORY_TNAME,
-                                 1UL,
+                                 uint64_t(1),
                                  ObSchemaUtils::get_extract_schema_id(database_id),
                                  schema_version, database_name.ptr()))) {
       } else {
@@ -4734,10 +4735,10 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_info(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_FOREIGN_KEY_HISTORY_SQL, OB_ALL_FOREIGN_KEY_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND (child_table_id = %lu OR parent_table_id = %lu)",
+      } else if (OB_FAIL(sql.append_fmt(" AND (child_table_id = %" PRIu64 " OR parent_table_id = %" PRIu64 ")",
                                         table_id,
                                         table_id))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
+      } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY foreign_key_id desc, schema_version desc"))) {
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -4772,7 +4773,7 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_column_info(
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_FOREIGN_KEY_COLUMN_HISTORY_SQL, OB_ALL_FOREIGN_KEY_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND foreign_key_id = %lu AND schema_version <= %ld ORDER BY position ASC, schema_version DESC",
+    } else if (OB_FAIL(sql.append_fmt(" AND foreign_key_id = %" PRIu64 " AND schema_version <= %" PRId64 " ORDER BY position ASC, schema_version DESC",
                foreign_key_info.foreign_key_id_,
                schema_version))) {
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
@@ -4805,7 +4806,7 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_array_for_simple_table_schemas(
                          OB_INVALID_RUNTIME_ID))) {
       } else if (OB_FAIL(sql.append_fmt(" AND child_table_id IN "))) {
       } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
+      } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY child_table_id desc, foreign_key_id desc, schema_version desc"))) {
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -4833,9 +4834,9 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_TRIGGER_ID_HISTORY_SQL, OB_ALL_TRIGGER_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND base_object_id = %lu",
+    } else if (OB_FAIL(sql.append_fmt(" AND base_object_id = %" PRIu64,
                                       table_id))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64, schema_version))) {
     } else if (OB_FAIL(sql.append_fmt(" ORDER BY trigger_id desc, schema_version desc"))) {
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
@@ -4868,7 +4869,7 @@ int ObSchemaServiceSQLImpl::fetch_constraint_array_for_simple_table_schemas(cons
                          OB_INVALID_RUNTIME_ID))) {
       } else if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
       } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-      } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
+      } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY table_id desc, constraint_id desc, schema_version desc"))) {
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -4924,7 +4925,7 @@ int ObSchemaServiceSQLImpl::get_ori_schema_version(
       ObSqlString sql;
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       
-      ret = sql.append_fmt("SELECT ori_schema_version FROM %s WHERE table_id = %lu",
+      ret = sql.append_fmt("SELECT ori_schema_version FROM %s WHERE table_id = %" PRIu64,
                            OB_ALL_ORI_SCHEMA_VERSION_TNAME, table_id);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
@@ -4979,11 +4980,11 @@ int ObSchemaServiceSQLImpl::get_batch_sys_variables(
 
 #define CONSTRUCT_SCHEMA_VERSION_HISTORY_SQL1(SCHEMA_ID) \
   "select schema_version, is_deleted, min(schema_version) over () as min_version from %s "\
-  "where 0 = %lu %% 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld order by schema_version desc limit %d"
+  "where 0 = %" PRIu64 " %% 1 and "#SCHEMA_ID" = %" PRIu64 " and schema_version <= %" PRId64 " order by schema_version desc limit %d"
 
 #define CONSTRUCT_SCHEMA_VERSION_HISTORY_SQL2(SCHEMA_ID) \
-  "select * from (select schema_version, is_deleted from %s where 0 = %lu %% 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld order by schema_version desc limit %d) as a, "\
-  "(select min(schema_version) as min_version from %s where 0 = %lu %% 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld) as b"
+  "select * from (select schema_version, is_deleted from %s where 0 = %" PRIu64 " %% 1 and "#SCHEMA_ID" = %" PRIu64 " and schema_version <= %" PRId64 " order by schema_version desc limit %d) as a, "\
+  "(select min(schema_version) as min_version from %s where 0 = %" PRIu64 " %% 1 and "#SCHEMA_ID" = %" PRIu64 " and schema_version <= %" PRId64 ") as b"
 
 #define CONSTRUCT_TABLE_SCHEMA_VERSION_HISTORY_SQL1 CONSTRUCT_SCHEMA_VERSION_HISTORY_SQL1(table_id)
 #define CONSTRUCT_TABLE_SCHEMA_VERSION_HISTORY_SQL2 CONSTRUCT_SCHEMA_VERSION_HISTORY_SQL2(table_id)
@@ -5250,7 +5251,7 @@ int ObSchemaServiceSQLImpl::get_schema_version_by_timestamp(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
       if (OB_FAIL(sql.assign_fmt("SELECT MAX(schema_version) as schema_version FROM %s "
-                                 "WHERE schema_version <= %ld AND operation_type = %d",
+                                 "WHERE schema_version <= %" PRId64 " AND operation_type = %d",
                                  OB_ALL_DDL_OPERATION_TNAME, timestamp, OB_DDL_END_SIGN))) {
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
@@ -5390,7 +5391,7 @@ int ObSchemaServiceSQLImpl::fetch_table_latest_schema_versions_(
       const uint64_t table_id = table_ids.at(idx);
       if (OB_UNLIKELY(OB_INVALID_ID == table_ids.at(idx))) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(sql.append_fmt("%s%lu", start_idx == idx ? "" : ", ", table_id))) {
+      } else if (OB_FAIL(sql.append_fmt("%s%" PRIu64, start_idx == idx ? "" : ", ", table_id))) {
       }
     }
     if (FAILEDx(sql.append_fmt(")) WHERE rn = 1"))) {
@@ -5616,23 +5617,23 @@ int ObSchemaServiceSQLImpl::get_table_id(
         if (OB_FAIL(sql.assign_fmt(
             "SELECT * FROM "
             "((SELECT table_id, table_name, session_id, table_type, table_mode, schema_version FROM %s "
-            " WHERE 0 = %lu %% 1 AND database_id = %lu) "
+            " WHERE 0 = %lu %% 1 AND database_id = %" PRIu64 ") "
             "UNION ALL "
             "(SELECT table_id, table_name, session_id, table_type, table_mode, schema_version FROM %s "
             " WHERE table_name = '%s' "
-            " AND (session_id = 0 or session_id = %ld) "
-            " AND database_id = %lu "
+            " AND (session_id = 0 or session_id = %" PRId64 ") "
+            " AND database_id = %" PRIu64 " "
             ")) "
             "ORDER BY session_id DESC",                 // case 3.1
-            OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, 1UL, database_id,
+            OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, uint64_t(1), database_id,
             OB_ALL_TABLE_TNAME, tb_name, static_cast<int64_t>(session_id), database_id))) {
         }
       } else {
         if (OB_FAIL(sql.assign_fmt(
             "SELECT table_id, table_name, session_id, table_type, table_mode, schema_version FROM %s "
             "WHERE table_name = '%s' "
-            "AND (session_id = 0 or session_id = %ld) "
-            "AND database_id = %lu "
+            "AND (session_id = 0 or session_id = %" PRId64 ") "
+            "AND database_id = %" PRIu64 " "
             "ORDER BY session_id DESC", // case 3.1
             OB_ALL_TABLE_TNAME, tb_name, static_cast<int64_t>(session_id), database_id))) {
         }
@@ -5727,7 +5728,7 @@ int ObSchemaServiceSQLImpl::get_index_id(
   const bool compare_with_collation = true;
   index_id = OB_INVALID_ID;
   #define GET_INDEX_ID_SQL "SELECT table_id, table_name FROM %s " \
-                           "WHERE 0 = %lu %% 1 AND database_id = %lu AND table_name = '%s' " \
+                           "WHERE 0 = %" PRIu64 " %% 1 AND database_id = %" PRIu64 " AND table_name = '%s' " \
                            "AND table_type = %d "
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
@@ -5745,7 +5746,7 @@ int ObSchemaServiceSQLImpl::get_index_id(
                 "UNION ALL "
                 GET_INDEX_ID_SQL
                 ") ",
-                OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, 1UL, database_id, idx_name, USER_INDEX,
+                OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, UINT64_C(1), database_id, idx_name, USER_INDEX,
                 OB_ALL_TABLE_TNAME, OB_INVALID_RUNTIME_ID, database_id, idx_name, USER_INDEX))) {
     }
   } else {
@@ -5790,7 +5791,7 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_id(
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(sql.assign_fmt(
              "SELECT mock_fk_parent_table_id, mock_fk_parent_table_name "
-             "FROM %s WHERE database_id = '%lu' AND mock_fk_parent_table_name = '%s'",
+             "FROM %s WHERE database_id = '%" PRIu64 "' AND mock_fk_parent_table_name = '%s'",
              OB_ALL_MOCK_FK_PARENT_TABLE_TNAME, database_id, tb_name))) {
   } else if (OB_FAIL(retrieve_schema_id_with_name_(
              sql_client, sql,
@@ -5826,7 +5827,7 @@ int ObSchemaServiceSQLImpl::get_constraint_id(
     if (OB_FAIL(sql.assign_fmt(
         "SELECT cst.constraint_id, cst.constraint_name, t.table_mode, t.table_type "
         "FROM %s cst JOIN %s t ON cst.table_id = t.table_id "
-        "WHERE cst.constraint_name = '%s' and t.database_id = %lu",
+        "WHERE cst.constraint_name = '%s' and t.database_id = %" PRIu64,
         OB_ALL_CONSTRAINT_TNAME, OB_ALL_TABLE_TNAME, cst_name, database_id))) {
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
@@ -5899,7 +5900,7 @@ int ObSchemaServiceSQLImpl::get_foreign_key_id(
     if (OB_FAIL(sql.assign_fmt(
         "SELECT fk.foreign_key_id, fk.foreign_key_name, t.table_mode, t.table_type "
         "FROM %s fk JOIN %s t ON fk.child_table_id = t.table_id "
-        "WHERE fk.foreign_key_name = '%s' and t.database_id = %lu",
+        "WHERE fk.foreign_key_name = '%s' and t.database_id = %" PRIu64,
         OB_ALL_FOREIGN_KEY_TNAME, OB_ALL_TABLE_TNAME, fk_name, database_id))) {
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
     } else if (OB_ISNULL(result = res.get_result())) {
@@ -5971,7 +5972,7 @@ int ObSchemaServiceSQLImpl::get_package_id(
   } else if (FALSE_IT(case_compare = true)) {
   } else if (OB_FAIL(sql.assign_fmt(
              "SELECT package_id, package_name FROM %s "
-             "WHERE database_id = %lu AND package_name = '%s' "
+             "WHERE database_id = %" PRIu64 " AND package_name = '%s' "
              "AND type = %d",
              OB_ALL_PACKAGE_TNAME, database_id, pkg_name,
              package_type))) {
@@ -6011,8 +6012,8 @@ int ObSchemaServiceSQLImpl::get_routine_id(
     ObMySQLResult *result = NULL;
     if (OB_FAIL(sql.assign_fmt(
                "SELECT routine_id, routine_name, routine_type FROM %s "
-               "WHERE database_id = %lu AND package_id = %ld "
-               "AND overload = %lu and routine_name = '%s' ",
+               "WHERE database_id = %" PRIu64 " AND package_id = %" PRId64 " "
+               "AND overload = %" PRIu64 " and routine_name = '%s' ",
                OB_ALL_ROUTINE_TNAME, database_id,
                static_cast<int64_t>(package_id)/*OB_INVALID_ID*/,
                overload, rt_name))) {
@@ -6092,7 +6093,7 @@ int ObSchemaServiceSQLImpl::get_table_schema_versions(
             OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME))) {
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < core_table_ids.count(); i++) {
-          if (OB_FAIL(sql.append_fmt("%lu%s", core_table_ids.at(i),
+          if (OB_FAIL(sql.append_fmt("%" PRIu64 "%s", core_table_ids.at(i),
                                      core_table_ids.count() - 1 == i ? ")" : ","))) {
           }
         } // end for
@@ -6106,7 +6107,7 @@ int ObSchemaServiceSQLImpl::get_table_schema_versions(
             OB_ALL_TABLE_TNAME))) {
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < other_table_ids.count(); i++) {
-          if (OB_FAIL(sql.append_fmt("%lu%s", other_table_ids.at(i),
+          if (OB_FAIL(sql.append_fmt("%" PRIu64 "%s", other_table_ids.at(i),
                                      other_table_ids.count() - 1 == i ? ")" : ","))) {
           }
         } // end for
@@ -6162,7 +6163,7 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_schema_versions(
       }
 
       for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); i++) {
-        if (OB_FAIL(sql.append_fmt("%lu%s", table_ids.at(i),
+        if (OB_FAIL(sql.append_fmt("%" PRIu64 "%s", table_ids.at(i),
                                    table_ids.count() - 1 == i ? ")" : ","))) {
         }
       } // end for
@@ -6206,7 +6207,7 @@ int ObSchemaServiceSQLImpl::get_table_index_infos(
   ObSqlString sql;
   index_infos.reset();
   #define GET_INDEX_INFO_SQL "SELECT table_name, table_id, schema_version, index_type FROM %s " \
-                             "WHERE 0 = %lu %% 1 AND database_id = %lu AND data_table_id = %lu " \
+                             "WHERE 0 = %" PRIu64 " %% 1 AND database_id = %" PRIu64 " AND data_table_id = %" PRIu64 " " \
                              "AND table_type = %d "
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
@@ -6221,7 +6222,7 @@ int ObSchemaServiceSQLImpl::get_table_index_infos(
                 "UNION ALL "
                 GET_INDEX_INFO_SQL
                 ") ",
-                OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, 1UL, database_id, data_table_id, USER_INDEX,
+                OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, UINT64_C(1), database_id, data_table_id, USER_INDEX,
                 OB_ALL_TABLE_TNAME, OB_INVALID_RUNTIME_ID, database_id, data_table_id, USER_INDEX))) {
     }
   } else {
@@ -6278,7 +6279,7 @@ int ObSchemaServiceSQLImpl::get_obj_priv_with_obj_id(
       || OB_INVALID_ID == obj_type)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(sql.append_fmt("SELECT *, 0 as is_deleted, -1 as schema_version FROM %s "
-             " WHERE obj_id = %lu AND objtype = %lu",
+             " WHERE obj_id = %" PRIu64 " AND objtype = %" PRIu64,
              OB_ALL_OBJAUTH_TNAME, obj_id, obj_type))) {
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -6309,7 +6310,7 @@ int ObSchemaServiceSQLImpl::fetch_ai_models(ObISQLClient &sql_client,
     ObSqlString sql;
 
     if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE 0=0", OB_ALL_AI_MODEL_HISTORY_TNAME))) {
-    } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
+    } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64, schema_version))) {
     } else if (OB_NOT_NULL(schema_keys) && schema_key_size > 0) {
       if (OB_FAIL(sql.append(" AND model_id IN"))) {
       } else if (OB_FAIL(SQL_APPEND_SCHEMA_ID(ai_model, schema_keys, schema_key_size, sql))) {

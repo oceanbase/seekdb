@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstddef>
 #include <utility>
+#include <algorithm>
 #include "lib/ob_define.h"
 #include "lib/utility/ob_platform_utils.h"
 #include "lib/ob_abort.h"
@@ -347,16 +348,26 @@ uint64_t AChunk::aligned()
 
 uint64_t AChunk::calc_hold(int64_t size, int64_t washed_size, uint64_t *payload)
 {
+#ifdef __EMSCRIPTEN__
+  // The complete aligned allocation occupies linear memory. Native mmap can
+  // leave the tail uncommitted; using that accounting here understates usage.
+  uint64_t hold = aligned(size);
+#else
   const int64_t all_size = align_up2(size + ACHUNK_HEADER_SIZE, INTACT_ACHUNK_SIZE);
   uint64_t hold = (all_size == INTACT_ACHUNK_SIZE ? all_size : align_up2(size + ACHUNK_HEADER_SIZE, get_page_size()))
     - washed_size;
+#endif
   if (payload) *payload = hold - ACHUNK_HEADER_SIZE;
   return hold;
 }
 
 uint64_t AChunk::aligned(int64_t size)
 {
+#ifdef __EMSCRIPTEN__
+  return std::max<uint64_t>(INTACT_ACHUNK_SIZE, align_up2(size + ACHUNK_HEADER_SIZE, get_page_size()));
+#else
   return align_up2(size + ACHUNK_HEADER_SIZE, INTACT_ACHUNK_SIZE);
+#endif
 }
 
 AChunk *AChunk::ptr2chunk(const void *ptr)

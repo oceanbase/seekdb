@@ -2056,7 +2056,7 @@ int64_t ObPrintTableStore::to_string(char *buf, const int64_t buf_len) const
     J_OBJ_START();
     if (!major_tables_.empty() || !minor_tables_.empty() || !memtables_.empty() || !ddl_mem_sstables_.empty()
         || !ddl_sstables_.empty() || !meta_major_tables_.empty() || !mds_sstables_.empty()) {
-      ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+      const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
       J_NEWLINE();
       // table_type|max_merge_version
       //      |upper_trans_version|start_scn|end_scn|ref|buffer_minor
@@ -2156,7 +2156,7 @@ void ObPrintTableStore::table_to_string(
      int64_t &pos) const
 {
   if (nullptr != table) {
-    ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+    const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
     BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
     BUF_PRINTO(PC(trace_id));
     BUF_PRINTF("] ");
@@ -2189,7 +2189,7 @@ void ObPrintTableStore::ddl_kv_to_string(
      int64_t &pos) const
 {
   if (nullptr != table) {
-    ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+    const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
     BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
     BUF_PRINTO(PC(trace_id));
     BUF_PRINTF("] ");

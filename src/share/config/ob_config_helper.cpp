@@ -235,41 +235,7 @@ bool ObConfigMaxSyslogFileCountChecker::check(const char *text) const
 {
   bool is_valid = false;
   int64_t max_count = ObConfigIntParser::get(text, is_valid);
-  if (is_valid) {
-    int64_t uncompressed_count = config::syslog_file_uncompressed_count();
-    if (max_count == 0 || max_count >= uncompressed_count) {
-      is_valid = true;
-    } else {
-      is_valid = false;
-    }
-  }
-  return is_valid;
-}
-
-bool ObConfigSyslogCompressFuncChecker::check(const char *text) const
-{
-  bool is_valid = false;
-  for (int i = 0; i < ARRAYSIZEOF(common::syslog_compress_funcs) && !is_valid; ++i) {
-    if (0 == ObString::make_string(syslog_compress_funcs[i]).case_compare(text)) {
-      is_valid = true;
-    }
-  }
-  return is_valid;
-}
-
-bool ObConfigSyslogFileUncompressedCountChecker::check(const char *text) const
-{
-  bool is_valid = false;
-  int64_t uncompressed_count = ObConfigIntParser::get(text, is_valid);
-  if (is_valid) {
-    int64_t max_count = config::max_syslog_file_count();
-    if (uncompressed_count >= 0 && (max_count == 0 || uncompressed_count <= max_count)) {
-      is_valid = true;
-    } else {
-      is_valid = false;
-    }
-  }
-  return is_valid;
+  return is_valid && max_count >= 0;
 }
 
 bool ObConfigLogLevelChecker::check(const char *text) const

@@ -166,7 +166,7 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
     } else if ((human_time_ptr->tm_hour == hour) && (human_time_ptr->tm_min == minute)) {
       if (!already_launch_) {
         const int64_t start_us = ObTimeUtility::current_time();
-        const int64_t RETRY_TIME_LIMIT = 2 * 3600 * 1000 * 1000L; // 2h
+        const int64_t RETRY_TIME_LIMIT = 2LL * 3600 * 1000 * 1000L; // 2h
         do {
           ObMajorFreezeParam param;
           param.freeze_reason_ = MF_DAILY_MERGE;

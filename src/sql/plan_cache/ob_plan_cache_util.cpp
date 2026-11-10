@@ -49,56 +49,55 @@ int ObGetAllCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID, ObILib
   return ret;
 }
 
-int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
-                                           ObIArray<ObCandiTableLoc> &candi_table_locs)
+int TableAccessTargetBuilder::collect_access_targets(const common::ObIArray<ObTablePartitionInfo *> &partition_infos,
+                                           ObIArray<TableAccessTargets> &table_targets)
 {
   int ret = OB_SUCCESS;
-  //ObDASTableLoc table_loc;
   int64_t N = partition_infos.count();
-  if (OB_FAIL(candi_table_locs.reserve(N))) {
+  if (OB_FAIL(table_targets.reserve(N))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     if (OB_ISNULL(partition_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(candi_table_locs.push_back(
-                   partition_infos.at(i)->get_phy_tbl_location_info()))) {
+    } else if (OB_FAIL(table_targets.push_back(
+                   partition_infos.at(i)->get_access_targets()))) {
     } else { /* do nothing */ }
   }
   return ret;
 }
-int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
+int TableAccessTargetBuilder::collect_access_targets(const ObIArray<TableAccessPlan> &table_access_plans,
                                            const ObPlanCacheCtx &pc_ctx,
-                                           ObIArray<ObCandiTableLoc> &candi_table_locs)
+                                           ObIArray<TableAccessTargets> &table_targets)
 {
   int ret = OB_SUCCESS;
   ObExecContext &exec_ctx = pc_ctx.exec_ctx_;
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(pc_ctx.sql_ctx_.session_info_);
   ObPhysicalPlanCtx *plan_ctx = exec_ctx.get_physical_plan_ctx();
-  int64_t N = table_locations.count();
+  int64_t N = table_access_plans.count();
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObSEArray<const ObTableLocation *, 2> table_location_ptrs;
-    ObSEArray<ObCandiTableLoc *, 2> phy_location_info_ptrs;
+    ObSEArray<const TableAccessPlan *, 2> table_access_plan_ptrs;
+    ObSEArray<TableAccessTargets *, 2> target_ptrs;
     const ParamStore &params = plan_ctx->get_param_store();
-    if (OB_FAIL(candi_table_locs.prepare_allocate(N))) {
+    if (OB_FAIL(table_targets.prepare_allocate(N))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
-        const ObTableLocation &table_location = table_locations.at(i);
-        ObCandiTableLoc &candi_table_loc = candi_table_locs.at(i);
-        NG_TRACE(calc_partition_location_begin);
-        if (OB_FAIL(table_location.calculate_candi_tablet_locations(exec_ctx,
-                                                                    params,
-                                                                    candi_table_loc.get_phy_part_loc_info_list_for_update(),
-                                                                    dtc_params))) {
+        const TableAccessPlan &table_access_plan = table_access_plans.at(i);
+        TableAccessTargets &targets = table_targets.at(i);
+        NG_TRACE(calculate_partition_targets_begin);
+        if (OB_FAIL(table_access_plan.calculate_tablet_targets(exec_ctx,
+                                                          params,
+                                                          targets.get_tablets_for_update(),
+                                                          dtc_params))) {
         } else {
-          NG_TRACE(calc_partition_location_end);
-          candi_table_loc.set_table_location_key(
-              table_location.get_table_id(), table_location.get_ref_table_id());
+          NG_TRACE(calculate_partition_targets_end);
+          targets.set_table_identity(
+              table_access_plan.get_table_id(), table_access_plan.get_ref_table_id());
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(table_location_ptrs.push_back(&table_location))) {
-          } else if (OB_FAIL(phy_location_info_ptrs.push_back(&candi_table_loc))) {
+          if (OB_FAIL(table_access_plan_ptrs.push_back(&table_access_plan))) {
+          } else if (OB_FAIL(target_ptrs.push_back(&targets))) {
           }
         }
       } // for end
@@ -106,8 +105,8 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
 
     if (OB_SUCC(ret) && N!=0 ) {
       if (OB_FAIL(ObLogPlan::validate_local_tablets(exec_ctx,
-                                                    table_location_ptrs,
-                                                    phy_location_info_ptrs))) {
+                                                    table_access_plan_ptrs,
+                                                    target_ptrs))) {
       }
     }
   }
@@ -115,18 +114,18 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
   return ret;
 }
 
-int ObPhyLocationGetter::build_table_locs(ObDASCtx &das_ctx,
-                                          const ObIArray<ObTableLocation> &table_locations,
-                                          const ObIArray<ObCandiTableLoc> &candi_table_locs)
+int TableAccessTargetBuilder::build_runtime_accesses(ObDASCtx &das_ctx,
+                                          const ObIArray<TableAccessPlan> &table_access_plans,
+                                          const ObIArray<TableAccessTargets> &table_targets)
 {
   int ret = OB_SUCCESS;
-  CK(table_locations.count() == candi_table_locs.count());
-  for (int64_t i = 0; OB_SUCC(ret) && i < table_locations.count(); i++) {
-    if (OB_FAIL(das_ctx.add_candi_table_loc(table_locations.at(i).get_loc_meta(), candi_table_locs.at(i)))) {
+  CK(table_access_plans.count() == table_targets.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < table_access_plans.count(); i++) {
+    if (OB_FAIL(das_ctx.add_table_access_targets(table_access_plans.at(i).get_access_meta(), table_targets.at(i)))) {
     }
   }
   if (OB_FAIL(ret)) {
-    das_ctx.clear_all_location_info();
+    das_ctx.clear_table_accesses();
   }
 
   return ret;
@@ -134,7 +133,7 @@ int ObPhyLocationGetter::build_table_locs(ObDASCtx &das_ctx,
 
 
 //this function will rewrite the related tablet map info in DASCtx
-int ObPhyLocationGetter::build_related_tablet_info(const ObTableLocation &table_location,
+int TableAccessTargetBuilder::build_related_tablet_info(const TableAccessPlan &table_access_plan,
                                                    ObExecContext &exec_ctx,
                                                    DASRelatedTabletMap *&related_map)
 {
@@ -145,7 +144,7 @@ int ObPhyLocationGetter::build_related_tablet_info(const ObTableLocation &table_
   ObArray<ObObjectID> first_level_part_ids;
   ObArray<ObTabletID> tablet_ids;
 
-  if (OB_FAIL(table_location.calculate_tablet_ids(exec_ctx,
+  if (OB_FAIL(table_access_plan.calculate_tablet_ids(exec_ctx,
                                                   plan_ctx->get_param_store(),
                                                   tablet_ids,
                                                   partition_ids,
@@ -154,7 +153,7 @@ int ObPhyLocationGetter::build_related_tablet_info(const ObTableLocation &table_
   } else {
     related_map = &exec_ctx.get_das_ctx().get_related_tablet_map();
     LOG_DEBUG("build_related tablet info", K(tablet_ids), K(partition_ids),
-             K(table_location.get_loc_meta()), KPC(related_map));
+             K(table_access_plan.get_access_meta()), KPC(related_map));
   }
   return ret;
 }

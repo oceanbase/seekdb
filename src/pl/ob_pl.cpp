@@ -1012,7 +1012,7 @@ struct ObPLExecTraceIdGuard {
         && OB_NOT_NULL(ObCurTraceId::get_trace_id())
         && !(trace_id == *ObCurTraceId::get_trace_id())) {
       origin_trace_id_.set(*ObCurTraceId::get_trace_id());
-      ObCurTraceId::get_trace_id()->set(trace_id);
+      ObCurTraceId::set(trace_id);
     }
   }
 
@@ -1020,7 +1020,7 @@ struct ObPLExecTraceIdGuard {
   {
     if (origin_trace_id_.is_valid() && OB_NOT_NULL(ObCurTraceId::get_trace_id())) {
       ObCurTraceId::TraceId curr_trace_id = *ObCurTraceId::get_trace_id();
-      ObCurTraceId::get_trace_id()->set(origin_trace_id_);
+      ObCurTraceId::set(origin_trace_id_);
     }
   }
 

@@ -672,8 +672,6 @@
 #define N_TASK_INFO "task_info"
 #define N_SERVER "server"
 #define N_SERVER_ADDR "server_addr"
-#define N_TASK_LOC "task_loc"
-#define N_RANGE_LOC "range_loc"
 #define N_TASK_STATE "task_state"
 #define N_THEN "then"
 #define N_PAD "pad"

@@ -463,9 +463,12 @@ int ObTxReplayExecutor::replay_redo_in_memtable_(ObTxRedoLog &redo, const bool s
   if (OB_FAIL(ret)) {
 
   } else if (OB_FAIL(mmi_ptr_->deserialize(redo.get_replay_mutator_buf(), redo.get_mutator_size(),
-                                           pos))
-             || redo.get_mutator_size() != pos) {
-    TRANS_LOG(WARN, "[Replay Tx] deserialize fail or pos does not match data_len", K(ret));
+                                           pos))) {
+    TRANS_LOG(WARN, "[Replay Tx] deserialize mutator failed", K(ret));
+  } else if (redo.get_mutator_size() != pos) {
+    ret = OB_INVALID_LOG;
+    TRANS_LOG(WARN, "[Replay Tx] mutator size mismatch", K(ret), K(pos),
+              "mutator_size", redo.get_mutator_size());
   } else {
     meta_flag = mmi_ptr_->get_meta().get_flags();
     while (OB_SUCC(ret)) {

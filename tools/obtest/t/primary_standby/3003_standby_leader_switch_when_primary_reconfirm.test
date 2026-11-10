@@ -5,7 +5,7 @@
 # This case is used to verify following modification:
 # 1. leader reports FOLLOWER role during reconfirm.
 # 2. If standby leader switches when primary leader is reconfirming, primary leader will get correct
-#    standby leader by renewing location cache.
+# Exercise query retry after replica/role state changes.
 # 3. primary leader will notify sync_standby_leader registering to self through reject msg.
 #
 

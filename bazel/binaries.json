@@ -1,0 +1,12 @@
+{
+  "version": "9.3.0",
+  "url_template": "https://releases.bazel.build/{version}/release/bazel-{version}-{platform}",
+  "sha256": {
+    "linux-x86_64": "d302d22ed77ee5658b87857249baa579db84300ecebe0a1e9a357b5b20f80eb8",
+    "linux-arm64": "615cc2509819047e4930fe6643c5f01ebd705ccadf75e8f0b85f9b83cc6a6ca0",
+    "darwin-x86_64": "ab0c51f2d51cb86c82b12be4901c7f4aa088afc39a7d71f610ed0f1d54f76de4",
+    "darwin-arm64": "f29ca3f3bf577eb1619aeeed401b64a10901c8da8031aaa4add54a4ad0e99e3a",
+    "windows-x86_64.exe": "64aff24f986df98291f4da2795fd4b3e831c0af3f74bd7aa8eb56c49cb28b1e3",
+    "windows-arm64.exe": "6e3735e844e37e06cdf3a22778aeb451d47a2165e27e52a7af0c98f45030bd37"
+  }
+}

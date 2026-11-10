@@ -84,14 +84,14 @@ struct ObRetryParam
   // for inner connection, force_local_retry is always true
   const bool force_local_retry_;
   // Query is executed using inner connection, such as query in PL, query issued by kernel (such as
-  // schema / location refresh), query triggered by DDL
+  // schema / access refresh), query triggered by DDL
   const bool is_inner_sql_;
   // Query is part of a PL block, which is executed using inner connection
   const bool is_from_pl_;
   const sql::ObSqlCtx &ctx_;
-  sql::ObResultSet &result_; // for refresh location cache
+  sql::ObResultSet &result_; // for record access errors
   sql::ObSQLSessionInfo &session_;
-  const int64_t current_query_local_schema_version_; // Local database schema version before query start and location refresh
+  const int64_t current_query_local_schema_version_; // Local database schema version before query start
   const int64_t current_query_global_schema_version_; // Global database schema version at query start
   const int64_t stmt_retry_times_; // statement retry times, including each retry, local or packet
                                    // note: PL block don't have a stmt_retry_times_ attribute
@@ -259,9 +259,8 @@ private:
   static void trx_set_violation_proc(ObRetryParam &v);
   static void trx_can_not_serialize_proc(ObRetryParam &v);
   static void try_lock_row_conflict_proc(ObRetryParam &v);
-  static void location_error_proc(ObRetryParam &v);
-  static void nonblock_location_error_proc(ObRetryParam &v);
-  static void location_error_nothing_readable_proc(ObRetryParam &v);
+  static void access_error_proc(ObRetryParam &v);
+  static void unreadable_access_error_proc(ObRetryParam &v);
   static void peer_server_status_uncertain_proc(ObRetryParam &v);
   static void schema_error_proc(ObRetryParam &v);
   static void snapshot_discard_proc(ObRetryParam &v);
@@ -276,9 +275,8 @@ private:
   // processors for inner SQL error codes only
   static void inner_schema_error_proc(ObRetryParam &v);
   static void inner_try_lock_row_conflict_proc(ObRetryParam &v);
-  static void inner_table_location_error_proc(ObRetryParam &v);
-  static void inner_location_error_proc(ObRetryParam &v);
-  static void inner_location_error_nothing_readable_proc(ObRetryParam &v);
+  static void inner_access_error_proc(ObRetryParam &v);
+  static void inner_unreadable_access_error_proc(ObRetryParam &v);
   static void inner_peer_server_status_uncertain_proc(ObRetryParam &v);
   void on_close_resultset_fail_(const int err, int &client_ret);
 
@@ -286,7 +284,7 @@ private:
   // map_ is used to fast lookup the error code retry processor
   typedef common::ObTuple<retry_func, retry_func, sql::ObDASRetryCtrl::retry_func> RetryFuncs;
   static common::hash::ObHashMap<int, RetryFuncs, common::hash::NoPthreadDefendMode> map_;
-  int64_t current_query_local_schema_version_; // Local database schema version before query start and location refresh
+  int64_t current_query_local_schema_version_; // Local database schema version before query start
   int64_t current_query_global_schema_version_; // Global database schema version at query start
   int64_t retry_times_;
   ObQueryRetryType retry_type_;

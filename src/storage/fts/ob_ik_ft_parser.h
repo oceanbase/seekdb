@@ -38,9 +38,11 @@ public:
       : allocator_(allocator),
         is_inited_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
+        ik_smart_(true),
         ctx_(nullptr),
         hub_(hub),
-        segmenters_(allocator_),
+        work_alloc_(ObMemAttr("IKParserWork")),
+        segmenters_(work_alloc_),
         cache_main_(allocator),
         cache_quan_(allocator),
         cache_stop_(allocator),
@@ -53,6 +55,12 @@ public:
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const ObFTParserParam &param);
+  // Reuse the comparatively expensive dictionaries and re-create only the
+  // per-document tokenizer state.  Used by the thread-local parser cache in
+  // ObIKFTParserDesc so bulk index builds do not reload / rebuild the IK
+  // dictionaries for every document.
+  int reuse_init(const ObFTParserParam &param);
+  bool can_reuse(const ObFTParserParam &param) const;
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -80,6 +88,7 @@ private:
 
   int init_ctx(const ObFTParserParam &param);
 
+  void destroy_work();
   void reset();
 
   bool should_read_newest_table() const;
@@ -94,8 +103,12 @@ private:
   bool is_inited_;
 
   ObCollationType coll_type_;
+  bool ik_smart_;
   TokenizeContext *ctx_;
   ObFTDictHub *hub_;
+  // Dictionaries live in allocator_ and are kept across reuse(); context and
+  // processors live in work_alloc_, which can be reset for each document.
+  ObArenaAllocator work_alloc_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.

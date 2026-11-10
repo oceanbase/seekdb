@@ -17,7 +17,8 @@
 2. [获取代码，编译运行](build-and-run.md) - 克隆代码、编译和运行seekdb
 3. [在 Android 上构建](android.md) - 交叉编译并在 Android arm64-v8a 设备上运行 seekdb
 4. [在 iOS 上构建](ios.md) - 将 seekdb 交叉编译为供 iOS 真机和模拟器使用的 SeekDB.framework
-5. [Homebrew 优化](homebrew.md) - Homebrew 下载较慢时配置镜像
+5. [构建 WebAssembly 版](webassembly.md) - 用 Emscripten 将 seekdb 编译为 WebAssembly 引擎和浏览器 SQL shell
+6. [Homebrew 优化](homebrew.md) - Homebrew 下载较慢时配置镜像
 
 ### 第二部分：开发规范与实践
 

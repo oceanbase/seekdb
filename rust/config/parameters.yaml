@@ -303,30 +303,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "specifies whether use async log for observer.log, elec.log and rs.log"
 
-- name: syslog_disk_size
-  type: CAP
-  default: "0M"
-  range: "[0M,)"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "the size of disk space used by the syslog files. Range: [0, +∞)"
-
-- name: syslog_compress_func
-  type: STR_WITH_CHECKER
-  default: "none"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "compress function name for syslog files, values: none, zstd_1.3.8"
-  checker: "common::ObConfigSyslogCompressFuncChecker"
-
-- name: syslog_file_uncompressed_count
-  type: INT_WITH_CHECKER
-  default: "0"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "specifies the minimum number of the syslog files that will not be compressed. Each syslog file can occupy at most 256MB disk space. When this value is set to 0, all syslog file may be compressed. Range: [0, +∞) in integer"
-  checker: "common::ObConfigSyslogFileUncompressedCountChecker"
-
 - name: cache_wash_threshold
   type: CAP
   default: "64M"
@@ -383,7 +359,7 @@
 
 - name: _enable_defensive_check
   type: INT_WITH_CHECKER
-  default: "1"
+  default: "0"
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
   description: "specifies whether allow to do some defensive checks when the query is executed, 0 means defensive check is disabled, 1 means normal defensive check is enabled, 2 means more strict defensive check is enabled, such as check partition id validity"
@@ -1037,13 +1013,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "the time during which a RPC request is permitted to execute before it is terminated"
 
-- name: location_cache_refresh_sql_timeout
-  type: TIME
-  default: "1s"
-  range: "[1ms,)"
-  section: LOCATION_CACHE
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "The timeout used for refreshing location cache by SQL. Range: [1ms, +∞)"
 
 - name: bf_cache_miss_count_threshold
   type: INT

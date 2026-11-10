@@ -498,7 +498,7 @@ int ObTabletChecksumOperator::get_estimated_timeout_us(
     estimated_timeout_us = tablet_cnt * 1000L; // 1ms for each tablet
     const int64_t default_timeout_us = 9 * 1000 * 1000L;
     estimated_timeout_us = MAX(estimated_timeout_us, default_timeout_us);
-    estimated_timeout_us = MIN(estimated_timeout_us, 3600 * 1000 * 1000L);
+    estimated_timeout_us = MIN(estimated_timeout_us, 3600LL * 1000 * 1000L);
     estimated_timeout_us = MAX(estimated_timeout_us, config::rpc_timeout());
   }
   return ret;

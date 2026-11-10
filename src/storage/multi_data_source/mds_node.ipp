@@ -94,7 +94,7 @@ int64_t UserMdsNode<K, V>::to_string(char * buf, const int64_t buf_len) const
   if (p_mds_row_ && p_mds_row_->p_mds_unit_) {
     p_mds_table = p_mds_row_->p_mds_unit_->p_mds_table_;
   }
-#ifdef _WIN32
+#if defined(_WIN32) || (defined(__EMSCRIPTEN__) && __SIZEOF_LONG__ == 4)
   databuff_printf(buf, buf_len, pos, "this:0x%llx, ", (unsigned long long)(uintptr_t)this);
 #else
   databuff_printf(buf, buf_len, pos, "this:0x%lx, ", (unsigned long)this);
@@ -114,7 +114,7 @@ int64_t UserMdsNode<K, V>::to_string(char * buf, const int64_t buf_len) const
   databuff_printf(buf, buf_len, pos, "trans_version:%s, ",
       obj_to_string(trans_version_, scn_buf, sizeof(scn_buf)));
   databuff_print_multi_objs(buf, buf_len, pos, "status:", status_, ", ");
-#ifdef _WIN32
+#if defined(_WIN32) || (defined(__EMSCRIPTEN__) && __SIZEOF_LONG__ == 4)
   databuff_printf(buf, buf_len, pos, "ver_next:0x%llx, ",
   (unsigned long long)(uintptr_t)(static_cast<UserMdsNode*>(static_cast<ListNode<UserMdsNode<K, V>>*>(ListNode<UserMdsNode<K, V>>::next_))));
   databuff_printf(buf, buf_len, pos, "linked:0x%llx, ",

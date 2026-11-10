@@ -425,7 +425,6 @@ int ObDataStoreDesc::get_emergency_row_store_type()
           endptr++;
           (void)(std::strtoull(endptr, &endptr, 0));
           if (OB_SUCC(ret)) {
-            oceanbase::share::ObTaskController::get().allow_next_syslog();
             if (get_tablet_id() == emergency_tablet_id) {
               STORAGE_LOG(INFO, "Succ to find specified emergency partition to skip encoding",
                   K(emergency_tablet_id), K(*this));

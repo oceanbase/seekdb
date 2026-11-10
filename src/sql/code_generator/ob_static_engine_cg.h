@@ -478,7 +478,7 @@ private:
 
   int map_value_param_index(const ObInsertStmt *insert_stmt, RowParamMap &row_params_map);
   int add_output_datum_check_flag(ObOpSpec &spec);
-  int generate_calc_part_id_expr(const ObRawExpr &src, const ObDASTableLocMeta *loc_meta, ObExpr *&dst);
+  int generate_calc_part_id_expr(const ObRawExpr &src, const DASTableAccessMeta *access_meta, ObExpr *&dst);
   int check_only_one_unique_key(const ObLogPlan &log_plan, const ObTableSchema* table_schema, bool& only_one_unique_key);
   int check_has_global_unique_index(ObLogPlan *log_plan, const uint64_t table_id, bool &has_unique_index);
   int check_has_global_partiton_index(ObLogPlan *log_plan, const uint64_t table_id, bool &has_global_partition_index);

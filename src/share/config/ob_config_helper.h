@@ -167,28 +167,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigMaxSyslogFileCountChecker);
 };
 
-class ObConfigSyslogCompressFuncChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigSyslogCompressFuncChecker() {}
-  virtual ~ObConfigSyslogCompressFuncChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigSyslogCompressFuncChecker);
-};
-
-class ObConfigSyslogFileUncompressedCountChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigSyslogFileUncompressedCountChecker() {}
-  virtual ~ObConfigSyslogFileUncompressedCountChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigSyslogFileUncompressedCountChecker);
-};
-
 class ObConfigLogLevelChecker
   : public ObConfigChecker
 {

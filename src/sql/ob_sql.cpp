@@ -2767,7 +2767,7 @@ int ObSql::code_generate(
   }
   NG_TRACE(cg_end);
 
-  // set phy table location in task_exec_ctx, query_timeout in exec_context
+  // set tablet accesses in the execution context, query_timeout in exec_context
   if (OB_SUCC(ret)) {
     const ObPlanCachePolicy plan_cache_policy = phy_plan->get_phy_plan_hint().plan_cache_policy_;
     ObPhyPlanHint phy_hint(logical_plan->get_optimizer_context().get_global_hint());
@@ -2796,11 +2796,11 @@ int ObSql::code_generate(
       } else {
         ObDASCtx &das_ctx = DAS_CTX(result.get_exec_context());
         for (int64_t i = 0; OB_SUCC(ret) && i < tbl_part_infos.count(); i++) {
-          ObTableLocation &tl = tbl_part_infos.at(i)->get_table_location();
+          TableAccessPlan &tl = tbl_part_infos.at(i)->get_table_access_plan();
           if (!tl.use_das()) {
-            const ObCandiTableLoc &candi_table_loc = tbl_part_infos.at(i)->get_phy_tbl_location_info();
-            if (OB_FAIL(das_ctx.add_candi_table_loc(tl.get_loc_meta(), candi_table_loc))) {
-            } else if (OB_UNLIKELY(das_ctx.get_table_loc_list().empty())) {
+            const TableAccessTargets &table_targets = tbl_part_infos.at(i)->get_access_targets();
+            if (OB_FAIL(das_ctx.add_table_access_targets(tl.get_access_meta(), table_targets))) {
+            } else if (OB_UNLIKELY(das_ctx.get_table_accesses().empty())) {
               ret = OB_ERR_UNEXPECTED;
             }
           }
@@ -2811,15 +2811,15 @@ int ObSql::code_generate(
     if (OB_SUCC(ret)) {
       bool skip_non_partition_optimized = false;
       for (int64_t i = 0; OB_SUCC(ret) && i < tbl_part_infos.count(); i++) {
-        ObTableLocation &tl = tbl_part_infos.at(i)->get_table_location();
-        if (tl.is_partitioned() || is_virtual_table(tl.get_loc_meta().ref_table_id_)) {
+        TableAccessPlan &tl = tbl_part_infos.at(i)->get_table_access_plan();
+        if (tl.is_partitioned() || is_virtual_table(tl.get_access_meta().ref_table_id_)) {
           skip_non_partition_optimized = true;
           break;
         }
       }
       if (OB_SUCC(ret) && !skip_non_partition_optimized) {
         for (int64_t i = 0; OB_SUCC(ret) && i < tbl_part_infos.count(); i++) {
-          ObTableLocation &tl = tbl_part_infos.at(i)->get_table_location();
+          TableAccessPlan &tl = tbl_part_infos.at(i)->get_table_access_plan();
           if (OB_FAIL(tl.calc_not_partitioned_table_ids(result.get_exec_context()))) {
           } else {
             tl.set_is_non_partition_optimized(true);
@@ -2827,9 +2827,9 @@ int ObSql::code_generate(
         }
       }
     }
-    // set table location for phy_plan
+    // set table access plans for the physical plan
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(phy_plan->set_table_locations(tbl_part_infos, *sql_ctx.schema_guard_))) {
+      if (OB_FAIL(phy_plan->set_table_access_plans(tbl_part_infos, *sql_ctx.schema_guard_))) {
       }
     }
   }
