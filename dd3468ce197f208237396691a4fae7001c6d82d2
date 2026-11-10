@@ -1,0 +1,44 @@
+bazel/seekdb-jemalloc-sys-windows-long-paths.diff
+  s_f87238b17c0588::t_34384d4385db89 1-44
+src/include/seekdb.cpp
+  s_f87238b17c0588::t_aeba7f536a3182 1167-1171
+unittest/include/binding-exit-probe.sh
+  s_f87238b17c0588::t_839f45661dc5a8 61-66
+  s_f87238b17c0588::t_15c0446725e524 12-20,23,25,27-29,39-46
+  s_f87238b17c0588::t_b7563e88d3ce52 88
+  s_f87238b17c0588::t_8d042535c5d088 30-38
+  s_f87238b17c0588::t_5c9c460924a731 21-22,24
+  s_f87238b17c0588::t_beba96a55b7065 102-103
+  s_f87238b17c0588::t_881905713bffb9 101
+  s_f87238b17c0588::t_a00062a0730711 70-72
+  s_f87238b17c0588::t_06c9a042531fce 90-93
+unittest/include/rust/Cargo.toml
+  s_f87238b17c0588::t_e0502804aa1180 9-12
+MODULE.bazel
+  s_f87238b17c0588::t_3d8a0910c77ce7 89-92
+bazel/BUILD.bazel
+  s_f87238b17c0588::t_9d6218ed7839e6 16
+src/observer/BUILD.bazel
+  s_f87238b17c0588::t_f770b4072672d4 635-642
+  s_f87238b17c0588::t_85880998b38236 556
+  s_f87238b17c0588::t_b571ec565ff900 612-615
+  s_f87238b17c0588::t_a1ac9dd3b9a55e 520
+MODULE.bazel.lock
+  s_f87238b17c0588::t_b1251e85619a34 361-382,641,4116,4127-4132,4145-4247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dd3468ce197f208237396691a4fae7001c6d82d2",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}
