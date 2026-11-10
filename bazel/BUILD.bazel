@@ -66,3 +66,15 @@ config_setting(
     flag_values = {":rpm_logging": "true"},
     visibility = ["//visibility:public"],
 )
+
+bool_flag(
+    name = "line_tables_only",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "line_tables_only_enabled",
+    flag_values = {":line_tables_only": "true"},
+    visibility = ["//visibility:public"],
+)

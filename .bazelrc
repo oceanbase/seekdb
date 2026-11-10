@@ -77,3 +77,11 @@ build:remote --strategy=CppCompile=remote
 build:package --//bazel:package_runtime=true
 build:rpm --config=package
 build:rpm --//bazel:rpm_logging=true
+
+# Keep line tables for symbolication and drop full DWARF/CodeView debug info.
+# This composes with the selected compilation mode, including O1 and O2.
+build:line_tables_only --//bazel:line_tables_only=true
+build:line_tables_only --@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=1
+
+# Local development: O1 with line tables.
+build:dev --config=O1 --config=line_tables_only
