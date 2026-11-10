@@ -16,15 +16,15 @@
 
 #define USING_LOG_PREFIX BOOTSTRAP
 
-#if defined(__EMSCRIPTEN__)
-#include "common/ob_timeout_ctx.h"
-#endif
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "common/ob_timeout_ctx.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_share_util.h"
+#include "share/config/ob_server_config.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/ob_local_management_service.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
@@ -670,9 +670,14 @@ int ObBootstrap::check_is_already_bootstrap(bool &is_bootstrap)
 int ObBootstrap::init_global_stat()
 {
   int ret = OB_SUCCESS;
+  // The locking read and writes share an internal SQL budget during bootstrap.
+  ObTimeoutCtx timeout_ctx;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
   if (OB_FAIL(check_inner_stat())) {
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(
+                 timeout_ctx, GCONF.internal_sql_execute_timeout))) {
+    LOG_WARN("failed to set global stat initialization timeout", KR(ret));
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
@@ -689,7 +694,7 @@ int ObBootstrap::init_global_stat()
     }
 
     int temp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCCESS == ret))) {
+    if (trans.is_started() && OB_SUCCESS != (temp_ret = trans.end(OB_SUCCESS == ret))) {
       LOG_ERROR("trans end failed", "commit", OB_SUCCESS == ret, KR(temp_ret));
       ret = (OB_SUCCESS == ret) ? temp_ret : ret;
     }
