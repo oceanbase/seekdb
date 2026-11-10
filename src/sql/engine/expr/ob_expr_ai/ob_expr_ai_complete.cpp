@@ -131,8 +131,18 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
 
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(arg_config) && !arg_config->is_null()) {
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_config, expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), config_str))) {
-      } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
+      if (expr.args_[CONFIG_IDX]->datum_meta_.type_ == ObJsonType) {
+        ObIJsonBase *j_base = nullptr;
+        bool is_null = false;
+        if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, CONFIG_IDX, j_base, is_null))) {
+        } else if (is_null) {
+        } else if (OB_ISNULL(j_base) || j_base->json_type() != ObJsonNodeType::J_OBJECT) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, config must be a json object");
+        } else if (OB_FALSE_IT(config = static_cast<ObJsonObject *>(j_base))) {
+        }
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_config, expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), config_str))) {
+      } else if (!config_str.empty() && OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
       }
     }
 
