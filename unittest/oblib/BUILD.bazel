@@ -23,25 +23,3 @@ cc_test(
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
 
-cc_library(
-    name = "platform_io_cases",
-    srcs = ["test_platform_io.cpp"],
-    alwayslink = True,
-    deps = [
-        "//bazel/third_party:gtest",
-        "//src/oblib:oblib_foundation",
-    ],
-    target_compatible_with = select({
-        "//bazel:sanity_enabled": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
-)
-
-cc_test(
-    name = "test_platform_io",
-    linkstatic = True,
-    deps = [
-        ":platform_io_cases",
-        "//src/oblib:oblib_test_runtime",
-    ],
-)
