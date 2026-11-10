@@ -41,9 +41,7 @@ fn l2_square_f32(a: &[f32], b: &[f32]) -> f64 {
     if a.len() != b.len() {
         return f64::NAN;
     }
-    f32::sqeuclidean(a, b)
-        .map(|square| square as f64)
-        .unwrap_or(f64::NAN)
+    f32::sqeuclidean(a, b).unwrap_or(f64::NAN)
 }
 
 fn l2_square_flt_f32(a: &[f32], b: &[f32]) -> f32 {
