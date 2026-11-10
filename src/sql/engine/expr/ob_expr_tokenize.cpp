@@ -39,6 +39,47 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+// The normalized parser name and the rebuilt parser properties only depend on the
+// parser name and the parser properties passed by the user. TOKENIZE() is normally
+// called with constant arguments (once for every row), so the very same strings are
+// parsed again and again. Keep the result of the last conversion in a thread local
+// buffer so that repeated calls only need to compare the input strings.
+struct ObTokenizeArgCache
+{
+  ObTokenizeArgCache()
+      : name_len_(-1), inner_len_(0), pname_len_(-1), prop_len_(-1), props_json_len_(0)
+  {
+  }
+  char name_[128];
+  int64_t name_len_;
+  char inner_[128];
+  int64_t inner_len_;
+  char pname_[128];
+  int64_t pname_len_;
+  char prop_[256];
+  int64_t prop_len_;
+  char props_json_[1024];
+  int64_t props_json_len_;
+};
+
+thread_local ObTokenizeArgCache g_tokenize_arg_cache;
+
+bool is_same_cached_str(const char *cached,
+                        const int64_t cached_len,
+                        const ObString &input,
+                        const int64_t buf_size)
+{
+  bool same = false;
+  if (OB_LIKELY(input.length() <= buf_size) && cached_len == input.length()) {
+    same = (0 == input.length() || 0 == MEMCMP(cached, input.ptr(), input.length()));
+  }
+  return same;
+}
+
+} // anonymous namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -222,15 +263,29 @@ int ObExprTokenize::construct_ft_parser_inner_name(const ObString &input_str, To
 {
   int ret = OB_SUCCESS;
   storage::ObFTParser parser;
+  ObTokenizeArgCache &cache = g_tokenize_arg_cache;
 
-  char *parser_name_buf = nullptr;
-  if (OB_ISNULL(parser_name_buf
-                = static_cast<char *>(param.allocator_.alloc(storage::OB_FT_PARSER_NAME_LENGTH)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(parser.init(input_str))) {
-  } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, storage::OB_FT_PARSER_NAME_LENGTH))) {
+  if (is_same_cached_str(cache.name_, cache.name_len_, input_str, sizeof(cache.name_))) {
+    param.parser_name_ = ObString(static_cast<int32_t>(cache.inner_len_), cache.inner_);
   } else {
-    param.parser_name_ = ObString::make_string(parser_name_buf);
+    char *parser_name_buf = nullptr;
+    if (OB_ISNULL(parser_name_buf
+                  = static_cast<char *>(param.allocator_.alloc(storage::OB_FT_PARSER_NAME_LENGTH)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(parser.init(input_str))) {
+    } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, storage::OB_FT_PARSER_NAME_LENGTH))) {
+    } else {
+      param.parser_name_ = ObString::make_string(parser_name_buf);
+      if (input_str.length() <= static_cast<int64_t>(sizeof(cache.name_))
+          && param.parser_name_.length() <= static_cast<int64_t>(sizeof(cache.inner_))) {
+        MEMCPY(cache.name_, input_str.ptr(), input_str.length());
+        cache.name_len_ = input_str.length();
+        MEMCPY(cache.inner_, param.parser_name_.ptr(), param.parser_name_.length());
+        cache.inner_len_ = param.parser_name_.length();
+      } else {
+        cache.name_len_ = -1;
+      }
+    }
   }
   return ret;
 }
@@ -376,14 +431,29 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
+  ObTokenizeArgCache &cache = g_tokenize_arg_cache;
 
-  if (OB_FAIL(parser_properties.init())) {
+  if (is_same_cached_str(cache.prop_, cache.prop_len_, properties, sizeof(cache.prop_))
+      && is_same_cached_str(cache.pname_, cache.pname_len_, parser_name_, sizeof(cache.pname_))) {
+    properties_ = ObString(static_cast<int32_t>(cache.props_json_len_), cache.props_json_);
+  } else if (OB_FAIL(parser_properties.init())) {
   } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
   } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+  } else if (properties_.length() <= static_cast<int64_t>(sizeof(cache.props_json_))
+             && properties.length() <= static_cast<int64_t>(sizeof(cache.prop_))
+             && parser_name_.length() <= static_cast<int64_t>(sizeof(cache.pname_))) {
+    MEMCPY(cache.props_json_, properties_.ptr(), properties_.length());
+    cache.props_json_len_ = properties_.length();
+    MEMCPY(cache.prop_, properties.ptr(), properties.length());
+    cache.prop_len_ = properties.length();
+    MEMCPY(cache.pname_, parser_name_.ptr(), parser_name_.length());
+    cache.pname_len_ = parser_name_.length();
+  } else {
+    cache.prop_len_ = -1;
   }
 
   return ret;

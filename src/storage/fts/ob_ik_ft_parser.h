@@ -41,9 +41,7 @@ public:
         ctx_(nullptr),
         hub_(hub),
         segmenters_(allocator_),
-        cache_main_(allocator),
-        cache_quan_(allocator),
-        cache_stop_(allocator),
+        is_shared_dict_(false),
         dict_main_(nullptr),
         dict_quan_(nullptr),
         dict_stop_(nullptr)
@@ -74,8 +72,6 @@ private:
 private:
   int init_dict(const ObFTParserParam &param);
 
-  int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
-
   int init_segmenter(const ObFTParserParam &param);
 
   int init_ctx(const ObFTParserParam &param);
@@ -83,10 +79,6 @@ private:
   void reset();
 
   bool should_read_newest_table() const;
-
-  int build_dict_from_cache(const ObFTDictDesc &desc,
-                            ObFTCacheRangeContainer &container,
-                            ObIFTDict *&dict);
 
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
@@ -99,9 +91,8 @@ private:
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
-  ObFTCacheRangeContainer cache_main_;
-  ObFTCacheRangeContainer cache_quan_;
-  ObFTCacheRangeContainer cache_stop_;
+  // The dicts are shared (and owned) by ObFTDictHub, see ObFTDictHub::get_shared_dict.
+  bool is_shared_dict_;
 
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;

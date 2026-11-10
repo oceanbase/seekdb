@@ -378,26 +378,51 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
   return last_hit.dict_->match_with_hit(single_word, last_hit, hit);
 }
 
+namespace {
+// The ranges are compared with the utf8mb4 binary collation, which orders strings byte by
+// byte, so compare the buffer directly and skip the charset dispatch on the hot path.
+inline int cmp_word_bin(const ObString &lhs, const ObString &rhs)
+{
+  const int64_t cmp_len = MIN(lhs.length(), rhs.length());
+  int cmp_ret = (cmp_len > 0) ? MEMCMP(lhs.ptr(), rhs.ptr(), static_cast<size_t>(cmp_len)) : 0;
+  if (0 == cmp_ret) {
+    cmp_ret = lhs.length() < rhs.length() ? -1 : (lhs.length() > rhs.length() ? 1 : 0);
+  }
+  return cmp_ret;
+}
+} // namespace
+
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
-    }
-  }
-  if (!found) {
+  const int64_t range_cnt = range_dicts_.size();
+  dict = nullptr;
+  if (OB_UNLIKELY(0 >= range_cnt)) {
     // not found, dis match
     ret = OB_ENTRY_NOT_EXIST;
+  } else {
+    // The ranges are built by walking the dictionary keys in ascending order, so their
+    // start words are sorted and the ranges never overlap. Locate the last range whose
+    // start word is not greater than the given word by binary search instead of
+    // scanning all the ranges for every character.
+    int64_t left = 0;
+    int64_t right = range_cnt - 1;
+    int64_t pos = -1;
+    while (left <= right) {
+      const int64_t mid = left + (right - left) / 2;
+      if (cmp_word_bin(range_dicts_[mid].start_.get_word(), single_word) <= 0) {
+        pos = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+    if (OB_UNLIKELY(pos < 0) || cmp_word_bin(range_dicts_[pos].end_.get_word(), single_word) < 0) {
+      // not found, dis match
+      ret = OB_ENTRY_NOT_EXIST;
+    } else {
+      dict = range_dicts_[pos].dict_;
+    }
   }
   return ret;
 }
