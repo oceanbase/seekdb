@@ -47,6 +47,7 @@ MODULES = {
     "uuid-generator": {"bridge": "src/bridge.rs"},
     "math": {"bridge": "src/bridge.rs"},
     "vector-kernels": {"bridge": "src/bridge.rs"},
+    "path-utils": {"bridge": "src/bridge.rs"},
     "in-process": {
         "bridge": "src/bridge.rs",
         "headers": ["include/in_process_server.h"],

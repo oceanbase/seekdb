@@ -33,3 +33,4 @@ http-client = { path = "../http-client", optional = true }
 standby-rpc = { path = "../standby-rpc" }
 math = { path = "../math" }
 vector-kernels = { path = "../vector-kernels" }
+path-utils = { path = "../path-utils" }

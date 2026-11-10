@@ -34,6 +34,7 @@ rust_static_library(
             "//rust/http-client:http_client",
             "//rust/math",
             "//rust/vector-kernels:vector_kernels",
+            "//rust/path-utils:path_utils",
         ],
     }),
     proc_macro_deps = all_crate_deps(proc_macro = True),

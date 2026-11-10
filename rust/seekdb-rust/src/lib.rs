@@ -23,6 +23,7 @@ pub use local as local_storage;
 pub use logger::*;
 pub use mvt;
 pub use number_parser;
+pub use path_utils;
 pub use regex_engine;
 pub use json;
 pub use spatial_covering;

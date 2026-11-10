@@ -20,172 +20,11 @@
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
 #include "lib/utility/ob_platform_io.h"
+#include "rust/path_utils.h"
 
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
-// LOAD DATA SERVER_DISK wildcard expansion. The repository does not depend on
-// the platform glob(3) so that both the path encoding and the wildcard
-// semantics are identical on Linux, macOS and Windows: '*' matches any run of
-// characters and '?' matches exactly one, like glob(3) without flags.
-struct glob_t
-{
-  size_t gl_pathc;
-  char **gl_pathv;
-};
-
-#define GLOB_NOMATCH 3
-#define GLOB_ABORTED 1
-
 using namespace oceanbase::common;
-
-namespace
-{
-
-bool load_data_wildcard_match(const char *pattern, const char *name)
-{
-  const char *star_pattern = NULL;
-  const char *star_name = NULL;
-  while ('\0' != *name) {
-    if ('*' == *pattern) {
-      star_pattern = pattern++;
-      star_name = name;
-    } else if ('?' == *pattern || *pattern == *name) {
-      ++pattern;
-      ++name;
-    } else if (NULL != star_pattern) {
-      pattern = star_pattern + 1;
-      name = ++star_name;
-    } else {
-      return false;
-    }
-  }
-  while ('*' == *pattern) {
-    ++pattern;
-  }
-  return '\0' == *pattern;
-}
-
-// Appends `path` to the result array; returns 0 on success.
-int append_glob_path(glob_t *result, size_t &capacity, const char *path)
-{
-  int ret = 0;
-  if (result->gl_pathc >= capacity) {
-    const size_t new_capacity = (0 == capacity) ? 16 : capacity * 2;
-    char **new_paths = static_cast<char **>(::realloc(result->gl_pathv,
-                                                      new_capacity * sizeof(char *)));
-    if (NULL == new_paths) {
-      ret = -1;
-    } else {
-      result->gl_pathv = new_paths;
-      capacity = new_capacity;
-    }
-  }
-  if (0 == ret) {
-    const size_t path_len = ::strlen(path);
-    char *copy = static_cast<char *>(::malloc(path_len + 1));
-    if (NULL == copy) {
-      ret = -1;
-    } else {
-      ::memcpy(copy, path, path_len + 1);
-      result->gl_pathv[result->gl_pathc++] = copy;
-    }
-  }
-  return ret;
-}
-
-} // namespace
-
-int load_data_glob(const char *pattern, glob_t *result)
-{
-  int ret = GLOB_NOMATCH;
-  if (NULL == pattern || NULL == result) {
-    ret = GLOB_ABORTED;
-  } else {
-    result->gl_pathc = 0;
-    result->gl_pathv = NULL;
-    const char *last_sep = ::strrchr(pattern, '/');
-    const char *last_win_sep = ::strrchr(pattern, '\\');
-    if (NULL != last_win_sep && (NULL == last_sep || last_win_sep > last_sep)) {
-      last_sep = last_win_sep;
-    }
-    char dir[1024] = {0};
-    const char *base = pattern;
-    if (NULL != last_sep) {
-      const size_t dir_len = static_cast<size_t>(last_sep - pattern);
-      if (dir_len >= sizeof(dir)) {
-        ret = GLOB_ABORTED;
-      } else {
-        ::memcpy(dir, pattern, dir_len);
-        dir[dir_len] = '\0';
-        base = last_sep + 1;
-      }
-    } else {
-      ::strcpy(dir, ".");
-    }
-    if (GLOB_ABORTED != ret) {
-      ObPlatformDir *dir_handle = ob_opendir_utf8(dir);
-      if (NULL == dir_handle) {
-        ret = GLOB_NOMATCH;
-      } else {
-        char entry_name[1024] = {0};
-        size_t capacity = 0;
-        int read_ret = 0;
-        while (1 == (read_ret = ob_readdir_utf8(dir_handle, entry_name, sizeof(entry_name)))) {
-          if (0 == ::strcmp(entry_name, ".") || 0 == ::strcmp(entry_name, "..")) {
-            continue;
-          }
-          if ('.' == entry_name[0] && '.' != base[0]) {
-            continue;
-          }
-          if (!load_data_wildcard_match(base, entry_name)) {
-            continue;
-          }
-          const size_t full_path_size = ::strlen(dir) + 1 + ::strlen(entry_name) + 1;
-          char *full_path = static_cast<char *>(::malloc(full_path_size));
-          if (NULL == full_path) {
-            ret = GLOB_ABORTED;
-            break;
-          }
-          const int written = ::snprintf(full_path, full_path_size, "%s/%s", dir, entry_name);
-          if (written <= 0 || static_cast<size_t>(written) >= full_path_size) {
-            ::free(full_path);
-            ret = GLOB_ABORTED;
-            break;
-          }
-          const int append_ret = append_glob_path(result, capacity, full_path);
-          ::free(full_path);
-          if (0 != append_ret) {
-            ret = GLOB_ABORTED;
-            break;
-          }
-        }
-        ob_closedir_utf8(dir_handle);
-        if (read_ret < 0) {
-          ret = GLOB_ABORTED;
-        } else if (0 == result->gl_pathc) {
-          ret = GLOB_NOMATCH;
-        } else {
-          ret = 0;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-void load_data_globfree(glob_t *result)
-{
-  if (NULL != result) {
-    for (size_t i = 0; i < result->gl_pathc; ++i) {
-      ::free(result->gl_pathv[i]);
-    }
-    ::free(result->gl_pathv);
-    result->gl_pathv = NULL;
-    result->gl_pathc = 0;
-  }
-}
 
 #include "share/schema/ob_part_mgr_util.h"
 
@@ -733,21 +572,27 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
           sub_file_name = file_name.trim_space_only();
           if (OB_FAIL(ob_write_string(*allocator_, sub_file_name, cstyle_file_name, true))) {
           } else {
-            glob_t glob_result;
-            int return_value = load_data_glob(cstyle_file_name.ptr(), &glob_result);
-            if (return_value == GLOB_NOMATCH) {
+            const auto *pattern = reinterpret_cast<const uint8_t *>(cstyle_file_name.ptr());
+            auto glob_result = oceanbase::path_utils::expand_glob(
+                rust::Slice<const uint8_t>(pattern, cstyle_file_name.length()));
+            if (glob_result.code == oceanbase::path_utils::Code::Ok
+                && glob_result.paths.size() == 0) {
               ret = OB_FILE_NOT_EXIST;
-            } else if (return_value != 0) {
+            } else if (glob_result.code != oceanbase::path_utils::Code::Ok) {
               ret = OB_ERR_SYS;
               LOG_WARN("fail to glob", K(ObString(cstyle_file_name)));
             } else {
-              for (size_t i = 0; OB_SUCC(ret) && i < glob_result.gl_pathc; ++i) {
+              for (const auto &path : glob_result.paths) {
                 ObString match_file;
-                if (OB_FAIL(ob_write_string(*allocator_, ObString(glob_result.gl_pathv[i]), match_file, true))) {
+                ObString path_string(static_cast<int32_t>(path.bytes.size()),
+                                     reinterpret_cast<const char *>(path.bytes.data()));
+                if (OB_FAIL(ob_write_string(*allocator_, path_string, match_file, true))) {
                 } else if (OB_FAIL(match_array.push_back(match_file))) {
                 }
+                if (OB_FAIL(ret)) {
+                  break;
+                }
               }
-              load_data_globfree(&glob_result);
             }
           }
         } else {
