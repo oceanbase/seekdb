@@ -793,6 +793,14 @@ static void seekdb_library_init() {
         global_thread_stack_size = calculated_size;
     }
 
+    // The engine is always entered through the host runtime's FFI trampoline.
+    // Those trampolines have no unwind information (koffi's ForwardCallGG, for
+    // one), so the return addresses the libgcc unwinder picks up above them are
+    // garbage; it intermittently dereferences unmapped memory while capturing a
+    // diagnostic backtrace and takes the whole host process down with it. Stay
+    // on the bounded frame-pointer walk, which truncates the trace instead.
+    oceanbase::common::g_use_light_backtrace = true;
+
 #ifndef _WIN32
     // Install global SIGSEGV handler to catch segfaults during static destructors
     // This allows graceful handling of OceanBase static destructor issues at program exit
