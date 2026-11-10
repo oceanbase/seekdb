@@ -567,7 +567,9 @@ TEST(DynamicParamCapture, failed_native_store_growth_preserves_existing_bindings
   ASSERT_EQ(OB_SUCCESS, plan.set_parameter_input(0, initial));
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
   const Datum *prefix = materialized_parameter(plan, 0);
-  const int64_t large = 16384; // Several final scalar24 pages, independent of removed wrapper blocks.
+  // Cross the existing page capacity so failure comes from a real page
+  // allocation, independently of the removed NULL type descriptor allocation.
+  const int64_t large = ScalarFrameLayout::slots_per_frame() + 1;
   allocator.reject_ = true;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan.reserve_param_space(large));
   EXPECT_EQ(1, plan.get_parameter_count()); EXPECT_EQ(prefix, materialized_parameter(plan, 0));
