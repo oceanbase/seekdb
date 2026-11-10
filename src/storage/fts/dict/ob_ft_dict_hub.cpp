@@ -73,7 +73,7 @@ int ObFTDictHub::get_shared_dict(const ObFTDictDesc &desc, ObIFTDict *&dict)
     ObFTSharedDict &shared_dict = shared_dicts_[idx];
     if (nullptr == shared_dict.dict_) {
       if (OB_FAIL(build_shared_dict(desc, shared_dict))) {
-        LOG_WARN("failed to build shared fts dict", K(ret), K(desc));
+        LOG_WARN("failed to build shared fts dict", K(ret), K(desc.type_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -101,19 +101,19 @@ int ObFTDictHub::build_shared_dict(const ObFTDictDesc &desc, ObFTSharedDict &sha
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       if (OB_FAIL(build_cache(desc, *container))) {
-        LOG_WARN("failed to build fts dict cache", K(ret), K(desc));
+        LOG_WARN("failed to build fts dict cache", K(ret), K(desc.type_));
       }
     } else {
-      LOG_WARN("failed to load fts dict cache", K(ret), K(desc));
+      LOG_WARN("failed to load fts dict cache", K(ret), K(desc.type_));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(range_dict = OB_NEWx(ObFTRangeDict, &shared_dict_alloc_,
                                             shared_dict_alloc_, container, desc))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate fts range dict", K(ret), K(desc));
+    LOG_WARN("failed to allocate fts range dict", K(ret), K(desc.type_));
   } else if (OB_FAIL(range_dict->init())) {
-    LOG_WARN("failed to init fts range dict", K(ret), K(desc));
+    LOG_WARN("failed to init fts range dict", K(ret), K(desc.type_));
   } else {
     shared_dict.container_ = container;
     shared_dict.dict_ = range_dict;
