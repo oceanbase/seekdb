@@ -56,9 +56,13 @@ int load_ai_column_defs(ObTableModifyOp &op,
 {
   int ret = OB_SUCCESS;
   bool found_meta = false;
+  int64_t ai_result_column_count = 0;
   for (ObTableSchema::const_column_iterator iter = table_schema.column_begin();
        OB_SUCC(ret) && iter != table_schema.column_end(); ++iter) {
     const ObColumnSchemaV2 *column = *iter;
+    if (column->has_column_flag(AI_COLUMN_RESULT_FLAG)) {
+      ++ai_result_column_count;
+    }
     const ObString &comment = column->get_comment_str();
     if (NULL != comment.ptr()
         && comment.length() > static_cast<int32_t>(strlen(AI_COLUMN_META_PREFIX))
@@ -94,11 +98,15 @@ int load_ai_column_defs(ObTableModifyOp &op,
       }
     }
   }
-  if (OB_FAIL(ret) || found_meta) {
+  if (OB_FAIL(ret)) {
+    return ret;
+  } else if (found_meta && defs.count() == ai_result_column_count) {
     return ret;
   }
 
-  // Compatibility for tables created before the schema-encoded metadata.
+  // Compatibility for tables created before the schema-encoded metadata, or
+  // for a table whose AI columns were created by a mix of old and new code.
+  defs.reuse();
   ObSqlString sql;
   ObMySQLProxy *sql_proxy = op.get_exec_ctx().get_sql_proxy();
   if (OB_ISNULL(sql_proxy)) {
