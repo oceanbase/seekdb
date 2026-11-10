@@ -187,6 +187,17 @@ public:
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
                                          ObDomainIndexRow &word_rows);
+  // Reuse a caller-owned map across documents.  Creating a 997-bucket
+  // ObHashMap for every row is visible in bulk FTS index builds, where the
+  // same iterator tokenizes tens of thousands of documents.
+  static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
+                                         storage::ObFTParseHelper *helper,
+                                         const common::ObObjMeta &ft_obj_meta,
+                                         const ObDatum &doc_id_datum,
+                                         const ObString &fulltext,
+                                         const bool is_fts_index_aux,
+                                         storage::ObFTWordMap &word_map,
+                                         ObDomainIndexRow &word_rows);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
       const ObDASDMLBaseCtDef &das_ctdef,
@@ -360,6 +371,7 @@ public:
     ft_doc_word_iter_(nullptr),
     ft_doc_word_allocator_(allocator),
     ft_parse_helper_(),
+    ft_word_map_(),
     is_inited_(false)
   {
     ObDomainDMLIterator::mode_ = mode;
@@ -393,6 +405,7 @@ private:
   data_plane::ObFTDocWordIterator *ft_doc_word_iter_;
   common::ObArenaAllocator ft_doc_word_allocator_;
   storage::ObFTParseHelper ft_parse_helper_;
+  storage::ObFTWordMap ft_word_map_;
   bool is_inited_;
 };
 

@@ -1804,7 +1804,7 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_property(
         if (OB_NOT_SUPPORTED == ret) {
           ObSqlString message;
           message.append_fmt("%.*s with the %s charset is",
-                             static_cast<int>(parser.get_parser_name().len()), parser.get_parser_name().str(), cs->csname);
+                             parser.get_parser_name().len(), parser.get_parser_name().str(), cs->csname);
           LOG_USER_ERROR(OB_NOT_SUPPORTED, message.ptr());
         }
       }
@@ -2927,7 +2927,7 @@ int ObFtsIndexSchemaPrinter::print_fts_parser_info(
                  buf_len,
                  pos,
                  "WITH PARSER %.*s ",
-                 static_cast<int>(parser.get_parser_name().len()),
+                 parser.get_parser_name().len(),
                  parser.get_parser_name().str()))) {
   } else if (strict_compat || table_schema.get_parser_property_str().empty()) {
     // do nothing.
