@@ -1,0 +1,27 @@
+src/oblib/lib/utility/ob_backtrace.cpp
+  s_f87238b17c0588::t_291cf565b710e5 123,126,129,131
+  s_f87238b17c0588::t_0c9f38ebf778ad 43-65,68-98
+  s_f87238b17c0588::t_09ee6cc16ad8ff 145
+  s_f87238b17c0588::t_d04a786b5668f0 66-67
+  s_f87238b17c0588::t_5a14f477f718a1 157
+src/include/seekdb.cpp
+  s_f87238b17c0588::t_87a4dd6f87fa42 796-803
+src/oblib/lib/utility/ob_backtrace.h
+  s_f87238b17c0588::t_7c39a5e8241206 38-46,66-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "97af66c05c27c7fa668b29e4fa24353296c57913",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}
