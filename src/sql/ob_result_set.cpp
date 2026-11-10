@@ -34,6 +34,7 @@
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
+#include "sql/engine/dml/ob_ai_column_meta.h"
 #include "common/mysqlclient/ob_mysql_result.h"
 
 using namespace oceanbase::sql;
@@ -195,36 +196,64 @@ int ObResultSet::check_ai_column_strict_read()
       const ObDatabaseSchema *db_schema = NULL;
       const uint64_t table_id = session.get_ai_column_ref(i).table_id_;
       const uint64_t column_id = session.get_ai_column_ref(i).column_id_;
-      ObSqlString meta_sql;
-      uint64_t state_column_id = OB_INVALID_ID;
+      const ObColumnSchemaV2 *state_column = NULL;
       if (OB_FAIL(guard.get_table_schema(table_id, table_schema))) {
       } else if (NULL == table_schema) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(guard.get_database_schema(table_schema->get_database_id(), db_schema))) {
       } else if (OB_ISNULL(db_schema)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(meta_sql.assign_fmt(
-                   "SELECT state_column_id FROM oceanbase.%s WHERE table_id = %lu AND column_id = %lu",
-                   OB_ALL_AI_COLUMN_TNAME, table_id, column_id))) {
       } else {
-        SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-          ObMySQLResult *result = NULL;
-          if (OB_FAIL(GCTX.sql_proxy_->read(res, meta_sql.ptr()))) {
-          } else if (NULL == (result = res.get_result())) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(result->next())) {
-          } else {
-            int64_t state_id = 0;
-            if (OB_FAIL(result->get_int("state_column_id", state_id))) {
-            } else {
-              state_column_id = static_cast<uint64_t>(state_id);
+        const ObColumnSchemaV2 *result_column = table_schema->get_column_schema(column_id);
+        if (NULL == result_column) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          ObArenaAllocator alloc;
+          const int32_t prefix_len = static_cast<int32_t>(strlen(AI_COLUMN_META_PREFIX));
+          for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
+               OB_SUCC(ret) && iter != table_schema->column_end() && NULL == state_column;
+               ++iter) {
+            const ObString &comment = (*iter)->get_comment_str();
+            ObAiColumnDef def;
+            if (NULL != comment.ptr()
+                && comment.length() > prefix_len
+                && 0 == MEMCMP(comment.ptr(), AI_COLUMN_META_PREFIX, prefix_len)
+                && OB_SUCCESS == decode_ai_column_meta(comment, alloc, def)
+                && 0 == def.column_name_.compare(result_column->get_column_name_str())) {
+              state_column = table_schema->get_column_schema(def.state_column_name_);
             }
           }
         }
+        // Compatibility for tables created before the schema-encoded metadata.
+        if (OB_SUCC(ret) && NULL == state_column) {
+          ObSqlString meta_sql;
+          uint64_t state_column_id = OB_INVALID_ID;
+          if (OB_FAIL(meta_sql.assign_fmt(
+                       "SELECT state_column_id FROM oceanbase.%s WHERE table_id = %lu AND column_id = %lu",
+                       OB_ALL_AI_COLUMN_TNAME, table_id, column_id))) {
+          } else {
+            SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+              ObMySQLResult *result = NULL;
+              if (OB_FAIL(GCTX.sql_proxy_->read(res, meta_sql.ptr()))) {
+              } else if (NULL == (result = res.get_result())) {
+                ret = OB_ERR_UNEXPECTED;
+              } else if (OB_FAIL(result->next())) {
+              } else {
+                int64_t state_id = 0;
+                if (OB_FAIL(result->get_int("state_column_id", state_id))) {
+                } else {
+                  state_column_id = static_cast<uint64_t>(state_id);
+                }
+              }
+            }
+          }
+          if (OB_SUCC(ret)) {
+            state_column = table_schema->get_column_schema(state_column_id);
+          }
+        }
       }
-      const ObColumnSchemaV2 *state_column = NULL;
       if (OB_FAIL(ret)) {
-      } else if (NULL == (state_column = table_schema->get_column_schema(state_column_id))) {
+      } else if (NULL == state_column) {
         ret = OB_ERR_UNEXPECTED;
       } else {
         ObSqlString count_sql;
