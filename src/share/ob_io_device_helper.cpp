@@ -55,6 +55,7 @@
 #include "lib/restore/ob_io_device.h"
 #include "share/ob_device_manager.h"
 #include "share/ob_io_device_helper.h"
+#include "share/block_io_provenance.h"
 #include "share/ob_local_device.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/file/file_directory_utils.h"
@@ -639,15 +640,22 @@ int ObIODeviceLocalFileOp::fallocate(
     }
 #elif defined(_WIN32)
     HANDLE h = (HANDLE)_get_osfhandle(static_cast<int32_t>(fd.second_id_));
+    auto proof = BlockIoProvenance::instance().begin(
+        static_cast<int>(fd.second_id_), BlockIoProvenance::RESIZE, offset, len);
+    DWORD proof_error = ERROR_SUCCESS;
     if (h == INVALID_HANDLE_VALUE) {
       sys_ret = -1;
+      proof_error = ERROR_INVALID_HANDLE;
     } else {
       LARGE_INTEGER li;
       li.QuadPart = offset + len;
+      BlockIoProvenance::os_begin(proof);
       if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
+        proof_error = GetLastError();
         sys_ret = -1;
       }
     }
+    BlockIoProvenance::instance().end(proof, sys_ret == 0, proof_error, 0);
     if (0 != sys_ret) {
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "fail to fallocate", K(ret), K(sys_ret), K(fd), K(offset), K(len), KERRMSG);
@@ -904,18 +912,28 @@ int ObIODeviceLocalFileOp::pread_impl(
 #ifdef _WIN32
     {
       HANDLE h = (HANDLE)_get_osfhandle(static_cast<int>(fd));
+      auto proof = BlockIoProvenance::instance().begin(
+          static_cast<int>(fd), BlockIoProvenance::READ, read_offset, static_cast<DWORD>(read_sz), buffer);
+      DWORD proof_error = ERROR_SUCCESS;
+      DWORD proof_bytes = 0;
+      BOOL proof_ok = FALSE;
       if (h == INVALID_HANDLE_VALUE) {
         sz = -1;
         errno = EBADF;
+        proof_error = ERROR_INVALID_HANDLE;
       } else {
         OVERLAPPED ov = {};
         ov.Offset = (DWORD)((uint64_t)read_offset & 0xFFFFFFFF);
         ov.OffsetHigh = (DWORD)((uint64_t)read_offset >> 32);
         DWORD bytes = 0;
-        if (ReadFile(h, buffer, (DWORD)read_sz, &bytes, &ov)) {
+        BlockIoProvenance::os_begin(proof);
+        proof_ok = ReadFile(h, buffer, (DWORD)read_sz, &bytes, &ov);
+        proof_bytes = bytes;
+        if (proof_ok) {
           sz = (ssize_t)bytes;
         } else {
           DWORD err = GetLastError();
+          proof_error = err;
           if (err == ERROR_HANDLE_EOF) {
             sz = (ssize_t)bytes;
           } else {
@@ -924,6 +942,8 @@ int ObIODeviceLocalFileOp::pread_impl(
           }
         }
       }
+      BlockIoProvenance::instance().end(proof, proof_ok != FALSE, proof_error,
+                                      proof_bytes, buffer);
     }
 #else
     sz = ::pread(static_cast<int32_t>(fd), buffer, read_sz, read_offset);
@@ -966,21 +986,33 @@ int ObIODeviceLocalFileOp::pwrite_impl(
 #ifdef _WIN32
     {
       HANDLE h = (HANDLE)_get_osfhandle(static_cast<int>(fd));
+      auto proof = BlockIoProvenance::instance().begin(
+          static_cast<int>(fd), BlockIoProvenance::WRITE, write_offset, static_cast<DWORD>(write_sz), buffer);
+      DWORD proof_error = ERROR_SUCCESS;
+      DWORD proof_bytes = 0;
+      BOOL proof_ok = FALSE;
       if (h == INVALID_HANDLE_VALUE) {
         sz = -1;
         errno = EBADF;
+        proof_error = ERROR_INVALID_HANDLE;
       } else {
         OVERLAPPED ov = {};
         ov.Offset = (DWORD)((uint64_t)write_offset & 0xFFFFFFFF);
         ov.OffsetHigh = (DWORD)((uint64_t)write_offset >> 32);
         DWORD bytes = 0;
-        if (WriteFile(h, buffer, (DWORD)write_sz, &bytes, &ov)) {
+        BlockIoProvenance::os_begin(proof);
+        proof_ok = WriteFile(h, buffer, (DWORD)write_sz, &bytes, &ov);
+        proof_bytes = bytes;
+        if (proof_ok) {
           sz = (ssize_t)bytes;
         } else {
+          proof_error = GetLastError();
           sz = -1;
           errno = EIO;
         }
       }
+      BlockIoProvenance::instance().end(proof, proof_ok != FALSE, proof_error,
+                                      proof_bytes);
     }
 #else
     sz = ::pwrite(static_cast<int32_t>(fd), buffer, write_sz, write_offset);
@@ -1239,6 +1271,12 @@ int ObIODeviceLocalFileOp::open_block_file(
       SHARE_LOG(ERROR, "open file error", K(ret), "store_path", block_file_attr.store_path_, K(errno), KERRMSG);
     } else {
       const ObIOFd fd(nullptr, ObIOFd::NORMAL_FILE_ID, block_file_attr.block_fd_);
+#ifdef _WIN32
+      if (!BlockIoProvenance::instance().attach(block_file_attr.block_fd_,
+                                              block_file_attr.store_path_, block_size)) {
+        SHARE_LOG(WARN, "block IO provenance unavailable; capture is incomplete");
+      }
+#endif
       if (!is_exist) {
 #ifdef __EMSCRIPTEN__
         // This file was just created with O_EXCL; write the full allocation.

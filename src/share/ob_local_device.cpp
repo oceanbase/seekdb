@@ -29,6 +29,9 @@ struct iocb {
   void *aio_buf;
   size_t aio_nbytes;
   long long aio_offset;
+#ifdef _WIN32
+  uint64_t provenance_key;
+#endif
 };
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
@@ -40,6 +43,7 @@ struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #include "lib/profile/ob_trace_id.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_io_device_helper.h"
+#include "share/block_io_provenance.h"
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #include <unistd.h>
@@ -115,6 +119,9 @@ static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t c
   iocb->aio_nbytes = count;
   iocb->aio_offset = offset;
   iocb->aio_lio_opcode = 1; // IOCB_CMD_PWRITE
+#ifdef _WIN32
+  iocb->provenance_key = 0;
+#endif
 }
 static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
   iocb->aio_fildes = fd;
@@ -122,6 +129,9 @@ static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t co
   iocb->aio_nbytes = count;
   iocb->aio_offset = offset;
   iocb->aio_lio_opcode = 0; // IOCB_CMD_PREAD
+#ifdef _WIN32
+  iocb->provenance_key = 0;
+#endif
 }
 static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
   io_event_queue *q = (io_event_queue *)ctx;
@@ -133,23 +143,36 @@ static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
     ssize_t res = 0;
 #ifdef _WIN32
     HANDLE h = (HANDLE)_get_osfhandle(iocb->aio_fildes);
+    using oceanbase::share::BlockIoProvenance;
+    auto proof = BlockIoProvenance::instance().begin(iocb->aio_fildes,
+        iocb->aio_lio_opcode == 1 ? BlockIoProvenance::WRITE : BlockIoProvenance::READ,
+        iocb->aio_offset, static_cast<DWORD>(iocb->aio_nbytes), iocb->aio_buf, iocb->provenance_key);
+    DWORD proof_error = ERROR_SUCCESS;
+    DWORD proof_bytes = 0;
+    BOOL proof_ok = FALSE;
+    proof.record.detail2 = reinterpret_cast<uintptr_t>(iocb);
     if (h == INVALID_HANDLE_VALUE) {
       res = -EIO;
+      proof_error = ERROR_INVALID_HANDLE;
     } else {
       OVERLAPPED ov = {};
       ov.Offset = (DWORD)((uint64_t)iocb->aio_offset & 0xFFFFFFFF);
       ov.OffsetHigh = (DWORD)((uint64_t)iocb->aio_offset >> 32);
       DWORD bytes = 0;
       BOOL ok;
+      BlockIoProvenance::os_begin(proof);
       if (iocb->aio_lio_opcode == 1) {
         ok = WriteFile(h, iocb->aio_buf, (DWORD)iocb->aio_nbytes, &bytes, &ov);
       } else {
         ok = ReadFile(h, iocb->aio_buf, (DWORD)iocb->aio_nbytes, &bytes, &ov);
       }
+      proof_ok = ok;
+      proof_bytes = bytes;
       if (ok) {
         res = (ssize_t)bytes;
       } else {
         DWORD err = GetLastError();
+        proof_error = err;
         if (err == ERROR_HANDLE_EOF) {
           res = (ssize_t)bytes;
         } else {
@@ -157,6 +180,8 @@ static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
         }
       }
     }
+    BlockIoProvenance::instance().end(proof, proof_ok != FALSE, proof_error,
+        proof_bytes, iocb->aio_lio_opcode == 0 ? iocb->aio_buf : nullptr);
 #else
     if (iocb->aio_lio_opcode == 1) { // PWRITE
       res = pwrite(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
@@ -466,7 +491,12 @@ void ObLocalDevice::destroy()
   block_size_ = 0;
   block_file_size_ = 0;
   if (block_fd_ > 0) {
+#ifdef _WIN32
+    const int close_result = ::close(block_fd_);
+    BlockIoProvenance::instance().detach(block_fd_, close_result);
+#else
     ::close(block_fd_);
+#endif
   }
   block_fd_ = 0;
   is_inited_ = false;
@@ -691,6 +721,11 @@ int ObLocalDevice::alloc_block(const common::ObIODOpts *opts, ObIOFd &block_id)
     if (OB_SUCC(ret)) {
       block_id.first_id_ = 0;
       block_id.second_id_ = block_idx;
+#ifdef _WIN32
+      auto proof = BlockIoProvenance::instance().begin(
+          block_fd_, BlockIoProvenance::ALLOC, block_idx * block_size_, block_size_);
+      BlockIoProvenance::instance().end(proof, true, 0, 0);
+#endif
     }
   }
 
@@ -741,6 +776,11 @@ void ObLocalDevice::free_block(const ObIOFd &block_id)
     free_block_push_pos_ = (free_block_push_pos_ + 1) % total_block_cnt_;
     block_bitmap_[block_idx] = 0;
     ++free_block_cnt_;
+#ifdef _WIN32
+    auto proof = BlockIoProvenance::instance().begin(
+        block_fd_, BlockIoProvenance::FREE, block_idx * block_size_, block_size_);
+    BlockIoProvenance::instance().end(proof, true, 0, 0);
+#endif
   } else {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "unexpected error, bitmap isn't 1", K(ret), K(block_idx), K(block_id));
@@ -839,6 +879,10 @@ int ObLocalDevice::pread(
   } else {
     if (fd.is_block_file()) {
       const int64_t block_file_offset = get_block_file_offset(fd, offset);
+#ifdef _WIN32
+      BlockIoProvenance::LogicalScope proof_scope(BlockIoProvenance::instance().mapping(
+          block_fd_, fd.first_id_, fd.second_id_, fd.third_id_, block_file_offset, size, buf));
+#endif
       if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(block_fd_, buf, size, block_file_offset, read_size))) {
       }
     } else if (fd.is_normal_file()) {
@@ -870,6 +914,10 @@ int ObLocalDevice::pwrite(
   } else {
     if (fd.is_block_file()) {
       const int64_t block_file_offset = get_block_file_offset(fd, offset);
+#ifdef _WIN32
+      BlockIoProvenance::LogicalScope proof_scope(BlockIoProvenance::instance().mapping(
+          block_fd_, fd.first_id_, fd.second_id_, fd.third_id_, block_file_offset, size, buf));
+#endif
       if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_file_offset, write_size))) {
       }
     } else if (fd.is_normal_file()) {
@@ -1013,6 +1061,11 @@ int ObLocalDevice::io_prepare_pwrite(
       ::io_prep_pwrite(&(local_iocb->iocb_), static_cast<int32_t>(fd.second_id_), buf, count, offset);
     }
     local_iocb->iocb_.data = callback;
+#ifdef _WIN32
+    local_iocb->iocb_.provenance_key = fd.is_block_file()
+        ? BlockIoProvenance::instance().mapping(block_fd_, fd.first_id_, fd.second_id_, fd.third_id_,
+            get_block_file_offset(fd, offset), count, buf, reinterpret_cast<uintptr_t>(&local_iocb->iocb_)) : 0;
+#endif
   }
   return ret;
 }
@@ -1049,6 +1102,11 @@ int ObLocalDevice::io_prepare_pread(
       ::io_prep_pread(&(local_iocb->iocb_), static_cast<int32_t>(fd.second_id_), buf, count, offset);
     }
     local_iocb->iocb_.data = callback;
+#ifdef _WIN32
+    local_iocb->iocb_.provenance_key = fd.is_block_file()
+        ? BlockIoProvenance::instance().mapping(block_fd_, fd.first_id_, fd.second_id_, fd.third_id_,
+            get_block_file_offset(fd, offset), count, buf, reinterpret_cast<uintptr_t>(&local_iocb->iocb_)) : 0;
+#endif
   }
 
   return ret;
