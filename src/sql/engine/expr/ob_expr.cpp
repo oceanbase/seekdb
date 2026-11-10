@@ -1462,16 +1462,16 @@ int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datu
   } else {
     Datum captured;
     const Datum *value = &captured;
-    const SqlType *type = plan_ctx->get_native_parameter_type(expr.extra_);
-    if (type == nullptr) {
+    const DatumParameterMetadata *metadata = plan_ctx->get_parameter_metadata(expr.extra_);
+    if (metadata == nullptr) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(plan_ctx->read_native_parameter(expr.extra_, captured))) {
-    } else if (!value->is_null() && type->kind() != expr.datum_meta_.type_) {
+    } else if (!value->is_null() && metadata->value_type().get_type() != expr.datum_meta_.type_) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       Datum candidate = *value;
-      if (is_lob_storage(type->kind())) {
-        ret = ob_adjust_lob_datum(ctx.exec_ctx_, *value, type->legacy_meta(),
+      if (is_lob_storage(metadata->value_type().get_type())) {
+        ret = ob_adjust_lob_datum(ctx.exec_ctx_, *value, metadata->value_type(),
             expr.obj_meta_, ctx.exec_ctx_.get_allocator(), candidate);
       }
       if (OB_SUCC(ret)) { expr_datum = candidate; }

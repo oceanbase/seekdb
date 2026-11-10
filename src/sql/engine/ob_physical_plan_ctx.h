@@ -95,8 +95,11 @@ public:
   static int64_t allocation_bytes(int64_t capacity)
   { return (eval_offset(capacity) + capacity * sizeof(ObEvalInfo) + alignof(uint64_t) - 1)
       / alignof(uint64_t) * alignof(uint64_t); }
-  int assign(int64_t slot, const common::Datum &value, const common::SqlType &type,
+  int assign(int64_t slot, const common::Datum &value, const common::SqlTypeMeta &meta,
              common::ObIAllocator &owner);
+  int assign(int64_t slot, const common::Datum &value, const common::SqlType &type,
+             common::ObIAllocator &owner)
+  { return assign(slot, value, type.legacy_meta(), owner); }
   int read(int64_t slot, common::Datum &value) const;
   bool read_i64(int64_t slot, int64_t &value) const;
   bool read_i64(int64_t slot, int64_t &value, common::Datum::State &state) const;
@@ -660,7 +663,7 @@ private:
   int prepare_runtime_parameter(const DatumParameter &source, common::Datum &value,
       const common::SqlType *&type, int64_t index);
   int publish_runtime_parameter(int64_t index, const common::DatumParameterMetadata &attributes,
-      const common::Datum &value, const common::SqlType &type);
+      const common::Datum &value, const common::SqlType *type);
   int normalize_parameter_metadata(const common::Datum &value, const common::SqlType &type,
       const common::DatumParameterMetadata &source, common::DatumParameterMetadata &output) const;
   int adopt_runtime_parameters(ObPhysicalPlanCtx &staged);
@@ -707,9 +710,9 @@ private:
   };
   common::ObSEArray<common::DatumParameterMetadata, 8> native_parameter_metadata_;
   common::ObSEArray<GroupParameterInput, 2> native_group_inputs_;
-  // Effective full types of native execution slots (including the selected
-  // element of a grouped array input), owned by this context's arena.
-  common::ObSEArray<const common::SqlType *, 16> native_parameter_types_;
+  // Complex declarations and projections for the remaining full-type APIs.
+  // Scalar bindings use native_parameter_metadata_ and leave these entries NULL.
+  mutable common::ObSEArray<const common::SqlType *, 16> native_parameter_types_;
   common::ObSEArray<char *, 1, common::ModulePageAllocator, true> param_frame_ptrs_;
   // Original param cont for input SQL, used in static engine for param frames allocation.
   // Param store can be divided into three continuous part:

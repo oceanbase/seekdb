@@ -652,20 +652,33 @@ TEST_F(NativeExecutionParameters, construction_staging_failure_cannot_mutate_liv
   EXPECT_EQ(2, slot->get_int());
 }
 
-TEST_F(NativeExecutionParameters, frame_or_type_allocation_failure_does_not_publish_a_binding)
+TEST_F(NativeExecutionParameters, frame_allocation_failure_does_not_publish_a_binding)
 {
-  for (int64_t bytes : {ParameterValuePage::allocation_bytes(3), int64_t(sizeof(SqlType))}) {
-    ASSERT_NO_FATAL_FAILURE(load({1, 2, 3}));
-    owner_.fail_size_ = bytes;
-    ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan().init_datum_param_store());
-    EXPECT_EQ(nullptr, materialized_parameter(plan(), 0));
-    EXPECT_EQ(nullptr, plan().get_native_parameter_type(0));
-    EXPECT_EQ(0, plan().get_param_frame_ptrs().count());
-    for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(i + 1, parameter(i).get_int()); }
-    owner_.fail_size_ = 0;
-    ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
-    ASSERT_NO_FATAL_FAILURE(expect_questionmark(1, 2));
-  }
+  ASSERT_NO_FATAL_FAILURE(load({1, 2, 3}));
+  owner_.fail_size_ = ParameterValuePage::allocation_bytes(3);
+  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan().init_datum_param_store());
+  EXPECT_EQ(nullptr, materialized_parameter(plan(), 0));
+  EXPECT_EQ(nullptr, plan().get_native_parameter_type(0));
+  EXPECT_EQ(0, plan().get_param_frame_ptrs().count());
+  for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(i + 1, parameter(i).get_int()); }
+  owner_.fail_size_ = 0;
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  ASSERT_NO_FATAL_FAILURE(expect_questionmark(1, 2));
+}
+
+TEST_F(NativeExecutionParameters, scalar_binding_reads_and_exports_need_no_complete_type_allocation)
+{
+  ASSERT_NO_FATAL_FAILURE(load({INT64_MIN, 0, INT64_MAX}));
+  owner_.fail_size_ = sizeof(SqlType);
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  EXPECT_EQ(0, owner_.calls_for(sizeof(SqlType)));
+  ASSERT_NO_FATAL_FAILURE(expect_point(INT64_MIN, 0, INT64_MAX));
+  ASSERT_NO_FATAL_FAILURE(expect_questionmark(0, INT64_MIN));
+  ASSERT_NO_FATAL_FAILURE(expect_questionmark(2, INT64_MAX));
+  alignas(8) char scratch[64]; ObDatum physical;
+  ASSERT_EQ(OB_SUCCESS, plan().export_runtime_parameter_legacy(2, physical, scratch, sizeof(scratch)));
+  EXPECT_EQ(INT64_MAX, physical.get_int());
+  EXPECT_EQ(0, owner_.calls_for(sizeof(SqlType)));
 }
 
 TEST_F(NativeExecutionParameters, failed_rebuild_revokes_current_owner_but_keeps_old_payload_borrow)
@@ -928,6 +941,29 @@ TEST_F(NativeExecutionParameters, supplied_type_binding_reuses_exact_type_and_ig
   EXPECT_EQ(ObNullType, parameter(0).get_type());
   EXPECT_EQ(ObIntType, parameter(0).get_param_meta().get_type());
   EXPECT_EQ(9, parameter(0).get_precision());
+}
+
+TEST_F(NativeExecutionParameters, supplied_decimal_execution_precision_controls_physical_export)
+{
+  ASSERT_NO_FATAL_FAILURE(load({11}));
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  SqlTypeMeta meta; meta.set_decimal_int(2);
+  SqlType execution_type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(8, 2), execution_type));
+  DatumParameterMetadata attributes = *plan().get_parameter_metadata(0);
+  attributes.accuracy_.set_precision(38);
+  attributes.accuracy_.set_scale(2);
+  Datum coefficient; coefficient.set_int(12345);
+  ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(0, coefficient, execution_type, attributes));
+  EXPECT_EQ(38, plan().get_parameter_metadata(0)->accuracy_.get_precision());
+  int64_t bytes = 0;
+  ASSERT_EQ(OB_SUCCESS, plan().runtime_parameter_legacy_size(0, bytes));
+  EXPECT_EQ(4, bytes);
+  alignas(8) char scratch[64]; ObDatum physical;
+  ASSERT_EQ(OB_SUCCESS, plan().export_runtime_parameter_legacy(0, physical, scratch, sizeof(scratch)));
+  ASSERT_EQ(4, physical.len_);
+  int32_t actual = 0; MEMCPY(&actual, physical.ptr_, sizeof(actual));
+  EXPECT_EQ(12345, actual);
 }
 
 TEST_F(NativeExecutionParameters, supplied_reference_and_type_failures_preserve_the_published_binding)
@@ -2620,10 +2656,11 @@ TEST_F(NativeExecutionParameters, signed_i64_init_keeps_fallbacks_first_error_an
     else if (malformed == 4) { invalid.datum_.set_max(); }
     else { invalid.datum_.set_nop(); }
     ASSERT_EQ(OB_SUCCESS, plan().set_parameter_input(1, invalid));
-    // Type allocation for the first valid parameter still precedes any read
-    // of the later malformed value. The fast branch must not move this error.
+    // Scalar binding allocates no complete type: the malformed payload is the
+    // first error even when complete descriptor allocation is forbidden.
     owner_.fail_size_ = sizeof(SqlType);
-    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan().init_datum_param_store());
+    EXPECT_EQ(OB_INVALID_ARGUMENT, plan().init_datum_param_store());
+    EXPECT_EQ(0, owner_.calls_for(sizeof(SqlType)));
     EXPECT_FALSE(plan().native_parameters_ready());
     EXPECT_EQ(nullptr, materialized_parameter(plan(), 0));
     owner_.fail_size_ = 0;

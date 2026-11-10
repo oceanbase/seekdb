@@ -45,6 +45,11 @@ struct alignas(8) DatumParameterMetadata
   SqlTypeMeta param_meta_;
   ParamFlag flag_;
 
+  const SqlTypeMeta &value_type() const
+  {
+    return type_meta_.is_null() && !param_meta_.is_null() ? param_meta_ : type_meta_;
+  }
+
   TO_STRING_KV(K_(accuracy), K_(type_meta), K_(res_flags), K_(raw_text_pos),
                K_(raw_text_len), K_(param_meta), K_(flag));
 };

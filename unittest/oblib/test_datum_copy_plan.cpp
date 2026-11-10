@@ -373,7 +373,7 @@ TEST(DatumCopyPlan, reference_flags_and_owned_payload_survive_source_overwrite)
   }
 }
 
-TEST(DatumCopyPlan, complete_enum_type_uses_inline_ordinal_but_requires_labels)
+TEST(DatumCopyPlan, enum_ordinal_copy_uses_existing_metadata_without_resolving_labels)
 {
   ObArenaAllocator owner;
   ObString labels[] = {ObString("first"), ObString("second")};
@@ -387,8 +387,8 @@ TEST(DatumCopyPlan, complete_enum_type_uses_inline_ordinal_but_requires_labels)
   EXPECT_EQ(input, value.get_uint());
   CopyPlanAllocator reject; reject.reject = true; Datum clone;
   ASSERT_EQ(OB_SUCCESS, plan.deep_copy(value, clone, reject)); EXPECT_EQ(0, reject.calls);
-  const DatumCopyPlan incomplete(spec.attributes.meta_, ObAccuracy());
-  EXPECT_EQ(OB_NOT_SUPPORTED, incomplete.import_legacy(legacy(&input, sizeof(input)), clone));
+  const DatumCopyPlan compact(spec.attributes);
+  ASSERT_EQ(OB_SUCCESS, compact.import_legacy(legacy(&input, sizeof(input)), clone));
   EXPECT_EQ(input, clone.get_uint());
 }
 
@@ -439,12 +439,18 @@ TEST(DatumCopyPlan, resources_require_dedicated_cloners_and_nondefault_time_requ
   SqlTypeMeta array_meta; array_meta.set_ext(); array_meta.set_extend_type(T_EXT_SQL_ARRAY);
   const DatumCopyPlan array(array_meta, ObAccuracy());
   const int64_t address = 123; Datum result; result.set_int(99);
-  EXPECT_EQ(OB_NOT_SUPPORTED, array.import_legacy(legacy(&address, 8), result)); EXPECT_EQ(99, result.get_int());
+  ASSERT_EQ(OB_SUCCESS, array.import_legacy(legacy(&address, 8), result));
+  EXPECT_EQ(&address, result.get_reference());
+  CopyPlanAllocator reject; reject.reject = true;
+  Datum sentinel; sentinel.set_int(99);
+  EXPECT_EQ(OB_NOT_SUPPORTED, array.deep_copy(result, sentinel, reject));
+  EXPECT_EQ(99, sentinel.get_int()); EXPECT_EQ(0, reject.calls);
+  result.set_int(99);
   SqlTypeMeta ext_meta; ext_meta.set_ext();
   const DatumCopyPlan generic(ext_meta, ObAccuracy());
   char wrapper[DATUM_EXTEND_PAYLOAD_SIZE]; ObDatum extended; extended.ptr_ = wrapper;
   extended.set_extend(123, 1);
-  EXPECT_EQ(OB_NOT_SUPPORTED, generic.import_legacy(extended, result)); EXPECT_EQ(99, result.get_int());
+  EXPECT_EQ(OB_INVALID_ARGUMENT, generic.import_legacy(extended, result)); EXPECT_EQ(99, result.get_int());
   extended.set_extend(ObActionFlag::OP_DEL_ROW, 0);
   ASSERT_EQ(OB_SUCCESS, generic.import_legacy(extended, result));
   EXPECT_EQ(Datum::LegacyExtended, result.reference_flags());

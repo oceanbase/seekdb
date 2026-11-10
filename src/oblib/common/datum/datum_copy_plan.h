@@ -42,6 +42,9 @@ public:
   DatumCopyPlan(const SqlTypeMeta &meta, const ObAccuracy &accuracy)
     : meta_(meta), accuracy_(accuracy), type_(nullptr) {}
 
+  explicit DatumCopyPlan(const ObDataType &type)
+    : DatumCopyPlan(type.meta_, type.accuracy_) {}
+
   // type must remain stable for the lifetime of this prepared plan.
   explicit DatumCopyPlan(const SqlType &type)
     : meta_(type.legacy_meta()), accuracy_(type.accuracy()), type_(&type) {}
@@ -231,10 +234,7 @@ public:
     source.ptr_ = reinterpret_cast<const char *>(coefficient); source.pack_ = bytes;
     Datum candidate;
     int ret = import_legacy(source, candidate);
-    SqlType temporary;
-    const SqlType *type = nullptr;
-    if (ret == OB_SUCCESS) { ret = resolve_type(temporary, type); }
-    if (ret == OB_SUCCESS && type->canonical_representation() == DatumRepresentation::Reference) {
+    if (ret == OB_SUCCESS && canonical_representation() == DatumRepresentation::Reference) {
       if (static_cast<uint32_t>(bytes) > capacity) { ret = OB_BUF_NOT_ENOUGH; }
       else if (bytes > 0 && buffer == nullptr) { ret = OB_INVALID_ARGUMENT; }
       else {
@@ -451,34 +451,55 @@ private:
         : precision <= MAX_PRECISION_DECIMAL_INT_256 ? 32 : 64;
   }
 
-  int resolve_type(SqlType &temporary, const SqlType *&type) const
+  int validate_metadata() const
   {
-    int ret = OB_SUCCESS;
-    if (type_ != nullptr) { type = type_; }
-    else if (OB_FAIL(SqlType::from_legacy(meta_, accuracy_, temporary))) {}
-    else { type = &temporary; }
-    if (OB_SUCC(ret)) {
-      if (type->kind() < ObNullType || (type->kind() >= ObMaxType
-          && type->kind() != ObTimestampLTZType && type->kind() != ObTimestampNanoType)) {
-        ret = OB_NOT_SUPPORTED;
-      } else {
-        SqlTimeSemantics expected = SqlTimeSemantics::Unspecified;
-        switch (type->kind()) {
-          case ObDateType: case ObMySQLDateType: expected = SqlTimeSemantics::Date; break;
-          case ObTimeType: expected = SqlTimeSemantics::TimeOfDay; break;
-          case ObYearType: expected = SqlTimeSemantics::Year; break;
-          case ObDateTimeType: case ObMySQLDateTimeType: expected = SqlTimeSemantics::WallClock; break;
-          case ObTimestampType: expected = SqlTimeSemantics::Instant; break;
-          case ObTimestampLTZType: expected = SqlTimeSemantics::SessionLocal; break;
-          case ObTimestampNanoType: expected = SqlTimeSemantics::WallClock; break;
-          default: break;
-        }
-        if (type->time_semantics() != expected) { ret = OB_NOT_SUPPORTED; }
-      }
+    const SqlValueType kind = meta_.get_type();
+    if (kind < ObNullType || (kind >= ObMaxType
+        && kind != ObTimestampLTZType && kind != ObTimestampNanoType)) {
+      return OB_NOT_SUPPORTED;
     }
-    return ret;
+    if (kind == ObDecimalIntType && accuracy_.get_precision() != PRECISION_UNKNOWN_YET
+        && (accuracy_.get_precision() <= 0
+            || accuracy_.get_precision() > MAX_PRECISION_DECIMAL_INT_512)) {
+      return OB_INVALID_ARGUMENT;
+    }
+    // Complete declarations are still accepted at the remaining complex-type
+    // boundary. Ordinary copies use their existing metadata directly.
+    if (type_ != nullptr) {
+      SqlTimeSemantics expected = SqlTimeSemantics::Unspecified;
+      switch (kind) {
+        case ObDateType: case ObMySQLDateType: expected = SqlTimeSemantics::Date; break;
+        case ObTimeType: expected = SqlTimeSemantics::TimeOfDay; break;
+        case ObYearType: expected = SqlTimeSemantics::Year; break;
+        case ObDateTimeType: case ObMySQLDateTimeType: expected = SqlTimeSemantics::WallClock; break;
+        case ObTimestampType: expected = SqlTimeSemantics::Instant; break;
+        case ObTimestampLTZType: expected = SqlTimeSemantics::SessionLocal; break;
+        case ObTimestampNanoType: expected = SqlTimeSemantics::WallClock; break;
+        default: break;
+      }
+      if (type_->time_semantics() != expected) { return OB_NOT_SUPPORTED; }
+    }
+    return OB_SUCCESS;
   }
 
+public:
+  DatumRepresentation canonical_representation() const
+  {
+    if (type_ != nullptr) { return type_->canonical_representation(); }
+    const SqlValueType kind = meta_.get_type();
+    if (kind == ObNullType) { return DatumRepresentation::NoPayload; }
+    if ((kind >= ObTinyIntType && kind <= ObUDoubleType)
+        || (kind >= ObDateTimeType && kind <= ObYearType)
+        || kind == ObBitType || kind == ObMySQLDateType || kind == ObMySQLDateTimeType
+        || kind == ObEnumType || kind == ObSetType
+        || (kind == ObDecimalIntType && accuracy_.get_precision() > 0
+            && accuracy_.get_precision() <= MAX_PRECISION_DECIMAL_INT_64)) {
+      return DatumRepresentation::Inline64;
+    }
+    return DatumRepresentation::Reference;
+  }
+
+private:
   static int extended_value(const ObDatum &source, int64_t &value)
   {
     if (source.ptr_ == nullptr || (source.len_ != DATUM_EXTEND_PAYLOAD_SIZE
@@ -491,11 +512,11 @@ private:
     return OB_SUCCESS;
   }
 
-  static int validate_reference(const ObDatum &source, const SqlType &type)
+  int validate_reference(const ObDatum &source) const
   {
     if (source.len_ > 0 && source.ptr_ == nullptr) { return OB_INVALID_ARGUMENT; }
-    const SqlValueType kind = type.kind();
-    if (type.legacy_meta().is_ext_sql_array() && !source.is_ext()) {
+    const SqlValueType kind = meta_.get_type();
+    if (meta_.is_ext_sql_array() && !source.is_ext()) {
       if (source.flag_ != ObDatumDesc::NONE || source.len_ != sizeof(int64_t)) { return OB_INVALID_ARGUMENT; }
     } else if (kind == ObExtendType) {
       int64_t value = 0;
@@ -505,8 +526,8 @@ private:
           || value == ObActionFlag::OP_NOP) { return OB_INVALID_ARGUMENT; }
       const uint8_t subtype = source.get_extend_type();
       if (subtype > 0 && subtype <= T_EXT_SQL_ARRAY
-          && subtype != type.legacy_meta().get_extend_type()) {
-        return type.form() == SqlTypeForm::Scalar ? OB_NOT_SUPPORTED : OB_INVALID_ARGUMENT;
+          && subtype != meta_.get_extend_type()) {
+        return OB_INVALID_ARGUMENT;
       }
     } else if (kind == ObDecimalIntType) {
       if (source.flag_ != ObDatumDesc::NONE || !decimal_width(source.len_)) { return OB_INVALID_ARGUMENT; }
@@ -534,7 +555,7 @@ private:
 
   // A larger legacy coefficient is accepted only when all discarded bytes are
   // genuine sign extension. This is normalization, never truncation or a cast.
-  static int inline_decimal(const ObDatum &source, const SqlType &type, int64_t &value)
+  int inline_decimal(const ObDatum &source, int64_t &value) const
   {
     if (source.flag_ != ObDatumDesc::NONE || !decimal_width(source.len_)) { return OB_INVALID_ARGUMENT; }
     value = 0;
@@ -557,29 +578,27 @@ private:
         if (static_cast<uint8_t>(source.ptr_[i]) != extension) { return OB_INVALID_ARGUMENT; }
       }
     }
-    if (coefficient_width(type.precision()) == 4 && (value < INT32_MIN || value > INT32_MAX)) { return OB_INVALID_ARGUMENT; }
+    if (coefficient_width(accuracy_.get_precision()) == 4 && (value < INT32_MIN || value > INT32_MAX)) { return OB_INVALID_ARGUMENT; }
     return OB_SUCCESS;
   }
 
   int import_present(const ObDatum &source, Datum &output) const
   {
-    SqlType temporary;
-    const SqlType *type = nullptr;
-    int ret = resolve_type(temporary, type);
+    int ret = validate_metadata();
     if (ret != OB_SUCCESS) { return ret; }
-    const DatumRepresentation representation = type->canonical_representation();
+    const DatumRepresentation representation = canonical_representation();
     if (representation == DatumRepresentation::NoPayload) { return OB_INVALID_ARGUMENT; }
     if (representation == DatumRepresentation::Reference) {
-      if (OB_FAIL(validate_reference(source, *type))) {}
+      if (OB_FAIL(validate_reference(source))) {}
       else { ret = output.set_reference(source.ptr_, source.len_, reference_flags(source)); }
     } else if (source.flag_ != ObDatumDesc::NONE) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (type->kind() == ObDecimalIntType) {
+    } else if (meta_.get_type() == ObDecimalIntType) {
       int64_t value = 0;
-      ret = inline_decimal(source, *type, value);
+      ret = inline_decimal(source, value);
       if (OB_SUCC(ret)) { output.set_int(value); }
     } else {
-      const SqlValueType kind = type->kind();
+      const SqlValueType kind = meta_.get_type();
       const int64_t expected = kind == ObYearType ? 1 : (kind == ObFloatType || kind == ObUFloatType
           || kind == ObDateType || kind == ObMySQLDateType) ? 4 : 8;
       if (source.len_ != expected) { ret = OB_INVALID_ARGUMENT; }
@@ -653,21 +672,19 @@ private:
       return OB_SUCCESS;
     }
     if (!source.is_present()) { return OB_INVALID_ARGUMENT; }
-    SqlType temporary;
-    const SqlType *type = nullptr;
-    int ret = resolve_type(temporary, type);
+    int ret = validate_metadata();
     if (ret != OB_SUCCESS) { return ret; }
-    const DatumRepresentation representation = type->canonical_representation();
+    const DatumRepresentation representation = canonical_representation();
     if (representation == DatumRepresentation::NoPayload) { return OB_INVALID_ARGUMENT; }
     if (source.is_inline_extended()) {
-      if (representation != DatumRepresentation::Reference || type->kind() != ObExtendType) {
+      if (representation != DatumRepresentation::Reference || meta_.get_type() != ObExtendType) {
         return OB_INVALID_ARGUMENT;
       }
       ret = source.write_inline_extended_payload(scratch, 64);
       if (ret == OB_SUCCESS) {
         output.ptr_ = scratch;
         output.set_ext(source.inline_extended_payload_size());
-        ret = validate_reference(output, *type);
+        ret = validate_reference(output);
       }
       return ret;
     }
@@ -681,20 +698,20 @@ private:
       if (flags == Datum::OutRow) { output.set_outrow(); }
       else if (flags == Datum::HasLobHeader) { output.set_has_lob_header(); }
       else if (flags == Datum::LegacyExtended) { output.flag_ = ObDatumDesc::EXT; }
-      if (OB_FAIL(validate_reference(output, *type))) {}
+      if (OB_FAIL(validate_reference(output))) {}
       else {
         reference = true;
-        if (materialize_coefficient && type->kind() == ObDecimalIntType && type->has_precision()) {
-          ret = materialize_decimal(output, coefficient_width(type->precision()), scratch);
+        if (materialize_coefficient && meta_.get_type() == ObDecimalIntType && (accuracy_.get_precision() != PRECISION_UNKNOWN_YET)) {
+          ret = materialize_decimal(output, coefficient_width(accuracy_.get_precision()), scratch);
         }
       }
       return ret;
     }
     if (source.length() != 0 || source.reference_flags() != Datum::NoReferenceFlags) { return OB_INVALID_ARGUMENT; }
     output.ptr_ = scratch;
-    const SqlValueType kind = type->kind();
+    const SqlValueType kind = meta_.get_type();
     if (kind == ObDecimalIntType) {
-      const int width = coefficient_width(type->precision());
+      const int width = coefficient_width(accuracy_.get_precision());
       const int64_t value = source.get_int();
       if (width == 4) {
         if (value < INT32_MIN || value > INT32_MAX) { return OB_INVALID_ARGUMENT; }

@@ -54,15 +54,6 @@ bool same_parameter_type(const SqlType &left, const SqlType &right)
   return same;
 }
 
-bool is_same_signed_bigint_declaration(
-    const SqlType &type, const SqlTypeMeta &meta, const ObAccuracy &accuracy)
-{
-  const ObDataType &attributes = type.attributes();
-  return type.form() == SqlTypeForm::Scalar && type.kind() == ObIntType
-      && meta.get_type() == ObIntType && attributes.meta_ == meta
-      && attributes.meta_.get_scale() == meta.get_scale()
-      && attributes.accuracy_.get_accuracy() == accuracy.get_accuracy();
-}
 // Physical graph cloning deliberately has no Type ownership. The explicit
 // PlanCtx construction edit domain additionally carries whatever real producer
 // declarations were supplied; absent historical declarations remain absent.
@@ -169,12 +160,11 @@ Datum *ParameterValuePage::find_materialized(int64_t slot) const
   return slot < 0 || slot >= capacity_ || projections_ == nullptr ? nullptr : projections_[slot];
 }
 
-int ParameterValuePage::assign(int64_t slot, const Datum &value, const SqlType &type, ObIAllocator &owner)
+int ParameterValuePage::assign(int64_t slot, const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner)
 {
   if (slot < 0 || slot >= capacity_) { return OB_INVALID_ARGUMENT; }
   const Datum candidate = value;
-  const bool compact = type.kind() == ObIntType
-      && type.canonical_representation() == DatumRepresentation::Inline64;
+  const bool compact = meta.get_type() == ObIntType;
   uint64_t word = 0;
   Datum *generic = nullptr;
   if (candidate.is_present()) {
@@ -331,17 +321,12 @@ int ObPhysicalPlanCtx::reserve_param_space(int64_t param_count)
       while (param_store_.count() > old_count) { param_store_.pop_back(); }
     }
   } else {
-    SqlType null_declaration;
-    SqlTypeMeta null_meta;
-    null_meta.set_null();
     const SqlType *null_type = nullptr;
-    if (OB_FAIL(SqlType::from_legacy(null_meta, ObAccuracy(), null_declaration))) {
-    } else if (OB_FAIL(null_declaration.clone_to(allocator_, null_type))) {
-    } else if (OB_FAIL(native_parameter_metadata_.reserve(param_count))) {
+    if (OB_FAIL(native_parameter_metadata_.reserve(param_count))) {
     } else if (OB_FAIL(native_parameter_types_.reserve(param_count))) {
     } else if (OB_FAIL(reserve_param_frame(param_count))) {
     } else {
-      // All pages, descriptors and the NULL declaration are prepared. Existing
+      // All pages and metadata arrays are prepared. Existing
       // parameter pages never relocate, so compiled Expr frame aliases survive.
       Datum null_value;
       DatumParameterMetadata null_attributes;
@@ -351,7 +336,7 @@ int ObPhysicalPlanCtx::reserve_param_space(int64_t param_count)
         const int type_ret = native_parameter_types_.push_back(null_type);
         OB_ASSERT(meta_ret == OB_SUCCESS && type_ret == OB_SUCCESS);
         UNUSED(meta_ret); UNUSED(type_ret);
-        const int publish_ret = publish_runtime_parameter(index, null_attributes, null_value, *null_type);
+        const int publish_ret = publish_runtime_parameter(index, null_attributes, null_value, null_type);
         OB_ASSERT(publish_ret == OB_SUCCESS);
         UNUSED(publish_ret);
       }
@@ -564,7 +549,7 @@ int ObPhysicalPlanCtx::initialize_runtime_parameters(
     if (OB_SUCC(ret) && OB_FAIL(native_parameter_metadata_.push_back(attributes))) {
     } else if (OB_SUCC(ret) && OB_FAIL(native_parameter_types_.push_back(type))) {
     } else if (OB_SUCC(ret)) {
-      ret = publish_runtime_parameter(i, attributes, value, *type);
+      ret = publish_runtime_parameter(i, attributes, value, type);
     }
   }
   if (OB_SUCC(ret)) {
@@ -598,25 +583,24 @@ int ObPhysicalPlanCtx::prepare_runtime_parameter(const DatumParameter &source,
       && !meta.is_collection_sql_type() && meta.get_type() != ObExtendType
       && meta.get_type() != ObUserDefinedSQLType;
   if (scalar) {
-    const SqlType *previous = index >= 0 && index < native_parameter_types_.count()
-        ? native_parameter_types_.at(index) : nullptr;
-    const SqlType *adjacent = index > 0 && index - 1 < native_parameter_types_.count()
-        ? native_parameter_types_.at(index - 1) : nullptr;
-    if (previous != nullptr && is_same_signed_bigint_declaration(
-        *previous, meta, source.get_accuracy())) {
-      candidate_type = previous;
-    } else if (adjacent != nullptr && is_same_signed_bigint_declaration(
-        *adjacent, meta, source.get_accuracy())) {
-      candidate_type = adjacent;
+    // Scalar declarations already exist in the producer metadata. Bind the
+    // value directly; no complete descriptor is constructed or allocated.
+    const DatumCopyPlan plan(meta, source.get_accuracy());
+    Datum owned;
+    alignas(8) char scratch[64];
+    ObDatum physical;
+    if (source.get_type() == ObIntType && source.datum_.is_present()
+        && source.datum_.length() == 0
+        && source.datum_.reference_flags() == Datum::NoReferenceFlags) {
+      owned.set_int(source.datum_.get_int());
+    } else if (OB_FAIL(source.export_legacy(physical, scratch, sizeof(scratch)))) {
     } else {
-      SqlType resolved;
-      if (OB_FAIL(SqlType::from_legacy(meta, source.get_accuracy(), resolved))) {
-      } else {
-        if (previous != nullptr && same_parameter_type(*previous, resolved)) { candidate_type = previous; }
-        else if (adjacent != nullptr && same_parameter_type(*adjacent, resolved)) { candidate_type = adjacent; }
-        if (candidate_type == nullptr) { ret = resolved.clone_to(allocator_, candidate_type); }
-      }
+      Datum imported;
+      if (OB_FAIL(plan.import_legacy(physical, imported))) {
+      } else { ret = plan.deep_copy(imported, owned, allocator_); }
     }
+    if (OB_SUCC(ret)) { value = owned; type = nullptr; }
+    return ret;
   } else {
     ObArenaAllocator temporary("ParamTypePrep");
     const SqlType *resolved = nullptr;
@@ -714,7 +698,7 @@ int ObPhysicalPlanCtx::normalize_parameter_metadata(const Datum &value, const Sq
 }
 
 int ObPhysicalPlanCtx::publish_runtime_parameter(int64_t index,
-    const DatumParameterMetadata &attributes, const Datum &value, const SqlType &type)
+    const DatumParameterMetadata &attributes, const Datum &value, const SqlType *type)
 {
   if (index < 0 || index >= native_parameter_metadata_.count()
       || index >= native_parameter_types_.count() || index >= param_frame_capacity_) {
@@ -727,9 +711,9 @@ int ObPhysicalPlanCtx::publish_runtime_parameter(int64_t index,
   }
   const DatumParameterMetadata metadata = attributes;
   ParameterValuePage &page = ParameterValuePage::from_handle(param_frame_ptrs_.at(frame));
-  int ret = page.assign(slot, value, type, allocator_);
+  int ret = page.assign(slot, value, type == nullptr ? attributes.value_type() : type->legacy_meta(), allocator_);
   if (OB_SUCC(ret)) {
-    native_parameter_types_.at(index) = &type;
+    native_parameter_types_.at(index) = type;
     native_parameter_metadata_.at(index) = metadata;
   }
   return ret;
@@ -738,8 +722,7 @@ int ObPhysicalPlanCtx::publish_runtime_parameter(int64_t index,
 bool ObPhysicalPlanCtx::has_native_parameter(int64_t index) const
 {
   bool valid = native_parameters_ready_ && index >= 0 && index < native_parameter_metadata_.count()
-      && index < param_frame_capacity_ && index < native_parameter_types_.count()
-      && native_parameter_types_.at(index) != nullptr;
+      && index < param_frame_capacity_ && index < native_parameter_types_.count();
   if (valid) {
     int64_t frame = 0, slot = 0;
     ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
@@ -751,7 +734,39 @@ bool ObPhysicalPlanCtx::has_native_parameter(int64_t index) const
 
 const SqlType *ObPhysicalPlanCtx::get_native_parameter_type(int64_t index) const
 {
-  return has_native_parameter(index) ? native_parameter_types_.at(index) : nullptr;
+  if (!has_native_parameter(index)) { return nullptr; }
+  const SqlType *type = native_parameter_types_.at(index);
+  if (type == nullptr) {
+    // Only consumers of the remaining full-declaration API request this
+    // projection. Ordinary bind/read/export uses producer metadata directly.
+    const DatumParameterMetadata &metadata = native_parameter_metadata_.at(index);
+    const SqlTypeMeta &meta = metadata.value_type();
+    const SqlValueType kind = meta.get_type();
+    const bool collated = (kind >= ObVarcharType && kind <= ObHexStringType)
+        || (kind >= ObTinyTextType && kind <= ObLongTextType)
+        || (kind >= ObEnumType && kind <= ObGeometryType);
+    const ObCharsetType charset = collated ? meta.get_charset_type() : CHARSET_UTF8MB4;
+    const int64_t adjacent[] = {index - 1, index + 1};
+    for (int64_t i : adjacent) {
+      if (type != nullptr || i < 0 || i >= native_parameter_types_.count()) { continue; }
+      const SqlType *candidate = native_parameter_types_.at(i);
+      if (candidate != nullptr && candidate->form() == SqlTypeForm::Scalar) {
+        const ObDataType &attributes = candidate->attributes();
+        if (attributes.meta_ == meta && attributes.meta_.get_scale() == meta.get_scale()
+            && attributes.accuracy_.get_accuracy() == metadata.accuracy_.get_accuracy()
+            && attributes.charset_ == charset
+            && !attributes.is_binary_collation_ && !attributes.is_zero_fill_) {
+          type = candidate;
+        }
+      }
+    }
+    if (type == nullptr && SqlType::from_legacy(
+        metadata.value_type(), metadata.accuracy_, allocator_, type) != OB_SUCCESS) {
+      return nullptr;
+    }
+    native_parameter_types_.at(index) = type;
+  }
+  return type;
 }
 
 const DatumParameterMetadata *ObPhysicalPlanCtx::get_parameter_metadata(int64_t index) const
@@ -789,9 +804,7 @@ bool ObPhysicalPlanCtx::read_native_bigint_parameter(
       || index >= param_frame_capacity_ || index >= native_parameter_types_.count()) {
     return false;
   }
-  const SqlType *type = native_parameter_types_.at(index);
-  if (type == nullptr || type->kind() != ObIntType
-      || type->canonical_representation() != DatumRepresentation::Inline64) {
+  if (native_parameter_metadata_.at(index).value_type().get_type() != ObIntType) {
     return false;
   }
   int64_t frame = 0, slot = 0;
@@ -841,10 +854,13 @@ int ObPhysicalPlanCtx::capture_native_parameter(int64_t index, NativeTypedDatum 
   NativeTypedDatum candidate;
   int ret = read_native_parameter(index, candidate.datum_);
   if (OB_SUCC(ret)) {
-    candidate.type_ = native_parameter_types_.at(index);
-    const DatumParameterMetadata metadata = native_parameter_metadata_.at(index);
-    value = candidate;
-    attributes = metadata;
+    candidate.type_ = get_native_parameter_type(index);
+    if (candidate.type_ == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      const DatumParameterMetadata metadata = native_parameter_metadata_.at(index);
+      value = candidate;
+      attributes = metadata;
+    }
   }
   return ret;
 }
@@ -944,7 +960,13 @@ int ObPhysicalPlanCtx::runtime_parameter_legacy_size(int64_t index, int64_t &byt
 {
   Datum value;
   int ret = read_native_parameter(index, value);
-  if (OB_SUCC(ret)) { ret = DatumCopyPlan(*native_parameter_types_.at(index)).legacy_payload_size(value, bytes); }
+  if (OB_SUCC(ret)) {
+    const SqlType *type = native_parameter_types_.at(index);
+    const DatumParameterMetadata &metadata = native_parameter_metadata_.at(index);
+    const DatumCopyPlan plan = type == nullptr ? DatumCopyPlan(metadata.value_type(), metadata.accuracy_)
+                                               : DatumCopyPlan(*type);
+    ret = plan.legacy_payload_size(value, bytes);
+  }
   return ret;
 }
 
@@ -953,8 +975,13 @@ int ObPhysicalPlanCtx::export_runtime_parameter_legacy(int64_t index, ObDatum &o
 {
   Datum value;
   int ret = read_native_parameter(index, value);
-  if (OB_SUCC(ret)) { ret = DatumCopyPlan(*native_parameter_types_.at(index)).legacy_view(
-      value, out, caller_scratch, capacity); }
+  if (OB_SUCC(ret)) {
+    const SqlType *type = native_parameter_types_.at(index);
+    const DatumParameterMetadata &metadata = native_parameter_metadata_.at(index);
+    const DatumCopyPlan plan = type == nullptr ? DatumCopyPlan(metadata.value_type(), metadata.accuracy_)
+                                               : DatumCopyPlan(*type);
+    ret = plan.legacy_view(value, out, caller_scratch, capacity);
+  }
   return ret;
 }
 
@@ -999,7 +1026,7 @@ int ObPhysicalPlanCtx::set_runtime_parameter(int64_t index, const Datum &source,
     DatumParameterMetadata metadata;
     if (OB_SUCC(ret) && OB_FAIL(normalize_parameter_metadata(owned, *type, source_attributes, metadata))) {
     } else if (OB_SUCC(ret)) {
-      ret = publish_runtime_parameter(index, metadata, owned, *type);
+      ret = publish_runtime_parameter(index, metadata, owned, type);
     }
   }
   return ret;
@@ -1109,7 +1136,7 @@ int ObPhysicalPlanCtx::clone_runtime_parameters_to(ObPhysicalPlanCtx &destinatio
     } else if (OB_FAIL(clone_native_parameter_value(borrowed, destination.allocator_, owned))) {
     } else if (OB_FAIL(staged.native_parameter_metadata_.push_back(metadata))) {
     } else if (OB_FAIL(staged.native_parameter_types_.push_back(owned.type_))) {
-    } else { ret = staged.publish_runtime_parameter(i, metadata, owned.datum_, *owned.type_); }
+    } else { ret = staged.publish_runtime_parameter(i, metadata, owned.datum_, owned.type_); }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < native_group_inputs_.count(); ++i) {
     const GroupParameterInput &input = native_group_inputs_.at(i);
