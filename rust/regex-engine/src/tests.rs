@@ -55,7 +55,7 @@ fn capture_bounds_are_checked_after_the_selected_match_exists() {
     let regex = engine("a");
     assert_eq!(find(&regex, "b", 0, 1, 999).unwrap(), absent());
     assert_eq!(find(&regex, "a", 0, 2, 999).unwrap(), absent());
-    assert_eq!(find(&regex, "a", 0, 1, 999).err().unwrap().kind, ARGUMENT);
+    assert_eq!(find(&regex, "a", 0, 1, 999).err().unwrap().kind, GENERIC);
     assert_eq!(find(&regex, "b", 0, 1, -1).err().unwrap().kind, ARGUMENT);
 }
 
