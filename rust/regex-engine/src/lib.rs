@@ -372,7 +372,9 @@ fn find(regex: &Regex, text: &str, start: i64, occurrence: i64, group: i64) -> R
             // match exists. Preserve absent results for a missing occurrence
             // even when the positive group index would otherwise be invalid.
             if group as u64 >= regex.captures_len() as u64 {
-                return Err(err(ARGUMENT, "invalid capture-group index"));
+                // Preserve SQL error 1139 for an absent positive capture group.
+                // Invalid occurrences and negative group indices remain 1210.
+                return Err(err(GENERIC, "invalid capture-group index"));
             }
             return Ok(match captures.get(group as usize) {
                 Some(found) => {
