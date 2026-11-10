@@ -1,0 +1,41 @@
+# Regression for #1469: shared DDL quotes identifiers without depending on SQL.
+# Build indexes after inserting rows so the DDL column formatter is exercised.
+--disable_warnings
+DROP TABLE IF EXISTS ddl_identifier_enum_set;
+DROP TABLE IF EXISTS ddl_identifier_partitioned;
+--enable_warnings
+
+CREATE TABLE ddl_identifier_enum_set (
+  `id``key` INT PRIMARY KEY,
+  `e``kind` ENUM('a', 'b'),
+  `s``kind` SET('x', 'y'));
+INSERT INTO ddl_identifier_enum_set VALUES
+  (1, 'a', 'x'), (2, 'b', 'y'), (3, NULL, NULL), (4, NULL, NULL);
+# Nullable unique keys also exercise shadow primary-key aliases.
+CREATE UNIQUE INDEX enum_idx ON ddl_identifier_enum_set (`e``kind`);
+CREATE UNIQUE INDEX set_idx ON ddl_identifier_enum_set (`s``kind`);
+SELECT COUNT(DISTINCT INDEX_NAME) AS unique_index_count FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ddl_identifier_enum_set'
+    AND INDEX_NAME IN ('enum_idx', 'set_idx');
+--error 1062
+INSERT INTO ddl_identifier_enum_set VALUES (5, 'a', NULL);
+--error 1062
+INSERT INTO ddl_identifier_enum_set VALUES (5, NULL, 'x');
+SELECT `id``key`, `e``kind`, `s``kind` FROM ddl_identifier_enum_set ORDER BY `id``key`;
+
+# Cover adjacent, leading and trailing backticks, including an ordinary INT key.
+CREATE TABLE ddl_identifier_partitioned (
+  id INT PRIMARY KEY,
+  ```edge````` INT,
+  `plain` INT) PARTITION BY HASH(id) PARTITIONS 2;
+INSERT INTO ddl_identifier_partitioned VALUES (1, 10, 100), (2, 20, 200);
+CREATE INDEX edge_idx ON ddl_identifier_partitioned (```edge`````);
+CREATE INDEX plain_idx ON ddl_identifier_partitioned (`plain`);
+SELECT id, ```edge````` AS edge_value FROM ddl_identifier_partitioned FORCE INDEX (edge_idx)
+  WHERE ```edge````` = 20 ORDER BY id;
+SELECT id, `plain` FROM ddl_identifier_partitioned FORCE INDEX (plain_idx)
+  WHERE `plain` = 100 ORDER BY id;
+SELECT COUNT(*) AS row_count FROM ddl_identifier_partitioned;
+
+DROP TABLE ddl_identifier_enum_set;
+DROP TABLE ddl_identifier_partitioned;
