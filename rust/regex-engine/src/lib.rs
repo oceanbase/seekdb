@@ -225,19 +225,21 @@ fn limits(stack_limit: i64, time_limit: i64) -> Result<(usize, usize)> {
     Ok((compiled, backtracks))
 }
 
-/// Rewrite MySQL/ICU octal escapes that start with `\0`.
+/// Rewrite MySQL/ICU octal escapes `\0ooo`, or reject a bare `\0`.
 ///
 /// A leading zero marks an octal character, not a backreference. fancy-regex
-/// parses `\0` as backreference group 0 and rejects it. The leading `0` is
-/// the octal marker (value 0, so a bare `\0` is NUL) and up to three further
-/// octal digits are consumed. A further digit that would exceed 0xFF is left
-/// in the pattern, so `\0377` is U+00FF and `\0400` is U+0020 followed by `0`.
-/// The result is a `\xHH` literal so metacharacters such as `\050` stay
-/// literals. Escaped backslashes and `\Q...\E` quotes are left unchanged.
-/// Numbered backreferences `\1`..`\9` are not rewritten.
-fn rewrite_icu_octal_escapes(pattern: &str) -> Cow<'_, str> {
+/// parses `\0` as backreference group 0 and rejects it as a generic error
+/// (SQL 1139). ICU requires at least one octal digit after that zero:
+/// `\00` is NUL, `\0377` is U+00FF, and a further digit that would exceed
+/// 0xFF is left in the pattern (`\0400` is U+0020 followed by `0`). A bare
+/// `\0`, including `\08` and `[\0]`, is an invalid escape (SQL 5811), which
+/// is what `no_backslash_func_mysql` records. The result is a `\xHH` literal
+/// so metacharacters such as `\050` stay literals. Escaped backslashes and
+/// `\Q...\E` quotes are left unchanged. Numbered backreferences `\1`..`\9`
+/// are not rewritten.
+fn rewrite_icu_octal_escapes(pattern: &str) -> Result<Cow<'_, str>> {
     if !pattern.contains("\\0") {
-        return Cow::Borrowed(pattern);
+        return Ok(Cow::Borrowed(pattern));
     }
     let chars: Vec<char> = pattern.chars().collect();
     let mut out = String::with_capacity(pattern.len());
@@ -289,6 +291,12 @@ fn rewrite_icu_octal_escapes(pattern: &str) -> Cow<'_, str> {
                         digits += 1;
                         cursor += 1;
                     }
+                    if digits == 0 {
+                        return Err(err(
+                            ESCAPE,
+                            "invalid octal escape \\0 in regular expression",
+                        ));
+                    }
                     out.push_str(&format!("\\x{value:02X}"));
                     index = cursor;
                     continue;
@@ -299,7 +307,7 @@ fn rewrite_icu_octal_escapes(pattern: &str) -> Cow<'_, str> {
         out.push(ch);
         index += 1;
     }
-    Cow::Owned(out)
+    Ok(Cow::Owned(out))
 }
 
 fn validate_capture_conditions(pattern: &str, capture_count: usize) -> Result<()> {
@@ -332,7 +340,7 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
     let (compiled_bytes, backtracks) = limits(stack_limit, time_limit)?;
     // Rewrite before both compile and condition validation so `\0` is not
     // parsed as backreference group 0, and so condition checks see the same text.
-    let pattern = rewrite_icu_octal_escapes(&pattern);
+    let pattern = rewrite_icu_octal_escapes(&pattern)?;
     let mut builder = RegexBuilder::new(&pattern);
     builder
         .case_insensitive(flags & CASE_INSENSITIVE != 0)
