@@ -141,6 +141,9 @@ EXECUTE c1_ids;
 DEALLOCATE PREPARE c1_delta;
 DEALLOCATE PREPARE c1_ids;
 SELECT `key``id` AS id,v FROM `c1_partition_backtick` ORDER BY `key``id`;
+CALL dbms_vector.rebuild_index('idx','c1_partition_backtick','v');
+CALL dbms_vector.rebuild_index('idx','c1_partition_backtick','v',0);
+SELECT `key``id` AS id,v FROM `c1_partition_backtick` ORDER BY `key``id`;
 
 # table_backtick
 USE `seekdb_identifier_quoting`;
