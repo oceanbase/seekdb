@@ -1014,13 +1014,15 @@ cc_library(
         ":_oblib_restore_impl",
         ":_oblib_rpc_impl",
         ":_oblib_vector_impl",
-        "//bazel/third_party:libaio",
         "//bazel/third_party:libcrypto",
         "//bazel/third_party:libssl",
         "//rust:compression",
         "//rust:xml_parser",
         "//rust:json",
     ] + select({
+        "@platforms//os:linux": ["//bazel/third_party:libaio"],
+        "//conditions:default": [],
+    }) + select({
         "@platforms//os:linux": ["//deps/external:jemalloc_library"],
         "@platforms//os:macos": ["//deps/external:jemalloc_library"],
         "@platforms//os:windows": ["//deps/external:jemalloc_library"],

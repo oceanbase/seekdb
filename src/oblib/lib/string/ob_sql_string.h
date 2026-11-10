@@ -57,6 +57,10 @@ public:
   int append(const ObString &str);
   int append_fmt(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
+  // Append a MySQL identifier, doubling embedded backticks. The optional prefix
+  // is part of the same quoted identifier (for example, a shadow-column prefix).
+  int append_quoted_identifier(const ObString &name, const ObString &prefix = ObString());
+
   int assign(const char *str);
   int assign(const char *str, const int64_t len);
   int assign(const ObString &str);
