@@ -1,4 +1,3 @@
-OB-P:g_ohl5moRm6EqaspuOyHVw
 <div align="center">
 
 <picture>
