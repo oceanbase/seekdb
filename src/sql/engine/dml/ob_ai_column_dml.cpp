@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/dml/ob_ai_column_dml.h"
+#include "sql/engine/dml/ob_ai_column_meta.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -54,6 +55,50 @@ int load_ai_column_defs(ObTableModifyOp &op,
                         common::ObIArray<ObAiColumnDef> &defs)
 {
   int ret = OB_SUCCESS;
+  bool found_meta = false;
+  for (ObTableSchema::const_column_iterator iter = table_schema.column_begin();
+       OB_SUCC(ret) && iter != table_schema.column_end(); ++iter) {
+    const ObColumnSchemaV2 *column = *iter;
+    const ObString &comment = column->get_comment_str();
+    if (NULL != comment.ptr()
+        && comment.length() > static_cast<int32_t>(strlen(AI_COLUMN_META_PREFIX))
+        && 0 == MEMCMP(comment.ptr(), AI_COLUMN_META_PREFIX,
+                       static_cast<int32_t>(strlen(AI_COLUMN_META_PREFIX)))) {
+      ObAiColumnDef def;
+      const ObColumnSchemaV2 *result_column = NULL;
+      const ObColumnSchemaV2 *state_column = NULL;
+      const ObColumnSchemaV2 *request_column = NULL;
+      const ObColumnSchemaV2 *spec_column = NULL;
+      if (OB_FAIL(decode_ai_column_meta(comment, alloc, def))) {
+      } else if (NULL == (result_column =
+                            table_schema.get_column_schema(def.column_name_))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (NULL == (state_column =
+                            table_schema.get_column_schema(def.state_column_name_))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (NULL == (request_column =
+                            table_schema.get_column_schema(def.request_column_name_))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (NULL == (spec_column =
+                            table_schema.get_column_schema(def.result_spec_column_name_))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        def.result_column_id_ = result_column->get_column_id();
+        def.state_column_id_ = state_column->get_column_id();
+        def.request_column_id_ = request_column->get_column_id();
+        def.result_spec_column_id_ = spec_column->get_column_id();
+        if (OB_FAIL(defs.push_back(def))) {
+        } else {
+          found_meta = true;
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret) || found_meta) {
+    return ret;
+  }
+
+  // Compatibility for tables created before the schema-encoded metadata.
   ObSqlString sql;
   ObMySQLProxy *sql_proxy = op.get_exec_ctx().get_sql_proxy();
   if (OB_ISNULL(sql_proxy)) {

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "config_bridge.h"
 #include "ob_ddl_resolver.h"
+#include "sql/engine/dml/ob_ai_column_meta.h"
 #include "data_plane/blocksstable/ob_index_block_util.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -2492,7 +2493,19 @@ int ObDDLResolver::resolve_ai_column_definition(ObColumnSchemaV2 &column,
           hidden.set_accuracy(ObAccuracy(11, 0));
           ObObj pending_default;
           pending_default.set_int(1);
+          ObAiColumnDef meta_def;
+          meta_def.column_name_ = column.get_column_name_str();
+          meta_def.state_column_name_ = state_name;
+          meta_def.request_column_name_ = request_name;
+          meta_def.result_spec_column_name_ = spec_name;
+          meta_def.max_retries_ = max_retries;
+          meta_def.result_type_ = result_type;
+          meta_def.dep_column_names_ = dep_names;
+          meta_def.normalized_expr_ = exec_expr;
+          ObSqlString meta;
           if (OB_FAIL(hidden.set_cur_default_value(pending_default, false))) {
+          } else if (OB_FAIL(encode_ai_column_meta(meta_def, meta))) {
+          } else if (OB_FAIL(hidden.set_comment(meta.string()))) {
           }
         } else {
           hidden.set_data_type(ObVarcharType);
