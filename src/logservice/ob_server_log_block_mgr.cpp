@@ -215,7 +215,7 @@ int ObServerLogBlockMgr::create_block_at(const FileDesc &dest_dir_fd,
   // make sure the meta info of both directory has been flushed.
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fsync_until_success_(dest_dir_fd))) {
-    if (-1 == ::unlinkat(dest_dir_fd, dest_block_path, 0)) {
+    if (-1 == common::ob_unlinkat_utf8(dest_dir_fd, dest_block_path, false)) {
       CLOG_LOG(ERROR, "remove log block after directory fsync failed", K(ret),
                K(dest_dir_fd), K(dest_block_path), K(errno));
     }

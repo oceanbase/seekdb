@@ -1009,6 +1009,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
+name = "math"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "libm",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1554,6 +1568,7 @@ dependencies = [
  "json",
  "local",
  "logger",
+ "math",
  "mvt",
  "number-parser",
  "regex-engine",
@@ -1561,6 +1576,7 @@ dependencies = [
  "sql-nio",
  "standby-rpc",
  "uuid-generator",
+ "vector-kernels",
  "xml-parser",
 ]
 
@@ -1637,6 +1653,15 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
+name = "simsimd"
+version = "6.5.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4fb3bc3cdce07a7d7d4caa4c54f8aa967f6be41690482b54b24100a2253fa70"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "slab"
@@ -2223,6 +2248,14 @@ dependencies = [
  "sval_json",
  "sval_ref",
  "sval_serde",
+]
+
+[[package]]
+name = "vector-kernels"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "simsimd",
 ]
 
 [[package]]

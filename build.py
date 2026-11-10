@@ -185,7 +185,7 @@ def _normalize_cxxbridge_lockfile_paths(root: Path, output_base: Path) -> None:
         return
     repository = "+cxxbridge_repository+cxxbridge_source"
     local_prefix = ("FILE:@@//%s/external/%s/" % (output_directory, repository)).encode()
-    canonical_prefix = ("FILE:@@%s/" % repository).encode()
+    canonical_prefix = ("FILE:@@%s//" % repository).encode()
     lockfile = root / "MODULE.bazel.lock"
     contents = lockfile.read_bytes()
     normalized = contents.replace(local_prefix, canonical_prefix)
