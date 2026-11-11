@@ -1081,6 +1081,10 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             tmp_str.assign_ptr(const_cast<char *>(option_node->children_[0]->str_value_),
                                static_cast<int32_t>(option_node->children_[0]->str_len_));
             compress_method_ = tmp_str.trim();
+            // Older SeekDB releases emit this name in SHOW CREATE TABLE.
+            if (0 == compress_method_.case_compare("zstd_1.3.8")) {
+              compress_method_ = ObString::make_string("zstd");
+            }
           }
           bool is_find = false;
           const char *find_compress_name = NULL;
