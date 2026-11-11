@@ -148,6 +148,18 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     return [executable] + sorted(libraries.iterdir())
 
 
+def windows_runtime(binary):
+    imports = subprocess.check_output(["dumpbin", "/nologo", "/dependents", str(binary)], text=True)
+    libraries = {name.lower() for name in re.findall(r"^\s+([^\s]+\.dll)\s*$", imports,
+                                                    re.MULTILINE | re.IGNORECASE)}
+    if any(re.fullmatch(r"(?:vcruntime|msvcp)\d+(?:_\d+)*d(?:_\w+)?\.dll|ucrtbased\.dll", name)
+           for name in libraries):
+        raise ValueError("Windows binary distributions require release /MD CRT imports: %s" % binary)
+    if not any(name == "ucrtbase.dll" or name.startswith("api-ms-win-crt-") for name in libraries):
+        raise ValueError("Windows binary distributions require /MD dynamic CRT imports: %s" % binary)
+    return "MD"
+
+
 def prepare(prefix, original, layout, directories, extra_libraries, glibc):
     arch = architecture(prefix / "bin" / ("seekdb.exe" if layout == "windows" else "seekdb"), layout)
     host_layout = {"Linux": "linux", "Darwin": "macos", "Windows": "windows"}.get(platform.system())
@@ -175,6 +187,7 @@ def prepare(prefix, original, layout, directories, extra_libraries, glibc):
             versions.extend(target)
         metadata["minimum_os"] = max(versions, key=version_tuple)
     else:
+        metadata["msvc_runtime"] = windows_runtime(prefix / "bin/seekdb.exe")
         for dll in (prefix / "bin").glob("*.dll"):
             if architecture(dll, layout) != arch:
                 raise ValueError("runtime DLL architecture mismatch: %s" % dll)
@@ -194,6 +207,8 @@ def write(prefix, output, version, release, source_commit, metadata):
     checksums["manifest.json"] = digest(prefix / "manifest.json")
     (prefix / "SHA256SUMS").write_text("".join("%s  %s\n" % (value, name) for name, value in sorted(checksums.items())))
     abi = "-glibc" + metadata["glibc"] if metadata["os"] == "linux" else ""
+    if metadata["os"] == "windows":
+        abi = "-" + metadata["msvc_runtime"].lower()
     system = metadata["os"] + (metadata["minimum_os"] if metadata["os"] == "macos" else "")
     name = "seekdb-binary-%s-%s-%s-%s%s-%s-sdb%s" % (
         version, release, system, metadata["arch"], abi, built_at.strftime("%Y%m%dT%H%M%SZ"), source_commit[:12])
@@ -294,6 +309,8 @@ def load(source, destination, version):
     if metadata["os"] == "linux" and (not isinstance(metadata.get("glibc"), str) or
                                         not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", metadata["glibc"])):
         raise ValueError("binary package requires a numeric glibc baseline")
+    if metadata["os"] == "windows" and metadata.get("msvc_runtime") != "MD":
+        raise ValueError("Windows binary packages require msvc_runtime=MD")
     files = manifest.get("files")
     if not isinstance(files, dict):
         raise ValueError("binary package requires a file manifest")
