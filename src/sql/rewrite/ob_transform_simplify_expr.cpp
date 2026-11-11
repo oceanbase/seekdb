@@ -15,8 +15,10 @@
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
+#include <cmath>
 #include "sql/rewrite/ob_transform_simplify_expr.h"
 #include "sql/rewrite/ob_transform_utils.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
@@ -49,6 +51,67 @@ int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
     }
   }
   return ret;
+}
+
+// Helpers for removing conjuncts implied by a tighter conjunct on the same column,
+// e.g. `age < 10 and age < 20 and age < 655` -> `age < 10` (see issue #1534).
+
+// Returns true when the two constants can be compared without changing comparison semantics.
+// Requiring an identical meta type (type + collation + scale) keeps implicit-cast predicates such
+// as `int_col < 10` vs `int_col < 10.5` out of the rewrite.
+bool has_comparable_const_meta(const ObObj &left, const ObObj &right)
+{
+  return left.get_meta() == right.get_meta() && left.get_scale() == right.get_scale();
+}
+
+// NaN is not ordered with anything, so a predicate against a NaN constant can never be implied
+// by, nor imply, another predicate. Ordering such constants through ObObj::compare would be
+// meaningless, so they are excluded from the rule.
+bool is_nan_const(const ObObj &obj)
+{
+  bool is_nan = false;
+  if (obj.is_float()) {
+    float value = 0;
+    is_nan = (OB_SUCCESS == obj.get_float(value)) && std::isnan(value);
+  } else if (obj.is_double()) {
+    double value = 0;
+    is_nan = (OB_SUCCESS == obj.get_double(value)) && std::isnan(value);
+  }
+  return is_nan;
+}
+
+// Compares two constants that already passed has_comparable_const_meta().
+int compare_const_value(const ObObj &left, const ObObj &right, int &cmp)
+{
+  int ret = OB_SUCCESS;
+  cmp = 0;
+  if (left.is_string_type() && right.is_string_type()) {
+    ret = left.compare(right, left.get_collation_type(), cmp);
+  } else {
+    ret = left.compare(right, cmp);
+  }
+  return ret;
+}
+
+// Maps a comparison to the equivalent one when its operands are swapped: `c1 < col` is
+// `col > c1`, `c1 <= col` is `col >= c1`, and so on.
+ObItemType reverse_range_cmp_op(ObItemType op)
+{
+  ObItemType reversed = T_INVALID;
+  switch (op) {
+    case T_OP_EQ: reversed = T_OP_EQ; break;
+    case T_OP_LT: reversed = T_OP_GT; break;
+    case T_OP_LE: reversed = T_OP_GE; break;
+    case T_OP_GT: reversed = T_OP_LT; break;
+    case T_OP_GE: reversed = T_OP_LE; break;
+    default: reversed = T_INVALID; break;
+  }
+  return reversed;
+}
+
+bool is_range_cmp_op(ObItemType op)
+{
+  return T_OP_EQ == op || T_OP_LT == op || T_OP_LE == op || T_OP_GT == op || T_OP_GE == op;
 }
 
 }
@@ -2263,6 +2326,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   trans_happened = false;
   bool push_not_happend = false;
   bool remove_duplicate_happend = false;
+  bool remove_subsumed_happend = false;
   bool pull_similar_happend = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2272,9 +2336,11 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   } else if (OB_FAIL(remove_duplicate_exprs(stmt->get_query_ctx(),
                                             conditions,
                                             remove_duplicate_happend))) {
+  } else if (OB_FAIL(remove_subsumed_range_predicates(conditions, remove_subsumed_happend))) {
   } else if (OB_FAIL(pull_similar_expr(stmt, conditions, pull_similar_happend))) {
   } else {
-    trans_happened =  push_not_happend | remove_duplicate_happend | pull_similar_happend;
+    trans_happened =  push_not_happend | remove_duplicate_happend |
+                      remove_subsumed_happend | pull_similar_happend;
     if (trans_happened) {
       for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
         if (OB_ISNULL(conditions.at(i))) {
@@ -2284,6 +2350,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
       }
       OPT_TRACE("   push_not_happend:", push_not_happend);
       OPT_TRACE("   remove_duplicate_happend:", remove_duplicate_happend);
+      OPT_TRACE("   remove_subsumed_range_happened:", remove_subsumed_happend);
       OPT_TRACE("   pull_similar_happend:", pull_similar_happend);
     }
   }
@@ -2715,6 +2782,289 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
         } else if (!cmp_ctx.equal_pairs_.empty()) {
           cmp_ctx.equal_pairs_.reset();
         }
+      }
+    }
+  }
+  return ret;
+}
+
+/**
+ * Tries to interpret `expr` as a "column <cmp> constant" predicate and extracts it into
+ * `range_pred`. The predicate is normalized so that the column is always the left-hand side,
+ * i.e. `10 > age` is stored as `age < 10`.
+ *
+ * Only plain references to one column compared against a static scalar constant are accepted.
+ * Anything else (dynamic params, NULL / row / subquery constants, non-column left-hand sides,
+ * non-comparison operators) leaves `range_pred` invalid and is simply skipped by the caller.
+ */
+int ObTransformSimplifyExpr::extract_range_cmp_predicate(ObRawExpr *expr,
+                                                         int64_t pos,
+                                                         RangeCmpPredicate &range_pred)
+{
+  int ret = OB_SUCCESS;
+  range_pred.reset();
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!is_range_cmp_op(expr->get_expr_type()) || 2 != expr->get_param_count()) {
+    // not a supported comparison, ignore
+  } else {
+    ObRawExpr *left_expr = expr->get_param_expr(0);
+    ObRawExpr *right_expr = expr->get_param_expr(1);
+    if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!left_expr->is_static_scalar_const_expr() && !right_expr->is_static_scalar_const_expr()) {
+      // both sides are non-constant, e.g. `c1 < c2`, ignore
+    } else if (left_expr->is_static_scalar_const_expr() && right_expr->is_static_scalar_const_expr()) {
+      // constant-only predicate is handled by other rules, ignore
+    } else {
+      bool is_reversed = left_expr->is_static_scalar_const_expr();
+      ObRawExpr *column_expr = is_reversed ? right_expr : left_expr;
+      ObRawExpr *const_expr = is_reversed ? left_expr : right_expr;
+      ObItemType op = is_reversed ? reverse_range_cmp_op(expr->get_expr_type()) : expr->get_expr_type();
+      ObObj const_value;
+      bool calc_happened = false;
+      if (!column_expr->is_column_ref_expr()) {
+        // only bare column references, not arbitrary expressions over columns
+      } else if (OB_FAIL(ObTransformUtils::calc_const_expr_result(const_expr,
+                                                                  ctx_,
+                                                                  const_value,
+                                                                  calc_happened))) {
+        LOG_WARN("failed to calculate const expr result", K(ret), KPC(const_expr));
+      } else if (!calc_happened || const_value.is_null() || const_value.is_ext()) {
+        // unresolved or NULL constant, comparison with NULL is never true, leave it to other rules
+      } else {
+        range_pred.expr_ = expr;
+        range_pred.column_expr_ = column_expr;
+        range_pred.op_ = op;
+        range_pred.const_value_ = const_value;
+        range_pred.pos_ = pos;
+      }
+    }
+  }
+  return ret;
+}
+
+/**
+ * Decides whether `strong` implies `weak`. Both predicates are known to reference the same column
+ * expression and to have comparable constant meta types. `cmp` is the ordering of the two
+ * constants, so `strong` keeps every value that satisfies `weak` exactly when the table below
+ * says so. Transitivity holds, which is why a single O(n^2) pass is enough.
+ */
+int ObTransformSimplifyExpr::check_range_cmp_implies(const RangeCmpPredicate &strong,
+                                                     const RangeCmpPredicate &weak,
+                                                     bool &implied) const
+{
+  int ret = OB_SUCCESS;
+  int cmp = 0;
+  implied = false;
+  if (OB_UNLIKELY(!strong.is_valid() || !weak.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (is_nan_const(strong.const_value_) || is_nan_const(weak.const_value_)) {
+    // NaN is unordered, so no implication can be derived
+  } else if (OB_FAIL(compare_const_value(strong.const_value_, weak.const_value_, cmp))) {
+    LOG_WARN("failed to compare const value", K(ret), K(strong.op_), K(strong.const_value_),
+             K(weak.op_), K(weak.const_value_));
+  } else if (T_OP_EQ == strong.op_) {
+    // column = c1 keeps exactly one value, so it implies any predicate c1 satisfies
+    switch (weak.op_) {
+      case T_OP_EQ: implied = (0 == cmp); break;
+      case T_OP_LT: implied = (cmp < 0); break;
+      case T_OP_LE: implied = (cmp <= 0); break;
+      case T_OP_GT: implied = (cmp > 0); break;
+      case T_OP_GE: implied = (cmp >= 0); break;
+      default: implied = false; break;
+    }
+  } else if (T_OP_LT == strong.op_) {
+    // column < c1 implies column < c2 and column <= c2 when c1 <= c2
+    switch (weak.op_) {
+      case T_OP_LT: implied = (cmp <= 0); break;
+      case T_OP_LE: implied = (cmp <= 0); break;
+      default: implied = false; break;
+    }
+  } else if (T_OP_LE == strong.op_) {
+    // column <= c1 only implies column < c2 when c1 < c2, since c1 itself is allowed
+    switch (weak.op_) {
+      case T_OP_LT: implied = (cmp < 0); break;
+      case T_OP_LE: implied = (cmp <= 0); break;
+      default: implied = false; break;
+    }
+  } else if (T_OP_GT == strong.op_) {
+    switch (weak.op_) {
+      case T_OP_GT: implied = (cmp >= 0); break;
+      case T_OP_GE: implied = (cmp >= 0); break;
+      default: implied = false; break;
+    }
+  } else if (T_OP_GE == strong.op_) {
+    switch (weak.op_) {
+      case T_OP_GT: implied = (cmp > 0); break;
+      case T_OP_GE: implied = (cmp >= 0); break;
+      default: implied = false; break;
+    }
+  }
+  return ret;
+}
+
+/**
+ * Removes conjuncts of `exprs` that are implied by a tighter conjunct on the same column.
+ *
+ * For example `age < 10 and age < 20 and age < 655` is reduced to `age < 10`.
+ * Only same-column, same-constant-type comparisons are considered, and predicates are only ever
+ * removed, never added, so the rule always terminates and cannot oscillate with other rewrites.
+ */
+int ObTransformSimplifyExpr::do_remove_subsumed_range_predicates(common::ObIArray<ObRawExpr*> &exprs,
+                                                                 bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  const int64_t expr_count = exprs.count();
+  if (expr_count < 2 || expr_count > MAX_SUBSUMED_RANGE_PREDICATE_CNT) {
+    // too few to have a redundant pair, or too many to scan in O(n^2)
+  } else {
+    ObSEArray<RangeCmpPredicate, 8> range_preds;
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr_count; ++i) {
+      RangeCmpPredicate range_pred;
+      if (OB_FAIL(extract_range_cmp_predicate(exprs.at(i), i, range_pred))) {
+      } else if (range_pred.is_valid() && OB_FAIL(range_preds.push_back(range_pred))) {
+      }
+    }
+    if (OB_SUCC(ret) && range_preds.count() >= 2) {
+      // Positions of the conjuncts that are implied by a tighter one. `pos_` is only unique within
+      // the extracted list, so the positions are tracked separately from `range_preds`.
+      ObSEArray<int64_t, 8> removed_pos;
+      for (int64_t i = 0; OB_SUCC(ret) && i < range_preds.count(); ++i) {
+        for (int64_t j = i + 1; OB_SUCC(ret) && j < range_preds.count(); ++j) {
+          const RangeCmpPredicate &left = range_preds.at(i);
+          const RangeCmpPredicate &right = range_preds.at(j);
+          bool left_implies_right = false;
+          bool right_implies_left = false;
+          bool already_removed = false;
+          for (int64_t k = 0; !already_removed && k < removed_pos.count(); ++k) {
+            already_removed = (removed_pos.at(k) == left.pos_);
+          }
+          if (already_removed) {
+            // `left` is already implied by another conjunct, so it must not eliminate anything
+          } else if (!left.column_expr_->same_as(*right.column_expr_)) {
+            // different columns, no implication
+          } else if (!has_comparable_const_meta(left.const_value_, right.const_value_)) {
+            // different constant types, comparing them could change cast semantics
+          } else if (OB_FAIL(check_range_cmp_implies(left, right, left_implies_right))
+                     || OB_FAIL(check_range_cmp_implies(right, left, right_implies_left))) {
+          } else if (left_implies_right) {
+            // `left` is at least as tight as `right`, drop `right`. When the two are mutually
+            // implying (e.g. the same bound written twice with different syntax) `right` is still
+            // the one dropped, so both can never be removed and the conjunction stays non-empty.
+            if (OB_FAIL(removed_pos.push_back(right.pos_))) {
+            }
+          } else if (right_implies_left) {
+            if (OB_FAIL(removed_pos.push_back(left.pos_))) {
+            }
+          } else {
+            // neither side implies the other, e.g. `age < 10 and age > 5`
+          }
+        }
+      }
+      if (OB_SUCC(ret) && removed_pos.count() > 0) {
+        ObSEArray<ObRawExpr *, 8> new_exprs;
+        for (int64_t i = 0; OB_SUCC(ret) && i < expr_count; ++i) {
+          bool is_removed = false;
+          for (int64_t k = 0; !is_removed && k < removed_pos.count(); ++k) {
+            is_removed = (removed_pos.at(k) == i);
+          }
+          if (is_removed) {
+            // this conjunct is implied by a tighter one, drop it
+          } else if (OB_FAIL(new_exprs.push_back(exprs.at(i)))) {
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(exprs.assign(new_exprs))) {
+        } else {
+          trans_happened = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+/**
+ * Applies do_remove_subsumed_range_predicates() to every AND node reachable from `expr`.
+ * Top level conditions are usually flat already, but a conjunct rebuilt by another rule may still
+ * be an AND tree, so the parameters are visited recursively. Dropping an implied conjunct is
+ * value preserving for the whole expression tree: it only ever weakens an AND node to an
+ * equivalent AND node, so it is safe under OR / NOT parents as well.
+ */
+int ObTransformSimplifyExpr::recursive_remove_subsumed_range_predicates(ObRawExpr *&expr,
+                                                                        bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_stack_overflow = false;
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
+  } else if (is_stack_overflow) {
+    ret = OB_SIZE_OVERFLOW;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      ObRawExpr *&child_expr = expr->get_param_expr(i);
+      if (OB_ISNULL(child_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(SMART_CALL(recursive_remove_subsumed_range_predicates(child_expr,
+                                                                               trans_happened)))) {
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (T_OP_AND == expr->get_expr_type()) {
+      ObSEArray<ObRawExpr *, 8> and_exprs;
+      bool removed = false;
+      if (OB_FAIL(and_exprs.assign(static_cast<ObOpRawExpr *>(expr)->get_param_exprs()))) {
+      } else if (OB_FAIL(do_remove_subsumed_range_predicates(and_exprs, removed))) {
+      } else if (!removed) {
+      } else if (1 == and_exprs.count()) {
+        ObRawExpr *new_expr = NULL;
+        if (OB_FAIL(ObRawExprUtils::try_create_bool_expr(and_exprs.at(0),
+                                                         new_expr,
+                                                         *ctx_->expr_factory_))) {
+        } else if (OB_ISNULL(new_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          expr = new_expr;
+          trans_happened = true;
+        }
+      } else if (OB_FAIL(static_cast<ObOpRawExpr *>(expr)->set_param_exprs(and_exprs))) {
+      } else {
+        trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::remove_subsumed_range_predicates(common::ObIArray<ObRawExpr*> &conditions,
+                                                              bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      bool is_happened = false;
+      if (OB_ISNULL(conditions.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(recursive_remove_subsumed_range_predicates(conditions.at(i), is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+      }
+    }
+    if (OB_SUCC(ret) && conditions.count() >= 2) {
+      bool is_happened = false;
+      if (OB_FAIL(do_remove_subsumed_range_predicates(conditions, is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+      }
+    }
+    if (OB_SUCC(ret) && trans_happened) {
+      if (OB_FAIL(ObTransformUtils::flatten_and_or_xor(ctx_, conditions))) {
       }
     }
   }

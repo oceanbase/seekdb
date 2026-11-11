@@ -58,6 +58,7 @@ psmall_test=[
 'expr.expr_locate',
 'expr.expr_nseq',
 'expr.expr_position',
+'expr.expr_redundant_range',
 'expr.func_equal',
 'expr.func_length',
 'expr.func_regexp',
