@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 import platform
 import re
 import shutil
+import stat
 import struct
 import subprocess
 import tarfile
@@ -203,6 +204,7 @@ def write(prefix, output, version, release, source_commit, metadata):
         def owner(info):
             info.uid = info.gid = 0
             info.uname = info.gname = "root"
+            info.mode &= 0o777
             return info
         with tarfile.open(target, "w:gz") as archive:
             for path in sorted(prefix.iterdir()):
@@ -219,12 +221,31 @@ def relative(name):
     return path
 
 
+def entries(root):
+    pending = [root]
+    result = []
+    while pending:
+        path = pending.pop()
+        mode = path.lstat()
+        if stat.S_ISLNK(mode.st_mode) or getattr(mode, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0):
+            raise ValueError("links are not allowed in binary packages: %s" % path)
+        if not (stat.S_ISDIR(mode.st_mode) or stat.S_ISREG(mode.st_mode)):
+            raise ValueError("unsupported binary package file type: %s" % path)
+        if stat.S_IMODE(mode.st_mode) & 0o7000:
+            raise ValueError("special permission bits are not allowed in binary packages: %s" % path)
+        result.append((path, mode))
+        if stat.S_ISDIR(mode.st_mode):
+            pending.extend(path.iterdir())
+    return result
+
+
 def load(source, destination, version):
     if source.is_dir():
         root = source
     else:
         root = destination
         root.mkdir()
+        root.chmod(root.stat().st_mode & 0o777)
         seen = set()
         if zipfile.is_zipfile(source):
             with zipfile.ZipFile(source) as archive:
@@ -250,11 +271,13 @@ def load(source, destination, version):
                     target = root / path
                     if member.isdir():
                         target.mkdir(parents=True, exist_ok=True)
+                        target.chmod(0o755)
                     else:
                         target.parent.mkdir(parents=True, exist_ok=True)
                         with archive.extractfile(member) as stream, target.open("wb") as output:
                             shutil.copyfileobj(stream, output)
                         target.chmod(member.mode & 0o777)
+    payload = entries(root)
     manifest = json.loads((root / "manifest.json").read_text())
     if not isinstance(manifest, dict) or manifest.get("format") != "seekdb-binary" or manifest.get("schema_version") != 1:
         raise ValueError("unsupported binary package manifest")
@@ -284,7 +307,7 @@ def load(source, destination, version):
             raise ValueError("missing or linked binary package file: %s" % name)
         if path.stat().st_size != info["size"] or digest(path) != info["sha256"]:
             raise ValueError("binary package checksum mismatch: %s" % name)
-    actual = {path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()}
+    actual = {path.relative_to(root).as_posix() for path, mode in payload if stat.S_ISREG(mode.st_mode)}
     if actual != set(files) | {"manifest.json", "SHA256SUMS"}:
         raise ValueError("binary package contains unlisted or missing files")
     executable = root / "bin" / ("seekdb.exe" if manifest["platform"]["os"] == "windows" else "seekdb")
