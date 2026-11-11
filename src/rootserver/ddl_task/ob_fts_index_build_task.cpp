@@ -119,8 +119,10 @@ int ObFtsIndexBuildTask::init(
   } else if (OB_FAIL(deep_copy_index_arg(allocator_,
                                          create_index_arg,
                                          create_index_arg_))) {
-  } else if (OB_FAIL(ObFtsIndexBuilderUtil::decide_parallelism(create_index_arg.index_type_, parallelism, parallelism_))) {
   } else {
+    // FTS index build is sort/IO heavy; use at least four workers instead of
+    // collapsing the whole build to one thread.
+    parallelism_ = MAX(parallelism, 8L);
     LOG_INFO("create_index_arg.index_type_x", K(create_index_arg.index_type_), K(create_index_arg.index_key_));
 
     if (INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL == create_index_arg.index_type_ ||
