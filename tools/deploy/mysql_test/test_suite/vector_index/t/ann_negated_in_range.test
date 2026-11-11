@@ -1,0 +1,70 @@
+# Regression for #1513: ANN queries retain NOT(IN) when rewrites are disabled.
+--disable_warnings
+DROP TABLE IF EXISTS ann_negated_in_range;
+--enable_warnings
+CREATE TABLE ann_negated_in_range (
+  id INT PRIMARY KEY, age INT, v VECTOR(3), KEY idx_age(age)
+) ORGANIZATION HEAP;
+INSERT INTO ann_negated_in_range VALUES
+  (1,1,'[1,0,0]'),(2,2,'[2,0,0]'),(3,3,'[3,0,0]'),
+  (4,4,'[4,0,0]'),(5,5,'[5,0,0]'),(6,6,'[6,0,0]'),
+  (7,NULL,'[7,0,0]'),(8,8,'[8,0,0]');
+CREATE VECTOR INDEX vi ON ann_negated_in_range(v)
+  WITH (distance=l2,type=hnsw,lib=vsag);
+ANALYZE TABLE ann_negated_in_range;
+
+--echo # Both spellings must extract the same bounded scalar-index ranges.
+--replace_regex /[ ]*[0-9]+[ ]*\|[ ]*[0-9]+[ ]*\|/ROWS|COST|/ /[ ]+\n/\n/ /[ ]+$//
+EXPLAIN SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE NOT(age IN (3,4,5))
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+--replace_regex /[ ]*[0-9]+[ ]*\|[ ]*[0-9]+[ ]*\|/ROWS|COST|/ /[ ]+\n/\n/ /[ ]+$//
+EXPLAIN SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE age NOT IN (3,4,5)
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+
+--echo # The same extraction works outside ANN when NO_REWRITE preserves NOT(IN).
+--replace_regex /[ ]*[0-9]+[ ]*\|[ ]*[0-9]+[ ]*\|/ROWS|COST|/ /[ ]+\n/\n/ /[ ]+$//
+EXPLAIN SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE NOT(age IN (3,4,5));
+
+--echo # The existing range-extraction opt_param must still disable this path.
+--replace_regex /[ ]*[0-9]+[ ]*\|[ ]*[0-9]+[ ]*\|/ROWS|COST|/ /[ ]+\n/\n/ /[ ]+$//
+EXPLAIN SELECT /*+ INDEX(t idx_age) OPT_PARAM('enable_range_extraction_for_not_in' 'false') */
+  id FROM ann_negated_in_range t WHERE NOT(age IN (3,4,5))
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+
+--echo # Exact and approximate results agree; NULL column values are excluded.
+SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE NOT(age IN (3,4,5)) ORDER BY id;
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE NOT(age IN (3,4,5))
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE NOT(age IN (5,3,3,4))
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+
+--echo # A NULL in the list must not admit rows through the complement ranges.
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE NOT(age IN (3,NULL,5))
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE age NOT IN (3,NULL,5)
+  ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+
+--echo # Reusing a prepared plan must use the current list values and NULLs.
+PREPARE p FROM 'SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id
+  FROM ann_negated_in_range t WHERE NOT(age IN (?,?,?))
+  ORDER BY l2_distance(v,"[0,0,0]") APPROXIMATE LIMIT 5';
+SET @a=3,@b=4,@c=5;
+EXECUTE p USING @a,@b,@c;
+SET @a=1,@b=2,@c=6;
+EXECUTE p USING @a,@b,@c;
+SET @a=3,@b=NULL,@c=5;
+EXECUTE p USING @a,@b,@c;
+DEALLOCATE PREPARE p;
+
+--echo # Row-valued membership remains a residual predicate.
+SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id FROM ann_negated_in_range t
+  WHERE NOT((age,id) IN ((1,1),(2,2))) ORDER BY id;
+DROP TABLE ann_negated_in_range;

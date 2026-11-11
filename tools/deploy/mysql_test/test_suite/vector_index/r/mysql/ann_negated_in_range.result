@@ -1,0 +1,140 @@
+DROP TABLE IF EXISTS ann_negated_in_range;
+CREATE TABLE ann_negated_in_range (
+id INT PRIMARY KEY, age INT, v VECTOR(3), KEY idx_age(age)
+) ORGANIZATION HEAP;
+INSERT INTO ann_negated_in_range VALUES
+(1,1,'[1,0,0]'),(2,2,'[2,0,0]'),(3,3,'[3,0,0]'),
+(4,4,'[4,0,0]'),(5,5,'[5,0,0]'),(6,6,'[6,0,0]'),
+(7,NULL,'[7,0,0]'),(8,8,'[8,0,0]');
+CREATE VECTOR INDEX vi ON ann_negated_in_range(v)
+WITH (distance=l2,type=hnsw,lib=vsag);
+ANALYZE TABLE ann_negated_in_range;
+# Both spellings must extract the same bounded scalar-index ranges.
+EXPLAIN SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE NOT(age IN (3,4,5))
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+Query Plan
+=============================================================================
+|ID|OPERATOR                               |NAME      |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t(idx_age)|ROWS|COST|
+=============================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]), filter([(T_OP_NOT, t.age IN (3, 4, 5))]), rowset=16
+      access([t.__pk_increment], [t.age], [t.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([t.age], [t.__pk_increment]), range(NULL,MAX ; 3,MIN), (3,MAX ; 4,MIN), (4,MAX ; 5,MIN), (5,MAX ; MAX,MAX)
+EXPLAIN SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE age NOT IN (3,4,5)
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+Query Plan
+=============================================================================
+|ID|OPERATOR                               |NAME      |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t(idx_age)|ROWS|COST|
+=============================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]), filter([(T_OP_NOT_IN, t.age, (3, 4, 5))]), rowset=16
+      access([t.__pk_increment], [t.age], [t.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([t.age], [t.__pk_increment]), range(NULL,MAX ; 3,MIN), (3,MAX ; 4,MIN), (4,MAX ; 5,MIN), (5,MAX ; MAX,MAX)
+# The same extraction works outside ANN when NO_REWRITE preserves NOT(IN).
+EXPLAIN SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE NOT(age IN (3,4,5));
+Query Plan
+======================================================
+|ID|OPERATOR        |NAME      |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------
+|0 |TABLE RANGE SCAN|t(idx_age)|ROWS|COST|
+======================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]), filter(nil), rowset=16
+      access([t.__pk_increment], [t.id]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t.age], [t.__pk_increment]), range(NULL,MAX ; 3,MIN), (3,MAX ; 4,MIN), (4,MAX ; 5,MIN), (5,MAX ; MAX,MAX),
+      range_cond([(T_OP_NOT, t.age IN (3, 4, 5))])
+# The existing range-extraction opt_param must still disable this path.
+EXPLAIN SELECT /*+ INDEX(t idx_age) OPT_PARAM('enable_range_extraction_for_not_in' 'false') */
+id FROM ann_negated_in_range t WHERE NOT(age IN (3,4,5))
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+Query Plan
+=============================================================================
+|ID|OPERATOR                               |NAME      |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t(idx_age)|ROWS|COST|
+=============================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.id]), filter([(T_OP_NOT, t.age IN (3, 4, 5))]), rowset=16
+      access([t.__pk_increment], [t.age], [t.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([t.age], [t.__pk_increment]), range(MIN,MIN ; MAX,MAX)always true
+# Exact and approximate results agree; NULL column values are excluded.
+SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE NOT(age IN (3,4,5)) ORDER BY id;
+id
+1
+2
+6
+8
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE NOT(age IN (3,4,5))
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+id
+1
+2
+6
+8
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE NOT(age IN (5,3,3,4))
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+id
+1
+2
+6
+8
+# A NULL in the list must not admit rows through the complement ranges.
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE NOT(age IN (3,NULL,5))
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+id
+SELECT /*+ INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE age NOT IN (3,NULL,5)
+ORDER BY l2_distance(v,'[0,0,0]') APPROXIMATE LIMIT 5;
+id
+# Reusing a prepared plan must use the current list values and NULLs.
+PREPARE p FROM 'SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id
+  FROM ann_negated_in_range t WHERE NOT(age IN (?,?,?))
+  ORDER BY l2_distance(v,"[0,0,0]") APPROXIMATE LIMIT 5';
+SET @a=3,@b=4,@c=5;
+EXECUTE p USING @a,@b,@c;
+id
+1
+2
+6
+8
+SET @a=1,@b=2,@c=6;
+EXECUTE p USING @a,@b,@c;
+id
+3
+4
+5
+8
+SET @a=3,@b=NULL,@c=5;
+EXECUTE p USING @a,@b,@c;
+id
+DEALLOCATE PREPARE p;
+# Row-valued membership remains a residual predicate.
+SELECT /*+ NO_REWRITE INDEX(t idx_age) */ id FROM ann_negated_in_range t
+WHERE NOT((age,id) IN ((1,1),(2,2))) ORDER BY id;
+id
+3
+4
+5
+6
+7
+8
+DROP TABLE ann_negated_in_range;
