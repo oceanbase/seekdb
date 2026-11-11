@@ -19,6 +19,7 @@
 #include "rust/config.h"
 #include "lib/compress/ob_compress_util.h"
 #include "ob_ddl_common.h"
+#include "share/ddl/ob_ddl_quoted_identifier.h"
 #include <inttypes.h>
 #include "common/datum/ob_datum.h"  // ObDatum complete type(previously hidden behind the block_sstable_struct include chain)
 #include "share/ob_rpc_struct.h"
@@ -549,30 +550,39 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
-  // append comma
-  if (with_comma) {
-    if (OB_FAIL(sql_string.append_fmt(", "))) {
-    }
-  }
-  // append original column name
-  if (OB_SUCC(ret) && with_origin_name) {
-    if (column_name_info.is_enum_set_need_cast_) {
-      // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+  const ObString &column_name = column_name_info.column_name_;
+  if (OB_UNLIKELY(column_name.length() < 0 || (column_name.length() > 0 && OB_ISNULL(column_name.ptr())))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const auto append_identifier = [&](const bool shadow) -> int {
+      return append_ddl_quoted_identifier(column_name.ptr(),
+                                          static_cast<size_t>(column_name.length()),
+                                          shadow,
+                                          [&](const char *text, size_t length) -> int {
+                                            return sql_string.append(text, static_cast<int64_t>(length));
+                                          });
+    };
+    if (with_comma) {
+      if (OB_FAIL(sql_string.append_fmt(", "))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
     }
-  }
-  // append AS
-  if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt(" AS "))) {
+    // Preserve the ENUM/SET ordinal cast around the quoted identifier.
+    if (OB_SUCC(ret) && with_origin_name) {
+      if (column_name_info.is_enum_set_need_cast_) {
+        if (OB_FAIL(sql_string.append("cast("))) {
+        } else if (OB_FAIL(append_identifier(false))) {
+        } else if (OB_FAIL(sql_string.append(" as unsigned)"))) {
+        }
+      } else if (OB_FAIL(append_identifier(false))) {
+      }
     }
-  }
-  // append alias column name
-  if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
+      if (OB_FAIL(sql_string.append_fmt(" AS "))) {
+      }
+    }
+    if (OB_SUCC(ret) && with_alias_name) {
+      if (OB_FAIL(append_identifier(column_name_info.is_shadow_column_))) {
+      }
     }
   }
   return ret;
