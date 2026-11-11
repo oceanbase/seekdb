@@ -713,10 +713,14 @@ jobs:
           $ws = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
           python ./build.py init
           if ($LASTEXITCODE -ne 0) { throw "build.py init failed with exit code $LASTEXITCODE" }
+          # lld-link emits megabytes of duplicate-symbol warnings for this link
+          # (/FORCE:MULTIPLE), which overruns the default 1 MiB stderr cap and
+          # hides the actual fatal diagnostic. Keep the whole output.
           python ./build.py build `
             --launcher_cache_dir "$ws/.ci/bazel-launcher" `
             --disk_cache="$ws/.ci/bazel-cache" `
             --lockfile_mode=error `
+            --experimental_ui_max_stdouterr_bytes=16777216 `
             -o build_release //src/observer:libseekdb
           if ($LASTEXITCODE -ne 0) { throw "build.py build failed with exit code $LASTEXITCODE" }
 
