@@ -1079,22 +1079,61 @@ bool hipvs_backend_available()
   return available;
 }
 
+// Build the graph with the CPU VSAG builder. Used when the AMD GPU backend cannot
+// produce it (shared object missing, no usable GPU, graph outside the CAGRA
+// subset) so that a `lib=cuvs` index still ends up with a servable graph; the
+// caller records that no GPU acceleration happened.
+static int build_hipvs_index_on_cpu(VectorIndexPtr &index_handler, const float *vector_list,
+                                    const int64_t *ids, int dim, int64_t size)
+{
+  return build_index(index_handler, const_cast<float *>(vector_list),
+                     const_cast<int64_t *>(ids), dim, static_cast<int>(size), nullptr);
+}
+
+// Returns OB_SUCCESS with *gpu_compute == false when the graph had to be built on
+// the CPU: the DDL must succeed on a machine without a GPU, but the result is a
+// CPU result and must never be reported as GPU acceleration.
 int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
                       const int64_t *ids, int dim, int64_t size,
-                      int max_degree, int ef_construction)
+                      int max_degree, int ef_construction, bool *gpu_compute)
 {
   int ret = OB_SUCCESS;
+  if (nullptr != gpu_compute) {
+    *gpu_compute = false;
+  }
 #if defined(__linux__) && !defined(__ANDROID__)
   if (nullptr == index_handler || nullptr == vector_list || nullptr == ids || dim <= 0 ||
-      size <= 0 || max_degree < 2 || size <= 2 * static_cast<int64_t>(max_degree)) {
+      size <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments for hipvs build", K(ret), KP(index_handler), K(dim), K(size),
              K(max_degree));
   } else if (!hipvs_backend_available()) {
-    // Explicit failure: a GPU-only index must never be served by a CPU build.
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("hipvs backend unavailable, refusing to fall back to a CPU build", K(ret),
-             "hint", "set SEEKDB_HIPVS_LIBRARY before starting observer");
+    // No GPU backend on this machine: record the fallback and build on the CPU
+    // instead of failing the DDL.
+    LOG_WARN("[AMD hipVS] GPU backend unavailable (SEEKDB_HIPVS_LIBRARY unset or "
+             "libseekdb_hipvs.so not loadable, or no usable AMD GPU); falling back to the CPU "
+             "VSAG build. This result MUST NOT be counted as GPU acceleration",
+             K(size), K(dim), K(max_degree), K(ef_construction),
+             "hint", "export SEEKDB_HIPVS_LIBRARY=/path/to/libseekdb_hipvs.so before starting "
+                     "observer to build with the GPU");
+    if (OB_FAIL(build_hipvs_index_on_cpu(index_handler, vector_list, ids, dim, size))) {
+      LOG_WARN("cpu vsag fallback build for lib=cuvs failed", K(ret), K(size), K(dim));
+    } else {
+      LOG_INFO("[AMD hipVS] cpu_fallback build finished, gpu_compute=false", K(size), K(dim),
+               K(max_degree));
+    }
+  } else if (max_degree < 2 || size <= 2 * static_cast<int64_t>(max_degree)) {
+    // CAGRA needs more rows than the base-layer degree; such a tiny table is
+    // cheap on the CPU and is outside the GPU subset.
+    LOG_WARN("[AMD hipVS] graph too small for the CAGRA GPU build; falling back to the CPU VSAG "
+             "build. This result MUST NOT be counted as GPU acceleration",
+             K(size), K(dim), K(max_degree));
+    if (OB_FAIL(build_hipvs_index_on_cpu(index_handler, vector_list, ids, dim, size))) {
+      LOG_WARN("cpu vsag fallback build for lib=cuvs failed", K(ret), K(size), K(dim));
+    } else {
+      LOG_INFO("[AMD hipVS] cpu_fallback build finished, gpu_compute=false", K(size), K(dim),
+               K(max_degree));
+    }
   } else {
     HnswIndexHandler *handler = static_cast<HnswIndexHandler *>(index_handler);
     int64_t existing = 0;
@@ -1135,9 +1174,17 @@ int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
           worker.join();
         }
         if (SEEKDB_HIPVS_OK != backend_ret) {
-          ret = OB_ERR_VSAG_RETURN_ERROR;
-          LOG_WARN("hipvs GPU build failed", K(ret), K(backend_ret), KCSTRING(error), K(size),
-                   K(dim), K(max_degree), K(ef_construction));
+          // The handler is still untouched here, so the CPU builder can take over.
+          LOG_WARN("[AMD hipVS] GPU build failed; falling back to the CPU VSAG build. This result "
+                   "MUST NOT be counted as GPU acceleration",
+                   K(backend_ret), KCSTRING(error), K(size), K(dim), K(max_degree),
+                   K(ef_construction));
+          if (OB_FAIL(build_hipvs_index_on_cpu(index_handler, vector_list, ids, dim, size))) {
+            LOG_WARN("cpu vsag fallback build for lib=cuvs failed", K(ret), K(size), K(dim));
+          } else {
+            LOG_INFO("[AMD hipVS] cpu_fallback build finished after a GPU build error, "
+                     "gpu_compute=false", K(size), K(dim), K(max_degree));
+          }
         } else {
           std::ifstream input(snapshot, std::ios::binary);
           if (!input) {
@@ -1152,8 +1199,11 @@ int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("hipvs snapshot element count mismatch", K(ret), K(imported), K(size));
             } else {
-              LOG_INFO("hipvs GPU build imported", K(size), K(dim), K(max_degree),
-                       K(ef_construction), KCSTRING(snapshot));
+              if (nullptr != gpu_compute) {
+                *gpu_compute = true;
+              }
+              LOG_INFO("[AMD hipVS] gpu_compute=true: hipvs GPU build imported", K(size), K(dim),
+                       K(max_degree), K(ef_construction), KCSTRING(snapshot));
             }
           }
         }
@@ -1170,6 +1220,7 @@ int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
   static_cast<void>(size);
   static_cast<void>(max_degree);
   static_cast<void>(ef_construction);
+  static_cast<void>(gpu_compute);
   ret = OB_NOT_SUPPORTED;
 #endif
   return ret;

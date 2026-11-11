@@ -422,6 +422,7 @@ struct ObVectorIndexMemData
       rb_flag_(true),
       has_build_sq_(false),
       hipvs_built_(false),
+      hipvs_fallback_warned_(false),
       vid_array_(nullptr),
       vec_array_(nullptr),
       extra_info_buf_(nullptr),
@@ -474,6 +475,9 @@ public:
   // backend. Distinct from is_init_ because the snapshot is "inited but empty"
   // while the DDL scan is still buffering vectors for a single GPU build.
   bool hipvs_built_;
+  // Set once the "no GPU backend, building on the CPU instead" WARN has been
+  // logged for this snapshot: the DDL scan calls add_snap_index once per batch.
+  bool hipvs_fallback_warned_;
   ObVecIdxVidArray *vid_array_; // for hnsw+sq
   ObVecIdxVecArray *vec_array_; // for hnsw+sq
   ObVecExtraInfoBuffer *extra_info_buf_; // for hnsw+sq
@@ -760,6 +764,12 @@ public:
   // AMD GPU (hipVS) snapshot: buffer vectors during the DDL scan and build the
   // whole HNSW graph on the GPU once, at the end of the snapshot.
   int finish_hipvs_snapshot();
+  // True when a lib=cuvs/hipvs index must really be built on the AMD GPU. When
+  // the GPU backend cannot be used this logs an explicit WARN (once per snapshot)
+  // and returns false so the caller takes the ordinary CPU (VSAG) build path:
+  // the competition rules allow that fallback as long as the result is never
+  // counted as GPU acceleration.
+  bool hipvs_gpu_build_usable(ObVectorIndexParam *param);
   bool is_mem_data_init_atomic(ObVectorIndexRecordType type);
   int try_init_mem_data(ObVectorIndexRecordType type, ObVectorIndexAlgorithmType enforce_type = VIAT_MAX) {
     int ret = OB_SUCCESS;

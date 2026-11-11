@@ -126,12 +126,15 @@ int build_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, f
 // optional hipVS backend shared object (SEEKDB_HIPVS_LIBRARY) and import the
 // resulting snapshot into VSAG. The GPU backend is dlopen()ed on demand so the
 // server itself never links ROCm.
-// Returns OB_NOT_SUPPORTED when the backend/GPU is unavailable or the request is
-// outside the supported subset (plain FP32 HNSW, L2, no extra info); the caller
-// must treat that as a hard error and never fall back to a CPU build silently.
+// *gpu_compute is set to true only when the graph really was produced on the AMD
+// GPU. When the backend/GPU is unavailable, or the request is outside the
+// supported subset (plain FP32 HNSW, L2, no extra info, and a graph larger than
+// 2*m), the graph is built on the CPU by VSAG instead: an explicit WARN is
+// logged and *gpu_compute stays false, because such a result must never be
+// reported as GPU acceleration.
 int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
                       const int64_t *ids, int dim, int64_t size,
-                      int max_degree, int ef_construction);
+                      int max_degree, int ef_construction, bool *gpu_compute = nullptr);
 // True when the hipVS backend shared object was loaded successfully.
 bool hipvs_backend_available();
 int add_index(VectorIndexPtr& index_handler, float* vector, int64_t* ids, int dim, int size, char *extra_info = nullptr);

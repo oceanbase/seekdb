@@ -390,6 +390,7 @@ void free_memdata_resource(ObVectorIndexRecordType type,
   // A released snapshot must forget that a GPU build completed, otherwise a
   // retried snapshot would be treated as already built.
   memdata->hipvs_built_ = false;
+  memdata->hipvs_fallback_warned_ = false;
 }
 
 void free_hnswsq_array_data(ObVectorIndexMemData *&memdata, ObIAllocator *allocator)
@@ -1693,7 +1694,7 @@ int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, Ob
   } else if (OB_FALSE_IT(dim = param->dim_)) {
   } else if (OB_FAIL(get_extra_info_actual_size(extra_info_actual_size))) {
   } else {
-    if (param->lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
+    if (param->lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS && hipvs_gpu_build_usable(param)) {
       // GPU path: CAGRA needs the whole snapshot at once, so the DDL scan only
       // buffers (vectors, vids) here and finish_hipvs_snapshot() builds the
       // graph once, at the end of the snapshot.
@@ -1711,16 +1712,6 @@ int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, Ob
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("hipvs snapshot only supports plain FP32 HNSW with L2 and no extra info", K(ret),
                  K(param->type_), K(param->dist_algorithm_), K(extra_info_actual_size), K(dim));
-      } else if (param->m_ > 64) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("hipvs snapshot requires m <= 64: the VSAG hnswlib reader rejects a base layer "
-                 "of degree 2*m > 128", K(ret), K(param->m_));
-      } else if (!common::obvsag::hipvs_backend_available()) {
-        // Fail at DDL time, not at the first query: a lib=HIPVS index must never
-        // end up as a silently empty graph because the DSO or the GPU is missing.
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("hipvs backend unavailable (SEEKDB_HIPVS_LIBRARY or AMD GPU missing); "
-                 "refusing to build a CPU index for lib=HIPVS", K(ret));
       } else if (OB_FAIL(init_hnswsq_mem_data())) {
         // allocates vid_array_ / vec_array_ used as the GPU staging buffers
       } else {
@@ -2056,8 +2047,38 @@ int ObPluginVectorIndexAdaptor::inherit_index_id_watermarks_from(ObPluginVectorI
 // Called once the DDL scan (or the asynchronous snapshot refresh) has finished
 // buffering the snapshot: everything CAGRA needs is now available, so this is
 // the point where the graph is produced in one GPU pass and imported into VSAG.
-// Any failure is returned to the caller: a hipvs index is never silently served
-// by a CPU-built graph.
+// When the GPU backend cannot be used, the graph is built on the CPU by VSAG
+// instead and an explicit WARN records that no GPU acceleration happened.
+
+// Decide whether a lib=cuvs/hipvs index is built on the AMD GPU. The GPU path
+// needs the backend shared object, a usable AMD GPU, and m <= 64 (the VSAG
+// hnswlib reader rejects a base layer of degree 2*m > 128). Anything else falls
+// back to the CPU VSAG build, recorded once per snapshot with a WARN that the
+// result is not a GPU result.
+bool ObPluginVectorIndexAdaptor::hipvs_gpu_build_usable(ObVectorIndexParam *param)
+{
+  int ret = OB_SUCCESS;
+  bool usable = false;
+  if (OB_ISNULL(param) || param->lib_ != ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
+    // not a GPU request, nothing to decide
+  } else if (param->m_ <= 64 && common::obvsag::hipvs_backend_available()) {
+    usable = true;
+  } else if (OB_NOT_NULL(snap_data_) && !snap_data_->hipvs_fallback_warned_) {
+    snap_data_->hipvs_fallback_warned_ = true;
+    if (param->m_ > 64) {
+      LOG_WARN("[AMD hipVS] GPU build skipped (m > 64 is rejected by the VSAG hnswlib reader); "
+               "building the index on the CPU with VSAG instead. This result MUST NOT be counted "
+               "as GPU acceleration", K(param->dim_), K(param->m_));
+    } else {
+      LOG_WARN("[AMD hipVS] GPU backend unavailable (SEEKDB_HIPVS_LIBRARY unset, "
+               "libseekdb_hipvs.so not loadable, or no usable AMD GPU); lib=cuvs is served by the "
+               "CPU VSAG build path. This result MUST NOT be counted as GPU acceleration",
+               K(param->dim_), K(param->m_));
+    }
+  }
+  return usable;
+}
+
 int ObPluginVectorIndexAdaptor::finish_hipvs_snapshot()
 {
   INIT_SUCC(ret);
@@ -2106,6 +2127,7 @@ int ObPluginVectorIndexAdaptor::finish_hipvs_snapshot()
       lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexHipvsADP"));
       lib::ObLightBacktraceGuard light_backtrace_guard(false);
       void *candidate = nullptr;
+      bool gpu_compute = false;
       if (OB_FAIL(obvectorutil::create_index(candidate, VIAT_HNSW, DATATYPE_FLOAT32, "l2",
                                              param->dim_, param->m_, param->ef_construction_,
                                              param->ef_search_, snap_data_->mem_ctx_, 0,
@@ -2116,8 +2138,9 @@ int ObPluginVectorIndexAdaptor::finish_hipvs_snapshot()
                  OB_FAIL(common::obvsag::build_hipvs_index(
                      candidate, snap_data_->vec_array_->get_data(),
                      snap_data_->vid_array_->get_data(), static_cast<int>(param->dim_), count,
-                     static_cast<int>(param->m_), static_cast<int>(param->ef_construction_)))) {
-        LOG_WARN("hipvs GPU build failed; cpu_fallback=false", K(ret), K(count), K(param->dim_));
+                     static_cast<int>(param->m_), static_cast<int>(param->ef_construction_),
+                     &gpu_compute))) {
+        LOG_WARN("hipvs build failed", K(ret), K(count), K(param->dim_));
       } else {
         // count == 0 keeps the empty VSAG index created above: an empty snapshot
         // still has to answer queries.
@@ -2131,7 +2154,12 @@ int ObPluginVectorIndexAdaptor::finish_hipvs_snapshot()
         snap_data_->set_inited();
         free_hnswsq_array_data(snap_data_, get_allocator());
         LOG_INFO("hipvs snapshot finished", K(count), K(param->dim_), K(param->m_),
-                 K(param->ef_construction_));
+                 K(param->ef_construction_), K(gpu_compute));
+        if (!gpu_compute && count > 0) {
+          LOG_WARN("[AMD hipVS] lib=cuvs snapshot graph was built on the CPU (no GPU "
+                   "acceleration happened); it MUST NOT be scored as a GPU result",
+                   K(count), K(param->dim_));
+        }
       }
       if (OB_NOT_NULL(candidate)) {
         obvectorutil::delete_index(candidate);
@@ -2156,7 +2184,8 @@ int ObPluginVectorIndexAdaptor::check_snap_hnswsq_index()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(param = static_cast<ObVectorIndexParam*>(algo_data_))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (param->lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
+  } else if (param->lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS &&
+             hipvs_gpu_build_usable(param)) {
     ret = finish_hipvs_snapshot();
   } else if (param->type_ == VIAT_HNSW || param->type_ == VIAT_HGRAPH || snap_data_->has_build_sq_ || param->type_ == VIAT_IPIVF) {
     // do nothing
