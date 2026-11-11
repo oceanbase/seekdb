@@ -1,0 +1,23 @@
+[setup] VSAG: 100000 rows in `hipvsbench_cc50f64e2e_vsag`
+[setup] HIPVS: 100000 rows in `hipvsbench_cc50f64e2e_hipvs`
+[round 1] VSAG  build=  33.676s recall@10=0.9980 index_used=True gpu_records=0
+[round 1] HIPVS build=  11.493s recall@10=0.9560 index_used=True gpu_records=1
+[round 2] HIPVS build=  11.174s recall@10=0.9180 index_used=True gpu_records=1
+[round 2] VSAG  build=  36.318s recall@10=0.9980 index_used=True gpu_records=0
+[round 3] VSAG  build=  35.261s recall@10=0.9980 index_used=True gpu_records=0
+[round 3] HIPVS build=  11.791s recall@10=0.9180 index_used=True gpu_records=1
+{
+  "medians": {
+    "build_seconds": {
+      "VSAG": 35.260804345831275,
+      "HIPVS": 11.493048433214426
+    },
+    "recall_at_k": {
+      "VSAG": 0.998,
+      "HIPVS": 0.9179999999999999
+    }
+  },
+  "speedup": 3.068011463688697,
+  "recall_ok": true,
+  "status": "measured"
+}

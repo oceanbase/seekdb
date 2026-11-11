@@ -28,6 +28,18 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/worker.h"
+#include "hipvs_build_api.h"
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <dlfcn.h>
+#include <unistd.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <mutex>
+#include <string>
+#include <thread>
+#endif
 
 namespace oceanbase {
 namespace common {
@@ -977,6 +989,240 @@ int build_index(VectorIndexPtr &index_handler, float *vector_list,
     if (OB_FAIL(hnsw->build_index(dataset))) {
     }
   }
+  return ret;
+}
+
+// ---------------------------------------------------------------------------
+// AMD GPU (hipVS) build backend.
+//
+// The ROCm/hipVS stack lives in a separate shared object (libseekdb_hipvs.so)
+// that is loaded on demand, so the observer binary keeps a pure CPU link line
+// and starts normally on a machine without a GPU. The shared object is never
+// dlclose()d: the HIP runtime keeps thread-local state that must outlive the
+// build.
+// ---------------------------------------------------------------------------
+#if defined(__linux__) && !defined(__ANDROID__)
+
+namespace {
+
+struct HipvsBackend {
+  void *handle_ = nullptr;
+  int32_t (*build_)(const float *, const int64_t *, int64_t, int64_t, int64_t, int64_t,
+                    const char *, char *, size_t) = nullptr;
+  int32_t (*probe_)(char *, size_t) = nullptr;
+  int32_t (*abi_)(void) = nullptr;
+  bool resolved_ = false;
+};
+
+HipvsBackend &hipvs_backend()
+{
+  static HipvsBackend backend;
+  return backend;
+}
+
+std::mutex &hipvs_backend_mutex()
+{
+  static std::mutex mutex;
+  return mutex;
+}
+
+}  // namespace
+
+bool hipvs_backend_available()
+#else
+bool hipvs_backend_available()
+#endif
+{
+  int ret = OB_SUCCESS;  // LOG_WARN carries the error code of the enclosing scope
+  bool available = false;
+#if defined(__linux__) && !defined(__ANDROID__)
+  std::lock_guard<std::mutex> guard(hipvs_backend_mutex());
+  HipvsBackend &backend = hipvs_backend();
+  if (!backend.resolved_) {
+    backend.resolved_ = true;
+    const char *path = std::getenv("SEEKDB_HIPVS_LIBRARY");
+    const char *library = (nullptr != path && '\0' != path[0]) ? path : "libseekdb_hipvs.so";
+    backend.handle_ = dlopen(library, RTLD_NOW | RTLD_LOCAL);
+    if (nullptr == backend.handle_) {
+      const char *reason = dlerror();
+      LOG_WARN("hipvs backend shared object not loadable; lib=hipvs indexes will be rejected",
+               K(ret), "library", library, "reason", reason == nullptr ? "unknown" : reason);
+    } else {
+      backend.abi_ = reinterpret_cast<int32_t (*)(void)>(
+          dlsym(backend.handle_, "seekdb_hipvs_abi_version_v1"));
+      backend.build_ = reinterpret_cast<int32_t (*)(const float *, const int64_t *, int64_t,
+                                                    int64_t, int64_t, int64_t, const char *, char *,
+                                                    size_t)>(
+          dlsym(backend.handle_, "seekdb_hipvs_build_v1"));
+      backend.probe_ = reinterpret_cast<int32_t (*)(char *, size_t)>(
+          dlsym(backend.handle_, "seekdb_hipvs_probe_v1"));
+      if (nullptr == backend.abi_ || nullptr == backend.build_ ||
+          SEEKDB_HIPVS_ABI_VERSION != backend.abi_()) {
+        LOG_WARN("hipvs backend ABI mismatch, backend disabled", K(ret), "library", library,
+                 "expected_abi", SEEKDB_HIPVS_ABI_VERSION);
+        backend.build_ = nullptr;
+      } else {
+        char info[512] = {0};
+        const int32_t probe = (nullptr == backend.probe_) ? -1 : backend.probe_(info, sizeof(info));
+        if (SEEKDB_HIPVS_OK == probe) {
+          LOG_INFO("hipvs backend ready", "library", library, "gpu", info);
+        } else {
+          LOG_WARN("hipvs backend loaded but no usable AMD GPU; lib=hipvs indexes will be rejected",
+                   K(ret), "library", library, "reason", info);
+          backend.build_ = nullptr;
+        }
+      }
+    }
+  }
+  available = (nullptr != backend.build_);
+#endif
+  return available;
+}
+
+// Build the graph with the CPU VSAG builder. Used when the AMD GPU backend cannot
+// produce it (shared object missing, no usable GPU, graph outside the CAGRA
+// subset) so that a `lib=cuvs` index still ends up with a servable graph; the
+// caller records that no GPU acceleration happened.
+static int build_hipvs_index_on_cpu(VectorIndexPtr &index_handler, const float *vector_list,
+                                    const int64_t *ids, int dim, int64_t size)
+{
+  return build_index(index_handler, const_cast<float *>(vector_list),
+                     const_cast<int64_t *>(ids), dim, static_cast<int>(size), nullptr);
+}
+
+// Returns OB_SUCCESS with *gpu_compute == false when the graph had to be built on
+// the CPU: the DDL must succeed on a machine without a GPU, but the result is a
+// CPU result and must never be reported as GPU acceleration.
+int build_hipvs_index(VectorIndexPtr &index_handler, const float *vector_list,
+                      const int64_t *ids, int dim, int64_t size,
+                      int max_degree, int ef_construction, bool *gpu_compute)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr != gpu_compute) {
+    *gpu_compute = false;
+  }
+#if defined(__linux__) && !defined(__ANDROID__)
+  if (nullptr == index_handler || nullptr == vector_list || nullptr == ids || dim <= 0 ||
+      size <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments for hipvs build", K(ret), KP(index_handler), K(dim), K(size),
+             K(max_degree));
+  } else if (!hipvs_backend_available()) {
+    // No GPU backend on this machine: record the fallback and build on the CPU
+    // instead of failing the DDL.
+    LOG_WARN("[AMD hipVS] GPU backend unavailable (SEEKDB_HIPVS_LIBRARY unset or "
+             "libseekdb_hipvs.so not loadable, or no usable AMD GPU); falling back to the CPU "
+             "VSAG build. This result MUST NOT be counted as GPU acceleration",
+             K(size), K(dim), K(max_degree), K(ef_construction),
+             "hint", "export SEEKDB_HIPVS_LIBRARY=/path/to/libseekdb_hipvs.so before starting "
+                     "observer to build with the GPU");
+    if (OB_FAIL(build_hipvs_index_on_cpu(index_handler, vector_list, ids, dim, size))) {
+      LOG_WARN("cpu vsag fallback build for lib=cuvs failed", K(ret), K(size), K(dim));
+    } else {
+      LOG_INFO("[AMD hipVS] cpu_fallback build finished, gpu_compute=false", K(size), K(dim),
+               K(max_degree));
+    }
+  } else if (max_degree < 2 || size <= 2 * static_cast<int64_t>(max_degree)) {
+    // CAGRA needs more rows than the base-layer degree; such a tiny table is
+    // cheap on the CPU and is outside the GPU subset.
+    LOG_WARN("[AMD hipVS] graph too small for the CAGRA GPU build; falling back to the CPU VSAG "
+             "build. This result MUST NOT be counted as GPU acceleration",
+             K(size), K(dim), K(max_degree));
+    if (OB_FAIL(build_hipvs_index_on_cpu(index_handler, vector_list, ids, dim, size))) {
+      LOG_WARN("cpu vsag fallback build for lib=cuvs failed", K(ret), K(size), K(dim));
+    } else {
+      LOG_INFO("[AMD hipVS] cpu_fallback build finished, gpu_compute=false", K(size), K(dim),
+               K(max_degree));
+    }
+  } else {
+    HnswIndexHandler *handler = static_cast<HnswIndexHandler *>(index_handler);
+    int64_t existing = 0;
+    const int handler_index_type = handler->get_index_type();
+    const uint64_t handler_extra_info_size = handler->get_extra_info_size();
+    const char *handler_metric = handler->get_metric();
+    const int handler_dim = handler->get_dim();
+    if (HNSW_TYPE != handler_index_type || 0 != handler_extra_info_size ||
+        0 != strcmp(handler_metric, "l2") || handler_dim != dim) {
+      // The GPU exporter emits a plain FP32/L2 HNSW graph without extra info.
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("hipvs build only supports plain FP32 HNSW with L2 metric and no extra info", K(ret),
+               K(handler_index_type), "metric", handler_metric, K(handler_extra_info_size),
+               K(handler_dim), K(dim));
+    } else if (OB_FAIL(get_index_number(index_handler, existing))) {
+    } else if (0 != existing) {
+      // Never mix an incrementally built graph with a full GPU rebuild.
+      ret = OB_STATE_NOT_MATCH;
+      LOG_WARN("hipvs build requires an empty index handler", K(ret), K(existing));
+    } else {
+      char workspace[] = "/tmp/seekdb-hipvs-XXXXXX";
+      if (nullptr == mkdtemp(workspace)) {
+        ret = OB_IO_ERROR;
+        LOG_WARN("cannot create hipvs workspace", K(ret));
+      } else {
+        char snapshot[128] = {0};
+        std::snprintf(snapshot, sizeof(snapshot), "%s/snapshot.bin", workspace);
+        char error[512] = {0};
+        int32_t backend_ret = static_cast<int32_t>(SEEKDB_HIPVS_ERR_INTERNAL);
+        {
+          // ROCm needs a real OS thread (its stack/thread-local setup is not
+          // compatible with the coroutine stacks the DDL path may run on).
+          HipvsBackend &backend = hipvs_backend();
+          std::thread worker([&]() {
+            backend_ret = backend.build_(vector_list, ids, size, dim, max_degree,
+                                        ef_construction, snapshot, error, sizeof(error));
+          });
+          worker.join();
+        }
+        if (SEEKDB_HIPVS_OK != backend_ret) {
+          // The handler is still untouched here, so the CPU builder can take over.
+          LOG_WARN("[AMD hipVS] GPU build failed; falling back to the CPU VSAG build. This result "
+                   "MUST NOT be counted as GPU acceleration",
+                   K(backend_ret), KCSTRING(error), K(size), K(dim), K(max_degree),
+                   K(ef_construction));
+          if (OB_FAIL(build_hipvs_index_on_cpu(index_handler, vector_list, ids, dim, size))) {
+            LOG_WARN("cpu vsag fallback build for lib=cuvs failed", K(ret), K(size), K(dim));
+          } else {
+            LOG_INFO("[AMD hipVS] cpu_fallback build finished after a GPU build error, "
+                     "gpu_compute=false", K(size), K(dim), K(max_degree));
+          }
+        } else {
+          std::ifstream input(snapshot, std::ios::binary);
+          if (!input) {
+            ret = OB_IO_ERROR;
+            LOG_WARN("cannot open hipvs snapshot", K(ret), KCSTRING(snapshot));
+          } else if (OB_FAIL(fdeserialize(index_handler, input))) {
+            LOG_WARN("import hipvs snapshot into vsag failed", K(ret));
+          } else {
+            int64_t imported = 0;
+            if (OB_FAIL(get_index_number(index_handler, imported))) {
+            } else if (imported != size) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("hipvs snapshot element count mismatch", K(ret), K(imported), K(size));
+            } else {
+              if (nullptr != gpu_compute) {
+                *gpu_compute = true;
+              }
+              LOG_INFO("[AMD hipVS] gpu_compute=true: hipvs GPU build imported", K(size), K(dim),
+                       K(max_degree), K(ef_construction), KCSTRING(snapshot));
+            }
+          }
+        }
+        unlink(snapshot);
+        rmdir(workspace);
+      }
+    }
+  }
+#else
+  static_cast<void>(index_handler);
+  static_cast<void>(vector_list);
+  static_cast<void>(ids);
+  static_cast<void>(dim);
+  static_cast<void>(size);
+  static_cast<void>(max_degree);
+  static_cast<void>(ef_construction);
+  static_cast<void>(gpu_compute);
+  ret = OB_NOT_SUPPORTED;
+#endif
   return ret;
 }
 

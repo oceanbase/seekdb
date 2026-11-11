@@ -257,6 +257,10 @@ int ObVectorIndexUtil::parser_params_from_string(
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_VSAG;
           } else if (new_param_value == "OB") {
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_OB;
+          } else if (new_param_value == "HIPVS" || new_param_value == "CUVS") {
+            // CUVS is the official AMD hipVS SQL spelling (see the seekdb x hipVS demo);
+            // HIPVS is kept as a compatibility alias for both.
+            param.lib_ = ObVectorIndexAlgorithmLib::VIAL_HIPVS;
           } else {
             ret = OB_NOT_SUPPORTED;
           }
@@ -1030,6 +1034,8 @@ int ObVectorIndexUtil::construct_rebuild_index_param(
         tmp_lib = ObString("VSAG");
       } else if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_OB) {
         tmp_lib = ObString("OB");
+      } else if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
+        tmp_lib = ObString("HIPVS");
       } else {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -2991,7 +2997,9 @@ int ObVectorIndexUtil::check_index_param(
           }
         } else if (last_variable == "LIB") {
           if (new_parser_name == "VSAG" ||
-              new_parser_name == "OB") {
+              new_parser_name == "OB" ||
+              new_parser_name == "CUVS" ||
+              new_parser_name == "HIPVS") {
             lib_is_set = true;
             lib_name = new_parser_name;
           } else {
@@ -3293,9 +3301,21 @@ int ObVectorIndexUtil::check_index_param(
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index m is");
         }
         if (OB_FAIL(ret)) {
-        } else if (lib_is_set && lib_name != "VSAG") {
+        } else if (lib_is_set && lib_name != "VSAG" && lib_name != "CUVS" && lib_name != "HIPVS") {
           ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' is");
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG', 'CUVS' or 'HIPVS' is");
+        }
+        if (OB_FAIL(ret)) {
+        } else if (lib_is_set && (lib_name == "CUVS" || lib_name == "HIPVS")) {
+          // The AMD GPU backend builds the base-layer neighbours with CAGRA and
+          // exports a plain FP32/L2 HNSW graph which VSAG then serves. Quantized
+          // variants (SQ/BQ), other metrics and extra-info payloads stay VSAG-only.
+          if (distance_name != "L2" || type_hnsw_sq_is_set || type_hnsw_bq_is_set ||
+              extra_info_max_size_is_set || refine_type_is_set ||
+              bq_bits_query_set || bq_use_fht_is_set) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "hipvs vector index requires L2 distance, plain HNSW type and no extra info is");
+          }
         }
         if (OB_FAIL(ret)) {
         } else if (ef_construction_value <= m_value) {
