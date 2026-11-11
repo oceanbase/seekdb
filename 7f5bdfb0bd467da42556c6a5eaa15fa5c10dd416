@@ -1,0 +1,16 @@
+src/pl/sys_package/ob_dbms_stats.cpp
+  h_d52e93c5978515 188-304,307-321,323-338,341-348,350-364
+src/sql/optimizer/stat/ob_dbms_stats_executor.cpp
+  h_d52e93c5978515 55-87,89-112,115-123,125-150,153-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7f5bdfb0bd467da42556c6a5eaa15fa5c10dd416",
+  "prompts": {},
+  "humans": {
+    "h_d52e93c5978515": {
+      "author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

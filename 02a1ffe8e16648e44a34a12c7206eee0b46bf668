@@ -1,0 +1,24 @@
+bazel/final_link.bzl
+  s_f87238b17c0588::t_3aeabf3cc7004f 270
+  s_f87238b17c0588::t_85243ca6a806cf 212,226-243
+  s_f87238b17c0588::t_9748558ffe0243 258
+  s_f87238b17c0588::t_4cdd2122ea94f3 251
+  s_f87238b17c0588::t_c91d5664bea1fd 121-137
+  s_f87238b17c0588::t_5db02973a6d4be 138,153-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "02a1ffe8e16648e44a34a12c7206eee0b46bf668",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

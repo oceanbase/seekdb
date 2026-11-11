@@ -1,0 +1,24 @@
+src/observer/ob_server.cpp
+  s_f87238b17c0588::t_2b7ffc91041e82 808-812
+src/include/seekdb.cpp
+  s_f87238b17c0588::t_32256b27a64493 1186-1187
+  s_f87238b17c0588::t_29a1941c1ada9c 1167-1168
+src/observer/ob_server.h
+  s_f87238b17c0588::t_f90ad291234d06 260-263
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d383594a0ddd9c96b1fb28f8e39fb315f82b5620",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

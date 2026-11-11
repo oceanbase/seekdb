@@ -1,0 +1,21 @@
+src/sql/engine/expr/ob_expr_array_difference.h
+  s_531a28be8eb6c4::t_af7cfd0a58a74d 38-39
+src/sql/engine/expr/ob_expr_array_difference.cpp
+  s_531a28be8eb6c4::t_af7cfd0a58a74d 23-25,106-107,125-173,218,258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "22e2c16efb4072a516ae5437fed923a5ac4f73f8",
+  "prompts": {},
+  "sessions": {
+    "s_531a28be8eb6c4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bf5c-82c2-7d62-9c14-3fea736f0a82",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}

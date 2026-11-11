@@ -1,0 +1,20 @@
+src/share/ob_telemetry.cpp
+  s_f87238b17c0588::t_0eeecc0997ee45 44
+  s_f87238b17c0588::t_6aa217860da803 1056-1061,1064
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ffd843b2dfd0ba7bc6ed9dca07d6425da7fe36ab",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

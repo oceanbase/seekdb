@@ -1,0 +1,19 @@
+bazel/seekdb-jemalloc-sys-windows-long-paths.diff
+  s_f87238b17c0588::t_e22f36fb84da2f 3-48,68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1e35eed7a0eb25ec87837d5cf091b55cc87283a8",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}
