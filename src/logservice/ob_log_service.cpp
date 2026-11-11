@@ -20,6 +20,11 @@
 #include "logservice/ob_log_allocator_mgr.h"
 #include "lib/ob_running_mode.h"
 #include "share/ob_share_util.h"
+#ifdef _WIN32
+#include <atomic>
+#include <cerrno>
+#include <windows.h>
+#endif
 
 namespace oceanbase
 {
@@ -594,10 +599,39 @@ int check_clog_disk_full_or_hang(
   } else if (OB_FAIL(log_service.check_disk_space_enough(is_disk_enough))) {
   } else {
     clog_disk_is_full = !is_disk_enough;
-    clog_disk_is_hang =
-        OB_INVALID_TIMESTAMP != clog_disk_last_working_time &&
-        now - clog_disk_last_working_time >
-            log_service.get_log_storage_warning_tolerance_time();
+    if (OB_INVALID_TIMESTAMP != clog_disk_last_working_time) {
+      const int64_t warning_tolerance_us = log_service.get_log_storage_warning_tolerance_time();
+      clog_disk_is_hang = now - clog_disk_last_working_time > warning_tolerance_us;
+#ifdef _WIN32
+      if (clog_disk_is_hang) {
+        const int saved_errno = errno;
+        const DWORD saved_error = GetLastError();
+        static std::atomic<uint64_t> observations{0};
+        const uint64_t observation = observations.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (observation <= 32) {
+          LARGE_INTEGER qpc_before = {}, qpc_after = {}, frequency = {};
+          FILETIME wall_sample = {};
+          const bool before_ok = QueryPerformanceCounter(&qpc_before) != 0;
+          const bool frequency_ok = QueryPerformanceFrequency(&frequency) != 0;
+          GetSystemTimePreciseAsFileTime(&wall_sample);
+          const uint64_t wall_filetime = (uint64_t(wall_sample.dwHighDateTime) << 32)
+              | wall_sample.dwLowDateTime;
+          const int64_t raw_wall_us = static_cast<int64_t>(wall_filetime / 10)
+              - INT64_C(11644473600000000);
+          int64_t resampled_start_us = OB_INVALID_TIMESTAMP;
+          const int sample_ret = log_service.get_io_start_time(resampled_start_us);
+          const bool after_ok = QueryPerformanceCounter(&qpc_after) != 0;
+          const int clock_mask = (before_ok ? 1 : 0) | (after_ok ? 2 : 0) | (frequency_ok ? 4 : 0);
+          CLOG_LOG(WARN, "seek1243 clog hang decision inputs", K(observation), K(now),
+              K(clog_disk_last_working_time), K(warning_tolerance_us), K(is_disk_enough),
+              K(raw_wall_us), "qpc_before", qpc_before.QuadPart, "qpc_after", qpc_after.QuadPart,
+              "qpc_frequency", frequency.QuadPart, K(clock_mask), K(sample_ret), K(resampled_start_us));
+        }
+        errno = saved_errno;
+        SetLastError(saved_error);
+      }
+#endif
+    }
   }
   return ret;
 }
