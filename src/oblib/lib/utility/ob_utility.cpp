@@ -22,25 +22,30 @@
 #endif
 #include <io.h>
 #include <BaseTsd.h>
+#include <errno.h>
 typedef SSIZE_T ssize_t;
 static inline ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) {
   HANDLE h = (HANDLE)_get_osfhandle(fd);
   if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
-  OVERLAPPED ov = {};
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
-  ov.OffsetHigh = (DWORD)(offset >> 32);
+  // _open() returns a synchronous handle, so passing an OVERLAPPED structure
+  // makes WriteFile() fail with ERROR_INVALID_PARAMETER. Seek explicitly and
+  // then write with a NULL OVERLAPPED.
+  LARGE_INTEGER pos;
+  pos.QuadPart = offset;
+  if (!SetFilePointerEx(h, pos, NULL, FILE_BEGIN)) { errno = EIO; return -1; }
   DWORD written = 0;
-  if (!WriteFile(h, buf, (DWORD)count, &written, &ov)) { return -1; }
+  if (!WriteFile(h, buf, (DWORD)count, &written, NULL)) { errno = EIO; return -1; }
   return (ssize_t)written;
 }
 static inline ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
   HANDLE h = (HANDLE)_get_osfhandle(fd);
   if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
-  OVERLAPPED ov = {};
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
-  ov.OffsetHigh = (DWORD)(offset >> 32);
+  // Same as ob_pwrite(): a synchronous handle cannot use OVERLAPPED reads.
+  LARGE_INTEGER pos;
+  pos.QuadPart = offset;
+  if (!SetFilePointerEx(h, pos, NULL, FILE_BEGIN)) { errno = EIO; return -1; }
   DWORD nread = 0;
-  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) { return -1; }
+  if (!ReadFile(h, buf, (DWORD)count, &nread, NULL)) { errno = EIO; return -1; }
   return (ssize_t)nread;
 }
 #define pwrite ob_pwrite

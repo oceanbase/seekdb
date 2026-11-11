@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_table_modify_op.h"
+#include "sql/engine/cmd/ob_ai_column_util.h"
 #include "share/ob_autoincrement_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -791,6 +792,51 @@ int ObTableModifyOp::inner_switch_iterator()
   return ret;
 }
 
+int ObTableModifyOp::maintain_ai_column_tasks()
+{
+  int ret = OB_SUCCESS;
+  uint64_t table_loc_id = OB_INVALID_ID;
+  uint64_t ref_table_id = OB_INVALID_ID;
+  // The maintenance itself is a DML on the base table and on the task queue, so
+  // it must not recurse into the hook that started it.
+  static thread_local bool in_maintain = false;
+  if (in_maintain) {
+    // already maintaining the AI columns of this statement
+  } else if (OB_FAIL(get_spec().get_single_table_loc_id(table_loc_id, ref_table_id))) {
+    LOG_WARN("get ai hook table location failed", K(ret));
+    if (OB_NOT_IMPLEMENT == ret) {
+      // multi table DML: every single table op maintains its own AI columns
+      ret = OB_SUCCESS;
+    }
+  } else if (OB_INVALID_ID == ref_table_id || !ai_column::table_has_ai_column(ref_table_id)) {
+  } else if (OB_FAIL(open_inner_conn())) {
+    LOG_ERROR("open inner connection for ai column failed", K(ret));
+  } else if (OB_FAIL(begin_nested_session(true /* skip_cur_stmt_tables */))) {
+    LOG_ERROR("begin nested session for ai column failed", K(ret));
+  } else {
+    ObArenaAllocator allocator;
+    // The maintenance writes the very table this statement is modifying, so it
+    // is a cascading nested statement: mark the das context the same way the
+    // foreign key cascade does, otherwise the nested DML is rejected as a
+    // mutating table operation and the nested session cannot end its stmt.
+    ObDASCtx &das_ctx = ctx_.get_das_ctx();
+    const bool saved_fk_cascading = das_ctx.is_fk_cascading_;
+    das_ctx.is_fk_cascading_ = true;
+    in_maintain = true;
+    const int tmp_ret = ai_column::maintain_tasks(inner_conn_, sql_proxy_, allocator, ref_table_id);
+    in_maintain = false;
+    das_ctx.is_fk_cascading_ = saved_fk_cascading;
+    const int end_ret = end_nested_session();
+    if (OB_SUCCESS != end_ret) {
+      LOG_WARN("end nested session for ai column failed", K(end_ret));
+    }
+    if (OB_SUCCESS != tmp_ret) {
+      LOG_WARN("maintain ai column tasks failed", K(tmp_ret), K(ref_table_id));
+    }
+  }
+  return ret;
+}
+
 int ObTableModifyOp::inner_close()
 {
   int ret = OB_SUCCESS;
@@ -803,7 +849,9 @@ int ObTableModifyOp::inner_close()
       auto_service.release_handle(autoinc_params.at(i).cache_handle_);
     }
   }
-  close_inner_conn();
+  // The AI column queue must be maintained once every row of this statement has
+  // reached the transaction: only then can the maintenance statement (which runs
+  // in the same transaction) see the rows this statement inserted or updated.
   if (dml_rtctx_.das_ref_.has_task()) {
     if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
     } else {
@@ -811,6 +859,8 @@ int ObTableModifyOp::inner_close()
     }
   }
   dml_modify_rows_.clear();
+  ret = OB_SUCCESS;
+  close_inner_conn();
   return ret;
 }
 
@@ -1129,6 +1179,14 @@ int ObTableModifyOp::inner_get_next_row()
       //DML operator reach iter end,
       //now submit the remaining rows in the DAS Write Buffer to the storage
       if (OB_FAIL(submit_all_dml_task())) {
+      }
+    }
+    // Every row of this statement is now part of the transaction, so the AI
+    // column queue can be maintained: the maintenance statement runs in the
+    // same transaction and therefore sees exactly the rows of this statement.
+    if (OB_SUCC(ret) && iter_end_) {
+      if (OB_FAIL(maintain_ai_column_tasks())) {
+        LOG_WARN("maintain ai column tasks failed", K(ret));
       }
     }
     //to post process the DML info after writing all data to the storage or returning one row

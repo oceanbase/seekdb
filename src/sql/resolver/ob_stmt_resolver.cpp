@@ -220,7 +220,8 @@ int ObStmtResolver::get_column_schema(const uint64_t table_id,
     // Generated columns added by function-based indexes are hidden but may
     // still be selected through this path.
     if (OB_FAIL(schema_checker_->get_column_schema( table_id, column_name, column_schema, true, is_link))) {
-    } else if (!hidden && column_schema->is_hidden() && !column_schema->is_generated_column()) {
+    } else if (!hidden && column_schema->is_hidden() && !column_schema->is_generated_column()
+               && !column_schema->is_ai_hidden_column()) {
       ret = OB_ERR_BAD_FIELD_ERROR;
       LOG_INFO("do not get hidden column", K(table_id), K(column_name), K(ret));
     }

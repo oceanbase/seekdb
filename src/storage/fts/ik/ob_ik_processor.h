@@ -83,6 +83,7 @@ private:
   int64_t cursor_;
   int64_t next_char_len_;
   ObFTCharUtil::CharType next_char_type_;
+  bool is_utf8mb4_;
 
   uint32_t handle_size_;
   bool is_smart_;
@@ -114,3 +115,4 @@ public:
 } // namespace oceanbase
 
 #endif // _OCEANBASE_STORAGE_FTS_IK_OB_IK_PROCESSOR_H_
+

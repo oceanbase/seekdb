@@ -1297,15 +1297,37 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
   }
 
   if (OB_SUCC(ret)) {
-    // To avoid -5044 error, mock missed system variable schema with default value by hardcoded schema.
+    // A newly compiled binary may know system variables that a data directory
+    // written by an older binary does not carry yet.  Without them every later
+    // lookup ends in -5044, so a missing one is filled with the compiled default
+    // instead of refusing to start.
     for (int64_t i = 0; OB_SUCC(ret) && i < ObSysVariables::get_amount(); i++) {
       ObSysVarClassType sys_var_id = ObSysVariables::get_sys_var_id(i);
       const ObSysVarSchema *sys_var = NULL;
-      if (OB_FAIL(sys_variable_schema.get_sysvar_schema(sys_var_id, sys_var))) {
-      } else if (OB_ISNULL(sys_var)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
+      const int tmp_ret = sys_variable_schema.get_sysvar_schema(sys_var_id, sys_var);
+      if (OB_SUCCESS == tmp_ret && NULL != sys_var) {
         // sys_var exist, no need to deal with it
+      } else if (OB_SUCCESS != tmp_ret && OB_ERR_SYS_VARIABLE_UNKNOWN != tmp_ret) {
+        ret = tmp_ret;
+      } else {
+        ObSysVarSchema sysvar;
+        ObString value = ObSysVariables::get_value(i);
+        if (ObCharset::case_insensitive_equal(ObSysVariables::get_name(i),
+                                              OB_SV_LOWER_CASE_TABLE_NAMES)) {
+          value = ObString::make_string("2");
+        }
+        sysvar.set_data_type(ObSysVariables::get_type(i));
+        sysvar.set_flags(ObSysVariables::get_flags(i));
+        sysvar.set_schema_version(fetch_version);
+        if (OB_FAIL(sysvar.set_name(ObSysVariables::get_name(i)))) {
+        } else if (OB_FAIL(sysvar.set_value(value))) {
+        } else if (OB_FAIL(sysvar.set_min_val(ObSysVariables::get_min(i)))) {
+        } else if (OB_FAIL(sysvar.set_max_val(ObSysVariables::get_max(i)))) {
+        } else if (OB_FAIL(sysvar.set_info(ObSysVariables::get_info(i)))) {
+        } else if (OB_FAIL(sys_variable_schema.add_sysvar_schema(sysvar))) {
+          LOG_WARN("fill missing sysvar with compiled default failed", K(ret),
+                   "name", ObSysVariables::get_name(i));
+        }
       }
     }
   }

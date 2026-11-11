@@ -50,6 +50,7 @@ public:
   bool check_batch_finished();
   int get_batch_result(ObArray<ObJsonObject *> &responses);
 private:
+  int add_batch_request(ObJsonObject *data);
   int error_handle(CURLcode res);
   int send_post(ObJsonObject *data, ObJsonObject *&response);
   int send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray<ObJsonObject *> &responses);

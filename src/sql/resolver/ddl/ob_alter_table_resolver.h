@@ -67,6 +67,15 @@ public:
   int resolve_convert_to_character(const ParseNode &node);
   int resolve_foreign_key_options(const ParseNode &node);
   int resolve_add_column(const ParseNode &node, ObColumnNameSet &resolve_add_column);
+  int collect_alter_ai_column_def(ObAlterTableStmt &stmt, const share::schema::ObColumnSchemaV2 &column);
+  // An AI column needs three hidden auxiliary columns.  CREATE TABLE adds them to the
+  // table schema directly; ALTER TABLE has to queue them as extra ADD COLUMN actions
+  // so the DDL service allocates their column ids along with the AI column itself.
+  int add_alter_ai_hidden_columns(ObAlterTableStmt &stmt,
+                                  const share::schema::AlterColumnSchema &ai_column,
+                                  ObColumnNameSet &add_column_names_set);
+  // ALTER TABLE ... RETRY AI COLUMN <col> [WHERE ...]
+  int resolve_retry_ai_column(const ParseNode &node);
   int resolve_alter_column(const ParseNode &node);
   int resolve_change_column(const ParseNode &node);
   int check_modify_column_allowed(const share::schema::AlterColumnSchema &alter_column_schema,

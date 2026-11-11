@@ -124,6 +124,49 @@ int assign(const ObColumnSchemaV2 &src_schema);
   //inline void set_new_nullable();
   inline void set_autoincrement(const bool is_autoincrement) { is_autoincrement_ = is_autoincrement; }
   inline void set_is_hidden(const bool is_hidden) { is_hidden_ = is_hidden; }
+  // AI column metadata
+  inline void set_ai_column(const bool is_ai) { is_ai_column_ = is_ai; }
+  inline bool is_ai_column() const { return is_ai_column_; }
+  // Auxiliary columns of an AI column (state / request / result spec) stay hidden
+  // from SHOW CREATE TABLE and from SELECT *, but the AI column maintenance SQL
+  // has to be able to address them by name.
+  inline bool is_ai_hidden_column() const
+  {
+    static const char *AI_HIDDEN_PREFIX = "__ai_";
+    const int64_t prefix_len = 5;
+    return is_hidden_ && column_name_.length() > prefix_len
+           && 0 == strncasecmp(column_name_.ptr(), AI_HIDDEN_PREFIX, prefix_len);
+  }
+  inline void set_ai_max_retries(const int64_t max_retries) { ai_max_retries_ = max_retries; }
+  inline int64_t get_ai_max_retries() const { return ai_max_retries_; }
+  inline void set_ai_sync_mode_async(const bool is_async) { ai_async_ = is_async; }
+  inline bool is_ai_sync_mode_async() const { return ai_async_; }
+  inline void set_ai_state_column_id(const uint64_t column_id) { ai_state_column_id_ = column_id; }
+  inline uint64_t get_ai_state_column_id() const { return ai_state_column_id_; }
+  inline void set_ai_request_column_id(const uint64_t column_id) { ai_request_column_id_ = column_id; }
+  inline uint64_t get_ai_request_column_id() const { return ai_request_column_id_; }
+  inline void set_ai_result_spec_column_id(const uint64_t column_id) { ai_result_spec_column_id_ = column_id; }
+  inline uint64_t get_ai_result_spec_column_id() const { return ai_result_spec_column_id_; }
+  // Resolve-time AI definition: not part of the persisted column schema. The logical
+  // definition lives in __all_ai_column; this copy is only used while the DDL resolver
+  // builds the catalogue rows and the maintenance triggers.
+  inline void set_ai_definition(const common::ObString &expr,
+                                const common::ObString &func,
+                                const common::ObString &model,
+                                const common::ObString &deps,
+                                const common::ObString &prompt)
+  {
+    ai_expr_str_ = expr;
+    ai_prompt_expr_ = prompt;
+    ai_function_ = func;
+    ai_model_name_ = model;
+    ai_depend_columns_ = deps;
+  }
+  inline const common::ObString &get_ai_expr_str() const { return ai_expr_str_; }
+  inline const common::ObString &get_ai_prompt_expr() const { return ai_prompt_expr_; }
+  inline const common::ObString &get_ai_function() const { return ai_function_; }
+  inline const common::ObString &get_ai_model_name() const { return ai_model_name_; }
+  inline const common::ObString &get_ai_depend_columns() const { return ai_depend_columns_; }
   inline void set_charset_type(const common::ObCharsetType type) { charset_type_ = type; }
   inline void set_index_position(const int64_t index_position) { index_position_ = index_position; }
   // The following two functions is not used for juding if column's type is binary.
@@ -370,6 +413,17 @@ private:
   bool is_zero_fill_;
   bool is_autoincrement_;
   bool is_hidden_;
+  bool is_ai_column_;
+  bool ai_async_;
+  int64_t ai_max_retries_;
+  uint64_t ai_state_column_id_;
+  uint64_t ai_request_column_id_;
+  uint64_t ai_result_spec_column_id_;
+  common::ObString ai_expr_str_;
+  common::ObString ai_function_;
+  common::ObString ai_model_name_;
+  common::ObString ai_depend_columns_;
+  common::ObString ai_prompt_expr_;
   int64_t column_flags_;
   ColumnReferenceSet *column_ref_idxs_;
   common::ObCharsetType charset_type_;//default:utf8mb4

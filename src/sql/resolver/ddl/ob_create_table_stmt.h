@@ -26,6 +26,28 @@ namespace oceanbase
 namespace sql
 {
 
+
+// One declared AI column, captured while resolving so the executor can create its
+// catalogue row and maintenance triggers once the table id is known.
+struct ObAiColumnDef
+{
+  ObAiColumnDef()
+    : max_retries_(0), vector_dim_(0), requested_dim_(0) {}
+  common::ObString column_name_;
+  common::ObString expr_;
+  common::ObString prompt_expr_;
+  common::ObString depend_columns_;
+  common::ObString function_;
+  common::ObString model_name_;
+  common::ObString result_type_;
+  int64_t max_retries_;
+  int64_t vector_dim_;
+  int64_t requested_dim_;  // explicit dimension argument of AI_EMBED, 0 when absent
+  TO_STRING_KV(K_(column_name), K_(expr), K_(depend_columns), K_(function),
+               K_(model_name), K_(result_type), K_(max_retries), K_(vector_dim),
+               K_(requested_dim));
+};
+
 class ObCreateTableStmt : public ObTableStmt
 {
 public:
@@ -60,6 +82,8 @@ public:
   int add_view_need_priv(share::schema::ObNeedPriv &need_priv)
   { return view_need_privs_.push_back(need_priv); }
   common::ObSArray<obcall::ObCreateIndexArg> &get_index_arg_list() { return index_arg_list_; }
+  int add_ai_column_def(const ObAiColumnDef &def) { return ai_column_defs_.push_back(def); }
+  const common::ObSEArray<ObAiColumnDef, 4> &get_ai_column_defs() const { return ai_column_defs_; }
   common::ObSArray<obcall::ObCreateForeignKeyArg> &get_foreign_key_arg_list()
   { return create_table_arg_.foreign_key_arg_list_; }
   const common::ObSArray<obcall::ObCreateForeignKeyArg> &get_read_only_foreign_key_arg_list() const
@@ -84,6 +108,7 @@ private:
   bool is_view_stmt_;
   share::schema::ObStmtNeedPrivs::NeedPrivs view_need_privs_;
   common::ObSArray<obcall::ObCreateIndexArg> index_arg_list_;
+  common::ObSEArray<ObAiColumnDef, 4> ai_column_defs_;
   common::ObString masked_sql_;
   //common::ObSEArray<ObRawExpr *, OB_DEFAULT_ARRAY_SIZE, common::ModulePageAllocator, true> partition_fun_expr_; // for range fun expr
   //common::ObSEArray<ObRawExpr *, OB_DEFAULT_ARRAY_SIZE, common::ModulePageAllocator, true> range_values_exprs_; //range partition expr

@@ -245,6 +245,9 @@ public:
   bool is_fk_root_session();
   const ObObjPrintParams &get_obj_print_params() { return obj_print_params_; }
   int init_foreign_key_operation();
+  // Queue or drop the AI column tasks of the rows this statement touched,
+  // inside the transaction of the statement itself.
+  int maintain_ai_column_tasks();
   void clear_dml_evaluated_flag();
   void clear_dml_evaluated_flag(int64_t parent_cnt, ObExpr **parent_exprs);
   void clear_dml_evaluated_flag(ObExpr *clear_expr);

@@ -690,11 +690,14 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("ob_sql_ is NULL", K(ret));
     } else if (OB_FAIL(executor.execute(*ob_sql_, res.sql_ctx(), res.result_set()))) {
+      LOG_WARN("inner sql executor failed", K(ret));
     } else {
       ObSQLSessionInfo &session = res.result_set().get_session();
       if (OB_ISNULL(res.sql_ctx().schema_guard_)) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("inner sql schema guard is null", K(ret));
       } else if (OB_FAIL(session.update_query_sensitive_system_variable(*(res.sql_ctx().schema_guard_)))) {
+        LOG_WARN("update query sensitive system variables failed", K(ret));
       } else if (OB_UNLIKELY(is_restore)
                  && OB_FAIL(sql_modifier_->modify(res.result_set()))) {
         LOG_WARN("fail modify sql", K(res.result_set().get_statement_name()), K(ret));
@@ -704,6 +707,7 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
         // Opening the result set would attempt to execute/prefetch, which
         // fails with OB_NOT_INIT because there is no physical plan.
       } else if (OB_FAIL(res.open())) {
+        LOG_WARN("open inner sql result failed", K(ret));
       }
     }
   }
@@ -822,6 +826,7 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
           if (OB_FAIL(ret)) {
             // do nothing
           } else if (OB_FAIL(SMART_CALL(do_query(executor, res)))) {
+            LOG_WARN("inner sql query failed", K(ret));
             ret_code = ret;
             ret = process_retry(res, ret, abs_timeout_us, need_retry, retry_cnt);
             // moved here from ObInnerSQLConnection::do_query() -> ObInnerSQLResult::open().
@@ -1073,6 +1078,7 @@ int ObInnerSQLConnection::execute_proc(ObIAllocator &allocator,
   return ret;
 }
 
+
 int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     int64_t &affected_rows, bool is_user_sql)
 {
@@ -1093,8 +1099,10 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     } else {
       res.result_set().set_user_sql(is_user_sql);
       if (OB_FAIL(query(executor, res))) {
+        LOG_WARN("execute write inner sql failed", K(ret), K(sql));
       } else if (FALSE_IT(affected_rows = res.result_set().get_affected_rows())) {
       } else if (OB_FAIL(res.close())) {
+        LOG_WARN("close inner sql result failed", K(ret), K(sql));
       }
       if (get_session().get_ddl_info().is_ddl()) {
         SERVER_EVENT_ADD(

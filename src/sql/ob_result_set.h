@@ -338,6 +338,9 @@ private:
   // function members
   int execute();
   int open_plan();
+  // Reject a statement that reads an AI column which is still being computed,
+  // when the session runs with ai_column_strict_read on.
+  int check_ai_column_strict_read(ObPhysicalPlan &physical_plan);
   int open_cmd();
   int open_result();
   int do_open_plan(ObExecContext &ctx);
