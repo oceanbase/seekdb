@@ -1552,7 +1552,7 @@ fn native_order_preserves_database_type_matrix_and_scalar_errors() {
     let date = BinaryDocument::new([32,0,0,0,0]).unwrap();
     let datetime = BinaryDocument::new([33,0,0,0,0,0,0,0,0]).unwrap();
     let mut no_callback = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| -> Result<_, ()> { panic!("matrix decided the order") };
-    assert_eq!(crate::compare::order(date.root().unwrap(), datetime.root().unwrap(), &mut no_callback).unwrap(), Greater);
+    assert_eq!(crate::compare::order(date.root().unwrap(), datetime.root().unwrap(), &mut no_callback).unwrap(), Less);
     assert_eq!(crate::compare::order(datetime.root().unwrap(), date.root().unwrap(), &mut no_callback).unwrap(), Greater);
     let mut callback = |_: crate::BinaryValue<'_>, _: crate::BinaryValue<'_>| Err(37);
     assert!(matches!(crate::compare::order(timestamp.root().unwrap(), datetime.root().unwrap(), &mut callback), Err(crate::compare::OrderError::Scalar(37))));
