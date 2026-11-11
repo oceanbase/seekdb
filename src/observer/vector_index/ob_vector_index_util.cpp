@@ -257,7 +257,9 @@ int ObVectorIndexUtil::parser_params_from_string(
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_VSAG;
           } else if (new_param_value == "OB") {
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_OB;
-          } else if (new_param_value == "HIPVS") {
+          } else if (new_param_value == "HIPVS" || new_param_value == "CUVS") {
+            // CUVS is the official AMD hipVS SQL spelling (see the seekdb x hipVS demo);
+            // HIPVS is kept as a compatibility alias for both.
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_HIPVS;
           } else {
             ret = OB_NOT_SUPPORTED;
@@ -2996,6 +2998,7 @@ int ObVectorIndexUtil::check_index_param(
         } else if (last_variable == "LIB") {
           if (new_parser_name == "VSAG" ||
               new_parser_name == "OB" ||
+              new_parser_name == "CUVS" ||
               new_parser_name == "HIPVS") {
             lib_is_set = true;
             lib_name = new_parser_name;
@@ -3298,12 +3301,12 @@ int ObVectorIndexUtil::check_index_param(
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index m is");
         }
         if (OB_FAIL(ret)) {
-        } else if (lib_is_set && lib_name != "VSAG" && lib_name != "HIPVS") {
+        } else if (lib_is_set && lib_name != "VSAG" && lib_name != "CUVS" && lib_name != "HIPVS") {
           ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' or 'HIPVS' is");
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG', 'CUVS' or 'HIPVS' is");
         }
         if (OB_FAIL(ret)) {
-        } else if (lib_is_set && lib_name == "HIPVS") {
+        } else if (lib_is_set && (lib_name == "CUVS" || lib_name == "HIPVS")) {
           // The AMD GPU backend builds the base-layer neighbours with CAGRA and
           // exports a plain FP32/L2 HNSW graph which VSAG then serves. Quantized
           // variants (SQ/BQ), other metrics and extra-info payloads stay VSAG-only.
