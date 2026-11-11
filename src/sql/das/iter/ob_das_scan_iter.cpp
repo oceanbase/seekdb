@@ -151,8 +151,9 @@ int ObDASScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     if (ret != OB_ITER_END) {
     }
   }
-  const ObBitVector *skip = nullptr;
-  PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, count, skip);
+  // The parent merge fills domain-ID placeholders after this scan returns.
+  // Logging their values here can evaluate uninitialized datum storage.
+  LOG_DEBUG("storage scan batch", K(ret), K(count), K(capacity));
   return ret;
 }
 
