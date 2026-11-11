@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import os
 import platform
 import re
 import shutil
@@ -150,16 +151,52 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     return [executable] + sorted(libraries.iterdir())
 
 
-def windows_runtime(binary):
+def windows_imports(binary):
     imports = subprocess.check_output(["dumpbin", "/nologo", "/dependents", str(binary)], text=True)
     libraries = {name.lower() for name in re.findall(r"^\s+([^\s]+\.dll)\s*$", imports,
                                                     re.MULTILINE | re.IGNORECASE)}
     if any(re.fullmatch(r"(?:vcruntime|msvcp)\d+(?:_\d+)*d(?:_\w+)?\.dll|ucrtbased\.dll", name)
            for name in libraries):
         raise ValueError("Windows binary distributions require release /MD CRT imports: %s" % binary)
+    return libraries
+
+
+def windows_runtime(binary):
+    libraries = windows_imports(binary)
     if not any(name == "ucrtbase.dll" or name.startswith("api-ms-win-crt-") for name in libraries):
         raise ValueError("Windows binary distributions require /MD dynamic CRT imports: %s" % binary)
     return "MD"
+
+
+def windows_binaries(prefix, arch):
+    binaries = [prefix / "bin/seekdb.exe"] + sorted(
+        path for path in (prefix / "bin").iterdir() if path.suffix.lower() == ".dll")
+    for binary in binaries:
+        if architecture(binary, "windows") != arch:
+            raise ValueError("Windows runtime architecture mismatch: %s" % binary)
+        with binary.open("rb") as stream:
+            header = stream.read(64)
+            stream.seek(struct.unpack_from("<I", header, 60)[0] + 24)
+            optional = stream.read(52)
+        if len(optional) < 52 or struct.unpack_from("<H", optional)[0] != 0x20b:
+            raise ValueError("unsupported Windows PE optional header: %s" % binary)
+        # PE OS/subsystem versions are lower bounds, not an imported-API audit.
+        required = max(struct.unpack_from("<HH", optional, offset) for offset in (40, 48))
+        if required > (10, 0):
+            raise ValueError("Windows binary requires %s.%s, exceeding the Windows 10 target: %s" %
+                             (required[0], required[1], binary))
+    return binaries
+
+
+def windows_dependencies(binaries):
+    available = {path.name.lower() for path in binaries}
+    system = Path(os.environ["SystemRoot"]) / "System32"
+    for binary in binaries:
+        for name in windows_imports(binary):
+            if name in available or name.startswith(("api-ms-", "ext-ms-")):
+                continue
+            if name.startswith(("msvcp", "vcruntime", "concrt", "vcomp", "vccorlib")) or not (system / name).is_file():
+                raise ValueError("unbundled Windows dependency %s imported by %s; include it in seekdb.exe.runtime.json" % (name, binary))
 
 
 def prepare(prefix, original, layout, directories, extra_libraries, glibc):
@@ -190,9 +227,8 @@ def prepare(prefix, original, layout, directories, extra_libraries, glibc):
         metadata["minimum_os"] = max(versions, key=version_tuple)
     else:
         metadata["msvc_runtime"] = windows_runtime(prefix / "bin/seekdb.exe")
-        for dll in (prefix / "bin").glob("*.dll"):
-            if architecture(dll, layout) != arch:
-                raise ValueError("runtime DLL architecture mismatch: %s" % dll)
+        windows_dependencies(windows_binaries(prefix, arch))
+        metadata["minimum_os"] = "10.0"
     (prefix / "lib/seekdb").mkdir(parents=True, exist_ok=True)
     return metadata
 
@@ -313,6 +349,8 @@ def load(source, destination, version):
         raise ValueError("binary package requires a numeric glibc baseline")
     if metadata["os"] == "windows" and metadata.get("msvc_runtime") != "MD":
         raise ValueError("Windows binary packages require msvc_runtime=MD")
+    if metadata["os"] == "windows" and metadata.get("minimum_os") != "10.0":
+        raise ValueError("Windows binary packages require minimum_os=10.0")
     files = manifest.get("files")
     if not isinstance(files, dict):
         raise ValueError("binary package requires a file manifest")
@@ -335,6 +373,8 @@ def load(source, destination, version):
     executable = root / "bin" / ("seekdb.exe" if manifest["platform"]["os"] == "windows" else "seekdb")
     if architecture(executable, manifest["platform"]["os"]) != manifest["platform"]["arch"]:
         raise ValueError("binary package architecture does not match its executable")
+    if metadata["os"] == "windows":
+        windows_binaries(root, metadata["arch"])
     for path in ("share/seekdb/admin", "share/seekdb/srs", "share/seekdb/timezone", "etc/seekdb", "libexec/seekdb", "lib/seekdb"):
         if not (root / path).is_dir():
             raise ValueError("missing binary package directory: %s" % path)
