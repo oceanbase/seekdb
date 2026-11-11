@@ -470,7 +470,7 @@ int ObLocalManagementService::execute_bootstrap()
     }
     ret = OB_SUCC(ret) ? tmp_ret : ret;
   }
-  BOOTSTRAP_LOG(INFO, "execute_bootstrap finished", K(ret));
+  BOOTSTRAP_LOG(INFO, "execute_bootstrap finished", K(ret), "Note: intermittent OB_TIMEOUT(-4012) may occur on Windows during init_global_stat.");
   if (OB_FAIL(ret)) {
     LOG_DBA_FORCE_PRINT(DBA_ERROR, OB_BOOTSTRAP_FAIL, ret,
                         DBA_STEP_INC_INFO(bootstrap),
