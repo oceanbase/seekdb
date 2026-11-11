@@ -199,7 +199,10 @@ function Invoke-BindingSection {
     [Parameter(Mandatory = $true)]
     [string]$Name,
     [Parameter(Mandatory = $true)]
-    [scriptblock]$Script
+    [scriptblock]$Script,
+    # Section working directory: its <name>.db/log/seekdb.log is dumped when the section fails.
+    [Parameter(Mandatory = $false)]
+    [string]$WorkDir
   )
   Write-BindLog "SECTION START: $Name"
   Write-Host "--- $Name ---"
@@ -208,6 +211,8 @@ function Invoke-BindingSection {
     Write-BindLog "SECTION END OK: $Name"
   } catch {
     $msg = $_.Exception.Message
+    # The binding test restores its own working directory before the exception reaches this catch.
+    if ($WorkDir) { Show-SeekdbEngineLogTail -WorkDir $WorkDir }
     Write-BindLog "SECTION FAILED: $Name — $msg"
     Write-Host "::error::$Name — $msg"
     [void]$bindingFailures.Add($Name)
@@ -219,7 +224,7 @@ function Invoke-BindingSection {
 
 if (-not (Test-BindSection 'Python')) { Write-BindLog "SKIP section Python (BindSection=$script:BindSectionMode)" }
 if (Test-BindSection 'Python') {
-Invoke-BindingSection "Python" {
+Invoke-BindingSection "Python" -WorkDir (Join-Path $root "unittest\include\python") {
   Push-Location (Join-Path $root "unittest\include\python")
   try {
     Write-Host "::group::Python binding tests"
@@ -294,7 +299,7 @@ Invoke-BindingSection "Python" {
 
 if (-not (Test-BindSection 'NodeFfi')) { Write-BindLog "SKIP section NodeFfi (BindSection=$script:BindSectionMode)" }
 if (Test-BindSection 'NodeFfi') {
-Invoke-BindingSection "Node.js FFI (koffi)" {
+Invoke-BindingSection "Node.js FFI (koffi)" -WorkDir (Join-Path $root "unittest\include\nodejs") {
   Push-Location (Join-Path $root "unittest\include\nodejs")
   try {
     Write-BindLog "Entering nodejs/ — will run npm ci or npm install (this can be silent 5–15+ minutes on Windows)"
@@ -318,7 +323,7 @@ Invoke-BindingSection "Node.js FFI (koffi)" {
 
 if (-not (Test-BindSection 'NodeNapi')) { Write-BindLog "SKIP section NodeNapi (BindSection=$script:BindSectionMode)" }
 if (Test-BindSection 'NodeNapi') {
-Invoke-BindingSection "Node.js N-API" {
+Invoke-BindingSection "Node.js N-API" -WorkDir (Join-Path $root "unittest\include\nodejs_napi") {
   Push-Location (Join-Path $root "unittest\include\nodejs_napi")
   try {
     Install-NodeBindingDeps
@@ -342,7 +347,7 @@ Invoke-BindingSection "Node.js N-API" {
 
 if (-not (Test-BindSection 'Rust')) { Write-BindLog "SKIP section Rust (BindSection=$script:BindSectionMode)" }
 if (Test-BindSection 'Rust') {
-Invoke-BindingSection "Rust" {
+Invoke-BindingSection "Rust" -WorkDir (Join-Path $root "unittest\include\rust") {
   Push-Location (Join-Path $root "unittest\include\rust")
   try {
     $env:RUSTFLAGS = "-L native=$libDir"
@@ -365,7 +370,7 @@ Invoke-BindingSection "Rust" {
 
 if (-not (Test-BindSection 'Go')) { Write-BindLog "SKIP section Go (BindSection=$script:BindSectionMode)" }
 if (Test-BindSection 'Go') {
-Invoke-BindingSection "Go" {
+Invoke-BindingSection "Go" -WorkDir (Join-Path $root "unittest\include\go") {
   if (-not (Get-Command gcc -ErrorAction SilentlyContinue)) {
     throw "gcc not found on PATH (required for Go CGO). Install MinGW (e.g. choco install mingw)."
   }
@@ -394,7 +399,7 @@ Invoke-BindingSection "Go" {
 
 if (-not (Test-BindSection 'Java')) { Write-BindLog "SKIP section Java (BindSection=$script:BindSectionMode)" }
 if (Test-BindSection 'Java') {
-Invoke-BindingSection "Java" {
+Invoke-BindingSection "Java" -WorkDir (Join-Path $root "unittest\include\java") {
   if (-not (Get-Command mvn -ErrorAction SilentlyContinue)) {
     throw "mvn not found on PATH (required for Java tests). Install Maven."
   }

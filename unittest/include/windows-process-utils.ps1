@@ -2,6 +2,7 @@
 <#
   Shared Windows process utilities for libseekdb CI scripts (pure functions, no logic changes):
     - Write-BindLog
+    - Show-SeekdbEngineLogTail
     - Wait-ProcessWithDeadline
     - Start-NpmProcess
     - Invoke-ExternalTestWithBindingExitProbe
@@ -20,6 +21,37 @@ function Write-BindLog {
   $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
   Write-Host "[$ts] [seekdb-bind] $Message"
   try { [Console]::Out.Flush() } catch {}
+}
+
+# seekdb_open() suppresses engine logging on stdout, so a failed startup surfaces only as e.g.
+# "observer start failed: Internal error (rc=-4016)". The failing step lives in <base_dir>/log/seekdb.log
+# (WARN level by default), so dump its tail — otherwise CI never shows which observer step failed.
+function Show-SeekdbEngineLogTail {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$WorkDir,
+    [Parameter(Mandatory = $false)]
+    [int]$TailLines = 200
+  )
+  if (-not (Test-Path -LiteralPath $WorkDir)) {
+    Write-BindLog "engine log: work dir not found ($WorkDir)"
+    return
+  }
+  $dbDirs = @(Get-ChildItem -LiteralPath $WorkDir -Directory -Filter '*.db' -ErrorAction SilentlyContinue)
+  if ($dbDirs.Count -eq 0) {
+    Write-BindLog "engine log: no *.db directory under $WorkDir (database never opened)"
+    return
+  }
+  foreach ($dbDir in $dbDirs) {
+    $logPath = Join-Path $dbDir.FullName 'log\seekdb.log'
+    if (-not (Test-Path -LiteralPath $logPath)) {
+      Write-BindLog "engine log: $logPath missing (startup failed before the log file was configured)"
+      continue
+    }
+    Write-Host "::group::seekdb engine log ($logPath — last $TailLines lines)"
+    Get-Content -LiteralPath $logPath -Tail $TailLines -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+    Write-Host "::endgroup::"
+  }
 }
 
 # Wait for a child process with Refresh/WaitForExit chunks + wall-clock deadline + taskkill /T on expiry.

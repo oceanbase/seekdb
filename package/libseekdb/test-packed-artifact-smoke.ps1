@@ -121,6 +121,8 @@ try {
   }
   catch {
     Write-Host "::error::smoke-vsag.js failed: $($_.Exception.Message)"
+    # Unpack dir (and its smoke-seekdb.db/log/seekdb.log) is deleted by the finally block.
+    Show-SeekdbEngineLogTail -WorkDir $UnpackDir
     exit 1
   }
 
