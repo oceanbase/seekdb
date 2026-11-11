@@ -83,6 +83,31 @@ def version_tuple(value):
     return parts + (0,) * (3 - len(parts))
 
 
+def linux_libdir():
+    import ctypes
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="seekdb-libdir-") as temporary:
+        root = Path(temporary)
+        probe = root / "$LIB/seekdb-probe.so"
+        def failure():
+            try:
+                ctypes.CDLL(str(probe))
+            except OSError as error:
+                return str(error)
+            raise ValueError("unexpected load of an empty ELF library probe")
+        missing = failure()
+        # An empty file changes the loader error without executing any library.
+        for name in ("lib", "lib64", "lib/x86_64-linux-gnu", "lib/aarch64-linux-gnu"):
+            target = root / name / probe.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.touch()
+            found = failure() != missing
+            target.unlink()
+            if found:
+                return name
+    raise ValueError("unsupported native ELF $LIB directory")
+
+
 def linux_libraries(prefix, original, directories, extra_libraries):
     libraries = prefix / "lib/seekdb"
     libraries.mkdir(parents=True)
@@ -96,6 +121,17 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     pending = [(original, executable, ())]
     origins = {}
     executable_arch = architecture(executable, "linux")
+    libdir = None
+
+    def expand(entry, source):
+        def replace(match):
+            nonlocal libdir
+            if (match.group(1) or match.group(2)) == "ORIGIN":
+                return str(source.parent)
+            if libdir is None:
+                libdir = linux_libdir()
+            return libdir
+        return Path(re.sub(r"\$(?:\{(ORIGIN|LIB)\}|(ORIGIN|LIB)\b)", replace, entry))
 
     def matching(path):
         try:
@@ -126,8 +162,7 @@ def linux_libraries(prefix, original, directories, extra_libraries):
         source, target, inherited = pending.pop()
         metadata = dynamic(source)
         tags = re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", metadata)
-        paths = {kind: tuple(Path(entry.replace("${ORIGIN}", str(source.parent)).replace("$ORIGIN", str(source.parent)))
-                             for entry in value.split(":") if entry) for kind, value in tags}
+        paths = {kind: tuple(expand(entry, source) for entry in value.split(":") if entry) for kind, value in tags}
         if "RUNPATH" not in paths:
             inherited = paths.get("RPATH", ()) + inherited
         search = list(paths.get("RUNPATH", inherited))
@@ -146,8 +181,8 @@ def linux_libraries(prefix, original, directories, extra_libraries):
             enqueue(resolved, name, inherited)
         rpath = "$ORIGIN/../lib/seekdb:$ORIGIN/../libexec/seekdb/lib" if target == executable else "$ORIGIN"
         alignment = elf_relocation_page_size(target)
-        # Leaf system dependencies need no new RPATH.
-        if (target == executable or rpaths or any(not system.match(name) for name in needed)) and rpaths != [rpath]:
+        # Libraries also need their own search path when they dlopen plugins.
+        if rpaths != [rpath]:
             subprocess.run(["patchelf", "--page-size", str(alignment), "--set-rpath", rpath, str(target)], check=True)
         elf_relocation_page_size(target)
     return [executable] + sorted(libraries.iterdir())
