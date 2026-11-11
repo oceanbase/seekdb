@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "common/number/ob_number_v2.h"
+#include <inttypes.h>
 #include "lib/charset/ob_dtoa.h"
 #include "lib/utility/ob_fast_convert.h"
 #include "lib/utility/ob_hang_fatal_error.h"
@@ -1263,7 +1264,7 @@ int ObNumber::check_precision_(const int64_t precision, const int64_t scale)
       }
       if (OB_UNLIKELY(integer_counter > limit)) {
         ObCStringHelper helper;
-        _OB_LOG(WARN, "Precision=%ld scale=%ld integer_number=%ld precision overflow %s",
+        _OB_LOG(WARN, "Precision=%" PRId64 " scale=%" PRId64 " integer_number=%" PRId64 " precision overflow %s",
                   precision, scale, integer_counter, helper.convert(*this));
         ret = OB_INTEGER_PRECISION_OVERFLOW;
         break;
@@ -2259,7 +2260,7 @@ int ObNumber::rebuild_digits_(
   if (NULL != integer_digits
       && 0 < integer_length) {
     if (OB_UNLIKELY(MAX_CALC_LEN <= (length + integer_length))) {
-      _OB_LOG(WARN, "buffer size overflow, cap=%ld length=%ld integer_length=%ld",
+      _OB_LOG(WARN, "buffer size overflow, cap=%" PRId64 " length=%" PRId64 " integer_length=%" PRId64 "",
                 MAX_CALC_LEN, length, integer_length);
       ret = OB_NUMERIC_OVERFLOW;
     } else {
@@ -2271,7 +2272,7 @@ int ObNumber::rebuild_digits_(
       && NULL != decimal_digits
       && 0 < decimal_length) {
     if (OB_UNLIKELY(MAX_CALC_LEN <= (length + decimal_length))) {
-      _OB_LOG(WARN, "buffer size overflow, cap=%ld length=%ld decimal_length=%ld",
+      _OB_LOG(WARN, "buffer size overflow, cap=%" PRId64 " length=%" PRId64 " decimal_length=%" PRId64 "",
                 MAX_CALC_LEN, length, decimal_length);
       ret = OB_NUMERIC_OVERFLOW;
     } else {
@@ -2765,7 +2766,7 @@ int ObNumber::to_sci_str_(ObString &num_str, char *buf,
     }
     // fill exponent part
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(databuff_printf(pow_str, sizeof(pow_str), pow_pos, "%ld", pow_size))) {
+      if (OB_FAIL(databuff_printf(pow_str, sizeof(pow_str), pow_pos, "%" PRId64 "", pow_size))) {
       } else {
         for (int i = 0; i < pow_pos; ++i) {
           buf[pos++] = pow_str[i];
@@ -4099,7 +4100,7 @@ int ObNumber::negate_(ObNumber &value, IAllocator &allocator) const
       ++res.d_.exp_;
 
       if (OB_ISNULL(res.digits_ = res.alloc_(allocator, size2alloc))) {
-        _OB_LOG(WARN, "alloc digits fail, length=%ld", size2alloc);
+        _OB_LOG(WARN, "alloc digits fail, length=%" PRId64 "", size2alloc);
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(res.normalize_(cv.get_digits(), cv.size()))) {
         ObCStringHelper helper;
@@ -4674,7 +4675,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 //      ObCalcVector dividend_amplify;
 //      ObCalcVector *dividend_ptr = NULL;
 //      if (dividend.size() < divisor.size()) {
-//        _OB_LOG(WARN, "dividend_size=%ld must not less than divisor_size=%ld", dividend.size(),
+//        _OB_LOG(WARN, "dividend_size=%lld must not less than divisor_size=%lld", dividend.size(),
 //                divisor.size());
 //        ret = OB_ERR_UNEXPECTED;
 //      } else if (dividend.size() > divisor.size()) {
@@ -4685,7 +4686,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 //          LOG_WARN("divisor_amplify.ensure() fails", K(ret));
 //        } else if (OB_FAIL(poly_mono_mul(divisor, BASE - 1, divisor_amplify))) {
 //          ObCStringHelper helper;
-//          _OB_LOG(WARN, "[%s] mul [%lu] fail, ret=%d", helper.convert(divisor), BASE - 1, ret);
+//          _OB_LOG(WARN, "[%s] mul [%llu] fail, ret=%d", helper.convert(divisor), BASE - 1, ret);
 //        } else {
 //          int64_t sum_size = std::max(dividend.size(), divisor_amplify.size()) + 1;
 //          if (OB_FAIL(dividend_amplify.ensure(sum_size))) {
@@ -5419,7 +5420,7 @@ int ObNumber::power(const int64_t exponent, ObNumber &value,
     }
   }
 
-  _OB_LOG(DEBUG, "power (int exponent) ( [%s], [%ld] ), do_rounding=%d, ret=%d [%s]",
+  _OB_LOG(DEBUG, "power (int exponent) ( [%s], [%" PRId64 "] ), do_rounding=%d, ret=%d [%s]",
           (ret == OB_SUCCESS ? format() : "error"), exponent, do_rounding, ret,
           (ret == OB_SUCCESS ? result.format() : "error"));
   return ret;

@@ -45,6 +45,9 @@ MODULES = {
     },
     "json": {"bridge": "src/bridge.rs", "headers": ["include/binary_source.h", "include/schema_pattern.h", "include/read.h"], "deps": ["//rust/json:schema_pattern"]},
     "uuid-generator": {"bridge": "src/bridge.rs"},
+    "math": {"bridge": "src/bridge.rs"},
+    "vector-kernels": {"bridge": "src/bridge.rs"},
+    "path-utils": {"bridge": "src/bridge.rs"},
     "in-process": {
         "bridge": "src/bridge.rs",
         "headers": ["include/in_process_server.h"],

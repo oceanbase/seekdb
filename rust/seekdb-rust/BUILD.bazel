@@ -29,7 +29,13 @@ rust_static_library(
         "//rust/json",
     ] + select({
         "@platforms//os:emscripten": [],
-        "//conditions:default": ["//rust/standby-rpc:standby_rpc", "//rust/http-client:http_client"],
+        "//conditions:default": [
+            "//rust/standby-rpc:standby_rpc",
+            "//rust/http-client:http_client",
+            "//rust/math",
+            "//rust/vector-kernels:vector_kernels",
+            "//rust/path-utils:path_utils",
+        ],
     }),
     proc_macro_deps = all_crate_deps(proc_macro = True),
     aliases = aliases(),

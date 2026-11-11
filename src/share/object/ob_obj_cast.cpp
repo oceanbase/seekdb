@@ -18,6 +18,7 @@
 
 #ifdef _WIN32
 #include "lib/utility/alloc_assist.h"
+#include <inttypes.h>
 #define memmem ob_memmem
 #endif
 #include "ob_obj_cast.h"
@@ -732,7 +733,7 @@ int ObHexUtils::hex_for_mysql(const uint64_t uint_val, common::ObCastCtx &cast_c
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc memory failed", K(ret));
   } else {
-    int pos = snprintf(buf, MAX_INT64_LEN, "%lX", uint_val);
+    int pos = snprintf(buf, MAX_INT64_LEN, "%" PRIX64, uint_val);
     if (OB_UNLIKELY(pos <= 0) || OB_UNLIKELY(pos >= MAX_INT64_LEN)) {
       ret = OB_SIZE_OVERFLOW;
       LOG_ERROR("size is overflow", K(ret), K(uint_val));

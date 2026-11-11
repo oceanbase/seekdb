@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "rust/config.h"
+#include <inttypes.h>
 #include "query/protocol/ob_mysql_packet_sender.h"
 #include "rust/sql_nio.h"
 #include "observer/mysql/ob_mysql_result_set.h"
@@ -630,7 +631,7 @@ int ObMPPacketSender::send_error_packet(int err,
       char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
       msg_buf_size = snprintf(msg_buf, MAX_MSG_BUF_SIZE,
                            "%.*s\n"
-                           "[%04d-%02d-%02d %02d:%02d:%02d.%06ld] "
+                           "[%04d-%02d-%02d %02d:%02d:%02d.%06" PRId64 "] "
                            "[%s]",
                            message.length(), tmp_msg_buf,
                            tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,

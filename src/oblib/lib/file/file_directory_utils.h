@@ -21,9 +21,7 @@
 #include <vector>
 #include <stdint.h>
 #include <sys/types.h>
-#ifdef _WIN32
-#include "lib/utility/ob_platform_utils.h"
-#endif
+#include "lib/utility/ob_platform_io.h"
 
 namespace oceanbase
 {
@@ -75,7 +73,8 @@ public:
   static int to_absolute_path(ObSqlString &path);
 
 private:
-  static int check_directory_mode(const char *file_path, int mode, bool &result);
+  static int check_directory_mode(const char *file_path, ObPathPermission permission,
+                                  bool &result);
 };
 
 typedef FileDirectoryUtils FSU;

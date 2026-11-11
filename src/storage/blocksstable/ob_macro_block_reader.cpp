@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_macro_block_reader.h"
+#include <inttypes.h>
 #include "ob_macro_block_bare_iterator.h"
 #include "index_block/ob_index_block_row_struct.h"
 
@@ -606,7 +607,7 @@ int ObSSTableDataBlockReader::dump_sstable_micro_data(
       if (!is_trans_sstable_) {
         printer_.print_row_title(row, row_idx);
       } else {
-        fprintf(printer_.fd_, "ROW[%ld]:", row_idx);
+        fprintf(printer_.fd_, "ROW[%" PRId64 "]:", row_idx);
       }
       if (OB_NOT_NULL(hex_print_buf_) && !is_trans_sstable_) {
         printer_.print_store_row_hex(row, column_types_, OB_DEFAULT_MACRO_BLOCK_SIZE, hex_print_buf_);

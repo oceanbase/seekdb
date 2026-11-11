@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
@@ -182,7 +183,7 @@ int ObIndexSSTableBuildTask::process()
 void ObIndexSSTableBuildTask::add_event_info(const int ret, const ObString &ddl_event_stmt)
 {
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, dest_table_id:%ld",
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%" PRIu64 ", dest_table_id:%" PRIu64,
             data_table_id_, dest_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
     "ret", ret,
@@ -1511,7 +1512,7 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %" PRId64 ", ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(databuff_printf(stat_info_.message_,
@@ -1526,14 +1527,14 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %ld",
+                                    "STATUS: ACQUIRE SNAPSHOT, SNAPSHOT_VERSION: %" PRId64 "",
                                     snapshot_version_))) {
         }
       } else {
         if (OB_FAIL(databuff_printf(stat_info_.message_,
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
-                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %ld",
+                                    "STATUS: WAIT TRANS END, PENDING_TX_ID: %" PRId64 "",
                                     wait_trans_ctx_.get_pending_tx_id().get_id()))) {
         }
       }

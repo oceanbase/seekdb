@@ -1,0 +1,85 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Database preserves the complete acquired snapshot identity
+##tags: fork_database snapshot
+
+--disable_warnings
+DROP DATABASE IF EXISTS db_fork_snapshot_identity_src;
+DROP DATABASE IF EXISTS db_fork_snapshot_identity_dst;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection obsys;
+ALTER SYSTEM SET debug_sync_timeout = '60s';
+SET ob_global_debug_sync = 'reset';
+
+connection default;
+CREATE DATABASE db_fork_snapshot_identity_src;
+CREATE TABLE db_fork_snapshot_identity_src.t1 (
+  id INT PRIMARY KEY,
+  v INT,
+  body TEXT,
+  KEY idx_v (v)
+);
+CREATE TABLE db_fork_snapshot_identity_src.t2 (
+  id INT PRIMARY KEY,
+  body BLOB
+);
+INSERT INTO db_fork_snapshot_identity_src.t1 VALUES (1, 10, 'source-one');
+INSERT INTO db_fork_snapshot_identity_src.t2 VALUES (2, 'source-two');
+
+let $src_database_id = `SELECT database_id FROM oceanbase.__all_database WHERE database_name = 'db_fork_snapshot_identity_src'`;
+let $src_t1_table_id = `SELECT table_id FROM oceanbase.__all_table WHERE database_id = $src_database_id AND table_name = 't1'`;
+let $src_t2_table_id = `SELECT table_id FROM oceanbase.__all_table WHERE database_id = $src_database_id AND table_name = 't2'`;
+let $src_max_schema_version = `SELECT MAX(schema_version) FROM oceanbase.__all_table WHERE database_id = $src_database_id AND table_name IN ('t1', 't2')`;
+let $src_tablet_cnt = `SELECT COUNT(DISTINCT tablet_id) FROM oceanbase.__all_tablet_to_table WHERE table_id IN (SELECT table_id FROM oceanbase.__all_table WHERE database_id = $src_database_id)`;
+let $src_tablet_ids = `SELECT GROUP_CONCAT(DISTINCT tablet_id ORDER BY tablet_id) FROM oceanbase.__all_tablet_to_table WHERE table_id IN (SELECT table_id FROM oceanbase.__all_table WHERE database_id = $src_database_id)`;
+
+connection obsys;
+SET ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for fork_snapshot_identity_signal execute 10000';
+connection default;
+FORK DATABASE db_fork_snapshot_identity_src TO db_fork_snapshot_identity_dst;
+
+let $wait_status = BUILD_DATA;
+let $wait_task_cnt = 1;
+let $wait_src_table_id = $src_t1_table_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+let $wait_status = BUILD_DATA;
+let $wait_task_cnt = 1;
+let $wait_src_table_id = $src_t2_table_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+let $fork_snapshot_scn = `SELECT MIN(snapshot_version) FROM oceanbase.__all_ddl_task_status WHERE ddl_type = 10009 AND object_id IN (SELECT table_id FROM oceanbase.__all_table WHERE database_id = $src_database_id AND table_name IN ('t1', 't2'))`;
+let $dst_database_id = `SELECT database_id FROM oceanbase.__all_database WHERE database_name = 'db_fork_snapshot_identity_dst'`;
+
+--disable_query_log
+--eval SELECT COUNT(*) = 2 AND MIN(snapshot_version) = MAX(snapshot_version) AS single_shared_snapshot FROM oceanbase.__all_ddl_task_status WHERE ddl_type = 10009 AND object_id IN (SELECT table_id FROM oceanbase.__all_table WHERE database_id = $src_database_id AND table_name IN ('t1', 't2'))
+
+--eval SELECT MIN(schema_version) > $src_max_schema_version AS source_destination_versions_diverge FROM oceanbase.__all_table WHERE database_id = $dst_database_id AND table_name IN ('t1', 't2')
+
+--eval SELECT COUNT(*) = $src_tablet_cnt AND COUNT(DISTINCT tablet_id) = $src_tablet_cnt AND MIN(schema_version) = $src_max_schema_version AND MAX(schema_version) = $src_max_schema_version AND COALESCE(SUM(tablet_id NOT IN ($src_tablet_ids)), 0) = 0 AS complete_acquisition_identity FROM oceanbase.__all_acquired_snapshot WHERE snapshot_type = 1 AND snapshot_scn = $fork_snapshot_scn
+--enable_query_log
+
+connection obsys;
+SET ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+SET ob_global_debug_sync = 'now broadcast fork_snapshot_identity_signal';
+connection default;
+let $wait_src_table_id = $src_t1_table_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+let $wait_src_table_id = $src_t2_table_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--disable_query_log
+--eval SELECT COUNT(*) AS remaining_snapshot_rows FROM oceanbase.__all_acquired_snapshot WHERE snapshot_type = 1 AND snapshot_scn = $fork_snapshot_scn
+--enable_query_log
+
+SELECT 't1' AS table_name, id, v, body FROM db_fork_snapshot_identity_dst.t1 ORDER BY id;
+SELECT 't2' AS table_name, id, body FROM db_fork_snapshot_identity_dst.t2 ORDER BY id;
+
+connection obsys;
+SET ob_global_debug_sync = 'reset';
+disconnect obsys;
+connection default;
+DROP DATABASE db_fork_snapshot_identity_dst;
+DROP DATABASE db_fork_snapshot_identity_src;

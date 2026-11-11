@@ -15,11 +15,13 @@
 //! seekdb's timestamped file convention on top of spdlog's public Sink API.
 //! Open files, append/reopen/rotation and retention have one owner.
 use chrono::Local;
-use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+
+#[cfg(unix)]
+use std::ffi::CString;
 
 #[cfg(unix)]
 use std::os::unix::{ffi::OsStrExt, fs::MetadataExt, fs::OpenOptionsExt, io::AsRawFd};
@@ -88,6 +90,52 @@ fn open(path: &Path) -> io::Result<File> {
     options.open(path)
 }
 
+#[cfg(unix)]
+fn duplicate_file_descriptor(file: &File) -> io::Result<libc::c_int> {
+    let fd = unsafe { libc::dup(file.as_raw_fd()) };
+    if fd < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(fd)
+    }
+}
+
+#[cfg(windows)]
+fn duplicate_file_descriptor(file: &File) -> io::Result<libc::c_int> {
+    use windows_sys::Win32::Foundation::{CloseHandle, DuplicateHandle, DUPLICATE_SAME_ACCESS};
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+
+    let process = unsafe { GetCurrentProcess() };
+    let mut handle = std::ptr::null_mut();
+    if unsafe {
+        DuplicateHandle(
+            process,
+            file.as_raw_handle(),
+            process,
+            &mut handle,
+            0,
+            0,
+            DUPLICATE_SAME_ACCESS,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+
+    let fd = unsafe {
+        libc::open_osfhandle(
+            handle as isize,
+            libc::O_WRONLY | libc::O_APPEND | libc::O_BINARY,
+        )
+    };
+    if fd < 0 {
+        let error = io::Error::last_os_error();
+        unsafe { CloseHandle(handle) };
+        return Err(error);
+    }
+    Ok(fd)
+}
+
 impl Output {
     pub fn new(path: PathBuf, redirect: bool) -> io::Result<Self> {
         let file = if path.as_os_str().is_empty() {
@@ -121,24 +169,9 @@ impl Output {
             return Ok(());
         }
         if let Some(file) = &self.file {
-            #[cfg(unix)]
-            let fd = file.as_raw_fd();
-            // std::File uses Win32 HANDLEs; stdout/stderr use CRT descriptors.
-            #[cfg(windows)]
-            let fd = {
-                let _ = file;
-                let path = CString::new(self.path.to_string_lossy().as_bytes())?;
-                let fd = unsafe {
-                    libc::open(
-                        path.as_ptr(),
-                        libc::O_WRONLY | libc::O_APPEND | libc::O_BINARY,
-                    )
-                };
-                if fd < 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                fd
-            };
+            // Derive stdio from the output's existing open file so both use
+            // the same append and sharing semantics during rotation.
+            let fd = duplicate_file_descriptor(file)?;
             let result = (|| {
                 for target in [1, 2] {
                     if unsafe { libc::dup2(fd, target) } < 0 {
@@ -147,7 +180,6 @@ impl Output {
                 }
                 Ok(())
             })();
-            #[cfg(windows)]
             unsafe {
                 libc::close(fd);
             }

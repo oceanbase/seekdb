@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "rust/sql_nio.h"
 
 #include "obmp_stmt_execute.h"
@@ -493,7 +494,7 @@ int ObMPStmtExecute::save_exception_for_arraybinding(
   } else {
     errm_result = ob_errpkt_strerror(error_code);
     if (NULL == errm_result) {
-      errm_result = "OBE%ld: Message error_code not found; product=RDBMS; facility=ORA";
+      errm_result = "OBE%" PRId64 ": Message error_code not found; product=RDBMS; facility=ORA";
     }
     errm_length = strlen(errm_result);
   }

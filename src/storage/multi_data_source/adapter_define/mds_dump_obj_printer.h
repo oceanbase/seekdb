@@ -17,6 +17,7 @@
 #ifndef SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_DUMP_OBJ_PRINTER_H
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_DUMP_OBJ_PRINTER_H
 #include "lib/literals/ob_literals.h"
+#include <inttypes.h>
 #include "mds_dump_node.h"
 #include "storage/multi_data_source/mds_table_handle.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
@@ -138,7 +139,7 @@ struct MdsDumpObjPrinter
                                                        int64_t &pos)
     {
       databuff_printf(buf, buf_len, pos,
-                      "user_key:ERROR:unit_id not in tuple(%ld)", (int64_t)mds_unit_id);
+                      "user_key:ERROR:unit_id not in tuple(%" PRId64 ")", (int64_t)mds_unit_id);
     }
     template <int IDX>
     void help_print_data(const uint8_t mds_unit_id,
@@ -176,7 +177,7 @@ struct MdsDumpObjPrinter
                                                         int64_t &pos)
     {
       databuff_printf(buf, buf_len, pos,
-                      "user_data:ERROR:mds_unit_id not in tuple(%ld)", (int64_t)mds_unit_id);
+                      "user_data:ERROR:mds_unit_id not in tuple(%" PRId64 ")", (int64_t)mds_unit_id);
     }
   };
   template <int IDX>
@@ -213,7 +214,7 @@ struct MdsDumpObjPrinter
                                                          int64_t &pos)
   {
     databuff_printf(buf, buf_len, pos,
-                    "user_data:ERROR:table_id not in tuple(%ld)", (int64_t)mds_table_id);
+                    "user_data:ERROR:table_id not in tuple(%" PRId64 ")", (int64_t)mds_table_id);
   }
 };
 

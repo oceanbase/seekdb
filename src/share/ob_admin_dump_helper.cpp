@@ -15,6 +15,7 @@
  */
 
 #include "share/ob_admin_dump_helper.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -49,14 +50,14 @@ int ObAdminLogNormalDumper::dump_key(const char *key)
 int ObAdminLogNormalDumper::dump_int64(int64_t arg)
 {
   int ret = OB_SUCCESS;
-  fprintf(stdout, " %ld ", arg);
+  fprintf(stdout, " %" PRId64 " ", arg);
   return ret;
 }
 
 int ObAdminLogNormalDumper::dump_uint64(uint64_t arg)
 {
   int ret = OB_SUCCESS;
-  fprintf(stdout, " %lu ", arg);
+  fprintf(stdout, " %" PRIu64 " ", arg);
   return ret;
 }
 

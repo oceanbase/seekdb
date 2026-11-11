@@ -2258,9 +2258,14 @@ extern void mark_filtered_datums_simd(const ObDatum *datums,
 
 MarkFilterdDatumsFunc get_mark_filterd_datums_func()
 {
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
   return data_plane::is_avx512_supported()
       ? mark_filtered_datums_simd
       : mark_filtered_datums;
+#else
+  // Match the build guard of mark_filtered_datums_simd before CPU dispatch.
+  return mark_filtered_datums;
+#endif
 }
 
 MarkFilterdDatumsFunc mark_filtered_datums_func = get_mark_filterd_datums_func();

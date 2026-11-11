@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_RESV
 
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
+#include <inttypes.h>
 #include "sql/printer/ob_select_stmt_printer.h"
 
 namespace oceanbase
@@ -713,7 +714,7 @@ int ObCreateViewResolver::create_alias_names_auto(
     hash_ret = OB_HASH_EXIST;
     char temp_str_buf[number::ObNumber::MAX_PRINTABLE_SIZE];
     while (OB_SUCC(ret) && OB_HASH_EXIST == hash_ret) {
-      if (snprintf(temp_str_buf, sizeof(temp_str_buf), "Name_exp_%ld", auto_name_id) < 0) {
+      if (snprintf(temp_str_buf, sizeof(temp_str_buf), "Name_exp_%" PRIu64, auto_name_id) < 0) {
         ret = OB_SIZE_OVERFLOW;SQL_RESV_LOG(WARN, "failed to generate buffer for temp_str_buf", K(ret));
       }
       if (OB_SUCC(ret)) {

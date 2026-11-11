@@ -54,13 +54,13 @@
 #define FETCH_ALL_ROLE_GRANTEE_MAP_HISTORY_SQL  COMMON_SCHEMA_SQL
 
 #define FETCH_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE 0 = %lu %% 1 and object_name = '%.*s' and type = %d "
+    "WHERE 0 = %" PRIu64 " %% 1 and object_name = '%.*s' and type = %d "
 
 #define FETCH_EXPIRE_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE 0 = %lu %% 1 and time_to_usec(gmt_create) < %ld order by gmt_create"
+    "WHERE 0 = %" PRIu64 " %% 1 and time_to_usec(gmt_create) < %" PRId64 " order by gmt_create"
 
 #define FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE (0 = %lu %% 1 or TYPE = 7) and time_to_usec(gmt_create) < %" PRId64 " order by gmt_create"
+    "WHERE (0 = %" PRIu64 " %% 1 or TYPE = 7) and time_to_usec(gmt_create) < %" PRId64 " order by gmt_create"
 
 #define FETCH_ALL_RECYCLEBIN_SQL_WITH_CONDITION COMMON_SCHEMA_SQL
 
@@ -88,18 +88,18 @@
 #define FETCH_ALL_MOCK_FK_PARENT_TABLE_HISTORY_SQL COMMON_SCHEMA_SQL
 
 #define FETCH_ALL_CASCADE_OBJECT_ID_HISTORY_SQL "SELECT %s object_id, is_deleted FROM %s " \
-    "WHERE 0 = %lu %% 1 AND %s = %lu AND schema_version <= %lu " \
+    "WHERE 0 = %" PRIu64 " %% 1 AND %s = %" PRIu64 " AND schema_version <= %" PRIu64 " " \
     "ORDER BY object_id desc, schema_version desc"
 
 // foreign key begin
 #define FETCH_ALL_FOREIGN_KEY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu %% 1"
+  "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_HISTORY_SQL \
   "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_COLUMN_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu %% 1"
+  "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_COLUMN_HISTORY_SQL \
   "SELECT * FROM %s WHERE 0 = %" PRIu64 " %% 1"
@@ -116,13 +116,13 @@
 
 #define FETCH_RECYCLE_TABLE_OBJECT \
     "SELECT table_name, database_id FROM %s \
-     WHERE 0 = %lu %% 1 and table_id = %" PRIu64 " and schema_version <= %" PRId64 " and \
+     WHERE 0 = %" PRIu64 " %% 1 and table_id = %" PRIu64 " and schema_version <= %" PRId64 " and \
            table_name is not null and table_name != "" and table_name != %s \
      ORDER BY SCHEMA_VERSION DESC LIMIT 1"
 
 #define FETCH_RECYCLE_DATABASE_OBJECT \
     "SELECT database_name FROM %s \
-     WHERE 0 = %lu %% 1 and database_id = %" PRIu64 " and schema_version <= %" PRId64 " and \
+     WHERE 0 = %" PRIu64 " %% 1 and database_id = %" PRIu64 " and schema_version <= %" PRId64 " and \
            database_name is not null and database_name != "" and database_name != %s \
      ORDER BY SCHEMA_VERSION DESC LIMIT 1"
 
@@ -4469,7 +4469,7 @@ int ObSchemaServiceSQLImpl::delete_recycle_object(const ObRecycleObject &recycle
   } else {
     ObSqlString sql;
     int64_t affected_rows = 0;
-    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE 0 = %lu %% 1 and object_name = '%.*s' AND type = %d",
+    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE 0 = %" PRIu64 " %% 1 and object_name = '%.*s' AND type = %d",
                                OB_ALL_RECYCLEBIN_TNAME,
                                uint64_t(1),
                                recycle_object.get_object_name().length(),
@@ -5617,7 +5617,7 @@ int ObSchemaServiceSQLImpl::get_table_id(
         if (OB_FAIL(sql.assign_fmt(
             "SELECT * FROM "
             "((SELECT table_id, table_name, session_id, table_type, table_mode, schema_version FROM %s "
-            " WHERE 0 = %lu %% 1 AND database_id = %" PRIu64 ") "
+            " WHERE 0 = %" PRIu64 " %% 1 AND database_id = %" PRIu64 ") "
             "UNION ALL "
             "(SELECT table_id, table_name, session_id, table_type, table_mode, schema_version FROM %s "
             " WHERE table_name = '%s' "

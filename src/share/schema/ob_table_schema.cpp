@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "common/datum/ob_datum.h"
+#include <inttypes.h>
 #include "share/schema/ob_col_desc.h"  // ObColDesc complete type(previously hidden behind the ddl_common include chain)
 #include "ob_table_schema.h"
 #include "lib/compress/ob_compress_util.h"
@@ -2023,22 +2024,22 @@ int ObTableSchema::create_cons_name_automatically(ObString &cst_name,
   if (OB_SUCC(ret)) {
     switch (cst_type) {
       case CONSTRAINT_TYPE_PRIMARY_KEY: {
-        if (OB_FAIL(cons_name_postfix_str.append_fmt("_OBPK_%ld",ObTimeUtility::current_time()))) {
+        if (OB_FAIL(cons_name_postfix_str.append_fmt("_OBPK_%" PRId64 "",ObTimeUtility::current_time()))) {
         }
         break;
       }
       case CONSTRAINT_TYPE_CHECK: {
-        if (OB_FAIL(cons_name_postfix_str.append_fmt("_OBCHECK_%ld", ObTimeUtility::current_time()))) {
+        if (OB_FAIL(cons_name_postfix_str.append_fmt("_OBCHECK_%" PRId64 "", ObTimeUtility::current_time()))) {
         }
         break;
       }
       case CONSTRAINT_TYPE_UNIQUE_KEY: {
-        if (OB_FAIL(cons_name_postfix_str.append_fmt("_OBUNIQUE_%ld",ObTimeUtility::current_time()))) {
+        if (OB_FAIL(cons_name_postfix_str.append_fmt("_OBUNIQUE_%" PRId64 "",ObTimeUtility::current_time()))) {
         }
         break;
       }
       case CONSTRAINT_TYPE_NOT_NULL: {
-        if (OB_FAIL(cons_name_postfix_str.append_fmt("_OBNOTNULL_%ld",ObTimeUtility::current_time()))) {
+        if (OB_FAIL(cons_name_postfix_str.append_fmt("_OBNOTNULL_%" PRId64 "",ObTimeUtility::current_time()))) {
         }
         break;
       }
@@ -6960,7 +6961,7 @@ int ObTableSchema::convert_column_udt_set_ids(const ObHashMap<uint64_t, uint64_t
           } else {
             // update hidden column name
             char col_name[OB_MAX_COLUMN_NAME_LENGTH] = {0};
-            databuff_printf(col_name, OB_MAX_COLUMN_NAME_LENGTH, "SYS_NC%05lu$", new_column_id);
+            databuff_printf(col_name, OB_MAX_COLUMN_NAME_LENGTH, "SYS_NC%05" PRIu64 "$", new_column_id);
             if (OB_FAIL(remove_col_from_name_hash_array(column))) {
             } else if (OB_FAIL(column->set_column_name(col_name))) {
             } else if (OB_FAIL(add_col_to_name_hash_array(column))) {

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "query/vector/ob_vector_index_cache.h"
+#include <inttypes.h>
 #include "query/vector/ob_vector_query_result.h"
 #include "storage/allocator/ob_vector_allocator.h"
 
@@ -218,8 +219,8 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
   ObVectorIndexParam *param;
   int64_t pos = 0;
   if (OB_FAIL(databuff_printf(
-          info.statistics_, sizeof(info.statistics_), pos, "actual_memory_used=%ld;", get_actual_memory_used()))) {
-  } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "ref_cnt=%ld;", ref_cnt_))) {
+          info.statistics_, sizeof(info.statistics_), pos, "actual_memory_used=%" PRId64 ";", get_actual_memory_used()))) {
+  } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "ref_cnt=%" PRId64 ";", ref_cnt_))) {
   } else if (OB_FAIL(databuff_printf(
                  info.statistics_, sizeof(info.statistics_), pos, "is_reach_limit=%d;", is_reach_limit_))) {
   } else if (OB_FAIL(databuff_printf(
@@ -249,7 +250,7 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
           ObIvfCentCache *cache = dynamic_cast<ObIvfCentCache*>(iter->second);
           if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
-                  "capacity=%ld;", cache->get_capacity()))) {
+                  "capacity=%" PRId64 ";", cache->get_capacity()))) {
           } else if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "cent_vec_dim=%d;", cache->cent_vec_dim_))) {
@@ -383,7 +384,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
         break;
       }
       case IvfCacheType::IVF_PQ_CENTROID_CACHE: {
-        int64_t pqnlist = 1L << param.nbits_;
+        int64_t pqnlist = 1ULL << param.nbits_;
         if (OB_ISNULL(centroids_ = static_cast<float *>(
                           sub_mem_ctx_->Allocate(sizeof(float) * pqnlist * param.dim_)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -397,7 +398,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
         break;
       }
       case IvfCacheType::IVF_PQ_PRECOMPUTE_TABLE_CACHE: {
-        int64_t ksub = 1L << param.nbits_;
+        int64_t ksub = 1ULL << param.nbits_;
         if (OB_ISNULL(centroids_ = static_cast<float *>(
                           sub_mem_ctx_->Allocate(sizeof(float) * param.nlist_ * param.m_ * ksub)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -505,12 +506,12 @@ int64_t ObIvfCentCache::get_expect_memory_used(
       break;
     }
     case IvfCacheType::IVF_PQ_CENTROID_CACHE: {
-      int64_t pqnlist = 1L << param.nbits_;
+      int64_t pqnlist = 1ULL << param.nbits_;
       usage = sizeof(float) * pqnlist * param.dim_;
       break;
     }
     case IvfCacheType::IVF_PQ_PRECOMPUTE_TABLE_CACHE: {
-      int64_t ksub = 1L << param.nbits_;
+      int64_t ksub = 1ULL << param.nbits_;
       usage = sizeof(float) * param.nlist_ * param.m_ * ksub;
       break;
     }

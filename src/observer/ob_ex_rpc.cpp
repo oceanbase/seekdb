@@ -27,6 +27,7 @@
 #include "lib/lock/ob_futex.h"
 #include "lib/time/ob_clock_generator.h"
 #include "lib/profile/ob_trace_id.h"
+#include <time.h>
 
 namespace oceanbase {
 namespace ex_rpc {
@@ -35,17 +36,26 @@ using namespace oceanbase::lib;
 
 // ===================== sync_call -> runtime ReqWorker =====================
 
-// Caller-owned completion context: created on the caller's stack, lives across the
-// wait, so it survives the framework freeing the task after run().
+// Completion context shared by the caller and the dispatched task. The caller
+// blocks until done_, but a timeout may return early, and the callback captures
+// caller stack references (see sync_call() contract). The task must therefore
+// either never run the callback or already be running it when the caller leaves.
+// The state machine makes that decision race-free:
+//   PENDING -> RUNNING  (task starts the callback)
+//   PENDING -> CANCELED (caller timed out before the task started)
+// Once RUNNING, the caller keeps waiting past the deadline so the captured
+// references stay alive.
 struct SyncCtx {
+  enum State { PENDING = 0, RUNNING = 1, CANCELED = 2 };
+  std::atomic<int> state_;
   int ret_;
   int done_;   // futex word: 0 pending, 1 done
-  SyncCtx() : ret_(OB_SUCCESS), done_(0) {}
+  SyncCtx() : state_(PENDING), ret_(OB_SUCCESS), done_(0) {}
 };
 
 class ExRpcProcessor : public rpc::frame::ObReqProcessor {
 public:
-  ExRpcProcessor() : timeout_ts_(INT64_MAX), sync_ctx_(nullptr) {}
+  ExRpcProcessor() : timeout_ts_(INT64_MAX), sync_ctx_() {}
   int run() override {
     // Propagate the caller trace id onto the dispatched worker (the former loopback
     // RPC carried it in the packet). Without this the worker keeps the null trace
@@ -53,17 +63,25 @@ public:
     // id, rejected as invalid (OB_INVALID_ERROR / -4055).
     ObCurTraceId::set(trace_id_);
     THIS_WORKER.set_timeout_ts(timeout_ts_);
-    const int op_ret = fn_ ? fn_() : OB_SUCCESS;
+    int op_ret = OB_SUCCESS;
     if (sync_ctx_ != nullptr) {
-      sync_ctx_->ret_ = op_ret;
+      int expected = SyncCtx::PENDING;
+      if (sync_ctx_->state_.compare_exchange_strong(expected, SyncCtx::RUNNING)) {
+        op_ret = fn_ ? fn_() : OB_SUCCESS;
+        sync_ctx_->ret_ = op_ret;
+      }
+      // A canceled context has no waiter left; the caller already returned and
+      // no longer owns any captured reference.
       ATOMIC_STORE(&sync_ctx_->done_, 1);
       futex_wake(reinterpret_cast<int *>(&sync_ctx_->done_), 1);
+    } else {
+      op_ret = fn_ ? fn_() : OB_SUCCESS;
     }
     return OB_SUCCESS;
   }
   std::function<int()> fn_;
   int64_t timeout_ts_;
-  SyncCtx *sync_ctx_;
+  std::shared_ptr<SyncCtx> sync_ctx_;
   ObCurTraceId::TraceId trace_id_;
 };
 
@@ -73,7 +91,8 @@ public:
   ExRpcProcessor proc_;
 };
 
-static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_ctx)
+static int dispatch_(int64_t timeout_us, std::function<int()> fn,
+                     std::shared_ptr<SyncCtx> sync_ctx)
 {
   int ret = OB_SUCCESS;
   
@@ -84,7 +103,7 @@ static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_
   } else {
     task->proc_.fn_ = std::move(fn);
     task->proc_.timeout_ts_ = ObClockGenerator::getClock() + timeout_us;
-    task->proc_.sync_ctx_ = sync_ctx;
+    task->proc_.sync_ctx_ = std::move(sync_ctx);
     task->proc_.trace_id_.set(*ObCurTraceId::get_trace_id());
     task->set_receive_timestamp(ObClockGenerator::getClock());
     task->proc_.set_ob_request(*task);
@@ -98,15 +117,57 @@ static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_
   return ret;
 }
 
-int sync_call_internal(int64_t timeout_us, std::function<int()> fn)
+// Wait for the dispatched callback with a bounded wait. On deadline the caller
+// may leave only when the callback never started (PENDING -> CANCELED); if it is
+// already RUNNING the caller must stay until it finishes because the callback
+// captures caller references.
+static int wait_sync_ctx(SyncCtx &ctx, const int64_t timeout_us)
 {
-  SyncCtx ctx;
-  int ret = dispatch_(timeout_us, std::move(fn), &ctx);
-  if (OB_SUCC(ret)) {
-    while (0 == ATOMIC_LOAD(&ctx.done_)) {
+  int ret = OB_SUCCESS;
+  const int64_t deadline = ObClockGenerator::getClock() + timeout_us;
+  while (0 == ATOMIC_LOAD(&ctx.done_)) {
+    const int64_t now = ObClockGenerator::getClock();
+    if (now < deadline) {
+      const int64_t remaining_us = deadline - now;
+      struct timespec rel_time;
+      rel_time.tv_sec = static_cast<time_t>(remaining_us / 1000000);
+      rel_time.tv_nsec = static_cast<long>((remaining_us % 1000000) * 1000);
+      futex_wait(reinterpret_cast<int *>(&ctx.done_), 0, &rel_time);
+    } else {
+      int expected = SyncCtx::PENDING;
+      if (ctx.state_.compare_exchange_strong(expected, SyncCtx::CANCELED)) {
+        // The callback will never run; the task may still release its own
+        // references, but it no longer touches anything the caller owns.
+        ret = OB_TIMEOUT;
+        break;
+      }
+      // Already running: keep waiting (unbounded) so captured stack references
+      // stay valid even though the deadline passed.
       futex_wait(reinterpret_cast<int *>(&ctx.done_), 0, nullptr);
     }
+  }
+  if (OB_SUCC(ret)) {
     ret = ctx.ret_;
+  }
+  return ret;
+}
+
+int sync_call_internal(int64_t timeout_us, std::function<int()> fn)
+{
+  int ret = OB_SUCCESS;
+  if (timeout_us <= 0) {
+    timeout_us = EX_RPC_DEFAULT_TIMEOUT_US;
+  }
+  std::shared_ptr<SyncCtx> ctx = std::make_shared<SyncCtx>();
+  // dispatch_() enqueues the callback through ObServerRuntime::recv_request,
+  // whose foreground expansion runs before this thread blocks: when the queued
+  // requests outnumber the idle workers it spawns a worker immediately
+  // (high-priority ExRpcTask expands up to max_worker_cnt), so the callback has
+  // an executor other than this caller. The wait below is bounded as a safety
+  // net, not as the mechanism that guarantees progress.
+  ret = dispatch_(timeout_us, std::move(fn), ctx);
+  if (OB_SUCC(ret)) {
+    ret = wait_sync_ctx(*ctx, timeout_us);
   }
   return ret;
 }
@@ -120,7 +181,7 @@ int sync_call_internal(int64_t timeout_us, std::function<int()> fn)
 int async_call_internal(std::function<void()> fn) {
     return dispatch_(EX_RPC_DEFAULT_TIMEOUT_US,
                      [f = std::move(fn)]() -> int { f(); return oceanbase::common::OB_SUCCESS; },
-                     nullptr);
+                     std::shared_ptr<SyncCtx>());
 }
 
 } // namespace ex_rpc

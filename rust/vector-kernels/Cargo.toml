@@ -1,0 +1,11 @@
+[package]
+name = "vector-kernels"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "1"
+# Pinned so the SIMD dispatch/arithmetic cannot drift under the SQL-visible
+# l2_distance()/l2_squared() values.
+simsimd = "=6.5.16"

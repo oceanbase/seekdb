@@ -4126,7 +4126,7 @@ int ObTimeConverter::time_overflow_trunc(int64_t &value, const ObScale &time_sca
 //  */
 //  if(!(higher_bound > 0 && t >= range_boundaries[0]))
 //  {
-//    _OB_LOG(ERROR, "Invalid higher_bound = %lu or t = %ld", higher_bound, t);
+//    _OB_LOG(ERROR, "Invalid higher_bound = %llu or t = %lld", higher_bound, t);
 //    ret = OB_INVALID_ARGUMENT_FOR_USEC_TO_TIME;
 //    result = -1;
 //  } else {

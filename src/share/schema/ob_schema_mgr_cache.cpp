@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "share/rc/ob_server_runtime.h"
+#include <inttypes.h>
 #include "rust/config.h"
 #include "ob_schema_mgr_cache.h"
 #include "share/schema/ob_schema_service.h"
@@ -337,7 +338,7 @@ int ObSchemaMgrCache::build_ref_mod_infos_(const int64_t *mod_ref,
   for (int64_t i = 0; i < ARRAYSIZEOF(ref_info_type_strs) && OB_SUCC(ret); ++i) {
     if (mod_ref[i] > 0) {
       if (OB_FAIL(get_ref_info_type_str_(i, type_str))) {
-      } else if (OB_FAIL(databuff_printf(buff, buf_len, pos, "%s%s:%ld", (0 != pos ? "," : ""), type_str, mod_ref[i]))) {
+      } else if (OB_FAIL(databuff_printf(buff, buf_len, pos, "%s%s:%" PRId64 "", (0 != pos ? "," : ""), type_str, mod_ref[i]))) {
       }
     }
   }

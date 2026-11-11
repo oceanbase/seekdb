@@ -20,6 +20,7 @@
 // emulates the directory moves the OPFS backend refuses, and reports failing
 // file calls.
 #include <atomic>
+#include <inttypes.h>
 #include <cerrno>
 #include <cstdarg>
 #include <cstdint>
@@ -49,8 +50,8 @@ std::mutex directory_move_mutex;
 void report(const char *name, long ret, const char *path, long fd)
 {
   if (reported.fetch_add(1) >= 300) return;
-  if (path != nullptr) std::fprintf(stderr, "seekdb-runtime: %s(%s) -> %ld\n", name, path, ret);
-  else std::fprintf(stderr, "seekdb-runtime: %s(fd %ld) -> %ld\n", name, fd, ret);
+  if (path != nullptr) std::fprintf(stderr, "seekdb-runtime: %s(%s) -> %" PRId64 "\n", name, path, static_cast<int64_t>(ret));
+  else std::fprintf(stderr, "seekdb-runtime: %s(fd %" PRId64 ") -> %" PRId64 "\n", name, static_cast<int64_t>(fd), static_cast<int64_t>(ret));
 }
 
 const char *text(intptr_t path)

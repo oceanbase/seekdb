@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_lob_piece_builder.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -158,7 +159,7 @@ int ObLobPieceBuilder::generate_lob_piece_table_name(
   // __AUX_LOB_PIECE_<table_id>_
   if (OB_ISNULL(buf) || buf_size <= 0 || pos < 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if ((pos = snprintf(buf, buf_size, "__AUX_LOB_PIECE_%lu_", new_table_id)) >= buf_size || pos < 0) {
+  } else if ((pos = snprintf(buf, buf_size, "__AUX_LOB_PIECE_%" PRIu64 "_", new_table_id)) >= buf_size || pos < 0) {
     ret = common::OB_BUF_NOT_ENOUGH;
   }
 

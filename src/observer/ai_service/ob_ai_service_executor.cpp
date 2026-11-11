@@ -15,6 +15,7 @@
  */
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "observer/ai_service/ob_ai_service_executor.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "observer/ai_service/ob_ai_service_proxy.h"
@@ -266,7 +267,7 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
                                                            EXCLUSIVE,
                                                            timeout,
                                                            conn))) {
-  } else if (OB_FAIL(sql.assign_fmt("SELECT VERSION FROM %s WHERE endpoint_id = %ld AND scope = '%s'",
+  } else if (OB_FAIL(sql.assign_fmt("SELECT VERSION FROM %s WHERE endpoint_id = %" PRId64 " AND scope = '%s'",
       OB_ALL_AI_MODEL_ENDPOINT_TNAME, SPECIAL_ENDPOINT_ID_FOR_VERSION, SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {

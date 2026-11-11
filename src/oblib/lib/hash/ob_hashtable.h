@@ -17,6 +17,7 @@
 #ifndef  OCEANBASE_COMMON_HASH_HASHTABLE_
 #define  OCEANBASE_COMMON_HASH_HASHTABLE_
 #include <stdlib.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -822,10 +823,10 @@ public:
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(0 >= bucket_num) || OB_UNLIKELY(NULL == allocer)
         || OB_UNLIKELY(NULL == bucket_allocer)) {
-      HASH_WRITE_LOG(HASH_WARNING, "invalid param bucket_num=%ld allocer=%p", bucket_num, allocer);
+      HASH_WRITE_LOG(HASH_WARNING, "invalid param bucket_num=%" PRId64 " allocer=%p", bucket_num, allocer);
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_UNLIKELY(inited(buckets_))) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable has already been created allocer=%p bucket_num=%ld",
+      HASH_WRITE_LOG(HASH_WARNING, "hashtable has already been created allocer=%p bucket_num=%" PRId64 "",
                      allocer_, bucket_num_);
       ret = OB_INIT_TWICE;
     } else if (OB_UNLIKELY(0 != (ret = hash::create(buckets_, bucket_num, ARRAY_SIZE,
@@ -935,7 +936,7 @@ public:
       HASH_WRITE_LOG(HASH_WARNING, "hashtable not init, backtrace=%s", lbt());
     } else if (OB_UNLIKELY((bucket_pos < 0) || (bucket_pos >= bucket_num_))) {
       ret = OB_INVALID_ARGUMENT;
-      HASH_WRITE_LOG(HASH_WARNING, "invalid bucket pos, bucket_pos = %ld, bucket_num = %ld",
+      HASH_WRITE_LOG(HASH_WARNING, "invalid bucket pos, bucket_pos = %" PRId64 ", bucket_num = %" PRId64 "",
                      bucket_pos, bucket_num_);
     } else {
       bucket = &buckets_[bucket_pos];
@@ -1225,7 +1226,7 @@ public:
       HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);
     } else if (1 < EXTEND_RATIO && size_ >= bucket_num_) {
       if (OB_FAIL(extend())) {
-        HASH_WRITE_LOG(HASH_WARNING, "failed to extend, ret = %d, bucket_num = %ld, size = %ld",
+        HASH_WRITE_LOG(HASH_WARNING, "failed to extend, ret = %d, bucket_num = %" PRId64 ", size = %" PRId64 "",
                                       ret, bucket_num_, size_);
       }
     }
@@ -1582,9 +1583,9 @@ public:
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hash::serialization(archive, bucket_num_))) {
       HASH_WRITE_LOG(HASH_WARNING,
-                     "serialize hash bucket_num fail bucket_num=%ld, ret=%d", bucket_num_, ret);
+                     "serialize hash bucket_num fail bucket_num=%" PRId64 ", ret=%d", bucket_num_, ret);
     } else if (OB_FAIL(hash::serialization(archive, size_))) {
-      HASH_WRITE_LOG(HASH_WARNING, "serialize hash size fail size=%ld, ret=%d", size_, ret);
+      HASH_WRITE_LOG(HASH_WARNING, "serialize hash size fail size=%" PRId64 ", ret=%d", size_, ret);
     } else if (size_ > 0) {
       for (iterator iter = begin(); OB_SUCC(ret) && iter != end(); iter++) {
         if (OB_FAIL(hash::serialization(archive, *iter))) {
@@ -1607,7 +1608,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(hash::deserialization(archive, bucket_num))
                || OB_UNLIKELY(0 >= bucket_num)) {
-      HASH_WRITE_LOG(HASH_WARNING, "deserialize bucket_num fail, ret=%d, bucket_num=%ld",
+      HASH_WRITE_LOG(HASH_WARNING, "deserialize bucket_num fail, ret=%d, bucket_num=%" PRId64 "",
           ret, bucket_num);
       if (OB_SUCC(ret)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1623,9 +1624,9 @@ public:
         for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
           if (OB_FAIL(hash::deserialization(archive, value))) {
             HASH_WRITE_LOG(HASH_WARNING,
-                           "deserialize item fail num=%ld, ret=%d", i, ret);
+                           "deserialize item fail num=%" PRId64 ", ret=%d", i, ret);
           } else if (OB_FAIL(set_refactored(getkey_(value), value))) {
-            HASH_WRITE_LOG(HASH_WARNING, "insert item fail num=%ld, ret=%d", i, ret);
+            HASH_WRITE_LOG(HASH_WARNING, "insert item fail num=%" PRId64 ", ret=%d", i, ret);
           } else {
             // do nothing
           }

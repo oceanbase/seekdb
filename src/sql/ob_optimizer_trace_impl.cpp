@@ -16,6 +16,7 @@
  
 #define USING_LOG_PREFIX SQL
 #include "ob_optimizer_trace_impl.h"
+#include <inttypes.h>
 #include "lib/file/file_directory_utils.h"
 #include "share/ob_version.h"
 #include "sql/optimizer/ob_log_values.h"
@@ -288,12 +289,12 @@ int ObOptimizerTraceImpl::append(const common::ObString &msg)
 
 int ObOptimizerTraceImpl::append(const int64_t &value)
 {
-  return append_format<32>("%ld", value);
+  return append_format<32>("%" PRId64 "", value);
 }
 
 int ObOptimizerTraceImpl::append(const uint64_t &value)
 {
-  return append_format<32>("%lu", value);
+  return append_format<32>("%" PRIu64 "", value);
 }
 
 int ObOptimizerTraceImpl::append(const uint32_t &value)
@@ -853,7 +854,7 @@ int ObOptimizerTraceImpl::append(const ObIndexMergeNode *node)
 
 int ObOptimizerTraceImpl::append(const ObVersionRange& version_range)
 {
-  return append_format<128>("%ld-%ld-%ld",
+  return append_format<128>("%" PRId64 "-%" PRId64 "-%" PRId64 "",
                             version_range.base_version_,
                             version_range.multi_version_start_,
                             version_range.snapshot_version_);

@@ -15,6 +15,7 @@
  */
 
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
+#include <inttypes.h>
 #include "storage/multi_data_source/ob_mds_table_merge_task.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
 #include "storage/scheduler/ob_dag_warning_history_mgr.h"
@@ -105,7 +106,7 @@ int ObMdsTableMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(databuff_printf(buf, buf_len, "mds table merge task, tablet_id=%ld, flush_scn=%ld",
+  if (OB_FAIL(databuff_printf(buf, buf_len, "mds table merge task, tablet_id=%" PRId64 ", flush_scn=%" PRId64 "",
       tablet_id_.id(), flush_scn_.get_val_for_inner_table_field()))) {
   }
 

@@ -36,6 +36,8 @@ build:windows --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows-cla
 build:windows --noforce_pic
 build:windows --features=compiler_param_file
 build:windows --features=-static_link_msvcrt
+# Embed CodeView in each object so parallel compiles need no shared compiler PDB.
+build:windows --copt=/Z7
 build:O1 --compilation_mode=fastbuild
 build:O1 --copt=-O1
 build:O1 --@rules_rust//rust/settings:lto=off
@@ -75,3 +77,11 @@ build:remote --strategy=CppCompile=remote
 build:package --//bazel:package_runtime=true
 build:rpm --config=package
 build:rpm --//bazel:rpm_logging=true
+
+# Keep line tables for symbolication and drop full DWARF/CodeView debug info.
+# This composes with the selected compilation mode, including O1 and O2.
+build:line_tables_only --//bazel:line_tables_only=true
+build:line_tables_only --@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=1
+
+# Local development: O1 with line tables.
+build:dev --config=O1 --config=line_tables_only

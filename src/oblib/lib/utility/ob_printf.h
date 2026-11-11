@@ -16,70 +16,24 @@
 
 #pragma once
 
-#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 namespace oceanbase
 {
 namespace common
 {
 
+// Format strings in SeekDB carry 64-bit values through the <inttypes.h> PRI
+// macros (PRId64/PRIu64/...), so %ld always means the native long everywhere.
+// This used to rewrite %ld to %lld on LLP64 targets; that transitional shim is
+// gone now that every 64-bit call site is portable.
+inline int ob_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
+    __attribute__((format(printf, 3, 0)));
+
 inline int ob_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 {
-#if defined(__EMSCRIPTEN__) && __SIZEOF_LONG__ == 4
-  size_t extra = 0;
-  bool conversion = false;
-  for (const char *src = fmt; nullptr != src && '\0' != *src; ++src) {
-    if (!conversion) {
-      conversion = '%' == *src;
-    } else if ('l' == *src && 'l' != src[-1] && '\0' != src[1]
-        && nullptr != strchr("diouxX", src[1])) {
-      ++extra;
-    } else if (nullptr != strchr("diouxXfFeEgGaAcCsSpnm%", *src)) {
-      conversion = false;
-    }
-  }
-  if (0 == extra) {
-    return vsnprintf(buf, size, fmt, args);
-  }
-  const size_t length = strlen(fmt);
-  if (extra >= static_cast<size_t>(-1) - length) {
-    errno = EOVERFLOW;
-    return -1;
-  }
-  char local_fmt[4096];
-  const size_t capacity = length + extra + 1;
-  char *actual_fmt = capacity <= sizeof(local_fmt)
-      ? local_fmt : static_cast<char *>(malloc(capacity));
-  if (nullptr == actual_fmt) {
-    errno = ENOMEM;
-    return -1;
-  }
-  char *dst = actual_fmt;
-  conversion = false;
-  for (const char *src = fmt; '\0' != *src; ++src) {
-    if (!conversion) {
-      conversion = '%' == *src;
-    } else if ('l' == *src && 'l' != src[-1] && '\0' != src[1]
-        && nullptr != strchr("diouxX", src[1])) {
-      *dst++ = 'l';
-    } else if (nullptr != strchr("diouxXfFeEgGaAcCsSpnm%", *src)) {
-      conversion = false;
-    }
-    *dst++ = *src;
-  }
-  *dst = '\0';
-  const int result = vsnprintf(buf, size, actual_fmt, args);
-  if (actual_fmt != local_fmt) {
-    free(actual_fmt);
-  }
-  return result;
-#else
   return vsnprintf(buf, size, fmt, args);
-#endif
 }
 
 }

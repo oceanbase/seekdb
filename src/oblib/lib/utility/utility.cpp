@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX LIB
 
 #include "utility.h"
+#include <inttypes.h>
 #include "lib/utility/ob_printf.h"
 #include "lib/alloc/alloc_func.h"
 #include "dirent.h"
@@ -468,10 +469,10 @@ void hex_dump(const void *data, const int32_t size,
     if (n % 16 == 0) {
       /* line completed */
       if (char_type)
-        _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%ld] [%4.4s]   %-50.50s  %s\n",
+        _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%" PRId64 "] [%4.4s]   %-50.50s  %s\n",
                           pthread_self(), addrstr, hexstr, charstr);
       else
-        _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%ld] [%4.4s]   %-50.50s\n",
+        _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%" PRId64 "] [%4.4s]   %-50.50s\n",
                           pthread_self(), addrstr, hexstr);
       hexstr[0] = 0;
       charstr[0] = 0;
@@ -486,10 +487,10 @@ void hex_dump(const void *data, const int32_t size,
   if (strlen(hexstr) > 0) {
     /* print rest of buffer if not empty */
     if (char_type)
-      _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%ld] [%4.4s]   %-50.50s  %s\n",
+      _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%" PRId64 "] [%4.4s]   %-50.50s  %s\n",
                         pthread_self(), addrstr, hexstr, charstr);
     else
-      _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%ld] [%4.4s]   %-50.50s\n",
+      _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%" PRId64 "] [%4.4s]   %-50.50s\n",
                         pthread_self(), addrstr, hexstr);
   }
 }
@@ -769,7 +770,7 @@ const char *time2str(const int64_t time_us, char *buf, const int64_t buf_len, co
       if (pos > 0) {
         // 25 = 1(.) + 6(cur_second_time_u) + 1(' ') + 16(time_us) + 1('\0')
         if (pos <= buf_len - 25) {
-          IGNORE_RETURN snprintf(buf + pos, buf_len - pos, ".%ld %ld", cur_second_time_us, time_us);
+          IGNORE_RETURN snprintf(buf + pos, buf_len - pos, ".%" PRId64 " %" PRId64, cur_second_time_us, time_us);
         }
       } else {
         buf[0] = '\0';
@@ -798,7 +799,7 @@ int mem_chunk_serialize(char *buf, int64_t len, int64_t &pos, const char *data, 
   if (NULL == buf || len <= 0 || pos < 0 || pos > len || NULL == data || 0 > data_len) {
     err = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (err = serialization::encode_i64(buf, len, tmp_pos, data_len))) {
-    _OB_LOG_RET(ERROR, err, "encode_i64(buf=%p, len=%ld, pos=%ld, i=%ld)=>%d", buf, len, tmp_pos, data_len,
+    _OB_LOG_RET(ERROR, err, "encode_i64(buf=%p, len=%" PRId64 ", pos=%" PRId64 ", i=%" PRId64 ")=>%d", buf, len, tmp_pos, data_len,
             err);
   } else if (tmp_pos + data_len > len) {
     err = OB_SERIALIZE_ERROR;
@@ -818,7 +819,7 @@ int mem_chunk_deserialize(const char *buf, int64_t len, int64_t &pos, char *data
   if (NULL == buf || len <= 0 || pos < 0 || pos > len || NULL == data || data_len < 0) {
     err = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (err = serialization::decode_i64(buf, len, tmp_pos, &real_len))) {
-    _OB_LOG_RET(ERROR, err, "decode_i64(buf=%p, len=%ld, pos=%ld, i=%ld)=>%d", buf, len, tmp_pos, real_len,
+    _OB_LOG_RET(ERROR, err, "decode_i64(buf=%p, len=%" PRId64 ", pos=%" PRId64 ", i=%" PRId64 ")=>%d", buf, len, tmp_pos, real_len,
             err);
   } else if (real_len > data_len || tmp_pos + real_len > len) {
     err = OB_DESERIALIZE_ERROR;
@@ -878,7 +879,7 @@ int replace_str(char *src_str, const int64_t src_str_buf_size,
 
   if (NULL == src_str || src_str_buf_size <= 0
       || NULL == match_str || NULL == replace_str) {
-    _OB_LOG(WARN, "invalid param, src_str=%p, src_str_buf_size=%ld, "
+    _OB_LOG(WARN, "invalid param, src_str=%p, src_str_buf_size=%" PRId64 ", "
             "match_str=%p, replace_str=%p",
             src_str, src_str_buf_size, match_str, replace_str);
     ret = OB_ERROR;
@@ -890,8 +891,8 @@ int replace_str(char *src_str, const int64_t src_str_buf_size,
           + strlen(find_pos + match_str_len);
       if (str_len >= OB_MAX_REPLACE_STR_LENGTH
           || str_len >= src_str_buf_size) {
-        _OB_LOG(WARN, "str after replace is too large, new_size=%ld, "
-                "new_buf_size=%ld, src_str_buf_size=%ld",
+        _OB_LOG(WARN, "str after replace is too large, new_size=%" PRId64 ", "
+                "new_buf_size=%" PRId64 ", src_str_buf_size=%" PRId64 "",
                 str_len, OB_MAX_REPLACE_STR_LENGTH, src_str_buf_size);
         ret = OB_ERROR;
         break;
@@ -1707,7 +1708,7 @@ int64_t ObTimeGuard::to_string(char *buf, const int64_t buf_len) const
   } else {
     int64_t i = 0;
 
-    ret = databuff_printf(buf, buf_len, pos, "time guard '%s' cost too much time, used=%ld%s",
+    ret = databuff_printf(buf, buf_len, pos, "time guard '%s' cost too much time, used=%" PRId64 "%s",
         owner_, common::ObTimeUtility::fast_current_time() - start_ts_,
         click_count_ > 0 ? ", time_dist: " : "");
 
@@ -2229,7 +2230,7 @@ int is_dir_empty(const char *dirname, bool &is_empty)
     ret = OB_INVALID_ARGUMENT;
   } else {
     is_empty = true;
-    DIR *dir = opendir(dirname);
+    common::ObPlatformDir *dir = common::ob_opendir_utf8(dirname);
     if (NULL == dir) {
       if (ENOENT == errno) {
         is_empty = true;
@@ -2238,33 +2239,21 @@ int is_dir_empty(const char *dirname, bool &is_empty)
         LIB_LOG(ERROR, "opendir failed", K(ret), K(errno), KP(dirname));
       }
     } else {
-      while (OB_SUCC(ret)) {
-        struct dirent entry;
-        struct dirent *pentry = &entry;
-        memset(&entry, 0, sizeof(struct dirent));
-        if (0 != readdir_r(dir, pentry, &pentry)) {
-          ret = OB_IO_ERROR;
-          LIB_LOG(WARN, "readdir_r failed", K(ret), K(errno), KP(dirname));
-        } else if (NULL == pentry) {
-          ret = OB_ITER_END;
-        } else if (strcmp(".", pentry->d_name) == 0
-            || strcmp("..", pentry->d_name) == 0) {
-          continue;
-        } else {
+      common::ObPlatformDirEntry entry;
+      int read_ret = 0;
+      while (OB_SUCC(ret) && true == is_empty
+             && 1 == (read_ret = common::ob_readdir_entry_utf8(dir, entry))) {
+        if (0 != strcmp(".", entry.name) && 0 != strcmp("..", entry.name)) {
           is_empty = false;
-          break;
         }
       }
-
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS;
+      if (OB_SUCC(ret) && read_ret < 0) {
+        ret = OB_IO_ERROR;
+        LIB_LOG(WARN, "readdir failed", K(ret), K(errno), KP(dirname));
       }
-
-      if (0 != closedir(dir)) {
+      if (0 != common::ob_closedir_utf8(dir)) {
         ret = OB_IO_ERROR;
         LIB_LOG(ERROR, "closedir failed", K(ret), K(errno), KP(dirname));
-      } else {
-        dir = NULL;
       }
     }
   }
@@ -2286,7 +2275,7 @@ static int64_t get_cpu_cache_size(int sysconf_name, const char *sysfs_path, int6
     FILE *file = nullptr;
     file = fopen(sysfs_path, "r");
     if (file) {
-      fscanf(file, "%ld", &cache_size);
+      fscanf(file, "%" PRId64 "", &cache_size);
       fclose(file);
       cache_size *= 1024;
     }
@@ -2504,7 +2493,7 @@ int read_one_int(const char *file_name, int64_t &value)
   int ret = OB_SUCCESS;
   FILE *fp = fopen(file_name, "r");
   if (fp != nullptr) {
-    if (1 != fscanf(fp, "%ld", &value)) {
+    if (1 != fscanf(fp, "%" PRId64 "", &value)) {
       ret = OB_IO_ERROR;
       LOG_ERROR("Failed to read integer from file", K(ret));
     }

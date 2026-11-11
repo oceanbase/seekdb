@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_add.h"
+#include <inttypes.h>
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -233,7 +234,7 @@ int ObExprAdd::add_int(ObObj &res,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld + %ld)'", left_i, right_i);
+                      "'(%" PRId64 " + %" PRId64 ")'", left_i, right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
     }
   } else if (ObUIntTC != right.get_type_class()) {
@@ -246,7 +247,7 @@ int ObExprAdd::add_int(ObObj &res,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld + %lu)'", left_i, right_i);
+                      "'(%" PRId64 " + %" PRIu64 ")'", left_i, right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
   }
@@ -274,7 +275,7 @@ int ObExprAdd::add_uint(ObObj &res,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%lu + %lu)'", left_i, right_i);
+                      "'(%" PRIu64 " + %" PRIu64 ")'", left_i, right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
   } else if (ObIntTC != right.get_type_class()) {
@@ -286,7 +287,7 @@ int ObExprAdd::add_uint(ObObj &res,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%lu + %ld)'", left_i, right_i);
+                      "'(%" PRIu64 " + %" PRId64 ")'", left_i, right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
   }
@@ -388,7 +389,7 @@ int ObExprAdd::add_datetime(ObObj &res, const ObObj &left, const ObObj &right,
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld + %ld)'", left_i, right_i);
+                      "'(%" PRId64 " + %" PRId64 ")'", left_i, right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DATE", expr_str);
     }
   }
@@ -560,7 +561,7 @@ struct ObIntIntBatchAddRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld + %ld)'", l, r);
+                      "'(%" PRId64 " + %" PRId64 ")'", l, r);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
     }
     return ret;
@@ -596,7 +597,7 @@ struct ObIntUIntBatchAddRaw : public ObArithOpRawType<uint64_t, int64_t, uint64_
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld + %lu)'", l, r);
+                      "'(%" PRId64 " + %" PRIu64 ")'", l, r);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
     return ret;
@@ -632,7 +633,7 @@ struct ObUIntUIntBatchAddRaw : public ObArithOpRawType<uint64_t, uint64_t, uint6
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%lu + %lu)'", l, r);
+                      "'(%" PRIu64 " + %" PRIu64 ")'", l, r);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
     return ret;
@@ -668,7 +669,7 @@ struct ObUIntIntBatchAddRaw : public ObArithOpRawType<uint64_t, uint64_t, int64_
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%lu + %ld)'", l, r);
+                      "'(%" PRIu64 " + %" PRId64 ")'", l, r);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
     }
     return ret;
@@ -907,7 +908,7 @@ struct ObNumberDatetimeAddFunc
         databuff_printf(expr_str,
                         OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                         pos,
-                        "'(%ld + %ld)'",
+                        "'(%" PRId64 " + %" PRId64 ")'",
                         !SWAP_L_R ? left_i : right_i,
                         !SWAP_L_R ? right_i : left_i);
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DATE", expr_str);
@@ -959,7 +960,7 @@ struct ObDatetimeDatetimeAddFunc
       databuff_printf(expr_str,
                       OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
                       pos,
-                      "'(%ld + %ld)'", left_i, right_i);
+                      "'(%" PRId64 " + %" PRId64 ")'", left_i, right_i);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DATE", expr_str);
     }
     return ret;

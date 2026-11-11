@@ -61,6 +61,23 @@ crate.annotation(
     repositories = ["rust_crates"],
     build_script_env = {"NUM_JOBS": "4"},
 )
+# simsimd's build script compiles one amalgamated C file and, on failure,
+# retries with x86 SIMD backends disabled one at a time. Enabling the newest
+# four makes clang 17 peak above 58 GiB RSS and get OOM-killed, so every
+# uncached build pays four full retries before settling on the same backend
+# set. Disable those four up front to keep the result identical and the build
+# deterministic.
+crate.annotation(
+    crate = "simsimd",
+    version = "6.5.16",
+    repositories = ["rust_crates"],
+    build_script_env = {
+        "SIMSIMD_TARGET_SIERRA": "0",
+        "SIMSIMD_TARGET_TURIN": "0",
+        "SIMSIMD_TARGET_SAPPHIRE": "0",
+        "SIMSIMD_TARGET_GENOA": "0",
+    },
+)
 _RUST_PLATFORMS = [
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
