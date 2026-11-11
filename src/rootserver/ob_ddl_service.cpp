@@ -17853,8 +17853,10 @@ int ObDDLService::purge_recyclebin_objects(
           break;
         }
         default: {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unknown recycle object type", K(recycle_obj));
+          // No purge plan can be built for an unrecognized type.  Failing the whole
+          // purge here would keep this row in the recycle bin forever and make
+          // every following purge fail with -4016 as well, so skip the row.
+          LOG_WARN("unknown recycle object type, skip it", K(recycle_obj));
         }
       }
       LOG_INFO("purge expire recycle object execpt runtime finished",
