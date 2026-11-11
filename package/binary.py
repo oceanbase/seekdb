@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import platform
 import re
@@ -182,18 +183,20 @@ def prepare(prefix, original, layout, directories, extra_libraries, glibc):
 
 
 def write(prefix, output, version, release, source_commit, metadata):
+    built_at = datetime.now(timezone.utc).replace(microsecond=0)
     files = {path.relative_to(prefix).as_posix(): {"sha256": digest(path), "size": path.stat().st_size}
              for path in sorted(prefix.rglob("*")) if path.is_file()}
     manifest = {"format": "seekdb-binary", "schema_version": 1, "version": version,
-                "release": release, "source_commit": source_commit, "platform": metadata, "files": files}
+                "release": release, "source_commit": source_commit, "built_at": built_at.isoformat().replace("+00:00", "Z"),
+                "platform": metadata, "files": files}
     (prefix / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     checksums = {name: info["sha256"] for name, info in files.items()}
     checksums["manifest.json"] = digest(prefix / "manifest.json")
     (prefix / "SHA256SUMS").write_text("".join("%s  %s\n" % (value, name) for name, value in sorted(checksums.items())))
     abi = "-glibc" + metadata["glibc"] if metadata["os"] == "linux" else ""
     system = metadata["os"] + (metadata["minimum_os"] if metadata["os"] == "macos" else "")
-    name = "seekdb-binary-%s-%s-%s-%s%s-sdb%s" % (
-        version, release, system, metadata["arch"], abi, source_commit[:12])
+    name = "seekdb-binary-%s-%s-%s-%s%s-%s-sdb%s" % (
+        version, release, system, metadata["arch"], abi, built_at.strftime("%Y%m%dT%H%M%SZ"), source_commit[:12])
     if metadata["os"] == "windows":
         target = output / (name + ".zip")
         with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
