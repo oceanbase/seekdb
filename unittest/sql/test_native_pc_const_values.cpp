@@ -953,7 +953,12 @@ TEST_F(NativePcRuntimeMatch, prepared_ordinary_values_match_after_source_retirem
   context.owner_.fail_at_ = calls + 1;
   ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
   EXPECT_EQ(calls, context.owner_.calls_);
-  EXPECT_EQ(DatumRepresentation::Reference, context.parameters().get_native_parameter_type(8)->canonical_representation());
+  // Matching reads producer metadata without projecting the deferred full type.
+  // Permit that explicit projection only after checking the allocation-free match.
+  context.owner_.fail_at_ = 0;
+  const SqlType *deferred_type = context.parameters().get_native_parameter_type(8);
+  ASSERT_NE(nullptr, deferred_type);
+  EXPECT_EQ(DatumRepresentation::Reference, deferred_type->canonical_representation());
   EXPECT_EQ(8, read_parameter_value(context.parameters(), 8).length());
   EXPECT_EQ(PRECISION_UNKNOWN_YET, context.parameters().get_parameter_metadata(8)->accuracy_.get_precision());
   EXPECT_TRUE(read_parameter_value(context.parameters(), 9).is_null());
