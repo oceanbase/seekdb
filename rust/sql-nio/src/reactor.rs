@@ -188,7 +188,34 @@ pub(crate) struct PeerHandoff {
 
 pub(crate) const HANDOFF_CAP: usize = 1024;
 
+// Reactor-local observations only: none of these counters controls IO or retry.
+#[derive(Debug, Default)]
+pub(crate) struct AdmissionDiagnostics {
+    polls: u64,
+    poll_errors: u64,
+    listener_events: u64,
+    accept_calls: u64,
+    accepted: u64,
+    connection_errors: u64,
+    listener_errors: u64,
+    nodelay_failed: u64,
+    handed_off: u64,
+    no_slot: u64,
+    connect_calls: u64,
+    connect_returns: u64,
+    connect_rejected: u64,
+    connection_failed: u64,
+    greeting_failed: u64,
+    registered: u64,
+    register_failed: u64,
+}
+
+fn diagnostic_sample(count: u64) -> bool {
+    count < 16 || count.is_power_of_two()
+}
+
 pub(crate) struct EventLoop {
+    pub(crate) admission_diagnostics: AdmissionDiagnostics,
     pub(crate) poll: Poll,
     #[cfg(feature = "native-network")]
     pub(crate) listener: Option<TcpListener>,
@@ -224,10 +251,22 @@ pub(crate) struct EventLoop {
 }
 
 impl EventLoop {
+    fn log_admission_state(&self, phase: &str) {
+        eprintln!(
+            "sql-nio: admission pid={} thread={:?} phase={} state={:?}",
+            std::process::id(),
+            std::thread::current().id(),
+            phase,
+            self.admission_diagnostics,
+        );
+    }
+
     pub(crate) fn run(mut self) {
         let mut events = Events::with_capacity(512);
         let mut stopping = false;
         loop {
+            self.admission_diagnostics.polls =
+                self.admission_diagnostics.polls.saturating_add(1);
             if !stopping && self.stop.load(Ordering::Acquire) {
                 self.begin_shutdown();
                 stopping = true;
@@ -263,6 +302,11 @@ impl EventLoop {
                 stopping = true;
             }
             if poll_failed && !stopping {
+                self.admission_diagnostics.poll_errors =
+                    self.admission_diagnostics.poll_errors.saturating_add(1);
+                if diagnostic_sample(self.admission_diagnostics.poll_errors) {
+                    self.log_admission_state("poll_error");
+                }
                 continue;
             }
             if !skip_poll {
@@ -274,6 +318,8 @@ impl EventLoop {
                         WAKER => {}
                         #[cfg(feature = "native-network")]
                         LISTENER => {
+                            self.admission_diagnostics.listener_events =
+                                self.admission_diagnostics.listener_events.saturating_add(1);
                             if let Err(err) = self.accept_all() {
                                 if let Some(listener) = self.listener.as_mut() {
                                     on_accept_failure(listener, &self.reg, err);
@@ -309,7 +355,11 @@ impl EventLoop {
                 self.drain_ready();
             }
             self.reap_retired();
+            if diagnostic_sample(self.admission_diagnostics.polls) {
+                self.log_admission_state("poll_complete");
+            }
         }
+        self.log_admission_state("stopped");
     }
 
     pub(crate) fn begin_shutdown(&mut self) {
@@ -414,12 +464,38 @@ impl EventLoop {
         let sess = conn.sess();
         insert_conn_mapping(conn);
         let mut greeting = NioGreetingInfo::zeroed();
+        self.admission_diagnostics.connect_calls =
+            self.admission_diagnostics.connect_calls.saturating_add(1);
+        let sample = diagnostic_sample(self.admission_diagnostics.connect_calls);
+        if sample {
+            self.log_admission_state("connect_enter");
+        }
         let rc = unsafe {
             ob_sql_sock_handler_on_connect(self.handler.0, sess, fd, is_unix, &mut greeting)
         };
+        self.admission_diagnostics.connect_returns =
+            self.admission_diagnostics.connect_returns.saturating_add(1);
         conn.session_constructed.store(true, Ordering::Release);
         let rejected = rc != 0;
-        if rejected || conn.err.load(Ordering::Acquire) || !send_greeting(conn, &greeting) {
+        let failed = if rejected {
+            self.admission_diagnostics.connect_rejected =
+                self.admission_diagnostics.connect_rejected.saturating_add(1);
+            true
+        } else if conn.err.load(Ordering::Acquire) {
+            self.admission_diagnostics.connection_failed =
+                self.admission_diagnostics.connection_failed.saturating_add(1);
+            true
+        } else if !send_greeting(conn, &greeting) {
+            self.admission_diagnostics.greeting_failed =
+                self.admission_diagnostics.greeting_failed.saturating_add(1);
+            true
+        } else {
+            false
+        };
+        if failed {
+            if sample {
+                self.log_admission_state("admission_failed");
+            }
             self.abort_admission(conn, preregistered);
             return false;
         }
@@ -439,7 +515,15 @@ impl EventLoop {
             }
         };
         if !registered {
+            self.admission_diagnostics.register_failed =
+                self.admission_diagnostics.register_failed.saturating_add(1);
             self.abort_admission(conn, true);
+        } else {
+            self.admission_diagnostics.registered =
+                self.admission_diagnostics.registered.saturating_add(1);
+        }
+        if sample {
+            self.log_admission_state("admission_complete");
         }
         registered
     }
@@ -458,23 +542,39 @@ impl EventLoop {
 
     #[cfg(feature = "native-network")]
     pub(crate) fn accept_all(&mut self) -> std::io::Result<()> {
+        self.admission_diagnostics.accept_calls =
+            self.admission_diagnostics.accept_calls.saturating_add(1);
         loop {
             let listener = match self.listener.as_ref() {
                 Some(listener) => listener,
                 None => return Ok(()),
             };
             let (sock, _addr) = match listener.accept() {
-                Ok(v) => v,
+                Ok(v) => {
+                    self.admission_diagnostics.accepted =
+                        self.admission_diagnostics.accepted.saturating_add(1);
+                    v
+                }
                 // mio rearms the listener when the drain reaches WouldBlock.
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
                 // The pending connection was aborted or reset, or accept was
                 // interrupted.  It is no longer queued, so keep draining.
-                Err(ref e) if is_connection_accept_error(e.kind()) => continue,
+                Err(ref e) if is_connection_accept_error(e.kind()) => {
+                    self.admission_diagnostics.connection_errors =
+                        self.admission_diagnostics.connection_errors.saturating_add(1);
+                    continue;
+                }
                 // A listener error is not a connection error.  Tell the reactor
                 // instead of silently leaving an unrearmed listener behind.
-                Err(err) => return Err(err),
+                Err(err) => {
+                    self.admission_diagnostics.listener_errors =
+                        self.admission_diagnostics.listener_errors.saturating_add(1);
+                    return Err(err);
+                }
             };
             if sock.set_nodelay(true).is_err() {
+                self.admission_diagnostics.nodelay_failed =
+                    self.admission_diagnostics.nodelay_failed.saturating_add(1);
                 continue;
             }
             self.distribute(ConnStream::from(sock));
@@ -584,6 +684,8 @@ impl EventLoop {
                     }
                 };
                 if pushed {
+                    self.admission_diagnostics.handed_off =
+                        self.admission_diagnostics.handed_off.saturating_add(1);
                     let _ = peer.waker.wake();
                     break;
                 }
@@ -597,7 +699,11 @@ impl EventLoop {
     fn admit_incoming(&mut self, stream: ConnStream) {
         let token = match self.conns.next_token() {
             Some(token) => token,
-            None => return,
+            None => {
+                self.admission_diagnostics.no_slot =
+                    self.admission_diagnostics.no_slot.saturating_add(1);
+                return;
+            }
         };
         let fd = raw_fd(&stream);
         let is_unix = stream.is_local() as c_int;
@@ -1123,6 +1229,7 @@ pub(crate) unsafe fn nio_start_in_dir(
             let reactor_polling = Arc::new(AtomicBool::new(false));
             let incoming = Arc::new(Mutex::new(Vec::new()));
             let io = EventLoop {
+                admission_diagnostics: AdmissionDiagnostics::default(),
                 poll,
                 #[cfg(feature = "native-network")]
                 listener: None,
