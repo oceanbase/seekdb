@@ -650,9 +650,56 @@ int ObIODeviceLocalFileOp::fallocate(
       LARGE_INTEGER li;
       li.QuadPart = offset + len;
       BlockIoProvenance::os_begin(proof);
-      if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
-        proof_error = GetLastError();
-        sys_ret = -1;
+      if (proof.slot < 0) {
+        if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
+          proof_error = GetLastError();
+          sys_ret = -1;
+        }
+      } else {
+        DWORD saved_win_error = GetLastError();
+        int saved_crt_error = errno;
+        LARGE_INTEGER seek_begin = {}, seek_end = {}, eof_begin = {}, eof_end = {}, size_sample = {};
+        DWORD clock_mask = QueryPerformanceCounter(&seek_begin) ? 1 : 0;
+        errno = saved_crt_error;
+        SetLastError(saved_win_error);
+        const BOOL seek_ok = SetFilePointerEx(h, li, NULL, FILE_BEGIN);
+        saved_win_error = GetLastError();
+        saved_crt_error = errno;
+        const DWORD seek_error = seek_ok ? ERROR_SUCCESS : saved_win_error;
+        clock_mask |= QueryPerformanceCounter(&seek_end) ? 2 : 0;
+        BOOL eof_ok = FALSE;
+        DWORD eof_error = ERROR_SUCCESS;
+        if (seek_ok) {
+          clock_mask |= QueryPerformanceCounter(&eof_begin) ? 4 : 0;
+          errno = saved_crt_error;
+          SetLastError(saved_win_error);
+          eof_ok = SetEndOfFile(h);
+          saved_win_error = GetLastError();
+          saved_crt_error = errno;
+          eof_error = eof_ok ? ERROR_SUCCESS : saved_win_error;
+          clock_mask |= QueryPerformanceCounter(&eof_end) ? 8 : 0;
+        }
+        if (!seek_ok || !eof_ok) {
+          proof_error = seek_ok ? eof_error : seek_error;
+          sys_ret = -1;
+        }
+        LARGE_INTEGER observed_size;
+        observed_size.QuadPart = -1;
+        const BOOL size_ok = GetFileSizeEx(h, &observed_size);
+        const DWORD size_error = size_ok ? ERROR_SUCCESS : GetLastError();
+        clock_mask |= QueryPerformanceCounter(&size_sample) ? 16 : 0;
+        SHARE_LOG(INFO, "seek1243 resize syscall provenance",
+                  "generation", proof.record.generation, "sequence", proof.record.sequence,
+                  "native_pid", proof.record.pid, "os_tid", proof.record.tid,
+                  "fd", proof.record.fd, "handle", proof.record.handle,
+                  "seek_target", li.QuadPart, K(seek_ok), K(seek_error),
+                  "eof_attempted", seek_ok, K(eof_ok), K(eof_error), K(clock_mask),
+                  "seek_begin_qpc", seek_begin.QuadPart, "seek_end_qpc", seek_end.QuadPart,
+                  "eof_begin_qpc", eof_begin.QuadPart, "eof_end_qpc", eof_end.QuadPart,
+                  K(size_ok), K(size_error), "observed_size", observed_size.QuadPart,
+                  "size_sample_qpc", size_sample.QuadPart);
+        errno = saved_crt_error;
+        SetLastError(saved_win_error);
       }
     }
     BlockIoProvenance::instance().end(proof, sys_ret == 0, proof_error, 0);
