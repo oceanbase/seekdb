@@ -16,6 +16,7 @@
 
 #include "ob_local_device.h"
 #include "lib/utility/ob_platform_io.h"
+#include "lib/utility/block_io_provenance.h"
 #include "rust/config.h"
 #ifdef __EMSCRIPTEN__
 #include "lib/file/wasm_file.h"
@@ -321,7 +322,13 @@ void ObLocalDevice::destroy()
   block_size_ = 0;
   block_file_size_ = 0;
   if (block_fd_ > 0) {
+#ifdef _WIN32
+    const auto close_token = BlockIoProvenance::instance().before_close(block_fd_);
+    const int close_result = ::close(block_fd_);
+    BlockIoProvenance::instance().detach(close_token, close_result);
+#else
     ::close(block_fd_);
+#endif
   }
   block_fd_ = 0;
   is_inited_ = false;
@@ -547,6 +554,11 @@ int ObLocalDevice::alloc_block(const common::ObIODOpts *opts, ObIOFd &block_id)
     if (OB_SUCC(ret)) {
       block_id.first_id_ = 0;
       block_id.second_id_ = block_idx;
+#ifdef _WIN32
+      auto proof = BlockIoProvenance::instance().begin(
+          block_fd_, BlockIoProvenance::ALLOC, block_idx * block_size_, block_size_);
+      BlockIoProvenance::instance().end(proof, true, 0, 0);
+#endif
     }
   }
 
@@ -597,6 +609,11 @@ void ObLocalDevice::free_block(const ObIOFd &block_id)
     free_block_push_pos_ = (free_block_push_pos_ + 1) % total_block_cnt_;
     block_bitmap_[block_idx] = 0;
     ++free_block_cnt_;
+#ifdef _WIN32
+    auto proof = BlockIoProvenance::instance().begin(
+        block_fd_, BlockIoProvenance::FREE, block_idx * block_size_, block_size_);
+    BlockIoProvenance::instance().end(proof, true, 0, 0);
+#endif
   } else {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "unexpected error, bitmap isn't 1", K(ret), K(block_idx), K(block_id));
@@ -695,6 +712,10 @@ int ObLocalDevice::pread(
   } else {
     if (fd.is_block_file()) {
       const int64_t block_file_offset = get_block_file_offset(fd, offset);
+#ifdef _WIN32
+      BlockIoProvenance::LogicalScope proof_scope(BlockIoProvenance::instance().mapping(
+          block_fd_, fd.first_id_, fd.second_id_, fd.third_id_, block_file_offset, size, buf));
+#endif
       if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(block_fd_, buf, size, block_file_offset, read_size))) {
       }
     } else if (fd.is_normal_file()) {
@@ -726,6 +747,10 @@ int ObLocalDevice::pwrite(
   } else {
     if (fd.is_block_file()) {
       const int64_t block_file_offset = get_block_file_offset(fd, offset);
+#ifdef _WIN32
+      BlockIoProvenance::LogicalScope proof_scope(BlockIoProvenance::instance().mapping(
+          block_fd_, fd.first_id_, fd.second_id_, fd.third_id_, block_file_offset, size, buf));
+#endif
       if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_file_offset, write_size))) {
       }
     } else if (fd.is_normal_file()) {

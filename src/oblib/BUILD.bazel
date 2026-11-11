@@ -73,6 +73,7 @@ cc_library(
         "lib/charset/ob_dtoa.h",
         "lib/charset/ob_mysql_global.h",
         "lib/checksum/ob_crc64.h",
+        "lib/utility/block_io_provenance.h",
         "lib/container/ob_2d_array.h",
         "lib/container/ob_array.h",
         "lib/container/ob_array_array.h",

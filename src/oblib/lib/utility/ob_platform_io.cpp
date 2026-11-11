@@ -17,6 +17,7 @@
 #include "lib/utility/ob_platform_io.h"
 
 #include <cerrno>
+#include "lib/utility/block_io_provenance.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -601,9 +602,15 @@ int64_t ob_pread_fd(int fd, void *buf, int64_t count, int64_t offset)
       overlapped.Offset = static_cast<DWORD>(position & 0xFFFFFFFF);
       overlapped.OffsetHigh = static_cast<DWORD>(position >> 32);
       DWORD read_bytes = 0;
-      if (FALSE == ::ReadFile(handle, static_cast<char *>(buf) + total, chunk, &read_bytes,
-                              &overlapped)) {
-        const DWORD error = ::GetLastError();
+      auto proof = BlockIoProvenance::instance().begin(
+          fd, BlockIoProvenance::READ, position, chunk, static_cast<char *>(buf) + total);
+      BlockIoProvenance::os_begin(proof);
+      const BOOL ok = ::ReadFile(handle, static_cast<char *>(buf) + total, chunk,
+                                &read_bytes, &overlapped);
+      const DWORD error = ok ? ERROR_SUCCESS : ::GetLastError();
+      BlockIoProvenance::instance().end(proof, ok != FALSE, error, read_bytes,
+                                       static_cast<char *>(buf) + total);
+      if (FALSE == ok) {
         if (ERROR_HANDLE_EOF == error) {
           // A read starting at or past EOF is a successful short read.
           break;
@@ -656,10 +663,16 @@ int64_t ob_pwrite_fd(int fd, const void *buf, int64_t count, int64_t offset)
       overlapped.Offset = static_cast<DWORD>(position & 0xFFFFFFFF);
       overlapped.OffsetHigh = static_cast<DWORD>(position >> 32);
       DWORD written_bytes = 0;
-      if (FALSE == ::WriteFile(handle, static_cast<const char *>(buf) + total, chunk,
-                               &written_bytes, &overlapped)) {
+      auto proof = BlockIoProvenance::instance().begin(
+          fd, BlockIoProvenance::WRITE, position, chunk, static_cast<const char *>(buf) + total);
+      BlockIoProvenance::os_begin(proof);
+      const BOOL ok = ::WriteFile(handle, static_cast<const char *>(buf) + total, chunk,
+                                 &written_bytes, &overlapped);
+      const DWORD error = ok ? ERROR_SUCCESS : ::GetLastError();
+      BlockIoProvenance::instance().end(proof, ok != FALSE, error, written_bytes);
+      if (FALSE == ok) {
         if (0 == total) {
-          errno = platform_io_internal::win32_error_to_errno(::GetLastError());
+          errno = platform_io_internal::win32_error_to_errno(error);
           total = -1;
         }
         break;

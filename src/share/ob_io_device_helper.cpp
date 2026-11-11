@@ -54,6 +54,7 @@
 #include "lib/restore/ob_io_device.h"
 #include "share/ob_device_manager.h"
 #include "share/ob_io_device_helper.h"
+#include "lib/utility/block_io_provenance.h"
 #include "share/ob_local_device.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/file/file_directory_utils.h"
@@ -613,7 +614,11 @@ int ObIODeviceLocalFileOp::fallocate(
     }
 #elif defined(_WIN32)
     HANDLE h = (HANDLE)_get_osfhandle(static_cast<int32_t>(fd.second_id_));
+    auto proof = BlockIoProvenance::instance().begin(
+        static_cast<int>(fd.second_id_), BlockIoProvenance::RESIZE, offset, len);
+    DWORD proof_error = ERROR_SUCCESS;
     if (h == INVALID_HANDLE_VALUE) {
+      proof_error = ERROR_INVALID_HANDLE;
       errno = EBADF;
       sys_ret = -1;
     } else {
@@ -621,11 +626,14 @@ int ObIODeviceLocalFileOp::fallocate(
       // Set the length directly so concurrent I/O cannot turn growth into truncation.
       FILE_END_OF_FILE_INFO end_info = {};
       end_info.EndOfFile.QuadPart = offset + len;
+      BlockIoProvenance::os_begin(proof);
       if (!SetFileInformationByHandle(h, FileEndOfFileInfo, &end_info, sizeof(end_info))) {
+        proof_error = GetLastError();
         errno = EIO;
         sys_ret = -1;
       }
     }
+    BlockIoProvenance::instance().end(proof, sys_ret == 0, proof_error, 0);
     if (0 != sys_ret) {
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "fail to fallocate", K(ret), K(sys_ret), K(fd), K(offset), K(len), KERRMSG);
@@ -1139,6 +1147,12 @@ int ObIODeviceLocalFileOp::open_block_file(
       SHARE_LOG(ERROR, "open file error", K(ret), "store_path", block_file_attr.store_path_, K(errno), KERRMSG);
     } else {
       const ObIOFd fd(nullptr, ObIOFd::NORMAL_FILE_ID, block_file_attr.block_fd_);
+#ifdef _WIN32
+      if (!BlockIoProvenance::instance().attach(block_file_attr.block_fd_,
+                                              block_file_attr.store_path_, block_size)) {
+        SHARE_LOG(WARN, "block IO provenance unavailable; capture is incomplete");
+      }
+#endif
       if (!is_exist) {
 #ifdef __EMSCRIPTEN__
         // This file was just created with O_EXCL; write the full allocation.
