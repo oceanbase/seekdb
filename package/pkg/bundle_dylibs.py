@@ -17,10 +17,10 @@ def loader_path(path, binary, executable):
                 .replace("@executable_path", str(executable.parent)))
 
 
-def bundle(prefix, executable):
+def bundle(prefix, executable, staged_executable=None):
     libraries = prefix / "lib/seekdb"
     libraries.mkdir(parents=True, exist_ok=True)
-    pending = deque([(executable, prefix / "bin" / executable.name, ())])
+    pending = deque([(executable, staged_executable or prefix / "bin" / executable.name, ())])
     visited = set()
     origins = {}
     signed = []
