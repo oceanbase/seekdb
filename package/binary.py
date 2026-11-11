@@ -79,7 +79,8 @@ def glibc_requirement(binaries):
 
 
 def version_tuple(value):
-    return tuple(int(part) for part in value.split("."))
+    parts = tuple(int(part) for part in value.split("."))
+    return parts + (0,) * (3 - len(parts))
 
 
 def linux_libraries(prefix, original, directories, extra_libraries):
@@ -152,6 +153,26 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     return [executable] + sorted(libraries.iterdir())
 
 
+def macos_binaries(prefix, arch, minimum_os="13.0"):
+    versions = []
+    for binary in [prefix / "bin/seekdb"] + sorted((prefix / "lib/seekdb").iterdir()):
+        if architecture(binary, "macos") != arch:
+            raise ValueError("macOS runtime architecture mismatch: %s" % binary)
+        commands = subprocess.check_output(["otool", "-l", str(binary)], text=True)
+        target = re.findall(
+            r"cmd LC_BUILD_VERSION\s+cmdsize \d+\s+platform (?:1|MACOS)\s+minos (\d+(?:\.\d+)+)",
+            commands, re.IGNORECASE) or re.findall(
+                r"cmd LC_VERSION_MIN_MACOSX\s+cmdsize \d+\s+version (\d+(?:\.\d+)+)", commands)
+        if not target:
+            raise ValueError("cannot determine the macOS deployment target: %s" % binary)
+        required = max(target, key=version_tuple)
+        if version_tuple(required) > version_tuple(minimum_os):
+            raise ValueError("binary requires macOS %s, exceeding target %s: %s; rebuild it for the target OS" %
+                             (required, minimum_os, binary))
+        versions.extend(target)
+    return max(versions, key=version_tuple)
+
+
 def windows_imports(binary):
     imports = subprocess.check_output(["dumpbin", "/nologo", "/dependents", str(binary)], text=True)
     libraries = {name.lower() for name in re.findall(r"^\s+([^\s]+\.dll)\s*$", imports,
@@ -217,15 +238,7 @@ def prepare(prefix, original, layout, directories, extra_libraries, glibc):
     elif layout == "macos":
         from pkg.bundle_dylibs import bundle
         bundle(prefix, original, prefix / "bin/seekdb")
-        versions = []
-        for binary in [prefix / "bin/seekdb"] + sorted((prefix / "lib/seekdb").iterdir()):
-            commands = subprocess.check_output(["otool", "-l", str(binary)], text=True)
-            target = re.findall(r"\bminos\s+(\d+(?:\.\d+)+)", commands) or re.findall(
-                r"cmd LC_VERSION_MIN_MACOSX\s+cmdsize \d+\s+version (\d+(?:\.\d+)+)", commands)
-            if not target:
-                raise ValueError("cannot determine the macOS deployment target: %s" % binary)
-            versions.extend(target)
-        metadata["minimum_os"] = max(versions, key=version_tuple)
+        metadata["minimum_os"] = macos_binaries(prefix, arch)
     else:
         metadata["msvc_runtime"] = windows_runtime(prefix / "bin/seekdb.exe")
         windows_dependencies(windows_binaries(prefix, arch))
@@ -352,6 +365,10 @@ def load(source, destination, version):
         raise ValueError("Windows binary packages require msvc_runtime=MD")
     if metadata["os"] == "windows" and metadata.get("minimum_os") != "10.0":
         raise ValueError("Windows binary packages require minimum_os=10.0")
+    if metadata["os"] == "macos" and (not isinstance(metadata.get("minimum_os"), str) or
+                                        not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", metadata["minimum_os"]) or
+                                        version_tuple(metadata["minimum_os"]) > version_tuple("13.0")):
+        raise ValueError("macOS binary packages require a numeric deployment target no newer than 13.0")
     files = manifest.get("files")
     if not isinstance(files, dict):
         raise ValueError("binary package requires a file manifest")
@@ -376,6 +393,8 @@ def load(source, destination, version):
         raise ValueError("binary package architecture does not match its executable")
     if metadata["os"] == "windows":
         windows_binaries(root, metadata["arch"])
+    elif metadata["os"] == "macos":
+        macos_binaries(root, metadata["arch"], metadata["minimum_os"])
     for path in ("share/seekdb/admin", "share/seekdb/srs", "share/seekdb/timezone", "etc/seekdb", "libexec/seekdb", "lib/seekdb"):
         if not (root / path).is_dir():
             raise ValueError("missing binary package directory: %s" % path)

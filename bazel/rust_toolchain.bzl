@@ -54,6 +54,9 @@ def declare_installed_rust(host, version, targets, channel = "stable", wasm_flag
         name = target.replace("-", "_")
         constraints = triple_to_constraint_set(target)
         wasm = target == "wasm32-unknown-emscripten"
+        toolchain_env = {"AR": "/usr/bin/ar"} if target_info.system in ["macos", "ios"] else {}
+        if target_info.system == "macos":
+            toolchain_env["MACOSX_DEPLOYMENT_TARGET"] = "13.0"
         rust_stdlib_filegroup(
             name = name + "_std",
             srcs = native.glob([
@@ -87,7 +90,7 @@ def declare_installed_rust(host, version, targets, channel = "stable", wasm_flag
             strip_level = {"dbg": "none", "fastbuild": "none", "opt": "none"},
             extra_rustc_flags = wasm_flags if wasm else ["-Cpanic=abort"],
             # Build scripts expect ar flags; the Apple C++ toolchain uses libtool.
-            env = {"AR": "/usr/bin/ar"} if target_info.system in ["macos", "ios"] else {},
+            env = toolchain_env,
         )
         for kind, implementation, toolchain_type in [
             ("rust", name + "_impl", "@rules_rust//rust:toolchain_type"),
