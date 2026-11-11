@@ -92,11 +92,17 @@ SELECT id FROM points ORDER BY l2_distance(v, '[...]') APPROXIMATE LIMIT 10;
 
 `lib=vsag` with the same data/parameters is the CPU baseline.
 
-Failures are explicit by design:
+The GPU path is never silently faked:
 
-* no `SEEKDB_HIPVS_LIBRARY` / no AMD GPU -> `CREATE VECTOR INDEX` fails with
-  `OB_NOT_SUPPORTED` and a warning naming the reason; the index is never built on
-  the CPU behind the user's back;
+* GPU backend usable (`SEEKDB_HIPVS_LIBRARY` loadable and an AMD GPU visible) ->
+  the graph is built on the GPU and the server logs
+  `SEEKDB_HIPVS_BUILD {..., "gpu_compute":true, ...}`;
+* no `SEEKDB_HIPVS_LIBRARY`, no AMD GPU, or `m > 64` -> the DDL **still
+  succeeds**: the index is built on the CPU by VSAG exactly like `lib=vsag`, and
+  a WARN records that this is not a GPU result (`[AMD hipVS] GPU backend
+  unavailable ... This result MUST NOT be counted as GPU acceleration`, plus
+  `"gpu_compute":false`). The competition rule allows that fallback as long as
+  the fallback is never scored as a GPU acceleration;
 * quantized types (`HNSW_SQ`/`HNSW_BQ`), non-L2 metrics, extra-info columns and
   `lib=hipvs` on `IVF*` are rejected at DDL time.
 
