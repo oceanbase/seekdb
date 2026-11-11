@@ -24,8 +24,8 @@ function Write-BindLog {
 }
 
 # seekdb_open() suppresses engine logging on stdout, so a failed startup surfaces only as e.g.
-# "observer start failed: Internal error (rc=-4016)". The failing step lives in <base_dir>/log/seekdb.log
-# (WARN level by default), so dump its tail — otherwise CI never shows which observer step failed.
+# "observer start failed: Internal error (rc=-4016)". Dump the database directory tree and every
+# non-empty log file under <db>/log so CI shows how far the open got and which step failed.
 function Show-SeekdbEngineLogTail {
   param(
     [Parameter(Mandatory = $true)]
@@ -43,14 +43,30 @@ function Show-SeekdbEngineLogTail {
     return
   }
   foreach ($dbDir in $dbDirs) {
-    $logPath = Join-Path $dbDir.FullName 'log\seekdb.log'
-    if (-not (Test-Path -LiteralPath $logPath)) {
-      Write-BindLog "engine log: $logPath missing (startup failed before the log file was configured)"
+    # Directory tree: store/ etc/ run/ appearing means the open got past base-dir setup, a pid file
+    # means the single-process lock was taken, and file sizes show whether the engine wrote anything.
+    Write-Host "::group::seekdb db dir ($($dbDir.FullName))"
+    Get-ChildItem -LiteralPath $dbDir.FullName -Recurse -Force -Depth 2 -ErrorAction SilentlyContinue |
+      ForEach-Object {
+        $size = if ($_.PSIsContainer) { '<DIR>' } else { [string]$_.Length }
+        Write-Host ("{0,10}  {1}" -f $size, $_.FullName)
+      }
+    Write-Host "::endgroup::"
+
+    # seekdb.log is created up front by set_file_name(); the engine may reconfigure logging during
+    # observer init, so dump every non-empty file in log/ instead of only seekdb.log.
+    $logDir = Join-Path $dbDir.FullName 'log'
+    $logs = @(Get-ChildItem -LiteralPath $logDir -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Length -gt 0 } | Sort-Object LastWriteTime)
+    if ($logs.Count -eq 0) {
+      Write-BindLog "engine log: no non-empty log file under $logDir"
       continue
     }
-    Write-Host "::group::seekdb engine log ($logPath — last $TailLines lines)"
-    Get-Content -LiteralPath $logPath -Tail $TailLines -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
-    Write-Host "::endgroup::"
+    foreach ($log in $logs) {
+      Write-Host "::group::seekdb engine log ($($log.FullName) — last $TailLines lines)"
+      Get-Content -LiteralPath $log.FullName -Tail $TailLines -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+      Write-Host "::endgroup::"
+    }
   }
 }
 

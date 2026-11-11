@@ -43,6 +43,10 @@ func Open(dbDir string) error {
 	defer C.free(unsafe.Pointer(dbDirC))
 	ret := C.seekdb_open(dbDirC)
 	if ret != SeekdbSuccess {
+		// Include the engine's thread-local detail: a bare error code does not say which startup step failed.
+		if detail := C.GoString(C.seekdb_last_error()); detail != "" {
+			return fmt.Errorf("failed to open database: error code %d (%s)", int(ret), detail)
+		}
 		return fmt.Errorf("failed to open database: error code %d", int(ret))
 	}
 	return nil

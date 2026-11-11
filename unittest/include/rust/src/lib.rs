@@ -49,6 +49,7 @@ extern "C" {
     fn seekdb_row_is_null(row: *mut c_void, column_index: i32) -> bool;
     fn seekdb_result_free(result: *mut c_void);
     fn seekdb_error(handle: *mut c_void) -> *const c_char;
+    fn seekdb_last_error() -> *const c_char;
     fn seekdb_affected_rows(handle: *mut c_void) -> u64;
 }
 
@@ -83,13 +84,26 @@ impl From<i32> for SeekdbError {
     }
 }
 
+/// Thread-local message recorded by the C API (e.g. "observer start failed: ... (rc=-4016)").
+/// The bare return code does not say which startup step failed, so callers should log this.
+pub fn last_error_message() -> String {
+    unsafe {
+        let msg = seekdb_last_error();
+        if msg.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr(msg).to_string_lossy().into_owned()
+        }
+    }
+}
+
 pub fn open(db_dir: &str) -> Result<(), SeekdbError> {
     let db_dir_c = CString::new(db_dir).unwrap();
     let ret = unsafe { seekdb_open(db_dir_c.as_ptr()) };
     if ret == SEEKDB_SUCCESS {
         Ok(())
     } else {
-        Err(SeekdbError::from(ret))
+        Err(SeekdbError::ConnectionFailed(last_error_message()))
     }
 }
 

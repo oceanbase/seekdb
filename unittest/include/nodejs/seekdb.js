@@ -242,7 +242,10 @@ class SeekdbResult {
 function open(dbDir) {
     const ret = seekdb_open(dbDir);
     if (ret !== SEEKDB_SUCCESS) {
-        throw new Error(`Failed to open database: ${ret}`);
+        // Include the engine's thread-local detail: a bare -2 does not say which startup step failed.
+        const detail = seekdb_last_error();
+        const msg = detail ? detail.toString('utf8') : '';
+        throw new Error(msg ? `Failed to open database: ${ret} (${msg})` : `Failed to open database: ${ret}`);
     }
 }
 
