@@ -66,6 +66,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
             shutil.copytree(binary_package / source, target, dirs_exist_ok=True)
         if layout == "macos":
             shutil.copytree(binary_package / "lib", destination / "opt/seekdb/lib", dirs_exist_ok=True)
+        (binary / executable).chmod(0o755)
     else:
         timezone = timezone or Path(os.environ.get("SEEKDB_TIMEZONE_FILE", ROOT / "tools/timezone_V1.log"))
         if not timezone.is_file():
