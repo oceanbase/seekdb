@@ -153,9 +153,9 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     return [executable] + sorted(libraries.iterdir())
 
 
-def macos_binaries(prefix, arch, minimum_os="13.0"):
+def macos_binaries(prefix, arch, minimum_os="13.0", executable=None):
     versions = []
-    for binary in [prefix / "bin/seekdb"] + sorted((prefix / "lib/seekdb").iterdir()):
+    for binary in [executable or prefix / "bin/seekdb"] + sorted((prefix / "lib/seekdb").iterdir()):
         if architecture(binary, "macos") != arch:
             raise ValueError("macOS runtime architecture mismatch: %s" % binary)
         commands = subprocess.check_output(["otool", "-l", str(binary)], text=True)

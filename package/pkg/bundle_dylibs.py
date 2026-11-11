@@ -63,4 +63,9 @@ def bundle(prefix, executable, staged_executable=None):
 
 
 if __name__ == "__main__":
-    bundle(Path(sys.argv[1]), Path(sys.argv[2]))
+    prefix, original = Path(sys.argv[1]), Path(sys.argv[2])
+    bundle(prefix, original)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import binary
+    staged = prefix / "bin" / original.name
+    binary.macos_binaries(prefix, binary.architecture(staged, "macos"), executable=staged)
