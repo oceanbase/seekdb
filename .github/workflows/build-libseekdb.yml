@@ -723,24 +723,15 @@ jobs:
             --experimental_ui_max_stdouterr_bytes=16777216 `
             -o build_release //src/observer:libseekdb
           if ($LASTEXITCODE -ne 0) { throw "build.py build failed with exit code $LASTEXITCODE" }
-
-      - name: Diagnose Windows link inputs
-        if: failure()
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Continue"
-          $bin = Join-Path $PWD "build_release/execroot/_main/bazel-out/x64_windows-opt/bin"
-          Write-Host "== archives referencing __gcc_personality_v0 =="
-          cmd /c "findstr /S /M /C:__gcc_personality_v0 `"$bin\*.lib`""
-          Write-Host "== archives referencing _Unwind_GetIP =="
-          cmd /c "findstr /S /M /C:_Unwind_GetIP `"$bin\*.lib`""
-          Write-Host "== unwind libraries shipped with the dependencies =="
-          cmd /c "where /r `"$PWD\deps\3rd`" *unwind* 2>nul"
-          $env:LIB.Split(';') | ForEach-Object {
-            if ($_ -and (Test-Path $_)) {
-              Get-ChildItem -Path $_ -Filter "*unwind*" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
-            }
-          }
+          # Binding tests read <output_base>/src/include, the same layout the
+          # other platforms stage. The import library is what MSVC and MinGW
+          # consumers link against; the .dll.a copy gives MinGW's -lseekdb the
+          # name it searches for.
+          $include = Join-Path $ws "build_release/src/include"
+          New-Item -ItemType Directory -Force -Path $include | Out-Null
+          Copy-Item "build_release/bin/src/observer/seekdb.dll" $include -Force
+          Copy-Item "build_release/bin/src/observer/seekdb.lib" $include -Force
+          Copy-Item "build_release/bin/src/observer/seekdb.lib" (Join-Path $include "libseekdb.dll.a") -Force
 
       - name: Debug facts (Windows)
         shell: pwsh
