@@ -209,7 +209,7 @@ public:
 
 private:
   static constexpr int SLOT_COUNT = 8;
-  static constexpr uint64_t BUDGET = 64ULL * 1024 * 1024;
+  static constexpr uint64_t BUDGET = 512ULL * 1024 * 1024;
   static uint64_t &scope_key() { static thread_local uint64_t key = 0; return key; }
   struct ErrorScope {
     int crt = errno; DWORD win = GetLastError();
