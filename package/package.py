@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -24,12 +25,22 @@ def copy(source, destination, executable=False):
     destination.chmod(0o755 if executable else 0o644)
 
 
+def normalize_permissions(root):
+    for path in [root] + list(root.rglob("*")):
+        mode = path.lstat().st_mode
+        if stat.S_ISDIR(mode):
+            path.chmod(0o755)
+        elif stat.S_ISREG(mode):
+            path.chmod(0o755 if mode & 0o111 else 0o644)
+
+
 def stage(destination, artifacts, dependencies, layout, version, release, component="server", timezone=None,
           binary_package=None, seekdb_bin=None, obshell_bin=None, portable=False):
     if component == "libs":
         if binary_package:
             shutil.copytree(binary_package / "lib/seekdb", destination / "usr/libexec/seekdb/lib",
                             dirs_exist_ok=True)
+            normalize_permissions(destination)
             return
         for name in ("libaio.so", "libaio.so.1", "libaio.so.1.0.1"):
             source = dependencies / "usr/local/oceanbase/deps/devel/lib" / name
@@ -39,6 +50,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
                 target.symlink_to(os.readlink(source))
             else:
                 copy(source, target, True)
+        normalize_permissions(destination)
         return
     paths = {
         "linux": ("usr/bin", "etc/seekdb", "usr/share/seekdb", "usr/libexec/seekdb"),
@@ -111,6 +123,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
             target = helpers / "scripts" / (script + ".sh")
             target.write_text(content)
             target.chmod(0o755)
+        normalize_permissions(destination)
 
 
 def deb(payload, output, version, release, architecture=None, glibc=None):

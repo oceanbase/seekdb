@@ -105,14 +105,15 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     def enqueue(source, name, inherited=()):
         if system.match(name):
             raise ValueError("system runtime libraries must not be bundled: %s" % name)
-        source = source.resolve()
+        source = source.absolute()
+        canonical = source.resolve()
         if name in origins:
-            if origins[name] != source:
+            if origins[name] != canonical:
                 raise ValueError("conflicting runtime libraries named %s" % name)
             return
         if architecture(source, "linux") != executable_arch:
             raise ValueError("runtime library architecture mismatch: %s" % source)
-        origins[name] = source
+        origins[name] = canonical
         target = libraries / name
         shutil.copyfile(source, target)
         target.chmod(0o755)
