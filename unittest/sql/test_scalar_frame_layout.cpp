@@ -85,12 +85,13 @@ const int64_t NATIVE_SLOTS_PER_FRAME = MAX_FRAME_SIZE / NATIVE_SLOT_BYTES;
 class FrameAllocator final : public ObIAllocator
 {
 public:
-  FrameAllocator() : fail_size_(0), arena_("ScalarFrame"), blocks_() {}
+  FrameAllocator() : fail_size_(0), poison_(false), arena_("ScalarFrame"), blocks_() {}
   void *alloc(int64_t size) override
   {
     if (size == fail_size_) { return nullptr; }
     char *bytes = static_cast<char *>(arena_.alloc(size + 8));
     if (bytes != nullptr) {
+      if (poison_) { MEMSET(bytes, 0xa5, size); }
       MEMSET(bytes + size, 0xa7, 8);
       blocks_.push_back({bytes, size});
     }
@@ -118,6 +119,7 @@ public:
     return -1;
   }
   int64_t fail_size_;
+  bool poison_;
 private:
   struct Block { char *bytes_; int64_t size_; };
   ObArenaAllocator arena_;
@@ -817,6 +819,54 @@ TEST_F(NativeI64ExprFrames, public_cg_selects_one_native_page_and_evaluates_i64_
     EXPECT_GT(ObToStringExpr(eval, fixture.lane(0)).to_string(text, sizeof(text)), 0);
     EXPECT_EQ(nullptr, fixture.parameters().locate_materialized_parameter(0));
     fixture.owner_.expect_frame_canary(eval.frames_[layout.frames[0].index]);
+  }
+}
+
+TEST_F(NativeI64ExprFrames, nonzero_memory_starts_with_null_values_and_clear_evaluation_state)
+{
+  for (const int64_t batch : {0, 4, 65}) {
+    for (const bool fallback : {false, true}) {
+      SCOPED_TRACE(::testing::Message() << "batch=" << batch << " fallback=" << fallback);
+      NativePointCoreFixture fixture;
+      ASSERT_NO_FATAL_FAILURE(fixture.prepare(batch));
+      if (fallback) { ASSERT_NO_FATAL_FAILURE(fixture.bind(0, ObInt32Type, 7)); }
+      fixture.owner_.poison_ = true;
+      ObEvalCtx eval(fixture.exec_);
+      for (int pass = 0; pass < 2; ++pass) {
+        ASSERT_NO_FATAL_FAILURE(fixture.allocate(eval));
+        for (int64_t i = 0; i < NativeI64PointLayout::LANE_COUNT; ++i) {
+          ObExpr &expr = fixture.lane(i);
+          bool native = fallback;
+          ASSERT_EQ(OB_SUCCESS, expr.get_native_i64_mode(eval, native));
+          ASSERT_EQ(!fallback, native);
+          const auto &lane = *expr.native_i64_layout_;
+          ObEvalInfo &info = expr.get_eval_info(eval);
+          EXPECT_EQ(0, info.flag_);
+          EXPECT_EQ(0, info.cnt_);
+          for (uint32_t row = 0; row < lane.capacity; ++row) {
+            Datum value;
+            value.set_int(991);
+            ASSERT_EQ(OB_SUCCESS, expr.read_value(eval, row, value));
+            EXPECT_TRUE(value.is_null());
+          }
+          if (expr.is_batch_result()) {
+            const int64_t bitmap = ObBitVector::memory_size(lane.capacity);
+            const auto *flags = reinterpret_cast<const unsigned char *>(&expr.get_evaluated_flags(eval));
+            const auto *skip = reinterpret_cast<const unsigned char *>(&expr.get_pvt_skip(eval));
+            for (int64_t byte = 0; byte < bitmap; ++byte) {
+              EXPECT_EQ(0, flags[byte]);
+              EXPECT_EQ(0, skip[byte]);
+            }
+            MEMSET(&expr.get_evaluated_flags(eval), 0xff, bitmap);
+            MEMSET(&expr.get_pvt_skip(eval), 0xff, bitmap);
+          }
+          info.evaluated_ = true;
+          info.cnt_ = 1;
+        }
+        const auto &layout = *fixture.info().native_i64_point_layout_;
+        fixture.owner_.expect_frame_canary(eval.frames_[layout.frames[0].index]);
+      }
+    }
   }
 }
 

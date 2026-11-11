@@ -231,7 +231,6 @@ int validate_native_i64_layout_impl(const ObExprFrameInfo &expressions)
 void initialize_native_i64_frame(const ObExprFrameInfo &expressions,
     const NativeI64PointLayout::Frame &description, char *frame, bool compact)
 {
-  MEMSET(frame, 0, compact ? description.compact_size : description.generic_size);
   new (frame) NativeI64FrameHeader{NativeI64FrameHeader::MAGIC, NativeI64FrameHeader::VERSION,
                                   static_cast<uint8_t>(compact), 0};
   for (int64_t i = 0; i < NativeI64PointLayout::LANE_COUNT; ++i) {
@@ -244,7 +243,14 @@ void initialize_native_i64_frame(const ObExprFrameInfo &expressions,
         new (frame + lane.state_off + row) uint8_t(static_cast<uint8_t>(Datum::State::Null));
       } else { new (frame + expr.datum_off_ + sizeof(Datum) * row) Datum(); }
     }
-    new (frame + (compact ? lane.eval_info_off : expr.eval_info_off_)) ObEvalInfo{};
+    auto *info = new (frame + (compact ? lane.eval_info_off : expr.eval_info_off_)) ObEvalInfo;
+    info->flag_ = 0;
+    info->cnt_ = 0;
+    if (expr.is_batch_result()) {
+      const int64_t bitmap = ObBitVector::memory_size(lane.capacity);
+      MEMSET(frame + (compact ? lane.eval_flags_off : expr.eval_flags_off_), 0, bitmap);
+      MEMSET(frame + (compact ? lane.pvt_skip_off : expr.pvt_skip_off_), 0, bitmap);
+    }
   }
 }
 
