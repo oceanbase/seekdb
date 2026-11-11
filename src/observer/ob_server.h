@@ -257,6 +257,10 @@ public:
   // Start OceanBase server, this function is blocked after invoking
   // until the server itself stops it.
   int start();
+  // Name of the most recently completed cold-start stage (see startup_timeline_mark()), or "" when
+  // no stage has finished yet. Lets the embed open path report where init/start failed even when
+  // the engine log is unavailable.
+  const char *get_last_startup_stage() const;
   int wait();
   void prepare_stop();
   bool is_prepare_stopped();

@@ -805,6 +805,11 @@ static void startup_timeline_dump(const char *scope)
 }
 }  // namespace
 
+const char *ObServer::get_last_startup_stage() const
+{
+  return g_startup_stage_count > 0 ? g_startup_stages[g_startup_stage_count - 1].name : "";
+}
+
 int ObServer::init(const ObServerOptions &opts)
 {
   in_process_ = opts.in_process_;

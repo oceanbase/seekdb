@@ -1164,13 +1164,9 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
                 LOG_WARN("observer init failed", K(ret));
                 const char* err_msg = ob_strerror(ret);
                 char buf[256];
-                snprintf(buf, sizeof(buf), "observer init failed: %s (rc=%d)",
-                         err_msg ? err_msg : "unknown", ret);
+                snprintf(buf, sizeof(buf), "observer init failed: %s (rc=%d, stage=%s)",
+                         err_msg ? err_msg : "unknown", ret, OBSERVER.get_last_startup_stage());
                 set_error(nullptr, buf);
-                // Startup logs are written asynchronously by default, and the FFI host usually exits
-                // right after a failed open, so drain the queue or <base_dir>/log/seekdb.log stays
-                // empty and the failing step is lost (the host only sees the generic rc).
-                OB_LOGGER.wait();
                 // Clean up partially initialized observer
                 OBSERVER.destroy();
             }
@@ -1187,12 +1183,9 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             LOG_WARN("observer start failed", K(ret));
             const char* err_msg = ob_strerror(ret);
             char buf[256];
-            snprintf(buf, sizeof(buf), "observer start failed: %s (rc=%d)",
-                     err_msg ? err_msg : "unknown", ret);
+            snprintf(buf, sizeof(buf), "observer start failed: %s (rc=%d, stage=%s)",
+                     err_msg ? err_msg : "unknown", ret, OBSERVER.get_last_startup_stage());
             set_error(nullptr, buf);
-            // See the init failure path: drain the async log queue so the engine's own
-            // "fail to ..." line survives in <base_dir>/log/seekdb.log after the host exits.
-            OB_LOGGER.wait();
             // Clean up partially initialized observer
             OBSERVER.destroy();
         } else if (-1 == SEEKDB_CHDIR(g_embedded_work_dir)) {
