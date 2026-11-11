@@ -662,4 +662,68 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1472: avoid a full primary scan for a moderately selective large-table filter
+--disable_warnings
+drop table if exists t_issue1472_filtered_ann;
+drop table if exists t_issue1472_seed;
+--enable_warnings
+
+create table t_issue1472_seed (n int primary key);
+--disable_query_log
+--let $n = 0
+while ($n < 1000)
+{
+  eval insert into t_issue1472_seed values ($n);
+  --inc $n
+}
+--enable_query_log
+
+create table t_issue1472_filtered_ann (
+  id bigint primary key,
+  category int not null,
+  embedding vector(3) not null,
+  key idx_category(category));
+--disable_query_log
+insert into t_issue1472_filtered_ann
+select a.n * 120 + b.n, mod(a.n * 120 + b.n, 100),
+       concat('[', mod(a.n * 120 + b.n, 97), ',',
+                    mod(a.n * 120 + b.n, 103), ',',
+                    mod(a.n * 120 + b.n, 107), ']')
+from t_issue1472_seed a, t_issue1472_seed b
+where b.n < 120;
+--enable_query_log
+create vector index idx_embedding on t_issue1472_filtered_ann(embedding)
+  with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=32);
+analyze table t_issue1472_filtered_ann;
+
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1472_filtered_ann where category < 25
+order by l2_distance(embedding, '[1,2,3]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1472_filtered_ann') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+alter table t_issue1472_filtered_ann drop index idx_category;
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1472_filtered_ann where category < 1
+order by l2_distance(embedding, '[1,2,3]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select p.operator
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1472_filtered_ann') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%';
+
+drop table t_issue1472_filtered_ann;
+drop table t_issue1472_seed;
+
 alter system set vector_memory_limit = 0;
