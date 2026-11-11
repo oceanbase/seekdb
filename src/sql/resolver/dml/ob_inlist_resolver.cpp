@@ -263,6 +263,65 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+bool ObInListResolver::has_small_distinct_integer_list(const ParseNode &in_list,
+                                                       const ParamStore *param_store,
+                                                       const int64_t threshold)
+{
+  // This is a bounded cardinality probe, not expression deduplication. Keep every
+  // parameter in the scalar IN expression so a cached plan remains correct when
+  // the same parameterized SQL is executed with different values later.
+  static const int64_t MAX_DISTINCT_VALUES = 64;
+  uint64_t distinct_values[MAX_DISTINCT_VALUES];
+  int64_t distinct_count = 0;
+  bool first_is_unsigned = false;
+  if (threshold <= 1 || in_list.num_child_ <= 0 || OB_ISNULL(in_list.children_)) {
+    return false;
+  }
+  for (int64_t i = 0; i < in_list.num_child_; ++i) {
+    const ParseNode *node = in_list.children_[i];
+    uint64_t value = 0;
+    bool is_unsigned = false;
+    if (OB_ISNULL(node)) {
+      return false;
+    } else if (T_INT == node->type_ || T_UINT64 == node->type_) {
+      is_unsigned = T_UINT64 == node->type_;
+      value = static_cast<uint64_t>(node->value_);
+    } else if (T_QUESTIONMARK == node->type_ && NULL != param_store &&
+               node->value_ >= 0 && node->value_ < param_store->count()) {
+      const ObObjParam &param = param_store->at(node->value_);
+      if (param.is_signed_integer()) {
+        value = static_cast<uint64_t>(param.get_int());
+      } else if (param.is_unsigned_integer()) {
+        is_unsigned = true;
+        value = param.get_uint64();
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
+    // Do not introduce new equality rules for mixed types, NULLs or expressions.
+    if (0 == i) {
+      first_is_unsigned = is_unsigned;
+    } else if (first_is_unsigned != is_unsigned) {
+      return false;
+    }
+    int64_t j = 0;
+    while (j < distinct_count && distinct_values[j] != value) {
+      ++j;
+    }
+    if (j == distinct_count) {
+      distinct_values[distinct_count++] = value;
+      // Lists outside this small-cardinality case retain the existing policy.
+      // The cap also bounds work when an unusually large threshold is supplied.
+      if (distinct_count >= threshold || distinct_count >= MAX_DISTINCT_VALUES) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +409,13 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && T_OP_IN == op_type &&
+          T_OP_ROW != left_expr.get_expr_type() && !is_prepare_stmt &&
+          has_small_distinct_integer_list(in_list, param_store, threshold)) {
+        // Repeated literals should not turn a small membership set into a
+        // VALUES subquery merely because their raw list length is large.
+        is_enable = false;
+      }
     }
   }
   return ret;
