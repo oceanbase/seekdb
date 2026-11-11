@@ -131,10 +131,17 @@ static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
   for (long i = 0; i < nr; ++i) {
     struct iocb *iocb = iocbpp[i];
     ssize_t res = 0;
+    // io_event::res uses the libaio convention: the transferred byte count on success,
+    // or a negated errno-style code on failure. It must be derived from the outcome of
+    // this very call -- never from an ambient errno, which carries whatever an earlier,
+    // unrelated call left behind.
+    long event_res = 0;
 #ifdef _WIN32
     HANDLE h = (HANDLE)_get_osfhandle(iocb->aio_fildes);
     if (h == INVALID_HANDLE_VALUE) {
-      res = -EIO;
+      // _get_osfhandle() documents EBADF for an invalid descriptor; state the code
+      // explicitly rather than reading errno back.
+      event_res = -(long)EBADF;
     } else {
       OVERLAPPED ov = {};
       ov.Offset = (DWORD)((uint64_t)iocb->aio_offset & 0xFFFFFFFF);
@@ -148,12 +155,23 @@ static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
       }
       if (ok) {
         res = (ssize_t)bytes;
+        event_res = (long)res;
       } else {
-        DWORD err = GetLastError();
-        if (err == ERROR_HANDLE_EOF) {
+        const DWORD win_error = GetLastError();
+        if (ERROR_HANDLE_EOF == win_error) {
+          // Reading past the end of the file is a short result, not an IO failure; the
+          // positioned read shims (ob_pread) report it the same way with errno = 0.
           res = (ssize_t)bytes;
+          event_res = (long)res;
         } else {
-          res = -EIO;
+          // ReadFile()/WriteFile() report failures in GetLastError(), not in errno.
+          // Reporting -errno here promoted a failed IO to a successful 0-byte
+          // completion (or to an unrelated stale errno) depending on the caller.
+          SHARE_LOG(WARN, "posix aio emulation op failed", K(iocb->aio_fildes),
+                    "aio_lio_opcode", iocb->aio_lio_opcode, "offset", iocb->aio_offset,
+                    "size", iocb->aio_nbytes, "win32_error", win_error);
+          res = -1;
+          event_res = -(long)EIO;
         }
       }
     }
@@ -163,12 +181,15 @@ static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
     } else if (iocb->aio_lio_opcode == 0) { // PREAD
       res = pread(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
     }
+    // pread()/pwrite() return -1 and set errno, so the POSIX branch keeps the
+    // existing libaio contract unchanged.
+    event_res = (res >= 0) ? (long)res : -(long)errno;
 #endif
 
     struct io_event ev;
     ev.data = iocb->data;
     ev.obj = iocb;
-    ev.res = (res >= 0) ? res : -errno;
+    ev.res = event_res;
     ev.res2 = 0;
 
     {
