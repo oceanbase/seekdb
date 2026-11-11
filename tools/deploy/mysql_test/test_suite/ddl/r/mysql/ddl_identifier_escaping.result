@@ -1,0 +1,81 @@
+DROP DATABASE IF EXISTS ddl_identifier_escaping;
+CREATE DATABASE ddl_identifier_escaping;
+USE ddl_identifier_escaping;
+SET ob_query_timeout = 60000000;
+SET ob_trx_timeout = 60000000;
+CREATE TABLE t_enum_set_quoted (
+id INT PRIMARY KEY,
+`enum``value` ENUM('a','b'),
+`set````value` SET('x','y'),
+n INT
+);
+INSERT INTO t_enum_set_quoted VALUES
+(1,'a','x',NULL),
+(2,'b','x,y',2),
+(3,'a','y',3);
+CREATE UNIQUE INDEX type_idx ON t_enum_set_quoted (`enum``value`,`set````value`,n);
+SET @t_table_id = (
+SELECT table_id FROM oceanbase.__all_table
+WHERE table_name = 't_enum_set_quoted'
+AND database_id = (
+SELECT database_id FROM oceanbase.__all_database
+WHERE database_name = DATABASE()
+)
+);
+SELECT COUNT(*) AS usable_index
+FROM oceanbase.__all_table
+WHERE table_name = CONCAT('__idx_', @t_table_id, '_type_idx')
+AND index_status = 2;
+usable_index
+1
+SELECT id,
+CAST(`enum``value` AS UNSIGNED) AS enum_ordinal,
+CAST(`set````value` AS UNSIGNED) AS set_bits,
+n
+FROM t_enum_set_quoted
+ORDER BY id;
+id	enum_ordinal	set_bits	n
+1	1	1	NULL
+2	2	3	2
+3	1	2	3
+SELECT /*+ INDEX(t_enum_set_quoted type_idx) */ id
+FROM t_enum_set_quoted
+WHERE id = 2;
+id
+2
+CREATE TABLE t_backtick_col (
+id INT PRIMARY KEY,
+`key``id` INT,
+v INT
+);
+INSERT INTO t_backtick_col VALUES (1,10,100),(2,20,200);
+CREATE UNIQUE INDEX bk_idx ON t_backtick_col (`key``id`);
+SET @t_table_id = (
+SELECT table_id FROM oceanbase.__all_table
+WHERE table_name = 't_backtick_col'
+AND database_id = (
+SELECT database_id FROM oceanbase.__all_database
+WHERE database_name = DATABASE()
+)
+);
+SELECT COUNT(*) AS usable_index
+FROM oceanbase.__all_table
+WHERE table_name = CONCAT('__idx_', @t_table_id, '_bk_idx')
+AND index_status = 2;
+usable_index
+1
+SELECT id, `key``id` AS kid, v FROM t_backtick_col ORDER BY id;
+id	kid	v
+1	10	100
+2	20	200
+SELECT COLUMN_NAME
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+AND table_name = 't_backtick_col'
+ORDER BY ordinal_position;
+COLUMN_NAME
+id
+key`id
+v
+USE test;
+DROP DATABASE ddl_identifier_escaping;
