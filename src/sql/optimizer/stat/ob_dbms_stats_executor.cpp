@@ -52,48 +52,116 @@ int ObDbmsStatsExecutor::gather_table_stats(ObExecContext &ctx,
                                             bool *need_refresh_schema)
 {
   int ret = OB_SUCCESS;
-  PartitionIdBlockMap partition_id_block_map;
-  GatherHelper gather_helper(running_monitor);
-  ObMySQLTransaction backup_trans;
-  if (OB_NOT_NULL(need_refresh_schema)) {
-    *need_refresh_schema = false;
-  }
-  if (OB_FAIL(backup_trans.start(ctx.get_sql_proxy()))) {
-  } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::BACKUP_HISTORY_STATS))) {
-  } else if (!param.is_temp_table_ && !param.is_async_gather_ &&
-             OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(
-                 ctx, backup_trans, param, ObTimeUtility::current_time(), true))) {
-    LOG_WARN("failed to backup opt stats", K(ret));
-  } else if (OB_FAIL(
-                 prepare_gather_stats(ctx, param, partition_id_block_map, gather_helper))) {
-    if (OB_TABLET_NOT_EXIST == ret && OB_NOT_NULL(need_refresh_schema)) {
-      *need_refresh_schema = true;
-    }
-  } else if (OB_FAIL(gather_partition_stats(ctx,
-                                            param,
-                                            &partition_id_block_map,
-                                            gather_helper,
-                                            running_monitor.failed_part_ids_))) {
-    int tmp_ret = OB_SUCCESS;
-     ObSEArray<int64_t, 8> temp_failed_part_ids;
-    if (OB_SUCCESS != (tmp_ret = collect_last_part_and_global_if_timeout(ctx,
-                                                                         param,
-                                                                         &partition_id_block_map,
-                                                                         gather_helper,
-                                                                         temp_failed_part_ids))) {
-    }
-  }
+  const int64_t diagnostic_start_us = ObTimeUtility::current_time();
+  enum DiagnosticPhase { TRANS_START, BACKUP, PREPARE, PARTITION_GATHER, RECOVERY, TRANS_END, CLEANUP_SCOPE, OTHER, PHASE_COUNT };
+  int64_t phase_us[PHASE_COUNT] = {};
+  int64_t phase_calls[PHASE_COUNT] = {};
+  int phase_ret[PHASE_COUNT] = {};
 
-  // end backup trans
-  if (OB_SUCC(ret)) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = OB_FAIL(backup_trans.end(true)))) {
+  DiagnosticPhase current_phase = OTHER;
+  int64_t phase_start_us = diagnostic_start_us;
+  bool clock_regressed = false;
+  auto enter_phase = [&](DiagnosticPhase next_phase) {
+    const int64_t now_us = ObTimeUtility::current_time();
+    const int64_t delta_us = now_us - phase_start_us;
+    clock_regressed = clock_regressed || delta_us < 0;
+    phase_us[current_phase] += delta_us;
+    phase_start_us = now_us;
+    current_phase = next_phase;
+  };
+  auto in_phase = [&](DiagnosticPhase phase, auto &&operation) {
+    const DiagnosticPhase parent_phase = current_phase;
+    enter_phase(phase);
+    ++phase_calls[phase];
+    const int operation_ret = operation();
+    phase_ret[phase] = operation_ret;
+
+    enter_phase(parent_phase);
+    return operation_ret;
+  };
+  {
+    PartitionIdBlockMap partition_id_block_map;
+    GatherHelper gather_helper(running_monitor);
+    ObMySQLTransaction backup_trans;
+    if (OB_NOT_NULL(need_refresh_schema)) {
+      *need_refresh_schema = false;
     }
-  } else {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = backup_trans.end(false))) {
+    if (OB_FAIL(in_phase(TRANS_START, [&]() { return backup_trans.start(ctx.get_sql_proxy()); }))) {
+    } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::BACKUP_HISTORY_STATS))) {
+    } else if (!param.is_temp_table_ && !param.is_async_gather_ &&
+               OB_FAIL(in_phase(BACKUP, [&]() { return ObDbmsStatsHistoryManager::backup_opt_stats(
+                   ctx, backup_trans, param, ObTimeUtility::current_time(), true); }))) {
+      LOG_WARN("failed to backup opt stats", K(ret));
+    } else if (OB_FAIL(
+                   in_phase(PREPARE, [&]() { return prepare_gather_stats(ctx, param, partition_id_block_map, gather_helper); }))) {
+      if (OB_TABLET_NOT_EXIST == ret && OB_NOT_NULL(need_refresh_schema)) {
+        *need_refresh_schema = true;
+      }
+    } else if (OB_FAIL(in_phase(PARTITION_GATHER, [&]() { return gather_partition_stats(ctx,
+                                              param,
+                                              &partition_id_block_map,
+                                              gather_helper,
+                                              running_monitor.failed_part_ids_); }))) {
+      int tmp_ret = OB_SUCCESS;
+       ObSEArray<int64_t, 8> temp_failed_part_ids;
+      if (OB_SUCCESS != (tmp_ret = in_phase(RECOVERY, [&]() { return collect_last_part_and_global_if_timeout(ctx,
+                                                                           param,
+                                                                           &partition_id_block_map,
+                                                                           gather_helper,
+                                                                           temp_failed_part_ids); }))) {
+      }
+    }
+
+    // end backup trans
+    if (OB_SUCC(ret)) {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = OB_FAIL(in_phase(TRANS_END, [&]() { return backup_trans.end(true); })))) {
+      }
+    } else {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = in_phase(TRANS_END, [&]() { return backup_trans.end(false); }))) {
+      }
+    }
+    enter_phase(CLEANUP_SCOPE);
+  }
+  const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+  const int64_t final_delta_us = diagnostic_end_us - phase_start_us;
+  clock_regressed = clock_regressed || final_delta_us < 0;
+  phase_us[current_phase] += final_delta_us;
+  const int64_t total_us = diagnostic_end_us - diagnostic_start_us;
+  int64_t accounted_us = 0;
+  for (int64_t phase = 0; phase < PHASE_COUNT; ++phase) {
+    accounted_us += phase_us[phase];
+  }
+  const int64_t accounting_error_us = total_us - accounted_us;
+  const int64_t trans_start_us = phase_us[TRANS_START];
+  const int64_t backup_us = phase_us[BACKUP];
+  const int64_t prepare_us = phase_us[PREPARE];
+  const int64_t partition_gather_us = phase_us[PARTITION_GATHER];
+  const int64_t recovery_us = phase_us[RECOVERY];
+  const int64_t trans_end_us = phase_us[TRANS_END];
+  const int64_t cleanup_scope_us = phase_us[CLEANUP_SCOPE];
+  const int64_t other_us = phase_us[OTHER];
+  const uint64_t diagnostic_table_id = param.table_id_;
+  const uint64_t diagnostic_schema_id = param.db_id_;
+  int64_t called_mask = 0;
+  for (int64_t phase = 0; phase < PHASE_COUNT; ++phase) {
+    if (phase_calls[phase] > 0) {
+      called_mask |= int64_t(1) << phase;
     }
   }
+  const int backup_ret = phase_ret[BACKUP];
+  const int prepare_ret = phase_ret[PREPARE];
+  const int partition_ret = phase_ret[PARTITION_GATHER];
+  const int recovery_ret = phase_ret[RECOVERY];
+  const int trans_end_ret = phase_ret[TRANS_END];
+  LOG_INFO("seek1381 table phase summary",
+           K(ret), K(diagnostic_start_us), K(diagnostic_end_us), K(total_us),
+           K(trans_start_us), K(backup_us), K(prepare_us), K(partition_gather_us),
+           K(recovery_us), K(trans_end_us), K(cleanup_scope_us), K(other_us),
+           K(diagnostic_table_id), K(diagnostic_schema_id), K(called_mask), K(backup_ret),
+           K(prepare_ret), K(partition_ret), K(recovery_ret), K(trans_end_ret),
+           K(accounting_error_us), K(clock_regressed));
   return ret;
 }
 

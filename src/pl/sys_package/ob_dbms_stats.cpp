@@ -185,112 +185,183 @@ int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
 int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
 {
   int ret = OB_SUCCESS;
-  UNUSED(result);
-  ObSEArray<uint64_t, 4> table_ids;
-  ObOptStatTaskInfo task_info;
-  SMART_VAR(ObTableStatParam, global_param){
-  global_param.allocator_ = &ctx.get_allocator();
-  int64_t start_time = ObTimeUtility::current_time();
-  if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
-  } else if (OB_ISNULL(ctx.get_my_session())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (ctx.get_my_session()->get_is_in_retry()) {
-    ret = OB_ERR_DBMS_STATS_PL;
-    LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"retry gather schema stats is not allowed");
-  } else if (OB_FAIL(ObDbmsStatsUtils::cancel_async_gather_stats(ctx))) {
-  } else if (OB_FAIL(ObOptStatMonitorManager::flush_database_monitoring_info(ctx, false, true))) {
-  } else if (OB_FAIL(get_all_table_ids_in_database(ctx, params.at(0), global_param, table_ids))) {
-  } else if (table_ids.empty()) {
-    //do nothing
-  } else if (OB_FAIL(init_gather_task_info(ctx, ObOptStatGatherType::MANUAL_GATHER, start_time, table_ids.count(), task_info))) {
-  } else {
-    int64_t i = 0;
-    for (; OB_SUCC(ret) && i < table_ids.count(); ++i) {
-      StatTable stat_table;
-      stat_table.database_id_ = global_param.db_id_;
-      stat_table.table_id_ = table_ids.at(i);
-      ObOptStatGatherStat gather_stat(task_info);
-      ObOptStatGatherStatList::instance().push(gather_stat);
-      bool need_retry = false;
-      int64_t schema_refresh_retry_cnt = 0;
-      const int64_t MAX_SCHEMA_REFRESH_RETRY_CNT = 1;
-      do {
-        need_retry = false;
-        ObTableStatParam stat_param = global_param;
-        ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
-        stat_param.allocator_ = &tmp_alloc;//use the temp allocator to free memory after gather stats.
-        bool is_all_fast_gather = false;
-        bool need_refresh_schema = false;
-        ObSEArray<int64_t, 4> no_gather_index_ids;
-        int64_t start_time = ObTimeUtility::current_time();
-        ObOptStatGatherAudit audit(tmp_alloc);
-        ObOptStatRunningMonitor running_monitor(ctx.get_allocator(), start_time, stat_param.allocator_->used(), gather_stat, audit);
-        if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-        } else if (OB_FAIL(THIS_WORKER.check_status())) {
-        } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_PREPARE))) {
-        } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param, true))) {
-        } else if (OB_FAIL(parse_gather_stat_options(ctx,
-                                                     params.at(1),
-                                                     params.at(2),
-                                                     params.at(3),
-                                                     params.at(4),
-                                                     params.at(5),
-                                                     params.at(6),
-                                                     params.at(10),
-                                                     params.at(12),
-                                                     NULL/*hist_est_percent*/,
-                                                     NULL/*hist_block_sample*/,
-                                                     stat_param))) {
-        } else if (OB_FAIL(running_monitor.add_table_info(stat_param))) {
-        } else if (stat_param.force_ &&
-                  OB_FAIL(ObDbmsStatsLockUnlock::fill_stat_locked(ctx, stat_param))) {
-        } else if (!stat_param.force_ &&
-                  OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, stat_param))) {
-          if (OB_ERR_DBMS_STATS_PL == ret) {
-            // all table/partition locked, just skip
+  const int64_t diagnostic_start_us = ObTimeUtility::current_time();
+  enum DiagnosticPhase { PREFLIGHT, ENUMERATE, OPTIONS, TABLE_DISPATCH, POST_GATHER, CLEANUP_SCOPE, OTHER, PHASE_COUNT };
+  int64_t phase_us[PHASE_COUNT] = {};
+  int64_t phase_calls[PHASE_COUNT] = {};
+
+  DiagnosticPhase current_phase = OTHER;
+  int64_t phase_start_us = diagnostic_start_us;
+  bool clock_regressed = false;
+  auto enter_phase = [&](DiagnosticPhase next_phase) {
+    const int64_t now_us = ObTimeUtility::current_time();
+    const int64_t delta_us = now_us - phase_start_us;
+    clock_regressed = clock_regressed || delta_us < 0;
+    phase_us[current_phase] += delta_us;
+    phase_start_us = now_us;
+    current_phase = next_phase;
+  };
+  auto in_phase = [&](DiagnosticPhase phase, auto &&operation) {
+    const DiagnosticPhase parent_phase = current_phase;
+    enter_phase(phase);
+    ++phase_calls[phase];
+    const int operation_ret = operation();
+
+    enter_phase(parent_phase);
+    return operation_ret;
+  };
+  uint64_t diagnostic_schema_id = OB_INVALID_ID;
+  int64_t diagnostic_table_count = 0;
+  int64_t table_attempts = 0;
+  LOG_INFO("seek1381 schema phase begin", K(diagnostic_start_us));
+  {
+    UNUSED(result);
+    ObSEArray<uint64_t, 4> table_ids;
+    ObOptStatTaskInfo task_info;
+    SMART_VAR(ObTableStatParam, global_param){
+    global_param.allocator_ = &ctx.get_allocator();
+    int64_t start_time = ObTimeUtility::current_time();
+    if (OB_FAIL(in_phase(PREFLIGHT, [&]() { return check_statistic_table_writeable(ctx); }))) {
+    } else if (OB_FAIL(in_phase(PREFLIGHT, [&]() { return ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx); }))) {
+    } else if (OB_ISNULL(ctx.get_my_session())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (ctx.get_my_session()->get_is_in_retry()) {
+      ret = OB_ERR_DBMS_STATS_PL;
+      LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"retry gather schema stats is not allowed");
+    } else if (OB_FAIL(in_phase(PREFLIGHT, [&]() { return ObDbmsStatsUtils::cancel_async_gather_stats(ctx); }))) {
+    } else if (OB_FAIL(in_phase(PREFLIGHT, [&]() { return ObOptStatMonitorManager::flush_database_monitoring_info(ctx, false, true); }))) {
+    } else if (OB_FAIL(in_phase(ENUMERATE, [&]() { return get_all_table_ids_in_database(ctx, params.at(0), global_param, table_ids); }))) {
+    } else if (table_ids.empty()) {
+      //do nothing
+    } else if (OB_FAIL(in_phase(PREFLIGHT, [&]() { return init_gather_task_info(ctx, ObOptStatGatherType::MANUAL_GATHER, start_time, table_ids.count(), task_info); }))) {
+    } else {
+      int64_t i = 0;
+      for (; OB_SUCC(ret) && i < table_ids.count(); ++i) {
+        enter_phase(OPTIONS);
+        StatTable stat_table;
+        stat_table.database_id_ = global_param.db_id_;
+        stat_table.table_id_ = table_ids.at(i);
+        ObOptStatGatherStat gather_stat(task_info);
+        ObOptStatGatherStatList::instance().push(gather_stat);
+        bool need_retry = false;
+        int64_t schema_refresh_retry_cnt = 0;
+        const int64_t MAX_SCHEMA_REFRESH_RETRY_CNT = 1;
+        do {
+          enter_phase(OPTIONS);
+          ++table_attempts;
+          need_retry = false;
+          ObTableStatParam stat_param = global_param;
+          ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
+          stat_param.allocator_ = &tmp_alloc;//use the temp allocator to free memory after gather stats.
+          bool is_all_fast_gather = false;
+          bool need_refresh_schema = false;
+          ObSEArray<int64_t, 4> no_gather_index_ids;
+          int64_t start_time = ObTimeUtility::current_time();
+          ObOptStatGatherAudit audit(tmp_alloc);
+          ObOptStatRunningMonitor running_monitor(ctx.get_allocator(), start_time, stat_param.allocator_->used(), gather_stat, audit);
+          if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
+          } else if (OB_FAIL(THIS_WORKER.check_status())) {
+          } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_PREPARE))) {
+          } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param, true))) {
+          } else if (OB_FAIL(parse_gather_stat_options(ctx,
+                                                       params.at(1),
+                                                       params.at(2),
+                                                       params.at(3),
+                                                       params.at(4),
+                                                       params.at(5),
+                                                       params.at(6),
+                                                       params.at(10),
+                                                       params.at(12),
+                                                       NULL/*hist_est_percent*/,
+                                                       NULL/*hist_block_sample*/,
+                                                       stat_param))) {
+          } else if (OB_FAIL(running_monitor.add_table_info(stat_param))) {
+          } else if (stat_param.force_ &&
+                    OB_FAIL(ObDbmsStatsLockUnlock::fill_stat_locked(ctx, stat_param))) {
+          } else if (!stat_param.force_ &&
+                    OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, stat_param))) {
+            if (OB_ERR_DBMS_STATS_PL == ret) {
+              // all table/partition locked, just skip
+              ret = OB_SUCCESS;
+            } else {
+            }
+          } else if (OB_FAIL(in_phase(TABLE_DISPATCH, [&]() { const int64_t child_start_us = ObTimeUtility::current_time();
+                         const int child_ret = ObDbmsStatsExecutor::gather_table_stats(
+                         ctx, stat_param, running_monitor, &need_refresh_schema);
+                         const int64_t child_end_us = ObTimeUtility::current_time();
+                         LOG_INFO("seek1381 schema table dispatch", K(diagnostic_start_us),
+                                  K(child_start_us), K(child_end_us), K(child_ret), K(stat_param.table_id_));
+                         return child_ret; }))) {
+          } else if (OB_FAIL(in_phase(POST_GATHER, [&]() { return update_stat_cache(stat_param,
+                                                &running_monitor); }))) {
+          } else if (is_virtual_table(stat_param.table_id_)) {//not gather virtual table index.
+            //do nothing
+          } else if (OB_FAIL(in_phase(POST_GATHER, [&]() { return running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_INDEX_STATS); }))) {
+          } else if (stat_param.cascade_ &&
+                    OB_FAIL(in_phase(POST_GATHER, [&]() { return fast_gather_index_stats(ctx, stat_param,
+                                                    is_all_fast_gather, no_gather_index_ids); }))) {
+          } else if (stat_param.cascade_ && !is_all_fast_gather &&
+                    OB_FAIL(in_phase(POST_GATHER, [&]() { return gather_table_index_stats(ctx, stat_param, no_gather_index_ids); }))) {
+          } else {
+          }
+          enter_phase(POST_GATHER);
+          if (ret == OB_SUCCESS || ret == OB_TIMEOUT) {
+            int tmp_ret = ret;
+            if (OB_FAIL(running_monitor.flush_gather_audit())) {
+            } else {
+              ret = tmp_ret;
+            }
+          }
+          running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), stat_param.allocator_->used());
+          if (need_refresh_schema && schema_refresh_retry_cnt < MAX_SCHEMA_REFRESH_RETRY_CNT) {
+            need_retry = true;
+            ++schema_refresh_retry_cnt;
             ret = OB_SUCCESS;
-          } else {
+            LOG_INFO("tablet not exist while gathering schema stats, refresh schema and retry current table",
+                     K(stat_table.table_id_), K(schema_refresh_retry_cnt));
           }
-        } else if (OB_FAIL(ObDbmsStatsExecutor::gather_table_stats(
-                       ctx, stat_param, running_monitor, &need_refresh_schema))) {
-        } else if (OB_FAIL(update_stat_cache(stat_param,
-                                              &running_monitor))) {
-        } else if (is_virtual_table(stat_param.table_id_)) {//not gather virtual table index.
-          //do nothing
-        } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_INDEX_STATS))) {
-        } else if (stat_param.cascade_ &&
-                  OB_FAIL(fast_gather_index_stats(ctx, stat_param,
-                                                  is_all_fast_gather, no_gather_index_ids))) {
-        } else if (stat_param.cascade_ && !is_all_fast_gather &&
-                  OB_FAIL(gather_table_index_stats(ctx, stat_param, no_gather_index_ids))) {
-        } else {
-        }
-        if (ret == OB_SUCCESS || ret == OB_TIMEOUT) {
-          int tmp_ret = ret;
-          if (OB_FAIL(running_monitor.flush_gather_audit())) {
-          } else {
-            ret = tmp_ret;
-          }
-        }
-        running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), stat_param.allocator_->used());
-        if (need_refresh_schema && schema_refresh_retry_cnt < MAX_SCHEMA_REFRESH_RETRY_CNT) {
-          need_retry = true;
-          ++schema_refresh_retry_cnt;
-          ret = OB_SUCCESS;
-          LOG_INFO("tablet not exist while gathering schema stats, refresh schema and retry current table",
-                   K(stat_table.table_id_), K(schema_refresh_retry_cnt));
-        }
-      } while (need_retry);
-      ObOptStatGatherStatList::instance().remove(gather_stat);
-      task_info.completed_table_count_ ++;
-      ret = ret == OB_TABLE_NOT_EXIST ? OB_SUCCESS : ret;//skip table not exist in schema stats op.
+          enter_phase(CLEANUP_SCOPE);
+        } while (need_retry);
+        enter_phase(POST_GATHER);
+        ObOptStatGatherStatList::instance().remove(gather_stat);
+        task_info.completed_table_count_ ++;
+        ret = ret == OB_TABLE_NOT_EXIST ? OB_SUCCESS : ret;//skip table not exist in schema stats op.
+        enter_phase(CLEANUP_SCOPE);
+      }
+      enter_phase(POST_GATHER);
+      task_info.task_end_time_ = ObTimeUtility::current_time();
+      task_info.ret_code_ = ret;
+      task_info.failed_count_ = ret == OB_SUCCESS ? 0 : table_ids.count() - i + 1;
     }
-    task_info.task_end_time_ = ObTimeUtility::current_time();
-    task_info.ret_code_ = ret;
-    task_info.failed_count_ = ret == OB_SUCCESS ? 0 : table_ids.count() - i + 1;
+    diagnostic_schema_id = global_param.db_id_;
+    diagnostic_table_count = table_ids.count();
+    enter_phase(CLEANUP_SCOPE);
+    }
   }
+  const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+  const int64_t final_delta_us = diagnostic_end_us - phase_start_us;
+  clock_regressed = clock_regressed || final_delta_us < 0;
+  phase_us[current_phase] += final_delta_us;
+  const int64_t total_us = diagnostic_end_us - diagnostic_start_us;
+  int64_t accounted_us = 0;
+  for (int64_t phase = 0; phase < PHASE_COUNT; ++phase) {
+    accounted_us += phase_us[phase];
   }
+  const int64_t accounting_error_us = total_us - accounted_us;
+  const int64_t preflight_us = phase_us[PREFLIGHT];
+  const int64_t enumerate_us = phase_us[ENUMERATE];
+  const int64_t options_us = phase_us[OPTIONS];
+  const int64_t table_dispatch_us = phase_us[TABLE_DISPATCH];
+  const int64_t post_gather_us = phase_us[POST_GATHER];
+  const int64_t cleanup_scope_us = phase_us[CLEANUP_SCOPE];
+  const int64_t other_us = phase_us[OTHER];
+  const int64_t table_calls = phase_calls[TABLE_DISPATCH];
+  LOG_INFO("seek1381 schema phase summary",
+           K(ret), K(diagnostic_start_us), K(diagnostic_end_us), K(total_us),
+           K(preflight_us), K(enumerate_us), K(options_us), K(table_dispatch_us),
+           K(post_gather_us), K(cleanup_scope_us), K(other_us), K(diagnostic_schema_id),
+           K(diagnostic_table_count), K(table_attempts), K(table_calls), K(accounting_error_us),
+           K(clock_regressed));
   return ret;
 }
 
