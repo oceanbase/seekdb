@@ -91,6 +91,16 @@ SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
 SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
   FROM vector_inlist_cardinality WHERE category5 IN (1,2,3,4,5,6,7,8,9,10,11,12);
 
+--echo # Removed duplicate slots may change independently on a later execution.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 IN (1,1,1,1,1,1,1,1,1,1,1,2);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 IN (1,1,1,1,1,1,1,1,1,1,1,1);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 NOT IN (NULL,NULL,NULL,NULL,1,1,2,2,3,3,3,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 NOT IN (4,4,4,4,1,1,2,2,3,3,3,3);
+
 --echo # Prepared parameters are not treated as fixed duplicate literals.
 PREPARE inlist_cardinality_ps FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 8) */ COUNT(*) AS matches FROM vector_inlist_cardinality WHERE category5 IN (?,?,?,?,?,?,?,?,?,?,?,?)';
 SET @a=1, @b=2, @c=3, @d=4, @e=5, @f=NULL;

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
-#include "lib/hash/ob_hashset.h"
+#include "lib/hash/ob_hashmap.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -264,40 +264,44 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
-// Only integer equality is used here: strings and other types may require
-// collation or conversion rules that cannot be inferred from parse-node values.
-// Keep every original member and parameter slot; this is only a plan decision.
-static int check_integer_inlist_cardinality(const ParseNode &in_list,
-                                           const ParamStore *param_store,
-                                           const int64_t threshold,
-                                           bool &is_enable)
+// Deduplicate only homogeneous scalar integers. Parameter equality constraints
+// make a cached compact list valid only while every removed slot still equals
+// its retained representative. The original parameter store is never modified.
+static int compact_integer_inlist(const ParseNode &in_list,
+                                 const ParamStore *param_store,
+                                 const int64_t threshold,
+                                 ObIAllocator &alloc,
+                                 ObQueryCtx *query_ctx,
+                                 const ParseNode *&resolved_list,
+                                 bool &is_enable)
 {
   int ret = OB_SUCCESS;
-  hash::ObHashSet<uint64_t, hash::NoPthreadDefendMode> distinct_values;
-  bool has_null = false;
+  hash::ObHashMap<uint64_t, int64_t, hash::NoPthreadDefendMode> representatives;
+  ObSEArray<ParseNode *, 4> members;
+  ObSEArray<ObPCParamEqualInfo, 4> equal_params;
+  int64_t null_idx = -1;
   bool supported = true;
-  // The caller already checked total count >= threshold. Stop once enough
-  // distinct entries have been seen, so memory is bounded by the threshold.
-  if (OB_FAIL(distinct_values.create(threshold, ObMemAttr("InlistCard")))) {
-    LOG_WARN("failed to create integer inlist set", K(ret));
+  if (OB_FAIL(representatives.create(threshold, ObMemAttr("InlistCard")))) {
+    LOG_WARN("failed to create integer inlist map", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_
-                      && distinct_values.size() + (has_null ? 1 : 0) < threshold; ++i) {
-    const ParseNode *node = in_list.children_[i];
+                      && members.count() < threshold; ++i) {
+    ParseNode *node = in_list.children_[i];
     uint64_t value = 0;
     bool is_null = false;
+    int64_t representative = -1;
     if (OB_ISNULL(node)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (T_QUESTIONMARK == node->type_) {
       if (OB_ISNULL(param_store) || node->value_ < 0 || node->value_ >= param_store->count()) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (NULL == query_ctx) {
+        supported = false;
       } else {
         const ObObjParam &param = param_store->at(node->value_);
         is_null = param.is_null();
         supported = is_null || ob_is_integer_type(param.get_type());
         if (supported && !is_null) {
-          // The caller requires one homogeneous integer type, so the bit
-          // representation is an exact key for both signed and unsigned values.
           value = ob_is_unsigned_type(param.get_type())
                       ? param.get_uint64() : static_cast<uint64_t>(param.get_int());
         }
@@ -311,14 +315,41 @@ static int check_integer_inlist_cardinality(const ParseNode &in_list,
     }
     if (OB_SUCC(ret) && supported) {
       if (is_null) {
-        has_null = true;
-      } else if (OB_FAIL(distinct_values.set_refactored(value))) {
+        representative = null_idx;
+        null_idx = representative < 0 ? i : representative;
+      } else if (OB_HASH_NOT_EXIST == (ret = representatives.get_refactored(value, representative))) {
+        ret = representatives.set_refactored(value, i);
+      }
+      if (OB_FAIL(ret)) {
         LOG_WARN("failed to collect integer inlist value", K(ret));
+      } else if (representative < 0) {
+        ret = members.push_back(node);
+      } else if (T_QUESTIONMARK == node->type_) {
+        ObPCParamEqualInfo equal_info;
+        equal_info.first_param_idx_ = in_list.children_[representative]->value_;
+        equal_info.second_param_idx_ = node->value_;
+        ret = equal_params.push_back(equal_info);
       }
     }
   }
-  if (OB_SUCC(ret) && supported) {
-    is_enable = distinct_values.size() + (has_null ? 1 : 0) >= threshold;
+  if (OB_SUCC(ret) && supported && members.count() < threshold) {
+    ParseNode *compact_list = NULL;
+    ParseNode **children = NULL;
+    if (OB_ISNULL(compact_list = static_cast<ParseNode *>(alloc.alloc(sizeof(ParseNode))))
+        || OB_ISNULL(children = static_cast<ParseNode **>(alloc.alloc(sizeof(ParseNode *) * members.count())))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (NULL != query_ctx && OB_FAIL(append(query_ctx->all_equal_param_constraints_, equal_params))) {
+      LOG_WARN("failed to preserve integer inlist parameter equality", K(ret));
+    } else {
+      *compact_list = in_list;
+      for (int64_t i = 0; i < members.count(); ++i) {
+        children[i] = members.at(i);
+      }
+      compact_list->children_ = children;
+      compact_list->num_child_ = members.count();
+      resolved_list = compact_list;
+      is_enable = false;
+    }
   }
   return ret;
 }
@@ -335,10 +366,12 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObStmt *stmt,
                                                   ObIAllocator &alloc,
                                                   bool &is_question_mark,
-                                                  bool &is_enable)
+                                                  bool &is_enable,
+                                                  const ParseNode *&resolved_list)
 {
   int ret = OB_SUCCESS;
   is_enable = false;
+  resolved_list = &in_list;
   int64_t threshold = INT64_MAX;
   bool is_prepare_stmt = false;
   // 1. check basic requests
@@ -413,7 +446,9 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
           && !(helper.is_prepare_stmt_ && rewrite_info.is_question_mark_)
           && 1 == rewrite_info.param_types_.count()
           && ob_is_integer_type(rewrite_info.param_types_.at(0).obj_type_)) {
-        if (OB_FAIL(check_integer_inlist_cardinality(in_list, param_store, threshold, is_enable))) {
+        if (OB_FAIL(compact_integer_inlist(in_list, param_store, threshold, alloc,
+                                         NULL == stmt ? NULL : stmt->get_query_ctx(),
+                                         resolved_list, is_enable))) {
           LOG_WARN("failed to check integer inlist cardinality", K(ret));
         }
       }
