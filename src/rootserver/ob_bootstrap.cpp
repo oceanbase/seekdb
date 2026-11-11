@@ -16,13 +16,13 @@
 
 #define USING_LOG_PREFIX BOOTSTRAP
 
-#if defined(__EMSCRIPTEN__)
 #include "common/ob_timeout_ctx.h"
-#endif
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "rust/config.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/ob_share_util.h"
 
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/ob_table_creator.h"
@@ -670,9 +670,16 @@ int ObBootstrap::check_is_already_bootstrap(bool &is_bootstrap)
 int ObBootstrap::init_global_stat()
 {
   int ret = OB_SUCCESS;
+  ObTimeoutCtx ctx;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
   if (OB_FAIL(check_inner_stat())) {
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(
+                 ctx, config::internal_sql_execute_timeout()))) {
+    LOG_WARN("failed to set global stat initialization timeout", KR(ret));
+  } else if (!ctx.is_trx_timeout_set()
+             && OB_FAIL(ctx.set_trx_timeout_us(ctx.get_timeout()))) {
+    LOG_WARN("failed to set global stat transaction timeout", KR(ret));
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
