@@ -540,6 +540,59 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+namespace
+{
+// Escape the identifier quote character so that a column name which contains a
+// literal backtick can be embedded into a backtick quoted DDL fragment.
+//
+// This helper deliberately lives in the share module: share is a terminal
+// module and must not depend on upper modules such as sql. Referencing
+// sql::ObSQLUtils from here would introduce an upward dependency and break
+// the share terminal architecture.
+int escape_identifier_quote(oceanbase::common::ObIAllocator &allocator,
+                            const oceanbase::common::ObString &src,
+                            oceanbase::common::ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const char escape_character = '`';
+  const int64_t src_len = src.length();
+  int64_t dst_len = src_len;
+  char *ptr = NULL;
+
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
+    dst.assign(NULL, 0);
+  } else if (NULL == src.find(escape_character)) {
+    dst = src;
+  } else {
+    for (int64_t i = 0; i < src_len; ++i) {
+      if (escape_character == src[i]) {
+        ++dst_len;
+      }
+    }
+    if (NULL == (ptr = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
+      dst = NULL;
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory failed", K(ret), "size", dst_len);
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; i < src_len; ++i) {
+        if (escape_character == src[i]) {
+          ptr[pos++] = escape_character;
+        }
+        ptr[pos++] = src[i];
+      }
+      if (pos != dst_len) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ptr[dst_len] = '\0';
+        dst.assign_ptr(ptr, dst_len);
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -549,8 +602,15 @@ int ObDDLUtil::generate_column_name_str(
 {
   int ret = OB_SUCCESS;
   const char *split_char = "`";
+  ObArenaAllocator allocator("ObDDLTmp");
+  common::ObString escaped_column_name = column_name_info.column_name_;
+  if ((with_origin_name || with_alias_name)
+      && OB_FAIL(escape_identifier_quote(allocator,
+                                         column_name_info.column_name_,
+                                         escaped_column_name))) {
+  }
   // append comma
-  if (with_comma) {
+  if (OB_SUCC(ret) && with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
     }
   }
@@ -558,9 +618,9 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   // append AS
@@ -571,7 +631,7 @@ int ObDDLUtil::generate_column_name_str(
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+        escaped_column_name.length(), escaped_column_name.ptr(), split_char))) {
     }
   }
   return ret;
