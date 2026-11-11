@@ -92,6 +92,13 @@ int ObSrvNetworkFrame::start()
     ret = OB_INVALID_CONFIG;
     LOG_ERROR("invalid mysql_port_mode", KR(ret), K(port_mode));
   }
+  if (OB_SUCC(ret) && gctx_.is_embedded_mode()) {
+    // An embedded instance must not depend on a fixed MySQL port: another
+    // in-process engine (or the previous one's TIME_WAIT sockets, which
+    // Windows refuses to rebind) can already own mysql_port. Bind an ephemeral
+    // loopback port instead; in-process SQL uses the local endpoint anyway.
+    mysql_port = 0;
+  }
   obmysql::global_sql_nio_server =
       OB_NEW(obmysql::ObSqlNioServer, "SqlNio",
               obmysql::global_sm_conn_callback);
