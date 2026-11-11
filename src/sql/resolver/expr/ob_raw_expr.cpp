@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_raw_expr.h"
+#include <cinttypes>
 #include "query/resolver/ob_raw_expr_traits.h"
 #include "sql/resolver/expr/ob_raw_expr_info_extractor.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
@@ -39,6 +40,26 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+int print_expr_address_annotation(char *buf, const int64_t buf_len, int64_t &pos,
+                                  const void *address,
+                                  common::ObIArray<common::ObString> *address_annotations)
+{
+  int ret = OB_SUCCESS;
+  const int64_t begin = pos;
+  if (OB_FAIL(databuff_printf(buf, buf_len, pos, "("))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "0x%" PRIxPTR,
+                                    reinterpret_cast<std::uintptr_t>(address)))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, ")"))) {
+  } else if (nullptr != address_annotations &&
+             OB_FAIL(address_annotations->push_back(
+                 common::ObString(static_cast<int32_t>(pos - begin), buf + begin)))) {
+  }
+  return ret;
+}
+}
+
 ObRawExpr *USELESS_POINTER = NULL;
 
 #define GENERATE_CASE(type, class)                                      \
@@ -317,14 +338,20 @@ void ObRawExpr::reset()
   is_deterministic_ = true;
 }
 
-int ObRawExpr::get_name(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const
+int ObRawExpr::get_name(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
+  const int64_t annotation_count = nullptr == address_annotations ? 0 : address_annotations->count();
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
   } else {
-    if (OB_FAIL(get_name_internal(buf, buf_len, pos, type))) {
+    if (OB_FAIL(get_name_internal(buf, buf_len, pos, type, address_annotations))) {
+    }
+  }
+  if (OB_FAIL(ret) && nullptr != address_annotations) {
+    while (address_annotations->count() > annotation_count) {
+      address_annotations->pop_back();
     }
   }
   return ret;
@@ -1292,7 +1319,7 @@ int ObConstRawExpr::do_visit(ObRawExprVisitor &visitor)
 }
 
 int ObConstRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                      ExplainType type) const
+                                      ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (EXPLAIN_HINT_FORMAT == type) {
@@ -1305,9 +1332,7 @@ int ObConstRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t 
       }
     } else if (EXPLAIN_EXTENDED != type) {
       /* do nothing */
-    } else if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    } else if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     }
   } else {
     if (OB_FAIL(get_value().print_sql_literal(buf, buf_len, pos))) {
@@ -1398,7 +1423,7 @@ void ObVarRawExpr::inner_calc_hash()
 }
 
 int ObVarRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                    ExplainType type) const
+                                    ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (EXPLAIN_HINT_FORMAT == type) {
@@ -1685,7 +1710,7 @@ int ObQueryRefRawExpr::do_visit(ObRawExprVisitor &visitor)
 }
 
 int ObQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                         ExplainType type) const
+                                         ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (EXPLAIN_HINT_FORMAT == type) {
@@ -1697,9 +1722,7 @@ int ObQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
     }
   } else if (OB_FAIL(BUF_PRINTF("subquery(%lu)", ref_id_))) {
   } else if (EXPLAIN_EXTENDED == type) {
-    if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     } else {}
   }
   return ret;
@@ -1817,7 +1840,7 @@ uint64_t ObExecParamRawExpr::hash_internal(uint64_t seed) const
 int ObExecParamRawExpr::get_name_internal(char *buf,
                                           const int64_t buf_len,
                                           int64_t &pos,
-                                          ExplainType type) const
+                                          ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (EXPLAIN_HINT_FORMAT == type) {
@@ -1830,9 +1853,7 @@ int ObExecParamRawExpr::get_name_internal(char *buf,
     if (OB_FAIL(BUF_PRINTF(":%ld", exec_param_idx_))) {
     } else if (EXPLAIN_EXTENDED != type) {
       /* do nothing */
-    } else if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    } else if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     }
   }
   return ret;
@@ -1985,7 +2006,7 @@ int ObColumnRefRawExpr::do_visit(ObRawExprVisitor &visitor)
 }
 
 int ObColumnRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                          ExplainType type) const
+                                          ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (EXPLAIN_HINT_FORMAT == type) {
@@ -1998,9 +2019,7 @@ int ObColumnRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int6
                            column_name_.length(), column_name_.ptr()))) {
     } else {
       if (EXPLAIN_EXTENDED == type) {
-        if (OB_FAIL(BUF_PRINTF("("))) {
-        } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-        } else if (OB_FAIL(BUF_PRINTF(")"))) {
+        if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
         } else {}
       }
     }
@@ -2122,12 +2141,12 @@ uint64_t ObAliasRefRawExpr::hash_internal(uint64_t seed) const
 }
 
 int ObAliasRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                         ExplainType type) const
+                                         ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ref_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ref_expr_->get_name(buf, buf_len, pos, type))) {
+  } else if (OB_FAIL(ref_expr_->get_name(buf, buf_len, pos, type, address_annotations))) {
   } else { }//do nothing
   return ret;
 }
@@ -2547,7 +2566,7 @@ int ObOpRawExpr::do_visit(ObRawExprVisitor &visitor)
 }
 
 int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                   ExplainType type) const {
+                                   ExplainType type, common::ObIArray<common::ObString> *address_annotations) const {
   int ret = OB_SUCCESS;
   ObString symbol;
   switch (get_expr_type()) {
@@ -2629,7 +2648,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       break;
   }
   if (IS_SUBQUERY_COMPARISON_OP(get_expr_type())) {
-    if (OB_FAIL(get_subquery_comparison_name(symbol, buf, buf_len, pos, type))) {
+    if (OB_FAIL(get_subquery_comparison_name(symbol, buf, buf_len, pos, type, address_annotations))) {
     }
   } else if ((!symbol.empty() && 2 == get_param_count())) {
     if (OB_ISNULL(get_param_expr(0))) {
@@ -2637,11 +2656,11 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
     } else if (OB_ISNULL(get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      if (OB_FAIL(get_param_expr(0)->get_name(buf, buf_len, pos, type))) {
+      if (OB_FAIL(get_param_expr(0)->get_name(buf, buf_len, pos, type, address_annotations))) {
       } else if (OB_FAIL(BUF_PRINTF(" "))) {
       } else if (OB_FAIL(BUF_PRINTF("%.*s", symbol.length(), symbol.ptr()))) {
       } else if (OB_FAIL(BUF_PRINTF(" "))) {
-      } else if (OB_FAIL(get_param_expr(1)->get_name(buf, buf_len, pos, type))) {
+      } else if (OB_FAIL(get_param_expr(1)->get_name(buf, buf_len, pos, type, address_annotations))) {
       }
     }
   } else if (T_OP_ROW == get_expr_type()) {
@@ -2650,7 +2669,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       for (int64_t i = 0; OB_SUCC(ret) && i < get_param_count() ; ++i) {
         if (OB_ISNULL(get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (i < get_param_count() - 1) {
           if (OB_FAIL(BUF_PRINTF(", "))) {
           }
@@ -2663,7 +2682,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
              && (EXPLAIN_EXTENDED != type && EXPLAIN_EXTENDED_NOADDR != type)
              && T_OP_BOOL == get_expr_type()) {
     CK(1 == get_param_count());
-    OZ(get_param_expr(0)->get_name(buf, buf_len, pos, type));
+    OZ(get_param_expr(0)->get_name(buf, buf_len, pos, type, address_annotations));
     LOG_DEBUG("debug print wrapper inner", K(ret), K(lbt()));
   } else if (T_OP_BOOL == get_expr_type()) {
     if (OB_UNLIKELY(1 != get_param_count())) {
@@ -2672,7 +2691,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       if (OB_FAIL(BUF_PRINTF("BOOL("))) {
       } else if (OB_ISNULL(get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(get_param_expr(0)->get_name_internal(buf, buf_len, pos, type))) {
+      } else if (OB_FAIL(get_param_expr(0)->get_name_internal(buf, buf_len, pos, type, address_annotations))) {
       } else if (OB_FAIL(BUF_PRINTF(")"))) {
       }
     }
@@ -2694,7 +2713,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       for (int64_t i = 0; OB_SUCC(ret) && i < get_param_count() ; ++i) {
         if (OB_ISNULL(get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (i < get_param_count() - 1) {
           if (OB_FAIL(BUF_PRINTF(", "))) {
           }
@@ -2708,7 +2727,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       for (int64_t i = 0; OB_SUCC(ret) && i < get_param_count() ; ++i) {
         if (OB_ISNULL(get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (i < get_param_count() - 1) {
           if (OB_FAIL(BUF_PRINTF(", "))) {
           }
@@ -2722,7 +2741,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       for (int64_t i = 1; OB_SUCC(ret) && i < get_param_count() ; ++i) {
         if (OB_ISNULL(get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (i < get_param_count() - 1) {
           if (OB_FAIL(BUF_PRINTF(", "))) {
           }
@@ -2736,7 +2755,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       for (int64_t i = 0; OB_SUCC(ret) && i < get_param_count() ; ++i) {
         if (OB_ISNULL(get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (i < get_param_count() - 1) {
           if (OB_FAIL(BUF_PRINTF(", "))) {
           }
@@ -2753,7 +2772,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       for (int64_t i = 0; OB_SUCC(ret) && i < get_param_count() ; ++i) {
         if (OB_ISNULL(get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (i < get_param_count() - 1) {
           if (OB_FAIL(BUF_PRINTF(", "))) {
           }
@@ -2768,7 +2787,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
         if (OB_ISNULL(get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(BUF_PRINTF(", "))) {
-        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else {}
       }
       if (OB_SUCCESS == ret && OB_FAIL(BUF_PRINTF(")"))) {
@@ -2777,9 +2796,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
   }
   if (OB_SUCC(ret)) {
     if (EXPLAIN_EXTENDED == type) {
-      if (OB_FAIL(BUF_PRINTF("("))) {
-      } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-      } else if (OB_FAIL(BUF_PRINTF(")"))) {
+      if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
       } else {}
     }
   }
@@ -2790,7 +2807,7 @@ int ObOpRawExpr::get_subquery_comparison_name(const ObString &symbol,
                                               char *buf,
                                               int64_t buf_len,
                                               int64_t &pos,
-                                              ExplainType type) const
+                                              ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   const ObRawExpr *param1 = NULL;
@@ -2808,11 +2825,11 @@ int ObOpRawExpr::get_subquery_comparison_name(const ObString &symbol,
     LOG_WARN("expr param count is unexpected", K(get_param_count()));
   } else if (OB_ISNULL(param1 = get_param_expr(0)) || OB_ISNULL(param2 = get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(param1->get_name(buf, buf_len, pos, type))) {
+  } else if (OB_FAIL(param1->get_name(buf, buf_len, pos, type, address_annotations))) {
   } else if (OB_FAIL(BUF_PRINTF(" %.*s %.*s", symbol.length(), symbol.ptr(),
                                 subquery_keyname.length(), subquery_keyname.ptr()))) {
   } else if (!subquery_keyname.empty() && OB_FAIL(BUF_PRINTF("("))) {
-  } else if (OB_FAIL(param2->get_name(buf, buf_len, pos, type))) {
+  } else if (OB_FAIL(param2->get_name(buf, buf_len, pos, type, address_annotations))) {
   } else if (!subquery_keyname.empty() && OB_FAIL(BUF_PRINTF(")"))) {
   }
   return ret;
@@ -3398,13 +3415,13 @@ int ObCaseOpRawExpr::postorder_replace(ObRawExprVisitor &visitor)
 */
 
 int ObCaseOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                       ExplainType type) const
+                                       ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(BUF_PRINTF("CASE"))) {
   } else if (NULL != arg_expr_) {
     if (OB_FAIL(BUF_PRINTF(" "))) {
-    } else if (OB_FAIL(arg_expr_->get_name(buf, buf_len, pos, type))) {
+    } else if (OB_FAIL(arg_expr_->get_name(buf, buf_len, pos, type, address_annotations))) {
     } else {}
   } else {}
 
@@ -3417,11 +3434,11 @@ int ObCaseOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       } else if (OB_FAIL(BUF_PRINTF(" "))) {
       } else if (OB_FAIL(BUF_PRINTF("WHEN"))) {
       } else if (OB_FAIL(BUF_PRINTF(" "))) {
-      } else if (OB_FAIL(get_when_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+      } else if (OB_FAIL(get_when_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
       } else if (OB_FAIL(BUF_PRINTF(" "))) {
       } else if (OB_FAIL(BUF_PRINTF("THEN"))) {
       } else if (OB_FAIL(BUF_PRINTF(" "))) {
-      } else if (OB_FAIL(get_then_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+      } else if (OB_FAIL(get_then_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
       } else {}
     }
     if (OB_SUCC(ret)) {
@@ -3430,7 +3447,7 @@ int ObCaseOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       } else {
         if (NULL != default_expr_) {
           if (OB_FAIL(BUF_PRINTF(" "))) {
-          } else if (OB_FAIL(default_expr_->get_name(buf, buf_len, pos, type))) {
+          } else if (OB_FAIL(default_expr_->get_name(buf, buf_len, pos, type, address_annotations))) {
           } else {}
         }
       }
@@ -3443,9 +3460,7 @@ int ObCaseOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
     } else {}
   }
   if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
-    if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     } else {}
   }
   return ret;
@@ -3661,7 +3676,7 @@ int ObAggFunRawExpr::do_visit(ObRawExprVisitor &visitor)
 }
 
 int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                       ExplainType type) const
+                                       ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (T_FUN_PL_AGG_UDF == get_expr_type()) {
@@ -3685,13 +3700,13 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
         T_FUN_GROUP_PERCENTILE_CONT == get_expr_type()) {
       if (1 > get_real_param_count()) {
         ret = OB_ERR_PARAM_SIZE;
-      } else if (OB_FAIL(get_real_param_exprs().at(0)->get_name(buf, buf_len, pos, type))) {
+      } else if (OB_FAIL(get_real_param_exprs().at(0)->get_name(buf, buf_len, pos, type, address_annotations))) {
       } else {}
     } else {
       for (; OB_SUCC(ret) && i < get_real_param_count() - 1; ++i) {
         if (OB_ISNULL(get_real_param_exprs().at(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_real_param_exprs().at(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_real_param_exprs().at(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF(", "))) {
         } else {}
       }
@@ -3701,7 +3716,7 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
           }
         } else if (OB_ISNULL(get_real_param_exprs().at(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_real_param_exprs().at(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_real_param_exprs().at(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else {}
       }
     }
@@ -3724,7 +3739,7 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
             //do nothing
           } else if (OB_ISNULL(order_items_.at(i).expr_)) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(order_items_.at(i).expr_->get_name(buf, buf_len, pos, type))) {
+          } else if (OB_FAIL(order_items_.at(i).expr_->get_name(buf, buf_len, pos, type, address_annotations))) {
           } else {}
         }
         if (OB_SUCCESS == ret && OB_FAIL(BUF_PRINTF(")"))) {
@@ -3732,15 +3747,13 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       }
       if (OB_SUCCESS == ret && NULL != separator_param_expr_) {
         if (OB_FAIL(BUF_PRINTF(" separator_param_expr("))) {
-        } else if (OB_FAIL(separator_param_expr_->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(separator_param_expr_->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF(")"))) {
         } else {}
       }
     }
     if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
-      if (OB_FAIL(BUF_PRINTF("("))) {
-      } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-      } else if (OB_FAIL(BUF_PRINTF(")"))) {
+      if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
       } else {}
     }
   }
@@ -4121,14 +4134,14 @@ int ObSysFunRawExpr::do_visit(ObRawExprVisitor &visitor)
 }
 
 int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                       ExplainType type) const
+                                       ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (has_flag(IS_INNER_ADDED_EXPR)
       && (EXPLAIN_EXTENDED != type && EXPLAIN_EXTENDED_NOADDR != type)
       && (T_FUN_SYS_REMOVE_CONST == get_expr_type() || T_FUN_SYS_WRAPPER_INNER == get_expr_type())) {
     CK(1 == get_param_count());
-    OZ(get_param_expr(0)->get_name(buf, buf_len, pos, type));
+    OZ(get_param_expr(0)->get_name(buf, buf_len, pos, type, address_annotations));
   } else {
     if (T_FUN_SYS_AUTOINC_NEXTVAL == get_expr_type() &&
         OB_FAIL(get_autoinc_nextval_name(buf, buf_len, pos))) {
@@ -4139,13 +4152,13 @@ int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
     }
     if (OB_FAIL(ret)) {
     } else if (T_FUN_COLUMN_CONV == get_expr_type()) {
-      if (OB_FAIL(get_column_conv_name(buf, buf_len, pos, type))) {
+      if (OB_FAIL(get_column_conv_name(buf, buf_len, pos, type, address_annotations))) {
       }
     } else if (T_FUN_SYS_INNER_ROW_CMP_VALUE == get_expr_type()) {
       CK(3 == get_param_count());
-      OZ(get_param_expr(2)->get_name(buf, buf_len, pos, type));
+      OZ(get_param_expr(2)->get_name(buf, buf_len, pos, type, address_annotations));
     } else if (IS_TYPE_DEMOTION_FUN(get_expr_type())) {
-      if (OB_FAIL(get_type_demotion_name(buf, buf_len, pos, type))) {
+      if (OB_FAIL(get_type_demotion_name(buf, buf_len, pos, type, address_annotations))) {
       }
     } else {
       int64_t i = 0;
@@ -4153,7 +4166,7 @@ int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
         for (; OB_SUCC(ret) && i < get_param_count() - 1; ++i) {
           if (OB_ISNULL(get_param_expr(i))) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+          } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
           } else if (OB_FAIL(BUF_PRINTF(", "))) {
           } else {}
         }
@@ -4163,7 +4176,7 @@ int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
           if (get_param_count() >= 1) {
             if (OB_ISNULL(get_param_expr(i))) {
               ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type))) {
+            } else if (OB_FAIL(get_param_expr(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
             } else {}
           }
         } else {
@@ -4175,9 +4188,7 @@ int ObSysFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
     if (OB_SUCC(ret)) {
       if (OB_FAIL(BUF_PRINTF(")"))) {
       } else if (EXPLAIN_EXTENDED == type) {
-        if (OB_FAIL(BUF_PRINTF("("))) {
-        } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-        } else if (OB_FAIL(BUF_PRINTF(")"))) {
+        if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
         } else {}
       } else {}
     }
@@ -4228,7 +4239,7 @@ int ObSysFunRawExpr::get_cast_type_name(char *buf, int64_t buf_len, int64_t &pos
 }
 
 int ObSysFunRawExpr::get_column_conv_name(char *buf, int64_t buf_len, int64_t &pos,
-                                          ExplainType explain_type) const
+                                          ExplainType explain_type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || T_FUN_COLUMN_CONV != get_expr_type()) {
@@ -4258,7 +4269,7 @@ int ObSysFunRawExpr::get_column_conv_name(char *buf, int64_t buf_len, int64_t &p
                              accuracy.get_scale(), is_nullable ? "NULL" : "NOT NULL"))) {
       }
     }
-    if (OB_SUCC(ret) && OB_FAIL(get_param_expr(4)->get_name(buf, buf_len, pos, explain_type))) {
+    if (OB_SUCC(ret) && OB_FAIL(get_param_expr(4)->get_name(buf, buf_len, pos, explain_type, address_annotations))) {
     }
   }
   return ret;
@@ -4285,7 +4296,7 @@ int ObSysFunRawExpr::get_autoinc_nextval_name(char *buf, int64_t buf_len, int64_
 }
 
 int ObSysFunRawExpr::get_type_demotion_name(char *buf, int64_t buf_len, int64_t &pos,
-                                            ExplainType explain_type) const
+                                            ExplainType explain_type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   const ObRawExpr *const_expr = NULL;
@@ -4296,7 +4307,7 @@ int ObSysFunRawExpr::get_type_demotion_name(char *buf, int64_t buf_len, int64_t 
   } else if (OB_ISNULL(get_param_expr(0)) || OB_ISNULL(get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(get_param_expr(0), const_expr))) {
-  } else if (OB_FAIL(const_expr->get_name(buf, buf_len, pos, explain_type))) {
+  } else if (OB_FAIL(const_expr->get_name(buf, buf_len, pos, explain_type, address_annotations))) {
   } else if (OB_FAIL(BUF_PRINTF(", "))) {
   } else if (OB_FAIL(get_cast_type_name(buf, buf_len, pos))) {
   }
@@ -4575,7 +4586,7 @@ ObExprOperator *ObUDFRawExpr::get_op()
 }
 
 int ObUDFRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                    ExplainType type) const
+                                    ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (!get_database_name().empty()) {
@@ -4584,7 +4595,7 @@ int ObUDFRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &p
   if (!get_package_name().empty()) {
     OZ (BUF_PRINTF("%.*s.", get_package_name().length(), get_package_name().ptr()));
   }
-  OZ (ObSysFunRawExpr::get_name_internal(buf, buf_len, pos, type));
+  OZ (ObSysFunRawExpr::get_name_internal(buf, buf_len, pos, type, address_annotations));
   return ret;
 }
 
@@ -4951,7 +4962,7 @@ int ObSetOpRawExpr::assign(const ObRawExpr &other)
 }
 
 int ObSetOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                      ExplainType type) const
+                                      ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   const char *op_name = "UNKNOWN";
@@ -4973,9 +4984,7 @@ int ObSetOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t 
   } else if (OB_FAIL(BUF_PRINTF("%s([%ld])", op_name, idx_ + 1))) {
   } else {}
   if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
-    if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     } else {}
   }
   return ret;
@@ -5422,12 +5431,12 @@ uint64_t ObWinFunRawExpr::hash_internal(uint64_t seed) const
 }
 
 int ObWinFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                       ExplainType type) const
+                                       ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
 
   if (agg_expr_ != NULL) {
-    ret = get_agg_expr()->get_name(buf, buf_len, pos, type);
+    ret = get_agg_expr()->get_name(buf, buf_len, pos, type, address_annotations);
   } else {
     if (OB_FAIL(BUF_PRINTF("%s(", get_type_name(func_type_)))) {
     }
@@ -5440,7 +5449,7 @@ int ObWinFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
       }
       if (OB_SUCC(ret) && OB_ISNULL(func_param = func_params_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_SUCC(ret) && OB_FAIL(func_param->get_name(buf, buf_len, pos, type))) {
+      } else if (OB_SUCC(ret) && OB_FAIL(func_param->get_name(buf, buf_len, pos, type, address_annotations))) {
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
@@ -5448,9 +5457,7 @@ int ObWinFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
   }
 
   if (OB_SUCCESS == ret && EXPLAIN_EXTENDED == type) {
-    if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     } else {}
   }
   return ret;
@@ -5520,7 +5527,7 @@ uint64_t ObPseudoColumnRawExpr::hash_internal(uint64_t seed) const
 }
 
 int ObPseudoColumnRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                             ExplainType type) const
+                                             ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   UNUSED(type);
@@ -5545,9 +5552,7 @@ int ObPseudoColumnRawExpr::get_name_internal(char *buf, const int64_t buf_len, i
       LOG_WARN("invalid expr type", K(get_expr_type()));
   }
   if (OB_SUCC(ret) && EXPLAIN_EXTENDED == type) {
-    if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     } else {}
   }
   return ret;
@@ -5614,15 +5619,13 @@ int ObOpPseudoColumnRawExpr::do_visit(ObRawExprVisitor &visitor)
 int ObOpPseudoColumnRawExpr::get_name_internal(char *buf,
                                                const int64_t buf_len,
                                                int64_t &pos,
-                                               ExplainType type) const
+                                               ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   OZ(BUF_PRINTF("%s", name_));
   if (OB_FAIL(ret)) {
   } else if (EXPLAIN_EXTENDED == type) {
-    if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     } else {}
   }
   return ret;
@@ -5834,7 +5837,7 @@ int ObPlQueryRefRawExpr::do_visit(ObRawExprVisitor &visitor)
 }
 
 int ObPlQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos,
-                                         ExplainType type) const
+                                         ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (EXPLAIN_HINT_FORMAT == type) {
@@ -5842,9 +5845,7 @@ int ObPlQueryRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int
     }
   } else if (OB_FAIL(BUF_PRINTF("subquery(%.*s)", ps_sql_.length(), ps_sql_.ptr()))) {
   } else if (EXPLAIN_EXTENDED == type) {
-    if (OB_FAIL(BUF_PRINTF("("))) {
-    } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-    } else if (OB_FAIL(BUF_PRINTF(")"))) {
+    if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
     } else {}
   }
   return ret;
@@ -6164,7 +6165,7 @@ uint64_t ObMatchFunRawExpr::hash_internal(uint64_t seed) const
   return hash_value;
 }
 
-int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const
+int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations) const
 {
   int ret = OB_SUCCESS;
   if (!is_es_match()) {
@@ -6174,16 +6175,16 @@ int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
       for (; OB_SUCC(ret) && i < get_match_columns().count() - 1; ++i) {
         if (OB_ISNULL(get_match_columns().at(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_match_columns().at(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_match_columns().at(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF(", "))) {
         } else {}
       }
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(get_match_columns().at(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_match_columns().at(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_match_columns().at(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF(") AGAINST("))) {
-        } else if (OB_FAIL(get_search_key()->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_search_key()->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (NATURAL_LANGUAGE_MODE == get_mode_flag() &&
                    OB_FAIL(BUF_PRINTF(""))) {
         } else if (BOOLEAN_MODE == get_mode_flag() &&
@@ -6196,9 +6197,7 @@ int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
                    OB_FAIL(BUF_PRINTF(" MATCH PHRASE_MODE"))) {
         }else if (OB_FAIL(BUF_PRINTF(")"))) {
         } else if (EXPLAIN_EXTENDED == type) {
-          if (OB_FAIL(BUF_PRINTF("("))) {
-          } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-          } else if (OB_FAIL(BUF_PRINTF(")"))) {
+          if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
           } else {}
         }
       }
@@ -6210,27 +6209,25 @@ int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
       for (; OB_SUCC(ret) && i < get_match_columns().count() - 1; ++i) {
         if (OB_ISNULL(get_match_columns().at(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_match_columns().at(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_match_columns().at(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF("^"))) {
-        } else if (OB_FAIL(get_columns_boosts().at(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_columns_boosts().at(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF(", "))) {
         } else {}
       }
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(get_match_columns().at(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(get_match_columns().at(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_match_columns().at(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF("^"))) {
-        } else if (OB_FAIL(get_columns_boosts().at(i)->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_columns_boosts().at(i)->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF(", "))) {
-        } else if (OB_FAIL(get_search_key()->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_search_key()->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF(", "))) {
-        } else if (OB_FAIL(get_param_text_expr()->get_name(buf, buf_len, pos, type))) {
+        } else if (OB_FAIL(get_param_text_expr()->get_name(buf, buf_len, pos, type, address_annotations))) {
         } else if (OB_FAIL(BUF_PRINTF(")"))) {
         } else if (EXPLAIN_EXTENDED == type) {
-          if (OB_FAIL(BUF_PRINTF("("))) {
-          } else if (OB_FAIL(BUF_PRINTF("%p", this))) {
-          } else if (OB_FAIL(BUF_PRINTF(")"))) {
+          if (OB_FAIL(print_expr_address_annotation(buf, buf_len, pos, this, address_annotations))) {
           } else {}
         }
       }

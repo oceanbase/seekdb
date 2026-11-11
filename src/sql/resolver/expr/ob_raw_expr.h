@@ -2036,9 +2036,9 @@ public:
   }
   virtual uint64_t hash_internal(uint64_t seed) const = 0;
 
-  int get_name(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type = EXPLAIN_UNINITIALIZED) const;
+  int get_name(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type = EXPLAIN_UNINITIALIZED, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   int get_type_and_length(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
-  virtual int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const = 0;
+  virtual int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const = 0;
 
   // post-processing for expressions
   int formalize(const ObSQLSessionInfo *my_session,
@@ -2607,7 +2607,7 @@ public:
   virtual int do_visit(ObRawExprVisitor &visitor) override;
 
   virtual uint64_t hash_internal(uint64_t seed) const;
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   void set_is_literal_bool(const bool is_literal_bool) { is_literal_bool_ = is_literal_bool; }
   bool is_literal_bool() const { return is_literal_bool_; }
   void set_is_batch_stmt_parameter() { is_batch_stmt_parameter_ = true; }
@@ -2673,7 +2673,7 @@ public:
 
   virtual int do_visit(ObRawExprVisitor &visitor) override;
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   void set_result_type_assigned(bool v) { result_type_assigned_ = v; }
   bool get_result_type_assigned() { return result_type_assigned_; }
   ObRawExpr *get_ref_expr() const { return ref_expr_; }
@@ -2778,7 +2778,7 @@ public:
   virtual int get_name_internal(char *buf,
                                 const int64_t buf_len,
                                 int64_t &pos,
-                                ExplainType type) const override;
+                                ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const override;
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // the refered expr in the outer stmt
@@ -2871,7 +2871,7 @@ public:
 
   virtual uint64_t hash_internal(uint64_t seed) const { return common::do_hash(ref_id_, seed); }
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
 
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
@@ -3086,7 +3086,7 @@ public:
   bool is_rowkey_column() const { return is_rowkey_column_; }
   void set_is_rowkey_column(bool value) { is_rowkey_column_ = value; }
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   inline uint64_t get_srs_id() const { return srs_id_; };
   inline void set_srs_id(uint64_t srs_id) { srs_id_ = srs_id; };
 
@@ -3191,7 +3191,7 @@ public:
   virtual int do_visit(ObRawExprVisitor &visitor) override;
   virtual int replace_expr(const common::ObIArray<ObRawExpr *> &other_exprs,
                            const common::ObIArray<ObRawExpr *> &new_exprs) override;
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   virtual bool inner_same_as(const ObRawExpr &expr,
                              ObExprEqualCheckContext *check_context) const override;
   virtual void inner_calc_hash() override;
@@ -3249,7 +3249,7 @@ public:
   virtual ObRawExpr *&get_param_expr(int64_t index) override;
   virtual int do_visit(ObRawExprVisitor &visitor) override;
   virtual uint64_t hash_internal(uint64_t seed) const;
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   virtual bool inner_same_as(const ObRawExpr &expr,
                              ObExprEqualCheckContext *check_context) const override;
   virtual void inner_calc_hash() override;
@@ -3356,12 +3356,12 @@ public:
 
   virtual uint64_t hash_internal(uint64_t seed) const;
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   int get_subquery_comparison_name(const common::ObString &symbol,
                                    char *buf,
                                    int64_t buf_len,
                                    int64_t &pos,
-                                   ExplainType type) const;
+                                   ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   bool is_white_runtime_filter_expr() const override;
   int get_subquery_comparison_flag() const;
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
@@ -3510,7 +3510,7 @@ public:
 
   virtual uint64_t hash_internal(uint64_t seed) const;
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
                                             N_EXPR_INFO, info_,
@@ -3765,7 +3765,7 @@ public:
     return seed;
   }
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
                                             N_EXPR_INFO, info_,
@@ -3898,13 +3898,13 @@ public:
     return hash_ret;
   }
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   int get_cast_type_name(char *buf, int64_t buf_len, int64_t &pos) const;
-  int get_column_conv_name(char *buf, int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_column_conv_name(char *buf, int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   int get_autoinc_nextval_name(char *buf, int64_t buf_len, int64_t &pos) const;
   void set_op_id(int64_t operator_id) { extra_.operator_id_ = operator_id; }
   int64_t get_op_id() const { return extra_.operator_id_; }
-  int get_type_demotion_name(char *buf, int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_type_demotion_name(char *buf, int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
 
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
@@ -4222,7 +4222,7 @@ public:
     return hash_ret;
   }
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const override;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const override;
 
   inline void set_parallel_enable(bool is_parallel_enable) { is_parallel_enable_ = is_parallel_enable; }
   inline bool is_parallel_enable() const { return is_parallel_enable_; }
@@ -4753,7 +4753,7 @@ public:
   virtual uint64_t hash_internal(uint64_t seed) const;
   int64_t get_partition_param_index(int64_t index);
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   int get_order_exprs(ObIArray<ObRawExpr*> &order_exprs) const;
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
@@ -4808,7 +4808,7 @@ public:
 
   virtual int do_visit(ObRawExprVisitor &visitor) override;
   virtual uint64_t hash_internal(uint64_t seed) const;
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
   void set_table_id(uint64_t table_id) { table_id_ = table_id; }
   uint64_t get_table_id() const { return table_id_; }
   void set_table_name(const common::ObString &table_name) { table_name_ = table_name; }
@@ -4853,7 +4853,7 @@ public:
   virtual int get_name_internal(char *buf,
                                 const int64_t buf_len,
                                 int64_t &pos,
-                                ExplainType type) const override;
+                                ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const override;
 
   void set_name(const char *name) { name_ = name; }
   const char *get_name() const { return name_; }
@@ -4893,7 +4893,7 @@ public:
                            const common::ObIArray<ObRawExpr *> &new_exprs) override;
   virtual int do_visit(ObRawExprVisitor &visitor) override;
   virtual uint64_t hash_internal(uint64_t seed) const;
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const override;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const override;
   virtual bool inner_same_as(const ObRawExpr &expr, ObExprEqualCheckContext *check_context) const override;
   virtual void inner_calc_hash() override;
   virtual void clear_child() override;
@@ -5215,7 +5215,7 @@ public:
 
   virtual uint64_t hash_internal(uint64_t seed) const;
 
-  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
+  int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type, common::ObIArray<common::ObString> *address_annotations = nullptr) const;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPlQueryRefRawExpr);
