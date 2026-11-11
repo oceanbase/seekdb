@@ -3104,13 +3104,13 @@ int ObVectorIndexUtil::check_index_param(
           }
         } else if (last_variable == "MODEL") {
           if (!new_parser_name.empty()) {
-            ObAIFuncExprInfo *ai_func_info;
+            ObAIFuncExprInfo *ai_func_info = nullptr;
             if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, new_parser_name, ai_func_info))) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");
+              LOG_WARN("failed to get ai func info for vector index model", K(ret), K(new_parser_name));
+            } else {
+              endpoint_is_set = true;
+              endpoint_name = new_parser_name;
             }
-            endpoint_is_set = true;
-            endpoint_name = new_parser_name;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");

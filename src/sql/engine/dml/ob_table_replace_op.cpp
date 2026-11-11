@@ -664,6 +664,7 @@ int ObTableReplaceOp::replace_conflict_row_cache()
     int64_t insert_rows = 0;
     constraint_values.reuse();
     ObChunkDatumStore::StoredRow *insert_new_row = NULL;
+    ObNewRowSource conflict_row_source = ObNewRowSource::FROM_SCAN;
     if (OB_ISNULL(stored_row)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(stored_row->to_expr(get_all_saved_exprs(), eval_ctx_))) {
@@ -671,7 +672,8 @@ int ObTableReplaceOp::replace_conflict_row_cache()
                                                                      insert_new_row))) {
     } else if (OB_FAIL(conflict_checker_.check_duplicate_rowkey(insert_new_row,
                                                                 constraint_values,
-                                                                false))) {
+                                                                false,
+                                                                conflict_row_source))) {
     } else {
       insert_rows++;
     }

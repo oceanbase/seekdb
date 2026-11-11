@@ -1724,8 +1724,24 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
       ObDASWriteBuffer::DAS_WITH_TRANS_INFO_EXTEND_SIZE : ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE;
   // 1. find das dml op
   OpType *dml_op = nullptr;
-  if (OB_UNLIKELY(!dml_rtctx.das_ref_.has_das_op(tablet_access, dml_op))) {
-    if (OB_FAIL(dml_rtctx.das_ref_.prepare_das_task(tablet_access, dml_op))) {
+  // One upsert batch can carry both statement text and vectors fetched from
+  // storage. They need different projectors, so they cannot share one task.
+  DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT;
+  if (N == DAS_OP_TABLE_INSERT) {
+    bool uses_stored_embedding = ctdef.is_embedded_vec_from_old_row_;
+    if (OB_NOT_NULL(rtdef.related_ctdefs_)) {
+      for (int64_t i = 0; !uses_stored_embedding && i < rtdef.related_ctdefs_->count(); ++i) {
+        const ObDASDMLBaseCtDef *related_ctdef = rtdef.related_ctdefs_->at(i);
+        uses_stored_embedding = OB_NOT_NULL(related_ctdef)
+            && related_ctdef->is_embedded_vec_from_old_row_;
+      }
+    }
+    if (uses_stored_embedding) {
+      vec_datum_kind = DAS_VEC_DATUM_EMBEDDED;
+    }
+  }
+  if (OB_UNLIKELY(!dml_rtctx.das_ref_.has_das_op(tablet_access, dml_op, vec_datum_kind))) {
+    if (OB_FAIL(dml_rtctx.das_ref_.prepare_das_task(tablet_access, dml_op, vec_datum_kind))) {
     } else if (OB_FAIL(dml_op->init_task_info(extend_size))) {
     } else {
       dml_op->set_das_ctdef(static_cast<const CtDefType*>(&ctdef));

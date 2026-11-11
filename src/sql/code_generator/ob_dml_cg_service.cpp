@@ -1565,6 +1565,32 @@ int ObDmlCgService::append_all_uk_column_id(ObSchemaGetterGuard *schema_guard,
   return ret;
 }
 
+template<typename ExprType>
+int ObDmlCgService::set_embedded_vec_datum_flag(const ObIArray<ExprType*> &cur_row,
+                                                ObDASDMLBaseCtDef &das_ctdef)
+{
+  // The embedded vector column is an encoded vector only when the new row
+  // projects a column reference, i.e. the value comes from an existing row.
+  // When an update is expanded into DELETE + INSERT this distinction keeps the
+  // stored vector from being embedded a second time.
+  int ret = OB_SUCCESS;
+  const uint64_t embedded_col_id =
+      das_ctdef.table_param_.get_data_table().get_embedded_vec_col_id();
+  das_ctdef.is_embedded_vec_from_old_row_ = false;
+  for (int64_t i = 0; OB_SUCC(ret) && i < cur_row.count(); ++i) {
+    ObRawExpr *expr = cur_row.at(i);
+    if (OB_NOT_NULL(expr) && expr->is_column_ref_expr()) {
+      const ObColumnRefRawExpr *column_expr = static_cast<const ObColumnRefRawExpr *>(expr);
+      if (column_expr->get_column_id() == embedded_col_id
+          && column_expr->is_hybrid_embedded_vec_column()) {
+        das_ctdef.is_embedded_vec_from_old_row_ = true;
+        break;
+      }
+    }
+  }
+  return ret;
+}
+
 template<typename OldExprType, typename NewExprType>
 int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_ids,
                                            const ObIArray<uint64_t> &storage_column_ids,
@@ -1581,6 +1607,8 @@ int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_
                           && !das_ctdef.table_param_.get_data_table().is_ivf_vector_index()
                           && das_ctdef.op_type_ == DAS_OP_TABLE_UPDATE;
   bool is_spatial_index = das_ctdef.table_param_.get_data_table().is_spatial_index();
+  bool is_semantic_embedded_index = share::schema::is_hybrid_vec_index_embedded_type(
+      das_ctdef.table_param_.get_data_table().get_index_type());
   uint8_t extra_geo = (is_spatial_index) ? 1 : 0;
   //generate old row projector
   if (!old_row.empty()) {
@@ -1648,6 +1676,10 @@ int ObDmlCgService::generate_das_projector(const ObIArray<uint64_t> &dml_column_
     }
     if (OB_SUCC(ret) && is_vec_vid_index &&
         OB_FAIL(add_vec_idx_col_projector(new_row, full_row, dml_column_ids, das_ctdef, new_row_projector))) {
+    }
+    if (OB_SUCC(ret) && is_semantic_embedded_index
+        && OB_FAIL(set_embedded_vec_datum_flag(new_row, das_ctdef))) {
+      LOG_WARN("failed to set embedded vector datum flag", K(ret));
     }
   }
 
