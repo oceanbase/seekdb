@@ -1280,9 +1280,8 @@ int ObExprInOrNotIn::eval_in_without_row(const ObExpr &expr,
                                 expr.args_[0]->datum_meta_.cs_type_,
                                 expr.args_[0]->obj_meta_.has_lob_header() ||
                                 expr.args_[1]->args_[0]->obj_meta_.has_lob_header());
-        for (int i = 0; i < expr.inner_func_cnt_; i++) {
-          in_ctx->cmp_functions_[i] = (void *)func_ptr;
-        }
+        // Scalar hash keys have one column; probing only uses comparator slot 0.
+        in_ctx->cmp_functions_[0] = (void *)func_ptr;
       }
       //second we search in hashset.
       if (OB_SUCC(ret) && OB_NOT_NULL(in_ctx)) {
@@ -1374,9 +1373,8 @@ int ObExprInOrNotIn::eval_batch_in_without_row(const ObExpr &expr,
                                 expr.args_[0]->datum_meta_.cs_type_,
                                 expr.args_[0]->obj_meta_.has_lob_header() ||
                                 expr.args_[1]->args_[0]->obj_meta_.has_lob_header());
-        for (int i = 0; i < expr.inner_func_cnt_; i++) {
-          in_ctx->cmp_functions_[i] = (void *)func_ptr;
-        }
+        // Scalar hash keys have one column; probing only uses comparator slot 0.
+        in_ctx->cmp_functions_[0] = (void *)func_ptr;
       }
       for (int64_t left_idx = 0; OB_SUCC(ret) && !fallback && left_idx < batch_size; ++left_idx) {
         if (skip.at(left_idx) || eval_flags.at(left_idx)) {
