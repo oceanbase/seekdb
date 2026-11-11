@@ -797,7 +797,7 @@ static int get_telemetry_container_scope_id(char *scope_id,
   has_scope_id = false;
   if (OB_ISNULL(scope_id) || scope_id_size <= TELEMETRY_UUID_STRING_LENGTH) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_NOT_NULL(configured_id)) {
+  } else if (OB_NOT_NULL(configured_id) && '\0' != configured_id[0]) {
     const int64_t configured_id_len = static_cast<int64_t>(strlen(configured_id));
     if (OB_FAIL(normalize_telemetry_uuid_text(configured_id, configured_id_len,
                                               scope_id, scope_id_size, scope_id_len))) {
