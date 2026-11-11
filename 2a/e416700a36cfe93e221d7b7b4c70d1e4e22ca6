@@ -1,0 +1,20 @@
+src/include/seekdb.cpp
+  s_f87238b17c0588::t_6deb0be174135b 1170-1173
+  s_f87238b17c0588::t_8e42df2dc6b18e 1193-1195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2ae416700a36cfe93e221d7b7b4c70d1e4e22ca6",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}
