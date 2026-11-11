@@ -91,7 +91,7 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     for name, path in re.findall(r"^\s*(\S+)\s+\([^\n]*\)\s+=>\s+(\S+)",
                                  subprocess.check_output([ldconfig, "-p"], text=True), re.MULTILINE):
         cache.setdefault(name, []).append(Path(path))
-    pending = [(original, executable)]
+    pending = [(original, executable, ())]
     origins = {}
     executable_arch = architecture(executable, "linux")
 
@@ -101,7 +101,7 @@ def linux_libraries(prefix, original, directories, extra_libraries):
         except ValueError:
             return False
 
-    def enqueue(source, name):
+    def enqueue(source, name, inherited=()):
         if system.match(name):
             raise ValueError("system runtime libraries must not be bundled: %s" % name)
         source = source.resolve()
@@ -115,19 +115,21 @@ def linux_libraries(prefix, original, directories, extra_libraries):
         target = libraries / name
         shutil.copyfile(source, target)
         target.chmod(0o755)
-        pending.append((source, target))
+        pending.append((source, target, inherited))
 
     for source in extra_libraries:
         enqueue(source, source.name)
     while pending:
-        source, target = pending.pop()
+        source, target, inherited = pending.pop()
         metadata = dynamic(source)
-        search = []
-        rpaths = re.findall(r"\((?:RPATH|RUNPATH)\).*?\[(.*?)\]", metadata)
-        for rpath in rpaths:
-            search.extend(Path(entry.replace("${ORIGIN}", str(source.parent)).replace("$ORIGIN", str(source.parent)))
-                          for entry in rpath.split(":") if entry)
+        tags = re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", metadata)
+        paths = {kind: tuple(Path(entry.replace("${ORIGIN}", str(source.parent)).replace("$ORIGIN", str(source.parent)))
+                             for entry in value.split(":") if entry) for kind, value in tags}
+        if "RUNPATH" not in paths:
+            inherited = paths.get("RPATH", ()) + inherited
+        search = list(paths.get("RUNPATH", inherited))
         search.extend(directories)
+        rpaths = [value for _, value in tags]
         needed = re.findall(r"\(NEEDED\).*?\[(.*?)\]", metadata)
         for name in needed:
             if system.match(name):
@@ -138,7 +140,7 @@ def linux_libraries(prefix, original, directories, extra_libraries):
             resolved = next((path for path in candidates if matching(path)), None)
             if resolved is None:
                 raise ValueError("unresolved dependency %s imported by %s; supply --runtime-lib-dir" % (name, source))
-            enqueue(resolved, name)
+            enqueue(resolved, name, inherited)
         rpath = "$ORIGIN/../lib/seekdb:$ORIGIN/../libexec/seekdb/lib" if target == executable else "$ORIGIN"
         alignment = elf_relocation_page_size(target)
         # Leaf system dependencies need no new RPATH.
@@ -176,7 +178,7 @@ def prepare(prefix, original, layout, directories, extra_libraries, glibc):
         metadata.update(glibc=glibc or required, required_glibc=required)
     elif layout == "macos":
         from pkg.bundle_dylibs import bundle
-        bundle(prefix, original)
+        bundle(prefix, original, prefix / "bin/seekdb")
         versions = []
         for binary in [prefix / "bin/seekdb"] + sorted((prefix / "lib/seekdb").iterdir()):
             commands = subprocess.check_output(["otool", "-l", str(binary)], text=True)
