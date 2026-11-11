@@ -18,6 +18,7 @@
 
 #include "rust/config.h"
 #include "lib/compress/ob_compress_util.h"
+#include "lib/string/ob_identifier_escape.h"
 #include "ob_ddl_common.h"
 #include <inttypes.h>
 #include "common/datum/ob_datum.h"  // ObDatum complete type(previously hidden behind the block_sstable_struct include chain)
@@ -550,8 +551,18 @@ int ObDDLUtil::generate_column_name_str(
 {
   int ret = OB_SUCCESS;
   const char *split_char = "`";
+  char escaped_name_buffer[2 * OB_MAX_COLUMN_NAME_BINARY_LENGTH + 1];
+  int64_t escaped_length = 0;
+  ObString column_name = column_name_info.column_name_;
+  if (with_origin_name || with_alias_name) {
+    if (OB_FAIL(escape_mysql_identifier(column_name.ptr(), column_name.length(),
+        escaped_name_buffer, sizeof(escaped_name_buffer), escaped_length))) {
+    } else {
+      column_name.assign_ptr(escaped_name_buffer, static_cast<int32_t>(escaped_length));
+    }
+  }
   // append comma
-  if (with_comma) {
+  if (OB_SUCC(ret) && with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
     }
   }
@@ -559,9 +570,9 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name.length(), column_name.ptr(), split_char))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name.length(), column_name.ptr(), split_char))) {
     }
   }
   // append AS
@@ -572,7 +583,7 @@ int ObDDLUtil::generate_column_name_str(
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+        column_name.length(), column_name.ptr(), split_char))) {
     }
   }
   return ret;
