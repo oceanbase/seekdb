@@ -194,13 +194,33 @@ int ObExprArraySortby::cg_expr(ObExprCGCtx &expr_cg_ctx,
   ObExecContext *exec_ctx = expr_cg_ctx.session_->get_cur_exec_ctx();
   uint16_t lambda_subschema_id;
   ObIExprExtraInfo *extra_info = nullptr;
+  const ObRawExpr *lambda_expr = raw_expr.get_param_expr(0);
 
-  if (OB_FAIL(get_lambda_subschema_id(exec_ctx, raw_expr, lambda_subschema_id))) {
-  } else if (OB_FAIL(construct_extra_info(expr_cg_ctx, raw_expr, rt_expr, extra_info))) {
-  } else {
-    static_cast<ObExprArrayMapInfo *>(extra_info)->lambda_subschema_id_ = lambda_subschema_id;
-    rt_expr.extra_info_ = extra_info;
-    rt_expr.eval_func_ = eval_array_sortby;
+  if (OB_ISNULL(exec_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(lambda_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (lambda_expr->get_result_type().is_varchar()
+             && lambda_expr->get_result_type().get_length() > OB_MAX_VARCHAR_LENGTH / 4) {
+    ObDataType elem_type;
+    elem_type.set_meta_type(lambda_expr->get_result_type().get_obj_meta());
+    elem_type.set_accuracy(lambda_expr->get_result_type().get_accuracy());
+    // This private ObArrayBinary stores complete key datums without using the
+    // declared element length. Keep its descriptor within the ARRAY type limit
+    // without changing the scalar lambda accuracy or truncating its values.
+    elem_type.set_length(OB_MAX_VARCHAR_LENGTH / 4);
+    if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(
+            ObNestedType::OB_ARRAY_TYPE, elem_type, lambda_subschema_id))) {
+    }
+  } else if (OB_FAIL(get_lambda_subschema_id(exec_ctx, raw_expr, lambda_subschema_id))) {
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(construct_extra_info(expr_cg_ctx, raw_expr, rt_expr, extra_info))) {
+    } else {
+      static_cast<ObExprArrayMapInfo *>(extra_info)->lambda_subschema_id_ = lambda_subschema_id;
+      rt_expr.extra_info_ = extra_info;
+      rt_expr.eval_func_ = eval_array_sortby;
+    }
   }
   return ret;
 }
