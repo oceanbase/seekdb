@@ -148,6 +148,16 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "the maximum memory used by the vector module. 0 derives the limit from effective memory, which is the smaller of physical memory and a finite cgroup memory limit. The automatic value is 50% of effective memory. The Vector allocator enforces this module limit independently of the TxShare aggregate limit. Range: [0M,)."
 
+# Legacy clients still read and set this parameter. Only vector_memory_limit
+# controls vector memory sizing.
+- name: ob_vector_memory_limit_percentage
+  type: INT
+  default: "0"
+  range: "[0, 100)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Deprecated compatibility parameter. The value is persisted but does not affect vector memory sizing. Use vector_memory_limit to configure the limit."
+
 - name: cpu_count
   type: INT
   default: "0"

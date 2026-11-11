@@ -324,6 +324,29 @@ fn declared_dynamic_and_static_updates_follow_storage_and_effective_state() {
 }
 
 #[test]
+fn legacy_vector_memory_percentage_is_persisted_independently_of_capacity() {
+    let _guard = CONFIG_TEST_LOCK.lock().unwrap();
+    let mut directory = TestDirectory::new();
+    reset_active_defaults(directory.store());
+    let legacy = "ob_vector_memory_limit_percentage";
+    assert_eq!(crate::config::effective_value(legacy).as_deref(), Some("0"));
+
+    crate::config::update_parameter(directory.store(), "vector_memory_limit", Some("128M")).unwrap();
+    crate::config::update_parameter(directory.store(), legacy, Some("30")).unwrap();
+    assert!(crate::config::update_parameter(directory.store(), legacy, Some("100")).is_err());
+
+    directory.reopen();
+    reset_active_defaults(directory.store());
+    assert_eq!(crate::config::effective_value(legacy).as_deref(), Some("30"));
+    assert_eq!(crate::config::vector_memory_limit(), 128 * 1024 * 1024);
+
+    crate::config::update_parameter(directory.store(), legacy, None).unwrap();
+    assert_eq!(crate::config::effective_value(legacy).as_deref(), Some("0"));
+    assert_eq!(crate::config::vector_memory_limit(), 128 * 1024 * 1024);
+    crate::config::update_parameter(directory.store(), "vector_memory_limit", None).unwrap();
+}
+
+#[test]
 fn bootstrap_overrides_are_effective_before_writeback() {
     let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
     let directory = TestDirectory::new();
