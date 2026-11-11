@@ -6,11 +6,16 @@
 %undefine _debugsource_packages
 %undefine _debuginfo_subpackages
 %define __strip @STRIP@
+%global with_debuginfo @WITH_DEBUGINFO@
+%if %{with_debuginfo}
 %define __debug_install_post \
   mv %{buildroot}/usr/bin/obshell %{_builddir}/obshell; \
   %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}; \
   mv %{_builddir}/obshell %{buildroot}/usr/bin/obshell; \
 %{nil}
+%else
+%global debug_package %{nil}
+%endif
 Name: seekdb
 Version: @VERSION@
 Release: @RELEASE@%{?dist}
@@ -24,7 +29,8 @@ seekdb single-node relational database.
 %package libs
 Summary: Runtime libraries for seekdb
 %description libs
-libaio runtime libraries for seekdb.
+Runtime shared libraries required by seekdb.
+%if %{with_debuginfo}
 %global __debug_package 1
 %package debuginfo
 Summary: Debug information for seekdb
@@ -32,6 +38,7 @@ Group: Development/Debug
 AutoReq: no
 %description debuginfo
 Debug information for the seekdb release binaries.
+%endif
 %prep
 %build
 %install
@@ -63,6 +70,8 @@ cp -a @LIBS@/. %{buildroot}/
 %files libs
 %defattr(-,root,root,-)
 /usr/libexec/seekdb/lib
+%if %{with_debuginfo}
 %files debuginfo
 %defattr(-,root,root,-)
 /usr/lib/debug
+%endif
