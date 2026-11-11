@@ -434,7 +434,7 @@ private:
   common::ObConfigManager config_mgr_;
   omt::ObTimezoneMgr &timezone_mgr_;
 
-  // The Oceanbase schema relating to.
+  // The OceanBase schema relating to.
   share::schema::ObSchemaServiceSQLImpl *schema_service_sql_impl_;
   share::schema::ObMultiVersionSchemaService &schema_service_;
   share::schema::ObSchemaPublishSignal schema_publish_signal_;
@@ -450,7 +450,7 @@ private:
   // Shared process-local persistent store
   share::LocalStore local_store_;
 
-  // The Oceanbase partition table relating to
+  // The OceanBase partition table relating to
   share::ObTabletTableOperator tablet_operator_;
 
   // storage related

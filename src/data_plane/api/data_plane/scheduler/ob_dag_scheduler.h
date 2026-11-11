@@ -1012,7 +1012,7 @@ public:
     const compaction::ObMergeDagHash &merge_dag_info,
     compaction::ObDiagnoseTabletCompProgress &progress);
 
-  /* TODO @zhuoran.zzr wait to replace get_conext().xxx_ with get_context().get_xx(), should use funciton instead of member variable */
+  /* TODO @zhuoran.zzr wait to replace get_context().xxx_ with get_context().get_xx(), should use function instead of member variable */
   template <typename T>
   int get_dag_progress(const T &dag, int64_t &row_inserted, int64_t &physical_row_count)
   {
