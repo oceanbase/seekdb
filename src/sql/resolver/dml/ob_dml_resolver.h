@@ -874,6 +874,7 @@ protected:
   int32_t current_view_level_;
   uint64_t view_ref_id_;
   bool is_resolving_view_;
+  bool keep_scalar_inlist_;
   common::ObSEArray<ResolverJoinInfo, 1, common::ModulePageAllocator, true> join_infos_;
   //store parent cte tables
   common::ObSEArray<TableItem *, 4, common::ModulePageAllocator, true> parent_cte_tables_;
