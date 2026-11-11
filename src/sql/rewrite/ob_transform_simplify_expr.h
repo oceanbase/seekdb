@@ -37,6 +37,8 @@ public:
                                  ObDMLStmt *&stmt,
                                  bool &trans_happened) override;
 private:
+  int simplify_stmt_exprs(ObDMLStmt *stmt, bool &trans_happened);
+  int push_not_for_vec_approx(ObDMLStmt *stmt, bool &trans_happened);
   int replace_is_null_condition(ObDMLStmt *stmt, bool &trans_happened);
   int inner_replace_is_null_condition(ObDMLStmt *stmt,
                                       ObRawExpr *&expr,

@@ -90,7 +90,8 @@ struct ObTransformerCtx
     inline_blacklist_(),
     materialize_blacklist_(),
     force_subquery_unnest_(false),
-    nested_loop_join_enabled_(true)
+    nested_loop_join_enabled_(true),
+    vec_approx_push_not_only_(false)
   { }
   virtual ~ObTransformerCtx() {}
 
@@ -169,6 +170,10 @@ struct ObTransformerCtx
   bool force_subquery_unnest_;
   /* used for NLJ opportunity check */
   bool nested_loop_join_enabled_;
+  /* stmt contains approximate vector index search: only push NOT down into
+     where conditions, so that predicates like NOT (c IN (...)) can still
+     be used to extract query ranges */
+  bool vec_approx_push_not_only_;
 };
 
 enum TransMethod
