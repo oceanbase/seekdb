@@ -118,20 +118,24 @@ def _archive_args(files, platform, alwayslink):
             args.append(file.path)
     return args
 
-def _windows_import_libraries(targets):
-    # A library that also names a DLL is an import library: its members are
-    # import descriptors, not object files. Whole-archiving one makes lld-link
-    # read those members as objects and reject them.
+def _windows_plain_archive(library, archive):
+    # Archives that stay on the link line but must never be whole-archived: an
+    # import library holds import descriptors instead of objects, and the
+    # compiler runtime (clang_rt.*) is a grab bag whose members only make sense
+    # when something references them.
+    if library.dynamic_library != None:
+        return True
+    return archive != None and archive.basename.startswith("clang_rt.")
+
+def _windows_plain_archives(targets):
     paths = {}
     for target in targets:
         for linker_input in target[CcInfo].linking_context.linker_inputs.to_list():
             for library in linker_input.libraries:
-                if library.dynamic_library == None:
-                    continue
                 archive = _selected_static_archive(library)
                 if archive == None:
                     archive = library.interface_library
-                if archive != None:
+                if archive != None and _windows_plain_archive(library, archive):
                     paths[archive.path] = True
     return paths
 
@@ -150,9 +154,7 @@ def _dependency_link_metadata(targets, platform):
         inputs.extend(linker_input.additional_inputs)
         for library in linker_input.libraries:
             archive = _selected_static_archive(library)
-            if platform.os == "windows" and library.dynamic_library != None:
-                # Import libraries hold import descriptors, not objects; see
-                # _windows_import_libraries.
+            if platform.os == "windows" and _windows_plain_archive(library, archive):
                 continue
             if archive != None and library.alwayslink:
                 alwayslink[archive.path] = True
@@ -223,23 +225,22 @@ def _final_link_impl(ctx):
             for file in whole_group_inputs
             if file.path not in ordered_paths
         ]
-        # cc_import contributes the import library of a third-party DLL
-        # (libomp.lib, zlib.lib, ...) through the same CcInfo closure. Keep it
-        # on the link line, but let the linker pull the import descriptors on
-        # demand instead of whole-archiving them.
-        import_libraries = _windows_import_libraries(
+        # Import libraries and the compiler runtime reach this rule through the
+        # same CcInfo closure. Keep them on the link line, but let the linker
+        # pull their members on demand instead of whole-archiving them.
+        plain_archives = _windows_plain_archives(
             ctx.attr.direct_object_deps + ctx.attr.group_deps +
             ctx.attr.whole_group_deps + ctx.attr.tail_deps + ctx.attr.sdk_deps,
         )
         windows_plain_group_inputs = [
             file
             for file in whole_group_inputs
-            if file.path in import_libraries
+            if file.path in plain_archives
         ]
         whole_group_inputs = [
             file
             for file in whole_group_inputs
-            if file.path not in import_libraries
+            if file.path not in plain_archives
         ]
     sdk_inputs = _inputs_from_deps(ctx.attr.sdk_deps)
     sdk_paths = {file.path: True for file in sdk_inputs}
