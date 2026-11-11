@@ -118,7 +118,24 @@ def _archive_args(files, platform, alwayslink):
             args.append(file.path)
     return args
 
-def _dependency_link_metadata(targets):
+def _windows_import_libraries(targets):
+    # A library that also names a DLL is an import library: its members are
+    # import descriptors, not object files. Whole-archiving one makes lld-link
+    # read those members as objects and reject them.
+    paths = {}
+    for target in targets:
+        for linker_input in target[CcInfo].linking_context.linker_inputs.to_list():
+            for library in linker_input.libraries:
+                if library.dynamic_library == None:
+                    continue
+                archive = _selected_static_archive(library)
+                if archive == None:
+                    archive = library.interface_library
+                if archive != None:
+                    paths[archive.path] = True
+    return paths
+
+def _dependency_link_metadata(targets, platform):
     # Merge linker inputs as a depset: shared dependencies contribute flags once,
     # while repetition within one library's flags retains its meaning.
     linker_inputs = depset(transitive = [
@@ -133,6 +150,10 @@ def _dependency_link_metadata(targets):
         inputs.extend(linker_input.additional_inputs)
         for library in linker_input.libraries:
             archive = _selected_static_archive(library)
+            if platform.os == "windows" and library.dynamic_library != None:
+                # Import libraries hold import descriptors, not objects; see
+                # _windows_import_libraries.
+                continue
             if archive != None and library.alwayslink:
                 alwayslink[archive.path] = True
     return flags, inputs, alwayslink
@@ -188,6 +209,7 @@ def _final_link_impl(ctx):
     ordered_link_files = _files_from_targets(
         ctx.attr.ordered_link_files,
     )
+    windows_plain_group_inputs = []
     if platform.os == "windows":
         # A Rust staticlib embeds the MSVC import libraries it links against
         # (kernel32.dll, bcryptprimitives.dll, ...). /WHOLEARCHIVE visits those
@@ -201,6 +223,24 @@ def _final_link_impl(ctx):
             for file in whole_group_inputs
             if file.path not in ordered_paths
         ]
+        # cc_import contributes the import library of a third-party DLL
+        # (libomp.lib, zlib.lib, ...) through the same CcInfo closure. Keep it
+        # on the link line, but let the linker pull the import descriptors on
+        # demand instead of whole-archiving them.
+        import_libraries = _windows_import_libraries(
+            ctx.attr.direct_object_deps + ctx.attr.group_deps +
+            ctx.attr.whole_group_deps + ctx.attr.tail_deps + ctx.attr.sdk_deps,
+        )
+        windows_plain_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path in import_libraries
+        ]
+        whole_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path not in import_libraries
+        ]
     sdk_inputs = _inputs_from_deps(ctx.attr.sdk_deps)
     sdk_paths = {file.path: True for file in sdk_inputs}
     group_inputs = [file for file in group_inputs if file.path not in sdk_paths]
@@ -208,13 +248,14 @@ def _final_link_impl(ctx):
     tail_inputs = [file for file in tail_inputs if file.path not in sdk_paths]
     dependencies = (ctx.attr.direct_object_deps + ctx.attr.group_deps + ctx.attr.whole_group_deps +
                     ctx.attr.tail_deps + ctx.attr.sdk_deps)
-    dependency_flags, dependency_inputs, alwayslink = _dependency_link_metadata(dependencies)
+    dependency_flags, dependency_inputs, alwayslink = _dependency_link_metadata(dependencies, platform)
     extra_inputs = _files_from_targets(ctx.attr.extra_inputs) + dependency_inputs
 
     link_inputs = (
         direct_objects +
         group_inputs +
         whole_group_inputs +
+        windows_plain_group_inputs +
         tail_inputs +
         ordered_link_files +
         sdk_inputs +
@@ -226,6 +267,7 @@ def _final_link_impl(ctx):
     ordered_link_args = _file_paths(direct_objects)
     ordered_link_args.extend(_archive_group(group_inputs, platform, alwayslink = alwayslink))
     ordered_link_args.extend(_archive_group(whole_group_inputs, platform, whole = True))
+    ordered_link_args.extend(_file_paths(windows_plain_group_inputs))
     ordered_link_args.extend(_archive_args(tail_inputs, platform, alwayslink))
     ordered_link_args.extend(_file_paths(ordered_link_files))
     ordered_link_args.extend(_archive_group(sdk_inputs, platform, alwayslink = alwayslink))
