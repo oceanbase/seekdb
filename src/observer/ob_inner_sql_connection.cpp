@@ -668,7 +668,7 @@ int ObInnerSQLConnection::process_final(const T &sql,
   {
     int64_t process_time = ObTimeUtility::current_time() - get_session().get_query_start_time();
     if (process_time > 1L * 1000 * 1000) {
-      LOG_INFO("slow inner sql", K(last_ret), K(sql), K(process_time));
+      LOG_INFO("slow inner sql", K(last_ret), K(process_time), K(sql));
     }
   }
   return ret;
