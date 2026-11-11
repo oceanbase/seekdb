@@ -196,8 +196,11 @@ int ObServerLogBlockMgr::create_block_at(const FileDesc &dest_dir_fd,
       } else if (OB_SUCCESS == (ret = allocate_block_at_(dest_dir_fd, dest_block_path, block_size))) {
         break;
       } else {
-        CLOG_LOG(WARN, "allocate_block_at_ failed", K(ret), KPC(this),
-                 K(dest_dir_fd), K(dest_block_path));
+        // A full disk can keep this loop retrying every 10 ms until space is freed.
+        if (OB_ALLOCATE_DISK_SPACE_FAILED != ret || REACH_TIME_INTERVAL(PRINT_INTERVAL)) {
+          CLOG_LOG(WARN, "allocate_block_at_ failed", K(ret), KPC(this),
+                   K(dest_dir_fd), K(dest_block_path));
+        }
         const int startup_error = startup_result_.report_failure(ret);
         if (OB_SUCCESS != startup_error) {
           ret = startup_error;
@@ -336,8 +339,11 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
   FileDesc fd = -1;
   if (-1 == (fd = common::ob_openat_utf8(dir_fd, block_path, io_config_.file_flags(CREATE_FILE_FLAG),
                                          CREATE_FILE_MODE))) {
+    const int saved_errno = errno;
     ret = convert_sys_errno();
-    CLOG_LOG(ERROR, "ob_openat_utf8 failed", K(ret), KPC(this), K(dir_fd), K(block_path));
+    if (OB_ALLOCATE_DISK_SPACE_FAILED != ret || REACH_TIME_INTERVAL(PRINT_INTERVAL)) {
+      CLOG_LOG(ERROR, "ob_openat_utf8 failed", K(ret), KPC(this), K(dir_fd), K(block_path), K(saved_errno));
+    }
 #ifdef __EMSCRIPTEN__
   // O_EXCL above gives this allocation exclusive ownership of the new file.
   } else if (-1 == common::wasm::extend_file_with_zeros(fd, block_size)) {
@@ -345,9 +351,11 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
     CLOG_LOG(ERROR, "write log block allocation failed", K(ret), K(block_path), K(block_size), K(errno));
 #else
   } else if (-1 == common::ob_fallocate_fd(fd, block_size)) {
+    const int saved_errno = errno;
     ret = convert_sys_errno();
-    CLOG_LOG(ERROR, "ob_fallocate_fd failed", K(ret), KPC(this), K(dir_fd), K(block_path),
-             K(errno));
+    if (OB_ALLOCATE_DISK_SPACE_FAILED != ret || REACH_TIME_INTERVAL(PRINT_INTERVAL)) {
+      CLOG_LOG(ERROR, "ob_fallocate_fd failed", K(ret), KPC(this), K(dir_fd), K(block_path), K(saved_errno));
+    }
 #endif
   } else {
     if (REACH_TIME_INTERVAL(PRINT_INTERVAL)) {
