@@ -1,3 +1,4 @@
+diff --git a/src/parse.rs b/src/parse.rs
 --- a/src/parse.rs
 +++ b/src/parse.rs
 @@ -544,7 +544,42 @@
@@ -95,6 +96,7 @@
  
                      // Handle `]` after `[` or `[^` in nested classes
                      // Check for negated character class
+diff --git a/src/parse_flags.rs b/src/parse_flags.rs
 --- a/src/parse_flags.rs
 +++ b/src/parse_flags.rs
 @@ -16,3 +16,9 @@
@@ -107,6 +109,7 @@
 +
 +/// Opt-in SQL/ICU zero-prefixed octal escapes.
 +pub const FLAG_ICU_OCTAL: u32 = 1 << 9;
+diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -540,6 +540,8 @@
@@ -183,6 +186,7 @@
          self
      }
  
+diff --git a/src/error.rs b/src/error.rs
 --- a/src/error.rs
 +++ b/src/error.rs
 @@ -54,6 +54,10 @@
