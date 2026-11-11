@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_stats_estimator.h"
+#include "lib/time/ob_time_utility.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
@@ -364,72 +365,124 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
                                   ObIArray<ObOptStat> &dst_opt_stats)
 {
   int ret = OB_SUCCESS;
-  ObCommonSqlProxy *sql_proxy = ctx_.get_sql_proxy();
-  ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
-  sql::ObSQLSessionInfo::StmtSavedValue *session_value = NULL;
-  void *ptr = NULL;
-  ObSQLSessionInfo *session = ctx_.get_my_session();
-  if (OB_ISNULL(ptr = tmp_alloc.alloc(sizeof(sql::ObSQLSessionInfo::StmtSavedValue)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    session_value = new(ptr)sql::ObSQLSessionInfo::StmtSavedValue();
-    if (OB_ISNULL(sql_proxy) || OB_ISNULL(session) ||
-        OB_UNLIKELY(dst_opt_stats.empty() || raw_sql.empty())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(session->save_session(*session_value))) {
-    }
-  }
-  if (OB_SUCC(ret)) {
-    sqlclient::ObISQLConnection *conn = NULL;
-    sqlclient::ObISQLConnectionGuard conn_guard;
-    session->set_inner_session();
-    //
-    session->set_autocommit(true);
-    SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
-      sqlclient::ObMySQLResult *client_result = NULL;
-      if (OB_FAIL(
-              query::ObInnerSQLConnectionAccess::
-                  create_connection_with_external_session(
-                      session, conn_guard))) {
-      } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+  const int64_t diagnostic_start_us = ObTimeUtility::current_time();
+  int64_t read_us = 0;
+  int64_t next_us = 0;
+  int64_t values_us = 0;
+  int64_t decode_copy_us = 0;
+  int64_t cleanup_start_us = 0;
+  int64_t read_calls = 0;
+  int64_t next_calls = 0;
+  int64_t result_rows = 0;
+  int last_read_ret = OB_SUCCESS;
+  int last_next_ret = OB_SUCCESS;
+  bool clock_regressed = false;
+  auto elapsed = [&](int64_t start_us) {
+    const int64_t delta_us = ObTimeUtility::current_time() - start_us;
+    clock_regressed = clock_regressed || delta_us < 0;
+    return delta_us;
+  };
+  {
+    ObCommonSqlProxy *sql_proxy = ctx_.get_sql_proxy();
+    ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
+    sql::ObSQLSessionInfo::StmtSavedValue *session_value = NULL;
+    void *ptr = NULL;
+    ObSQLSessionInfo *session = ctx_.get_my_session();
+    if (OB_ISNULL(ptr = tmp_alloc.alloc(sizeof(sql::ObSQLSessionInfo::StmtSavedValue)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      session_value = new(ptr)sql::ObSQLSessionInfo::StmtSavedValue();
+      if (OB_ISNULL(sql_proxy) || OB_ISNULL(session) ||
+          OB_UNLIKELY(dst_opt_stats.empty() || raw_sql.empty())) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(), proxy_result))) {
-      } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
-          for (int64_t i = 0; OB_SUCC(ret) && i < get_item_size(); ++i) {
-            ObObj tmp;
-            ObObj val;
-            if (OB_FAIL(client_result->get_obj(i, tmp))) {
-            } else if (OB_FAIL(ob_write_obj(allocator_, tmp, val))) {
-            } else if (OB_FAIL(add_result(val))) {
-            }
-          }
-          if (OB_SUCC(ret)) {
-            if (OB_FAIL(decode(allocator_))) {
-            } else if (need_copy_basic_stat &&
-                       OB_FAIL(copy_basic_opt_stat(src_opt_stat, dst_opt_stats))) {
-            } else {
-              results_.reset();
-            }
-          }
-        }
-        if (OB_ITER_END != ret) {
-        } else {
-          ret = OB_SUCCESS;
-        }
+      } else if (OB_FAIL(session->save_session(*session_value))) {
       }
     }
-    int tmp_ret = OB_SUCCESS;
-    if (session_value != NULL && OB_SUCCESS != (tmp_ret = session->restore_session(*session_value))) {
-      LOG_ERROR("failed to restore session", K(tmp_ret));
-      ret = COVER_SUCC(tmp_ret);
+    if (OB_SUCC(ret)) {
+      sqlclient::ObISQLConnection *conn = NULL;
+      sqlclient::ObISQLConnectionGuard conn_guard;
+      session->set_inner_session();
+      //
+      session->set_autocommit(true);
+      SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
+        sqlclient::ObMySQLResult *client_result = NULL;
+        auto timed_read = [&]() {
+          const int64_t start_us = ObTimeUtility::current_time();
+          ++read_calls;
+          last_read_ret = conn->execute_read(raw_sql.ptr(), proxy_result);
+          read_us += elapsed(start_us);
+          return last_read_ret;
+        };
+        auto timed_next = [&]() {
+          const int64_t start_us = ObTimeUtility::current_time();
+          ++next_calls;
+          last_next_ret = client_result->next();
+          next_us += elapsed(start_us);
+          return last_next_ret;
+        };
+        if (OB_FAIL(
+                query::ObInnerSQLConnectionAccess::
+                    create_connection_with_external_session(
+                        session, conn_guard))) {
+        } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(timed_read())) {
+        } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          while (OB_SUCC(ret) && OB_SUCC(timed_next())) {
+            ++result_rows;
+            const int64_t values_start_us = ObTimeUtility::current_time();
+            for (int64_t i = 0; OB_SUCC(ret) && i < get_item_size(); ++i) {
+              ObObj tmp;
+              ObObj val;
+              if (OB_FAIL(client_result->get_obj(i, tmp))) {
+              } else if (OB_FAIL(ob_write_obj(allocator_, tmp, val))) {
+              } else if (OB_FAIL(add_result(val))) {
+              }
+            }
+            values_us += elapsed(values_start_us);
+            if (OB_SUCC(ret)) {
+              const int64_t decode_start_us = ObTimeUtility::current_time();
+              if (OB_FAIL(decode(allocator_))) {
+              } else if (need_copy_basic_stat &&
+                         OB_FAIL(copy_basic_opt_stat(src_opt_stat, dst_opt_stats))) {
+              } else {
+                results_.reset();
+              }
+              decode_copy_us += elapsed(decode_start_us);
+            }
+          }
+          if (OB_ITER_END != ret) {
+          } else {
+            ret = OB_SUCCESS;
+          }
+        }
+      }
+      int tmp_ret = OB_SUCCESS;
+      if (session_value != NULL && OB_SUCCESS != (tmp_ret = session->restore_session(*session_value))) {
+        LOG_ERROR("failed to restore session", K(tmp_ret));
+        ret = COVER_SUCC(tmp_ret);
+      }
+      if (OB_NOT_NULL(session_value)) {
+        session_value->reset();
+      }
+      cleanup_start_us = ObTimeUtility::current_time();
     }
-    if (OB_NOT_NULL(session_value)) {
-      session_value->reset();
+    if (0 == cleanup_start_us) {
+      cleanup_start_us = ObTimeUtility::current_time();
     }
   }
+  const int64_t cleanup_scope_us = elapsed(cleanup_start_us);
+  const int64_t total_us = elapsed(diagnostic_start_us);
+  const int64_t other_us = total_us - read_us - next_us - values_us - decode_copy_us - cleanup_scope_us;
+  clock_regressed = clock_regressed || other_us < 0;
+  const int64_t sql_bytes = raw_sql.length();
+  const int64_t stat_items = get_item_size();
+  LOG_INFO("seek1381 estimate phase summary", K(ret), K(diagnostic_start_us), K(total_us), K(read_us), K(next_us),
+           K(values_us), K(decode_copy_us), K(cleanup_scope_us), K(other_us),
+           K(read_calls), K(next_calls), K(result_rows), K(last_read_ret), K(last_next_ret),
+           K(sql_bytes), K(stat_items), K(clock_regressed));
   return ret;
 }
 
