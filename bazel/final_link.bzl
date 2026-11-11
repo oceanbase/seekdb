@@ -188,6 +188,19 @@ def _final_link_impl(ctx):
     ordered_link_files = _files_from_targets(
         ctx.attr.ordered_link_files,
     )
+    if platform.os == "windows":
+        # A Rust staticlib embeds the MSVC import libraries it links against
+        # (kernel32.dll, bcryptprimitives.dll, ...). /WHOLEARCHIVE visits those
+        # members as if they were object files and lld-link rejects them with
+        # ".idata$4 should not refer to special section 0". Archives whose
+        # position is already pinned by ordered_link_files are still passed to
+        # the linker in that position, so every referenced object is pulled in.
+        ordered_paths = {file.path: True for file in ordered_link_files}
+        whole_group_inputs = [
+            file
+            for file in whole_group_inputs
+            if file.path not in ordered_paths
+        ]
     sdk_inputs = _inputs_from_deps(ctx.attr.sdk_deps)
     sdk_paths = {file.path: True for file in sdk_inputs}
     group_inputs = [file for file in group_inputs if file.path not in sdk_paths]
