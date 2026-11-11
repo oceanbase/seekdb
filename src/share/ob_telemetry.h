@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_OB_TELEMETRY_H_
 
 #include <stdint.h>
+#include "lib/net/ob_addr.h"
 
 namespace oceanbase
 {
@@ -46,7 +47,14 @@ int generate_telemetry_uuid(const char *machine_id,
                             char *uuid,
                             const int64_t uuid_len);
 
-int report_telemetry(const char *reporter, const char *event_name);
+// Report the telemetry event for this instance.
+//
+// The self address is injected by the caller because the Share module must
+// not reach into the global runtime context; the owner of the runtime
+// dependency supplies the address it already owns.
+int report_telemetry(const char *reporter,
+                     const char *event_name,
+                     const common::ObAddr &self_addr);
 
 } // namespace share
 } // namespace oceanbase
