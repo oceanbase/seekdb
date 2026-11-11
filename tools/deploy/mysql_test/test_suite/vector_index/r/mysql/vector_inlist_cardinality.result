@@ -1,0 +1,73 @@
+DROP TABLE IF EXISTS vector_inlist_cardinality;
+CREATE TABLE vector_inlist_cardinality (
+id INT PRIMARY KEY, category5 INT, embedding VECTOR(3),
+KEY idx_category5(category5)
+) ORGANIZATION HEAP;
+# Equivalent filters keep ANN filtering in the vector scan.
+compact_vector_root
+1
+duplicates_vector_root
+1
+distinct_at_threshold_vector_root
+0
+explicit_threshold_one_vector_root
+0
+null_duplicates_vector_root
+1
+strings_vector_root
+0
+null_at_threshold_vector_root
+0
+row_list_vector_root
+0
+mixed_types_vector_root
+1
+# The default threshold also handles the 3072-member reproducer.
+default_threshold_vector_root
+1
+# Membership results and NULL semantics are preserved.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+FROM vector_inlist_cardinality WHERE category5 IN (1,2,3,1,2,3,1,2,3,1,2,3);
+matches
+300
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+FROM vector_inlist_cardinality WHERE category5 NOT IN (1,2,3,1,2,3,1,2,3,1,2,3);
+matches
+200
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+FROM vector_inlist_cardinality WHERE category5 IN (NULL,1,2,3,NULL,1,2,3,NULL,1,2,3);
+matches
+300
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+FROM vector_inlist_cardinality WHERE category5 NOT IN (NULL,1,2,3,NULL,1,2,3,NULL,1,2,3);
+matches
+0
+# All literal parameter slots survive plan-cache reuse with new values.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+FROM vector_inlist_cardinality WHERE category5 IN (1,1,1,1,1,1,1,1,1,1,1,1);
+matches
+100
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+FROM vector_inlist_cardinality WHERE category5 IN (1,2,3,4,5,6,7,8,9,10,11,12);
+matches
+500
+# Prepared parameters are not treated as fixed duplicate literals.
+PREPARE inlist_cardinality_ps FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 8) */ COUNT(*) AS matches FROM vector_inlist_cardinality WHERE category5 IN (?,?,?,?,?,?,?,?,?,?,?,?)';
+SET @a=1, @b=2, @c=3, @d=4, @e=5, @f=NULL;
+EXECUTE inlist_cardinality_ps USING @a,@a,@a,@a,@a,@a,@a,@a,@a,@a,@a,@a;
+matches
+100
+EXECUTE inlist_cardinality_ps USING @a,@b,@c,@d,@e,@a,@b,@c,@d,@e,@a,@f;
+matches
+500
+DEALLOCATE PREPARE inlist_cardinality_ps;
+# Signed and unsigned integer boundaries remain exact.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+FROM vector_inlist_cardinality WHERE category5 IN (-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808);
+matches
+0
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+FROM vector_inlist_cardinality WHERE category5 IN (18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615);
+matches
+0
+DROP TABLE vector_inlist_cardinality;

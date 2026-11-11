@@ -1,0 +1,106 @@
+# Regression for #1512: duplicate integer members must not force a VALUES
+# subquery between ANN candidate generation and the membership filter.
+--disable_warnings
+DROP TABLE IF EXISTS vector_inlist_cardinality;
+--enable_warnings
+CREATE TABLE vector_inlist_cardinality (
+  id INT PRIMARY KEY, category5 INT, embedding VECTOR(3),
+  KEY idx_category5(category5)
+) ORGANIZATION HEAP;
+--disable_query_log
+INSERT INTO vector_inlist_cardinality VALUES
+  (1,1,'[0.001,1,0]'),(2,2,'[0.002,1,0]'),(3,3,'[0.003,1,0]'),
+  (4,4,'[0.004,1,0]'),(5,5,'[0.005,1,0]');
+INSERT INTO vector_inlist_cardinality SELECT id+5,category5,CONCAT('[',(id+5)/1000,',1,0]') FROM vector_inlist_cardinality;
+INSERT INTO vector_inlist_cardinality SELECT id+10,category5,CONCAT('[',(id+10)/1000,',1,0]') FROM vector_inlist_cardinality;
+INSERT INTO vector_inlist_cardinality SELECT id+20,category5,CONCAT('[',(id+20)/1000,',1,0]') FROM vector_inlist_cardinality;
+INSERT INTO vector_inlist_cardinality SELECT id+40,category5,CONCAT('[',(id+40)/1000,',1,0]') FROM vector_inlist_cardinality;
+INSERT INTO vector_inlist_cardinality SELECT id+80,category5,CONCAT('[',(id+80)/1000,',1,0]') FROM vector_inlist_cardinality;
+INSERT INTO vector_inlist_cardinality SELECT id+160,category5,CONCAT('[',(id+160)/1000,',1,0]') FROM vector_inlist_cardinality;
+INSERT INTO vector_inlist_cardinality SELECT id+320,category5,CONCAT('[',(id+320)/1000,',1,0]') FROM vector_inlist_cardinality WHERE id<=180;
+CREATE VECTOR INDEX idx_hnsw ON vector_inlist_cardinality(embedding)
+  WITH (distance=l2,type=hnsw,lib=vsag);
+ANALYZE TABLE vector_inlist_cardinality;
+--enable_query_log
+
+--echo # Equivalent filters keep ANN filtering in the vector scan.
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ id FROM vector_inlist_cardinality WHERE category5 IN (1,2,3) ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS compact_vector_root;
+--enable_query_log
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ id FROM vector_inlist_cardinality WHERE category5 IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS duplicates_vector_root;
+--enable_query_log
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ id FROM vector_inlist_cardinality WHERE category5 IN (1,2,3,4,5,6,7,8) ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS distinct_at_threshold_vector_root;
+--enable_query_log
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 1) */ id FROM vector_inlist_cardinality WHERE category5 IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS explicit_threshold_one_vector_root;
+--enable_query_log
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ id FROM vector_inlist_cardinality WHERE category5 IN (NULL,1,2,3,NULL,1,2,3,NULL,1,2,3) ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS null_duplicates_vector_root;
+--enable_query_log
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ id FROM vector_inlist_cardinality WHERE category5 IN ('1','2','3','1','2','3','1','2','3','1','2','3') ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS strings_vector_root;
+--enable_query_log
+
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id FROM vector_inlist_cardinality WHERE category5 IN (NULL,1,2,3,NULL,1,2,3) ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS null_at_threshold_vector_root;
+--enable_query_log
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ id FROM vector_inlist_cardinality WHERE (category5,category5) IN ((1,1),(2,2),(3,3),(1,1),(2,2),(3,3),(1,1),(2,2)) ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS row_list_vector_root;
+--enable_query_log
+--disable_query_log
+let $plan = query_get_value("EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ id FROM vector_inlist_cardinality WHERE category5 IN (1,'2',3,1,'2',3,1,'2') ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS mixed_types_vector_root;
+--enable_query_log
+
+--echo # The default threshold also handles the 3072-member reproducer.
+--disable_query_log
+let $members = 1,2,3;
+let $doublings = 10;
+while ($doublings)
+{
+  let $members = $members,$members;
+  dec $doublings;
+}
+let $plan = query_get_value("EXPLAIN BASIC SELECT id FROM vector_inlist_cardinality WHERE category5 IN ($members) ORDER BY l2_distance(embedding, '[0,1,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT '$plan' LIKE '%VECTOR INDEX%' AS default_threshold_vector_root;
+--enable_query_log
+
+--echo # Membership results and NULL semantics are preserved.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 IN (1,2,3,1,2,3,1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 NOT IN (1,2,3,1,2,3,1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 IN (NULL,1,2,3,NULL,1,2,3,NULL,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 NOT IN (NULL,1,2,3,NULL,1,2,3,NULL,1,2,3);
+
+--echo # All literal parameter slots survive plan-cache reuse with new values.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 IN (1,1,1,1,1,1,1,1,1,1,1,1);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 IN (1,2,3,4,5,6,7,8,9,10,11,12);
+
+--echo # Prepared parameters are not treated as fixed duplicate literals.
+PREPARE inlist_cardinality_ps FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 8) */ COUNT(*) AS matches FROM vector_inlist_cardinality WHERE category5 IN (?,?,?,?,?,?,?,?,?,?,?,?)';
+SET @a=1, @b=2, @c=3, @d=4, @e=5, @f=NULL;
+EXECUTE inlist_cardinality_ps USING @a,@a,@a,@a,@a,@a,@a,@a,@a,@a,@a,@a;
+EXECUTE inlist_cardinality_ps USING @a,@b,@c,@d,@e,@a,@b,@c,@d,@e,@a,@f;
+DEALLOCATE PREPARE inlist_cardinality_ps;
+
+--echo # Signed and unsigned integer boundaries remain exact.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 IN (-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808,-9223372036854775808);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 8) */ COUNT(*) AS matches
+  FROM vector_inlist_cardinality WHERE category5 IN (18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615,18446744073709551615);
+DROP TABLE vector_inlist_cardinality;
