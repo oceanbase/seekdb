@@ -1,0 +1,43 @@
+# DDL column identifiers must be quoted without depending on the SQL layer.
+--disable_warnings
+DROP TABLE IF EXISTS ddl_identifier_escape;
+--enable_warnings
+
+CREATE TABLE ddl_identifier_escape (
+  `id``key` INT PRIMARY KEY,
+  `a``b` INT,
+  ```lead` INT,
+  `trail``` INT,
+  `two````ticks` INT,
+  `e``n` ENUM('x', 'y'),
+  `s``t` SET('a', 'b'),
+  plain INT
+);
+INSERT INTO ddl_identifier_escape VALUES
+  (1, 7, 11, 13, 17, 'x', 'a', 19),
+  (2, NULL, 23, 29, 31, 'y', 'a,b', 37);
+
+# Original names and aliases, including leading/trailing/consecutive quotes.
+CREATE INDEX idx_quoted ON ddl_identifier_escape
+  (`a``b`, ```lead`, `trail```, `two````ticks`);
+SELECT `id``key` AS id, `a``b`, ```lead`, `trail```, `two````ticks`
+  FROM ddl_identifier_escape FORCE INDEX (idx_quoted)
+  WHERE `a``b` = 7;
+
+# Enum and set names are also used inside generated CAST expressions.
+CREATE INDEX idx_enum ON ddl_identifier_escape (`e``n`, `s``t`);
+SELECT `id``key` AS id, `e``n`, `s``t`
+  FROM ddl_identifier_escape FORCE INDEX (idx_enum)
+  WHERE `e``n` = 1;
+
+# Nullable unique keys require a shadow alias for the quoted primary-key name.
+CREATE UNIQUE INDEX idx_unique ON ddl_identifier_escape (`a``b`);
+SELECT `id``key` AS id, `a``b` FROM ddl_identifier_escape FORCE INDEX (idx_unique)
+  WHERE `a``b` IS NULL;
+
+# Identifiers without embedded quotes retain the existing behavior.
+CREATE INDEX idx_plain ON ddl_identifier_escape (plain);
+SELECT `id``key` AS id, plain FROM ddl_identifier_escape FORCE INDEX (idx_plain)
+  WHERE plain = 19;
+
+DROP TABLE ddl_identifier_escape;
