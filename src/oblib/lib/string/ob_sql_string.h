@@ -116,50 +116,9 @@ private:
  *                         backtick it aliases the source and no memory is used
  * @return OB_SUCCESS on success
  */
-inline int escape_sql_identifier(common::ObIAllocator &allocator,
-                                 const common::ObString &src,
-                                 common::ObString &dst)
-{
-  int ret = OB_SUCCESS;
-  const common::ObString::obstr_size_t src_len = src.length();
-  const char escape_character = '`';
-  char *ptr = NULL;
-
-  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
-    dst.assign(NULL, 0);
-  } else if (NULL == src.find(escape_character)) {
-    dst = src;
-  } else {
-    common::ObString::obstr_size_t dst_len = src_len;
-    for (int64_t i = 0; i < src_len; ++i) {
-      if (src[i] == escape_character) {
-        ++dst_len;
-      }
-    }
-    if (NULL == (ptr = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
-      dst = NULL;
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("allocate memory failed", K(ret), "size", dst_len);
-    } else {
-      int64_t tmp_dst_pos = 0;
-      for (int64_t i = 0; i < src_len; i++) {
-        if (src[i] == escape_character) {
-          ptr[tmp_dst_pos++] = escape_character;
-          ptr[tmp_dst_pos++] = escape_character;
-        } else {
-          ptr[tmp_dst_pos++] = src[i];
-        }
-      }
-      if (tmp_dst_pos != dst_len) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ptr[dst_len] = '\0';
-        dst.assign_ptr(ptr, dst_len);
-      }
-    }
-  }
-  return ret;
-}
+int escape_sql_identifier(common::ObIAllocator &allocator,
+                          const common::ObString &src,
+                          common::ObString &dst);
 
 } // end namespace common
 } // end namespace oceanbase
