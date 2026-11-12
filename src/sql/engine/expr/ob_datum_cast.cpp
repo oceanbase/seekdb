@@ -2542,8 +2542,13 @@ static OB_INLINE void log_integer_range_warning(const ObExpr &expr,
                                                 ObEvalCtx &ctx,
                                                 const int warning)
 {
-  if (OB_UNLIKELY(OB_DATA_OUT_OF_RANGE == warning)
-      && CM_IS_COLUMN_CONVERT(expr.extra_) && CM_IS_WARN_ON_FAIL(expr.extra_)) {
+  const bool is_truncated = OB_UNLIKELY(OB_DATA_OUT_OF_RANGE == warning)
+                            && CM_IS_COLUMN_CONVERT(expr.extra_)
+                            && CM_IS_WARN_ON_FAIL(expr.extra_);
+  // Keep the diagnostic attached to the conversion result. The result may be
+  // cached and reused by later DML rows without executing this cast again.
+  expr.get_eval_info(ctx).integer_range_warning_ = is_truncated;
+  if (is_truncated) {
     const ObUserLoggingCtx *logging_ctx = ctx.exec_ctx_.get_user_logging_ctx();
     if (OB_NOT_NULL(logging_ctx) && !logging_ctx->skip_logging()) {
       // The cast has clipped the value, so column accuracy checking can no
