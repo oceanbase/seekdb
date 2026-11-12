@@ -49,15 +49,21 @@ int ObBEngFTParser::get_next_token(
     }
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    MEMCPY(buf, token.ptr_, token.len_);
-    word = buf;
-    word_len = token.len_;
-    char_len = token.len_;
-    word_freq = token_freq;
-    LOG_DEBUG("succeed to add word", K(ObString(word_len, word)), K(word_freq));
+    if (nullptr != copy_buf_ && copy_pos_ + token.len_ <= copy_cap_) {
+      buf = copy_buf_ + copy_pos_;
+      copy_pos_ += token.len_;
+    } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+    if (OB_SUCC(ret)) {
+      MEMCPY(buf, token.ptr_, token.len_);
+      word = buf;
+      word_len = token.len_;
+      char_len = token.len_;
+      word_freq = token_freq;
+      LOG_DEBUG("succeed to add word", K(ObString(word_len, word)), K(word_freq));
+    }
   }
   return ret;
 }
@@ -73,6 +79,12 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     ret = OB_NOT_SUPPORTED;
   } else {
     doc_.set_string(param->fulltext_, param->ft_length_);
+    copy_cap_ = param->ft_length_ + 16;
+    copy_pos_ = 0;
+    copy_buf_ = static_cast<char *>(param->allocator_->alloc(copy_cap_));
+    if (nullptr == copy_buf_) {
+      copy_cap_ = 0;
+    }
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
@@ -110,6 +122,9 @@ void ObBEngFTParser::reset()
   english_analyzer_.reset();
   doc_.reset();
   token_stream_ = nullptr;
+  copy_buf_ = nullptr;
+  copy_cap_ = 0;
+  copy_pos_ = 0;
   is_inited_ = false;
 }
 
