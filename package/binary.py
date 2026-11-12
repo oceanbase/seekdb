@@ -381,8 +381,8 @@ def write(prefix, output, version, release, source_commit, metadata):
     if metadata["os"] == "android":
         abi = "-api" + str(metadata["minimum_api"])
     system = metadata["os"] + (metadata["minimum_os"] if metadata["os"] == "macos" else "")
-    name = "seekdb-binary-%s-%s-%s-%s%s-%s-sdb%s" % (
-        version, release, system, metadata["arch"], abi, built_at.strftime("%Y%m%dT%H%M%SZ"), source_commit[:12])
+    name = "seekdb-binary-%s-%s-%s%s-%s-sdb%s" % (
+        version, system, metadata["arch"], abi, built_at.strftime("%Y%m%dT%H%M%SZ"), source_commit[:12])
     if metadata["os"] == "windows":
         target = output / (name + ".zip")
         with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
