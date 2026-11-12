@@ -44,6 +44,7 @@ MODULES = {
         "exclude_platforms": ["emscripten"],
     },
     "json": {"bridge": "src/bridge.rs", "headers": ["include/binary_source.h", "include/schema_pattern.h", "include/read.h"], "deps": ["//rust/json:schema_pattern"]},
+    "sql-parser": {"bridge": "src/bridge.rs"},
     "uuid-generator": {"bridge": "src/bridge.rs"},
     "math": {"bridge": "src/bridge.rs"},
     "vector-kernels": {"bridge": "src/bridge.rs"},

@@ -22,17 +22,15 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObCreateDatabaseStmt;
 class ObCreateDatabaseResolver: public ObDDLResolver
 {
-  static const int64_t IF_NOT_EXIST = 0;
-  static const int64_t DBNAME = 1;
-  static const int64_t DATABASE_OPTION = 2;
-  static const int64_t DATABASE_NODE_COUNT = 3;
 public:
   explicit ObCreateDatabaseResolver(ObResolverParams &params);
   virtual ~ObCreateDatabaseResolver();
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
+  int resolve_options(ObCreateDatabaseStmt &stmt, rust::Slice<const peg::Node> options);
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObCreateDatabaseResolver);
 };

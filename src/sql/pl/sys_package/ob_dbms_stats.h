@@ -24,6 +24,7 @@
 #include "sql/optimizer/stat/ob_dbms_stats_preferences.h"
 #include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
 #include "sql/optimizer/stat/ob_dbms_stats_copy_table_stats.h"
+#include "rust/sql_parser.h"
 
 namespace oceanbase
 {
@@ -262,12 +263,12 @@ public:
                               const bool is_async_gather,
                               bool &use_size_auto);
 
-  static int parser_for_all_clause(const ParseNode *for_all_node,
+  static int parser_for_all_clause(const peg::Node &clause,
                                    ObIArray<ObColumnStatParam> &column_params,
                                    const bool is_async_gather,
                                    bool &use_size_auto);
 
-  static int parser_for_columns_clause(const ParseNode *for_col_node,
+  static int parser_for_columns_clause(const peg::Node &clause,
                                        ObIArray<ObColumnStatParam> &column_params,
                                        common::ObIArray<ObString> &record_cols);
 
@@ -377,9 +378,9 @@ public:
 
   static int set_default_column_params(ObIArray<ObColumnStatParam> &column_params);
 
-  static int parse_size_clause(const ParseNode *node, MethodOptSizeConf &size_opt);
+  static int parse_size_clause(const peg::Node &clause, MethodOptSizeConf &size_opt);
 
-  static int parse_for_columns(const ParseNode *node,
+  static int parse_for_columns(const peg::Node &column,
                                const ObIArray<ObColumnStatParam> &column_params,
                                common::ObIArray<ObString> &cols,
                                common::ObIArray<ObString> &record_cols);

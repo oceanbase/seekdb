@@ -27,7 +27,7 @@ namespace sql
 {
 
 ObExprInterval::ObExprInterval(common::ObIAllocator &alloc) :
-    ObExprOperator(alloc, T_FUN_SYS_INTERVAL, "interval", MORE_THAN_TWO, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),
+    ObExprOperator(alloc, T_FUN_SYS_INTERVAL, "interval", MORE_THAN_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),
     use_binary_search_(true)
 {
 }

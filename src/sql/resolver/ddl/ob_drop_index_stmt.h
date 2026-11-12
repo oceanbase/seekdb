@@ -20,7 +20,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/allocator/ob_allocator.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 
 namespace oceanbase
 {

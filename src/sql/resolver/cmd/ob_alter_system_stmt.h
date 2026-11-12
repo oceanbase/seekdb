@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_RESOLVER_CMD_OB_ALTER_SYSTEM_STMT_
 #define OCEANBASE_RESOLVER_CMD_OB_ALTER_SYSTEM_STMT_
 
+#include "share/cache/ob_cache_type.h"
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
 #include "share/io/ob_io_calibration.h"

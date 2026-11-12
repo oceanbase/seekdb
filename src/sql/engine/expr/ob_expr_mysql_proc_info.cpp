@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "sql/syntax.h"
 #include "sql/engine/expr/ob_expr_mysql_proc_info.h"
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -77,90 +78,9 @@ int ObExprMysqlProcInfo::set_return_result(const ObExpr &expr,
   return ret;
 }
 
-int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &alloc, const ObRoutineInfo &routine_info, const sql::ObExecEnv &exec_env, ParseNode *&create_node) 
-{
-  int ret = OB_SUCCESS;
 
-  ParseResult parse_result;
-  ObString routine_stmt;
-  ObSQLMode sql_mode = exec_env.get_sql_mode();
-  pl::ObPLParser parser(alloc, sql::ObCharsets4Parser(), sql_mode);
-  const ObString &routine_body = routine_info.get_routine_body();
-  const char prefix[] = "CREATE\n";
-  int64_t prefix_len = STRLEN(prefix);
-  int64_t buf_sz = prefix_len + routine_body.length();
-  char *stmt_buf = static_cast<char *>(alloc.alloc(buf_sz));
-  if (OB_ISNULL(stmt_buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    SERVER_LOG(WARN, "failed to allocate memory for routine body buffer",
-               K(buf_sz));
-  } else {
-    MEMCPY(stmt_buf, prefix, prefix_len);
-    MEMCPY(stmt_buf + prefix_len, routine_body.ptr(), routine_body.length());
-    routine_stmt.assign_ptr(stmt_buf, buf_sz);
-  }
 
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (OB_FAIL(parser.parse(routine_stmt, routine_stmt, parse_result, true))) {
-  }
 
-  if OB_SUCC(ret) {
-    if (OB_NOT_NULL(parse_result.result_tree_) &&
-        T_STMT_LIST == parse_result.result_tree_->type_ &&
-        1 == parse_result.result_tree_->num_child_) {
-      create_node = parse_result.result_tree_->children_[0];
-    } else {
-      create_node = nullptr;
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node of mysql routine body", K(routine_info), K(routine_body), K(parse_result.result_tree_));
-    }
-  }
-
-  return ret;
-}
-
-int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &alloc, const ObString &routine_body, const sql::ObExecEnv &exec_env, ParseNode *&create_node) 
-{
-  int ret = OB_SUCCESS;
-
-  ParseResult parse_result;
-  ObString routine_stmt;
-  ObSQLMode sql_mode = exec_env.get_sql_mode();
-  pl::ObPLParser parser(alloc, sql::ObCharsets4Parser(), sql_mode);
-  const char prefix[] = "CREATE\n";
-  int64_t prefix_len = STRLEN(prefix);
-  int64_t buf_sz = prefix_len + routine_body.length();
-  char *stmt_buf = static_cast<char *>(alloc.alloc(buf_sz));
-  if (OB_ISNULL(stmt_buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    SERVER_LOG(WARN, "failed to allocate memory for routine body buffer",
-               K(buf_sz));
-  } else {
-    MEMCPY(stmt_buf, prefix, prefix_len);
-    MEMCPY(stmt_buf + prefix_len, routine_body.ptr(), routine_body.length());
-    routine_stmt.assign_ptr(stmt_buf, buf_sz);
-  }
-
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (OB_FAIL(parser.parse(routine_stmt, routine_stmt, parse_result, true))) {
-  }
-
-  if OB_SUCC(ret) {
-    if (OB_NOT_NULL(parse_result.result_tree_) &&
-        T_STMT_LIST == parse_result.result_tree_->type_ &&
-        1 == parse_result.result_tree_->num_child_) {
-      create_node = parse_result.result_tree_->children_[0];
-    } else {
-      create_node = nullptr;
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node of mysql routine body", K(routine_body), K(parse_result.result_tree_));
-    }
-  }
-
-  return ret;
-}
 
 int ObExprMysqlProcInfo::get_routine_info(ObSQLSessionInfo *session,
                                           uint64_t routine_id,
@@ -197,7 +117,7 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
   sql::ObExecEnv exec_env;
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-  ParseNode *create_node = nullptr;
+  sql::ParsedSql syntax;
 
   OZ (get_routine_info(session, routine_id, routine_info));
   OZ (exec_env.init(routine_info->get_exec_env()));
@@ -205,30 +125,22 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
   if (OB_FAIL(ret)) {
   } else if (routine_info->get_routine_body().prefix_match_ci("procedure")
               || routine_info->get_routine_body().prefix_match_ci("function")) {
-    if (OB_FAIL(extract_create_node_from_routine_info(
-                  calc_alloc, *routine_info, exec_env, create_node))) {
+    if (OB_FAIL(sql::ObParser(calc_alloc, exec_env.get_sql_mode()).parse_routine_definition(routine_info->get_routine_body(), syntax))) {
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (nullptr != create_node) {
-    if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_ && OB_ISNULL(create_node->children_[2])) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
-    } else {
-      ParseNode *param_node = create_node->children_[2];
-      ObString value_str;
-      if (param_node != nullptr) {
-        if (OB_FAIL(ob_write_string(
-                        calc_alloc,
-                        ObString(min(OB_MAX_VARCHAR_LENGTH, param_node->str_len_),
-                        param_node->str_value_),
-                        value_str))) {
-        }
-      }
-      if (OB_SUCC(ret)) {
-        OZ (set_return_result(expr, ctx, expr_datum, value_str));
-      }
+  } else if (nullptr != syntax.statement()) {
+    const ObString param_text = syntax.source(peg::routine_parameter_list(*syntax.statement()));
+    ObString value_str;
+    if (OB_FAIL(ob_write_string(
+                    calc_alloc,
+                    ObString(min(OB_MAX_VARCHAR_LENGTH, static_cast<int64_t>(param_text.length())),
+                    param_text.ptr()),
+                    value_str))) {
+    }
+    if (OB_SUCC(ret)) {
+      OZ (set_return_result(expr, ctx, expr_datum, value_str));
     }
   } else {
     char *param_list_buf = NULL;
@@ -239,7 +151,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
       ObSchemaPrinter schema_printer(schema_guard);
       int64_t pos = 0;
       if (OB_FAIL(schema_printer.print_routine_definition_param_v1(*routine_info,
-                                                                   NULL,
                                                                    param_list_buf,
                                                                    OB_MAX_VARCHAR_LENGTH,
                                                                    pos,
@@ -265,37 +176,29 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
   sql::ObExecEnv exec_env;
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-  ParseNode *create_node = nullptr;
+  sql::ParsedSql syntax;
 
   OZ (exec_env.init(exec_env_str));
 
   if (OB_FAIL(ret)) {
   } else if (routine_body.prefix_match_ci("procedure")
               || routine_body.prefix_match_ci("function")) {
-    if (OB_FAIL(extract_create_node_from_routine_info(
-                  calc_alloc, routine_body, exec_env, create_node))) {
+    if (OB_FAIL(sql::ObParser(calc_alloc, exec_env.get_sql_mode()).parse_routine_definition(routine_body, syntax))) {
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (nullptr != create_node) {
-    if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_ && OB_ISNULL(create_node->children_[2])) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
-    } else {
-      ParseNode *param_node = create_node->children_[2];
-      ObString value_str;
-      if (param_node != nullptr) {
-        if (OB_FAIL(ob_write_string(
-                        calc_alloc,
-                        ObString(min(OB_MAX_VARCHAR_LENGTH, param_node->str_len_),
-                        param_node->str_value_),
-                        value_str))) {
-        }
-      }
-      if (OB_SUCC(ret)) {
-        OZ (set_return_result(expr, ctx, expr_datum, value_str));
-      }
+  } else if (nullptr != syntax.statement()) {
+    const ObString param_text = syntax.source(peg::routine_parameter_list(*syntax.statement()));
+    ObString value_str;
+    if (OB_FAIL(ob_write_string(
+                    calc_alloc,
+                    ObString(min(OB_MAX_VARCHAR_LENGTH, static_cast<int64_t>(param_text.length())),
+                    param_text.ptr()),
+                    value_str))) {
+    }
+    if (OB_SUCC(ret)) {
+      OZ (set_return_result(expr, ctx, expr_datum, value_str));
     }
   } else {
     const ObRoutineInfo *routine_info = NULL;
@@ -317,7 +220,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
       } else {
         ObSchemaPrinter schema_printer(schema_guard);
         if (OB_FAIL(schema_printer.print_routine_definition_param_v1(*routine_info,
-                                                                    NULL,
                                                                     param_list_buf,
                                                                     OB_MAX_VARCHAR_LENGTH,
                                                                     pos,
@@ -399,26 +301,21 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
   ObSEArray<common::ObString, 4> extended_type_info;
   uint64_t sub_type = static_cast<uint64_t>(common::ObGeoType::GEOTYPEMAX);
+  sql::ParsedSql syntax;
   if (ob_is_geometry_tc(static_cast<ObObjType>(param_type)) ||
       ob_is_enumset_tc(static_cast<ObObjType>(param_type))) {
     sql::ObExecEnv exec_env;
-    ParseNode *create_node = nullptr;
-    if OB_FAIL(exec_env.init(exec_env_str)) {
-    } else if (OB_FAIL(extract_create_node_from_routine_info(
-               calc_alloc, routine_body, exec_env, create_node))) {
-    }
+    OZ (exec_env.init(exec_env_str));
+    OZ (sql::ObParser(calc_alloc, exec_env.get_sql_mode()).parse_routine_definition(routine_body, syntax));
     if (OB_SUCC(ret)) {
-      if(!OB_ISNULL(create_node) && !OB_ISNULL(create_node->children_[3])) {
-        ParseNode *return_node = create_node->children_[3];
+      CK (syntax.statement()->kind() == peg::NodeKind::CreateFunction);
+      if (OB_SUCC(ret)) {
+        const auto &return_type = peg::routine_return_type(*syntax.statement());
         if (ob_is_geometry_tc(static_cast<ObObjType>(param_type))) {
-          sub_type = return_node->int32_values_[1];
+          sub_type = static_cast<uint64_t>(ObResolverUtils::resolve_geometry_type(peg::type_syntax(return_type).geometry));
         } else {
-          CK(OB_NOT_NULL(return_node->children_[3]));
-          OZ (ObResolverUtils::resolve_extended_type_info(*(return_node->children_[3]), extended_type_info));
+          OZ (ObResolverUtils::resolve_extended_type_info(return_type, calc_alloc, extended_type_info));
         }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
       }
     }
   }
@@ -459,7 +356,7 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   
   sql::ObExecEnv exec_env;
-  ParseNode *create_node = nullptr;
+  sql::ParsedSql syntax;
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
 
@@ -469,31 +366,18 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
   if (OB_FAIL(ret)) {
   } else if (routine_info->get_routine_body().prefix_match_ci("procedure")
               || routine_info->get_routine_body().prefix_match_ci("function")) {
-    if (OB_FAIL(extract_create_node_from_routine_info(
-                  calc_alloc, *routine_info, exec_env, create_node))) {
+    if (OB_FAIL(sql::ObParser(calc_alloc, exec_env.get_sql_mode()).parse_routine_definition(routine_info->get_routine_body(), syntax))) {
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (nullptr != create_node) {
-    ParseNode *body_node = nullptr;
-    if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
-    } else if (FALSE_IT(body_node = create_node->type_ == T_SP_CREATE ? create_node->children_[4] : create_node->children_[5])) {
-      // do nothing
-    } else if (OB_ISNULL(body_node) || OB_ISNULL(body_node->raw_text_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected empty routine body", K(routine_info->get_routine_body()));
-    } else {
-      ObString value_str;
-      if (OB_FAIL(ob_write_string(calc_alloc,
-                                  ObString(min(OB_MAX_VARCHAR_LENGTH, body_node->text_len_), body_node->raw_text_),
-                                  value_str))) {
-      } else {
-        OZ (set_return_result(expr, ctx, expr_datum, value_str));
-      }
-    }
+  } else if (nullptr != syntax.statement()) {
+    const ObString body_text = syntax.source(peg::routine_body(*syntax.statement()));
+    ObString value_str;
+    OZ (ob_write_string(calc_alloc,
+                        ObString(min(OB_MAX_VARCHAR_LENGTH, static_cast<int64_t>(body_text.length())), body_text.ptr()),
+                        value_str));
+    OZ (set_return_result(expr, ctx, expr_datum, value_str));
   } else {
     ObString &value_str = (ObString&)routine_info->get_routine_body();
     OZ(set_return_result(expr, ctx, expr_datum, value_str));
@@ -512,7 +396,7 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   
   sql::ObExecEnv exec_env;
-  ParseNode *create_node = nullptr;
+  sql::ParsedSql syntax;
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
 
@@ -521,31 +405,18 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
   if (OB_FAIL(ret)) {
   } else if (routine_body.prefix_match_ci("procedure")
               || routine_body.prefix_match_ci("function")) {
-    if (OB_FAIL(extract_create_node_from_routine_info(
-                  calc_alloc, routine_body, exec_env, create_node))) {
+    if (OB_FAIL(sql::ObParser(calc_alloc, exec_env.get_sql_mode()).parse_routine_definition(routine_body, syntax))) {
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (nullptr != create_node) {
-    ParseNode *body_node = nullptr;
-    if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
-    } else if (FALSE_IT(body_node = create_node->type_ == T_SP_CREATE ? create_node->children_[4] : create_node->children_[5])) {
-      // do nothing
-    } else if (OB_ISNULL(body_node) || OB_ISNULL(body_node->raw_text_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected empty routine body", K(routine_body));
-    } else {
-      ObString value_str;
-      if (OB_FAIL(ob_write_string(calc_alloc,
-                                  ObString(min(OB_MAX_VARCHAR_LENGTH, body_node->text_len_), body_node->raw_text_),
-                                  value_str))) {
-      } else {
-        OZ (set_return_result(expr, ctx, expr_datum, value_str));
-      }
-    }
+  } else if (nullptr != syntax.statement()) {
+    const ObString body_text = syntax.source(peg::routine_body(*syntax.statement()));
+    ObString value_str;
+    OZ (ob_write_string(calc_alloc,
+                        ObString(min(OB_MAX_VARCHAR_LENGTH, static_cast<int64_t>(body_text.length())), body_text.ptr()),
+                        value_str));
+    OZ (set_return_result(expr, ctx, expr_datum, value_str));
   } else {
     OZ(set_return_result(expr, ctx, expr_datum, routine_body));
   }

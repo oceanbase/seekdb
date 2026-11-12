@@ -23,30 +23,17 @@ namespace oceanbase
 using namespace oceanbase::common;
 namespace sql
 {
-int ObKillResolver::resolve(const ParseNode &parse_tree)
+int ObKillResolver::resolve(const peg::Node &statement)
 {
   int ret = OB_SUCCESS;
-  ObKillStmt *kill_stmt = NULL;
-  ObRawExpr *tmp_expr = NULL;
-  if (OB_UNLIKELY(!(parse_tree.type_ == T_KILL || parse_tree.type_ == T_ALTER_SYSTEM_KILL)
-                  || parse_tree.num_child_ != 2
-                  || NULL == parse_tree.children_[0]
-                  || parse_tree.children_[0]->type_ != T_BOOL
-                  || NULL == parse_tree.children_[1])) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(NULL == (kill_stmt = create_stmt<ObKillStmt>()))) {
+  ObKillStmt *kill = create_stmt<ObKillStmt>();
+  ObRawExpr *target = nullptr;
+  if (kill == nullptr) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("failed to create kill stmt");
-  } else if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *(parse_tree.children_[1]), tmp_expr, NULL))) {
-  } else if (parse_tree.type_ == T_KILL) {
-    kill_stmt->set_is_query(1 == parse_tree.children_[0]->value_);
-    kill_stmt->set_value_expr(tmp_expr);
-  } else if (parse_tree.type_ == T_ALTER_SYSTEM_KILL) {
-    if (1 == parse_tree.children_[0]->value_) {
-      // TO DO.
-    }
-    kill_stmt->set_is_alter_system_kill(true);
-    kill_stmt->set_value_expr(tmp_expr);
+  } else if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, peg::kill_target(statement), target, nullptr))) {
+  } else {
+    kill->set_is_query(peg::kill_query_only(statement));
+    kill->set_value_expr(target);
   }
   return ret;
 }

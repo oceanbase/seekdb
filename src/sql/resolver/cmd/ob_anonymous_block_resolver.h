@@ -33,10 +33,10 @@ public:
   explicit ObAnonymousBlockResolver(ObResolverParams &params) : ObCMDResolver(params) {}
   virtual ~ObAnonymousBlockResolver() {}
 
-  virtual int resolve(const ParseNode &parse_tree);
+  int resolve(const ParsedSql &syntax);
 private:
   int resolve_anonymous_block(
-    ParseNode &block_node, ObAnonymousBlockStmt &stmt, bool resolve_inout_param = false);
+    const ParsedSql &syntax, ObAnonymousBlockStmt &stmt, bool resolve_inout_param = false);
   int add_param();
   // types and constants
 private:

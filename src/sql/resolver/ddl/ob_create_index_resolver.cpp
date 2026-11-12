@@ -37,64 +37,53 @@ ObCreateIndexResolver::~ObCreateIndexResolver()
 {
 }
 
-// child 0 of root node, resolve index name
 int ObCreateIndexResolver::resolve_index_name_node(
-    ParseNode *index_name_node,
+    const peg::Node &name,
     ObCreateIndexStmt *crt_idx_stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == index_name_node)
-      || OB_UNLIKELY(NULL == crt_idx_stmt)) {
+  if (OB_ISNULL(crt_idx_stmt) || OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (index_name_node->num_child_ < 2) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (NULL == index_name_node->children_[1]) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (NULL != index_name_node->children_[0]) { // database name not null
-    
+  } else if (peg::relation_has_database(name)) {
     uint64_t database_id = OB_INVALID_ID;
-    const ObString &database_name = crt_idx_stmt->get_database_name();
     uint64_t spec_database_id = OB_INVALID_ID;
-    ObString spec_database_name(index_name_node->children_[0]->str_len_,
-                                index_name_node->children_[0]->str_value_);
-    if (OB_FAIL(schema_checker_->get_database_id(
-            database_name, database_id))) {
-    } else if (OB_FAIL(schema_checker_->get_database_id(
-            spec_database_name, spec_database_id))) {
+    const auto &database = peg::relation_database(name);
+    const auto database_text = database.text();
+    const ObString spec_database_name(syntax_text(database_text));
+    if (OB_FAIL(schema_checker_->get_database_id(crt_idx_stmt->get_database_name(), database_id))) {
+    } else if (OB_FAIL(schema_checker_->get_database_id(spec_database_name, spec_database_id))) {
     } else if (spec_database_id != database_id) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Index name including database name is");
-    } else {} // no more to do
+    }
   }
   if (OB_SUCC(ret)) {
-    int32_t len = static_cast<int32_t>(index_name_node->children_[1]->str_len_);
-    ObString index_name(len, index_name_node->children_[1]->str_value_);
+    const auto &identifier = peg::relation_name(name);
+    const auto identifier_text = identifier.text();
+    ObString index_name;
     ObCollationType cs_type = CS_TYPE_INVALID;
-    if (OB_UNLIKELY(NULL == session_info_)) {
-      ret = OB_ERR_UNEXPECTED;
+    if (OB_FAIL(ob_write_string(*allocator_,
+        syntax_text(identifier_text), index_name))) {
     } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
     } else if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, index_name))) {
     } else {
       crt_idx_stmt->set_index_name(index_name);
-      index_keyname_ = static_cast<INDEX_KEYNAME>(index_name_node->value_);
     }
   }
   return ret;
 }
 
-// child 1 of root node, resolve table name of this index
 int ObCreateIndexResolver::resolve_index_table_name_node(
-    ParseNode *index_table_name_node,
+    const peg::Node &relation,
     ObCreateIndexStmt *crt_idx_stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == index_table_name_node)
-      || OB_UNLIKELY(NULL == crt_idx_stmt)) {
+  if (OB_ISNULL(crt_idx_stmt)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObString table_name;
     ObString database_name;
-    if (OB_FAIL(resolve_table_relation_node(index_table_name_node, table_name, database_name))) {
+    if (OB_FAIL(resolve_table_relation_node(&relation, table_name, database_name))) {
     } else if (OB_FAIL(set_database_name(database_name))) {
     } else {
       crt_idx_stmt->set_database_name(database_name);
@@ -106,53 +95,43 @@ int ObCreateIndexResolver::resolve_index_table_name_node(
   return ret;
 }
 
-// child 2 of root node, resolve index column
 int ObCreateIndexResolver::resolve_index_column_node(
-    ParseNode *index_column_node,
+    rust::Slice<const peg::Node> columns,
     const int64_t index_keyname_value,
-    ParseNode *table_option_node,
+    rust::Slice<const peg::Node> options,
     ObCreateIndexStmt *crt_idx_stmt,
     const ObTableSchema *tbl_schema)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObString, 8> input_index_columns_name;
   bool is_prefix_index = false;
-  if (OB_ISNULL(index_column_node) || OB_ISNULL(crt_idx_stmt) || OB_ISNULL(tbl_schema)) {
+  if (OB_ISNULL(crt_idx_stmt) || OB_ISNULL(tbl_schema) || OB_ISNULL(params_.syntax_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (T_INDEX_COLUMN_LIST != index_column_node->type_) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
     bool cnt_func_index = false;
     const bool is_vec_index = (index_keyname_ == INDEX_KEYNAME::VEC_KEY);
-    if (is_vec_index && index_column_node->num_child_ >= 2) {
+    if (is_vec_index && columns.size() >= 2) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "multi vector index column is");
     }
-    for (int32_t i = 0; OB_SUCC(ret) && i < index_column_node->num_child_; ++i) {
-      ParseNode *col_node = index_column_node->children_[i];
+    for (int32_t i = 0; OB_SUCC(ret) && i < columns.size(); ++i) {
+      const auto &column = columns[i];
+      const auto &expression = peg::index_column_expression(column);
       ObColumnSortItem sort_item;
-      if (OB_UNLIKELY(NULL == col_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_SORT_COLUMN_KEY != col_node->type_) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(col_node->children_) || 3 != col_node->num_child_
-                 || OB_ISNULL(col_node->children_[0])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        // If this node type is not identifier, then it is considered a function index.
-        if (col_node->children_[0]->type_ != T_IDENT) {
-          sort_item.is_func_index_ = true;
-          cnt_func_index = true;
+      {
+        sort_item.is_func_index_ = expression.kind() != peg::NodeKind::Ident;
+        cnt_func_index |= sort_item.is_func_index_;
+        const auto expression_text = expression.text();
+        const ObString spelling = sort_item.is_func_index_ ? params_.syntax_->source(expression)
+            : syntax_text(expression_text);
+        if (OB_FAIL(ob_write_string(*allocator_, spelling, sort_item.column_name_))) {
         }
-        sort_item.column_name_.assign_ptr(const_cast<char *>(col_node->children_[0]->str_value_),
-                                          static_cast<int32_t>(col_node->children_[0]->str_len_));
         bool is_multi_value_index = false;
-        if (OB_FAIL(share::ObMulValueIndexBuilderUtil::adjust_index_type(sort_item.column_name_,
+        if (OB_SUCC(ret) && OB_FAIL(share::ObMulValueIndexBuilderUtil::adjust_index_type(sort_item.column_name_,
                                                                   is_multi_value_index,
                                                                   reinterpret_cast<int*>(&index_keyname_)))) {
         } else if (is_multi_value_index
-                   && NULL != col_node->children_[2]
-                   && 1 != col_node->children_[2]->is_empty_) {
+                   && peg::index_column_has_direction(column)) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "ASC/DESC for multivalue index is");
         } else if (is_multi_value_index) {
@@ -177,8 +156,8 @@ int ObCreateIndexResolver::resolve_index_column_node(
       }
       // Prefix index prefix length
       if (OB_FAIL(ret)) {
-      } else if (NULL != col_node->children_[1]) {
-        sort_item.prefix_len_ = static_cast<int32_t>(col_node->children_[1]->value_);
+      } else if (peg::index_column_has_prefix(column)) {
+        sort_item.prefix_len_ = static_cast<int32_t>(peg::index_column_prefix(column));
         if (0 == sort_item.prefix_len_) {
           ret = OB_KEY_PART_0;
           LOG_USER_ERROR(OB_KEY_PART_0, sort_item.column_name_.length(), sort_item.column_name_.ptr());
@@ -218,13 +197,12 @@ int ObCreateIndexResolver::resolve_index_column_node(
                                                         *schema_checker_,
                                                         sort_item.column_name_,
                                                         index_keyname_value,
-                                                        table_option_node))) {
+                                                        options))) {
         }
       } else { // spatial index, NOTE resolve_spatial_index_constraint() will set index_keyname
-        bool is_explicit_order = (NULL != col_node->children_[2]
-            && 1 != col_node->children_[2]->is_empty_);
+        const bool is_explicit_order = peg::index_column_has_direction(column);
         if (OB_FAIL(resolve_spatial_index_constraint(*tbl_schema, sort_item.column_name_,
-            index_column_node->num_child_, index_keyname_value, is_explicit_order, sort_item.is_func_index_, NULL, is_prefix_index))) {
+            columns.size(), index_keyname_value, is_explicit_order, sort_item.is_func_index_ ? &expression : nullptr, NULL, is_prefix_index))) {
         }
       }
       // Index sorting method
@@ -250,9 +228,8 @@ int ObCreateIndexResolver::resolve_index_column_node(
   return ret;
 }
 
-// child 3 of root node, resolve index option node
 int ObCreateIndexResolver::resolve_index_option_node(
-    ParseNode *index_option_node,
+    rust::Slice<const peg::Node> options,
     ObCreateIndexStmt *crt_idx_stmt,
     const ObTableSchema *tbl_schema,
     bool is_partitioned)
@@ -261,32 +238,14 @@ int ObCreateIndexResolver::resolve_index_option_node(
   const bool is_index = true;
   if (OB_ISNULL(crt_idx_stmt) || OB_ISNULL(tbl_schema)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (NULL != index_option_node) {
-    if (OB_FAIL(resolve_table_options(index_option_node, is_index))) {
-    }
-
-    // index table dop
-    if (OB_SUCC(ret)) {
-      // If dop is not specified, the default value of table_dop_ is 1
+  } else if (!options.empty()) {
+    if (OB_FAIL(resolve_table_options(options, is_index))) {
+    } else {
       crt_idx_stmt->set_index_dop(table_dop_);
-    }
-
-    // block_size
-    if (OB_SUCC(ret)) {
-      if(T_TABLE_OPTION_LIST != index_option_node->type_) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "invalid parse node", K(ret));
-      } else {
-        int64_t num = index_option_node->num_child_;
-        for (int64_t i = 0; OB_SUCC(ret) && i < num; ++i) {
-          ParseNode *option_node = NULL;
-          if (OB_ISNULL(option_node = index_option_node->children_[i])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "node is null", K(ret));
-          } else if (T_BLOCK_SIZE == option_node->type_) {
-            is_spec_block_size = true;
-            break;
-          }
+      for (const auto &option : options) {
+        if (option.kind() == peg::NodeKind::BlockSize) {
+          is_spec_block_size = true;
+          break;
         }
       }
     }
@@ -318,25 +277,6 @@ int ObCreateIndexResolver::resolve_index_option_node(
   return ret;
 }
 
-// child 4 of root node, resolve index method node
-int ObCreateIndexResolver::resolve_index_method_node(
-    ParseNode *index_method_node,
-    ObCreateIndexStmt *crt_idx_stmt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == index_method_node)
-      || OB_UNLIKELY(NULL == crt_idx_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (T_USING_HASH == index_method_node->type_) {
-      crt_idx_stmt->set_index_using_type(USING_HASH);
-    } else {
-      crt_idx_stmt->set_index_using_type(USING_BTREE);
-    }
-  }
-  return ret;
-}
-
 /**
  * @brief Add some information from the session to arg
  * @param session Current session
@@ -357,29 +297,23 @@ int ObCreateIndexResolver::fill_session_info_into_arg(const sql::ObSQLSessionInf
   return ret;
 }
 
-int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
+int ObCreateIndexResolver::resolve(const peg::Node &statement)
 {
+  if (statement.kind() != peg::NodeKind::CreateIndex) { return OB_ERR_UNEXPECTED; }
   int ret = OB_SUCCESS;
   ObCreateIndexStmt *crt_idx_stmt = NULL;
-  ParseNode &parse_node = const_cast<ParseNode &>(parse_tree);
-  ParseNode *if_not_exist_node = NULL;
+  const auto definition = peg::index_definition(statement);
   const ObTableSchema *tbl_schema = NULL;
   const ObTableSchema *data_tbl_schema = NULL;
 
-  if (OB_UNLIKELY(T_CREATE_INDEX != parse_tree.type_)
-      || OB_UNLIKELY(CREATE_INDEX_CHILD_NUM != parse_tree.num_child_)
-      || OB_UNLIKELY(NULL == parse_tree.children_[0])
-      || OB_UNLIKELY(NULL == parse_tree.children_[1])
-      || OB_UNLIKELY(NULL == parse_tree.children_[2])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(NULL == (crt_idx_stmt = create_stmt<ObCreateIndexStmt>()))) {
+  if (OB_UNLIKELY(NULL == (crt_idx_stmt = create_stmt<ObCreateIndexStmt>()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("create index stmt failed", K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     stmt_ = crt_idx_stmt;
-    if_not_exist_node = parse_tree.children_[7];
+    index_keyname_ = index_keyname(definition.kind);
   }
   // Write the information from session to stmt's arg
   // includes nls_xx_format
@@ -388,7 +322,7 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
     }
   }
 
-  if (FAILEDx(resolve_index_table_name_node(parse_node.children_[1], crt_idx_stmt))) {
+  if (FAILEDx(resolve_index_table_name_node(peg::index_definition_table(statement), crt_idx_stmt))) {
   } else if (OB_FAIL(schema_checker_->get_table_schema(crt_idx_stmt->get_database_name(),
                                                        crt_idx_stmt->get_table_name(),
                                                        false/*not index table*/,
@@ -408,36 +342,26 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
     crt_idx_stmt->set_table_id(tbl_schema->get_table_id());
     data_tbl_schema = tbl_schema;
   }
-  if (FAILEDx(resolve_index_name_node(parse_node.children_[0], crt_idx_stmt))) {
-  } else if (OB_FAIL(resolve_index_column_node(parse_node.children_[2],
-                                               parse_tree.children_[0]->value_,
-                                               parse_tree.children_[3],
+  if (FAILEDx(resolve_index_name_node(peg::index_definition_name(statement), crt_idx_stmt))) {
+  } else if (OB_FAIL(resolve_index_column_node(definition.columns,
+                                               index_keyname(definition.kind),
+                                               definition.options,
                                                crt_idx_stmt,
                                                data_tbl_schema))) {
-  } else if (NULL != parse_node.children_[4]
-      && OB_FAIL(resolve_index_method_node(parse_node.children_[4], crt_idx_stmt))) {
-  } else if (OB_FAIL(resolve_index_option_node(parse_node.children_[3],
+  } else if (FALSE_IT(crt_idx_stmt->set_index_using_type(
+      definition.method == peg::IndexMethod::Hash ? USING_HASH : USING_BTREE))) {
+  } else if (OB_FAIL(resolve_index_option_node(definition.options,
                                                crt_idx_stmt,
                                                data_tbl_schema,
-                                               NULL != parse_node.children_[5]))) {
+                                               definition.has_partition))) {
   } else if (global_ && OB_FAIL(generate_global_index_schema(crt_idx_stmt))) {
   } else {
-    if (NULL != parse_node.children_[5]) {
-      if (1 != parse_node.children_[5]->num_child_
-          || T_PARTITION_OPTION != parse_node.children_[5]->type_) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "invalid partition option for index table");
-      } else if (NULL == parse_node.children_[5]->children_[0]) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ParseNode *index_partition_node = parse_node.children_[5]->children_[0]; // ordinary partition node
-        if (OB_FAIL(resolve_index_partition_node(index_partition_node, crt_idx_stmt))) {
-        }
-      }
+    if (definition.has_partition) {
+      ret = resolve_index_partition_node(peg::index_definition_partition(statement), crt_idx_stmt);
     }
 
     if (OB_SUCC(ret)) {
-      crt_idx_stmt->set_if_not_exists(NULL != if_not_exist_node);
+      crt_idx_stmt->set_if_not_exists(definition.if_not_exists);
       // Set block size, if block size is not specified, then use the main table block size
       // Otherwise use default block_size
       if (!is_spec_block_size) {
@@ -448,8 +372,7 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
   }
 
   if (OB_SUCC(ret)) {
-    const ParseNode *parallel_node = parse_tree.children_[8];
-    if (OB_FAIL(resolve_hints(parse_tree.children_[8], *crt_idx_stmt, *tbl_schema))) {
+    if (OB_FAIL(resolve_hints(peg::index_hints(statement), *crt_idx_stmt, *tbl_schema))) {
     }
   }
   if (OB_SUCC(ret)) {

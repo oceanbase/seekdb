@@ -20,6 +20,7 @@ number-parser = { path = "../number-parser" }
 config = { path = "../config" }
 local = { path = "../local" }
 in-process = { path = "../in-process" }
+sql-parser = { path = "../sql-parser" }
 regex-engine = { path = "../regex-engine" }
 xml-parser = { path = "../xml-parser" }
 compression = { path = "../compression" }

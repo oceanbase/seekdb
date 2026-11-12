@@ -22,7 +22,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "common/object/ob_object.h"
 #include "share/schema/ob_table_schema.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "sql/resolver/ddl/ob_partitioned_stmt.h"
 namespace oceanbase
 {

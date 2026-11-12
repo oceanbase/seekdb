@@ -129,42 +129,12 @@ public:
     COLUMN_TYPE_NODE,
     COLUMN_NAME_NODE,
   };
-  enum RangeNode {
-    RANGE_FUN_EXPR_NODE = 0,
-    RANGE_ELEMENTS_NODE = 1,
-    RANGE_SUBPARTITION_NODE = 2,
-    RANGE_PARTITION_NUM_NODE = 3,
-    RANGE_TEMPLATE_MARK = 4,
-    RANGE_RESERVED_NODE = 5,
-  };
-  enum ElementsNode {
-    PARTITION_NAME_NODE = 0,
-    PARTITION_ELEMENT_NODE = 1,
-    ELEMENT_ATTRIBUTE_NODE = 2,
-    ELEMENT_SUBPARTITION_NODE = 3,
-  };
-  enum ListNode {
-    LIST_FUN_EXPR_NODE = 0,
-    LIST_ELEMENTS_NODE = 1,
-    LIST_SUBPARTITIOPPN_NODE = 2,
-    LIST_PARTITION_NUM_NODE = 3,
-    LIST_TEMPLATE_MARK = 4
-  };
-  enum HashOrKeyNode {
-    HASH_FUN_EXPR_NODE = 0,
-    HASH_PARTITION_NUM_NODE = 1,
-    HASH_PARTITION_LIST_NODE = 2,
-    HASH_SUBPARTITIOPPN_NODE = 3,
-    HASH_TEMPLATE_MARK = 4,
-    HASH_TABLESPACE_NODE = 5
-  };
   enum ObTableOrganizationType : uint8_t {
     OB_ORGANIZATION_INVALID = 0,
     OB_INDEX_ORGANIZATION = 1,
     OB_HEAP_ORGANIZATION = 2,
     OB_ORGANIZATION_MAX
   };
-  static const int NAMENODE = 1;
 
   static const int64_t MAX_PROGRESSIVE_MERGE_NUM = 100;
   static const int64_t MIN_BLOCK_SIZE = 1024;
@@ -202,10 +172,10 @@ public:
       const int32_t prefix_len,
       const share::schema::ObColumnSchemaV2 &column_schema);
   int resolve_default_value(
-      ParseNode *def_node,
+      const peg::Node &node,
       ObDefaultValueRes &resolve_res);
   int resolve_sign_in_default_value(
-      ObIAllocator *name_pool, ParseNode *def_val, ObDefaultValueRes &resolve_res, const bool is_neg);
+      const peg::DefaultExpression &syntax, ObDefaultValueRes &resolve_res);
   static int check_and_fill_column_charset_info(
       share::schema::ObColumnSchemaV2 &column,
       const common::ObCharsetType table_charset_type,
@@ -340,7 +310,7 @@ public:
 
   // { used for enum and set
   int fill_extended_type_info(
-      const ParseNode &str_list_node,
+      const peg::Node &type_node,
       share::schema::ObColumnSchemaV2 &column);
   int check_extended_type_info(
       share::schema::ObColumnSchemaV2 &column,
@@ -359,7 +329,7 @@ public:
   static int cast_enum_or_set_default_value(
       const share::schema::ObColumnSchemaV2 &column,
       common::ObObjCastParams &params, common::ObObj &def_val);
-  int check_partition_name_duplicate(ParseNode *node);
+  int check_partition_name_duplicate(rust::Slice<const peg::Node> elements);
   static int check_text_column_length_and_promote(share::schema::ObColumnSchemaV2 &column,
                                                   int64_t table_id,
                                                   const bool is_byte_length = false);
@@ -368,7 +338,7 @@ public:
 
   typedef common::hash::ObPlacementHashSet<share::schema::ObIndexNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> IndexNameSet;
   int generate_index_name(ObString &index_name, IndexNameSet &current_index_name_set, const common::ObString &first_col_name);
-  int resolve_range_partition_elements(ParseNode *node,
+  int resolve_range_partition_elements(rust::Slice<const peg::Node> elements,
                                        const bool is_subpartition,
                                        const share::schema::ObPartitionFuncType part_type,
                                        const int64_t expr_num,
@@ -377,15 +347,12 @@ public:
                                        common::ObIArray<share::schema::ObSubPartition> &subpartitions);
    int resolve_partition_hash_or_key(
        ObPartitionedStmt *stmt,
-       ParseNode *node,
+       const peg::Node &node,
        const bool is_subpartition,
        share::schema::ObTableSchema &table_schema);
   int check_column_in_foreign_key(const share::schema::ObTableSchema &table_schema,
                                   const common::ObString &column_name,
                                   const bool is_drop_column);
-  int check_is_json_contraint(const share::schema::ObTableSchema &tmp_table_schema,
-                              ObIArray<ObConstraint> &csts,
-                              ParseNode *cst_check_expr_node);
 
   int check_column_in_check_constraint(
       const share::schema::ObTableSchema &table_schema,
@@ -399,19 +366,12 @@ public:
                                         const share::schema::ObTableSchema &index_table_schema,
                                         ObSchemaChecker &schema_checker,
                                         bool &has_other_indexes_on_same_cols);
-  static int resolve_check_constraint_expr(
-        ObResolverParams &params,
-        const ParseNode *node,
-        const share::schema::ObTableSchema &table_schema,
-        share::schema::ObConstraint &constraint,
-        ObRawExpr *&check_expr,
-        const share::schema::ObColumnSchemaV2 *column_schema = NULL);
 
   int resolve_partition_node(ObPartitionedStmt *stmt,
-                             ParseNode *part_node,
+                             const peg::Node &part_node,
                              share::schema::ObTableSchema &table_schema);
   int resolve_subpartition_option(ObPartitionedStmt *stmt,
-                                  ParseNode *subpart_node,
+                                  const peg::Node &subpart_node,
                                   share::schema::ObTableSchema &table_schema);
   // @param [in] resolved_cols the columns which have been resolved in alter table, default null
   int resolve_spatial_index_constraint(
@@ -420,7 +380,7 @@ public:
       int64_t column_num,
       const int64_t index_keyname_value,
       bool is_explicit_order,
-      bool is_func_index,
+      const peg::Node *functional_expression,
       ObIArray<share::schema::ObColumnSchemaV2*> *resolved_cols = NULL,
       bool is_prefix_index = false);
   int resolve_spatial_index_constraint(
@@ -444,16 +404,17 @@ public:
       ObSchemaChecker &schema_checker,
       const common::ObString &column_name,
       const int64_t index_keyname_value,
-      ParseNode *node);
+      rust::Slice<const peg::Node> options);
   int resolve_vec_index_constraint(
       const share::schema::ObColumnSchemaV2 &column_schema,
       const int64_t index_keyname_value,
-      ParseNode *node);
+      rust::Slice<const peg::Node> options);
   static int get_partition_keys_by_part_func_expr(
       const ObString &part_func_expr_str,
       ObIAllocator &allocator,
       ObIArray<ObString> &partkey_strs);
 protected:
+  static INDEX_KEYNAME index_keyname(peg::IndexKind kind);
   static int append_vec_hnsw_args(
       const ObPartitionResolveResult &resolve_result,
       const obcall::ObCreateIndexArg &index_arg,
@@ -488,7 +449,7 @@ protected:
       share::schema::ObPartitionFuncType part_func_type,
       common::ObString &func_str,
       common::ObSqlString &part_str);
-  int resolve_hints(const ParseNode *parse_node, ObDDLStmt &stmt, const ObTableSchema &table_schema);
+  int resolve_hints(rust::Slice<const peg::Node> hints, ObDDLStmt &stmt, const ObTableSchema &table_schema);
   int calc_ddl_parallelism(const uint64_t hint_parallelism, const uint64_t table_dop, uint64_t &parallelism);
   int deep_copy_str(const common::ObString &src, common::ObString &dest);
   int set_vec_column_name(
@@ -498,20 +459,22 @@ protected:
   int set_database_name(
       const common::ObString &database_name);
   int resolve_table_options(
-      ParseNode *node,
+      rust::Slice<const peg::Node> options,
       bool is_index_option);
   int resolve_table_option(
-      const ParseNode *node,
+      const peg::Node &option,
       const bool is_index_option);
+  int resolve_json_storage(const peg::Node &node);
+  int resolve_storage_chunk(share::schema::ObColumnSchemaV2 &column, const peg::Node &node);
   int resolve_column_definition_ref(
       share::schema::ObColumnSchemaV2 &column,
-      ParseNode *node,
+      const peg::Node &node,
       bool is_resolve_for_alter_table);
-  int resolve_column_name(common::ObString &col_name, ParseNode *node);
-  int resolve_column_name(share::schema::ObColumnSchemaV2 &column, ParseNode *node);
+  int resolve_column_name(common::ObString &col_name, const peg::Node *node);
+  int resolve_column_name(share::schema::ObColumnSchemaV2 &column, const peg::Node &node);
   int resolve_column_definition(
       share::schema::ObColumnSchemaV2 &column,
-      ParseNode *node,
+      const peg::Node &node,
       ObColumnResolveStat &reslove_stat,
       bool &is_modify_column_visibility,
       common::ObString &pk_name,
@@ -521,50 +484,34 @@ protected:
       const bool allow_has_default = true);
   int drop_not_null_constraint(const share::schema::ObColumnSchemaV2 &column);
   int resolve_normal_column_attribute_constr_not_null(ObColumnSchemaV2 &column,
-                                                      ParseNode *attrs_node,
+                                                      const peg::Node &attribute,
                                                       ObColumnResolveStat &resolve_stat);
   int resolve_normal_column_attribute_constr_default(ObColumnSchemaV2 &column,
-                                                     ParseNode *attr_node,
+                                                     const peg::Node &attribute,
                                                      ObColumnResolveStat &resolve_stat,
                                                      ObObjParam& default_value,
                                                      bool& is_set_cur_default);
   int resolve_normal_column_attribute_constr_null(ObColumnSchemaV2 &column,
                                                   ObColumnResolveStat &resolve_stat);
   int resolve_normal_column_attribute(share::schema::ObColumnSchemaV2 &column,
-                                      ParseNode *attrs_node,
+                                      rust::Slice<const peg::Node> attributes,
                                       ObColumnResolveStat &reslove_stat,
                                       common::ObString &pk_name,
                                       bool &is_modify_column,
                                       bool &is_modify_column_visibility,
                                       const bool allow_has_default = true);
   int resolve_normal_column_attribute_check_cons(ObColumnSchemaV2 &column,
-                                                 ParseNode *attrs_node,
+                                                 const peg::Node &attribute,
                                                  ObCreateTableStmt *create_table_stmt);
-  int resolve_normal_column_attribute_foreign_key(ObColumnSchemaV2 &column,
-                                                  ParseNode *attrs_node,
-                                                  ObCreateTableStmt *create_table_stmt);
+
   int resolve_generated_column_attribute(share::schema::ObColumnSchemaV2 &column,
-                                         ParseNode *attrs_node,
+                                         rust::Slice<const peg::Node> attributes,
                                          ObColumnResolveStat &reslove_stat);
   int resolve_srid_node(share::schema::ObColumnSchemaV2 &column,
-                        const ParseNode &srid_node);
-  int resolve_column_skip_index(
-      const ParseNode &skip_index_node,
-      share::schema::ObColumnSchemaV2 &column_schema);
+                        const peg::Node &node);
   int check_skip_index(share::schema::ObTableSchema &table_schema);
-  int resolve_lob_inrow_threshold(const ParseNode *option_node, const bool is_index_option);
+  int resolve_lob_inrow_threshold(const peg::Node &option, const bool is_index_option);
 
-  int resolve_lob_storage_parameters(const ParseNode *node);
-  int resolve_lob_storage_parameter(share::schema::ObColumnSchemaV2 &column, const ParseNode &param_node);
-  int resolve_lob_chunk_size(const ParseNode &size_node, int64_t &lob_chunk_size);
-  int resolve_lob_chunk_size(share::schema::ObColumnSchemaV2 &column, const ParseNode &lob_chunk_size_node);
-  int resolve_semistruct_encoding_type(const ParseNode *option_node, const bool is_index_option);
-  /*
-  int resolve_generated_column_definition(
-      share::schema::ObColumnSchemaV2 &column,
-      ParseNode *node,
-      ObColumnResolveStat &reslove_stat);
-  */
 
   virtual int add_storing_column(
       const common::ObString &column_name,
@@ -579,21 +526,19 @@ protected:
   int fill_column_collation_info(
       const int64_t database_id,
       const common::ObString &table_name);
-  int check_column_name_duplicate(
-      const ParseNode *node);
   int resolve_partition_range(
       ObPartitionedStmt *stmt,
-      ParseNode *node,
+      const peg::Node &node,
       const bool is_subpartition,
       share::schema::ObTableSchema &table_schema);
   int resolve_partition_list(
       ObPartitionedStmt *stmt,
-      ParseNode *node,
+      const peg::Node &node,
       const bool is_subpartition,
       share::schema::ObTableSchema &table_schema);
     static int resolve_part_func(
       ObResolverParams &params,
-      const ParseNode *node,
+      const peg::Node &node,
       const share::schema::ObPartitionFuncType partition_func_type,
       const share::schema::ObTableSchema &table_schema,
       common::ObIArray<ObRawExpr *> &part_fun_expr,
@@ -609,10 +554,10 @@ protected:
       common::ObIArray<common::ObString> &partition_keys,
       bool is_subpart);
     int resolve_enum_or_set_column(
-      const ParseNode *type_node,
+      const peg::Node *type_node,
       share::schema::ObColumnSchemaV2 &column);
     int resolve_collection_column(
-      const ParseNode *type_node,
+      const peg::Node *type_node,
       share::schema::ObColumnSchemaV2 &column);
 
 
@@ -620,13 +565,13 @@ protected:
                                  const ObRawExpr *col_expr,
                                  bool &res);
 
-  int resolve_range_value_exprs(ParseNode *expr_list_node,
+  int resolve_range_value_exprs(rust::Slice<const peg::Node> values,
                                 const share::schema::ObPartitionFuncType part_type,
                                 const common::ObString &partition_name,
                                 common::ObIArray<ObRawExpr *> &range_value_exprs);
 
   int resolve_index_partition_node(
-      ParseNode *index_partition_node,
+      const peg::Node &index_partition_node,
       ObCreateIndexStmt *crt_idx_stmt);
   int check_key_cover_partition_keys(
       const bool is_range_part,
@@ -641,35 +586,27 @@ protected:
       obcall::ObCreateIndexArg &create_index_arg,
       share::schema::ObTableSchema &table_schema);
   int resolve_check_constraint_node(
-      const ParseNode &cst_node,
+      const peg::Node &cst_node,
       common::ObIArray<share::schema::ObConstraint> &csts,
       const share::schema::ObColumnSchemaV2 *column_schema = NULL);
-  int resolve_check_cst_state_node_mysql(const ParseNode* cst_check_state_node,
-      share::schema::ObConstraint& cst);
-  int resolve_pk_constraint_node(const ParseNode &cst_node,
-                                 common::ObString pk_name,
-                                 common::ObSEArray<share::schema::ObConstraint, 4> &csts);
-  int resolve_foreign_key(const ParseNode *node, common::ObArray<int> &node_position_list);
+  int resolve_foreign_key(rust::Slice<const peg::Node> elements, common::ObArray<int> &node_position_list);
   int resolve_foreign_key_node(
-      const ParseNode *node,
+      const peg::Node &node,
       obcall::ObCreateForeignKeyArg &arg,
-      bool is_alter_table = false,
-      const share::schema::ObColumnSchemaV2 *column = NULL);
-  int resolve_foreign_key_columns(const ParseNode *node, common::ObIArray<common::ObString> &columns);
-  int resolve_foreign_key_options(const ParseNode *node,
+      bool is_alter_table = false);
+  int resolve_foreign_key_columns(rust::Slice<const peg::Node> names, common::ObIArray<common::ObString> &columns);
+  int resolve_foreign_key_options(rust::Slice<const peg::Node> options,
                                   share::schema::ObReferenceAction &update_action,
                                   share::schema::ObReferenceAction &delete_action);
-  int resolve_foreign_key_name(const ParseNode *constraint_node,
+  int resolve_foreign_key_name(const peg::Node *name,
                                common::ObString &foreign_key_name,
                                ObNameGeneratedType &name_generated_type);
   int check_foreign_key_reference(
       obcall::ObCreateForeignKeyArg &arg,
       bool is_alter_table = false,
       const share::schema::ObColumnSchemaV2 *column = NULL);
-  int resolve_match_options(const ParseNode *match_options_node);
   int create_fk_cons_name_automatically(ObString &foreign_key_name);
-  int resolve_not_null_constraint_node(share::schema::ObColumnSchemaV2 &column,
-                                       const ParseNode *cst_node);
+  int resolve_not_null_constraint_node(share::schema::ObColumnSchemaV2 &column);
   static int add_not_null_constraint(share::schema::ObColumnSchemaV2 &column,
                               const common::ObString &cst_name,
                               bool is_sys_generate_name,
@@ -689,49 +626,48 @@ protected:
                         share::schema::ObColumnNameWrapper &column_key,
                         bool check_prefix_len);
 
-  inline bool is_hash_type_partition(ObItemType type) const
+  inline bool is_hash_type_partition(peg::NodeKind type) const
   {
-    return T_HASH_PARTITION == type || T_KEY_PARTITION == type;
+    return peg::NodeKind::HashPartition == type || peg::NodeKind::KeyPartition == type;
   }
-  inline bool is_range_type_partition(ObItemType type) const
+  inline bool is_range_type_partition(peg::NodeKind type) const
   {
-    return T_RANGE_PARTITION == type || T_RANGE_COLUMNS_PARTITION == type;
+    return peg::NodeKind::RangePartition == type || peg::NodeKind::RangeColumnsPartition == type;
   }
-  inline bool is_list_type_partition(ObItemType type) const
+  inline bool is_list_type_partition(peg::NodeKind type) const
   {
-    return T_LIST_PARTITION == type || T_LIST_COLUMNS_PARTITION == type;
+    return peg::NodeKind::ListPartition == type || peg::NodeKind::ListColumnsPartition == type;
   }
 
   int resolve_individual_subpartition(ObPartitionedStmt *stmt,
-                                      ParseNode *part_node,
-                                      ParseNode *partition_list_node,
-                                      ParseNode *subpart_node,
+                                      rust::Slice<const peg::Node> elements,
+                                      const peg::Node &subpart_node,
                                       share::schema::ObTableSchema &table_schema,
                                       bool &force_template);
 
   int resolve_subpartition_elements(ObPartitionedStmt *stmt,
-                                    ParseNode *node,
+                                    rust::Slice<const peg::Node> elements,
                                     share::schema::ObTableSchema &table_schema,
                                     share::schema::ObPartition *partition);
 
-  int resolve_partition_name(ParseNode *partition_name_node,
+  int resolve_partition_element(const peg::PartitionElement &definition,
                              ObString &partition_name,
                              share::schema::ObBasePartition &partition);
 
-  int resolve_hash_or_key_partition_basic_infos(ParseNode *node,
+  int resolve_hash_or_key_partition_basic_infos(const peg::Node &node,
                                                 bool is_subpartition,
                                                 share::schema::ObTableSchema &table_schema,
                                                 share::schema::ObPartitionFuncType &part_func_type,
                                                 ObString &func_expr_name);
 
-  int resolve_range_partition_basic_infos(ParseNode *node,
+  int resolve_range_partition_basic_infos(const peg::Node &node,
                                           bool is_subpartition,
                                           share::schema::ObTableSchema &table_schema,
                                           share::schema::ObPartitionFuncType &part_func_type,
                                           ObString &func_expr_name,
                                           ObIArray<ObRawExpr*> &part_func_exprs);
 
-  int resolve_list_partition_basic_infos(ParseNode *node,
+  int resolve_list_partition_basic_infos(const peg::Node &node,
                                          bool is_subpartition,
                                          share::schema::ObTableSchema &table_schema,
                                          share::schema::ObPartitionFuncType &part_func_type,
@@ -739,23 +675,23 @@ protected:
                                          ObIArray<ObRawExpr*> &part_func_exprs);
 
   int resolve_hash_partition_elements(ObPartitionedStmt *stmt,
-                                      ParseNode *node,
+                                      rust::Slice<const peg::Node> elements,
                                       share::schema::ObTableSchema &table_schema);
 
   int resolve_hash_subpartition_elements(ObPartitionedStmt *stmt,
-                                         ParseNode *node,
+                                         rust::Slice<const peg::Node> elements,
                                          share::schema::ObTableSchema &table_schema,
                                          share::schema::ObPartition *partition);
 
   int resolve_range_partition_elements(ObPartitionedStmt *stmt,
-                                       ParseNode *node,
+                                       rust::Slice<const peg::Node> elements,
                                        share::schema::ObTableSchema &table_schema,
                                        const share::schema::ObPartitionFuncType part_type,
                                        const ObIArray<ObRawExpr *> &part_func_exprs,
                                        ObIArray<ObRawExpr *> &range_value_exprs);
 
   int resolve_range_subpartition_elements(ObPartitionedStmt *stmt,
-                                          ParseNode *node,
+                                          rust::Slice<const peg::Node> elements,
                                           share::schema::ObTableSchema &table_schema,
                                           share::schema::ObPartition *partition,
                                           const share::schema::ObPartitionFuncType part_type,
@@ -763,27 +699,27 @@ protected:
                                           ObIArray<ObRawExpr *> &range_value_exprs);
 
   int resolve_list_partition_elements(ObPartitionedStmt*stmt,
-                                      ParseNode *node,
+                                      rust::Slice<const peg::Node> elements,
                                       share::schema::ObTableSchema &table_schema,
                                       const share::schema::ObPartitionFuncType part_type,
                                       const ObIArray<ObRawExpr *> &part_func_exprs,
                                       ObDDLStmt::array_t &list_value_exprs);
 
   int resolve_list_subpartition_elements(ObPartitionedStmt *stmt,
-                                         ParseNode *node,
+                                         rust::Slice<const peg::Node> elements,
                                          share::schema::ObTableSchema &table_schema,
                                          share::schema::ObPartition *partition,
                                          const share::schema::ObPartitionFuncType part_type,
                                          const ObIArray<ObRawExpr *> &part_func_exprs,
                                          ObDDLStmt::array_t &list_value_exprs);
 
-  int resolve_range_partition_value_node(ParseNode &expr_list_node,
+  int resolve_range_partition_value_node(const peg::Node &expr_list_node,
                                          const ObString &partition_name,
                                          const share::schema::ObPartitionFuncType part_type,
                                          const ObIArray<ObRawExpr *> &part_func_exprs,
                                          ObIArray<ObRawExpr *> &range_value_exprs);
 
-  int resolve_list_partition_value_node(ParseNode &expr_list_node,
+  int resolve_list_partition_value_node(const peg::Node &expr_list_node,
                                         const ObString &partition_name,
                                         const share::schema::ObPartitionFuncType part_type,
                                         const ObIArray<ObRawExpr *> &part_func_exprs,
@@ -818,7 +754,6 @@ protected:
                                     ObPartitionNameSet &partition_name_set);
   int deep_copy_string_in_part_expr(ObPartitionedStmt* stmt);
   int deep_copy_column_expr_name(common::ObIAllocator &allocator, ObIArray<ObRawExpr*> &exprs);
-  int check_index_param(const ParseNode *option_node, ObString &index_params, const int64_t vector_dim);
 
 
   void reset();

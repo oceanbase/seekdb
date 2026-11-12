@@ -1368,7 +1368,7 @@
   default: "True"
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
-  description: "control if enable fast parser"
+  description: "deprecated; the parser and statement parameterization are always enabled, this switch has no effect"
 
 - name: _ob_obj_dep_maint_task_interval
   type: TIME

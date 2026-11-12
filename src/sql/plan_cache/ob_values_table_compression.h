@@ -17,19 +17,17 @@
 #ifndef OCEANBASE_SQL_PLAN_CACHE_OB_VALUES_TABLE_COMPRESSION_
 #define OCEANBASE_SQL_PLAN_CACHE_OB_VALUES_TABLE_COMPRESSION_
 
-#include "sql/parser/ob_parser.h"
+#include "sql/syntax.h"
 #include "lib/string/ob_string.h"
 #include "share/statement/ob_stmt_type.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
-#include "sql/parser/ob_char_type.h"
-#include "sql/parser/ob_fast_parser.h"
+#include "sql/plan_cache/fast_parse.h"
 
 namespace oceanbase
 {
 namespace sql
 {
 class ObPlanCacheCtx;
-struct ObRawSql;
 class ObFastParserResult;
 
 // values clause folding params utils class
@@ -62,10 +60,6 @@ public:
                                    int64_t &delta_length,
                                    bool &can_batch_opt);
 private:
-  static void match_one_state(const char *&p,
-                              const char *p_end,
-                              const ObParser::State next_state,
-                              ObParser::State &state);
   static bool is_support_compress_values_table(const common::ObString &stmt);
   static int add_raw_array_params(common::ObIAllocator &allocator,
                                   ObPlanCacheCtx &pc_ctx,
@@ -73,29 +67,6 @@ private:
                                   const int64_t begin_param,
                                   const int64_t row_count,
                                   const int64_t param_count);
-  static int rebuild_new_raw_sql(ObPlanCacheCtx &pc_ctx,
-                                 const common::ObIArray<ObPCParam*> &raw_params,
-                                 const int64_t begin_idx,
-                                 const int64_t param_cnt,
-                                 const int64_t delta_length,
-                                 const common::ObString &no_param_sql,
-                                 common::ObIArray<int64_t> &no_param_pos,
-                                 common::ObIArray<int64_t> &raw_sql_offset,
-                                 common::ObString &new_raw_sql,
-                                 int64_t &no_param_sql_pos,
-                                 int64_t &new_raw_pos);
-  static bool is_mysql_space(char ch) {
-    return ch != INVALID_CHAR && SPACE_FLAGS[static_cast<uint8_t>(ch)];
-  }
-  static void skip_space(ObRawSql &raw_sql);
-  static bool skip_row_constructor(ObRawSql &raw_sql);
-  static void get_one_row_str(ObRawSql &no_param_sql,
-                             int64_t &param_count,
-                             int64_t &end_pos,
-                             bool &is_valid);
-private:
-  static const char *lower_[ObParser::S_MAX];
-  static const char *upper_[ObParser::S_MAX];
 };
 
 }

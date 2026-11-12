@@ -107,12 +107,10 @@ cc_library(
 unity_cc_library(
     name = "resolver_prepare",
     unity_members = [
-        "ob_deallocate_resolver.cpp",
         "ob_deallocate_stmt.cpp",
-        "ob_execute_resolver.cpp",
         "ob_execute_stmt.cpp",
-        "ob_prepare_resolver.cpp",
         "ob_prepare_stmt.cpp",
+        "prepared_command_resolver.cpp",
     ],
     deps = [
         ":resolver_prepare_internal_headers",

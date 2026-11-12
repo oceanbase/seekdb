@@ -20,6 +20,7 @@ rust_static_library(
         "//rust/logger",
         "//rust/number-parser:number_parser",
         "//rust/sql-nio:sql_nio",
+        "//rust/sql-parser:sql_parser",
         "//rust/regex-engine:regex_engine",
         "//rust/xml-parser:xml_parser",
         "//rust/compression",
