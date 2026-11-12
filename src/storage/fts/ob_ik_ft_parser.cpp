@@ -18,7 +18,10 @@
 
 #include "src/storage/fts/ob_ik_ft_parser.h"
 
+#include "lib/allocator/ob_fifo_allocator.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/lock/ob_lock_guard.h"
+#include "lib/lock/ob_mutex.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -29,6 +32,7 @@
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
+#include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_cjk_processor.h"
 #include "storage/fts/ik/ob_ik_letter_processor.h"
@@ -40,6 +44,233 @@ namespace oceanbase
 {
 namespace storage
 {
+
+namespace
+{
+/**
+ * @brief 进程级共享的 IK 词典。
+ *
+ * IK 词典在匹配阶段是只读的，初始化完成后也不再依赖构建它时使用的缓存容器，
+ * 因此整个进程只需要构建一次，所有 IK 解析器实例直接复用同一份词典。
+ *
+ * 背景：TOKENIZE 每次调用都会新建一个 IK 解析器，而解析器初始化时又会为
+ * main / quantifier / stopword 三个词典分别重新加载缓存并重建 range 结构。
+ * 对于 IK 主词典（按首字符范围切分的上百个 range），这部分开销远大于真正的
+ * 分词计算，是分词热路径上的主要瓶颈。共享词典后，每次调用只剩下分词本身。
+ *
+ * 词典缓存被重建时（range 数量变化），共享词典会同步重建，避免使用过期内容。
+ */
+class ObIKFTSharedDict final
+{
+public:
+  ObIKFTSharedDict()
+      : alloc_(),
+        main_container_(alloc_),
+        quan_container_(alloc_),
+        stop_container_(alloc_),
+        main_dict_(nullptr),
+        quan_dict_(nullptr),
+        stop_dict_(nullptr),
+        main_range_count_(-1),
+        quan_range_count_(-1),
+        stop_range_count_(-1)
+  {
+  }
+
+  ~ObIKFTSharedDict() { destroy(); }
+
+  int init()
+  {
+    int ret = OB_SUCCESS;
+    lib::ObMemAttr mem_attr;
+    mem_attr.label_ = "FtIKSharedDict";
+    if (OB_FAIL(alloc_.init(lib::ObMallocAllocator::get_instance(),
+                            OB_MALLOC_NORMAL_BLOCK_SIZE,
+                            mem_attr))) {
+    }
+    return ret;
+  }
+
+  int get(ObFTDictHub *hub,
+          ObIFTDict *&main_dict,
+          ObIFTDict *&quan_dict,
+          ObIFTDict *&stop_dict)
+  {
+    int ret = OB_SUCCESS;
+    lib::ObLockGuard guard(lock_);
+    bool need_rebuild = (nullptr == main_dict_);
+    if (!need_rebuild && OB_FAIL(check_cache_state(hub))) {
+      need_rebuild = true;
+      ret = OB_SUCCESS;
+    } else if (!need_rebuild) {
+      need_rebuild = (main_range_count_ != main_state_.range_count_
+                      || quan_range_count_ != quan_state_.range_count_
+                      || stop_range_count_ != stop_state_.range_count_);
+    }
+    if (need_rebuild && OB_FAIL(rebuild(hub))) {
+      return ret;
+    }
+    main_dict = main_dict_;
+    quan_dict = quan_dict_;
+    stop_dict = stop_dict_;
+    return ret;
+  }
+
+private:
+  struct ObDictState
+  {
+    ObDictState() : range_count_(-1) {}
+    int32_t range_count_;
+  };
+
+  int check_cache_state(ObFTDictHub *hub)
+  {
+    int ret = OB_SUCCESS;
+    ObDictState main_state;
+    ObDictState quan_state;
+    ObDictState stop_state;
+    if (OB_FAIL(hub->get_dict_cache_state(main_desc_, main_state.range_count_))) {
+    } else if (OB_FAIL(hub->get_dict_cache_state(quan_desc_, quan_state.range_count_))) {
+    } else if (OB_FAIL(hub->get_dict_cache_state(stop_desc_, stop_state.range_count_))) {
+    } else {
+      main_state_ = main_state;
+      quan_state_ = quan_state;
+      stop_state_ = stop_state;
+    }
+    return ret;
+  }
+
+  int rebuild(ObFTDictHub *hub)
+  {
+    int ret = OB_SUCCESS;
+    destroy_dicts();
+    main_container_.reset();
+    quan_container_.reset();
+    stop_container_.reset();
+    if (OB_FAIL(load_dict(hub, main_desc_, main_container_, main_dict_))) {
+    } else if (OB_FAIL(load_dict(hub, quan_desc_, quan_container_, quan_dict_))) {
+    } else if (OB_FAIL(load_dict(hub, stop_desc_, stop_container_, stop_dict_))) {
+    } else {
+      ObDictState state;
+      if (OB_SUCC(hub->get_dict_cache_state(main_desc_, state.range_count_))) {
+        main_state_ = state;
+      }
+      if (OB_SUCC(hub->get_dict_cache_state(quan_desc_, state.range_count_))) {
+        quan_state_ = state;
+      }
+      if (OB_SUCC(hub->get_dict_cache_state(stop_desc_, state.range_count_))) {
+        stop_state_ = state;
+      }
+    }
+    if (OB_FAIL(ret)) {
+      destroy_dicts();
+    }
+    return ret;
+  }
+
+  int load_dict(ObFTDictHub *hub,
+                const ObFTDictDesc &desc,
+                ObFTCacheRangeContainer &container,
+                ObIFTDict *&dict)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(hub->load_cache(desc, container))) {
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        if (OB_FAIL(hub->build_cache(desc, container))) {
+        }
+      } else {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      dict = OB_NEWx(ObFTRangeDict, &alloc_, alloc_, &container, desc);
+      if (OB_ISNULL(dict)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(dict->init())) {
+        OB_DELETEx(ObIFTDict, &alloc_, dict);
+        dict = nullptr;
+      }
+    }
+    return ret;
+  }
+
+  void destroy_dicts()
+  {
+    if (OB_NOT_NULL(main_dict_)) {
+      OB_DELETEx(ObIFTDict, &alloc_, main_dict_);
+      main_dict_ = nullptr;
+    }
+    if (OB_NOT_NULL(quan_dict_)) {
+      OB_DELETEx(ObIFTDict, &alloc_, quan_dict_);
+      quan_dict_ = nullptr;
+    }
+    if (OB_NOT_NULL(stop_dict_)) {
+      OB_DELETEx(ObIFTDict, &alloc_, stop_dict_);
+      stop_dict_ = nullptr;
+    }
+  }
+
+  void destroy()
+  {
+    destroy_dicts();
+    main_container_.reset();
+    quan_container_.reset();
+    stop_container_.reset();
+  }
+
+private:
+  static const ObFTDictDesc main_desc_;
+  static const ObFTDictDesc quan_desc_;
+  static const ObFTDictDesc stop_desc_;
+
+  common::ObFIFOAllocator alloc_;
+  ObFTCacheRangeContainer main_container_;
+  ObFTCacheRangeContainer quan_container_;
+  ObFTCacheRangeContainer stop_container_;
+
+  ObIFTDict *main_dict_;
+  ObIFTDict *quan_dict_;
+  ObIFTDict *stop_dict_;
+
+  ObDictState main_state_;
+  ObDictState quan_state_;
+  ObDictState stop_state_;
+
+  int32_t main_range_count_;
+  int32_t quan_range_count_;
+  int32_t stop_range_count_;
+
+  lib::ObMutex lock_;
+};
+
+const ObFTDictDesc ObIKFTSharedDict::main_desc_(
+    "main_dict",
+    ObFTDictType::DICT_IK_MAIN,
+    ObCharsetType::CHARSET_UTF8MB4,
+    ObCollationType::CS_TYPE_UTF8MB4_BIN);
+const ObFTDictDesc ObIKFTSharedDict::quan_desc_(
+    "quan_dict",
+    ObFTDictType::DICT_IK_QUAN,
+    ObCharsetType::CHARSET_UTF8MB4,
+    ObCollationType::CS_TYPE_UTF8MB4_BIN);
+const ObFTDictDesc ObIKFTSharedDict::stop_desc_(
+    "stopword",
+    ObFTDictType::DICT_IK_STOP,
+    ObCharsetType::CHARSET_UTF8MB4,
+    ObCollationType::CS_TYPE_UTF8MB4_BIN);
+
+ObIKFTSharedDict &get_ik_shared_dict()
+{
+  static ObIKFTSharedDict shared_dict;
+  static bool inited = false;
+  if (!inited) {
+    inited = true;
+    shared_dict.init();
+  }
+  return shared_dict;
+}
+
+} // namespace
+
 int ObIKFTParser::init(const ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
@@ -231,42 +462,11 @@ int ObIKFTParserDesc::get_add_word_flag(ObAddWordFlag &flag) const
 int ObIKFTParser::init_dict(const ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
-  ObIFTDict *tmp_dict = nullptr;
 
   if (OB_ISNULL(hub_)) {
     ret = OB_ERR_UNEXPECTED;
-  }
-
-  ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
-                              ObFTDictType::DICT_IK_MAIN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  ObFTDictDesc quan_dict_desc("quan_dict",
-                              ObFTDictType::DICT_IK_QUAN,
-                              ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  ObFTDictDesc stopword_dict_desc("stopword",
-                                  ObFTDictType::DICT_IK_STOP,
-                                  ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
-
-  if (should_read_newest_table()) {
-    // clear dict cache, always false now
-  } else {
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
-    }
-  }
-
-  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(get_ik_shared_dict().get(hub_, dict_main_, dict_quan_, dict_stop_))) {
     // already logged.
-  } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
-  } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
   }
 
   return ret;
@@ -366,18 +566,11 @@ void ObIKFTParser::reset()
   cache_quan_.reset();
   cache_stop_.reset();
 
-  if (!OB_ISNULL(dict_main_)) {
-    dict_main_->~ObIFTDict();
-    allocator_.free(dict_main_);
-  }
-  if (!OB_ISNULL(dict_quan_)) {
-    dict_quan_->~ObIFTDict();
-    allocator_.free(dict_quan_);
-  }
-  if (!OB_ISNULL(dict_stop_)) {
-    dict_stop_->~ObIFTDict();
-    allocator_.free(dict_stop_);
-  }
+  // the dictionaries are owned by the process wide shared dictionary cache,
+  // they must not be released here
+  dict_main_ = nullptr;
+  dict_quan_ = nullptr;
+  dict_stop_ = nullptr;
 
   is_inited_ = false;
 }
