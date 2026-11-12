@@ -301,7 +301,6 @@ int ObExprURLCODEC::calc_result_type1(ObExprResType &type, ObExprResType &type_1
   int ret = OB_SUCCESS;
 
   type_1.set_calc_type(ObVarcharType);
-  type_1.set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
   type.set_varchar();
   // If the input is a string, output the same collation as the input. Otherwise, output current
   // session collation
@@ -310,6 +309,7 @@ int ObExprURLCODEC::calc_result_type1(ObExprResType &type, ObExprResType &type_1
   } else {
     type.set_collation_type(type_ctx.get_coll_type());
   }
+  type_1.set_calc_collation_type(type.get_collation_type());
   type.set_collation_level(common::CS_LEVEL_COERCIBLE);
 
   ObLength input_length = type_1.get_length();
