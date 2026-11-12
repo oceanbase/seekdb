@@ -33,6 +33,7 @@ on:
       - 'MODULE.bazel.lock'
       - '.bazelrc'
       - '.github/workflows/rust-checks.yml'
+      - '!**/*.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
