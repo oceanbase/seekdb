@@ -111,7 +111,22 @@ jobs:
           arch: x64
       - name: Install Linux build utilities
         if: matrix.os == 'linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y rpm2cpio cpio make binutils patchelf
+        run: |
+          packages=(rpm2cpio cpio make binutils patchelf)
+          if [[ "$LINUX_PROFILE" == el7 ]]; then
+            # EL7 Clang needs libtinfo.so.5, which Ubuntu 24 no longer ships.
+            archive=https://archive.ubuntu.com/ubuntu
+            if [[ "$RUNNER_ARCH" == ARM64 ]]; then archive=https://ports.ubuntu.com/ubuntu-ports; fi
+            for suite in jammy jammy-updates jammy-security; do
+              echo "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] $archive $suite universe"
+            done | sudo tee /etc/apt/sources.list.d/seekdb-compat.list >/dev/null
+            # Allow only libtinfo5 from the older release.
+            printf 'Package: *\nPin: release n=jammy\nPin-Priority: -1\n\nPackage: libtinfo5\nPin: release n=jammy\nPin-Priority: 500\n' |
+              sudo tee /etc/apt/preferences.d/seekdb-compat >/dev/null
+            packages+=(libtinfo5)
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y "${packages[@]}"
       - name: Set up Conda sysroot
         id: conda
         if: matrix.os == 'linux'
