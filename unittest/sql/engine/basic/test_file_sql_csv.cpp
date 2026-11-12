@@ -108,6 +108,7 @@ void csv_cases()
   }
   rejects("",FileCode::INVALID_DATA);
   rejects("a,b\n1\n",FileCode::INVALID_DATA,2);
+  rejects("a,b\n1,2,3\n",FileCode::INVALID_DATA,3);
   rejects("a\n\"unterminated",FileCode::INVALID_DATA,1);
   rejects("a\n\"closed\"x\n",FileCode::INVALID_DATA,1);
   rejects("a\nunquoted\"\n",FileCode::INVALID_DATA,1);
@@ -139,6 +140,16 @@ void csv_cases()
     CHECK(futimens(fileno(f.f),times)==0);
     std::vector<ScalarRow> rows; CHECK(scan.next_batch(1,rows).code==FileCode::FILE_CHANGED);
   }
+}
+void full_inference()
+{
+  TempFile f;
+  CHECK(fputs("n,allnull\n",f.f)>=0);
+  for (int i=0; i<3000; ++i) { CHECK(fputs("1,\n",f.f)>=0); }
+  CHECK(fputs("2.5,\n",f.f)>=0); CHECK(fflush(f.f)==0); rewind(f.f);
+  CsvTableScan scan; CHECK(scan.prepare(f.f).ok());
+  CHECK(scan.columns()[0].type==ScalarType::DOUBLE && scan.row_count()==3001);
+  CHECK(scan.columns()[1].type==ScalarType::NULL_VALUE && scan.columns()[1].nullable);
 }
 void roundtrip()
 {
@@ -196,6 +207,6 @@ void streaming()
 int main(int argc,char **argv)
 {
   if (argc>1 && std::string(argv[1])=="--streaming") { streaming(); }
-  else { if (argc>1) { basic_fixture(argv[1]); } csv_cases(); roundtrip(); }
+  else { if (argc>1) { basic_fixture(argv[1]); } csv_cases(); full_inference(); roundtrip(); }
   std::cout<<"PASS CSV: "<<checks<<" checks\n";
 }

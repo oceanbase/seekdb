@@ -181,7 +181,8 @@ FileStatus SchemaInference::init(const std::vector<std::string> &names)
 FileStatus SchemaInference::observe(const TextRow &row, uint64_t record, uint64_t line)
 {
   if (columns_.empty() || row.size() != columns_.size()) {
-    return {FileCode::INVALID_DATA,record,line,row.size()+1,"CSV record width differs from schema"};
+    const size_t column = (row.size() < columns_.size() ? row.size() : columns_.size()) + 1;
+    return {FileCode::INVALID_DATA,record,line,column,"CSV record width differs from schema"};
   }
   for (size_t i = 0; i < row.size(); ++i) {
     if (!valid_utf8(row[i].text)) { return {FileCode::INVALID_DATA,record,line,i+1,"invalid UTF-8 or NUL byte"}; }
