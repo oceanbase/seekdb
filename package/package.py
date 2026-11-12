@@ -130,15 +130,19 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
         normalize_permissions(destination)
 
 
-def deb(payload, output, version, release, architecture=None, glibc=None):
+def deb(payload, output, version, release, architecture=None):
     architecture = architecture or subprocess.check_output(["dpkg", "--print-architecture"], text=True).strip()
+    multiarch = {"amd64": "x86_64-linux-gnu", "arm64": "aarch64-linux-gnu"}[architecture]
+    # Both supported architectures have 64-bit time_t. Let the private SONAME
+    # alias use libaio1t64; if absent, the loader falls back to system libaio1.
+    (payload / "usr/libexec/seekdb/lib/libaio.so.1").symlink_to(
+        "/usr/lib/%s/libaio.so.1t64" % multiarch)
     control = payload / "DEBIAN"
     control.mkdir()
-    depends = "systemd" + (", libc6 (>= %s)" % glibc if glibc else "")
     (control / "control").write_text(
         "Package: seekdb\nVersion: %s-%s\nSection: database\nPriority: optional\n"
-        "Architecture: %s\nMaintainer: OceanBase\nDepends: %s\n"
-        "Description: seekdb single-node database\n" % (version, release, architecture, depends))
+        "Architecture: %s\nMaintainer: OceanBase\nDepends: libaio1 | libaio1t64, systemd\n"
+        "Description: seekdb single-node database\n" % (version, release, architecture))
     (control / "conffiles").write_text("/etc/seekdb/seekdb.cnf\n")
     for name, script in LIFECYCLE.items():
         copy(payload / "usr/libexec/seekdb/scripts" / (script + ".sh"), control / name, True)
@@ -296,22 +300,20 @@ def main():
             if binary.version_tuple(required) > binary.version_tuple(metadata["glibc"]):
                 raise ValueError("obshell requires GLIBC_%s, exceeding the binary package baseline %s; "
                                  "rebuild obshell for the target glibc" % (required, metadata["glibc"]))
-        if options.format == "rpm":
+        if options.format in ("rpm", "deb"):
             libraries = payload / "usr/libexec/seekdb/lib"
             libraries.mkdir(parents=True, exist_ok=True)
             if binary_package:
-                # RPM uses the distribution's libaio, as in previous seekdb releases.
+                # System packages use the distribution's libaio, as in previous releases.
                 shutil.copytree(binary_package / "lib/seekdb", libraries, dirs_exist_ok=True,
                                 ignore=shutil.ignore_patterns("libaio.so", "libaio.so.*"))
             normalize_permissions(payload)
+        if options.format == "rpm":
             rpm(payload, work, output, options.version, options.release, options.dependencies.resolve(),
                 metadata["arch"] if metadata else None)
         elif options.format == "deb":
-            stage(payload, options.artifacts.resolve(), options.dependencies.resolve(), "linux",
-                  options.version, options.release, "libs", binary_package=binary_package)
             deb(payload, output, options.version, options.release,
-                {"x86_64": "amd64", "aarch64": "arm64"}[metadata["arch"]] if metadata else None,
-                metadata["glibc"] if metadata else None)
+                {"x86_64": "amd64", "aarch64": "arm64"}[metadata["arch"]] if metadata else None)
         elif options.format == "tgz":
             tgz(payload, output, options.version, options.release, options.component, options.layout,
                 metadata["arch"] if metadata else None)

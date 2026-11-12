@@ -28,7 +28,11 @@ The RPM retains the previous release's explicit dependencies on `libaio` and
 `libaio` instead of bundling it or producing a `seekdb-libs` RPM. Install the local
 RPM with `dnf install ./seekdb-<version>-<release>.<arch>.rpm` (or `yum install`)
 to download missing dependencies from the configured distribution repositories.
-Portable binary archives and DEB packages still include their runtime libraries.
+The DEB retains `libaio1 | libaio1t64, systemd` from the released Ubuntu 22.04
+and Debian 12 packages. It also uses system libaio, with a private compatibility
+link for the `libaio1t64` SONAME on amd64/arm64. Install it using
+`apt install ./seekdb_<version>-<release>_<arch>.deb` to fetch missing dependencies.
+Portable binary archives still include their runtime libraries.
 
 ## Compatibility
 
