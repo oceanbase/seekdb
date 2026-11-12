@@ -1,0 +1,51 @@
+# Regression: JSON bool is not a VARCHAR literal or JSON number.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS hybrid_json_bool_types;
+--enable_warnings
+CREATE TABLE hybrid_json_bool_types(_id VARCHAR(64) NOT NULL UNIQUE, flag TINYINT, document TEXT, metadata JSON, embedding VECTOR(4));
+INSERT INTO hybrid_json_bool_types VALUES ('j_true',1,'oceanbase same','{"flag": true}','[1,0.0,0,0]'),('j_false',0,'oceanbase same','{"flag": false}','[1,0.125,0,0]'),('j_one',1,'oceanbase same','{"flag": 1}','[1,0.25,0,0]'),('j_zero',0,'oceanbase same','{"flag": 0}','[1,0.375,0,0]'),('j_string_true',1,'oceanbase same','{"flag": "true"}','[1,0.5,0,0]'),('j_string_false',0,'oceanbase same','{"flag": "false"}','[1,0.625,0,0]'),('j_null',0,'oceanbase same','{"flag": null}','[1,0.75,0,0]'),('j_missing',0,'oceanbase same','{}','[1,0.875,0,0]');
+CREATE FULLTEXT INDEX ft ON hybrid_json_bool_types(document) WITH PARSER SPACE;
+CREATE VECTOR INDEX vi ON hybrid_json_bool_types(embedding) WITH (distance=cosine,type=hnsw);
+SET @q=CAST(DBMS_HYBRID_SEARCH.GET_SQL('hybrid_json_bool_types','{"query":{"bool":{"must":[{"query_string":{"fields":["document"],"query":"oceanbase"}}],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":true}}]}},"knn":{"field":"embedding","k":8,"query_vector":[1,0,0,0],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":true}}]},"size":8,"rank":{"rrf":{"rank_window_size":8,"rank_constant":60}},"_source":["_id"]}') AS CHAR);
+SET @q=CONCAT('SELECT GROUP_CONCAT(_id ORDER BY _id) AS ids FROM (',@q,') h');
+PREPARE s FROM @q;
+EXECUTE s;
+DEALLOCATE PREPARE s;
+SET @q=CAST(DBMS_HYBRID_SEARCH.GET_SQL('hybrid_json_bool_types','{"query":{"bool":{"must":[{"query_string":{"fields":["document"],"query":"oceanbase"}}],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":false}}]}},"knn":{"field":"embedding","k":8,"query_vector":[1,0,0,0],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":false}}]},"size":8,"rank":{"rrf":{"rank_window_size":8,"rank_constant":60}},"_source":["_id"]}') AS CHAR);
+SET @q=CONCAT('SELECT GROUP_CONCAT(_id ORDER BY _id) AS ids FROM (',@q,') h');
+PREPARE s FROM @q;
+EXECUTE s;
+DEALLOCATE PREPARE s;
+SET @q=CAST(DBMS_HYBRID_SEARCH.GET_SQL('hybrid_json_bool_types','{"query":{"bool":{"must":[{"query_string":{"fields":["document"],"query":"oceanbase"}}],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":"true"}}]}},"knn":{"field":"embedding","k":8,"query_vector":[1,0,0,0],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":"true"}}]},"size":8,"rank":{"rrf":{"rank_window_size":8,"rank_constant":60}},"_source":["_id"]}') AS CHAR);
+SET @q=CONCAT('SELECT GROUP_CONCAT(_id ORDER BY _id) AS ids FROM (',@q,') h');
+PREPARE s FROM @q;
+EXECUTE s;
+DEALLOCATE PREPARE s;
+SET @q=CAST(DBMS_HYBRID_SEARCH.GET_SQL('hybrid_json_bool_types','{"query":{"bool":{"must":[{"query_string":{"fields":["document"],"query":"oceanbase"}}],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":"false"}}]}},"knn":{"field":"embedding","k":8,"query_vector":[1,0,0,0],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":"false"}}]},"size":8,"rank":{"rrf":{"rank_window_size":8,"rank_constant":60}},"_source":["_id"]}') AS CHAR);
+SET @q=CONCAT('SELECT GROUP_CONCAT(_id ORDER BY _id) AS ids FROM (',@q,') h');
+PREPARE s FROM @q;
+EXECUTE s;
+DEALLOCATE PREPARE s;
+SET @q=CAST(DBMS_HYBRID_SEARCH.GET_SQL('hybrid_json_bool_types','{"query":{"bool":{"must":[{"query_string":{"fields":["document"],"query":"oceanbase"}}],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":1}}]}},"knn":{"field":"embedding","k":8,"query_vector":[1,0,0,0],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":1}}]},"size":8,"rank":{"rrf":{"rank_window_size":8,"rank_constant":60}},"_source":["_id"]}') AS CHAR);
+SET @q=CONCAT('SELECT GROUP_CONCAT(_id ORDER BY _id) AS ids FROM (',@q,') h');
+PREPARE s FROM @q;
+EXECUTE s;
+DEALLOCATE PREPARE s;
+SET @q=CAST(DBMS_HYBRID_SEARCH.GET_SQL('hybrid_json_bool_types','{"query":{"bool":{"must":[{"query_string":{"fields":["document"],"query":"oceanbase"}}],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":0}}]}},"knn":{"field":"embedding","k":8,"query_vector":[1,0,0,0],"filter":[{"term":{"(JSON_EXTRACT(metadata, ''$.flag''))":0}}]},"size":8,"rank":{"rrf":{"rank_window_size":8,"rank_constant":60}},"_source":["_id"]}') AS CHAR);
+SET @q=CONCAT('SELECT GROUP_CONCAT(_id ORDER BY _id) AS ids FROM (',@q,') h');
+PREPARE s FROM @q;
+EXECUTE s;
+DEALLOCATE PREPARE s;
+SET @q=CAST(DBMS_HYBRID_SEARCH.GET_SQL('hybrid_json_bool_types','{"query":{"bool":{"must":[{"query_string":{"fields":["document"],"query":"oceanbase"}}],"filter":[{"terms":{"(JSON_EXTRACT(metadata, ''$.flag''))":[true,false]}}]}},"knn":{"field":"embedding","k":8,"query_vector":[1,0,0,0],"filter":[{"terms":{"(JSON_EXTRACT(metadata, ''$.flag''))":[true,false]}}]},"size":8,"rank":{"rrf":{"rank_window_size":8,"rank_constant":60}},"_source":["_id"]}') AS CHAR);
+SET @q=CONCAT('SELECT GROUP_CONCAT(_id ORDER BY _id) AS ids FROM (',@q,') h');
+PREPARE s FROM @q;
+EXECUTE s;
+DEALLOCATE PREPARE s;
+SET @q=CAST(DBMS_HYBRID_SEARCH.GET_SQL('hybrid_json_bool_types','{"query":{"bool":{"must":[{"query_string":{"fields":["document"],"query":"oceanbase"}}],"filter":[{"term":{"flag":true}}]}},"knn":{"field":"embedding","k":8,"query_vector":[1,0,0,0],"filter":[{"term":{"flag":true}}]},"size":8,"rank":{"rrf":{"rank_window_size":8,"rank_constant":60}},"_source":["_id"]}') AS CHAR);
+SET @q=CONCAT('SELECT GROUP_CONCAT(_id ORDER BY _id) AS ids FROM (',@q,') h');
+PREPARE s FROM @q;
+EXECUTE s;
+DEALLOCATE PREPARE s;
+DROP TABLE hybrid_json_bool_types;
+--enable_query_log
