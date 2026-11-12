@@ -26,7 +26,7 @@ def digest(path):
 def architecture(binary, layout):
     with binary.open("rb") as stream:
         header = stream.read(64)
-        if layout == "linux" and header[:6] == b"\x7fELF\x02\x01":
+        if layout in ("linux", "android") and header[:6] == b"\x7fELF\x02\x01":
             machine = struct.unpack_from("<H", header, 18)[0]
             if machine in (62, 183):
                 return {62: "x86_64", 183: "aarch64"}[machine]
@@ -275,12 +275,54 @@ def windows_dependencies(binaries):
                 raise ValueError("unbundled Windows dependency %s imported by %s; include it in seekdb.exe.runtime.json" % (name, binary))
 
 
+def android_binaries(prefix, arch):
+    binaries = [prefix / "bin/seekdb"] + sorted((prefix / "lib/seekdb").iterdir())
+    available = {path.name for path in binaries}
+    system = {"libc.so", "libm.so", "libdl.so", "liblog.so", "libandroid.so", "libz.so"}
+    for binary in binaries:
+        if architecture(binary, "android") != arch:
+            raise ValueError("Android runtime architecture mismatch: %s" % binary)
+        versions = []
+        with binary.open("rb") as stream:
+            header = stream.read(64)
+            offset = struct.unpack_from("<Q", header, 32)[0]
+            size, count = struct.unpack_from("<HH", header, 54)
+            for index in range(count):
+                stream.seek(offset + index * size)
+                kind, _, position, _, _, length, _, alignment = struct.unpack("<IIQQQQQQ", stream.read(56))
+                if kind == 1 and alignment < 16384:
+                    raise ValueError("Android load alignment must be at least 16 KiB: %s" % binary)
+                if kind != 4:
+                    continue
+                stream.seek(position)
+                notes = stream.read(length)
+                cursor = 0
+                while cursor + 12 <= len(notes):
+                    namesz, descsz, tag = struct.unpack_from("<III", notes, cursor)
+                    name = notes[cursor + 12:cursor + 12 + namesz].rstrip(b"\0")
+                    description = cursor + 12 + ((namesz + 3) & ~3)
+                    end = description + ((descsz + 3) & ~3)
+                    if end > len(notes):
+                        raise ValueError("invalid Android ELF note: %s" % binary)
+                    if name == b"Android" and tag == 1 and descsz >= 4:
+                        versions.append(struct.unpack_from("<I", notes, description)[0])
+                    cursor = end
+        if not versions or max(versions) > 26:
+            raise ValueError("Android binary must declare a minimum API no newer than 26: %s" % binary)
+        imports = set(re.findall(r"\(NEEDED\).*?\[(.*?)\]", dynamic(binary)))
+        if imports - system - available:
+            raise ValueError("unbundled Android dependencies in %s: %s; link non-system libraries statically" %
+                             (binary, ", ".join(sorted(imports - system - available))))
+    return binaries
+
+
 def prepare(prefix, original, layout, directories, extra_libraries, glibc):
     arch = architecture(prefix / "bin" / ("seekdb.exe" if layout == "windows" else "seekdb"), layout)
     host_layout = {"Linux": "linux", "Darwin": "macos", "Windows": "windows"}.get(platform.system())
     machine = platform.machine().lower()
     host_arch = {"arm64": "aarch64", "amd64": "x86_64"}.get(machine, machine)
-    if layout != host_layout or arch.replace("arm64", "aarch64") != host_arch:
+    cross_android = layout == "android" and host_layout in ("linux", "macos")
+    if not cross_android and (layout != host_layout or arch.replace("arm64", "aarch64") != host_arch):
         raise ValueError("binary distributions must be assembled on a matching native OS and architecture")
     metadata = {"os": layout, "arch": arch}
     if layout == "linux":
@@ -293,6 +335,10 @@ def prepare(prefix, original, layout, directories, extra_libraries, glibc):
         from pkg.bundle_dylibs import bundle
         bundle(prefix, original, prefix / "bin/seekdb")
         metadata["minimum_os"] = macos_binaries(prefix, arch)
+    elif layout == "android":
+        (prefix / "lib/seekdb").mkdir(parents=True, exist_ok=True)
+        android_binaries(prefix, arch)
+        metadata["minimum_api"] = 26
     else:
         metadata["msvc_runtime"] = windows_runtime(prefix / "bin/seekdb.exe")
         windows_dependencies(windows_binaries(prefix, arch))
@@ -315,6 +361,8 @@ def write(prefix, output, version, release, source_commit, metadata):
     abi = "-glibc" + metadata["glibc"] if metadata["os"] == "linux" else ""
     if metadata["os"] == "windows":
         abi = "-" + metadata["msvc_runtime"].lower()
+    if metadata["os"] == "android":
+        abi = "-api" + str(metadata["minimum_api"])
     system = metadata["os"] + (metadata["minimum_os"] if metadata["os"] == "macos" else "")
     name = "seekdb-binary-%s-%s-%s-%s%s-%s-sdb%s" % (
         version, release, system, metadata["arch"], abi, built_at.strftime("%Y%m%dT%H%M%SZ"), source_commit[:12])
@@ -408,7 +456,7 @@ def load(source, destination, version):
     if manifest.get("version") != version:
         raise ValueError("binary package version %s does not match requested version %s" % (manifest.get("version"), version))
     metadata = manifest.get("platform")
-    if not isinstance(metadata, dict) or metadata.get("os") not in ("linux", "macos", "windows"):
+    if not isinstance(metadata, dict) or metadata.get("os") not in ("linux", "macos", "windows", "android"):
         raise ValueError("unsupported binary package OS")
     if not isinstance(manifest.get("source_commit"), str) or not re.fullmatch(r"[0-9a-f]{40}", manifest["source_commit"]):
         raise ValueError("binary package requires a full source commit")
@@ -419,6 +467,8 @@ def load(source, destination, version):
         raise ValueError("Windows binary packages require msvc_runtime=MD")
     if metadata["os"] == "windows" and metadata.get("minimum_os") != "10.0":
         raise ValueError("Windows binary packages require minimum_os=10.0")
+    if metadata["os"] == "android" and metadata.get("minimum_api") != 26:
+        raise ValueError("Android binary packages require minimum_api=26")
     if metadata["os"] == "macos" and (not isinstance(metadata.get("minimum_os"), str) or
                                         not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", metadata["minimum_os"]) or
                                         version_tuple(metadata["minimum_os"]) > version_tuple("13.0")):
@@ -449,6 +499,8 @@ def load(source, destination, version):
         windows_binaries(root, metadata["arch"])
     elif metadata["os"] == "macos":
         macos_binaries(root, metadata["arch"], metadata["minimum_os"])
+    elif metadata["os"] == "android":
+        android_binaries(root, metadata["arch"])
     else:
         binaries = [executable] + sorted((root / "lib/seekdb").iterdir())
         for path in binaries:
