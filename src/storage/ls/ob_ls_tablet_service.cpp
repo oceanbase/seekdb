@@ -155,21 +155,56 @@ public:
         && rows_checked <= rows_visited && rows_visited <= row_count
         && total_us >= 0 && accounted_us == total_us;
     const int64_t accounting_error_us = accounting_valid ? total_us - accounted_us : -1;
-    const int old_row_schema_version = 2, old_row_phase_count = PHASE_COUNT;
+    const int old_row_schema_version = 3, old_row_phase_count = PHASE_COUNT;
     int64_t mono_us[] = {anchor_mono_before_us_, start_us_, phase_start_us_, anchor_mono_after_us};
     ObArrayWrap<int64_t> old_row_mono_us(mono_us, 4);
     ObArrayWrap<int64_t> old_row_us(phase_us_, PHASE_COUNT);
     ObArrayWrap<int64_t> old_row_entries(phase_entries_, PHASE_COUNT);
     ObArrayWrap<int> old_row_first_ret(phase_first_ret_, PHASE_COUNT);
-    LOG_INFO("seek1381 old row batch summary", K(ret), K(diagnostic_start_us), K(diagnostic_end_us),
-             K(diagnostic_epoch), K(same_request), K(storage_table_id), K(tablet_id),
-             K(tx_id_begin), K(tx_id_end), K(tx_id_known), K(same_transaction),
-             K(inner_session_known), K(inner_session_id), K(row_count), K(rows_visited), K(rows_checked),
-             K(total_us), K(accounting_valid), K(accounting_error_us),
-             K(old_row_mono_us), K(monotonic_clock_steady), K(wall_span_us),
-             K(wall_mapping_valid), K(wall_quantization_us),
-             K(old_row_schema_version), K(old_row_phase_count),
-             K(old_row_us), K(old_row_entries), K(old_row_first_ret));
+    struct BatchSummary
+    {
+      int ret;
+      int64_t diagnostic_start_us, diagnostic_end_us;
+      uint64_t diagnostic_epoch;
+      bool same_request;
+      uint64_t storage_table_id, tablet_id;
+      int64_t tx_id_begin, tx_id_end;
+      bool tx_id_known, same_transaction, inner_session_known;
+      uint32_t inner_session_id;
+      int64_t row_count, rows_visited, rows_checked, total_us;
+      bool accounting_valid;
+      int64_t accounting_error_us;
+      const ObArrayWrap<int64_t> &old_row_mono_us;
+      bool monotonic_clock_steady;
+      int64_t wall_span_us;
+      bool wall_mapping_valid;
+      int64_t wall_quantization_us;
+      int old_row_schema_version, old_row_phase_count;
+      const ObArrayWrap<int64_t> &old_row_us, &old_row_entries;
+      const ObArrayWrap<int> &old_row_first_ret;
+
+      TO_STRING_KV(K(ret), K(diagnostic_start_us), K(diagnostic_end_us),
+                   K(diagnostic_epoch), K(same_request), K(storage_table_id), K(tablet_id),
+                   K(tx_id_begin), K(tx_id_end), K(tx_id_known), K(same_transaction),
+                   K(inner_session_known), K(inner_session_id), K(row_count), K(rows_visited), K(rows_checked),
+                   K(total_us), K(accounting_valid), K(accounting_error_us),
+                   K(old_row_mono_us), K(monotonic_clock_steady), K(wall_span_us),
+                   K(wall_mapping_valid), K(wall_quantization_us),
+                   K(old_row_schema_version), K(old_row_phase_count),
+                   K(old_row_us), K(old_row_entries), K(old_row_first_ret));
+    };
+    const BatchSummary old_row_batch = {
+      ret, diagnostic_start_us, diagnostic_end_us,
+      diagnostic_epoch, same_request, storage_table_id, tablet_id,
+      tx_id_begin, tx_id_end, tx_id_known, same_transaction,
+      inner_session_known, inner_session_id, row_count, rows_visited, rows_checked,
+      total_us, accounting_valid, accounting_error_us,
+      old_row_mono_us, monotonic_clock_steady, wall_span_us,
+      wall_mapping_valid, wall_quantization_us,
+      old_row_schema_version, old_row_phase_count,
+      old_row_us, old_row_entries, old_row_first_ret
+    };
+    LOG_INFO("seek1381 old row batch summary", K(old_row_batch));
   }
 
 private:
