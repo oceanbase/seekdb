@@ -1,4 +1,5 @@
 %global _missing_build_ids_terminate_build 0
+%global _binary_payload w2.xzdio
 %global _find_debuginfo_opts -g
 %{!?__find_debuginfo:%global __find_debuginfo %(command -v find-debuginfo || echo %{_rpmconfigdir}/find-debuginfo.sh)}
 %global __brp_check_rpaths %{nil}
@@ -24,13 +25,9 @@ Summary: seekdb single-node database
 License: Apache-2.0
 URL: https://www.oceanbase.ai
 Group: Applications/Databases
-Requires: seekdb-libs%{?_isa} = %{version}-%{release}, systemd
+Requires: libaio, systemd
 %description
 seekdb single-node relational database.
-%package libs
-Summary: Runtime libraries for seekdb
-%description libs
-Runtime shared libraries required by seekdb.
 %if %{with_debuginfo}
 %global __debug_package 1
 %package debuginfo
@@ -45,14 +42,13 @@ Debug information for the seekdb release binaries.
 %install
 mkdir -p %{buildroot}
 cp -a @PAYLOAD@/. %{buildroot}/
-cp -a @LIBS@/. %{buildroot}/
-%pre -p /bin/bash
+%pre -p /bin/sh
 @PRE@
-%post -p /bin/bash
+%post -p /bin/sh
 @POST@
-%preun -p /bin/bash
+%preun -p /bin/sh
 @PREUN@
-%postun -p /bin/bash
+%postun -p /bin/sh
 @POSTUN@
 %files
 %defattr(-,root,root,-)
@@ -67,10 +63,8 @@ cp -a @LIBS@/. %{buildroot}/
 /usr/lib/systemd/system/seekdb.service
 /usr/libexec/seekdb/import*.py
 /usr/libexec/seekdb/scripts
-/usr/share/seekdb
-%files libs
-%defattr(-,root,root,-)
 /usr/libexec/seekdb/lib
+/usr/share/seekdb
 %if %{with_debuginfo}
 %files debuginfo
 %defattr(-,root,root,-)
