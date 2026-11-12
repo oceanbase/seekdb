@@ -20,9 +20,7 @@ Write review comments in English.
    pull request template, `.github/pull_request_template.md`: identify missing
    or incomplete sections and ask the author to supply the information or state
    why it does not apply. Report template gaps separately from code findings;
-   do not treat a missing section alone as a Blocker or Major. Checking the
-   upgrade-compatibility section does not expand the review scope beyond the
-   explicit exclusions below.
+   do not treat a missing section alone as a Blocker or Major.
 2. State the behavior the change promises before judging its implementation.
 3. Inspect enough surrounding code to understand the existing invariant. Do
    not review the diff in isolation.
