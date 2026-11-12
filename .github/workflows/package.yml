@@ -189,7 +189,11 @@ jobs:
         id: build
         run: |
           # Keep MSYS utilities out of the cache action's tar/zstd pipeline.
-          if [[ "$RUNNER_OS" == Windows ]]; then export PATH="$PATH:/c/msys64/usr/bin"; fi
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            export PATH="/c/msys64/usr/bin:$PATH"
+            command -v make
+            make --version
+          fi
           python .github/scripts/package.py build
       - name: Export verified binary distribution
         run: python .github/scripts/package.py export
