@@ -2,7 +2,7 @@
 
 load(":repository_utils.bzl", "builtin_include_directories", "host_substitutions")
 
-def _discover_builtin_include_directories(repository_ctx, compiler):
+def _discover_builtin_include_directories(repository_ctx, compiler, flags):
     resource_result = repository_ctx.execute(
         [compiler, "-print-resource-dir"],
         environment = {"LC_ALL": "C"},
@@ -23,7 +23,7 @@ def _discover_builtin_include_directories(repository_ctx, compiler):
 
     directories = []
     repository_root = str(repository_ctx.path(""))
-    for value in builtin_include_directories(repository_ctx, compiler):
+    for value in builtin_include_directories(repository_ctx, compiler, flags):
         if value == resource_directory or value.startswith(resource_directory + "/"):
             value = "%crosstool_top%/devtools/lib/clang/" + resource_version + value[len(resource_directory):]
         elif value.startswith(repository_root + "/"):
@@ -95,6 +95,13 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
             fail("bundled tool is missing: %s" % tool)
 
     repository_ctx.symlink(devtools, "devtools")
+    sysroot = repository_ctx.getenv("SEEKDB_SYSROOT")
+    flags = []
+    if sysroot:
+        if not repository_ctx.path(sysroot).get_child("usr/include/stdlib.h").exists:
+            fail("SEEKDB_SYSROOT is missing usr/include/stdlib.h: %s" % sysroot)
+        repository_ctx.symlink(sysroot, "sysroot")
+        flags = ["--sysroot=" + str(repository_ctx.path("sysroot"))]
 
     repository_ctx.template(
         "validate_static_library.sh",
@@ -110,6 +117,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
     builtin_include_directories = _discover_builtin_include_directories(
         repository_ctx,
         str(repository_ctx.path("devtools/bin/clang")),
+        flags,
     )
     repository_ctx.template(
         "BUILD.bazel",
@@ -118,6 +126,7 @@ def _linux_cc_toolchain_repository_impl(repository_ctx):
             "@CXX_BUILTIN_INCLUDE_DIRECTORIES@": repr(builtin_include_directories),
             "@HOST_CPU@": architecture,
             "@BAZEL_CPU@": "aarch64" if architecture == "aarch64" else "k8",
+            "@BUILTIN_SYSROOT@": repr("external/" + repository_ctx.name + "/sysroot" if sysroot else None),
         },
         executable = False,
     )
