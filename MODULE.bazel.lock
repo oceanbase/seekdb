@@ -622,7 +622,7 @@
     "@@rules_rust+//crate_universe:extensions.bzl%crate": {
       "general": {
         "bzlTransitiveDigest": "imkbK4Elrvc9HAhGIIs7HAfIWBgwhVAiaJgxuCBKfp4=",
-        "usagesDigest": "fwdvzVQ+9bXrdYTfix+qeJom4OJo2qznRZWjT6YXTJA=",
+        "usagesDigest": "mmq/3yOs1YMpG6SOErNiSg9Mhnq3tsKj9cSRRZBs2ak=",
         "recordedInputs": [
           "ENV:CARGO_BAZEL_DEBUG \\0",
           "ENV:CARGO_BAZEL_GENERATOR_SHA256 \\0",
