@@ -104,6 +104,7 @@ static const uint64_t OB_MIN_ID  = 0;//used for lower_bound
 #define CTE_GENERATED_COLUMN_FLAG (INT64_C(1) << 2)
 #define DEFAULT_EXPR_V2_COLUMN_FLAG (INT64_C(1) << 3)
 #define RESERVED_COLUMN_FLAG_4 (INT64_C(1) << 4)
+#define AI_COLUMN_RESULT_FLAG (INT64_C(1) << 4) // result column of an AI column
 #define RESERVED_COLUMN_FLAG_5 (INT64_C(1) << 5)
 #define INVISIBLE_COLUMN_FLAG (INT64_C(1) << 6)
 // The logic of the new table without a primary key changes the column (partition key) to the primary key

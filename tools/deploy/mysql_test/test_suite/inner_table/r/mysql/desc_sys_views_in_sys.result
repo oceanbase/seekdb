@@ -2499,6 +2499,7 @@ REQUEST_MODEL_NAME	varchar(128)	YES		NULL
 PARAMETERS	varchar(2048)	YES		NULL	
 REQUEST_TRANSFORM_FN	varchar(64)	YES		NULL	
 RESPONSE_TRANSFORM_FN	varchar(64)	YES		NULL	
+MAX_CONCURRENCY	bigint(20)	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS limit 1);
 cnt
 1

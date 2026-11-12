@@ -2441,10 +2441,64 @@ all_ai_model_endpoint_def = dict(
         ('request_model_name', 'varchar:128', 'true'),
         ('parameters', 'varchar:2048', 'true'),
         ('request_transform_fn', 'varchar:64', 'true'),
-        ('response_transform_fn', 'varchar:64', 'true')
+        ('response_transform_fn', 'varchar:64', 'true'),
+        ('max_concurrency', 'int', 'false', 0)
     ]
 )
 def_table_schema(**all_ai_model_endpoint_def)
+
+all_ai_column_def = dict(
+    owner = 'competition',
+    table_name = '__all_ai_column',
+    table_id = '1131',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int')
+    ],
+
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('column_name', 'varchar:128', 'false'),
+        ('state_column_id', 'int', 'false'),
+        ('request_column_id', 'int', 'false'),
+        ('result_spec_column_id', 'int', 'false'),
+        ('max_retries', 'int', 'false', 0),
+        ('sync_mode', 'varchar:32', 'true'),
+        ('normalized_expr', 'varchar:65535', 'true'),
+        ('dep_column_names', 'varchar:2048', 'true'),
+        ('result_type', 'int', 'false', 0)
+    ]
+)
+def_table_schema(**all_ai_column_def)
+
+
+all_ai_column_task_def = dict(
+    owner = 'competition',
+    table_name = '__all_ai_column_task',
+    table_id = '1132',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int'),
+      ('request_id', 'varchar:64')
+    ],
+
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('rowkey_predicate', 'varchar:1024', 'true'),
+        ('eligible_ts', 'timestamp:6', 'true'),
+        ('state', 'int', 'false', 1),
+        ('retry_count', 'int', 'false', 0),
+        ('last_error', 'varchar:512', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_task_def)
+
 
 
 all_objauth_mysql_def = dict(
@@ -13819,7 +13873,8 @@ def_table_schema(
       REQUEST_MODEL_NAME,
       PARAMETERS,
       REQUEST_TRANSFORM_FN,
-      RESPONSE_TRANSFORM_FN
+      RESPONSE_TRANSFORM_FN,
+      MAX_CONCURRENCY
     FROM oceanbase.__all_ai_model_endpoint WHERE ENDPOINT_ID != -1;
   """.replace("\n", " ")
 )

@@ -626,6 +626,38 @@ public:
   {
     return inner_flag_;
   }
+  inline bool is_in_ai_column_maintenance() const { return in_ai_column_maintenance_; }
+  inline void set_in_ai_column_maintenance(const bool flag) { in_ai_column_maintenance_ = flag; }
+  struct ObAiColumnRef
+  {
+    ObAiColumnRef() : table_id_(common::OB_INVALID_ID), column_id_(common::OB_INVALID_ID) {}
+    ObAiColumnRef(const uint64_t table_id, const uint64_t column_id)
+      : table_id_(table_id), column_id_(column_id) {}
+    uint64_t table_id_;
+    uint64_t column_id_;
+  };
+  int add_ai_column_ref(const uint64_t table_id, const uint64_t column_id)
+  {
+    int ret = common::OB_SUCCESS;
+    bool found = false;
+    for (int64_t i = 0; !found && i < ai_column_ref_count_; ++i) {
+      found = ai_column_refs_[i].table_id_ == table_id
+              && ai_column_refs_[i].column_id_ == column_id;
+    }
+    if (!found) {
+      if (ai_column_ref_count_ >= MAX_AI_COLUMN_REFS) {
+        ret = common::OB_SIZE_OVERFLOW;
+      } else {
+        ai_column_refs_[ai_column_ref_count_].table_id_ = table_id;
+        ai_column_refs_[ai_column_ref_count_].column_id_ = column_id;
+        ++ai_column_ref_count_;
+      }
+    }
+    return ret;
+  }
+  int64_t get_ai_column_ref_count() const { return ai_column_ref_count_; }
+  const ObAiColumnRef &get_ai_column_ref(const int64_t i) const { return ai_column_refs_[i]; }
+  void clear_ai_column_refs() { ai_column_ref_count_ = 0; }
   void reset_audit_record(bool need_retry = false)
   {
     if (!need_retry) {
@@ -909,6 +941,10 @@ private:
   // in_transaction_ has been merged into trans_flags_.
 //  int64_t has_write_stmt_in_trans_;
   bool inner_flag_; // whether it is a virtual session for an internal request
+  bool in_ai_column_maintenance_ = false;
+  static const int64_t MAX_AI_COLUMN_REFS = 16;
+  ObAiColumnRef ai_column_refs_[MAX_AI_COLUMN_REFS];
+  int64_t ai_column_ref_count_ = 0;
   // After version 2.2, this variable is no longer used
   bool is_max_availability_mode_;
   typedef common::hash::ObHashMap<ObPsStmtId, ObPsSessionInfo *,

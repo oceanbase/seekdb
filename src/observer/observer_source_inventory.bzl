@@ -139,6 +139,7 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/omt/ob_th_worker.cpp",
             "src/observer/omt/ob_worker_processor.cpp",
             "src/observer/omt/ob_ai_service.cpp",
+            "src/observer/omt/ob_ai_column_worker.cpp",
             "src/observer/omt/ob_server_runtime.cpp",
             "src/observer/omt/ob_server_runtime_controller.cpp",
             "src/observer/omt/ob_srs_service.cpp",

@@ -110,6 +110,7 @@ public:
   ObAlterTableExecutor();
   virtual ~ObAlterTableExecutor();
   int execute(ObExecContext &ctx, ObAlterTableStmt &stmt);
+  int execute_ai_column_retry(ObExecContext &ctx, ObAlterTableStmt &stmt);
 private:
   static const int64_t TIME_INTERVAL_PER_PART_US = 50 * 1000; // 50ms
   static const int64_t MAX_WAIT_CHECK_SCHEMA_VERSION_INTERVAL_US = 120LL * 1000000LL; // 120s

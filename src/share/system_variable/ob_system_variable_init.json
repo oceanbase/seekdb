@@ -10886,6 +10886,32 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html"
   },
+  "ai_column_strict_read": {
+    "id": 10755,
+    "name": "ai_column_strict_read",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Reject reads of AI columns while any row of the column is not ready.",
+    "flags": "SESSION ",
+    "publish_version": "",
+    "info_cn": "\u5f53 AI \u5217\u5b58\u5728\u672a\u5b8c\u6210\u7684\u884c\u65f6\u62d2\u7edd\u8bfb\u53d6\u8be5 AI \u5217",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Control whether file SQL functions (read_csv/read_json/read_parquet/glob) may be used.",
+    "flags": "SESSION ",
+    "publish_version": "",
+    "info_cn": "\u63a7\u5236\u662f\u5426\u5141\u8bb8\u4f7f\u7528\u6587\u4ef6 SQL \u51fd\u6570\uff08read_csv/read_json/read_parquet/glob\uff09",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "enable_optimizer_rowgoal": {
     "id": 10747,
     "name": "enable_optimizer_rowgoal",

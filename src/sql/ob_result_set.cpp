@@ -27,9 +27,19 @@
 #include "sql/monitor/show_trace/ob_show_trace.h"
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "share/ob_ddl_checksum.h"
+#include "share/ob_errno.h"
+#include "share/ob_server_struct.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/schema/ob_table_schema.h"
+#include "share/inner_table/ob_inner_table_schema.h"
+#include "share/system_variable/ob_sys_var_class_type.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "sql/engine/dml/ob_ai_column_meta.h"
+#include "common/mysqlclient/ob_mysql_result.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
+using namespace oceanbase::common::sqlclient;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
@@ -164,13 +174,130 @@ OB_INLINE int ObResultSet::open_plan()
   return ret;
 }
 
+
+int ObResultSet::check_ai_column_strict_read()
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo &session = get_session();
+  const int64_t ref_count = session.get_ai_column_ref_count();
+  bool strict_read = false;
+  if (0 == ref_count) {
+  } else if (OB_FAIL(session.get_sys_variable(SYS_VAR_AI_COLUMN_STRICT_READ, strict_read))) {
+  } else if (!strict_read) {
+    session.clear_ai_column_refs();
+  } else {
+    ObSchemaGetterGuard guard;
+    if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < ref_count; ++i) {
+      const ObTableSchema *table_schema = NULL;
+      const ObDatabaseSchema *db_schema = NULL;
+      const uint64_t table_id = session.get_ai_column_ref(i).table_id_;
+      const uint64_t column_id = session.get_ai_column_ref(i).column_id_;
+      const ObColumnSchemaV2 *state_column = NULL;
+      if (OB_FAIL(guard.get_table_schema(table_id, table_schema))) {
+      } else if (NULL == table_schema) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(guard.get_database_schema(table_schema->get_database_id(), db_schema))) {
+      } else if (OB_ISNULL(db_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        const ObColumnSchemaV2 *result_column = table_schema->get_column_schema(column_id);
+        if (NULL == result_column) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          ObArenaAllocator alloc;
+          const int32_t prefix_len = static_cast<int32_t>(strlen(AI_COLUMN_META_PREFIX));
+          for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
+               OB_SUCC(ret) && iter != table_schema->column_end() && NULL == state_column;
+               ++iter) {
+            const ObString &comment = (*iter)->get_comment_str();
+            ObAiColumnDef def;
+            if (NULL != comment.ptr()
+                && comment.length() > prefix_len
+                && 0 == MEMCMP(comment.ptr(), AI_COLUMN_META_PREFIX, prefix_len)
+                && OB_SUCCESS == decode_ai_column_meta(comment, alloc, def)
+                && 0 == def.column_name_.compare(result_column->get_column_name_str())) {
+              state_column = table_schema->get_column_schema(def.state_column_name_);
+            }
+          }
+        }
+        // Compatibility for tables created before the schema-encoded metadata.
+        if (OB_SUCC(ret) && NULL == state_column) {
+          ObSqlString meta_sql;
+          uint64_t state_column_id = OB_INVALID_ID;
+          if (OB_FAIL(meta_sql.assign_fmt(
+                       "SELECT state_column_id FROM oceanbase.%s WHERE table_id = %lu AND column_id = %lu",
+                       OB_ALL_AI_COLUMN_TNAME, table_id, column_id))) {
+          } else {
+            SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+              ObMySQLResult *result = NULL;
+              if (OB_FAIL(GCTX.sql_proxy_->read(res, meta_sql.ptr()))) {
+              } else if (NULL == (result = res.get_result())) {
+                ret = OB_ERR_UNEXPECTED;
+              } else if (OB_FAIL(result->next())) {
+              } else {
+                int64_t state_id = 0;
+                if (OB_FAIL(result->get_int("state_column_id", state_id))) {
+                } else {
+                  state_column_id = static_cast<uint64_t>(state_id);
+                }
+              }
+            }
+          }
+          if (OB_SUCC(ret)) {
+            state_column = table_schema->get_column_schema(state_column_id);
+          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (NULL == state_column) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ObSqlString count_sql;
+        if (OB_FAIL(count_sql.append_fmt(
+                      "SELECT count(*) FROM `%.*s`.`%.*s` WHERE `%.*s` != %ld",
+                      db_schema->get_database_name_str().length(),
+                      db_schema->get_database_name_str().ptr(),
+                      table_schema->get_table_name_str().length(),
+                      table_schema->get_table_name_str().ptr(),
+                      state_column->get_column_name_str().length(),
+                      state_column->get_column_name_str().ptr(),
+                      0))) {
+        } else {
+          SMART_VAR(ObMySQLProxy::MySQLResult, res2) {
+            ObMySQLResult *result2 = NULL;
+            if (OB_FAIL(GCTX.sql_proxy_->read(res2, count_sql.ptr()))) {
+            } else if (NULL == (result2 = res2.get_result())) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (OB_FAIL(result2->next())) {
+            } else {
+              int64_t unfinished = 0;
+              if (OB_FAIL(result2->get_int(static_cast<int64_t>(0), unfinished))) {
+              } else if (unfinished > 0) {
+                ret = OB_AI_COLUMN_UNFINISHED_TASK;
+                LOG_USER_ERROR(OB_AI_COLUMN_UNFINISHED_TASK, table_id, column_id);
+              }
+            }
+          }
+        }
+      }
+    }
+    session.clear_ai_column_refs();
+  }
+  return ret;
+}
+
 int ObResultSet::open()
 {
   int ret = OB_SUCCESS;
   my_session_.set_process_query_time(ObClockGenerator::getClock());
   LinkExecCtxGuard link_guard(my_session_, get_exec_context());
   ObTraceSpanGuard open_span(&my_session_, TRACE_OPEN);
-  if (OB_FAIL(execute())) {
+  if (OB_FAIL(check_ai_column_strict_read())) {
+  } else if (OB_FAIL(execute())) {
   } else if (OB_FAIL(open_result())) {
   }
 

@@ -1906,7 +1906,16 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
       bool is_lob_column = is_lob_storage(col_schema->get_data_type());
       col_expr->set_lob_column(is_lob_column);
       column_item.expr_ = col_expr;
-      if (session_info_->get_ddl_info().is_ddl()) {
+      if (col_schema->has_column_flag(AI_COLUMN_RESULT_FLAG)
+          && T_INSERT_SCOPE != current_scope_) {
+        int add_ret = session_info_->add_ai_column_ref(table_item.ref_id_,
+                                                       col_schema->get_column_id());
+        if (OB_FAIL(add_ret)) {
+          ret = add_ret;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (session_info_->get_ddl_info().is_ddl()) {
         column_item.set_default_value(col_schema->get_orig_default_value());
       } else {
         column_item.set_default_value(col_schema->get_cur_default_value());
@@ -3057,7 +3066,19 @@ int ObDMLResolver::resolve_table_column_expr(const ObQualifiedName &q_name, ObRa
       }
     }
   }
-
+  if (OB_SUCC(ret) && OB_NOT_NULL(real_ref_expr)
+      && real_ref_expr->is_column_ref_expr()) {
+    const ObColumnRefRawExpr *col_ref = static_cast<const ObColumnRefRawExpr *>(real_ref_expr);
+    const uint64_t tid = col_ref->get_table_id();
+    const uint64_t cid = col_ref->get_column_id();
+    const share::schema::ObColumnSchemaV2 *column_schema = NULL;
+    int schema_ret = schema_checker_->get_column_schema(tid, cid, column_schema);
+    if (OB_SUCCESS == schema_ret
+        && NULL != column_schema && column_schema->has_column_flag(AI_COLUMN_RESULT_FLAG)) {
+      if (OB_FAIL(session_info_->add_ai_column_ref(tid, cid))) {
+      }
+    }
+  }
 
   return ret;
 }

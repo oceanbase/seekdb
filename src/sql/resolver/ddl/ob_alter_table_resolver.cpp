@@ -17,6 +17,10 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "config_bridge.h"
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_result.h"
+#include "share/inner_table/ob_inner_table_schema.h"
+#include "lib/string/ob_sql_string.h"
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -472,6 +476,87 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             }
             break;
           }
+        case T_AI_COLUMN_RETRY: {
+          if (node.num_child_ > 1) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                           "combining AI COLUMN RETRY with another ALTER action");
+          } else if (OB_ISNULL(action_node->children_[0])) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            const ParseNode *name_node = action_node->children_[0];
+            ObString col_name(name_node->str_len_, name_node->str_value_);
+            const ObColumnSchemaV2 *col = NULL;
+            if (OB_ISNULL(table_schema_)
+                || NULL == (col = table_schema_->get_column_schema(col_name))
+                || !col->has_column_flag(AI_COLUMN_RESULT_FLAG)) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                             "retrying a column that is not an AI column");
+            } else {
+              alter_table_stmt->get_alter_table_arg().table_id_ =
+                  table_schema_->get_table_id();
+              alter_table_stmt->set_table_id(table_schema_->get_table_id());
+              ObString col_name_copy;
+              if (OB_FAIL(ob_write_string(*allocator_, col_name, col_name_copy))) {
+              } else {
+                alter_table_stmt->set_ai_column_retry(true);
+                alter_table_stmt->set_retry_ai_column_name(col_name_copy);
+                alter_table_stmt->set_retry_ai_column_id(col->get_column_id());
+              }
+              ObSqlString meta_sql;
+              uint64_t state_column_id = OB_INVALID_ID;
+              uint64_t request_column_id = OB_INVALID_ID;
+              uint64_t spec_column_id = OB_INVALID_ID;
+              if (OB_SUCC(ret)) {
+                if (OB_ISNULL(params_.sql_proxy_)) {
+                  ret = OB_ERR_UNEXPECTED;
+                } else if (OB_FAIL(meta_sql.assign_fmt(
+                             "SELECT state_column_id, request_column_id, result_spec_column_id "
+                             "FROM oceanbase.%s WHERE table_id = %lu AND column_id = %lu",
+                             share::OB_ALL_AI_COLUMN_TNAME, table_schema_->get_table_id(),
+                             col->get_column_id()))) {
+                } else {
+                  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+                    common::sqlclient::ObMySQLResult *result = NULL;
+                    if (OB_FAIL(params_.sql_proxy_->read(res, meta_sql.ptr()))) {
+                    } else if (NULL == (result = res.get_result())) {
+                      ret = OB_ERR_UNEXPECTED;
+                    } else if (OB_FAIL(result->next())) {
+                    } else {
+                      int64_t state_id = 0;
+                      int64_t request_id = 0;
+                      int64_t spec_id = 0;
+                      if (OB_FAIL(result->get_int("state_column_id", state_id))
+                          || OB_FAIL(result->get_int("request_column_id", request_id))
+                          || OB_FAIL(result->get_int("result_spec_column_id", spec_id))) {
+                      } else {
+                        state_column_id = static_cast<uint64_t>(state_id);
+                        request_column_id = static_cast<uint64_t>(request_id);
+                        spec_column_id = static_cast<uint64_t>(spec_id);
+                      }
+                    }
+                  }
+                }
+              }
+              if (OB_SUCC(ret)) {
+                alter_table_stmt->set_retry_ai_state_column_id(state_column_id);
+                alter_table_stmt->set_retry_ai_request_column_id(request_column_id);
+                alter_table_stmt->set_retry_ai_spec_column_id(spec_column_id);
+              }
+              ParseNode *where_node = action_node->children_[1];
+              if (NULL != where_node && NULL != where_node->str_value_) {
+                ObString predicate(where_node->str_len_, where_node->str_value_);
+                ObString predicate_copy;
+                if (OB_FAIL(ob_write_string(*allocator_, predicate, predicate_copy))) {
+                } else {
+                  alter_table_stmt->set_retry_ai_predicate(predicate_copy);
+                }
+              }
+            }
+          }
+          break;
+        }
         case T_ALTER_PARTITION_OPTION: {
             has_alter_partition = true;
             alter_table_stmt->set_alter_table_partition();
@@ -3462,6 +3547,19 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
       }
     }
     add_column_cnt_++;
+  }
+  if (OB_SUCC(ret)) {
+    ObSEArray<ObColumnSchemaV2, 8> &hidden_cols = get_pending_ai_hidden_columns();
+    for (int64_t k = 0; OB_SUCC(ret) && k < hidden_cols.count(); ++k) {
+      AlterColumnSchema alter_hidden;
+      if (OB_FAIL(alter_hidden.assign(hidden_cols.at(k)))) {
+      } else {
+        alter_hidden.alter_type_ = OB_DDL_ADD_COLUMN;
+        if (OB_FAIL(alter_table_stmt->add_column(alter_hidden))) {
+        }
+      }
+    }
+    hidden_cols.reuse();
   }
   return ret;
 }

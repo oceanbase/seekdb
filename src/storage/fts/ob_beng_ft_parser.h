@@ -39,6 +39,9 @@ public:
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
+      copy_buf_(nullptr),
+      copy_cap_(0),
+      copy_pos_(0),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
@@ -62,6 +65,12 @@ private:
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
+  // Tokens from the analyzer point into a reused buffer, so copy them into a
+  // per-document buffer to keep hash-map keys stable.  The buffer is filled
+  // monotonically; total copied bytes do not exceed the document length.
+  char *copy_buf_;
+  int64_t copy_cap_;
+  int64_t copy_pos_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);

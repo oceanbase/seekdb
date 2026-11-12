@@ -21,6 +21,7 @@
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/dml/ob_dml_service.h"
+#include "sql/engine/dml/ob_ai_column_dml.h"
 
 namespace oceanbase
 {
@@ -618,6 +619,7 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
     saved_conn_(),
     need_foreign_key_check_(false),
     need_close_conn_(false),
+    ai_column_flag_(-1),
     iter_end_(false),
     dml_rtctx_(eval_ctx_, ctx, *this),
     execute_single_row_(false),
@@ -636,6 +638,7 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
 int ObTableModifyOp::inner_open()
 {
   int ret = OB_SUCCESS;
+  ai_column_flag_ = -1;
   ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
   if (OB_FAIL(init_foreign_key_operation())) {
   } else if (MY_SPEC.plan_->has_nested_sql() && OB_FAIL(open_inner_conn())) {
@@ -789,6 +792,27 @@ int ObTableModifyOp::inner_switch_iterator()
   }
 
   return ret;
+}
+
+bool ObTableModifyOp::has_ai_column(const ObDMLBaseCtDef &dml_ctdef)
+{
+  if (-1 == ai_column_flag_) {
+    ai_column_flag_ = 0;
+    const uint64_t cand_ids[2] = { dml_ctdef.das_base_ctdef_.index_tid_,
+                                   dml_ctdef.das_base_ctdef_.table_id_ };
+    ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
+    const share::schema::ObTableSchema *table_schema = NULL;
+    if (NULL != sql_ctx && NULL != sql_ctx->schema_guard_) {
+      for (int64_t i = 0; 0 == ai_column_flag_ && i < 2; ++i) {
+        table_schema = NULL;
+        if (OB_SUCCESS == sql_ctx->schema_guard_->get_table_schema(cand_ids[i], table_schema)
+            && NULL != table_schema && table_has_ai_column(*table_schema)) {
+          ai_column_flag_ = 1;
+        }
+      }
+    }
+  }
+  return 1 == ai_column_flag_;
 }
 
 int ObTableModifyOp::inner_close()

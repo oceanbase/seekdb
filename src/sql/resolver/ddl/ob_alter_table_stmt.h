@@ -53,6 +53,20 @@ public:
 
   bool is_alter_triggers() const { return is_alter_triggers_; }
   void set_is_alter_triggers(const bool flag) { is_alter_triggers_ = flag; }
+  bool is_ai_column_retry() const { return is_ai_column_retry_; }
+  void set_ai_column_retry(const bool flag) { is_ai_column_retry_ = flag; }
+  const common::ObString &get_retry_ai_column_name() const { return retry_ai_column_name_; }
+  void set_retry_ai_column_name(const common::ObString &name) { retry_ai_column_name_ = name; }
+  const common::ObString &get_retry_ai_predicate() const { return retry_ai_predicate_; }
+  void set_retry_ai_predicate(const common::ObString &predicate) { retry_ai_predicate_ = predicate; }
+  uint64_t get_retry_ai_column_id() const { return retry_ai_column_id_; }
+  void set_retry_ai_column_id(const uint64_t id) { retry_ai_column_id_ = id; }
+  uint64_t get_retry_ai_state_column_id() const { return retry_ai_state_column_id_; }
+  void set_retry_ai_state_column_id(const uint64_t id) { retry_ai_state_column_id_ = id; }
+  uint64_t get_retry_ai_request_column_id() const { return retry_ai_request_column_id_; }
+  void set_retry_ai_request_column_id(const uint64_t id) { retry_ai_request_column_id_ = id; }
+  uint64_t get_retry_ai_spec_column_id() const { return retry_ai_spec_column_id_; }
+  void set_retry_ai_spec_column_id(const uint64_t id) { retry_ai_spec_column_id_ = id; }
 
   int set_origin_database_name(const common::ObString &origin_db_name);
   int set_origin_table_name(const common::ObString &origin_table_name);
@@ -111,6 +125,13 @@ private:
   common::ObSArray<obcall::ObCreateIndexArg*> index_arg_list_;
   common::ObIAllocator *fts_arg_allocator_;
   bool is_alter_triggers_;
+  bool is_ai_column_retry_;
+  common::ObString retry_ai_column_name_;
+  common::ObString retry_ai_predicate_;
+  uint64_t retry_ai_column_id_;
+  uint64_t retry_ai_state_column_id_;
+  uint64_t retry_ai_request_column_id_;
+  uint64_t retry_ai_spec_column_id_;
   obcall::ObAlterTriggerArg tg_arg_;
   uint64_t alter_table_action_count_;
   obcall::ObExchangePartitionArg exchange_partition_arg_;

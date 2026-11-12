@@ -884,6 +884,22 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       }
     }
 
+    // AI COLUMN hidden bookkeeping columns are appended after every user
+    // column, so that their column ids stay strictly increasing.
+    if (OB_SUCC(ret)) {
+      ObSEArray<ObColumnSchemaV2, 8> &hidden_cols = get_pending_ai_hidden_columns();
+      for (int64_t k = 0; OB_SUCC(ret) && k < hidden_cols.count(); ++k) {
+        ObColumnSchemaV2 &hidden = hidden_cols.at(k);
+        if (OB_FAIL(table_schema.add_column(hidden))) {
+        } else {
+          ObColumnNameHashWrapper name_key(hidden.get_column_name_str());
+          if (OB_FAIL(column_name_set_.set_refactored(name_key))) {
+          }
+        }
+      }
+      hidden_cols.reuse();
+    }
+
     if (OB_SUCC(ret)) {
       for (int32_t i = resolved_cols_count; i < resolved_cols.count() && OB_SUCC(ret); i++) {
         ObColumnSchemaV2 &hidden_col = resolved_cols.at(i);
