@@ -1,0 +1,37 @@
+src/storage/ls/ob_ls_tablet_service.h
+  s_c1726ac37da477::t_1fecf66e89b9df 84,517-518,769-770
+src/storage/ls/ob_ls_tablet_service.cpp
+  s_c1726ac37da477::t_801af61b9f61b0 20
+  s_c1726ac37da477::t_b57425a0595cb5 1906-1907,1912-1922,2807-2808,2820-2823,2912-2915,5531-5532
+  s_c1726ac37da477::t_1fecf66e89b9df 21,67-73,77,82-109,115-119,137-153,155-157,161-168,171-175,177,180,182-189,191-201,203-208
+  s_c1726ac37da477::t_fe4aa80a98ddc0 110-114,2830-2836,2918
+  s_c1726ac37da477::t_2b025a2423a9f8 76,81,5533-5540,5542-5549
+  s_c1726ac37da477::t_e6fd4699bbef6d 74-75
+  s_c1726ac37da477::t_c11bbd39859111 78-80
+  s_c1726ac37da477::t_f6542b0b5c1ec2 120-122,134-136
+  s_c1726ac37da477::t_2f54704039f0a9 154
+  s_c1726ac37da477::t_9530e8b375469a 158-160
+  s_c1726ac37da477::t_e8d04dfd5e044f 169-170
+  s_c1726ac37da477::t_583e00ce3b6942 176
+  s_c1726ac37da477::t_1273155faf09ea 178-179
+  s_c1726ac37da477::t_aa0a24458463af 181
+  s_c1726ac37da477::t_6ef26eb6c8e067 190
+  s_c1726ac37da477::t_d50f8929e5ed95 202
+  s_c1726ac37da477::t_f9f40c5cf569fa 209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a7f6521ccacf90c6387de5b3965f4dad692eb850",
+  "prompts": {},
+  "sessions": {
+    "s_c1726ac37da477": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c9b8-d9ec-7e81-bc9f-4f6259e85576",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}
