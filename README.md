@@ -1,4 +1,4 @@
-OB-P:KdJz2wCKtjn3EEQAQ_xGQ
+OB-P:KdJ2z2wCKtjn3E0QAQ_xGQ
 
 <div align="center">
 
@@ -66,7 +66,7 @@ MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · CO
 
 </div>
 
-OB-P:KdJz2wCKtjn3EEQAQ_xGQ
+OB-P:KdJ2z2wCKtjn3E0QAQ_xGQ
 
 ## 📄 License
 
