@@ -108,18 +108,23 @@ def linux_libdir():
     raise ValueError("unsupported native ELF $LIB directory")
 
 
-def linux_hwcaps():
+def linux_loader_help():
     # Older loaders have no hwcaps directories and do not recognize --help.
     if version_tuple(os.confstr("CS_GNU_LIBC_VERSION").split()[-1]) < version_tuple("2.33"):
-        return ()
+        return ""
     # Use the packaging process's trusted loader, never an input ELF's interpreter.
     headers = subprocess.check_output(["readelf", "-lW", str(Path("/proc/self/exe").resolve())], text=True)
     interpreter = re.search(r"\[Requesting program interpreter: (.*?)\]", headers)
     if not interpreter:
-        return ()
+        return ""
     result = subprocess.run([interpreter.group(1), "--help"], text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    section = result.stdout.partition("Subdirectories of glibc-hwcaps directories, in priority order:")[2]
+    return result.stdout
+
+
+def linux_hwcaps(output=None):
+    output = linux_loader_help() if output is None else output
+    section = output.partition("Subdirectories of glibc-hwcaps directories, in priority order:")[2]
     section = section.split("\n\n", 1)[0]
     return tuple("glibc-hwcaps/" + name for name in re.findall(
         r"^\s+(\S+) \(supported, searched\)$", section, re.MULTILINE))
@@ -139,7 +144,14 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     origins = {}
     executable_arch = architecture(executable, "linux")
     libdir = None
-    subdirectories = linux_hwcaps() + ("",)
+    loader_help = linux_loader_help()
+    subdirectories = linux_hwcaps(loader_help) + ("",)
+    defaults = [Path(name) for name in re.findall(r"^\s+(/\S+) \(system search path\)$", loader_help, re.MULTILINE)]
+    if not defaults:
+        libdir = linux_libdir()
+        defaults = [Path("/") / libdir, Path("/usr") / libdir]
+        if "/" in libdir:
+            defaults += [Path("/lib"), Path("/usr/lib")]
 
     def expand(entry, source):
         def replace(match):
@@ -174,8 +186,11 @@ def linux_libraries(prefix, original, directories, extra_libraries):
         target.chmod(0o755)
         pending.append((source, target, inherited))
 
+    root_paths = dict(re.findall(r"\((RPATH|RUNPATH)\).*?\[(.*?)\]", dynamic(original)))
+    inherited = () if "RUNPATH" in root_paths else tuple(
+        expand(entry, original) for entry in root_paths.get("RPATH", "").split(":") if entry)
     for source in extra_libraries:
-        enqueue(source, source.name)
+        enqueue(source, source.name, inherited)
     while pending:
         source, target, inherited = pending.pop()
         metadata = dynamic(source)
@@ -194,6 +209,8 @@ def linux_libraries(prefix, original, directories, extra_libraries):
                 raise ValueError("runtime dependency must use a library basename: %s" % name)
             candidates = [directory / subdirectory / name for directory in search
                           for subdirectory in subdirectories] + cache.get(name, [])
+            candidates += [directory / subdirectory / name for directory in defaults
+                           for subdirectory in subdirectories]
             resolved = next((path for path in candidates if matching(path)), None)
             if resolved is None:
                 raise ValueError("unresolved dependency %s imported by %s; supply --runtime-lib-dir" % (name, source))
