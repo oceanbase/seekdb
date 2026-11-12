@@ -70,17 +70,19 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObParser parser(ctx.get_allocator(), session->get_sql_mode());
-    ParseResult parse_result;
+    ParsedSql parsed;
 
     SqlInfo not_param_info;
+    ParameterizationResult bindings;
     bool is_transform_outline = false;
-    if (OB_FAIL(parser.parse(insertsql.string(), parse_result))) {
+    if (OB_FAIL(parser.parse(insertsql.string(), parsed))) {
     } else if (OB_FAIL(ObSqlParameterization::transform_syntax_tree(ctx.get_allocator(),
                                                                     *session,
                                                                     NULL,
-                                                                    parse_result.result_tree_,
+                                                                    parsed,
                                                                     not_param_info,
                                                                     param_store,
+                                                                    bindings,
                                                                     NULL,
                                                                     is_transform_outline))) {
     } else {
@@ -91,6 +93,8 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
         resolver_ctx.schema_checker_ = &schema_checker;
         resolver_ctx.session_info_ = session;
         resolver_ctx.param_list_ = &param_store;
+        resolver_ctx.parameterization_ = &bindings;
+        resolver_ctx.syntax_ = &parsed;
         resolver_ctx.database_id_ = session->get_database_id();
         resolver_ctx.disable_privilege_check_ = PRIV_CHECK_FLAG_DISABLE;
         resolver_ctx.expr_factory_ = ctx.get_expr_factory();
@@ -105,12 +109,9 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
           resolver_ctx.query_ctx_->sql_schema_guard_.set_schema_guard(ctx.get_sql_ctx()->schema_guard_);
           ObResolver resolver(resolver_ctx);
           ObStmt *astmt = NULL;
-          ParseNode *stmt_tree = parse_result.result_tree_->children_[0];
-          if (OB_ISNULL(stmt_tree) || OB_ISNULL(ctx.get_stmt_factory()->get_query_ctx())) {
+          if (OB_ISNULL(parsed.statement()) || OB_ISNULL(ctx.get_stmt_factory()->get_query_ctx())) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT,
-                                              *stmt_tree,
-                                              astmt))) {
+          } else if (OB_FAIL(resolver.resolve(parsed, astmt))) {
           } else {
             insert_stmt = static_cast<ObInsertStmt*>(astmt);
             ctx.get_stmt_factory()->get_query_ctx()->reset();

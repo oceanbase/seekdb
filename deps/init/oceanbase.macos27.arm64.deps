@@ -18,8 +18,6 @@ devdeps-roaringbitmap-croaring-3.0.0-20251208.tar.gz
 devdeps-xz-5.2.2-20251208.tar.gz
 devdeps-vsag-1.1.0-20260107.tar.gz
 [tools]
-obdevtools-bison-2.4.1-20251219.tar.gz
-obdevtools-flex-2.5.35-20251219.tar.gz
 
 [tools-deps]
 obshell-4.4.1.1-20260325.tgz

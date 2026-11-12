@@ -29,7 +29,7 @@
 #include "share/ob_simple_batch.h"
 #include "share/config/ob_server_config.h"
 #include "sql/ob_sql_define.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "share/statement/ob_stmt_type.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
 #include "sql/session/ob_local_session_var.h"
@@ -55,6 +55,7 @@ class ObISrsProvider;
 }
 namespace sql
 {
+class ParsedSql;
 class ObRawExprFactory;  // fwd: previously re-exported through the share schema include chain
 class ObMaintainDepInfoTaskQueue;
 class RowDesc;
@@ -197,8 +198,7 @@ public:
    *  duplicates.
    */
 
-  static int replace_questionmarks(ParseNode *tree,
-                                   const ParamStore &params);
+
 
   static int calc_const_or_calculable_expr(ObExecContext *exec_ctx,
                                            const ObRawExpr *raw_expr,
@@ -334,11 +334,9 @@ public:
                                bool is_from_view = false);
   static int check_and_copy_column_alias_name(const common::ObCollationType cs_type, const bool is_auto_gen,
                                               common::ObIAllocator *allocator, common::ObString &name);
-  static bool cause_implicit_commit(ParseResult &result);
-  static bool is_end_trans_stmt(const ParseResult &result);
-  static bool is_commit_stmt(const ParseResult &result);
-  static bool is_mysql_ps_not_support_stmt(const ParseResult &result);
-  static bool is_readonly_stmt(ParseResult &result);
+
+  static bool is_mysql_ps_not_support_stmt(const ParsedSql &syntax);
+
   static bool is_allowed_on_standby(const ObItemType stmt_type);
   static int make_field_name(const char *src, int64_t len, const common::ObCollationType cs_type,
                              common::ObIAllocator *allocator, common::ObString &name);
@@ -395,13 +393,10 @@ public:
                                       const ObSQLSessionInfo &session,
                                       const common::ObString &sql,
                                       common::ObString &param_sql);
-  static int filter_head_space(ObString &sql);
-  static char find_first_empty_char(const ObString &sql);
   static int construct_outline_sql(common::ObIAllocator &allocator,
                                    const ObSQLSessionInfo &session,
                                    const common::ObString &outline_content,
                                    const common::ObString &orig_sql,
-                                   bool is_need_filter_hint,
                                    common::ObString &outline_sql);
 
   static int reconstruct_sql(ObIAllocator &allocator, const ObStmt *stmt, ObString &sql,
@@ -409,9 +404,6 @@ public:
                              ObObjPrintParams print_params = ObObjPrintParams(),
                              const ParamStore *param_store = NULL,
                              const ObSQLSessionInfo *session = NULL);
-  static int reconstruct_ps_sql(ObSqlString &reconstruct_sql, const ObString &ps_sql,
-                                const ObIArray<const common::ObObjParam *> &const_tokens);
-  static int append_obj_param(ObSqlString &reconstruct_sql, const common::ObObjParam & obj_param);
   static int print_sql(char *buf,
                        int64_t buf_len,
                        int64_t &pos,
@@ -569,7 +561,7 @@ public:
                                         const common::ObIArray<OrderItem> &order_keys,
                                         int64_t start_key,
                                         OrderItem &encode_sortkey);
-  static ObItemType get_sql_item_type(const ParseResult &result);
+
   static bool is_enable_explain_batched_multi_statement();
   static bool is_support_batch_exec(ObItemType type);
   static bool is_pl_nested_sql(ObExecContext *cur_ctx);
@@ -687,17 +679,6 @@ public:
                            const sql::ObSQLSessionInfo &session,
                            common::ObIAllocator &allocator,
                            common::ObString &limit_sql);
-  static int replace_question_mark(const common::ObString &not_param_sql,
-                                   const share::schema::ObMaxConcurrentParam &concurrent_param,
-                                   int64_t start_pos,
-                                   int64_t cur_pos,
-                                   int64_t &question_mark_offset,
-                                   common::ObSqlString &string_helper);
-  static int replace_not_param(const common::ObString &not_param_sql,
-                               const ParseNode &node,
-                               int64_t start_pos,
-                               int64_t cur_pos,
-                               common::ObSqlString &string_helper);
   static int get_outline_sql(const share::schema::ObOutlineInfo &outline_info, common::ObIAllocator &allocator, const ObSQLSessionInfo &session, common::ObString &outline_sql);
 }; // end of ObSQLUtils
 
@@ -830,12 +811,14 @@ struct ObSqlTraits
   bool is_readonly_stmt_;
   bool is_cause_implicit_commit_;
   bool is_commit_stmt_;
-  ObItemType stmt_type_;
+  stmt::StmtType stmt_type_;
+  bool allowed_on_standby_;
 
   ObSqlTraits() : is_readonly_stmt_(false),
                   is_cause_implicit_commit_(false),
                   is_commit_stmt_(false),
-                  stmt_type_(T_INVALID)
+                  stmt_type_(stmt::T_NONE),
+                  allowed_on_standby_(false)
   {
     sql_id_[common::OB_MAX_SQL_ID_LENGTH] = '\0';
   }
@@ -845,12 +828,13 @@ struct ObSqlTraits
     is_readonly_stmt_ = false;
     is_cause_implicit_commit_ = false;
     is_commit_stmt_ = false;
-    stmt_type_ = T_INVALID;
+    stmt_type_ = stmt::T_NONE;
+    allowed_on_standby_ = false;
   }
    TO_STRING_KV(K(is_readonly_stmt_),
                 K(is_cause_implicit_commit_),
                 K(is_commit_stmt_),
-                K(stmt_type_));
+                K(stmt_type_), K(allowed_on_standby_));
 };
 
 template<typename ValueType>

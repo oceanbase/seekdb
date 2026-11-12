@@ -46,6 +46,7 @@ class ObDDLService;
 }
 namespace sql
 {
+namespace peg { struct Node; }
 class ObColumnRefRawExpr;
 class ObDMLStmt;
 class ObExecContext;
@@ -481,7 +482,8 @@ public:
       int64_t extra_info_max_size,
       int64_t& extra_info_actual_size);
   static int update_param_extra_actual_size(const schema::ObTableSchema &data_schema, schema::ObTableSchema &index_schema);
-  static int check_vec_index_param(const ParseNode *option_node,
+  static int check_vec_index_param(const sql::peg::Node &option_node,
+      const ObString &parameter_text,
       common::ObIAllocator &allocator,
       const schema::ObTableSchema &tbl_schema,
       ObString &index_params,
@@ -494,9 +496,9 @@ public:
       ObVectorIndexParam &param,
       const bool set_default=true);
   static int parse_time_string_to_seconds(const ObString &time_str, int64_t &seconds);
-  static int resolve_query_param(
-      const ParseNode *option_node,
-      ObVectorIndexQueryParam& query_param);
+  static int resolve_query_param(const ObString &name,
+                                 const ObString &value,
+                                 ObVectorIndexQueryParam &query_param);
   static int get_vector_from_text_by_embedding(
       ObIAllocator &allocator,
       const ObString &query_text,
@@ -897,7 +899,7 @@ private:
       const schema::ObColumnSchemaV2 *&new_column,
       const schema::ObColumnSchemaV2 *cur_column);
   static int check_index_param(
-      const ParseNode *option_node,
+      const sql::peg::Node &option_node,
       common::ObIAllocator &allocator,
       const int64_t vector_dim,
       const bool is_sparse_vec,

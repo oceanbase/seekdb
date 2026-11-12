@@ -37,15 +37,10 @@ ObDropDatabaseResolver::~ObDropDatabaseResolver()
 {
 }
 
-int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
+int ObDropDatabaseResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
-  ParseNode *node = const_cast<ParseNode*>(&parse_tree);
-  if (OB_ISNULL(node)
-    || OB_UNLIKELY(node->type_ != T_DROP_DATABASE)
-    || OB_UNLIKELY(node->num_child_ != DB_NODE_COUNT)
-    || OB_ISNULL(node->children_)
-    || OB_ISNULL(allocator_)) {
+  if (parse_tree.kind() != peg::NodeKind::DropDatabase || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -58,27 +53,18 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
       stmt_ = drop_database_stmt;
       
     }
-    //resolve if exist
-    if (OB_SUCC(ret)) {
-      if (node->children_[IF_EXIST] != NULL) {
-        if (node->children_[IF_EXIST]->type_ != T_IF_EXISTS) {
-        } else {
-          drop_database_stmt->set_if_exist(true);;
-        }
-      }
-    }
+    OX (drop_database_stmt->set_if_exist(peg::drop_if_exists(parse_tree)));
     /* database name */
     if (OB_SUCC(ret)) {
       //resolve database name
       ObString database_name;
-      ParseNode *dbname_node = node->children_[DBNAME];
-      if (OB_ISNULL(dbname_node) || OB_UNLIKELY(T_IDENT != dbname_node->type_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        database_name.assign_ptr(dbname_node->str_value_,
-                                 static_cast<int32_t>(dbname_node->str_len_));
+      const auto &name = peg::database_name(parse_tree);
+      if (OB_SUCC(ret)) {
+        const auto name_text = name.text();
+        OZ (ob_write_string(*allocator_, syntax_text(name_text), database_name));
         ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-        if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
         } else {
           bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
           ObCollationType cs_type = CS_TYPE_INVALID;

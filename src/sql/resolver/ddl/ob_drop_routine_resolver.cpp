@@ -22,25 +22,20 @@ namespace oceanbase
 {
 namespace sql
 {
-int ObDropProcedureResolver::resolve(const ParseNode &parse_tree)
+int ObDropProcedureResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
-  const ParseNode *name_node = NULL;
+  const peg::Node &name_node = peg::routine_name(parse_tree);
   ObString db_name;
   ObString sp_name;
   ObDropRoutineStmt *proc_stmt = NULL;
-  if (OB_UNLIKELY(parse_tree.type_ != T_SP_DROP)
-      || OB_ISNULL(parse_tree.children_)
-      || OB_UNLIKELY(parse_tree.num_child_ != 1)
-      || OB_ISNULL(name_node = parse_tree.children_[0])) {
+  if (parse_tree.kind() != peg::NodeKind::DropProcedure) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("parse tree is invalid", "type", get_type_name(parse_tree.type_),
-             K_(parse_tree.children), K_(parse_tree.num_child), K(name_node));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *name_node, db_name, sp_name))) {
+  } else if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, peg::name_parts(name_node), *allocator_, db_name, sp_name))) {
   } else if (OB_ISNULL(proc_stmt = create_stmt<ObDropRoutineStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("create drop procedure stmt failed");
@@ -52,29 +47,24 @@ int ObDropProcedureResolver::resolve(const ParseNode &parse_tree)
     routine_arg.db_name_ = db_name;
     routine_arg.routine_name_ = sp_name;
     routine_arg.routine_type_ = share::schema::ROUTINE_PROCEDURE_TYPE;
-    routine_arg.if_exist_ = parse_tree.value_;
+    routine_arg.if_exist_ = peg::routine_if_exists(parse_tree);
   }
   return ret;
 }
 
-int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
+int ObDropFunctionResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
-  const ParseNode *name_node = NULL;
+  const peg::Node &name_node = peg::routine_name(parse_tree);
   ObString db_name;
   ObString sp_name;
   ObDropRoutineStmt *routine_stmt = NULL;
-  if (parse_tree.type_ != T_SF_DROP
-      || OB_ISNULL(parse_tree.children_)
-      || OB_UNLIKELY(parse_tree.num_child_ != 1)
-      || OB_ISNULL(name_node = parse_tree.children_[0])) {
+  if (parse_tree.kind() != peg::NodeKind::DropFunction) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("parse tree is invalid", "type", get_type_name(parse_tree.type_),
-             K_(parse_tree.children), K_(parse_tree.num_child), K(name_node));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
   } else {
-    if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *name_node, db_name, sp_name))) {
+    if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, peg::name_parts(name_node), *allocator_, db_name, sp_name))) {
       // MySQL allows DROP FUNCTION to reach the executor without a selected
       // database so IF EXISTS can return the compatible 1305 warning.
       if (OB_ERR_NO_DB_SELECTED == ret) {
@@ -91,7 +81,7 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
         routine_arg.db_name_ = db_name;
         routine_arg.routine_name_ = sp_name;
         routine_arg.routine_type_ = share::schema::ROUTINE_FUNCTION_TYPE;
-        routine_arg.if_exist_ = parse_tree.value_;
+        routine_arg.if_exist_ = peg::routine_if_exists(parse_tree);
       }
     }
   }

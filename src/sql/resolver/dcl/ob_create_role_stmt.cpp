@@ -50,8 +50,7 @@ int64_t ObCreateRoleStmt::to_string(char *buf, const int64_t buf_len) const
   if (NULL != buf) {
     J_OBJ_START();
     J_KV(N_STMT_TYPE, ((int)stmt_type_),
-         "role_to_create", role_name_,
-         "password", password_);
+         "role_to_create", role_name_);
     J_OBJ_END();
   }
   return pos;

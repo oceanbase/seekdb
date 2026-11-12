@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include <inttypes.h>
+#include "sql/syntax.h"
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
 #include "share/ob_time_utility2.h"
 #include "sql/resolver/dml/ob_aggr_expr_push_up_analyzer.h"
@@ -27,7 +28,6 @@
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/expr/ob_json_param_type.h"
-#include "sql/parser/ob_parser_utils.h"
 
 #include "sql/executor/ob_memory_tracker.h"
 namespace oceanbase
@@ -71,7 +71,7 @@ ObSelectStmt *ObSelectResolver::get_select_stmt()
   return static_cast<ObSelectStmt*>(stmt_);
 }
 
-int ObSelectResolver::resolve_set_query(const ParseNode &parse_tree)
+int ObSelectResolver::resolve_set_query(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   bool recursive_union = false;
@@ -89,54 +89,21 @@ int ObSelectResolver::resolve_set_query(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObSelectResolver::do_check_basic_table_in_cte_recursive_union(const ParseNode &parse_tree, bool &recursive_union)
+int ObSelectResolver::do_check_node_in_cte_recursive_union(const peg::Node *query,
+                                                           bool &recursive_union)
 {
   int ret = OB_SUCCESS;
-  const ParseNode *table_node = &parse_tree;
-  bool no_defined_database_name = true;
-
-  if (T_ORG == parse_tree.type_) {
-    table_node = parse_tree.children_[0];
-  } else if (T_ALIAS == parse_tree.type_) {
-    table_node = parse_tree.children_[0];
+  auto relations = peg::relation_references(*query);
+  while (!recursive_union && relations->advance_relation()) {
+    const peg::Node &relation = relations->relation_reference();
+    const auto &name = peg::relation_name(relation);
+    const auto name_text = name.text();
+    const ObString table_name(syntax_text(name_text));
+    recursive_union = cte_ctx_.is_with_resolver()
+        && !peg::relation_has_database(relation)
+        && !table_name.empty()
+        && ObCharset::case_insensitive_equal(cte_ctx_.current_cte_table_name_, table_name);
   }
-  no_defined_database_name = (table_node->children_[0] == NULL);
-  // compare current table name is equal to current cte table name
-  ObString tblname(table_node->str_len_, table_node->str_value_);
-  if (cte_ctx_.is_with_resolver()
-      && ObCharset::case_insensitive_equal(cte_ctx_.current_cte_table_name_, tblname)
-      && tblname.length()
-      && no_defined_database_name) {
-    recursive_union = true;
-  }
-  return ret;
-}
-
-
-// recursive test node to find a cte table
-int ObSelectResolver::do_check_node_in_cte_recursive_union(const ParseNode* current_node, bool &recursive_union)
-{
-  int ret = OB_SUCCESS;
-  while (OB_NOT_NULL(current_node)
-        && current_node->type_ != T_RELATION_FACTOR
-        && current_node->type_ != T_WITH_CLAUSE_LIST
-        && current_node->num_child_ == 1) {
-    // the current node with only one child node expands immediately to prevent the recursive level from being too high
-    current_node = current_node->children_[0];
-  }
-
-  if (OB_ISNULL(current_node)) {
-  } else if (current_node->type_ == T_RELATION_FACTOR) {
-    // find relation factor, check it
-    if (OB_FAIL(do_check_basic_table_in_cte_recursive_union(*current_node, recursive_union))) {
-    }
-  } else {
-    for (int32_t i = 0; OB_SUCC(ret) && i < current_node->num_child_ && !recursive_union; i += 1) {
-      if (OB_FAIL(SMART_CALL(do_check_node_in_cte_recursive_union(current_node->children_[i], recursive_union)))) {
-      }
-    }
-  }
-
   return ret;
 }
 
@@ -154,21 +121,21 @@ int ObSelectResolver::do_check_node_in_cte_recursive_union(const ParseNode* curr
  *  the type of the cte table column is unknown. Therefore, first determine
  *  whether the set query shape is recursive.
  */
-int ObSelectResolver::check_query_is_recursive_union(const ParseNode &parse_tree,
+int ObSelectResolver::check_query_is_recursive_union(const peg::Node &parse_tree,
                                                      bool &recursive_union)
 {
   int ret = OB_SUCCESS;
-  const ParseNode *set_node = parse_tree.children_[PARSE_SELECT_SET];
+  const auto operands = peg::query_set_operands(parse_tree);
   ObSelectStmt *select_stmt = get_select_stmt();
   recursive_union = false;
   if (!cte_ctx_.is_with_resolver()) {
     // recursive_union = false
-  } else if (OB_ISNULL(set_node) || OB_ISNULL(select_stmt)) {
+  } else if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < set_node->num_child_; i++) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < operands.size(); i++) {
       bool is_recursive_union = false;
-      if (OB_FAIL(do_check_node_in_cte_recursive_union(set_node->children_[i],
+      if (OB_FAIL(do_check_node_in_cte_recursive_union(&operands[i],
                                                        is_recursive_union))) {
       } else {
         recursive_union |= is_recursive_union;
@@ -182,21 +149,21 @@ int ObSelectResolver::check_query_is_recursive_union(const ParseNode &parse_tree
  * 2. recursive query blocks must follow non-recursive query blocks.
  * 3. recursive query blocks cannot appear in subqueries.
 */
-int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &parse_tree)
+int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = get_select_stmt();
-  ParseNode *set_node = parse_tree.children_[PARSE_SELECT_SET];
+  const auto operands = peg::query_set_operands(parse_tree);
   bool is_set_recursive_union = false;
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(select_stmt) || OB_ISNULL(set_node)) {
+  } else if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(set_stmt_set_type(select_stmt, set_node))) {
-  } else if (OB_FAIL(resolve_with_clause(parse_tree.children_[PARSE_SELECT_WITH]))) {
+  } else if (OB_FAIL(set_stmt_set_type(select_stmt, peg::query_set_operator(parse_tree)))) {
+  } else if (OB_FAIL(resolve_with_clause(parse_tree))) {
   } else {
-    const int64_t n_set_child = set_node->num_child_;
+    const int64_t n_set_child = operands.size();
     for (int64_t i = 0; OB_SUCC(ret) && i < n_set_child; ++i) {
-      ParseNode *child_node = NULL;
+      const peg::Node *child_node = NULL;
       ObSelectStmt *child_stmt = NULL;
       ObSelectResolver child_resolver(params_);
       child_resolver.set_current_level(current_level_);
@@ -204,7 +171,7 @@ int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &par
       child_resolver.set_in_set_query(true);
       child_resolver.set_parent_namespace_resolver(parent_namespace_resolver_);
       child_resolver.set_calc_found_rows(i == 0 ? has_calc_found_rows_ : false);
-      if (OB_ISNULL(child_node = set_node->children_[i])) {
+      if (OB_ISNULL(child_node = &operands[i])) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(child_resolver.set_cte_ctx(cte_ctx_))) {
       } else if (OB_FAIL(add_cte_table_to_children(child_resolver))) {
@@ -272,7 +239,7 @@ int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &par
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "recursive WITH clause using operation not union all");
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "recursive WITH clause using union (distinct) operation");
     } else if (OB_FAIL(check_recursive_cte_limited())) {
-    } else if (OB_NOT_NULL(parse_tree.children_[PARSE_SELECT_LIMIT])) {
+    } else if (peg::query_has_limit(parse_tree)) {
       ret = OB_ERR_CTE_ILLEGAL_RECURSIVE_BRANCH;
     } else {
       /**
@@ -284,18 +251,17 @@ int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &par
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(resolve_into_clause(ObResolverUtils::get_select_into_node(parse_tree)))) {
-  } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[PARSE_SELECT_ORDER]))) {
-  } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[PARSE_SELECT_LIMIT]))) {
-  } else if (OB_FAIL(resolve_fetch_clause(parse_tree.children_[PARSE_SELECT_FETCH]))) {
-  } else if (OB_FAIL(resolve_check_option_clause(parse_tree.children_[PARSE_SELECT_WITH_CHECK_OPTION]))) {
+  } else if (OB_FAIL(resolve_into_clause(parse_tree))) {
+  } else if (OB_FAIL(resolve_order_clause(peg::query_order(parse_tree)))) {
+  } else if (OB_FAIL(resolve_limit_clause((peg::query_has_limit(parse_tree) ? &peg::query_limit(parse_tree) : nullptr)))) {
+
   } else if (OB_FAIL(resolve_set_query_hint())) {
   } else if (OB_FAIL(select_stmt->formalize_stmt(session_info_))) {
   } else if (OB_FAIL(check_order_by())) {
   } else if (OB_FAIL(check_udt_set_query())) {
   } else if (has_top_limit_) {
     has_top_limit_ = false;
-    select_stmt->set_has_top_limit(NULL != parse_tree.children_[PARSE_SELECT_LIMIT]);
+    select_stmt->set_has_top_limit(peg::query_has_limit(parse_tree));
   }
   return ret;
 }
@@ -320,27 +286,27 @@ int ObSelectResolver::resolve_set_query_hint()
  * 2. calc_found_rows
  * 3. is_serial_set_order_forced
  */
-int ObSelectResolver::do_resolve_set_query_in_normal(const ParseNode &parse_tree)
+int ObSelectResolver::do_resolve_set_query_in_normal(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = get_select_stmt();
-  ParseNode *select_set = parse_tree.children_[PARSE_SELECT_SET];
+  const auto operands = peg::query_set_operands(parse_tree);
   bool force_serial_set_order = false;
-  if (OB_ISNULL(select_set) || OB_ISNULL(select_stmt) || OB_ISNULL(session_info_)) {
+  if (OB_ISNULL(select_stmt) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(set_stmt_set_type(select_stmt, select_set))) {
-  } else if (OB_FAIL(resolve_into_clause(ObResolverUtils::get_select_into_node(parse_tree)))) {
-  } else if (OB_FAIL(resolve_with_clause(parse_tree.children_[PARSE_SELECT_WITH]))) {
+  } else if (OB_FAIL(set_stmt_set_type(select_stmt, peg::query_set_operator(parse_tree)))) {
+  } else if (OB_FAIL(resolve_into_clause(parse_tree))) {
+  } else if (OB_FAIL(resolve_with_clause(parse_tree))) {
   } else {
-    const int64_t num_child = select_set->num_child_;
+    const int64_t num_child = operands.size();
     select_stmt->get_set_query().reuse();
     for (int64_t i = 0; OB_SUCC(ret) && i < num_child; i++) {
-      ParseNode *child_node = select_set->children_[i];
+      const peg::Node *child_node = &operands[i];
       ObSelectStmt *child_stmt = NULL;
       bool is_type_same = false;
       bool enable_pullup = false;
       if (OB_ISNULL(child_node) ||
-          OB_UNLIKELY(T_SELECT != child_node->type_)) {
+          OB_UNLIKELY(peg::NodeKind::Select != child_node->kind())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(do_resolve_set_query(*child_node, child_stmt, i == 0))) {
       } else if (OB_FAIL(check_set_child_into_pullup(*select_stmt, *child_stmt, i == 0))) {
@@ -376,23 +342,22 @@ int ObSelectResolver::do_resolve_set_query_in_normal(const ParseNode &parse_tree
   if (OB_FAIL(ret)) {
     //do nothing
   } else if (OB_FAIL(session_info_->is_serial_set_order_forced(force_serial_set_order))) {
-  } else if (force_serial_set_order && T_SET_UNION_ALL == parse_tree.children_[PARSE_SELECT_SET]->type_) {
+  } else if (force_serial_set_order && peg::query_set_operator(parse_tree) == peg::SetOperator::UnionAll) {
     // for set query except union-all/recursive, when force serial set order, will add select expr as order by expr
     force_serial_set_order = false;
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[PARSE_SELECT_ORDER], force_serial_set_order))) {
-  } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[PARSE_SELECT_LIMIT]))) {
-  } else if (OB_FAIL(resolve_fetch_clause(parse_tree.children_[PARSE_SELECT_FETCH]))) {
-  } else if (OB_FAIL(resolve_check_option_clause(parse_tree.children_[PARSE_SELECT_WITH_CHECK_OPTION]))) {
+  } else if (OB_FAIL(resolve_order_clause(peg::query_order(parse_tree), force_serial_set_order))) {
+  } else if (OB_FAIL(resolve_limit_clause((peg::query_has_limit(parse_tree) ? &peg::query_limit(parse_tree) : nullptr)))) {
+
   } else if (OB_FAIL(resolve_set_query_hint())) {
   } else if (OB_FAIL(select_stmt->formalize_stmt(session_info_))) {
   } else if (OB_FAIL(check_order_by())) {
   } else if (OB_FAIL(check_udt_set_query())) {
   } else if (has_top_limit_) {
     has_top_limit_ = false;
-    select_stmt->set_has_top_limit(NULL != parse_tree.children_[PARSE_SELECT_LIMIT]);
+    select_stmt->set_has_top_limit(peg::query_has_limit(parse_tree));
   }
   return ret;
 }
@@ -460,7 +425,7 @@ int ObSelectResolver::check_udt_set_query()
   return ret;
 }
 
-int ObSelectResolver::do_resolve_set_query(const ParseNode &parse_tree,
+int ObSelectResolver::do_resolve_set_query(const peg::Node &parse_tree,
                                            ObSelectStmt *&child_stmt,
                                            const bool is_left_child) /*default false*/
 {
@@ -486,25 +451,25 @@ int ObSelectResolver::do_resolve_set_query(const ParseNode &parse_tree,
 }
 
 int ObSelectResolver::set_stmt_set_type(ObSelectStmt *select_stmt,
-                                        ParseNode *set_node)
+                                        peg::SetOperator operation)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(select_stmt) || OB_ISNULL(set_node)) {
+  if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     select_stmt->assign_set_distinct();
-    switch (set_node->type_) {
-    case T_SET_UNION:
+    switch (operation) {
+    case peg::SetOperator::Union:
       select_stmt->assign_set_op(ObSelectStmt::UNION);
       break;
-    case T_SET_UNION_ALL:
+    case peg::SetOperator::UnionAll:
       select_stmt->assign_set_op(ObSelectStmt::UNION);
       select_stmt->assign_set_all();
       break;
-    case T_SET_INTERSECT:
+    case peg::SetOperator::Intersect:
       select_stmt->assign_set_op(ObSelectStmt::INTERSECT);
       break;
-    case T_SET_EXCEPT:
+    case peg::SetOperator::Except:
       select_stmt->assign_set_op(ObSelectStmt::EXCEPT);
       break;
     default:
@@ -826,15 +791,15 @@ int ObSelectResolver::mark_aggr_in_order_by_scope(ObSelectStmt *select_stmt) {
   return ret;
 }
 
-int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
+int ObSelectResolver::resolve_normal_query(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   // ObStmt *st = NULL;
   // ObSelectStmt *s_t = static_cast<ObSelectStmt *>(st);
   // used to record name win expr count
   int64_t count_name_win_expr = 0;
-  const ParseNode *group_by = NULL;
-  const ParseNode *having = NULL;
+  const peg::Node *group_by = nullptr;
+  const peg::Node *having = nullptr;
   ObSelectStmt *select_stmt = get_select_stmt();
   bool has_rollup = false;
   CK(OB_NOT_NULL(select_stmt),
@@ -845,33 +810,33 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
    * @muhang.zb
    * Define a cte, regardless of whether it is ultimately used in the main clause, it must be parsed
    */
-  OZ( resolve_with_clause(parse_tree.children_[PARSE_SELECT_WITH]) );
+  OZ( resolve_with_clause(parse_tree) );
 
   /* normal select */
   if (OB_SUCC(ret)) {
     select_stmt->assign_set_op(ObSelectStmt::NONE);
   }
-  OZ( resolve_query_options(parse_tree.children_[PARSE_SELECT_DISTINCT]) );
+  OZ( resolve_query_options(peg::query_options(parse_tree)) );
   if (OB_SUCC(ret) && is_only_full_group_by_on(session_info_->get_sql_mode())) {
     OZ( standard_group_checker_.init(select_stmt, session_info_, params_.schema_checker_) );
   }
   if (OB_SUCC(ret)) {
-    group_by = parse_tree.children_[PARSE_SELECT_DYNAMIC_GROUP];
-    having = parse_tree.children_[PARSE_SELECT_DYNAMIC_HAVING];
+    group_by = peg::query_has_grouping(parse_tree) ? &peg::query_grouping(parse_tree) : nullptr;
+    having = peg::query_has_having(parse_tree) ? &peg::query_having(parse_tree) : nullptr;
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(group_by)) {
     set_has_group_by_clause();
-    OZ (check_rollup_clause(group_by, has_rollup));
+    has_rollup = peg::grouping_with_rollup(*group_by);
   }
-  OZ( resolve_hints(parse_tree.children_[PARSE_SELECT_HINTS]) );
+  OZ( resolve_hints(peg::query_hints(parse_tree)) );
   /* resolve from clause */
-  OZ( resolve_from_clause(parse_tree.children_[PARSE_SELECT_FROM]) );
+  OZ( resolve_from_clause(peg::query_sources(parse_tree)) );
   /* resolve where clause */
-  OZ( resolve_where_clause(parse_tree.children_[PARSE_SELECT_WHERE]) );
+  OZ( resolve_where_clause((peg::query_has_filter(parse_tree) ? &peg::query_filter(parse_tree) : nullptr)) );
 
   if (OB_SUCC(ret)) {
     /* resolve named window clause */
-    OZ( resolve_named_windows_clause(parse_tree.children_[PARSE_SELECT_NAMED_WINDOWS]) );
+    OZ( resolve_named_windows_clause(peg::query_windows(parse_tree)) );
   }
   /* resolve select clause */
     // mysql resolve: from->where->select_item->group by->having->order by
@@ -879,7 +844,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   if (has_rollup) {
     expr_resv_ctx_.set_new_scope();
   }
-  OZ( resolve_field_list(*(parse_tree.children_[PARSE_SELECT_SELECT])));
+  OZ( resolve_field_list(peg::query_projection(parse_tree)));
 
   /* resolve group by clause */
   OZ( resolve_group_clause(group_by) );
@@ -887,14 +852,12 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   /* resolve having clause */
   OZ( resolve_having_clause(having) );
 
-  OZ( resolve_order_clause(parse_tree.children_[PARSE_SELECT_ORDER]) );
-  OZ( resolve_approx_clause(parse_tree.children_[PARSE_SELECT_APPROX]));
-  OZ( resolve_limit_clause(parse_tree.children_[PARSE_SELECT_LIMIT]) );
-  OZ( resolve_vector_index_params(parse_tree.children_[PARSE_SELECT_VECTOR_INDEX_PARAMS]));
-  OZ( resolve_fetch_clause(parse_tree.children_[PARSE_SELECT_FETCH]) );
-  OZ( resolve_check_option_clause(parse_tree.children_[PARSE_SELECT_WITH_CHECK_OPTION]) );
-  OZ( resolve_into_clause(ObResolverUtils::get_select_into_node(parse_tree)) );
-  OZ( resolve_for_update_clause(parse_tree.children_[PARSE_SELECT_FOR_UPD]) );
+  OZ( resolve_order_clause(peg::query_order(parse_tree)) );
+  OZ( resolve_approx_clause(peg::query_approximate(parse_tree)));
+  OZ( resolve_limit_clause((peg::query_has_limit(parse_tree) ? &peg::query_limit(parse_tree) : nullptr)) );
+  OZ( resolve_vector_index_params(peg::query_vector_parameters(parse_tree)));
+  OZ( resolve_into_clause(parse_tree) );
+  OZ( resolve_for_update_clause((peg::query_has_lock(parse_tree) ? &peg::query_lock(parse_tree) : nullptr)) );
 
   if (OB_SUCC(ret)) {
     bool has_snapshot_query = false;
@@ -908,7 +871,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret) && has_top_limit_) {
     has_top_limit_ = false;
-    select_stmt->set_has_top_limit(NULL != parse_tree.children_[PARSE_SELECT_LIMIT]);
+    select_stmt->set_has_top_limit(peg::query_has_limit(parse_tree));
   }
 
   //bug:
@@ -997,13 +960,19 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObSelectResolver::resolve(const ParseNode &parse_tree)
+int ObSelectResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = NULL;
   bool is_stack_overflow = false;
   const int64_t check_try_times = 32;
   if (OB_UNLIKELY((OB_SUCCESS != (ret = TRY_CHECK_MEM_STATUS(check_try_times))))) {
+  } else if (peg::query_approximate(parse_tree)
+      && (peg::query_order(parse_tree).empty() || !peg::query_has_limit(parse_tree)
+          || peg::query_sources(parse_tree).empty()
+          || peg::query_set_operator(parse_tree) != peg::SetOperator::None)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "APPROX requires a simple table query with ORDER BY and LIMIT");
   } else if (NULL == (select_stmt = create_stmt<ObSelectStmt>())) {
     ret = OB_SQL_RESOLVER_NO_MEMORY;
     LOG_WARN("failed to create select stmt");
@@ -1035,7 +1004,7 @@ int ObSelectResolver::resolve(const ParseNode &parse_tree)
 
     // resolve outline data hint first
     if (OB_FAIL(resolve_outline_data_hints())) {
-    } else if (parse_tree.children_[PARSE_SELECT_SET] != NULL) {
+    } else if (peg::query_set_operator(parse_tree) != peg::SetOperator::None) {
       /* resolve set clause */
       if (OB_FAIL(SMART_CALL(resolve_set_query(parse_tree)))) {
       }
@@ -1055,7 +1024,7 @@ int ObSelectResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObSelectResolver::resolve_query_options(const ParseNode *node)
+int ObSelectResolver::resolve_query_options(rust::Slice<const peg::Node> options)
 {
   int ret = OB_SUCCESS;
   bool is_distinct = false;
@@ -1063,19 +1032,14 @@ int ObSelectResolver::resolve_query_options(const ParseNode *node)
   ObSelectStmt *select_stmt = get_select_stmt();
   if (OB_ISNULL(select_stmt)) {
     ret = OB_NOT_INIT;
-  } else if (NULL == node) {
-    //nothing to do
-  } else if (node->type_ != T_QEURY_EXPRESSION_LIST) {
-    ret = OB_INVALID_ARGUMENT;
   } else {
-    ParseNode *option_node = NULL;
-    for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-      option_node = node->children_[i];
-      if (option_node->type_ == T_DISTINCT) {
+    for (size_t i = 0; OB_SUCC(ret) && i < options.size(); ++i) {
+      const auto &option = options[i];
+      if (option.kind() == peg::NodeKind::Distinct) {
         is_distinct = true;
-      } else if (option_node->type_ == T_ALL) {
+      } else if (option.kind() == peg::NodeKind::All) {
         is_all = true;
-      } else if (option_node->type_ == T_FOUND_ROWS) {
+      } else if (option.kind() == peg::NodeKind::FoundRows) {
         if (has_calc_found_rows_) {
           has_calc_found_rows_ = false;
           select_stmt->set_calc_found_rows(true);
@@ -1083,7 +1047,7 @@ int ObSelectResolver::resolve_query_options(const ParseNode *node)
           ret = OB_ERR_CANT_USE_OPTION_HERE;
           LOG_USER_ERROR(OB_ERR_CANT_USE_OPTION_HERE, "SQL_CALC_FOUND_ROWS");
         }
-      } else if (option_node->type_ == T_STRAIGHT_JOIN) {
+      } else if (option.kind() == peg::NodeKind::StraightJoin) {
         select_stmt->set_select_straight_join(true);
       }
     }
@@ -1102,7 +1066,7 @@ int ObSelectResolver::resolve_query_options(const ParseNode *node)
   return ret;
 }
 
-int ObSelectResolver::resolve_for_update_clause(const ParseNode *node)
+int ObSelectResolver::resolve_for_update_clause(const peg::Node *node)
 {
   int ret = OB_SUCCESS;
   if (NULL == node) {
@@ -1113,7 +1077,7 @@ int ObSelectResolver::resolve_for_update_clause(const ParseNode *node)
   return ret;
 }
 
-int ObSelectResolver::resolve_for_update_clause_mysql(const ParseNode &node)
+int ObSelectResolver::resolve_for_update_clause_mysql(const peg::Node &node)
 {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = NULL;
@@ -1121,19 +1085,34 @@ int ObSelectResolver::resolve_for_update_clause_mysql(const ParseNode &node)
   bool skip_locked = false;
   if (OB_ISNULL(select_stmt = get_select_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (T_SFU_INT != node.type_ && T_SFU_DECIMAL != node.type_ && T_SKIP_LOCKED != node.type_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (T_SFU_INT == node.type_) {
-    wait_us = node.value_ < 0 ? -1 : node.value_ * 1000000LL;
-  } else if (T_SFU_DECIMAL == node.type_) {
-    ObString time_str(node.str_len_, node.str_value_);
-    if (OB_FAIL(ObTimeUtility2::str_to_time(
-                  time_str, wait_us, ObTimeUtility2::DIGTS_SENSITIVE))) {
-    }
-  } else if (T_SKIP_LOCKED == node.type_) {
-    // skip locked
+  } else if (peg::lock_kind(node) == peg::LockKind::SkipLocked) {
     skip_locked = true;
     wait_us = 0;
+  } else if (peg::lock_wait(node) == peg::LockWait::NoWait) {
+    wait_us = 0;
+  } else if (peg::lock_wait(node) == peg::LockWait::Duration) {
+    const auto duration = peg::lock_wait_seconds(node);
+    size_t integer_length = 0;
+    while (integer_length < duration.size() && duration.data()[integer_length] != '.') ++integer_length;
+    int error = 0;
+    const uint64_t seconds = ObCharset::strntoull(duration.data(), integer_length, 10, &error);
+    bool overflow = error != 0 || seconds > INT64_MAX / 1000000ULL;
+    if (!overflow) {
+      int64_t fraction = 0;
+      if (integer_length < duration.size()) {
+        const ObString time_str(syntax_text(duration));
+        int64_t position = integer_length + 1;
+        OZ(ObTimeUtility2::extract_usec(time_str, position, fraction, ObTimeUtility2::DIGTS_SENSITIVE));
+      }
+      if (OB_SUCC(ret)) {
+        overflow = seconds > static_cast<uint64_t>((INT64_MAX - fraction) / 1000000);
+        if (!overflow) wait_us = static_cast<int64_t>(seconds * 1000000ULL) + fraction;
+      }
+    }
+    if (overflow) {
+      ret = OB_INVALID_ARGUMENT;
+      _LOG_USER_MSG(USER_ERROR, OB_INVALID_ARGUMENT, "WAIT duration exceeds the supported range");
+    }
   }
   if (OB_SUCC(ret) && OB_FAIL(set_for_update_mysql(*select_stmt, wait_us, skip_locked))) {
   }
@@ -1245,22 +1224,27 @@ int ObSelectResolver::resolve_order_item_by_pos(int64_t pos, OrderItem &order_it
   return ret;
 }
 
-int ObSelectResolver::resolve_order_item(const ParseNode &sort_node, OrderItem &order_item)
+int ObSelectResolver::resolve_order_item(const peg::Node &sort_node, OrderItem &order_item)
 {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = NULL;
+  const peg::Node *expression = &peg::sort_expression(sort_node);
+  while (expression->kind() == peg::NodeKind::Parenthesized) {
+    expression = &peg::parenthesized_expression(*expression);
+  }
+  const auto &syntax = *expression;
   if (OB_ISNULL(select_stmt = get_select_stmt())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObResolverUtils::set_direction_by_mode(sort_node, order_item))) {
-  } else if (OB_UNLIKELY(sort_node.children_[0]->type_ == T_INT && sort_node.children_[0]->value_ >= 0)) {
+  } else if (OB_UNLIKELY(syntax.kind() == peg::NodeKind::Int)) {
     // The order-by item is specified using column position
     // ie. ORDER BY 1 DESC
-    int32_t pos = static_cast<int32_t>(sort_node.children_[0]->value_);
+    int32_t pos = static_cast<int32_t>(peg::integer_literal_value(syntax));
     if (OB_FAIL(resolve_order_item_by_pos(pos, order_item, select_stmt))) {
     }
   } else if (params_.is_prepare_protocol_
              && !params_.is_prepare_stage_
-             && sort_node.children_[0]->type_ == T_QUESTIONMARK) {
+             && syntax.kind() == peg::NodeKind::Parameter) {
     ObRawExpr *null_expr = NULL;
     if (OB_ISNULL(params_.expr_factory_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1269,10 +1253,10 @@ int ObSelectResolver::resolve_order_item(const ParseNode &sort_node, OrderItem &
     } else {
       order_item.expr_ = null_expr;
     }
-  } else if (T_QUESTIONMARK == sort_node.children_[0]->type_ && !params_.is_prepare_protocol_) {
+  } else if (syntax.kind() == peg::NodeKind::Parameter && !params_.is_prepare_protocol_) {
     ret = OB_ERR_PARSE_SQL;
   } else {
-    if (OB_FAIL(resolve_sql_expr(*(sort_node.children_[0]), order_item.expr_))) {
+    if (OB_FAIL(resolve_sql_expr(syntax, order_item.expr_))) {
     } else if (OB_FAIL(resolve_shared_order_item(order_item, select_stmt))) {
     } else { }
   }
@@ -1294,22 +1278,9 @@ int ObSelectResolver::resolve_order_item(const ParseNode &sort_node, OrderItem &
   return ret;
 }
 
-int ObSelectResolver::prepare_get_child_at(const ParseNode* node,
-                                           const int32_t idx)
-{
-  // check before get
-  int ret = OB_SUCCESS;
-  if (idx < 0 || idx >= node->num_child_) {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_field_list(const ParseNode &node)
+int ObSelectResolver::resolve_field_list(rust::Slice<const peg::Node> projections)
 {
   int ret = OB_SUCCESS;
-  ParseNode *project_node = NULL;
-  ParseNode *alias_node = NULL;
   bool is_bald_star = false;
   ObSelectStmt *select_stmt = NULL;
   ObExecContext *exec_ctx = NULL;
@@ -1320,46 +1291,35 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
   } else {
     exec_ctx = session_info_->get_cur_exec_ctx();
   }
-  for (int32_t i = 0; OB_SUCC(ret) && i < node.num_child_; ++i) {
-    alias_node = NULL;
-    project_node = NULL;
+  for (const peg::Node &projection : projections) {
+    if (OB_FAIL(ret)) { break; }
+    const peg::Node &project_node = peg::projection_expression(projection);
     SelectItem select_item;
-    // Rule for expr_name and alias_name
-    // expr_name is filled with expr name, both ref_expr and other complex expr.
-    // alias_name is filled with expr_name for default, but updated with real alias name if exists.
-    // the special case is the column ref, which expr_name will be replaced with unqualified column name.
-    select_item.expr_name_.assign_ptr(node.children_[i]->str_value_,
-                                      static_cast<int32_t>(node.children_[i]->str_len_));
-    // In PS mode, the alias name of the bind variable is ":" + num, not the actual value. As follows:
-    // PREPARE STMT FROM 'SELECT ?, ?, ? FROM DUAL';
-    // SET @I1 = 1;
-    // EXECUTE STMT USING @I1, @I1, @I1;
-    // col_name1 is ":1", col_name2 is ":2", col_name3 is ":3"
-    if (OB_FAIL(prepare_get_child_at(node.children_[i], 0))) {
-    } else if (node.children_[i]->children_[0]->type_ == T_NULL) {
-      // MySQL sets the alias of standalone null value("\N","null"...) to "NULL" during projection.
-      // Note: when null value is in a composite expression, its alias is not modified.
-      ObString alias_name = ObString::make_string("NULL");
-      if (OB_FAIL(ob_write_string(*allocator_, alias_name, select_item.alias_name_))) {
-      }
-    } else {
-      select_item.alias_name_.assign_ptr(node.children_[i]->str_value_,
-                                      static_cast<int32_t>(node.children_[i]->str_len_));
-    }
-    project_node = node.children_[i]->children_[0];
-    if (project_node->type_ == T_COLUMN_REF
-        && OB_FAIL(prepare_get_child_at(project_node, 2))) {
-    } else if (project_node->type_ == T_STAR
-               || (project_node->type_ == T_COLUMN_REF
-                   && project_node->children_[2]->type_ == T_STAR)) {
-      if (project_node->type_ == T_STAR) {
+    const SelectItemParamInfo *param_info = params_.select_item_param_infos_ != nullptr
+        && params_.select_item_param_infos_->created()
+        ? params_.select_item_param_infos_->get(&projection) : nullptr;
+    const ObString expression_source = params_.syntax_->original_source(project_node);
+    const rust::Slice<const uint8_t> source{
+        reinterpret_cast<const uint8_t *>(expression_source.ptr()),
+        static_cast<size_t>(expression_source.length())};
+    const auto *effects = params_.parameterization_ != nullptr ? params_.parameterization_->effects() : nullptr;
+    const bool null_template = param_info != nullptr && param_info->null_literal_;
+    const auto names = effects != nullptr
+        ? peg::parameterized_projection_names(projection, source, *effects, null_template)
+        : peg::projection_names(projection, source, null_template);
+    const bool has_alias = names.has_alias;
+    OZ(ob_write_string(*allocator_, ObString(names.expression.size(),
+        reinterpret_cast<const char *>(names.expression.data())), select_item.expr_name_));
+    OZ(ob_write_string(*allocator_, ObString(names.alias.size(),
+        reinterpret_cast<const char *>(names.alias.data())), select_item.alias_name_));
+    if (project_node.kind() == peg::NodeKind::Star
+        || (project_node.kind() == peg::NodeKind::Column && peg::name_is_wildcard(project_node))) {
+      if (project_node.kind() == peg::NodeKind::Star) {
         if (is_bald_star) {
           ret = OB_ERR_STAR_DUPLICATE;
-          LOG_WARN("Wrong usage of '*'");
           break;
-        } else {
-          is_bald_star = true;
         }
+        is_bald_star = true;
       }
       // A star select item is ambiguous when base tables share the same name, for example:
       //select * from t1,t1 ==> NO
@@ -1384,36 +1344,15 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
       }
     }
     bool is_auto_gen = false;
-    if (OB_SUCC(ret)) {
-      // processing alias
-      ObCollationType cs_type = CS_TYPE_INVALID;
-      if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-      } else if (project_node->type_ == T_ALIAS
-                 && OB_FAIL(prepare_get_child_at(project_node, 1))) {
-      } else if (project_node->type_ == T_ALIAS) {
-        alias_node = project_node->children_[1];
-        project_node = project_node->children_[0];
-        select_item.is_real_alias_ = true;
-        /* check if the alias name is legal */
-        select_item.alias_name_.assign_ptr(const_cast<char *>(alias_node->str_value_),
-                                           static_cast<int32_t>(alias_node->str_len_));
-      }
+    if (OB_SUCC(ret) && has_alias) {
+      select_item.is_real_alias_ = true;
+      OZ(ob_write_string(*allocator_, ObString(names.explicit_alias.size(),
+          reinterpret_cast<const char *>(names.explicit_alias.data())), select_item.alias_name_));
     }
 
     if (OB_SUCC(ret)) {
       ObRawExpr *sel_expr = NULL;
-      if (OB_FAIL(resolve_sql_expr(*project_node, select_item.expr_))) {
-        if (OB_EER_WINDOW_NO_REDEFINE_ORDER_BY == ret
-            && OB_NOT_NULL(project_node)
-            && project_node->num_child_ > 1
-            && OB_NOT_NULL(project_node->children_[1])
-            && project_node->children_[1]->num_child_ > 0
-            && OB_NOT_NULL(project_node->children_[1]->children_[0])) {
-          LOG_USER_ERROR(OB_EER_WINDOW_NO_REDEFINE_ORDER_BY,
-              (int)strlen("<unnamed window>"), "<unnamed window>",
-              (int)(project_node->children_[1]->children_[0]->str_len_),
-              project_node->children_[1]->children_[0]->str_value_);
-        }
+      if (OB_FAIL(resolve_sql_expr(project_node, select_item.expr_))) {
       } else if (OB_ISNULL(sel_expr = select_item.expr_)) {
         ret = OB_NOT_INIT;
       } else if (sel_expr->is_exec_param_expr()) {
@@ -1423,58 +1362,24 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
         }
       }
 
-      if (OB_SUCC(ret) && NULL == alias_node) {
+      if (OB_SUCC(ret) && !has_alias) {
         if (sel_expr->is_column_ref_expr()) {
-          // for t1.c1, extract the exact column name of c1 for searching in resolve_columns
-          if (project_node->type_ == T_COLUMN_REF
-              && OB_FAIL(prepare_get_child_at(project_node, 2))) {
-          } else if (project_node->type_ == T_COLUMN_REF) {
-            alias_node = project_node->children_[2];
-            select_item.alias_name_.assign_ptr(const_cast<char *>(alias_node->str_value_),
-                                               static_cast<int32_t>(alias_node->str_len_));
-          } else if (T_OBJ_ACCESS_REF == project_node->type_) {
-            while (OB_SUCC(prepare_get_child_at(project_node, 1))
-                   && NULL != project_node->children_[1]) {
-              project_node = project_node->children_[1];
-            }
-            if (OB_FAIL(ret)) {
-            } else if (T_OBJ_ACCESS_REF != project_node->type_
-                || OB_FAIL(prepare_get_child_at(project_node, 0))) {
-              ret = OB_ERR_UNEXPECTED;
-            } else {
-              alias_node = project_node->children_[0];
-              /* bugfix: table has fbi index, select fbi_expr, alias name is empty
-              create table t1(c1 number,c2 number);
-              create index t1_g_idx on t1(ceil(c1)) global;
-              select ceil(c1),ceil(c2) from t1;
-              +------+----------+
-              |      | CEIL(C2) |   -----》 not display CEIL(C1) COLUM NAME
-              +------+----------+
-              |    4 |        5 |
-              +------+----------+
-              */
-              if (alias_node->str_len_ > 0) {
-                select_item.alias_name_.assign_ptr(const_cast<char *>(alias_node->str_value_),
-                                                   static_cast<int32_t>(alias_node->str_len_));
-              }
-            }
-          } else if (T_REF_COLUMN == sel_expr->get_expr_type()) {
-            // deal with generated column
-            ObColumnRefRawExpr *ref_expr = dynamic_cast<ObColumnRefRawExpr *>(sel_expr);
-            if (OB_ISNULL(ref_expr)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else {
-              select_item.alias_name_ = ref_expr->get_column_name();
-            }
-          } else {
-            ret = OB_ERR_UNEXPECTED;
+          const peg::Node *column = &project_node;
+          while (column->kind() == peg::NodeKind::Parenthesized) {
+            column = &peg::parenthesized_expression(*column);
           }
-        } else if (T_FUN_SYS_NAME_CONST == sel_expr->get_expr_type()
-                   && OB_FAIL(prepare_get_child_at(project_node, 1))) {
+          if (column->kind() == peg::NodeKind::Column && !peg::name_parts(*column).empty()) {
+            const auto parts = peg::name_parts(*column);
+            const peg::Node &name = parts[parts.size() - 1];
+            const auto name_text = name.text();
+            OZ(ob_write_string(*allocator_, syntax_text(name_text), select_item.alias_name_));
+          } else {
+            select_item.alias_name_ = static_cast<ObColumnRefRawExpr *>(sel_expr)->get_column_name();
+          }
         } else if (T_FUN_SYS_NAME_CONST == sel_expr->get_expr_type()) {
-          const ParseNode *expr_list_node = project_node->children_[1];
+          const auto arguments = peg::call_arguments(project_node);
           const ObRawExpr *name_expr = nullptr;
-          if (2 != expr_list_node->num_child_) {
+          if (arguments.size() != 2) {
             //do nothing
           } else if (OB_ISNULL(name_expr = sel_expr->get_param_expr(0))) {
             ret = OB_ERR_UNEXPECTED;
@@ -1482,28 +1387,17 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
             char buf[OB_MAX_ALIAS_NAME_LENGTH + 1];
             int64_t pos = 0;
             const ObObj &value = static_cast<const ObConstRawExpr*>(name_expr)->get_value();
-            if (value.is_numeric_type() && OB_FAIL(prepare_get_child_at(expr_list_node, 0))) {
-            } else if (value.is_numeric_type()) {
-              const ParseNode *alias_node = expr_list_node->children_[0];
-              if (OB_ISNULL(alias_node)) {
-                ret = OB_ERR_UNEXPECTED;
-              } else if (alias_node->str_len_ > 0 && '-' == alias_node->str_value_[0]) {
+            const ObString argument_source = params_.syntax_->source(arguments[0]);
+            if (value.is_numeric_type()) {
+              if (!argument_source.empty() && argument_source.ptr()[0] == '-') {
                 ret = OB_INVALID_ARGUMENT;
                 LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_NAME_CONST);
               } else if (OB_FAIL(value.print_sql_literal(buf, OB_MAX_ALIAS_NAME_LENGTH + 1, pos))) {
               }
-            } else if (value.is_string_type()
-                       && OB_FAIL(prepare_get_child_at(expr_list_node, 0))) {
             } else if (value.is_string_type()) {
-              const ParseNode *alias_node = expr_list_node->children_[0];
-              if (OB_ISNULL(alias_node)) {
-                ret = OB_ERR_UNEXPECTED;
-              } else if ((pos = alias_node->str_len_) > 0) {
-                if (pos > OB_MAX_ALIAS_NAME_LENGTH + 1) {
-                  pos = OB_MAX_ALIAS_NAME_LENGTH + 1;
-                }
-                MEMCPY(buf, alias_node->str_value_, pos);
-              }
+              const ObString value_name = value.get_string();
+              pos = std::min<int64_t>(value_name.length(), OB_MAX_ALIAS_NAME_LENGTH + 1);
+              MEMCPY(buf, value_name.ptr(), pos);
             } else if (value.is_temporal_type()) {
               char time_buf[31];
               if (OB_FAIL(value.print_sql_literal(time_buf, OB_MAX_ALIAS_NAME_LENGTH + 1, pos))) {
@@ -1541,21 +1435,16 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
         } else {
           if (params_.is_prepare_protocol_
               || !session_info_->get_local_ob_enable_plan_cache()
-              || 0 == node.children_[i]->is_val_paramed_item_idx_) {
+              || param_info == nullptr) {
             // ps do not parameterize columns; plan cache disabled do not parameterize columns
             // do nothing
-          } else if (OB_ISNULL(params_.select_item_param_infos_)
-                     || node.children_[i]->value_ >= params_.select_item_param_infos_->count()) {
-            ret = OB_INVALID_ARGUMENT;
           } else {
-            int64_t idx = node.children_[i]->value_;
-            const SelectItemParamInfo &param_info = params_.select_item_param_infos_->at(idx);
-            select_item.paramed_alias_name_.assign_ptr(param_info.paramed_field_name_, param_info.name_len_);
-            if (OB_FAIL(select_item.questions_pos_.assign(param_info.questions_pos_))) {
-            } else if (OB_FAIL(select_item.params_idx_.assign(param_info.params_idx_))) {
+            select_item.paramed_alias_name_.assign_ptr(param_info->paramed_field_name_, param_info->name_len_);
+            if (OB_FAIL(select_item.questions_pos_.assign(param_info->questions_pos_))) {
+            } else if (OB_FAIL(select_item.params_idx_.assign(param_info->params_idx_))) {
             } else {
-              select_item.esc_str_flag_ = param_info.esc_str_flag_;
-              select_item.neg_param_idx_ = param_info.neg_params_idx_;
+              select_item.esc_str_flag_ = param_info->esc_str_flag_;
+              select_item.neg_param_idx_ = param_info->neg_params_idx_;
 
               LOG_DEBUG("select item param info",
                         K(select_item.alias_name_), K(select_item.params_idx_),
@@ -1910,18 +1799,18 @@ int ObSelectResolver::resolve_all_generated_table_columns(
 // specified columns are ahead of star
 // columns are append by table group, separated by ','.
 // each group containers the mixtrue of based/joined/generated table.
-int ObSelectResolver::resolve_star(const ParseNode *node)
+int ObSelectResolver::resolve_star(const peg::Node &node)
 {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = get_select_stmt();
   const share::schema::ObTableSchema *table_schema = NULL;
-  if (OB_ISNULL(node) || OB_ISNULL(session_info_)
+  if (OB_ISNULL(session_info_)
       || OB_ISNULL(select_stmt) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid status", K(node), K_(session_info), K(select_stmt), K(params_.expr_factory_));
+    LOG_WARN("invalid status", K_(session_info), K(select_stmt), K(params_.expr_factory_));
   }
   if (OB_FAIL(ret)) {
-  } else if (node->type_ == T_STAR) {
+  } else if (node.kind() == peg::NodeKind::Star) {
     int64_t num = select_stmt->get_table_size();
     if (num <= 0) {
       // select *
@@ -1940,10 +1829,7 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
       } else {/*do nothing*/}
     } else if (OB_FAIL(resolve_star_for_table_groups())) {
     }
-  } else if (node->type_ == T_COLUMN_REF
-             && OB_FAIL(prepare_get_child_at(node, 2))) {
-  } else if (node->type_ == T_COLUMN_REF
-             && node->children_[2]->type_ == T_STAR) {
+  } else if (node.kind() == peg::NodeKind::Column && peg::name_is_wildcard(node)) {
     ObQualifiedName column_ref;
     bool is_json_wildcard_column = false;  // special input : tab_name.column_name.*
     bool is_column_name_equal = false;
@@ -1965,7 +1851,7 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
       } else if (OB_FAIL(select_stmt->add_select_item(select_item))) {
       }
     } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    } else if (OB_FAIL(ObResolverUtils::resolve_column_ref(node, case_mode, column_ref))) {
+    } else if (OB_FAIL(ObResolverUtils::resolve_column_ref(node, case_mode, *allocator_, column_ref))) {
     } else {
       ObSEArray<const TableItem*, 8> table_items;
       ObArray<SelectItem> target_list;
@@ -2223,19 +2109,16 @@ int ObSelectResolver::add_parent_cte_table_item(TableItem *table_item) {
   return ret;
 }
 
-int ObSelectResolver::resolve_from_clause(const ParseNode *node)
+int ObSelectResolver::resolve_from_clause(rust::Slice<const peg::Node> sources)
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(node)) {
+  if (!sources.empty()) {
     current_scope_ = T_FROM_SCOPE;
     ObSelectStmt *select_stmt = NULL;
     TableItem *table_item = NULL;
-    CK( OB_NOT_NULL(select_stmt = get_select_stmt()),
-        node->type_ == T_FROM_LIST,
-        node->num_child_ >= 1);
-    for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; i += 1) {
-      ParseNode *table_node = node->children_[i];
-      CK(OB_NOT_NULL(table_node));
+    CK(OB_NOT_NULL(select_stmt = get_select_stmt()));
+    for (const peg::Node &table_node : sources) {
+      if (OB_FAIL(ret)) { break; }
       const bool old_flag = session_info_->is_table_name_hidden();
       bool is_table_hidden = false;
       const ObSessionDDLInfo &ddl_info = session_info_->get_ddl_info();
@@ -2249,7 +2132,7 @@ int ObSelectResolver::resolve_from_clause(const ParseNode *node)
       }
       // TODO@wenqu: wait flags from session info
       session_info_->set_table_name_hidden(is_table_hidden);
-      OZ( resolve_table(*table_node, table_item) );
+      OZ( resolve_table(table_node, table_item) );
       session_info_->set_table_name_hidden(old_flag);
       OZ( column_namespace_checker_.add_reference_table(table_item), table_item );
       OZ( select_stmt->add_from_item(table_item->table_id_, table_item->is_joined_table()) );
@@ -2261,7 +2144,7 @@ int ObSelectResolver::resolve_from_clause(const ParseNode *node)
   return ret;
 }
 
-int ObSelectResolver::resolve_group_clause(const ParseNode *node)
+int ObSelectResolver::resolve_group_clause(const peg::Node *node)
 {
   int ret = OB_SUCCESS;
   bool has_explicit_dir = false;
@@ -2304,163 +2187,25 @@ int ObSelectResolver::resolve_group_clause(const ParseNode *node)
   return ret;
 }
 
-int ObSelectResolver::check_rollup_clause(const ParseNode *node, bool &has_rollup)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || OB_ISNULL(node->children_) ||
-      OB_UNLIKELY(T_GROUPBY_CLAUSE != node->type_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && !has_rollup && i < node->num_child_; ++i) {
-      const ParseNode *child_node = node->children_[i];
-      if (OB_ISNULL(child_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (child_node->type_ == T_WITH_ROLLUP_CLAUSE) {
-        has_rollup = true;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_group_by_element(const ParseNode *node,
-                                               common::ObIArray<ObRawExpr*> &groupby_exprs,
-                                               common::ObIArray<ObRawExpr*> &rollup_exprs,
-                                               common::ObIArray<OrderItem> &order_items,
-                                               bool &has_explicit_dir)
-{
-  int ret = OB_SUCCESS;
-  ObSelectStmt *select_stmt = get_select_stmt();
-  if (OB_ISNULL(node) || OB_ISNULL(select_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    switch (node->type_) {
-      case T_NULL: {
-        /* select c1 from t1 group by c1, (); do nothing, just skip */
-        break;
-      }
-      case T_GROUPBY_KEY: {
-        if (OB_ISNULL(node->children_) || OB_UNLIKELY(node->num_child_ != 1)) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(resolve_groupby_node(node->children_[0],
-                                                node,
-                                                groupby_exprs,
-                                                rollup_exprs,
-                                                order_items,
-                                                has_explicit_dir,
-                                                true,
-                                                0))) {
-        } else {/*do nothing*/}
-        break;
-      }
-      default: {
-        /* won't be here */
-        ret = OB_ERR_UNEXPECTED;
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_group_by_list(const ParseNode *node,
-                                            common::ObIArray<ObRawExpr*> &groupby_exprs,
-                                            common::ObIArray<ObRawExpr*> &rollup_exprs,
-                                            common::ObIArray<OrderItem> &order_items,
+int ObSelectResolver::resolve_group_by_list(const peg::Node *grouping,
+                                            ObIArray<ObRawExpr*> &groupby_exprs,
+                                            ObIArray<ObRawExpr*> &rollup_exprs,
+                                            ObIArray<OrderItem> &order_items,
                                             bool &has_explicit_dir)
 {
   int ret = OB_SUCCESS;
-  ObSelectStmt *select_stmt = get_select_stmt();
   current_scope_ = T_GROUP_SCOPE;
-  if (OB_ISNULL(node) || OB_ISNULL(node->children_) || OB_ISNULL(select_stmt) ||
-      OB_UNLIKELY(T_GROUPBY_CLAUSE != node->type_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-      const ParseNode *child_node = node->children_[i];
-      if (OB_ISNULL(child_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        switch (child_node->type_) {
-          case T_WITH_ROLLUP_CLAUSE: {
-            if (OB_FAIL(resolve_with_rollup_clause(child_node,
-                                                   groupby_exprs,
-                                                   rollup_exprs,
-                                                   order_items,
-                                                   has_explicit_dir))) {
-            } else {/*do nothing*/}
-            break;
-          }
-          default: {
-            if (OB_FAIL(resolve_group_by_element(child_node,
-                                                 groupby_exprs,
-                                                 rollup_exprs,
-                                                 order_items,
-                                                 has_explicit_dir))) {
-            } else {/*do nothing*/}
-            break;
-          }
-        }
-      }
-    }
+  const bool is_groupby_expr = !peg::grouping_with_rollup(*grouping);
+  for (const peg::Node &sort : peg::grouping_keys(*grouping)) {
+    if (OB_FAIL(ret)) { break; }
+    OZ(resolve_groupby_node(&peg::sort_expression(sort), &sort, groupby_exprs,
+                           rollup_exprs, order_items, has_explicit_dir, is_groupby_expr, 0));
   }
   return ret;
 }
 
-int ObSelectResolver::resolve_with_rollup_clause(const ParseNode *node,
-                                                 common::ObIArray<ObRawExpr*> &groupby_exprs,
-                                                 common::ObIArray<ObRawExpr*> &rollup_exprs,
-                                                 common::ObIArray<OrderItem> &order_items,
-                                                 bool &has_explicit_dir)
-{
-  int ret = OB_SUCCESS;
-  const ParseNode *sort_list_node = NULL;
-  ObSelectStmt *select_stmt = get_select_stmt();
-  // for: select a, sum(b) from t group by a with rollup.
-  // with rollup is the children[0] and sort key list is children[1].
-  if (OB_ISNULL(node) || OB_ISNULL(select_stmt) ||
-      OB_UNLIKELY(T_WITH_ROLLUP_CLAUSE != node->type_ || node->num_child_ != 2) ||
-      OB_ISNULL(sort_list_node = node->children_[1])) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    bool has_rollup = false;
-    if (node->children_[0] != NULL) {
-      if (node->children_[0]->type_ != T_ROLLUP) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get invalid type", K(get_type_name(node->children_[0]->type_)));
-      } else {
-        has_rollup = true;
-      }
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < sort_list_node->num_child_; ++i) {
-      const ParseNode *sort_node = sort_list_node->children_[i];
-      if (OB_ISNULL(sort_node)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (T_SORT_KEY == sort_node->type_) {
-        if (sort_node->num_child_ != 2 || OB_ISNULL(sort_node->children_)) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(resolve_groupby_node(sort_node->children_[0],
-                                                 sort_node,
-                                                 groupby_exprs,
-                                                 rollup_exprs,
-                                                 order_items,
-                                                 has_explicit_dir,
-                                                 !has_rollup,
-                                                 0))) {
-        }
-      } else if (OB_FAIL(resolve_group_by_element(sort_node,
-                                                  groupby_exprs,
-                                                  rollup_exprs,
-                                                  order_items,
-                                                  has_explicit_dir))) {
-      } else {/*do nothing*/}
-    }
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_group_by_sql_expr(const ParseNode *group_node,
-                                                const ParseNode *group_sort_node,
+int ObSelectResolver::resolve_group_by_sql_expr(const peg::Node *group_node,
+                                                const peg::Node *group_sort_node,
                                                 common::ObIArray<ObRawExpr*> &groupby_exprs,
                                                 common::ObIArray<ObRawExpr*> &rollup_exprs,
                                                 common::ObIArray<OrderItem> &order_items,
@@ -2472,8 +2217,8 @@ int ObSelectResolver::resolve_group_by_sql_expr(const ParseNode *group_node,
   ObRawExpr *expr = NULL;
   if (OB_ISNULL(group_node)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (group_node->type_ == T_INT) {
-    int64_t pos = group_node->value_;
+  } else if (group_node->kind() == peg::NodeKind::Int) {
+    int64_t pos = peg::integer_literal_value(*group_node);
     if (pos <= 0 || pos > select_stmt->get_select_item_size()) {
       ret = OB_ERR_BAD_FIELD_ERROR;
       char buff[OB_MAX_ERROR_MSG_LEN];
@@ -2497,8 +2242,7 @@ int ObSelectResolver::resolve_group_by_sql_expr(const ParseNode *group_node,
   if (OB_SUCC(ret)) {
     OrderItem order_item;
     order_item.expr_ = expr;
-    if (group_sort_node->num_child_ == 2 &&
-        NULL != group_sort_node->children_[1]) {
+    if (peg::sort_direction(*group_sort_node) != peg::SortDirection::Unspecified) {
       has_explicit_dir = true;
       if (OB_FAIL(ObResolverUtils::set_direction_by_mode(*group_sort_node, order_item))) {
       } else { /*do nothing.*/ }
@@ -2521,8 +2265,8 @@ int ObSelectResolver::resolve_group_by_sql_expr(const ParseNode *group_node,
   return ret;
 }
 
-int ObSelectResolver::resolve_groupby_node(const ParseNode *group_node,
-                                           const ParseNode *group_sort_node,
+int ObSelectResolver::resolve_groupby_node(const peg::Node *group_node,
+                                           const peg::Node *group_sort_node,
                                            common::ObIArray<ObRawExpr*> &groupby_exprs,
                                            common::ObIArray<ObRawExpr*> &rollup_exprs,
                                            common::ObIArray<OrderItem> &order_items,
@@ -2538,7 +2282,10 @@ int ObSelectResolver::resolve_groupby_node(const ParseNode *group_node,
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-  } else if (group_node->type_ == T_EXPR_LIST) {
+  } else if (group_node->kind() == peg::NodeKind::Parenthesized) {
+    OZ(SMART_CALL(resolve_groupby_node(&peg::parenthesized_expression(*group_node), group_sort_node,
+        groupby_exprs, rollup_exprs, order_items, has_explicit_dir, is_groupby_expr, group_expr_level)));
+  } else if (group_node->kind() == peg::NodeKind::ExprList) {
     /****************************************************************************
     Support row-shaped group-by expressions such as:
     select c1 from t1 group by ((c1)); ==> select c1 from t1 group by c1;
@@ -2546,13 +2293,13 @@ int ObSelectResolver::resolve_groupby_node(const ParseNode *group_node,
     select c1,c2 from t1 group by (c1, c2), c3; ==> select c1,c2 from t1 group by c1, c2, c3;
     select c1,c2 from t1 group by ((c1)), (c2, c3); ==> select c1,c2 from t1 group by c1, c2, c3;
     ****************************************************************************/
-    if (++group_expr_level > 1 && group_node->num_child_ > 1) {
+    if (++group_expr_level > 1 && peg::row_elements(*group_node).size() > 1) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "group by nested row");
     } else {
-      ParseNode *expr_list_node = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && i < group_node->num_child_; i++) {
-        expr_list_node = group_node->children_[i];
+      const peg::Node *expr_list_node = NULL;
+      for (int64_t i = 0; OB_SUCC(ret) && i < peg::row_elements(*group_node).size(); i++) {
+        expr_list_node = &peg::row_elements(*group_node)[i];
         if (OB_ISNULL(expr_list_node)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(SMART_CALL(resolve_groupby_node(expr_list_node,
@@ -2662,7 +2409,7 @@ int ObSelectResolver::check_grouping_columns(ObSelectStmt &stmt, ObRawExpr *&exp
   return ret;
 }
 
-int ObSelectResolver::resolve_having_clause(const ParseNode *node)
+int ObSelectResolver::resolve_having_clause(const peg::Node *node)
 {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = get_select_stmt();
@@ -2682,35 +2429,23 @@ int ObSelectResolver::resolve_having_clause(const ParseNode *node)
   return ret;
 }
 
-int ObSelectResolver::get_refindex_from_named_windows(const ParseNode *ref_name_node,
-                                                      const ParseNode *node,
-                                                      int64_t& ref_idx)
+int ObSelectResolver::get_refindex_from_named_windows(const peg::Node &reference,
+                                                       rust::Slice<const peg::Node> windows,
+                                                       int64_t &ref_idx)
 {
-  int ret = OB_SUCCESS;
+  const auto reference_text = reference.text();
+  const ObString reference_name(syntax_text(reference_text));
   ref_idx = -1;
-  if (OB_ISNULL(ref_name_node) || OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObString ref_name(static_cast<int32_t>(ref_name_node->str_len_),
-                      ref_name_node->str_value_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-      ParseNode *cur_named_win_node = node->children_[i];
-      ParseNode *cur_name_node = NULL;
-      if (OB_ISNULL(cur_named_win_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(cur_name_node = cur_named_win_node->children_[0])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ObString cur_ref_name(static_cast<int32_t>(cur_name_node->str_len_),
-                              cur_name_node->str_value_);
-        if (ObCharset::case_insensitive_equal(ref_name, cur_ref_name)) {
-          ref_idx = i;
-          break;
-        }
-      }
+  for (size_t i = 0; i < windows.size(); ++i) {
+    const auto &name = peg::named_window_name(windows[i]);
+    const auto name_text = name.text();
+    const ObString candidate(syntax_text(name_text));
+    if (ObCharset::case_insensitive_equal(reference_name, candidate)) {
+      ref_idx = i;
+      break;
     }
   }
-  return ret;
+  return OB_SUCCESS;
 }
 
 int ObSelectResolver::check_duplicated_name_window(ObString &name,
@@ -2727,359 +2462,65 @@ int ObSelectResolver::check_duplicated_name_window(ObString &name,
   return ret;
 }
 
-int ObSelectResolver::mock_to_named_windows(ObString &name,
-                                            ParseNode *win_node)
+int ObSelectResolver::resolve_named_windows_clause(rust::Slice<const peg::Node> windows)
 {
   int ret = OB_SUCCESS;
-  ObSelectStmt *select_stmt = get_select_stmt();
-  if (OB_ISNULL(select_stmt) || OB_ISNULL(win_node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    const ParseNode *mock_node = NULL;
-    ObString win_str(win_node->str_len_, win_node->str_value_);
-    ObSqlString sql_str;
-    ObRawExpr *expr = NULL;
-    //bug18840807, at this time the constants of frame have been parameterized, re-resolving will lead to loss of parameterization information, cg expects actual constants for para;
-    // Subsequent reuse of the execution phase would take the wrong constant value, here we modified the parse_node window pointer to use parameterized
-    if (OB_FAIL(sql_str.append_fmt("COUNT(1) OVER %.*s",
-                                   win_str.length(),
-                                   win_str.ptr()))) {
-    } else if (OB_FAIL(ObRawExprUtils::parse_expr_node_from_str(sql_str.string(),
-                                                                params_.session_info_->get_charsets4parser(),
-                                                                params_.expr_factory_->get_allocator(),
-                                                                mock_node))) {
-    } else if (2 != mock_node->num_child_
-        || T_WIN_NEW_GENERALIZED_WINDOW != mock_node->children_[1]->type_) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      mock_node->children_[1] = win_node;
-    }
-
-    if (OB_FAIL(ret)) {
-      //do nothing...
-    } else if (OB_FAIL(resolve_sql_expr(*mock_node, expr))) {
-      if (OB_EER_WINDOW_NO_REDEFINE_ORDER_BY == ret && OB_NOT_NULL(win_node->children_[0])) {
-        LOG_USER_ERROR(OB_EER_WINDOW_NO_REDEFINE_ORDER_BY, name.length(), name.ptr(),
-            (int)(win_node->children_[0]->str_len_), win_node->children_[0]->str_value_);
-      }
-    } else if (OB_ISNULL(expr)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (!expr->is_win_func_expr()) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObWinFunRawExpr *win_expr = static_cast<ObWinFunRawExpr *>(expr);
-      win_expr->set_win_name(name);
-      select_stmt->get_window_func_exprs().pop_back();
-      ret = select_stmt->get_window_func_exprs().push_back(win_expr);
-    }
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_named_windows_clause(const ParseNode *node)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {// no named windows.
-  } else if (OB_UNLIKELY(node->type_ != T_WIN_NAMED_WINDOWS)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(node->num_child_ > OB_MAX_NAMED_WINDOW_FUNCTION_NUM)) {
+  if (windows.size() > OB_MAX_NAMED_WINDOW_FUNCTION_NUM) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "named windows more than 127");
-  } else {
+  } else if (!windows.empty()) {
     current_scope_ = T_NAMED_WINDOWS_SCOPE;
-    int64_t ref_list_cnt = 0; // reference relationship linked list
-    int64_t ref_list[OB_MAX_NAMED_WINDOW_FUNCTION_NUM];
+    int64_t dependencies[OB_MAX_NAMED_WINDOW_FUNCTION_NUM];
+    int64_t dependency_count = 0;
     bool resolved[OB_MAX_NAMED_WINDOW_FUNCTION_NUM] = { false };
-    ObSEArray<ObString, 32> resolved_name_list;
-    for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-      if (resolved[i]) {
-        continue;
-      }
-      // Parse in order of dependency, prioritize parsing the referenced window
-      ParseNode *name_node = NULL;
-      ParseNode *win_node = NULL;
-      ParseNode *named_win_node = NULL;
-      ref_list[ref_list_cnt++] = i;
-      // named_window             ->   named_win_node   ->   window w1 as (w2 partition by c)
-      // name_ob                  ->   name_node        ->   w1
-      // new_generalized_window   ->   win_node         ->   w2 partition by c
-      while (OB_SUCC(ret) && ref_list_cnt > 0) {
-        named_win_node = node->children_[ref_list[ref_list_cnt - 1]];
-        if (OB_ISNULL(named_win_node)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_ISNULL(name_node = named_win_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_ISNULL(win_node = named_win_node->children_[1])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          // 1. No window referenced
-          // 2. reference the already parsed window
-          // These two cases will directly parse the current window, otherwise it will parse the referenced window
-          bool resolve_expr = false;
-          int64_t ref_idx = -1;
-          ParseNode *ref_name_node = win_node->children_[0];
-          if (NULL == ref_name_node) {
-            resolve_expr = true;
-          } else if (OB_FAIL(get_refindex_from_named_windows(ref_name_node,
-                                                             node,
-                                                             ref_idx))) {
-          } else if (OB_UNLIKELY(-1 == ref_idx)) {
+    ObSEArray<ObString, 32> names;
+    for (size_t i = 0; OB_SUCC(ret) && i < windows.size(); ++i) {
+      if (resolved[i]) { continue; }
+      dependencies[dependency_count++] = i;
+      while (OB_SUCC(ret) && dependency_count > 0) {
+        const int64_t index = dependencies[dependency_count - 1];
+        const peg::Node &window = windows[index];
+        const peg::Node &definition = peg::named_window_definition(window);
+        int64_t reference_index = -1;
+        bool ready = !peg::window_has_reference(definition);
+        if (!ready) {
+          OZ(get_refindex_from_named_windows(peg::window_reference(definition), windows, reference_index));
+          if (OB_SUCC(ret) && reference_index < 0) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "ref not existed window");
-          } else if ((ref_list + ref_list_cnt) != std::find(ref_list,
-                                                            ref_list + ref_list_cnt,
-                                                            ref_idx)) {
+          } else if (OB_SUCC(ret) && std::find(dependencies, dependencies + dependency_count,
+                                             reference_index) != dependencies + dependency_count) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "circle ref window");
-          } else if (resolved[ref_idx]) {
-            resolve_expr = true;
-          } else {
-            resolve_expr = false;
-            ref_list[ref_list_cnt++] = ref_idx;
-          }
-          if (OB_SUCC(ret) && resolve_expr) {
-            ObString name(static_cast<int32_t>(name_node->str_len_),
-                          name_node->str_value_);
-            if (OB_FAIL(check_duplicated_name_window(name, resolved_name_list))) {
-            } else if (OB_FAIL(resolved_name_list.push_back(name))) {
-            } else if (OB_FAIL(mock_to_named_windows(name,
-                                                     win_node))) {
-            } else {
-              resolved[ref_list[ref_list_cnt - 1]] = true;
-              ref_list_cnt--;
-            }
+          } else if (OB_SUCC(ret)) {
+            ready = resolved[reference_index];
+            if (!ready) { dependencies[dependency_count++] = reference_index; }
           }
         }
+        if (OB_SUCC(ret) && ready) {
+          const auto &name_node = peg::named_window_name(window);
+          const auto name_node_text = name_node.text();
+          ObString name(syntax_text(name_node_text));
+          ObRawExpr *expression = nullptr;
+          OZ(check_duplicated_name_window(name, names));
+          OZ(names.push_back(name));
+          OZ(resolve_sql_expr(window, expression));
+          if (OB_SUCC(ret)) {
+            resolved[index] = true;
+            --dependency_count;
+          }
+        }
       }
     }
   }
   return ret;
 }
 
-int ObSelectResolver::resolve_into_const_node(const ParseNode *node, ObObj &obj)
+int ObSelectResolver::resolve_into_clause(const peg::Node &query)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (T_CHAR == node->type_ || T_VARCHAR == node->type_) {
-    ObCollationType cs_type = params_.session_info_->get_local_collation_connection();
-    ObString node_str(node->str_len_, node->str_value_);
-    if (OB_SUCC(ret)) {
-      obj.set_varchar(node_str);
-      obj.set_collation_type(cs_type);
-    }
-  } else if (T_HEX_STRING == node->type_) {
-    ObString node_str(node->str_len_, node->str_value_);
-    obj.set_varchar(node_str);
-    obj.set_collation_type(CS_TYPE_BINARY);
-  } else if (T_QUESTIONMARK == node->type_) {
-    obj.set_unknown(node->value_);
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_into_field_node(
-  const ParseNode *list_node,
-  ObSelectIntoItem &into_item)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(list_node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    for (int32_t i = 0 ; i < list_node->num_child_ ; ++i) {
-      ParseNode *node = list_node->children_[i];
-      if (OB_ISNULL(node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_FIELD_TERMINATED_STR == node->type_) {
-        if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.field_str_))) {
-        }
-      } else if (T_OPTIONALLY_CLOSED_STR == node->type_
-                 || T_CLOSED_STR == node->type_) {
-        if (node->num_child_ != 1) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (node->children_[0]->str_len_ == 0 || node->children_[0]->str_len_ == 1) {
-          into_item.closed_cht_.meta_.set_char();
-          into_item.closed_cht_.set_char_value(node->children_[0]->str_value_,
-                                               node->children_[0]->str_len_);
-          into_item.closed_cht_.set_collation_type(params_.session_info_->get_local_collation_connection());
-        } else {
-          ret = OB_WRONG_FIELD_TERMINATORS;
-        }
-        if (T_OPTIONALLY_CLOSED_STR == node->type_) {
-          into_item.is_optional_ = true;
-        }
-      } else if (T_ESCAPED_STR == node->type_) {
-        if (node->num_child_ != 1) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (node->children_[0]->str_len_ == 0 || node->children_[0]->str_len_ == 1) {
-          into_item.escaped_cht_.meta_.set_char();
-          into_item.escaped_cht_.set_char_value(node->children_[0]->str_value_,
-                                                node->children_[0]->str_len_);
-          into_item.escaped_cht_.set_collation_type(params_.session_info_->get_local_collation_connection());
-        } else {
-          ret = OB_WRONG_FIELD_TERMINATORS;
-        }
-      } else {
-        // do nothing
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObSelectResolver::resolve_into_line_node(const ParseNode *list_node, ObSelectIntoItem &into_item)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(list_node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    for (int32_t i = 0 ; i < list_node->num_child_ ; ++i) {
-      ParseNode *str_node = list_node->children_[i];
-      if (OB_ISNULL(str_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_LINE_TERMINATED_STR == str_node->type_) {
-        if (OB_FAIL(resolve_into_const_node(str_node->children_[0], into_item.line_str_))) {
-        }
-      } else {
-        // escape
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_into_file_node(const ParseNode *list_node, ObSelectIntoItem &into_item)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(list_node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    for (int32_t i = 0 ; OB_SUCC(ret) && i < list_node->num_child_; ++i) {
-      ParseNode *node = list_node->children_[i];
-      if (OB_ISNULL(node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_SINGLE_OPT == node->type_) {
-        if (node->num_child_ != 1 || OB_ISNULL(node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          into_item.is_single_ = node->children_[0]->value_;
-        }
-      } else if (T_MAX_FILE_SIZE == node->type_) {
-        if (OB_FAIL(ObResolverUtils::resolve_file_size_node(node, into_item.max_file_size_))) {
-        }
-      } else if (T_BUFFER_SIZE == node->type_) {
-        if (OB_FAIL(ObResolverUtils::resolve_file_size_node(node, into_item.buffer_size_))) {
-        }
-      } else {
-        ret = OB_ERR_PARSE_SQL;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item)
-{
-  int ret = OB_SUCCESS;
-  bool has_format_type = false;
-  bool has_cs_type = false;
-  ObExternalFileFormat external_format;
-  ParseNode* format_node = NULL;
-  ParseNode* option_node = NULL;
-  if (node->num_child_ != 3) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
-  }
-  if (OB_SUCC(ret) && NULL != (format_node = node->children_[1])) { // format
-    for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
-      if (OB_ISNULL(option_node = format_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
-                 || T_CHARSET == option_node->type_) {
-        if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
-        }
-        has_format_type |= (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_);
-        has_cs_type |= (T_CHARSET == option_node->type_);
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (!has_format_type) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
-    } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
-    } else {
-      ObCollationType file_cs_type = has_cs_type
-                                     ? ObCharset::get_default_collation(external_format.csv_format_.cs_type_)
-                                     : ObCharset::get_system_collation();
-      if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
-      }
-    }
-    for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
-      if (OB_ISNULL(option_node = format_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
-                 || T_CHARSET == option_node->type_) {
-      } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
-      }
-    }
-    if (OB_SUCC(ret)
-        && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
-    }
-  }
-  // file: single, max_file_size, buffer_size
-  if (OB_SUCC(ret) && NULL != node->children_[2]) {
-    if (OB_FAIL(resolve_into_file_node(node->children_[2], into_item))) {
-    }
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
-                                                          ObSelectIntoItem &into_item)
-{
-  int ret = OB_SUCCESS;
-  if (node->num_child_ != 5) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
-  }
-  if (OB_SUCC(ret) && NULL != node->children_[1]) { // charset
-    ObCharsetType charset_type = CHARSET_INVALID;
-    ObString charset(node->children_[1]->str_len_, node->children_[1]->str_value_);
-    if (CHARSET_INVALID == (charset_type = ObCharset::charset_type(charset.trim()))) {
-      ret = OB_ERR_UNKNOWN_CHARSET;
-      LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset.length(), charset.ptr());
-    } else if (CHARSET_UTF16 == charset_type) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "upload data using utf16");
-    } else {
-      into_item.cs_type_ = ObCharset::get_default_collation(charset_type);
-    }
-  }
-  if (OB_SUCC(ret) && NULL != node->children_[2]) { // field
-    if (OB_FAIL(resolve_into_field_node(node->children_[2], into_item))) {
-    }
-  }
-  if (OB_SUCC(ret) && NULL != node->children_[3]) { // line
-    if (OB_FAIL(resolve_into_line_node(node->children_[3], into_item))) {
-    }
-  }
-  // file: single, max_file_size, buffer_size
-  if (OB_SUCC(ret) && NULL != node->children_[4]) {
-    if (OB_FAIL(resolve_into_file_node(node->children_[4], into_item))) {
-    }
-  }
-  return ret;
-}
-
-int ObSelectResolver::resolve_into_clause(const ParseNode *node)
-{
-  int ret = OB_SUCCESS;
-  if (NULL != node) {
+  const auto kind = peg::query_into_kind(query);
+  if (kind != peg::IntoKind::Absent) {
     current_scope_ = T_INTO_SCOPE;
     ObSelectIntoItem *into_item = NULL;
     ObSelectStmt *select_stmt = get_select_stmt();
@@ -3098,31 +2539,13 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
       ret = OB_ERR_VIEW_SELECT_CONTAIN_INTO;
     } else {
       new(into_item) ObSelectIntoItem();
-      into_item->into_type_ = node->type_;
-      if (T_INTO_OUTFILE == node->type_) { // into outfile
-        if (is_in_set_query()) {
-          ret = OB_INAPPROPRIATE_INTO;
-        } else if (node->num_child_ == 3 && NULL != node->children_[1]
-            && T_EXTERNAL_FILE_FORMAT == node->children_[1]->type_) { // Handle with `FORMAT`
-          if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item))) {
-          }
-        } else { // Be compatible with grammar before
-          if (OB_FAIL(resolve_into_outfile_without_format(node, *into_item))) {
-          }
-        }
-      } else if (T_INTO_DUMPFILE  == node->type_) { // into dumpfile
-        if (is_in_set_query()) {
-          ret = OB_INAPPROPRIATE_INTO;
-        } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item->outfile_name_))) {
-        }
-      } else if (T_INTO_VARIABLES == node->type_) { // into @x,@y....
-        if (OB_FAIL(resolve_into_variables(node,
-                                           into_item->user_vars_,
-                                           into_item->pl_vars_,
-                                           select_stmt))) {
-        }
+      if (kind == peg::IntoKind::Variables) {
+        into_item->into_type_ = T_INTO_VARIABLES;
+        OZ(resolve_into_variables(peg::query_into_variables(query),
+            into_item->user_vars_, into_item->pl_vars_, select_stmt));
       } else {
-        //do nothing
+        into_item->into_type_ = kind == peg::IntoKind::Outfile ? T_INTO_OUTFILE : T_INTO_DUMPFILE;
+        OZ(resolve_file_output(peg::file_output_definition(query), *into_item));
       }
       if (OB_SUCC(ret)) {
         select_stmt->set_select_into(into_item);
@@ -3536,17 +2959,17 @@ int ObSelectResolver::resolve_column_ref_table_first(
 }
 
 
-int ObSelectResolver::check_special_join_table(const TableItem &join_table, bool is_left_child, ObItemType join_type)
+int ObSelectResolver::check_special_join_table(const TableItem &join_table, bool is_left_child, peg::JoinKind join_type)
 {
   int ret = OB_SUCCESS;
   if (is_left_child) {
     if (join_table.is_fake_cte_table() && cte_ctx_.is_with_resolver()
-        && (T_JOIN_RIGHT == join_type || T_JOIN_FULL == join_type)) {
+        && (peg::JoinKind::Right == join_type || peg::JoinKind::Full == join_type)) {
       ret = OB_ERR_ILLEGAL_JOIN_IN_RECURSIVE_CTE;
     }
   } else {
     if (join_table.is_fake_cte_table() && cte_ctx_.is_with_resolver()
-        && (T_JOIN_LEFT == join_type || T_JOIN_FULL == join_type)) {
+        && (peg::JoinKind::Left == join_type || peg::JoinKind::Full == join_type)) {
       ret = OB_ERR_ILLEGAL_JOIN_IN_RECURSIVE_CTE;
     }
   }
@@ -4211,37 +3634,7 @@ int ObSelectResolver::check_subquery_return_one_column(const ObRawExpr &expr, bo
 /*fetch clause:
 *[OFFSET offset {ROW | ROWS}] FETCH {NEXT | FIRST} {rowcount| percent PERCENT} {ROW | ROWS} {ONLY | WITH TIES}
  */
-int ObSelectResolver::resolve_fetch_clause(const ParseNode *node)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(params_.expr_factory_) || OB_ISNULL(session_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  return ret;
-}
 
-int ObSelectResolver::resolve_check_option_clause(const ParseNode *node)
-{
-  int ret = OB_SUCCESS;
-  if (NULL != node) {
-    const int64_t node_value = node->value_;
-    ObSelectStmt *select_stmt = get_select_stmt();
-    if (OB_UNLIKELY(node_value < 0 || node_value >= static_cast<int64_t>(VIEW_CHECK_OPTION_MAX))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_ISNULL(select_stmt)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      select_stmt->set_check_option(static_cast<ViewCheckOption>(node_value));
-    }
-  }
-  return ret;
-}
-
-/* ObSelectResolver::check_auto_gen_column_names()
- *
- * For a long expr with no alias
- * rename the overlong auto generated alias to "Name_exp_x".
- */
 int ObSelectResolver::check_auto_gen_column_names() {
   int ret = OB_SUCCESS;
   ObSelectStmt *select_stmt = get_select_stmt();
@@ -4418,40 +3811,37 @@ int ObSelectResolver::resolve_shared_order_item(OrderItem &order_item, ObSelectS
 }
 
 
-int ObSelectResolver::try_resolve_values_table_from_union(const ParseNode &parse_node,
+int ObSelectResolver::try_resolve_values_table_from_union(const peg::Node &parse_node,
                                                           bool &resolve_happened)
 {
   int ret = OB_SUCCESS;
   bool is_valid = true;
-  ObSEArray<int64_t, 16> leaf_nodes;
+  ObSEArray<const peg::Node *, 16> leaf_nodes;
   ObValuesTableDef *table_def = NULL;
   ObSelectStmt *select_stmt = get_select_stmt();
   resolve_happened = false;
-  if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_) || OB_ISNULL(select_stmt) ||
-      OB_ISNULL(parse_node.children_[PARSE_SELECT_SET])) {
+  if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_) || OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(set_stmt_set_type(select_stmt, parse_node.children_[PARSE_SELECT_SET]))) {
+  } else if (OB_FAIL(set_stmt_set_type(select_stmt, peg::query_set_operator(parse_node)))) {
   } else if (OB_FAIL(check_union_to_values_table_valid(parse_node, *select_stmt, leaf_nodes,
                                                        is_valid))) {
   } else if (!is_valid) {
     /* do nothing */
   } else {
-    if (OB_FAIL(resolve_into_clause(ObResolverUtils::get_select_into_node(parse_node)))) {
-    } else if (OB_FAIL(resolve_with_clause(parse_node.children_[PARSE_SELECT_WITH]))) {
+    if (OB_FAIL(resolve_into_clause(parse_node))) {
+    } else if (OB_FAIL(resolve_with_clause(parse_node))) {
     } else if (OB_FAIL(resolve_values_table_from_union(leaf_nodes, table_def))) {
     } else if (OB_FAIL(ObResolverUtils::create_values_table_query(session_info_, allocator_,
                                                           params_.expr_factory_, params_.query_ctx_,
                                                           select_stmt, table_def))) {
-    } else if (OB_FAIL(resolve_order_clause(parse_node.children_[PARSE_SELECT_ORDER]))) {
-    } else if (OB_FAIL(resolve_limit_clause(parse_node.children_[PARSE_SELECT_LIMIT]))) {
-    } else if (OB_FAIL(resolve_fetch_clause(parse_node.children_[PARSE_SELECT_FETCH]))) {
-    } else if (OB_FAIL(resolve_check_option_clause(
-                                           parse_node.children_[PARSE_SELECT_WITH_CHECK_OPTION]))) {
+    } else if (OB_FAIL(resolve_order_clause(peg::query_order(parse_node)))) {
+    } else if (OB_FAIL(resolve_limit_clause((peg::query_has_limit(parse_node) ? &peg::query_limit(parse_node) : nullptr)))) {
+
     } else if (OB_FAIL(select_stmt->formalize_stmt(session_info_))) {
     } else if (OB_FAIL(check_order_by())) {
     } else if (has_top_limit_) {
       has_top_limit_ = false;
-      select_stmt->set_has_top_limit(NULL != parse_node.children_[PARSE_SELECT_LIMIT]);
+      select_stmt->set_has_top_limit(peg::query_has_limit(parse_node));
     }
     if (OB_SUCC(ret)) {
       if (select_stmt->is_set_distinct()) {
@@ -4469,29 +3859,27 @@ int ObSelectResolver::try_resolve_values_table_from_union(const ParseNode &parse
   return ret;
 }
 
-int ObSelectResolver::check_union_to_values_table_valid(const ParseNode &parse_node,
+int ObSelectResolver::check_union_to_values_table_valid(const peg::Node &parse_node,
                                                         const ObSelectStmt &select_stmt,
-                                                        ObIArray<int64_t> &leaf_nodes,
+                                                        ObIArray<const peg::Node *> &leaf_nodes,
                                                         bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<int64_t, 16> node_stack;
   const int64_t UNION_TO_VALUES_THRESHOLD = 2;
-  int64_t top = 0;
-  bool is_type_same = false;
   is_valid = true;
-  const ParseNode *set_node = parse_node.children_[PARSE_SELECT_SET];
-  if (OB_ISNULL(session_info_) || OB_ISNULL(set_node)) {
+  const auto operands = peg::query_set_operands(parse_node);
+  const auto operation = peg::query_set_operator(parse_node);
+  if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if ((T_SET_UNION != set_node->type_ && T_SET_UNION_ALL != set_node->type_) ||
+  } else if ((operation != peg::SetOperator::Union && operation != peg::SetOperator::UnionAll) ||
              params_.is_from_create_view_ || params_.is_from_create_table_ ||
              in_pl_ || is_prepare_stage_) {
     is_valid = false;
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < set_node->num_child_; i++) {
-      if (OB_FAIL(check_union_leaf_to_values_table_valid(*set_node->children_[i], is_valid))) {
+    for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < operands.size(); i++) {
+      if (OB_FAIL(check_union_leaf_to_values_table_valid(operands[i], is_valid))) {
       } else if (is_valid &&
-                 OB_FAIL(leaf_nodes.push_back(reinterpret_cast<int64_t>(set_node->children_[i])))) {
+                 OB_FAIL(leaf_nodes.push_back(&operands[i]))) {
       } else if (!is_valid) {
       }
     }
@@ -4503,24 +3891,22 @@ int ObSelectResolver::check_union_to_values_table_valid(const ParseNode &parse_n
   return ret;
 }
 
-int ObSelectResolver::check_union_leaf_to_values_table_valid(const ParseNode &parse_node,
+int ObSelectResolver::check_union_leaf_to_values_table_valid(const peg::Node &parse_node,
                                                             bool &is_valid)
 {
   int ret = OB_SUCCESS;
   is_valid = true;
-  /* 1. only has select_item and distinct */
-  for (int64_t i = 0; is_valid && i < PARSE_SELECT_MAX_IDX; i++) {
-    if (parse_node.children_[i] != NULL) {
-      if (PARSE_SELECT_SELECT != i && PARSE_SELECT_DISTINCT != i) {
-        is_valid = false;
-      }
-    }
-  }
-  /* 2. select item must be const param */
-  const ParseNode *project_list = parse_node.children_[PARSE_SELECT_SELECT];
-  if (!is_valid) { /* do nothing */
-  } else if (project_list == NULL || project_list->type_ != T_PROJECT_LIST ||
-             project_list->num_child_ < 1) {
+  is_valid = peg::query_sources(parse_node).empty()
+      && peg::query_ctes(parse_node).empty() && peg::query_windows(parse_node).empty()
+      && peg::query_order(parse_node).empty() && peg::query_hints(parse_node).empty()
+      && peg::query_into_kind(parse_node) == peg::IntoKind::Absent
+      && peg::query_vector_parameters(parse_node).empty()
+      && !peg::query_has_filter(parse_node) && !peg::query_has_grouping(parse_node)
+      && !peg::query_has_having(parse_node) && !peg::query_has_limit(parse_node)
+      && !peg::query_has_lock(parse_node) && !peg::query_approximate(parse_node)
+      && peg::query_set_operator(parse_node) == peg::SetOperator::None;
+  const auto projections = peg::query_projection(parse_node);
+  if (!is_valid || projections.empty()) {
     is_valid = false;
   } else {
     ObCollationType connect_collation = CS_TYPE_INVALID;
@@ -4533,21 +3919,17 @@ int ObSelectResolver::check_union_leaf_to_values_table_valid(const ParseNode &pa
     } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info_, enable_decimal_int))) {
     } else {
       const ObCollationType nchar_collation = session_info_->get_nls_collation_nation();
-      for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < project_list->num_child_; i++) {
-        const ParseNode *param_node = NULL;
+      for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < projections.size(); i++) {
+        const peg::Node *param_node = &peg::projection_expression(projections[i]);
         ObObjType param_type;
+        const ParameterBinding *binding = nullptr;
         ObCollationType dummy_collation_type;
         ObCollationLevel dummy_collation_level;
-        if (OB_ISNULL(project_list->children_[i]) ||
-            OB_UNLIKELY(project_list->children_[i]->num_child_ < 1) ||
-            OB_ISNULL(param_node = project_list->children_[i]->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (T_ALIAS == param_node->type_ &&
-                   OB_ISNULL(param_node = param_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (!IS_DATATYPE_OR_QUESTIONMARK_OP(param_node->type_)) {
+        if (FALSE_IT(binding = params_.parameterization_ != nullptr
+            ? params_.parameterization_->find(param_node) : nullptr)) {
+        } else if (binding == nullptr && !peg::is_literal(*param_node) && param_node->kind() != peg::NodeKind::Parameter) {
           is_valid = false;
-        } else if (OB_FAIL(ObResolverUtils::fast_get_param_type(*param_node, param_store,
+        } else if (OB_FAIL(ObResolverUtils::fast_get_param_type(*param_node, binding, param_store,
                                                     connect_collation, nchar_collation,
                                                     static_cast<ObCollationType>(server_collation),
                                                     enable_decimal_int, *allocator_, param_type,
@@ -4561,7 +3943,7 @@ int ObSelectResolver::check_union_leaf_to_values_table_valid(const ParseNode &pa
   return ret;
 }
 
-int ObSelectResolver::resolve_values_table_from_union(const ObIArray<int64_t> &leaf_nodes,
+int ObSelectResolver::resolve_values_table_from_union(const ObIArray<const peg::Node *> &leaf_nodes,
                                                       ObValuesTableDef *&table_def)
 {
   int ret = OB_SUCCESS;
@@ -4590,12 +3972,9 @@ int ObSelectResolver::resolve_values_table_from_union(const ObIArray<int64_t> &l
   }
   /* first set, need resolve select_item name*/
   if (OB_SUCC(ret)) {
-    const ParseNode *node = reinterpret_cast<const ParseNode *>(leaf_nodes.at(0));
-    const ParseNode *project_list = NULL;
-    if (OB_ISNULL(node) || OB_ISNULL(node->children_[PARSE_SELECT_SELECT])) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(resolve_query_options(node->children_[PARSE_SELECT_DISTINCT]))) {
-    } else if (OB_FAIL(resolve_field_list(*node->children_[PARSE_SELECT_SELECT]))) {
+    const peg::Node &node = *leaf_nodes.at(0);
+    if (OB_FAIL(resolve_query_options(peg::query_options(node)))) {
+    } else if (OB_FAIL(resolve_field_list(peg::query_projection(node)))) {
     } else {
       column_cnt = select_stmt->get_select_item_size();
       table_def->column_cnt_ = column_cnt;
@@ -4630,26 +4009,16 @@ int ObSelectResolver::resolve_values_table_from_union(const ObIArray<int64_t> &l
   }
   /* other set */
   for (int64_t i = 1; OB_SUCC(ret) && i < leaf_nodes.count(); i++) {
-    const ParseNode *node = reinterpret_cast<const ParseNode *>(leaf_nodes.at(i));
-    const ParseNode *project_list = NULL;
-    if (OB_ISNULL(node) || OB_ISNULL(project_list = node->children_[PARSE_SELECT_SELECT]) ||
-        OB_UNLIKELY(project_list->type_ != T_PROJECT_LIST)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(resolve_query_options(node->children_[PARSE_SELECT_DISTINCT]))) {
-    } else if (OB_UNLIKELY(project_list->num_child_ != column_cnt)) {
+    const peg::Node &node = *leaf_nodes.at(i);
+    const auto projections = peg::query_projection(node);
+    if (OB_FAIL(resolve_query_options(peg::query_options(node)))) {
+    } else if (OB_UNLIKELY(projections.size() != column_cnt)) {
       ret = OB_ERR_COLUMN_SIZE;
     } else {
       for (int64_t j = 0; OB_SUCC(ret) && j < column_cnt; j++) {
-        const ParseNode *param_node = NULL;
+        const peg::Node &param_node = peg::projection_expression(projections[j]);
         ObRawExpr *select_expr = NULL;
-        if (OB_ISNULL(project_list->children_[j]) ||
-            OB_UNLIKELY(project_list->children_[j]->num_child_ < 1) ||
-            OB_ISNULL(param_node = project_list->children_[j]->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (T_ALIAS == param_node->type_ &&
-                   OB_ISNULL(param_node = param_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(resolve_sql_expr(*param_node, select_expr))) {
+        if (OB_FAIL(resolve_sql_expr(param_node, select_expr))) {
         } else if (OB_FAIL(table_def->access_exprs_.push_back(select_expr))) {
         }
       }

@@ -51,7 +51,7 @@ public:
   explicit ObCreateTableResolver(ObResolverParams &params);
   virtual ~ObCreateTableResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  int resolve(const peg::Node &parse_tree);
   static int set_nullable_for_cta_column(ObSelectStmt *select_stmt,
                                   share::schema::ObColumnSchemaV2& column,
                                   const ObRawExpr *expr,
@@ -75,39 +75,35 @@ private:
   int64_t get_primary_key_size() const;
   int add_primary_key_part(const common::ObString &column_name, common::ObArray<ObColumnResolveStat> &stats, int64_t &pk_data_length);
   int add_hidden_tablet_seq_col();
-  int check_column_name_duplicate(const ParseNode *node);
-  int resolve_primary_key_node(const ParseNode &pk_node, common::ObArray<ObColumnResolveStat> &stats);
-  int resolve_table_elements(const ParseNode *node,
+  int check_column_name_duplicate(rust::Slice<const peg::Node> elements);
+  int resolve_primary_key_node(const peg::Node &pk_node, common::ObArray<ObColumnResolveStat> &stats);
+  int resolve_table_elements(rust::Slice<const peg::Node> elements,
                              common::ObArray<int> &idx_index_node,
                              common::ObArray<int> &foreign_key_node_position_list,
                              common::ObArray<int> &table_level_constraint_list,
                              const int resolve_rule);
-  int resolve_insert_mode(const ParseNode *parse_tree);
-  int resolve_table_elements_from_select(const ParseNode &parse_tree);
-  int set_temp_table_info(share::schema::ObTableSchema &table_schema, ParseNode *commit_option_node);
+  int resolve_insert_mode(peg::TableSelectMode mode);
+  int resolve_table_elements_from_select(const peg::Node &parse_tree);
 
-  int resolve_table_charset_info(const ParseNode *node);
+  int resolve_table_charset_info(rust::Slice<const peg::Node> options);
   //index
   int add_sort_column(const obcall::ObColumnSortItem &sort_column);
   int generate_index_arg(const bool process_heap_table_primary_key);
   int set_index_name();
   int set_index_option_to_arg();
   int set_storing_column();
-  int resolve_index(const ParseNode *node, common::ObArray<int> &index_node_position_list);
-  int resolve_index_node(const ParseNode *node);
+  int resolve_index(rust::Slice<const peg::Node> elements, common::ObArray<int> &index_node_position_list);
+  int resolve_index_node(const peg::Node &node);
   int resolve_index_name(
-      const ParseNode *node,
-      const common::ObString &first_column_name,
-      bool is_unique,
-      ObString &uk_name);
+      const peg::Node *node,
+      const common::ObString &first_column_name);
   int resolve_table_level_constraint_for_mysql(
-      const ParseNode* node, ObArray<int> &constraint_position_list);
+      rust::Slice<const peg::Node> elements, ObArray<int> &constraint_position_list);
   int build_partition_key_info(share::schema::ObTableSchema &table_schema,
                                const bool is_subpart);
   //resolve partition option only used in ObCreateTableResolver now.
-  int resolve_partition_option(ParseNode *node,
-                               share::schema::ObTableSchema &table_schema,
-                               const bool is_partition_option_node_with_opt);
+  int resolve_partition_option(const peg::Node *node,
+                               share::schema::ObTableSchema &table_schema);
   //check generated column whether valid
   int check_generated_partition_column(share::schema::ObTableSchema &table_schema);
   ObRawExpr* find_gen_col_expr(const uint64_t column_id);
@@ -120,9 +116,9 @@ private:
   int add_inner_index_for_heap_gtt();
   int check_max_row_data_length(const ObTableSchema &table_schema);  
   int set_default_micro_index_clustered_(share::schema::ObTableSchema &table_schema);
-  int resolve_primary_key_node_in_heap_table(const ParseNode *element, common::ObArray<ObColumnResolveStat> &stats,
-                                             ObSEArray<ObColumnSchemaV2, SEARRAY_INIT_NUM> &resolved_cols);
-  int resolve_single_column_primary_key_node(const ParseNode *column_list_node, ObTableSchema &tbl_schema, bool &process_heap_table_primary_key, ObString &first_column_name);
+  int resolve_primary_key_node_in_heap_table(const peg::Node &element,
+                                            common::ObArray<ObColumnResolveStat> &stats);
+  int resolve_single_column_primary_key_node(rust::Slice<const peg::Node> columns, ObTableSchema &tbl_schema, bool &process_heap_table_primary_key, ObString &first_column_name);
   int uk_or_heap_table_pk_add_to_index_list(ObArray<int> &index_node_position_list, const int32_t node_index);
   int check_building_domain_index_legal();
 

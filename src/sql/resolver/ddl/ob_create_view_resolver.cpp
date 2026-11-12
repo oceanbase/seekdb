@@ -18,6 +18,7 @@
 
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 #include <inttypes.h>
+#include "sql/syntax.h"
 #include "sql/printer/ob_select_stmt_printer.h"
 
 namespace oceanbase
@@ -36,16 +37,12 @@ ObCreateViewResolver::~ObCreateViewResolver()
 {
 }
 
-int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
+int ObCreateViewResolver::resolve(const peg::Node &statement)
 {
   int ret = OB_SUCCESS;
   ObCreateTableStmt *stmt = NULL;
-  if (OB_UNLIKELY(T_CREATE_VIEW != parse_tree.type_)
-      || OB_UNLIKELY(ROOT_NUM_CHILD != parse_tree.num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(parse_tree.children_) || OB_ISNULL(parse_tree.children_[VIEW_NODE])
-             || OB_ISNULL(allocator_) || OB_ISNULL(session_info_)
-             || OB_ISNULL(params_.query_ctx_)) {
+  const auto view = peg::view_definition(statement);
+  if (OB_ISNULL(allocator_) || OB_ISNULL(session_info_) || OB_ISNULL(params_.query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(NULL == (stmt = create_stmt<ObCreateTableStmt>()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -55,9 +52,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     ObString view_name;
     ObString view_define;
     ObString expanded_view;
-    int64_t view_definition_start_pos = 0;
-    int64_t view_definition_end_pos = 0;
-    const bool is_force_view = NULL != parse_tree.children_[FORCE_VIEW_NODE];
+    const bool is_force_view = false;
     stmt->set_allocator(*allocator_);
     stmt_ = stmt;
     stmt->set_is_view_stmt(true);
@@ -68,9 +63,8 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     // resolve view_name does not depend on view_definition, but resolve view_definition checks for circular dependencies and needs view_name,
     // Therefore exchange the positions of the two resolves
     // resolve view name; create view [ or replace] view <view_name>[column_list]
-    create_arg.if_not_exist_ = NULL != parse_tree.children_[IF_NOT_EXISTS_NODE]
-                               || 1 == parse_tree.reserved_;
-    create_arg.is_alter_view_ = (1 == parse_tree.reserved_);
+    create_arg.if_not_exist_ = view.replace || view.alter;
+    create_arg.is_alter_view_ = view.alter;
     table_schema.set_force_view(is_force_view);
     
     table_schema.set_define_user_id(session_info_->get_priv_user_id());
@@ -87,10 +81,10 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     bool resolve_succ = true;
     bool can_expand_star = true;
     bool add_undefined_columns = false;
-    ParseNode *select_stmt_node = NULL;
+    const peg::Node *select_stmt_node = &view.query;
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[VIEW_NODE],
+    } else if (OB_FAIL(resolve_table_relation_node(&view.relation,
                                                 view_name, db_name,
                                                 false))) {
     } else if (OB_FAIL(set_database_name(db_name))) {
@@ -121,23 +115,17 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       ObViewTableResolver view_table_resolver(params_, stmt->get_database_name(),
                                               table_schema.get_table_name());
       view_table_resolver.params_.is_from_create_view_ = true;
-      view_table_resolver.params_.is_specified_col_name_ = parse_tree.children_[VIEW_COLUMNS_NODE] != NULL;
+      view_table_resolver.params_.is_specified_col_name_ = !view.columns.empty();
       view_table_resolver.set_current_view_level(1);
       view_table_resolver.set_is_top_stmt(true);
       view_table_resolver.set_has_resolved_field_list(false);
       view_table_resolver.set_is_create_view(true);
-      select_stmt_node = parse_tree.children_[SELECT_STMT_NODE];
-      ParseNode *view_columns_node = parse_tree.children_[VIEW_COLUMNS_NODE];
-      bool has_column = (NULL != view_columns_node) && (view_columns_node->num_child_ > 0);
-      ObString sql_str(select_stmt_node->str_len_, select_stmt_node->str_value_);
-      view_define = sql_str;
-      view_definition_start_pos = select_stmt_node->stmt_loc_.first_column_;
-      view_definition_end_pos = min(select_stmt_node->stmt_loc_.last_column_,
-                                    params_.cur_sql_.length() - 1);
-      if (OB_ISNULL(select_stmt_node)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_UNLIKELY(T_SELECT != select_stmt_node->type_)) {
-        ret = OB_ERR_UNEXPECTED;
+      const auto view_columns = view.columns;
+      const bool has_column = !view_columns.empty();
+      const auto span = view.query.span();
+      view_define = ObString(span.end - span.start,
+                             params_.syntax_->original_source().ptr() + span.start);
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                           *allocator_, session_info_->get_dtc_params(), view_define,
                           ObCharset::COPY_STRING_ON_SAME_CHARSET))) {
@@ -161,7 +149,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
         table_schema.set_table_type(USER_VIEW);
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(resolve_column_list(view_columns_node,
+      } else if (OB_FAIL(resolve_column_list(view_columns,
                                              column_list))) {
       } else if (OB_ISNULL(select_stmt = view_table_resolver.get_select_stmt())) {
         ret = OB_ERR_UNEXPECTED;
@@ -179,7 +167,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
           ret = OB_ERR_UNEXPECTED;
         }
       } else if (OB_FAIL(check_view_columns(*select_stmt,
-                                            view_columns_node,
+                                            view_columns,
                                             create_arg.error_info_,
                                             is_force_view,
                                             can_expand_star,
@@ -198,15 +186,8 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       } else {
         bool is_updatable = true;
         ViewCheckOption check_option = VIEW_CHECK_OPTION_NONE;
-        if (NULL != parse_tree.children_[WITH_OPT_NODE]) {
-          int64_t node_value = parse_tree.children_[WITH_OPT_NODE]->value_;
-          if (OB_UNLIKELY(node_value < 0 ||
-                node_value >= static_cast<int64_t>(VIEW_CHECK_OPTION_MAX))) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            check_option = static_cast<ViewCheckOption>(node_value);
-          }
-        }
+        if (view.check == peg::ViewCheck::Local) check_option = VIEW_CHECK_OPTION_LOCAL;
+        else if (view.check == peg::ViewCheck::Cascaded) check_option = VIEW_CHECK_OPTION_CASCADED;
         ObViewSchema &view_schema = table_schema.get_view_schema();
         view_schema.set_view_definition(view_define);
         view_schema.set_view_check_option(check_option);
@@ -276,7 +257,7 @@ int ObCreateViewResolver::try_add_error_info(const uint64_t error_number,
 }
 
 int ObCreateViewResolver::check_view_columns(ObSelectStmt &select_stmt,
-                                             ParseNode *view_columns_node,
+                                             rust::Slice<const peg::Node> view_columns,
                                              share::schema::ObErrorInfo &error_info,
                                              const bool is_force_view,
                                              bool &can_expand_star,
@@ -296,9 +277,9 @@ int ObCreateViewResolver::check_view_columns(ObSelectStmt &select_stmt,
   ObCollationType cs_type = CS_TYPE_INVALID;
   if ((!is_force_view || select_item_size > 0)
       && OB_FAIL(view_col_names.create(select_item_size))) {
-  } else if (NULL == view_columns_node || view_columns_node->num_child_ <= 0) {
+  } else if (view_columns.empty()) {
     /* do nothing */
-  } else if (is_force_view && select_item_size != view_columns_node->num_child_) {
+  } else if (is_force_view && select_item_size != view_columns.size()) {
     has_view_columns_node = true;
     if (OB_FAIL(try_add_error_info(OB_ERR_VIEW_WRONG_LIST, error_info))) {
     } else {
@@ -307,14 +288,11 @@ int ObCreateViewResolver::check_view_columns(ObSelectStmt &select_stmt,
     }
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
   } else {
-    ParseNode *child_node = NULL;
     int64_t col_cnt_from_node = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && !is_col_dup && i < view_columns_node->num_child_; i++) {
-      if (OB_ISNULL(child_node = view_columns_node->children_[i])) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (T_PRIMARY_KEY == child_node->type_) {
-        /* do nothing */
-      } else if (FALSE_IT(dup_col_name = ObString::make_string(child_node->str_value_))) {
+    for (size_t i = 0; OB_SUCC(ret) && !is_col_dup && i < view_columns.size(); ++i) {
+      const auto &column = view_columns[i];
+      const auto column_text = column.text();
+      if (FALSE_IT(dup_col_name = syntax_text(column_text))) {
       } else if (OB_FAIL(ObCharset::tolower(cs_type, dup_col_name, dup_col_name, *allocator_))) {
       } else if (OB_HASH_EXIST == (ret = view_col_names.set_refactored(dup_col_name, 0))) {
         ++col_cnt_from_node;
@@ -329,7 +307,7 @@ int ObCreateViewResolver::check_view_columns(ObSelectStmt &select_stmt,
     } else if (OB_UNLIKELY(select_item_size != col_cnt_from_node)) {
       ret = OB_ERR_VIEW_WRONG_LIST;
       LOG_WARN("view columns is not equal with select columns", K(select_item_size),
-                                      K(col_cnt_from_node), K(view_columns_node->num_child_));
+                                      K(col_cnt_from_node), K(view_columns.size()));
     } else {
       has_view_columns_node = true;
     }
@@ -742,36 +720,14 @@ int ObCreateViewResolver::create_alias_names_auto(
   return ret;
 }
 
-int ObCreateViewResolver::resolve_column_list(ParseNode *view_columns_node,
-                                              ObIArray<ObString> &column_list)
+int ObCreateViewResolver::resolve_column_list(rust::Slice<const peg::Node> columns,
+                                             ObIArray<ObString> &column_list)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (NULL != view_columns_node) {
-    ObColumnSchemaV2 column;
-    if (OB_ISNULL(view_columns_node->children_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < view_columns_node->num_child_; ++i) {
-        ParseNode *column_node = view_columns_node->children_[i];
-        if (OB_ISNULL(column_node)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          column.reset();
-          ObString column_name;
-          if (OB_FAIL(resolve_column_name(column_name, column_node))) {
-          } else if (OB_FAIL(column.set_column_name(column_name))) {
-          } else {
-            if (OB_FAIL(ob_write_string(*allocator_, column.get_column_name_str(), column_name))) {
-            } else if (OB_FAIL(column_list.push_back(column_name))) {
-            } else {}
-          }
-        }
-      }
-    }
-  } else {
-    //if view_columns_nodes == NULL, just skip it
+  for (const auto &column : columns) {
+    ObString name;
+    OZ (resolve_column_name(name, &column));
+    OZ (column_list.push_back(name));
   }
   return ret;
 }
@@ -804,48 +760,6 @@ int ObCreateViewResolver::collect_dependency_infos(ObQueryCtx *query_ctx,
 
   return ret;
 }
-int ObCreateViewResolver::resolve_select_node_for_force_view(bool &add_undefined_columns,
-                                                             ParseNode *select_stmt_node,
-                                                             ObIArray<SelectItem> &select_items)
-{
-  int ret = OB_SUCCESS;
-  ParseNode *field_list_node = NULL;
-  bool has_star = false;
-  ParseNode *project_node = NULL;
-  SelectItem select_item;
-  if (OB_ISNULL(select_stmt_node)
-      || OB_ISNULL(field_list_node = select_stmt_node->children_[PARSE_SELECT_SELECT])) {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  for (int32_t i = 0; OB_SUCC(ret) && !has_star && i < field_list_node->num_child_; ++i) {
-    if (OB_ISNULL(project_node = field_list_node->children_[i]->children_[0])) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (project_node->type_ == T_STAR
-               || (project_node->type_ == T_COLUMN_REF
-                   && project_node->children_[2]->type_ == T_STAR)) {
-      has_star = true;
-    } else {
-      select_item.expr_name_.assign_ptr(field_list_node->children_[i]->str_value_,
-                          static_cast<int32_t>(field_list_node->children_[i]->str_len_));
-      if (project_node->type_ == T_ALIAS) {
-        ParseNode *alias_node = project_node->children_[1];
-        select_item.alias_name_.assign_ptr(const_cast<char *>(alias_node->str_value_),
-                                            static_cast<int32_t>(alias_node->str_len_));
-        if (OB_UNLIKELY(alias_node->str_len_ > OB_MAX_COLUMN_NAME_LENGTH)) {
-          ret = OB_ERR_TOO_LONG_IDENT;
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(select_items.push_back(select_item))) {
-      }
-    }
-  }
-  if (!has_star && OB_SUCC(ret)) {
-    add_undefined_columns = true;
-  }
-  return ret;
-}
-
 int ObCreateViewResolver::add_undefined_column_infos(ObIArray<SelectItem> &select_items,
                                                      ObTableSchema &table_schema,
                                                      const common::ObIArray<ObString> &column_list)

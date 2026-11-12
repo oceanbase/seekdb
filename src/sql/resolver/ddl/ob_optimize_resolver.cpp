@@ -21,11 +21,11 @@ using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
 using namespace oceanbase::sql;
 
-int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
+int ObOptimizeTableResolver::resolve(const peg::Node &parser_tree)
 {
   int ret = OB_SUCCESS;
   ObOptimizeTableStmt *stmt = nullptr;
-  if (OB_ISNULL(session_info_) || T_OPTIMIZE_TABLE != parser_tree.type_) {
+  if (OB_ISNULL(session_info_) || peg::NodeKind::OptimizeTable != parser_tree.kind()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (OB_ISNULL(stmt = create_stmt<ObOptimizeTableStmt>())) {
@@ -48,36 +48,26 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
       ObString database_name;
       ObString table_name;
       obcall::ObTableItem table_item;
-      ParseNode *table_node = nullptr;
-      int64_t max_table_num = 1;
-      if (OB_UNLIKELY(!parser_tree.children_[TABLE_LIST_NODE])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        max_table_num = parser_tree.children_[TABLE_LIST_NODE]->num_child_;
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < max_table_num; ++i) {
-        table_node = parser_tree.children_[TABLE_LIST_NODE]->children_[i];
-        if (nullptr == table_node) {
-          ret = OB_ERR_UNEXPECTED;
+      for (const auto &relation : peg::optimize_relations(parser_tree)) {
+        if (OB_FAIL(ret)) { break; }
+        database_name.reset();
+        table_name.reset();
+        if (OB_FAIL(resolve_table_relation_node(&relation, table_name, database_name))) {
         } else {
-          database_name.reset();
-          table_name.reset();
-          if (OB_FAIL(resolve_table_relation_node(table_node, table_name, database_name))) {
+          table_item.reset();
+          if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
           } else {
-            table_item.reset();
-            if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
-            } else {
-              table_item.database_name_ = database_name;
-              table_item.table_name_ = table_name;
-              if (OB_HASH_EXIST == table_item_set->exist_refactored(table_item)) {
-                ret = OB_ERR_NONUNIQ_TABLE;
-                LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_item.table_name_.length(), table_item.table_name_.ptr());
-              } else if (OB_FAIL(table_item_set->set_refactored(table_item))) {
-              } else if (OB_FAIL(stmt->add_table_item(table_item))) {
-              }
+            table_item.database_name_ = database_name;
+            table_item.table_name_ = table_name;
+            if (OB_HASH_EXIST == table_item_set->exist_refactored(table_item)) {
+              ret = OB_ERR_NONUNIQ_TABLE;
+              LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_item.table_name_.length(), table_item.table_name_.ptr());
+            } else if (OB_FAIL(table_item_set->set_refactored(table_item))) {
+            } else if (OB_FAIL(stmt->add_table_item(table_item))) {
             }
           }
         }
+
       }
     }
   }

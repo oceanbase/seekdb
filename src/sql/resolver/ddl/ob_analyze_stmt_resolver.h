@@ -28,29 +28,17 @@ class ObAnalyzeTableInfo;
 
 class ObAnalyzeStmtResolver: public ObDDLResolver
 {
-  static const int64_t DEFAULT_SAMPLE_ROWCOUNT_PER_BUCKET = 512;
 public:
   ObAnalyzeStmtResolver(ObResolverParams &params);
   virtual ~ObAnalyzeStmtResolver();
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
-  int resolve_analyze_table(const ParseNode &parse_node,
+  int resolve_analyze_table(const peg::Node &parse_node,
                             ObAnalyzeStmt &analyze_stmt);
-  int resolve_mysql_update_histogram(const ParseNode &parse_node,
-                                     ObAnalyzeStmt &analyze_stmt);
-  int resolve_mysql_delete_histogram(const ParseNode &parse_node,
-                                     ObAnalyzeStmt &analyze_stmt);
-  int resolve_mysql_column_bucket_info(const ParseNode *column_node,
-                                       const int64_t bucket_number,
-                                       ObAnalyzeStmt &analyze_stmt);
-  int resolve_table_info(const ParseNode *table_node,
+  int resolve_table_info(const peg::Node *table_node,
                          ObAnalyzeStmt &analyze_stmt);
-  int recursive_resolve_table_info(const ParseNode *table_list_node,
-                                  ObAnalyzeStmt &analyze_stmt);
-  int resolve_partition_info(const ParseNode *part_node,
-                             ObAnalyzeStmt &analyze_stmt);
-  int inner_resolve_partition_info(const ParseNode *part_node,
-                                  ObAnalyzeTableInfo &table_info);
+  int resolve_partition_info(ObAnalyzeStmt &analyze_stmt);
+  int inner_resolve_partition_info(     ObAnalyzeTableInfo &table_info);
   int resolve_default_column_info(ObAnalyzeStmt &analyze_stmt);
 
 

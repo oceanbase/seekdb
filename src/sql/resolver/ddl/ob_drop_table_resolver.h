@@ -25,17 +25,10 @@ namespace sql
 class ObDropTableResolver : public ObDDLResolver
 {
 public:
-  enum node_type {
-    TEMPORARY_NODE = 0,
-    IF_EXIST_NODE,
-    TABLE_LIST_NODE,
-    MAX_NODE
-  };
-public:
   explicit ObDropTableResolver(ObResolverParams &params);
   virtual ~ObDropTableResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropTableResolver);
 };

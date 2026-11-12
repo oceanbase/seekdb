@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "sql/syntax.h"
 #include "sql/printer/ob_schema_printer.h"
 #include <inttypes.h>
 #include "share/ob_autoincrement_service.h"
@@ -2294,64 +2295,8 @@ int ObSchemaPrinter::print_database_definiton(const uint64_t database_id,
   return ret;
 }
 
-int ObSchemaPrinter::print_package_definition(uint64_t package_id,
-                                              char* buf,
-                                              const int64_t& buf_len,
-                                              int64_t& pos) const
-{
-  int ret = OB_SUCCESS;
-  const ObPackageInfo *package_info = NULL;
-  const ObDatabaseSchema *database_schema = NULL;
-  ObString actully_package_body;
-  ObArenaAllocator allocator;
-  pl::ObPLParser parser(allocator, ObCharsets4Parser());
-  ObStmtNodeTree *package_stmt = NULL;
-  const ObStmtNodeTree *real_package_stmt = NULL;
-  OZ (schema_guard_.get_package_info( package_id, package_info));
-  if (OB_SUCC(ret) && OB_ISNULL(package_info)) {
-    ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
-    SHARE_SCHEMA_LOG(WARN, "Unknow package", K(ret), K(package_id));
-  }
-  OZ (schema_guard_.get_database_schema( package_info->get_database_id(), database_schema));
-  if (OB_SUCC(ret) && OB_ISNULL(database_schema)) {
-    ret = OB_ERR_BAD_DATABASE;
-    SHARE_SCHEMA_LOG(WARN, "Unknow database", K(ret), K(package_info->get_database_id()));
-  }
-  CK (false);
-  OZ (databuff_printf(buf, buf_len, pos, "CREATE OR REPLACE%s PACKAGE%s \"%.*s\".\"%.*s\"\n",
-                      package_info->is_noneditionable() ? " NONEDITIONABLE" : "",
-                      package_info->is_package() ? "" : " BODY",
-                      database_schema->get_database_name_str().length(),
-                      database_schema->get_database_name_str().ptr(),
-                      package_info->get_package_name().length(),
-                      package_info->get_package_name().ptr()));
-  CK (!package_info->get_source().empty());
-  OZ (parser.parse_package(package_info->get_source(),
-                           package_stmt,
-                           ObDataTypeCastParams(),
-                           NULL,
-                           false,
-                           nullptr));
-  CK (OB_NOT_NULL(package_stmt));
-  CK (T_STMT_LIST == package_stmt->type_);
-  CK (1 == package_stmt->num_child_);
-  CK (OB_NOT_NULL(package_stmt->children_[0]));
-  OX (real_package_stmt = package_stmt->children_[0]);
-  if (OB_FAIL(ret)) {
-  } else {
-    CK (package_info->is_package() ? T_PACKAGE_BLOCK == real_package_stmt->type_
-                                 : T_PACKAGE_BODY_BLOCK == real_package_stmt->type_);
-    OX (actully_package_body = ObString(real_package_stmt->str_len_, real_package_stmt->str_value_));
-  }
-  CK (!actully_package_body.empty());
-  OZ (databuff_printf(buf, buf_len, pos, "%.*s",
-                      actully_package_body.length(),
-                      actully_package_body.ptr()));
-  return ret;
-}
-
 int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
-                                              const ObStmtNodeTree *param_type,
+                                              const peg::Node *param_type,
                                               char *buf,
                                               const int64_t &buf_len,
                                               int64_t &pos,
@@ -2446,7 +2391,7 @@ int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
     MEMSET(type_str, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
     if (ObGeometryTC == param->get_param_type().get_type_class()) {
       CK (OB_NOT_NULL(param_type));
-      OX (sub_type = param_type->int32_values_[1]);
+      OX (sub_type = static_cast<uint64_t>(sql::ObResolverUtils::resolve_geometry_type(peg::type_syntax(*param_type).geometry)));
     }
     OZ (ob_sql_type_str(type_str,
                         OB_MAX_SYS_PARAM_NAME_LENGTH,
@@ -2464,7 +2409,6 @@ int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
 }
 
 int ObSchemaPrinter::print_routine_definition_param_v1(const ObRoutineInfo &routine_info,
-                                                    const ObStmtNodeTree *param_list,
                                                     char* buf,
                                                     const int64_t& buf_len,
                                                     int64_t& pos,
@@ -2472,7 +2416,6 @@ int ObSchemaPrinter::print_routine_definition_param_v1(const ObRoutineInfo &rout
 {
   int ret = OB_SUCCESS;
   bool is_first_param = true;
-  UNUSED(param_list);
 
   for(int64_t i = 0; OB_SUCC(ret) && i < routine_info.get_param_count(); ++i) {
     ObRoutineParam *param = NULL;
@@ -2517,10 +2460,7 @@ int ObSchemaPrinter::print_routine_definition_param_v1(const ObRoutineInfo &rout
 }
 
 int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_info,
-                                              const ObStmtNodeTree *param_list,
-                                              const ObStmtNodeTree *return_type,
                                               const ObString &body,
-                                              const ObString &clause,
                                               char* buf,
                                               const int64_t& buf_len,
                                               int64_t &pos,
@@ -2553,7 +2493,7 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
   OZ (databuff_printf(buf, buf_len, pos, "\n"));
   if (OB_SUCC(ret) && routine_info->get_param_count() > 0) {
     OZ (databuff_printf(buf, buf_len, pos, "(\n"));
-    OZ (print_routine_definition_param_v1(*routine_info, param_list, buf, buf_len, pos, tz_info));
+    OZ (print_routine_definition_param_v1(*routine_info, buf, buf_len, pos, tz_info));
     OZ (databuff_printf(buf, buf_len, pos, "\n)"));
   } else {
     OZ (databuff_printf(buf, buf_len, pos, "()\n"));
@@ -2562,7 +2502,7 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
     const ObRoutineParam *routine_param = NULL;
     OZ (databuff_printf(buf, buf_len, pos, " RETURNS"));
     OX (routine_param = static_cast<const ObRoutineParam*>(routine_info->get_ret_info()));
-    OZ (print_routine_param_type(routine_param, return_type, buf, buf_len, pos, tz_info));
+    OZ (print_routine_param_type(routine_param, nullptr, buf, buf_len, pos, tz_info));
   }
   if (OB_SUCC(ret)) {
     if (routine_info->is_no_sql()) {
@@ -2582,7 +2522,6 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
       OZ (databuff_printf(buf, buf_len, pos, "\n"));
     }
   }
-  UNUSED(clause);
   OZ (databuff_printf(buf, buf_len, pos, " %.*s", body.length(), body.ptr()));
   return ret;
 }
@@ -2605,8 +2544,7 @@ int ObSchemaPrinter::print_routine_definition(const uint64_t routine_id,
 
   if (OB_SUCC(ret)) {
     ObArenaAllocator allocator;
-    ObString routine_stmt;
-    ParseResult parse_result;
+    sql::ParsedSql parse_result;
     const ObString &routine_body = routine_info->get_routine_body();
     CK(!routine_body.empty());
 
@@ -2616,35 +2554,14 @@ int ObSchemaPrinter::print_routine_definition(const uint64_t routine_id,
     } else if (routine_info->get_routine_body().prefix_match_ci("procedure")
                || routine_info->get_routine_body().prefix_match_ci("function")) {
       use_v1 = false;
-      ObSQLMode sql_mode = exec_env.get_sql_mode();
-
-      {
-        const char prefix[] = "CREATE\n";
-        int64_t prefix_len = STRLEN(prefix);
-        int64_t buf_sz = prefix_len + routine_body.length();
-        char *stmt_buf = static_cast<char *>(allocator.alloc(buf_sz));
-        if (OB_ISNULL(stmt_buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory for routine body buffer", K(buf_sz));
-        } else {
-          MEMCPY(stmt_buf, prefix, prefix_len);
-          MEMCPY(stmt_buf + prefix_len, routine_body.ptr(), routine_body.length());
-
-          routine_stmt.assign_ptr(stmt_buf, buf_sz);
-        }
-      }
-      CK(!routine_stmt.empty());
-
-      if (OB_SUCC(ret)) {
-        pl::ObPLParser parser(allocator, ObCharsets4Parser(), sql_mode);
-        OZ (parser.parse(routine_stmt, routine_stmt, parse_result, true));
-      }
+      sql::ObParser parser(allocator, exec_env.get_sql_mode());
+      OZ (parser.parse_routine_definition(routine_body, parse_result));
     }
 
     if (OB_SUCC(ret) && !use_v1) {
       if (OB_FAIL(print_routine_definition_v2_mysql(
                     *routine_info,
-                    parse_result.result_tree_,
+                    parse_result,
                     exec_env,
                     buf,
                     buf_len,
@@ -2657,15 +2574,14 @@ int ObSchemaPrinter::print_routine_definition(const uint64_t routine_id,
   if (OB_FAIL(ret) || !use_v1) {
     //do nothing
   } else {
-    ObString clause;
-    OZ (print_routine_definition_v1(routine_info, NULL, NULL, routine_info->get_routine_body(), clause, buf, buf_len, pos, tz_info));
+    OZ (print_routine_definition_v1(routine_info, routine_info->get_routine_body(), buf, buf_len, pos, tz_info));
   }
   return ret;
 }
 
 int ObSchemaPrinter::print_routine_definition_v2_mysql(
     const ObRoutineInfo &routine_info,
-    const ObStmtNodeTree *parse_tree,
+    const sql::ParsedSql &syntax,
     const ObExecEnv &exec_env,
     char* buf,
     const int64_t& buf_len,
@@ -2679,9 +2595,8 @@ int ObSchemaPrinter::print_routine_definition_v2_mysql(
   ObString user_name;
   ObString host_name;
 
-  ParseNode *create_node = nullptr;
-  ParseNode *return_node = nullptr;
-  ParseNode *body_node = nullptr;
+  const peg::Node *create_node = syntax.statement();
+  ObString body;
 
   bool is_ansi_quote = false;
   IS_ANSI_QUOTES(exec_env.get_sql_mode(), is_ansi_quote);
@@ -2692,14 +2607,9 @@ int ObSchemaPrinter::print_routine_definition_v2_mysql(
   // use quote or not is determined by SQL_QUOTE_SHOW_CREATE variable of the SHOW CREATE statement execution
   const char *quote = sql_quote_show_create_ ? quote_char : "";
 
-  CK (OB_NOT_NULL(parse_tree) && T_STMT_LIST == parse_tree->type_ && 1 == parse_tree->num_child_);
-  OX (create_node = parse_tree->children_[0]);
-  CK (OB_NOT_NULL(create_node)); 
-  CK (T_SP_CREATE == create_node->type_ || T_SF_CREATE == create_node->type_);
-  OX (body_node = routine_info.is_procedure() ? create_node->children_[4]
-                                              : create_node->children_[5]);
-  CK (OB_NOT_NULL(body_node));
-  CK (OB_NOT_NULL(body_node->raw_text_));
+  CK (OB_NOT_NULL(create_node));
+  CK (create_node->kind() == peg::NodeKind::CreateProcedure || create_node->kind() == peg::NodeKind::CreateFunction);
+  OX (body = syntax.source(peg::routine_body(*create_node)));
 
   OX (priv_user = routine_info.get_priv_user());
   OX (user_name = priv_user.split_on('@'));
@@ -2725,17 +2635,10 @@ int ObSchemaPrinter::print_routine_definition_v2_mysql(
                       quote),
       K(buf), K(buf_len), K(routine_info));
 
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (create_node->children_[2] != nullptr) {
-    const ParseNode &param_node = *create_node->children_[2];
-    OZ (databuff_printf(buf, buf_len, pos, "(%.*s)",
-                        static_cast<int32_t>(param_node.str_len_),
-                        param_node.str_value_),
-        K(buf), K(buf_len), K(routine_info), K(param_node.str_value_), K(param_node.str_len_));
-  } else {
-    OZ (databuff_printf(buf, buf_len, pos, "()"),
-        K(buf), K(buf_len), K(routine_info));
+  if (OB_SUCC(ret)) {
+    const ObString parameters = peg::routine_parameters(*create_node).empty() ? ObString()
+        : syntax.source(peg::routine_parameter_list(*create_node));
+    OZ (databuff_printf(buf, buf_len, pos, "(%.*s)", parameters.length(), parameters.ptr()));
   }
 
   if (OB_SUCC(ret) && routine_info.is_function()) {
@@ -2743,9 +2646,7 @@ int ObSchemaPrinter::print_routine_definition_v2_mysql(
     OZ (databuff_printf(buf, buf_len, pos, " RETURNS"));
     OX (return_type =
            static_cast<const ObRoutineParam *>(routine_info.get_ret_info()));
-    OX (return_node = create_node->children_[3]);
-    CK (OB_NOT_NULL(return_node));
-    OZ (print_routine_param_type(return_type, return_node, buf, buf_len, pos, tz_info),
+    OZ (print_routine_param_type(return_type, &peg::routine_return_type(*create_node), buf, buf_len, pos, tz_info),
         K(buf), K(buf_len), K(routine_info));
   }
 
@@ -2768,10 +2669,7 @@ int ObSchemaPrinter::print_routine_definition_v2_mysql(
     }
   }
 
-  OZ (databuff_printf(buf, buf_len, pos, "\n%.*s",
-                      static_cast<int32_t>(body_node->text_len_),
-                      body_node->raw_text_),
-      K(buf), K(buf_len), K(routine_info), K(body_node->raw_text_), K(body_node->text_len_));
+  OZ (databuff_printf(buf, buf_len, pos, "\n%.*s", body.length(), body.ptr()));
 
   return ret;
 }

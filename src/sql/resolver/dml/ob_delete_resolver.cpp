@@ -54,7 +54,7 @@ ObDeleteResolver::~ObDeleteResolver()
 {
 }
 
-int ObDeleteResolver::resolve(const ParseNode &parse_tree)
+int ObDeleteResolver::resolve(const peg::Node &query)
 {
   int ret = OB_SUCCESS;
   // create the delete stmt
@@ -65,22 +65,13 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(delete_stmt = create_stmt<ObDeleteStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create delete stmt failed", K(ret));
-  } else if (OB_UNLIKELY(parse_tree.type_ != T_DELETE) || OB_UNLIKELY(parse_tree.num_child_ < 2)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree type is invalid", K_(parse_tree.type), K_(parse_tree.num_child));
-  } else if (OB_ISNULL(parse_tree.children_[TABLE])) {
+  } else if (query.kind() != peg::NodeKind::Delete) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     stmt_ = delete_stmt;
-    // Only support the syntax of delete ignore, and there is no semantic support.
-//   delete_stmt->set_ignore(false);
-//    if (NULL != parse_tree.children_[IGNORE]) {
-//      delete_stmt->set_ignore(true);
-//      session_info_->set_ignore_stmt(true);
-//    }
     if (OB_FAIL(resolve_outline_data_hints())) {
-    } else if (OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
-    } else if (OB_FAIL(resolve_table_list(*parse_tree.children_[TABLE], is_multi_table_delete))) {
+    } else if (OB_FAIL(resolve_with_clause(query))) {
+    } else if (OB_FAIL(resolve_table_list(query, is_multi_table_delete))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < delete_tables_.count(); ++i) {
         const TableItem *table_item = delete_tables_.at(i);
@@ -97,10 +88,10 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(resolve_hints(parse_tree.children_[HINT]))) {
-      } else if (OB_FAIL(resolve_where_clause(parse_tree.children_[WHERE]))) {
-      } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[ORDER_BY]))) {
-      } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], true))) {
+      if (OB_FAIL(resolve_hints(peg::query_hints(query)))) {
+      } else if (OB_FAIL(resolve_where_clause(peg::query_has_filter(query) ? &peg::query_filter(query) : nullptr))) {
+      } else if (OB_FAIL(resolve_order_clause(peg::query_order(query)))) {
+      } else if (OB_FAIL(resolve_limit_clause(peg::query_has_limit(query) ? &peg::query_limit(query) : nullptr, true))) {
       } else if (OB_FAIL(delete_stmt->formalize_stmt(session_info_))) {
       } else { /*do nothing*/ }
     }
@@ -182,33 +173,20 @@ int ObDeleteResolver::check_multi_delete_table_conflict()
   return ret;
 }
 
-int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_multi_table_delete)
+int ObDeleteResolver::resolve_table_list(const peg::Node &query, bool &is_multi_table_delete)
 {
   int ret = OB_SUCCESS;
   TableItem *table_item = NULL;
   is_multi_table_delete = false;
-  const ParseNode *delete_list = NULL;
-  const ParseNode *from_list = NULL;
+  const auto targets = peg::delete_targets(query);
+  const auto sources = peg::query_sources(query);
   ObDeleteStmt *delete_stmt = get_delete_stmt();
-
-  CK(T_DELETE_TABLE_NODE == table_list.type_);
-  CK(2 == table_list.num_child_);
   CK(OB_NOT_NULL(delete_stmt));
 
-  if (OB_SUCC(ret)) {
-    delete_list = table_list.children_[0];
-    from_list = table_list.children_[1];
-  }
-
-  CK(OB_NOT_NULL(from_list));
-  CK(T_TABLE_REFERENCES == from_list->type_);
-  CK(OB_NOT_NULL(from_list->children_));
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < from_list->num_child_; ++i) {
-    const ParseNode *table_node = from_list->children_[i];
-    CK(OB_NOT_NULL(table_node));
+  for (int64_t i = 0; OB_SUCC(ret) && i < sources.size(); ++i) {
+    const auto &source = sources[i];
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
+      if (OB_FAIL(ObDMLResolver::resolve_table(source, table_item))) {
       } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid delete target
         ret = OB_WRONG_TABLE_NAME;
       } else if (OB_FAIL(column_namespace_checker_.add_reference_table(table_item))) {
@@ -224,7 +202,7 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
   }
 
   if (OB_SUCC(ret)) {
-    if (NULL == delete_list) {
+    if (targets.empty()) {
       //single table delete, delete list is same with from list
       CK(delete_stmt->get_table_size() == 1);
       OZ(delete_tables_.push_back(delete_stmt->get_table_item(0)));
@@ -234,13 +212,12 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
       is_multi_table_delete = true;
       ObString table_name;
       ObString db_name;
-      CK(T_TABLE_REFERENCES == delete_list->type_);
-      for (int64_t i = 0; OB_SUCC(ret) && i < delete_list->num_child_; ++i) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < targets.size(); ++i) {
         table_name.reset();
         db_name.reset();
         table_item = NULL;
-        const ParseNode *table_node = delete_list->children_[i];
-        if (OB_FAIL(resolve_table_relation_node(table_node, table_name, db_name, true))) {
+        const auto &target = targets[i];
+        if (OB_FAIL(resolve_table_relation_node(&target, table_name, db_name, true))) {
         } else if (OB_FAIL(find_delete_table_with_mysql_rule(db_name, table_name, table_item))) {
         } else if (OB_ISNULL(table_item)) {
           ret = OB_ERR_UNEXPECTED;

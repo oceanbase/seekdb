@@ -27,7 +27,7 @@
 #include "share/schema/ob_table_schema.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/pl/ob_pl.h"
 #include "sql/pl/ob_pl_stmt.h"
@@ -50,6 +50,11 @@ class ObPLRoutineInfo;
 }
 namespace sql
 {
+namespace peg { struct Node; }
+struct LiteralToken;
+struct LiteralDecodeOptions;
+struct NumericLiteral;
+struct NumericLiteralOptions;
 class ObRawExprUtils;
 class ObRoutineMatchInfo
 {
@@ -128,7 +133,6 @@ struct ObResolverUtils
 public:
   // Validate compatibility selectors such as TENANT = sys after TENANT was
   // removed as a global keyword in the standalone runtime.
-  static int resolve_local_runtime_selector(const ParseNode *runtime_selector);
   static int get_user_type(common::ObIAllocator *allocator,
                            ObSQLSessionInfo *session_info,
                            ObPlanCache *plan_cache,
@@ -155,23 +159,24 @@ public:
                                     bool is_called_in_sql = false,
                                     ObIArray<uint64_t> *dep_db_array = NULL);
 
-  static int resolve_extended_type_info(const ParseNode &str_list_node,
+  static int resolve_extended_type_info(const peg::Node &type_node,
+                                        common::ObIAllocator &allocator,
                                         ObIArray<ObString>& type_info_array);
-  static int resolve_collection_type_info(const ParseNode &type_node,
+  static int resolve_collection_type_info(const peg::Node &type_node,
                                           ObStringBuffer &buf,
                                           uint8_t &depth);
-  static int resolve_basic_type_info(const ParseNode &type_node,
+  static int resolve_basic_type_info(const peg::Node &type_node,
                                      ObStringBuffer &buf);
-  static int resolve_array_type_info(const ParseNode &type_node,
+  static int resolve_array_type_info(const peg::Node &type_node,
                                      ObStringBuffer &buf,
                                      uint8_t &depth);
-  static int resolve_vector_type_info(const ParseNode &type_node,
+  static int resolve_vector_type_info(const peg::Node &type_node,
                                           ObStringBuffer &buf,
                                           uint8_t &depth);
-  static int resolve_map_type_info(const ParseNode &type_node,
+  static int resolve_map_type_info(const peg::Node &type_node,
                                    ObStringBuffer &buf,
                                    uint8_t &depth);
-  static int resolve_sparse_vector_type_info(const ParseNode &type_node,
+  static int resolve_sparse_vector_type_info(const peg::Node &type_node,
                                       ObStringBuffer &buf,
                                       uint8_t &depth);
   inline static bool is_collection_support_type(const ObObjType type);
@@ -278,20 +283,22 @@ public:
                          const share::schema::ObRoutineInfo *&routine);
   static int resolve_sp_access_name(ObSchemaChecker &schema_checker,
                                     const ObString& current_database,
-                                    const ParseNode &sp_access_name_node,
+                                    rust::Slice<const peg::Node> names,
                                     ObString &db_name,
                                     ObString &package_name,
                                     ObString &routine_name,
                                     ObIArray<ObSchemaObjVersion> *deps = nullptr);
   static int resolve_sp_name(ObSQLSessionInfo &session_info,
-                             const ParseNode &sp_name_node,
+                             rust::Slice<const peg::Node> names,
+                             common::ObIAllocator &allocator,
                              ObString &db_name,
                              ObString &sp_name,
                              bool need_db_name = true);
 
-  static int resolve_column_ref(const ParseNode *node, const common::ObNameCaseMode mode, ObQualifiedName& column_ref);
+  static int resolve_column_ref(const peg::Node &node, const common::ObNameCaseMode mode,
+                                common::ObIAllocator &allocator, ObQualifiedName &column_ref);
   static int resolve_obj_access_ref_node(ObRawExprFactory &expr_factory,
-                                         const ParseNode *node,
+                                         const peg::Node &node,
                                          ObQualifiedName &q_name,
                                          const ObSQLSessionInfo &session_info);
 
@@ -339,8 +346,28 @@ public:
    * @retval OB_SOME_ERROR special errno need to handle
    *
    */
-  static int resolve_stmt_type(const ParseResult &result, stmt::StmtType &type);
+
   static stmt::StmtType get_stmt_type_by_item_type(const ObItemType item_type);
+  static int resolve_string_literal(const common::ObString &text, common::ObObjType value_type,
+                                    common::ObCollationType connection_collation,
+                                    const common::ObString *charset, bool binary_introducer,
+                                    common::ObIAllocator &allocator, common::ObObjParam &val);
+  static int resolve_expression_literal(const peg::Node &node,
+                                         const LiteralDecodeOptions &options,
+                                         common::ObIAllocator &allocator,
+                                         common::ObObjParam &value,
+                                         common::ObString &literal_prefix);
+  static int resolve_literal(const LiteralToken &literal,
+                             const LiteralDecodeOptions &options,
+                             common::ObIAllocator &allocator,
+                             common::ObObjParam &val,
+                             common::ObString &literal_prefix);
+  static int resolve_numeric_literal(const NumericLiteral &literal,
+                                     const NumericLiteralOptions &options,
+                                     common::ObIAllocator &allocator,
+                                     common::ObObjParam &val,
+                                     common::ObString &literal_prefix);
+
   /**
    * resolve expr_const, @see sql_parser.y
    *
@@ -352,25 +379,7 @@ public:
    *
    * @return
    */
-  static int resolve_const(const ParseNode *node,
-                           const stmt::StmtType stmt_type,
-                           common::ObIAllocator &allocator,
-                           const common::ObCollationType connection_collation,
-                           const ObCollationType nchar_collation,
-                           const common::ObTimeZoneInfo *tz_info,
-                           common::ObObjParam &val,
-                           const bool is_paramlize,
-                           common::ObString &literal_prefix,
-                           const ObLengthSemantics default_length_semantics,
-                           const common::ObCollationType server_collation,
-                           ObExprInfo *parents_expr_info,
-                           const ObSQLMode mode,
-                           bool enable_decimal_int_type,
-                           const share::ObCompatType compat_type,
-                           const bool enable_mysql_compatible_dates,
-                           int8_t min_const_integer_precision,
-                           bool is_from_pl = false,
-                           bool fmt_int_or_ch_decint = false);
+
 
   static int set_string_val_charset(ObIAllocator &allocator,
                                     ObObjParam &val, 
@@ -379,7 +388,11 @@ public:
                                     bool is_strict_mode, 
                                     bool return_ret);
 
-  static int resolve_data_type(const ParseNode &type_node,
+  static int resolve_unsigned_integer(const peg::Node &node, const char *context, uint64_t &value);
+  static int resolve_type_syntax(const peg::Node &node, peg::TypeSyntax &syntax);
+  static int resolve_cast_type(const peg::Node &node, const common::ObString &spelling, ObRawExprResType &target);
+  static common::ObGeoType resolve_geometry_type(peg::GeometryType type);
+  static int resolve_data_type(const peg::Node &type_node,
                                const common::ObString &ident_name,
                                common::ObDataType &data_type,
                                const bool is_for_pl_type,
@@ -388,7 +401,7 @@ public:
                                const bool enable_mysql_compatible_dates,
                                const bool convert_real_type_to_decimal = false);
 
-  static int resolve_str_charset_info(const ParseNode &type_node,
+  static int resolve_str_charset_info(const peg::Node &type_node,
                                       common::ObDataType &data_type,
                                       const bool is_for_pl_type);
 
@@ -400,7 +413,7 @@ public:
 
   static int resolve_columns_for_const_expr(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns, ObResolverParams &resolve_params);
   static int resolve_const_expr(ObResolverParams &params,
-                                const ParseNode &node,
+                                const peg::Node &node,
                                 ObRawExpr *&const_expr,
                                 common::ObIArray<ObVarInfo> *var_infos);
 
@@ -432,26 +445,26 @@ public:
                                const ObColumnRefRawExpr &col_ref,
                                bool &is_hit);
   static int resolve_partition_list_value_expr(ObResolverParams &params,
-                                               const ParseNode &node,
+                                               const peg::Node &node,
                                                const common::ObString &part_name,
                                                const share::schema::ObPartitionFuncType part_type,
                                                const common::ObIArray<ObRawExpr *> &part_func_exprs,
                                                common::ObIArray<ObRawExpr *> &part_value_expr_array);
   static int resolve_partition_list_value_expr(ObResolverParams &params,
-                                               const ParseNode &node,
+                                               const peg::Node &node,
                                                const common::ObString &part_name,
                                                const share::schema::ObPartitionFuncType part_type,
                                                int64_t &expr_num,
                                                common::ObIArray<ObRawExpr *> &part_value_expr_array);
   static int resolve_columns_for_partition_range_value_expr(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns);
   static int resolve_partition_range_value_expr(ObResolverParams &params,
-                                                const ParseNode &node,
+                                                const peg::Node &node,
                                                 const common::ObString &part_name,
                                                 const share::schema::ObPartitionFuncType part_type,
                                                 const ObRawExpr &part_func_expr,
                                                 ObRawExpr *&part_value_expr);
   static int resolve_partition_range_value_expr(ObResolverParams &params,
-                                                const ParseNode &node,
+                                                const peg::Node &node,
                                                 const common::ObString &part_name,
                                                 const share::schema::ObPartitionFuncType part_type,
                                                 ObRawExpr *&part_value_expr);
@@ -463,7 +476,7 @@ public:
                                                 int64_t partition_key_start,
                                                 common::ObIArray<common::ObString> &partition_keys);
   static int resolve_partition_expr(ObResolverParams &params,
-                                    const ParseNode &node,
+                                    const peg::Node &node,
                                     const share::schema::ObTableSchema &tbl_schema,
                                     share::schema::ObPartitionFuncType part_func_type,
                                     ObRawExpr *&part_expr,
@@ -476,7 +489,8 @@ public:
                                            const PureFunctionCheckStatus
                                             check_status = DISABLE_CHECK);
   static int resolve_generated_column_expr(ObResolverParams &params,
-                                           const ParseNode *node,
+                                           const peg::Node &node,
+                                           const common::ObString &syntax_source,
                                            share::schema::ObTableSchema &tbl_schema,
                                            share::schema::ObColumnSchemaV2 &generated_column,
                                            ObRawExpr *&expr,
@@ -492,7 +506,8 @@ public:
                                              check_status = DISABLE_CHECK,
                                            bool coltype_not_defined = false);
   static int resolve_generated_column_expr(ObResolverParams &params,
-                                           const ParseNode *node,
+                                           const peg::Node &node,
+                                           const common::ObString &syntax_source,
                                            share::schema::ObTableSchema &tbl_schema,
                                            ObIArray<share::schema::ObColumnSchemaV2 *> &resolved_cols,
                                            share::schema::ObColumnSchemaV2 &generated_column,
@@ -502,10 +517,8 @@ public:
                                            bool coltype_not_defined = false);
   static int resolve_generated_column_info(const common::ObString &expr_str,
                                            ObIAllocator &allocator,
-                                           ObItemType &root_expr_type,
+                                           ObItemType &root_function_type,
                                            common::ObIArray<common::ObString> &column_names);
-  static int resolve_column_info_recursively(const ParseNode *node,
-                                             common::ObIArray<common::ObString> &column_names);
   static share::schema::ObColumnSchemaV2* get_column_schema_from_array(
     ObIArray<share::schema::ObColumnSchemaV2 *> &resolved_cols,
     const common::ObString &column_name);
@@ -514,7 +527,8 @@ public:
                                                  share::schema::ObColumnSchemaV2 &default_expr_v2_column,
                                                  ObRawExpr *&expr);
   static int resolve_default_expr_v2_column_expr(ObResolverParams &params,
-                                                 const ParseNode *node,
+                                                 const peg::Node &node,
+                                           const common::ObString &syntax_source,
                                                  share::schema::ObColumnSchemaV2 &default_expr_v2_column,
                                                  ObRawExpr *&expr);
   static int resolve_constraint_expr(ObResolverParams &params,
@@ -529,7 +543,8 @@ public:
   static int check_user_variable_length(char *str, int64_t str_len);
   static int resolve_check_constraint_expr(
              ObResolverParams &params,
-             const ParseNode *node,
+             const peg::Node &node,
+      const common::ObString &syntax_source,
              const share::schema::ObTableSchema &tbl_schema,
              share::schema::ObConstraint &constraint,
              ObRawExpr *&expr,
@@ -562,8 +577,11 @@ public:
   static bool is_partition_range_column_type(const common::ObObjType type);
   static bool is_restore_user(ObSQLSessionInfo &session_info);
   static bool is_drc_user(ObSQLSessionInfo &session_info);
-  static int resolve_udf_name_by_parse_node(
-    const ParseNode *node, const common::ObNameCaseMode case_mode, ObUDFInfo& udf_info);
+  static int resolve_udf_name(const common::ObString &name,
+                              const common::ObString &database,
+                              const common::ObString &package,
+                              common::ObNameCaseMode case_mode,
+                              common::ObIAllocator &allocator, ObUDFInfo &udf_info);
   // Check duplicate foreign keys for CREATE TABLE and ALTER TABLE ADD FOREIGN KEY.
   static int check_dup_foreign_keys_exist(
              const common::ObIArray<share::schema::ObForeignKeyInfo> &fk_infos,
@@ -618,15 +636,7 @@ public:
       const share::schema::ObColumnSchemaV2 *column = NULL);
   static int get_columns_name_from_index_table_schema(const share::schema::ObTableSchema &index_table_schema,
                                                       ObIArray<ObString> &index_columns_name);
-  static int transform_sys_func_to_objaccess(
-    common::ObIAllocator *allocator, const ParseNode *sys_func, ParseNode *&obj_access);
-  static int transform_func_sys_to_udf(common::ObIAllocator *allocator,
-                                       const ParseNode *func_sys,
-                                       const common::ObString &db_name,
-                                       const common::ObString &pkg_name,
-                                       ParseNode *&func_udf);
-  static int set_direction_by_mode(const ParseNode &sort_node, OrderItem &order_item, bool opt_nulls = false);
-  static int resolve_string(const ParseNode *node, common::ObString &string);
+  static int set_direction_by_mode(const peg::Node &sort_node, OrderItem &order_item);
   // Check non-updatable view shapes which are forbidden for DML statements:
   //    aggregate
   //    distinct
@@ -674,13 +684,10 @@ public:
 
   static common::ObString get_stmt_type_string(stmt::StmtType stmt_type);
 
-  static ParseNode *get_select_into_node(const ParseNode &node);
-
-  static int get_select_into_node(const ParseNode &node, ParseNode* &into_node, bool top_level);
-
-  static int get_user_var_value(const ParseNode *node,
-                                ObSQLSessionInfo *session_info,
-                                ObObj &value);
+  static int get_select_into_clause(const peg::Node &query,
+                                        peg::IntoKind &kind,
+                                        rust::Slice<const peg::Node> &variables,
+                                        bool top_level);
   static int check_duplicated_column(ObSelectStmt &select_stmt, bool can_skip = false);
   static int check_secure_path(const common::ObString &secure_file_priv, const common::ObString &full_path);
   // get column item's default value. Use select item's expr to find the original column.
@@ -715,20 +722,13 @@ public:
                                                      const ObRawExprResType &column_type,
                                                      const ObString &column_name,
                                                      ObObj &part_value);
-  static int resolve_file_size_node(const ParseNode *file_size_node, int64_t &parse_int_value);
-  static int resolve_varchar_file_size(const ParseNode *child, int64_t &parse_int_value);
 
-  static int resolve_file_format(const ParseNode *node,
-                                 ObExternalFileFormat &format,
-                                 ObResolverParams &params);
-  static int resolve_file_compression_format(const ParseNode *node,
-                                             ObExternalFileFormat &format,
-                                             ObResolverParams &params);
-  static int resolve_binary_format(const ParseNode *node, ObExternalFileFormat &format);
-  static int resolve_file_format_string_value(const ParseNode *node,
-                                              const ObCharsetType &format_charset,
-                                              ObResolverParams &params,
-                                              ObString &result_value);
+
+
+
+
+
+
   static int get_generated_column_expr_temp(TableItem *table_item,
                                             ObIArray<ObRawExpr *> &gen_col_depend, ObIArray<ObString> &gen_col_names,
                                             ObIArray<ObColumnSchemaV2 *> &gen_col_schema, 
@@ -753,7 +753,8 @@ public:
                             ObObjParam &obj_param,
                             bool &is_param,
                             const bool enable_decimal_int);
-  static int fast_get_param_type(const ParseNode &parse_node,
+  static int fast_get_param_type(const peg::Node &parse_node,
+                                 const ParameterBinding *binding,
                                  const ParamStore *param_store,
                                  const ObCollationType connect_collation,
                                  const ObCollationType nchar_collation,
@@ -820,15 +821,7 @@ private:
   static int check_partition_range_value_result_type(const share::schema::ObPartitionFuncType part_type,
                                                      const ObColumnRefRawExpr &part_column_expr,
                                                      ObRawExpr &part_value_expr);
-  static int rm_space_for_neg_num(ParseNode *param_node, ObIAllocator &allocator);
-  static int handle_varchar_charset(ObCharsetType charset_type,
-                                    ObIAllocator &allocator,
-                                    ParseNode *&node);
 
-  static int calc_unistr(const common::ObString &src,
-                          const common::ObCollationType src_cs_type,
-                          const common::ObCollationType dst_cs_type,
-                          char* buf, const int64_t buf_len, int32_t &pos);
   static const common::ObString stmt_type_string[];
 
   // disallow construct

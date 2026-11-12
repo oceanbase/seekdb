@@ -25,97 +25,27 @@ namespace oceanbase
 namespace sql
 {
 
-class ObSystemCmdStmt;
-class ObFreezeStmt;
-class ObAlterSystemResolverUtil
-{
-public:
-  static int sanity_check(const ParseNode *parse_tree, ObItemType item_type);
-
-  static int resolve_string(const ParseNode *parse_tree, common::ObString &string);
-  static int resolve_relation_name(const ParseNode *parse_tree, common::ObString &string);
-
-  static int resolve_tablet_id(const ParseNode *opt_tablet_id, ObTabletID &tablet_id);
-};
-
-typedef common::ObFixedLengthString<common::OB_MAX_TRACE_ID_BUFFER_SIZE + 1> Task_Id;
-
-#define DEF_SIMPLE_CMD_RESOLVER(name)                                   \
-  class name : public ObSystemCmdResolver                               \
-  {                                                                     \
-  public:                                                               \
-    name(ObResolverParams &params) : ObSystemCmdResolver(params) {}     \
-    virtual ~name() {}                                                  \
-    virtual int resolve(const ParseNode &parse_tree);                   \
+#define DEF_SIMPLE_CMD_RESOLVER(name) \
+  class name : public ObSystemCmdResolver \
+  { \
+  public: \
+    name(ObResolverParams &params) : ObSystemCmdResolver(params) {} \
+    virtual ~name() {} \
+    int resolve(const peg::Node &statement); \
   };
 
+DEF_SIMPLE_CMD_RESOLVER(ObFreezeResolver);
+DEF_SIMPLE_CMD_RESOLVER(MergeControlResolver);
+DEF_SIMPLE_CMD_RESOLVER(ClearMergeErrorResolver);
+DEF_SIMPLE_CMD_RESOLVER(CancelTaskResolver);
+DEF_SIMPLE_CMD_RESOLVER(FlushDagWarningsResolver);
+DEF_SIMPLE_CMD_RESOLVER(RefreshIoCalibrationResolver);
+DEF_SIMPLE_CMD_RESOLVER(SwitchRoleResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObFlushCacheResolver);
-
 DEF_SIMPLE_CMD_RESOLVER(ObFlushKVCacheResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObFlushIlogCacheResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObFlushDagWarningsResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObAdminMergeResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObRefreshIOCalibrationResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObSwitchRoleResolver);
-
 DEF_SIMPLE_CMD_RESOLVER(ObSetTPResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObClearMergeErrorResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObCancelTaskResolver);
-
-class ObAlterSystemSetResolver : public ObSystemCmdResolver
-{
-public:
-  ObAlterSystemSetResolver(ObResolverParams &params) : ObSystemCmdResolver(params) {}
-  virtual ~ObAlterSystemSetResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-};
-
-class ObAlterSystemKillResolver : public ObSystemCmdResolver
-{
-public:
-  ObAlterSystemKillResolver(ObResolverParams &params) : ObSystemCmdResolver(params) {}
-  virtual ~ObAlterSystemKillResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-};
-
-class ObSetConfigResolver : public ObSystemCmdResolver
-{
-public:
-  ObSetConfigResolver(ObResolverParams &params) : ObSystemCmdResolver(params) {}
-  virtual ~ObSetConfigResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-};
-class ObFreezeResolver : public ObSystemCmdResolver {
-public:
-  ObFreezeResolver(ObResolverParams &params) : ObSystemCmdResolver(params) {}
-  virtual ~ObFreezeResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-private:
-  int resolve_target_(ObFreezeStmt *freeze_stmt, const ParseNode *tablet_node);
-
-};
-
-class ObResetConfigResolver : public ObSystemCmdResolver
-{
-public:
-  ObResetConfigResolver(ObResolverParams &params) : ObSystemCmdResolver(params) {}
-  virtual ~ObResetConfigResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-};
-class ObAlterSystemResetResolver : public ObSystemCmdResolver
-{
-public:
-  ObAlterSystemResetResolver(ObResolverParams &params) : ObSystemCmdResolver(params) {}
-  virtual ~ObAlterSystemResetResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-};
+DEF_SIMPLE_CMD_RESOLVER(ObSetConfigResolver);
+DEF_SIMPLE_CMD_RESOLVER(ObResetConfigResolver);
 
 #undef DEF_SIMPLE_CMD_RESOLVER
 

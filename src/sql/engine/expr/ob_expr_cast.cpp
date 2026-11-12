@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/cast_type_descriptor.h"
 #include "sql/engine/expr/ob_expr_cast.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "share/geo/ob_geometry_cast.h"
@@ -22,7 +23,6 @@
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/pl/ob_pl_resolver.h"
 
-// from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
 
 namespace oceanbase
@@ -484,9 +484,8 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           if (ob_is_geometry_tc(dst_type.get_type())) {
             ObCastMode cast_mode = cast_raw_expr->get_cast_mode();
             const ObObj &param = type2.get_param();
-            ParseNode parse_node;
-            parse_node.value_ = param.get_int();
-            ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
+            CastTypeDescriptor type_descriptor(param.get_int());
+            ObGeoType geo_type = static_cast<ObGeoType>(type_descriptor.geometry_type());
             if (OB_FAIL(ObGeoCastUtils::set_geo_type_to_cast_mode(geo_type, cast_mode))) {
             } else {
               cast_raw_expr->set_cast_mode(cast_mode);
@@ -537,15 +536,14 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
     LOG_WARN("cast param type is unexpected", K(param_type2));
   } else {
     const ObObj &param = param_type2.get_param();
-    ParseNode parse_node;
-    parse_node.value_ = param.get_int();
-    ObObjType obj_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
+    CastTypeDescriptor type_descriptor(param.get_int());
+    ObObjType obj_type = static_cast<ObObjType>(type_descriptor.type());
     bool is_explicit_cast = CM_IS_EXPLICIT_CAST(cast_mode);
-    dst_type.set_collation_type(static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]));
+    dst_type.set_collation_type(static_cast<ObCollationType>(type_descriptor.collation()));
     dst_type.set_type(obj_type);
     int64_t maxblen = ObCharset::CharConvertFactorNum;
     if (ob_is_string_type(obj_type)) {
-      dst_type.set_full_length(parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX], param_type2.get_accuracy().get_length_semantics());
+      dst_type.set_full_length(type_descriptor.length(), param_type2.get_accuracy().get_length_semantics());
       if (is_explicit_cast && !dst_type.is_binary() && !dst_type.is_varbinary()) {
         if (dst_type.get_length() > OB_MAX_CAST_CHAR_VARCHAR_LENGTH && dst_type.get_length() <= OB_MAX_CAST_CHAR_TEXT_LENGTH) {
           dst_type.set_type(ObTextType);
@@ -563,8 +561,8 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
       dst_type.set_udt_id(param_type2.get_udt_id());
       if (ob_is_collection_sql_type(obj_type)) {
         // recover subschema id
-        dst_type.set_cs_type(static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]));
-        dst_type.set_cs_level(static_cast<ObCollationLevel>(parse_node.int16_values_[OB_NODE_CAST_CS_LEVEL_IDX]));
+        dst_type.set_cs_type(static_cast<ObCollationType>(type_descriptor.collation()));
+        dst_type.set_cs_level(static_cast<ObCollationLevel>(type_descriptor.collation_level()));
       }
     } else if (ob_is_json(obj_type)) {
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -572,15 +570,15 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
       dst_type.set_collation_type(CS_TYPE_BINARY);
       dst_type.set_collation_level(CS_LEVEL_IMPLICIT);
     } else if (ObNumberType == obj_type) {
-      dst_type.set_precision(parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX]);
-      dst_type.set_scale(parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX]);
+      dst_type.set_precision(type_descriptor.precision());
+      dst_type.set_scale(type_descriptor.scale());
       if (enable_decimal_int && CM_IS_EXPLICIT_CAST(cast_mode)) {
         // in mysql mode, if cast is explicit, change dst type from NumberType to DecimalIntType
         dst_type.set_type(ObDecimalIntType);
       }
     } else {
-      dst_type.set_precision(parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX]);
-      dst_type.set_scale(parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX]);
+      dst_type.set_precision(type_descriptor.precision());
+      dst_type.set_scale(type_descriptor.scale());
     }
     if (OB_SUCC(ret) && CM_IS_EXPLICIT_CAST(cast_mode)) {
       if (type_ctx.enable_mysql_compatible_dates()) {

@@ -31,7 +31,7 @@ public:
   explicit ObDropIndexResolver(ObResolverParams &params);
   virtual ~ObDropIndexResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropIndexResolver);
 };
