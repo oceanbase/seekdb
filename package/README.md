@@ -95,7 +95,10 @@ and `deps/android`. These directories hold the extracted SDKs and their
 downloaded archives in `pkg/`. The cache key includes the target, dependency
 manifests, and initializer. `init` rechecks the manifest identity when an older
 same-target snapshot is restored, reusing its downloaded archives as needed.
-The initialized SDK is saved before compilation.
+The initialized SDK is saved before compilation. Cache restore/save steps have
+a five-minute limit and do not block builds on failure. An incomplete restore
+is removed before initializing dependencies again. Windows adds MSYS utilities
+to the compilation step's PATH only, keeping the cache tools independent.
 
 Conda, Rust/Cargo, the Android NDK, Bazel downloads, Homebrew, timezone data,
 and compilation outputs are not persisted between workflow runs. Additional
