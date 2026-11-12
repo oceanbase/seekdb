@@ -62,7 +62,9 @@ int ObExprJsonArray::calc_result_typeN(ObExprResType& type,
           if (types_stack[i].get_type() == ObVarcharType && types_stack[i].get_collation_type() == CS_TYPE_BINARY) {
             types_stack[i].set_calc_type(ObHexStringType);
             types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-          } else if (types_stack[i].get_charset_type() != CHARSET_UTF8MB4) {
+          } else if (types_stack[i].get_charset_type() != CHARSET_UTF8MB4
+                     && !(ob_is_text_tc(types_stack[i].get_type())
+                          && types_stack[i].get_collation_type() == CS_TYPE_BINARY)) {
             types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
           }
         } else if (types_stack[i].get_type() == ObJsonType) {
