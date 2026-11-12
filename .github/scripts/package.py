@@ -29,10 +29,17 @@ def output(name, value):
 def matrix():
     selected = os.environ["PACKAGE_PLATFORM"]
     glibc = os.environ["PACKAGE_GLIBC"]
-    version = os.environ.get("PACKAGE_VERSION") or re.search(
-        r'^VERSION = "([^"]+)"', (ROOT / "bazel/compile_config.bzl").read_text(), re.MULTILINE).group(1)
+    binary_run_id = os.environ.get("PACKAGE_BINARY_RUN_ID", "").strip()
+    if binary_run_id:
+        if not re.fullmatch(r"[1-9][0-9]*", binary_run_id):
+            raise ValueError("binary_run_id must be a workflow run ID")
+        if selected not in ("linux-x86_64", "linux-aarch64") or os.environ["PACKAGE_FORMATS"] == "binary":
+            raise ValueError("binary reuse requires a Linux platform and RPM/DEB formats")
+    version = os.environ.get("PACKAGE_VERSION") or ("" if binary_run_id else re.search(
+        r'^VERSION = "([^"]+)"', (ROOT / "bazel/compile_config.bzl").read_text(), re.MULTILINE).group(1))
     release = os.environ["PACKAGE_RELEASE"]
-    if not all(re.fullmatch(r"[0-9A-Za-z.+~_]+", x) for x in (version, release)):
+    if (version and not re.fullmatch(r"[0-9A-Za-z.+~_]+", version)) or not re.fullmatch(
+            r"[0-9A-Za-z.+~_]+", release):
         raise ValueError("invalid version/release")
     if glibc not in ("2.17", "2.28", "both"):
         raise ValueError("unsupported glibc baseline")
@@ -59,6 +66,16 @@ def matrix():
     output("has_linux", str(bool(linux)).lower())
     output("version", version)
     output("release", release)
+    output("binary_run_id", binary_run_id)
+    source_commit = os.environ["GITHUB_SHA"]
+    if binary_run_id:
+        request = urllib.request.Request(
+            "%s/repos/%s/actions/runs/%s" % (os.environ["GITHUB_API_URL"], os.environ["GITHUB_REPOSITORY"], binary_run_id),
+            headers={"Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
+                     "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10"})
+        with urllib.request.urlopen(request, timeout=60) as response:
+            source_commit = json.load(response)["head_sha"]
+    output("binary_source_commit", source_commit)
 
 
 def environment():
@@ -181,15 +198,28 @@ def system_packages():
         raise ValueError("expected exactly one Linux binary distribution")
     with tempfile.TemporaryDirectory(prefix="system-packages-", dir=CACHE) as temporary:
         work = Path(temporary)
-        bundle, manifest = binary.load(archives[0], work / "binary", os.environ["PACKAGE_VERSION"])
-        if manifest["source_commit"] != os.environ["GITHUB_SHA"]:
-            raise ValueError("binary distribution does not match this workflow's source commit")
+        bundle, manifest = binary.load(archives[0], work / "binary", os.environ["PACKAGE_VERSION"] or None)
+        if manifest["source_commit"] != os.environ["BINARY_SOURCE_COMMIT"]:
+            raise ValueError("binary distribution does not match the source run's commit")
+        target = manifest["platform"]
+        if (target["os"], target["arch"], target.get("glibc")) != (
+                "linux", os.environ["PACKAGE_ARCH"], os.environ["PACKAGE_GLIBC"]):
+            raise ValueError("binary distribution does not match the selected Linux architecture/glibc")
         run(["tar", "-xzf", ROOT / "input/obshell.tar.gz", "-C", work, "--", "obshell"])
         formats = ("rpm", "deb") if os.environ["PACKAGE_FORMATS"] == "all" else (os.environ["PACKAGE_FORMATS"],)
         for kind in formats:
-            run([sys.executable, "package/package.py", kind, "--version", os.environ["PACKAGE_VERSION"],
+            run([sys.executable, "package/package.py", kind, "--version", manifest["version"],
                  "--release", os.environ["PACKAGE_RELEASE"], "--binary-package", bundle,
                  "--obshell-bin", work / "obshell", "--output", ROOT / "dist"])
+    (ROOT / "dist/packaging-info.json").write_text(json.dumps({
+        "binary_run_id": os.environ["BINARY_RUN_ID"],
+        "binary_source_commit": manifest["source_commit"],
+        "binary_built_at": manifest.get("built_at"),
+        "packaging_commit": os.environ["GITHUB_SHA"],
+        "version": manifest["version"],
+        "release": os.environ["PACKAGE_RELEASE"],
+        "platform": target,
+    }, indent=2) + "\n")
     for artifact in (ROOT / "dist").iterdir():
         if artifact.suffix in (".rpm", ".deb"):
             digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
