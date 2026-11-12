@@ -48,6 +48,7 @@ build:macos --copt=-UDEBUG
 build:macos --macos_minimum_os=13.0
 build:macos --copt=-Werror=unguarded-availability
 build:android --platforms=//bazel/platforms:android_arm64
+build:android --copt=-Werror=unguarded-availability
 build:ios --platforms=@apple_support//platforms:ios_arm64
 build:ios --ios_minimum_os=18.0
 build:ios --//src/standby:enable_standby=false

@@ -2,7 +2,8 @@
 
 load(":repository_utils.bzl", "host_substitutions")
 
-_ANDROID_API_LEVEL = 28
+# Keep the compiler/linker target aligned with seekdb-deps' API 26 profile.
+_ANDROID_API_LEVEL = 26
 _ANDROID_TARGET = "aarch64-linux-android{}".format(_ANDROID_API_LEVEL)
 
 def _android_cc_toolchain_repository_impl(ctx):
