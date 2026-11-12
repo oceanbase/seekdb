@@ -33,6 +33,11 @@ int32_t ob_sql_sock_handler_on_readable(ObSqlSockHandler *handler,
     int32_t packet_kind, const nio::NioMysqlCommandView *command, uint64_t generation);
 void ob_sql_sock_handler_on_disconnect(ObSqlSockHandler *handler, ObSqlSockSession *session);
 void ob_sql_sock_handler_on_close(ObSqlSockHandler *handler, ObSqlSockSession *session, int32_t error);
+void ob_sql_nio_log_active_close(ObSqlSockSession *session, bool record_known,
+    uint32_t origin, uint32_t site_file, uint32_t site_line, uint64_t generation,
+    bool generation_stable, uint32_t observed_state, uint64_t mono_ns,
+    uint32_t event_flags, bool flags_known, int32_t raw_error, bool error_known,
+    uint64_t notify_generation, uint32_t notify_state, uint64_t notify_ns);
 void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain_id,
     uint64_t accepted, uint32_t transient_errors, uint32_t consecutive_errors,
     int32_t outcome);

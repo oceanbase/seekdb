@@ -164,6 +164,8 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
 int ObSMConnectionCallback::on_disconnect(observer::ObSMConnection& conn)
 {
   int ret = OB_SUCCESS;
+  bool state_snapshot_known = false;
+  int state_before = -1, state_after = -1, state_set_ret = 0;
   if (conn.is_sess_alloc_.load(std::memory_order_acquire)
       && !conn.is_sess_free_.load(std::memory_order_acquire)
       && ObSMConnection::INITIAL_SESSID != conn.sessid_) {
@@ -173,11 +175,16 @@ int ObSMConnectionCallback::on_disconnect(observer::ObSMConnection& conn)
     } else if (OB_ISNULL(sess_info)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      sess_info->set_session_state(sql::SESSION_KILLED);
+      sql::ObSQLSessionState before = sql::SESSION_INIT, after = sql::SESSION_INIT;
+      state_set_ret = sess_info->set_session_state_with_snapshot(sql::SESSION_KILLED, before, after);
+      state_before = static_cast<int>(before);
+      state_after = static_cast<int>(after);
+      state_snapshot_known = true;
       sess_info->set_mark_killed(true);
     }
   }
-  LOG_INFO("kill and revert session", K(conn.sessid_), K(ret));
+  LOG_INFO("kill and revert session", K(conn.sessid_), K(ret),
+           K(state_snapshot_known), K(state_before), K(state_after), K(state_set_ret));
   return ret;
 }
 

@@ -389,6 +389,24 @@ pub mod ffi {
             sess: *mut ObSqlSockSession,
             err: i32,
         );
+        unsafe fn ob_sql_nio_log_active_close(
+            sess: *mut ObSqlSockSession,
+            record_known: bool,
+            origin: u32,
+            site_file: u32,
+            site_line: u32,
+            generation: u64,
+            generation_stable: bool,
+            observed_state: u32,
+            mono_ns: u64,
+            event_flags: u32,
+            flags_known: bool,
+            raw_error: i32,
+            error_known: bool,
+            notify_generation: u64,
+            notify_state: u32,
+            notify_ns: u64,
+        );
         unsafe fn ob_sql_nio_log_accept_state(
             kind: i32,
             raw_error: i32,

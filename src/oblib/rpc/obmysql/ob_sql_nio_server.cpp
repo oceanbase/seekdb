@@ -75,6 +75,22 @@ void ob_sql_sock_handler_on_disconnect(ObSqlSockHandler* handler, ObSqlSockSessi
 void ob_sql_sock_handler_on_close(ObSqlSockHandler* handler, ObSqlSockSession* sess, int err) {
   handler->on_close(sess, err);
 }
+void ob_sql_nio_log_active_close(ObSqlSockSession *session, bool record_known,
+    uint32_t origin, uint32_t site_file, uint32_t site_line, uint64_t generation,
+    bool generation_stable, uint32_t observed_state, uint64_t mono_ns,
+    uint32_t event_flags, bool flags_known, int32_t raw_error, bool error_known,
+    uint64_t notify_generation, uint32_t notify_state, uint64_t notify_ns)
+{
+  if (session != nullptr) {
+    const uint32_t session_id = session->conn_.sessid_;
+    const bool clock_valid = record_known && mono_ns != UINT64_MAX
+        && notify_ns != UINT64_MAX && notify_ns >= mono_ns;
+    LOG_INFO("seek1381 active close signal", K(session_id), K(record_known), K(origin),
+             K(site_file), K(site_line), K(generation), K(generation_stable), K(observed_state),
+             K(mono_ns), K(clock_valid), K(event_flags), K(flags_known), K(raw_error),
+             K(error_known), K(notify_generation), K(notify_state), K(notify_ns));
+  }
+}
 static const char *nio_accept_error_kind_name(const int32_t kind)
 {
   switch (kind) {

@@ -4435,6 +4435,16 @@ int ObBasicSessionInfo::set_session_state(ObSQLSessionState state)
   return set_session_state_(state);
 }
 
+int ObBasicSessionInfo::set_session_state_with_snapshot(ObSQLSessionState state,
+    ObSQLSessionState &before, ObSQLSessionState &after)
+{
+  LockGuard lock_guard(thread_data_mutex_);
+  before = thread_data_.state_;
+  const int ret = set_session_state_(state);
+  after = thread_data_.state_;
+  return ret;
+}
+
 int ObBasicSessionInfo::set_session_state_(ObSQLSessionState state)
 {
   int ret = OB_SUCCESS;

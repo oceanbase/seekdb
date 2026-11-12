@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
 #include "lib/profile/ob_trace_id.h"
+#include "lib/container/ob_array_wrap.h"
 #include "sql/optimizer/stat/ob_incremental_stat_estimator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
@@ -191,12 +192,50 @@ int ObDbmsStatsExecutor::gather_partition_stats(ObExecContext &ctx,
                                                 ObIArray<int64_t> &failed_part_ids)
 {
   int ret = OB_SUCCESS;
+  enum WorkPhase { WORK_OTHER, SPLIT_PARAMS, TRANS_START, COPY_PARAMS, GATHER_WORK,
+    UPDATE_MODIFIED, TRANS_END, CLEANUP_SCOPE, WORK_PHASE_COUNT };
+  const uint64_t diagnostic_epoch = ::oceanbase::common::seek1381::request_epoch();
+  const bool measure = diagnostic_epoch != 0;
+  const int64_t diagnostic_start_us = measure ? ObTimeUtility::current_time() : 0;
+  int64_t phase_us[WORK_PHASE_COUNT] = {};
+  int64_t phase_calls[WORK_PHASE_COUNT] = {};
+  int phase_first_error[WORK_PHASE_COUNT] = {};
+  WorkPhase current_phase = WORK_OTHER;
+  int64_t phase_start_us = diagnostic_start_us;
+  bool accounting_valid = true;
+  auto enter_phase = [&](WorkPhase next) {
+    if (measure) {
+      const int64_t now = ObTimeUtility::current_time();
+      const bool delta_valid = phase_start_us >= 0 && now >= phase_start_us;
+      const int64_t delta = delta_valid ? now - phase_start_us : 0;
+      if (!delta_valid || delta > INT64_MAX - phase_us[current_phase]) {
+        accounting_valid = false;
+      } else {
+        phase_us[current_phase] += delta;
+      }
+      phase_start_us = now;
+      current_phase = next;
+    }
+  };
+  auto in_phase = [&](WorkPhase phase, auto &&operation) {
+    if (!measure) { return operation(); }
+    const WorkPhase parent = current_phase;
+    enter_phase(phase);
+    if (phase_calls[phase] == INT64_MAX) { accounting_valid = false; }
+    else { ++phase_calls[phase]; }
+    const int operation_ret = operation();
+    if (operation_ret != OB_SUCCESS && phase_first_error[phase] == OB_SUCCESS) {
+      phase_first_error[phase] = operation_ret;
+    }
+    enter_phase(parent);
+    return operation_ret;
+  };
   typedef ObSEArray<TaskColumnParam, 2> TaskColumnParamInfo;
   typedef ObSEArray<GatherPartInfos, 2> BatchTaskPartInfo;
   SMART_VARS_2((BatchTaskPartInfo, batch_part_infos),(TaskColumnParamInfo, batch_task_col_infos))
   {
-    if (OB_FAIL(split_table_part_param(param, gather_helper, batch_part_infos))) {
-    } else if (OB_FAIL(split_column_param(param, gather_helper, batch_task_col_infos))) {
+    if (OB_FAIL(in_phase(SPLIT_PARAMS, [&]() { return split_table_part_param(param, gather_helper, batch_part_infos); }))) {
+    } else if (OB_FAIL(in_phase(SPLIT_PARAMS, [&]() { return split_column_param(param, gather_helper, batch_task_col_infos); }))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < batch_part_infos.count(); i++) {
         SMART_VAR(ObTableStatParam, derive_param)
@@ -204,11 +243,11 @@ int ObDbmsStatsExecutor::gather_partition_stats(ObExecContext &ctx,
           ObMySQLTransaction gather_trans;
           GatherPartInfos &taskInfo = batch_part_infos.at(i);
           // init partition stats_analyze_task param
-          if (OB_FAIL(gather_trans.start(ctx.get_sql_proxy()))) {
-          } else if (OB_FAIL(derive_param.assign(param))) {
-          } else if (OB_FAIL(derive_param.subpart_infos_.assign(taskInfo.sub_part_infos_))) {
-          } else if (!taskInfo.approx_gather_ && OB_FAIL(derive_param.part_infos_.assign(taskInfo.part_infos_))) {
-          } else if (taskInfo.approx_gather_ && OB_FAIL(derive_param.approx_part_infos_.assign(taskInfo.part_infos_))) {
+          if (OB_FAIL(in_phase(TRANS_START, [&]() { return gather_trans.start(ctx.get_sql_proxy()); }))) {
+          } else if (OB_FAIL(in_phase(COPY_PARAMS, [&]() { return derive_param.assign(param); }))) {
+          } else if (OB_FAIL(in_phase(COPY_PARAMS, [&]() { return derive_param.subpart_infos_.assign(taskInfo.sub_part_infos_); }))) {
+          } else if (!taskInfo.approx_gather_ && OB_FAIL(in_phase(COPY_PARAMS, [&]() { return derive_param.part_infos_.assign(taskInfo.part_infos_); }))) {
+          } else if (taskInfo.approx_gather_ && OB_FAIL(in_phase(COPY_PARAMS, [&]() { return derive_param.approx_part_infos_.assign(taskInfo.part_infos_); }))) {
           } else {
             derive_param.global_stat_param_.need_modify_ = taskInfo.gather_global_;
             if (ERRSIM_FAILED_ANALYZE_TABLE_STATS) {
@@ -221,24 +260,24 @@ int ObDbmsStatsExecutor::gather_partition_stats(ObExecContext &ctx,
             }
           }
           if (!OB_SUCC(ret)) {
-          } else if (OB_FAIL(do_split_gather_stats(ctx,
+          } else if (OB_FAIL(in_phase(GATHER_WORK, [&]() { return do_split_gather_stats(ctx,
                                                    gather_trans,
                                                    taskInfo,
                                                    batch_task_col_infos,
                                                    derive_param,
                                                    partition_id_block_map,
-                                                   gather_helper))) {
-          } else if (OB_FAIL(update_dml_modified_info(gather_trans.get_connection(), derive_param))) {
+                                                   gather_helper); }))) {
+          } else if (OB_FAIL(in_phase(UPDATE_MODIFIED, [&]() { return update_dml_modified_info(gather_trans.get_connection(), derive_param); }))) {
           }
 
           // end gather trans
           if (OB_SUCC(ret)) {
             int tmp_ret = OB_SUCCESS;
-            if (OB_SUCCESS != (tmp_ret = OB_FAIL(gather_trans.end(true)))) {
+            if (OB_SUCCESS != (tmp_ret = OB_FAIL(in_phase(TRANS_END, [&]() { return gather_trans.end(true); })))) {
             }
           } else {
             int tmp_ret = OB_SUCCESS;
-            if (OB_SUCCESS != (tmp_ret = gather_trans.end(false))) {
+            if (OB_SUCCESS != (tmp_ret = in_phase(TRANS_END, [&]() { return gather_trans.end(false); }))) {
             }
           }
 
@@ -256,9 +295,36 @@ int ObDbmsStatsExecutor::gather_partition_stats(ObExecContext &ctx,
           gather_helper.sepcify_scn_ = 0;
           gather_helper.is_split_column_ = false;
           gather_helper.is_all_col_gathered_ = false;
+          enter_phase(CLEANUP_SCOPE);
         }
+        enter_phase(WORK_OTHER);
       }
     }
+    enter_phase(CLEANUP_SCOPE);
+  }
+  enter_phase(WORK_OTHER);
+  if (measure) {
+    const int64_t diagnostic_end_us = phase_start_us;
+    const int64_t total_us = diagnostic_start_us >= 0 && diagnostic_end_us >= diagnostic_start_us
+        ? diagnostic_end_us - diagnostic_start_us : -1;
+    int64_t accounted_us = 0;
+    for (int64_t i = 0; i < WORK_PHASE_COUNT; ++i) {
+      if (phase_us[i] > INT64_MAX - accounted_us) { accounting_valid = false; }
+      else { accounted_us += phase_us[i]; }
+    }
+    const bool same_request = diagnostic_epoch == ::oceanbase::common::seek1381::request_epoch();
+    accounting_valid = accounting_valid && same_request && total_us >= 0 && accounted_us == total_us;
+    const int64_t accounting_error_us = accounting_valid ? total_us - accounted_us : -1;
+    const uint64_t diagnostic_table_id = param.table_id_;
+    const int work_schema_version = 1, work_phase_count = WORK_PHASE_COUNT;
+    ObArrayWrap<int64_t> work_us(phase_us, WORK_PHASE_COUNT);
+    ObArrayWrap<int64_t> work_calls(phase_calls, WORK_PHASE_COUNT);
+    ObArrayWrap<int> work_first_error(phase_first_error, WORK_PHASE_COUNT);
+    LOG_INFO("seek1381 partition work summary", K(ret), K(diagnostic_start_us), K(diagnostic_end_us),
+             K(diagnostic_table_id), K(diagnostic_epoch), K(same_request),
+             K(total_us), K(accounting_valid), K(accounting_error_us),
+             K(work_schema_version), K(work_phase_count),
+             K(work_us), K(work_calls), K(work_first_error));
   }
   return ret;
 }

@@ -562,7 +562,10 @@ impl EventLoop {
                                 self.on_readable_event(token);
                             }
                             if transport_closed {
-                                self.on_transport_closed(token, event.is_error());
+                                let flags = u32::from(event.is_error())
+                                    | (u32::from(event.is_read_closed()) << 1)
+                                    | (u32::from(event.is_write_closed()) << 2);
+                                self.on_transport_closed(token, flags);
                             }
                         }
                     }
@@ -590,6 +593,7 @@ impl EventLoop {
         let conns: Vec<Arc<Conn>> = self.conns.values().cloned().collect();
         let mut completed = Vec::new();
         for conn in conns {
+            record_active_close(&conn, CLOSE_REACTOR_STOP, None, None);
             let had_async_write = {
                 let mut g = conn.mu.lock().unwrap();
                 conn.err.store(true, Ordering::Release);
@@ -674,6 +678,7 @@ impl EventLoop {
             request_gate: Mutex::new(()),
             request_state: AtomicU8::new(0),
             request_generation: AtomicU64::new(0),
+            active_close: ActiveCloseDiagnostic::new(),
         })
     }
 
@@ -755,6 +760,7 @@ impl EventLoop {
     }
 
     fn abort_admission(&mut self, conn: &Arc<Conn>, registered: bool) {
+        record_active_close(conn, CLOSE_ADMISSION, None, None);
         conn.err.store(true, Ordering::Release);
         conn.write_done.notify_all();
         if registered {
@@ -1252,11 +1258,12 @@ impl EventLoop {
         }
     }
 
-    pub(crate) fn on_transport_closed(&self, token: Token, _is_error: bool) {
+    pub(crate) fn on_transport_closed(&self, token: Token, event_flags: u32) {
         let conn = match self.conns.get(&token) {
             Some(conn) => conn,
             None => return,
         };
+        record_active_close(conn, CLOSE_READINESS, Some(event_flags), None);
         conn.peer_closed.store(true, Ordering::Release);
         cancel_connection_io(conn);
         self.notify_disconnect(conn);
@@ -1405,6 +1412,7 @@ impl EventLoop {
             Some(c) => c,
             None => return,
         };
+        record_active_close(&conn, CLOSE_REACTOR, None, None);
         #[cfg(feature = "native-network")]
         if conn.session_constructed.load(Ordering::Acquire)
             && !conn.greeting_complete.load(Ordering::Acquire)
@@ -1435,6 +1443,10 @@ impl EventLoop {
         if conn.session_constructed.load(Ordering::Acquire)
             && !conn.disconnect_notified.swap(true, Ordering::AcqRel)
         {
+            if conn.request_is_busy() || conn.active_close.has_record() {
+                record_active_close(conn, CLOSE_NOTIFY, None, None);
+                conn.active_close.emit(conn);
+            }
             unsafe { ob_sql_sock_handler_on_disconnect(self.handler.0, conn.sess()) };
         }
     }

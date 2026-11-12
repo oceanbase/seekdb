@@ -1996,6 +1996,11 @@ bool target_select(const ObString &sql, uint64_t &fingerprint)
   return true;
 }
 }
+uint64_t request_epoch()
+{
+  const RequestState &s = state();
+  return s.active && s.valid && identity_matches(s) ? s.epoch : 0;
+}
 bool histogram_delete_active()
 {
   const RequestState &s = state();

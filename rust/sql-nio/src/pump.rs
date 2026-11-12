@@ -568,13 +568,17 @@ pub(crate) fn drain_socket(
         };
         match read_result {
             Ok(0) => {
+                record_active_close(conn, CLOSE_READ_EOF, Some(u32::from(g.tls.is_some()) << 3), None);
                 conn.peer_closed.store(true, Ordering::Release);
                 break;
             }
             Ok(_) => {}
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
             Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(_) => return Err(()),
+            Err(ref error) => {
+                record_active_close(conn, CLOSE_READ_ERROR, Some(u32::from(g.tls.is_some()) << 3), error.raw_os_error());
+                return Err(());
+            }
         }
     }
     Ok(())

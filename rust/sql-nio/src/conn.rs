@@ -14,6 +14,110 @@
 
 use crate::*;
 
+// First observed close signal while a request is busy; not a peer-origin verdict.
+pub(crate) const CLOSE_REQUESTED: u32 = 1;
+pub(crate) const CLOSE_ERROR: u32 = 2;
+pub(crate) const CLOSE_READINESS: u32 = 3;
+pub(crate) const CLOSE_READ_EOF: u32 = 4;
+pub(crate) const CLOSE_READ_ERROR: u32 = 5;
+pub(crate) const CLOSE_SHUTDOWN: u32 = 6;
+pub(crate) const CLOSE_REACTOR_STOP: u32 = 7;
+pub(crate) const CLOSE_ADMISSION: u32 = 8;
+pub(crate) const CLOSE_REACTOR: u32 = 9;
+pub(crate) const CLOSE_NOTIFY: u32 = 10;
+const CLOSE_RECORD_WRITING: u32 = u32::MAX;
+
+pub(crate) fn close_diagnostic_ns() -> u64 {
+    #[cfg(feature = "native-network")]
+    {
+        static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+        u64::try_from(START.get_or_init(Instant::now).elapsed().as_nanos()).unwrap_or(u64::MAX)
+    }
+    #[cfg(not(feature = "native-network"))]
+    {
+        u64::MAX
+    }
+}
+
+pub(crate) struct ActiveCloseDiagnostic {
+    kind: AtomicU32,
+    site: AtomicU64,
+    generation: AtomicU64,
+    request_state: AtomicU32,
+    flags: AtomicU64,
+    error: AtomicU64,
+    mono_ns: AtomicU64,
+}
+
+impl ActiveCloseDiagnostic {
+    pub(crate) fn new() -> Self {
+        Self {
+            kind: AtomicU32::new(0),
+            site: AtomicU64::new(0),
+            generation: AtomicU64::new(0),
+            request_state: AtomicU32::new(0),
+            flags: AtomicU64::new(0),
+            error: AtomicU64::new(0),
+            mono_ns: AtomicU64::new(0),
+        }
+    }
+
+    pub(crate) fn has_record(&self) -> bool {
+        self.kind.load(Ordering::Acquire) != 0
+    }
+
+    pub(crate) fn emit(&self, conn: &Conn) {
+        let kind = self.kind.load(Ordering::Acquire);
+        let record_known = kind != 0 && kind != CLOSE_RECORD_WRITING;
+        let site = if record_known { self.site.load(Ordering::Relaxed) } else { 0 };
+        let generation = if record_known { self.generation.load(Ordering::Relaxed) } else { 0 };
+        let state = if record_known { self.request_state.load(Ordering::Relaxed) } else { 0 };
+        let flags = if record_known { self.flags.load(Ordering::Relaxed) } else { 0 };
+        let error = if record_known { self.error.load(Ordering::Relaxed) } else { 0 };
+        let mono_ns = if record_known { self.mono_ns.load(Ordering::Relaxed) } else { 0 };
+        let notify_generation = conn.request_generation.load(Ordering::Acquire);
+        let notify_state = u32::from(conn.request_state.load(Ordering::Acquire));
+        let notify_stable = notify_generation == conn.request_generation.load(Ordering::Acquire);
+        let generation_stable = state >> 8 != 0 && notify_stable && generation == notify_generation
+            && generation != 0 && state & u32::from(REQUEST_BUSY) != 0
+            && notify_state & u32::from(REQUEST_BUSY) != 0;
+        unsafe {
+            ob_sql_nio_log_active_close(
+                conn.sess(), record_known, kind, (site >> 32) as u32, site as u32,
+                generation, generation_stable, state & 0xff, mono_ns,
+                flags as u32, flags >> 32 != 0, error as u32 as i32,
+                error >> 32 != 0, notify_generation, notify_state, close_diagnostic_ns(),
+            );
+        }
+    }
+}
+
+#[track_caller]
+pub(crate) fn record_active_close(conn: &Conn, kind: u32, flags: Option<u32>, error: Option<i32>) {
+    if !conn.request_is_busy()
+        || conn.active_close.kind.compare_exchange(0, CLOSE_RECORD_WRITING, Ordering::AcqRel, Ordering::Acquire).is_err()
+    {
+        return;
+    }
+    let site = std::panic::Location::caller();
+    let file: u64 = if site.file().ends_with("conn.rs") { 1 }
+        else if site.file().ends_with("pump.rs") { 2 }
+        else if site.file().ends_with("reactor.rs") { 3 }
+        else if site.file().ends_with("request.rs") { 4 }
+        else if site.file().ends_with("tls.rs") { 5 }
+        else if site.file().ends_with("response_api.rs") { 6 } else { 0 };
+    let generation = conn.request_generation.load(Ordering::Acquire);
+    let state = u32::from(conn.request_state.load(Ordering::Acquire));
+    let stable = generation == conn.request_generation.load(Ordering::Acquire);
+    conn.active_close.site.store((file << 32) | u64::from(site.line()), Ordering::Relaxed);
+    conn.active_close.generation.store(generation, Ordering::Relaxed);
+    conn.active_close.request_state.store(state | (u32::from(stable) << 8), Ordering::Relaxed);
+    conn.active_close.flags.store(flags.map_or(0, |v| (1_u64 << 32) | u64::from(v)), Ordering::Relaxed);
+    conn.active_close.error.store(error.map_or(0, |v| (1_u64 << 32) | u64::from(v as u32)), Ordering::Relaxed);
+    conn.active_close.mono_ns.store(close_diagnostic_ns(), Ordering::Relaxed);
+    conn.active_close.kind.store(kind, Ordering::Release);
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ReadState {
     Login,
@@ -264,6 +368,7 @@ pub(crate) struct Conn {
     pub(crate) request_gate: Mutex<()>,
     pub(crate) request_state: AtomicU8,
     pub(crate) request_generation: AtomicU64,
+    pub(crate) active_close: ActiveCloseDiagnostic,
 }
 
 impl Conn {
@@ -315,25 +420,31 @@ impl Conn {
     }
 }
 
+#[track_caller]
 pub(crate) fn request_close(conn: &Arc<Conn>) {
     let first = {
         let _gate = conn.request_gate.lock().unwrap();
         !conn.close_requested.swap(true, Ordering::AcqRel)
     };
     if first {
+        record_active_close(conn, CLOSE_REQUESTED, None, None);
         conn.closes.lock().unwrap().push(conn.token);
     }
     conn.signal_mid_read();
     let _ = conn.waker.wake();
 }
 
+#[track_caller]
 pub(crate) fn publish_shutdown(conn: &Arc<Conn>) {
+    record_active_close(conn, CLOSE_SHUTDOWN, None, None);
     let _gate = conn.request_gate.lock().unwrap();
     conn.need_shutdown.store(true, Ordering::Release);
     conn.signal_mid_read();
 }
 
+#[track_caller]
 pub(crate) fn mark_connection_error(conn: &Arc<Conn>) {
+    record_active_close(conn, CLOSE_ERROR, None, None);
     conn.err.store(true, Ordering::Release);
     conn.write_done.notify_all();
     request_close(conn);

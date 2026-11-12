@@ -453,6 +453,7 @@ private:
   const int *ret_ = nullptr;
   int returned_ret_ = 0;
 };
+uint64_t request_epoch();
 bool histogram_delete_active();
 template<class Operation> int histogram_delete_call(DetailStage stage, Operation &&operation)
 {

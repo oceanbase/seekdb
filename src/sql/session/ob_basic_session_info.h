@@ -658,6 +658,8 @@ public:
     thread_data_.dis_state_ = dis_state;
   }
   int set_session_state(ObSQLSessionState state);
+  int set_session_state_with_snapshot(ObSQLSessionState state,
+      ObSQLSessionState &before, ObSQLSessionState &after);
   int check_session_status();
   ObDisconnectState get_disconnect_state() const { return thread_data_.dis_state_;}
   ObSQLSessionState get_session_state() const { return thread_data_.state_;}
