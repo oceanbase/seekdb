@@ -504,7 +504,8 @@ where
         }
 
         if meta.state_changed {
-            checked_add_assign(&mut state_info_len, 4)?;
+            let tracker_len = if meta.use_standard_serialize { 3 } else { 4 };
+            checked_add_assign(&mut state_info_len, tracker_len)?;
         }
     }
 
@@ -875,8 +876,14 @@ where
 
             if meta.state_changed {
                 writer.put_u8(SESSION_TRACK_STATE_CHANGE)?;
-                writer.put_lenenc_usize(2)?;
-                writer.put_lenenc_bytes(b"1")?;
+                if meta.use_standard_serialize {
+                    // MySQL encodes the boolean tracker as one ASCII byte.
+                    writer.put_lenenc_usize(1)?;
+                    writer.put_u8(b'1')?;
+                } else {
+                    writer.put_lenenc_usize(2)?;
+                    writer.put_lenenc_bytes(b"1")?;
+                }
             }
         }
     } else if !message.is_empty() {
