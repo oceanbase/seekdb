@@ -26,6 +26,13 @@ Write review comments in English.
 5. When behavior is unclear, use a concrete input, state, and execution
    sequence to prove the defect. If proof is incomplete but the potential
    impact is serious, state exactly what evidence or focused test is missing.
+6. For a bug fix, trace the defective behavior through relevant history, such
+   as blame, commits, and linked pull requests. Verify the causal change before
+   attributing the bug to a PR; a commit that merely moved code is not enough.
+   Record the introducing PR and the evidence in the fix PR description. If it
+   cannot be identified, say so and summarize the history checked; do not guess.
+   When reviewing someone else's PR, report this information in the review or
+   ask the author to add it rather than editing the PR without authorization.
 
 ## Required Checks
 
@@ -55,7 +62,11 @@ Write review comments in English.
   kernel, build flags, and dependencies through conditional compilation, build
   selection, packaging, and runtime behavior. Compare the affected paths and
   check whether tests or CI actually exercise each relevant configuration.
-  A missing CI job alone does not prove a defect.
+  Where practical, address platform differences in the lowest appropriate
+  platform-specific layer behind a common contract so upper layers remain
+  platform-independent. Check that the contract holds on relevant supported
+  targets; do not add an abstraction without a concrete need or demand an
+  unrelated refactor. A missing CI job alone does not prove a defect.
 - **Security:** Apply the dedicated security review below to product code,
   workflows, build scripts, tests, documentation, and repository instructions.
 - **Performance:** Report material regressions in hot paths, such as repeated
