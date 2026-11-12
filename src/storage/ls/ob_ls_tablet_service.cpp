@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "rust/config.h"
+#include <chrono>
+#include "lib/container/ob_array_wrap.h"
 #include "lib/profile/ob_trace_id.h"
 #include "ob_ls_tablet_service.h"
 #include "storage/tx/ob_ts_mgr.h"
@@ -61,6 +63,149 @@ namespace storage
 using namespace mds;
 
 ERRSIM_POINT_DEF(EN_CREATE_EMPTY_SHELL_TABLET_ERROR);
+
+class OldRowCheckDiagnostic
+{
+public:
+  enum Phase { OTHER, PREPARE_ACCESS, OPEN_GETTER, FETCH_ROW, COMPARE_VALIDATE,
+    ROW_SCOPE_CLEANUP, PHASE_COUNT };
+
+  explicit OldRowCheckDiagnostic(const uint64_t epoch)
+    : epoch_(epoch), wall_start_us_(0), anchor_mono_before_us_(0), start_us_(0), phase_start_us_(0),
+      phase_(OTHER), valid_(std::chrono::steady_clock::is_steady), rows_visited_(0), rows_checked_(0),
+      phase_us_{}, phase_entries_{}, phase_first_ret_{}
+  {
+    anchor_mono_before_us_ = monotonic_us();
+    wall_start_us_ = ObTimeUtility::current_time();
+    start_us_ = phase_start_us_ = monotonic_us();
+    phase_entries_[OTHER] = 1;
+  }
+
+  void enter(const Phase next)
+  {
+    if (next != phase_) {
+      account();
+      phase_ = next;
+      increment(phase_entries_[next]);
+    }
+  }
+
+  void record(const int ret)
+  {
+    if (ret != OB_SUCCESS && phase_first_ret_[phase_] == OB_SUCCESS) {
+      phase_first_ret_[phase_] = ret;
+    }
+  }
+
+  template<class Operation> int call(const Phase phase, Operation &&operation)
+  {
+    enter(phase);
+    const int ret = operation();
+    record(ret);
+    return ret;
+  }
+
+  void visit_row() { increment(rows_visited_); }
+  void check_row() { increment(rows_checked_); }
+  void complete_row(const int ret)
+  {
+    if (phase_ == OTHER) { record(ret); }
+    enter(OTHER);
+  }
+
+  void finish(const ObDMLRunningCtx &run_ctx, const int64_t row_count,
+              const int64_t tx_id_begin, const int ret)
+  {
+    account();
+    const int64_t diagnostic_start_us = wall_start_us_;
+    const int64_t diagnostic_end_us = ObTimeUtility::current_time();
+    const int64_t anchor_mono_after_us = monotonic_us();
+    const bool monotonic_clock_steady = std::chrono::steady_clock::is_steady;
+    const bool anchor_order_valid = anchor_mono_before_us_ >= 0
+        && start_us_ >= anchor_mono_before_us_ && phase_start_us_ >= start_us_
+        && anchor_mono_after_us >= phase_start_us_;
+    const int64_t total_us = anchor_order_valid ? phase_start_us_ - start_us_ : -1;
+    const int64_t wall_span_us = diagnostic_start_us >= 0 && diagnostic_end_us >= diagnostic_start_us
+        ? diagnostic_end_us - diagnostic_start_us : -1;
+    const int64_t max_anchor_span_us = anchor_order_valid
+        ? anchor_mono_after_us - anchor_mono_before_us_ : -1;
+    // Bound the two wall samples by their steady brackets, allowing microsecond truncation.
+    const int64_t wall_quantization_us = 2;
+    const bool wall_mapping_valid = anchor_order_valid && wall_span_us >= 0
+        && (wall_span_us >= total_us || total_us - wall_span_us <= wall_quantization_us)
+        && (wall_span_us <= max_anchor_span_us || wall_span_us - max_anchor_span_us <= wall_quantization_us);
+    int64_t accounted_us = 0;
+    for (int64_t i = 0; i < PHASE_COUNT; ++i) {
+      if (phase_us_[i] > INT64_MAX - accounted_us) { valid_ = false; }
+      else { accounted_us += phase_us_[i]; }
+    }
+    const uint64_t diagnostic_epoch = epoch_;
+    const bool same_request = epoch_ == ::oceanbase::common::seek1381::request_epoch()
+        && ::oceanbase::common::seek1381::histogram_delete_active();
+    const int64_t tx_id_end = run_ctx.store_ctx_.mvcc_acc_ctx_.tx_id_.get_id();
+    const bool tx_id_known = tx_id_begin > 0 && tx_id_end > 0;
+    const bool same_transaction = tx_id_known && tx_id_begin == tx_id_end;
+    const bool inner_session_known = run_ctx.store_ctx_.mvcc_acc_ctx_.tx_desc_ != nullptr;
+    const uint32_t inner_session_id = inner_session_known
+        ? run_ctx.store_ctx_.mvcc_acc_ctx_.tx_desc_->get_session_id() : 0;
+    const uint64_t storage_table_id = run_ctx.relative_table_.get_table_id();
+    const uint64_t tablet_id = run_ctx.relative_table_.get_tablet_id().id();
+    const int64_t rows_visited = rows_visited_, rows_checked = rows_checked_;
+    const bool accounting_valid = valid_ && same_request && anchor_order_valid && row_count >= 0
+        && rows_checked <= rows_visited && rows_visited <= row_count
+        && total_us >= 0 && accounted_us == total_us;
+    const int64_t accounting_error_us = accounting_valid ? total_us - accounted_us : -1;
+    const int old_row_schema_version = 2, old_row_phase_count = PHASE_COUNT;
+    int64_t mono_us[] = {anchor_mono_before_us_, start_us_, phase_start_us_, anchor_mono_after_us};
+    ObArrayWrap<int64_t> old_row_mono_us(mono_us, 4);
+    ObArrayWrap<int64_t> old_row_us(phase_us_, PHASE_COUNT);
+    ObArrayWrap<int64_t> old_row_entries(phase_entries_, PHASE_COUNT);
+    ObArrayWrap<int> old_row_first_ret(phase_first_ret_, PHASE_COUNT);
+    LOG_INFO("seek1381 old row batch summary", K(ret), K(diagnostic_start_us), K(diagnostic_end_us),
+             K(diagnostic_epoch), K(same_request), K(storage_table_id), K(tablet_id),
+             K(tx_id_begin), K(tx_id_end), K(tx_id_known), K(same_transaction),
+             K(inner_session_known), K(inner_session_id), K(row_count), K(rows_visited), K(rows_checked),
+             K(total_us), K(accounting_valid), K(accounting_error_us),
+             K(old_row_mono_us), K(monotonic_clock_steady), K(wall_span_us),
+             K(wall_mapping_valid), K(wall_quantization_us),
+             K(old_row_schema_version), K(old_row_phase_count),
+             K(old_row_us), K(old_row_entries), K(old_row_first_ret));
+  }
+
+private:
+  static int64_t monotonic_us()
+  {
+    return std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+  }
+
+  void increment(int64_t &value)
+  {
+    if (value == INT64_MAX) { valid_ = false; }
+    else { ++value; }
+  }
+
+  void account()
+  {
+    const int64_t now = monotonic_us();
+    if (phase_start_us_ < 0 || now < phase_start_us_) {
+      valid_ = false;
+    } else {
+      const int64_t delta = now - phase_start_us_;
+      if (delta > INT64_MAX - phase_us_[phase_]) { valid_ = false; }
+      else { phase_us_[phase_] += delta; }
+    }
+    phase_start_us_ = now;
+  }
+
+  uint64_t epoch_;
+  int64_t wall_start_us_, anchor_mono_before_us_, start_us_, phase_start_us_;
+  Phase phase_;
+  bool valid_;
+  int64_t rows_visited_, rows_checked_;
+  int64_t phase_us_[PHASE_COUNT], phase_entries_[PHASE_COUNT];
+  int phase_first_ret_[PHASE_COUNT];
+};
 
 ObLSTabletService::ObLSTabletService()
   : ls_(nullptr),
@@ -1758,15 +1903,23 @@ int ObLSTabletService::get_storage_row(
     ObStoreCtx &store_ctx,
     const ObDMLBaseParam &dml_param,
     ObDatumRow *&out_row,
-    bool use_fuse_row_cache)
+    bool use_fuse_row_cache,
+    OldRowCheckDiagnostic *diagnostic)
 {
   int ret = OB_SUCCESS;
   ObDatumRowkey datum_rowkey;
   ObDatumRowkeyHelper rowkey_helper;
-  if (OB_FAIL(rowkey_helper.prepare_datum_rowkey(sql_row, data_table.get_rowkey_column_num(), column_descs, datum_rowkey))) {
-  } else if (OB_FAIL(init_row_getter(row_getter, store_ctx, dml_param, column_ids, data_table, false/*is_multi_get*/, true))) {
-  } else if (OB_FAIL(row_getter.open(datum_rowkey, use_fuse_row_cache))) {
-  } else if (OB_FAIL(row_getter.get_next_row(out_row))) {
+  auto in_phase = [&](OldRowCheckDiagnostic::Phase phase, auto &&operation) {
+    return diagnostic == nullptr ? operation() : diagnostic->call(phase, operation);
+  };
+  if (OB_FAIL(in_phase(OldRowCheckDiagnostic::PREPARE_ACCESS, [&]() {
+      return rowkey_helper.prepare_datum_rowkey(sql_row, data_table.get_rowkey_column_num(), column_descs, datum_rowkey); }))) {
+  } else if (OB_FAIL(in_phase(OldRowCheckDiagnostic::PREPARE_ACCESS, [&]() {
+      return init_row_getter(row_getter, store_ctx, dml_param, column_ids, data_table, false/*is_multi_get*/, true); }))) {
+  } else if (OB_FAIL(in_phase(OldRowCheckDiagnostic::OPEN_GETTER, [&]() {
+      return row_getter.open(datum_rowkey, use_fuse_row_cache); }))) {
+  } else if (OB_FAIL(in_phase(OldRowCheckDiagnostic::FETCH_ROW, [&]() {
+      return row_getter.get_next_row(out_row); }))) {
     if (OB_ITER_END != ret) {
     }
   }
@@ -2651,7 +2804,8 @@ int ObLSTabletService::check_old_row_legitimacy(
     const bool is_need_check_old_row,
     const bool is_udf,
     const blocksstable::ObDmlFlag &dml_flag,
-    const blocksstable::ObDatumRow &old_row)
+    const blocksstable::ObDatumRow &old_row,
+    OldRowCheckDiagnostic *diagnostic)
 {
   int ret = OB_SUCCESS;
   // EN_9 may inject OB_ERR_DEFENSIVE_CHECK for the matching session id.
@@ -2663,14 +2817,23 @@ int ObLSTabletService::check_old_row_legitimacy(
   } else if (OB_UNLIKELY(data_table.get_rowkey_column_num() > old_row.count_) || OB_ISNULL(column_ids_ptr)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (is_need_check_old_row) {
+    if (diagnostic != nullptr) {
+      diagnostic->check_row();
+      diagnostic->enter(OldRowCheckDiagnostic::PREPARE_ACCESS);
+    }
     ObArenaAllocator scan_allocator((common::ObMemAttr(ObModIds::OB_TABLE_SCAN_ITER)));
     ObRowGetter storage_row_getter(scan_allocator, *data_tablet_handle.get_obj());
     ObDatumRow *storage_old_row = nullptr;
     const ObIArray<uint64_t> &column_ids = *column_ids_ptr;
     const ObColDescIArray &column_descs =  *col_descs_ptr;
     uint64_t err_col_id = OB_INVALID_ID;
-    if (OB_FAIL(get_storage_row(old_row, column_ids, column_descs, storage_row_getter,
-                                data_table, store_ctx, dml_param, storage_old_row, true))) {
+    auto read_old_row = [&]() {
+      const int result = get_storage_row(old_row, column_ids, column_descs, storage_row_getter,
+                                         data_table, store_ctx, dml_param, storage_old_row, true, diagnostic);
+      if (diagnostic != nullptr) { diagnostic->enter(OldRowCheckDiagnostic::COMPARE_VALIDATE); }
+      return result;
+    };
+    if (OB_FAIL(read_old_row())) {
       if (OB_ITER_END == ret) {
         ret = OB_ERR_DEFENSIVE_CHECK;
         FLOG_WARN("old row in storage is not exists", K(ret), K(old_row));
@@ -2746,8 +2909,13 @@ int ObLSTabletService::check_old_row_legitimacy(
         store_ctx.force_print_trace_log();
       }
     }
+    if (diagnostic != nullptr) {
+      diagnostic->record(ret);
+      diagnostic->enter(OldRowCheckDiagnostic::ROW_SCOPE_CLEANUP);
+    }
   }
 
+  if (diagnostic != nullptr) { diagnostic->complete_row(ret); }
   return ret;
 }
 
@@ -5360,12 +5528,25 @@ int ObLSTabletService::check_old_row_legitimacy_wrap(
     int64_t &error_row_idx)
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < row_count; i++) {
-    if (OB_FAIL(check_old_row_legitimacy(cmp_funcs, tablet_handle, run_ctx.relative_table_,
-        run_ctx.store_ctx_, run_ctx.dml_param_, run_ctx.column_ids_, run_ctx.col_descs_,
-        run_ctx.is_need_check_old_row_, run_ctx.is_udf_, run_ctx.dml_flag_, old_rows[i]))) {
-      error_row_idx = i;
+  const uint64_t diagnostic_epoch = ::oceanbase::common::seek1381::histogram_delete_active()
+      ? ::oceanbase::common::seek1381::request_epoch() : 0;
+  auto check_rows = [&](OldRowCheckDiagnostic *diagnostic) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < row_count; i++) {
+      if (diagnostic != nullptr) { diagnostic->visit_row(); }
+      if (OB_FAIL(check_old_row_legitimacy(cmp_funcs, tablet_handle, run_ctx.relative_table_,
+          run_ctx.store_ctx_, run_ctx.dml_param_, run_ctx.column_ids_, run_ctx.col_descs_,
+          run_ctx.is_need_check_old_row_, run_ctx.is_udf_, run_ctx.dml_flag_, old_rows[i], diagnostic))) {
+        error_row_idx = i;
+      }
     }
+  };
+  if (diagnostic_epoch == 0) {
+    check_rows(nullptr);
+  } else {
+    OldRowCheckDiagnostic diagnostic(diagnostic_epoch);
+    const int64_t tx_id_begin = run_ctx.store_ctx_.mvcc_acc_ctx_.tx_id_.get_id();
+    check_rows(&diagnostic);
+    diagnostic.finish(run_ctx, row_count, tx_id_begin, ret);
   }
   return ret;
 }

@@ -81,6 +81,7 @@ class ObDMLRunningCtx;
 class ObTableHandleV2;
 class ObTableScanIterator;
 class ObRowGetter;
+class OldRowCheckDiagnostic;
 class ObLSTabletIterator;
 class ObLSTabletAddrIterator;
 class ObLSTabletFastIter;
@@ -513,7 +514,8 @@ private:
       const bool is_need_check_old_row,
       const bool is_udf,
       const blocksstable::ObDmlFlag &dml_flag,
-      const blocksstable::ObDatumRow &old_row);
+      const blocksstable::ObDatumRow &old_row,
+      OldRowCheckDiagnostic *diagnostic);
   static int check_new_row_legitimacy(
       ObDMLRunningCtx &run_ctx,
       const int64_t row_count,
@@ -764,7 +766,8 @@ private:
                              ObStoreCtx &store_ctx,
                              const ObDMLBaseParam &dml_param,
                              blocksstable::ObDatumRow *&out_row,
-                             bool use_fuse_row_cache = false);
+                             bool use_fuse_row_cache = false,
+                             OldRowCheckDiagnostic *diagnostic = nullptr);
   static int check_is_gencol_check_failed(const ObRelativeTable &data_table,
                                 uint64_t error_col_id,
                                 bool &is_virtual_gencol);
