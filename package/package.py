@@ -56,6 +56,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
         "linux": ("usr/bin", "etc/seekdb", "usr/share/seekdb", "usr/libexec/seekdb"),
         "macos": ("opt/seekdb/bin", "opt/seekdb/etc/seekdb", "opt/seekdb/share/seekdb", "opt/seekdb/libexec/seekdb"),
         "windows": ("bin", "etc", "share", "bin"),
+        "android": ("bin", "etc/seekdb", "share/seekdb", "libexec/seekdb"),
     }
     directories = ("bin", "etc/seekdb", "share/seekdb", "libexec/seekdb") if portable else paths[layout]
     binary, config, share, helpers = [destination / path for path in directories]
@@ -66,6 +67,8 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
             shutil.copytree(binary_package / source, target, dirs_exist_ok=True)
         if layout == "macos":
             shutil.copytree(binary_package / "lib", destination / "opt/seekdb/lib", dirs_exist_ok=True)
+        elif layout == "android":
+            shutil.copytree(binary_package / "lib", destination / "lib", dirs_exist_ok=True)
         (binary / executable).chmod(0o755)
     else:
         timezone = timezone or Path(os.environ.get("SEEKDB_TIMEZONE_FILE", ROOT / "tools/timezone_V1.log"))
@@ -105,7 +108,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
             copy(ROOT / "package/msi/seekdb.cnf", config / "seekdb.cnf")
         helpers.mkdir(parents=True, exist_ok=True)
         return
-    profile = ROOT / ("package/linux/profile" if layout == "linux" else "package/pkg/launchd/profile")
+    profile = ROOT / ("package/linux/profile" if layout in ("linux", "android") else "package/pkg/launchd/profile")
     if not binary_package:
         copy(profile / "seekdb.cnf", config / "seekdb.cnf")
     if portable:
@@ -195,7 +198,7 @@ def main():
                         help="Bazel bin directory from a --config=package build on Linux")
     parser.add_argument("--dependencies", type=Path, default=ROOT / "deps/3rd")
     parser.add_argument("--timezone-file", type=Path)
-    parser.add_argument("--layout", choices=("linux", "macos", "windows"),
+    parser.add_argument("--layout", choices=("linux", "macos", "windows", "android"),
                         help="target layout; inferred from --binary-package, otherwise Linux (native OS for binary)")
     parser.add_argument("--component", choices=("server", "libs"), default="server")
     inputs = parser.add_mutually_exclusive_group()
@@ -235,7 +238,7 @@ def main():
         parser.error("the libs component is Linux-only")
     if options.format in ("rpm", "deb") and (options.layout not in (None, "linux") or options.component != "server"):
         parser.error("RPM and DEB require the Linux server payload")
-    if options.format == "tgz" and options.layout == "windows":
+    if options.format == "tgz" and options.layout not in (None, "linux", "macos"):
         parser.error("TGZ supports Linux and macOS payloads")
     output = options.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -253,7 +256,7 @@ def main():
         options.layout = options.layout or "linux"
         if options.format in ("rpm", "deb") and options.layout != "linux":
             parser.error("RPM and DEB require a Linux binary package")
-        if options.format == "tgz" and options.layout == "windows":
+        if options.format == "tgz" and options.layout not in ("linux", "macos"):
             parser.error("TGZ supports Linux and macOS payloads")
         if options.component == "libs" and options.layout != "linux":
             parser.error("the libs component is Linux-only")
