@@ -1,0 +1,20 @@
+src/observer/main.cpp
+  s_c1726ac37da477::t_d0b6206370af64 96-109,111-138,141-155,901,928-930
+  s_c1726ac37da477::t_1a89facccbaf0d 110,139-140,902
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "342666e6d938038157ea6325f75be9c21d30f0e5",
+  "prompts": {},
+  "sessions": {
+    "s_c1726ac37da477": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c9b8-d9ec-7e81-bc9f-4f6259e85576",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "文田 <wentian@U-QLPQTXHR-0107.local>"
+    }
+  }
+}
