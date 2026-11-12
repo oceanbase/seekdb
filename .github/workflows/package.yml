@@ -52,7 +52,6 @@ jobs:
       has_linux: ${{ steps.matrix.outputs.has_linux }}
       version: ${{ steps.matrix.outputs.version }}
       release: ${{ steps.matrix.outputs.release }}
-      jobs: ${{ steps.matrix.outputs.jobs }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -64,7 +63,6 @@ jobs:
           PACKAGE_GLIBC: ${{ inputs.linux_glibc }}
           PACKAGE_VERSION: ${{ inputs.version }}
           PACKAGE_RELEASE: ${{ inputs.release }}
-          BUILD_JOBS: ${{ inputs.jobs }}
         run: python3 .github/scripts/package.py matrix
 
   binary:
@@ -85,7 +83,7 @@ jobs:
       LINUX_PROFILE: ${{ matrix.profile }}
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
       PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
-      BUILD_JOBS: ${{ needs.prepare.outputs.jobs }}
+      BUILD_JOBS: ${{ inputs.jobs }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

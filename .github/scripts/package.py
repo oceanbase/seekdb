@@ -32,9 +32,8 @@ def matrix():
     version = os.environ.get("PACKAGE_VERSION") or re.search(
         r'^VERSION = "([^"]+)"', (ROOT / "bazel/compile_config.bzl").read_text(), re.MULTILINE).group(1)
     release = os.environ["PACKAGE_RELEASE"]
-    jobs = int(os.environ["BUILD_JOBS"])
-    if not 0 <= jobs <= 64 or not all(re.fullmatch(r"[0-9A-Za-z.+~_]+", x) for x in (version, release)):
-        raise ValueError("invalid version/release or jobs (expected 0..64)")
+    if not all(re.fullmatch(r"[0-9A-Za-z.+~_]+", x) for x in (version, release)):
+        raise ValueError("invalid version/release")
     if glibc not in ("2.17", "2.28", "both"):
         raise ValueError("unsupported glibc baseline")
     targets = []
@@ -60,7 +59,6 @@ def matrix():
     output("has_linux", str(bool(linux)).lower())
     output("version", version)
     output("release", release)
-    output("jobs", jobs)
 
 
 def environment():
@@ -139,9 +137,11 @@ def bazel_arguments():
 
 
 def build():
-    jobs = int(os.environ["BUILD_JOBS"]) or (1 if os.environ["PACKAGE_OS"] == "macos" else 2)
+    jobs = os.environ["BUILD_JOBS"]
+    if jobs == "0":
+        jobs = "1" if os.environ["PACKAGE_OS"] == "macos" else "2"
     arguments = [sys.executable, "build.py", "build", *bazel_arguments(),
-                 "--jobs=" + str(jobs), "--config=O2", "--config=line_tables_only", "--config=package",
+                 "--jobs=" + jobs, "--config=O2", "--config=line_tables_only", "--config=package",
                  "--lockfile_mode=error"]
     if os.environ["PACKAGE_OS"] == "android":
         arguments.append("--config=android")
