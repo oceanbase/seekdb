@@ -4360,6 +4360,97 @@ int ObVectorIndexUtil::check_vec_aux_index_deleted(
   return ret;
 }
 
+int ObVectorIndexUtil::get_ivf_aux_table_id(
+    ObSchemaGetterGuard &schema_guard,
+    const schema::ObTableSchema &ivf_domain_index_schema,
+    const schema::ObIndexType aux_index_type,
+    uint64_t &aux_table_id)
+{
+  int ret = OB_SUCCESS;
+  aux_table_id = OB_INVALID_ID;
+  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
+  const ObTableSchema *aux_index_schema = nullptr;
+  if (OB_UNLIKELY(!ivf_domain_index_schema.is_vec_domain_index() ||
+                  !is_local_vec_ivf_index(aux_index_type) ||
+                  !is_local_vec_ivf_index(ivf_domain_index_schema.get_index_type()))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(
+                 schema_guard,
+                 ivf_domain_index_schema.get_database_id(),
+                 ivf_domain_index_schema.get_table_name_str(),
+                 aux_index_type,
+                 &allocator,
+                 aux_index_schema))) {
+  } else if (OB_NOT_NULL(aux_index_schema)) {
+    aux_table_id = aux_index_schema->get_table_id();
+  }
+  return ret;
+}
+
+int ObVectorIndexUtil::check_ivf_index_readable(
+    ObSchemaGetterGuard &schema_guard,
+    const schema::ObTableSchema &ivf_domain_index_schema,
+    bool &is_readable)
+{
+  int ret = OB_SUCCESS;
+  is_readable = false;
+  const ObIndexType index_type = ivf_domain_index_schema.get_index_type();
+  ObSEArray<ObIndexType, 4> aux_index_types;
+  if (OB_UNLIKELY(!ivf_domain_index_schema.is_vec_domain_index() ||
+                  !is_local_vec_ivf_index(index_type))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!ivf_domain_index_schema.can_read_index() ||
+             !ivf_domain_index_schema.is_index_visible()) {
+    // the domain index table is still being built, aux tables can not be read either
+  } else {
+    if (is_vec_ivfflat_index(index_type)) {
+      ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFFLAT_CID_VECTOR_LOCAL);
+      if (OB_SUCC(ret)) {
+        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFFLAT_ROWKEY_CID_LOCAL);
+      }
+    } else if (is_vec_ivfsq8_index(index_type)) {
+      ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFSQ8_META_LOCAL);
+      if (OB_SUCC(ret)) {
+        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFSQ8_CID_VECTOR_LOCAL);
+      }
+      if (OB_SUCC(ret)) {
+        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFSQ8_ROWKEY_CID_LOCAL);
+      }
+    } else {
+      ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFPQ_PQ_CENTROID_LOCAL);
+      if (OB_SUCC(ret)) {
+        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFPQ_CODE_LOCAL);
+      }
+      if (OB_SUCC(ret)) {
+        ret = aux_index_types.push_back(INDEX_TYPE_VEC_IVFPQ_ROWKEY_CID_LOCAL);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      is_readable = true;
+      for (int64_t i = 0; is_readable && i < aux_index_types.count(); ++i) {
+        uint64_t aux_table_id = OB_INVALID_ID;
+        const ObTableSchema *aux_index_schema = nullptr;
+        if (OB_FAIL(get_ivf_aux_table_id(schema_guard,
+                                         ivf_domain_index_schema,
+                                         aux_index_types.at(i),
+                                         aux_table_id))) {
+        } else if (OB_INVALID_ID == aux_table_id ||
+                   OB_FAIL(schema_guard.get_table_schema(aux_table_id, aux_index_schema))) {
+          is_readable = false;
+        } else if (OB_ISNULL(aux_index_schema) ||
+                   !aux_index_schema->can_read_index() ||
+                   !aux_index_schema->is_index_visible()) {
+          is_readable = false;
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !is_readable) {
+    LOG_INFO("ivf index is not readable", K(index_type), K(ivf_domain_index_schema.get_table_name_str()));
+  }
+  return ret;
+}
+
 int ObVectorIndexUtil::check_vector_index_by_column_name(
     ObSchemaGetterGuard &schema_guard,
     const schema::ObTableSchema &table_schema,

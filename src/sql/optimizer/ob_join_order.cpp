@@ -1423,6 +1423,7 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
     }  else if (OB_FAIL(schema_guard->get_table_schema(vec_index_id, vec_index_schema))) {
     } else if (OB_ISNULL(vec_index_schema)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nullptr to index schema", K(ret));
     } else {
       is_ipivf = ObVectorIndexUtil::is_sindi_index(vec_index_schema);
       ObVecIndexType pre_vec_type = (vec_index_schema->is_vec_hnsw_index() && helper.vec_index_type_ == ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN) ? 
@@ -1460,6 +1461,7 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
   if (OB_FAIL(ret) || !vector_index_match) {
   } else if (OB_ISNULL(vec_index_schema)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("vec_table_schema unexpected null", K(ret));
   } else {
     double selectivity = 0.0;
     if (OB_FAIL(ObOptSelectivity::calculate_selectivity(get_plan()->get_basic_table_metas(),
@@ -16218,7 +16220,22 @@ int ObJoinOrder::get_vector_index_tid_from_expr(ObSqlSchemaGuard *schema_guard,
       LOG_INFO("can not find vector index for spec col id", K(ref_table_id), K(vec_col_id));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "should be vector column with vector index");
     } else {
-      vec_index_tid = inv_idx_tid;
+      const ObTableSchema *inv_idx_schema = nullptr;
+      bool ivf_readable = true;
+      if (OB_FAIL(schema_guard->get_table_schema(inv_idx_tid, inv_idx_schema))) {
+      } else if (OB_ISNULL(inv_idx_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (inv_idx_schema->is_vec_domain_index() &&
+                 is_local_vec_ivf_index(inv_idx_schema->get_index_type()) &&
+                 OB_FAIL(ObVectorIndexUtil::check_ivf_index_readable(
+                     *schema_guard->get_schema_guard(), *inv_idx_schema, ivf_readable))) {
+      } else if (!ivf_readable) {
+        // the ivf index is still being built, do not use a partial generation
+        LOG_INFO("ivf index is not readable, skip it", K(ref_table_id), K(vec_col_id), K(inv_idx_tid));
+        vector_index_match = false;
+      } else {
+        vec_index_tid = inv_idx_tid;
+      }
     }
   }
   return ret;

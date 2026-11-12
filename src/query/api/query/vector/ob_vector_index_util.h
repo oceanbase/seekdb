@@ -571,6 +571,15 @@ public:
       const schema::ObTableSchema &table_schema,
       const ObString &index_column_name,
       bool &is_valid);
+  static int get_ivf_aux_table_id(
+      schema::ObSchemaGetterGuard &schema_guard,
+      const schema::ObTableSchema &ivf_domain_index_schema,
+      const schema::ObIndexType aux_index_type,
+      uint64_t &aux_table_id);
+  static int check_ivf_index_readable(
+      schema::ObSchemaGetterGuard &schema_guard,
+      const schema::ObTableSchema &ivf_domain_index_schema,
+      bool &is_readable);
   static int get_vector_index_column_name(
       const schema::ObTableSchema &data_table_schema,
       const schema::ObTableSchema &index_table_schema,
