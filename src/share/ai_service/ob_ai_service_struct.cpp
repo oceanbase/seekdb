@@ -37,8 +37,28 @@ const char *VALID_PROVIDERS[] = {
   "SILICONFLOW",
   "COHERE",
   "HUNYUAN-OPENAI",
-  "OPENAI"
+  "OPENAI",
+  "OLLAMA"
 };
+
+// providers that do not authenticate the request, an empty access key is accepted
+const char *NO_ACCESS_KEY_PROVIDERS[] = {
+  "OLLAMA"
+};
+
+namespace
+{
+bool is_provider_in_list(const ObString &provider, const char *const *provider_list, const int64_t list_size)
+{
+  bool is_found = false;
+  for (int64_t i = 0; i < list_size && !is_found; i++) {
+    if (provider.case_compare(provider_list[i]) == 0) {
+      is_found = true;
+    }
+  }
+  return is_found;
+}
+} // namespace
 
 #define EXTRACT_JSON_ELEM_STR(json_key, member) \
   EXTRACT_JSON_ELEM_STR_WITH_PROCESS(json_key, member, "void")
@@ -112,7 +132,8 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (url_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("url"), "url");
-  } else if (access_key_.empty()) {
+  } else if (access_key_.empty()
+             && !is_provider_in_list(provider_, NO_ACCESS_KEY_PROVIDERS, ARRAYSIZEOF(NO_ACCESS_KEY_PROVIDERS))) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
     LOG_WARN("access_key is empty", K(ret), K(*this));
