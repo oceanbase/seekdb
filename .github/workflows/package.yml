@@ -107,7 +107,6 @@ jobs:
         run: |
           & C:\msys64\usr\bin\bash.exe -lc 'pacman -S --needed --noconfirm make'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          'C:\msys64\usr\bin' >> $env:GITHUB_PATH
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
         if: runner.os == 'Windows'
         with:
@@ -155,6 +154,8 @@ jobs:
         run: python .github/scripts/package.py environment
       - name: Restore dependency SDK
         id: sdk
+        continue-on-error: true
+        timeout-minutes: 5
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -162,10 +163,22 @@ jobs:
             deps/android
           key: package-sdk-v1-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
           restore-keys: package-sdk-v1-${{ matrix.id }}-
+      - name: Clear incomplete SDK restore
+        if: steps.sdk.outputs.cache-matched-key == ''
+        run: |
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          for path in (Path('deps/3rd'), Path('deps/android')):
+              if path.exists():
+                  shutil.rmtree(path)
+          PY
       - name: Initialize dependencies
         run: python .github/scripts/package.py initialize
       - name: Save initialized SDK
-        if: steps.sdk.outputs.cache-hit != 'true'
+        if: steps.sdk.outputs.cache-hit != 'true' && steps.sdk.outputs.cache-primary-key != ''
+        continue-on-error: true
+        timeout-minutes: 5
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -174,7 +187,10 @@ jobs:
           key: ${{ steps.sdk.outputs.cache-primary-key }}
       - name: Compile seekdb once
         id: build
-        run: python .github/scripts/package.py build
+        run: |
+          # Keep MSYS utilities out of the cache action's tar/zstd pipeline.
+          if [[ "$RUNNER_OS" == Windows ]]; then export PATH="$PATH:/c/msys64/usr/bin"; fi
+          python .github/scripts/package.py build
       - name: Export verified binary distribution
         run: python .github/scripts/package.py export
       - name: Upload binary distribution
