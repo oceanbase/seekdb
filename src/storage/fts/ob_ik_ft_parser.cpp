@@ -40,6 +40,65 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+// Building the IK dictionaries (main + quantifier + stopword) is by far the most
+// expensive part of one tokenize() call, yet the dictionaries are immutable once
+// built. Keep one bundle per thread so later parsers only pay for their own
+// parse state.
+struct ObIKDictCache
+{
+  ObArenaAllocator alloc_;
+  ObFTCacheRangeContainer main_;
+  ObFTCacheRangeContainer quan_;
+  ObFTCacheRangeContainer stop_;
+  ObIFTDict *dict_main_;
+  ObIFTDict *dict_quan_;
+  ObIFTDict *dict_stop_;
+  bool ready_;
+
+  ObIKDictCache()
+      : alloc_(lib::ObMemAttr("IKDictCache")),
+        main_(alloc_),
+        quan_(alloc_),
+        stop_(alloc_),
+        dict_main_(nullptr),
+        dict_quan_(nullptr),
+        dict_stop_(nullptr),
+        ready_(false)
+  {
+  }
+
+  ~ObIKDictCache()
+  {
+    if (nullptr != dict_main_) { dict_main_->~ObIFTDict(); dict_main_ = nullptr; }
+    if (nullptr != dict_quan_) { dict_quan_->~ObIFTDict(); dict_quan_ = nullptr; }
+    if (nullptr != dict_stop_) { dict_stop_->~ObIFTDict(); dict_stop_ = nullptr; }
+  }
+
+  int load_one(ObFTDictHub *hub, const ObFTDictDesc &desc,
+               ObFTCacheRangeContainer &container, ObIFTDict *&dict)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(hub->load_cache(desc, container))) {
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
+        if (OB_FAIL(hub->build_cache(desc, container))) {
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(dict = OB_NEWx(ObFTRangeDict, &alloc_, alloc_, &container, desc))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(dict->init())) {
+    }
+    return ret;
+  }
+};
+
+thread_local ObIKDictCache g_ik_dict_cache;
+}  // namespace
+
 int ObIKFTParser::init(const ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
@@ -253,20 +312,26 @@ int ObIKFTParser::init_dict(const ObFTParserParam &param)
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  if (should_read_newest_table()) {
-    // clear dict cache, always false now
-  } else {
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+  if (!g_ik_dict_cache.ready_) {
+    if (OB_FAIL(g_ik_dict_cache.load_one(hub_, main_dict_desc,
+                                         g_ik_dict_cache.main_,
+                                         g_ik_dict_cache.dict_main_))) {
+    } else if (OB_FAIL(g_ik_dict_cache.load_one(hub_, quan_dict_desc,
+                                                g_ik_dict_cache.quan_,
+                                                g_ik_dict_cache.dict_quan_))) {
+    } else if (OB_FAIL(g_ik_dict_cache.load_one(hub_, stopword_dict_desc,
+                                                g_ik_dict_cache.stop_,
+                                                g_ik_dict_cache.dict_stop_))) {
+    } else {
+      g_ik_dict_cache.ready_ = true;
     }
   }
 
-  if (OB_FAIL(ret)) {
-    // already logged.
-  } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
-  } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
+  if (OB_SUCC(ret)) {
+    dict_main_ = g_ik_dict_cache.dict_main_;
+    dict_quan_ = g_ik_dict_cache.dict_quan_;
+    dict_stop_ = g_ik_dict_cache.dict_stop_;
+    shared_dict_ = true;
   }
 
   return ret;
@@ -366,18 +431,23 @@ void ObIKFTParser::reset()
   cache_quan_.reset();
   cache_stop_.reset();
 
-  if (!OB_ISNULL(dict_main_)) {
-    dict_main_->~ObIFTDict();
-    allocator_.free(dict_main_);
+  if (!shared_dict_) {
+    if (!OB_ISNULL(dict_main_)) {
+      dict_main_->~ObIFTDict();
+      allocator_.free(dict_main_);
+    }
+    if (!OB_ISNULL(dict_quan_)) {
+      dict_quan_->~ObIFTDict();
+      allocator_.free(dict_quan_);
+    }
+    if (!OB_ISNULL(dict_stop_)) {
+      dict_stop_->~ObIFTDict();
+      allocator_.free(dict_stop_);
+    }
   }
-  if (!OB_ISNULL(dict_quan_)) {
-    dict_quan_->~ObIFTDict();
-    allocator_.free(dict_quan_);
-  }
-  if (!OB_ISNULL(dict_stop_)) {
-    dict_stop_->~ObIFTDict();
-    allocator_.free(dict_stop_);
-  }
+  dict_main_ = nullptr;
+  dict_quan_ = nullptr;
+  dict_stop_ = nullptr;
 
   is_inited_ = false;
 }
