@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RPC
 #include "lib/utility/data_buffer.h"
+#include <inttypes.h>
 #include "lib/utility/utility.h"
 
 namespace oceanbase
@@ -67,7 +68,7 @@ OB_DEF_SERIALIZE_SIZE(ObDataBuffer)
 int64_t ObDataBuffer::to_string(char *buffer, const int64_t length) const
 {
   int64_t pos = 0;
-  databuff_printf(buffer, length, pos, "buffer=%p capacity=%ld position=%ld limit=%ld",
+  databuff_printf(buffer, length, pos, "buffer=%p capacity=%" PRId64 " position=%" PRId64 " limit=%" PRId64 "",
                   data_, capacity_, position_, limit_);
   return pos;
 }

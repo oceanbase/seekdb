@@ -391,6 +391,7 @@ cc_library(
     name = "local_io_config",
     srcs = ["local_io_config.cpp"],
     hdrs = ["local_io_config.h"],
+    deps = ["//src/oblib:oblib_foundation"],
     visibility = ["//src:__subpackages__"],
 )
 
@@ -496,7 +497,6 @@ cc_library(
     ],
     deps = [
         "//src/oblib:oblib_foundation",
-        "//bazel/third_party:openssl_headers",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -1120,14 +1120,14 @@ cc_library(
         "geo/ob_geo_bin_traits.h",
         "geo/ob_geo_cache.h",
         "geo/ob_geo_ibin.h",
-        "geo/ob_geo_to_s2_visitor.h",
+        "geo/ob_spatial_covering.h",
+        "geo/ob_spatial_mbr.h",
         "geo/ob_geo_to_tree_visitor.h",
         "geo/ob_geo_tree.h",
         "geo/ob_geo_tree_traits.h",
         "geo/ob_geo_utils.h",
         "geo/ob_geo_visitor.h",
         "geo/ob_geometry_cast.h",
-        "geo/ob_s2adapter.h",
         "geo/ob_wkt_parser.h",
     ],
     deps = [
@@ -1136,7 +1136,7 @@ cc_library(
         "//src/oblib:oblib_foundation",
         "//bazel/third_party:absl_headers",
         "//bazel/third_party:boost_headers",
-        "//bazel/third_party:s2_headers",
+        "//rust:spatial_covering",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -1225,7 +1225,7 @@ grouped_unity_cc_library(
         ":lob_runtime",
         ":roaringbitmap",
         ":srs_provider_interface",
-        "//bazel/third_party:fast_float_headers",
+        "//rust:number_parser",
         "//src/oblib:oblib_base",
         "//src/oblib:oblib_common",
     ],
@@ -1671,16 +1671,12 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     ":transaction_id",
     "//bazel/third_party:absl_headers",
     "//bazel/third_party:boost_headers",
-    "//bazel/third_party:curl_headers",
-    "//bazel/third_party:fast_float_headers",
+    "//rust:http_client_headers",
     "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
-    "//bazel/third_party:openssl_headers",
-    "//bazel/third_party:protobuf_c_headers",
-    "//bazel/third_party:rapidjson_headers",
+    "//rust:crypto_headers",
     "//bazel/third_party:roaring_headers",
-    "//bazel/third_party:s2_headers",
-    "//bazel/third_party:zlib_headers",
+    "//rust:spatial_covering_headers",
 ]
 
 _SHARE_RUNTIME_SEMANTIC_DEPS = [
@@ -1798,7 +1794,10 @@ grouped_unity_cc_library(
     split_unity_groups = True,
     implementation_deps = [
         ":_share_implementation_headers",
+        ":math_compat",
         "//rust:config_headers",
+        "//rust:mvt_headers",
+        "//rust:json",
     ] + _SHARE_RUNTIME_COMPILE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",
@@ -1816,28 +1815,13 @@ grouped_unity_cc_library(
     visibility = ["//src/share:__pkg__"],
 )
 
-grouped_unity_cc_library(
-    name = "share_runtime_c",
-    unity_groups = select_unity_groups(
-        SHARE_UNITY_GROUPS,
-        ["ob_share_geo_1"],
-        language = "c",
-    ),
-    language = "c",
-    implementation_deps = [
-        ":geo_serialization",
-        "//bazel/third_party:protobuf_c_headers",
-    ],
-    tags = ["manual"],
-    visibility = ["//src/share:__pkg__"],
-)
-
 cc_library(
     name = "share_static",
     implementation_deps = [
         ":share_runtime",
-        ":share_runtime_c",
     ] + _SHARE_RUNTIME_SEMANTIC_DEPS,
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )
+
+exports_files(["geo/ob_vector_tile.proto"], visibility = ["//rust/mvt:__pkg__"])

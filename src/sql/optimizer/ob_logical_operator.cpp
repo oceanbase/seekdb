@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_logical_operator.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -3348,23 +3349,23 @@ int ObLogicalOperator::explain_print_partitions(
             const int64_t np_id = n_id;
             const int64_t ns_id = part_infos.at(idx + 1).subpart_id_;
             if (p_id == np_id && s_id == ns_id - 1) {
-              ret = BUF_PRINTF("p%lusp[%lu-", p_id, s_id);
+              ret = BUF_PRINTF("p%" PRIu64 "sp[%" PRIu64 "-", p_id, s_id);
               continuous = true;
             } else {
-              ret = BUF_PRINTF("p%lusp%lu", p_id, s_id);
+              ret = BUF_PRINTF("p%" PRIu64 "sp%" PRIu64 "", p_id, s_id);
             }
           } else if (id == n_id -1) {
-            ret = BUF_PRINTF("p[%lu-", id);
+            ret = BUF_PRINTF("p[%" PRIu64 "-", id);
             continuous = true;
           } else {
-            ret = BUF_PRINTF("p%lu", id);
+            ret = BUF_PRINTF("p%" PRIu64 "", id);
           }
         } else if(two_level) {
           const int64_t p_id = id;
           const int64_t s_id = part_infos.at(idx).subpart_id_;
-          ret = BUF_PRINTF("p%lusp%lu", p_id, s_id);
+          ret = BUF_PRINTF("p%" PRIu64 "sp%" PRIu64 "", p_id, s_id);
         } else {
-          ret = BUF_PRINTF("p%lu", id);
+          ret = BUF_PRINTF("p%" PRIu64 "", id);
         }
       } else {
         if (idx >= count -1) {
@@ -3387,9 +3388,9 @@ int ObLogicalOperator::explain_print_partitions(
           cont_flag = true;
         } else if (two_level) {
           const int64_t s_id = part_infos.at(idx).subpart_id_;
-          ret = BUF_PRINTF("%lu]", s_id);
+          ret = BUF_PRINTF("%" PRIu64 "]", s_id);
         } else {
-          ret = BUF_PRINTF("%lu]", id);
+          ret = BUF_PRINTF("%" PRIu64 "]", id);
         }
       }
       if (!cont_flag && !continuous && (idx < count -1)) {

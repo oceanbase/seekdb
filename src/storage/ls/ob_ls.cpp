@@ -423,34 +423,21 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
 {
   int ret = OB_SUCCESS;
   palf::LSN end_lsn;
-  bool is_done = false;
-  bool is_clear = false;
-  logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
-  logservice::ObLogReplayService *replay_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service();
+  bool reached = false;
+  logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
   }
-  while (OB_SUCC(ret) && !is_done) {
-    if (OB_FAIL(replay_service->is_replay_done(end_lsn, is_done))) {
-    } else if (!is_done && ObTimeUtility::current_time() >= deadline_us) {
+  while (OB_SUCC(ret) && !reached) {
+    if (OB_FAIL(log_service->is_replayed_to(end_lsn, reached))) {
+    } else if (!reached && ObTimeUtility::current_time() >= deadline_us) {
       ret = OB_TIMEOUT;
       LOG_WARN("wait local replay timed out", K(ret), K(end_lsn), K(deadline_us));
-    } else if (!is_done) {
+    } else if (!reached) {
       ob_usleep(50 * 1000);
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(apply_service->start_local_append())) {
-  }
-  if (OB_SUCC(ret) && OB_FAIL(replay_service->disable_local_replay())) {
-    LOG_WARN("stop local replay failed", K(ret));
-  }
-  while (OB_SUCC(ret) && !is_clear) {
-    if (OB_FAIL(replay_service->is_submit_task_clear(is_clear))) {
-    } else if (!is_clear && ObTimeUtility::current_time() >= deadline_us) {
-      ret = OB_TIMEOUT;
-      LOG_WARN("wait local replay tasks timed out", K(ret), K(deadline_us));
-    } else if (!is_clear) {
-      ob_usleep(1000);
-    }
+  if (OB_SUCC(ret) && OB_FAIL(log_service->finish_replay(deadline_us))) {
+    LOG_WARN("finish local replay failed", K(ret));
   }
   if (OB_SUCC(ret)) {
     // Local recovery has drained its replay tasks. Close the replay cache now;
@@ -512,9 +499,7 @@ int ObLS::stop_local_log_(const int64_t deadline_us)
   int ret = OB_SUCCESS;
   bool is_done = false;
   palf::LSN end_lsn;
-  share::SCN end_scn;
   logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
-  logservice::ObLogReplayService *replay_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service();
   log_handler_.set_local_append_enabled(false);
   local_log_handler_set_.deactivate();
   if (OB_FAIL(apply_service->wait_append_sync())) {
@@ -530,12 +515,7 @@ int ObLS::stop_local_log_(const int64_t deadline_us)
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(log_handler_.get_end_scn(end_scn))) {
-    } else if (OB_FAIL(replay_service->enable_local_replay(
-        end_lsn, share::SCN::scn_inc(end_scn)))) {
-    } else {
-      is_local_append_mode_ = false;
-    }
+    is_local_append_mode_ = false;
   }
   return ret;
 }
@@ -714,6 +694,14 @@ int ObLS::register_common_service()
   if (OB_SUCC(ret) &&
       OB_FAIL(register_composition_log_handler_(MAJOR_FREEZE_LOG_BASE_TYPE))) {
   }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(local_log_handler_set_.register_handler(
+        OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE, &lock_table_))) {
+    } else if (OB_FAIL(checkpoint_executor_.register_handler(
+        OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE, &lock_table_))) {
+      local_log_handler_set_.unregister_handler(OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE);
+    }
+  }
   return ret;
 }
 
@@ -830,6 +818,8 @@ void ObLS::unregister_common_service_()
   UNREGISTER_REPLAY_CHECKPOINT_HANDLER(TIMESTAMP_LOG_BASE_TYPE);
   UNREGISTER_REPLAY_CHECKPOINT_HANDLER(TRANS_ID_LOG_BASE_TYPE);
   unregister_composition_log_handler_(MAJOR_FREEZE_LOG_BASE_TYPE);
+  checkpoint_executor_.unregister_handler(OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE);
+  local_log_handler_set_.unregister_handler(OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE);
 }
 
 void ObLS::unregister_local_services_()
@@ -1235,7 +1225,7 @@ int ObLS::replay_get_tablet_no_check(
     if (OB_TABLET_NOT_EXIST != ret) {
     } else if (scn <= tablet_change_checkpoint_scn) {
       ret = OB_OBSOLETE_CLOG_NEED_SKIP;
-    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service()->get_max_replayed_scn(max_scn))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_max_replayed_scn(max_scn))) {
     }
     // double check for this scenario:
     // 1. get_tablet return OB_TABLET_NOT_EXIST

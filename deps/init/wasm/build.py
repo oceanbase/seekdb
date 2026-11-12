@@ -50,37 +50,6 @@ def build_openssl(prefix, spec, jobs):
     subprocess.run(["make", "install_dev"], cwd=source, check=True)
 
 
-def build_libxml2(prefix, spec, jobs):
-    source = locked_source(prefix, spec, ".tar.xz", "libxml2 archive checksum mismatch")
-    build = prefix / "build/libxml2"
-    build.mkdir(parents=True, exist_ok=True)
-    subprocess.run([
-        "emconfigure", str(source / "configure"),
-        "--host=wasm32-unknown-emscripten", "--prefix=" + str(prefix),
-        "--disable-shared", "--enable-static", "--with-threads",
-        "--with-iconv", "--without-python", "--without-http", "--without-ftp",
-        "--without-lzma", "--without-zlib", "--without-modules", "CFLAGS=-Oz -pthread",
-    ], cwd=build, check=True)
-    subprocess.run(["emmake", "make", "-j" + str(jobs), "libxml2.la"], cwd=build, check=True)
-    subprocess.run([
-        "emmake", "make", "install-libLTLIBRARIES", "install-nodist_pkgconfigDATA",
-    ], cwd=build, check=True)
-    subprocess.run(["emmake", "make", "-C", "include", "install"], cwd=build, check=True)
-
-
-def build_protobuf_c(prefix, spec):
-    source = locked_source(prefix, spec, ".tar.gz", "protobuf-c archive checksum mismatch")
-    obj = source / "protobuf-c.o"
-    subprocess.run([
-        "emcc", "-Oz", "-pthread", "-c", str(source / "protobuf-c/protobuf-c.c"),
-        "-o", str(obj),
-    ], check=True)
-    lib = prefix / "lib"
-    lib.mkdir(exist_ok=True)
-    subprocess.run(["emar", "rcs", str(lib / "libprotobuf-c.a"), str(obj)], check=True)
-    headers = prefix / "include/protobuf-c"
-    headers.mkdir(parents=True, exist_ok=True)
-    (headers / "protobuf-c.h").write_bytes((source / "protobuf-c/protobuf-c.h").read_bytes())
 
 
 def header_variant(patch, digest, fields):
@@ -97,16 +66,9 @@ def copy_headers(source, prefix, manifest):
     patches += manifest["boost_numeric_backport"]["headers"]
     patches += manifest["boost_geometry_math"]["headers"]
     patched = {patch["path"]: patch for patch in patches}
-    trees = [(name, name) for name in (
-        "fast_float", "rapidjson", "curl",
-        "boost", "protobuf-c", "libxml2")]
-    trees += [("libxml2/libxml", "libxml")]
+    trees = [("boost", "boost")]
     for source_tree, target_tree in trees:
         tree = source / source_tree
-        if source_tree.startswith("libxml2") or source_tree == "protobuf-c":
-            # xmlversion.h describes compiled features. Never pair the native
-            # configuration header with the Wasm library.
-            tree = prefix / "include" / source_tree
         if not tree.is_dir():
             raise SystemExit(f"Missing source headers: {tree}")
         for src in tree.rglob("*"):
@@ -199,8 +161,6 @@ def main():
     os.environ["EM_CACHE"] = str(prefix / "em-cache")
     dependencies = json.loads(Path(__file__).with_name("dependencies.json").read_text())
     build_openssl(prefix, dependencies["openssl"], args.jobs)
-    build_libxml2(prefix, dependencies["libxml2"], args.jobs)
-    build_protobuf_c(prefix, dependencies["protobuf_c"])
     prepare_headers(repo / "deps/3rd/usr/local/oceanbase/deps/devel/include", prefix, dependencies)
 
     # Bazel consumes this prepared thread/exception ABI cache read-only.
@@ -209,7 +169,7 @@ def main():
         (probe / "main.cpp").write_text("int main() { return 0; }\n")
         subprocess.run([
             "emcc", str(probe / "main.cpp"), "-Oz", "-pthread", "-fexceptions", "-msimd128",
-            "-sUSE_ZLIB=1", "-sWASMFS", "-sASSERTIONS=2", "-sPROXY_TO_PTHREAD=1", "-sEXIT_RUNTIME=1",
+            "-sWASMFS", "-sASSERTIONS=2", "-sPROXY_TO_PTHREAD=1", "-sEXIT_RUNTIME=1",
             "-o", str(probe / "main.mjs"),
         ], check=True)
     rustc = Path(subprocess.check_output(

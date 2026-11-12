@@ -18,6 +18,7 @@
 
 #ifdef WITH_COVERAGE
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -38,7 +39,7 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
     snprintf(abs_base, sizeof(abs_base), "%s", base);
   } else {
     char cwd[1024] = {0};
-    (void)getcwd(cwd, sizeof(cwd));
+    (void)ob_getcwd_utf8(cwd, sizeof(cwd));
     snprintf(abs_base, sizeof(abs_base), "%s/%s", cwd, base);
   }
   char val[1100];
@@ -54,7 +55,6 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #include "lib/oblog/ob_easy_log.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_warning_buffer.h"
-#include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_defer.h"
 #include "observer/ob_command_line_parser.h"
 #include "observer/ob_server.h"
@@ -63,7 +63,6 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #include "observer/ob_signal_handle.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_version.h"
-#include <curl/curl.h>
 #include <stdlib.h>
 #ifndef _WIN32
 #include <getopt.h>
@@ -87,6 +86,8 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #endif
 #ifdef _WIN32
 #include <windows.h>
+#include <shellapi.h>
+#pragma comment(lib, "shell32.lib")
 #include "observer/ob_win_service.h"
 extern "C" void win32_trace(const char *msg) {
   HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
@@ -168,7 +169,7 @@ static LONG WINAPI win32_vectored_handler(EXCEPTION_POINTERS *ep) {
   DWORD tid = GetCurrentThreadId();
   BOOL is_main = (tid == g_main_thread_id);
   int n = snprintf(buf, sizeof(buf),
-    "[WIN32-TRACE] Vectored exception #%ld: code=0x%08lX addr=0x%p tid=%lu%s\r\n",
+    "[WIN32-TRACE] Vectored exception #%" PRId64 ": code=0x%08" PRIX64 " addr=0x%p tid=%" PRIu64 "%s\r\n",
     crash_seq, code, (void*)ep->ExceptionRecord->ExceptionAddress, tid,
     is_main ? " (MAIN)" : " (bg-thread)");
   if (code == 0xC0000005 && ep->ExceptionRecord->NumberParameters >= 2) {
@@ -295,7 +296,7 @@ static LONG WINAPI win32_vectored_handler(EXCEPTION_POINTERS *ep) {
   {
     char msg2[256];
     snprintf(msg2, sizeof(msg2),
-      "[WIN32-TRACE] Background thread crash #%ld, terminating process to avoid corruption.\r\n",
+      "[WIN32-TRACE] Background thread crash #%" PRId64 ", terminating process to avoid corruption.\r\n",
       bg_seq);
     win32_trace(msg2);
   }
@@ -384,7 +385,7 @@ static void disable_hugepage_for_self_text()
     unsigned long end = 0;
     char perms[8] = {0};
     char path[PATH_MAX] = {0};
-    const int fields = sscanf(line, "%lx-%lx %7s %*s %*s %*s %4095[^\n]",
+    const int fields = sscanf(line, "%" PRIx64 "-%" PRIx64 " %7s %*s %*s %*s %4095[^\n]",
                               &start, &end, perms, path);
     if (fields == 4 && start < end && perms[0] == 'r' && perms[2] == 'x'
         && 0 == strcmp(path, exe_path)) {
@@ -417,60 +418,10 @@ static int create_observer_softlink()
   int ret = OB_SUCCESS;
   char softlink_path[4096] = {0};
   snprintf(softlink_path, sizeof(softlink_path), "%s/seekdb", PID_DIR);
-  char target_path[4096] = {0};
-#ifdef _WIN32
-  if (0 == GetModuleFileNameA(nullptr, target_path, sizeof(target_path))) {
+  if (0 != common::ob_create_executable_alias_utf8(softlink_path)) {
     ret = OB_IO_ERROR;
-    MPRINT("failed to get executable path on Windows");
+    MPRINT("create seekdb softlink failed, errno=%d (%s)", errno, strerror(errno));
   }
-  if (OB_SUCC(ret)) {
-    char link_path_exe[4096] = {0};
-    snprintf(link_path_exe, sizeof(link_path_exe), "%s.exe", softlink_path);
-    DeleteFileA(link_path_exe);
-    if (!CopyFileA(target_path, link_path_exe, FALSE)) {
-      if (!CreateHardLinkA(link_path_exe, target_path, NULL)) {
-        ret = OB_IO_ERROR;
-        MPRINT("create seekdb copy/hardlink failed, err=%lu", GetLastError());
-      }
-    }
-  }
-#elif defined(__APPLE__)
-  uint32_t size = PATH_MAX;
-  if (0 != _NSGetExecutablePath(target_path, &size)) {
-    ret = OB_IO_ERROR;
-    MPRINT("failed to get executable path on macOS");
-  }
-  if (OB_SUCC(ret)) {
-    char resolved_path[PATH_MAX] = {0};
-    if (nullptr == realpath(target_path, resolved_path)) {
-      ret = OB_IO_ERROR;
-      MPRINT("failed to resolve executable path, errno=%s", strerror(errno));
-    } else {
-      strncpy(target_path, resolved_path, PATH_MAX - 1);
-      target_path[PATH_MAX - 1] = '\0';
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (FALSE_IT(FileDirectoryUtils::unlink_symlink(softlink_path))) {
-  } else if (OB_FAIL(FileDirectoryUtils::symlink(target_path, softlink_path))) {
-    ret = OB_IO_ERROR;
-    MPRINT("create seekdb softlink failed, errno=%s", strerror(errno));
-  }
-#else
-  ssize_t read_len = readlink("/proc/self/exe", target_path, sizeof(target_path) - 1);
-  if (read_len < 0) {
-    ret = OB_IO_ERROR;
-    MPRINT("failed to readlink /proc/self/exe, errno=%s", strerror(errno));
-  } else {
-    target_path[read_len] = '\0';
-  }
-  if (OB_FAIL(ret)) {
-  } else if (FALSE_IT(FileDirectoryUtils::unlink_symlink(softlink_path))) {
-  } else if (OB_FAIL(FileDirectoryUtils::symlink(target_path, softlink_path))) {
-    ret = OB_IO_ERROR;
-    MPRINT("create seekdb softlink failed, errno=%s", strerror(errno));
-  }
-#endif
   return ret;
 }
 static void print_args(int argc, char *argv[])
@@ -538,11 +489,8 @@ static void print_limit(const char *name, const int resource)
     if (RLIM_INFINITY == limit.rlim_cur) {
       _OB_LOG(INFO, "[%s] %-24s = %s", __func__, name, "unlimited");
     } else {
-      _OB_LOG(INFO, "[%s] %-24s = %ld", __func__, name, limit.rlim_cur);
+      _OB_LOG(INFO, "[%s] %-24s = %" PRId64 "", __func__, name, limit.rlim_cur);
     }
-  }
-  if (RLIMIT_CORE == resource) {
-    g_rlimit_core = limit.rlim_cur;
   }
 }
 
@@ -650,8 +598,6 @@ int inner_main(int argc, char *argv[])
     return OB_ERR_UNEXPECTED;
   }
 #endif
-  // LLVM removed: the LLVM symbolizer is gone; sanity (ASAN/UBSAN) builds keep
-  // backtrace_symbolize_func at its default (NULL) -> unsymbolized frames.
 #if defined(_WIN32) || defined(__ANDROID__)
   snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
 #else
@@ -700,7 +646,7 @@ int inner_main(int argc, char *argv[])
   }
 
   if (OB_FAIL(ret)) {
-  } else if (0 != chdir(opts->base_dir_.ptr())) {
+  } else if (0 != ob_chdir_utf8(opts->base_dir_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
     MPRINT("Failed to change working directory to base dir. path='%s', system error='%s'",
       opts->base_dir_.ptr(), strerror(errno));
@@ -724,8 +670,6 @@ int inner_main(int argc, char *argv[])
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(CONF_DIR))) {
     MPRINT("create log dir fail: ./etc/");
   } else if (FALSE_IT(create_observer_softlink())) {
-  } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
-    MPRINT("failed to init crypto malloc");
   }
   if (OB_FAIL(ret)) {
   } else if (!opts->nodaemon_ && !opts->initialize_) {
@@ -733,9 +677,6 @@ int inner_main(int argc, char *argv[])
     MPRINT("    Start seekdb with --nodaemon if you don't want to start as a daemon process.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
       MPRINT("Start seekdb as a daemon failed. Did you started seekdb already?");
-    } else if (!restore_allocator_after_fork()) {
-      ret = OB_ERR_UNEXPECTED;
-      MPRINT("Failed to restore allocator state after starting daemon process.");
     }
   } else if (opts->nodaemon_) {
     if (OB_FAIL(start_daemon(PID_FILE_NAME, true/*skip_daemon*/))) {
@@ -746,9 +687,6 @@ int inner_main(int argc, char *argv[])
   if (OB_FAIL(ret)) {
   } else {
     ObCurTraceId::set("Y0-0000000000000001-0-0");
-    CURLcode curl_code = curl_global_init(CURL_GLOBAL_ALL);
-    OB_ASSERT(CURLE_OK == curl_code);
-
     const char *syslog_file_info = ObServerUtils::build_syslog_file_info();
     OB_LOGGER.set_log_level(opts->log_level_);
     OB_LOGGER.set_max_file_size(LOG_FILE_SIZE);
@@ -762,9 +700,9 @@ int inner_main(int argc, char *argv[])
       _LOG_INFO("Get virtual memory info failed");
     } else {
 #ifdef _WIN32
-      _LOG_INFO("Virtual memory : %15ld byte", memory_used);
+      _LOG_INFO("Virtual memory : %15" PRId64 " byte", memory_used);
 #else
-      _LOG_INFO("Virtual memory : %'15ld byte", memory_used);
+      _LOG_INFO("Virtual memory : %'15" PRId64 " byte", memory_used);
 #endif
     }
     // print in log file.
@@ -803,7 +741,6 @@ int inner_main(int argc, char *argv[])
       }
       observer.destroy();
     }
-    curl_global_cleanup();
     unlink(PID_FILE_NAME);
   }
 
@@ -831,8 +768,54 @@ static const char *get_arg_value(int argc, char *argv[], const char *name)
 }
 #endif
 
+#ifdef _WIN32
+// MSVC converts the command line to the ANSI code page before calling `main`;
+// every file name the server consumes is UTF-8, so rebuild argv from the wide
+// command line once at process start. The converted copy lives for the whole
+// process and is intentionally never freed.
+static void convert_command_line_to_utf8(int &argc, char **&argv)
+{
+  int wide_argc = 0;
+  LPWSTR *wide_argv = ::CommandLineToArgvW(::GetCommandLineW(), &wide_argc);
+  if (NULL == wide_argv || wide_argc <= 0) {
+    return;
+  }
+  char **utf8_argv = static_cast<char **>(
+      ::calloc(static_cast<size_t>(wide_argc) + 1, sizeof(char *)));
+  if (NULL == utf8_argv) {
+    ::LocalFree(wide_argv);
+    return;
+  }
+  bool converted = true;
+  for (int i = 0; i < wide_argc && converted; ++i) {
+    const int utf8_len = ::WideCharToMultiByte(CP_UTF8, 0, wide_argv[i], -1, NULL, 0, NULL, NULL);
+    if (utf8_len <= 0) {
+      converted = false;
+    } else if (NULL == (utf8_argv[i] = static_cast<char *>(::malloc(utf8_len)))) {
+      converted = false;
+    } else if (0 == ::WideCharToMultiByte(CP_UTF8, 0, wide_argv[i], -1, utf8_argv[i],
+                                          utf8_len, NULL, NULL)) {
+      converted = false;
+    }
+  }
+  ::LocalFree(wide_argv);
+  if (!converted) {
+    for (int i = 0; i < wide_argc; ++i) {
+      ::free(utf8_argv[i]);
+    }
+    ::free(utf8_argv);
+    return;
+  }
+  argc = wide_argc;
+  argv = utf8_argv;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+  convert_command_line_to_utf8(argc, argv);
+#endif
 #if defined(__linux__)
   disable_hugepage_for_self_text();
 #endif

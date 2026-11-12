@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "share/rc/ob_server_runtime.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "ob_error_info.h"
 #include "lib/oblog/ob_warning_buffer.h"
@@ -102,8 +103,8 @@ bool ObErrorInfo::is_valid() const
   return ret;
 }
 
-int ObErrorInfo::collect_error_info(const IObErrorInfo *info, 
-                                    const ObWarningBuffer *buf, 
+int ObErrorInfo::collect_error_info(const IObErrorInfo *info,
+                                    const ObWarningBuffer *buf,
                                     bool fill_info,
                                     const ObObjectType obj_type)
 {
@@ -138,7 +139,7 @@ int ObErrorInfo::collect_error_info(const IObErrorInfo *info,
       set_error_number(0);
       set_obj_seq(0);
       set_error_status(ERROR_STATUS_NO_ERROR);
-    } 
+    }
   }
   return ret;
 }
@@ -162,14 +163,14 @@ int ObErrorInfo::collect_error_info(const IObErrorInfo *info,
   return ret;
 }
 
-int ObErrorInfo::add_error(common::ObISQLClient & sql_client, 
-                                 bool is_replace, 
+int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
+                                 bool is_replace,
                                  bool only_history)
 {
   int ret = OB_SUCCESS;
   const ObErrorInfo & error_info = *this;
-  
-  
+
+
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_error_dml(dml))) {
   } else {
@@ -216,7 +217,7 @@ int ObErrorInfo::gen_error_dml(ObDMLSqlSplicer &dml)
 
 int ObErrorInfo::update_error_info(const IObErrorInfo *info, const ObObjectType obj_type) {
   int ret = OB_SUCCESS;
-  
+
   if (NULL == info) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -230,8 +231,8 @@ int ObErrorInfo::update_error_info(const IObErrorInfo *info, const ObObjectType 
 
 uint64_t ObErrorInfo::extract_obj_id() const
 {
-  
-  
+
+
   return ObSchemaUtils::get_extract_schema_id(get_obj_id());
 }
 
@@ -262,16 +263,16 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
   ObErrorInfo &error_info = *this;
-  
-  
+
+
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (ERROR_STATUS_NO_ERROR != error_info.get_error_status()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %ld \
-                                                  AND obj_seq = %ld \
-                                                  AND obj_type = %ld", 
-             OB_ALL_ERROR_TNAME, 
+  } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %" PRId64 " \
+                                                  AND obj_seq = %" PRId64 " \
+                                                  AND obj_type = %" PRId64 "",
+             OB_ALL_ERROR_TNAME,
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {
@@ -292,9 +293,9 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
   ObSqlString sql;
   if (false == error_info.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %ld  \
-                                                                  AND obj_seq = %ld\
-                                                                  AND obj_type = %ld",
+  } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %" PRId64 "  \
+                                                                  AND obj_seq = %" PRId64 "\
+                                                                  AND obj_type = %" PRId64 "",
              OB_ALL_ERROR_TNAME,
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
@@ -347,7 +348,7 @@ int ObErrorInfo::handle_error_info(ObMySQLTransaction &trans, const IObErrorInfo
       } else {
         error_info.reset();
       }
-    } 
+    }
   } else {
     // do nothing
   }
@@ -393,7 +394,7 @@ int ObErrorInfo::delete_error(common::ObMySQLProxy &sql_proxy,
       }
     }
   }
-  return ret;  
+  return ret;
 }
 
 void ObErrorInfo::reset()

@@ -113,7 +113,6 @@ public:
   int open_palf(palf::PalfHandleGuard &palf_handle);
 
   int update_replayable_point(const share::SCN &replayable_point);
-  int get_replayable_point(share::SCN &replayable_point);
 
   // @brief get palf disk usage
   // @param [out] used_size_byte
@@ -163,7 +162,20 @@ public:
   int check_disk_space_enough(bool &is_disk_enough);
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
-  ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
+  bool is_replay_enabled() const;
+  // The recovered watermark has been handed to apply and replay status detached.
+  bool is_replay_handoff_complete() const;
+  int get_max_decided_scn(share::SCN &scn);
+  int get_max_replayed_scn(share::SCN &scn);
+  int get_min_unreplayed_scn(share::SCN &scn);
+  int has_replay_fatal_error(bool &has_error);
+  int enable_replay(const palf::LSN &lsn, const share::SCN &scn);
+  int disable_replay();
+  int finish_replay(int64_t deadline_us);
+  // Query live replay progress; returns OB_STATE_NOT_MATCH after status retirement.
+  int is_replayed_to(const palf::LSN &target_lsn, bool &reached);
+  int block_submit_replay();
+  int unblock_submit_replay();
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
   // Get restore net driver for standby log sync
   // Returns the net driver from restore service if available
@@ -177,6 +189,8 @@ public:
   }
 
 private:
+  void destroy_replay_();
+  int get_replay_status_(ObReplayStatusGuard &guard) const;
   int create_ls_(const palf::PalfBaseInfo &palf_base_info,
                  ObLogHandler &log_handler);
   int get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_size);
@@ -190,7 +204,14 @@ private:
   common::ObILogAllocator *alloc_mgr_;
 
   ObLogApplyService apply_service_;
-  ObLogReplayService replay_service_;
+  lib::ObMutex replay_lock_;
+  mutable common::ObSpinLock replay_status_lock_;
+  // Protected by replay_status_lock_; only published while the executor exists.
+  ObReplayStatus *replay_status_;
+  bool replay_enabled_;
+  bool replay_handoff_complete_;
+  ObLogReplayService *replay_service_;
+  int64_t replay_thread_quota_;
   ObILogStorage *log_storage_;
   ObLogRuntimeConfig runtime_config_;
   ObLogMonitor monitor_;

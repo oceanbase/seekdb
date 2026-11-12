@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX LIB
 
+#include <cmath>
+#include <limits>
+
 #include "ob_geo_utils.h"
 #include "share/geo/ob_geo_wkb_visitor.h"
 #include "share/geo/ob_geo_wkb_size_visitor.h"
@@ -41,6 +44,7 @@
 #include "share/geo/ob_geo_close_ring_visitor.h"
 #include "share/rc/ob_server_runtime.h"
 #include "common/mysqlclient/ob_mysql_global.h" // DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE
+#include "share/ob_math_compat.h"
 
 namespace oceanbase
 {
@@ -711,6 +715,11 @@ int ObGeoTypeUtil::check_coordinate_range(const ObSrsItem *srs,
   return ret;
 }
 
+static int mbr_box_to_geometry(uint32_t srid,
+                               ObIAllocator &allocator,
+                               ObCartesianBox &box,
+                               ObGeometry *&geo_bin_out);
+
 int ObGeoTypeUtil::get_buffered_geo(ObArenaAllocator *allocator,
                                     const ObString &wkb_str,
                                     double distance,
@@ -729,14 +738,53 @@ int ObGeoTypeUtil::get_buffered_geo(ObArenaAllocator *allocator,
     if (OB_FAIL(ObGeoTypeUtil::build_geometry(*allocator, wkb_str, geo, srs, log_info, ObGeoBuildFlag::GEO_ALLOW_3D))) {
     } else if (OB_FAIL(gis_context.append_geo_arg(geo))) {
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(gis_context, correct_result))) {
-    } else if (OB_FAIL(gis_context.append_val_arg(&buf_strat))) {
-    } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Buffer>::geo_func::eval(gis_context, res_geo))) {
-    } else if (OB_ISNULL(res_geo)) {
-      ret = OB_ERR_NULL_VALUE;
-    } else if (OB_FAIL(ObGeoTypeUtil::to_wkb(*allocator,
-                                            *res_geo,
-                                            srs,
-                                            res_wkb))) {
+    } else {
+      bool valid = true;
+      if (std::isfinite(distance) && distance >= 0 && !geo->is_empty()) {
+        // IsValid stores its failure reason in the evaluation context. Keep that
+        // value separate from Buffer's strategy argument.
+        ObGeoEvalCtx valid_context(CURRENT_CONTEXT, srs);
+        if (OB_FAIL(valid_context.append_geo_arg(geo))) {
+        } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::IsValid>::geo_func::eval(valid_context, valid))) {
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (!valid) {
+        // This helper builds Cartesian DWithin index candidates, not the public
+        // ST_Buffer result. Buffering an invalid polygon can silently discard
+        // part of a collection while leaving a nonempty result. Use an expanded
+        // envelope so that the exact distance filter cannot lose candidates.
+        ObCartesianBox box;
+        if (OB_FAIL(ObGeoFuncEnvelope::eval(gis_context, box))) {
+        } else if (box.is_empty()
+                   || !std::isfinite(box.min_corner().get<0>())
+                   || !std::isfinite(box.min_corner().get<1>())
+                   || !std::isfinite(box.max_corner().get<0>())
+                   || !std::isfinite(box.max_corner().get<1>())) {
+          ret = OB_ERR_GIS_INVALID_DATA;
+        } else {
+          const double limit = std::numeric_limits<double>::max();
+          const auto lower = [distance, limit](double value) {
+            return std::nextafter(std::max(-limit, value - distance), -limit);
+          };
+          const auto upper = [distance, limit](double value) {
+            return std::nextafter(std::min(limit, value + distance), limit);
+          };
+          box.set_box(lower(box.min_corner().get<0>()),
+                      lower(box.min_corner().get<1>()),
+                      upper(box.max_corner().get<0>()),
+                      upper(box.max_corner().get<1>()));
+          if (OB_FAIL(mbr_box_to_geometry(geo->get_srid(), *allocator, box, res_geo))) {
+          }
+        }
+      } else if (OB_FAIL(gis_context.append_val_arg(&buf_strat))) {
+      } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Buffer>::geo_func::eval(gis_context, res_geo))) {
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_ISNULL(res_geo)) {
+        ret = OB_ERR_NULL_VALUE;
+      } else if (OB_FAIL(ObGeoTypeUtil::to_wkb(*allocator, *res_geo, srs, res_wkb))) {
+      }
     }
   }
   return ret;
@@ -907,7 +955,7 @@ int ObGeoTypeUtil::get_wkb_from_swkb(const ObString &swkb, ObString &wkb, uint32
 double ObGeoTypeUtil::round_double(double x, int32_t dec, bool truncate)
 {
   double dret = 0.0;
-  double pow_val = std::pow(10, static_cast<double>(std::abs(dec)));
+  double pow_val = math_compat::pow(10, static_cast<double>(std::abs(dec)));
   double val_mul_tmp = x * pow_val;
   if (dec < 0 && std::isinf(pow_val)) {
     dret = 0.0;
@@ -1708,27 +1756,29 @@ int ObGeoTypeUtil::geo_close_ring(ObGeometry &geo, ObIAllocator &allocator)
 int ObGeoTypeUtil::get_cellid_mbr_from_geom(const ObString &wkb_str,
                                             const ObSrsItem *srs_item,
                                             const ObSrsBoundsItem *srs_bound,
-                                            ObS2Cellids &cellids,
+                                            ObSpatialCellIds &cellids,
                                             ObString &mbr_val)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(lib::ObLabel("GisIndexRebuild"));
-  ObS2Adapter s2object(&tmp_allocator, srs_item == NULL ? false : srs_item->is_geographical_srs());
-  ObSpatialMBR spa_mbr;
+  ObSpatialCovering covering;
   char *mbr = mbr_val.ptr();
   int64_t mbr_len = 0;
-  if (OB_FAIL(s2object.init(wkb_str, srs_bound))) {
-  } else if (OB_FAIL(s2object.get_cellids(cellids, false))) {
-  } else if (OB_FAIL(s2object.get_mbr(spa_mbr))) {
-  } else if (spa_mbr.is_empty()) {
-    if (cellids.size() == 0) {
+  if (OB_FAIL(build_spatial_covering(wkb_str,
+                                     OB_NOT_NULL(srs_item) && srs_item->is_geographical_srs(),
+                                     srs_bound,
+                                     ObSpatialCoveringKind::INDEX,
+                                     0.0,
+                                     covering))) {
+  } else if (covering.mbr_.is_empty()) {
+    if (covering.cells_.size() == 0) {
     } else {
       ret = OB_ERR_GIS_INVALID_DATA;
     }
   } else if (OB_ISNULL(mbr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "failed to alloc memory for spatial index row mbr", K(ret), K(mbr));
-  } else if (OB_FAIL(spa_mbr.to_char(mbr, mbr_len))) {
+  } else if (OB_FAIL(covering.mbr_.to_char(mbr, mbr_len))) {
+  } else if (OB_FAIL(cellids.assign(covering.cells_))) {
   } else {
     mbr_val.assign_ptr(mbr, mbr_len);
   }

@@ -13,14 +13,22 @@ build --force_pic
 build --compilation_mode=opt
 build --@rules_rust//rust/settings:lto=thin
 build --@rules_rust//rust/settings:codegen_units=1
+build --@rules_rust//rust/settings:extra_exec_rustc_flag=-Copt-level=0
+build --@rules_rust//rust/settings:extra_exec_rustc_flag=-Cdebuginfo=0
+build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
+build:clippy --output_groups=clippy_checks
+build:clippy --@rules_rust//rust/settings:clippy_flag=-Dwarnings
+build:clippy --@rules_rust//rust/settings:clippy_flag=-Cpanic=unwind
+test --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=unwind
 # SLP spends most of this generated parser's compile time on location copies.
 build:linux --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
 build:macos --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
 build:windows --per_file_copt=sql_parser_mysql_mode_tab[.]c$@/clang:-fno-slp-vectorize
 # Allow developers to modify build outputs in place.
 build --experimental_writable_outputs
-# Windows generators use the installed SDK/Python utility paths.
+# Native generators and Cargo build scripts use installed SDK utilities.
 build:windows --action_env=PATH
+build:macos --action_env=PATH
 build:windows --repo_env=BAZEL_WIN32_WINNT=/D_WIN32_WINNT=0x0A00
 build:windows --platforms=//bazel/platforms:windows_x86_64
 build:windows --host_platform=//bazel/platforms:windows_x86_64
@@ -28,8 +36,11 @@ build:windows --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows-cla
 build:windows --noforce_pic
 build:windows --features=compiler_param_file
 build:windows --features=-static_link_msvcrt
+# Embed CodeView in each object so parallel compiles need no shared compiler PDB.
+build:windows --copt=/Z7
 build:O1 --compilation_mode=fastbuild
 build:O1 --copt=-O1
+build:O1 --@rules_rust//rust/settings:lto=off
 build:O2 --compilation_mode=opt
 # Apple's fastbuild/dbg DEBUG macro conflicts with seekdb's DEBUG log level.
 build:macos --copt=-UDEBUG
@@ -42,6 +53,7 @@ build:ios-simulator --config=ios
 build:ios-simulator --platforms=@apple_support//platforms:ios_sim_arm64
 build:wasm --platforms=//bazel/platforms:wasm32
 build:wasm --@rules_rust//rust/toolchain/channel=nightly
+test:wasm --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=abort
 build:wasm --@rules_rust//cargo/settings:use_default_shell_env=true
 build:wasm --//src/standby:enable_standby=false
 build:wasm --action_env=EM_CONFIG
@@ -65,3 +77,11 @@ build:remote --strategy=CppCompile=remote
 build:package --//bazel:package_runtime=true
 build:rpm --config=package
 build:rpm --//bazel:rpm_logging=true
+
+# Keep line tables for symbolication and drop full DWARF/CodeView debug info.
+# This composes with the selected compilation mode, including O1 and O2.
+build:line_tables_only --//bazel:line_tables_only=true
+build:line_tables_only --@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=1
+
+# Local development: O1 with line tables.
+build:dev --config=O1 --config=line_tables_only

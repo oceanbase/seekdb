@@ -18,6 +18,7 @@
 #define OCEANBASE_LIB_STRING_OB_STRING_BUFFER_
 
 #include "lib/string/ob_string.h"
+#include <inttypes.h>
 #include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase {
@@ -67,7 +68,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;
-    databuff_printf(buf, buf_len, pos, "len = %ld, cap = %ld", len_, cap_);
+    databuff_printf(buf, buf_len, pos, "len = %" PRId64 ", cap = %" PRId64 "", len_, cap_);
     return pos;
   }
 private:

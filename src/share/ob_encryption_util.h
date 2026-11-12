@@ -15,7 +15,6 @@
  */
 
 #include "lib/ob_define.h"
-#include <openssl/evp.h>
 #include "lib/container/ob_se_array.h"
 
 #ifndef OCEANBASE_SHARE_OB_ENCRYPTION_UTIIL_H
@@ -88,8 +87,6 @@ public:
   static int64_t get_ciphertext_length(const ObCipherOpMode opmode, const int64_t plaintext_len);
 private:
   static bool is_need_padding(const ObCipherOpMode opmode);
-  static void create_key(const unsigned char *key, int key_length, char *rkey,
-                         enum ObCipherOpMode opmode);
 public:
   static const int OB_MAX_CIPHER_KEY_LENGTH = 256; // max aes key bit length
   static const int OB_DEFAULT_IV_LENGTH = 16;
@@ -102,7 +99,6 @@ class ObEncryptionUtil
 {
 public:
 
-  static int init_ssl_malloc();
   static bool is_aes_encryption(const ObCipherOpMode opmode);
   static bool is_sm4_encryption(const ObCipherOpMode opmode);
   static bool is_ecb_mode(const ObCipherOpMode opmode);
@@ -132,8 +128,6 @@ public:
                   char *buf, const int64_t &buf_len, int64_t &out_len);
   static int get_hash_output_len(const ObHashAlgorithm algo, int64_t &output_len);
   static int get_sha_hash_algorightm(const int64_t bit_length, ObHashAlgorithm &algo);
-private:
-  static const EVP_MD* get_hash_evp_md(const ObHashAlgorithm algo);
 };
 
 }//end share

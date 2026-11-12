@@ -18,6 +18,7 @@
 
 
 #include "ob_major_freeze_util.h"
+#include <inttypes.h>
 #include "rootserver/freeze/ob_major_freeze_service.h"
 
 namespace oceanbase
@@ -76,7 +77,7 @@ ObFreezeTimeGuard::~ObFreezeTimeGuard()
   if (OB_UNLIKELY(total_cost_us >= warn_threshold_us_)) {
     constexpr int buffer_size = 256;
     char strbuffer[buffer_size] = { 0 };
-    int n = snprintf(strbuffer, buffer_size, "cost too much time: %s (%s:%ld), ",
+    int n = snprintf(strbuffer, buffer_size, "cost too much time: %s (%s:%" PRId64 "), ",
                      func_name_, strrchr(file_, '/') ? (strrchr(file_, '/') + 1) : file_, line_);
     if (n >= buffer_size) {
       snprintf(&strbuffer[buffer_size - 6], 6, "..., ");

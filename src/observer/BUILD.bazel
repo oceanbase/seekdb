@@ -154,16 +154,11 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/storage:tablet_autoincrement_handler_internal",
     "//src/storage:tablet_autoincrement_service_internal",
     "//bazel/third_party:absl_headers",
-    "//bazel/third_party:curl_headers",
     "//bazel/third_party:libaio_headers",
-    "//bazel/third_party:libxml2_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
-    "//bazel/third_party:rapidjson_headers",
     "//bazel/third_party:roaring_headers",
-    "//bazel/third_party:s2_headers",
     "//bazel/third_party:vsag_headers",
-    "//bazel/third_party:zlib_headers",
 ]
 
 _OBSERVER_RUNTIME_ONLY_SHARE_DEPS = [
@@ -229,7 +224,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_common",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_concurrency_primitives",
-        "//src/oblib:oblib_db_log",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_encoding_primitives",
         "//src/oblib:oblib_foundation",
@@ -263,7 +257,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_common",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_concurrency_primitives",
-        "//src/oblib:oblib_db_log",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_io_primitives",
@@ -292,7 +285,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_common",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_concurrency_primitives",
-        "//src/oblib:oblib_db_log",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_diagnostics_primitives",
         "//src/oblib:oblib_foundation",
@@ -325,6 +317,7 @@ _OBSERVER_MAIN_OBJECT_TARGETS = [
 cc_library(
     name = "windows_service",
     srcs = ["ob_win_service.cpp", "ob_win_service.h"],
+    deps = ["//src/oblib:oblib_foundation"],
     target_compatible_with = ["@platforms//os:windows"],
 )
 
@@ -404,6 +397,8 @@ _ORDERED_LINK_FILES = [
 ] + select({
     "@platforms//os:linux": ["//deps/external:jemalloc_archive"],
     "@platforms//os:macos": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:windows": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:android": ["//deps/external:jemalloc_archive"],
     "//conditions:default": [],
 }) + select({
     "@platforms//os:windows": [],
@@ -527,7 +522,6 @@ cc_library(
         "//src/oblib:oblib_io_primitives",
         "//src/oblib:oblib_rpc",
         "//deps/external:jemalloc_headers",
-        "//bazel/third_party:curl_headers",
         "//rust:in_process_headers",
         "//rust:logger_headers",
     ],

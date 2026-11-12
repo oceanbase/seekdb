@@ -89,11 +89,11 @@ int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx 
   INIT_SUCC(ret);
   const ObExprJsonSchemaValidInfo *info
                   = static_cast<ObExprJsonSchemaValidInfo *>(expr.extra_info_);
-  ObIJsonBase* j_schema = nullptr;
+  ObJsonSchemaCache* j_schema = nullptr;
   ObIJsonBase* j_doc = nullptr;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  ObJsonBin j_schema_bin;
+
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_ISNULL(info)) {
@@ -102,27 +102,28 @@ int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx 
                                                   j_schema, is_null_result))) {
     }
   } else {
-    // schema is const
-    new (&j_schema_bin) ObJsonBin(info->json_schema_.ptr(), info->json_schema_.length(), &temp_allocator);
-    if (OB_FAIL(j_schema_bin.reset_iter())) {
-    } else {
-      // schema validation only seek, do not need reserve parent stack
-      j_schema_bin.set_seek_flag(true);
-      j_schema = &j_schema_bin;
+    j_schema = ObJsonExprHelper::get_schema_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
+    if (OB_ISNULL(j_schema)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(j_schema->prepare(info->json_schema_, 1, ObJsonInType::JSON_BIN, true))) {
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (!is_null_result && OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 1,
-                                             j_doc, is_null_result, false, false, true))) {
+                                             j_doc, is_null_result, true))) {
   } else if (is_null_result) {
     res.set_null();
   } else {
-    ObJsonSchemaValidator validator(&temp_allocator, j_schema);
-    bool is_valid = false;
-    if (OB_FAIL(validator.schema_validator(j_doc, is_valid))) {
+    ObString binary;
+    if (OB_FAIL(j_doc->get_raw_binary(binary, &temp_allocator))) {
     } else {
-      res.set_int(static_cast<int64_t>(is_valid));
+      bool valid = false;
+      ObString report;
+      if (OB_FAIL(j_schema->validate(binary, 1, false, valid, report, temp_allocator))) {
+      } else {
+        res.set_int(static_cast<int64_t>(valid));
+      }
     }
   }
   return ret;
@@ -158,7 +159,6 @@ int ObExprJsonSchemaValidInfo::init_json_schema_extra_info(ObIAllocator &alloc,
   ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
   got_data = false;
   ObObj const_data;
-  ObIJsonBase* j_schema = nullptr;
   if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                         schema,
                                                         const_data,
@@ -169,8 +169,7 @@ int ObExprJsonSchemaValidInfo::init_json_schema_extra_info(ObIAllocator &alloc,
   } else if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObJsonExprHelper::get_const_json_schema(
-                 const_data, N_JSON_SCHEMA_VALID, *exec_ctx, &alloc, j_schema))) {
-  } else if (OB_FAIL(j_schema->get_raw_binary(json_schema_, &alloc))){
+                 const_data, N_JSON_SCHEMA_VALID, *exec_ctx, &alloc, json_schema_))) {
   } else {
     got_data = true;
   }

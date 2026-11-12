@@ -17,9 +17,9 @@
 #ifndef SRC_LIBRARY_SRC_COMMON_STORAGE_OB_DEVICE_COMMON_
 #define SRC_LIBRARY_SRC_COMMON_STORAGE_OB_DEVICE_COMMON_
 
-#include <dirent.h>
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
+#include "lib/utility/ob_platform_io.h"
 
 namespace oceanbase
 {
@@ -36,7 +36,7 @@ public:
   };
   ObBaseDirEntryOperator() : op_flag_(DOF_REG), size_(0) {}
   virtual ~ObBaseDirEntryOperator() = default;
-  virtual int func(const dirent *entry) = 0;
+  virtual int func(const ObPlatformDirEntry &entry) = 0;
   virtual bool need_get_file_size() const { return false; }
   void set_dir_flag() {op_flag_ = DOF_DIR;}
   bool is_dir_scan() {return (op_flag_ == DOF_DIR) ? true : false;}

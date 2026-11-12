@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "storage/scheduler/ob_independent_dag.h"
+#include <inttypes.h>
 #include "data_plane/scheduler/ob_sys_task_stat.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -622,7 +623,7 @@ int64_t ObPrintIndependentDag::to_string(char *buf, const int64_t buf_len) const
       for (int i = 0; i < ObITask::TASK_TYPE_MAX; ++i) {
         if (type_count[i] > 0) {
           if (!first) BUF_PRINTF(", ");
-          BUF_PRINTF("%s: %ld", ObITask::ObITaskTypeStr[i], type_count[i]);
+          BUF_PRINTF("%s: %" PRId64 "", ObITask::ObITaskTypeStr[i], type_count[i]);
           first = false;
         }
       }
@@ -633,7 +634,7 @@ int64_t ObPrintIndependentDag::to_string(char *buf, const int64_t buf_len) const
       for (int i = 0; i < ObITask::TASK_TYPE_MAX; ++i) {
         if (orphan_type_count[i] > 0) {
           if (!first) BUF_PRINTF(", ");
-          BUF_PRINTF("%s: %ld", ObITask::ObITaskTypeStr[i], orphan_type_count[i]);
+          BUF_PRINTF("%s: %" PRId64 "", ObITask::ObITaskTypeStr[i], orphan_type_count[i]);
           first = false;
         }
       }
@@ -647,7 +648,7 @@ int64_t ObPrintIndependentDag::to_string(char *buf, const int64_t buf_len) const
       const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
       J_NEWLINE();
       // task_list_name|task_ptr|task_type|task_status|task_priority|dag_ptr
-      BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
+      BUF_PRINTF("[%" PRId64 "][%s] [", GETTID(), GETTNAME());
       BUF_PRINTO(PC(trace_id));
       BUF_PRINTF("] ");
       BUF_PRINTF(" %-10s %-16s %-5s %-16s %-10s %-10s %-10s %-50s \n",
@@ -701,10 +702,10 @@ void ObPrintIndependentDag::task_to_string(
   if (OB_NOT_NULL(task)) {
     const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
     const char* task_status_str = ObITask::get_task_status_str(task->get_status());
-    BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
+    BUF_PRINTF("[%" PRId64 "][%s] [", GETTID(), GETTNAME());
     BUF_PRINTO(PC(trace_id));
     BUF_PRINTF("] ");
-    BUF_PRINTF(" %-10s %-16p %-5d %-16s %-10s %-10d %-10ld ",
+    BUF_PRINTF(" %-10s %-16p %-5d %-16s %-10s %-10d %-10" PRId64 " ",
       task_list_name,
       task,
       task->get_type(),

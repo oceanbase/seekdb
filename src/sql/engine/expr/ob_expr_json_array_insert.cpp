@@ -80,73 +80,7 @@ int ObExprJsonArrayInsert::calc_result_typeN(ObExprResType& type, ObExprResType*
 
 int ObExprJsonArrayInsert::eval_json_array_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
-  INIT_SUCC(ret);
-  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  ObIJsonBase *j_base = NULL;
-  bool is_null = false;
-  ObJsonSeekResult hit;
-
-  if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
-    ret = OB_ERR_INVALID_JSON_CHARSET;
-  } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, j_base, is_null))) {
-  }
-
-  ObJsonPathCache ctx_cache(&temp_allocator);
-  ObJsonPathCache* path_cache = NULL;
-  if (OB_SUCC(ret) && !is_null) {
-    path_cache = ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
-    path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
-  }
-
-  for (int32 i = 1; OB_SUCC(ret) && i < expr.arg_cnt_ && !is_null; i += 2) {
-    hit.reset();
-    ObExpr *arg = expr.args_[i];
-    ObDatum *json_datum = NULL;
-    if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, json_datum))) {
-    } else if (json_datum->is_null() || arg->datum_meta_.type_ == ObNullType) {
-      is_null = true;
-    } else {
-      ObString j_path_text = json_datum->get_string();
-      ObJsonPath *j_path;
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *json_datum,
-                  arg->datum_meta_, arg->obj_meta_.has_lob_header(), j_path_text))) {
-      } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path, j_path_text, i, false))) {
-      } else if (j_path->path_node_cnt() == 0
-          || j_path->last_path_node()->get_node_type() != JPN_ARRAY_CELL) {
-        ret = OB_ERR_INVALID_JSON_PATH_ARRAY_CELL;
-      } else if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt() - 1, false, true, hit))) {
-      } else if (hit.size() == 0) {
-        // do nothing
-      } else {
-        ObJsonPathBasicNode* path_node = j_path->last_path_node();
-        ObIJsonBase *j_pos_node = hit[0];
-        if (j_pos_node->json_type() == ObJsonNodeType::J_ARRAY) {
-          ObIJsonBase *j_val = NULL;
-          if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i+1, j_val))) {
-            ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-          } else {
-            ObJsonArrayIndex array_index;
-            if (OB_FAIL(path_node->get_first_array_index(j_pos_node->element_count(), array_index))) {
-            } else if (OB_FAIL(j_pos_node->array_insert(array_index.get_array_index(), j_val))) {
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObString raw_bin;
-    if (is_null) {
-      res.set_null();
-    } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
-    } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
-    }
-  }
-
-  return ret;
+  return ObJsonExprHelper::eval_json_mutation(expr, ctx, res, JsonMutation::ArrayInsert);
 }
 
 int ObExprJsonArrayInsert::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

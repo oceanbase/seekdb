@@ -29,6 +29,7 @@ def declare_installed_rust(host, version, targets, channel = "stable", wasm_flag
     """Declare only target standard libraries already installed by init."""
     host_info = triple(host)
     suffix = system_to_binary_ext(host_info.system)
+    clippy = native.glob(["bin/clippy-driver" + suffix], allow_empty = True)
     host_constraints = triple_to_constraint_set(host)
     native.exports_files(["BUILD.bazel", "bin/cargo" + suffix])
     native.filegroup(
@@ -69,6 +70,7 @@ def declare_installed_rust(host, version, targets, channel = "stable", wasm_flag
             name = name + "_impl",
             rustc = "bin/rustc" + suffix,
             rust_doc = "bin/rustdoc" + suffix,
+            clippy_driver = clippy[0] if clippy else None,
             rustc_lib = ":compiler_libraries",
             rust_std = "@rust_wasm_std//:std" if wasm else ":" + name + "_std",
             exec_triple = host,
@@ -80,7 +82,7 @@ def declare_installed_rust(host, version, targets, channel = "stable", wasm_flag
             staticlib_ext = ".a" if wasm else system_to_staticlib_ext(target_info.system, target_info.abi),
             stdlib_linkflags = system_to_stdlib_linkflags(target_info.system, target_info.abi),
             default_edition = "2021",
-            opt_level = {"dbg": "3", "fastbuild": "3", "opt": "3"},
+            opt_level = {"dbg": "3", "fastbuild": "1", "opt": "3"},
             debug_info = {"dbg": "2", "fastbuild": "2", "opt": "2"},
             strip_level = {"dbg": "none", "fastbuild": "none", "opt": "none"},
             extra_rustc_flags = wasm_flags if wasm else ["-Cpanic=abort"],

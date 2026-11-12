@@ -1,4 +1,5 @@
 load(":build_settings.bzl", "bool_flag")
+load(":cargo_build_script_env.bzl", "cargo_build_script_environment")
 
 exports_files([
     "build_metadata.py",
@@ -10,8 +11,12 @@ exports_files([
     "compile_config.bzl",
     "build_settings.bzl",
     "final_link.bzl",
-    "localized_partial_link.bzl",
 ])
+
+cargo_build_script_environment(
+    name = "windows_build_script_environment",
+    visibility = ["//visibility:public"],
+)
 
 config_setting(
     name = "ios_simulator",
@@ -59,5 +64,17 @@ bool_flag(
 config_setting(
     name = "rpm_logging_enabled",
     flag_values = {":rpm_logging": "true"},
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
+    name = "line_tables_only",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "line_tables_only_enabled",
+    flag_values = {":line_tables_only": "true"},
     visibility = ["//visibility:public"],
 )

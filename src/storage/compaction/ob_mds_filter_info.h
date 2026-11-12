@@ -16,6 +16,7 @@
 #ifndef OB_STORAGE_COMPACTION_MDS_FILTER_INFO_H_
 #define OB_STORAGE_COMPACTION_MDS_FILTER_INFO_H_
 #include "lib/utility/ob_macro_utils.h"
+#include <inttypes.h>
 #include "storage/truncate_info/ob_truncate_info.h"
 #include "lib/oblog/ob_log_module.h"
 namespace oceanbase
@@ -310,7 +311,7 @@ void ObMdsFilterInfo::ObFilterInfoArray<T, type>::gene_info(char* buf, const int
     } else {
       J_COMMA();
       for (int64_t idx = 0; idx < cnt_; ++idx) {
-        BUF_PRINTF("[%ld]:", idx);
+        BUF_PRINTF("[%" PRId64 "]:", idx);
         J_OBJ_START();
         array_[idx].gene_info(buf, buf_len, pos);
         J_OBJ_END();

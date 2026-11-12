@@ -15,6 +15,7 @@
  */
 
 #include "ob_version_parser.h"
+#include <inttypes.h>
 #include "lib/ob_define.h"
 namespace oceanbase
 {
@@ -81,7 +82,7 @@ int64_t ObVersionParser::print_vsn(char *buf, const int64_t buf_len, uint64_t ve
   const uint16_t minor = OB_VSN_MINOR(version);
   const uint8_t major_patch = OB_VSN_MAJOR_PATCH(version);
   const uint8_t minor_patch = OB_VSN_MINOR_PATCH(version);
-  if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%lu(%u, %u, %u, %u)",
+  if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%" PRIu64 "(%u, %u, %u, %u)",
               version, major, minor, major_patch, minor_patch))) {
   }
   if (OB_FAIL(ret)) {

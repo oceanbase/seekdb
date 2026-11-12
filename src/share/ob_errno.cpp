@@ -22,6 +22,7 @@
 
 #define USING_LOG_PREFIX LIB_MYSQLC
 
+#include <inttypes.h>
 #include "ob_errno.h"
 #include "ob_define.h"
 using namespace oceanbase::common;
@@ -125,7 +126,7 @@ static const _error _error_OB_TIMEOUT = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "Timeout",
-      .str_user_error        = "Timeout, query has reached the maximum query timeout: %ld(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again."
+      .str_user_error        = "Timeout, query has reached the maximum query timeout: %" PRId64 "(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again."
 };
 static const _error _error_OB_ALLOCATE_MEMORY_FAILED = {
       .error_name            = "OB_ALLOCATE_MEMORY_FAILED",
@@ -1042,7 +1043,7 @@ static const _error _error_OB_UNKNOWN_CONNECTION = {
       .mysql_errno           = ER_NO_SUCH_THREAD,
       .sqlstate              = "HY000",
       .str_error             = "Unknown thread id",
-      .str_user_error        = "Unknown thread id: %lu"
+      .str_user_error        = "Unknown thread id: %" PRIu64 ""
 };
 static const _error _error_OB_ERROR_OUT_OF_RANGE = {
       .error_name            = "OB_ERROR_OUT_OF_RANGE",
@@ -1322,7 +1323,7 @@ static const _error _error_OB_DATA_OUT_OF_RANGE = {
       .mysql_errno           = ER_WARN_DATA_OUT_OF_RANGE,
       .sqlstate              = "22003",
       .str_error             = "Out of range value for column",
-      .str_user_error        = "Out of range value for column '%.*s' at row %ld"
+      .str_user_error        = "Out of range value for column '%.*s' at row %" PRId64 ""
 };
 static const _error _error_OB_PARTITION_NOT_EXIST = {
       .error_name            = "OB_PARTITION_NOT_EXIST",
@@ -1336,7 +1337,7 @@ static const _error _error_OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD = {
       .mysql_errno           = ER_TRUNCATED_WRONG_VALUE_FOR_FIELD,
       .sqlstate              = "HY000",
       .str_error             = "Incorrect integer value",
-      .str_user_error        = "Incorrect %.*s value for column '%.*s' at row %ld"
+      .str_user_error        = "Incorrect %.*s value for column '%.*s' at row %" PRId64 ""
 };
 static const _error _error_OB_ERR_NO_DEFAULT_FOR_FIELD = {
       .error_name            = "OB_ERR_NO_DEFAULT_FOR_FIELD",
@@ -1357,21 +1358,21 @@ static const _error _error_OB_ERR_TOO_LONG_TABLE_COMMENT = {
       .mysql_errno           = ER_TOO_LONG_TABLE_COMMENT,
       .sqlstate              = "HY000",
       .str_error             = "Comment for table is too long",
-      .str_user_error        = "Comment for table is too long (max = %ld)"
+      .str_user_error        = "Comment for table is too long (max = %" PRId64 ")"
 };
 static const _error _error_OB_ERR_TOO_LONG_FIELD_COMMENT = {
       .error_name            = "OB_ERR_TOO_LONG_FIELD_COMMENT",
       .mysql_errno           = ER_TOO_LONG_FIELD_COMMENT,
       .sqlstate              = "HY000",
       .str_error             = "Comment for field is too long",
-      .str_user_error        = "Comment for field is too long (max = %ld)"
+      .str_user_error        = "Comment for field is too long (max = %" PRId64 ")"
 };
 static const _error _error_OB_ERR_TOO_LONG_INDEX_COMMENT = {
       .error_name            = "OB_ERR_TOO_LONG_INDEX_COMMENT",
       .mysql_errno           = ER_TOO_LONG_INDEX_COMMENT,
       .sqlstate              = "HY000",
       .str_error             = "Comment for index is too long",
-      .str_user_error        = "Comment for index is too long (max = %ld)"
+      .str_user_error        = "Comment for index is too long (max = %" PRId64 ")"
 };
 static const _error _error_OB_NOT_FOLLOWER = {
       .error_name            = "OB_NOT_FOLLOWER",
@@ -1483,7 +1484,7 @@ static const _error _error_OB_ERR_DATA_TRUNCATED = {
       .mysql_errno           = WARN_DATA_TRUNCATED,
       .sqlstate              = "01000",
       .str_error             = "Data truncated for argument",
-      .str_user_error        = "Data truncated for column '%.*s' at row %ld"
+      .str_user_error        = "Data truncated for column '%.*s' at row %" PRId64 ""
 };
 static const _error _error_OB_NOT_RUNNING = {
       .error_name            = "OB_NOT_RUNNING",
@@ -1539,7 +1540,7 @@ static const _error _error_OB_ERR_INCORRECT_STRING_VALUE = {
       .mysql_errno           = ER_TRUNCATED_WRONG_VALUE_FOR_FIELD,
       .sqlstate              = "HY000",
       .str_error             = "Incorrect string value",
-      .str_user_error        = "Incorrect string value for column '%.*s' at row %ld"
+      .str_user_error        = "Incorrect string value for column '%.*s' at row %" PRId64 ""
 };
 static const _error _error_OB_IS_CHANGING_LEADER = {
       .error_name            = "OB_IS_CHANGING_LEADER",
@@ -2827,7 +2828,7 @@ static const _error _error_OB_ERR_INVALID_COLUMN_NUM = {
       .mysql_errno           = ER_OPERAND_COLUMNS,
       .sqlstate              = "21000",
       .str_error             = "Invalid column number",
-      .str_user_error        = "Operand should contain %ld column(s)"
+      .str_user_error        = "Operand should contain %" PRId64 " column(s)"
 };
 static const _error _error_OB_ERR_PREPARE_STMT_NOT_FOUND = {
       .error_name            = "OB_ERR_PREPARE_STMT_NOT_FOUND",
@@ -2883,7 +2884,7 @@ static const _error _error_OB_ERR_WRONG_DYNAMIC_PARAM = {
       .mysql_errno           = -1,
       .sqlstate              = "HY093",
       .str_error             = "Wrong dynamic parameters",
-      .str_user_error        = "Incorrect arguments number to EXECUTE, need %ld arguments but give %ld"
+      .str_user_error        = "Incorrect arguments number to EXECUTE, need %" PRId64 " arguments but give %" PRId64 ""
 };
 static const _error _error_OB_ERR_PARAM_SIZE = {
       .error_name            = "OB_ERR_PARAM_SIZE",
@@ -3072,14 +3073,14 @@ static const _error _error_OB_INTEGER_PRECISION_OVERFLOW = {
       .mysql_errno           = ER_WARN_DATA_OUT_OF_RANGE,
       .sqlstate              = "22003",
       .str_error             = "Result value was out of range when casting varchar to number",
-      .str_user_error        = "value larger than specified precision(%ld,%ld) allowed for this column"
+      .str_user_error        = "value larger than specified precision(%" PRId64 ",%" PRId64 ") allowed for this column"
 };
 static const _error _error_OB_DECIMAL_PRECISION_OVERFLOW = {
       .error_name            = "OB_DECIMAL_PRECISION_OVERFLOW",
       .mysql_errno           = ER_WARN_DATA_OUT_OF_RANGE,
       .sqlstate              = "22003",
       .str_error             = "Result value was out of range when casting varchar to number",
-      .str_user_error        = "value(%s) larger than specified precision(%ld,%ld) allowed for this column"
+      .str_user_error        = "value(%s) larger than specified precision(%" PRId64 ",%" PRId64 ") allowed for this column"
 };
 static const _error _error_OB_SCHEMA_NUMBER_PRECISION_OVERFLOW = {
       .error_name            = "OB_SCHEMA_NUMBER_PRECISION_OVERFLOW",
@@ -3128,7 +3129,7 @@ static const _error _error_OB_ERR_VARCHAR_TOO_LONG = {
       .mysql_errno           = -1,
       .sqlstate              = "22001",
       .str_error             = "Varchar value is too long for the column",
-      .str_user_error        = "Data too long(%d>%ld) for column '%s'"
+      .str_user_error        = "Data too long(%d>%" PRId64 ") for column '%s'"
 };
 static const _error _error_OB_ERR_SYS_CONFIG_UNKNOWN = {
       .error_name            = "OB_ERR_SYS_CONFIG_UNKNOWN",
@@ -3506,7 +3507,7 @@ static const _error _error_OB_ERR_DATA_TOO_LONG = {
       .mysql_errno           = ER_DATA_TOO_LONG,
       .sqlstate              = "22001",
       .str_error             = "Data too long for column",
-      .str_user_error        = "Data too long for column '%.*s' at row %ld"
+      .str_user_error        = "Data too long for column '%.*s' at row %" PRId64 ""
 };
 static const _error _error_OB_ERR_WRONG_VALUE_COUNT_ON_ROW = {
       .error_name            = "OB_ERR_WRONG_VALUE_COUNT_ON_ROW",
@@ -3562,7 +3563,7 @@ static const _error _error_OB_ERR_COULUMN_VALUE_NOT_MATCH = {
       .mysql_errno           = ER_WRONG_VALUE_COUNT_ON_ROW,
       .sqlstate              = "21S01",
       .str_error             = "Column count doesn\'t match value count",
-      .str_user_error        = "Column count doesn\'t match value count at row %ld"
+      .str_user_error        = "Column count doesn\'t match value count at row %" PRId64 ""
 };
 static const _error _error_OB_ERR_INVALID_GROUP_FUNC_USE = {
       .error_name            = "OB_ERR_INVALID_GROUP_FUNC_USE",
@@ -3688,21 +3689,21 @@ static const _error _error_OB_ERR_TOO_MANY_KEYS = {
       .mysql_errno           = ER_TOO_MANY_KEYS,
       .sqlstate              = "42000",
       .str_error             = "Too many keys specified",
-      .str_user_error        = "Too many keys specified; max %ld keys allowed"
+      .str_user_error        = "Too many keys specified; max %" PRId64 " keys allowed"
 };
 static const _error _error_OB_ERR_TOO_MANY_ROWKEY_COLUMNS = {
       .error_name            = "OB_ERR_TOO_MANY_ROWKEY_COLUMNS",
       .mysql_errno           = ER_TOO_MANY_KEY_PARTS,
       .sqlstate              = "42000",
       .str_error             = "Too many key parts specified",
-      .str_user_error        = "Too many key parts specified; max %ld parts allowed"
+      .str_user_error        = "Too many key parts specified; max %" PRId64 " parts allowed"
 };
 static const _error _error_OB_ERR_TOO_LONG_KEY_LENGTH = {
       .error_name            = "OB_ERR_TOO_LONG_KEY_LENGTH",
       .mysql_errno           = ER_TOO_LONG_KEY,
       .sqlstate              = "42000",
       .str_error             = "Specified key was too long",
-      .str_user_error        = "Specified key was too long; max key length is %ld bytes"
+      .str_user_error        = "Specified key was too long; max key length is %" PRId64 " bytes"
 };
 static const _error _error_OB_ERR_TOO_MANY_COLUMNS = {
       .error_name            = "OB_ERR_TOO_MANY_COLUMNS",
@@ -3744,14 +3745,14 @@ static const _error _error_OB_ERR_TOO_BIG_SCALE = {
       .mysql_errno           = ER_TOO_BIG_SCALE,
       .sqlstate              = "42000",
       .str_error             = "Too big scale specified for column",
-      .str_user_error        = "Too big scale %d specified for column '%s'. Maximum is %ld."
+      .str_user_error        = "Too big scale %d specified for column '%s'. Maximum is %" PRId64 "."
 };
 static const _error _error_OB_ERR_TOO_BIG_PRECISION = {
       .error_name            = "OB_ERR_TOO_BIG_PRECISION",
       .mysql_errno           = ER_TOO_BIG_PRECISION,
       .sqlstate              = "42000",
       .str_error             = "Too big precision specified for column",
-      .str_user_error        = "Too big precision %d specified for column '%s'. Maximum is %ld."
+      .str_user_error        = "Too big precision %d specified for column '%s'. Maximum is %" PRId64 "."
 };
 static const _error _error_OB_ERR_M_BIGGER_THAN_D = {
       .error_name            = "OB_ERR_M_BIGGER_THAN_D",
@@ -3765,7 +3766,7 @@ static const _error _error_OB_ERR_TOO_BIG_DISPLAYWIDTH = {
       .mysql_errno           = ER_TOO_BIG_DISPLAYWIDTH,
       .sqlstate              = "42000",
       .str_error             = "Display width out of range for column",
-      .str_user_error        = "Display width out of range for column '%s' (max = %ld)"
+      .str_user_error        = "Display width out of range for column '%s' (max = %" PRId64 ")"
 };
 static const _error _error_OB_WRONG_GROUP_FIELD = {
       .error_name            = "OB_WRONG_GROUP_FIELD",
@@ -3926,7 +3927,7 @@ static const _error _error_OB_ERR_WARN_DATA_OUT_OF_RANGE = {
       .mysql_errno           = ER_WARN_DATA_OUT_OF_RANGE,
       .sqlstate              = "22003",
       .str_error             = "Out of range value for column",
-      .str_user_error        = "Out of range value for column '%.*s' at row %ld"
+      .str_user_error        = "Out of range value for column '%.*s' at row %" PRId64 ""
 };
 static const _error _error_OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR = {
       .error_name            = "OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR",
@@ -4073,7 +4074,7 @@ static const _error _error_OB_ERR_KILL_DENIED = {
       .mysql_errno           = ER_KILL_DENIED_ERROR,
       .sqlstate              = "HY000",
       .str_error             = "You are not owner of thread",
-      .str_user_error        = "You are not owner of thread %lu"
+      .str_user_error        = "You are not owner of thread %" PRIu64 ""
 };
 static const _error _error_OB_ERR_COLUMN_DEFINITION_AMBIGUOUS = {
       .error_name            = "OB_ERR_COLUMN_DEFINITION_AMBIGUOUS",
@@ -4094,7 +4095,7 @@ static const _error _error_OB_ERR_CUT_VALUE_GROUP_CONCAT = {
       .mysql_errno           = ER_CUT_VALUE_GROUP_CONCAT,
       .sqlstate              = "42000",
       .str_error             = "Row was cut by GROUP_CONCAT()",
-      .str_user_error        = "Row %ld was cut by GROUP_CONCAT()"
+      .str_user_error        = "Row %" PRId64 " was cut by GROUP_CONCAT()"
 };
 static const _error _error_OB_ERR_FIELD_NOT_FOUND_PART = {
       .error_name            = "OB_ERR_FIELD_NOT_FOUND_PART",
@@ -4423,7 +4424,7 @@ static const _error _error_OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "Not enough thread resource to execute the query. Maybe parallel_servers_target was set too low.",
-      .str_user_error        = "Not enough thread resource to execute the query. Require setting parallel_servers_target to a value no less than %ld for this query"
+      .str_user_error        = "Not enough thread resource to execute the query. Require setting parallel_servers_target to a value no less than %" PRId64 " for this query"
 };
 static const _error _error_OB_ERR_IGNORE_USER_HOST_NAME = {
       .error_name            = "OB_ERR_IGNORE_USER_HOST_NAME",
@@ -4969,7 +4970,7 @@ static const _error _error_OB_ERR_CTE_MAX_RECURSION_DEPTH = {
       .mysql_errno           = ER_CTE_MAX_RECURSION_DEPTH,
       .sqlstate              = "HY000",
       .str_error             = "Recursive query aborted after multiple iterations. Try increasing @@cte_max_recursion_depth to a larger value.",
-      .str_user_error        = "Recursive query aborted after %lu iterations. Try increasing @@cte_max_recursion_depth to a larger value."
+      .str_user_error        = "Recursive query aborted after %" PRIu64 " iterations. Try increasing @@cte_max_recursion_depth to a larger value."
 };
 static const _error _error_OB_DUPLICATE_OBJECT_NAME_EXIST = {
       .error_name            = "OB_DUPLICATE_OBJECT_NAME_EXIST",
@@ -5970,7 +5971,7 @@ static const _error _error_OB_ER_SP_RECURSION_LIMIT = {
       .mysql_errno           = ER_SP_RECURSION_LIMIT,
       .sqlstate              = "HY000",
       .str_error             = "Recursive limit was exceeded",
-      .str_user_error        = "Recursive limit %ld (as set by the max_sp_recursion_depth variable) was exceeded for routine"
+      .str_user_error        = "Recursive limit %" PRId64 " (as set by the max_sp_recursion_depth variable) was exceeded for routine"
 };
 static const _error _error_OB_ER_UNSUPPORTED_PS = {
       .error_name            = "OB_ER_UNSUPPORTED_PS",
@@ -6215,14 +6216,14 @@ static const _error _error_OB_WARN_TOO_FEW_RECORDS = {
       .mysql_errno           = ER_WARN_TOO_FEW_RECORDS,
       .sqlstate              = "01000",
       .str_error             = "Row doesn't contain data for all columns",
-      .str_user_error        = "Row %ld doesn't contain data for all columns"
+      .str_user_error        = "Row %" PRId64 " doesn't contain data for all columns"
 };
 static const _error _error_OB_WARN_TOO_MANY_RECORDS = {
       .error_name            = "OB_WARN_TOO_MANY_RECORDS",
       .mysql_errno           = ER_WARN_TOO_MANY_RECORDS,
       .sqlstate              = "01000",
       .str_error             = "Row was truncated; it contained more data than there were input columns",
-      .str_user_error        = "Row %ld was truncated; it contained more data than there were input columns"
+      .str_user_error        = "Row %" PRId64 " was truncated; it contained more data than there were input columns"
 };
 static const _error _error_OB_ERR_TOO_MANY_VALUES = {
       .error_name            = "OB_ERR_TOO_MANY_VALUES",
@@ -6642,7 +6643,7 @@ static const _error _error_OB_ERR_ARGUMENT_OUT_OF_RANGE = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "argument is out of range",
-      .str_user_error        = "argument '%ld' is out of range"
+      .str_user_error        = "argument '%" PRId64 "' is out of range"
 };
 static const _error _error_OB_ERR_ORDER_BY_ITEM_NOT_IN_SELECT_LIST = {
       .error_name            = "OB_ERR_ORDER_BY_ITEM_NOT_IN_SELECT_LIST",
@@ -7804,7 +7805,7 @@ static const _error _error_OB_ROWID_NUM_MISMATCH = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "rowid num mismatch",
-      .str_user_error        = "rowid num mismatch, expect %ld, actual %ld"
+      .str_user_error        = "rowid num mismatch, expect %" PRId64 ", actual %" PRId64 ""
 };
 static const _error _error_OB_NO_COLUMN_ALIAS = {
       .error_name            = "OB_NO_COLUMN_ALIAS",
@@ -8322,7 +8323,7 @@ static const _error _error_OB_ERR_USER_EXCEED_RESOURCE = {
       .mysql_errno           = 1226,
       .sqlstate              = "42000",
       .str_error             = "User has exceeded the resource",
-      .str_user_error        = "User '%.*s' has exceeded the '%s' resource (current value: %lu)"
+      .str_user_error        = "User '%.*s' has exceeded the '%s' resource (current value: %" PRIu64 ")"
 };
 static const _error _error_OB_ERR_CHECK_OPTION_VIOLATED = {
       .error_name            = "OB_ERR_CHECK_OPTION_VIOLATED",
@@ -9239,7 +9240,7 @@ static const _error _error_OB_ERR_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED = {
       .mysql_errno           = ER_GIS_MAX_POINTS_IN_GEOMETRY_OVERFLOWED,
       .sqlstate              = "HY000",
       .str_error             = "Parameter exceeds the maximum number of points in a geometryin function.",
-      .str_user_error        = "Parameter %s exceeds the maximum number of points in a geometry (%lu) in function %s."
+      .str_user_error        = "Parameter %s exceeds the maximum number of points in a geometry (%" PRIu64 ") in function %s."
 };
 static const _error _error_OB_ERR_UNEXPECTED_GEOMETRY_TYPE = {
       .error_name            = "OB_ERR_UNEXPECTED_GEOMETRY_TYPE",
@@ -9309,7 +9310,7 @@ static const _error _error_OB_ERR_WRONG_SRID_FOR_COLUMN = {
       .mysql_errno           = ER_WRONG_SRID_FOR_COLUMN,
       .sqlstate              = "HY000",
       .str_error             = "The SRID of the geometry does not match the SRID of the column.",
-      .str_user_error        = "The SRID of the geometry does not match the SRID of the column. The SRID of the geometry is %lu, but the SRID of the column is %lu. Consider changing the SRID of the geometry or the SRID property of the column."
+      .str_user_error        = "The SRID of the geometry does not match the SRID of the column. The SRID of the geometry is %" PRIu64 ", but the SRID of the column is %" PRIu64 ". Consider changing the SRID of the geometry or the SRID property of the column."
 };
 static const _error _error_OB_ERR_CANNOT_ALTER_SRID_DUE_TO_INDEX = {
       .error_name            = "OB_ERR_CANNOT_ALTER_SRID_DUE_TO_INDEX",
@@ -10541,7 +10542,7 @@ static const _error _error_OB_ELEMENT_AT_GIVEN_INDEX_NOT_EXIST = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "collection element at the given index does not exist.",
-      .str_user_error        = "element at index [%ld] does not exist"
+      .str_user_error        = "element at index [%" PRId64 "] does not exist"
 };
 static const _error _error_OB_ERR_MVIEW_INVALID_TABLE_TYPE = {
       .error_name            = "OB_ERR_MVIEW_INVALID_TABLE_TYPE",
@@ -10604,7 +10605,7 @@ static const _error _error_OB_EST_DEVIA_TOO_LARGE = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "Optimizer estimate deviation is too large",
-      .str_user_error        = "Optimizer estimate deviation is too large 'Operator: %d.%.*s EST:%.ld -> REAL:%ld'"
+      .str_user_error        = "Optimizer estimate deviation is too large 'Operator: %d.%.*s EST:%.ld -> REAL:%" PRId64 "'"
 };
 static const _error _error_OB_ERR_HAS_TYPE_OR_TABLE_DEPENDENT = {
       .error_name            = "OB_ERR_HAS_TYPE_OR_TABLE_DEPENDENT",
@@ -10709,7 +10710,7 @@ static const _error _error_OB_EXCEED_QUERY_MEM_LIMIT = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "Exceed query memory limit",
-      .str_user_error        = "Exceed query memory limit (mem_limit=%ld, mem_hold=%ld),  please check whether the query_memory_limit_percentage configuration item is reasonable."
+      .str_user_error        = "Exceed query memory limit (mem_limit=%" PRId64 ", mem_hold=%" PRId64 "),  please check whether the query_memory_limit_percentage configuration item is reasonable."
 };
 static const _error _error_OB_ERR_INCORRECT_STRING_VALUE_FOR_INET = {
       .error_name            = "OB_ERR_INCORRECT_STRING_VALUE_FOR_INET",
@@ -10730,7 +10731,7 @@ static const _error _error_OB_REACH_DIAGNOSIS_ERROR_LIMIT = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "reject limit reached",
-      .str_user_error        = "reject limit %ld reached"
+      .str_user_error        = "reject limit %" PRId64 " reached"
 };
 static const _error _error_OB_AI_FUNC_ENDPOINT_NOT_FOUND = {
       .error_name            = "OB_AI_FUNC_ENDPOINT_NOT_FOUND",

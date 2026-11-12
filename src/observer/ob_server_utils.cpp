@@ -18,6 +18,7 @@
 
 #include "rust/config.h"
 #include "observer/ob_server_utils.h"
+#include "lib/utility/ob_platform_io.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
 #include "share/resource/ob_server_resource.h"
@@ -58,16 +59,19 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
   int64_t clog_disk_total_size = 0;
   bool same_filesystem = false;
   const char* clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
-  struct statvfs clog_statvfs;
+  int64_t clog_disk_total_space = 0;
+  int64_t clog_disk_available_space = 0;
   if (OB_FAIL(calculate_disk_layout_defaults(data_disk_total_size,
                                              data_default_disk_percentage,
                                              clog_disk_total_size,
                                              clog_default_disk_percentage,
                                              same_filesystem))) {
-  } else if (OB_UNLIKELY(0 != statvfs(clog_dir, &clog_statvfs))) {
+  } else if (OB_UNLIKELY(0 != ob_get_disk_space_utf8(clog_dir, clog_disk_total_space,
+                                                     clog_disk_available_space))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("failed to get available log disk space", KR(ret), K(clog_dir), K(errno));
-  } else if (OB_FAIL(decide_disk_size(clog_statvfs,
+  } else if (OB_FAIL(decide_disk_size(clog_disk_total_space,
+                                      clog_disk_available_space,
                                       suggested_clog_disk_size,
                                       suggested_clog_disk_percentage,
                                       clog_default_disk_percentage,
@@ -77,7 +81,7 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
   } else if (suggested_clog_disk_size <= 0
              && log_disk_size < share::ObServerResource::SERVER_MIN_LOG_DISK_SIZE) {
     ret = OB_SERVER_OUTOF_DISK_SPACE;
-    const int64_t available_space = clog_statvfs.f_bavail * clog_statvfs.f_bsize;
+    const int64_t available_space = clog_disk_available_space;
     const int64_t minimum_log_disk_size = share::ObServerResource::SERVER_MIN_LOG_DISK_SIZE;
     LOG_ERROR("automatic log disk size is below minimum", KR(ret), K(clog_dir),
               K(available_space), K(log_disk_percentage), K(log_disk_size),
@@ -276,31 +280,35 @@ int ObServerUtils::calculate_disk_layout_defaults(int64_t &data_disk_total_size,
   const char* data_dir = OB_FILE_SYSTEM_ROUTER.get_sstable_dir();
   const char* clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
 
-  struct statvfs data_statvfs;
-  struct statvfs clog_statvfs;
+  int64_t data_disk_total_space = 0;
+  int64_t data_disk_available_space = 0;
+  int64_t clog_disk_total_space = 0;
+  int64_t clog_disk_available_space = 0;
+  int64_t data_filesystem_id = 0;
+  int64_t clog_filesystem_id = 0;
   if (OB_SUCC(ret)) {
-    if (OB_UNLIKELY(0 != statvfs(data_dir, &data_statvfs))) {
+    if (OB_UNLIKELY(0 != ob_get_disk_space_utf8(data_dir, data_disk_total_space,
+                                                data_disk_available_space))) {
       LOG_ERROR("Failed to get data disk space ", KR(ret), K(data_dir), K(errno));
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(0 != statvfs(clog_dir, &clog_statvfs))) {
+    } else if (OB_UNLIKELY(0 != ob_get_disk_space_utf8(clog_dir, clog_disk_total_space,
+                                                       clog_disk_available_space))) {
       LOG_ERROR("Failed to get clog disk space ", KR(ret), K(clog_dir), K(errno));
       ret = OB_ERR_UNEXPECTED;
     }
   }
 
   if (OB_SUCC(ret)) {
-#ifdef _WIN32
-    auto get_volume_serial = [](const char *path) -> DWORD {
-      char root[MAX_PATH];
-      if (!GetVolumePathNameA(path, root, MAX_PATH)) return 0;
-      DWORD serial = 0;
-      GetVolumeInformationA(root, NULL, 0, &serial, NULL, NULL, NULL, 0);
-      return serial;
-    };
-    same_filesystem = (get_volume_serial(data_dir) == get_volume_serial(clog_dir));
-#else
-    same_filesystem = (data_statvfs.f_fsid == clog_statvfs.f_fsid);
-#endif
+    if (OB_UNLIKELY(0 != ob_get_filesystem_id_utf8(data_dir, data_filesystem_id))
+        || OB_UNLIKELY(0 != ob_get_filesystem_id_utf8(clog_dir, clog_filesystem_id))) {
+      LOG_ERROR("Failed to get filesystem id", KR(ret), K(data_dir), K(clog_dir), K(errno));
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      same_filesystem = (data_filesystem_id == clog_filesystem_id);
+    }
+  }
+
+  if (OB_SUCC(ret)) {
     if (same_filesystem) {
       data_disk_default_percentage = DEFAULT_DATA_DISK_PERCENTAGE_ON_SAME_FILESYSTEM;
       clog_disk_default_percentage = DEFAULT_CLOG_DISK_PERCENTAGE_ON_SAME_FILESYSTEM;
@@ -308,8 +316,8 @@ int ObServerUtils::calculate_disk_layout_defaults(int64_t &data_disk_total_size,
       data_disk_default_percentage = DEFAULT_DISK_PERCENTAGE_ON_SEPARATE_FILESYSTEM;
       clog_disk_default_percentage = DEFAULT_DISK_PERCENTAGE_ON_SEPARATE_FILESYSTEM;
     }
-    data_disk_total_size = (data_statvfs.f_blocks + data_statvfs.f_bavail - data_statvfs.f_bfree) * data_statvfs.f_bsize;
-    clog_disk_total_size = (clog_statvfs.f_blocks + clog_statvfs.f_bavail - clog_statvfs.f_bfree) * clog_statvfs.f_bsize;
+    data_disk_total_size = data_disk_total_space;
+    clog_disk_total_size = clog_disk_total_space;
     LOG_INFO("calculate disk layout defaults succeeded",
         K(data_dir), K(clog_dir),
         K(same_filesystem), K(data_disk_total_size), K(data_disk_default_percentage),
@@ -319,7 +327,8 @@ int ObServerUtils::calculate_disk_layout_defaults(int64_t &data_disk_total_size,
   return ret;
 }
 
-int ObServerUtils::decide_disk_size(const struct statvfs& svfs,
+int ObServerUtils::decide_disk_size(const int64_t total_space,
+                                    const int64_t available_space,
                                     const int64_t suggested_disk_size,
                                     const int64_t suggested_disk_percentage,
                                     const int64_t default_disk_percentage,
@@ -327,9 +336,6 @@ int ObServerUtils::decide_disk_size(const struct statvfs& svfs,
                                     int64_t& disk_size,
                                     int64_t& disk_percentage)
 {
-  const int64_t total_space =
-      (svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize;
-  const int64_t available_space = svfs.f_bavail * svfs.f_bsize;
   const int64_t calculation_space = suggested_disk_size <= 0 ? available_space : total_space;
   const int ret = decide_disk_size(calculation_space,
                                    suggested_disk_size,

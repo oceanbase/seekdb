@@ -19,49 +19,13 @@
 #include "src/sql/resolver/dml/ob_del_upd_resolver.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
-#ifdef _WIN32
-#include <windows.h>
-#include <shlwapi.h>
-struct glob_t {
-  size_t gl_pathc;
-  char **gl_pathv;
-};
-#define GLOB_NOMATCH 3
-static int glob(const char *pattern, int, void *, glob_t *result) {
-  result->gl_pathc = 0;
-  result->gl_pathv = nullptr;
-  WIN32_FIND_DATAA fd;
-  HANDLE hFind = FindFirstFileA(pattern, &fd);
-  if (hFind == INVALID_HANDLE_VALUE) return GLOB_NOMATCH;
-  size_t cap = 16;
-  result->gl_pathv = (char **)malloc(cap * sizeof(char *));
-  char dir[MAX_PATH];
-  strncpy(dir, pattern, MAX_PATH);
-  char *last_sep = strrchr(dir, '/');
-  if (!last_sep) last_sep = strrchr(dir, '\\');
-  if (last_sep) *(last_sep + 1) = '\0'; else dir[0] = '\0';
-  do {
-    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-    char full[MAX_PATH];
-    snprintf(full, MAX_PATH, "%s%s", dir, fd.cFileName);
-    if (result->gl_pathc >= cap) {
-      cap *= 2;
-      result->gl_pathv = (char **)realloc(result->gl_pathv, cap * sizeof(char *));
-    }
-    result->gl_pathv[result->gl_pathc++] = _strdup(full);
-  } while (FindNextFileA(hFind, &fd));
-  FindClose(hFind);
-  return result->gl_pathc == 0 ? GLOB_NOMATCH : 0;
-}
-static void globfree(glob_t *result) {
-  for (size_t i = 0; i < result->gl_pathc; i++) free(result->gl_pathv[i]);
-  free(result->gl_pathv);
-  result->gl_pathv = nullptr;
-  result->gl_pathc = 0;
-}
-#else
-#include <glob.h>
-#endif
+#include "lib/utility/ob_platform_io.h"
+#include "rust/path_utils.h"
+
+#include <cstring>
+
+using namespace oceanbase::common;
+
 #include "share/schema/ob_part_mgr_util.h"
 
 namespace oceanbase
@@ -600,29 +564,35 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
       if (ObLoadFileLocation::SERVER_DISK == load_args.load_file_storage_) {
         load_args.file_name_ = file_name;
         char *full_path_buf = nullptr;
-        char *actual_path = nullptr;
+        const int64_t full_path_size = 4096;
         ObArray<ObString> match_array;
-        if (OB_ISNULL(full_path_buf = static_cast<char *>(allocator_->alloc(MAX_PATH_SIZE)))) {
+        if (OB_ISNULL(full_path_buf = static_cast<char *>(allocator_->alloc(full_path_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else if (exist_wildcard(file_name)) {
           sub_file_name = file_name.trim_space_only();
           if (OB_FAIL(ob_write_string(*allocator_, sub_file_name, cstyle_file_name, true))) {
           } else {
-            glob_t glob_result;
-            int return_value = glob(cstyle_file_name.ptr(), 0, NULL, &glob_result);
-            if (return_value == GLOB_NOMATCH) {
+            const auto *pattern = reinterpret_cast<const uint8_t *>(cstyle_file_name.ptr());
+            auto glob_result = oceanbase::path_utils::expand_glob(
+                rust::Slice<const uint8_t>(pattern, cstyle_file_name.length()));
+            if (glob_result.code == oceanbase::path_utils::Code::Ok
+                && glob_result.paths.size() == 0) {
               ret = OB_FILE_NOT_EXIST;
-            } else if (return_value != 0) {
+            } else if (glob_result.code != oceanbase::path_utils::Code::Ok) {
               ret = OB_ERR_SYS;
               LOG_WARN("fail to glob", K(ObString(cstyle_file_name)));
             } else {
-              for (size_t i = 0; OB_SUCC(ret) && i < glob_result.gl_pathc; ++i) {
+              for (const auto &path : glob_result.paths) {
                 ObString match_file;
-                if (OB_FAIL(ob_write_string(*allocator_, ObString(glob_result.gl_pathv[i]), match_file, true))) {
+                ObString path_string(static_cast<int32_t>(path.bytes.size()),
+                                     reinterpret_cast<const char *>(path.bytes.data()));
+                if (OB_FAIL(ob_write_string(*allocator_, path_string, match_file, true))) {
                 } else if (OB_FAIL(match_array.push_back(match_file))) {
                 }
+                if (OB_FAIL(ret)) {
+                  break;
+                }
               }
-              globfree(&glob_result);
             }
           }
         } else {
@@ -650,14 +620,11 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
             for (int32_t i = 0; OB_SUCC(ret) && i < match_array.size(); i++) {
               //security check for mysql mode
               ObString secure_file_priv;
-#ifdef _WIN32
-              if (OB_ISNULL(actual_path = _fullpath(full_path_buf, match_array[i].ptr(), PATH_MAX))) {
-#else
-              if (OB_ISNULL(actual_path = realpath(match_array[i].ptr(), full_path_buf))) {
-#endif
+              if (0 != ob_absolute_path_utf8(match_array[i].ptr(), full_path_buf,
+                                             full_path_size)) {
                 ret = OB_FILE_NOT_EXIST;
               } else if (OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
-              } else if (!session_info_->is_inner() && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
+              } else if (!session_info_->is_inner() && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, full_path_buf))) {
               } else if (OB_FAIL(load_args.file_iter_.add_files(&match_array[i]))) {
               }
             }

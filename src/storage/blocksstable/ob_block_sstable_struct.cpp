@@ -15,7 +15,9 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "lib/checksum/ob_checksum_utils.h"
 #include "ob_block_sstable_struct.h"
+#include <inttypes.h>
 #include "share/ob_server_struct.h"
 
 using namespace oceanbase;
@@ -213,7 +215,7 @@ void ObMacroBlockMarkerStatus::fill_comment(char *buf, const int32_t buf_len) co
       J_COLON();
       BUF_PRINTO(hold_info_);
       J_COMMA();
-      BUF_PRINTF("last access interval = %lds", (now - hold_info_.last_access_time_) / 1000 / 1000);
+      BUF_PRINTF("last access interval = %" PRId64 "s", (now - hold_info_.last_access_time_) / 1000 / 1000);
     }
   }
 }

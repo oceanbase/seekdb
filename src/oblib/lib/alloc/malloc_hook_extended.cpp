@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
+#if defined(__linux__) && !defined(__ANDROID__) \
+    && defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
 
 #include <cstdlib>
 #include <new>

@@ -297,6 +297,9 @@ public:
   lib::ObMutex workers_lock_;
 
   std::atomic<int64_t> completion_cnt_;
+  // Completion counter seen at the previous background-rescue tick; per runtime
+  // so one runtime's progress cannot mask another runtime's stall.
+  int64_t last_rescue_completion_cnt_;
 
 }; // end of class ObServerRuntime
 

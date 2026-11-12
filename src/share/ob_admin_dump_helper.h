@@ -20,8 +20,6 @@
 #include <cstdint>
 #include "common/ob_tablet_id.h"
 #include "lib/utility/ob_print_utils.h"
-#include <rapidjson/prettywriter.h>
-#include <rapidjson/stringbuffer.h>
 
 namespace oceanbase
 {
@@ -70,21 +68,6 @@ class ObAdminLogNormalDumper : public ObAdminLogDumperInterface
 public:
   ObAdminLogNormalDumper(){}
   ~ObAdminLogNormalDumper(){}
-public:
-  int start_object();
-  int end_object();
-  int dump_key(const char *arg);
-  int dump_int64(int64_t arg);
-  int dump_uint64(uint64_t arg);
-  int dump_string(const char *str);
-};
-
-class ObAdminLogJsonDumper : public ObAdminLogDumperInterface, public rapidjson::PrettyWriter<rapidjson::StringBuffer>
-{
-public :
-  ObAdminLogJsonDumper(rapidjson::StringBuffer &str_buf) : rapidjson::PrettyWriter<rapidjson::StringBuffer>::PrettyWriter(str_buf)
-  {}
-  ~ObAdminLogJsonDumper(){}
 public:
   int start_object();
   int end_object();

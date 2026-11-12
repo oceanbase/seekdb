@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_scheduler_stat.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server.h"
 #include "storage/tx/ob_trans_service.h"
@@ -151,7 +152,7 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
           break;
         case TX_DESC_ADDR:
           tx_desc_addr_buffer_[0] = 0;
-          snprintf(tx_desc_addr_buffer_, 18, "0x%lx", (uint64_t)tx_scheduler_stat.tx_desc_addr_);
+          snprintf(tx_desc_addr_buffer_, 18, "0x%" PRIx64, (uint64_t)tx_scheduler_stat.tx_desc_addr_);
           cur_row_.cells_[i].set_varchar(tx_desc_addr_buffer_);
           cur_row_.cells_[i].set_default_collation_type();
           break;

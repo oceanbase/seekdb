@@ -17,9 +17,7 @@
 #define USING_LOG_PREFIX PALF
 #include "palf_env_impl.h"
 #include <cinttypes>
-#ifdef _WIN32
-#include <direct.h>
-#endif
+#include "lib/utility/ob_platform_io.h"
 #include "palf_handle.h"
 #include "share/ob_local_device.h"                            // ObLocalDevice
 #include "share/io/ob_io_manager.h"                           // ObIOManager
@@ -432,18 +430,10 @@ int PalfEnvImpl::create_directory(const char *base_dir)
   } else if (0 > (pret = snprintf(log_dir, MAX_PATH_SIZE, "%s/log", tmp_base_dir))) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "snprinf failed", K(pret), K(base_dir));
-#ifdef _WIN32
-  } else if (-1 == (::_mkdir(tmp_base_dir))) {
-#else
-  } else if (-1 == (::mkdir(tmp_base_dir, mode))) {
-#endif
+  } else if (-1 == ob_mkdir_utf8(tmp_base_dir, mode)) {
     ret = convert_sys_errno();
     PALF_LOG(WARN, "mkdir failed", K(ret), K(errno), K(tmp_base_dir), K(base_dir));
-#ifdef _WIN32
-  } else if (-1 == (::_mkdir(log_dir))) {
-#else
-  } else if (-1 == (::mkdir(log_dir, mode))) {
-#endif
+  } else if (-1 == ob_mkdir_utf8(log_dir, mode)) {
     ret = convert_sys_errno();
     PALF_LOG(WARN, "mkdir failed", K(ret), K(errno), K(tmp_base_dir), K(base_dir));
   } else if (OB_FAIL(rename_with_retry(tmp_base_dir, base_dir))) {
@@ -619,12 +609,12 @@ PalfEnvImpl::RemoveStaleIncompletePalfFunctor::RemoveStaleIncompletePalfFunctor(
   palf_env_impl_ = NULL;
 }
 
-int PalfEnvImpl::RemoveStaleIncompletePalfFunctor::func(const dirent *entry)
+int PalfEnvImpl::RemoveStaleIncompletePalfFunctor::func(const char *entry_name)
 {
   int ret = OB_SUCCESS;
   char *saveptr = NULL;
   char file_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  const char *d_name = entry->d_name;
+  const char *d_name = entry_name;
   MEMCPY(file_name, d_name, strlen(d_name));
   char *tmp = strtok_r(file_name, "_", &saveptr);
   char *timestamp_str = NULL;
@@ -856,11 +846,7 @@ int PalfEnvImpl::move_incomplete_palf_into_tmp_dir_()
   }
   if (OB_FAIL(check_tmp_log_dir_exist_(tmp_dir_exist))) {
     PALF_LOG(WARN, "check_tmp_log_dir_exist_ failed", K(ret), KPC(this), K(tmp_log_dir_));
-#ifdef _WIN32
-  } else if (false == tmp_dir_exist && (-1 == ::_mkdir(tmp_log_dir_))) {
-#else
-  } else if (false == tmp_dir_exist && (-1 == ::mkdir(tmp_log_dir_, mode))) {
-#endif
+  } else if (false == tmp_dir_exist && (-1 == ob_mkdir_utf8(tmp_log_dir_, mode))) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "mkdir tmp log dir failed", K(ret), KPC(this), K(tmp_log_dir_));
   } else if (0 > (pret = snprintf(src_log_dir, MAX_PATH_SIZE, "%s/log_stream", log_dir_))) {

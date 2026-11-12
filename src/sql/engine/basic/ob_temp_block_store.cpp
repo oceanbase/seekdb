@@ -1293,7 +1293,7 @@ void ObTempBlockStore::BlockReader::reset()
      * 2. aio_buf_[N].data() may have same ptr as buf_.data(); shoudn't free twice
      */
     if (read_io_handle_ != NULL) {
-      read_io_handle_->reset();
+      read_io_handle_->~ObTmpFileIOHandle();
       ob_free(read_io_handle_);
       read_io_handle_ = NULL;
     }

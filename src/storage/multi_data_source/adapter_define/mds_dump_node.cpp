@@ -15,6 +15,7 @@
  */
 
 #include "mds_dump_node.h"
+#include <inttypes.h>
 #include "meta_programming/ob_meta_swap.h"
 #include "mds_dump_obj_printer.h"
 
@@ -158,9 +159,9 @@ int64_t MdsDumpKey::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   databuff_printf(buf, buf_len, pos, "{");
-  databuff_printf(buf, buf_len, pos, "mds_table_id:%ld, ", (int64_t)mds_table_id_);
-  databuff_printf(buf, buf_len, pos, "mds_unit_id:%ld, ", (int64_t)mds_unit_id_);
-  databuff_printf(buf, buf_len, pos, "crc_check_number:0x%lx, ", (int64_t)crc_check_number_);
+  databuff_printf(buf, buf_len, pos, "mds_table_id:%" PRId64 ", ", (int64_t)mds_table_id_);
+  databuff_printf(buf, buf_len, pos, "mds_unit_id:%" PRId64 ", ", (int64_t)mds_unit_id_);
+  databuff_printf(buf, buf_len, pos, "crc_check_number:0x%" PRIx64 ", ", (int64_t)crc_check_number_);
   databuff_printf(buf, buf_len, pos, "allocator:%p, ", (void*)allocator_);
   MdsDumpObjPrinter print_helper;
   print_helper.help_print<0>(true, mds_table_id_, mds_unit_id_, key_, buf, buf_len, pos);
@@ -172,11 +173,11 @@ int64_t MdsDumpNode::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   databuff_printf(buf, buf_len, pos, "{");
-  databuff_printf(buf, buf_len, pos, "mds_table_id:%ld, ", (int64_t)mds_table_id_);
-  databuff_printf(buf, buf_len, pos, "mds_unit_id:%ld, ", (int64_t)mds_unit_id_);
-  databuff_printf(buf, buf_len, pos, "crc_check_number:0x%lx, ", (int64_t)crc_check_number_);
+  databuff_printf(buf, buf_len, pos, "mds_table_id:%" PRId64 ", ", (int64_t)mds_table_id_);
+  databuff_printf(buf, buf_len, pos, "mds_unit_id:%" PRId64 ", ", (int64_t)mds_unit_id_);
+  databuff_printf(buf, buf_len, pos, "crc_check_number:0x%" PRIx64 ", ", (int64_t)crc_check_number_);
   databuff_printf(buf, buf_len, pos, "allocator:%p, ", (void*)allocator_);
-  databuff_printf(buf, buf_len, pos, "writer_id:%ld, ", writer_id_);
+  databuff_printf(buf, buf_len, pos, "writer_id:%" PRId64 ", ", writer_id_);
   databuff_print_multi_objs(buf, buf_len, pos, "seq_no:", seq_no_, ", ");
   char scn_buf[64] = {'\0'};
   databuff_printf(buf, buf_len, pos, "redo_scn:%s, ",

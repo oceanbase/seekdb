@@ -1,0 +1,15 @@
+[package]
+name = "http-client"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+# Share parallel compilation with the workspace's native crate builders.
+cc = { version = "1", features = ["parallel"] }
+
+[dependencies]
+cxx = "=1.0.202"
+
+[target.'cfg(not(target_os = "emscripten"))'.dev-dependencies]
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "tls12", "ring"] }

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_dynamic_sampling.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
@@ -98,7 +99,7 @@ int ObDynamicSampling::add_ds_result_cache(ObIArray<ObDSResultItem> &ds_result_i
         logical_idx = i;
       }
     } else if (ds_result_items.at(i).stat_ != NULL) {
-      ds_result_items.at(i).stat_->set_stat_expired_time(ObTimeUtility::current_time() + ObOptStatMonitorCheckTask::CHECK_INTERVAL);
+      ds_result_items.at(i).stat_->set_stat_expired_time(ObTimeUtility::current_time() + OPT_STATS_MAINTENANCE_INTERVAL_US);
       if (ds_result_items.at(i).type_ == ObDSResultItemType::OB_DS_OUTPUT_STAT &&
           ds_result_items.at(i).exprs_.empty()) {
         //no need add, assign the logical count hanle
@@ -232,7 +233,7 @@ int ObDynamicSampling::add_ds_stat_items_by_dml_info(const ObDSTableParam &param
           use_col_stat_cache &&
           param.degree_ <= ds_result_items.at(i).stat_handle_.stat_->get_ds_degree()) {
         const_cast<ObOptDSStat*>(ds_result_items.at(i).stat_handle_.stat_)->set_stat_expired_time(
-                         ObTimeUtility::current_time() + ObOptStatMonitorCheckTask::CHECK_INTERVAL);
+                         ObTimeUtility::current_time() + OPT_STATS_MAINTENANCE_INTERVAL_US);
       } else if (inc_ratio <= stale_percent_threshold && is_basic_stat &&
                  OB_FAIL(ds_result_items.at(i).stat_handle_.stat_->deep_copy(allocator_, ds_result_items.at(i).stat_))) {
       } else {
@@ -677,11 +678,11 @@ int ObDynamicSampling::add_basic_hint_info(ObSqlString &basic_hint_str,
   int ret = OB_SUCCESS;
   if (OB_FAIL(basic_hint_str.append("/*+ NO_REWRITE"))) {
   } else if (degree <= 1 && OB_FAIL(basic_hint_str.append(" NO_PARALLEL "))) {
-  } else if (degree > 1 && OB_FAIL(basic_hint_str.append_fmt(" PARALLEL(%ld) ", degree))) {
+  } else if (degree > 1 && OB_FAIL(basic_hint_str.append_fmt(" PARALLEL(%" PRId64 ") ", degree))) {
   //Dynamic Sampling SQL shouldn't dynamic sampling
   } else if (OB_FAIL(basic_hint_str.append(" DYNAMIC_SAMPLING(0) "))) {
   } else if (OB_FAIL(basic_hint_str.append(" DBMS_STATS "))) {
-  } else if (OB_FAIL(basic_hint_str.append_fmt(" QUERY_TIMEOUT(%ld) ", query_timeout))) {
+  } else if (OB_FAIL(basic_hint_str.append_fmt(" QUERY_TIMEOUT(%" PRId64 ") ", query_timeout))) {
   } else if (OB_FAIL(basic_hint_str.append(" OPT_PARAM(\'USE_DEFAULT_OPT_STAT\',\'TRUE\') "))) {
   } else if (OB_FAIL(basic_hint_str.append("*/"))) {
   } else {
@@ -890,7 +891,7 @@ int ObDynamicSampling::add_block_sample_info(const double &sample_block_ratio,
   } else if (sample_block_ratio == 100.0) {
     //do nothing
     sample_block_.reset();
-  } else if (seed > 0 && OB_FAIL(seed_str.append_fmt(" SEED(%ld) ", seed))) {
+  } else if (seed > 0 && OB_FAIL(seed_str.append_fmt(" SEED(%" PRId64 ") ", seed))) {
   } else if (OB_FAIL(sample_str.append_fmt(" SAMPLE BLOCK(%lf) %s ",
                                            sample_block_ratio,
                                            seed_str.empty() ? " " : seed_str.ptr()))) {
@@ -1172,7 +1173,7 @@ int ObDynamicSampling::add_table_clause(ObSqlString &table_str)
   int64_t big_table_row = 100000;
   if (OB_UNLIKELY(is_big_table_ && sample_big_table_rown_cnt_ < MAGIC_MAX_AUTO_SAMPLE_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (is_big_table_ && OB_FAIL(table_str.append_fmt("(SELECT * FROM `%.*s`.`%.*s` %.*s %.*s LIMIT %ld) %s%.*s%s" ,
+  } else if (is_big_table_ && OB_FAIL(table_str.append_fmt("(SELECT * FROM `%.*s`.`%.*s` %.*s %.*s LIMIT %" PRId64 ") %s%.*s%s" ,
                                                            db_name_.length(),
                                                            db_name_.ptr(),
                                                            table_name_.length(),
@@ -1640,7 +1641,7 @@ bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
 //   } else if (OB_FAIL(estimte_rowcount(get_result, ObDynamicSamplingLevel::ADS_DYNAMIC_SAMPLING))) {
 //     LOG_WARN("failed to estimate rowcount", K(ret));
 //   } else if (get_result) {
-//     ds_stat.set_stat_expired_time(ObTimeUtility::current_time() + ObOptStatMonitorCheckTask::CHECK_INTERVAL);
+//     ds_stat.set_stat_expired_time(ObTimeUtility::current_time() + OPT_STATS_MAINTENANCE_INTERVAL_US);
 //     OPT_TRACE("succeed to do estimate join rowcount");
 //   }
 //   return ret;
@@ -1795,7 +1796,7 @@ bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
 //     if (sample_inc_ratio <= sample_stale_percent_threshold && other_inc_ratio <= other_stale_percent_threshold) {
 //       get_result = true;
 //       join_output_cnt = ds_stat_handle.stat_->get_output_rowcount();
-//       const_cast<ObOptDSStat*>(ds_stat_handle.stat_)->set_stat_expired_time(ObTimeUtility::current_time() + ObOptStatMonitorCheckTask::CHECK_INTERVAL);
+//       const_cast<ObOptDSStat*>(ds_stat_handle.stat_)->set_stat_expired_time(ObTimeUtility::current_time() + OPT_STATS_MAINTENANCE_INTERVAL_US);
 //       OPT_TRACE("succeed to get ds join result from cache");
 //     } else if (OB_FAIL(ctx_->get_opt_stat_manager()->erase_ds_stat(key))) {
 //       LOG_WARN("failed to erase ds stat", K(ret));

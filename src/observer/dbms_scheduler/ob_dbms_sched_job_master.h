@@ -32,7 +32,6 @@
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 
-#include "rootserver/dbms_job/ob_dbms_job_utils.h"
 #include "rootserver/ob_ddl_service.h"
 
 

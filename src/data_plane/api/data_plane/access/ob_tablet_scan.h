@@ -23,7 +23,7 @@
 #include "common/sql_mode/ob_sql_mode.h"
 #include "lib/container/ob_array_array.h"
 #include "lib/container/ob_se_array.h"
-#include "share/geo/ob_s2adapter.h"
+#include "share/geo/ob_spatial_mbr.h"
 #include "share/scn.h"
 #include "share/schema/ob_schema_getter_guard.h"
 namespace oceanbase

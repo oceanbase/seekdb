@@ -15,6 +15,7 @@
  */
 
 #include "ob_abort.h"
+#include <inttypes.h>
 #include "lib/ob_define.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -33,12 +34,12 @@ OB_NORETURN OB_WEAK_SYMBOL void ob_abort (void) __THROW
 #ifdef _WIN32
   {
     char buf[512];
-    int n = snprintf(buf, sizeof(buf), "OB_ABORT called, tid: %ld\r\n", GETTID());
+    int n = snprintf(buf, sizeof(buf), "OB_ABORT called, tid: %" PRId64 "\r\n", GETTID());
     HANDLE h = GetStdHandle((DWORD)-12); /* STD_ERROR_HANDLE */
     DWORD written;
     WriteFile(h, buf, (DWORD)n, &written, NULL);
   }
 #endif
-  fprintf(stderr, "OB_ABORT, tid: %ld, lbt: %s\n", GETTID(), oceanbase::common::lbt());
+  fprintf(stderr, "OB_ABORT, tid: %" PRId64 ", lbt: %s\n", GETTID(), oceanbase::common::lbt());
   abort();
 }

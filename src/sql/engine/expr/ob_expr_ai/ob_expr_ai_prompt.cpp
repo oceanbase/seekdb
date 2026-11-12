@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_ai_prompt.h"
 #include <regex>
+#include "common/json_type/json_builder.h"
 #include "ob_ai_func.h"
 #include "lib/utility/utility.h"
 #include "common/json_type/ob_json_common.h"
@@ -84,12 +85,13 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObDatum *template_datum = NULL;
   ObExpr *arg0 = expr.args_[0];
   ObString template_str;
-  ObJsonArray *args_array = NULL;
-  ObJsonObject *prompt_object = NULL;
+  ObIJsonBase *args_array = NULL;
+  ObIJsonBase *prompt_object = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_PROMPT));
+  JsonContainerBuilder args_builder(false);
 
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, template_datum))) {
   } else if (template_datum->is_null()) {
@@ -105,13 +107,10 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       ObDatum *datum = NULL;
       ObExpr *arg = expr.args_[i];
       ObString arg_str;
-      ObJsonString *arg_json_str = NULL;
       if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, datum))) {
       } else if (ob_is_string_tc(arg->datum_meta_.type_)) {
         arg_str = datum->get_string();
-        if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(tmp_allocator, arg_str, arg_json_str))) {
-        } else if (OB_FAIL(args_array->append(arg_json_str))) {
-        }
+        ret = args_builder.append_string(ObString(), arg_str);
       } else if (ob_is_json(arg->datum_meta_.type_)) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "json type is not supported");
@@ -122,6 +121,7 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   }
 
   if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObAIFuncJsonUtils::finish_array(tmp_allocator, args_builder, args_array))) {
   } else if (OB_FAIL(ObAIFuncPromptObjectUtils::construct_prompt_object(tmp_allocator, template_str, args_array, prompt_object))) {
   } else {
     ObString raw_str;

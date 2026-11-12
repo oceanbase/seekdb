@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "ob_load_data_parser.h"
+#include <inttypes.h>
 #include "common/ob_hex_utils_base.h"
 #include "src/sql/engine/ob_exec_context.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
@@ -157,11 +158,11 @@ int ObCSVGeneralFormat::to_json_kv_string(char *buf, const int64_t buf_len, int6
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::FIELD_DELIMITER)],
                      helper.convert(ObHexStringWrap(field_term_str_))));
   OZ(J_COMMA());
-  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%ld)",
+  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%" PRId64 ")",
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::ESCAPE)],
                      field_escaped_char_));
   OZ(J_COMMA());
-  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%ld)",
+  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%" PRId64 ")",
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::FIELD_OPTIONALLY_ENCLOSED_BY)],
                      field_enclosed_char_));
   OZ(J_COMMA());
@@ -169,7 +170,7 @@ int ObCSVGeneralFormat::to_json_kv_string(char *buf, const int64_t buf_len, int6
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::ENCODING)],
                      ObCharset::charset_name(cs_type_)));
   OZ(J_COMMA());
-  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%ld)",
+  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%" PRId64 ")",
                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::SKIP_HEADER)],
                      skip_header_lines_));
   OZ(J_COMMA());
@@ -619,7 +620,7 @@ int ObExternalFileFormat::mock_gen_column_def(
   switch (format_type_) {
     case CSV_FORMAT: {
       uint64_t file_column_idx = column.get_column_id() - OB_APP_MIN_COLUMN_ID + 1;
-      if (OB_FAIL(temp_str.append_fmt("%s%lu", N_EXTERNAL_FILE_COLUMN_PREFIX, file_column_idx))) {
+      if (OB_FAIL(temp_str.append_fmt("%s%" PRIu64 "", N_EXTERNAL_FILE_COLUMN_PREFIX, file_column_idx))) {
       }
       break;
     }

@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_vector_mem_info.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
@@ -72,7 +73,7 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
           cache_tablet_ids_.reset();
           if (OB_FAIL(service->get_snapshot_ids(complete_tablet_ids_, partial_tablet_ids_))) {
           } else if (OB_FAIL(service->get_cache_ids(cache_tablet_ids_))) {
-          } else if (OB_FAIL(databuff_printf(vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos, "{\"rb_used\":%lu", rb_used))) {
+          } else if (OB_FAIL(databuff_printf(vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos, "{\"rb_used\":%" PRIu64 "", rb_used))) {
           } else if (OB_FAIL(ObPluginVectorIndexUtils::get_mem_context_detail_info(service, complete_tablet_ids_,
              partial_tablet_ids_, cache_tablet_ids_, vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos))) {
           } else if (OB_FAIL(databuff_printf(vector_used_str_, OB_MAX_MYSQL_VARCHAR_LENGTH, pos, "}"))) {

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX PL_CACHE
 #include "ob_pl_cache_mgr.h"
+#include <inttypes.h>
 #include "src/sql/plan_cache/ob_plan_cache_util.h"
 using namespace oceanbase::observer;
 
@@ -264,7 +265,7 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
     // do nothing
   } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(sql.assign_fmt("alter system flush pl cache schema_id = %lu databases = \"%.*s\"",
+  } else if (OB_FAIL(sql.assign_fmt("alter system flush pl cache schema_id = %" PRIu64 " databases = \"%.*s\"",
                                       key_id, db_name.length(), db_name.ptr()))) {
   } else {
     if (OB_FAIL(sql_proxy->write(sql.ptr(), affected_rows))) {

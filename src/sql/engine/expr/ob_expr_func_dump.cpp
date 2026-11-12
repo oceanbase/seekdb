@@ -27,7 +27,7 @@ namespace sql
 {
 
 const int64_t MAX_DUMP_BUFFER_SIZE = 4000;
-const char *CONST_HEADER = "Typ=%d Len=%ld: ";
+const char *CONST_HEADER = "Typ=%d Len=%" PRId64 ": ";
 
 enum ReturnFormat {
   RF_OB_SEPC = 0,

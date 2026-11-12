@@ -100,5 +100,9 @@ int64_t Worker::get_timeout_remain() const
 
 bool Worker::is_timeout() const
 {
-  return common::ObClockGenerator::getClock() >= timeout_ts_;
+  // The deadline must be compared against the precise clock: ObClockGenerator::getClock()
+  // only advances once per sampling tick, so a deadline that falls inside the current
+  // tick window was invisible here while get_timeout_remain() above already reported it
+  // as expired. Both checks describe the same deadline and must agree.
+  return ObTimeUtility::current_time() >= timeout_ts_;
 }

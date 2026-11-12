@@ -51,15 +51,7 @@ int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
       cmp_ret = 1;
     }
   } else {
-    ObJsonBin j_bin_l(l_data.ptr(), l_data.length(), &allocator);
-    ObJsonBin j_bin_r(r_data.ptr(), r_data.length(), &allocator);
-    ObIJsonBase *j_base_l = &j_bin_l;
-    ObIJsonBase *j_base_r = &j_bin_r;
-
-    if (OB_FAIL(j_bin_l.reset_iter())) {
-    } else if (OB_FAIL(j_bin_r.reset_iter())) {
-    } else if (OB_FAIL(j_base_l->compare(*j_base_r, cmp_ret))) {
-    }
+    ret = compare_json_binary(l_data, r_data, cmp_ret);
   }
   return ret;
 }
@@ -107,7 +99,11 @@ int ObDatumCollectionCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_r
   } else {
     // only memcmp supported now
     cmp_ret = MEMCMP(l_data.ptr(), r_data.ptr(), std::min(l_data.length(), r_data.length()));
-    if (cmp_ret == 0 && l_data.length() != r_data.length()) {
+    // memcmp guarantees only the sign. DatumCmpFunc consumers such as row_cmp
+    // require exactly -1/0/1; other magnitudes make both '=' and '<>' false.
+    if (cmp_ret != 0) {
+      cmp_ret = cmp_ret > 0 ? 1 : -1;
+    } else if (l_data.length() != r_data.length()) {
       cmp_ret = l_data.length() > r_data.length() ? 1 : -1;
     }
   }

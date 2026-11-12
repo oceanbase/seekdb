@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/cmd/ob_get_diagnostics_executor.h"
+#include <inttypes.h>
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
 #include "share/ob_lob_access_utils.h"
@@ -205,7 +206,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
               case MYSQL_ERRNO_TYPE:
                 {
                   int64_t errnum = ob_errpkt_errno(err_ret);
-                  sprintf(str, "%ld", errnum);
+                  sprintf(str, "%" PRId64, errnum);
                   SET_OBJ_VAR(expect_type, errnum, ObString(str), has_lob_header);
                 }
                 break;
@@ -345,7 +346,7 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
 
   return ret;
 }
- 
+
 int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &stmt) {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -353,7 +354,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
-   
+
   int64_t warning_count = 0;
   ObSqlString query_virtual;
   if (OB_ISNULL(session_info)) {
@@ -366,7 +367,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
                          session_info, conn_guard))) {
   } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(query_virtual.assign_fmt("select count(*) from %s.%s", 
+  } else if (OB_FAIL(query_virtual.assign_fmt("select count(*) from %s.%s",
                       OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
   } else {
     SMART_VAR(ObISQLClient::ReadResult, res) {
@@ -404,7 +405,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
       ObString err_msg, err_msg_c, sqlstate, sqlstate_c;
       ObSqlString query_virtual;
       if (OB_FAIL(query_virtual.assign_fmt(
-        "select message, ori_code, sql_state from %s.%s limit %ld, 1", 
+        "select message, ori_code, sql_state from %s.%s limit %" PRId64 ", 1",
         OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME, restored_arg - 1))) {
       } else {
         SMART_VAR(ObISQLClient::ReadResult, res) {
@@ -497,10 +498,10 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
         }
         if (OB_FAIL(ret)) {
         } else if (val == "NUMBER") {
-          if (OB_FAIL(set_sql.assign_fmt("set %s%s=%ld;", "@", var.ptr(), number))) {
+          if (OB_FAIL(set_sql.assign_fmt("set %s%s=%" PRId64 ";", "@", var.ptr(), number))) {
           }
         } else if (val == "ROW_COUNT") {
-          if (OB_FAIL(set_sql.assign_fmt("set %s%s=%ld;", "@", var.ptr(), old_affected_rows))) {
+          if (OB_FAIL(set_sql.assign_fmt("set %s%s=%" PRId64 ";", "@", var.ptr(), old_affected_rows))) {
           }
         }
         if (OB_SUCC(ret)) {
@@ -531,10 +532,10 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
               ObObjType expect_type = pl_data_type.get_data_type()->get_obj_type();
               bool has_lob_header = pl_data_type.get_data_type()->get_meta_type().has_lob_header();
               if (val == "NUMBER") {
-                sprintf(str, "%ld", number);
+                sprintf(str, "%" PRId64, number);
                 SET_OBJ_VAR(expect_type, number, ObString(str), has_lob_header);
               } else if (val == "ROW_COUNT") {
-                sprintf(str, "%ld", old_affected_rows);
+                sprintf(str, "%" PRId64, old_affected_rows);
                 SET_OBJ_VAR(expect_type, old_affected_rows, ObString(str), has_lob_header);
               } else {
                 ret = OB_ERR_UNEXPECTED;
