@@ -16,8 +16,6 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_spi.h"
-#include "sql/engine/cmd/ob_variable_set_executor.h"
-#include "common/enumset/ob_enum_set_meta.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_sql.h"
 #include "sql/ob_query_retry_ctrl.h"
@@ -1252,40 +1250,6 @@ int ObSPIService::spi_set_variable_to_expr(ObPLExecCtx *ctx,
   return ret;
 }
 
-// Persist an evaluated PL user-variable value without issuing a second SQL
-// statement that would erase diagnostics produced by RHS evaluation.
-static int store_pl_user_variable(ObPLExecCtx *ctx, const ObString &name,
-                                  const ObObjParam &value)
-{
-  int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(ctx), OB_NOT_NULL(ctx->exec_ctx_));
-  ObSQLSessionInfo *session = OB_SUCC(ret) ? ctx->exec_ctx_->get_my_session() : NULL;
-  CK (OB_NOT_NULL(session), OB_NOT_NULL(session->get_pl_implicit_cursor()));
-  ObObj stored_value = value;
-  if (OB_SUCC(ret) && ob_is_enum_or_set_type(value.get_type())) {
-    ObRawExprResType source_type;
-    source_type.set_meta(value.get_param_meta());
-    const ObEnumSetMeta *meta = NULL;
-    OZ (ObRawExprUtils::extract_enum_set_meta(source_type, session, meta));
-    CK (OB_NOT_NULL(meta), OB_NOT_NULL(meta->get_str_values()));
-    ObObjParam source = value;
-    OZ (ObSPIService::cast_enum_set_to_string(*ctx->exec_ctx_, *meta->get_str_values(), source, stored_value));
-  }
-  if (OB_SUCC(ret)) {
-    ObExprCtx expr_ctx;
-    expr_ctx.my_session_ = session;
-    expr_ctx.exec_ctx_ = ctx->exec_ctx_;
-    expr_ctx.phy_plan_ctx_ = ctx->exec_ctx_->get_physical_plan_ctx();
-    expr_ctx.calc_buf_ = ctx->get_top_expr_allocator();
-    OZ (ObVariableSetExecutor::set_user_variable(stored_value, name, expr_ctx));
-    // ROW_COUNT()/GET DIAGNOSTICS read the session counter; PL cursor state is
-    // separate. A successful SET publishes zero to both, as the SQL path did.
-    OX (session->set_affected_rows(0));
-    OX (session->get_pl_implicit_cursor()->set_rowcount(0));
-  }
-  return ret;
-}
-
 int ObSPIService::spi_set_variable(ObPLExecCtx *ctx,
                                    const ObSqlExpression* expr,
                                    const ObObjParam *value,
@@ -1310,7 +1274,24 @@ int ObSPIService::spi_set_variable(ObPLExecCtx *ctx,
           }
         }
         if (OB_SUCC(ret) && T_OP_GET_USER_VAR == expr_type && !is_default) {
-          OZ (store_pl_user_variable(ctx, name, *value));
+          // Re-issuing the assignment as SET @x = <literal> normalizes the
+          // evaluated value exactly like the SQL path, but that synthetic
+          // statement owns a diagnostics area of its own. Give it a scratch
+          // buffer so its reset/warnings cannot erase the conditions produced
+          // by evaluating the RHS. On failure keep the scratch contents: the
+          // error message and SQLSTATE are reported from there.
+          ObWarningBuffer *outer_wb = ob_get_tsi_warning_buffer();
+          ObWarningBuffer inner_wb;
+          if (OB_NOT_NULL(outer_wb)) {
+            ob_setup_tsi_warning_buffer(&inner_wb);
+          }
+          ret = set_variable(ctx, scope, name, *value, is_default);
+          if (OB_NOT_NULL(outer_wb)) {
+            ob_setup_tsi_warning_buffer(outer_wb);
+            if (OB_FAIL(ret)) {
+              *outer_wb = inner_wb;
+            }
+          }
         } else if (OB_SUCC(ret) && OB_FAIL(set_variable(ctx, scope, name, *value, is_default))) {
         }
       }
@@ -1625,13 +1606,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
 
             OX (session->get_pl_sqlcode_info()->set_sqlcode(OB_SUCCESS));
 
-            // A plain SELECT does not start a new diagnostics area: MySQL keeps a
-            // warning raised by the previous statement visible across it (see
-            // sp-error-02, Bug#23032 p3, where SELECT 1 must not erase the
-            // CAST() warning). Every other statement type -- DML, DDL, SET --
-            // does clear it. Diagnostics statements are excluded as before.
-            if (OB_SUCC(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)
-                && stmt::T_SELECT != stmt_type) {
+            if (OB_SUCC(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)) {
               ob_reset_tsi_warning_buffer();
             }
 

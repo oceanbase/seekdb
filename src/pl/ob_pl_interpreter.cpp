@@ -393,7 +393,8 @@ static int exec_block(ObPLExecCtx *ctx, const ObPLStmtBlock *block, CtrlState &c
             break;
           }
         }
-      } else if (PL_BLOCK != stmts.at(i)->get_type()) {
+      } else if (PL_BLOCK != stmts.at(i)->get_type()
+                 && PL_CALL != stmts.at(i)->get_type()) {
         // The statement succeeded but may have raised a *warning* (SIGNAL '01000', a
         // truncation, a SELECT..INTO that found nothing). MySQL fires a matching
         // SQLWARNING / NOT FOUND / specific CONTINUE/EXIT handler for it; the interpreter is
@@ -401,8 +402,12 @@ static int exec_block(ObPLExecCtx *ctx, const ObPLStmtBlock *block, CtrlState &c
         // -- mirror that here. Only a non-block statement triggers the search: a nested block
         // already ran this check for whichever of its own statements actually raised, so
         // gating on PL_BLOCK fires the search exactly once, at the innermost raising statement.
+        // A CALL's callee warnings stay in the diagnostic area for SHOW WARNINGS,
+        // but they do not belong to the CALL statement for handler selection: only
+        // conditions raised by the CALL itself (errors returned from the callee)
+        // reach the caller's handlers above.
         wb = common::ob_get_tsi_warning_buffer();
-        // CALL and dynamic SQL can reset the diagnostic area through SPI too. A
+        // Dynamic SQL can reset the diagnostic area through SPI too. A
         // reset invalidates the old count even if the new count happens to equal
         // it. Observe the buffer's actual reset rather than guessing from syntax.
         // Without a reset, only appended slots are new; a diagnostic read or a
