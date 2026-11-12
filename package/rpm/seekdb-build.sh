@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ $# -lt 4 || "$2" != seekdb ]]; then
-  echo "Usage: $0 <source-path> seekdb <version> <release> [--binary-package PATH | --seekdb-bin PATH] [package options]" >&2
+if [[ $# -lt 3 || "$2" != seekdb ]]; then
+  echo "Usage: $0 <source-path> seekdb <version> [--binary-package PATH | --seekdb-bin PATH] [package options]" >&2
   exit 64
 fi
 source_dir="$(cd "$1" && pwd)"
 output_dir="$PWD"
+# Accept the former positional release without using it as a package counter.
+first_option=4
+if [[ $# -ge 4 && "${4:-}" != --* ]]; then first_option=5; fi
 prebuilt=false
-for argument in "${@:5}"; do
+for argument in "${@:$first_option}"; do
   case "$argument" in
     --binary-package|--binary-package=*|--seekdb-bin|--seekdb-bin=*) prebuilt=true ;;
   esac
@@ -20,4 +23,4 @@ if [[ "$prebuilt" == false ]]; then
       //src/observer:seekdb //src/share/inner_table/sys_package:syspack_release
   )
 fi
-python3 "$source_dir/package/package.py" rpm --version "$3" --release "$4" --output "$output_dir" "${@:5}"
+python3 "$source_dir/package/package.py" rpm --version "$3" --output "$output_dir" "${@:$first_option}"
