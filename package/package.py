@@ -146,7 +146,7 @@ def deb(payload, output, version, release, architecture=None, glibc=None):
     subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(payload), str(target)], check=True)
 
 
-def rpm(payload, libs, work, output, version, release, dependencies, architecture=None):
+def rpm(payload, work, output, version, release, dependencies, architecture=None):
     for directory in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
         (work / directory).mkdir()
     strip = dependencies / "usr/local/oceanbase/devtools/bin/llvm-strip"
@@ -156,12 +156,13 @@ def rpm(payload, libs, work, output, version, release, dependencies, architectur
             raise ValueError("RPM packaging requires llvm-strip or strip")
     spec = work / "SPECS/seekdb.spec"
     content = (ROOT / "package/rpm/seekdb.spec.in").read_text()
-    binaries = [payload / "usr/bin/seekdb"] + [path for path in libs.rglob("*")
+    libraries = payload / "usr/libexec/seekdb/lib"
+    binaries = [payload / "usr/bin/seekdb"] + [path for path in libraries.rglob("*")
                                                if path.is_file() and not path.is_symlink()]
     debug_info = any(re.search(r"\.(?:z)?debug_info\b", subprocess.check_output(
         ["readelf", "-SW", str(path)], text=True)) for path in binaries)
     values = {"STRIP": str(strip), "VERSION": version, "RELEASE": release,
-              "PAYLOAD": str(payload), "LIBS": str(libs),
+              "PAYLOAD": str(payload),
               "WITH_DEBUGINFO": "1" if debug_info else "0"}
     for name, script in (("PRE", "pre_install"), ("POST", "post_install"),
                          ("PREUN", "pre_uninstall"), ("POSTUN", "post_uninstall")):
@@ -296,10 +297,14 @@ def main():
                 raise ValueError("obshell requires GLIBC_%s, exceeding the binary package baseline %s; "
                                  "rebuild obshell for the target glibc" % (required, metadata["glibc"]))
         if options.format == "rpm":
-            libs = work / "libs"
-            stage(libs, options.artifacts.resolve(), options.dependencies.resolve(), "linux",
-                  options.version, options.release, "libs", binary_package=binary_package)
-            rpm(payload, libs, work, output, options.version, options.release, options.dependencies.resolve(),
+            libraries = payload / "usr/libexec/seekdb/lib"
+            libraries.mkdir(parents=True, exist_ok=True)
+            if binary_package:
+                # RPM uses the distribution's libaio, as in previous seekdb releases.
+                shutil.copytree(binary_package / "lib/seekdb", libraries, dirs_exist_ok=True,
+                                ignore=shutil.ignore_patterns("libaio.so", "libaio.so.*"))
+            normalize_permissions(payload)
+            rpm(payload, work, output, options.version, options.release, options.dependencies.resolve(),
                 metadata["arch"] if metadata else None)
         elif options.format == "deb":
             stage(payload, options.artifacts.resolve(), options.dependencies.resolve(), "linux",
