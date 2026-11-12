@@ -1,5 +1,5 @@
 name: Package seekdb
-run-name: Package ${{ inputs.platform }} / ${{ inputs.linux_glibc }} / ${{ inputs.version || 'source version' }}-${{ inputs.release }}
+run-name: Package ${{ inputs.platform }} / ${{ inputs.linux_glibc }} / ${{ inputs.binary_run_id && format('binary run {0}', inputs.binary_run_id) || inputs.version || 'source version' }}-${{ inputs.release }}
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
         default: '2.17'
         options: ['2.17', '2.28', both]
       version:
-        description: Package version (empty uses the source version)
+        description: Package version (empty uses the source or reused binary version)
         type: string
       release:
         description: Package release
@@ -26,6 +26,9 @@ on:
         type: choice
         default: all
         options: [all, binary, rpm, deb]
+      binary_run_id:
+        description: Existing run ID to reuse Linux binaries for RPM/DEB (empty builds binaries)
+        type: string
       jobs:
         description: Local build parallelism (0 selects hosted-runner defaults)
         type: number
@@ -33,9 +36,10 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: package-${{ github.ref }}-${{ inputs.platform }}-${{ inputs.linux_glibc }}
+  group: package-${{ github.ref }}-${{ inputs.platform }}-${{ inputs.linux_glibc }}-${{ inputs.binary_run_id || 'build' }}
   cancel-in-progress: false
 
 env:
@@ -52,6 +56,8 @@ jobs:
       has_linux: ${{ steps.matrix.outputs.has_linux }}
       version: ${{ steps.matrix.outputs.version }}
       release: ${{ steps.matrix.outputs.release }}
+      binary_run_id: ${{ steps.matrix.outputs.binary_run_id }}
+      binary_source_commit: ${{ steps.matrix.outputs.binary_source_commit }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -63,11 +69,15 @@ jobs:
           PACKAGE_GLIBC: ${{ inputs.linux_glibc }}
           PACKAGE_VERSION: ${{ inputs.version }}
           PACKAGE_RELEASE: ${{ inputs.release }}
+          PACKAGE_FORMATS: ${{ inputs.formats }}
+          PACKAGE_BINARY_RUN_ID: ${{ inputs.binary_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/package.py matrix
 
   binary:
     name: binary-${{ matrix.id }}
     needs: prepare
+    if: needs.prepare.outputs.binary_run_id == ''
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     strategy:
@@ -196,6 +206,10 @@ jobs:
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
       PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
       PACKAGE_FORMATS: ${{ inputs.formats }}
+      PACKAGE_ARCH: ${{ matrix.arch }}
+      PACKAGE_GLIBC: ${{ matrix.glibc }}
+      BINARY_RUN_ID: ${{ needs.prepare.outputs.binary_run_id || github.run_id }}
+      BINARY_SOURCE_COMMIT: ${{ needs.prepare.outputs.binary_source_commit }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -203,6 +217,8 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: binary-${{ matrix.id }}
+          run-id: ${{ env.BINARY_RUN_ID }}
+          github-token: ${{ github.token }}
           path: input
       - name: Install packaging tools
         run: sudo apt-get update -qq && sudo apt-get install -y rpm binutils dpkg-dev debugedit elfutils file

@@ -428,7 +428,7 @@ def entries(root):
     return result
 
 
-def load(source, destination, version):
+def load(source, destination, version=None):
     if source.is_dir():
         root = source
     else:
@@ -470,7 +470,9 @@ def load(source, destination, version):
     manifest = json.loads((root / "manifest.json").read_text())
     if not isinstance(manifest, dict) or manifest.get("format") != "seekdb-binary" or manifest.get("schema_version") != 1:
         raise ValueError("unsupported binary package manifest")
-    if manifest.get("version") != version:
+    if not isinstance(manifest.get("version"), str) or not re.fullmatch(r"[0-9A-Za-z.+~_]+", manifest["version"]):
+        raise ValueError("invalid binary package version")
+    if version is not None and manifest["version"] != version:
         raise ValueError("binary package version %s does not match requested version %s" % (manifest.get("version"), version))
     metadata = manifest.get("platform")
     if not isinstance(metadata, dict) or metadata.get("os") not in ("linux", "macos", "windows", "android"):
