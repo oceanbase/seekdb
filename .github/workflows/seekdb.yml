@@ -1,286 +1,95 @@
-# SeekDB CI - 执行下沉版（Native）
-# setup 单次 checkout 并准备源码与 seekdb → 4 个并行 mysqltest job（各独立容器）→ collect 合并结果
-name: SeekDB CI
+name: Repackage seekdb RPM
+run-name: Repackage RPM from binary run 43170742983
 
 on:
-  workflow_call:
   workflow_dispatch:
-  pull_request:
-    branches: [master, develop]
-    types: [opened, reopened, synchronize, ready_for_review]
-    paths-ignore:
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/pull_request_template.md'
-      - 'README.md'
-      - 'README_CN.md'
-      - 'CONTRIBUTING.md'
-  schedule:
-    - cron: '30 9 * * *'
 
 permissions:
   contents: read
-
-env:
-  MYSQLTEST_SLICES: "4"
-  SEEKDB_BINARY_PATH: build/bin/src/observer/seekdb
-  SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
-  SEEKDB_CACHE_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb/_cache
+  actions: read
 
 jobs:
-  seekdb-setup:
-    name: setup
-    if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    runs-on: arc-runner-k8s-ci-org-25c100g
-    container:
-      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
+  rpm:
+    name: rpm-linux-x86_64-glibc2.17
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: Checkout source
-        shell: bash
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download the previously built binary and obshell
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: binary-linux-x86_64-glibc2.17
+          run-id: 43170742983
+          github-token: ${{ github.token }}
+          path: input
+      - name: Install RPM packaging tools
+        run: sudo apt-get update -qq && sudo apt-get install -y rpm binutils debugedit elfutils file
+      - name: Verify the existing binary and build RPMs
         run: |
-          set -euo pipefail
-          KEY_FILE="/obshared/seekdb/id_rsa"
-          KNOWN_HOSTS="/obshared/seekdb/known_hosts"
-          if [[ ! -r "$KEY_FILE" ]]; then
-            echo "GitHub checkout private key is unavailable: $KEY_FILE" >&2
-            exit 1
-          fi
-          if [[ ! -r "$KNOWN_HOSTS" ]]; then
-            echo "GitHub known_hosts file is unavailable: $KNOWN_HOSTS" >&2
-            exit 1
-          fi
-          export GIT_SSH_COMMAND="/usr/bin/ssh -i $KEY_FILE -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=$KNOWN_HOSTS"
-          REMOTE_URL="ssh://git@ssh.github.com:443/${GITHUB_REPOSITORY}.git"
-          echo "Using runner-mounted SSH key for GitHub checkout"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import tempfile
 
-          git init "$GITHUB_WORKSPACE"
-          git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
-          git -C "$GITHUB_WORKSPACE" remote add origin "$REMOTE_URL"
-          for attempt in 1 2 3; do
-            if git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
-              break
-            fi
-            if [[ "$attempt" -eq 3 ]]; then
-              echo "checkout fetch failed after $attempt attempts" >&2
-              exit 1
-            fi
-            delay=$((attempt * 5))
-            echo "checkout fetch attempt $attempt failed; retrying in ${delay}s" >&2
-            sleep "$delay"
-          done
-          git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
-          git -C "$GITHUB_WORKSPACE" clean -ffdx
+          sys.path.insert(0, str(Path('package').resolve()))
+          import binary
 
-      - name: Test local development tools
-        shell: bash
-        run: python3 -m unittest discover -s tools/deploy/tests -v
-
-      # Source 与 run_attempt 无关：下游 job 重跑时直接复用同一提交的快照。
-      - name: Persist source snapshot to NFS
-        shell: bash
-        run: |
-          set -euo pipefail
-          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
-          DEST_DIR="$RUN_ROOT/setup"
-          SOURCE_ARCHIVE="${RUNNER_TEMP:-/tmp}/seekdb-ci-source.tar.zst"
-          tar -C "$GITHUB_WORKSPACE" --exclude='./.git' -cf - . \
-            | zstd -f -q -T0 -o "$SOURCE_ARCHIVE"
-          mkdir -p "$DEST_DIR"
-          cp -f "$SOURCE_ARCHIVE" "$DEST_DIR/seekdb-ci-source.tar.zst"
-          echo "source snapshot saved to $DEST_DIR/seekdb-ci-source.tar.zst"
-
-      - name: Configure shared cache paths
-        shell: bash
-        run: |
-          set -euo pipefail
-          CACHE_ROOT="$SEEKDB_CACHE_NFS_ROOT/shared"
-          RUST_CONFIG=$(sha256sum rust-toolchain.toml | cut -d ' ' -f 1)
-          mkdir -p "$CACHE_ROOT/deps" "$CACHE_ROOT/bazel" "$CACHE_ROOT/cargo" "$CACHE_ROOT/rustup/$RUST_CONFIG"
-          {
-            echo "DEP_CACHE_DIR=$CACHE_ROOT/deps"
-            echo "BAZEL_DISK_CACHE=$CACHE_ROOT/bazel"
-            echo "CARGO_HOME=$CACHE_ROOT/cargo"
-            echo "RUSTUP_HOME=$CACHE_ROOT/rustup/$RUST_CONFIG"
-          } >> "$GITHUB_ENV"
-          echo "$CACHE_ROOT/cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Compile
-        id: compile
-        shell: bash
-        run: |
-          chmod +x .github/script/seekdb/compile.sh
-          export GITHUB_RUN_ID="${{ github.run_id }}"
-          export SEEKDB_TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}"
-          export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
-          .github/script/seekdb/compile.sh
-
-      - name: Prepare mysqltest runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          SEEKDB_BINARY="${SEEKDB_BINARY_PATH:?}"
-          if [[ ! -x "$SEEKDB_BINARY" ]]; then
-            echo "seekdb missing or not executable: $SEEKDB_BINARY"
-            exit 1
-          fi
-          CLIENT_ROOT="deps/3rd/u01/obclient"
-          if [[ ! -x "$CLIENT_ROOT/bin/obclient" || ! -x "$CLIENT_ROOT/bin/mysqltest" ]]; then
-            echo "obclient or mysqltest missing under $CLIENT_ROOT/bin"
-            exit 1
-          fi
-          RUNTIME_DIR="${RUNNER_TEMP:-/tmp}/seekdb-mysqltest-runtime-${GITHUB_RUN_ID}"
-          mkdir -p "$RUNTIME_DIR/obclient"
-          cp -L -f "$SEEKDB_BINARY" "$RUNTIME_DIR/seekdb"
-          cp -a "$CLIENT_ROOT/." "$RUNTIME_DIR/obclient/"
-          tar -C "$RUNTIME_DIR" -cf - seekdb obclient | zstd -f -q -T0 -o seekdb-mysqltest-runtime.tar.zst
-          echo "runtime size: $(stat -c%s seekdb-mysqltest-runtime.tar.zst 2>/dev/null || stat -f%z seekdb-mysqltest-runtime.tar.zst 2>/dev/null) bytes"
-      # Re-running failed jobs can skip setup, so the runtime path excludes run_attempt.
-      - name: Persist mysqltest runtime to NFS
-        shell: bash
-        run: |
-          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
-          DEST_DIR="$RUN_ROOT/setup"
-          mkdir -p "$DEST_DIR"
-          cp -f seekdb-mysqltest-runtime.tar.zst "$DEST_DIR/"
-          echo "mysqltest runtime saved to $DEST_DIR/seekdb-mysqltest-runtime.tar.zst"
-  seekdb-mysqltest:
-    name: mysqltest-slice-${{ matrix.slice }}
-    needs: seekdb-setup
-    runs-on: arc-runner-k8s-ci-org-4c8g
-    container:
-      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
-    strategy:
-      fail-fast: false
-      matrix:
-        slice: [0, 1, 2, 3]
-    steps:
-      - name: Restore source snapshot (from NFS)
-        shell: bash
-        run: |
-          set -euo pipefail
-          SOURCE_ARCHIVE="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/setup/seekdb-ci-source.tar.zst"
-          if [[ ! -f "$SOURCE_ARCHIVE" ]]; then
-            echo "source snapshot not found: $SOURCE_ARCHIVE"
-            exit 1
-          fi
-          mkdir -p "$GITHUB_WORKSPACE"
-          zstd -d -q -c "$SOURCE_ARCHIVE" | tar -xf - -C "$GITHUB_WORKSPACE"
-
-      - name: Place mysqltest runtime (from NFS)
-        shell: bash
-        run: |
-          set -eo pipefail
-          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
-          RUNTIME_ARCHIVE="$RUN_ROOT/setup/seekdb-mysqltest-runtime.tar.zst"
-          if [[ ! -f "$RUNTIME_ARCHIVE" ]]; then
-            echo "mysqltest runtime not found: $RUNTIME_ARCHIVE"
-            exit 1
-          fi
-          mkdir -p .seekdb_runtime
-          zstd -d -q -c "$RUNTIME_ARCHIVE" | tar -xf - -C .seekdb_runtime
-          test -x .seekdb_runtime/seekdb
-          test -x .seekdb_runtime/obclient/bin/obclient
-          test -x .seekdb_runtime/obclient/bin/mysqltest
-      - name: Run mysqltest slice
-        shell: bash
-        run: |
-          chmod +x .github/script/seekdb/mysqltest_slice.sh
-          export GITHUB_RUN_ID="${{ github.run_id }}"
-          export SEEKDB_TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
-          export SLICE_IDX=${{ matrix.slice }} SLICES="${{ env.MYSQLTEST_SLICES }}"
-          export SEEKDB_RUNTIME_DIR="$GITHUB_WORKSPACE/.seekdb_runtime"
-          export SEEKDB_BINARY="$SEEKDB_RUNTIME_DIR/seekdb"
-          mkdir -p "$SEEKDB_TASK_DIR"
-          .github/script/seekdb/mysqltest_slice.sh
-
-      - name: Persist slice result to NFS
-        if: always()
-        shell: bash
-        run: |
-          TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
-          DEST_DIR="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}"
-          mkdir -p "$DEST_DIR"
-          if [[ -f "$TASK_DIR/seekdb_result.json" ]]; then
-            cp -f "$TASK_DIR/seekdb_result.json" "$DEST_DIR/"
-          else
-            echo "skip copying slice result: seekdb_result.json not found"
-          fi
-          if [[ -d "$TASK_DIR/failures" ]]; then
-            mkdir -p "$DEST_DIR/failures"
-            cp -a "$TASK_DIR/failures/." "$DEST_DIR/failures/"
-          fi
-        continue-on-error: true
-
-      - name: Job summary (logs hint)
-        if: always()
-        shell: bash
-        run: |
-          TASK_DIR="$GITHUB_WORKSPACE/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
-          if [[ -d "$TASK_DIR/failures" ]]; then
-            echo "### Slice ${{ matrix.slice }} failure diagnostics saved" >> "$GITHUB_STEP_SUMMARY"
-            echo "Saved under \`${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/slices/slice_${{ matrix.slice }}/failures/\`." >> "$GITHUB_STEP_SUMMARY"
-          fi
-  seekdb-collect:
-    # 仅在 4 个 mysqltest slice 都跑完（成功或失败）时执行；若 mysqltest 被 skip 则不跑
-    if: ${{ always() && needs.seekdb-mysqltest.result != 'skipped' }}
-    name: collect
-    needs: seekdb-mysqltest
-    runs-on: arc-runner-k8s-ci-org-4c8g
-    container:
-      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
-    steps:
-      - name: Restore source snapshot (from NFS)
-        shell: bash
-        run: |
-          set -euo pipefail
-          SOURCE_ARCHIVE="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/setup/seekdb-ci-source.tar.zst"
-          if [[ ! -f "$SOURCE_ARCHIVE" ]]; then
-            echo "source snapshot not found: $SOURCE_ARCHIVE"
-            exit 1
-          fi
-          mkdir -p "$GITHUB_WORKSPACE"
-          zstd -d -q -c "$SOURCE_ARCHIVE" | tar -xf - -C "$GITHUB_WORKSPACE"
-
-      - name: Collect slice results from NFS
-        shell: bash
-        run: |
-          RUN_ROOT="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}"
-          ATT="${{ github.run_attempt }}"
-          SLICES="${{ env.MYSQLTEST_SLICES }}"
-          mkdir -p slice_results
-          for (( slice=0; slice<SLICES; slice++ )); do
-            SOURCE_RESULT=""
-            SOURCE_ATTEMPT=""
-            for (( attempt=ATT; attempt>=1; attempt-- )); do
-              CANDIDATE="$RUN_ROOT/attempt-$attempt/slices/slice_$slice/seekdb_result.json"
-              if [[ -f "$CANDIDATE" ]]; then
-                SOURCE_RESULT="$CANDIDATE"
-                SOURCE_ATTEMPT="$attempt"
-                break
-              fi
-            done
-            if [[ -n "$SOURCE_RESULT" ]]; then
-              mkdir -p "slice_results/slice_$slice"
-              cp -f "$SOURCE_RESULT" "slice_results/slice_$slice/seekdb_result.json"
-              echo "slice $slice result loaded from attempt-$SOURCE_ATTEMPT"
-            else
-              echo "slice $slice result not found under $RUN_ROOT/attempt-*"
-            fi
-          done
-      - name: Merge results and persist
-        shell: bash
-        run: |
-          set +e
-          python3 tools/deploy/mysqltest.py merge \
-            --results-dir slice_results \
-            --slice-count "${{ env.MYSQLTEST_SLICES }}" \
-            --run-id "${{ github.run_id }}" \
-            --output seekdb_result.json
-          MERGE_RET=$?
-          set -e
-          DEST_DIR="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/collect"
-          mkdir -p "$DEST_DIR"
-          cp -f seekdb_result.json "$DEST_DIR/"
-          echo "seekdb_result.json saved to $DEST_DIR/seekdb_result.json"
-          exit "$MERGE_RET"
+          archives = list(Path('input').glob('seekdb-binary-*.tar.gz'))
+          if len(archives) != 1:
+              raise ValueError('expected one binary archive from the previous run')
+          output = Path('dist')
+          output.mkdir()
+          with tempfile.TemporaryDirectory(prefix='rpm-repack-') as temporary:
+              work = Path(temporary)
+              bundle, manifest = binary.load(archives[0].resolve(), work / 'binary', '1.4.0.0')
+              if manifest['source_commit'] != '22f678b6e11ab278a19078ef0dc89d4450cc711f':
+                  raise ValueError('unexpected binary source commit')
+              target = manifest['platform']
+              if (target['os'], target['arch'], target['glibc']) != ('linux', 'x86_64', '2.17'):
+                  raise ValueError('unexpected binary platform')
+              subprocess.run(['tar', '-xzf', 'input/obshell.tar.gz', '-C', str(work), '--', 'obshell'], check=True)
+              subprocess.run([sys.executable, 'package/package.py', 'rpm', '--version', '1.4.0.0',
+                              '--release', '1', '--binary-package', str(bundle),
+                              '--obshell-bin', str(work / 'obshell'), '--output', str(output.resolve())], check=True)
+          packages = sorted(output.glob('*.rpm'))
+          if len(packages) != 2 or any(path.name.startswith('seekdb-libs-') for path in packages):
+              raise ValueError('expected only seekdb and seekdb-debuginfo RPMs')
+          main = next(output.glob('seekdb-1.4.0.0-1*.rpm'))
+          requires = subprocess.check_output(['rpm', '-qp', '--requires', str(main)], text=True)
+          files = subprocess.check_output(['rpm', '-qpl', str(main)], text=True)
+          if not {'libaio', 'systemd'} <= set(requires.splitlines()) or 'seekdb-libs' in requires:
+              raise ValueError('RPM dependencies do not match the released package')
+          if 'libaio.so' in files:
+              raise ValueError('RPM must use the system libaio')
+          payload = subprocess.check_output(['rpm', '-qp', '--qf', '%{PAYLOADCOMPRESSOR}/%{PAYLOADFLAGS}', str(main)], text=True)
+          if payload != 'xz/2':
+              raise ValueError('expected the released RPM compression format')
+          (output / 'requires.txt').write_text(requires)
+          (output / 'packaging-info.json').write_text(json.dumps({
+              'source_run_id': 43170742983,
+              'source_artifact_id': 13924890537,
+              'binary_source_commit': manifest['source_commit'],
+              'binary_built_at': manifest['built_at'],
+              'binary_sha256': manifest['files']['bin/seekdb']['sha256'],
+              'packaging_commit': os.environ['GITHUB_SHA'],
+              'platform': target,
+          }, indent=2) + '\n')
+          for path in packages:
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              path.with_name(path.name + '.sha256').write_text(digest + '  ' + path.name + '\n')
+              print(path.name, path.stat().st_size, digest)
+          print(requires)
+          PY
+      - name: Upload repackaged RPMs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rpm-linux-x86_64-glibc2.17-repack
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
