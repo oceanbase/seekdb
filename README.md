@@ -430,3 +430,11 @@ seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same 
 本仓库为本队参加 OceanBase seekDB 2026 挑战赛的基础实践题交付分支。
 基础实践题（部署 / Fork / PR）的完整交付说明与实测证据见
 [`competition/basic-practice/README.md`](competition/basic-practice/README.md)。
+
+---
+
+## 本队验证行
+
+OB-P:qNrgUk1djGbh_A5TgfXG9g
+
+该验证行已单独成行写入 PR 的正文描述，用于验证 Fork 仓库与 PR 的队伍归属。
