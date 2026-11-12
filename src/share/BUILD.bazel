@@ -391,6 +391,7 @@ cc_library(
     name = "local_io_config",
     srcs = ["local_io_config.cpp"],
     hdrs = ["local_io_config.h"],
+    deps = ["//src/oblib:oblib_foundation"],
     visibility = ["//src:__subpackages__"],
 )
 
