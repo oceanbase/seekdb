@@ -18,6 +18,7 @@
 #include "query/das/ob_fts_eval_node_access.h"
 #include "sql/engine/ob_exec_context.h"
 #include "ob_das_text_retrieval_eval_node.h"
+#include "rust/sql_parser.h"
 
 namespace oceanbase
 {
@@ -96,162 +97,83 @@ int ObFtsEvalNode::fts_boolean_eval(ObFtsEvalNode *node, const common::ObIArray<
 }
 
 int ObFtsEvalNode::fts_boolean_node_create(
-    ObFtsEvalNode *&parant_node,
-    const FtsNode *cur_node,
+    ObFtsEvalNode *&parent_node,
+    const peg::SearchNode &search_node,
     const ObCollationType &cs_type,
     ObIAllocator &allocator,
     ObArray<ObString> &tokens,
     hash::ObHashMap<ObString, int32_t> &tokens_map,
-    bool &has_duplicate_tokens) // TODO: tokens maybe repeat
+    bool &has_duplicate_tokens)
 {
   int ret = OB_SUCCESS;
   ObFtsEvalNode *node = nullptr;
-  if (cur_node == nullptr) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected fts compute node");
-  } else if (parant_node != nullptr) {
-    FtsNode *head = cur_node->list.head;
-    FtsNode *tail = cur_node->list.tail;
-    if (FTS_NODE_OPER != head->type) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected fts compute flag", K(head->type));
-    } else {
-      FtsComputeFlag flag;
-      switch (head->oper)
-      {
-      case FTS_IGNORE:
-        flag = NOT;
-        break;
-      case FTS_EXIST:
-        flag = AND;
-        break;
-      default:
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected fts compute flag", K(head->oper));
-        break;
-      }
-      if (OB_FAIL(parant_node->child_flags_.push_back(flag))) {
-      } else if (OB_FAIL(fts_boolean_node_create(node, tail, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-      } else if (OB_FAIL(parant_node->child_nodes_.push_back(node))) {
-      } else {
-        node = nullptr;
-      }
-    }
-  } else if (FTS_NODE_SUBEXP_LIST == cur_node->type || FTS_NODE_LIST == cur_node->type) {
-    void *buf = nullptr;
-    ObFtsEvalNode *re_node = nullptr;
-    if (OB_ISNULL(buf = allocator.alloc(sizeof(ObFtsEvalNode)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      re_node = new(buf) ObFtsEvalNode();
-      re_node->leaf_node_ = false;
-      re_node->parant_node_ = nullptr;
-    }
-    FtsNode *head = cur_node->list.head;
-    FtsNode *tail = cur_node->list.tail;
-    FtsNode *feak_head = static_cast<FtsNode *>(allocator.alloc(sizeof(FtsNode)));
-    feak_head->next = head;
-    if (OB_SUCC(ret) && (OB_ISNULL(head) || OB_ISNULL(tail))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected fts compute node");
-    }
-    while (OB_SUCC(ret) && feak_head != tail) {
-      feak_head = feak_head->next;
-      if (FTS_NODE_TERM == feak_head->type) {
-        if (OB_FAIL(re_node->child_flags_.push_back(NO_OPERATOR))) {
-        } else if (OB_FAIL(fts_boolean_node_create(node, feak_head, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-        } else if (OB_FAIL(re_node->child_nodes_.push_back(node))) {
-        } else {
-          node = nullptr;
-        }
-      } else if (FTS_NODE_OPER == feak_head->type) {
-        FtsComputeFlag flag;
-        switch (feak_head->oper)
-        {
-        case FTS_IGNORE:
-          flag = NOT;
-          break;
-        case FTS_EXIST:
-          flag = AND;
-          break;
-        default:
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected fts compute flag", K(cur_node->oper));
-          break;
-        }
-        if (OB_FAIL(re_node->child_flags_.push_back(flag))) {
-        } else {
-          feak_head = feak_head->next;
-          if (OB_SUCC(ret) && feak_head != tail) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected fts compute flag", K(feak_head->type));
-          } else if (FTS_NODE_LIST == feak_head->type) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected fts compute node type", K(feak_head->type));
-          } else if (FTS_NODE_TERM == feak_head->type || FTS_NODE_SUBEXP_LIST == feak_head->type) {
-            if (OB_FAIL(fts_boolean_node_create(node, feak_head, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-            } else if (OB_FAIL(re_node->child_nodes_.push_back(node))) {
-            } else {
-              node = nullptr;
-            }
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected fts compute flag", K(feak_head->type));
-          }
-        }
-      } else if (FTS_NODE_SUBEXP_LIST == feak_head->type || FTS_NODE_SUBEXP_LIST == cur_node->type) {
-        if (OB_FAIL(fts_boolean_node_create(node, feak_head, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-        } else if (OB_FAIL(re_node->child_flags_.push_back(OR))) {
-        } else if (OB_FAIL(re_node->child_nodes_.push_back(node))) {
-        } else {
-          node = nullptr;
-        }
-      } else if (FTS_NODE_LIST == feak_head->type) {
-        if (OB_FAIL(fts_boolean_node_create(re_node, feak_head, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-        } else {
-          node = nullptr;
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected fts compute flag", K(feak_head->type));
-      }
-    }
-    parant_node = re_node;
-  } else if (cur_node->type == FTS_NODE_TERM) {
-    void *buf = nullptr;
-    if (OB_ISNULL(buf = allocator.alloc(sizeof(ObFtsEvalNode)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      node = new(buf) ObFtsEvalNode();
-    }
-    ObString tmp_string(cur_node->term.len_, cur_node->term.str_);
-    ObString token_string;
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(common::ObCharset::charset_convert(allocator, tmp_string, ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, cs_type, token_string, common::ObCharset::CONVERT_FLAG::COPY_STRING_ON_SAME_CHARSET))) {
-    } else {
-      int32_t token_idx = 0;
-      int32_t map_size = tokens_map.size();
-      if (OB_FAIL(tokens_map.get_refactored(token_string, token_idx))) {
-        if (OB_HASH_NOT_EXIST != ret) {
-        } else if (OB_FAIL(tokens_map.set_refactored(token_string, map_size, 1/*overwrite*/))) {
-        } else if (OB_FAIL(tokens.push_back(token_string))) {
-        } else {
-          token_idx = map_size;
-          ret = OB_SUCCESS;
-        }
-      } else {
-        has_duplicate_tokens = true;
-      }
-      node->postion_ = token_idx;
-      node->leaf_node_ = true;
-      parant_node = node;
-    }
+  void *buf = nullptr;
+  if (OB_ISNULL(buf = allocator.alloc(sizeof(ObFtsEvalNode)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected fts compute flag", K(cur_node->type));
+    node = new(buf) ObFtsEvalNode();
+    node->parant_node_ = nullptr;
+    if (search_node.is_term()) {
+      ObString token_string;
+      const auto text = search_node.text();
+      const ObString term(text.size(), text.data());
+      if (OB_FAIL(common::ObCharset::charset_convert(
+          allocator, term, ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, cs_type, token_string,
+          common::ObCharset::CONVERT_FLAG::COPY_STRING_ON_SAME_CHARSET))) {
+      } else {
+        int32_t token_idx = 0;
+        const int32_t map_size = tokens_map.size();
+        if (OB_FAIL(tokens_map.get_refactored(token_string, token_idx))) {
+          if (OB_HASH_NOT_EXIST != ret) {
+          } else if (OB_FAIL(tokens_map.set_refactored(token_string, map_size, 1/*overwrite*/))) {
+          } else if (OB_FAIL(tokens.push_back(token_string))) {
+          } else {
+            token_idx = map_size;
+            ret = OB_SUCCESS;
+          }
+        } else {
+          has_duplicate_tokens = true;
+        }
+        node->postion_ = token_idx;
+        node->leaf_node_ = true;
+      }
+    } else {
+      for (const auto &child : search_node.children()) {
+        if (OB_FAIL(ret)) {
+          break;
+        }
+        FtsComputeFlag flag = NO_OPERATOR;
+        switch (child.occurrence()) {
+          case peg::SearchOccurrence::Required: flag = AND; break;
+          case peg::SearchOccurrence::Excluded: flag = NOT; break;
+          case peg::SearchOccurrence::Alternative: flag = OR; break;
+          case peg::SearchOccurrence::Optional: break;
+          default:
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected search occurrence");
+            break;
+        }
+        ObFtsEvalNode *child_node = nullptr;
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(fts_boolean_node_create(
+            child_node, child, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
+        } else if (OB_FAIL(node->child_flags_.push_back(flag))) {
+        } else if (OB_FAIL(node->child_nodes_.push_back(child_node))) {
+        }
+        if (OB_FAIL(ret) && OB_NOT_NULL(child_node)) {
+          child_node->release();
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    parent_node = node;
+  } else if (OB_NOT_NULL(node)) {
+    node->release();
   }
   return ret;
 }
+
 } // namespace sql
 
 namespace query

@@ -16,7 +16,7 @@
 
 #ifndef _OB_SELECT_RESOLVER_H
 #define _OB_SELECT_RESOLVER_H
-#include "sql/parser/ob_parser.h"
+#include "sql/syntax.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/resolver/dml/ob_standard_group_checker.h"
@@ -29,6 +29,8 @@ namespace oceanbase
 {
 namespace sql
 {
+struct ObExternalFileFormat;
+
 // Provide an interface class for parsing various subqueries, including where subqueries, union subqueries, view subqueries, generated table subqueries
 // The purpose of this is to hide some details of subquery parsing, without passing the entire dml resolver structure to the subquery parsing function
 // Avoid seeing too many properties during the call, reduce coupling
@@ -37,7 +39,7 @@ class ObChildStmtResolver
 public:
   ObChildStmtResolver()
     : parent_aggr_level_(-1) {}
-  virtual int resolve_child_stmt(const ParseNode &parse_tree) = 0;
+  virtual int resolve_child_stmt(const peg::Node &parse_tree) = 0;
   virtual int add_parent_cte_table_item(TableItem *table_item) = 0;
   virtual ObSelectStmt *get_child_stmt() = 0;
   void set_parent_aggr_level(int64_t parent_aggr_level) { parent_aggr_level_ = parent_aggr_level; }
@@ -53,11 +55,11 @@ public:
   explicit ObSelectResolver(ObResolverParams &params);
   virtual ~ObSelectResolver();
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
   ObSelectStmt *get_select_stmt();
   void set_calc_found_rows(bool found_rows) { has_calc_found_rows_ = found_rows; }
   void set_has_top_limit(bool has_top_limit) {has_top_limit_ = has_top_limit; }
-  virtual int resolve_child_stmt(const ParseNode &parse_tree)
+  virtual int resolve_child_stmt(const peg::Node &parse_tree)
   { return SMART_CALL(resolve(parse_tree)); }
   virtual ObSelectStmt *get_child_stmt() { return get_select_stmt(); }
   virtual bool is_select_resolver() const { return true; }
@@ -101,76 +103,57 @@ public:
                K_(has_resolved_field_list));
 
 protected:
-  int resolve_set_query(const ParseNode &parse_node);
-  int do_resolve_set_query_in_recursive_cte(const ParseNode &parse_tree);
-  int do_resolve_set_query_in_normal(const ParseNode &parse_tree);
+  int resolve_set_query(const peg::Node &parse_node);
+  int do_resolve_set_query_in_recursive_cte(const peg::Node &parse_tree);
+  int do_resolve_set_query_in_normal(const peg::Node &parse_tree);
   int resolve_set_query_hint();
-  virtual int do_resolve_set_query(const ParseNode &parse_tree,
+  virtual int do_resolve_set_query(const peg::Node &parse_tree,
                                    ObSelectStmt *&child_stmt,
                                    const bool is_left_child = false);
-  int set_stmt_set_type(ObSelectStmt *select_stmt, ParseNode *set_node);
+  int set_stmt_set_type(ObSelectStmt *select_stmt, peg::SetOperator operation);
   int check_recursive_cte_limited();
-  int resolve_normal_query(const ParseNode &parse_node);
-  virtual int check_special_join_table(const TableItem &join_table, bool is_left_child, ObItemType join_type) override;
+  int resolve_normal_query(const peg::Node &parse_node);
+  virtual int check_special_join_table(const TableItem &join_table, bool is_left_child, peg::JoinKind join_type) override;
   int add_parent_cte_table_item(TableItem *table_item);
-  int resolve_from_clause(const ParseNode *node);
-  int resolve_field_list(const ParseNode &node);
-  int prepare_get_child_at(const ParseNode* node, const int32_t idx);
-  int resolve_star(const ParseNode *node);
-  int resolve_group_clause(const ParseNode *node);
-  int resolve_groupby_node(const ParseNode *group_node,
-                           const ParseNode *group_sort_node,
+  int resolve_from_clause(rust::Slice<const peg::Node> sources);
+  int resolve_field_list(rust::Slice<const peg::Node> projections);
+  int resolve_star(const peg::Node &node);
+  int resolve_group_clause(const peg::Node *node);
+  int resolve_groupby_node(const peg::Node *group_node,
+                           const peg::Node *group_sort_node,
                            common::ObIArray<ObRawExpr*> &groupby_exprs,
                            common::ObIArray<ObRawExpr*> &rollup_exprs,
                            common::ObIArray<OrderItem> &order_items,
                            bool &has_explicit_dir,
                            bool is_groupby_expr,
                            int group_expr_level);
-  int resolve_group_by_sql_expr(const ParseNode *group_node,
-                                const ParseNode *group_sort_node,
+  int resolve_group_by_sql_expr(const peg::Node *group_node,
+                                const peg::Node *group_sort_node,
                                 common::ObIArray<ObRawExpr*> &groupby_exprs,
                                 common::ObIArray<ObRawExpr*> &rollup_exprs,
                                 common::ObIArray<OrderItem> &order_items,
                                 ObSelectStmt *select_stmt,
                                 bool &has_explicit_dir,
                                 bool is_groupby_expr);
-  int check_rollup_clause(const ParseNode *node, bool &has_rollup);
-  int resolve_group_by_element(const ParseNode *node,
-                               common::ObIArray<ObRawExpr*> &groupby_exprs,
-                               common::ObIArray<ObRawExpr*> &rollup_exprs,
-                               common::ObIArray<OrderItem> &order_items,
-                               bool &has_explicit_dir);
-  int resolve_group_by_list(const ParseNode *node,
+  int resolve_group_by_list(const peg::Node *node,
                             common::ObIArray<ObRawExpr*> &groupby_exprs,
                             common::ObIArray<ObRawExpr*> &rollup_exprs,
                             common::ObIArray<OrderItem> &order_items,
                             bool &has_explicit_dir);
-  int resolve_with_rollup_clause(const ParseNode *node,
-                                 common::ObIArray<ObRawExpr*> &groupby_exprs,
-                                 common::ObIArray<ObRawExpr*> &rollup_exprs,
-                                 common::ObIArray<OrderItem> &order_items,
-                                 bool &has_explicit_dir);
-  int resolve_for_update_clause(const ParseNode *node);
+  int resolve_for_update_clause(const peg::Node *node);
   int set_for_update_mysql(ObSelectStmt &stmt, const int64_t wait_us, bool skip_locked);
   int set_for_update_recursive(ObSelectStmt &stmt,
                                const int64_t wait_us,
                                bool skip_locked,
                                ObColumnRefRawExpr *col = NULL);
-  int resolve_for_update_clause_mysql(const ParseNode &node);
+  int resolve_for_update_clause_mysql(const peg::Node &node);
   int resolve_all_fake_cte_table_columns(const TableItem &table_item, common::ObIArray<ColumnItem> *column_items);
 
   int check_unsupported_operation_in_recursive_branch();
   int check_recursive_cte_usage(const ObSelectStmt &select_stmt);
 
   //resolve select into
-  int resolve_into_clause(const ParseNode *node);
-  int resolve_into_const_node(const ParseNode *node, ObObj &obj);
-  int resolve_into_field_node(const ParseNode *node, ObSelectIntoItem &into_item);
-  int resolve_into_line_node(const ParseNode *node, ObSelectIntoItem &into_item);
-  int resolve_into_variable_node(const ParseNode *node, ObSelectIntoItem &into_item);
-  int resolve_into_file_node(const ParseNode *node, ObSelectIntoItem &into_item);
-  int resolve_into_outfile_without_format(const ParseNode *node, ObSelectIntoItem &into_item);
-  int resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item);
+  int resolve_into_clause(const peg::Node &query);
   // resolve_star related functions
   int resolve_star_for_table_groups();
   int find_joined_table_group_for_table(const uint64_t table_id, int64_t &jt_idx);
@@ -186,10 +169,10 @@ protected:
   int recursive_find_coalesce_expr(const JoinedTable *&joined_table,
                                    const common::ObString &cname,
                                    ObRawExpr *&coalesce_expr);
-  int resolve_having_clause(const ParseNode *node);
-  int resolve_named_windows_clause(const ParseNode *node);
+  int resolve_having_clause(const peg::Node *node);
+  int resolve_named_windows_clause(rust::Slice<const peg::Node> windows);
   int check_correlated_column_ref(const ObSelectStmt &select_stmt, ObRawExpr *expr, bool &correalted_query);
-  virtual int resolve_order_item(const ParseNode &sort_node, OrderItem &order_item);
+  virtual int resolve_order_item(const peg::Node &sort_node, OrderItem &order_item);
   virtual int resolve_order_item_by_pos(int64_t pos, OrderItem &order_item, ObSelectStmt *select_stmt);
   virtual int resolve_aggr_exprs(ObRawExpr *&expr, common::ObIArray<ObAggFunRawExpr*> &aggr_exprs,
                                  const bool need_analyze = true);
@@ -213,7 +196,7 @@ public:
   int resolve_all_generated_table_columns(const TableItem &table_item, common::ObIArray<ColumnItem> *column_items);
 protected:
   virtual int set_select_item(SelectItem &select_item, bool is_auto_gen);
-  int resolve_query_options(const ParseNode *node);
+  int resolve_query_options(rust::Slice<const peg::Node> options);
   virtual int resolve_subquery_info(const common::ObIArray<ObSubQueryInfo> &subquery_info);
   virtual int resolve_column_ref_for_subquery(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
   int check_column_ref_in_group_by_or_field_list(const ObRawExpr *column_ref) const;
@@ -229,52 +212,22 @@ protected:
                                const ObItemType func_type,
                                common::ObIArray<ObRawExpr *> &arg_exp_arr,
                                common::ObIArray<ObRawExpr *> &partition_exp_arr);
-  int check_query_is_recursive_union(const ParseNode &parse_tree, bool &recursive_union);
-  int do_check_basic_table_in_cte_recursive_union(const ParseNode &parse_tree, bool &recursive_union);
-  int do_check_node_in_cte_recursive_union(const ParseNode* node, bool &recursive_union);
-  int resolve_fetch_clause(const ParseNode *node);
-  int resolve_check_option_clause(const ParseNode *node);
+  int check_query_is_recursive_union(const peg::Node &parse_tree, bool &recursive_union);
+  int do_check_node_in_cte_recursive_union(const peg::Node* node, bool &recursive_union);
   int check_set_child_stmt_pullup(const ObSelectStmt &child_stmt, bool &enable_pullup);
   int check_set_child_into_pullup(ObSelectStmt &select_stmt, ObSelectStmt &child_stmt, bool is_first_child);
 private:
-  int parameterize_fields_name(const ParseNode *project_node,
-                               const ObString &org_alias_name,
-                               ObString &paramed_name,
-                               common::ObIArray<int64_t> &questions_pos,
-                               common::ObIArray<int64_t> &params_idx,
-                               common::ObBitSet<> &neg_param_idx,
-                               bool &is_cp_str_value);
-  int recursive_parameterize_field(const ParseNode *root_node,
-                                   const ObString &org_expr_name,
-                                   const int32_t buf_len,
-                                   const int64_t expr_start_pos,
-                                   char *str_buf,
-                                   int64_t &str_pos,
-                                   int64_t &sql_pos,
-                                   common::ObIArray<int64_t> &questions_pos,
-                                   common::ObIArray<int64_t> &params_idx,
-                                   common::ObBitSet<> &neg_param_idx);
-  int resolve_paramed_const(const ParseNode &const_node,
-                            const common::ObIArray<ObPCParam *> &raw_params,
-                            const ObString &org_expr_name,
-                            const int32_t buf_len,
-                            const int64_t expr_start_pos,
-                            char *buf,
-                            int64_t &buf_pos,
-                            int64_t &expr_pos,
-                            common::ObIArray<int64_t> &questions_pos,
-                            common::ObIArray<int64_t> &params_idx,
-                            common::ObBitSet<> &neg_param_idx);
-  int resolve_not_paramed_const(const ParseNode &const_node,
-                                const common::ObIArray<ObPCParam *> &raw_params,
-                                const ObString &org_expr_name,
-                                const int32_t buf_len,
-                                const int64_t expr_start_pos,
-                                char *buf,
-                                int64_t &buf_pos,
-                                int64_t &expr_pos);
-  int get_refindex_from_named_windows(const ParseNode *ref_name_node,
-                                      const ParseNode *node,
+  int resolve_file_output(const peg::FileOutputDefinition &output, ObSelectIntoItem &into_item);
+  int resolve_output_literal(const peg::Node &node, common::ObObj &value);
+  int resolve_output_fields(rust::Slice<const peg::Node> fields, ObSelectIntoItem &into_item);
+  int resolve_output_file_options(rust::Slice<const peg::Node> options, ObSelectIntoItem &into_item);
+  int resolve_output_format(rust::Slice<const peg::Node> options, ObSelectIntoItem &into_item);
+  int resolve_output_format_option(const peg::Node &node, ObExternalFileFormat &format);
+  int resolve_output_format_string(const peg::Node &node, common::ObCharsetType charset,
+                                   common::ObString &value);
+
+  int get_refindex_from_named_windows(const peg::Node &reference,
+                                      rust::Slice<const peg::Node> windows,
                                       int64_t& ref_idx);
   int check_ntile_compatiable_with_mysql(ObWinFunRawExpr *win_expr);
   int check_ntile_validity(const ObRawExpr *expr,
@@ -284,8 +237,6 @@ private:
   int check_orderby_type_validity(ObWinFunRawExpr *win_expr);
   int check_duplicated_name_window(ObString &name,
                                    const ObIArray<ObString> &resolved_name_list);
-  int mock_to_named_windows(ObString &name,
-                            ParseNode *win_node);
   int can_find_group_column(ObRawExpr *&col_expr,
                             const common::ObIArray<ObRawExpr*> &exprs,
                             bool &can_find,
@@ -309,13 +260,13 @@ private:
   int check_aggr_in_select_scope(ObSelectStmt *select_stmt);
   int mark_aggr_in_select_scope(ObSelectStmt *select_stmt);
   
-  int try_resolve_values_table_from_union(const ParseNode &parse_node, bool &resolve_happened);
-  int check_union_to_values_table_valid(const ParseNode &parse_node,
+  int try_resolve_values_table_from_union(const peg::Node &parse_node, bool &resolve_happened);
+  int check_union_to_values_table_valid(const peg::Node &parse_node,
                                         const ObSelectStmt &select_stmt,
-                                        ObIArray<int64_t> &leaf_nodes,
+                                        ObIArray<const peg::Node *> &leaf_nodes,
                                         bool &is_valid);
-  int check_union_leaf_to_values_table_valid(const ParseNode &parse_node, bool &is_valid);
-  int resolve_values_table_from_union(const ObIArray<int64_t> &values_nodes,
+  int check_union_leaf_to_values_table_valid(const peg::Node &parse_node, bool &is_valid);
+  int resolve_values_table_from_union(const ObIArray<const peg::Node *> &leaf_nodes,
                                       ObValuesTableDef *&table_def);
 protected:
   // data members

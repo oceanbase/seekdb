@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/cast_type_descriptor.h"
 #include "sql/pl/ob_pl.h"
 #include "ob_expr_json_utils.h"
 #include "share/object/ob_obj_cast_util.h"
@@ -312,13 +313,12 @@ int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
                                       const ObLengthSemantics &length_semantics)
 {
   INIT_SUCC(ret);
-  ParseNode node;
-  node.value_ = value;
-  dest_type = static_cast<ObObjType>(node.int16_values_[0]);
+  CastTypeDescriptor type_descriptor(value);
+  dest_type = static_cast<ObObjType>(type_descriptor.type());
 
   if (ObFloatType == dest_type) {
     // boundaries already checked in calc result type
-    if (node.int16_values_[OB_NODE_CAST_N_PREC_IDX] > OB_MAX_FLOAT_PRECISION) {
+    if (type_descriptor.precision() > OB_MAX_FLOAT_PRECISION) {
       dest_type = ObDoubleType;
     }
   }
@@ -326,21 +326,21 @@ int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
   if (ObStringTC == dest_tc) {
     // parser will abort all negative number
     // if length < 0 means DEFAULT_STR_LENGTH or OUT_OF_STR_LEN.
-    accuracy.set_full_length(node.int32_values_[1], length_semantics);
+    accuracy.set_full_length(type_descriptor.length(), length_semantics);
   } else if (ObRawTC == dest_tc) {
-    accuracy.set_length(node.int32_values_[1]);
+    accuracy.set_length(type_descriptor.length());
   } else if(ObTextTC == dest_tc || ObJsonTC == dest_tc) {
-    accuracy.set_length(node.int32_values_[1] < 0 ?
-        ObAccuracy::DDL_DEFAULT_ACCURACY[dest_type].get_length() : node.int32_values_[1]);
+    accuracy.set_length(type_descriptor.length() < 0 ?
+        ObAccuracy::DDL_DEFAULT_ACCURACY[dest_type].get_length() : type_descriptor.length());
   } else {
     const ObAccuracy &def_acc =
       ObAccuracy::DDL_DEFAULT_ACCURACY2[0][dest_type];
-    if (ObNumberType == dest_type && 0 == node.int16_values_[2]) {
+    if (ObNumberType == dest_type && 0 == type_descriptor.precision()) {
       accuracy.set_precision(def_acc.get_precision());
     } else {
-      accuracy.set_precision(node.int16_values_[2]);
+      accuracy.set_precision(type_descriptor.precision());
     }
-    accuracy.set_scale(node.int16_values_[3]);
+    accuracy.set_scale(type_descriptor.scale());
     if (ObNumberType == dest_type
         && is_decimal_int_accuracy_valid(accuracy.get_precision(), accuracy.get_scale())) {
       bool enable_decimalint = false;

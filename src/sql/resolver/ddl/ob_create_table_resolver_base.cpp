@@ -36,36 +36,14 @@ ObCreateTableResolverBase::~ObCreateTableResolverBase()
 }
 
 int ObCreateTableResolverBase::resolve_partition_option(
-    ParseNode *node, ObTableSchema &table_schema, const bool is_partition_option_node_with_opt)
+    const peg::Node *definition, ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt_) || OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
-    SQL_RESV_LOG(WARN, "failed to build partition key info!", KR(ret), KP(session_info_));
-  } else {
-    if (NULL != node) {
-      ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
-      if (OB_FAIL(ret)) {
-      } else if (!is_partition_option_node_with_opt) {
-        if (OB_FAIL(resolve_partition_node(create_table_stmt, node, table_schema))) {
-        }
-      } else if (T_PARTITION_OPTION == node->type_) {
-        if (node->num_child_ < 1 || node->num_child_ > 2) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "node number is invalid.", KR(ret), K(node->num_child_));
-        } else if (NULL == node->children_[0]) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "partition node is null.", KR(ret));
-        } else {
-          ParseNode *partition_node = node->children_[0]; // ordinary partition node
-          if (OB_FAIL(resolve_partition_node(create_table_stmt, partition_node, table_schema))) {
-          }
-        }
-      } else {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN, "node type is invalid.", KR(ret), K(node->type_));
-      }
-    }
+    SQL_RESV_LOG(WARN, "failed to build partition key info", KR(ret), KP(session_info_));
+  } else if (definition != nullptr) {
+    ret = resolve_partition_node(static_cast<ObCreateTableStmt *>(stmt_), *definition, table_schema);
   }
   return ret;
 }
@@ -230,55 +208,29 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
 }
 
 
-int ObCreateTableResolverBase::resolve_table_organization(ParseNode *node)
+int ObCreateTableResolverBase::resolve_table_organization(rust::Slice<const peg::Node> options)
 {
   int ret = OB_SUCCESS;
-  // Get the table organization from the server runtime configuration.
-  {
-    rust::String organization = config::default_table_organization();
-    table_organization_ =
-      (0 == ObString::make_string("HEAP").case_compare(organization.c_str())) ?
-        ObTableOrganizationType::OB_HEAP_ORGANIZATION : ObTableOrganizationType::OB_INDEX_ORGANIZATION;
-  }
-
-  // get the table organization from the table options
-  if (OB_FAIL(ret)) {
-  } else if (NULL != node) {
-    ParseNode *option_node = NULL;
-    int32_t num = 0;
-    if (T_TABLE_OPTION_LIST != node->type_) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid parse node", KR(ret), K(node->type_), K(node->num_child_));
-    } else {
-      num = node->num_child_;
-    }
-
-    for (int64_t i = 0; OB_SUCC(ret) && i < num; ++i) {
-      if (OB_ISNULL(option_node = node->children_[i])) {
+  const rust::String organization = config::default_table_organization();
+  table_organization_ = ObString(organization.size(), organization.data()).case_compare("HEAP") == 0
+      ? ObTableOrganizationType::OB_HEAP_ORGANIZATION : ObTableOrganizationType::OB_INDEX_ORGANIZATION;
+  for (const auto &option : options) {
+    if (OB_FAIL(ret)) {
+      break;
+    } else if (option.kind() == peg::NodeKind::Organization) {
+      if (stmt_->get_stmt_type() == stmt::T_CREATE_TABLE) {
+        table_organization_ = peg::table_option_organization(option) == peg::TableOrganization::Heap
+            ? ObTableOrganizationType::OB_HEAP_ORGANIZATION : ObTableOrganizationType::OB_INDEX_ORGANIZATION;
+      } else if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify organization type in alter table query");
+      } else {
         ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "node is null", K(ret));
-      } else if (T_ORGANIZATION == option_node->type_) {
-        if (stmt_->get_stmt_type() == stmt::T_CREATE_TABLE) {
-          if (OB_ISNULL(option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-          } else {
-            if (T_ORGANIZATION_HEAP == option_node->children_[0]->type_) {
-              table_organization_ = ObTableOrganizationType::OB_HEAP_ORGANIZATION;
-            } else if (T_ORGANIZATION_INDEX == option_node->children_[0]->type_) {
-              table_organization_ = ObTableOrganizationType::OB_INDEX_ORGANIZATION;
-            }
-          }
-        } else if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify organization type in alter table query");
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-        }
       }
     }
   }
   return ret;
 }
+
 }//end namespace sql
 }//end namespace oceanbase

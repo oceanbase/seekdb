@@ -26,65 +26,35 @@ namespace oceanbase
 namespace sql
 {
 
-int ObAnonymousBlockResolver::resolve(const ParseNode &parse_tree)
+int ObAnonymousBlockResolver::resolve(const ParsedSql &syntax)
 {
   int ret = OB_SUCCESS;
-  ObAnonymousBlockStmt *stmt = NULL;
-  ParseNode *block_node = NULL;
-  void *params_buf = NULL;
-  if (OB_ISNULL(session_info_)
-      || OB_ISNULL(params_.param_list_)
-      || OB_ISNULL(allocator_)) {
+  ObAnonymousBlockStmt *stmt = nullptr;
+  void *params_buf = nullptr;
+  if (OB_ISNULL(session_info_) || OB_ISNULL(params_.param_list_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(stmt = create_stmt<ObAnonymousBlockStmt>())
              || OB_ISNULL(params_buf = allocator_->alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("create index stmt failed", K(ret));
-  } else{
-    ParamStore *param_store = new(params_buf)ParamStore( ObWrapperAllocator(*allocator_) );
-    stmt->set_params(param_store);
+  } else {
+    stmt->set_params(new(params_buf)ParamStore(ObWrapperAllocator(*allocator_)));
     stmt_ = stmt;
-  }
-  CK (OB_NOT_NULL(stmt));
-  if (OB_SUCC(ret)) {
+    stmt->set_prepare_protocol(params_.is_prepare_protocol_);
     if (params_.is_prepare_protocol_) {
-      stmt->set_prepare_protocol(true);
       stmt->set_stmt_id(params_.statement_id_);
-      stmt->set_sql(params_.cur_sql_);
-      if ((params_.is_prepare_stage_
-            || params_.is_mock_prepare_)
-          && OB_ISNULL(session_info_->get_pl_context())) {
-        CK (OB_LIKELY(T_SP_ANONYMOUS_BLOCK == parse_tree.type_));
-        CK (OB_NOT_NULL(block_node = parse_tree.children_[0]));
-        CK (OB_LIKELY(T_SP_BLOCK_CONTENT == block_node->type_
-                      || T_SP_LABELED_BLOCK == block_node->type_));
-        OZ (resolve_anonymous_block(*block_node, *stmt, true));
-        if (OB_SUCC(ret) && params_.is_mock_prepare_) {
-          OZ (add_param());
-        }
+      ObString sql;
+      OZ (ob_write_string(*allocator_, params_.cur_sql_, sql));
+      OX (stmt->set_sql(sql));
+      if ((params_.is_prepare_stage_ || params_.is_mock_prepare_)
+          && session_info_->get_pl_context() == nullptr) {
+        OZ (resolve_anonymous_block(syntax, *stmt, true));
+        if (OB_SUCC(ret) && params_.is_mock_prepare_) { OZ (add_param()); }
       } else {
-        if (params_.is_prepare_stage_) {
-          CK (OB_LIKELY(T_SP_ANONYMOUS_BLOCK == parse_tree.type_));
-          CK (OB_NOT_NULL(block_node = parse_tree.children_[0]));
-          CK (OB_LIKELY(T_SP_BLOCK_CONTENT == block_node->type_
-                        || T_SP_LABELED_BLOCK == block_node->type_));
-          OZ (resolve_anonymous_block(*block_node, *stmt, false));
-        }
+        if (params_.is_prepare_stage_) { OZ (resolve_anonymous_block(syntax, *stmt, false)); }
         OZ (add_param());
       }
-    } else if (OB_UNLIKELY(T_SP_ANONYMOUS_BLOCK != parse_tree.type_
-                           || OB_ISNULL(block_node = parse_tree.children_[0]))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (T_SP_BLOCK_CONTENT != block_node->type_
-               && T_SP_LABELED_BLOCK != block_node->type_) {
-      ret = OB_ERR_UNEXPECTED;
     } else {
-      CK (OB_LIKELY(T_SP_ANONYMOUS_BLOCK == parse_tree.type_));
-      CK (OB_NOT_NULL(block_node = parse_tree.children_[0]));
-      CK (OB_LIKELY(T_SP_BLOCK_CONTENT == block_node->type_
-                    || T_SP_LABELED_BLOCK == block_node->type_));
-      OX (stmt->set_prepare_protocol(false));
-      OX (stmt->set_body(block_node));
+      CK (syntax.statement() != nullptr);
       OZ (add_param());
     }
   }
@@ -92,7 +62,7 @@ int ObAnonymousBlockResolver::resolve(const ParseNode &parse_tree)
 }
 
 int ObAnonymousBlockResolver::resolve_anonymous_block(
-  ParseNode &block_node, ObAnonymousBlockStmt &stmt, bool resolve_inout_param)
+  const ParsedSql &syntax, ObAnonymousBlockStmt &stmt, bool resolve_inout_param)
 {
   int ret = OB_SUCCESS;
   HEAP_VAR(pl::ObPLFunctionAST, func_ast, *(params_.allocator_)) {
@@ -144,7 +114,7 @@ int ObAnonymousBlockResolver::resolve_anonymous_block(
           package_guard,
           p_param_list));
     OZ (resolver.init(func_ast));
-    OZ (resolver.resolve_root(&block_node, func_ast));
+    OZ (resolver.resolve_root(syntax, func_ast));
     for (int64_t i = 0; OB_SUCC(ret) && i < func_ast.get_dependency_table().count(); ++i) {
       OZ (stmt.add_global_dependency_table(func_ast.get_dependency_table().at(i)));
     }

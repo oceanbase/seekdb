@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 #include "rust/config.h"
+#include <vector>
 #include "ob_plan_cache.h"
 #include "share/ob_truncated_string.h"
 #include "sql/plan_cache/ob_plan_cache_callback.h"
@@ -379,8 +380,7 @@ int ObPlanCache::get_normalized_pattern_digest(const ObPlanCacheCtx &pc_ctx, uin
   if (pc_ctx.mode_ == PC_PS_MODE || pc_ctx.mode_ == PC_PL_MODE || pc_ctx.fp_result_.pc_key_.name_.empty()) {
     ObFastParserResult fp_result;
     ObSQLMode sql_mode = pc_ctx.sql_ctx_.session_info_->get_sql_mode();
-    ObCharsets4Parser charsets4parser = pc_ctx.sql_ctx_.session_info_->get_charsets4parser();
-    FPContext fp_ctx(charsets4parser);
+    FPContext fp_ctx;
     fp_ctx.enable_batched_multi_stmt_ = pc_ctx.sql_ctx_.handle_batched_multi_stmt();
     fp_ctx.sql_mode_ = sql_mode;
     if (OB_FAIL(ObSqlParameterization::fast_parser(pc_ctx.allocator_,
@@ -469,7 +469,7 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
             && !pc_ctx.sql_ctx_.session_info_->is_user_session();
         const bool is_write_enabled = share::server_is_write_enabled();
         const bool is_standby_control_stmt = !is_write_enabled
-            && ObSQLUtils::is_allowed_on_standby(pc_ctx.sql_traits_.stmt_type_);
+            && pc_ctx.sql_traits_.allowed_on_standby_;
         MEMCPY(pc_ctx.sql_ctx_.sql_id_,
                plan->stat_.sql_id_.ptr(),
                plan->stat_.sql_id_.length());
@@ -479,7 +479,7 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
         if (!is_internal_maintenance
             && !is_write_enabled
                    && !pc_ctx.sql_traits_.is_readonly_stmt_
-                   && !ObSQLUtils::is_allowed_on_standby(pc_ctx.sql_traits_.stmt_type_)) {
+                   && !pc_ctx.sql_traits_.allowed_on_standby_) {
           ret = OB_STANDBY_DATABASE_READ_ONLY;
           LOG_WARN("standby server is read only", KR(ret), K(pc_ctx.sql_traits_));
          } else if (!is_internal_maintenance
@@ -572,7 +572,6 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObSQLMode sql_mode = pc_ctx.sql_ctx_.session_info_->get_sql_mode();
-    ObCharsets4Parser charsets4parser = pc_ctx.sql_ctx_.session_info_->get_charsets4parser();
     // if exact mode is on, not needs to do fast parser
     bool enable_exact_mode = pc_ctx.sql_ctx_.session_info_->get_enable_exact_mode();
     fp_result.cache_params_ =
@@ -583,7 +582,7 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
     } else if (enable_exact_mode) {
       (void)fp_result.pc_key_.name_.assign_ptr(raw_sql.ptr(), raw_sql.length());
     } else {
-      FPContext fp_ctx(charsets4parser);
+      FPContext fp_ctx;
       fp_ctx.enable_batched_multi_stmt_ = pc_ctx.sql_ctx_.handle_batched_multi_stmt();
       fp_ctx.sql_mode_ = sql_mode;
       bool can_do_batch_insert = false;
@@ -633,87 +632,47 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
   return ret;
 }
 
-// For insert into t1 values(1,1),(2,2),(3,3); After parameterization,
-// the SQL will become insert into t1 values(?,?),(?,?),(?,?);
-// After inspection, it is found that insert multi-values ​​batch optimization can be done,
-// and the SQL is truncated to insert into t1 values(?,?); If the SQL does not hit the plan from plan_cache,
-// hard parsing is required, then insert into t1 values(?,?); Revert to insert into t1 values(1,1);
-// This function is to complete the parameter reduction in parameterless SQL,
-// so that the original SQL can be used as a parser later
-// replace into statement and insert_up statement are same
 int ObPlanCache::restore_param_to_truncated_sql(ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
-  char *buf = NULL;
-  int32_t pos = 0;
-  int64_t idx = 0;
   const ObIArray<ObPCParam *> *raw_params = nullptr;
-  int64_t buff_len = pc_ctx.raw_sql_.length();
-  int64_t ins_params_count = pc_ctx.insert_batch_opt_info_.insert_params_count_;
-  ObString &no_param_sql = pc_ctx.fp_result_.pc_key_.name_;
+  const ObString &sql = pc_ctx.fp_result_.pc_key_.name_;
+  std::vector<peg::RestoreParameter> parameters;
   if (pc_ctx.insert_batch_opt_info_.multi_raw_params_.empty()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(raw_params = pc_ctx.insert_batch_opt_info_.multi_raw_params_.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(buf = (char *)pc_ctx.allocator_.alloc(pc_ctx.raw_sql_.length()))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (raw_params->count() < ins_params_count) {
+  } else if (raw_params->count() < pc_ctx.insert_batch_opt_info_.insert_params_count_) {
     ret = OB_ERR_UNEXPECTED;
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < raw_params->count(); i++) {
-    ObPCParam *pc_param = nullptr;
-    if (OB_ISNULL(pc_param = raw_params->at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      int32_t len = (int32_t)pc_param->node_->pos_ - idx;
-      LOG_TRACE("print raw_params", K(i), K(buff_len), K(len), K(idx), K(pc_param->node_->pos_),
-          K(ObString(pc_param->node_->text_len_, pc_param->node_->raw_text_)));
-      if (len == 0) {
-        // insert into t1 values(2-1,2-2); becomes insert into t1 values(??,??); after parameterization
-        // So this scenario len == 0 is needed
-        if (pc_param->node_->text_len_ > buff_len - pos) {
-          ret = OB_BUF_NOT_ENOUGH;
-        } else {
-          MEMCPY(buf + pos, pc_param->node_->raw_text_, pc_param->node_->text_len_);
-          pos += (int32_t)pc_param->node_->text_len_;
-          idx = (int32_t)pc_param->node_->pos_ + 1;
-        }
-      } else if (len > 0) {
-        if (len > buff_len - pos) {
-          ret = OB_BUF_NOT_ENOUGH;
-        } else if (pc_param->node_->text_len_ > (buff_len - pos - len)) {
-          ret = OB_BUF_NOT_ENOUGH;
-        } else {
-          // copy sql text
-          // insert into t1 values(?,?);
-          // first times, it copy 'insert into t1 values('
-          MEMCPY(buf + pos, no_param_sql.ptr() + idx, len);
-          idx = (int32_t)pc_param->node_->pos_ + 1;
-          pos += len;
-          //copy raw param
-          MEMCPY(buf + pos, pc_param->node_->raw_text_, pc_param->node_->text_len_);
-          pos += (int32_t)pc_param->node_->text_len_;
+  } else {
+    parameters.reserve(raw_params->count());
+    for (int64_t i = 0; OB_SUCC(ret) && i < raw_params->count(); ++i) {
+      const ObPCParam *parameter = raw_params->at(i);
+      if (OB_ISNULL(parameter) || OB_ISNULL(parameter->literal_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        const ObString &source = parameter->literal_->source;
+        parameters.push_back({static_cast<size_t>(parameter->sql_position_), 0,
+            rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(source.ptr()), source.length())});
+      }
+    }
+    if (OB_SUCC(ret)) {
+      const auto restored = peg::restore_parameter_sql(
+          rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(sql.ptr()), sql.length()),
+          rust::Slice<const peg::RestoreParameter>(parameters.data(), parameters.size()), true);
+      if (restored.error != peg::ParameterError::None) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ret = ob_write_string(pc_ctx.allocator_,
+            ObString(restored.sql.size(), reinterpret_cast<const char *>(restored.sql.data())),
+            pc_ctx.insert_batch_opt_info_.new_reconstruct_sql_);
+        if (OB_SUCC(ret)) {
+          for (size_t i = 0; i < restored.parameters.size(); ++i) {
+            raw_params->at(i)->source_offset_ = restored.parameters[i].source_offset;
+          }
         }
       }
     }
-  }
-
-  if (OB_SUCCESS == ret) {
-    int32_t len = no_param_sql.length() - idx;
-    if (len > buff_len - pos) {
-      ret = OB_BUF_NOT_ENOUGH;
-    } else if (len > 0) {
-      MEMCPY(buf + pos, no_param_sql.ptr() + idx, len);
-      idx += len;
-      pos += len;
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    buf[pos] = ';';
-    pos++;
-    pc_ctx.insert_batch_opt_info_.new_reconstruct_sql_.assign_ptr(buf, pos);
   }
   return ret;
 }
@@ -752,7 +711,7 @@ int ObPlanCache::rebuild_raw_params(common::ObIAllocator &allocator,
     ObPCParam *pc_param = fp_result.raw_params_.at(i);
     if (OB_ISNULL(pc_param)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (FALSE_IT(pc_param->node_->pos_ = pc_param->node_->pos_ - sql_delta_length)) {
+    } else if (FALSE_IT(pc_param->sql_position_ = pc_param->sql_position_ - sql_delta_length)) {
       // For the parameters of the update part, pos_ needs to subtract the length of the truncated part
     } else if (OB_FAIL(update_raw_params.push_back(pc_param))) {
     }
@@ -827,14 +786,7 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
     int64_t ins_params_count = 0;
     int64_t upd_params_count = 0;
     int64_t delta_length = 0;
-    ObSQLMode sql_mode = pc_ctx.sql_ctx_.session_info_->get_sql_mode();
-    ObCharsets4Parser charsets4parser = pc_ctx.sql_ctx_.session_info_->get_charsets4parser();
-    FPContext fp_ctx(charsets4parser);
-    fp_ctx.enable_batched_multi_stmt_ = pc_ctx.sql_ctx_.handle_batched_multi_stmt();
-    fp_ctx.sql_mode_ = sql_mode;
-    ObFastParserMysql fp(allocator, fp_ctx);
-
-    if (OB_FAIL(fp.parser_insert_str(allocator,
+    if (OB_FAIL(ObFastParser::compress_insert(allocator,
                                      fp_result.values_token_pos_,
                                      fp_result.pc_key_.name_,
                                      first_truncated_sql,
@@ -842,7 +794,7 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
                                      ins_params_count,
                                      upd_params_count,
                                      delta_length,
-                                     batch_count))) {
+                                     batch_count, is_insert_values))) {
     } else if (!can_do_batch || ins_params_count <= 0) {
       can_do_batch = false;
       // Only the insert ... values ​​... statement will print this,after trying to do insert batch optimization failure
@@ -857,10 +809,6 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
       pc_ctx.insert_batch_opt_info_.update_params_count_ = upd_params_count;
       pc_ctx.insert_batch_opt_info_.sql_delta_length_ = delta_length;
       pc_ctx.is_batch_insert_opt_ = true;
-    }
-    // if batch_count >= 1, then sql is a insert into .. values ()...;
-    if (batch_count >= 1) {
-      is_insert_values = true;
     }
   }
 

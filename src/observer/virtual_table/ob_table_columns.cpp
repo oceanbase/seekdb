@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_table_columns.h"
 #include "observer/ob_server_runtime_access.h"
+#include "sql/syntax.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -27,66 +28,7 @@ namespace oceanbase
 namespace observer
 {
 
-#if defined(__ANDROID__)
-static bool has_mixed_string_array_literal(const ParseNode *node);
 
-static bool has_unnest_expression(const ParseNode *node)
-{
-  bool has_unnest = false;
-  if (OB_NOT_NULL(node)) {
-    if (T_UNNEST_EXPRESSION == node->type_) {
-      has_unnest = true;
-    }
-    for (int64_t i = 0; !has_unnest && i < node->num_child_; ++i) {
-      has_unnest = has_unnest_expression(node->children_[i]);
-    }
-  }
-  return has_unnest;
-}
-
-static void collect_array_literal_flags(const ParseNode *node,
-                                        bool &has_string,
-                                        bool &has_non_string_scalar,
-                                        bool &has_mixed)
-{
-  if (has_mixed || OB_ISNULL(node)) {
-  } else if (T_FUN_SYS_ARRAY == node->type_) {
-    has_mixed = has_mixed_string_array_literal(node);
-  } else if (T_VARCHAR == node->type_) {
-    has_string = true;
-  } else if (T_NULL == node->type_) {
-  } else if (node->num_child_ > 0) {
-    for (int64_t i = 0; !has_mixed && i < node->num_child_; ++i) {
-      collect_array_literal_flags(node->children_[i], has_string, has_non_string_scalar, has_mixed);
-    }
-  } else {
-    has_non_string_scalar = true;
-  }
-  if (has_string && has_non_string_scalar) {
-    has_mixed = true;
-  }
-}
-
-static bool has_mixed_string_array_literal(const ParseNode *node)
-{
-  bool has_mixed = false;
-  if (OB_NOT_NULL(node)) {
-    if (T_FUN_SYS_ARRAY == node->type_) {
-      bool has_string = false;
-      bool has_non_string_scalar = false;
-      for (int64_t i = 0; !has_mixed && i < node->num_child_; ++i) {
-        collect_array_literal_flags(node->children_[i], has_string, has_non_string_scalar, has_mixed);
-      }
-    }
-    for (int64_t i = 0; !has_mixed && i < node->num_child_; ++i) {
-      if (has_mixed_string_array_literal(node->children_[i])) {
-        has_mixed = true;
-      }
-    }
-  }
-  return has_mixed;
-}
-#endif
 
 ObTableColumns::ObTableColumns()
     : ObVirtualTableScannerIterator(),
@@ -1091,16 +1033,15 @@ int ObTableColumns::resolve_view_definition(
 #if defined(__ANDROID__)
     {
       ObString view_definition;
-      ParseResult view_parse_result;
-      ObParser view_parser(*allocator, session->get_sql_mode(), session->get_charsets4parser());
+      ParsedSql view_syntax;
+      ObParser view_parser(*allocator, session->get_sql_mode());
       if (OB_FAIL(ObSQLUtils::generate_view_definition_for_resolve(
                     *allocator,
                     session->get_local_collation_connection(),
                     table_schema.get_view_schema(),
                     view_definition))) {
-      } else if (OB_FAIL(view_parser.parse(view_definition, view_parse_result))) {
-      } else if (has_mixed_string_array_literal(view_parse_result.result_tree_)
-                 || has_unnest_expression(view_parse_result.result_tree_)) {
+      } else if (OB_FAIL(view_parser.parse(view_definition, view_syntax))) {
+      } else if (peg::query_has_mixed_string_array(*view_syntax.statement())) {
         ret = OB_ERR_VIEW_INVALID;
         if (throw_error) {
           LOG_USER_ERROR(OB_ERR_VIEW_INVALID, db_name.length(), db_name.ptr(),
@@ -1122,14 +1063,14 @@ int ObTableColumns::resolve_view_definition(
                                       table_name.length(),
                                       table_name.ptr()))) {
     } else {
-      ParseResult parse_result;
-      ObParser parser(*allocator, session->get_sql_mode(),
-                      session->get_charsets4parser());
-      if (OB_FAIL(parser.parse(select_sql.string(), parse_result))) {
+      ParsedSql syntax;
+      ObParser parser(*allocator, session->get_sql_mode());
+      if (OB_FAIL(parser.parse(select_sql.string(), syntax))) {
       } else {
         ObSchemaChecker schema_checker;
         ObResolverParams resolver_ctx;
         resolver_ctx.allocator_ = allocator;
+        resolver_ctx.syntax_ = &syntax;
         resolver_ctx.schema_checker_ = &schema_checker;
         resolver_ctx.session_info_ = const_cast<ObSQLSessionInfo*>(session);
         resolver_ctx.expr_factory_ = &expr_factory;
@@ -1143,7 +1084,7 @@ int ObTableColumns::resolve_view_definition(
           ret = OB_ERR_UNEXPECTED;
         } else {
           // set # of question marks
-          resolver_ctx.query_ctx_->set_questionmark_count(static_cast<int64_t> (parse_result.question_mark_ctx_.count_));
+          resolver_ctx.query_ctx_->set_questionmark_count(static_cast<int64_t> (syntax.metadata().question_mark_ctx_.count_));
           resolver_ctx.query_ctx_->sql_schema_guard_.set_schema_guard(schema_guard);
           uint64_t session_id = 0;
           if (session->get_session_type() != ObSQLSessionInfo::INNER_SESSION) {
@@ -1156,8 +1097,8 @@ int ObTableColumns::resolve_view_definition(
         }
         if (OB_SUCC(ret)) {
           ObSelectResolver select_resolver(resolver_ctx);
-          ParseNode *select_stmt_node = parse_result.result_tree_->children_[0];
-          if (OB_UNLIKELY(NULL == select_stmt_node || select_stmt_node->type_ != T_SELECT)) {
+          const peg::Node *select_stmt_node = syntax.statement();
+          if (OB_UNLIKELY(NULL == select_stmt_node || select_stmt_node->kind() != peg::NodeKind::Select)) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(select_resolver.resolve(*select_stmt_node))) {
             if (can_rewrite_error_code(ret)) {

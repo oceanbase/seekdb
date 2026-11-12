@@ -159,8 +159,6 @@ def initialize():
         import prepare
         simulator = os.environ["PACKAGE_APPLE_SDK"] == "iphonesimulator"
         prepare.prepare_rust("aarch64-apple-ios-sim" if simulator else "aarch64-apple-ios")
-        prepare.install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/native",
-                               None, "Darwin", "arm64", package_names=("bison-flex",))
         prepare.install_locked(ROOT / "deps.lock.json",
                                ROOT / "deps/prebuilt" / ("ios_simulator" if simulator else "ios"),
                                None, "iOSSimulator" if simulator else "iOSDevice", "arm64")

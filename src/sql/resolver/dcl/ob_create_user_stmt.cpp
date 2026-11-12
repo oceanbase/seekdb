@@ -25,7 +25,6 @@ using namespace oceanbase::sql;
 ObCreateUserStmt::ObCreateUserStmt(ObIAllocator *name_pool)
     : ObDDLStmt(name_pool, stmt::T_CREATE_USER),
       users_(),
-      masked_sql_(),
       if_not_exist_(false),
       max_connections_per_hour_(0),
       max_user_connections_(0)
@@ -35,7 +34,6 @@ ObCreateUserStmt::ObCreateUserStmt(ObIAllocator *name_pool)
 ObCreateUserStmt::ObCreateUserStmt()
     : ObDDLStmt(NULL, stmt::T_CREATE_USER),
       users_(),
-      masked_sql_(),
       if_not_exist_(false),
       max_connections_per_hour_(0),
       max_user_connections_(0)
@@ -85,7 +83,7 @@ int64_t ObCreateUserStmt::to_string(char *buf, const int64_t buf_len) const
   if (NULL != buf) {
     J_OBJ_START();
     J_KV(N_STMT_TYPE, ((int)stmt_type_),
-         "users_to_create", users_);
+         "user_count", (users_.count() >= 4 ? (users_.count() - 4) / 4 : 0));
     J_OBJ_END();
   }
   return pos;

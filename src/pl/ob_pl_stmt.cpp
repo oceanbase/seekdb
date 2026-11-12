@@ -3369,37 +3369,3 @@ int ObPLStmtFactory::allocate(ObPLStmtType type, const ObPLStmtBlock *block, ObP
 
 }
 }
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/*
- Parse a symbol from ObPLBlockNS and provide the index in the symbol table, if not found return OB_SUCCESS but the index returns OB_INVALID_INDEX;
- Encapsulated as a C interface for Parser to call
- */
-int lookup_pl_symbol(const void *pl_ns, const char *symbol, size_t len, int64_t *idx)
-{
- int ret = OB_SUCCESS;
- if (OB_ISNULL(pl_ns) || OB_ISNULL(symbol) || len <= 0 || OB_ISNULL(idx)) {
-   ret = OB_ERR_UNEXPECTED;
-   LOG_WARN("argument input is invalid");
- } else {
-   uint64_t parent_id = OB_INVALID_INDEX;
-   int64_t var_index = OB_INVALID_INDEX;
-   oceanbase::pl::ObPLExternalNS::ExternalType type = oceanbase::pl::ObPLExternalNS::INVALID_VAR;
-   oceanbase::pl::ObPLDataType pl_data_type;
-   ObString var_name(len, symbol);
-   const oceanbase::pl::ObPLBlockNS *ns = static_cast<const oceanbase::pl::ObPLBlockNS *>(pl_ns);
-   if (OB_FAIL(ns->resolve_symbol(var_name, type, pl_data_type, parent_id, var_index))) {
-   } else if (oceanbase::pl::ObPLExternalNS::LOCAL_VAR == type
-              && !pl_data_type.is_cursor_type()) { // mysql can not access explicit cursor in sql/expression
-     *idx = var_index;
-   } else { /*do nothing*/ }
- }
- return ret;
-}
-
-#ifdef __cplusplus
-}
-#endif

@@ -20,7 +20,7 @@
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/object/ob_obj_cast.h"
-#include "query/parser/ob_item_type.h"
+#include "query/engine/expr/ob_item_type.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_bin.h"
@@ -39,7 +39,6 @@ namespace sql
 
 const size_t ObMaxItemMethod = ObJsonPathNodeType::JPN_END_FUNC_FLAG - ObJsonPathNodeType::JPN_BEGIN_FUNC_FLAG - 1;
 const size_t ObMaxJsonType = (size_t)ObJsonNodeType::J_MAX_TYPE;
-// from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
 
 /* process on mismatch { error : 0, null : 1, ignore : 2 }*/

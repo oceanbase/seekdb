@@ -24,29 +24,28 @@ namespace oceanbase
 namespace sql
 {
 class ObSQLSessionInfo;
+class ParsedSql;
 
 /// the interface of this module
 class ObResolver
 {
 public:
-  enum IsPrepared
-  {
-    IS_PREPARED_STMT,
-    IS_NOT_PREPARED_STMT
-  };
-
   explicit ObResolver(ObResolverParams &params);
   virtual ~ObResolver();
 
-  virtual int resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObStmt *&stmt);
+  int resolve(const ParsedSql &parsed, ObStmt *&stmt);
+  int resolve_anonymous(const ParsedSql &parsed, ObStmt *&stmt);
+  int resolve(const peg::Node &statement, ObStmt *&stmt);
   ObResolverParams &get_params() { return params_; }
 
 private:
-  template <typename ResolverType>
-  int stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt);
+  template <typename ResolverType, typename Syntax>
+  int stmt_resolver_func(ObResolverParams &params, const Syntax &parse_tree, ObStmt *&stmt);
 
   template <typename SelectResolverType>
-  int select_stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt);
+  int select_stmt_resolver_func(ObResolverParams &params, const peg::Node &parse_tree, ObStmt *&stmt);
+  int check_parameters(const ParsedSql &parsed);
+  int finish_resolution(ObStmt *stmt);
 private:
   // data members
   ObResolverParams params_;

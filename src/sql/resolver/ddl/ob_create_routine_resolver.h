@@ -41,77 +41,28 @@ public:
   static const int64_t ROUTINE_RET_TYPE_SEQUENCE = 1;
   explicit ObCreateRoutineResolver(ObResolverParams &params) : ObDDLResolver(params) {}
 
-  int resolve(const ParseNode &parse_tree,
-                     const ParseNode *sp_definer_node,
-                     const ParseNode *name_node,
-                     const ParseNode *body_node,
-                     const ParseNode *ret_node,
-                     const ParseNode *param_node,
-                     const ParseNode *clause_list,
-                     obcall::ObCreateRoutineArg *crt_routine_arg);
-  int resolve_impl(share::schema::ObRoutineType routine_type,
-                   const ParseNode *sp_definer_node,
-                   const ParseNode *name_node,
-                   const ParseNode *body_node,
-                   const ParseNode *ret_node,
-                   const ParseNode *param_node,
-                   const ParseNode *clause_list,
-                   obcall::ObCreateRoutineArg *crt_routine_arg);
-  
-  virtual int resolve(const ParseNode &parse_tree);
-  virtual int resolve_impl(const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg) = 0;
-
-protected:
-  int resolve_sp_body(const ParseNode *parse_node, share::schema::ObRoutineInfo &routine_info);
+  int resolve(const peg::Node &parse_tree);
 
 private:
+  int resolve_impl(const peg::Node &command, obcall::ObCreateRoutineArg *crt_routine_arg);
+  int resolve_sp_body(const peg::Node *parse_node, share::schema::ObRoutineInfo &routine_info);
   int check_dup_routine_param(const common::ObIArray<share::schema::ObRoutineParam*> &params,
                               const common::ObString &param_name);
   int create_routine_arg(obcall::ObCreateRoutineArg *&crt_routine_arg);
   int set_routine_info(const share::schema::ObRoutineType &type,
                        share::schema::ObRoutineInfo &routine_info);
   int analyze_router_sql(obcall::ObCreateRoutineArg *crt_routine_arg);
-  int resolve_sp_definer(const ParseNode *parse_node, share::schema::ObRoutineInfo &routine_info);
-  int resolve_sp_name(const ParseNode *parse_node, obcall::ObCreateRoutineArg *crt_routine_arg);
-  int resolve_ret_type(const ParseNode *ret_type_node, share::schema::ObRoutineInfo &func_info);
-  int analyze_expr_type(ObRawExpr *&expr, share::schema::ObRoutineInfo &routine_info);
-  int resolve_param_list(const ParseNode *param_list, obcall::ObCreateRoutineArg &crt_routine_arg);
-  int resolve_param_type(const ParseNode *type_node, const common::ObString &param_name,
+  int resolve_sp_definer(const peg::Node *parse_node, share::schema::ObRoutineInfo &routine_info);
+  int resolve_sp_name(const peg::Node *parse_node, obcall::ObCreateRoutineArg *crt_routine_arg);
+  int resolve_ret_type(const peg::Node *ret_type_node, share::schema::ObRoutineInfo &func_info);
+  int resolve_param_list(rust::Slice<const peg::Node> param_list, obcall::ObCreateRoutineArg &crt_routine_arg);
+  int resolve_param_type(const peg::Node *type_node, const common::ObString &param_name,
                          ObSQLSessionInfo &session_info, share::schema::ObRoutineParam &routine_param);
-  int resolve_clause_list(const ParseNode *clause_list, share::schema::ObRoutineInfo &func_info);
+  int resolve_clause_list(rust::Slice<const peg::Node> clause_list, share::schema::ObRoutineInfo &func_info);
   int collect_ref_obj_info(int64_t ref_obj_id, int64_t ref_timestamp,
                            ObDependencyTableType dependent_type);
   int set_routine_param(const ObIArray<pl::ObObjAccessIdx> &access_idxs,
                         share::schema::ObRoutineParam &routine_param);
-};
-
-class ObCreateProcedureResolver: public ObCreateRoutineResolver
-{
-public:
-  explicit ObCreateProcedureResolver(ObResolverParams &params) : ObCreateRoutineResolver(params) {}
-  virtual ~ObCreateProcedureResolver() {}
-
-  virtual int resolve_impl(const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObCreateProcedureResolver);
-  // function members
-
-private:
-  // data members
-};
-
-class ObCreateFunctionResolver: public ObCreateRoutineResolver
-{
-public:
-  explicit ObCreateFunctionResolver(ObResolverParams &params) : ObCreateRoutineResolver(params) {}
-  virtual ~ObCreateFunctionResolver() { }
-
-  virtual int resolve_impl(const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObCreateFunctionResolver);
-  // function members
-private:
-  // data members
 };
 
 } // end namespace sql

@@ -420,7 +420,7 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
 
     switch (result_type) {
       case ObIntType:
-        rt_expr.may_not_need_raw_check_ = true;
+        rt_expr.may_not_need_raw_check_ = ObIntTC == left_tc && ObIntTC == right_tc;
         SET_MINUS_FUNC_PTR(minus_int_int);
         break;
       case ObUInt64Type:
@@ -555,15 +555,60 @@ struct ObIntIntBatchMinusRaw : public ObArithOpRawType<int64_t, int64_t, int64_t
   }
 };
 
-//calc_type is IntTC  left and right has same TC
+template <typename Left, typename Right>
+struct SignedResultMinusRaw : public ObArithOpRawType<int64_t, Left, Right>
+{
+  static void raw_op(int64_t &res, const Left l, const Right r)
+  {
+    res = static_cast<int64_t>(static_cast<__int128>(l) - static_cast<__int128>(r));
+  }
+
+  static int raw_check(const int64_t, const Left l, const Right r)
+  {
+    int ret = OB_SUCCESS;
+    const __int128 difference = static_cast<__int128>(l) - static_cast<__int128>(r);
+    if (OB_UNLIKELY(difference < INT64_MIN || difference > INT64_MAX)) {
+      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
+      int64_t pos = 0;
+      ObCStringHelper left_text;
+      ObCStringHelper right_text;
+      databuff_printf(expr_str, sizeof(expr_str), pos, "'(%s - %s)'",
+                      left_text.convert(l), right_text.convert(r));
+      ret = OB_OPERATE_OVERFLOW;
+      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
+    }
+    return ret;
+  }
+};
+
 int ObExprMinus::minus_int_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  const bool left_unsigned = ob_is_uint_tc(expr.args_[0]->datum_meta_.type_);
+  const bool right_unsigned = ob_is_uint_tc(expr.args_[1]->datum_meta_.type_);
+  if (left_unsigned && right_unsigned) {
+    return def_arith_eval_func<ObArithOpWrap<SignedResultMinusRaw<uint64_t, uint64_t>>>(EVAL_FUNC_ARG_LIST);
+  } else if (left_unsigned) {
+    return def_arith_eval_func<ObArithOpWrap<SignedResultMinusRaw<uint64_t, int64_t>>>(EVAL_FUNC_ARG_LIST);
+  } else if (right_unsigned) {
+    return def_arith_eval_func<ObArithOpWrap<SignedResultMinusRaw<int64_t, uint64_t>>>(EVAL_FUNC_ARG_LIST);
+  } else {
+    return def_arith_eval_func<ObArithOpWrap<ObIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  }
 }
 
 int ObExprMinus::minus_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  const bool left_unsigned = ob_is_uint_tc(expr.args_[0]->datum_meta_.type_);
+  const bool right_unsigned = ob_is_uint_tc(expr.args_[1]->datum_meta_.type_);
+  if (left_unsigned && right_unsigned) {
+    return def_batch_arith_op<ObArithOpWrap<SignedResultMinusRaw<uint64_t, uint64_t>>>(BATCH_EVAL_FUNC_ARG_LIST);
+  } else if (left_unsigned) {
+    return def_batch_arith_op<ObArithOpWrap<SignedResultMinusRaw<uint64_t, int64_t>>>(BATCH_EVAL_FUNC_ARG_LIST);
+  } else if (right_unsigned) {
+    return def_batch_arith_op<ObArithOpWrap<SignedResultMinusRaw<int64_t, uint64_t>>>(BATCH_EVAL_FUNC_ARG_LIST);
+  } else {
+    return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  }
 }
 
 

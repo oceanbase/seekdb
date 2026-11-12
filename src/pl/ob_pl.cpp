@@ -1029,10 +1029,10 @@ struct ObPLExecTraceIdGuard {
   uint64_t routine_id_;
 };
 
-int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *block)
+int ObPL::execute(ObExecContext &ctx, ParamStore &params, const sql::ParsedSql &syntax)
 {
   int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(block));
+  CK (OB_NOT_NULL(syntax.statement()));
   lib::MemoryContext mem_context = NULL;
   lib::ContextParam param;
   ObPLFunction *routine = NULL;
@@ -1079,7 +1079,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
       OX (routine = new(routine)ObPLFunction(mem_context));
 
       // stmt_id is OB_INVALID_ID for anonymous block from text protocol
-      OZ (builder.compile(block, OB_INVALID_ID, *routine, &params, false));
+      OZ (builder.compile(syntax, OB_INVALID_ID, *routine, &params, false));
       if (OB_SUCC(ret) && params.count() != routine->get_params_info().count()) {
         ret = OB_ERR_BIND_VARIABLE_NOT_EXIST;
       }
@@ -1485,7 +1485,6 @@ int ObPL::get_pl_function(ObExecContext &ctx,
 
     // not in cache, compile it and add to cache
     if (OB_SUCC(ret) && OB_ISNULL(routine)) {
-      ParseNode root_node;
       // check session status after get lock
       if (OB_FAIL(check_session_alive(*ctx.get_my_session()))) {
       } else if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_plan_cache(), cacheobj_guard, pc_ctx))) {
@@ -1495,7 +1494,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
       }
       OX (routine = static_cast<ObPLFunction*>(cacheobj_guard.get_cache_obj()));
       if (OB_SUCC(ret) && OB_ISNULL(routine)) {
-        OZ (generate_pl_function(ctx, sql, params, root_node, cacheobj_guard, stmt_id));
+        OZ (generate_pl_function(ctx, sql, params, cacheobj_guard, stmt_id));
         OX (routine = static_cast<ObPLFunction*>(cacheobj_guard.get_cache_obj()));
         CK (OB_NOT_NULL(routine));
         if (OB_SUCC(ret) && routine->get_can_cached()) {
@@ -1663,13 +1662,12 @@ int ObPL::add_pl_lib_cache(ObPLFunction *pl_func, ObPLCacheCtx &pc_ctx)
 int ObPL::generate_pl_function(ObExecContext &ctx,
                                const ObString &anonymouse_sql,
                                ParamStore &params,
-                               ParseNode &parse_node,
                                ObCacheObjGuard& cacheobj_guard,
                                const uint64_t stmt_id,
                                bool is_anonymous_text)
 {
   int ret = OB_SUCCESS;
-  ParseNode *block_node = NULL;
+  sql::ParsedSql syntax;
   ObPLFunction *routine = NULL;
   ObPlanCache *plan_cache = NULL;
   ObPLPackageGuard package_guard{};
@@ -1687,32 +1685,9 @@ int ObPL::generate_pl_function(ObExecContext &ctx,
   OX (routine = static_cast<ObPLFunction *>(cacheobj_guard.get_cache_obj()));
   CK (OB_NOT_NULL(routine));
 
-  // do parser
   if (OB_SUCC(ret)) {
-    ObParser parser(compile_alloc,
-                    ctx.get_my_session()->get_sql_mode(),
-                    ctx.get_my_session()->get_charsets4parser());
-    ParseResult parse_result;
-    ParseMode parse_mode = ctx.get_sql_ctx()->is_dynamic_sql_ ? DYNAMIC_SQL_MODE
-        : (ctx.get_my_session()->is_for_trigger_package() ? TRIGGER_MODE : STD_MODE);
-    const ParseNode *parse_tree = NULL;
-    OZ (parser.parse(anonymouse_sql, parse_result, parse_mode));
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(parse_result.result_tree_)
-              || OB_ISNULL(parse_result.result_tree_->children_)
-              || OB_ISNULL(parse_tree = parse_result.result_tree_->children_[0])) {
-      ret = OB_INVALID_ARGUMENT;
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_UNLIKELY(T_SP_ANONYMOUS_BLOCK != parse_tree->type_
-               || OB_ISNULL(block_node = parse_tree->children_[0]))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (T_SP_BLOCK_CONTENT != block_node->type_
-               && T_SP_LABELED_BLOCK != block_node->type_) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      parse_node = *(parse_result.result_tree_);
-    }
+    ObParser parser(compile_alloc, ctx.get_my_session()->get_sql_mode());
+    OZ (parser.parse_routine_body(anonymouse_sql, syntax));
   }
 
   // do compile
@@ -1734,7 +1709,7 @@ int ObPL::generate_pl_function(ObExecContext &ctx,
                           *(ctx.get_sql_proxy()));
 
     OZ (builder.compile(
-      block_node, stmt_id, *routine, &params, ctx.get_sql_ctx()->is_prepare_protocol_));
+      syntax, stmt_id, *routine, &params, ctx.get_sql_ctx()->is_prepare_protocol_));
     OZ (routine->set_params_info(params, true));
   }
 

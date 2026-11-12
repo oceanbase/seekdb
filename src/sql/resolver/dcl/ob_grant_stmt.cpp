@@ -30,7 +30,6 @@ ObGrantStmt::ObGrantStmt(ObIAllocator *name_pool)
       grant_level_(OB_PRIV_INVALID_LEVEL),
       database_(),
       table_(),
-      masked_sql_(),
       need_create_user_(false),
       need_create_user_priv_(false),
       user_name_set_(),
@@ -57,7 +56,6 @@ ObGrantStmt::ObGrantStmt()
       grant_level_(OB_PRIV_INVALID_LEVEL),
       database_(),
       table_(),
-      masked_sql_(),
       need_create_user_(false),
       need_create_user_priv_(false),
       user_name_set_(),
@@ -148,7 +146,7 @@ int64_t ObGrantStmt::to_string(char *buf, const int64_t buf_len) const
          "grant_level", ob_priv_level_str(grant_level_),
          "database", database_,
          "table", table_,
-         "users", users_,
+         "grantees", grantees_,
          "object_type", object_type_,
          "object_id", object_id_);
     J_OBJ_END();

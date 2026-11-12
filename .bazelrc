@@ -20,10 +20,6 @@ build:clippy --output_groups=clippy_checks
 build:clippy --@rules_rust//rust/settings:clippy_flag=-Dwarnings
 build:clippy --@rules_rust//rust/settings:clippy_flag=-Cpanic=unwind
 test --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=unwind
-# SLP spends most of this generated parser's compile time on location copies.
-build:linux --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
-build:macos --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
-build:windows --per_file_copt=sql_parser_mysql_mode_tab[.]c$@/clang:-fno-slp-vectorize
 # Allow developers to modify build outputs in place.
 build --experimental_writable_outputs
 # Native generators and Cargo build scripts use installed SDK utilities.

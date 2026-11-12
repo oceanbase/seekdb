@@ -20,7 +20,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "sql/rewrite/ob_transform_rule.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 

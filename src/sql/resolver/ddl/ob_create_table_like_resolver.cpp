@@ -32,14 +32,13 @@ ObCreateTableLikeResolver::~ObCreateTableLikeResolver()
 {
 }
 
-int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
+int ObCreateTableLikeResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
-  bool is_temporary_table = false;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "session info should not be null", K(ret));
-  } else if (T_CREATE_TABLE_LIKE != parse_tree.type_ || OB_ISNULL(parse_tree.children_)) {
+  } else if (peg::NodeKind::CreateTableLike != parse_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
   } else {
@@ -50,35 +49,15 @@ int ObCreateTableLikeResolver::resolve(const ParseNode &parse_tree)
     } else {
       stmt_ = create_table_like_stmt;
     }
-    //resolve temporary option
     if (OB_SUCC(ret)) {
-      if (NULL != parse_tree.children_[0]) {
-        if (T_TEMPORARY == parse_tree.children_[0]->type_) {
-          is_temporary_table = true;
-        } else {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid argument.",
-                       K(ret), K(parse_tree.children_[0]->type_));
-        }
-      }
-      if (OB_SUCC(ret) && is_temporary_table) {
-        create_table_like_stmt->set_table_type(share::schema::TMP_TABLE);
-      } else {
-        create_table_like_stmt->set_table_type(share::schema::USER_TABLE);
-      }
-    }
-    //if not exist
-    if (OB_SUCC(ret)) {
-      if (NULL != parse_tree.children_[1]) {
-        create_table_like_stmt->set_if_not_exist(true);
-      } else {
-        create_table_like_stmt->set_if_not_exist(false);
-      }
+      create_table_like_stmt->set_table_type(peg::table_like_temporary(parse_tree)
+          ? share::schema::TMP_TABLE : share::schema::USER_TABLE);
+      create_table_like_stmt->set_if_not_exist(peg::table_like_if_not_exists(parse_tree));
     }
 
     if (OB_SUCC(ret)) {
-      ParseNode *new_relation_node = parse_tree.children_[2];
-      ParseNode *origin_relation_node = parse_tree.children_[3];
+      const auto *new_relation_node = &peg::table_like_relation(parse_tree);
+      const auto *origin_relation_node = &peg::table_like_source(parse_tree);
       if (NULL != new_relation_node && NULL != origin_relation_node) {
         //resolve table
         ObString origin_table_name;

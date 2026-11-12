@@ -20,7 +20,6 @@
 #include "lib/string/ob_string.h"
 #include "observer/mysql/obmp_base.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
-#include "sql/parser/parse_node.h"
 namespace oceanbase
 {
 namespace sql

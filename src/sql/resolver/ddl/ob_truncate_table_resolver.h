@@ -30,14 +30,13 @@ class ObTruncateTableResolver : public ObDDLResolver
 public:
   explicit ObTruncateTableResolver(ObResolverParams &params);
   virtual ~ObTruncateTableResolver();
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
   ObTruncateTableStmt *get_truncate_table_stmt()
   {
     return static_cast<ObTruncateTableStmt*>(stmt_);
   };
 
 private:
-  static const int64_t TABLE_NODE = 0;         /* 0. table_node  */
   DISALLOW_COPY_AND_ASSIGN(ObTruncateTableResolver);
 };
 
