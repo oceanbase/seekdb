@@ -42,7 +42,9 @@ def matrix():
         for baseline in (("2.17", "2.28") if glibc == "both" else (glibc,)):
             targets.append(dict(id="linux-" + arch + "-glibc" + baseline, os="linux", arch=arch,
                                 platform="linux-" + arch, runner=runner, glibc=baseline,
-                                profile="el7" if baseline == "2.17" else "el8"))
+                                profile="el7" if baseline == "2.17" else "el8",
+                                conda_spec=CONFIG["linux_sysroots"][arch][baseline]["spec"],
+                                micromamba=CONFIG["micromamba"]))
     targets += [
         dict(id="macos13-arm64", platform="macos-arm64", os="macos", arch="arm64", runner="macos-15", glibc="", profile=""),
         dict(id="windows-x86_64-md", platform="windows-x86_64", os="windows", arch="x86_64", runner="windows-2022", glibc="", profile=""),
@@ -62,7 +64,7 @@ def matrix():
 
 
 def environment():
-    for name in ("cargo", "rustup", "launcher", "downloads", "actions", "homebrew", "home"):
+    for name in ("cargo", "rustup", "launcher", "downloads", "actions", "homebrew"):
         (CACHE / name).mkdir(parents=True, exist_ok=True)
     values = {"CARGO_HOME": CACHE / "cargo", "RUSTUP_HOME": CACHE / "rustup",
               "HOMEBREW_CACHE": CACHE / "homebrew", "DEP_DOWNLOAD_DIR": CACHE / "sdk-archives"}
@@ -89,7 +91,9 @@ def environment():
     toolchain = hashlib.sha256(sdk.digest())
     for name in ("rust-toolchain.toml", ".bazelversion", "bazel/binaries.json"):
         toolchain.update((ROOT / name).read_bytes())
-    if target == "windows":
+    if target == "linux":
+        toolchain.update(os.environ["SEEKDB_SYSROOT_ID"].encode())
+    elif target == "windows":
         for name in ("VCToolsVersion", "WindowsSDKVersion"):
             if not os.environ.get(name):
                 raise ValueError("Visual Studio developer environment is missing " + name)
@@ -99,63 +103,31 @@ def environment():
     output("toolchain", toolchain.hexdigest()[:24])
 
 
-def container_image():
-    base = CONFIG["linux_images"][os.environ["PACKAGE_ARCH"]]
-    recipe = "FROM %s\nRUN yum -y install cpio && yum clean all\n" % base
-    tag = "seekdb-package-%s:%s" % (os.environ["PACKAGE_ARCH"], hashlib.sha256(recipe.encode()).hexdigest()[:16])
-    found = subprocess.run(["docker", "image", "inspect", tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if found.returncode:
-        run(["docker", "build", "--tag", tag, "-"], input=recipe.encode())
-    return tag
-
-
-def in_container(command):
-    if os.environ["PACKAGE_OS"] != "linux" or os.environ.get("PACKAGE_IN_CONTAINER"):
-        return False
-    arguments = ["docker", "run", "--rm", "--user", "%s:%s" % (os.getuid(), os.getgid()),
-                 "-v", str(ROOT) + ":/work", "-w", "/work", "-e", "PACKAGE_IN_CONTAINER=1",
-                 "-e", "HOME=/work/.ci-cache/home", "-e", "CARGO_HOME=/work/.ci-cache/cargo",
-                 "-e", "RUSTUP_HOME=/work/.ci-cache/rustup", "-e", "LC_ALL=C.UTF-8"]
-    arguments += ["-e", "DEP_DOWNLOAD_DIR=/work/.ci-cache/sdk-archives"]
-    for name in ("PACKAGE_OS", "PACKAGE_ARCH", "PACKAGE_GLIBC", "PACKAGE_VERSION", "PACKAGE_RELEASE",
-                 "PACKAGE_FORMATS", "LINUX_PROFILE", "BUILD_JOBS", "GITHUB_SHA",
-                 "RUSTUP_DIST_SERVER", "RUSTUP_UPDATE_ROOT", "RUSTUP_INIT_URL"):
-        if name in os.environ:
-            arguments += ["-e", name]
-    arguments += [container_image(),
-                  "/opt/python/cp311-cp311/bin/python", ".github/scripts/package.py", command]
-    run(arguments)
-    return True
-
-
 def sysroot():
-    if os.environ["PACKAGE_OS"] != "linux" or os.environ["PACKAGE_GLIBC"] != "2.17":
-        return
-    destination = CACHE / "sysroot"
-    image = CONFIG["sysroot_images"][os.environ["PACKAGE_ARCH"]]
-    marker = destination / "image.txt"
-    if marker.is_file() and marker.read_text() == image:
-        sysroot_layout(destination)
-        return
-    shutil.rmtree(destination, ignore_errors=True)
-    destination.mkdir(parents=True)
-    # Export package-owned files only, without recursively archiving /usr/lib64.
-    script = '''set -euo pipefail
-rpm -ql glibc glibc-devel glibc-headers kernel-headers | sort -u | while IFS= read -r path; do
-  case "$path" in /usr/include/*|/usr/lib64/*|/lib64/*|/usr/lib/*|/lib/*)
-    if [ -f "$path" ] || [ -L "$path" ]; then printf '%s\\0' "${path#/}"; fi ;;
-  esac
-done | tar -C / --null -T - -czf -
-'''
-    with subprocess.Popen(["docker", "run", "--rm", image, "bash", "-c", script], stdout=subprocess.PIPE) as archive:
-        try:
-            run(["tar", "-xzf", "-", "-C", destination], stdin=archive.stdout)
-        finally:
-            archive.stdout.close()
-        if archive.wait():
-            raise RuntimeError("failed to export the glibc 2.17 sysroot")
+    arch = os.environ["PACKAGE_ARCH"]
+    metadata = CONFIG["linux_sysroots"][arch][os.environ["PACKAGE_GLIBC"]]
+    name, version, build = metadata["spec"].split("=")
+    prefix = Path(os.environ["CONDA_ENVIRONMENT"])
+    record = json.loads((prefix / "conda-meta" / (name + "-" + version + "-" + build + ".json")).read_text())
+    if (record["name"], record["version"], record["build"], record.get("sha256")) != (
+            name, version, build, metadata["sha256"]):
+        raise ValueError("Conda sysroot does not match the pinned package")
+    destination = prefix / (arch + "-conda-linux-gnu") / "sysroot"
+    for filename in ("usr/include/stdlib.h", "usr/include/linux/version.h", "usr/lib64/libc.so"):
+        if not (destination / filename).is_file():
+            raise ValueError("incomplete Conda sysroot: " + str(destination / filename))
     sysroot_layout(destination)
-    marker.write_text(image)
+    # Include resolved transitive packages in the compilation cache identity.
+    # Exclude installation paths and timestamps so restored environments match.
+    records = []
+    for path in sorted((prefix / "conda-meta").glob("*.json")):
+        package = json.loads(path.read_text())
+        records.append({key: package.get(key) for key in ("name", "version", "build", "subdir", "sha256", "md5")})
+    identity = hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()
+    with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
+        stream.write("SEEKDB_SYSROOT=" + destination.as_posix() + "\n")
+        stream.write("SEEKDB_SYSROOT_ID=" + identity + "\n")
+    print("Using Conda glibc " + version + " sysroot: " + str(destination))
 
 
 def sysroot_layout(destination):
@@ -168,9 +140,6 @@ def sysroot_layout(destination):
 
 
 def initialize():
-    sysroot()
-    if in_container("initialize"):
-        return
     if os.environ["PACKAGE_OS"] == "macos":
         run(["brew", "install", "autoconf", "automake", "libtool", "pkg-config"])
     arguments = [sys.executable, "build.py", "init"]
@@ -192,8 +161,8 @@ def initialize():
 
 
 def bazel_arguments():
-    if os.environ["PACKAGE_OS"] == "linux" and os.environ["PACKAGE_GLIBC"] == "2.17":
-        os.environ["SEEKDB_SYSROOT"] = str(CACHE / "sysroot")
+    if os.environ["PACKAGE_OS"] == "linux" and not os.environ.get("SEEKDB_SYSROOT"):
+        raise ValueError("Linux packaging requires a configured Conda sysroot")
     direct = CACHE / "direct-downloads.cfg"
     direct.write_text("allow *\n")
     return ["--launcher_cache_dir=" + str(CACHE / "launcher"),
@@ -203,8 +172,6 @@ def bazel_arguments():
 
 
 def build():
-    if in_container("build"):
-        return
     jobs = int(os.environ["BUILD_JOBS"]) or (1 if os.environ["PACKAGE_OS"] == "macos" else 2)
     arguments = [sys.executable, "build.py", "build", *bazel_arguments(),
                  "--jobs=" + str(jobs), "--config=O2", "--config=line_tables_only", "--config=package",
@@ -227,8 +194,6 @@ def timezone():
 
 
 def export():
-    if in_container("export"):
-        return
     arguments = [sys.executable, "package/package.py", "binary", "--version", os.environ["PACKAGE_VERSION"],
                  "--release", os.environ["PACKAGE_RELEASE"], "--layout", os.environ["PACKAGE_OS"],
                  "--source-commit", os.environ["GITHUB_SHA"], "--timezone-file", timezone(),
@@ -265,14 +230,12 @@ def system_packages():
 
 
 def shutdown():
-    if in_container("shutdown"):
-        return
     if (ROOT / "build").is_dir():
         run([sys.executable, "build.py", "shutdown", "--launcher_cache_dir=" + str(CACHE / "launcher")])
 
 
 if __name__ == "__main__":
-    commands = {"matrix": matrix, "environment": environment, "initialize": initialize,
+    commands = {"matrix": matrix, "sysroot": sysroot, "environment": environment, "initialize": initialize,
                 "build": build, "export": export, "system": system_packages, "shutdown": shutdown}
     os.chdir(ROOT)
     commands[sys.argv[1]]()
