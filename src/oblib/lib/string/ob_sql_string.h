@@ -96,6 +96,30 @@ private:
 
   DISALLOW_COPY_AND_ASSIGN(ObSqlString);
 };
+
+/**
+ * @brief Escape the backtick characters inside a SQL identifier.
+ *
+ * A SQL identifier is delimited by backticks, so any backtick contained in the
+ * identifier itself has to be doubled to keep the identifier intact:
+ *
+ *   key`id  ->  key``id
+ *
+ * The helper lives in oblib so that lower modules such as `share` can escape
+ * identifiers without depending on the SQL upper layer.  The SQL layer keeps
+ * its own entry point (ObSQLUtils::generate_new_name_with_escape_character) and
+ * delegates here, so both layers always produce the same escaping.
+ *
+ * @param[in] allocator   allocator used for the escaped copy
+ * @param[in] src         the raw identifier
+ * @param[out] dst         the escaped identifier; when the source contains no
+ *                         backtick it aliases the source and no memory is used
+ * @return OB_SUCCESS on success
+ */
+int escape_sql_identifier(common::ObIAllocator &allocator,
+                          const common::ObString &src,
+                          common::ObString &dst);
+
 } // end namespace common
 } // end namespace oceanbase
 
