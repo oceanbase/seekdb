@@ -1,0 +1,25 @@
+unittest/include/windows-process-utils.ps1
+  s_f87238b17c0588::t_c76c096ee44268 5
+  s_f87238b17c0588::t_25f1ce442168b5 26-56
+package/libseekdb/test-packed-artifact-smoke.ps1
+  s_f87238b17c0588::t_4389670c26c112 124-125
+unittest/include/run-libseekdb-binding-tests.ps1
+  s_f87238b17c0588::t_e0452a7d64abb6 202-205,214-215
+  s_f87238b17c0588::t_7ba06947bc7464 227,302,326,350,373,402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "311c5a04861bafbda5879d02703364d89e470872",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}

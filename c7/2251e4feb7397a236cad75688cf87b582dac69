@@ -1,0 +1,23 @@
+.github/workflows/build-libseekdb.yml
+  s_f87238b17c0588::t_cd7aecbac9d240 634-657,659-670,676-677
+  s_f87238b17c0588::t_371162fcb48294 658
+  s_f87238b17c0588::t_bf22a7a5d9c95f 731,733
+bazel/toolchains/cc/BUILD.android_cc_toolchain.tpl
+  s_f87238b17c0588::t_0ef2a6b13ffe08 58-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c72251e4feb7397a236cad75688cf87b582dac69",
+  "prompts": {},
+  "sessions": {
+    "s_f87238b17c0588": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e3f1cb88-1964-4b1c-8d5a-41b1fe3288b5",
+        "model": "5998288cf433a589"
+      },
+      "human_author": "dengfuping <fuping.dfp@antgroup.com>"
+    }
+  }
+}
