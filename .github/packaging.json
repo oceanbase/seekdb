@@ -1,0 +1,15 @@
+{
+  "timezone": {
+    "url": "https://raw.githubusercontent.com/oceanbase/oceanbase/93a1074b0ccc5ab9dadd25e5b3bf447aadcca19b/tools/timezone_V1.log",
+    "sha256": "84bb2c709e06b6f62623dacac0f5cb870c88df6562bc347cce318c58b1d7e9d8"
+  },
+  "linux_images": {
+    "x86_64": "quay.io/pypa/manylinux_2_28_x86_64@sha256:9555ba6c479fa69a2aa80ad1dc57154a60d562b19df159361d9379a02beb1e36",
+    "aarch64": "quay.io/pypa/manylinux_2_28_aarch64@sha256:cb37f0d66c8a75abb93cf6085cad1f1427cd7208f0c0fc48359bb1eea9924f21"
+  },
+  "sysroot_images": {
+    "x86_64": "quay.io/pypa/manylinux2014_x86_64@sha256:62eeff30ef134a85ec0f97109e008a319b0315ca5e8a6d754ee771556c02622a",
+    "aarch64": "quay.io/pypa/manylinux2014_aarch64@sha256:101d2292840109c9d329fcfcd7b89b46f59e19ca23cbfdcf059fb389994665fc"
+  },
+  "android_ndk": "27.3.13750724"
+}
