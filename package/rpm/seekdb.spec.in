@@ -63,6 +63,7 @@ cp -a @LIBS@/. %{buildroot}/
 %files libs
 %defattr(-,root,root,-)
 /usr/libexec/seekdb/lib
+/usr/share/seekdb/licenses
 %files debuginfo
 %defattr(-,root,root,-)
 /usr/lib/debug

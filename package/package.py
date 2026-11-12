@@ -24,8 +24,24 @@ def copy(source, destination, executable=False):
     destination.chmod(0o755 if executable else 0o644)
 
 
+def stage_licenses(destination, share):
+    names = ("LICENSE", "NOTICE", "THIRD_PARTY_COMPONENTS.md", "REDISTRIBUTION.md")
+    missing = [name for name in names if not (ROOT / name).is_file()]
+    if not (ROOT / "licenses").is_dir():
+        missing.append("licenses/")
+    if missing:
+        raise ValueError("required license materials are missing: %s" % ", ".join(missing))
+    target = destination / share / "licenses"
+    for name in names:
+        copy(ROOT / name, target / name)
+    for source in sorted((ROOT / "licenses").rglob("*")):
+        if source.is_file():
+            copy(source, target / source.relative_to(ROOT / "licenses"))
+
+
 def stage(destination, artifacts, dependencies, layout, version, release, component="server", timezone=None):
     if component == "libs":
+        stage_licenses(destination, destination / "usr/share/seekdb")
         for name in ("libaio.so", "libaio.so.1", "libaio.so.1.0.1"):
             source = dependencies / "usr/local/oceanbase/deps/devel/lib" / name
             target = destination / "usr/libexec/seekdb/lib" / name
@@ -44,6 +60,7 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
     if not timezone.is_file():
         raise ValueError("required timezone data is missing: %s; supply --timezone-file or SEEKDB_TIMEZONE_FILE" % timezone)
     binary, config, share, helpers = [destination / path for path in paths[layout]]
+    stage_licenses(destination, share)
     executable = "seekdb.exe" if layout == "windows" else "seekdb"
     sql = sorted((artifacts / SYSPACK).glob("*.sql"))
     if not sql:
