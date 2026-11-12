@@ -163,6 +163,7 @@ private:
   int canonicalize_conditions(ObDMLStmt *stmt, bool &trans_happened);
   int recursive_canonicalize_join_conditions(ObDMLStmt *stmt, TableItem *table, bool &trans_happened);
   int do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
+  int semantic_canonicalize_conditions(ObIArray<ObRawExpr*> &conditions, bool &trans_happened);
   int push_not(ObIArray<ObRawExpr*> &conditions,
                bool &trans_happened);
   int recursive_push_not(ObRawExpr *&expr,

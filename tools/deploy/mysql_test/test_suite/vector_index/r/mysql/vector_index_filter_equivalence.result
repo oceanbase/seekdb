@@ -1,0 +1,49 @@
+drop table if exists t_filter_equivalence;
+create table t_filter_equivalence(
+id bigint not null,
+embedding vector(3) not null,
+category int not null,
+primary key(id),
+key idx_category(category),
+vector key idx_embedding(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+analyze table t_filter_equivalence;
+call dbms_stats.set_table_stats('TEST', 'T_FILTER_EQUIVALENCE', numrows=>200000);
+alter system flush plan cache;
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_filter_equivalence') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by length(s.statement), p.plan_id;
+operator	cardinality
+VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	32
+VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	32
+alter system flush plan cache;
+select count(*) as descending_rows
+from t_filter_equivalence
+where category in (31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,
+19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5,
+4, 3, 2, 1, 0);
+descending_rows
+32
+alter system flush plan cache;
+select count(*) as duplicate_rows
+from t_filter_equivalence
+where category in (0, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+duplicate_rows
+11
+alter system flush plan cache;
+select count(*) as sparse_rows
+from t_filter_equivalence
+where category in (0, 5, 10, 15, 20);
+sparse_rows
+5
+alter system flush plan cache;
+select count(*) as unordered_rows
+from t_filter_equivalence
+where category in (5, 3, 9, 1, 7);
+unordered_rows
+5
+drop table t_filter_equivalence;
+alter system set vector_memory_limit = 0;

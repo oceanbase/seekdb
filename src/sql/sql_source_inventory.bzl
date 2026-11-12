@@ -1585,6 +1585,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_transform_simplify_expr.cpp",
             "src/sql/rewrite/ob_transform_simplify_groupby.cpp",
             "src/sql/rewrite/ob_transform_simplify_limit.cpp",
+            "src/sql/rewrite/ob_filter_canonicalizer.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

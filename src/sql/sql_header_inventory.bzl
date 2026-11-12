@@ -1255,6 +1255,7 @@ SQL_PRIVATE_HEADERS = [
     "rewrite/ob_transform_join_limit_pushdown.h",
     "rewrite/ob_transform_late_materialization.h",
     "rewrite/ob_transform_left_join_to_anti.h",
+    "rewrite/ob_filter_canonicalizer.h",
     "rewrite/ob_transform_min_max.h",
     "rewrite/ob_transform_or_expansion.h",
     "rewrite/ob_transform_predicate_move_around.h",
