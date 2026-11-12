@@ -206,9 +206,12 @@ namespace oceanbase
 {
 namespace logservice
 {
+enum class ClogDiskCheckOrigin { READ_LOCK, COMMIT_TIMEOUT };
+
 // Checks whether the clog disk is full or hung through the server log module.
 int check_clog_disk_full_or_hang(
     ObLogService &log_service,
+    ClogDiskCheckOrigin origin,
     bool &clog_disk_is_full,
     bool &clog_disk_is_hang);
 }

@@ -423,7 +423,7 @@ int ObTxCtx::handle_timeout(const int64_t delay)
             ret = OB_ERR_UNEXPECTED;
             TRANS_LOG(WARN, "log service is null", KR(ret));
           } else if (OB_FAIL(logservice::check_clog_disk_full_or_hang(
-              *log_service, clog_is_full, clog_is_hang))) {
+              *log_service, logservice::ClogDiskCheckOrigin::COMMIT_TIMEOUT, clog_is_full, clog_is_hang))) {
           } else if (clog_is_full || clog_is_hang) {
             tmp_ret = post_tx_commit_resp_(OB_EAGAIN);
             TRANS_LOG(WARN, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));

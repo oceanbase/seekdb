@@ -23,6 +23,7 @@
 #ifdef _WIN32
 #include <atomic>
 #include <cerrno>
+#include <cstdio>
 #include <windows.h>
 #endif
 
@@ -586,10 +587,14 @@ namespace logservice
 using namespace oceanbase::share;
 int check_clog_disk_full_or_hang(
     ObLogService &log_service,
+    ClogDiskCheckOrigin origin,
     bool &clog_disk_is_full,
     bool &clog_disk_is_hang)
 {
   int ret = OB_SUCCESS;
+#ifndef _WIN32
+  UNUSED(origin);
+#endif
   clog_disk_is_full = false;
   clog_disk_is_hang = false;
   int64_t clog_disk_last_working_time = OB_INVALID_TIMESTAMP;
@@ -606,7 +611,10 @@ int check_clog_disk_full_or_hang(
       if (clog_disk_is_hang) {
         const int saved_errno = errno;
         const DWORD saved_error = GetLastError();
-        static std::atomic<uint64_t> observations{0};
+        static std::atomic<uint64_t> read_observations{0}, commit_observations{0};
+        const bool is_read_lock = origin == ClogDiskCheckOrigin::READ_LOCK;
+        const char *origin_name = is_read_lock ? "read-lock" : "commit-timeout";
+        auto &observations = is_read_lock ? read_observations : commit_observations;
         const uint64_t observation = observations.fetch_add(1, std::memory_order_relaxed) + 1;
         if (observation <= 32) {
           LARGE_INTEGER qpc_before = {}, qpc_after = {}, frequency = {};
@@ -622,7 +630,51 @@ int check_clog_disk_full_or_hang(
           const int sample_ret = log_service.get_io_start_time(resampled_start_us);
           const bool after_ok = QueryPerformanceCounter(&qpc_after) != 0;
           const int clock_mask = (before_ok ? 1 : 0) | (after_ok ? 2 : 0) | (frequency_ok ? 4 : 0);
-          CLOG_LOG(WARN, "seek1243 clog hang decision inputs", K(observation), K(now),
+          char trace_id[128] = {};
+          ObCurTraceId::get_trace_id()->to_string(trace_id, sizeof(trace_id));
+          const DWORD native_pid = GetCurrentProcessId();
+          const DWORD native_tid = GetCurrentThreadId();
+          char path[256] = {};
+          char record[1536] = {};
+          const int path_len = std::snprintf(path, sizeof(path),
+              "log/clog-hang-%lu-%s-%llu.json", static_cast<unsigned long>(native_pid),
+              origin_name, static_cast<unsigned long long>(observation));
+          const int record_len = std::snprintf(record, sizeof(record),
+              "{\"origin\":\"%s\",\"observation\":%llu,\"pid\":%lu,\"tid\":%lu,"
+              "\"trace_id\":\"%s\",\"now_us\":%lld,\"start_us\":%lld,"
+              "\"tolerance_us\":%lld,\"disk_enough\":%d,\"raw_wall_us\":%lld,"
+              "\"qpc_before\":%lld,\"qpc_after\":%lld,\"qpc_frequency\":%lld,"
+              "\"clock_mask\":%d,\"sample_ret\":%d,\"resampled_start_us\":%lld}\n",
+              origin_name, static_cast<unsigned long long>(observation),
+              static_cast<unsigned long>(native_pid), static_cast<unsigned long>(native_tid), trace_id,
+              static_cast<long long>(now), static_cast<long long>(clog_disk_last_working_time),
+              static_cast<long long>(warning_tolerance_us), static_cast<int>(is_disk_enough),
+              static_cast<long long>(raw_wall_us), static_cast<long long>(qpc_before.QuadPart),
+              static_cast<long long>(qpc_after.QuadPart), static_cast<long long>(frequency.QuadPart),
+              clock_mask, sample_ret, static_cast<long long>(resampled_start_us));
+          bool evidence_written = false;
+          DWORD evidence_error = ERROR_INVALID_DATA;
+          if (path_len > 0 && path_len < static_cast<int>(sizeof(path)) && record_len > 0 && record_len < static_cast<int>(sizeof(record))) {
+            HANDLE file = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (file == INVALID_HANDLE_VALUE) {
+              evidence_error = GetLastError();
+            } else {
+              DWORD written = 0;
+              const bool write_ok = WriteFile(file, record, static_cast<DWORD>(record_len), &written, nullptr) != 0;
+              evidence_error = write_ok ? ERROR_SUCCESS : GetLastError();
+              evidence_written = write_ok && written == static_cast<DWORD>(record_len);
+              if (write_ok && !evidence_written) {
+                evidence_error = ERROR_WRITE_FAULT;
+              }
+              if (!CloseHandle(file)) {
+                evidence_written = false;
+                evidence_error = GetLastError();
+              }
+            }
+          }
+          CLOG_LOG(INFO, "seek1243 clog hang decision inputs", K(origin_name), K(observation),
+              K(native_pid), K(native_tid), K(trace_id), K(evidence_written), K(evidence_error), K(now),
               K(clog_disk_last_working_time), K(warning_tolerance_us), K(is_disk_enough),
               K(raw_wall_us), "qpc_before", qpc_before.QuadPart, "qpc_after", qpc_after.QuadPart,
               "qpc_frequency", frequency.QuadPart, K(clock_mask), K(sample_ret), K(resampled_start_us));
