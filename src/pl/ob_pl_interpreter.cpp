@@ -786,6 +786,15 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(s), OB_NOT_NULL(ctx), OB_NOT_NULL(ctx->allocator_), OB_NOT_NULL(ctx->params_));
+  // A CALL is its own statement and therefore starts a fresh diagnostics area:
+  // conditions raised by earlier statements of this block are not visible after
+  // it, and the callee's conditions are what the caller sees. This is the
+  // statement-level counterpart of the SELECT exemption in spi_execute --
+  // without it, a read-only SELECT no longer clearing the buffer would let a
+  // caller's stale warning leak past CALL.
+  if (OB_SUCC(ret)) {
+    common::ob_reset_tsi_warning_buffer();
+  }
   const int64_t argc = OB_SUCC(ret) ? s->get_params().count() : 0;
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObObjParam **argv = NULL;

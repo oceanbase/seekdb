@@ -1625,7 +1625,13 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
 
             OX (session->get_pl_sqlcode_info()->set_sqlcode(OB_SUCCESS));
 
-            if (OB_SUCC(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)) {
+            // A plain SELECT does not start a new diagnostics area: MySQL keeps a
+            // warning raised by the previous statement visible across it (see
+            // sp-error-02, Bug#23032 p3, where SELECT 1 must not erase the
+            // CAST() warning). Every other statement type -- DML, DDL, SET --
+            // does clear it. Diagnostics statements are excluded as before.
+            if (OB_SUCC(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)
+                && stmt::T_SELECT != stmt_type) {
               ob_reset_tsi_warning_buffer();
             }
 
