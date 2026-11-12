@@ -30,6 +30,7 @@ pub use spatial_covering;
 pub use sql_nio as network;
 #[cfg(not(target_family = "wasm"))]
 pub use standby_rpc;
+pub use sql_parser;
 pub use uuid_generator;
 pub use xml_parser;
 pub use math;

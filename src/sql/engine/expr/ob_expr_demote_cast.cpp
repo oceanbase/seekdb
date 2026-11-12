@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "sql/engine/expr/cast_type_descriptor.h"
 #include "sql/engine/expr/ob_expr_demote_cast.h"
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
@@ -68,16 +69,15 @@ int ObExprDemoteCastBase::get_column_res_type(const ObExprResType &param_type,
 int ObExprDemoteCastBase::get_column_datum_meta(const int64_t val, ObDatumMeta &column_datum_meta)
 {
   int ret = OB_SUCCESS;
-  ParseNode parse_node;
-  parse_node.value_ = val;
-  column_datum_meta.type_ = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
+  CastTypeDescriptor type_descriptor(val);
+  column_datum_meta.type_ = static_cast<ObObjType>(type_descriptor.type());
   column_datum_meta.cs_type_ =
-    static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]);
+    static_cast<ObCollationType>(type_descriptor.collation());
   if (ob_is_string_type(column_datum_meta.type_)) {
-    column_datum_meta.length_semantics_ = parse_node.int32_values_[OB_NODE_CAST_C_LEN_IDX];
+    column_datum_meta.length_semantics_ = type_descriptor.length();
   } else {
-    column_datum_meta.precision_ = parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX];
-    column_datum_meta.scale_ = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
+    column_datum_meta.precision_ = type_descriptor.precision();
+    column_datum_meta.scale_ = type_descriptor.scale();
   }
   return ret;
 }

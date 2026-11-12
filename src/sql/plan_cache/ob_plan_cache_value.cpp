@@ -752,24 +752,24 @@ int ObPlanCacheValue::check_not_param_value(const ObIArray<ObPCParam *> &raw_par
                                             bool &is_same)
 {
   int ret = OB_SUCCESS;
-  ParseNode *raw_param = NULL;
+  const LiteralToken *raw_param = NULL;
   ObPCParam *pc_param = NULL;
   is_same = true;
   for (int64_t i = 0; OB_SUCC(ret) && is_same && i < not_param_info.count(); ++i) {
     if (OB_FAIL(raw_params.at(not_param_info.at(i).idx_, pc_param))) {
     } else if (OB_ISNULL(pc_param)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (NULL == (raw_param = pc_param->node_)) {
+    } else if (NULL == (raw_param = pc_param->literal_)) {
       ret = OB_INVALID_ARGUMENT;
     } else if (0 != not_param_info.at(i).raw_text_.compare(
-        ObString(raw_param->text_len_, raw_param->raw_text_))) {
+        raw_param->source)) {
       is_same = false;
       LOG_TRACE("can't match not param info",
-                "raw value", ObString(raw_param->text_len_, raw_param->raw_text_),
+                "raw value", raw_param->source,
                 "cached special value", not_param_info.at(i).raw_text_);
     } else {
       LOG_TRACE("match not param info success",
-                "raw value", ObString(raw_param->text_len_, raw_param->raw_text_),
+                "raw value", raw_param->source,
                 "cached special value", not_param_info.at(i).raw_text_);
     }
   }
@@ -781,24 +781,24 @@ int ObPlanCacheValue::check_not_param_value(const ObFastParserResult &fp_result,
                                             bool &is_same)
 {
   int ret = OB_SUCCESS;
-  ParseNode *raw_param = NULL;
+  const LiteralToken *raw_param = NULL;
   ObPCParam *pc_param = NULL;
   is_same = true;
   for (int64_t i = 0; OB_SUCC(ret) && is_same && i < not_param_info.count(); ++i) {
     if (OB_FAIL(fp_result.raw_params_.at(not_param_info.at(i).idx_, pc_param))) {
     } else if (OB_ISNULL(pc_param)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (NULL == (raw_param = pc_param->node_)) {
+    } else if (NULL == (raw_param = pc_param->literal_)) {
       ret = OB_INVALID_ARGUMENT;
     } else if (0 != not_param_info.at(i).raw_text_.compare(
-        ObString(raw_param->text_len_, raw_param->raw_text_))) {
+        raw_param->source)) {
       is_same = false;
       LOG_TRACE("match not param info",
-                "raw value", ObString(raw_param->text_len_, raw_param->raw_text_),
+                "raw value", raw_param->source,
                 "cached special value", not_param_info.at(i).raw_text_);
     } else {
       LOG_TRACE("match param info",
-                "raw value", ObString(raw_param->text_len_, raw_param->raw_text_),
+                "raw value", raw_param->source,
                 "cached special value", not_param_info.at(i).raw_text_);
     }
   }

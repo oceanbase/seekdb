@@ -140,7 +140,7 @@ ERROR 42000: You have an error in your SQL syntax; check the manual that corresp
 fork t6_fork to t6;
 ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 't6_fork to t6' at line 1
 fork table t6_fork;
-ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 't6_fork' at line 1
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use; unexpected end of input at line 1
 ============================================
 9. Fork临时表（不支持）
 ============================================

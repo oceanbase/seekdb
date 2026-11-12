@@ -63,7 +63,7 @@ int ObCallProcedureResolver::check_param_expr_legal(ObRawExpr *param)
   }
   return ret;
 }
-int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
+int ObCallProcedureResolver::resolve_cparams(rust::Slice<const peg::Node> arguments,
                                              const ObRoutineInfo *routine_info,
                                              ObCallProcedureInfo *call_proc_info,
                                              ObIArray<ObRawExpr*> &params,
@@ -78,22 +78,15 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_info->get_param_count(); ++i) {
     OZ (params.push_back(NULL));
   }
-  // Step 2: Parse parameters from ParamsNode
-  if (OB_SUCC(ret) && OB_NOT_NULL(params_node)) {
-    if (T_SP_CPARAM_LIST != params_node->type_) {
-      ret = OB_INVALID_ARGUMENT;
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < params_node->num_child_; ++i) {
-      if (OB_ISNULL(params_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_SP_CPARAM == params_node->children_[i]->type_) {
-        has_assign_param = true;
-        if (OB_FAIL(resolve_cparam_with_assign(params_node->children_[i], routine_info, params, deps))) {
-        }
-      } else if (has_assign_param) {
-        ret = OB_ERR_SP_WRONG_ARG_NUM;
-      } else if (OB_FAIL(resolve_cparam_without_assign(params_node->children_[i], i, params, deps))) {
-      }
+  for (int64_t i = 0; OB_SUCC(ret) && i < arguments.size(); ++i) {
+    const auto &argument = arguments[i];
+    if (argument.kind() == peg::NodeKind::PlNamedArgument) {
+      has_assign_param = true;
+      OZ (resolve_cparam_with_assign(&argument, routine_info, params, deps));
+    } else if (has_assign_param) {
+      ret = OB_ERR_SP_WRONG_ARG_NUM;
+    } else {
+      OZ (resolve_cparam_without_assign(&argument, i, params, deps));
     }
   }
   // Step 3: process missing parameters, if there are default values fill with default values, otherwise report an error
@@ -122,7 +115,8 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
         ret = OB_INVALID_ARGUMENT;
       } else if (params.at(i)->is_const_raw_expr()) {
         const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(params.at(i));
-        if (T_QUESTIONMARK != const_expr->get_expr_type()) {
+        if (T_QUESTIONMARK != const_expr->get_expr_type()
+            || const_expr->get_value().get_unknown() != i) {
           v = false;
         }
       } else {
@@ -134,7 +128,7 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
   return ret;
 }
 
-int ObCallProcedureResolver::resolve_cparam_without_assign(const ParseNode *param_node,
+int ObCallProcedureResolver::resolve_cparam_without_assign(const peg::Node *param_node,
                                                            const int64_t position,
                                                            ObIArray<ObRawExpr*> &params,
                                                            pl::ObPLDependencyTable &deps)
@@ -161,63 +155,42 @@ int ObCallProcedureResolver::resolve_cparam_without_assign(const ParseNode *para
   return ret;
 }
 
-int ObCallProcedureResolver::resolve_cparam_with_assign(const ParseNode *param_node,
-                                                        const ObRoutineInfo* routine_info,
-                                                        ObIArray<ObRawExpr*> &params,
-                                                        pl::ObPLDependencyTable &deps)
+int ObCallProcedureResolver::resolve_cparam_with_assign(const peg::Node *argument,
+                                                       const ObRoutineInfo *routine_info,
+                                                       ObIArray<ObRawExpr*> &params,
+                                                       pl::ObPLDependencyTable &deps)
 {
   int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(param_node));
-  CK (OB_NOT_NULL(routine_info));
-  CK (OB_LIKELY(2 == param_node->num_child_));
-  CK (OB_NOT_NULL(param_node->children_[0]));
-  CK (OB_NOT_NULL(param_node->children_[1]));
+  CK (OB_NOT_NULL(argument), OB_NOT_NULL(routine_info));
   if (OB_SUCC(ret)) {
-    const ParseNode *name_node = NULL;
-    if (T_OBJ_ACCESS_REF == param_node->children_[0]->type_) {
-      CK (OB_LIKELY(2 == param_node->children_[0]->num_child_));
-      CK (OB_NOT_NULL(param_node->children_[0]->children_[0]));
-      CK (OB_ISNULL(param_node->children_[0]->children_[1]));
-      CK (OB_LIKELY(T_IDENT == param_node->children_[0]->children_[0]->type_));
-      name_node = param_node->children_[0]->children_[0];
-    } else if (T_IDENT == param_node->children_[0]->type_) {
-      name_node = param_node->children_[0];
-    } else if (T_COLUMN_REF == param_node->children_[0]->type_ &&
-               3 == param_node->children_[0]->num_child_ &&
-               NULL == param_node->children_[0]->children_[0] &&
-               NULL ==  param_node->children_[0]->children_[1] &&
-               T_IDENT == param_node->children_[0]->children_[2]->type_) {
-      name_node = param_node->children_[0]->children_[2];
-    } else {
+    const peg::Node &name = peg::named_argument_name(*argument);
+    if (name.kind() != peg::NodeKind::Ident) {
       ret = OB_ERR_CALL_WRONG_ARG;
       LOG_USER_ERROR(OB_ERR_CALL_WRONG_ARG, routine_info->get_routine_name().length(),
-                    routine_info->get_routine_name().ptr());
+                     routine_info->get_routine_name().ptr());
     }
-
     if (OB_SUCC(ret)) {
-      ObString name = ObString(static_cast<int32_t>(name_node->str_len_), name_node->str_value_);
+      const auto identifier_text = name.text();
+      ObString parameter_name(syntax_text(identifier_text));
       int64_t position = -1;
-      if (OB_FAIL(routine_info->find_param_by_name(name, position))) {
-      } else if (OB_UNLIKELY(-1 == position)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(resolve_cparam_without_assign(param_node->children_[1], position, params, deps))) {
-      }
+      OZ (routine_info->find_param_by_name(parameter_name, position));
+      CK (position != -1);
+      OZ (resolve_cparam_without_assign(&peg::named_argument_value(*argument), position, params, deps));
     }
   }
   return ret;
 }
 
-int ObCallProcedureResolver::resolve_param_exprs(const ParseNode *params_node,
-                                                 ObIArray<ObRawExpr*> &expr_params,
-                                                 pl::ObPLDependencyTable &deps)
+int ObCallProcedureResolver::resolve_param_exprs(rust::Slice<const peg::Node> arguments,
+                                                ObIArray<ObRawExpr*> &expr_params,
+                                                pl::ObPLDependencyTable &deps)
 {
   int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(params_node));
-  CK (T_SP_CPARAM_LIST == params_node->type_);
-  CK (OB_NOT_NULL(params_.session_info_));
-  for (int64_t i = 0; OB_SUCC(ret) && i < params_node->num_child_; ++i) {
-    ObRawExpr* raw_expr = NULL;
-    OZ (expr_resolver_->resolve(*params_node->children_[i], raw_expr, &deps));
+  CK (OB_NOT_NULL(params_.session_info_), OB_NOT_NULL(params_.syntax_));
+  for (const auto &argument : arguments) {
+    if (OB_FAIL(ret)) { break; }
+    ObRawExpr *raw_expr = nullptr;
+    OZ (expr_resolver_->resolve(argument, raw_expr, &deps));
     CK (OB_NOT_NULL(raw_expr));
     OZ (check_param_expr_legal(raw_expr));
     OZ (expr_params.push_back(raw_expr));
@@ -305,12 +278,11 @@ int ObCallProcedureResolver::find_call_proc_info(ObCallProcedureStmt &stmt)
   return ret;
 }
 
-int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
+int ObCallProcedureResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObCallProcedureStmt *stmt = NULL;
-  ParseNode *name_node = parse_tree.children_[0];
-  ParseNode *params_node = parse_tree.children_[1];
+  const auto arguments = peg::routine_call_arguments(parse_tree);
   ObString db_name;
   ObString package_name;
   ObString sp_name;
@@ -319,7 +291,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
   ObPlanCache *plan_cache = params_.plan_cache_;
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_) || OB_ISNULL(plan_cache)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(T_SP_CALL_STMT != parse_tree.type_ || OB_ISNULL(name_node))) {
+  } else if (OB_UNLIKELY(peg::NodeKind::PlCall != parse_tree.kind())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(stmt = create_stmt<ObCallProcedureStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -345,24 +317,20 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
     OZ (ObResolverUtils::wait_for_sys_package_ready(*session_info_));
     // Parsing process name
     if (OB_SUCC(ret)) {
-      if (T_SP_ACCESS_NAME != name_node->type_) {
-        ret = OB_ERR_UNEXPECTED;
+      if (OB_FAIL(ObResolverUtils::resolve_sp_access_name(*schema_checker_,
+                                                          session_info_->get_database_name(),
+                                                          peg::routine_call_names(parse_tree),
+                                                          db_name, package_name, sp_name,
+                                                          nullptr))) {
+      } else if (db_name.empty() && session_info_->get_database_name().empty()) {
+        ret = OB_ERR_NO_DB_SELECTED;
       } else {
-        if (OB_FAIL(ObResolverUtils::resolve_sp_access_name(*schema_checker_,
-                                                            session_info_->get_database_name(),
-                                                            *name_node,
-                                                            db_name, package_name, sp_name,
-                                                            nullptr))) {
-        } else if (db_name.empty() && session_info_->get_database_name().empty()) {
-          ret = OB_ERR_NO_DB_SELECTED;
+        if (!db_name.empty()) {
+          OZ (call_proc_info->set_db_name(db_name));
         } else {
-          if (!db_name.empty()) {
-            OZ (call_proc_info->set_db_name(db_name));
-          } else {
-            OZ (call_proc_info->set_db_name(session_info_->get_database_name()));
-          }
-
+          OZ (call_proc_info->set_db_name(session_info_->get_database_name()));
         }
+
       }
     }
     if (OB_SUCC(ret)) {
@@ -378,8 +346,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         pl::ObPLDependencyTable expr_deps;
         // Get routine schema info
         if (OB_SUCC(ret)) {
-          if (OB_NOT_NULL(params_node)
-              && OB_FAIL(resolve_param_exprs(params_node, expr_params, expr_deps))) {
+          if (OB_FAIL(resolve_param_exprs(arguments, expr_params, expr_deps))) {
           } else if (OB_FAIL(ObResolverUtils::get_routine(*params_.package_guard_,
                                                           params_,
                                                           (*session_info_).get_database_name(),
@@ -413,22 +380,22 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         }
         ObSEArray<ObRawExpr*, 16> params;
         bool reuse_resolved = OB_SUCC(ret) && NULL == params_.secondary_namespace_
-            && NULL != params_node && expr_params.count() == proc_info->get_param_count()
-            && expr_params.count() == params_node->num_child_;
+            && expr_params.count() == proc_info->get_param_count()
+            && expr_params.count() == arguments.size();
         bool direct_params = true;
         for (int64_t i = 0; reuse_resolved && i < expr_params.count(); ++i) {
           const ObRawExpr *expr = expr_params.at(i);
-          reuse_resolved = NULL != params_node->children_[i]
-              && T_SP_CPARAM != params_node->children_[i]->type_
+          reuse_resolved = arguments[i].kind() != peg::NodeKind::PlNamedArgument
               && can_reuse_call_param(expr);
-          direct_params = direct_params && NULL != expr && T_QUESTIONMARK == expr->get_expr_type();
+          direct_params = direct_params && NULL != expr && T_QUESTIONMARK == expr->get_expr_type()
+              && static_cast<const ObConstRawExpr *>(expr)->get_value().get_unknown() == i;
         }
         if (OB_SUCC(ret) && reuse_resolved) {
           OZ (params.assign(expr_params));
           OZ (pl::ObPLDependencyUtil::add_dependency_objects(&deps, expr_deps));
           OX (call_proc_info->set_can_direct_use_param(direct_params));
         } else {
-          OZ (resolve_cparams(params_node, proc_info, call_proc_info, params, deps));
+          OZ (resolve_cparams(arguments, proc_info, call_proc_info, params, deps));
         }
         OZ (call_proc_info->init_dependency_table_store(deps.count()));
         OZ (call_proc_info->get_dependency_table().assign(deps));

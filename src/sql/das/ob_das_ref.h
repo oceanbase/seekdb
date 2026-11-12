@@ -193,21 +193,25 @@ struct DasRefKey
 public:
   DasRefKey()
     : tablet_access_(NULL),
-      op_type_(ObDASOpType::DAS_OP_INVALID)
+      op_type_(ObDASOpType::DAS_OP_INVALID),
+      vec_datum_kind_(DAS_VEC_DATUM_TEXT)
   {}
-  DasRefKey(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type)
+  DasRefKey(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type,
+            DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT)
     : tablet_access_(tablet_access),
-      op_type_(op_type)
+      op_type_(op_type),
+      vec_datum_kind_(vec_datum_kind)
   {}
   ~DasRefKey() {}
   bool operator==(const DasRefKey &other) const;
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
-  TO_STRING_KV(KP_(tablet_access), K_(op_type));
+  TO_STRING_KV(KP_(tablet_access), K_(op_type), K_(vec_datum_kind));
 
 public:
   const DASRuntimeTabletAccess *tablet_access_;
   ObDASOpType op_type_;
+  DasVecDatumKind vec_datum_kind_;
 };
 
 static const int64_t DAS_REF_TASK_LOOKUP_THRESHOLD = 1000;
@@ -228,18 +232,22 @@ public:
   void set_mem_attr(const common::ObMemAttr &memattr) { das_alloc_.set_attr(memattr); }
   ObExecContext &get_exec_ctx() { return exec_ctx_; }
   template <typename DASOp>
-  bool has_das_op(const DASRuntimeTabletAccess *tablet_access, DASOp *&das_op);
-  ObIDASTaskOp* find_das_task(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type);
+  bool has_das_op(const DASRuntimeTabletAccess *tablet_access, DASOp *&das_op,
+                  DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT);
+  ObIDASTaskOp* find_das_task(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type,
+                             DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT);
   int add_aggregated_task(ObIDASTaskOp *das_task, ObDASOpType op_type);
   int create_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task);
   int find_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task);
   int add_batched_task(ObIDASTaskOp *das_task);
   // Create a DAS Task, and hold it by das_ref
   template <typename DASOp>
-  int prepare_das_task(const DASRuntimeTabletAccess *tablet_access, DASOp *&task_op);
+  int prepare_das_task(const DASRuntimeTabletAccess *tablet_access, DASOp *&task_op,
+                       DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT);
   int create_das_task(const DASRuntimeTabletAccess *tablet_access,
                       ObDASOpType op_type,
-                      ObIDASTaskOp *&task_op);
+                     ObIDASTaskOp *&task_op,
+                     DasVecDatumKind vec_datum_kind = DAS_VEC_DATUM_TEXT);
   bool has_task() const { return !batched_tasks_.empty(); }
   int32_t get_das_task_cnt() const { return batched_tasks_.get_size(); }
   ObDasParallelType get_parallel_type() { return das_parallel_ctx_.get_parallel_type(); }
@@ -308,11 +316,12 @@ public:
 };
 
 template <typename DASOp>
-OB_INLINE bool ObDASRef::has_das_op(const DASRuntimeTabletAccess *tablet_access, DASOp *&das_op)
+OB_INLINE bool ObDASRef::has_das_op(const DASRuntimeTabletAccess *tablet_access, DASOp *&das_op,
+                                   DasVecDatumKind vec_datum_kind)
 {
   ObDASOpType type = static_cast<ObDASOpType>(das_reg::ObDASOpTraits<DASOp>::type_);
   bool bret = false;
-  ObIDASTaskOp *das_task = find_das_task(tablet_access, type);
+  ObIDASTaskOp *das_task = find_das_task(tablet_access, type, vec_datum_kind);
   if (das_task != nullptr) {
     bret = true;
     OB_ASSERT(typeid(*das_task) == typeid(DASOp));
@@ -322,11 +331,12 @@ OB_INLINE bool ObDASRef::has_das_op(const DASRuntimeTabletAccess *tablet_access,
 }
 
 template <typename DASOp>
-OB_INLINE int ObDASRef::prepare_das_task(const DASRuntimeTabletAccess *tablet_access, DASOp *&task_op)
+OB_INLINE int ObDASRef::prepare_das_task(const DASRuntimeTabletAccess *tablet_access, DASOp *&task_op,
+                                        DasVecDatumKind vec_datum_kind)
 {
   ObDASOpType type = static_cast<ObDASOpType>(das_reg::ObDASOpTraits<DASOp>::type_);
   ObIDASTaskOp *tmp_op = nullptr;
-  int ret = create_das_task(tablet_access, type, tmp_op);
+  int ret = create_das_task(tablet_access, type, tmp_op, vec_datum_kind);
   if (OB_SUCC(ret)) {
     task_op = static_cast<DASOp*>(tmp_op);
   }

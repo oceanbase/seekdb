@@ -65,7 +65,17 @@ public:
     inline int add_param(sql::ObRawExpr* param) { return params_.push_back(param); }
     inline int add_info_argument(ObString arg) {return info_argument_.push_back(arg); }
     inline const common::ObIArray<ObString> &get_info_argument() const { return info_argument_; }
-    inline int add_origin_param_index(int64_t idx) {return orgin_param_index_.push_back(idx); }
+    inline int set_origin_param_index(int64_t bind_index, int64_t local_index)
+    {
+      int ret = OB_SUCCESS;
+      if (bind_index == orgin_param_index_.count()) {
+        ret = orgin_param_index_.push_back(local_index);
+      } else if (bind_index < 0 || bind_index >= orgin_param_index_.count()
+                 || orgin_param_index_.at(bind_index) != local_index) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+      return ret;
+    }
     inline const common::ObIArray<int64_t> &get_origin_param_indexs() const { return orgin_param_index_; }
     inline int64_t get_origin_param_index(int64_t idx) const
     {

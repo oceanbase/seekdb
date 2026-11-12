@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SQL_RESOLVER_EXPR_RAW_EXPR_
 #define OCEANBASE_SQL_RESOLVER_EXPR_RAW_EXPR_
+#include "sql/resolver/parameterization_result.h"
 #include "share/ob_define.h"
 #include "lib/container/ob_bit_set.h"
 #include "lib/string/ob_string.h"
@@ -31,7 +32,7 @@
 #include "sql/resolver/expr/ob_expr_info_flag.h"
 #include "sql/session/ob_system_variable.h"
 #include "lib/worker.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "sql/resolver/ob_resolver_define.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_operator_factory.h"
@@ -58,6 +59,7 @@ class ObPLBuilder;
 }
 namespace sql
 {
+namespace peg { struct Node; }
 class ObStmt;
 class ObCallProcedureInfo;
 class ObSQLSessionInfo;
@@ -1185,6 +1187,7 @@ public:
         tbl_name_(),
         col_name_(),
         is_star_(false),
+        has_qualifier_(false),
         ref_expr_(NULL),
         parents_expr_info_(),
         parent_aggr_level_(-1),
@@ -1201,6 +1204,7 @@ public:
     tbl_name_ = other.tbl_name_;
     col_name_ = other.col_name_;
     is_star_ = other.is_star_;
+    has_qualifier_ = other.has_qualifier_;
     ref_expr_ = other.ref_expr_;
     parents_expr_info_ = other.parents_expr_info_;
     parent_aggr_level_ = other.parent_aggr_level_;
@@ -1298,6 +1302,7 @@ public:
   common::ObString tbl_name_; // When used for UDF, indicates package name
   common::ObString col_name_; // When used for UDF, indicates function name
   bool is_star_;
+  bool has_qualifier_;
   ObColumnRefRawExpr *ref_expr_;
   ObExprInfo parents_expr_info_;
   int64_t parent_aggr_level_;
@@ -1576,7 +1581,7 @@ struct ObSubQueryInfo
   }
   TO_STRING_KV(K_(ref_expr));
 
-  const ParseNode *sub_query_;
+  const peg::Node *sub_query_;
   ObQueryRefRawExpr *ref_expr_;
   ObExprInfo parents_expr_info_;
 };
@@ -1617,6 +1622,7 @@ struct ObResolveContext
     inlist_infos_(NULL),
     is_extract_param_type_(true),
     param_list_(NULL),
+    parameterization_(nullptr),
     prepare_param_count_(0),
     external_param_info_(NULL),
     current_scope_(T_NONE_SCOPE),
@@ -1639,6 +1645,7 @@ struct ObResolveContext
   }
 
   ExprFactoryT &expr_factory_;
+  common::ObString syntax_source_;
   ObStmt *stmt_;
   common::ObCharsetType connection_charset_;
   common::ObCollationType dest_collation_;
@@ -1664,6 +1671,7 @@ struct ObResolveContext
   // If no parameter list is specified, then the expr resolver will ignore the filling of parameter types
   bool is_extract_param_type_;
   const ParamStore *param_list_;
+  const ParameterizationResult *parameterization_;
   int64_t prepare_param_count_;
   ExternalParams *external_param_info_;//for anonymous + ps
   ObStmtScope current_scope_;

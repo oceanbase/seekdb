@@ -23,7 +23,6 @@
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "sql/resolver/dcl/ob_dcl_resolver.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
@@ -42,6 +41,30 @@ using namespace share;
 using namespace obcall;
 namespace sql
 {
+namespace
+{
+const peg::Node &partition_value_expression(const peg::Node &syntax)
+{
+  const peg::Node *expression = &syntax;
+  while (expression->kind() == peg::NodeKind::Parenthesized) {
+    expression = &peg::parenthesized_expression(*expression);
+  }
+  return *expression;
+}
+}
+
+ObDDLResolver::INDEX_KEYNAME ObDDLResolver::index_keyname(peg::IndexKind kind)
+{
+  switch (kind) {
+    case peg::IndexKind::Normal: return NORMAL_KEY;
+    case peg::IndexKind::Unique: return UNIQUE_KEY;
+    case peg::IndexKind::Spatial: return SPATIAL_KEY;
+    case peg::IndexKind::Fulltext: return FTS_KEY;
+    case peg::IndexKind::Vector: return VEC_KEY;
+  }
+  return NORMAL_KEY;
+}
+
 ObDDLResolver::ObDDLResolver(ObResolverParams &params)
   : ObStmtResolver(params),
     block_size_(OB_DEFAULT_SSTABLE_BLOCK_SIZE),
@@ -249,108 +272,68 @@ int ObDDLResolver::check_add_column_as_pk_allowed(const ObColumnSchemaV2 &column
  * set default value for primary key
  */
 
-int update_datetime_default_value(ObObjParam &default_value, ParseNode &def_val,
-    const ObObjType datetime_type, const int64_t action_flag)
+int ObDDLResolver::resolve_default_value(const peg::Node &node, ObDefaultValueRes &resolve_res)
 {
   int ret = OB_SUCCESS;
-  int16_t scale = 0;
-  default_value.set_ext(action_flag);
-  default_value.set_param_meta();
-  if (def_val.value_ < 0) {
-    scale = ObAccuracy::DDL_DEFAULT_ACCURACY[datetime_type].get_scale();
-    default_value.set_scale(scale);
-  } else if (OB_ISNULL(def_val.children_) || OB_UNLIKELY(1 != def_val.num_child_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (NULL != def_val.children_[0]) {
-      scale = static_cast<int16_t>(def_val.children_[0]->value_);
-    } else {
-      scale = 0;
-    }
-    default_value.set_scale(scale);
-  }
-  return ret;
-}
-
-int ObDDLResolver::resolve_default_value(ParseNode *def_node,
-                                        //  const ObObjType column_data_type,
-                                         ObDefaultValueRes &resolve_res)
-{
-  int ret = OB_SUCCESS;
-  ObString tmp_str;
-  ObString str;
-  ObObj val;
-  int16_t scale = -1;
-  ObIAllocator *name_pool = NULL;
-  ParseNode *def_val = NULL;
+  const auto syntax = peg::default_expression(node);
+  const peg::Node &value = syntax.node;
+  const auto form = syntax.form;
+  using Form = peg::DefaultForm;
   ObObjParam &default_value = resolve_res.value_;
   resolve_res.is_literal_ = true;
-  if (NULL != def_node) {
-    def_val = def_node;
-    if (def_node->type_ == T_CONSTR_DEFAULT) {
-      def_val = def_node->children_[0];
+  if (OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (form == Form::Hidden) {
+  } else if (form == Form::Literal) {
+    const auto literal = peg::default_literal(value);
+    ObString text(syntax_text(literal.text));
+    ObString owned_text;
+    int16_t scale = -1;
+    if (literal.binary_notation != peg::BinaryNotation::None) {
+      const auto bytes = peg::decode_binary_literal(literal.text, literal.binary_notation);
+      OZ (ob_write_string(*allocator_,
+          ObString(bytes.size(), reinterpret_cast<const char *>(bytes.data())), text, true));
     }
-    if (OB_ISNULL(allocator_) || OB_ISNULL(def_val)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "allocator_ or def_val is null", K(allocator_),  K(ret));
-    } else {
-      name_pool = static_cast<ObIAllocator *>(allocator_);
-      if (OB_ISNULL(name_pool)) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "name pool is null", K(name_pool),  K(ret));
-      }
-    }
-    if (OB_FAIL(ret)) {
-      //do nothing;
-    } else {
-      switch (def_val->type_) {
-      case T_INT:
-        default_value.set_int(def_val->value_);
-        default_value.set_param_meta();
-        break;
-      case T_UINT64:
-        default_value.set_uint64(static_cast<uint64_t>(def_val->value_));
-        default_value.set_param_meta();
-        break;
-      case T_NCHAR: //mysql mode
-      case T_CHAR:
-      case T_VARCHAR:
-        tmp_str.assign_ptr(const_cast<char *>(def_val->str_value_),
-                           static_cast<int32_t>(def_val->str_len_));
-        if ((OB_FAIL(ob_write_string(*name_pool, tmp_str, str)))) {
-        } else {
-          ObCollationType coll = session_info_->get_local_collation_connection();
-          if (def_val->type_ == T_NCHAR) {
-            ObString charset(strlen("utf8mb4"), "utf8mb4");
-            ObCharsetType charset_type = ObCharset::charset_type(charset.trim());
-            coll = ObCharset::get_default_collation(charset_type);
+    if (OB_SUCC(ret)) {
+      switch (literal.kind) {
+      case peg::LiteralKind::Integer: {
+        int64_t integer = literal.integer;
+        if (!literal.date_unit.empty()) {
+          const ObString unit(syntax_text(literal.date_unit));
+          for (int i = DATE_UNIT_MICROSECOND; i < DATE_UNIT_MAX; ++i) {
+            if (unit == ObString::make_string(ob_date_unit_type_str(static_cast<ObDateUnitType>(i)))) {
+              integer = i;
+              break;
+            }
           }
-          default_value.set_varchar(str);
-          default_value.set_collation_type(coll);
+        }
+        default_value.set_int(integer);
+        default_value.set_param_meta();
+        break;
+      }
+      case peg::LiteralKind::Unsigned:
+        default_value.set_uint64(literal.integer);
+        default_value.set_param_meta();
+        break;
+      case peg::LiteralKind::String:
+      case peg::LiteralKind::NationalString:
+        OZ(ob_write_string(*allocator_, text, owned_text));
+        if (OB_SUCC(ret)) {
+          default_value.set_varchar(owned_text);
+          default_value.set_collation_type(session_info_->get_local_collation_connection());
           default_value.set_param_meta();
         }
         break;
-      case T_HEX_STRING:
-        tmp_str.assign_ptr(const_cast<char *>(def_val->str_value_),
-                           static_cast<int32_t>(def_val->str_len_));
-        if ((OB_FAIL(ob_write_string(*name_pool, tmp_str, str)))) {
-          SQL_RESV_LOG(WARN, "Can not malloc space for default value", K(ret));
-          break;
+      case peg::LiteralKind::Binary:
+        OZ(ob_write_string(*allocator_, text, owned_text));
+        if (OB_SUCC(ret)) {
+          default_value.set_hex_string(owned_text);
+          default_value.set_scale(0);
+          default_value.set_param_meta();
         }
-        default_value.set_hex_string(str);
-        default_value.set_scale(0);
-        default_value.set_param_meta();
         break;
-      case T_YEAR:
-        default_value.set_year(static_cast<uint8_t>(def_val->value_));
-        default_value.set_scale(0);
-        default_value.set_param_meta();
-        break;
-      /*
-       * mysql5.6 supports such syntax c1 date|time|timestamp default date|time|timestamp'xxx'
-       */
-      case T_DATE: {
-        ObString time_str(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
+      case peg::LiteralKind::Date: {
+        ObString time_str(text.length(), text.ptr());
         ObDateSqlMode date_sql_mode;
         bool enable_mysql_compatible_dates = false;
         ObCStringHelper helper;
@@ -383,8 +366,8 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
         }
         break;
       }
-      case T_TIME: {
-        ObString time_str(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
+      case peg::LiteralKind::Time: {
+        ObString time_str(text.length(), text.ptr());
         int64_t time_val = 0;
         if (OB_FAIL(ObTimeConverter::str_to_time(time_str, time_val, &scale))) {
           ret = OB_ERR_WRONG_VALUE;
@@ -397,8 +380,8 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
         }
         break;
       }
-      case T_TIMESTAMP: {
-        ObString time_str(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
+      case peg::LiteralKind::Timestamp: {
+        ObString time_str(text.length(), text.ptr());
         int64_t time_val = 0;
         ObDateSqlMode date_sql_mode;
         ObTimeConvertCtx cvrt_ctx(TZ_INFO(session_info_), false);
@@ -418,334 +401,142 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
         }
         break;
       }
-      case T_TIMESTAMP_TZ: {
-        ObObjType value_type = ObMaxType;
-        ObOTimestampData tz_value;
-        ObTimeConvertCtx cvrt_ctx(TZ_INFO(session_info_), false);
-        ObString time_str(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
-        //if (OB_FAIL(ObTimeConverter::str_to_otimestamp(time_str, cvrt_ctx, tmp_type, ot_data))) {
-        if (OB_FAIL(ObTimeConverter::validate_literal_timestamp(time_str, cvrt_ctx, value_type, tz_value))) {
-          ret = OB_INVALID_DATE_VALUE;
-          ObCStringHelper helper;
-          LOG_USER_ERROR(OB_INVALID_DATE_VALUE, 9, "TIMESTAMP", helper.convert(time_str));
+
+      case peg::LiteralKind::Float: {
+        int error = 0;
+        char *end = nullptr;
+        const double number = ObCharset::strntod(text.ptr(), text.length(), &end, &error);
+        if (error == EOVERFLOW) {
+          ret = OB_DATA_OUT_OF_RANGE;
         } else {
-          /* use max scale bug:#18093350 */
-          default_value.set_otimestamp_value(value_type, tz_value);
-          default_value.set_scale(OB_MAX_TIMESTAMP_TZ_PRECISION);
+          default_value.set_double(number);
           default_value.set_param_meta();
         }
         break;
       }
-      case T_DATETIME: {
-        ObString time_str(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
-        int64_t time_val = 0;
-        ObTimeConvertCtx cvrt_ctx(TZ_INFO(session_info_), false);
-        if (OB_FAIL(ObTimeConverter::validate_literal_date(time_str, cvrt_ctx, time_val))) {
-          ret = OB_ERR_WRONG_VALUE;
-          ObCStringHelper helper;
-          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", helper.convert(time_str));
-        } else {
-          default_value.set_datetime(time_val);
-          default_value.set_scale(OB_MAX_DATE_PRECISION);
-          default_value.set_param_meta();
-        }
-        break;
-      }
-      case T_FLOAT: {
-          int err = 0;
-          double value = 0;
-          char *endptr = NULL;
-          value = ObCharset::strntod(def_val->str_value_,
-                                     static_cast<int32_t>(def_val->str_len_),
-                                     &endptr,
-                                     &err);
-          if (EOVERFLOW == err) {
-            ret = OB_DATA_OUT_OF_RANGE;
-          } else {
-            default_value.set_float(static_cast<float>(value));
-            default_value.set_param_meta();
-          }
-          break;
-        }
-      case T_DOUBLE:
-        {
-          int err = 0;
-          double value = 0;
-          char *endptr = NULL;
-          value = ObCharset::strntod(def_val->str_value_,
-                                     static_cast<int32_t>(def_val->str_len_),
-                                     &endptr,
-                                     &err);
-          if (EOVERFLOW == err) {
-            ret = OB_DATA_OUT_OF_RANGE;
-          } else {
-            default_value.set_double(value);
-            default_value.set_param_meta();
-          }
-          break;
-        }
-      case T_NUMBER:
-        { // set as string
-          ObString number(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
-          if (OB_FAIL(ob_write_string(*name_pool, number, str))) {
-            SQL_RESV_LOG(WARN, "Can not malloc space for default value", K(ret));
-            break;
-          }
-          default_value.set_varchar(str);
-          default_value.set_type(ObVarcharType);
+      case peg::LiteralKind::Decimal:
+        OZ(ob_write_string(*allocator_, text, owned_text));
+        if (OB_SUCC(ret)) {
+          default_value.set_varchar(owned_text);
           default_value.set_collation_type(ObCharset::get_system_collation());
           default_value.set_param_meta();
-          break;
         }
-      case T_BOOL:
-        default_value.set_bool(def_val->value_ == 1 ? true : false);
+        break;
+      case peg::LiteralKind::Boolean:
+        default_value.set_bool(literal.integer != 0);
         default_value.set_param_meta();
         break;
-      case T_NULL:
-        default_value.set_type(ObNullType);
+      case peg::LiteralKind::Null:
+        default_value.set_null();
         default_value.set_param_meta();
         break;
-      case T_FUN_SYS_CUR_TIMESTAMP: {
-        resolve_res.is_literal_ = def_node->is_default_literal_expression_;
-        ret = update_datetime_default_value(default_value, *def_val, ObTimestampType, ObActionFlag::OP_DEFAULT_NOW_FLAG);
+      default:
+        ret = OB_ERR_ILLEGAL_TYPE;
         break;
       }
-      case T_DEFAULT_INT: {
-        default_value.set_int(def_val->value_);
-        default_value.set_param_meta();
-        break;
-      }
-      case T_OP_POS:
-      case T_OP_NEG: {
-        if (OB_FAIL(resolve_sign_in_default_value(
-                    name_pool, def_val, resolve_res, T_OP_NEG == def_val->type_))) {
-        }
-        break;
-      }
-      case T_FUN_SUM:
-      case T_FUN_MAX:
-      case T_FUN_MIN:
-      case T_FUN_AVG: {
-        resolve_res.is_literal_ = false;
-        ObObjParam arg;
-        ObDefaultValueRes arg_res(arg);
-        if (def_val->num_child_ != 2) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "Invalid expression", K(ret), K(def_val->type_), K(def_val->num_child_));
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[1], arg_res)))) {
-        }
-        break;
-      }
-      case T_OP_ADD:
-      case T_OP_MINUS:
-      case T_OP_MUL:
-      case T_OP_DIV:
-      case T_OP_MOD:
-      case T_OP_EQ:
-      case T_OP_NSEQ:
-      case T_OP_LE:
-      case T_OP_LT:
-      case T_OP_GE:
-      case T_OP_GT:
-      case T_OP_NE:
-      case T_OP_AND:
-      case T_OP_OR:
-      case T_OP_IN:
-      case T_OP_NOT_IN:
-      case T_OP_BIT_OR:
-      case T_OP_BIT_AND:
-      case T_OP_BIT_XOR:
-      case T_OP_BIT_LEFT_SHIFT:
-      case T_OP_BIT_RIGHT_SHIFT:
-      case T_WHEN:
-      case T_FUN_SYS_INTERVAL:
-      case T_FUN_SYS_IF:
-      case T_FUN_SYS_ISNULL:
-      case T_FUN_SYS_POINT: {
-        resolve_res.is_literal_ = false;
-        ObObjParam first;
-        ObDefaultValueRes first_res(first);
-        ObObjParam second;
-        ObDefaultValueRes second_res(second);
-        if (def_val->num_child_ != 2) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "Invalid expression", K(ret), K(def_val->type_), K(def_val->num_child_));
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[0], first_res)))) {
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[1], second_res)))) {
-        }
-        break;
-      }
-      case T_OP_BTW:
-      case T_OP_NOT_BTW:
-      case T_CASE: {
-        resolve_res.is_literal_ = false;
-        ObObjParam first;
-        ObDefaultValueRes first_res(first);
-        ObObjParam second;
-        ObDefaultValueRes second_res(second);
-        ObObjParam third;
-        ObDefaultValueRes third_res(third);
-        if (def_val->num_child_ != 3) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "Invalid expression", K(ret), K(def_val->type_), K(def_val->num_child_));
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[0], first_res)))) {
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[1], second_res)))) {
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[2], third_res)))) {
-        }
-        break;
-      }
-      case T_OP_NOT:
-      case T_OP_BIT_NEG:
-      case T_FUN_SYS_UTC_TIMESTAMP:
-      case T_FUN_SYS_CUR_TIME:
-      case T_FUN_SYS_UTC_TIME:
-      case T_FUN_SYS_SYSDATE:
-      case T_FUN_SYS_ARRAY:
-      case T_FUN_SYS_MAP: {
-        resolve_res.is_literal_ = false;
-        ObObjParam first;
-        ObDefaultValueRes first_res(first);
-        if (def_val->num_child_ != 1) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "Invalid expression", K(ret), K(def_val->type_), K(def_val->num_child_));
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[0], first_res)))) {
-        }
-        break;
-      }
-      case T_FUN_SYS: {
-        resolve_res.is_literal_ = false;
-        ObObjParam func_ident;
-        ObDefaultValueRes func_res(func_ident);
-        if (def_val->num_child_ < 1) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "Invalid expression", K(ret), K(def_val->type_), K(def_val->num_child_));
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[0], func_res)))) {
-        } else if (def_val->num_child_ == 2) {
-          ObObjParam argument;
-          ObDefaultValueRes argument_res(argument);
-          if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[1], argument_res)))) {
-          }
-        }
-        break;
-      }
-      case T_OP_LIKE: {
-        resolve_res.is_literal_ = false;
-        int child_num = def_val->num_child_;
-        ObObjParam value;
-        ObDefaultValueRes value_res(value);
-        ObObjParam pattern;
-        ObDefaultValueRes pattern_res(pattern);
-        if (def_val->num_child_ < 2) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "Invalid expression", K(ret), K(def_val->type_), K(def_val->num_child_));
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[0], value_res)))) {
-        } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[1], pattern_res)))) {
-        }
-        if (child_num == 3) {
-          ObObjParam escape;
-          ObDefaultValueRes escape_res(escape);
-          if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[2], escape_res)))) {
-          }
-        }
-        break;
-      }
-      case T_EXPR_LIST:
-      case T_LINK_NODE:
-      case T_WHEN_LIST: {
-        resolve_res.is_literal_ = false;
-        int num_child = def_val->num_child_;
-        for (int i = 0; OB_SUCC(ret) && i<num_child; ++i) {
-          ObObjParam expr;
-          ObDefaultValueRes expr_res(expr);
-          if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[i], expr_res)))) {
-          }
-        }
-        break;
-      }
-      case T_FUN_SYS_UTC_DATE:
-      case T_FUN_SYS_CUR_DATE:
-      case T_IDENT: {
-        resolve_res.is_literal_ = false;
-        break;
-      }
-      case T_OP_CNN: {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "Connect operator in default value expression");
-        break;
-      }
-      case T_COLUMN_REF: {
-        resolve_res.is_literal_ = false;
+    }
+  } else if (form == Form::Timestamp) {
+    resolve_res.is_literal_ = syntax.literal_timestamp;
+    default_value.set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
+    default_value.set_param_meta();
+    default_value.set_scale(static_cast<int16_t>(syntax.timestamp_precision));
+  } else if (form == Form::Positive || form == Form::MinimumInteger ||
+             form == Form::UnsignedDecimal || form == Form::NegateValue ||
+             form == Form::NegateDecimal) {
+    OZ(resolve_sign_in_default_value(syntax, resolve_res));
+  } else {
+    resolve_res.is_literal_ = false;
+    switch (form) {
+      case Form::ColumnReference:
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Column reference in default value expression");
         break;
-      }
-      case T_SFU_DOUBLE: {
+      case Form::Concatenation:
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "Connect operator in default value expression");
+        break;
+      case Form::InvalidPoint:
+        ret = OB_INVALID_ARGUMENT;
+        break;
+      case Form::Expression:
+      case Form::QueryMembership:
+      case Form::Cast: {
+        auto arguments = peg::default_arguments(value);
+        while (arguments->advance()) {
+          ObObjParam result;
+          ObDefaultValueRes resolved(result);
+          OZ(SMART_CALL(resolve_default_value(arguments->argument(), resolved)));
+        }
+        if (form == Form::QueryMembership) {
+          ret = OB_ERR_ILLEGAL_TYPE;
+        } else if (form == Form::Cast && OB_SUCC(ret)) {
+          ret = OB_ERR_ILLEGAL_TYPE;
+        }
         break;
       }
       default:
         ret = OB_ERR_ILLEGAL_TYPE;
-        SQL_RESV_LOG(WARN, "Illegal type of default value",K(ret), K(def_val->type_));
         break;
     }
-   }
-  } else {
-    default_value.set_null();
-    default_value.set_param_meta();
-  }
-  if (OB_SUCC(ret)) {
-    ObCStringHelper helper;
-    _OB_LOG(DEBUG, "resolve default value: %s", helper.convert(default_value));
   }
   return ret;
 }
 
-int ObDDLResolver::resolve_sign_in_default_value(
-    ObIAllocator *name_pool, ParseNode *def_val, ObDefaultValueRes &resolve_res, const bool is_neg)
+int ObDDLResolver::resolve_sign_in_default_value(const peg::DefaultExpression &syntax,
+                                                 ObDefaultValueRes &resolve_res)
 {
   int ret = OB_SUCCESS;
-  if (is_neg) {
-    ObObjParam old_obj;
-    ObDefaultValueRes old_res(old_obj);
-    ObObjParam &default_value = resolve_res.value_;
-    ret = resolve_default_value(def_val->children_[0], old_res);
-    resolve_res.is_literal_ = old_res.is_literal_;
-    if (OB_FAIL(ret)) {
-    } else if (ObIntType == old_obj.get_type()) {
-      int64_t value = 0;
-      old_obj.get_int(value);
-      default_value.set_int(-value);
-      default_value.set_param_meta();
-    } else if (ObFloatType == old_obj.get_type()) {
-      float value = 0.0f;
-      old_obj.get_float(value);
-      default_value.set_float(-value);
-      default_value.set_param_meta();
-    } else if (ObDoubleType == old_obj.get_type()) {
-      double value = 0.0;
-      if (OB_FAIL(old_obj.get_double(value))) {
+  using Form = peg::DefaultForm;
+  const peg::Node &operand = syntax.node;
+  if (syntax.form == Form::Positive) {
+    OZ(resolve_default_value(operand, resolve_res));
+  } else {
+    if (syntax.form == Form::MinimumInteger || syntax.form == Form::UnsignedDecimal) {
+      if (syntax.form == Form::MinimumInteger) {
+        resolve_res.value_.set_int(INT64_MIN);
       } else {
-        default_value.set_double(-value);
-        default_value.set_param_meta();
+        const auto literal = peg::default_literal(operand);
+        ObString source(syntax_text(literal.text));
+        char *bytes = static_cast<char *>(allocator_->alloc(source.length() + 1));
+        if (OB_ISNULL(bytes)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          bytes[0] = '-';
+          MEMCPY(bytes + 1, source.ptr(), source.length());
+          resolve_res.value_.set_varchar(ObString(source.length() + 1, bytes));
+          resolve_res.value_.set_collation_type(ObCharset::get_system_collation());
+        }
       }
-    } else if (T_NUMBER == def_val->children_[0]->type_) {
-      ObString str;
-      char buffer[number::ObNumber::MAX_PRINTABLE_SIZE];
-      if (OB_FAIL(old_obj.get_varchar(str))) {
-      } else if (FALSE_IT(snprintf(buffer, sizeof(buffer), "-%.*s", str.length(), str.ptr()))) {
-      } else if ((OB_FAIL(ob_write_string(*name_pool,
-                                          ObString::make_string(buffer),
-                                          str)))) {
-      } else {
-        default_value.set_varchar(str);
-        default_value.set_collation_type(ObCharset::get_system_collation());
-        default_value.set_param_meta();
-      }
+      resolve_res.value_.set_param_meta();
     } else {
-      ret = OB_ERR_PARSER_SYNTAX;
-      SQL_RESV_LOG(WARN, "Invalid flag '-' in default value",K(ret));
-    }
-  } else { // is_pos
-    if (OB_FAIL(resolve_default_value(def_val->children_[0], resolve_res))) {
+      ObObjParam value;
+      ObDefaultValueRes previous(value);
+      OZ(resolve_default_value(operand, previous));
+      resolve_res.is_literal_ = previous.is_literal_;
+      if (OB_FAIL(ret)) {
+      } else if (value.is_int()) {
+        resolve_res.value_.set_int(-value.get_int());
+        resolve_res.value_.set_param_meta();
+      } else if (value.is_float()) {
+        resolve_res.value_.set_float(-value.get_float());
+        resolve_res.value_.set_param_meta();
+      } else if (value.is_double()) {
+        resolve_res.value_.set_double(-value.get_double());
+        resolve_res.value_.set_param_meta();
+      } else if (syntax.form == Form::NegateDecimal) {
+        ObString str;
+        char buffer[number::ObNumber::MAX_PRINTABLE_SIZE];
+        OZ(value.get_varchar(str));
+        if (OB_SUCC(ret)) {
+          snprintf(buffer, sizeof(buffer), "-%.*s", str.length(), str.ptr());
+          OZ(ob_write_string(*allocator_, ObString::make_string(buffer), str));
+          resolve_res.value_.set_varchar(str);
+          resolve_res.value_.set_collation_type(ObCharset::get_system_collation());
+          resolve_res.value_.set_param_meta();
+        }
+      } else {
+        ret = OB_ERR_PARSER_SYNTAX;
+      }
     }
   }
   return ret;
@@ -815,28 +606,14 @@ int ObDDLResolver::set_vec_column_name(const ObString &column_name)
   return ret;
 }
 
-int ObDDLResolver::resolve_table_options(ParseNode *node, bool is_index_option)
+int ObDDLResolver::resolve_table_options(rust::Slice<const peg::Node> options, bool is_index_option)
 {
   int ret = OB_SUCCESS;
-  if (NULL != node) {
-    ParseNode *option_node = NULL;
-    int32_t num = 0;
-    if(T_TABLE_OPTION_LIST != node->type_) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid parse node", KR(ret), K(node->type_), K(node->num_child_));
-    } else if ( OB_ISNULL(session_info_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "session_info_ is null", K(session_info_), K(ret));
-    } else {
-      num = node->num_child_;
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < num; ++i) {
-      if (OB_ISNULL(option_node = node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "node is null", K(ret));
-      } else if (OB_FAIL(resolve_table_option(option_node, is_index_option))) {
-      }
-    }
+  if (OB_ISNULL(session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  for (size_t i = 0; OB_SUCC(ret) && i < options.size(); ++i) {
+    OZ(resolve_table_option(options[i], is_index_option));
   }
   if (OB_SUCC(ret)) {
     if (CHARSET_INVALID == charset_type_
@@ -942,317 +719,290 @@ int ObDDLResolver::add_storing_column(const ObString &column_name,
   return ret;
 }
 
-int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool is_index_option)
+int ObDDLResolver::resolve_json_storage(const peg::Node &node)
 {
   int ret = OB_SUCCESS;
-  ObString database_name;
-  uint64_t database_id = OB_INVALID_ID;
-  if (OB_ISNULL(stmt_) || OB_ISNULL(allocator_) || OB_ISNULL(schema_checker_)){
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(ERROR,"allocator_ or stmt_ or schema_checker_ cat not be null",K(ret));
+  const auto storage = peg::json_storage_definition(node);
+  const auto text = storage.column.text();
+  const ObString name(syntax_text(text));
+  ObColumnSchemaV2 *column = nullptr;
+  if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()) {
+    auto *create = static_cast<ObCreateTableStmt *>(stmt_);
+    column = create->get_create_table_arg().schema_.get_column_schema(name);
+  } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+    auto &schema = static_cast<ObAlterTableStmt *>(stmt_)->get_alter_table_schema();
+    for (auto iter = schema.column_begin(); OB_SUCC(ret) && iter != schema.column_end() && nullptr == column; ++iter) {
+      if (0 == (**iter).get_column_name_str().case_compare(name)) {
+        auto &alter_column = static_cast<AlterColumnSchema &>(**iter);
+        if (alter_column.alter_type_ != OB_DDL_ADD_COLUMN) {
+          ret = OB_NOT_SUPPORTED;
+        } else {
+          column = &alter_column;
+        }
+      }
+    }
   } else {
-    database_name = database_name_;
+    ret = OB_NOT_SUPPORTED;
   }
-  if (OB_FAIL(ret)) {
-    //do nothing
-  } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id)))  {
+  if (OB_SUCC(ret)) {
+    if (nullptr == column || !column->is_json()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      for (const auto &chunk : storage.chunks) {
+        OZ(resolve_storage_chunk(*column, chunk));
+      }
+    }
   }
-  if (OB_SUCCESS == ret && NULL != option_node) {
-    switch (option_node->type_) {
-      case T_BLOCK_SIZE: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-        } else {
-          const int64_t block_size = option_node->children_[0]->value_;
-          if (block_size < MIN_BLOCK_SIZE || block_size > MAX_BLOCK_SIZE) {
-            ret = OB_ERR_INVALID_BLOCK_SIZE;
-            SQL_RESV_LOG(WARN, "block size should between 1024 and 1048576", K(block_size),
-                K(ret));
-          } else {
-            block_size_ = block_size;
-          }
-        }
-        if (OB_SUCCESS == ret && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-          if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::BLOCK_SIZE))) {
-          }
-        }
-        break;
+  return ret;
+}
+
+int ObDDLResolver::resolve_storage_chunk(ObColumnSchemaV2 &column, const peg::Node &node)
+{
+  int ret = OB_SUCCESS;
+  const auto value = peg::expression_literal(peg::table_option_value(node));
+  uint64_t kilobytes = value.integer;
+  const uint64_t maximum = OB_MAX_LOB_CHUNK_SIZE / 1024;
+  if (!column.is_json()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "chunk size column attribute only supported for json, others");
+  } else if (value.kind == peg::LiteralKind::String && value.text.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (value.kind == peg::LiteralKind::String) {
+    const ObString text(syntax_text(value.text));
+    kilobytes = 0;
+    int64_t end = 0;
+    for (; end < text.length() && text[end] >= '0' && text[end] <= '9'; ++end) {
+      if (kilobytes <= maximum) {
+        kilobytes = kilobytes * 10 + (text[end] - '0');
       }
-      case T_TABLET_SIZE: {
-        if (!is_index_option) {
-          if (OB_ISNULL(option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-          } else {
-            tablet_size_ = option_node->children_[0]->value_;
-            if (tablet_size_ < 0 || tablet_size_ & ((1 << 21) - 1)) {
-              ret = OB_INVALID_CONFIG;
-              SQL_RESV_LOG(WARN, "tablet_size must be a multiple of 2M", K_(tablet_size), K(ret));
-            }
-          }
-          if (ret == OB_SUCCESS && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-            if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::TABLET_SIZE))) {
-            }
-          }
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-        }
+    }
+    const ObString unit(text.length() - end, text.ptr() + end);
+    if (!unit.empty() && 0 != unit.case_compare("k") && 0 != unit.case_compare("kb")) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  } else {
+    OZ(ObResolverUtils::resolve_unsigned_integer(peg::table_option_value(node), "CHUNK", kilobytes));
+  }
+  if (OB_SUCC(ret)) {
+    if (kilobytes < OB_MIN_LOB_CHUNK_SIZE / 1024 || kilobytes > maximum) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "invalid CHUNK LOB storage option value");
+    } else {
+      column.set_lob_chunk_size(kilobytes * 1024);
+    }
+  }
+  return ret;
+}
+
+int ObDDLResolver::resolve_table_option(const peg::Node &option, const bool is_index_option)
+{
+  int ret = OB_SUCCESS;
+  uint64_t database_id = OB_INVALID_ID;
+  if (option.kind() == peg::NodeKind::ProgressiveMergeNum || option.kind() == peg::NodeKind::AutoIncrementCacheSize) {
+    uint64_t value = 0;
+    if (OB_FAIL(ObResolverUtils::resolve_unsigned_integer(peg::table_option_value(option), "Table option", value))) return ret;
+  }
+  if (OB_ISNULL(stmt_) || OB_ISNULL(allocator_) || OB_ISNULL(schema_checker_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(schema_checker_->get_database_id(database_name_, database_id))) {
+  } else {
+    switch (option.kind()) {
+      case peg::NodeKind::JsonStorage:
+        OZ(resolve_json_storage(option));
         break;
-      }
-      case T_PCTFREE: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(ret), K(option_node->children_[0]));
-        } else {
-          pctfree_ = static_cast<int32_t>(option_node->children_[0]->value_);
-          if (pctfree_ < 0 || pctfree_ >= OB_MAX_PCTFREE) {
-            ret = OB_INVALID_CONFIG;
-            SQL_RESV_LOG(WARN, "invalid pctfree value", K(ret), K_(pctfree));
-          }
-        }
-        if (ret == OB_SUCCESS && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-          if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::PCTFREE))) {
-          }
-        }
-        break;
-      }
-      case T_PCTUSED: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(ret), K(option_node->children_[0]));
-        } else {
-          int64_t pctused = static_cast<int32_t>(option_node->children_[0]->value_);
-          if (pctused <= 0 || pctused > OB_MAX_PCTUSED) {
-            ret = OB_ERR_INVALID_PCTFREE_OR_PCTUSED_VALUE;
-            SQL_RESV_LOG(WARN, "invalid pctused value", K(ret), K(pctused));
-          }
-        }
-        break;
-      }
-      case T_INITRANS: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(ret), K(option_node->children_[0]));
-        } else {
-          int64_t initrans = static_cast<int32_t>(option_node->children_[0]->value_);
-          if (initrans <= 0 || initrans > OB_MAX_TRANS) {
-            ret = OB_ERR_INVALID_INITRANS_VALUE;
-            SQL_RESV_LOG(WARN, "invalid initrans value", K(ret), K(initrans));
-          }
-        }
-        break;
-      }
-      case T_MAXTRANS: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(ret), K(option_node->children_[0]));
-        } else {
-          int64_t maxtrans = static_cast<int32_t>(option_node->children_[0]->value_);
-          if (maxtrans < 0 || maxtrans > OB_MAX_TRANS) {
-            ret = OB_ERR_INVALID_MAXTRANS_VALUE;
-            SQL_RESV_LOG(WARN, "invalid initrans value", K(ret), K(maxtrans));
-          }
-        }
-        break;
-      }
-      case T_STORAGE_OPTIONS: {
-        if (0 == option_node->num_child_) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node's num child can not be 0", K(ret), K(option_node->num_child_));
-        }
-        for (int64_t i = 0; OB_SUCC(ret) && i < option_node->num_child_; ++i) {
-          if (OB_ISNULL(option_node->children_[i])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null!", K(ret), K(i));
-          } else {
-            // TODO: temporarily only supports storage syntax, does not support functionality
-          }
-        }
-        break;
-      }
-      case T_COMPRESSION: {
-        if (!is_index_option) {
-          ObString tmp_str;
-          if (OB_ISNULL(option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-          } else {
-            tmp_str.assign_ptr(const_cast<char *>(option_node->children_[0]->str_value_),
-                               static_cast<int32_t>(option_node->children_[0]->str_len_));
-            compress_method_ = tmp_str.trim();
-          }
-          bool is_find = false;
-          const char *find_compress_name = NULL;
-          for (int i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(common::compress_funcs) && !is_find; i++) {
-            if (0 == ObString::make_string(compress_funcs[i]).case_compare(compress_method_)) {
-              is_find = true;
-              find_compress_name = compress_funcs[i];
-            }
-          }
-          if (OB_FAIL(ret)) {
-            //do nothing
-          } else if (OB_ISNULL(find_compress_name)) {
-            ret = OB_INVALID_ARGUMENT;
-            ObCStringHelper helper;
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, helper.convert(compress_method_));
-          } else if (OB_FAIL(ob_write_string(*allocator_, find_compress_name, compress_method_))) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "write string failed", K(ret));
-          } else {}
-          if (ret == OB_SUCCESS && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-            if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::COMPRESS_METHOD))) {
-            }
-          }
-        } else {
+      case peg::NodeKind::SemistructEncodingType: {
+        if (is_index_option) {
           ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify compress method in index option");
-        }
-        break;
-      }
-      case T_STORE_FORMAT: {
-        if (!is_index_option) {
-          if (OB_ISNULL(option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-          } else {
-            store_format_ = static_cast<ObStoreFormatType>(option_node->children_[0]->value_);
-            if (!ObStoreFormat::is_store_format_valid(store_format_)) {
-              ret = OB_ERR_UNEXPECTED;
-              SQL_RESV_LOG(WARN, "Unexpected invalid store format value", K_(store_format), K(ret));
-            } else if (OB_FAIL(ObDDLResolver::get_row_store_type(store_format_, row_store_type_))) {
-            }
-            if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-              if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::STORE_FORMAT))) {
-              }
-            }
-          }
         } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify store format in index option");
-        }
-        break;
-      }
-      case T_PROGRESSIVE_MERGE_NUM: {
-        if (!is_index_option) {
-          if (OB_ISNULL(option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
+          const auto text = peg::table_option_text(option);
+          const ObString type(syntax_text(text));
+          if (type.empty()) {
+            semistruct_encoding_type_.mode_ = ObSemiStructEncodingType::Mode::NONE;
+          } else if (0 == type.case_compare("encoding")) {
+            semistruct_encoding_type_.mode_ = ObSemiStructEncodingType::Mode::ENCODING;
           } else {
-            progressive_merge_num_ = option_node->children_[0]->value_;
-          }
-          if (OB_FAIL(ret)) {
-            //do nothing
-          } else if (progressive_merge_num_ < 0 ||
-                     progressive_merge_num_ > MAX_PROGRESSIVE_MERGE_NUM) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "progressive_merge_num");
-          } else {
-            if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-              if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::PROGRESSIVE_MERGE_NUM))) {
-              }
-            } else if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()) {
-              ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-              ObTableSchema &tbl_schema = create_table_stmt->get_create_table_arg().schema_;
-              if (!tbl_schema.is_user_table()) {
-                ret = OB_OP_NOT_ALLOW;
-                SQL_RESV_LOG(WARN, "only allow to set progressive merge num for data table", K(ret));
-              }
-            } else {
-              ret = OB_ERR_PARSE_SQL;
-              SQL_RESV_LOG(WARN, "PROGRESSIVE_MERGE_NUM can not be specified in creating index", K(ret));
-            }
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "semistruct encoding type, should be none or encoding");
           }
-        } else {
+          if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+            OZ(alter_table_bitset_.add_member(ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE));
+          }
+        }
+        break;
+      }
+      case peg::NodeKind::ProgressiveMergeNum: {
+        if (is_index_option) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify progressive merge num in index option");
-        }
-        break;
-      }
-      case T_INDEX_SCOPE: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
         } else {
-          index_scope_ = option_node->children_[0]->value_ == 0 ? LOCAL_INDEX : GLOBAL_INDEX;
-        }
-        if (OB_SUCCESS == ret && GLOBAL_INDEX == index_scope_) {
-          if (OB_ISNULL(option_node->children_[1])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[1]), K(ret));
-          } else if (0 != STRNCMP("GLOBAL",
-               static_cast<const char*>(option_node->children_[1]->str_value_),
-               option_node->children_[1]->str_len_)) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(ERROR, "invalid index type!", K(ret));
-          }
-        }
-        if (OB_SUCCESS == ret && LOCAL_INDEX == index_scope_) {
-          if (OB_ISNULL(option_node->children_[1])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[1]), K(ret));
-          } else if (0 != STRNCMP("LOCAL",
-               static_cast<const char*>(option_node->children_[1]->str_value_),
-               option_node->children_[1]->str_len_)){
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(ERROR, "invalid index type!", K(ret));
+          progressive_merge_num_ = peg::table_option_number(option);
+          if (progressive_merge_num_ < 0 || progressive_merge_num_ > MAX_PROGRESSIVE_MERGE_NUM) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "progressive_merge_num");
+          } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+            OZ(alter_table_bitset_.add_member(ObAlterTableArg::PROGRESSIVE_MERGE_NUM));
+          } else if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()) {
+            const auto &schema = static_cast<ObCreateTableStmt *>(stmt_)->get_create_table_arg().schema_;
+            if (!schema.is_user_table()) {
+              ret = OB_OP_NOT_ALLOW;
+            }
+          } else {
+            ret = OB_ERR_PARSE_SQL;
           }
         }
         break;
       }
-      case T_REVERSE: {
-        // Only supports syntax
+      case peg::NodeKind::MicroIndexClustered: {
+        if (is_index_option || stmt_->get_stmt_type() != stmt::T_CREATE_TABLE) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "micro_index_clustered outside CREATE TABLE");
+        } else {
+          auto &schema = static_cast<ObCreateTableStmt *>(stmt_)->get_create_table_arg().schema_;
+          schema.set_micro_index_clustered(peg::table_option_number(option) != 0);
+        }
         break;
       }
-      case T_STORING_COLUMN_LIST: {
-        ParseNode *cur_node = NULL;
-        ObString column_name;
+      case peg::NodeKind::Parallel: {
+        const uint64_t degree = peg::table_option_number(option);
+        if (degree == 0 || degree > INT64_MAX) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "positive parallel degree");
+        } else {
+          table_dop_ = static_cast<int64_t>(degree);
+        }
+        if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+          OZ(alter_table_bitset_.add_member(ObAlterTableArg::TABLE_DOP));
+        }
+        break;
+      }
+      case peg::NodeKind::Engine: {
+        const auto &name = peg::table_option_engine_name(option);
+        const auto text = name.text();
+        const ObString engine_name(syntax_text(text));
+        if (0 == engine_name.case_compare("InnoDB") || 0 == engine_name.case_compare("MyISAM")) {
+          LOG_USER_WARN(OB_ERR_UNKNOWN_STORAGE_ENGINE, engine_name.length(), engine_name.ptr());
+        } else {
+          ret = OB_ERR_PARSE_SQL;
+          const ObString spelling = params_.syntax_->source(name);
+          LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
+                         spelling.length(), spelling.ptr(), 1);
+        }
+        break;
+      }
+      case peg::NodeKind::BlockSize: {
+        const int64_t block_size = peg::table_option_number(option);
+        if (block_size < MIN_BLOCK_SIZE || block_size > MAX_BLOCK_SIZE) {
+          ret = OB_ERR_INVALID_BLOCK_SIZE;
+        } else {
+          block_size_ = block_size;
+        }
+        if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+          OZ(alter_table_bitset_.add_member(ObAlterTableArg::BLOCK_SIZE));
+        }
+        break;
+      }
+      case peg::NodeKind::TabletSize: {
+        if (is_index_option) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          tablet_size_ = peg::table_option_number(option);
+          if (tablet_size_ < 0 || tablet_size_ & ((1 << 21) - 1)) {
+            ret = OB_INVALID_CONFIG;
+          }
+          if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+            OZ(alter_table_bitset_.add_member(ObAlterTableArg::TABLET_SIZE));
+          }
+        }
+        break;
+      }
+      case peg::NodeKind::PctFree: {
+        pctfree_ = static_cast<int32_t>(peg::table_option_number(option));
+        if (pctfree_ < 0 || pctfree_ >= OB_MAX_PCTFREE) {
+          ret = OB_INVALID_CONFIG;
+        }
+        if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+          OZ(alter_table_bitset_.add_member(ObAlterTableArg::PCTFREE));
+        }
+        break;
+      }
+      case peg::NodeKind::Compression: {
+        if (is_index_option) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify compress method in index option");
+        } else {
+          const auto text = peg::table_option_text(option);
+          ObString method(syntax_text(text));
+          method = method.trim();
+          const char *name = nullptr;
+          for (int i = 0; i < ARRAYSIZEOF(common::compress_funcs) && nullptr == name; ++i) {
+            if (0 == ObString::make_string(compress_funcs[i]).case_compare(method)) {
+              name = compress_funcs[i];
+            }
+          }
+          if (nullptr == name) {
+            ret = OB_INVALID_ARGUMENT;
+            ObCStringHelper helper;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, helper.convert(method));
+          } else if (OB_FAIL(ob_write_string(*allocator_, name, compress_method_))) {
+            ret = OB_ERR_UNEXPECTED;
+          }
+          if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+            OZ(alter_table_bitset_.add_member(ObAlterTableArg::COMPRESS_METHOD));
+          }
+        }
+        break;
+      }
+      case peg::NodeKind::StoreFormat: {
+        if (is_index_option) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify store format in index option");
+        } else {
+          switch (peg::table_option_row_format(option)) {
+            case peg::TableRowFormat::Redundant: store_format_ = OB_STORE_FORMAT_REDUNDANT_MYSQL; break;
+            case peg::TableRowFormat::Compact: store_format_ = OB_STORE_FORMAT_COMPACT_MYSQL; break;
+            case peg::TableRowFormat::Dynamic: store_format_ = OB_STORE_FORMAT_DYNAMIC_MYSQL; break;
+            case peg::TableRowFormat::Compressed: store_format_ = OB_STORE_FORMAT_COMPRESSED_MYSQL; break;
+            case peg::TableRowFormat::Condensed: store_format_ = OB_STORE_FORMAT_CONDENSED_MYSQL; break;
+          }
+          OZ(ObDDLResolver::get_row_store_type(store_format_, row_store_type_));
+          if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+            OZ(alter_table_bitset_.add_member(ObAlterTableArg::STORE_FORMAT));
+          }
+        }
+        break;
+      }
+      case peg::NodeKind::IndexScope: {
+        index_scope_ = peg::index_option_global(option) ? GLOBAL_INDEX : LOCAL_INDEX;
+        break;
+      }
+      case peg::NodeKind::StoringColumns: {
         if (INDEX_KEYNAME::VEC_KEY == index_keyname_) {
           ret = OB_NOT_SUPPORTED;
-          SQL_RESV_LOG(WARN, "vector index not support storing column", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "setting vector index storing column is");
-        } else if (OB_ISNULL(option_node->children_[0]) ||
-            T_STORING_COLUMN_LIST != option_node->type_ ||
-            option_node->num_child_ <1) {
-         ret = OB_ERR_UNEXPECTED;
-         SQL_RESV_LOG(ERROR, "invalid node type and node child!", K(ret));
         }
-        for (int64_t i = 0; OB_SUCCESS == ret  && i < option_node->num_child_; i++) {
-          if(OB_ISNULL(option_node->children_[i])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "invalid node type and node child!", K(ret));
-          } else {
-            cur_node = option_node->children_[i];
-            if (OB_ISNULL(cur_node)) {
-              ret = OB_ERR_UNEXPECTED;
-              SQL_RESV_LOG(ERROR, "invalid node type and node child!", K(cur_node), K(ret));
-            } else {
-              int32_t len = static_cast<int32_t>(cur_node->str_len_);
-              column_name = ObString(len, len, cur_node->str_value_);
-            }
-          }
-          if (OB_FAIL(ret)) {
+        const auto names = peg::table_option_names(option);
+        for (size_t i = 0; OB_SUCC(ret) && i < names.size(); ++i) {
+          const auto &name = names[i];
+          ObString column_name;
+          const auto name_text = name.text();
+          if (OB_FAIL(ob_write_string(*allocator_, syntax_text(name_text), column_name))) {
           } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type() ||
-              stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
-            bool check_column_exist = false;
-            if (OB_FAIL(add_storing_column(column_name, check_column_exist))) {
-            }
+                     stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
+            OZ(add_storing_column(column_name, false));
           } else {
-            if (OB_FAIL(add_storing_column(column_name))) {
-            }
+            OZ(add_storing_column(column_name));
           }
         }
         break;
       }
-      case T_VEC_INDEX_PARAMS: {
+      case peg::NodeKind::VectorParameters: {
         if (index_keyname_ != VEC_KEY) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "set index params in not vector index is");
         } else {
           const ObTableSchema *tbl_schema = nullptr;
           if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()) {
-            sql::ObCreateTableStmt *create_table_stmt = static_cast<sql::ObCreateTableStmt*>(stmt_);
-            tbl_schema = &create_table_stmt->get_create_table_arg().schema_;
+            tbl_schema = &static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg().schema_;
           } else if (stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
             if (OB_FAIL(schema_checker_->get_table_schema(database_name_, table_name_, false, tbl_schema))) {
             } else if (OB_ISNULL(tbl_schema)) {
@@ -1262,101 +1012,73 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "without create table with index or create index is");
           }
-          if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(ObVectorIndexUtil::check_vec_index_param(option_node, *allocator_,
-              *tbl_schema, index_params_, vec_column_name_, vec_index_type_, session_info_))) {
+          if (OB_SUCC(ret)) {
+            OZ(ObVectorIndexUtil::check_vec_index_param(option, params_.syntax_->source(option),
+                *allocator_, *tbl_schema, index_params_, vec_column_name_, vec_index_type_, session_info_));
           }
         }
         break;
       }
-      case T_PARSER_NAME: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          int32_t str_len = static_cast<int32_t>(option_node->children_[0]->str_len_);
-          parser_name_.assign_ptr(option_node->children_[0]->str_value_, str_len);
-        }
+      case peg::NodeKind::ParserName: {
+        const auto text = peg::table_option_text(option);
+        OZ(ob_write_string(*allocator_, syntax_text(text), parser_name_));
         break;
       }
-      case T_PARSER_PROPERTIES: {
-        if (OB_FAIL(ObFTParserResolverHelper::resolve_parser_properties(*option_node,
-                                                                               *allocator_,
-                                                                               parser_properties_))) {
-        }
+      case peg::NodeKind::ParserProperties: {
+        OZ(ObFTParserResolverHelper::resolve_parser_properties(option, *allocator_, parser_properties_));
         break;
       }
-      case T_WITH_ROWID: {
-        with_rowid_ = true;
-        break;
-      }
-      case T_COMMENT: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-        } else {
-          comment_ = ObString(option_node->children_[0]->str_len_, option_node->children_[0]->str_value_);
-          if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
-                        *allocator_, session_info_->get_dtc_params(), comment_))) {
-          }
-        }
-        if (OB_SUCC(ret)) {
-          if(comment_.length() > MAX_TABLE_COMMENT_LENGTH) {
-            comment_ = "";
-            if(is_index_option) {
-              ret = OB_ERR_TOO_LONG_INDEX_COMMENT;
-              LOG_USER_ERROR(OB_ERR_TOO_LONG_INDEX_COMMENT, MAX_INDEX_COMMENT_LENGTH);
-            } else {
-              ret = OB_ERR_TOO_LONG_TABLE_COMMENT;
-              LOG_USER_ERROR(OB_ERR_TOO_LONG_TABLE_COMMENT, MAX_TABLE_COMMENT_LENGTH);
-            }
-          }
-        }
-        if (OB_SUCCESS == ret && stmt::T_ALTER_TABLE == stmt_->get_stmt_type() && !is_index_option) {
-          if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::COMMENT))) {
-          }
-        }
-        break;
-      }
-      case T_TABLE_MODE: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-        } else {
-          ObString table_mode_str(static_cast<int32_t>(option_node->children_[0]->str_len_),
-                                  (char *)(option_node->children_[0]->str_value_));
-          if (0 == table_mode_str.case_compare("normal")) {
-            table_mode_.mode_flag_ = TABLE_MODE_NORMAL;
-          } else if (0 == table_mode_str.case_compare("queuing")) {
-            table_mode_.mode_flag_ = TABLE_MODE_QUEUING;
-          } else if (0 == table_mode_str.case_compare("moderate")) {
-            table_mode_.mode_flag_ = TABLE_MODE_QUEUING_MODERATE;
-          } else if (0 == table_mode_str.case_compare("super")) {
-            table_mode_.mode_flag_ = TABLE_MODE_QUEUING_SUPER;
-          } else if (0 == table_mode_str.case_compare("extreme")) {
-            table_mode_.mode_flag_ = TABLE_MODE_QUEUING_EXTREME;
+      case peg::NodeKind::ColumnComment: {
+        const auto text = peg::table_option_text(option);
+        OZ(ob_write_string(*allocator_, syntax_text(text), comment_));
+        OZ(ObSQLUtils::convert_sql_text_to_schema_for_storing(
+            *allocator_, session_info_->get_dtc_params(), comment_));
+        if (OB_SUCC(ret) && comment_.length() > MAX_TABLE_COMMENT_LENGTH) {
+          comment_ = "";
+          if (is_index_option) {
+            ret = OB_ERR_TOO_LONG_INDEX_COMMENT;
+            LOG_USER_ERROR(OB_ERR_TOO_LONG_INDEX_COMMENT, MAX_INDEX_COMMENT_LENGTH);
           } else {
-            ret = OB_NOT_SUPPORTED;
-            int tmp_ret = OB_SUCCESS;
-            ObSqlString err_msg;
-            if (OB_TMP_FAIL(err_msg.append_fmt("Table mode %s is", table_mode_str.ptr()))) {
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "this table mode is");
-              LOG_WARN("failed to append err msg", K(tmp_ret), K(err_msg), K(table_mode_str));
-            } else {
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
-            }
-          }
-          if (OB_FAIL(ret)) {
+            ret = OB_ERR_TOO_LONG_TABLE_COMMENT;
+            LOG_USER_ERROR(OB_ERR_TOO_LONG_TABLE_COMMENT, MAX_TABLE_COMMENT_LENGTH);
           }
         }
-        if (OB_SUCCESS == ret && stmt::T_ALTER_TABLE ==stmt_->get_stmt_type()) {
-          if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::TABLE_MODE))) {
+        if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type() && !is_index_option) {
+          OZ(alter_table_bitset_.add_member(ObAlterTableArg::COMMENT));
+        }
+        break;
+      }
+      case peg::NodeKind::TableMode: {
+        const auto text = peg::table_option_text(option);
+        ObString table_mode(syntax_text(text));
+        if (0 == table_mode.case_compare("normal")) {
+          table_mode_.mode_flag_ = TABLE_MODE_NORMAL;
+        } else if (0 == table_mode.case_compare("queuing")) {
+          table_mode_.mode_flag_ = TABLE_MODE_QUEUING;
+        } else if (0 == table_mode.case_compare("moderate")) {
+          table_mode_.mode_flag_ = TABLE_MODE_QUEUING_MODERATE;
+        } else if (0 == table_mode.case_compare("super")) {
+          table_mode_.mode_flag_ = TABLE_MODE_QUEUING_SUPER;
+        } else if (0 == table_mode.case_compare("extreme")) {
+          table_mode_.mode_flag_ = TABLE_MODE_QUEUING_EXTREME;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          int tmp_ret = OB_SUCCESS;
+          ObSqlString err_msg;
+          if (OB_TMP_FAIL(err_msg.append_fmt("Table mode %.*s is", table_mode.length(), table_mode.ptr()))) {
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this table mode is");
           } else {
-            const ObTableSchema *tbl_schema = nullptr;
-            if (OB_FAIL(get_table_schema_for_check(tbl_schema))) {
-            } else if (OB_ISNULL(tbl_schema)) {
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
+          }
+        }
+        if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+          OZ(alter_table_bitset_.add_member(ObAlterTableArg::TABLE_MODE));
+          const ObTableSchema *tbl_schema = nullptr;
+          OZ(get_table_schema_for_check(tbl_schema));
+          if (OB_SUCC(ret)) {
+            if (OB_ISNULL(tbl_schema)) {
               ret = OB_ERR_UNEXPECTED;
-            } else { // Temporarily not supporting changing PK_MODE when altering table
-              // Set Table current PK_MODE, assemble final TableMode
+            } else {
               table_mode_.pk_mode_ = tbl_schema->get_table_mode_struct().pk_mode_;
               table_mode_.pk_exists_ = tbl_schema->get_table_mode_struct().pk_exists_;
               table_mode_.table_organization_mode_ = tbl_schema->get_table_mode_struct().table_organization_mode_;
@@ -1365,365 +1087,194 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
-      case T_CHARSET: {
-        if (!is_index_option) {
-          if (CHARSET_INVALID == charset_type_) {
-            if (OB_ISNULL(option_node->children_[0])) {
-              ret = OB_ERR_UNEXPECTED;
-              SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-            } else {
-              ObString node_value(option_node->children_[0]->str_len_,
-                                  option_node->children_[0]->str_value_);
-              ObString charset = node_value.trim();
-              ObCharsetType charset_type = ObCharset::charset_type(charset);
-              if (CHARSET_INVALID == charset_type) {
-                ret = OB_ERR_UNKNOWN_CHARSET;
-                LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset.length(), charset.ptr());
-              } else {
-                charset_type_ = charset_type;
-                if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-                  if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::CHARSET_TYPE))) {
-                  }
-                }
-              }
+      case peg::NodeKind::TableCharset: {
+        if (is_index_option) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify charset in index option");
+        } else if (CHARSET_INVALID == charset_type_) {
+          const auto &name = peg::table_option_charset(option);
+          const auto name_text = name.text();
+          ObString charset(syntax_text(name_text));
+          charset = charset.trim();
+          const ObCharsetType charset_type = ObCharset::charset_type(charset);
+          if (CHARSET_INVALID == charset_type) {
+            ret = OB_ERR_UNKNOWN_CHARSET;
+            LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset.length(), charset.ptr());
+          } else {
+            charset_type_ = charset_type;
+            if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+              OZ(alter_table_bitset_.add_member(ObAlterTableArg::CHARSET_TYPE));
             }
           }
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index option should not specify charset");
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify charset in index option");
         }
         break;
       }
-      case T_COLLATION: {
-        if (!is_index_option) {
-          if (CS_TYPE_INVALID == collation_type_) {
-            ObString node_value(option_node->str_len_, option_node->str_value_);
-            ObString collation = node_value.trim();
-            ObCollationType collation_type = ObCharset::collation_type(collation);
-            if (CS_TYPE_INVALID == collation_type) {
-              ret = OB_ERR_UNKNOWN_COLLATION;
-              LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, collation.length(), collation.ptr());
-            } else {
-              collation_type_ = collation_type;
-              if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-                if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::COLLATION_TYPE))) {
-                }
-              }
-            }
-          }
-        } else {
+      case peg::NodeKind::Collation: {
+        if (is_index_option) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify collation in index option");
+        } else if (CS_TYPE_INVALID == collation_type_) {
+          const auto text = peg::table_option_text(option);
+          ObString collation(syntax_text(text));
+          collation = collation.trim();
+          const ObCollationType collation_type = ObCharset::collation_type(collation);
+          if (CS_TYPE_INVALID == collation_type) {
+            ret = OB_ERR_UNKNOWN_COLLATION;
+            LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, collation.length(), collation.ptr());
+          } else {
+            collation_type_ = collation_type;
+            if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+              OZ(alter_table_bitset_.add_member(ObAlterTableArg::COLLATION_TYPE));
+            }
+          }
         }
         break;
       }
-      case T_READ_ONLY: {
-        if (!is_index_option) {
-          if (OB_ISNULL(option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(ERROR, "read only options can not be null", K(ret));
-          } else if (T_ON == option_node->children_[0]->type_) {
-            read_only_ = true;
-          } else if (T_OFF == option_node->children_[0]->type_) {
-            read_only_ = false;
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "unknown read only options", K(ret));
-          }
-          if (OB_SUCCESS == ret && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-            if (OB_FAIL(alter_table_bitset_.add_member( obcall::ObAlterTableArg::READ_ONLY))) {
-            }
-          }
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify read only in index option");
+      case peg::NodeKind::ReadOnly:
+      case peg::NodeKind::ReadWrite: {
+        read_only_ = option.kind() == peg::NodeKind::ReadOnly;
+        if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+          OZ(alter_table_bitset_.add_member(ObAlterTableArg::READ_ONLY));
         }
         break;
       }
-      case T_AUTO_INCREMENT: {
-        if (!is_index_option) {
-          // parser filters negative value
-          errno = 0;
-          int err = 0;
-          uint64_t auto_increment = 0;
-          if (OB_ISNULL(option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(ERROR, "read only options can not be null", K(ret));
-          } else {
-            auto_increment = ObCharset::strntoull(
-                             option_node->children_[0]->str_value_,
-                             static_cast<int32_t>(option_node->children_[0]->str_len_),10, &err);
-          }
-          /* If the value read is out of the range of representable values by a long long int,
-           * the function returns LLONG_MAX or LLONG_MIN, and errno is set to ERANGE.
-           */
-          if (OB_FAIL(ret)) {
-            //do nothing
-          } else if (ERANGE == err && (UINT_MAX == auto_increment || 0 == auto_increment)) {
-            ret = OB_DATA_OUT_OF_RANGE;
-          } else if (EDOM == err) {
-            ObString node_str(static_cast<int32_t>(option_node->children_[0]->str_len_),
-                               option_node->children_[0]->str_value_);
-            ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-            SQL_RESV_LOG(WARN, "failed, invalid value", K(auto_increment),
-                         K(node_str), K(err), K(ret));
-          } else {
-            auto_increment_ = auto_increment;
-          }
-          if (OB_SUCCESS == ret && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-            if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::AUTO_INCREMENT))) {
-            }
-          }
-        } else {
+      case peg::NodeKind::TableAutoIncrement: {
+        if (is_index_option) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify autoincrement id in index option");
-        }
-        break;
-      }
-      case T_AUTO_INCREMENT_CACHE_SIZE: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
         } else {
-          const static int64_t MAX_AUTO_INCREMENT_CACHE_SIZE = 100000000;
-          const int64_t cache_size = option_node->children_[0]->value_;
-          if (cache_size < 0 || cache_size > MAX_AUTO_INCREMENT_CACHE_SIZE) {
-            ret = OB_INVALID_ARGUMENT;
-            SQL_RESV_LOG(WARN, "Specify table auto increment cache size should be [0, 100000000]",
-                        K(ret), K(cache_size));
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "table auto_increment_cache_size");
+          errno = 0;
+          int err = 0;
+          const auto text = peg::table_option_text(option);
+          const uint64_t value = ObCharset::strntoull(syntax_text(text).ptr(), text.size(), 10, &err);
+          if (ERANGE == err && (UINT_MAX == value || 0 == value)) {
+            ret = OB_DATA_OUT_OF_RANGE;
+          } else if (EDOM == err) {
+            ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
           } else {
-            auto_increment_cache_size_ = cache_size;
+            auto_increment_ = value;
           }
-        }
-        if (OB_SUCCESS == ret && stmt::T_ALTER_TABLE ==stmt_->get_stmt_type()) {
-          const ObTableSchema *tbl_schema = nullptr;
-          if (OB_FAIL(get_table_schema_for_check(tbl_schema))) {
-          } else if (OB_ISNULL(tbl_schema)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (auto_increment_cache_size_ ==
-                     tbl_schema->get_auto_increment_cache_size()) {
-            // The cache size is unchanged, so there is nothing to alter.
-          } else if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::INCREMENT_CACHE_SIZE))) {
+          if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
+            OZ(alter_table_bitset_.add_member(ObAlterTableArg::AUTO_INCREMENT));
           }
         }
         break;
       }
-      case T_TABLE_RENAME: {
-        if (!is_index_option) {
-          if (stmt::T_ALTER_TABLE != stmt_->get_stmt_type()) {
-            ret = OB_ERR_RESOLVE_SQL;
-            SQL_RESV_LOG(WARN, "Can't alter table name when creating table", K(ret));
-          } else {
-            ParseNode *relation_node = NULL;
-            ObString new_database_name;
-            if (OB_ISNULL(option_node->children_[0])) {
+      case peg::NodeKind::AutoIncrementCacheSize: {
+        const uint64_t cache_size = peg::table_option_number(option);
+        if (cache_size > 100000000) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "table auto_increment_cache_size");
+        } else {
+          auto_increment_cache_size_ = cache_size;
+        }
+        if (OB_SUCC(ret) && stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
+          const ObTableSchema *schema = nullptr;
+          OZ(get_table_schema_for_check(schema));
+          if (OB_SUCC(ret)) {
+            if (OB_ISNULL(schema)) {
               ret = OB_ERR_UNEXPECTED;
-              SQL_RESV_LOG(ERROR, "read only options can not be null", K(ret));
-            } else {
-              relation_node = option_node->children_[0];
-            }
-
-            if (OB_FAIL(ret)) {
-            } else if (OB_ISNULL(relation_node)) {
-              ret = OB_ERR_PARSE_SQL;
-              SQL_RESV_LOG(WARN, "table relation node should not be null!", K(ret));
-            } else if (OB_FAIL(resolve_table_relation_node(relation_node,
-                                                           table_name_,
-                                                           new_database_name))) {
-            } else if (table_name_.empty()) {
-              ret = OB_WRONG_TABLE_NAME;
-              LOG_USER_ERROR(OB_WRONG_TABLE_NAME, table_name_.length(), table_name_.ptr());
-            } else if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::TABLE_NAME))) {
-            } else {
-              database_name_ = new_database_name;
+            } else if (auto_increment_cache_size_ != schema->get_auto_increment_cache_size()) {
+              OZ(alter_table_bitset_.add_member(ObAlterTableArg::INCREMENT_CACHE_SIZE));
             }
           }
-        } else {
+        }
+        break;
+      }
+      case peg::NodeKind::TableRename: {
+        if (is_index_option) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify table rename in index option");
+        } else if (stmt::T_ALTER_TABLE != stmt_->get_stmt_type()) {
+          ret = OB_ERR_RESOLVE_SQL;
+        } else {
+          ObString new_database_name;
+          OZ(resolve_table_relation_node(&peg::alter_table_renamed_relation(option), table_name_, new_database_name));
+          if (OB_SUCC(ret) && table_name_.empty()) {
+            ret = OB_WRONG_TABLE_NAME;
+            LOG_USER_ERROR(OB_WRONG_TABLE_NAME, table_name_.length(), table_name_.ptr());
+          }
+          OZ(alter_table_bitset_.add_member(ObAlterTableArg::TABLE_NAME));
+          if (OB_SUCC(ret)) {
+            database_name_ = new_database_name;
+          }
         }
         break;
       }
-      case T_USING_BTREE: {
-        has_index_using_type_ = true;
-        index_using_type_ = USING_BTREE;
+      case peg::NodeKind::IndexVisibility: {
+        if (peg::index_visible(option)) {
+          index_attributes_set_ &= ~(uint64_t(1) << ObTableSchema::INDEX_VISIBILITY);
+        } else {
+          index_attributes_set_ |= uint64_t(1) << ObTableSchema::INDEX_VISIBILITY;
+        }
         break;
       }
-      case T_USING_HASH: {
+      case peg::NodeKind::UsingHash: {
         has_index_using_type_ = true;
         index_using_type_ = USING_HASH;
         break;
       }
-      case T_ENGINE: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(ERROR, "engine node can not be null", K(ret));
-        } else {
-          ObString engine_name(static_cast<int32_t>(option_node->children_[0]->str_len_),
-                               option_node->children_[0]->str_value_);
-          if (0 == engine_name.case_compare("InnoDB")
-              || 0 == engine_name.case_compare("MyISAM")) {
-            // Compatibility-only engine names map to seekdb's fixed storage
-            // engine. CREATE/ALTER succeeds and preserves the historical 1286
-            // warning, but no alternative storage semantics are enabled.
-            LOG_USER_WARN(OB_ERR_UNKNOWN_STORAGE_ENGINE, engine_name.length(), engine_name.ptr());
-            SQL_RESV_LOG(WARN, "compatibility engine accepted with warning", K(engine_name));
-          } else {
-            ret = OB_ERR_PARSE_SQL;
-            const char *error_text = OB_NOT_NULL(option_node->children_[0]->raw_text_)
-                                         ? option_node->children_[0]->raw_text_
-                                         : engine_name.ptr();
-            const int32_t error_text_len = option_node->children_[0]->text_len_ > 0
-                                               ? option_node->children_[0]->text_len_
-                                               : engine_name.length();
-            LOG_USER_ERROR(OB_ERR_PARSE_SQL,
-                           ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
-                           error_text_len,
-                           error_text,
-                           1);
-            SQL_RESV_LOG(WARN, "unsupported storage engine", K(engine_name), K(ret));
-          }
-        }
+      case peg::NodeKind::LobInrowThreshold: {
+        ret = resolve_lob_inrow_threshold(option, is_index_option);
         break;
       }
-      case T_INVISIBLE: {
-        index_attributes_set_ |= (uint64_t)1 << ObTableSchema::INDEX_VISIBILITY;
-        break;
-      }
-      case T_VISIBLE: {
-        /*do nothing default is visible*/
-        index_attributes_set_ &= ~((uint64_t)1 << ObTableSchema::INDEX_VISIBILITY);
-        break;
-      }
-      case T_ENABLE_ROW_MOVEMENT: {
-        if (NULL == option_node->children_ || 1 != option_node->num_child_ || T_BOOL != option_node->children_[0]->type_) {
-            ret = common::OB_INVALID_ARGUMENT;
-            SQL_RESV_LOG(WARN, "invalid row movement argument", K(ret), "num_child", option_node->num_child_);
-        } else {
-          enable_row_movement_ = static_cast<bool>(option_node->children_[0]->value_);
-          if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-            if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::ENABLE_ROW_MOVEMENT))) {
-            }
-          }
-        }
-        break;
-      }
-      case T_PARALLEL: {
-        if (OB_ISNULL(option_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
-        } else {
-          const int64_t table_dop = option_node->children_[0]->value_;
-          if (table_dop <= 0) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "invalid table dop", K(table_dop),
-                K(ret));
-          } else {
-            table_dop_ = table_dop;
-          }
-        }
-        if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-          if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::TABLE_DOP))) {
-          }
-        }
-        break;
-      }
-      case T_LOB_INROW_THRESHOLD: {
-        ret = resolve_lob_inrow_threshold(option_node, is_index_option);
-        break;
-      }
-      case T_LOB_STORAGE_CLAUSE : {
-        ret = resolve_lob_storage_parameters(option_node);
-        break;
-      }
-      case T_MICRO_INDEX_CLUSTERED: {
-        if (is_index_option) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "specified micro_index_clustered configuration for index table is");
-        } else if (OB_ISNULL(option_node->children_)) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "(the children of option_node is null", K(option_node->children_), K(ret));
-        } else {
-          const bool is_micro_index_clustered = static_cast<bool>(option_node->children_[0]->value_);
-          ObCreateTableArg &arg = static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg();
-          arg.schema_.set_micro_index_clustered(is_micro_index_clustered);
-        }
-        break;
-      }
-      case T_ORGANIZATION: {
+      case peg::NodeKind::Organization: {
         if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "organization in the alter table statement");
-        } else {
-          // do nothing
         }
         break;
       }
-      case T_SEMISTRUCT_ENCODING_TYPE: {
-        ret = resolve_semistruct_encoding_type(option_node, is_index_option);
-        break;
-      }
       default: {
-        /* won't be here */
         ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(ERROR, "should not reach here", K(option_node->type_), K(ret));
         break;
       }
     }
   }
-
   return ret;
 }
 
 int ObDDLResolver::resolve_column_definition_ref(ObColumnSchemaV2 &column,
-                                                  ParseNode *node /* column_definition_def */,
+                                                  const peg::Node &node,
                                                   bool is_resolve_for_alter_table)
 {
   int ret = OB_SUCCESS;
+  const auto names = peg::name_parts(node);
   ObString name;
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (T_COLUMN_REF != node->type_ || 3 != node->num_child_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ParseNode *db_name_node = node->children_[0];
-    ParseNode *table_name_node = node->children_[1];
-    if (NULL != db_name_node) {
-      ObString dbname(db_name_node->str_len_, db_name_node->str_value_);
-      if (0 != dbname.compare(database_name_)) {
-        ret = OB_WRONG_DB_NAME;
-        LOG_USER_ERROR(OB_WRONG_DB_NAME, dbname.length(), dbname.ptr());
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (NULL != table_name_node) {
-      ObString table_name(table_name_node->str_len_, table_name_node->str_value_);
-      if (0 != table_name.compare(table_name_)) {
-        ret = OB_WRONG_TABLE_NAME;
-        LOG_USER_ERROR(OB_WRONG_TABLE_NAME, table_name.length(), table_name.ptr());
-      }
+  if (names.size() == 3) {
+    const auto database_text = names[0].text();
+    const ObString database(syntax_text(database_text));
+    if (database != database_name_) {
+      ret = OB_WRONG_DB_NAME;
+      LOG_USER_ERROR(OB_WRONG_DB_NAME, database.length(), database.ptr());
     }
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(resolve_column_name(name, node->children_[2]))) {
-  } else if (is_resolve_for_alter_table) {
-    AlterColumnSchema &alter_column_schema = static_cast<AlterColumnSchema &>(column);
-    if (OB_FAIL(alter_column_schema.set_origin_column_name(name))) {
+  if (OB_SUCC(ret) && names.size() >= 2) {
+    const auto &part = names[names.size() - 2];
+    const auto part_text = part.text();
+    const ObString table(syntax_text(part_text));
+    if (table != table_name_) {
+      ret = OB_WRONG_TABLE_NAME;
+      LOG_USER_ERROR(OB_WRONG_TABLE_NAME, table.length(), table.ptr());
     }
-  } else if (OB_FAIL(column.set_column_name(name))) {
+  }
+  OZ(resolve_column_name(name, &names[names.size() - 1]));
+  if (OB_SUCC(ret) && is_resolve_for_alter_table) {
+    OZ(static_cast<AlterColumnSchema &>(column).set_origin_column_name(name));
+  } else if (OB_SUCC(ret)) {
+    OZ(column.set_column_name(name));
   }
   return ret;
 }
 
-int ObDDLResolver::resolve_column_name(common::ObString &col_name, ParseNode *node/* column_name */)
+int ObDDLResolver::resolve_column_name(common::ObString &col_name, const peg::Node *node/* column_name */)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || T_IDENT != node->type_) {
+  if (OB_ISNULL(node) || peg::NodeKind::Ident != node->kind()) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (const auto node_text = node->text();
+             OB_FAIL(ob_write_string(*allocator_, syntax_text(node_text), col_name))) {
   } else {
-    col_name.assign_ptr(node->str_value_, node->str_len_);
     int32_t name_length = col_name.length();
     const char *name_ptr = col_name.ptr();
     if (name_length > OB_MAX_COLUMN_NAME_LENGTH * OB_MAX_CHAR_LEN) {
@@ -1748,23 +1299,13 @@ int ObDDLResolver::resolve_column_name(common::ObString &col_name, ParseNode *no
   return ret;
 }
 
-int ObDDLResolver::resolve_column_name(ObColumnSchemaV2 &column,
-                                       ParseNode *node /* column_definition */)
+int ObDDLResolver::resolve_column_name(ObColumnSchemaV2 &column, const peg::Node &node)
 {
-  int ret = OB_SUCCESS;
-  ParseNode *column_definition_ref_node = NULL;
-  CK (OB_NOT_NULL(node));
-  CK (OB_NOT_NULL(node->children_[0]));
-  CK (node->type_ == T_COLUMN_DEFINITION);
-  if (OB_SUCC(ret)) {
-    column_definition_ref_node = node->children_[0];
-    OZ (resolve_column_definition_ref(column, column_definition_ref_node, false));
-  }
-  return ret;
+  return resolve_column_definition_ref(column, peg::column_definition(node).name, false);
 }
 
 int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
-                                             ParseNode *node, /* column_definition */
+                                             const peg::Node &node,
                                              ObColumnResolveStat &resolve_stat,
                                              bool &is_modify_column_visibility,
                                              common::ObString &pk_name,
@@ -1776,35 +1317,13 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
   int ret = OB_SUCCESS;
   bool is_modify_column = stmt::T_ALTER_TABLE == stmt_->get_stmt_type()
                   && OB_DDL_MODIFY_COLUMN == (static_cast<AlterColumnSchema &>(column)).alter_type_;
-  ParseNode *column_definition_ref_node = NULL;
-  if (T_COLUMN_DEFINITION != node->type_ || node->num_child_ < COLUMN_DEFINITION_NUM_CHILD ||
-     OB_ISNULL(allocator_) || OB_ISNULL(node->children_) || OB_ISNULL(node->children_[0]) ||
-     T_COLUMN_REF != node->children_[0]->type_ ||
-     COLUMN_DEF_NUM_CHILD != node->children_[0]->num_child_
-     || OB_ISNULL(session_info_)) {
+  const auto definition = peg::column_definition(node);
+  const peg::Node *type_node = &definition.data_type;
+  if (OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "invalid parse node",
-                 K(ret), K(node->type_), K(node->num_child_), K_(allocator), K_(session_info));
   } else {
     resolve_stat.reset();
-    column_definition_ref_node = node->children_[0];
-    ParseNode *table_node = column_definition_ref_node->children_[1];
-    if (OB_SUCC(resolve_column_definition_ref(column, column_definition_ref_node, false))) {
-      //empty
-    } else {
-      SQL_RESV_LOG(WARN, "fail to resolve column_definition_ref", K(ret));
-    }
-  }
-  ParseNode *type_node = NULL;
-  // Since modify column allows type to be empty, in this scenario we no longer resolve type
-  if (OB_SUCC(ret)) {
-    type_node = node->children_[1];
-    if (OB_ISNULL(type_node)) {
-      ret = OB_ERR_INVALID_DATATYPE;
-    } else if (OB_UNLIKELY(!ob_is_valid_obj_type(static_cast<ObObjType>(type_node->type_)))) {
-      ret = OB_ERR_INVALID_DATATYPE;
-      SQL_RESV_LOG(WARN, "type_node or stmt_ or datatype is invalid", K(ret), K(type_node->type_));
-    }
+    OZ(resolve_column_definition_ref(column, definition.name, false));
   }
   if (OB_SUCC(ret) && type_node != NULL) {
     ObDataType data_type;
@@ -1827,7 +1346,26 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
     }
 
     if (OB_SUCC(ret)) {
-      const bool is_string = (2 == type_node->int32_values_[1]);
+      const auto type_syntax = peg::type_syntax(*type_node);
+      const bool is_string = type_syntax.name == peg::TypeName::String;
+      if ((data_type.get_meta_type().is_string_type() || data_type.get_meta_type().is_enum_or_set()) &&
+          type_syntax.name != peg::TypeName::Binary && type_syntax.name != peg::TypeName::VarBinary) {
+        const peg::Node *last_collation = nullptr;
+        for (const peg::Node &attribute : definition.attributes) {
+          if (attribute.kind() == peg::NodeKind::Collation) { last_collation = &attribute; }
+        }
+        if (last_collation != nullptr) {
+          const auto last_collation_text = last_collation->text();
+          const ObString name(syntax_text(last_collation_text));
+          const ObCollationType collation = ObCharset::collation_type(name);
+          if (collation == CS_TYPE_INVALID) {
+            ret = OB_ERR_UNKNOWN_COLLATION;
+            LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, name.length(), name.ptr());
+          } else {
+            data_type.set_collation_type(collation);
+          }
+        }
+      }
       column.set_meta_type(data_type.get_meta_type());
       column.set_accuracy(data_type.get_accuracy());
       column.set_charset_type(data_type.get_charset_type());
@@ -1866,7 +1404,7 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
         if (OB_FAIL(resolve_enum_or_set_column(type_node, column))) {
         }
       }
-      if (OB_SUCC(ret) && column.is_geometry() && OB_FAIL(column.set_geo_type(type_node->int32_values_[1]))) {
+      if (OB_SUCC(ret) && column.is_geometry() && OB_FAIL(column.set_geo_type(static_cast<int32_t>(type_syntax.geometry)))) {
         SQL_RESV_LOG(WARN, "fail to set geometry sub type", K(ret), K(column));
       }
 
@@ -1876,19 +1414,18 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
       }
     }
   }
-  if (OB_SUCC(ret) && GEN_COLUMN_DEFINITION_NUM_CHILD == node->num_child_) {
-    ParseNode *expr_node = NULL;
-    if (OB_ISNULL(expr_node = node->children_[3])) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObString expr_str(expr_node->str_len_, expr_node->str_value_);
+  if (OB_SUCC(ret) && definition.generation != peg::ColumnGeneration::None) {
+    {
+      ObString expr_str;
+      OZ(ob_write_string(*allocator_, params_.syntax_->source(peg::column_generation_expression(node)), expr_str));
       ObObj default_value;
       /* bugfix:
        * in NO_BACKSLAH_ESCAPES sql_mode, mysql will convert '\\' to '\\\\';
        */
       bool is_no_backslash_escapes = false;
       IS_NO_BACKSLASH_ESCAPES(session_info_->get_sql_mode(), is_no_backslash_escapes);
-      if (is_no_backslash_escapes &&
+      if (OB_FAIL(ret)) {
+      } else if (is_no_backslash_escapes &&
           OB_FAIL(ObSQLUtils::convert_escape_char(*allocator_, expr_str, expr_str))) {
       } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(*allocator_,
                                                     session_info_->get_dtc_params(), expr_str))) {
@@ -1899,7 +1436,7 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
         if (OB_FAIL(column.set_cur_default_value(
                 default_value,
                 column.is_default_expr_v2_column()))) {
-        } else if (node->children_[4] != NULL && node->children_[4]->type_ == T_STORED_COLUMN) {
+        } else if (definition.generation == peg::ColumnGeneration::Stored) {
           column.add_column_flag(STORED_GENERATED_COLUMN_FLAG);
         } else {
           column.add_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
@@ -1911,13 +1448,13 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
     }
   }
   if (OB_SUCC(ret)) {
-    ParseNode *attrs_node = node->children_[2];
-    if (attrs_node != NULL) {
+    const auto attributes = definition.attributes;
+    if (!attributes.empty()) {
       if (column.is_generated_column()) {
-        if (OB_FAIL(resolve_generated_column_attribute(column, attrs_node, resolve_stat))) {
+        if (OB_FAIL(resolve_generated_column_attribute(column, attributes, resolve_stat))) {
         }
       } else if (OB_FAIL(resolve_normal_column_attribute(column,
-                                                         attrs_node,
+                                                         attributes,
                                                          resolve_stat,
                                                          pk_name,
                                                          is_modify_column,
@@ -1925,44 +1462,18 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
                                                          allow_has_default))) {
       }
     }
-    // Specify the position of the column for add column syntax
-    if (OB_SUCC(ret)) {
-      ParseNode *pos_node = NULL;
-      if (OB_UNLIKELY(GEN_COLUMN_DEFINITION_NUM_CHILD == node->num_child_)) {
-        // generated column with pos_column
-        pos_node = node->children_[5];
-      } else {
-        // normal column with pos_column
-        pos_node = node->children_[3];
-      }
-
-      // Handle invisible column
-      ParseNode *attrs_node = node->children_[2];
-
-      for (int64_t i = 0; attrs_node != NULL && OB_SUCC(ret) && i < attrs_node->num_child_; ++i) {
-        ParseNode *attr_node = attrs_node->children_[i];
-        if (attr_node->type_ == T_VISIBLE || attr_node->type_ == T_INVISIBLE) {
-          if (is_modify_column) { is_modify_column_visibility = true; }
-          if (T_INVISIBLE == attr_node->type_) {
-            const ObTableSchema *table_schema = NULL;
-            if (OB_ISNULL(schema_checker_)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if (OB_ISNULL(session_info_)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if (is_modify_column
-                       && OB_FAIL(schema_checker_->get_table_schema(column.get_table_id(),
-                            table_schema))) {
-            } else if (is_modify_column && is_sys_database_id(table_schema->get_database_id())) {
-              // The visibility of a column from a table owned by a SYS user cannot be modified to
-              // invisible, but can be modified to visible
-              ret = OB_ERR_MODIFY_COL_VISIBILITY_BY_SYS_USER;
-            } else {
-              column.add_column_flag(INVISIBLE_COLUMN_FLAG);
-            }
+    for (size_t i = 0; OB_SUCC(ret) && i < attributes.size(); ++i) {
+      const auto kind = attributes[i].kind();
+      if (kind == peg::NodeKind::ColumnVisible || kind == peg::NodeKind::ColumnInvisible) {
+        if (is_modify_column) { is_modify_column_visibility = true; }
+        if (kind == peg::NodeKind::ColumnInvisible) {
+          if (is_modify_column && is_sys_database_id(table_schema.get_database_id())) {
+            ret = OB_ERR_MODIFY_COL_VISIBILITY_BY_SYS_USER;
           } else {
-            // T_VISIBLE == visiblity_node->type_
-            column.del_column_flag(INVISIBLE_COLUMN_FLAG);
+            column.add_column_flag(INVISIBLE_COLUMN_FLAG);
           }
+        } else {
+          column.del_column_flag(INVISIBLE_COLUMN_FLAG);
         }
       }
     }
@@ -1971,7 +1482,7 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
 }
 
 int ObDDLResolver::resolve_normal_column_attribute_constr_not_null(ObColumnSchemaV2 &column,
-                                                   ParseNode *attr_node,
+                                                   const peg::Node &attribute,
                                                    ObColumnResolveStat &resolve_stat)
 {
   INIT_SUCC(ret);
@@ -1993,24 +1504,22 @@ int ObDDLResolver::resolve_normal_column_attribute_constr_null(ObColumnSchemaV2 
 }
 
 int ObDDLResolver::resolve_normal_column_attribute_constr_default(ObColumnSchemaV2 &column,
-                                                                  ParseNode *attr_node,
+                                                                  const peg::Node &attribute,
                                                                   ObColumnResolveStat &resolve_stat,
                                                                   ObObjParam& default_value,
                                                                   bool& is_set_cur_default)
 {
   INIT_SUCC(ret);
   ObDefaultValueRes resolve_res(default_value);
-  if (1 != attr_node->num_child_ || NULL == attr_node->children_[0]) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "resolve default value failed", K(ret));
-  } else if (OB_FAIL(resolve_default_value(attr_node, resolve_res))) {
+  if (OB_FAIL(resolve_default_value(attribute, resolve_res))) {
   } else if (!resolve_res.is_literal_) {
     // default value expression is not literal
     if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObString expr_str(attr_node->str_len_, attr_node->str_value_);
-      if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
+      ObString expr_str;
+      if (OB_FAIL(ob_write_string(*allocator_, params_.syntax_->source(peg::column_attribute_expression(attribute)), expr_str))) {
+      } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                             *allocator_, session_info_->get_dtc_params(), expr_str))) {
       } else {
         default_value.set_varchar(expr_str);
@@ -2058,7 +1567,7 @@ int ObDDLResolver::resolve_normal_column_attribute_constr_default(ObColumnSchema
 
 
 int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
-                                                   ParseNode *attrs_node,
+                                                   rust::Slice<const peg::Node> attributes,
                                                    ObColumnResolveStat &resolve_stat,
                                                    ObString &pk_name,
                                                    bool &is_modify_column,
@@ -2079,22 +1588,19 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
       create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
     }
 
-    if (OB_ISNULL(attrs_node)) {
-      ret = OB_INVALID_ARGUMENT;
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < attrs_node->num_child_; ++i) {
-      ParseNode *attr_node = attrs_node->children_[i];
-      switch (attr_node->type_) {
-      case T_CONSTR_NOT_NULL: {
-        if (OB_FAIL(resolve_normal_column_attribute_constr_not_null(column, attr_node, resolve_stat))) {
+    for (size_t i = 0; OB_SUCC(ret) && i < attributes.size(); ++i) {
+      const peg::Node &attribute = attributes[i];
+      switch (attribute.kind()) {
+      case peg::NodeKind::NotNull: {
+        if (OB_FAIL(resolve_normal_column_attribute_constr_not_null(column, attribute, resolve_stat))) {
         }
         break;
       }
-      case T_CONSTR_NULL:
+      case peg::NodeKind::Nullable:
         if (OB_FAIL(resolve_normal_column_attribute_constr_null(column, resolve_stat))) {
         }
         break;
-      case T_CONSTR_PRIMARY_KEY: {
+      case peg::NodeKind::ColumnPrimaryKey: {
         resolve_stat.is_primary_key_ = true;
         // primary key should not be nullable
         column.set_nullable(false);
@@ -2121,7 +1627,7 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
         }
         break;
       }
-      case T_CONSTR_UNIQUE_KEY: {
+      case peg::NodeKind::UniqueKey: {
         resolve_stat.is_unique_key_ = true;
         if (ob_is_collection_sql_type(column.get_data_type())) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
@@ -2146,15 +1652,15 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
         }
         break;
       }
-      case T_CONSTR_DEFAULT: {
+      case peg::NodeKind::ColumnDefault: {
         if (!allow_has_default) {
           ret = OB_ERR_DEFAULT_NOT_ALLOWED;
-        } else if (OB_FAIL(resolve_normal_column_attribute_constr_default(column, attr_node, resolve_stat,
+        } else if (OB_FAIL(resolve_normal_column_attribute_constr_default(column, attribute, resolve_stat,
                                                                    default_value, is_set_cur_default))) {
         }
         break;
       }
-      case T_CONSTR_AUTO_INCREMENT:
+      case peg::NodeKind::AutoIncrement:
         if (ob_is_text_tc(column.get_data_type()) || ob_is_json_tc(column.get_data_type())
             || ob_is_geometry_tc(column.get_data_type())) {
           ret = OB_ERR_COLUMN_SPEC;
@@ -2165,104 +1671,82 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
           resolve_stat.is_autoincrement_ = true;
         }
         break;
-      case T_COMMENT:{
-        if (attr_node->num_child_ != 1
-            || OB_ISNULL(attr_node->children_[0])
-            || T_VARCHAR != attr_node->children_[0]->type_) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "invalid node!", K(ret));
-        } else {
-          ObString comment(attr_node->children_[0]->str_len_, attr_node->children_[0]->str_value_);
-          if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(*allocator_, session_info_->get_dtc_params(), comment))) {
-          } else {
-            int64_t comment_length = comment.length();
-            char *comment_ptr = const_cast<char *>(comment.ptr());
-            if(OB_FAIL(ObResolverUtils::check_comment_length(session_info_,
-                                                            comment_ptr,
-                                                            &comment_length,
-                                                            MAX_COLUMN_COMMENT_CHAR_LENGTH))){
-            } else {
-              column.set_comment(ObString(comment_length, comment_ptr));
-            }
-          }
+      case peg::NodeKind::ColumnComment: {
+        const auto syntax = peg::column_attribute_text(attribute);
+        ObString comment;
+        OZ(ob_write_string(*allocator_, syntax_text(syntax), comment));
+        OZ(ObSQLUtils::convert_sql_text_to_schema_for_storing(*allocator_, session_info_->get_dtc_params(), comment));
+        if (OB_SUCC(ret)) {
+          int64_t length = comment.length();
+          char *bytes = const_cast<char *>(comment.ptr());
+          OZ(ObResolverUtils::check_comment_length(session_info_, bytes, &length, MAX_COLUMN_COMMENT_CHAR_LENGTH));
+          if (OB_SUCC(ret)) { column.set_comment(ObString(length, bytes)); }
         }
         break;
       }
-      case T_ON_UPDATE:
+      case peg::NodeKind::OnUpdate: {
         if (ObDateTimeType == column.get_data_type() || ObTimestampType == column.get_data_type()
             || ObMySQLDateTimeType == column.get_data_type()) {
-          if (T_FUN_SYS_CUR_TIMESTAMP != attr_node->children_[0]->type_) {
-            ret = OB_ERR_PARSER_SYNTAX;
-            SQL_RESV_LOG(WARN, "on_update attribute can only be timestamp or synonyms type",
-                        "node_type", attr_node->children_[0]->type_, K(column), K(ret));
+          const auto arguments = peg::call_arguments(peg::column_attribute_expression(attribute));
+          const int16_t scale = arguments.empty() ? 0 : static_cast<int16_t>(peg::integer_literal_value(arguments[0]));
+          if (column.get_accuracy().get_scale() != scale) {
+            ret = OB_INVALID_ON_UPDATE;
+            LOG_USER_ERROR(OB_INVALID_ON_UPDATE, column.get_column_name());
           } else {
-            int16_t scale = 0;
-            if (OB_UNLIKELY(NULL == attr_node->children_[0] || 1 != attr_node->children_[0]->num_child_)) {
-              ret = OB_INVALID_ON_UPDATE;
-            } else {
-              if (NULL != attr_node->children_[0]->children_[0]) {
-                scale = static_cast<int16_t>(attr_node->children_[0]->children_[0]->value_);
-              } else {
-                //defaule value
-              }
-              if (column.get_accuracy().get_scale() != scale) {
-                ret = OB_INVALID_ON_UPDATE;
-                LOG_USER_ERROR(OB_INVALID_ON_UPDATE, column.get_column_name());
-                SQL_RESV_LOG(WARN, "Invalid ON UPDATE clause for ",
-                          K(column), K(ret));
-              } else {
-                column.set_on_update_current_timestamp(true);
-              }
-            }
+            column.set_on_update_current_timestamp(true);
           }
         } else {
           ret = OB_INVALID_ON_UPDATE;
           LOG_USER_ERROR(OB_INVALID_ON_UPDATE, column.get_column_name());
-          SQL_RESV_LOG(WARN, "only ObDateTimeType and ObTimeStampType column can have attribute"
-                      " of on_update", K(column), K(ret));
         }
         break;
-      case T_CHECK_CONSTRAINT: {
+      }
+      case peg::NodeKind::CheckConstraint: {
         if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
           // Adding a column-level check constraint is only supported in mysql mode
-          if (OB_FAIL(resolve_check_constraint_node(*attr_node, alter_csts, &column))) {
+          if (OB_FAIL(resolve_check_constraint_node(attribute, alter_csts, &column))) {
           }
         } else if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()) {
-          if (OB_FAIL(resolve_normal_column_attribute_check_cons(column, attr_node, create_table_stmt))){
+          if (OB_FAIL(resolve_normal_column_attribute_check_cons(column, attribute, create_table_stmt))){
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
         }
         break;
       }
-      case T_FOREIGN_KEY: {
-        if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
+      case peg::NodeKind::Srid: {
+        if (OB_FAIL(resolve_srid_node(column, attribute))) {
+        }
+        break;
+      }
+      case peg::NodeKind::StorageChunk:
+        OZ(resolve_storage_chunk(column, attribute));
+        break;
+      case peg::NodeKind::ColumnSkipIndex: {
+        const auto syntax = peg::column_skip_index(attribute);
+        // Nonempty attributes validate earlier SUM state before replacing it.
+        if ((syntax.min_max || syntax.sum)
+            && (blocksstable::is_skip_index_black_list_type(column.get_data_type())
+                || (column.get_skip_index_attr().has_sum()
+                    && !blocksstable::can_agg_sum(column.get_data_type())))) {
           ret = OB_NOT_SUPPORTED;
-          SQL_RESV_LOG(WARN, "Adding a column-level fk while altering table is not supported",
-            K(ret), K(stmt_->stmt_type_));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "Adding column-level foreign key constraints while altering table");
-        } else if (OB_FAIL(resolve_normal_column_attribute_foreign_key(column, attr_node, create_table_stmt))) {
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
+        } else {
+          ObSkipIndexColumnAttr attr;
+          if (syntax.min_max) { attr.set_min_max(); }
+          if (syntax.sum) { attr.set_sum(); }
+          column.set_skip_index_attr(attr.get_packed_value());
         }
         break;
       }
-      case T_EMPTY: {
-          // compatible with mysql 5.7 check (expr), do nothing
-          // alter table t modify c1 json check(xyz);
-          break;
-      }
-      case T_CONSTR_SRID: {
-        if (OB_FAIL(resolve_srid_node(column, *attr_node))) {
-        }
-        break;
-      }
-      case T_COLLATION: {
+      case peg::NodeKind::Collation: {
         if (column.is_string_type() || column.is_enum_or_set()) {
           //To compat with mysql, only check here.
           ObString collation;
           ObCollationType collation_type;
           ObCharsetType charset_type = column.get_charset_type();
-          collation.assign_ptr(attr_node->str_value_,
-                              static_cast<int32_t>(attr_node->str_len_));
+          const auto spelling = peg::column_attribute_text(attribute);
+          collation.assign_ptr(syntax_text(spelling).ptr(), static_cast<int32_t>(spelling.size()));
           if (CS_TYPE_INVALID == (collation_type = ObCharset::collation_type(collation))) {
             ret = OB_ERR_UNKNOWN_COLLATION;
             LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, collation.length(), collation.ptr());
@@ -2271,25 +1755,12 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
         }
         break;
       }
-      case T_COL_SKIP_INDEX: {
-        if (OB_FAIL(resolve_column_skip_index(*attr_node, column))) {
-        }
+      case peg::NodeKind::ColumnVisible:
+      case peg::NodeKind::ColumnInvisible:
         break;
-      }
-      case T_LOB_CHUNK_SIZE:
-      case T_CONSTR_LOB_CHUNK_SIZE: {
-        if (OB_FAIL(resolve_lob_chunk_size(column, *attr_node))) {
-        }
-        break;
-      }
-      case T_VISIBLE:
-      case T_INVISIBLE:
-      {
-        break;
-      }
       default:  // won't be here
         ret = OB_ERR_PARSER_SYNTAX;
-        SQL_RESV_LOG(WARN, "Wrong column attribute", K(ret), K(attr_node->type_));
+        SQL_RESV_LOG(WARN, "Wrong column attribute", K(ret), "kind", static_cast<int>(attribute.kind()));
         break;
       }
     }
@@ -2341,34 +1812,21 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
 }
 
 int ObDDLResolver::resolve_normal_column_attribute_check_cons(ObColumnSchemaV2 &column,
-                                                              ParseNode *attrs_node,
+                                                              const peg::Node &attribute,
                                                               ObCreateTableStmt *create_table_stmt)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObConstraint, 4> &csts = create_table_stmt->get_create_table_arg().constraint_list_;
-  if (OB_FAIL(resolve_check_constraint_node(*attrs_node, csts, &column))) {
+  if (OB_FAIL(resolve_check_constraint_node(attribute, csts, &column))) {
   } else {
     // do nothing
   }
   return ret;
 }
 
-int ObDDLResolver::resolve_normal_column_attribute_foreign_key(ObColumnSchemaV2 &column,
-                                                               ParseNode *attrs_node,
-                                                               ObCreateTableStmt *create_table_stmt)
-{
-  int ret = OB_SUCCESS;
-  ObCreateForeignKeyArg foreign_key_arg;
-  if (OB_FAIL(resolve_foreign_key_node(attrs_node, foreign_key_arg, false, &column))) {
-  } else if (OB_FAIL(create_table_stmt->get_foreign_key_arg_list().push_back(foreign_key_arg))) {
-  } else {
-    // do nothing
-  }
-  return ret;
-}
 
 int ObDDLResolver::resolve_generated_column_attribute(ObColumnSchemaV2 &column,
-                                                      ParseNode *attrs_node,
+                                                      rust::Slice<const peg::Node> attributes,
                                                       ObColumnResolveStat &resolve_stat)
 {
   int ret = OB_SUCCESS;
@@ -2377,14 +1835,14 @@ int ObDDLResolver::resolve_generated_column_attribute(ObColumnSchemaV2 &column,
     AlterColumnSchema &alter_col_schema = static_cast<AlterColumnSchema &>(column);
     is_add_column = OB_DDL_ADD_COLUMN == alter_col_schema.alter_type_;
   }
-  for (int64_t i = 0; OB_SUCC(ret) && attrs_node && i < attrs_node->num_child_; ++i) {
-    ParseNode *attr_node = attrs_node->children_[i];
-    switch (attr_node->type_) {
-    case T_CONSTR_NOT_NULL:
+  for (size_t i = 0; OB_SUCC(ret) && i < attributes.size(); ++i) {
+    const peg::Node &attribute = attributes[i];
+    switch (attribute.kind()) {
+    case peg::NodeKind::NotNull:
       column.set_nullable(false);
       resolve_stat.is_set_not_null_ = true;
       break;
-    case T_CONSTR_NULL:
+    case peg::NodeKind::Nullable:
       {
         if (!resolve_stat.is_primary_key_) {
           column.set_nullable(true);
@@ -2392,7 +1850,7 @@ int ObDDLResolver::resolve_generated_column_attribute(ObColumnSchemaV2 &column,
       }
       resolve_stat.is_set_null_ = true;
       break;
-    case T_CONSTR_PRIMARY_KEY: {
+    case peg::NodeKind::ColumnPrimaryKey: {
 //        if (column.is_stored_generated_column()) {
 //          resolve_stat.is_primary_key_ = true;
         // primary key should not be nullable
@@ -2404,35 +1862,24 @@ int ObDDLResolver::resolve_generated_column_attribute(ObColumnSchemaV2 &column,
 //        }
       break;
     }
-    case T_CONSTR_UNIQUE_KEY: {
+    case peg::NodeKind::UniqueKey: {
       resolve_stat.is_unique_key_ = true;
       break;
     }
-    case T_COMMENT:{
-      if (attr_node->num_child_ != 1
-          || OB_ISNULL(attr_node->children_[0])
-          || (T_CHAR != attr_node->children_[0]->type_
-              && T_VARCHAR != attr_node->children_[0]->type_)) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "invalid node!", K(ret));
-      } else {
-        ObString comment(attr_node->children_[0]->str_len_, attr_node->children_[0]->str_value_);
-        if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(*allocator_, session_info_->get_dtc_params(), comment))) {
-        } else {
-          int64_t comment_length = comment.length();
-          char *comment_ptr = const_cast<char *>(comment.ptr());
-          if(OB_FAIL(ObResolverUtils::check_comment_length(session_info_,
-                                                          comment_ptr,
-                                                          &comment_length,
-                                                          MAX_COLUMN_COMMENT_CHAR_LENGTH))){
-          } else {
-            column.set_comment(ObString(comment_length, comment_ptr));
-          }
-        }
+    case peg::NodeKind::ColumnComment: {
+      const auto syntax = peg::column_attribute_text(attribute);
+      ObString comment;
+      OZ(ob_write_string(*allocator_, syntax_text(syntax), comment));
+      OZ(ObSQLUtils::convert_sql_text_to_schema_for_storing(*allocator_, session_info_->get_dtc_params(), comment));
+      if (OB_SUCC(ret)) {
+        int64_t length = comment.length();
+        char *bytes = const_cast<char *>(comment.ptr());
+        OZ(ObResolverUtils::check_comment_length(session_info_, bytes, &length, MAX_COLUMN_COMMENT_CHAR_LENGTH));
+        if (OB_SUCC(ret)) { column.set_comment(ObString(length, bytes)); }
       }
       break;
     }
-    case T_CHECK_CONSTRAINT: {
+    case peg::NodeKind::CheckConstraint: {
       if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
         ret = OB_NOT_SUPPORTED;
         SQL_RESV_LOG(WARN,
@@ -2442,34 +1889,28 @@ int ObDDLResolver::resolve_generated_column_attribute(ObColumnSchemaV2 &column,
       } else {
         ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
         if (OB_FAIL(resolve_normal_column_attribute_check_cons(column,
-                                                               attr_node,
+                                                               attribute,
                                                                create_table_stmt))){
         }
       }
       break;
     }
-    case T_EMPTY: {
-        // compatible with mysql 5.7 check (expr), do nothing
-        // alter table t modify c1 json check(xyz);
-        break;
-    }
-    case T_CONSTR_SRID: {
-      if (OB_FAIL(resolve_srid_node(column, *attr_node))) {
+    case peg::NodeKind::Srid: {
+      if (OB_FAIL(resolve_srid_node(column, attribute))) {
       }
       break;
     }
-    case T_CONSTR_DEFAULT: {
+    case peg::NodeKind::ColumnDefault: {
       ret = OB_ERR_PARSER_SYNTAX;
-      SQL_RESV_LOG(WARN, "Wrong column attribute", K(ret), K(attr_node->type_));
+      SQL_RESV_LOG(WARN, "Wrong column attribute", K(ret), "kind", static_cast<int>(attribute.kind()));
       break;
     }
-    case T_VISIBLE:
-    case T_INVISIBLE: {
+    case peg::NodeKind::ColumnVisible:
+    case peg::NodeKind::ColumnInvisible:
       break;
-    }
     default:  // won't be here
       ret = OB_ERR_PARSER_SYNTAX;
-      SQL_RESV_LOG(WARN, "Wrong column attribute", K(ret), K(attr_node->type_));
+      SQL_RESV_LOG(WARN, "Wrong column attribute", K(ret), "kind", static_cast<int>(attribute.kind()));
       break;
     }
   }
@@ -2484,237 +1925,43 @@ int ObDDLResolver::resolve_generated_column_attribute(ObColumnSchemaV2 &column,
   return ret;
 }
 
-int ObDDLResolver::resolve_srid_node(share::schema::ObColumnSchemaV2 &column,
-                                     const ParseNode &srid_node)
+int ObDDLResolver::resolve_srid_node(ObColumnSchemaV2 &column, const peg::Node &node)
 {
   int ret = OB_SUCCESS;
-  if (T_CONSTR_SRID != srid_node.type_) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(srid_node.type_));
+  const uint64_t value = peg::column_srid(node);
+  if (peg::column_attribute_expression(node).kind() != peg::NodeKind::Int) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!ob_is_geometry_tc(column.get_data_type())) {
+    ret = OB_ERR_SRID_WRONG_USAGE;
+    LOG_USER_ERROR(OB_ERR_SRID_WRONG_USAGE);
+  } else if (OB_ISNULL(params_.srs_provider_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ObSqlGeoUtils::check_srid_by_srs(*params_.srs_provider_, static_cast<int64_t>(value)))) {
   } else {
-    if (srid_node.num_child_ != 1
-        || OB_ISNULL(srid_node.children_[0])
-        || T_INT != srid_node.children_[0]->type_) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid node", K(ret));
-    } else if (!ob_is_geometry_tc(column.get_data_type())) {
-      ret = OB_ERR_SRID_WRONG_USAGE;
-      SQL_RESV_LOG(WARN, "srid column attribute only support in geometry column",
-          K(ret), K(srid_node.type_));
-      LOG_USER_ERROR(OB_ERR_SRID_WRONG_USAGE);
-    } else {
-      int64_t srid = srid_node.children_[0]->value_;
-      if (OB_ISNULL(params_.srs_provider_)) {
-        ret = OB_NOT_INIT;
-        SQL_RESV_LOG(WARN, "SRS provider is not configured", K(ret));
-      } else if (OB_FAIL(ObSqlGeoUtils::check_srid_by_srs(
-                     *params_.srs_provider_, srid))) {
-      } else {
-        column.set_srid(srid);
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObDDLResolver::resolve_lob_storage_parameters(const ParseNode *node)
-{
-  int ret = OB_SUCCESS;
-  ObColumnSchemaV2 *column_schema = nullptr;
-  ObString column_name;
-  ObObjType type = ObObjType::ObNullType;
-  if (OB_ISNULL(schema_checker_) || OB_ISNULL(stmt_) ||
-      OB_ISNULL(session_info_) || OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "unexpected null value", K(ret), K(schema_checker_),
-                 K(stmt_), K(session_info_), K(node));
-  } else if (T_LOB_STORAGE_CLAUSE != node->type_) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", KR(ret), K(node->type_));
-  } else if (node->num_child_ != 3) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "num_child_ not correct", K(ret), K(node->num_child_));
-  } else if (OB_ISNULL(node->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "type node is null", K(ret), K(node));
-  } else if (OB_FALSE_IT(type = static_cast<ObObjType>(node->children_[0]->value_))) {
-  } else if (! ob_is_json(type)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "type is not support", K(ret), K(type), K(node));
-  } else if (OB_ISNULL(node->children_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "column name node is null", K(ret), K(node));
-  } else if (OB_FALSE_IT(column_name.assign_ptr(node->children_[1]->str_value_, node->children_[1]->str_len_))) {
-  } else if (OB_ISNULL(node->children_[2])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "param node is null", K(ret), K(node));
-  } else if (node->children_[2]->num_child_ <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "param node is empty", K(ret), K(node), K(node->children_[2]->num_child_));
-  } else if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()) {
-    ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-    column_schema = const_cast<ObColumnSchemaV2*>(create_table_stmt->get_column_schema(column_name));
-  } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-    ObAlterTableStmt *alter_table_stmt = static_cast<ObAlterTableStmt*>(stmt_);
-    ObTableSchema &tbl_schema = alter_table_stmt->get_alter_table_schema();
-    for (ObTableSchema::const_column_iterator iter = tbl_schema.column_begin();
-          iter != tbl_schema.column_end() && nullptr == column_schema; ++iter) {
-      ObColumnSchemaV2 &column = (**iter);
-      if (column.get_column_name_str().case_compare(column_name) == 0) {
-        const AlterColumnSchema &alter_col_schema = static_cast<const AlterColumnSchema &>(column);
-        if (alter_col_schema.alter_type_ != OB_DDL_ADD_COLUMN) {
-          ret = OB_NOT_SUPPORTED;
-          SQL_RESV_LOG(WARN, "lob chunk size column attribute is not supported modify",
-              KR(ret), K(alter_col_schema));
-        } else {
-          column_schema = &column;
-        }
-      }
-    }
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    SQL_RESV_LOG(WARN, "not supported statement for lob storage parameter", K(ret), K(stmt_->get_stmt_type()));
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(column_schema)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "column not found", K(ret), K(type), K(column_name));
-  } else if (column_schema->get_data_type() != type) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "column type node match", K(ret), K(type), K(*column_schema));
-  } else {
-    for (int64_t i = 0; i < node->children_[2]->num_child_ && OB_SUCC(ret); i ++) {
-      if (OB_FAIL(resolve_lob_storage_parameter(*column_schema, *node->children_[2]->children_[i]))) {
-      }
-    }
-  }
-  return ret;
-}
-int ObDDLResolver::resolve_lob_storage_parameter(share::schema::ObColumnSchemaV2 &column, const ParseNode &param_node)
-{
-  int ret = OB_SUCCESS;
-  switch (param_node.type_) {
-    case T_LOB_CHUNK_SIZE:
-    case T_CONSTR_LOB_CHUNK_SIZE: {
-      if (OB_FAIL(resolve_lob_chunk_size(column, param_node))) {
-      }
-      break;
-    }
-    default: {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "UnKnown type", K(ret), K(param_node.type_));
-      break;
-    }
-  }
-  return ret;
-}
-int ObDDLResolver::resolve_lob_chunk_size(const ParseNode &size_node, int64_t &lob_chunk_size)
-{
-  int ret = OB_SUCCESS;
-  const char *str = nullptr;
-  int64_t len = 0;
-  int64_t value = 0;
-  bool valid = false;
-  ObString unit;
-  if (T_CONSTR_LOB_CHUNK_SIZE != size_node.type_ && T_LOB_CHUNK_SIZE != size_node.type_) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", KR(ret), K(size_node.type_));
-  } else if (size_node.num_child_ != 1
-      || OB_ISNULL(size_node.children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "invalid node", KR(ret));
-  } else if (T_LOB_CHUNK_SIZE == size_node.type_) {
-    lob_chunk_size = size_node.children_[0]->value_ * 1024;
-  } else if (OB_ISNULL(str = size_node.children_[0]->str_value_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "size node value is null", KR(ret), K(size_node.type_));
-  } else {
-    int64_t i = 0;
-    len = size_node.children_[0]->str_len_;
-    // calc integer part
-    for (; i < len; ++i) {
-      char c = str[i];
-      if (isdigit(c)) {
-        value = value * 10 + (c - '0');
-      } else {
-        break;
-      }
-    }
-    // cacl unit part, only support kb
-    unit.assign_ptr(str + i, len - i);
-    if (i >= len) {
-      // if no unit, use kb as unit
-      valid = true;
-      value <<= 10;
-    } else if (0 == unit.case_compare("kb")
-        || 0 == unit.case_compare("k")) {
-      value <<= 10;
-      valid = true;
-    }
-    if (valid) {
-      lob_chunk_size = value;
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-      SQL_RESV_LOG(WARN, "size input is invalid", KR(ret), K(ObString(len, str)));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (lob_chunk_size < OB_MIN_LOB_CHUNK_SIZE || lob_chunk_size > OB_MAX_LOB_CHUNK_SIZE) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "lob meta size invalid", KR(ret), K(lob_chunk_size));
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "invalid CHUNK LOB storage option value");
-  }
-  return ret;
-}
-int ObDDLResolver::resolve_lob_chunk_size(
-    share::schema::ObColumnSchemaV2 &column,
-    const ParseNode &lob_chunk_size_node)
-{
-  int ret = OB_SUCCESS;
-  int64_t lob_chunk_size = 0;
-  if (! column.is_json()) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_RESV_LOG(WARN, "lob chunk size column attribute is only supported for json",
-        KR(ret), K(lob_chunk_size_node.type_), K(column));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "chunk size column attribute only supported for json, others");
-  } else if (OB_FAIL(resolve_lob_chunk_size(lob_chunk_size_node, lob_chunk_size))) {
-  } else {
-    column.set_lob_chunk_size(lob_chunk_size);
+    column.set_srid(value);
   }
   return ret;
 }
 
-int ObDDLResolver::resolve_lob_inrow_threshold(const ParseNode *option_node, const bool is_index_option)
+
+
+
+
+int ObDDLResolver::resolve_lob_inrow_threshold(const peg::Node &option, const bool is_index_option)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(session_info_)) {
+  if (OB_ISNULL(session_info_) || OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "session_info_ is null", K(ret));
   } else if (is_index_option) {
     ret = OB_NOT_SUPPORTED;
-  } else if (OB_ISNULL(option_node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "option_node is null", K(ret));
-  } else if (OB_ISNULL(option_node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "the children of option_node is null", K(option_node->children_), K(ret));
-  } else if (OB_ISNULL(option_node->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(ERROR,"children can't be null", K(ret));
-  } else if (OB_ISNULL(stmt_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(ERROR,"stmt_ is null", K(ret));
   } else {
-    lob_inrow_threshold_ = option_node->children_[0]->value_;
+    lob_inrow_threshold_ = peg::table_option_number(option);
     is_set_lob_inrow_threshold_ = true;
     if (lob_inrow_threshold_ < OB_MIN_LOB_INROW_THRESHOLD || lob_inrow_threshold_ > OB_MAX_LOB_INROW_THRESHOLD) {
       ret = OB_INVALID_ARGUMENT;
-      SQL_RESV_LOG(ERROR, "invalid inrow threshold", K(ret), K(lob_inrow_threshold_));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "lob inrow threshold, should be [0, 786432]");
     } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-      if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::LOB_INROW_THRESHOLD))) {
-      }
+      OZ(alter_table_bitset_.add_member(ObAlterTableArg::LOB_INROW_THRESHOLD));
     }
   }
   return ret;
@@ -3219,7 +2466,7 @@ int ObDDLResolver::is_gen_col_with_udf(const ObTableSchema &table_schema,
 }
 
 int ObDDLResolver::resolve_part_func(ObResolverParams &params,
-                                     const ParseNode *node,
+                                     const peg::Node &node,
                                      const ObPartitionFuncType partition_func_type,
                                      const ObTableSchema &table_schema,
                                      ObIArray<ObRawExpr *> &part_func_exprs,
@@ -3230,24 +2477,21 @@ int ObDDLResolver::resolve_part_func(ObResolverParams &params,
   partition_keys.reset();
   bool is_gen_col_udf = false;
 
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (T_EXPR_LIST == node->type_) {
-    if (node->num_child_ < 1) {
+  if (node.kind() == peg::NodeKind::ExprList) {
+    const auto values = peg::row_elements(node);
+    if (values.size() < 1) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (node->num_child_ > OB_MAX_PART_COLUMNS) {
+    } else if (values.size() > OB_MAX_PART_COLUMNS) {
       ret = OB_ERR_TOO_MANY_PARTITION_FUNC_FIELDS;
     } else {
       ObRawExpr *func_expr = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < values.size(); i++) {
         func_expr = NULL;
-        if (OB_ISNULL(node->children_[i])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(T_EXPR_LIST == node->children_[i]->type_)) {
+        if (OB_UNLIKELY(partition_value_expression(values[i]).kind() == peg::NodeKind::ExprList)) {
           ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
           LOG_WARN("row expr as partition function is not allowed for hash/range/list partition");
         } else if (OB_FAIL(ObResolverUtils::resolve_partition_expr(params,
-                                                                   *(node->children_[i]),
+                                                                   values[i],
                                                                    table_schema,
                                                                    partition_func_type,
                                                                    func_expr,
@@ -3265,7 +2509,7 @@ int ObDDLResolver::resolve_part_func(ObResolverParams &params,
   } else {
     ObRawExpr *func_expr = NULL;
     if (OB_FAIL(ObResolverUtils::resolve_partition_expr(params,
-                                                        *node,
+                                                        node,
                                                         table_schema,
                                                         partition_func_type,
                                                         func_expr,
@@ -3307,56 +2551,28 @@ int ObDDLResolver::resolve_part_func(ObResolverParams &params,
 
 
 
-int ObDDLResolver::check_partition_name_duplicate(ParseNode *node)
+int ObDDLResolver::check_partition_name_duplicate(rust::Slice<const peg::Node> elements)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObPartitionNameSet *partition_name_set = nullptr;
-    void *buf = nullptr;
-    int64_t partition_num = node->num_child_;
-    ParseNode *partition_expr_list = node;
-    ParseNode *element_node = NULL;
-    if (OB_ISNULL(buf = allocator_->alloc(sizeof(
-              ObPartitionNameSet)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+  void *buffer = allocator_->alloc(sizeof(ObPartitionNameSet));
+  if (buffer == nullptr) return OB_ALLOCATE_MEMORY_FAILED;
+  auto &names = *new (buffer) ObPartitionNameSet();
+  for (size_t i = 0; OB_SUCC(ret) && i < elements.size(); ++i) {
+    const auto &name = peg::relation_name(peg::partition_element(elements[i]).name);
+    const auto name_text = name.text();
+    ObString text(syntax_text(name_text));
+    ObPartitionNameHashWrapper key(text);
+    if (OB_HASH_EXIST == names.exist_refactored(key)) {
+      ret = OB_ERR_SAME_NAME_PARTITION;
+      LOG_USER_ERROR(OB_ERR_SAME_NAME_PARTITION, text.length(), text.ptr());
     } else {
-      partition_name_set = new(buf)ObPartitionNameSet();
-    }
-    if (OB_FAIL(ret)) {
-    } else {
-      OB_ASSERT(partition_name_set != nullptr);
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
-      element_node = partition_expr_list->children_[i];
-      if (OB_ISNULL(element_node)
-          || OB_ISNULL(element_node->children_[PARTITION_ELEMENT_NODE])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(element_node->children_[PARTITION_NAME_NODE])
-            || OB_ISNULL(element_node->children_[PARTITION_NAME_NODE]->children_[NAMENODE])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ObString partition_name;
-        if (OB_NOT_NULL(element_node->children_[PARTITION_NAME_NODE])) {
-          ParseNode *partition_name_node = element_node->children_[PARTITION_NAME_NODE]->children_[NAMENODE];
-          partition_name.assign_ptr(partition_name_node->str_value_,
-              static_cast<int32_t>(partition_name_node->str_len_));
-          ObPartitionNameHashWrapper partition_name_key(partition_name);
-          if (OB_HASH_EXIST == partition_name_set->exist_refactored(partition_name_key)) {
-            ret = OB_ERR_SAME_NAME_PARTITION;
-            LOG_USER_ERROR(OB_ERR_SAME_NAME_PARTITION, partition_name.length(), partition_name.ptr());
-          } else if (OB_FAIL(set_partition_name_in_hashset(partition_name_key, *partition_name_set))) {
-          }
-        }
-      }
+      OZ(set_partition_name_in_hashset(key, names));
     }
   }
   return ret;
 }
 
-
-int ObDDLResolver::resolve_collection_column(const ParseNode *type_node, ObColumnSchemaV2 &column)
+int ObDDLResolver::resolve_collection_column(const peg::Node *type_node, ObColumnSchemaV2 &column)
 {
   int ret = OB_SUCCESS;
   ObArray<ObString> type_info_array;
@@ -3373,14 +2589,14 @@ int ObDDLResolver::resolve_collection_column(const ParseNode *type_node, ObColum
   return ret;
 }
 
-int ObDDLResolver::fill_extended_type_info(const ParseNode &str_list_node, ObColumnSchemaV2 &column)
+int ObDDLResolver::fill_extended_type_info(const peg::Node &type_node, ObColumnSchemaV2 &column)
 {
   int ret = OB_SUCCESS;
   ObArray<ObString> type_info_array;
   CK(NULL != session_info_);
   CK(NULL != allocator_);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObResolverUtils::resolve_extended_type_info(str_list_node, type_info_array))) {
+  } else if (OB_FAIL(ObResolverUtils::resolve_extended_type_info(type_node, *allocator_, type_info_array))) {
   } else {
     // The resolved extended type info's collation is session connection collation,
     // need convert to column collation finally. The converting may be done in RS,
@@ -3397,17 +2613,14 @@ int ObDDLResolver::fill_extended_type_info(const ParseNode &str_list_node, ObCol
   return ret;
 }
 
-int ObDDLResolver::resolve_enum_or_set_column(const ParseNode *type_node, ObColumnSchemaV2 &column)
+int ObDDLResolver::resolve_enum_or_set_column(const peg::Node *type_node, ObColumnSchemaV2 &column)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(type_node)
-      || OB_UNLIKELY(type_node->num_child_ != 4)
       || OB_ISNULL(allocator_)
       || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(type_node->children_[3])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(fill_extended_type_info(*(type_node->children_[3]), column))) {
+  } else if (OB_FAIL(fill_extended_type_info(*type_node, column))) {
   } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
     //The following operations may depend on the charset of the table, therefore alter table should be completed in RS.
   } else if (OB_FAIL(check_and_fill_column_charset_info(column, charset_type_, collation_type_))) {
@@ -4233,7 +3446,7 @@ int ObDDLResolver::fill_column_with_subschema(const ObRawExpr &expr,
   return ret;
 }
 
-int ObDDLResolver::resolve_range_partition_elements(ParseNode *node,
+int ObDDLResolver::resolve_range_partition_elements(rust::Slice<const peg::Node> elements,
                                                     const bool is_subpartition,
                                                     const ObPartitionFuncType part_type,
                                                     const int64_t expr_num,
@@ -4242,80 +3455,49 @@ int ObDDLResolver::resolve_range_partition_elements(ParseNode *node,
                                                     ObIArray<ObSubPartition> &subpartitions)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt_)) {
+  if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (expr_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    int64_t partition_num = node->num_child_;
-    ParseNode *partition_expr_list = node;
-    ObPartition partition;
-    ObSubPartition subpartition;
     bool has_empty_name = false;
-    for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
-      subpartition.reset();
-      partition.reset();
-      ParseNode *element_node = partition_expr_list->children_[i];
-      if (OB_ISNULL(element_node)
-          || OB_ISNULL(element_node->children_[PARTITION_ELEMENT_NODE])) {
+    for (size_t i = 0; OB_SUCC(ret) && i < elements.size(); ++i) {
+      const auto definition = peg::partition_element(elements[i]);
+      ObPartition partition;
+      ObSubPartition subpartition;
+      ObBasePartition &target = is_subpartition ? static_cast<ObBasePartition&>(subpartition)
+                                               : static_cast<ObBasePartition&>(partition);
+      ObString name;
+      OZ(resolve_partition_element(definition, name, target));
+      has_empty_name |= target.is_empty_partition_name();
+      if (definition.value_kind != peg::PartitionValues::Range) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (expr_num != definition.values.size()) {
+        ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
       } else {
-        ObString partition_name;
-        ObBasePartition *target_partition = is_subpartition ?
-            static_cast<ObBasePartition*>(&subpartition) : static_cast<ObBasePartition*>(&partition);
-        if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
-                                           partition_name,
-                                           *target_partition))) {
-        } else if (target_partition->is_empty_partition_name()) {
-          has_empty_name = true;
-        }
-        ParseNode *expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE];
-        if (T_EXPR_LIST != expr_list_node->type_) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (expr_num != expr_list_node->num_child_) {
-          ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-          LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num), "num_child", expr_list_node->num_child_);
-        } else {
-          if (is_subpartition) {
-            if (OB_FAIL(subpartitions.push_back(subpartition))) {
-            }
-          } else {
-            if (OB_FAIL(partitions.push_back(partition))) {
-            }
-          }
-          if (OB_FAIL(ret)) {
-            // do nothing
-          } else if (OB_FAIL(resolve_range_value_exprs(expr_list_node,
-                                                       part_type,
-                                                       partition_name,
-                                                       range_value_exprs))) {
-          }
-        }
+        if (is_subpartition) { OZ(subpartitions.push_back(subpartition)); }
+        else { OZ(partitions.push_back(partition)); }
+        OZ(resolve_range_value_exprs(definition.values, part_type, name, range_value_exprs));
       }
     }
-    if (OB_UNLIKELY(has_empty_name) &&
-        (stmt::T_CREATE_TABLE == stmt_->get_stmt_type() ||
-         stmt::T_CREATE_INDEX == stmt_->get_stmt_type())) {
-      if (OB_FAIL(create_name_for_empty_partition(is_subpartition, partitions, subpartitions))) {
-      }
+    if (has_empty_name && (stmt::T_CREATE_TABLE == stmt_->get_stmt_type() ||
+                          stmt::T_CREATE_INDEX == stmt_->get_stmt_type())) {
+      OZ(create_name_for_empty_partition(is_subpartition, partitions, subpartitions));
     }
   }
   return ret;
 }
 
-int ObDDLResolver::resolve_range_value_exprs(ParseNode *expr_list_node,
+int ObDDLResolver::resolve_range_value_exprs(rust::Slice<const peg::Node> values,
                                              const ObPartitionFuncType part_type,
                                              const ObString &partition_name,
                                              ObIArray<ObRawExpr *> &range_value_exprs)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr_list_node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    for (int64_t j = 0; OB_SUCC(ret) && j < expr_list_node->num_child_; j++) {
-      if (OB_ISNULL(expr_list_node->children_[j])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_MAXVALUE == expr_list_node->children_[j]->type_) {
+  {
+    for (int64_t j = 0; OB_SUCC(ret) && j < values.size(); j++) {
+      const auto kind = partition_value_expression(values[j]).kind();
+      if (peg::NodeKind::MaxValue == kind) {
         ObRawExpr *maxvalue_expr = NULL;
         ObConstRawExpr *c_expr = NULL;
         c_expr = (ObConstRawExpr *)allocator_->alloc(sizeof(ObConstRawExpr));
@@ -4328,13 +3510,13 @@ int ObDDLResolver::resolve_range_value_exprs(ParseNode *expr_list_node,
         } else {
           ret = OB_ALLOCATE_MEMORY_FAILED;
         }
-      } else if (T_NULL == expr_list_node->children_[j]->type_) {
+      } else if (peg::NodeKind::Null == kind) {
         ret = OB_EER_NULL_IN_VALUES_LESS_THAN;
-      } else if (T_EXPR_LIST != expr_list_node->children_[j]->type_) {
+      } else if (peg::NodeKind::ExprList != kind) {
         ObRawExpr *part_value_expr = NULL;
         if (OB_FAIL(ObResolverUtils::resolve_partition_range_value_expr(
                                                        params_,
-                                                       *(expr_list_node->children_[j]),
+                                                       values[j],
                                                        partition_name,
                                                        part_type,
                                                        part_value_expr))) {
@@ -4354,7 +3536,7 @@ int ObDDLResolver::resolve_spatial_index_constraint(
     int64_t column_num,
     const int64_t index_keyname_value,
     bool is_explicit_order,
-    bool is_func_index,
+    const peg::Node *functional_expression,
     ObIArray<share::schema::ObColumnSchemaV2*> *resolved_cols,
     bool is_prefix_index)
 {
@@ -4362,11 +3544,12 @@ int ObDDLResolver::resolve_spatial_index_constraint(
   const ObColumnSchemaV2 *column_schema = NULL;
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (is_func_index) {
+  } else if (nullptr != functional_expression) {
     ObRawExprFactory expr_factory(*allocator_);
     ObRawExpr *expr = NULL;
     if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(NULL,
-                                                            column_name,
+                                                            *functional_expression,
+                                                            params_.syntax_->source(),
                                                             expr_factory,
                                                             *session_info_,
                                                             table_schema,
@@ -4501,7 +3684,7 @@ int ObDDLResolver::resolve_spatial_index_constraint(
 int ObDDLResolver::resolve_vec_index_constraint(
     const share::schema::ObColumnSchemaV2 &column_schema,
     const int64_t index_keyname_value,
-    ParseNode *node)
+    rust::Slice<const peg::Node> options)
 {
   int ret = OB_SUCCESS;
 
@@ -4537,27 +3720,9 @@ int ObDDLResolver::resolve_vec_index_constraint(
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "vec index dim larger than 4096 is");
       } else {
         index_keyname_ = VEC_KEY;
-        ParseNode *option_node = NULL;
         bool has_set_params = false;
-        if (OB_ISNULL(node)) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector index params not set is");
-        } else if(T_TABLE_OPTION_LIST != node->type_ || node->num_child_ < 1) {
-          ret = OB_NOT_SUPPORTED;
-          SQL_RESV_LOG(WARN, "invalid parse node", KR(ret), K(node->type_), K(node->num_child_));
-        } else if (OB_ISNULL(node->children_)) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector index params not set is");
-        } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-            if (OB_ISNULL(option_node = node->children_[i])) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector index params not set is");
-            } else if (option_node->type_ != T_VEC_INDEX_PARAMS) {
-            } else {
-              has_set_params = true;
-            }
-          }
+        for (size_t i = 0; i < options.size(); ++i) {
+          has_set_params |= options[i].kind() == peg::NodeKind::VectorParameters;
         }
         if (OB_SUCC(ret) && has_set_params) {
         } else {
@@ -4597,7 +3762,7 @@ int ObDDLResolver::resolve_vec_index_constraint(
     ObSchemaChecker &schema_checker,
     const common::ObString &column_name,
     const int64_t index_keyname_value,
-    ParseNode *node)
+    rust::Slice<const peg::Node> options)
 {
   int ret = OB_SUCCESS;
   const ObColumnSchemaV2 *column_schema = NULL;
@@ -4622,7 +3787,7 @@ int ObDDLResolver::resolve_vec_index_constraint(
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create vector index on column has vector index is");
   } else if (OB_FAIL(resolve_vec_index_constraint(*column_schema,
                                                   index_keyname_value,
-                                                  node))) {
+                                                  options))) {
   }
   return ret;
 }
@@ -4928,18 +4093,15 @@ int ObDDLResolver::check_indexes_on_same_cols(const ObTableSchema &table_schema,
 // 2 this index is local, an error is raised since we cannot specify
 //   partition info for a local index
 int ObDDLResolver::resolve_index_partition_node(
-    ParseNode *index_partition_node,
+    const peg::Node &index_partition_node,
     ObCreateIndexStmt *crt_idx_stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(NULL == index_partition_node)
-      || OB_UNLIKELY(NULL == crt_idx_stmt)) {
+  if (OB_UNLIKELY(NULL == crt_idx_stmt)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObTableSchema &index_schema = crt_idx_stmt->get_create_index_arg().index_schema_;
-    if (NULL == index_partition_node) {
-      // No partitioning method specified
-    } else if (!global_) {
+    if (!global_) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "local index with partition option");
     } else if (!index_schema.is_global_index_table()) {
@@ -5120,259 +4282,76 @@ int ObDDLResolver::do_generate_global_index_schema(
 }
 
 int ObDDLResolver::resolve_check_constraint_node(
-    const ParseNode &cst_node,
+    const peg::Node &node,
     ObIArray<ObConstraint> &csts,
     const share::schema::ObColumnSchemaV2 *column_schema)
 {
   int ret = OB_SUCCESS;
-  if (cst_node.num_child_ != 3) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "the num_child of constraint_node is wrong.", K(cst_node.num_child_), K(ret));
-  } else {
-    ObString cst_name;
-    ParseNode *cst_name_node = cst_node.children_[0];
-    ParseNode *cst_check_expr_node = cst_node.children_[1];
-    ParseNode* cst_check_state_node = cst_node.children_[2];
-    bool is_sys_generated_cst_name = false;
-    if (OB_ISNULL(cst_check_expr_node)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "NULL ptr", K(ret), K(cst_check_expr_node));
-    } else if (OB_ISNULL(cst_name_node)) {
-      is_sys_generated_cst_name = true;
-    } else if (cst_name_node->num_child_ != 1) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "the num_child of constraint_name_node is wrong", K(ret), K(cst_name_node->num_child_));
-    } else if (OB_ISNULL(cst_name_node->children_[0])) {
-      is_sys_generated_cst_name = true;
-    } else {
-      cst_name.assign_ptr(cst_name_node->children_[0]->str_value_, static_cast<int32_t>(cst_name_node->children_[0]->str_len_));
-      if (cst_name.empty()) {
-        ret = OB_ERR_ZERO_LENGTH_IDENTIFIER;
-        SQL_RESV_LOG(WARN, "zero-length constraint name is illegal", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      bool need_reset_generated_name = is_sys_generated_cst_name;
-      do {
-        if (need_reset_generated_name) { // generate cst name automatically
-          if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_CHECK))) {
-          } else {
-            need_reset_generated_name = false;
-          }
-        }
-        // check length of constraint name
-        if (OB_FAIL(ret)) {
-        } else if (cst_name.length() > OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL) {
-          ret = OB_ERR_TOO_LONG_IDENT;
-        }
-        //check if cst name is duplicate
-        for (int64_t i = 0; OB_SUCC(ret) && i < csts.count() && !need_reset_generated_name; ++i) {
-          if (0 == cst_name.case_compare(csts.at(i).get_constraint_name_str())) {
-            if (is_sys_generated_cst_name) {
-              need_reset_generated_name = true; // sys generated cst name is duplicate
-            } else {
-              ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
-              LOG_USER_ERROR(OB_ERR_CONSTRAINT_NAME_DUPLICATE, cst_name.length(), cst_name.ptr());
-            }
-          }
-        }
-      } while (OB_SUCC(ret) && need_reset_generated_name);
-      if (OB_SUCC(ret)) {
-        ObConstraint cst;
-        ObRawExpr* check_expr = NULL;
-        const ObTableSchema *tbl_schema = nullptr;
-        if (OB_FAIL(get_table_schema_for_check(tbl_schema))) {
-        } else if (OB_ISNULL(tbl_schema)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          if (OB_FAIL(check_is_json_contraint(*tbl_schema, csts, cst_check_expr_node))) {
-          } else if (OB_FAIL(cst.set_constraint_name(cst_name))) {
-          } else if (OB_FAIL(resolve_check_constraint_expr(params_,
-                                                           cst_check_expr_node,
-                                                           *tbl_schema,
-                                                           cst,
-                                                           check_expr,
-                                                           column_schema))) {
-          } else {
-            cst.set_name_generated_type(is_sys_generated_cst_name ? GENERATED_TYPE_SYSTEM : GENERATED_TYPE_USER);
-            if (OB_FAIL(resolve_check_cst_state_node_mysql(cst_check_state_node, cst))) {
-            }
-            if (OB_SUCC(ret)) {
-              cst.set_constraint_type(CONSTRAINT_TYPE_CHECK);
-              ret = csts.push_back(cst);
-            }
-          }
-        }
-      }
+  ObString name;
+  const bool generated = !peg::check_constraint_has_name(node);
+  if (!generated) {
+    const auto &syntax_name = peg::check_constraint_name(node);
+    const auto syntax_name_text = syntax_name.text();
+    name.assign_ptr(syntax_text(syntax_name_text).ptr(), static_cast<int64_t>(syntax_name_text.size()));
+    if (name.empty()) {
+      ret = OB_ERR_ZERO_LENGTH_IDENTIFIER;
     }
   }
-  return ret;
-}
-
-int ObDDLResolver::check_is_json_contraint(const ObTableSchema &t_table_schema,
-                                           ObIArray<ObConstraint> &csts,
-                                           ParseNode *cst_check_expr_node)
-{
-  INIT_SUCC(ret);
-  const share::schema::ObColumnSchemaV2 *column_schema = NULL;
-  uint64_t col_id = 0;
-  if (cst_check_expr_node->type_ == T_FUN_SYS_IS_JSON &&
-              OB_NOT_NULL(cst_check_expr_node->children_[0]) && OB_NOT_NULL(cst_check_expr_node->children_[0]->children_[0])) {
-    ParseNode *cur_node = cst_check_expr_node->children_[0]->children_[0];
-    ObString col_str(cur_node->str_len_, cur_node->str_value_);
-    if (OB_ISNULL(column_schema = t_table_schema.get_column_schema(col_str))) {
-      // ignore ret
-    } else {
-      col_id = column_schema->get_column_id();
-      const ParseNode *node = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && i < csts.count(); ++i) {
-        ObConstraint &cst = csts.at(i);
-        for (ObConstraint::const_cst_col_iterator cst_col_iter = cst.cst_col_begin();
-                OB_SUCC(ret) && (cst_col_iter != cst.cst_col_end()); ++cst_col_iter) {
-          if (*cst_col_iter == col_id) {
-            if (OB_ISNULL(cst.get_check_expr_str().ptr())) {
-            } else if (OB_FAIL(ObRawExprUtils::parse_bool_expr_node_from_str(
-                  cst.get_check_expr_str(), *allocator_, node))) {
-            } else {
-              if (node->type_ == T_FUN_SYS_IS_JSON) {
-                ret = OB_ERR_ADDITIONAL_IS_JSON;
-              }
-            }
-          }
-        }
-      }
-      for (ObTableSchema::const_constraint_iterator iter = t_table_schema.constraint_begin(); OB_SUCC(ret) &&
-                          iter != t_table_schema.constraint_end(); iter ++) {
-        ObConstraint *cst = *iter;
-        for (ObConstraint::const_cst_col_iterator cst_col_iter = cst->cst_col_begin();
-                OB_SUCC(ret) && (cst_col_iter != cst->cst_col_end()); ++cst_col_iter) {
-          if (*cst_col_iter == col_id) {
-            if (OB_ISNULL(cst->get_check_expr_str().ptr())) {
-            } else if (OB_FAIL(ObRawExprUtils::parse_bool_expr_node_from_str(
-                  cst->get_check_expr_str(), *allocator_, node))) {
-            } else {
-              if (node->type_ == T_FUN_SYS_IS_JSON) {
-                ret = OB_ERR_ADDITIONAL_IS_JSON;
-              }
-            }
-          }
-        }
-      }
+  bool need_name = generated;
+  do {
+    if (OB_SUCC(ret) && need_name) {
+      OZ(ObTableSchema::create_cons_name_automatically(name, table_name_, *allocator_, CONSTRAINT_TYPE_CHECK));
+      need_name = false;
     }
-  }
-  return ret;
-}
-
-// only use in mysql mode
-int ObDDLResolver::resolve_check_cst_state_node_mysql(
-    const ParseNode* cst_check_state_node,
-    ObConstraint& cst)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(cst_check_state_node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "cst_check_state_node is null ptr", K(ret));
-  } else if (T_ENFORCED_CONSTRAINT == cst_check_state_node->type_) {
-    cst.set_enable_flag(true);
-    cst.set_validate_flag(CST_FK_VALIDATED);
-  } else if (T_NOENFORCED_CONSTRAINT == cst_check_state_node->type_) {
-    cst.set_enable_flag(false);
-    cst.set_validate_flag(CST_FK_NO_VALIDATE);
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "constraint type not support");
-  }
-  return ret;
-}
-
-// Resolve primary key constraints.
-int ObDDLResolver::resolve_pk_constraint_node(const ParseNode &pk_cst_node,
-                                              common::ObString pk_name,
-                                              ObSEArray<ObConstraint, 4> &csts)
-{
-  int ret = OB_SUCCESS;
-  ObString cst_name;
-  bool is_sys_generated_cst_name = false;
-  if ((T_PRIMARY_KEY != pk_cst_node.type_) && (T_COLUMN_DEFINITION != pk_cst_node.type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "node type is wrong.", K(ret), K(pk_cst_node.type_));
-  } else if (T_PRIMARY_KEY == pk_cst_node.type_) {
-    // Handle create table t1(c1 int, primary key(c1)); this case
-    if (pk_cst_node.num_child_ != 2) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "the num_child of constraint_node is wrong.", K(pk_cst_node.num_child_), K(ret));
-    } else {
-      ParseNode *cst_name_node = pk_cst_node.children_[1];
-      if (OB_ISNULL(cst_name_node)) {
-        // User has not explicitly named the primary key, the system names the primary key constraint
-        if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_PRIMARY_KEY))) {
-        } else {
-          is_sys_generated_cst_name = true;
-        }
-      } else if (NULL == cst_name_node->str_value_ || 0 == cst_name_node->str_len_) {
-        ret = OB_ERR_ZERO_LENGTH_IDENTIFIER;
-        SQL_RESV_LOG(WARN, "zero-length constraint name is illegal", K(ret));
-      } else {
-        cst_name.assign_ptr(cst_name_node->str_value_,static_cast<int32_t>(cst_name_node->str_len_));
-      }
-    }
-  } else {
-    if (NULL == pk_name.ptr()) {
-      if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_PRIMARY_KEY))) {
-      } else {
-        is_sys_generated_cst_name = true;
-      }
-    } else {
-      cst_name.assign_ptr(pk_name.ptr(), pk_name.length());
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ObConstraint cst;
-    if (cst_name.length() > OB_MAX_EXTENDED_CONSTRAINT_NAME_LENGTH) {
+    if (OB_SUCC(ret) && name.length() > OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL) {
       ret = OB_ERR_TOO_LONG_IDENT;
-    } else {
-      //ObTableSchema tmp_table_schema;
-      if (csts.end() != std::find_if(csts.begin(), csts.end(),
-                   [&cst_name](const ObConstraint &cst) {
-                     return cst_name == cst.get_constraint_name_str();
-                   })) {
-        ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
-      } else if (OB_FAIL(cst.set_constraint_name(cst_name))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < csts.count() && !need_name; ++i) {
+      if (0 == name.case_compare(csts.at(i).get_constraint_name_str())) {
+        if (generated) {
+          need_name = true;
+        } else {
+          ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
+          LOG_USER_ERROR(OB_ERR_CONSTRAINT_NAME_DUPLICATE, name.length(), name.ptr());
+        }
+      }
+    }
+  } while (OB_SUCC(ret) && need_name);
+  if (OB_SUCC(ret)) {
+    ObConstraint constraint;
+    ObRawExpr *check_expr = nullptr;
+    const ObTableSchema *schema = nullptr;
+    OZ(get_table_schema_for_check(schema));
+    if (OB_SUCC(ret) && OB_ISNULL(schema)) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    OZ(constraint.set_constraint_name(name));
+    OZ(ObResolverUtils::resolve_check_constraint_expr(params_, peg::check_constraint_expression(node),
+        params_.syntax_->source(), *schema, constraint, check_expr, column_schema));
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(check_expr)) {
+        ret = OB_ERR_UNEXPECTED;
       } else {
-        cst.set_name_generated_type(is_sys_generated_cst_name ? GENERATED_TYPE_SYSTEM : GENERATED_TYPE_USER);
-        cst.set_constraint_type(CONSTRAINT_TYPE_PRIMARY_KEY);
-        ret = csts.push_back(cst);
+        constraint.set_name_generated_type(generated ? GENERATED_TYPE_SYSTEM : GENERATED_TYPE_USER);
+        const bool enforced = peg::check_constraint_enforced(node);
+        constraint.set_enable_flag(enforced);
+        constraint.set_validate_flag(enforced ? CST_FK_VALIDATED : CST_FK_NO_VALIDATE);
+        constraint.set_constraint_type(CONSTRAINT_TYPE_CHECK);
+        OZ(csts.push_back(constraint));
       }
     }
   }
-
   return ret;
 }
 
-int ObDDLResolver::resolve_check_constraint_expr(
-    ObResolverParams &params,
-    const ParseNode *node,
-    const ObTableSchema &table_schema,
-    ObConstraint &constraint,
-    ObRawExpr *&check_expr,
-    const share::schema::ObColumnSchemaV2 *column_schema)
-{
-  int ret = OB_SUCCESS;
-  check_expr = NULL;
-  if (OB_ISNULL(node)) {
-    ret = OB_NOT_INIT;
-  } else {
-    if (OB_FAIL(ObResolverUtils::resolve_check_constraint_expr(params, node,
-                                                               table_schema,
-                                                               constraint,
-                                                               check_expr,
-                                                               column_schema))) {
-        } else if (OB_ISNULL(check_expr)) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-  }
-  return ret;
-}
+
+
+
+
+
+
+
+
 
 int ObDDLResolver::generate_index_name(ObString &index_name,
     IndexNameSet &current_index_name_set,
@@ -5417,83 +4396,43 @@ int ObDDLResolver::generate_index_name(ObString &index_name,
 // @param [in] node_position_list  table_element_list array of indices of child nodes related to foreign keys in the node
 //
 // @return oceanbase error code defined in lib/ob_errno.def
-int ObDDLResolver::resolve_foreign_key(const ParseNode *node,
-                                       ObArray<int> &node_position_list)
+int ObDDLResolver::resolve_foreign_key(rust::Slice<const peg::Node> elements,
+                                       ObArray<int> &positions)
 {
   int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(node)) {
-    // do nothing, create table t as select ... will come here
-  } else if (T_TABLE_ELEMENT_LIST != node->type_) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(node->type_));
-  } else if (OB_ISNULL(stmt_)) {
+  if (OB_ISNULL(stmt_)) {
     ret = OB_NOT_INIT;
-    SQL_RESV_LOG(WARN, "stmt_ is null", K(ret));
-  } else if (OB_ISNULL(node->children_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(node->children_));
   } else {
-    ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < node_position_list.size(); ++i) {
-      int child_pos = node_position_list.at(i);
-      ObCreateForeignKeyArg foreign_key_arg;
-      if (!(0 <= child_pos && child_pos < node->num_child_)) {
+    auto *statement = static_cast<ObCreateTableStmt*>(stmt_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < positions.size(); ++i) {
+      const int position = positions.at(i);
+      ObCreateForeignKeyArg arg;
+      if (position < 0 || static_cast<size_t>(position) >= elements.size()) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "node pos out of range", K(ret), K(child_pos), K(node->num_child_));
-      } else if (OB_FAIL(resolve_foreign_key_node(node->children_[child_pos], foreign_key_arg, false))) {
-      } else if (OB_FAIL(create_table_stmt->get_foreign_key_arg_list().push_back(foreign_key_arg))) {
+      } else {
+        OZ(resolve_foreign_key_node(elements[position], arg, false));
+        OZ(statement->get_foreign_key_arg_list().push_back(arg));
       }
     }
     current_foreign_key_name_set_.reset();
   }
-
   return ret;
 }
 
-// int resolve_foreign_key_node(const ParseNode *node, obcall::ObCreateForeignKeyArg &arg);
-// description: parse the sub-nodes related to foreign keys in the table_element_list node
-//
-// @param [in] node  table_element_list node related to foreign key sub-nodes
-// @param [out] arg  foreign key related sub-node parsing generated ObCreateForeignKeyArg
-//
-// @return oceanbase error code defined in lib/ob_errno.def
-int ObDDLResolver::resolve_foreign_key_node(const ParseNode *node,
+
+int ObDDLResolver::resolve_foreign_key_node(const peg::Node &node,
                                             obcall::ObCreateForeignKeyArg &arg,
-                                            bool is_alter_table,
-                                            const ObColumnSchemaV2 *column)
+                                            bool is_alter_table)
 {
   int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "node is null", K(ret));
-  } else {
-    // mysql mode
-    if (T_FOREIGN_KEY != node->type_ || 7 != node->num_child_ || OB_ISNULL(node->children_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(node->type_), K(node->num_child_), K(node->children_));
-    } else {
-      ParseNode *child_columns  = node->children_[0];
-      ParseNode *parent_table   = node->children_[1];
-      ParseNode *parent_columns = node->children_[2];
-      ParseNode *reference_options = node->children_[3];
-      ParseNode *constraint_name = node->children_[4];
-      // foreign_key_name this node is used for naming the index created automatically when creating a foreign key if constraint_name is not explicitly declared
-      // Note: The foreign keys in the current version are not indexed at creation, so this node is temporarily not being used
-      ParseNode *foreign_key_name = node->children_[5];
-      UNUSED(foreign_key_name);
-      ParseNode *match_options = node->children_[6];
-      if (OB_FAIL(resolve_table_relation_node(parent_table, arg.parent_table_, arg.parent_database_))) {
-      } else if (OB_FAIL(resolve_foreign_key_columns(child_columns, arg.child_columns_))) {
-      } else if (OB_FAIL(resolve_foreign_key_columns(parent_columns, arg.parent_columns_))) {
-      } else if (OB_FAIL(resolve_foreign_key_options(reference_options, arg.update_action_, arg.delete_action_))) {
-      } else if (OB_FAIL(resolve_foreign_key_name(constraint_name, arg.foreign_key_name_, arg.name_generated_type_))) {
-      } else if (OB_FAIL(check_foreign_key_reference(arg, is_alter_table, NULL))) {
-      } else if (OB_FAIL(resolve_match_options(match_options))) {
-      }
-    }
-  }
+  const auto definition = peg::foreign_key_definition(node);
+  OZ(resolve_table_relation_node(&definition.parent, arg.parent_table_, arg.parent_database_));
+  OZ(resolve_foreign_key_columns(definition.columns, arg.child_columns_));
+  OZ(resolve_foreign_key_columns(definition.parent_columns, arg.parent_columns_));
+  OZ(resolve_foreign_key_options(definition.actions, arg.update_action_, arg.delete_action_));
+  OZ(resolve_foreign_key_name(definition.has_name ? &peg::foreign_key_name(node) : nullptr,
+      arg.foreign_key_name_, arg.name_generated_type_));
+  OZ(check_foreign_key_reference(arg, is_alter_table, nullptr));
 
   if (OB_SUCC(ret) && !arg.is_parent_table_mock_) {
     if (0 == arg.parent_table_.case_compare(table_name_) &&
@@ -5517,180 +4456,85 @@ int ObDDLResolver::resolve_foreign_key_node(const ParseNode *node,
 // @param [in] node      The node related to the column with a foreign key relationship
 // @param [out] columns  Foreign key column names filled into arg
 // @return oceanbase error code defined in lib/ob_errno.def
-int ObDDLResolver::resolve_foreign_key_columns(const ParseNode *node,
+int ObDDLResolver::resolve_foreign_key_columns(rust::Slice<const peg::Node> names,
                                                ObIArray<ObString> &columns)
 {
   int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(node)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "node is null", K(ret));
-  } else if (OB_ISNULL(node->children_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(node->type_), K(node->num_child_), K(node->children_));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-      ParseNode *column  = node->children_[i];
-      if (OB_ISNULL(column)) {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN, "child is null", K(ret));
-      } else if (OB_ISNULL(column->str_value_)) {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(column->type_), K(column->str_value_));
-      } else if (OB_FAIL(columns.push_back(ObString(column->str_len_, column->str_value_)))) {
-      }
-    }
+  for (size_t i = 0; OB_SUCC(ret) && i < names.size(); ++i) {
+    ObString name;
+    const auto name_text = names[i].text();
+    OZ(ob_write_string(*allocator_, syntax_text(name_text), name));
+    OZ(columns.push_back(name));
   }
-
   return ret;
 }
-// description: parse the ReferenceAction of foreign keys, including update_action and delete_action
-//
-// @param [in] node      The node related to the ReferenceAction of the foreign key
-// @param [out] update_action  Fill the ObReferenceAction information into arg
-// @param [out] delete_action  Fill the ObReferenceAction information into arg
-// @return oceanbase error code defined in lib/ob_errno.def
-int ObDDLResolver::resolve_foreign_key_options(const ParseNode *node,
+
+
+int ObDDLResolver::resolve_foreign_key_options(rust::Slice<const peg::Node> options,
                                                ObReferenceAction &update_action,
                                                ObReferenceAction &delete_action)
 {
   int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(node)) {
-    // nothing.
-  } else if (T_REFERENCE_OPTION_LIST != node->type_ || node->num_child_ > 2) {
+  if (options.size() > 2) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(node->type_), K(node->num_child_));
-  } else if (NULL != node->children_) {
+  } else if (!options.empty()) {
     update_action = ACTION_INVALID;
     delete_action = ACTION_INVALID;
-    ParseNode *option_node = NULL;
-    for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-      option_node = node->children_[i];
+    for (size_t i = 0; OB_SUCC(ret) && i < options.size(); ++i) {
+      const auto syntax = peg::referential_action(options[i]);
       ObReferenceAction action = ACTION_INVALID;
-      if (OB_ISNULL(option_node)) {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN, "option node is null", K(ret), K(i));
-      } else {
-        switch (option_node->int32_values_[1]) {
-        case T_RESTRICT:
-          action = ACTION_RESTRICT;
-          break;
-        case T_CASCADE:
-          action = ACTION_CASCADE;
-          break;
-        case T_SET_NULL:
-          {
-            action = ACTION_SET_NULL;
-          }
-          break;
-        case T_NO_ACTION:
-          action = ACTION_NO_ACTION;
-          break;
-        case T_SET_DEFAULT:
-          ret = OB_ERR_CANNOT_ADD_FOREIGN;
-          SQL_RESV_LOG(WARN, "Cannot add foreign key constraint, because the key word of action is ACTION_SET_DEFAULT", K(ret), K(node->int32_values_[1]));
-          break;
-        default:
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid reference option", K(ret), K(option_node->int32_values_[1]));
-          break;
-        }
+      switch (syntax.action) {
+        case peg::ReferenceAction::Restrict: action = ACTION_RESTRICT; break;
+        case peg::ReferenceAction::Cascade: action = ACTION_CASCADE; break;
+        case peg::ReferenceAction::SetNull: action = ACTION_SET_NULL; break;
+        case peg::ReferenceAction::NoAction: action = ACTION_NO_ACTION; break;
+        case peg::ReferenceAction::SetDefault: ret = OB_ERR_CANNOT_ADD_FOREIGN; break;
       }
       if (OB_SUCC(ret)) {
-        switch (option_node->int32_values_[0]) {
-        case T_UPDATE:
-          if (ACTION_INVALID != update_action) {
-            ret = OB_INVALID_ARGUMENT;
-            SQL_RESV_LOG(WARN, "mutli update option", K(ret));
-          } else {
-            update_action = action;
-          }
-          break;
-        case T_DELETE:
-          if (ACTION_INVALID != delete_action) {
-            ret = OB_INVALID_ARGUMENT;
-            SQL_RESV_LOG(WARN, "mutli delete option", K(ret));
-          } else {
-            delete_action = action;
-          }
-          break;
-        default:
+        ObReferenceAction &target = syntax.event == peg::ReferenceEvent::Update ? update_action : delete_action;
+        if (ACTION_INVALID != target) {
           ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid reference option", K(ret), K(option_node->int32_values_[0]));
-          break;
+        } else {
+          target = action;
         }
       }
     }
   }
   if (OB_SUCC(ret)) {
-    if (ACTION_INVALID == update_action) {
-      update_action = ACTION_RESTRICT;
-    }
-    if (ACTION_INVALID == delete_action) {
-      delete_action = ACTION_RESTRICT;
-    }
+    if (ACTION_INVALID == update_action) { update_action = ACTION_RESTRICT; }
+    if (ACTION_INVALID == delete_action) { delete_action = ACTION_RESTRICT; }
   }
-
   return ret;
 }
 
-// description: parsing the explicitly declared foreign_key_name when creating a foreign key
-//              When the user does not explicitly create a foreign key constraint name, the system automatically creates a foreign key constraint name for the user
-//
-// @param [in] constraint_node
-// @param [in] foreign_key_node
-// @param [out] foreign_key_name
-// @return oceanbase error code defined in lib/ob_errno.def
-int ObDDLResolver::resolve_foreign_key_name(const ParseNode *constraint_node,
+
+int ObDDLResolver::resolve_foreign_key_name(const peg::Node *name,
                                             ObString &foreign_key_name,
                                             ObNameGeneratedType &name_generated_type)
 {
   int ret = OB_SUCCESS;
   foreign_key_name.reset();
   name_generated_type = GENERATED_TYPE_USER;
-
-  if (OB_NOT_NULL(constraint_node)) {
-    const ParseNode *constraint_name = NULL;
-    if (T_CHECK_CONSTRAINT != constraint_node->type_ || 1 != constraint_node->num_child_ || OB_ISNULL(constraint_node->children_)) {
-      ret = OB_INVALID_ARGUMENT;
-      SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(constraint_node->type_), K(constraint_node->num_child_), KP(constraint_node->children_));
-    } else if (OB_NOT_NULL(constraint_name = constraint_node->children_[0])) {
-      if (NULL == constraint_name->str_value_ || 0 == constraint_name->str_len_) {
-        ret = OB_ERR_ZERO_LENGTH_IDENTIFIER;
-        SQL_RESV_LOG(WARN, "zero-length constraint name is illegal", K(ret));
-      } else {
-        foreign_key_name.assign_ptr(constraint_name->str_value_, static_cast<int32_t>(constraint_name->str_len_));
-        // Check if foreign key names are duplicated when multiple foreign keys are created consecutively in a create table statement
-        ObForeignKeyNameHashWrapper fk_key(foreign_key_name);
-        if (OB_HASH_EXIST == (ret = current_foreign_key_name_set_.exist_refactored(fk_key))) {
-          SQL_RESV_LOG(WARN, "duplicate fk name", K(ret), K(foreign_key_name));
-          ret = OB_ERR_CANNOT_ADD_FOREIGN;
-        } else {
-          ret = OB_SUCCESS;
-          // Insert fk_name into hash set
-          if (OB_FAIL(current_foreign_key_name_set_.set_refactored(fk_key))) {
-          }
-        }
-      }
-    } else if (OB_FAIL(create_fk_cons_name_automatically(foreign_key_name))) {
-    } else {
-      name_generated_type = GENERATED_TYPE_SYSTEM;
-    }
-  } else if (OB_FAIL(create_fk_cons_name_automatically(foreign_key_name))) {
+  if (nullptr == name) {
+    OZ(create_fk_cons_name_automatically(foreign_key_name));
+    if (OB_SUCC(ret)) { name_generated_type = GENERATED_TYPE_SYSTEM; }
+  } else if (const auto name_text = name->text(); name_text.empty()) {
+    ret = OB_ERR_ZERO_LENGTH_IDENTIFIER;
   } else {
-    name_generated_type = GENERATED_TYPE_SYSTEM;
+    OZ(ob_write_string(*allocator_, syntax_text(name_text), foreign_key_name));
+    if (OB_SUCC(ret)) {
+      ObForeignKeyNameHashWrapper key(foreign_key_name);
+      if (OB_HASH_EXIST == current_foreign_key_name_set_.exist_refactored(key)) {
+        ret = OB_ERR_CANNOT_ADD_FOREIGN;
+      } else {
+        OZ(current_foreign_key_name_set_.set_refactored(key));
+      }
+    }
   }
-
   return ret;
 }
-// description: check if the number and type of foreign key columns match between the parent table and the child table when creating a foreign key
-//              Check if the foreign key column in the parent table is a primary key or unique index when creating a foreign key
-//              Check when the foreign key belongs to self-reference, whether the foreign key column is not the same column
-//              Check if the foreign key's cascade behavior conflicts with the definition in the schema for example set_null and not_null
-//
-// @param [in] arg  already contains foreign key information of ObCreateForeignKeyArg
-// @return oceanbase error code defined in lib/ob_errno.def
+
+
 int ObDDLResolver::check_foreign_key_reference(
     obcall::ObCreateForeignKeyArg &arg,
     bool is_alter_table,
@@ -5838,42 +4682,8 @@ int ObDDLResolver::check_foreign_key_reference(
   return ret;
 }
 
-int ObDDLResolver::resolve_match_options(const ParseNode *match_options_node) {
-  int ret = OB_SUCCESS;
 
-  if (OB_NOT_NULL(match_options_node)) {
-    // Now we are compatible with MYSQL 5.6 version, only supporting the syntax of the match clause, not supporting the match function.
-    LOG_WARN("the function of match options on foreign key is not supported now.");
-    // Check if the options after match are valid
-    if (T_FOREIGN_KEY_MATCH != match_options_node->type_) {
-      ret = OB_INVALID_ARGUMENT;
-      SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(match_options_node->type_));
-    } else {
-      switch (match_options_node->int32_values_[0]) {
-      case T_SIMPLE:
-        break;
-      case T_FULL:
-        break;
-      case T_PARTIAL:
-        break;
-      default:
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN, "invalid reference option", K(ret), K(match_options_node->int32_values_[0]));
-        break;
-      }
-    }
-  }
-  else {
-    // No match clause, nothing to check
-  }
 
-  return ret;
-}
-// description: When the user creates a foreign key without explicitly declaring a foreign key constraint name, the system will automatically generate a foreign key constraint name for it
-//              Generation rule: fk_name_sys_auto = tblname_OBFK_timestamp
-//              If tblname length exceeds 60 bytes, truncate to the first sixty bytes as tblname in the concatenated name
-// @param [in] foreign_key_name
-// @return oceanbase error code defined in lib/ob_errno.def
 int ObDDLResolver::create_fk_cons_name_automatically(ObString &foreign_key_name) {
   int ret = OB_SUCCESS;
   char temp_str_buf[number::ObNumber::MAX_PRINTABLE_SIZE];
@@ -5965,43 +4775,22 @@ int ObDDLResolver::drop_not_null_constraint(const ObColumnSchemaV2 &column)
   return ret;
 }
 
-int ObDDLResolver::resolve_not_null_constraint_node(
-    ObColumnSchemaV2 &column,
-    const ParseNode *cst_node)
+int ObDDLResolver::resolve_not_null_constraint_node(ObColumnSchemaV2 &column)
 {
   int ret = OB_SUCCESS;
-  ObString cst_name;
-  ObConstraint cst;
-  if (NULL != cst_node &&
-      (T_CONSTR_NOT_NULL != cst_node->type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "node type is wrong.", K(ret), K(cst_node->type_), K(cst_node->num_child_));
-  } else {
-    ParseNode *cst_name_node = NULL;
-    bool is_sys_generate_name = false;
-    if (NULL == cst_name_node) {
-      if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_,
-                                                                CONSTRAINT_TYPE_NOT_NULL))) {
-      } else {
-        is_sys_generate_name = true;
-      }
-    } else if (NULL == cst_name_node->str_value_ || 0 == cst_name_node->str_len_) {
-      ret = OB_ERR_ZERO_LENGTH_IDENTIFIER;
-      SQL_RESV_LOG(WARN, "zero-length constraint name is illegal", K(ret));
+  ObString name;
+  ObConstraint constraint;
+  OZ(ObTableSchema::create_cons_name_automatically(name, table_name_, *allocator_, CONSTRAINT_TYPE_NOT_NULL));
+  if (OB_SUCC(ret)) {
+    if (column.has_not_null_constraint()) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      cst_name.assign_ptr(cst_name_node->str_value_, static_cast<int32_t>(cst_name_node->str_len_));
-    }
-    if (OB_SUCC(ret)) {
-      if (column.has_not_null_constraint()) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(add_not_null_constraint(column, cst_name, is_sys_generate_name, cst, *allocator_, stmt_))) {
-      } else {
-        column.add_not_null_cst(cst.get_rely_flag(), cst.get_enable_flag(),
-                                cst.is_validated());
+      OZ(add_not_null_constraint(column, name, true, constraint, *allocator_, stmt_));
+      if (OB_SUCC(ret)) {
+        column.add_not_null_cst(constraint.get_rely_flag(), constraint.get_enable_flag(), constraint.is_validated());
       }
     }
   }
-
   return ret;
 }
 
@@ -6126,16 +4915,24 @@ int ObDDLResolver::get_row_store_type(const ObStoreFormatType store_format,
   return ret;
 }
 
-int ObDDLResolver::resolve_partition_name(ParseNode *partition_name_node,
+int ObDDLResolver::resolve_partition_element(const peg::PartitionElement &definition,
                                           ObString &partition_name,
                                           ObBasePartition &partition)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(partition_name_node) || OB_ISNULL(partition_name_node->children_[NAMENODE])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ParseNode *name_node = partition_name_node->children_[NAMENODE];
-    partition_name.assign_ptr(name_node->str_value_, static_cast<int32_t>(name_node->str_len_));
+  if (!definition.engine.empty()) {
+    const auto spelling = definition.engine[0].text();
+    const ObString engine(syntax_text(spelling));
+    if (engine.case_compare("innodb") != 0) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Partition storage engine other than InnoDB");
+    }
+  }
+  if (OB_SUCC(ret))
+  {
+    const auto &name_node = peg::relation_name(definition.name);
+    const auto name_node_text = name_node.text();
+    partition_name.assign_ptr(syntax_text(name_node_text).ptr(), static_cast<int64_t>(name_node_text.size()));
     if (OB_FAIL(ObSQLUtils::check_ident_name(CS_TYPE_UTF8MB4_GENERAL_CI,
                                              partition_name,
                                              false, //check_for_path_chars
@@ -6157,28 +4954,25 @@ int ObDDLResolver::resolve_partition_name(ParseNode *partition_name_node,
 // 1. partition function type
 // 2. partition function expr name
 // 3. partition keys (set in this function)
-int ObDDLResolver::resolve_hash_or_key_partition_basic_infos(ParseNode *node,
+int ObDDLResolver::resolve_hash_or_key_partition_basic_infos(const peg::Node &node,
                                                              bool is_subpartition,
                                                              ObTableSchema &table_schema,
                                                              ObPartitionFuncType &part_func_type,
                                                              ObString &func_expr_name)
 {
   int ret = OB_SUCCESS;
-  ParseNode *partition_fun_node = NULL;
+  const auto definition = peg::partition_definition(node);
+  const peg::Node &partition_fun_node = definition.expression;
   part_func_type = PARTITION_FUNC_TYPE_HASH;
-  if (OB_ISNULL(node) || OB_ISNULL(node->children_) ||
-      OB_ISNULL(partition_fun_node = node->children_[HASH_FUN_EXPR_NODE]) ||
-      OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
+  if (OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    part_func_type = T_HASH_PARTITION == node->type_
-          ? share::schema::PARTITION_FUNC_TYPE_HASH
-          : share::schema::PARTITION_FUNC_TYPE_KEY;
+    part_func_type = definition.kind == peg::PartitionKind::Hash ? PARTITION_FUNC_TYPE_HASH : PARTITION_FUNC_TYPE_KEY;
   }
 
   if (OB_SUCC(ret)) {
     ObSEArray<ObString, 4> partition_keys;
-    if (NULL == partition_fun_node->children_[1]) { //partition by key()
+    if (peg::call_arguments(partition_fun_node).empty()) { //partition by key()
       part_func_type = share::schema::PARTITION_FUNC_TYPE_KEY_IMPLICIT;
       if (OB_FAIL(build_partition_key_info(table_schema, partition_keys, part_func_type))) {
       }
@@ -6195,8 +4989,8 @@ int ObDDLResolver::resolve_hash_or_key_partition_basic_infos(ParseNode *node,
   }
 
   if (OB_SUCC(ret)) {
-    func_expr_name.assign_ptr(node->str_value_, static_cast<int32_t>(node->str_len_));
-    if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
+    if (OB_FAIL(ob_write_string(*allocator_, params_.syntax_->source(node), func_expr_name))) {
+    } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                   *allocator_, session_info_->get_dtc_params(), func_expr_name))) {
     } else {
       //TODO(yaoying.yyy:maybe not valid here, if expr include table name or databae name)
@@ -6212,7 +5006,7 @@ int ObDDLResolver::resolve_hash_or_key_partition_basic_infos(ParseNode *node,
 // 2. partition function expr name
 // 3. partition function exprs
 // 4. partition keys (set in this function)
-int ObDDLResolver::resolve_range_partition_basic_infos(ParseNode *node,
+int ObDDLResolver::resolve_range_partition_basic_infos(const peg::Node &node,
                                                        bool is_subpartition,
                                                        ObTableSchema &table_schema,
                                                        ObPartitionFuncType &part_func_type,
@@ -6220,18 +5014,17 @@ int ObDDLResolver::resolve_range_partition_basic_infos(ParseNode *node,
                                                        ObIArray<ObRawExpr*> &part_func_exprs)
 {
   int ret = OB_SUCCESS;
-  ParseNode *partition_fun_node = NULL;
+  const auto definition = peg::partition_definition(node);
+  const peg::Node &partition_fun_node = definition.expression;
   part_func_type = PARTITION_FUNC_TYPE_RANGE;
   ObSEArray<ObString, 4> partition_keys;
-  if (OB_ISNULL(node) || OB_ISNULL(partition_fun_node = node->children_[RANGE_FUN_EXPR_NODE])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (T_RANGE_COLUMNS_PARTITION == node->type_) {
+  if (definition.kind == peg::PartitionKind::RangeColumns) {
     part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
   }
 
   if (OB_SUCC(ret)) {
-    func_expr_name.assign_ptr(node->str_value_, static_cast<int32_t>(node->str_len_));
-    if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
+    if (OB_FAIL(ob_write_string(*allocator_, params_.syntax_->source(node), func_expr_name))) {
+    } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                   *allocator_, session_info_->get_dtc_params(), func_expr_name))) {
     } else if (OB_FAIL(resolve_part_func(params_, partition_fun_node, part_func_type,
                                          table_schema, part_func_exprs, partition_keys))) {
@@ -6246,7 +5039,7 @@ int ObDDLResolver::resolve_range_partition_basic_infos(ParseNode *node,
 // 2. partition function expr name
 // 3. partition function exprs
 // 4. partition keys (set in this function)
-int ObDDLResolver::resolve_list_partition_basic_infos(ParseNode *node,
+int ObDDLResolver::resolve_list_partition_basic_infos(const peg::Node &node,
                                                       bool is_subpartition,
                                                       ObTableSchema &table_schema,
                                                       ObPartitionFuncType &part_func_type,
@@ -6254,18 +5047,17 @@ int ObDDLResolver::resolve_list_partition_basic_infos(ParseNode *node,
                                                       ObIArray<ObRawExpr*> &part_func_exprs)
 {
   int ret = OB_SUCCESS;
-  ParseNode *partition_fun_node = NULL;
+  const auto definition = peg::partition_definition(node);
+  const peg::Node &partition_fun_node = definition.expression;
   part_func_type = PARTITION_FUNC_TYPE_LIST;
   ObSEArray<ObString, 4> partition_keys;
-  if (OB_ISNULL(node) || OB_ISNULL(partition_fun_node = node->children_[LIST_FUN_EXPR_NODE])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (T_LIST_COLUMNS_PARTITION == node->type_) {
+  if (definition.kind == peg::PartitionKind::ListColumns) {
     part_func_type = PARTITION_FUNC_TYPE_LIST_COLUMNS;
   }
 
   if (OB_SUCC(ret)) {
-    func_expr_name.assign_ptr(node->str_value_, static_cast<int32_t>(node->str_len_));
-    if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
+    if (OB_FAIL(ob_write_string(*allocator_, params_.syntax_->source(node), func_expr_name))) {
+    } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                   *allocator_, session_info_->get_dtc_params(), func_expr_name))) {
     } else if (OB_FAIL(resolve_part_func(params_, partition_fun_node, part_func_type,
                                          table_schema, part_func_exprs, partition_keys))) {
@@ -6276,19 +5068,19 @@ int ObDDLResolver::resolve_list_partition_basic_infos(ParseNode *node,
 }
 
 int ObDDLResolver::resolve_partition_node(ObPartitionedStmt *stmt,
-                                          ParseNode *part_node,
+                                          const peg::Node &part_node,
                                           ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  if (is_hash_type_partition(part_node->type_)) {
+  if (is_hash_type_partition(part_node.kind())) {
     ret = resolve_partition_hash_or_key(stmt, part_node, false, table_schema);
-  } else if (is_range_type_partition(part_node->type_)) {
+  } else if (is_range_type_partition(part_node.kind())) {
     ret = resolve_partition_range(stmt, part_node, false, table_schema);
-  } else if (is_list_type_partition(part_node->type_)) {
+  } else if (is_list_type_partition(part_node.kind())) {
     ret = resolve_partition_list(stmt, part_node, false, table_schema);
   } else {
     ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "node type is invalid.", K(ret), K(part_node->type_));
+    SQL_RESV_LOG(WARN, "node type is invalid.", K(ret), K(part_node.kind()));
   }
 
   if (OB_SUCC(ret)) {
@@ -6314,30 +5106,29 @@ int ObDDLResolver::resolve_partition_node(ObPartitionedStmt *stmt,
 }
 
 int ObDDLResolver::resolve_subpartition_option(ObPartitionedStmt *stmt,
-                                               ParseNode *subpart_node,
+                                               const peg::Node &subpart_node,
                                                ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  if (is_hash_type_partition(subpart_node->type_)) {
+  if (is_hash_type_partition(subpart_node.kind())) {
     if (OB_FAIL(resolve_partition_hash_or_key(stmt, subpart_node, true, table_schema))) {
     }
-  } else if (is_range_type_partition(subpart_node->type_)) {
+  } else if (is_range_type_partition(subpart_node.kind())) {
     if (OB_FAIL(resolve_partition_range(stmt, subpart_node, true, table_schema))) {
     }
-  } else if (is_list_type_partition(subpart_node->type_)) {
+  } else if (is_list_type_partition(subpart_node.kind())) {
     if (OB_FAIL(resolve_partition_list(stmt, subpart_node, true, table_schema))) {
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "get unexpected subpartition type", K(ret), K(subpart_node->type_));
+    SQL_RESV_LOG(WARN, "get unexpected subpartition type", K(ret), K(subpart_node.kind()));
   }
   return ret;
 }
 
 int ObDDLResolver::resolve_individual_subpartition(ObPartitionedStmt *stmt,
-                                                   ParseNode *part_node,
-                                                   ParseNode *partition_list_node,
-                                                   ParseNode *subpart_node,
+                                                   rust::Slice<const peg::Node> elements,
+                                                   const peg::Node &subpart_node,
                                                    share::schema::ObTableSchema &table_schema,
                                                    bool &force_template)
 {
@@ -6348,24 +5139,23 @@ int ObDDLResolver::resolve_individual_subpartition(ObPartitionedStmt *stmt,
   table_schema.set_part_level(share::schema::PARTITION_LEVEL_TWO);
   force_template = false;
 
-  if (OB_ISNULL(stmt) || OB_ISNULL(part_node) || OB_ISNULL(subpart_node)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "get unexpected null", K(ret), K(stmt), K(part_node), K(subpart_node));
-  } else if (is_range_type_partition(subpart_node->type_)) {
+  } else if (is_range_type_partition(subpart_node.kind())) {
     // range subpartition
     if (OB_FAIL(resolve_range_partition_basic_infos(subpart_node, true, table_schema,
                                                     partition_func_type, func_expr_name,
                                                     part_func_exprs))) {
     } else if (OB_FAIL(stmt->get_subpart_fun_exprs().assign(part_func_exprs))) {
     }
-  } else if (is_list_type_partition(subpart_node->type_)) {
+  } else if (is_list_type_partition(subpart_node.kind())) {
     // list subpartition
     if (OB_FAIL(resolve_list_partition_basic_infos(subpart_node, true, table_schema,
                                                    partition_func_type, func_expr_name,
                                                    part_func_exprs))) {
     } else if (OB_FAIL(stmt->get_subpart_fun_exprs().assign(part_func_exprs))) {
     }
-  } else if (is_hash_type_partition(subpart_node->type_)) {
+  } else if (is_hash_type_partition(subpart_node.kind())) {
     /**
      * Defined hash partitions through subpartitions number, essentially non-template semantics, but before version 2.2.70,
      * they were processed with template semantics. Backup and recovery require that backups from lower versions can be restored
@@ -6390,28 +5180,16 @@ int ObDDLResolver::resolve_individual_subpartition(ObPartitionedStmt *stmt,
      *    partition p1 values less than (200)
      *  );
      */
-    if (NULL != partition_list_node) {
-      bool has_def_subpart = false;
-      for (int64_t i = 0; OB_SUCC(ret) && !has_def_subpart && i < partition_list_node->num_child_; ++i) {
-        if (OB_ISNULL(partition_list_node->children_[i])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (NULL != partition_list_node->children_[i]->children_[ELEMENT_SUBPARTITION_NODE]) {
-          has_def_subpart = true;
-        }
-      }
-      if (OB_SUCC(ret) && !has_def_subpart) {
-        force_template = true;
-      }
-    } else {
-      // partition_list_node is empty indicates that the first-level partition is defined by partitions as hash partition, directly set it to templated second-level partition
-      force_template = true;
+    force_template = true;
+    for (size_t i = 0; force_template && i < elements.size(); ++i) {
+      force_template = peg::partition_element(elements[i]).subpartitions.empty();
     }
 
     if (OB_SUCC(ret) && !force_template) {
       if (OB_FAIL(resolve_hash_or_key_partition_basic_infos(subpart_node, true, table_schema,
                                                             partition_func_type, func_expr_name))) {
-      } else if (NULL != subpart_node->children_[HASH_PARTITION_NUM_NODE]) {
-        hash_subpart_num_ = subpart_node->children_[HASH_PARTITION_NUM_NODE]->value_;
+      } else if (peg::partition_definition(subpart_node).has_count) {
+        hash_subpart_num_ = peg::partition_definition(subpart_node).count;
         if (hash_subpart_num_ <= 0) {
           ret = common::OB_NO_PARTS_ERROR;
           LOG_USER_ERROR(OB_NO_PARTS_ERROR);
@@ -6431,7 +5209,7 @@ int ObDDLResolver::resolve_individual_subpartition(ObPartitionedStmt *stmt,
 }
 
 int ObDDLResolver::resolve_subpartition_elements(ObPartitionedStmt *stmt,
-                                                 ParseNode *node,
+                                                 rust::Slice<const peg::Node> elements,
                                                  ObTableSchema &table_schema,
                                                  ObPartition *partition)
 {
@@ -6439,7 +5217,7 @@ int ObDDLResolver::resolve_subpartition_elements(ObPartitionedStmt *stmt,
   ObPartitionFuncType subpart_type = table_schema.get_sub_part_option().get_part_func_type();
   if (OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(node)) {
+  } else if (elements.empty()) {
     if (is_range_part(subpart_type)) {
       ObDDLStmt::array_t range_value_exprs;
       OZ (generate_default_range_subpart(stmt,
@@ -6463,23 +5241,23 @@ int ObDDLResolver::resolve_subpartition_elements(ObPartitionedStmt *stmt,
                                                        partition))) {
       }
     }
-  } else if ((is_hash_like_part(subpart_type) && node->type_ != T_HASH_SUBPARTITION_LIST) ||
-             (is_range_part(subpart_type) && node->type_ != T_RANGE_SUBPARTITION_LIST) ||
-             (is_list_part(subpart_type) && node->type_ != T_LIST_SUBPARTITION_LIST)) {
+  } else if ((is_hash_like_part(subpart_type) && elements[0].kind() != peg::NodeKind::HashPartitionElement)
+             || (is_range_part(subpart_type) && elements[0].kind() != peg::NodeKind::RangePartitionElement)
+             || (is_list_part(subpart_type) && elements[0].kind() != peg::NodeKind::ListPartitionElement)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (T_HASH_SUBPARTITION_LIST == node->type_) {
-    if (OB_FAIL(resolve_hash_subpartition_elements(stmt, node, table_schema, partition))) {
+  } else if (is_hash_like_part(subpart_type)) {
+    if (OB_FAIL(resolve_hash_subpartition_elements(stmt, elements, table_schema, partition))) {
     }
-  } else if (T_RANGE_SUBPARTITION_LIST == node->type_) {
+  } else if (is_range_part(subpart_type)) {
     ObDDLStmt::array_t range_value_exprs;
-    if (OB_FAIL(resolve_range_subpartition_elements(stmt, node, table_schema, partition,
+    if (OB_FAIL(resolve_range_subpartition_elements(stmt, elements, table_schema, partition,
                                                     subpart_type, stmt->get_subpart_fun_exprs(),
                                                     range_value_exprs))) {
     } else if (OB_FAIL(stmt->get_individual_subpart_values_exprs().push_back(range_value_exprs))) {
     }
-  } else if (T_LIST_SUBPARTITION_LIST == node->type_) {
+  } else if (is_list_part(subpart_type)) {
     ObDDLStmt::array_t list_value_exprs;
-    if (OB_FAIL(resolve_list_subpartition_elements(stmt, node, table_schema, partition,
+    if (OB_FAIL(resolve_list_subpartition_elements(stmt, elements, table_schema, partition,
                                                    subpart_type, stmt->get_subpart_fun_exprs(),
                                                    list_value_exprs))) {
     } else if (OB_FAIL(stmt->get_individual_subpart_values_exprs().push_back(list_value_exprs))) {
@@ -6490,19 +5268,19 @@ int ObDDLResolver::resolve_subpartition_elements(ObPartitionedStmt *stmt,
 
 int ObDDLResolver::resolve_partition_hash_or_key(
     ObPartitionedStmt *stmt,
-    ParseNode *node,
+    const peg::Node &node,
     const bool is_subpartition,
     ObTableSchema &table_schema)
 {
   int ret = common::OB_SUCCESS;
+  const auto definition = peg::partition_definition(node);
+  const peg::Node *subpartition = definition.has_subpartition ? &peg::partition_subpartition(node) : nullptr;
   ObString partition_expr;
   ObPartitionFuncType partition_func_type = PARTITION_FUNC_TYPE_HASH;
   int64_t partition_num = 0;
   ObPartitionOption *partition_option = NULL;
 
-  if (OB_ISNULL(node) || OB_ISNULL(node->children_) || !is_hash_type_partition(node->type_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (is_subpartition && NULL != node->children_[HASH_SUBPARTITIOPPN_NODE]) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (is_subpartition) {
     partition_option = &(table_schema.get_sub_part_option());
@@ -6513,14 +5291,14 @@ int ObDDLResolver::resolve_partition_hash_or_key(
   }
   // Determine if the secondary partition is templated
   if (OB_SUCC(ret)) {
-    if (NULL != node->children_[HASH_SUBPARTITIOPPN_NODE]) {
+    if (nullptr != subpartition) {
       bool force_template = false;
-      if (NULL != node->children_[HASH_SUBPARTITIOPPN_NODE]->children_[HASH_TEMPLATE_MARK]) {
+      if (peg::partition_definition(*subpartition).is_template) {
         // Template-based secondary partition definition will be parsed later
         stmt->set_use_def_sub_part(true);
-      } else if (OB_FAIL(resolve_individual_subpartition(stmt, node,
-                                                         node->children_[HASH_PARTITION_LIST_NODE],
-                                                         node->children_[HASH_SUBPARTITIOPPN_NODE],
+      } else if (OB_FAIL(resolve_individual_subpartition(stmt,
+                                                         definition.elements,
+                                                         *subpartition,
                                                          table_schema, force_template))) {
       } else if (force_template) {
         stmt->set_use_def_sub_part(true);
@@ -6559,10 +5337,10 @@ int ObDDLResolver::resolve_partition_hash_or_key(
      * 4. Neither explicitly defined nor implicitly defined
      *    Considered as implicitly defining one partition, i.e., `partitions 1`
      */
-    if (NULL != node->children_[HASH_PARTITION_NUM_NODE]) {
+    if (definition.has_count) {
       // case 1, 3: partition number is initially set to the implicitly defined quantity
-      partition_num = node->children_[HASH_PARTITION_NUM_NODE]->value_;
-    } else if (NULL == node->children_[HASH_PARTITION_LIST_NODE]) {
+      partition_num = definition.count;
+    } else if (definition.elements.empty()) {
       // case 4: partition count is 1
       partition_num = 1;
     } else {
@@ -6570,9 +5348,9 @@ int ObDDLResolver::resolve_partition_hash_or_key(
       partition_num = 1;
     }
 
-    if (NULL != node->children_[HASH_PARTITION_NUM_NODE] &&
-        NULL != node->children_[HASH_PARTITION_LIST_NODE]) {
-      if (partition_num != node->children_[HASH_PARTITION_LIST_NODE]->num_child_) {
+    if (definition.has_count &&
+        !definition.elements.empty()) {
+      if (partition_num != definition.elements.size()) {
         ret = OB_ERR_PARSE_PARTITION_RANGE;
       }
     }
@@ -6584,10 +5362,10 @@ int ObDDLResolver::resolve_partition_hash_or_key(
     } else if (partition_num > sql::ObResolverUtils::get_mysql_max_partition_num()) {
       ret = common::OB_TOO_MANY_PARTITIONS_ERROR;
     } else if (is_subpartition) {
-      if (NULL != node->children_[HASH_PARTITION_LIST_NODE]) {
+      if (!definition.elements.empty()) {
         // Parse explicitly defined partitions
         if (OB_FAIL(resolve_hash_subpartition_elements(stmt,
-                                                       node->children_[HASH_PARTITION_LIST_NODE],
+                                                       definition.elements,
                                                        table_schema,
                                                        NULL/* dummy partition*/))) {
         }
@@ -6599,10 +5377,10 @@ int ObDDLResolver::resolve_partition_hash_or_key(
         }
       }
     } else {
-      if (NULL != node->children_[HASH_PARTITION_LIST_NODE]) {
+      if (!definition.elements.empty()) {
         // Parse explicitly defined partitions
         if (OB_FAIL(resolve_hash_partition_elements(stmt,
-                                                    node->children_[HASH_PARTITION_LIST_NODE],
+                                                    definition.elements,
                                                     table_schema))) {
         }
       } else {
@@ -6611,7 +5389,7 @@ int ObDDLResolver::resolve_partition_hash_or_key(
         if (!stmt->use_def_sub_part()) {
           for (int64_t i = 0; OB_SUCC(ret) && i < table_schema.get_first_part_num(); ++i) {
             if (OB_FAIL(resolve_subpartition_elements(stmt,
-                                                      NULL, // dummy node
+                                                      rust::Slice<const peg::Node>(),
                                                       table_schema,
                                                       table_schema.get_part_array()[i]))) {
             }
@@ -6622,8 +5400,8 @@ int ObDDLResolver::resolve_partition_hash_or_key(
   }
   // 6. Parse template-based secondary partition definition
   if (OB_SUCC(ret)) {
-    if (NULL != node->children_[HASH_SUBPARTITIOPPN_NODE] && stmt->use_def_sub_part()) {
-      if (OB_FAIL(resolve_subpartition_option(stmt, node->children_[HASH_SUBPARTITIOPPN_NODE], table_schema))) {
+    if (nullptr != subpartition && stmt->use_def_sub_part()) {
+      if (OB_FAIL(resolve_subpartition_option(stmt, *subpartition, table_schema))) {
       }
     }
   }
@@ -6631,31 +5409,23 @@ int ObDDLResolver::resolve_partition_hash_or_key(
 }
 
 int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
-                                           ParseNode *node,
+                                           const peg::Node &node,
                                            const bool is_subpartition,
                                            ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
+  const auto definition = peg::partition_definition(node);
+  const peg::Node *subpartition = definition.has_subpartition ? &peg::partition_subpartition(node) : nullptr;
   ObString func_expr_name;
   int64_t partition_num = 0;
   share::schema::ObPartitionFuncType part_func_type = share::schema::PARTITION_FUNC_TYPE_RANGE;
   common::ObSEArray<ObRawExpr*, 8> part_func_exprs;
   common::ObSEArray<ObRawExpr*, 8> range_values_exprs;
   share::schema::ObPartitionOption *partition_option = NULL;
-  static const int32_t RANGE_PARTITION_NODE_NUM = 6;
-  static const int32_t RANGE_SUBPARTITION_NODE_NUM = 5;
 
-  if (OB_ISNULL(stmt) || OB_ISNULL(node) || OB_ISNULL(node->children_)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "get unexpected null", K(ret), K(stmt), K(node));
-  } else if (!is_range_type_partition(node->type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "get unexpected partition type", K(ret), K(node->type_));
-  } else if (OB_UNLIKELY(!is_subpartition && RANGE_PARTITION_NODE_NUM != node->num_child_) ||
-             OB_UNLIKELY(is_subpartition && RANGE_SUBPARTITION_NODE_NUM != node->num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "get invalid num_child", KR(ret), K(is_subpartition), K(node->num_child_));
-  } else if (nullptr == node->children_[RANGE_ELEMENTS_NODE]) {
+  } else if (definition.elements.empty()) {
     ret = OB_ERR_PARSE_PARTITION_RANGE;
   } else {
     if (is_subpartition) {
@@ -6667,14 +5437,14 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
     }
 
     if (OB_SUCC(ret)) {
-      if (NULL != node->children_[RANGE_SUBPARTITION_NODE]) {
+      if (nullptr != subpartition) {
         bool force_template = false;
-        if (NULL != node->children_[RANGE_SUBPARTITION_NODE]->children_[RANGE_TEMPLATE_MARK]) {
+        if (peg::partition_definition(*subpartition).is_template) {
           // Template-based secondary partition definition to be parsed later
           stmt->set_use_def_sub_part(true);
-        } else if (OB_FAIL(resolve_individual_subpartition(stmt, node,
-                                                          node->children_[RANGE_ELEMENTS_NODE],
-                                                          node->children_[RANGE_SUBPARTITION_NODE],
+        } else if (OB_FAIL(resolve_individual_subpartition(stmt,
+                                                          definition.elements,
+                                                          *subpartition,
                                                           table_schema, force_template))) {
         } else if (force_template) {
           stmt->set_use_def_sub_part(true);
@@ -6696,20 +5466,20 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
 
     // 2. resolve range partition define
     if (OB_SUCC(ret)) {
-      if (NULL != node->children_[RANGE_PARTITION_NUM_NODE]) {
-        partition_num = node->children_[RANGE_PARTITION_NUM_NODE]->value_;
-        if (partition_num != node->children_[RANGE_ELEMENTS_NODE]->num_child_) {
+      if (definition.has_count) {
+        partition_num = definition.count;
+        if (partition_num != definition.elements.size()) {
           ret = OB_ERR_PARSE_PARTITION_RANGE;
         }
       } else {
-        partition_num = node->children_[RANGE_ELEMENTS_NODE]->num_child_;
+        partition_num = definition.elements.size();
       }
       partition_option->set_part_num(partition_num);
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(check_partition_name_duplicate(node->children_[RANGE_ELEMENTS_NODE]))) {
+        if (OB_FAIL(check_partition_name_duplicate(definition.elements))) {
         } else if (is_subpartition) {
           if (OB_FAIL(resolve_range_subpartition_elements(stmt,
-                                                          node->children_[RANGE_ELEMENTS_NODE],
+                                                          definition.elements,
                                                           table_schema,
                                                           NULL, // dummy partition
                                                           part_func_type,
@@ -6718,7 +5488,7 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
           }
         } else {
           if (OB_FAIL(resolve_range_partition_elements(stmt,
-                                                      node->children_[RANGE_ELEMENTS_NODE],
+                                                      definition.elements,
                                                       table_schema,
                                                       part_func_type,
                                                       part_func_exprs,
@@ -6729,8 +5499,8 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
     }
     // Parse templated secondary partition definition
     if (OB_SUCC(ret)) {
-      if (NULL != node->children_[RANGE_SUBPARTITION_NODE] && stmt->use_def_sub_part()) {
-        if (OB_FAIL(resolve_subpartition_option(stmt, node->children_[RANGE_SUBPARTITION_NODE], table_schema))) {
+      if (nullptr != subpartition && stmt->use_def_sub_part()) {
+        if (OB_FAIL(resolve_subpartition_option(stmt, *subpartition, table_schema))) {
         }
       }
     }
@@ -6751,11 +5521,13 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
 }
 
 int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
-                                          ParseNode *node,
+                                          const peg::Node &node,
                                           const bool is_subpartition,
                                           ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
+  const auto definition = peg::partition_definition(node);
+  const peg::Node *subpartition = definition.has_subpartition ? &peg::partition_subpartition(node) : nullptr;
   ObString func_expr_name;
   ObPartitionOption *partition_option = NULL;
   int64_t partition_num = 0;
@@ -6763,15 +5535,10 @@ int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
   common::ObSEArray<ObRawExpr*, 8> part_func_exprs;
   ObDDLStmt::array_t list_values_exprs;
 
-  if (OB_ISNULL(stmt) || OB_ISNULL(node) || OB_ISNULL(node->children_)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "get unexpected null", K(ret), K(stmt), K(node));
-  } else if (OB_ISNULL(node->children_[LIST_ELEMENTS_NODE])) {
+  } else if (definition.elements.empty()) {
     ret = OB_ERR_PARSER_SYNTAX;
-    SQL_RESV_LOG(WARN, "list partition elements are required", K(ret), K(stmt), K(node));
-  } else if (!is_list_type_partition(node->type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "get unexpected partition type", K(ret), K(node->type_));
   } else if (is_subpartition) {
     partition_option = &(table_schema.get_sub_part_option());
     table_schema.set_part_level(share::schema::PARTITION_LEVEL_TWO);
@@ -6781,14 +5548,14 @@ int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
   }
 
   if (OB_SUCC(ret)) {
-    if (NULL != node->children_[LIST_SUBPARTITIOPPN_NODE]) {
+    if (nullptr != subpartition) {
       bool force_template = false;
-      if (NULL != node->children_[LIST_SUBPARTITIOPPN_NODE]->children_[LIST_TEMPLATE_MARK]) {
+      if (peg::partition_definition(*subpartition).is_template) {
         // Template-based secondary partition definition will be parsed later
         stmt->set_use_def_sub_part(true);
-      } else if (OB_FAIL(resolve_individual_subpartition(stmt, node,
-                                                         node->children_[LIST_ELEMENTS_NODE],
-                                                         node->children_[LIST_SUBPARTITIOPPN_NODE],
+      } else if (OB_FAIL(resolve_individual_subpartition(stmt,
+                                                         definition.elements,
+                                                         *subpartition,
                                                          table_schema, force_template))) {
       } else if (force_template) {
         stmt->set_use_def_sub_part(true);
@@ -6808,22 +5575,22 @@ int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
   }
 
   if (OB_SUCC(ret)) {
-    if (!OB_ISNULL(node->children_[LIST_PARTITION_NUM_NODE])) {
-      partition_num = node->children_[LIST_PARTITION_NUM_NODE]->value_;
-      if (partition_num != node->children_[LIST_ELEMENTS_NODE]->num_child_) {
+    if (definition.has_count) {
+      partition_num = definition.count;
+      if (partition_num != definition.elements.size()) {
         ret = common::OB_ERR_PARSE_PARTITION_LIST;
       }
-    } else if (node->children_[LIST_ELEMENTS_NODE] == NULL) {
+    } else if (definition.elements.empty()) {
       partition_num = 0;
     } else {
-      partition_num = node->children_[LIST_ELEMENTS_NODE]->num_child_;
+      partition_num = definition.elements.size();
     }
     partition_option->set_part_num(partition_num);
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(check_partition_name_duplicate(node->children_[LIST_ELEMENTS_NODE]))) {
+      if (OB_FAIL(check_partition_name_duplicate(definition.elements))) {
       } else if (is_subpartition) {
         if (OB_FAIL(resolve_list_subpartition_elements(stmt,
-                                                       node->children_[LIST_ELEMENTS_NODE],
+                                                       definition.elements,
                                                        table_schema,
                                                        NULL, // dummy partition
                                                        part_func_type,
@@ -6832,7 +5599,7 @@ int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
         }
       } else {
         if (OB_FAIL(resolve_list_partition_elements(stmt,
-                                                    node->children_[LIST_ELEMENTS_NODE],
+                                                    definition.elements,
                                                     table_schema,
                                                     part_func_type,
                                                     part_func_exprs,
@@ -6843,8 +5610,8 @@ int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
   }
   // Parse templated secondary partition definition
   if (OB_SUCC(ret)) {
-    if (NULL != node->children_[LIST_SUBPARTITIOPPN_NODE] && stmt->use_def_sub_part()) {
-      if (OB_FAIL(resolve_subpartition_option(stmt, node->children_[LIST_SUBPARTITIOPPN_NODE], table_schema))) {
+    if (nullptr != subpartition && stmt->use_def_sub_part()) {
+      if (OB_FAIL(resolve_subpartition_option(stmt, *subpartition, table_schema))) {
       }
     }
   }
@@ -6863,23 +5630,21 @@ int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
   return ret;
 }
 int ObDDLResolver::resolve_hash_partition_elements(ObPartitionedStmt *stmt,
-                                                   ParseNode *node,
+                                                   rust::Slice<const peg::Node> elements,
                                                    ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  ParseNode *element_node = NULL;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    int64_t partition_num = node->num_child_;
+    int64_t partition_num = elements.size();
     ObPartition partition;
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; ++i) {
       partition.reset();
       ObString partition_name;
+      const auto definition = peg::partition_element(elements[i]);
       // 1. check partition name
-      if (OB_ISNULL(element_node = node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
+      if (OB_FAIL(resolve_partition_element(definition,
                                                 partition_name, partition))) {
       }
       //add hash partition elements to table schema
@@ -6887,7 +5652,7 @@ int ObDDLResolver::resolve_hash_partition_elements(ObPartitionedStmt *stmt,
         partition.set_part_idx(i);
         if (OB_FAIL(table_schema.add_partition(partition))) {
         } else if (stmt->use_def_sub_part() &&
-                   OB_NOT_NULL(element_node->children_[ELEMENT_SUBPARTITION_NODE])) {
+                   !definition.subpartitions.empty()) {
           ret = OB_INVALID_SUB_PARTITION_TYPE;
         } else if (!stmt->use_def_sub_part()) {
           // resolve non template
@@ -6896,7 +5661,7 @@ int ObDDLResolver::resolve_hash_partition_elements(ObPartitionedStmt *stmt,
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(resolve_subpartition_elements(
               stmt,
-              element_node->children_[ELEMENT_SUBPARTITION_NODE],
+              definition.subpartitions,
               table_schema,
               cur_partition))) {
           }
@@ -6911,29 +5676,27 @@ int ObDDLResolver::resolve_hash_partition_elements(ObPartitionedStmt *stmt,
 }
 
 int ObDDLResolver::resolve_hash_subpartition_elements(ObPartitionedStmt *stmt,
-                                                      ParseNode *node,
+                                                      rust::Slice<const peg::Node> elements,
                                                       ObTableSchema &table_schema,
                                                       ObPartition *partition)
 {
   int ret = OB_SUCCESS;
-  ParseNode *element_node = NULL;
   bool is_template = false;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else if (!is_template && OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    int64_t partition_num = node->num_child_;
+    int64_t partition_num = elements.size();
     ObSubPartition subpartition;
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; ++i) {
       subpartition.reset();
       ObString partition_name;
+      const auto definition = peg::partition_element(elements[i]);
 
       // 1. check partition name
-      if (OB_ISNULL(element_node = node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
+      if (OB_FAIL(resolve_partition_element(definition,
                                                 partition_name, subpartition))) {
       }
       // add hash subpartition elements to table schema or partition
@@ -6958,38 +5721,27 @@ int ObDDLResolver::resolve_hash_subpartition_elements(ObPartitionedStmt *stmt,
 }
 
 int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
-                                                    ParseNode *node,
+                                                    rust::Slice<const peg::Node> elements,
                                                     ObTableSchema &table_schema,
                                                     const ObPartitionFuncType part_type,
                                                     const ObIArray<ObRawExpr *> &part_func_exprs,
                                                     ObIArray<ObRawExpr *> &range_value_exprs)
 {
   int ret = OB_SUCCESS;
-  ParseNode *element_node = NULL;
-  ParseNode *expr_list_node = NULL;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    int64_t partition_num = node->num_child_;
+    int64_t partition_num = elements.size();
     ObPartition partition;
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; ++i) {
       partition.reset();
       ObString partition_name;
-      if (OB_ISNULL(element_node = node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (element_node->type_ != T_PARTITION_RANGE_ELEMENT) {
-        ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("not a valid range partition define", K(element_node->type_));
-      } else if (OB_ISNULL(expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE]) ||
-                 OB_UNLIKELY(T_EXPR_LIST != expr_list_node->type_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected node", K(expr_list_node));
-      } else if (part_func_exprs.count() != expr_list_node->num_child_) {
+      const auto definition = peg::partition_element(elements[i]);
+      if (part_func_exprs.count() != definition.values.size()) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
-      } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
+      } else if (OB_FAIL(resolve_partition_element(definition,
                                                 partition_name, partition))) {
-      } else if (OB_FAIL(resolve_range_partition_value_node(*expr_list_node, partition_name,
+      } else if (OB_FAIL(resolve_range_partition_value_node(peg::partition_element_values(elements[i]), partition_name,
                                                             part_type, part_func_exprs,
                                                             range_value_exprs))) {
       }
@@ -6998,7 +5750,7 @@ int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
       if (OB_SUCC(ret)) {
         if (OB_FAIL(table_schema.add_partition(partition))) {
         } else if (stmt->use_def_sub_part() &&
-                   OB_NOT_NULL(element_node->children_[ELEMENT_SUBPARTITION_NODE])) {
+                   !definition.subpartitions.empty()) {
           ret = OB_ERR_PARSE_SQL;
         } else if (!stmt->use_def_sub_part()) {
           // resolve non template
@@ -7007,7 +5759,7 @@ int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(resolve_subpartition_elements(
               stmt,
-              element_node->children_[ELEMENT_SUBPARTITION_NODE],
+              definition.subpartitions,
               table_schema,
               cur_partition))) {
           }
@@ -7022,7 +5774,7 @@ int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
 }
 
 int ObDDLResolver::resolve_range_subpartition_elements(ObPartitionedStmt *stmt,
-                                                       ParseNode *node,
+                                                       rust::Slice<const peg::Node> elements,
                                                        ObTableSchema &table_schema,
                                                        ObPartition *partition,
                                                        const ObPartitionFuncType part_type,
@@ -7030,30 +5782,24 @@ int ObDDLResolver::resolve_range_subpartition_elements(ObPartitionedStmt *stmt,
                                                        ObIArray<ObRawExpr *> &range_value_exprs)
 {
   int ret = OB_SUCCESS;
-  ParseNode *element_node = NULL;
-  ParseNode *expr_list_node = NULL;
   bool is_template = false;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else if (!is_template && OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    int64_t partition_num = node->num_child_;
+    int64_t partition_num = elements.size();
     ObSubPartition subpartition;
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; ++i) {
       subpartition.reset();
       ObString partition_name;
-      if (OB_ISNULL(element_node = node->children_[i]) ||
-          OB_ISNULL(expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE]) ||
-          OB_UNLIKELY(T_EXPR_LIST != expr_list_node->type_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (part_func_exprs.count() != expr_list_node->num_child_) {
+      const auto definition = peg::partition_element(elements[i]);
+      if (part_func_exprs.count() != definition.values.size()) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
-      } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
+      } else if (OB_FAIL(resolve_partition_element(definition,
                                                 partition_name, subpartition))) {
-      } else if (OB_FAIL(resolve_range_partition_value_node(*expr_list_node, partition_name,
+      } else if (OB_FAIL(resolve_range_partition_value_node(peg::partition_element_values(elements[i]), partition_name,
                                                             part_type, part_func_exprs,
                                                             range_value_exprs))) {
       }
@@ -7079,35 +5825,25 @@ int ObDDLResolver::resolve_range_subpartition_elements(ObPartitionedStmt *stmt,
 }
 
 int ObDDLResolver::resolve_list_partition_elements(ObPartitionedStmt *stmt,
-                                                   ParseNode *node,
+                                                   rust::Slice<const peg::Node> elements,
                                                    ObTableSchema &table_schema,
                                                    const ObPartitionFuncType part_type,
                                                    const ObIArray<ObRawExpr *> &part_func_exprs,
                                                    ObDDLStmt::array_t &list_value_exprs)
 {
   int ret = OB_SUCCESS;
-  ParseNode *element_node = NULL;
-  ParseNode *expr_list_node = NULL;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    int64_t partition_num = node->num_child_;
+    int64_t partition_num = elements.size();
     ObPartition partition;
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; ++i) {
       partition.reset();
       ObString partition_name;
-      if (OB_ISNULL(element_node = node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (element_node->type_ != T_PARTITION_LIST_ELEMENT) {
-        ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("not a valid range partition define", K(element_node->type_));
-      } else if (OB_ISNULL(expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXPR_LIST != expr_list_node->type_ && T_DEFAULT != expr_list_node->type_) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
+      const auto definition = peg::partition_element(elements[i]);
+      if (OB_FAIL(resolve_partition_element(definition,
                                                 partition_name, partition))) {
-      } else if (OB_FAIL(resolve_list_partition_value_node(*expr_list_node, partition_name,
+      } else if (OB_FAIL(resolve_list_partition_value_node(peg::partition_element_values(elements[i]), partition_name,
                                                            part_type, part_func_exprs,
                                                            list_value_exprs))) {
       }
@@ -7116,7 +5852,7 @@ int ObDDLResolver::resolve_list_partition_elements(ObPartitionedStmt *stmt,
       if (OB_SUCC(ret)) {
         if (OB_FAIL(table_schema.add_partition(partition))) {
         } else if (stmt->use_def_sub_part() &&
-                   OB_NOT_NULL(element_node->children_[ELEMENT_SUBPARTITION_NODE])) {
+                   !definition.subpartitions.empty()) {
           ret = OB_ERR_PARSE_SQL;
         } else if (!stmt->use_def_sub_part()) {
           // resolve non template
@@ -7125,7 +5861,7 @@ int ObDDLResolver::resolve_list_partition_elements(ObPartitionedStmt *stmt,
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(resolve_subpartition_elements(
               stmt,
-              element_node->children_[ELEMENT_SUBPARTITION_NODE],
+              definition.subpartitions,
               table_schema,
               cur_partition))) {
           }
@@ -7140,7 +5876,7 @@ int ObDDLResolver::resolve_list_partition_elements(ObPartitionedStmt *stmt,
 }
 
 int ObDDLResolver::resolve_list_subpartition_elements(ObPartitionedStmt *stmt,
-                                                      ParseNode *node,
+                                                      rust::Slice<const peg::Node> elements,
                                                       ObTableSchema &table_schema,
                                                       ObPartition *partition,
                                                       const ObPartitionFuncType part_type,
@@ -7148,26 +5884,20 @@ int ObDDLResolver::resolve_list_subpartition_elements(ObPartitionedStmt *stmt,
                                                       ObDDLStmt::array_t &list_value_exprs)
 {
   int ret = OB_SUCCESS;
-  ParseNode *element_node = NULL;
-  ParseNode *expr_list_node = NULL;
   bool is_template = false;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else {
-    int64_t partition_num = node->num_child_;
+    int64_t partition_num = elements.size();
     ObSubPartition subpartition;
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
       subpartition.reset();
       ObString partition_name;
-      if (OB_ISNULL(element_node = node->children_[i]) ||
-          OB_ISNULL(expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXPR_LIST != expr_list_node->type_ && T_DEFAULT != expr_list_node->type_) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
+      const auto definition = peg::partition_element(elements[i]);
+      if (OB_FAIL(resolve_partition_element(definition,
                                                 partition_name, subpartition))) {
-      } else if (OB_FAIL(resolve_list_partition_value_node(*expr_list_node, partition_name,
+      } else if (OB_FAIL(resolve_list_partition_value_node(peg::partition_element_values(elements[i]), partition_name,
                                                            part_type, part_func_exprs,
                                                            list_value_exprs))) {
       }
@@ -7192,19 +5922,19 @@ int ObDDLResolver::resolve_list_subpartition_elements(ObPartitionedStmt *stmt,
   return ret;
 }
 
-int ObDDLResolver::resolve_range_partition_value_node(ParseNode &expr_list_node,
+int ObDDLResolver::resolve_range_partition_value_node(const peg::Node &expr_list_node,
                                                       const ObString &partition_name,
                                                       const ObPartitionFuncType part_type,
                                                       const ObIArray<ObRawExpr *> &part_func_exprs,
                                                       ObIArray<ObRawExpr *> &range_value_exprs)
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < expr_list_node.num_child_; ++i) {
-    if (OB_ISNULL(expr_list_node.children_[i])) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (T_NULL == expr_list_node.children_[i]->type_) {
+  const auto values = expr_list_node.kind() == peg::NodeKind::Default ? rust::Slice<const peg::Node>() : peg::row_elements(expr_list_node);
+  for (int64_t i = 0; OB_SUCC(ret) && i < values.size(); ++i) {
+    const auto kind = partition_value_expression(values[i]).kind();
+    if (peg::NodeKind::Null == kind) {
       ret = OB_EER_NULL_IN_VALUES_LESS_THAN;
-    } else if (T_MAXVALUE == expr_list_node.children_[i]->type_) {
+    } else if (peg::NodeKind::MaxValue == kind) {
       ObRawExpr *maxvalue_expr = NULL;
       ObConstRawExpr *c_expr = NULL;
       c_expr = (ObConstRawExpr *)allocator_->alloc(sizeof(ObConstRawExpr));
@@ -7217,14 +5947,14 @@ int ObDDLResolver::resolve_range_partition_value_node(ParseNode &expr_list_node,
         if (OB_FAIL(range_value_exprs.push_back(maxvalue_expr))) {
         }
       }
-    } else if (T_EXPR_LIST != expr_list_node.children_[i]->type_) {
+    } else if (peg::NodeKind::ExprList != kind) {
       ObRawExpr *part_value_expr = NULL;
       ObRawExpr *part_func_expr = NULL;
       if (OB_FAIL(part_func_exprs.at(i, part_func_expr))) {
       } else if (OB_ISNULL(part_func_expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObResolverUtils::resolve_partition_range_value_expr(params_,
-                                                                             *(expr_list_node.children_[i]),
+                                                                             values[i],
                                                                              partition_name,
                                                                              part_type,
                                                                              *part_func_expr,
@@ -7238,20 +5968,21 @@ int ObDDLResolver::resolve_range_partition_value_node(ParseNode &expr_list_node,
   return ret;
 }
 
-int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
+int ObDDLResolver::resolve_list_partition_value_node(const peg::Node &expr_list_node,
                                                      const ObString &partition_name,
                                                      const ObPartitionFuncType part_type,
                                                      const ObIArray<ObRawExpr *> &part_func_exprs,
                                                      ObDDLStmt::array_t &list_value_exprs)
 {
   int ret = OB_SUCCESS;
+  const auto values = expr_list_node.kind() == peg::NodeKind::Default ? rust::Slice<const peg::Node>() : peg::row_elements(expr_list_node);
   ObOpRawExpr *row_expr = NULL;
   if (OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_OP_ROW, row_expr))) {
   } else if (OB_ISNULL(row_expr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (T_DEFAULT == expr_list_node.type_) {
+  } else if (peg::NodeKind::Default == expr_list_node.kind()) {
     // Here use max to replace default value
     ObRawExpr *maxvalue_expr = NULL;
     ObConstRawExpr *c_expr = NULL;
@@ -7268,8 +5999,8 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
   } else {
     ObSEArray<ObRawExpr *, 16> part_value_exprs;
     bool is_all_expr_list = false;
-    if (expr_list_node.num_child_ > 0) {
-      is_all_expr_list = (expr_list_node.children_[0]->type_ == T_EXPR_LIST);
+    if (values.size() > 0) {
+      is_all_expr_list = (partition_value_expression(values[0]).kind() == peg::NodeKind::ExprList);
     }
     /* multi cols in partition key and only one vector in values
     CREATE TABLE W0CASE (W0_TEST0 NVARCHAR2(100),W0_TEST1 DATE)
@@ -7290,23 +6021,21 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
         }
       }
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < expr_list_node.num_child_; ++i) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < values.size(); ++i) {
         part_value_exprs.reset();
-        if ((is_all_expr_list && expr_list_node.children_[i]->type_ != T_EXPR_LIST) ||
-            (!is_all_expr_list && expr_list_node.children_[i]->type_ == T_EXPR_LIST)) {
+        const bool is_row = partition_value_expression(values[i]).kind() == peg::NodeKind::ExprList;
+        if (is_all_expr_list != is_row) {
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
           LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
-        } else if (OB_ISNULL(expr_list_node.children_[i])) {
-          ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(ObResolverUtils::resolve_partition_list_value_expr(params_,
-                                                                              *(expr_list_node.children_[i]),
+                                                                              values[i],
                                                                               partition_name,
                                                                               part_type,
                                                                               part_func_exprs,
                                                                               part_value_exprs))) {
         }
         if (OB_SUCC(ret) && 0 == i) {
-          if (OB_FAIL(row_expr->init_param_exprs(expr_list_node.num_child_ * part_value_exprs.count()))) {
+          if (OB_FAIL(row_expr->init_param_exprs(values.size() * part_value_exprs.count()))) {
           }
         }
         for (int64_t j = 0; OB_SUCC(ret) && j < part_value_exprs.count(); ++j) {
@@ -7774,40 +6503,30 @@ int ObDDLResolver::calc_ddl_parallelism(const uint64_t hint_parallelism, const u
   return ret;
 }
 
-int ObDDLResolver::resolve_hints(const ParseNode *node, ObDDLStmt &stmt, const ObTableSchema &table_schema)
+int ObDDLResolver::resolve_hints(rust::Slice<const peg::Node> hints, ObDDLStmt &stmt, const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
   uint64_t hint_parallel = 1;
   uint64_t parallelism = 1;
-  if (OB_UNLIKELY(nullptr == node) || OB_UNLIKELY(OB_ISNULL(session_info_))) {
-  } else {
-    for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
-      ParseNode *hint_node = node->children_[i];
-      if (nullptr != hint_node) {
-        if (T_PARALLEL == hint_node->type_) {
-          ParseNode *parallel_node = nullptr;
-          if (1 != hint_node->num_child_) {
-            /* ignore parallel(auto) and parallel(manual)*/
-            LOG_WARN("Unused parallel hint");
-          } else if (OB_ISNULL(parallel_node = hint_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (parallel_node->value_ < 1) {
-            hint_parallel = 1;  // ignore invalid hint
-          } else {
-            hint_parallel = parallel_node->value_;
-            stmt.set_has_parallel_hint(true);
-          }
+  if (OB_NOT_NULL(session_info_)) {
+    for (size_t i = 0; i < hints.size(); ++i) {
+      const auto &hint = hints[i];
+      if (hint.kind() == peg::NodeKind::Parallel &&
+          peg::hint_parallel_policy(hint) == peg::ParallelPolicy::Explicit) {
+        const int64_t degree = peg::integer_literal_value(peg::hint_parallel_degree(hint));
+        if (degree < 1) {
+          hint_parallel = 1;
+        } else {
+          hint_parallel = degree;
+          stmt.set_has_parallel_hint(true);
         }
       }
     }
   }
-  if (OB_SUCC(ret)) {
-    const int64_t table_dop = stmt::T_CREATE_INDEX == stmt.get_cmd_type() ? static_cast<ObCreateIndexStmt &>(stmt).get_index_dop() : table_schema.get_dop();
-    if (OB_FAIL(calc_ddl_parallelism(hint_parallel, table_dop, parallelism))) {
-    } else {
-      stmt.set_parallelism(parallelism);
-    }
-  }
+  const int64_t table_dop = stmt::T_CREATE_INDEX == stmt.get_cmd_type()
+      ? static_cast<ObCreateIndexStmt &>(stmt).get_index_dop() : table_schema.get_dop();
+  OZ(calc_ddl_parallelism(hint_parallel, table_dop, parallelism));
+  if (OB_SUCC(ret)) { stmt.set_parallelism(parallelism); }
   return ret;
 }
 
@@ -7846,60 +6565,6 @@ int ObDDLResolver::deep_copy_column_expr_name(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObDDLResolver::resolve_column_skip_index(
-    const ParseNode &skip_index_node,
-    ObColumnSchemaV2 &column_schema)
-{
-  int ret = OB_SUCCESS;
-  const ParseNode *type_list_node = nullptr;
-  ObSkipIndexColumnAttr skip_index_column_attr;
-  if (OB_UNLIKELY(1 != skip_index_node.num_child_ || T_COL_SKIP_INDEX != skip_index_node.type_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (OB_ISNULL(type_list_node = skip_index_node.children_[0])) {
-      // empty specified type list, e.g:
-      // alter table t1 modify column c1 skip_index()
-      skip_index_column_attr.reset();
-    } else if (OB_UNLIKELY(0 == type_list_node->num_child_ || T_COL_SKIP_INDEX_LIST != type_list_node->type_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (blocksstable::is_skip_index_black_list_type(column_schema.get_data_type())) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
-    } else if (column_schema.get_skip_index_attr().has_sum() &&
-               !blocksstable::can_agg_sum(column_schema.get_data_type())) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < type_list_node->num_child_; ++i) {
-        const ParseNode *type_node = type_list_node->children_[i];
-        if (OB_ISNULL(type_node)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          switch (type_node->type_) {
-          case T_COL_SKIP_INDEX_MIN_MAX: {
-            skip_index_column_attr.set_min_max();
-            break;
-          }
-          case T_COL_SKIP_INDEX_SUM: {
-            skip_index_column_attr.set_sum();
-            break;
-          }
-          default: {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "skip index type");
-            break;
-          }
-          }
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      column_schema.set_skip_index_attr(skip_index_column_attr.get_packed_value());
-    }
-  }
-  return ret;
-}
 
 int ObDDLResolver::check_skip_index(share::schema::ObTableSchema &table_schema)
 {
@@ -7909,46 +6574,7 @@ int ObDDLResolver::check_skip_index(share::schema::ObTableSchema &table_schema)
   return ret;
 }
 
-int ObDDLResolver::resolve_semistruct_encoding_type(const ParseNode *option_node, const bool is_index_option)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(session_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "session_info_ is null", K(ret));
-  } else if (is_index_option) {
-    ret = OB_NOT_SUPPORTED;
-  } else if (OB_ISNULL(option_node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "option_node is null", K(ret));
-  } else if (OB_ISNULL(option_node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "the children of option_node is null", K(option_node->children_), K(ret));
-  } else if (OB_ISNULL(option_node->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN,"children can't be null", K(ret));
-  } else if (OB_ISNULL(stmt_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN,"stmt_ is null", K(ret));
-  } else {
-    ObString type_str(static_cast<int32_t>(option_node->children_[0]->str_len_), (char *)(option_node->children_[0]->str_value_));
-    if (type_str.empty()) {
-      semistruct_encoding_type_.mode_ = ObSemiStructEncodingType::Mode::NONE;
-    } else if (0 == type_str.case_compare("encoding")) {
-      semistruct_encoding_type_.mode_ = ObSemiStructEncodingType::Mode::ENCODING;
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-      SQL_RESV_LOG(WARN, "failed to resolve semistruct encoding type str", K(ret), K(type_str));
-      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "semistruct encoding type, should be none or encoding");
-    }
-    if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-      if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE))) {
-      }
-    }
-  }
-  return ret;
-}
 
-// assuming part_func_expr_str is utf-8 encoded
 int ObDDLResolver::get_partition_keys_by_part_func_expr(
     const ObString &part_func_expr_str,
     ObIAllocator &allocator,

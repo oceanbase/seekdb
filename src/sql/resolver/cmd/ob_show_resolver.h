@@ -26,21 +26,19 @@ class ObShowResolver : public ObSelectResolver
 {
 public:
   class ObShowResolverContext;
-  class ShowColumnInfo;
   explicit ObShowResolver(ObResolverParams &params);
   virtual ~ObShowResolver();
-  virtual int resolve(const ParseNode &parse_tree);
-protected:
+  int resolve(const peg::Node &statement);
 private:
   class ObSqlStrGenerator;
   struct ObShowSqlSet;
-  struct ObCheckTableInfo
+  struct CheckTableInfo
   {
-    ObCheckTableInfo() : db_name_(), table_name_(), db_exist_(false),
+    CheckTableInfo() : db_name_(), table_name_(), db_exist_(false),
                         table_exist_(false), is_view_(false),
                         valid_(true) {}
     int hash(uint64_t &res) const { res = db_name_.hash(table_name_.hash()); return OB_SUCCESS; }
-    bool operator==(const ObCheckTableInfo &other) const
+    bool operator==(const CheckTableInfo &other) const
     {
       return db_name_ == other.db_name_ && table_name_ == other.table_name_;
     }
@@ -57,80 +55,36 @@ private:
                 K_(is_view),
                 K_(valid));
   };
-  typedef common::hash::ObHashSet<ObShowResolver::ObCheckTableInfo, common::hash::NoPthreadDefendMode> TableInfoSet;
-  int get_database_info(const ParseNode *database_node,
-                        const common::ObString &session_database_name,
-                        uint64_t real_id,
-                        ObShowResolverContext &show_resv_ctx,
-                        uint64_t &show_db_id);
-
-  int resolve_show_from_table(const ParseNode *from_table_node,
-                              const ParseNode *from_database_clause_node,
-                              bool is_database_unselected,
-                              ObItemType node_type,
-                              uint64_t real_id,
-                              common::ObString &show_database_name,
-                              uint64_t &show_database_id,
-                              common::ObString &show_table_name,
-                              uint64_t &show_table_id,
-                              bool &is_view);
-  int resolve_show_from_database(const ParseNode &from_db_node,
-                                 const uint64_t real_id,
-                                 uint64_t &show_database_id,
-                                 common::ObString &show_database_name);
-  int resolve_show_from_routine(const ParseNode *from_routine_node,
-                                bool is_database_unselected,
-                                ObItemType node_type,
-                                uint64_t real_id,
-                                ObString &show_database_name,
-                                uint64_t &show_database_id,
-                                ObString &show_routine_name,
-                                uint64_t &show_routine_id,
-                                int64_t &proc_type);
-  int resolve_show_from_trigger(const ParseNode *from_tg_node,
-                                bool is_database_unselected,
-                                uint64_t real_id,
-                                ObString &show_database_name,
-                                uint64_t &show_database_id,
-                                ObString &show_tg_name,
-                                uint64_t &show_tg_id,
-                                ObString &show_table_name);
-  int parse_and_resolve_select_sql(const common::ObString &select_sql);
-  int resolve_like_or_where_clause(ObShowResolverContext &ctx);
-  int replace_where_clause(ParseNode* expr_node, const ObShowResolverContext &show_resv_ctx);
-  int process_select_type(
-      ObSelectStmt *select_stmt, stmt::StmtType stmt_type, const ParseNode &parse_tree);
-  virtual int resolve_column_ref_expr(const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr);
-  int resolve_show_check_table(const ParseNode &parse_tree,
-                               ObShowResolverContext &show_resv_ctx,
+  typedef common::hash::ObHashSet<ObShowResolver::CheckTableInfo, common::hash::NoPthreadDefendMode> TableInfoSet;
+  int resolve_show_create_user(const peg::Node &statement, ObShowResolverContext &context,
+                               ObString &select_sql, ObSqlStrGenerator &sql_gen);
+  int resolve_show_check_table(const peg::Node &statement, ObShowResolverContext &context,
                                ObString &select_sql);
-  int resolve_show_create_user(const ParseNode &parse_tree,
-                               ObShowResolverContext &show_resv_ctx,
-                               const ObSessionPrivInfo &session_priv,
-                               const common::ObIArray<uint64_t> &enable_role_id_array,
-                               ObStmtNeedPrivs &stmt_need_privs,
-                               ObString &select_sql,
-                               ObSqlStrGenerator &sql_gen);
-  int check_show_create_user_privilege(const bool show_current_user,
-                                       ObStmtNeedPrivs &stmt_need_privs,
-                                       const ObSessionPrivInfo &session_priv,
-                                       const common::ObIArray<uint64_t> &enable_role_id_array,
-                                       int &ret_code,
-                                       bool &has_select_privilege);
-  int check_db_access_for_show_sql(const ObShowResolverContext &show_resv_ctx,
-                                   ObSessionPrivInfo &session_priv,
-                                   const common::ObIArray<uint64_t> &enable_role_id_array);
-private:
-  int recursive_resolve_table_info(const ParseNode *table_list_node,
-                                   ObIAllocator &alloc,
-                                   ObIArray<ObCheckTableInfo> &infos,
-                                   TableInfoSet &tables_set);
-  int resolve_table_info(const ParseNode *table_node,
-                         ObIAllocator &alloc,
-                         ObIArray<ObCheckTableInfo> &infos,
-                         TableInfoSet &tables_set);
+  int resolve_check_table_info(const peg::Node &table, ObIAllocator &allocator,
+                              ObIArray<CheckTableInfo> &infos, TableInfoSet &tables);
+  int append_check_table_row(ObSqlString &sql, const ObString &table,
+                             const char *message_type, const ObString &message);
+  int get_database_info(const peg::Node *database, const ObString &session_database,
+                       ObShowResolverContext &context, uint64_t &id);
+  int resolve_show_from_table(const peg::Node &object, const peg::Node *database,
+      peg::NodeKind kind, ObString &database_name, uint64_t &database_id,
+      ObString &table_name, uint64_t &table_id, bool &is_view);
+  int resolve_show_from_database(const peg::Node &database, uint64_t &id, ObString &name);
+  int resolve_schema_object_name(const peg::Node &object, ObString &database,
+                                uint64_t &database_id, ObString &name);
+  int resolve_show_from_routine(const peg::Node &object, bool procedure,
+      ObString &database, uint64_t &database_id, ObString &name, uint64_t &id, int64_t &type);
+  int resolve_show_from_trigger(const peg::Node &object, ObString &database,
+      uint64_t &database_id, ObString &name, uint64_t &id, ObString &table_name);
+  int parse_and_resolve_select_sql(const ObString &sql);
+  int resolve_like_or_where_clause(ObShowResolverContext &context);
+  int process_select_type(ObSelectStmt *select, stmt::StmtType type, bool count);
+  int resolve_column_ref_expr(const ObQualifiedName &name, ObRawExpr *&expression) override;
+  int check_db_access_for_show_sql(const ObShowResolverContext &context,
+      ObSessionPrivInfo &privilege, const ObIArray<uint64_t> &roles);
+  ObString show_table_alias_;
   DISALLOW_COPY_AND_ASSIGN(ObShowResolver);
-};// ObShowresolver
+};
 
 struct ObShowResolver::ObShowSqlSet
 {
@@ -165,7 +119,6 @@ struct ObShowResolver::ObShowSqlSet
   DECLARE_SHOW_CLAUSE_SET(SHOW_OPEN_TABLES);
   DECLARE_SHOW_CLAUSE_SET(SHOW_PRIVILEGES);
   DECLARE_SHOW_CLAUSE_SET(SHOW_GRANTS);
-  DECLARE_SHOW_CLAUSE_SET(SHOW_GRANTS_USING_ROLES);
   DECLARE_SHOW_CLAUSE_SET(SHOW_PROCESSLIST);
   DECLARE_SHOW_CLAUSE_SET(SHOW_FULL_PROCESSLIST);
   DECLARE_SHOW_CLAUSE_SET(SHOW_SYS_PROCESSLIST);
@@ -220,72 +173,13 @@ private:
 class ObShowResolver::ObShowResolverContext
 {
 public:
-  ObShowResolverContext()
-    : 
-      database_name_(),
-      ref_table_id_(common::OB_INVALID_ID),
-      show_database_name_(),
-      show_database_id_(common::OB_INVALID_ID),
-      show_table_id_(common::OB_INVALID_ID),
-      grants_user_name_(),
-      grants_user_id_(common::OB_INVALID_ID),
-      stmt_type_(stmt::T_NONE),
-      global_scope_(false),
-      like_pattern_(),
-      like_escape_(),
-      parse_tree_(NULL),
-      condition_node_(NULL),
-      column_name_(),
-      like_column_()
-  {
-  }
-  ~ObShowResolverContext() {}
-  
-  
-  common::ObString database_name_;
-  uint64_t ref_table_id_;
-  common::ObString show_database_name_;
-  uint64_t show_database_id_;
-  uint64_t show_table_id_;
-  common::ObString grants_user_name_;
-  uint64_t grants_user_id_;
+  ObShowResolverContext() : stmt_type_(stmt::T_NONE), parse_tree_(nullptr) {}
+  ObString show_database_name_;
   stmt::StmtType stmt_type_;
-  bool global_scope_;
-  common::ObString like_pattern_;
-  common::ObString like_escape_;
-  const ParseNode *parse_tree_;
-  ParseNode *condition_node_;
-  common::ObString column_name_; // used for show tables
-  common::ObString like_column_; // used for the show stmt who has like clause
-  TO_STRING_KV(
-               
-               K_(database_name),
-               K_(ref_table_id),
-               K_(show_database_name),
-               K_(show_database_id),
-               K_(show_table_id),
-               K_(stmt_type),
-               K_(global_scope),
-               K_(like_pattern),
-               K_(like_escape),
-               K_(column_name));
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObShowResolverContext);
-};//ObShowResolvercontext
-
-class ObShowResolver::ShowColumnInfo
-{
-public:
-  ShowColumnInfo() : display_name_(), qualified_name_()
-  {
-  }
-  ~ShowColumnInfo() {}
-  common::ObString display_name_;
-  ObQualifiedName qualified_name_;
-  TO_STRING_KV(K_(display_name), K_(qualified_name));
-private:
-  DISALLOW_COPY_AND_ASSIGN(ShowColumnInfo);
-};//ShowColumninfo
+  const peg::Node *parse_tree_;
+  ObString column_name_;
+  ObString like_column_;
+};
 
 } // sql
 } // oceanbase

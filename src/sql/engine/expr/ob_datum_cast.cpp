@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "common/json_type/json_builder.h"
-
+#include "sql/engine/expr/cast_type_descriptor.h"
 #ifdef _WIN32
 #include "lib/utility/alloc_assist.h"
 #define memmem ob_memmem
@@ -688,16 +688,27 @@ static OB_INLINE int common_uint_int(const ObExpr &expr,
                                      const ObObjType &out_type,
                                      uint64_t in_val,
                                      ObEvalCtx &ctx,
-                                     int64_t &out_val)
+                                     int64_t &out_val,
+                                     int &warning)
 {
   int ret = OB_SUCCESS;
-  int warning = OB_SUCCESS;
+  warning = OB_SUCCESS;
   out_val = static_cast<int64_t>(in_val);
   UNUSED(ctx);
   if (CM_NEED_RANGE_CHECK(expr.extra_) &&
       CAST_FAIL(int_upper_check(out_type, in_val, out_val))) {
   }
   return ret;
+}
+
+static OB_INLINE int common_uint_int(const ObExpr &expr,
+                                     const ObObjType &out_type,
+                                     uint64_t in_val,
+                                     ObEvalCtx &ctx,
+                                     int64_t &out_val)
+{
+  int warning = OB_SUCCESS;
+  return common_uint_int(expr, out_type, in_val, ctx, out_val, warning);
 }
 
 int ObDataTypeCastUtil::common_uint_int_wrap(
@@ -2527,6 +2538,23 @@ int cast_eval_arg_batch(const ObExpr &expr,
   return ret;
 }
 
+static OB_INLINE void log_integer_range_warning(const ObExpr &expr,
+                                                ObEvalCtx &ctx,
+                                                const int warning)
+{
+  if (OB_UNLIKELY(OB_DATA_OUT_OF_RANGE == warning)
+      && CM_IS_COLUMN_CONVERT(expr.extra_) && CM_IS_WARN_ON_FAIL(expr.extra_)) {
+    const ObUserLoggingCtx *logging_ctx = ctx.exec_ctx_.get_user_logging_ctx();
+    if (OB_NOT_NULL(logging_ctx) && !logging_ctx->skip_logging()) {
+      // The cast has clipped the value, so column accuracy checking can no
+      // longer recover this diagnostic. The DML owner supplies column and row.
+      const ObString *column_name = logging_ctx->get_column_name();
+      LOG_USER_WARN(OB_DATA_OUT_OF_RANGE, column_name->length(), column_name->ptr(),
+                    logging_ctx->get_row_num());
+    }
+  }
+}
+
 CAST_FUNC_NAME(int, int)
 {
   EVAL_ARG()
@@ -2536,6 +2564,7 @@ CAST_FUNC_NAME(int, int)
     if (in_type > out_type && CAST_FAIL(int_range_check(out_type, val_int, val_int))) {
     } else {
       res_datum.set_int(val_int);
+      log_integer_range_warning(expr, ctx, warning);
     }
   }
   return ret;
@@ -2554,6 +2583,7 @@ CAST_FUNC_NAME(int, uint)
           CAST_FAIL(uint_range_check(out_type, in_val, out_val))) {
       } else {
         res_datum.set_uint(out_val);
+        log_integer_range_warning(expr, ctx, warning);
       }
     }
   }
@@ -2786,9 +2816,11 @@ CAST_FUNC_NAME(uint, int)
   {
      uint64_t in_val = child_res->get_uint();
      int64_t out_val = 0;
-     if (OB_FAIL(common_uint_int(expr, expr.datum_meta_.type_, in_val, ctx, out_val))) {
+     int warning = OB_SUCCESS;
+     if (OB_FAIL(common_uint_int(expr, expr.datum_meta_.type_, in_val, ctx, out_val, warning))) {
      } else {
        res_datum.set_int(out_val);
+       log_integer_range_warning(expr, ctx, warning);
      }
   }
   return ret;
@@ -2804,6 +2836,7 @@ CAST_FUNC_NAME(uint, uint)
         CAST_FAIL(uint_upper_check(out_type, in_val))) {
     } else {
       res_datum.set_uint(in_val);
+      log_integer_range_warning(expr, ctx, warning);
     }
   }
   return ret;
@@ -8862,14 +8895,13 @@ int get_accuracy_from_parse_node(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, dst_type_dat))) {
   } else {
     int64_t maxblen = ObCharset::CharConvertFactorNum;
-    ParseNode node;
-    node.value_ = dst_type_dat->get_int();
-    ObObjType obj_type = static_cast<ObObjType>(node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
-    dst_type.set_collation_type(static_cast<ObCollationType>(node.int16_values_[OB_NODE_CAST_COLL_IDX]));
+    CastTypeDescriptor type_descriptor(dst_type_dat->get_int());
+    ObObjType obj_type = static_cast<ObObjType>(type_descriptor.type());
+    dst_type.set_collation_type(static_cast<ObCollationType>(type_descriptor.collation()));
     dst_type.set_type(obj_type);
-    int64_t text_length = node.int32_values_[1];
+    int64_t text_length = type_descriptor.length();
     if (!dst_type.is_binary() && !dst_type.is_varbinary()) {
-      dst_type.set_full_length(node.int32_values_[OB_NODE_CAST_C_LEN_IDX], expr.datum_meta_.length_semantics_);
+      dst_type.set_full_length(type_descriptor.length(), expr.datum_meta_.length_semantics_);
       if (dst_type.get_length() > OB_MAX_CAST_CHAR_VARCHAR_LENGTH && dst_type.get_length() <= OB_MAX_CAST_CHAR_TEXT_LENGTH) {
         dst_type.set_type(ObTextType);
         dst_type.set_length(OB_MAX_CAST_CHAR_TEXT_LENGTH);
@@ -8887,21 +8919,21 @@ int get_accuracy_from_parse_node(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObStringTC == dest_tc) {
       // parser will abort all negative number
       // if length < 0 means DEFAULT_STR_LENGTH or OUT_OF_STR_LEN.
-      accuracy.set_full_length(node.int32_values_[1], expr.datum_meta_.length_semantics_);
+      accuracy.set_full_length(type_descriptor.length(), expr.datum_meta_.length_semantics_);
     } else if (ObRawTC == dest_tc) {
-      accuracy.set_length(node.int32_values_[1]);
+      accuracy.set_length(type_descriptor.length());
     } else if(ObTextTC == dest_tc || ObJsonTC == dest_tc) {
       accuracy.set_length(text_length < 0 ?
           ObAccuracy::DDL_DEFAULT_ACCURACY[dest_type].get_length() : text_length);
     } else {
       const ObAccuracy &def_acc =
         ObAccuracy::DDL_DEFAULT_ACCURACY2[0][dest_type];
-      if (ObNumberType == dest_type && 0 == node.int16_values_[2]) {
+      if (ObNumberType == dest_type && 0 == type_descriptor.precision()) {
         accuracy.set_precision(def_acc.get_precision());
       } else {
-        accuracy.set_precision(node.int16_values_[2]);
+        accuracy.set_precision(type_descriptor.precision());
       }
-      accuracy.set_scale(node.int16_values_[3]);
+      accuracy.set_scale(type_descriptor.scale());
     }
   }
   return ret;

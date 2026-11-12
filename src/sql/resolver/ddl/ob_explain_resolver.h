@@ -31,7 +31,7 @@ namespace sql
       : ObDMLResolver(params)
     {}
     virtual ~ObExplainResolver() {}
-    virtual int resolve(const ParseNode &parse_tree);
+    virtual int resolve(const peg::Node &parse_tree);
     ObExplainStmt *get_explain_stmt();
     int resolve_columns(ObRawExpr *&expr, common::ObArray<ObQualifiedName> &columns)
     {
@@ -39,7 +39,7 @@ namespace sql
       UNUSED(columns);
       return common::OB_SUCCESS;
     }
-    virtual int resolve_order_item(const ParseNode &sort_node, OrderItem &order_item)
+    virtual int resolve_order_item(const peg::Node &sort_node, OrderItem &order_item)
     {
       UNUSED(sort_node);
       UNUSED(order_item);

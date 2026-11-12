@@ -39,18 +39,12 @@ typedef common::hash::ObPlacementHashSet<share::schema::ObColumnNameHashWrapper,
 
 class ObAlterTableResolver : public ObDDLResolver
 {
-  static const int64_t ALTER_TABLE_NODE_COUNT = 4;
-  static const int64_t TABLE = 0;         // 0. table_node
-  static const int64_t ACTION_LIST = 1;   // 1. alter table action list
-  static const int64_t SPECIAL_TABLE_TYPE = 2;   // 2. special table type
-  static const int64_t ALTER_HINT = 3; // the hint.
-  static const int64_t ALTER_INDEX_CHILD_NUM = 6;
 public:
   explicit ObAlterTableResolver(ObResolverParams &params);
   virtual ~ObAlterTableResolver();
-  virtual int resolve(const ParseNode &parse_tree);
-  int resolve_action_list(const ParseNode &node);
-  int resolve_column_options(const ParseNode &node,
+  virtual int resolve(const peg::Node &parse_tree);
+  int resolve_action_list(rust::Slice<const peg::Node> actions);
+  int resolve_column_options(const peg::Node &node,
                              bool &is_modify_column_visibility,
                              bool &is_drop_column,
                              ObColumnNameSet &add_column_names_set,
@@ -58,52 +52,43 @@ public:
                              ObReducedVisibleColSet &drop_column_names_set,
                              bool &has_add_column,
                              bool &has_drop_column);
-  int resolve_extended_index_options(const ParseNode &node);
-  int resolve_index_options(const ParseNode &action_node_list, const ParseNode &node,
+  int resolve_index_options(rust::Slice<const peg::Node> actions, const peg::Node &node,
                             bool &is_add_index);
-  int resolve_partition_options(const ParseNode &node);
-  int resolve_constraint_options(const ParseNode &node, const bool is_multi_actions);
-  int resolve_modify_check_constraint_state_mysql(const ParseNode* node);
-  int resolve_convert_to_character(const ParseNode &node);
-  int resolve_foreign_key_options(const ParseNode &node);
-  int resolve_add_column(const ParseNode &node, ObColumnNameSet &resolve_add_column);
-  int resolve_alter_column(const ParseNode &node);
-  int resolve_change_column(const ParseNode &node);
+  int resolve_partition_options(const peg::Node &node);
+  int resolve_constraint_options(const peg::Node &node, const bool is_multi_actions);
+  int resolve_convert_to_character(const peg::Node &node);
+  int resolve_foreign_key_options(const peg::Node &node);
+  int resolve_add_column(const peg::Node &node, ObColumnNameSet &resolve_add_column);
+  int resolve_alter_column(const peg::Node &node);
+  int resolve_change_column(const peg::Node &node);
   int check_modify_column_allowed(const share::schema::AlterColumnSchema &alter_column_schema,
                                   const share::schema::ObColumnSchemaV2 &origin_col_schema,
                                   const ObColumnResolveStat &stat);
   int check_alter_geo_column_allowed(const share::schema::AlterColumnSchema &alter_column_schema,
                                      const share::schema::ObColumnSchemaV2 &origin_col_schema);
-  int resolve_modify_column(const ParseNode &node,
+  int resolve_modify_column(const peg::Node &node,
                             bool &is_modify_column_visibility,
                             ObReducedVisibleColSet &reduced_visible_col_set);
-  int resolve_drop_column(const ParseNode &node,
+  int resolve_drop_column(const peg::Node &node,
                           ObReducedVisibleColSet &reduced_visible_col_set,
                           ObReducedVisibleColSet &drop_column_names_set);
-  int resolve_drop_column_nodes_for_mysql(
-      const ParseNode& node,
-      ObReducedVisibleColSet &reduced_visible_col_set,
-      ObReducedVisibleColSet &drop_column_names_set);
-  int resolve_alter_table_force(const ParseNode &node);
-  int resolve_drop_unused_columns(const ParseNode &node);
-  int resolve_rename_column(const ParseNode &node);
+  int resolve_rename_column(const peg::Node &node);
   int fill_table_option(const share::schema::ObTableSchema *table_schema);
   //save table option to AlterTableArg
   int set_table_options();
   ObAlterTableStmt *get_alter_table_stmt() { return static_cast<ObAlterTableStmt*>(stmt_); };
   int resolve_column_index(const common::ObString &column_name);
-  int resolve_modify_all_trigger(const ParseNode &node);
 
 private:
   int check_dup_foreign_keys_exist(
       share::schema::ObSchemaGetterGuard *schema_guard,
       const obcall::ObCreateForeignKeyArg &foreign_key_arg);
-  int resolve_alter_table_option_list(const ParseNode &node);
+  int resolve_alter_table_option_list(const peg::Node &node);
   int check_drop_column_is_partition_key(const ObTableSchema &table_schema, 
                                          const ObString &column_name);
 
   int set_column_collation(share::schema::AlterColumnSchema &alter_column_schema);
-  int resolve_index_column_list(const ParseNode &node,
+  int resolve_index_column_list(rust::Slice<const peg::Node> columns,
                                 obcall::ObCreateIndexArg &index_arg,
                                 const int64_t index_name_value,
                                 ObIArray<ObString> &input_index_columns_name,
@@ -113,20 +98,19 @@ private:
                       obcall::ObCreateIndexArg &index_arg);
 
   int process_timestamp_column(ObColumnResolveStat &stat, share::schema::AlterColumnSchema &alter_column_schema);
-  int resolve_add_index(const ParseNode &node);
-  int resolve_drop_index(const ParseNode &node);
-  int resolve_drop_foreign_key(const ParseNode &node);
-  int resolve_alter_index(const ParseNode &node);
-  int resolve_rename_index(const ParseNode &node);
-  int resolve_alter_index_parallel_extended(const ParseNode &node);
-  int resolve_alter_index_parallel_mysql(const ParseNode &node);
-  int check_is_drop_primary_key(const ParseNode &node, bool &is_drop_primary_key);
-  int resolve_drop_primary(const ParseNode &action_node_list);
-  int resolve_add_primary(const ParseNode &node);
-  int resolve_alter_primary(const ParseNode &action_node_list, const ParseNode &node);
+  int resolve_add_index(const peg::Node &node);
+  int resolve_drop_index(const peg::Node &node);
+  int resolve_drop_foreign_key(const peg::Node &node);
+  int resolve_rename_index(const peg::Node &node);
+  int resolve_index_visibility(const peg::Node &node);
+  int resolve_index_parallel(const peg::Node &node);
+  int check_is_drop_primary_key(rust::Slice<const peg::Node> actions, bool &is_drop_primary_key);
+  int resolve_drop_primary(rust::Slice<const peg::Node> actions);
+  int resolve_add_primary(const peg::Node &node);
+  int resolve_alter_primary(rust::Slice<const peg::Node> actions, const peg::Node &node);
   int generate_index_arg(obcall::ObCreateIndexArg &index_arg, const bool is_unique_key);
   int resolve_alter_table_column_definition(share::schema::AlterColumnSchema &column,
-                                            ParseNode *node, ObColumnResolveStat &stat,
+                                            const peg::Node &node, ObColumnResolveStat &stat,
                                             bool &is_modify_column_visibility,
                                             ObIArray<ObColumnSchemaV2 *> &resolved_cols,
                                             const bool unused_flag = false,
@@ -135,24 +119,22 @@ private:
                                      const ObColumnSchemaV2 &ori_column);
   int get_table_schema_all_column_schema(ObIArray<ObColumnSchemaV2 *> &resolved_cols,
                                          ObTableSchema &table_schema);
-  int resolve_add_partition(const ParseNode &node,
+  int resolve_add_partition(const peg::Node &node,
                             const share::schema::ObTableSchema &orig_table_schema);
-  int inner_add_partition(ParseNode *part_elements_node,
+  int inner_add_partition(rust::Slice<const peg::Node> elements,
                           const share::schema::ObPartitionFuncType part_type,
                           const share::schema::ObPartitionOption &part_option,
                           ObTableStmt *alter_stmt,
                           share::schema::ObTableSchema &alter_table_schema);
-  int resolve_add_subpartition(const ParseNode &node,
-                               const share::schema::ObTableSchema &orig_table_schema);
-  int resolve_drop_partition(const ParseNode &node,
+  int resolve_drop_partition(const peg::Node &node,
                              const share::schema::ObTableSchema &orig_table_schema);
-  int resolve_drop_subpartition(const ParseNode &node,
+  int resolve_add_subpartition(const peg::Node &node,
+                              const share::schema::ObTableSchema &orig_table_schema);
+  int resolve_drop_subpartition(const peg::Node &node,
                                 const share::schema::ObTableSchema &orig_table_schema);
-  int resolve_exchange_partition(const ParseNode &node,
+  int resolve_exchange_partition(const peg::Node &node,
                                  const share::schema::ObTableSchema &orig_table_schema);
-  int resolve_exchange_subpartition(const ParseNode &node,
-                                    const share::schema::ObTableSchema &orig_table_schema);
-  int resolve_exchange_partition_stmt(const ParseNode &node,
+  int resolve_exchange_partition_stmt(const peg::Node &node,
                                       const share::schema::ObTableSchema &orig_table_schema,
                                       const share::schema::ObTableSchema *&exchange_table_schema,
                                       common::ObString &orig_partition_name);
@@ -160,33 +142,26 @@ private:
                                       const ObTableSchema &exchange_table_schema,
                                       const ObString &orig_part_name,
                                       const ObPartitionLevel exchange_part_level);
-  int resolve_rename_partition(const ParseNode &node,
-                             const share::schema::ObTableSchema &orig_table_schema);
-  int resolve_rename_subpartition(const ParseNode &node,
-                             const share::schema::ObTableSchema &orig_table_schema);
   int check_subpart_name(const share::schema::ObPartition &partition,
                          const share::schema::ObSubPartition &subpartition);
-  int resolve_add_constraint(const ParseNode &node);
-  int resolve_drop_constraint(const ParseNode &node);
-  /**
-   * mock (sub)part func expr node for table schema
-   * @param is_sub_part: mock sub part func expr node or part func expr node
-   */
-  int mock_part_func_node(const share::schema::ObTableSchema &table_schema,
-                          const bool is_sub_part,
-                          ParseNode *&part_expr_node);
+  int resolve_add_constraint(const peg::Node &node);
+  int resolve_drop_constraint(const peg::Node &node);
+  int resolve_constraint_state(const peg::Node &node);
+  int resolve_stored_partition_function(const share::schema::ObTableSchema &table_schema,
+                           const bool is_sub_part,
+                           common::ObIArray<ObRawExpr *> &expressions,
+                           common::ObIArray<ObString> &keys);
 
 
-  int resolve_pos_column(const ParseNode *node, share::schema::AlterColumnSchema &alter_column_schema);
+  int resolve_pos_column(const peg::Node &definition, share::schema::AlterColumnSchema &alter_column_schema);
   int fill_column_schema_according_stat(const ObColumnResolveStat &stat,
                                         share::schema::AlterColumnSchema &alter_column_schema);
-  int resolve_partitioned_partition(const ParseNode *node,
+  int resolve_partitioned_partition(const peg::Node &node,
                                     const share::schema::ObTableSchema &origin_table_schema);
   virtual int get_table_schema_for_check(const share::schema::ObTableSchema *&table_schema) override;
   //int generate_new_schema(const share::schema::ObTableSchema &origin_table_schema,
   //                        share::schema::AlterTableSchema &new_table_schema);
-  int check_column_definition_node(const ParseNode *node);
-  int is_exist_item_type(const ParseNode &node, const ObItemType type, bool &is_exist);
+  int is_exist_item_type(rust::Slice<const peg::Node> actions, const peg::NodeKind kind, bool &is_exist);
   int check_column_in_part_key(const share::schema::ObTableSchema &table_schema,
                                const share::schema::ObColumnSchemaV2 &src_col_schema,
                                const share::schema::ObColumnSchemaV2 &dst_col_schema);

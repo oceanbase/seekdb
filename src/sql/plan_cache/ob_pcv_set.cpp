@@ -415,14 +415,12 @@ int ObPCVSet::check_raw_param_for_dup_col(ObPlanCacheCtx &pc_ctx, bool &contain_
           int64_t r_idx = right_col_item.param_idxs_.at(i);
           if (OB_ISNULL(raw_params.at(l_idx)) ||
               OB_ISNULL(raw_params.at(r_idx)) ||
-              OB_ISNULL(raw_params.at(l_idx)->node_) ||
-              OB_ISNULL(raw_params.at(r_idx)->node_)) {
+              OB_ISNULL(raw_params.at(l_idx)->literal_) ||
+              OB_ISNULL(raw_params.at(r_idx)->literal_)) {
             ret = OB_INVALID_ARGUMENT;
           } else {
-            ObString l_tmp_str(raw_params.at(l_idx)->node_->text_len_,
-                               raw_params.at(l_idx)->node_->raw_text_);
-            ObString r_tmp_str(raw_params.at(r_idx)->node_->text_len_,
-                               raw_params.at(r_idx)->node_->raw_text_);
+            const ObString &l_tmp_str = raw_params.at(l_idx)->literal_->source;
+            const ObString &r_tmp_str = raw_params.at(r_idx)->literal_->source;
 
             if (0 != l_tmp_str.compare(r_tmp_str)) {
               all_same = false;

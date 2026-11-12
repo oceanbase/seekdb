@@ -33,13 +33,10 @@ protected:
   explicit ObAlterRoutineResolver(ObResolverParams &params) : ObDDLResolver(params) {}
 
 public:
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 
 protected:
-  int resolve_impl(
-    obcall::ObCreateRoutineArg &crt_routine_arg,
-    const share::schema::ObRoutineInfo &routine_info, const ParseNode &alter_clause_node);
-  int resolve_clause_list(const ParseNode *node,
+  int resolve_clause_list(rust::Slice<const peg::Node> clauses,
                           obcall::ObCreateRoutineArg &crt_routine_arg);
 };
 

@@ -31,6 +31,7 @@
 #include "lib/thread/protected_stack_allocator.h"
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/thread_local/ob_tsi_factory.h"
+#include "lib/utility/ob_common_utility.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -342,6 +343,10 @@ void Thread::destroy_stack()
 void* Thread::__th_start(void *arg)
 {
   Thread * const th = reinterpret_cast<Thread*>(arg);
+#if defined(__linux__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+  // Thread::start passed this interval to pthread_attr_setstack.
+  set_stackattr(th->stack_addr_, th->stack_size_);
+#endif
   // Set high QoS for this thread (platform-independent)
   // On macOS, threads in a daemon process inherit low QoS priority which causes scheduling delays.
   ob_set_thread_qos(ObThreadQoS::USER_INITIATED);

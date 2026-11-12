@@ -34,9 +34,7 @@ public:
                    const common::ObString &ssl_cipher,
                    const common::ObString &x509_issuer,
                    const common::ObString &x509_subject);
-  void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
   const common::ObStrings *get_user_password() const { return &user_pwd_; }
-  const common::ObString &get_masked_sql() const { return masked_sql_; }
   
   
   bool get_need_enc() const { return need_enc_; }
@@ -57,7 +55,6 @@ private:
   common::ObStrings user_pwd_;//username1, hostname1, passwd1;
                               //username2, hostname2, passwd2...
                               //ssl_type, ssl_cipher, x509_issuer, x509_subject
-  common::ObString masked_sql_;
   bool need_enc_;
   bool for_current_user_;
   obcall::ObSetPasswdArg set_password_arg_; // used to return exec_tid_

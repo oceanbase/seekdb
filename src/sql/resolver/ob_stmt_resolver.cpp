@@ -36,7 +36,7 @@ uint64_t ObStmtResolver::generate_table_id()
   }
 }
 
-int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
+int ObStmtResolver::resolve_table_relation_node(const peg::Node *node,
                                                 ObString &table_name,
                                                 ObString &db_name,
                                                 bool is_org/*false*/)
@@ -60,7 +60,7 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
 // @param [out] db_name     The associated database name filled into arg
 
 // @return oceanbase error code defined in lib/ob_errno.def
-int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
+int ObStmtResolver::resolve_table_relation_node_v2(const peg::Node *node,
                                                    ObString &table_name,
                                                    ObString &db_name,
                                                    bool &is_db_explicit,
@@ -68,14 +68,15 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
 {
   int ret = OB_SUCCESS;
   is_db_explicit = false;
-  ParseNode *db_node = node->children_[0];
-  ParseNode *relation_node = node->children_[1];
-  int32_t table_len = static_cast<int32_t>(relation_node->str_len_);
-  table_name.assign_ptr(const_cast<char*>(relation_node->str_value_), table_len);
+  const peg::Node &relation = peg::relation_name(*node);
+  const auto relation_text = relation.text();
+  const bool has_database = peg::relation_has_database(*node);
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   ObCollationType cs_type = CS_TYPE_INVALID;
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ob_write_string(*allocator_,
+      syntax_text(relation_text), table_name))) {
   } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
   } else {
@@ -85,7 +86,7 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
     if (OB_SUCCESS == tmp_ret || OB_ERR_TOO_LONG_IDENT == tmp_ret
         || ((session_info_->get_ddl_info().is_ddl() || session_info_->get_ddl_info().is_dummy_ddl_for_inner_visibility()) &&
             OB_WRONG_TABLE_NAME == tmp_ret)) {
-      if (NULL == db_node) {
+      if (!has_database) {
         if (is_org || params_.is_resolve_fake_cte_table_) {
           db_name = ObString::make_empty_string();
         } else if (session_info_->get_database_name().empty()) {
@@ -96,9 +97,11 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
         }
       } else {
         is_db_explicit = true;
-        int32_t db_len = static_cast<int32_t>(db_node->str_len_);
-        db_name.assign_ptr(const_cast<char*>(db_node->str_value_), db_len);
-        if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
+        const peg::Node &database = peg::relation_database(*node);
+        const auto database_text = database.text();
+        if (OB_FAIL(ob_write_string(*allocator_,
+            syntax_text(database_text), db_name))) {
+        } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
         } else {
           CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
           OZ (ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(),
@@ -130,8 +133,9 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
   return ret;
 }
 
-int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
-                                       ObSQLSessionInfo *session_info, 
+int ObStmtResolver::resolve_ref_factor(const peg::Node *node,
+                                       ObSQLSessionInfo *session_info,
+                                       ObIAllocator &allocator,
                                        ObString &table_name, 
                                        ObString &db_name)
 {
@@ -140,18 +144,19 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
   if (OB_ISNULL(node) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ParseNode *db_node = node->children_[0];
-    ParseNode *relation_node = node->children_[1];
-    int32_t table_len = static_cast<int32_t>(relation_node->str_len_);
-    table_name.assign_ptr(const_cast<char*>(relation_node->str_value_), table_len);
+    const peg::Node &relation = peg::relation_name(*node);
+    const auto relation_text = relation.text();
+    const bool has_database = peg::relation_has_database(*node);
     ObCollationType cs_type = CS_TYPE_INVALID;
-    if (OB_FAIL(session_info->get_name_case_mode(mode))) {
+    if (OB_FAIL(ob_write_string(allocator,
+        syntax_text(relation_text), table_name))) {
+    } else if (OB_FAIL(session_info->get_name_case_mode(mode))) {
     } else if (OB_FAIL(session_info->get_collation_connection(cs_type))) {
     } else {
       bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table_name))) {
       } else {
-        if (NULL == db_node) {
+        if (!has_database) {
           if (session_info->get_database_name().empty()) {
             ret = OB_ERR_NO_DB_SELECTED;
             LOG_WARN("No database selected");
@@ -159,9 +164,11 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
             db_name = session_info->get_database_name();
           }
         } else {
-          int32_t db_len = static_cast<int32_t>(db_node->str_len_);
-          db_name.assign_ptr(const_cast<char*>(db_node->str_value_), db_len);
-          if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
+          const peg::Node &database = peg::relation_database(*node);
+          const auto database_text = database.text();
+          if (OB_FAIL(ob_write_string(allocator,
+              syntax_text(database_text), db_name))) {
+          } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
           }
         }
       }
@@ -171,7 +178,7 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
   return ret;
 }
 
-int ObStmtResolver::resolve_database_factor(const ParseNode *node,
+int ObStmtResolver::resolve_database_factor(const peg::Node *node,
                                             uint64_t &database_id,
                                             ObString &db_name)
 {
@@ -179,11 +186,9 @@ int ObStmtResolver::resolve_database_factor(const ParseNode *node,
   database_id = OB_INVALID_ID;
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(T_IDENT != node->type_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (FALSE_IT(db_name.assign_ptr(const_cast<char*>(node->str_value_),
-                                  static_cast<int32_t>(node->str_len_)))) {
-    // won't be here
+  } else if (const auto node_text = node->text();
+             OB_FAIL(ob_write_string(*allocator_,
+      syntax_text(node_text), db_name))) {
   } else if (OB_FAIL(schema_checker_->get_database_id(db_name, database_id))) {
     LOG_USER_ERROR(OB_ERR_BAD_DATABASE, db_name.length(), db_name.ptr());
   }

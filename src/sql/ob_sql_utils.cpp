@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_sql_utils.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "sql/syntax.h"
+#include "sql/plan_cache/fast_parse.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/ob_sql.h"
@@ -35,7 +38,6 @@
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 #include "query/ob_sql_name_service.h"
 extern "C" {
-#include "sql/parser/ob_non_reserved_keywords.h"
 #include "share/schema/ob_schema_struct.h"  // relocated-definition owner
 }
 using namespace oceanbase;
@@ -158,71 +160,7 @@ int ObSQLUtils::md5(const ObString &stmt, char *sql_id, int32_t len)
   return ret;
 }
 
-int ObSQLUtils::replace_questionmarks(ParseNode *tree,
-                                      const ParamStore &params)
-{
-  int ret = OB_SUCCESS;
-  bool is_stack_overflow = false;
-  if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-  } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-  } else if (NULL != tree) {
-    // replace ? with given params
-    if (T_QUESTIONMARK == tree->type_) {
-      const ObObj &param = params.at(tree->value_);
-      switch (param.get_type()) {
-      case ObIntType:
-        tree->value_ = param.get_int();
-        tree->type_ = T_INT;
-        break;
-      case ObDateTimeType:
-        tree->value_ = param.get_datetime();
-        tree->type_ = T_DATETIME;
-        break;
-      case ObTimestampType:
-        tree->value_ = param.get_timestamp();
-        tree->type_ = T_TIMESTAMP;
-        break;
-      case ObDateType:
-        tree->value_ = param.get_date();
-        tree->type_ = T_DATE;
-        break;
-      case ObTimeType:
-        tree->value_ = param.get_time();
-        tree->type_ = T_TIME;
-        break;
-      case ObYearType:
-        tree->value_ = param.get_year();
-        tree->type_ = T_YEAR;
-        break;
-      case ObVarcharType:
-        tree->str_value_ = param.get_varchar().ptr();
-        tree->str_len_ = param.get_varchar().length();
-        tree->type_ = T_VARCHAR;
-        break;
-      case ObTinyIntType:
-        tree->value_ = param.get_bool();
-        tree->type_ = T_BOOL;
-        break;
-      case ObNumberType:
-        tree->str_value_ = param.get_number().format();
-        tree->type_ = T_NUMBER;
-        break;
-      default:
-        LOG_WARN("never reach here", "type", param.get_type());
-        break;
-      }
-    }
-    for (int32_t i = 0; OB_SUCC(ret) && i < tree->num_child_; ++i) {
-      if (OB_ISNULL(tree->children_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ret = SMART_CALL(replace_questionmarks(tree->children_[i], params));
-      }
-    }
-  }
-  return ret;
-}
+
 
 /**
  * @brief calculate the result of the const or calculable expr
@@ -943,129 +881,17 @@ int ObSQLUtils::check_enable_mysql_compatible_dates(const sql::ObSQLSessionInfo 
 }
 
 /***************************/
-/*   This is an incomplete list, extracted from ObBasicStmt::virtual bool cause_implicit_commit() */
-/* Need to manually synchronize this list */
-/***************************/
-bool ObSQLUtils::cause_implicit_commit(ParseResult &result)
-{
-  bool ret = false;
-  if (NULL != result.result_tree_
-      && NULL != result.result_tree_->children_
-      && NULL != result.result_tree_->children_[0]) {
-    ParseNode *root = result.result_tree_->children_[0];
-    ObItemType type = root->type_;
-    if (T_SET_PASSWORD == type
-        || T_DROP_USER == type
-        || T_CREATE_USER == type
-        || T_LOCK_USER == type
-        || T_REVOKE == type
-        || T_REVOKE_ALL == type
-        || T_RENAME_USER == type
-        || T_GRANT == type
-        || T_CREATE_TABLE == type
-        || T_ALTER_DATABASE == type
-        || T_DROP_DATABASE == type
-        || T_CREATE_VIEW == type
-        || T_DROP_TABLE == type
-        || T_DROP_INDEX == type
-        || T_CREATE_DATABASE == type
-        || T_CREATE_INDEX == type
-        /* pl item type*/
-        || T_PACKAGE_CREATE == type
-        || T_PACKAGE_CREATE_BODY == type
-        || T_PACKAGE_DROP == type
-        || T_SF_CREATE == type
-        || T_SF_DROP == type
-        || T_SF_ALTER == type
-        || T_SP_CREATE == type
-        || T_SP_DROP == type
-        || T_SP_ALTER == type
-        || T_TG_CREATE == type
-        || T_TG_DROP == type
-        || T_TG_ALTER == type
-        /* pl item type*/) {
-      ret = true;
-    }
-  }
-  return ret;
-}
 
-bool ObSQLUtils::is_end_trans_stmt(const ParseResult &result)
-{
-  bool bret = false;
-  if (NULL != result.result_tree_ &&
-      NULL != result.result_tree_->children_ &&
-      NULL != result.result_tree_->children_[0]) {
-    bret = (T_COMMIT == result.result_tree_->children_[0]->type_
-            || T_ROLLBACK == result.result_tree_->children_[0]->type_) ? true : false;
-  }
-  return bret;
-}
-
-bool ObSQLUtils::is_commit_stmt(const ParseResult &result)
-{
-  bool bret = false;
-  if (NULL != result.result_tree_ &&
-      NULL != result.result_tree_->children_ &&
-      NULL != result.result_tree_->children_[0]) {
-    bret = T_COMMIT == result.result_tree_->children_[0]->type_ ? true : false;
-  }
-  return bret;
-}
 
 // Used to determine the statement types not supported by prepare statements in mysql mode
-bool ObSQLUtils::is_mysql_ps_not_support_stmt(const ParseResult &result)
+bool ObSQLUtils::is_mysql_ps_not_support_stmt(const ParsedSql &syntax)
 {
-  bool ret = false;
-  if (NULL != result.result_tree_
-      && NULL != result.result_tree_->children_
-      && NULL != result.result_tree_->children_[0]) {
-    ParseNode *root = result.result_tree_->children_[0];
-    ObItemType type = root->type_;
-    switch (type) {
-      case T_SP_CREATE:
-      case T_SP_DROP: {
-        ret = true;
-        break;
-      }
-      default: {
-        ret = false;
-      }
-    }
-  }
-  return ret;
+  return syntax.statement() != nullptr
+      && (syntax.statement()->kind() == peg::NodeKind::CreateProcedure
+          || syntax.statement()->kind() == peg::NodeKind::DropProcedure);
 }
 
-bool ObSQLUtils::is_readonly_stmt(ParseResult &result)
-{
-  bool ret = false;
-  if (NULL != result.result_tree_
-      && NULL != result.result_tree_->children_
-      && NULL != result.result_tree_->children_[0]) {
-    ParseNode *root = result.result_tree_->children_[0];
-    ObItemType type = root->type_;
-    if (T_SELECT == type && NULL == root->children_[PARSE_SELECT_FOR_UPD]) {
-      ret = true;
-    } else if (T_EXPLAIN == type
-               && NULL != root->children_[1]
-               && root->children_[1]->type_ == T_SELECT
-               && NULL == root->children_[1]->children_[PARSE_SELECT_FOR_UPD]) {
-      ret = true;
-    } else if (IS_SHOW_STMT(type)
-               || T_USE_DATABASE == type
-               || T_TRANSACTION == type
-               || T_BEGIN == type
-               || T_COMMIT == type
-               || T_ROLLBACK == type
-               || T_VARIABLE_SET == type
-               || T_SET_NAMES == type //read only not restrict it
-               || T_SET_CHARSET == type  //read only not restrict it
-               || T_SET_ROLE == type) {
-      ret = true;
-    }
-  }
-  return ret;
-}
+
 
 bool ObSQLUtils::is_allowed_on_standby(const ObItemType stmt_type)
 {
@@ -1439,13 +1265,14 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
   } else {
     // Quick parameterization SQL with ?
     ObString no_param_sql;
-    ParseResult parse_result;
-    ObParser parser(allocator, session->get_sql_mode(), session->get_charsets4parser());
+    ParsedSql parsed;
+    ObParser parser(allocator, session->get_sql_mode());
     ObSEArray<ObPCParam *, OB_PC_SPECIAL_PARAM_COUNT> special_params;
     ObString param_sql;
     ParamStore params( (ObWrapperAllocator(allocator)) );
     ObSEArray<ObPCParam *, OB_PC_RAW_PARAM_COUNT> raw_params;
     SqlInfo sql_info;
+    ParameterizationResult bindings;
     char *buf = NULL;
     char *buf2 = NULL;
     int32_t pos = 0;
@@ -1454,25 +1281,20 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
     ObString constructed_sql;
     const bool is_transform_outline = true;
     const bool is_parameterized_execute = false;
-    ParseNode *type_node = NULL;
+    stmt::StmtType type = stmt::T_NONE;
     sql_info.need_check_fp_ = false;
     int64_t format_len = query_sql.length() * 2;
-    if (OB_FAIL(parser.parse(query_sql, parse_result))) {
-    } else if (OB_ISNULL(parse_result.result_tree_)) {
-      ret = OB_NOT_INIT;
-    } else if (OB_ISNULL(parse_result.result_tree_->children_)
-               || OB_UNLIKELY(parse_result.result_tree_->num_child_ < 1)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (NULL == (type_node = parse_result.result_tree_->children_[0])) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (!IS_DML_STMT(type_node->type_)) {
+    if (OB_FAIL(parser.parse(query_sql, parsed))) {
+    } else if (OB_FAIL(parsed.statement_type(type))) {
+    } else if (!(type == stmt::T_SELECT || ObStmt::is_dml_write_stmt(type))) {
       ret = OB_SQL_DML_ONLY;
     } else if (check_param && OB_FAIL(ObSqlParameterization::transform_syntax_tree(allocator,
                                                                     *session,
                                                                     NULL,
-                                                                    parse_result.result_tree_,
+                                                                    parsed,
                                                                     sql_info,
                                                                     params,
+                                                                    bindings,
                                                                     NULL,
                                                                     is_transform_outline))) {
       if (OB_NOT_SUPPORTED != ret) {
@@ -1519,11 +1341,10 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
         } else if (OB_FAIL(constructed_sql.serialize(buf, size, pos_s))) {
         } else {
           outline_key.assign_ptr(buf, static_cast<ObString::obstr_size_t>(pos_s));
-          has_questionmark_in_sql = INT64_MAX != type_node->value_ && type_node->value_ > 0;
+          has_questionmark_in_sql = parsed.metadata().question_mark_ctx_.count_ > 0;
         }
       }
     }
-    parser.free_result(parse_result);
   }
   return ret;
 }
@@ -1534,12 +1355,15 @@ int ObSQLUtils::filter_hint_in_query_sql(ObIAllocator &allocator,
                                          ObString &param_sql)
 {
   int ret = OB_SUCCESS;
-  ObParser parser(allocator, session.get_sql_mode(), session.get_charsets4parser());
-  ParseResult parse_result;
-  if (OB_FAIL(parser.parse(sql, parse_result, FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE))) {
+  FPContext context;
+  context.sql_mode_ = session.get_sql_mode();
+  context.parameterize_ = false;
+  context.ignore_hint_ = true;
+  ObFastParserResult result;
+  if (OB_FAIL(ObFastParser::parse(sql, context, allocator, result))) {
+    if (ret == OB_ERR_PARSER_SYNTAX) ret = OB_ERR_PARSE_SQL;
   } else {
-    param_sql.assign(parse_result.no_param_sql_, parse_result.no_param_sql_len_);
-    parser.free_result(parse_result);
+    param_sql = result.pc_key_.name_;
   }
   return ret;
 }
@@ -1548,57 +1372,26 @@ int ObSQLUtils::construct_outline_sql(ObIAllocator &allocator,
                                       const ObSQLSessionInfo &session,
                                       const ObString &outline_content,
                                       const ObString &orig_sql,
-                                      bool is_need_filter_hint,
                                       ObString &outline_sql)
 {
   int ret = OB_SUCCESS;
-  UNUSED(is_need_filter_hint);
   ObString filter_sql;
-  ObSqlString sql_helper;
-  // This interface will remove both comments and hints
   if (OB_FAIL(filter_hint_in_query_sql(allocator, session, orig_sql, filter_sql))) {
-  } else if (OB_FAIL(filter_head_space(filter_sql))) {
-  }
-  if (OB_SUCC(ret)) {
-    char empty_split = find_first_empty_char(filter_sql);
-    ObString first_token = filter_sql.split_on(empty_split);
-    if (OB_FAIL(sql_helper.assign_fmt("%.*s %.*s%.*s", first_token.length(), first_token.ptr(),
-                                      outline_content.length(), outline_content.ptr(),
-                                      filter_sql.length(), filter_sql.ptr()))) {
-    } else if (OB_FAIL(ob_write_string(allocator, sql_helper.string(), outline_sql))) {
-    } else {/*do nothing*/}
-  }
-  return ret;
-}
-// Remove characters at the beginning of sql that are ' ', '\r', '\n', '\t', '\f'
-int ObSQLUtils::filter_head_space(ObString &sql)
-{
-  int ret = OB_SUCCESS;
-  int64_t head_space_len = 0;
-  bool is_space = true;
-  for (int64_t i = 0; is_space && i < sql.length(); i++) {
-    char ch = sql[i];
-    if (' ' == ch || '\r' == ch || '\n' == ch || '\t' == ch || '\f' == ch) {
-      ++head_space_len;
-    } else {
-      is_space = false;
+  } else {
+    const auto mode = session.get_sql_mode();
+    const auto rewritten = peg::insert_outline_hint(
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(filter_sql.ptr()), filter_sql.length()),
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(outline_content.ptr()), outline_content.length()),
+        peg::SqlMode{bool(mode & SMO_ANSI_QUOTES), bool(mode & SMO_NO_BACKSLASH_ESCAPES),
+                     bool(mode & SMO_PIPES_AS_CONCAT), bool(mode & SMO_HIGH_NOT_PRECEDENCE),
+                     bool(mode & SMO_REAL_AS_FLOAT)});
+    if (rewritten.empty()) {
+      ret = OB_ERR_PARSE_SQL;
+    } else if (OB_FAIL(ob_write_string(allocator,
+        ObString(rewritten.size(), reinterpret_cast<const char *>(rewritten.data())), outline_sql))) {
     }
   }
-  sql.assign(sql.ptr() + head_space_len, sql.length() - head_space_len);
   return ret;
-}
-
-char ObSQLUtils::find_first_empty_char(const ObString &sql)
-{
-  char empty_char = ' '; // default split
-  for (int64_t i = 0; i < sql.length(); ++i) {
-    char ch = sql[i];
-    if (' ' == ch || '\r' == ch || '\n' == ch || '\t' == ch || '\f' == ch) {
-      empty_char = ch;
-      break;
-    }
-  }
-  return empty_char;
 }
 
 int ObSQLUtils::reconstruct_sql(ObIAllocator &allocator, const ObStmt *stmt, ObString &sql,
@@ -1954,16 +1747,6 @@ int SemanticVectorDistExprChecker::add_expr(ObRawExpr *&expr)
     }
   }
   return ret;
-}
-
-//used for C module
-bool check_stack_overflow_c()
-{
-  bool is_overflow = false;
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(oceanbase::common::check_stack_overflow(is_overflow))) {
-  }
-  return is_overflow;
 }
 
 int ObSQLUtils::extract_pre_query_range(const ObQueryRangeProvider &query_range_provider,
@@ -3277,16 +3060,7 @@ int ObPreCalcExprConstraint::check_is_match(ObDatumObjParam &datum_param,
   return ret;
 }
 
-ObItemType ObSQLUtils::get_sql_item_type(const ParseResult &result)
-{
-  ObItemType type = ObItemType::T_INVALID;
-  if (NULL != result.result_tree_
-      && NULL != result.result_tree_->children_
-      && NULL != result.result_tree_->children_[0]) {
-    type = result.result_tree_->children_[0]->type_;
-  }
-  return type;
-}
+
 
 bool ObSQLUtils::is_support_batch_exec(ObItemType type)
 {
@@ -3671,33 +3445,12 @@ int ObSQLUtils::print_identifier_require_quotes(ObCollationType collation_type,
                                                 bool &require)
 {
   int ret = OB_SUCCESS;
-  bool pure_digit = true;
-  const ObCharsetInfo *info = ObCharset::get_charset(collation_type);
-  require = false;
-  if (OB_ISNULL(info)) {
+  if (OB_ISNULL(ObCharset::get_charset(collation_type))) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "argument is invalid", K(ret));
-  } else if (ident.length() > 0 && ident[0] == '$') {
-    require = true;
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && !require && i < ident.length(); i++) {
-    char ch = ident[i];
-    uint length = ob_mbcharlen(info, ch);
-    if (length == 0) {
-      require = true;
-    } else if (length == 1 && !oceanbase::sql::MYSQL_IDENTIFIER_FALGS[static_cast<uint8_t>(ch)]) {
-      require = true;
-    } else if (length == 1 && (ch < '0' || ch > '9')) {
-      pure_digit = false;
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (pure_digit) {
-    require = true;
-  } else if (require) {
-    //do nothing
-  } else if (-1 != mysql_sql_reserved_keyword_lookup(ident.ptr())) {
-    require = true;
+  } else {
+    require = peg::identifier_requires_quotes(rust::Slice<const uint8_t>(
+        reinterpret_cast<const uint8_t *>(ident.ptr()), ident.length()));
   }
   return ret;
 }
@@ -3727,59 +3480,6 @@ bool ObSQLUtils::check_json_expr(const ObRawExpr &expr)
   return res;
 }
 
-int ObSQLUtils::reconstruct_ps_sql(ObSqlString & reconstruct_sql, const ObString &ps_sql,
-                                   const ObIArray<const common::ObObjParam *> &const_tokens)
-{
-  int ret = OB_SUCCESS;
-  ObString tmp_ps_sql = ps_sql;
-  int64_t target_ori_sql_pos = 0;
-  for (int64_t const_token_index = 0; OB_SUCC(ret) && const_token_index < const_tokens.count();
-       const_token_index++) {
-    if (OB_FAIL(reconstruct_sql.append(tmp_ps_sql.split_on('?')))) {
-    } else if (OB_FAIL(append_obj_param(reconstruct_sql, *const_tokens.at(const_token_index)))) {
-    }
-  }
-  if (OB_SUCC(ret) && OB_FAIL(reconstruct_sql.append(tmp_ps_sql))) {
-  }
-  return ret;
-}
-
-int ObSQLUtils::append_obj_param(ObSqlString & reconstruct_sql, const common::ObObjParam & obj_param) {
-  int ret = OB_SUCCESS;
-  int64_t len = 0;
-  do {
-    //logic copy from src/sql/printer/ob_raw_expr_printer.cpp: ObRawExprPrinter::print(ObConstRawExpr *expr)
-    len = reconstruct_sql.length();
-    if (obj_param.is_datetime()) {
-      int32_t tmp_date = 0;
-      if (OB_FAIL(databuff_printf(reconstruct_sql.ptr(), reconstruct_sql.capacity(), len, "%s '", LITERAL_PREFIX_DATE))) {
-      } else if (FALSE_IT(reconstruct_sql.set_length(len))) {
-      } else if (OB_FAIL(
-                   ObTimeConverter::datetime_to_date(obj_param.get_datetime(), NULL, tmp_date))) {
-      } else if (OB_FAIL(ObTimeConverter::date_to_str(tmp_date, reconstruct_sql.ptr(), reconstruct_sql.capacity(), len))) {
-      } else if (FALSE_IT(reconstruct_sql.set_length(len))) {
-      } else if (OB_FAIL(databuff_printf(reconstruct_sql.ptr(), reconstruct_sql.capacity(), len, "'"))) {
-      } else if (FALSE_IT(reconstruct_sql.set_length(len))) {
-      }
-    } else {
-      if (FALSE_IT(reconstruct_sql.set_length(len))) {
-      } else if (OB_FAIL(obj_param.print_sql_literal(reconstruct_sql.ptr(), reconstruct_sql.capacity(), len))) {
-      } else if (FALSE_IT(reconstruct_sql.set_length(len))) {
-      }
-    }
-
-    if (ret == OB_SIZE_OVERFLOW) {
-      const int64_t need_len = reconstruct_sql.length() + 100;
-      if (OB_FAIL(reconstruct_sql.reserve(need_len))) {
-      } else {
-        ret = OB_SIZE_OVERFLOW;
-      }
-    }
-  } while (ret == OB_SIZE_OVERFLOW);
-
-  return ret;
-}
-
 namespace oceanbase
 {
 namespace sql
@@ -3789,12 +3489,10 @@ int ObSQLUtils::get_outline_sql(const share::schema::ObOutlineInfo &outline_info
                                    ObString &outline_sql)
 {
   int ret = OB_SUCCESS;
-  bool is_need_filter_hint = true;
   if (OB_FAIL(ObSQLUtils::construct_outline_sql(allocator,
                                                 session,
                                                 outline_info.get_outline_content_str(),
                                                 outline_info.get_sql_text_str(),
-                                                is_need_filter_hint,
                                                 outline_sql))) {
   }
   return ret;
@@ -3854,10 +3552,6 @@ int ObSQLNameService::resolve_table_name(
     if (OB_SUCC(ret)) {
       const bool preserve_lettercase =
           common::OB_LOWERCASE_AND_INSENSITIVE != case_mode;
-      if (common::OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
-        ::str_tolower(database_name.ptr(), database_name.length());
-        ::str_tolower(table_name.ptr(), table_name.length());
-      }
       if (!database_name.empty()) {
         ret = check_and_convert_database_name(
             cs_type, preserve_lettercase, database_name);

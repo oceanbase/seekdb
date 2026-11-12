@@ -19,6 +19,7 @@
 #include <inttypes.h>
 #include "sql/plan_cache/ob_ps_sql_utils.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "sql/plan_cache/literal_token.h"
 
 namespace oceanbase
 {
@@ -344,36 +345,22 @@ int ObPsStmtInfo::assign_raw_sql(const common::ObString &raw_sql)
   return ret;
 }
 
-int ObPsStmtInfo::add_fixed_raw_param(const ObPCParam &node)
+int ObPsStmtInfo::add_fixed_raw_param(const ObPCParam &source)
 {
   int ret = OB_SUCCESS;
   char *buf = NULL;
-  ObPCParam *param = NULL;
-  int64_t alloc_size = sizeof(ObPCParam) + sizeof(ParseNode);
-  if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(alloc_size)))) {
+  const int64_t alloc_size = sizeof(ObPCParam) + sizeof(LiteralToken);
+  if (OB_ISNULL(allocator_) || OB_ISNULL(source.literal_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(alloc_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    MEMSET(buf, 0, alloc_size);
-    param = reinterpret_cast<ObPCParam *>(buf);
-    buf += sizeof(ObPCParam);
-    param->node_ = reinterpret_cast<ParseNode *>(buf);
-    if (OB_FAIL(deep_copy_parse_node(allocator_, node.node_, param->node_))) {
-    } else if (FALSE_IT(param->flag_ = node.flag_)) {
+    ObPCParam *param = new (buf) ObPCParam(source);
+    LiteralToken *literal = new (buf + sizeof(ObPCParam)) LiteralToken(*source.literal_);
+    if (OB_FAIL(ObPsSqlUtils::deep_copy_str(*allocator_, source.literal_->text, literal->text))) {
+    } else if (OB_FAIL(ObPsSqlUtils::deep_copy_str(*allocator_, source.literal_->source, literal->source))) {
     } else {
-      if (NEG_PARAM == param->flag_) {
-        int64_t tmp_pos = 0;
-        if ('-' != param->node_->str_value_[tmp_pos]) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expected neg sign here", K(tmp_pos), K(ObString(param->node_->str_len_,
-                                                                    param->node_->str_value_)));
-        } else {
-          tmp_pos += 1;
-          for (; tmp_pos < param->node_->str_len_ && isspace(param->node_->str_value_[tmp_pos]); tmp_pos++);
-          const_cast<char *>(param->node_->str_value_)[tmp_pos - 1] = '-';
-          param->node_->str_value_ += (tmp_pos - 1);
-          param->node_->str_len_ -= (tmp_pos - 1);
-        }
-      }
+      param->literal_ = literal;
       OZ (raw_params_.push_back(param));
     }
   }
@@ -393,7 +380,7 @@ int ObPsStmtInfo::assign_fixed_raw_params(const common::ObIArray<int64_t> &param
       const int64_t idx = param_idxs.at(i);
       if (idx >= raw_params.count()) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(tmp_param = raw_params.at(idx)) || OB_ISNULL(tmp_param->node_)) {
+      } else if (OB_ISNULL(tmp_param = raw_params.at(idx)) || OB_ISNULL(tmp_param->literal_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(add_fixed_raw_param(*tmp_param))) {
       }
@@ -496,11 +483,11 @@ int ObPsStmtInfo::get_convert_size(int64_t &cv_size) const
   }
   for (int i = 0; OB_SUCC(ret) && i < raw_params_.count(); ++i) {
     const ObPCParam *param = raw_params_.at(i);
-    if (OB_ISNULL(param)) {
+    if (OB_ISNULL(param) || OB_ISNULL(param->literal_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(get_deep_copy_size(param->node_, &raw_params_size))) {
     } else {
-      raw_params_size += sizeof(ObPCParam);
+      raw_params_size += sizeof(ObPCParam) + sizeof(LiteralToken)
+          + param->literal_->text.length() + 1 + param->literal_->source.length() + 1;
     }
   }
   if (OB_SUCC(ret)) {

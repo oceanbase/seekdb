@@ -20,7 +20,7 @@
 #include "share/ob_define.h"
 #include "lib/container/ob_iarray.h"
 #include "share/schema/ob_schema_struct.h"
-#include "sql/pl/parser/ob_pl_parser.h"
+#include "sql/syntax.h"
 #include "share/schema/ob_table_schema.h"
 
 namespace oceanbase
@@ -230,14 +230,14 @@ public:
                                           const int64_t& buf_len,
                                           int64_t& pos) const;
   int print_table_definition_table_options(const ObTableSchema &table_schema,
-                                           char* buf,
+                                     char* buf,
                                            const int64_t& buf_len,
                                            int64_t& pos,
                                            bool is_for_table_status,
                                            bool agent_mode = false,
                                            ObSQLMode sql_mode = SMO_DEFAULT) const;
   int print_table_definition_partition_options(const ObTableSchema &table_schema,
-                                               char* buf,
+                                         char* buf,
                                                const int64_t& buf_len,
                                                int64_t& pos,
                                                const common::ObTimeZoneInfo *tz_info) const;
@@ -284,10 +284,7 @@ public:
                                               int64_t &pos,
                                               const common::ObTimeZoneInfo *tz_info) const;
   int print_routine_definition_v1(const ObRoutineInfo *routine_info,
-                               const ObStmtNodeTree *param_list,
-                               const ObStmtNodeTree *return_type,
                                const common::ObString &body,
-                               const common::ObString &clause,
                                char* buf,
                                const int64_t& buf_len,
                                int64_t &pos,
@@ -299,35 +296,31 @@ public:
                                int64_t& pos,
                                const common::ObTimeZoneInfo *tz_info) const;
   int print_routine_definition_v2_mysql(const ObRoutineInfo &routine_info,
-                                const ObStmtNodeTree *parse_tree,
+                                const sql::ParsedSql &syntax,
                                 const sql::ObExecEnv &exec_env,
                                 char* buf,
                                 const int64_t& buf_len,
                                 int64_t& pos,
                                 const common::ObTimeZoneInfo *tz_info) const;
   int print_routine_param_type(const ObRoutineParam *param,
-                               const ObStmtNodeTree *param_type,
+                               const sql::peg::Node *param_type,
                                char *buf,
                                const int64_t &buf_len,
                                int64_t &pos,
                                const common::ObTimeZoneInfo *tz_info) const;
   int print_routine_definition_param_v1(const ObRoutineInfo &routine_info,
-                                     const ObStmtNodeTree *param_list,
                                      char* buf,
                                      const int64_t& buf_len,
                                      int64_t& pos,
                                      const common::ObTimeZoneInfo *tz_info) const;
   int print_foreign_key_definition(const share::schema::ObForeignKeyInfo &foreign_key_info,
                                    char *buf, int64_t buf_len, int64_t &pos) const;
-  int print_package_definition(uint64_t package_id,
-                               char* buf,
-                               const int64_t& buf_len,
-                               int64_t &pos) const;
+
   int print_trigger_definition(const share::schema::ObTriggerInfo &trigger_info,
                                char *buf, int64_t buf_len, int64_t &pos,
                                bool get_ddl = false) const;
   int print_table_definition_on_commit_options(const ObTableSchema &table_schema,
-                                               char* buf,
+                                         char* buf,
                                                const int64_t& buf_len,
                                                int64_t& pos) const;
   // print pk/check/not null constraint definition

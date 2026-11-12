@@ -1,6 +1,8 @@
+load("//bazel:parser.bzl", "parser_type_names")
 load(
     "//bazel:defs.bzl",
     "cc_library",
+    "C_COPTS",
 )
 load(
     ":query_build_defs.bzl",
@@ -326,16 +328,17 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-filegroup(
-    name = "_sql_item_type_definition",
-    srcs = ["api/query/parser/ob_item_type.h"],
-    visibility = ["//src/sql/parser:__pkg__"],
+parser_type_names(
+    name = "generate_item_type_names",
+    src = "api/query/engine/expr/ob_item_type.h",
+    out = "type_name.c",
 )
 
 cc_library(
-    name = "_sql_parser_types",
-    hdrs = ["api/query/parser/ob_item_type.h", "api/query/parser/parse_node.h"],
-    deps = ["//src/oblib:common_sql_mode"],
-    includes = ["api"],
-    visibility = ["//src/sql/parser:__pkg__"],
+    name = "item_type_names",
+    srcs = ["type_name.c"],
+    implementation_deps = [":query_api_interface"],
+    copts = C_COPTS,
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
 )

@@ -16,6 +16,7 @@
  
 #define USING_LOG_PREFIX SQL_PC
 #include "rust/config.h"
+#include <vector>
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -27,123 +28,11 @@ namespace oceanbase
 
 namespace sql
 {
-// based in ob_parser.h
-const char *ObValuesTableCompression::lower_[ObParser::S_MAX] = {
-  "", "", "", "", "", "", "", "", "", "", /* 0 ~9 */
-  "", "", "", "update", "", "", "", "", "", "", /* 10 ~19 */
-  "", "", "", "", "", "", "", "", "", "", /* 20 ~29 */
-  "", "", "", "select", "insert", "delete", "values", "table", "into", "" /* 30 ~39 */
-};
-
-const char *ObValuesTableCompression::upper_[ObParser::S_MAX] = {
-  "", "", "", "", "", "", "", "", "", "", /* 0 ~9 */
-  "", "", "", "UPDATE", "", "", "", "", "", "", /* 10 ~19 */
-  "", "", "", "", "", "", "", "", "", "", /* 20 ~29 */
-  "", "", "", "SELECT", "INSERT", "DELETE", "VALUES", "TABLE", "INTO", "" /* 30 ~39 */
-};
-
-#define ISSPACE(c) ((c) == ' ' || (c) == '\n' || (c) == '\r' || (c) == '\t' || (c) == '\f' || (c) == '\v')
-
-void ObValuesTableCompression::match_one_state(const char *&p,
-                                               const char *p_end,
-                                               const ObParser::State next_state,
-                                               ObParser::State &state)
-{
-  int compare_len = strlen(lower_[state]);
-  if (p_end - p < compare_len) {
-    state = ObParser::S_INVALID;
-  } else if (0 == strncasecmp(p, lower_[state], compare_len)) {
-    p += compare_len;
-    state = next_state;
-  } else {
-    state = ObParser::S_INVALID;
-  }
-}
-
 bool ObValuesTableCompression::is_support_compress_values_table(const ObString &stmt)
 {
-  ObParser::State state = ObParser::S_START;
-  ObParser::State save_state = state;
-  const char *p = stmt.ptr();
-  const char *p_start = p;
-  const char *p_end = p + stmt.length();
-  bool is_dml_stmt = false;
-  bool has_error = false;
-  while (p < p_end && !has_error && !is_dml_stmt) {
-    switch (state) {
-      case ObParser::S_START: {
-        if (ISSPACE(*p)) {
-          p++;
-        } else {
-          if (!ObParser::is_comment(p, p_end, save_state, state, ObParser::S_INVALID) &&
-              state != ObParser::S_INVALID) {
-            if (ObParser::S_START == state) {
-              save_state = state;
-              if (*p == lower_[ObParser::S_SELECT][0] || *p == upper_[ObParser::S_SELECT][0]) {
-                state = ObParser::S_SELECT;
-              } else if (*p == lower_[ObParser::S_INSERT][0] || *p == upper_[ObParser::S_INSERT][0]) {
-                state = ObParser::S_INSERT;
-              } else if (*p == lower_[ObParser::S_UPDATE][0] || *p == upper_[ObParser::S_UPDATE][0]) {
-                state = ObParser::S_UPDATE;
-              } else if (*p == lower_[ObParser::S_DELETE][0] || *p == upper_[ObParser::S_DELETE][0]) {
-                state = ObParser::S_DELETE;
-              } else if (*p == lower_[ObParser::S_VALUES][0] || *p == upper_[ObParser::S_VALUES][0]) {
-                state = ObParser::S_VALUES;
-              } else {
-                state = ObParser::S_INVALID;
-              }
-            }
-          }
-        }
-      } break;
-      case ObParser::S_SELECT:
-      case ObParser::S_DELETE:
-      case ObParser::S_UPDATE:
-      case ObParser::S_VALUES: {
-        match_one_state(p, p_end, ObParser::S_NORMAL, state);
-      } break;
-      case ObParser::S_INSERT: {
-        match_one_state(p, p_end, ObParser::S_INTO, state);
-      } break;
-      case ObParser::S_INTO: {
-        if (ISSPACE(*p)) {
-          p++;
-        } else {
-          if (!ObParser::is_comment(p, p_end, save_state, state, ObParser::S_INVALID) &&
-              state != ObParser::S_INVALID) {
-            match_one_state(p, p_end, ObParser::S_NORMAL, state);
-          }
-        }
-      } break;
-      case ObParser::S_NORMAL: {
-        is_dml_stmt = true;
-        has_error = false;
-      } break;
-      case ObParser::S_COMMENT: {
-        if (*p == '\n') {
-          // end of '--' comments
-          state = save_state;
-        }
-        p++;
-      } break;
-      case ObParser::S_C_COMMENT: {
-        if (*p == '*') {
-          if ((p + 1 < p_end) && '/' == *(p + 1)) {
-            // end of '/**/' comments
-            state = save_state;
-            p++;
-          }
-        }
-        p++;
-      } break;
-      case ObParser::S_INVALID:
-      default: {
-        is_dml_stmt = false;
-        has_error = true;
-      } break;
-    }
-  }
-  return is_dml_stmt && !has_error;
+  return peg::classify_statement(
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(stmt.ptr()), stmt.length()),
+      peg::SqlMode{}).supports_values_table;
 }
 
 int ObValuesTableCompression::add_raw_array_params(ObIAllocator &allocator,
@@ -180,66 +69,6 @@ int ObValuesTableCompression::add_raw_array_params(ObIAllocator &allocator,
   return ret;
 }
 
-int ObValuesTableCompression::rebuild_new_raw_sql(ObPlanCacheCtx &pc_ctx,
-                                                  const ObIArray<ObPCParam*> &raw_params,
-                                                  const int64_t begin_idx,
-                                                  const int64_t param_cnt,
-                                                  const int64_t delta_length,
-                                                  const ObString &no_param_sql,
-                                                  ObIArray<int64_t> &no_param_pos,
-                                                  ObIArray<int64_t> &raw_sql_offset,
-                                                  ObString &new_raw_sql,
-                                                  int64_t &no_param_sql_pos,
-                                                  int64_t &new_raw_pos)
-{
-  int ret = OB_SUCCESS;
-  char *buff = new_raw_sql.ptr();
-  int64_t buff_len = pc_ctx.raw_sql_.length();
-  int64_t len = 0;
-  if (OB_ISNULL(buff)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (begin_idx < 0 || raw_params.count() < begin_idx + param_cnt) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    for (int64_t i = begin_idx; OB_SUCC(ret) && i < begin_idx + param_cnt; i++) {
-      const ObPCParam *pc_param = raw_params.at(i);
-      if (OB_ISNULL(pc_param) || OB_ISNULL(pc_param->node_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        int64_t param_pos = pc_param->node_->pos_ - delta_length; // get pos is in new no param sql
-        int64_t param_raw_offset = pc_param->node_->raw_sql_offset_;
-        int64_t param_len = pc_param->node_->text_len_;
-        len = param_pos - no_param_sql_pos;
-        if (OB_UNLIKELY(len < 0) || OB_UNLIKELY(new_raw_pos + len + param_len > buff_len)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          if (len > 0) {
-            //copy text
-            MEMCPY(buff + new_raw_pos, no_param_sql.ptr() + no_param_sql_pos, len);
-            new_raw_pos += len;
-            no_param_sql_pos += len;
-          }
-          if (param_pos == no_param_sql_pos) {
-            //copy raw param
-            param_raw_offset = new_raw_pos;
-            MEMCPY(buff + new_raw_pos, pc_param->node_->raw_text_, param_len);
-            new_raw_pos += param_len;
-            no_param_sql_pos += 1;
-          }
-          if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(no_param_pos.push_back(param_pos))) {
-          } else if (OB_FAIL(raw_sql_offset.push_back(param_raw_offset))) {
-          }
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      new_raw_sql.assign_ptr(buff, new_raw_pos);
-    }
-  }
-  return ret;
-}
-
 int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
                                                     ObPlanCacheCtx &pc_ctx,
                                                     ObSQLSessionInfo &session_info,
@@ -247,38 +76,44 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   bool can_fold_params = false;
-  // used for no_param_sql --> new_no_param_sql
   int64_t old_sql_pos = 0;
   int64_t new_sql_pos = 0;
-  int64_t array_param_idx = 0;
   int64_t last_raw_param_idx = 0;
-  int64_t new_raw_idx = 0;
   int64_t total_delta_len = 0;
   ObString new_no_param_sql;
   ObSEArray<ObPCParam*, 4> temp_store;
-  char *buff = NULL;
-  int64_t buff_len = pc_ctx.raw_sql_.length();
-  int64_t no_param_sql_pos = 0;
-  int64_t new_raw_sql_pos = 0;
-  ObString &new_raw_sql = pc_ctx.new_raw_sql_;
-  ObSEArray<int64_t, 16> no_param_pos;
-  ObSEArray<int64_t, 16> raw_sql_offset;
-  ObPhysicalPlanCtx *phy_ctx = NULL;
+  std::vector<peg::RestoreParameter> parameters;
+  rust::Vec<peg::RestoredParameter> positions;
+  ObPhysicalPlanCtx *phy_ctx = nullptr;
+  const auto keep_parameters = [&](int64_t begin, int64_t end) {
+    int ret = OB_SUCCESS;
+    for (int64_t i = begin; OB_SUCC(ret) && i < end; ++i) {
+      const ObPCParam *parameter = fp_result.raw_params_.at(i);
+      if (OB_ISNULL(parameter) || OB_ISNULL(parameter->literal_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(temp_store.push_back(fp_result.raw_params_.at(i)))) {
+      } else {
+        const ObString &source = parameter->literal_->source;
+        parameters.push_back({static_cast<size_t>(parameter->sql_position_),
+            static_cast<size_t>(total_delta_len),
+            rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(source.ptr()), source.length())});
+      }
+    }
+    return ret;
+  };
   if (pc_ctx.sql_ctx_.handle_batched_multi_stmt() ||
       session_info.is_inner() ||
       session_info.get_is_in_retry() ||
       fp_result.values_tokens_.empty() ||
       !config::_enable_values_table_folding()) {
-    /* do nothing */
   } else if (!is_support_compress_values_table(pc_ctx.raw_sql_)) {
-    /* do nothing */
   } else if (OB_ISNULL(phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < fp_result.values_tokens_.count(); ++i) {
       bool is_valid = false;
       int64_t values_token_pos = fp_result.values_tokens_.at(i).no_param_sql_pos_;
-      int64_t param_idx = fp_result.values_tokens_.at(i).param_idx_;  // idx in fp_result.raw_params_
+      int64_t param_idx = fp_result.values_tokens_.at(i).param_idx_;
       int64_t batch_count = 0;
       int64_t param_count = 0;
       int64_t delta_len = 0;
@@ -289,77 +124,44 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
       } else if (!is_valid || param_count <= 0 || batch_count <= 1 || delta_len <= 0) {
       } else if (OB_FAIL(add_raw_array_params(allocator, pc_ctx, fp_result, param_idx, batch_count,
                                               param_count))) {
+      } else if (OB_FAIL(keep_parameters(last_raw_param_idx, param_idx + param_count))) {
+      } else if (OB_FAIL(phy_ctx->get_array_param_groups().push_back(
+                     ObArrayParamGroup(batch_count, param_count, temp_store.count() - param_count)))) {
       } else {
-        if (!can_fold_params) {
-          if (OB_ISNULL(buff = (char *)allocator.alloc(buff_len))) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            new_raw_sql.assign_ptr(buff, buff_len);
-          }
-        }
-        for (int64_t j = last_raw_param_idx; OB_SUCC(ret) && j < param_idx + param_count; j++) {
-          if (OB_FAIL(temp_store.push_back(pc_ctx.fp_result_.raw_params_.at(j)))) {
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(rebuild_new_raw_sql(pc_ctx, temp_store, new_raw_idx,
-                           temp_store.count() - new_raw_idx, total_delta_len, new_no_param_sql,
-                           no_param_pos, raw_sql_offset, new_raw_sql, no_param_sql_pos,
-                           new_raw_sql_pos))) {
-        } else {
-          int64_t batch_begin_idx = new_raw_idx + param_idx - last_raw_param_idx;
-          if (OB_FAIL(phy_ctx->get_array_param_groups().push_back(ObArrayParamGroup(batch_count,
-                                                                  param_count, batch_begin_idx)))) {
-          } else {
-            total_delta_len += delta_len;
-            can_fold_params = true;
-            last_raw_param_idx = param_idx + param_count * batch_count;
-            new_raw_idx = temp_store.count();
-          }
-        }
+        total_delta_len += delta_len;
+        can_fold_params = true;
+        last_raw_param_idx = param_idx + param_count * batch_count;
       }
     }
     if (OB_SUCC(ret) && can_fold_params) {
-      for (int64_t j = last_raw_param_idx; OB_SUCC(ret) && j < pc_ctx.fp_result_.raw_params_.count(); j++) {
-        if (OB_FAIL(temp_store.push_back(pc_ctx.fp_result_.raw_params_.at(j)))) {
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(rebuild_new_raw_sql(pc_ctx, temp_store, new_raw_idx,
-                    temp_store.count() - new_raw_idx, total_delta_len, new_no_param_sql,
-                    no_param_pos, raw_sql_offset, new_raw_sql, no_param_sql_pos,
-                    new_raw_sql_pos))) {
-        } else if (OB_UNLIKELY(no_param_pos.count() != temp_store.count()) ||
-                   OB_UNLIKELY(raw_sql_offset.count() != temp_store.count())) {
+      if (OB_FAIL(keep_parameters(last_raw_param_idx, fp_result.raw_params_.count()))) {
+      } else {
+        auto restored = peg::restore_parameter_sql(
+            rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(new_no_param_sql.ptr()),
+                                      new_no_param_sql.length()),
+            rust::Slice<const peg::RestoreParameter>(parameters.data(), parameters.size()), false);
+        if (restored.error != peg::ParameterError::None) {
           ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ob_write_string(allocator,
+                       ObString(restored.sql.size(), reinterpret_cast<const char *>(restored.sql.data())),
+                       pc_ctx.new_raw_sql_))) {
         } else {
-          int64_t len = new_no_param_sql.length() - no_param_sql_pos;
-          if (OB_UNLIKELY(len < 0) || OB_UNLIKELY(new_raw_sql_pos + len > buff_len)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (len > 0) {
-            MEMCPY(buff + new_raw_sql_pos, new_no_param_sql.ptr() + no_param_sql_pos, len);
-            new_raw_sql_pos += len;
-            no_param_sql_pos += len;
-            new_raw_sql.assign_ptr(buff, new_raw_sql_pos);
-          }
+          positions = std::move(restored.parameters);
         }
       }
     }
-    // handle error.
     if (ret != OB_SUCCESS) {
-      // Here whatever error can be swallowed, just cannot do batch optimization after the error
       phy_ctx->get_array_param_groups().reset();
       pc_ctx.fp_result_.array_params_.reset();
       pc_ctx.new_raw_sql_.reset();
       can_fold_params = false;
       ret = OB_SUCCESS;
     } else if (can_fold_params) {
-      fp_result.pc_key_.name_.assign_ptr(new_no_param_sql.ptr(), new_no_param_sql.length());
+      fp_result.pc_key_.name_ = new_no_param_sql;
       fp_result.raw_params_.reset();
       for (int64_t i = 0; i < temp_store.count(); i++) {
-        // checked null before
-        temp_store.at(i)->node_->pos_ = no_param_pos.at(i);
-        temp_store.at(i)->node_->raw_sql_offset_ = raw_sql_offset.at(i);
+        temp_store.at(i)->sql_position_ = positions[i].sql_offset;
+        temp_store.at(i)->source_offset_ = positions[i].source_offset;
       }
       if (OB_FAIL(fp_result.raw_params_.assign(temp_store))) {
       }
@@ -634,108 +436,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
   return ret;
 }
 
-void ObValuesTableCompression::skip_space(ObRawSql &raw_sql)
-{
-  int64_t space_len = 0;
-  bool is_space = true;
-  while (!raw_sql.search_end_ && is_space && raw_sql.cur_pos_ < raw_sql.raw_sql_len_) {
-    if (is_mysql_space(raw_sql.raw_sql_[raw_sql.cur_pos_])) {
-      raw_sql.scan(1);																									
-    } else {
-      is_space = false;
-    }
-  }
-}
-
-bool ObValuesTableCompression::skip_row_constructor(ObRawSql &raw_sql)
-{
-  bool b_ret = false;
-  int64_t space_len = 0;
-  if (!raw_sql.search_end_ && 0 == raw_sql.strncasecmp(raw_sql.cur_pos_, "row", 3)) {
-    raw_sql.scan(3);
-    skip_space(raw_sql);
-    b_ret = true;
-  }
-  return b_ret;
-}
-
-/* only row(?,?,?) is valid */
-void ObValuesTableCompression::get_one_row_str(ObRawSql &no_param_sql,
-                                               int64_t &param_count,
-                                               int64_t &end_pos,
-                                               bool &is_valid)
-{
-  enum ROW_STATE {
-    START_STATE = 0,
-    LEFT_PAR_STATE, // "("
-    PARS_MATCH,     // ")"
-    UNEXPECTED_STATE
-  };
-  ROW_STATE row_state = START_STATE;
-  int left_count = 0;
-  int comma_count = 0;
-  bool need_break = false;
-  int64_t curr_pos = 0;
-  is_valid = false;
-  param_count = 0;
-  end_pos = 0;
-  skip_space(no_param_sql);
-  if (no_param_sql.is_search_end() || !skip_row_constructor(no_param_sql)) {
-    /* do nothing */
-  } else {
-    while (!need_break && !no_param_sql.is_search_end()) {
-      skip_space(no_param_sql);
-      char ch = no_param_sql.char_at(no_param_sql.cur_pos_);
-      curr_pos = no_param_sql.cur_pos_;
-      no_param_sql.scan(1);
-      /* state machine */
-      switch (row_state) {
-        case START_STATE:
-          if ('(' == ch) {
-            row_state = LEFT_PAR_STATE;
-            left_count++;
-          } else {
-            row_state = UNEXPECTED_STATE;
-          }
-          break;
-        case LEFT_PAR_STATE:
-          if (')' == ch) {
-            left_count--;
-            if (0 == left_count) {
-              row_state = PARS_MATCH;
-              end_pos = curr_pos;
-            }
-          } else if ('(' == ch) {
-            left_count++;
-          } else if ('?' == ch) {
-            param_count++;
-          } else if (',' == ch && comma_count + 1 == param_count) {
-            comma_count++;
-          } else {
-            row_state = UNEXPECTED_STATE;
-          }
-          break;
-        case PARS_MATCH:
-          if (',' != ch) {
-            no_param_sql.search_end_ = true;
-          }
-          need_break = true;
-          break;
-        case UNEXPECTED_STATE:
-          need_break = true;
-          break;
-        default:
-          break;
-      }
-    }
-    if (PARS_MATCH == row_state) {
-      if (param_count > 0 && param_count == comma_count + 1) {
-        is_valid = true;
-      }
-    }
-  }
-}
-
 int ObValuesTableCompression::parser_values_row_str(ObIAllocator &allocator,
                                                     const ObString &no_param_sql,
                                                     const int64_t values_token_pos,
@@ -747,62 +447,26 @@ int ObValuesTableCompression::parser_values_row_str(ObIAllocator &allocator,
                                                     int64_t &delta_length,
                                                     bool &can_batch_opt)
 {
-  int ret = OB_SUCCESS;
-  int64_t no_param_sql_len = no_param_sql.length();
-  ObRawSql raw_sql;
-  raw_sql.init(no_param_sql.ptr(), no_param_sql_len);
-  raw_sql.cur_pos_ = values_token_pos;
-  int64_t new_sql_len = 0;
-  int64_t cur_param_count = 0;
-  int64_t end_pos = 0;
-  int64_t first_sql_end_pos = 0;
-  bool is_first = true;
-  bool is_valid = true;
-  row_count = 0;
-  param_count = 0;
-  delta_length = 0;
+  row_count = param_count = delta_length = 0;
   can_batch_opt = false;
-  if (0 == raw_sql.strncasecmp(raw_sql.cur_pos_, "values", 6)) {
-    raw_sql.scan(6);
-    while (OB_SUCC(ret) && is_valid && !raw_sql.is_search_end()) {
-      get_one_row_str(raw_sql, cur_param_count, end_pos, is_valid);
-      if (!is_valid) {
-      } else if (is_first) {
-        param_count = cur_param_count;
-        first_sql_end_pos = end_pos;
-        is_first = false;
-      } else if (cur_param_count != param_count) {
-      } 
-      row_count++;
-    }
-
-    if (OB_SUCC(ret) && is_valid && row_count > 1) {
-      char *buffer = NULL;
-      if (OB_ISNULL(buffer = static_cast<char*>(allocator.alloc(no_param_sql_len)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        // init
-        int64_t length = new_pos;
-        MEMCPY(buffer, new_no_param_sql.ptr(), length);
-        new_sql_len += length;
-        
-        length = first_sql_end_pos + 1 - old_pos;
-        MEMCPY(buffer + new_pos, no_param_sql.ptr() + old_pos, length);
-        new_sql_len += length;
-        new_pos += length;
-        old_pos = end_pos + 1;
-        
-        length = no_param_sql_len - old_pos;
-        MEMCPY(buffer + new_pos, no_param_sql.ptr() + old_pos, length);
-        new_sql_len += length;
-        
-        delta_length = end_pos - first_sql_end_pos;
-        new_no_param_sql.assign_ptr(buffer, new_sql_len);
-        can_batch_opt = true;
-      }
-    }
-  }
-  return ret;
+  const int64_t removed_length = old_pos - new_pos;
+  if (values_token_pos < removed_length) return OB_SUCCESS;
+  const ObString &input = new_no_param_sql.empty() ? no_param_sql : new_no_param_sql;
+  const auto result = peg::compress_values(
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(input.ptr()), input.length()),
+      values_token_pos - removed_length);
+  if (!result.eligible) return OB_SUCCESS;
+  char *buffer = static_cast<char *>(allocator.alloc(result.sql.size()));
+  if (buffer == nullptr) return OB_ALLOCATE_MEMORY_FAILED;
+  MEMCPY(buffer, result.sql.data(), result.sql.size());
+  new_no_param_sql.assign_ptr(buffer, static_cast<int64_t>(result.sql.size()));
+  old_pos = result.source_end + removed_length;
+  new_pos = result.output_end;
+  row_count = result.rows;
+  param_count = result.row_parameters;
+  delta_length = result.removed_length;
+  can_batch_opt = true;
+  return OB_SUCCESS;
 }
 
 }

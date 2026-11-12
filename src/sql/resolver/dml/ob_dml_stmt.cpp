@@ -176,11 +176,11 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   table_type_ = other.table_type_;
   is_recursive_union_fake_table_ = other.is_recursive_union_fake_table_;
   cte_type_ = other.cte_type_;
+  has_cte_column_aliases_ = other.has_cte_column_aliases_;
   database_name_ = other.database_name_;
   for_update_ = other.for_update_;
   for_update_wait_us_ = other.for_update_wait_us_;
   skip_locked_ = other.skip_locked_;
-  node_ = other.node_; // should deep copy ? seems to be unnecessary
   snapshot_query_type_ = other.snapshot_query_type_;
   // ddl related
   ddl_schema_version_ = other.ddl_schema_version_;
@@ -4316,7 +4316,7 @@ ObJtColBaseInfo::ObJtColBaseInfo()
     on_error_(3),
     on_mismatch_(3),
     on_mismatch_type_(3),
-    res_type_(-1),
+    geometry_type_(ObGeoType::GEOTYPEMAX),
     data_type_(),
     parent_id_(-1),
     id_(-1),
@@ -4337,7 +4337,7 @@ ObJtColBaseInfo::ObJtColBaseInfo(const ObJtColBaseInfo& info)
     on_error_(info.on_error_),
     on_mismatch_(info.on_mismatch_),
     on_mismatch_type_(info.on_mismatch_type_),
-    res_type_(info.res_type_),
+    geometry_type_(info.geometry_type_),
     data_type_(info.data_type_),
     parent_id_(info.parent_id_),
     id_(info.id_),
@@ -4371,7 +4371,7 @@ int ObJtColBaseInfo::deep_copy(const ObJtColBaseInfo& src, ObIAllocator* allocat
     on_error_ = src.on_error_;
     on_mismatch_ = src.on_mismatch_;
     on_mismatch_type_ = src.on_mismatch_type_;
-    res_type_ = src.res_type_;
+    geometry_type_ = src.geometry_type_;
     data_type_ = src.data_type_;
     parent_id_ = src.parent_id_;
     id_ = src.id_;
@@ -4398,7 +4398,7 @@ int ObJtColBaseInfo::assign(const ObJtColBaseInfo& src)
   on_error_ = src.on_error_;
   on_mismatch_ = src.on_mismatch_;
   on_mismatch_type_ = src.on_mismatch_type_;
-  res_type_ = src.res_type_;
+  geometry_type_ = src.geometry_type_;
   data_type_ = src.data_type_;
   parent_id_ = src.parent_id_;
   id_ = src.id_;

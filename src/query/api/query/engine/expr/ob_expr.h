@@ -24,7 +24,7 @@
 #include "common/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "query/engine/ob_serializable_function.h"
-#include "query/parser/ob_item_type.h"
+#include "query/engine/expr/ob_item_type.h"
 #include "lib/utility/ob_common_utility.h"
 #include "share/vector/ob_eval_bound.h"
 
@@ -151,6 +151,8 @@ struct ObEvalInfo
 			uint16_t notnull_:1;
 			// pointer is point to reserved buffer in frame.
 			uint16_t point_to_frame_:1;
+      // Diagnostic belongs to the cached integer table-assignment datum.
+      uint16_t integer_range_warning_:1;
 		};
 		uint16_t flag_;
 	};

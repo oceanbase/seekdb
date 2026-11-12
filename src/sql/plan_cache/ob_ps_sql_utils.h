@@ -21,7 +21,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/data_buffer.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_bit_set.h"
 

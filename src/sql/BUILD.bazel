@@ -116,15 +116,8 @@ _SQL_RUNTIME_NON_SHARE_DEPS = [
 _SQL_SEMANTIC_HEADER_PREFIXES = [
     "engine/prepare/",
     "optimizer/",
-    "parser/",
     "resolver/prepare/",
 ]
-
-
-_SQL_RETRIEVAL_COMPOSITION_HEADERS = headers_outside(
-    SQL_COMPOSITION_HEADERS,
-    ["parser/"],
-)
 
 
 # C++ sources include these table files textually. Their non-header extension
@@ -152,7 +145,7 @@ cc_library(
         "//rust:compression_headers",
         "//rust:config_headers",
         "//src/sql/optimizer:optimizer_public_headers",
-        "//src/sql/parser:parser_public_headers",
+        "//rust:sql_parser_headers",
         "//src/sql/resolver/prepare:resolver_prepare_public_headers",
     ],
     implementation_deps = [
@@ -173,11 +166,11 @@ cc_library(
 # the rest of SQL's implementation headers remain SQL-private.
 cc_library(
     name = "sql_retrieval_composition_headers",
-    hdrs = _SQL_RETRIEVAL_COMPOSITION_HEADERS,
+    hdrs = SQL_COMPOSITION_HEADERS,
     deps = [
         ":sql_runtime_interface",
         "//src/sql/optimizer:optimizer_internal_headers",
-        "//src/sql/parser:retrieval_composition_parser_headers",
+        "//rust:sql_parser_headers",
     ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
@@ -198,7 +191,6 @@ cc_library(
         "//rust:config_headers",
         "//src/sql/engine/prepare:engine_prepare_internal_headers",
         "//src/sql/optimizer:optimizer_internal_headers",
-        "//src/sql/parser:parser_internal_headers",
         "//src/sql/resolver/prepare:resolver_prepare_internal_headers",
     ],
     implementation_deps = _SQL_PRIVATE_HEADER_SHARE_DEPS,
@@ -227,12 +219,12 @@ _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
     "//rust:config_headers",
     "//rust:json",
     "//src/share:math_compat",
+    "//rust:sql_parser_headers",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
     ":sql_runtime_internal_headers",
     "//src/sql/engine/prepare:engine_prepare",
     "//src/sql/optimizer:optimizer",
-    "//src/sql/parser:sql_parser_driver",
     "//src/sql/resolver/prepare:resolver_prepare",
 ] + _SQL_RUNTIME_NON_SHARE_DEPS
 
@@ -414,7 +406,6 @@ grouped_unity_cc_library(
     visibility = ["//src/observer:__pkg__"],
 )
 
-# Complete checked-in SQL object closure except generated server-parser objects.
 cc_library(
     name = "sql_objects",
     implementation_deps = [

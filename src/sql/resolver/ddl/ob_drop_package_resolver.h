@@ -25,11 +25,10 @@ namespace sql
 class ObDropPackageResolver: public ObDDLResolver
 {
 public:
-  static const int64_t DROP_PACKAGE_NODE_CHILD_COUNT = 1;
   explicit ObDropPackageResolver(ObResolverParams &params) : ObDDLResolver(params) {}
   virtual ~ObDropPackageResolver() {}
 
-  virtual int resolve(const ParseNode &parse_tree);
+  virtual int resolve(const peg::Node &parse_tree);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropPackageResolver);
 };

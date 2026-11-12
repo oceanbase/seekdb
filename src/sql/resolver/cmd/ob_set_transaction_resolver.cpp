@@ -35,84 +35,43 @@ ObSetTransactionResolver::ObSetTransactionResolver(ObResolverParams &params)
 ObSetTransactionResolver::~ObSetTransactionResolver()
 {}
 
-int ObSetTransactionResolver::resolve(const ParseNode &parse_tree)
+int ObSetTransactionResolver::resolve(const peg::Node &statement)
 {
   int ret = OB_SUCCESS;
-  ObVariableSetStmt *stmt = NULL;
-  if (OB_ISNULL(stmt = create_stmt<ObVariableSetStmt>())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("create stmt failed");
-  } else if (T_TRANSACTION != parse_tree.type_
-             || OB_ISNULL(parse_tree.children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid parse node", K(parse_tree.type_), K(parse_tree.children_));
-  } else {
-    ParseNode *characteristics_node = parse_tree.children_[1];
-    ParseNode *scope_node = parse_tree.children_[0];
-    ObVariableSetStmt::VariableSetNode access_var_node;
-    ObVariableSetStmt::VariableSetNode isolation_var_node;
-    ObSetVar::SetScopeType scope = ObSetVar::SET_SCOPE_NEXT_TRANS;
-    int32_t isolation_level = ObTransIsolation::UNKNOWN;
-    bool is_read_only = false;
-    if (OB_ISNULL(scope_node) || OB_ISNULL(characteristics_node)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inalid scope node", K(scope_node), K(characteristics_node));
-    } else if (OB_FAIL(scope_resolve(*scope_node, scope))) {
-    } else if (OB_ISNULL(allocator_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("invalid allocator in resolver", K(allocator_));
-    } else {
-      access_var_node.set_scope_ = scope;
-      access_var_node.is_system_variable_ = true;
-      isolation_var_node.set_scope_ = scope;
-      isolation_var_node.is_system_variable_ = true;
-      if (OB_FAIL(ob_write_string(
-                  *allocator_, OB_SV_TX_ISOLATION, isolation_var_node.variable_name_))) {
-      } else if (OB_FAIL(ob_write_string(
-                  *allocator_, OB_SV_TX_READ_ONLY, access_var_node.variable_name_))) {
-      } else {
-        ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, isolation_var_node.variable_name_);
-        ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, access_var_node.variable_name_);
+  ObVariableSetStmt *stmt = create_stmt<ObVariableSetStmt>();
+  if (OB_ISNULL(stmt)) ret = OB_ALLOCATE_MEMORY_FAILED;
+  else if (OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) ret = OB_ERR_UNEXPECTED;
+  else {
+    const auto options = peg::transaction_setting(statement);
+    ObSetVar::SetScopeType scope = options.scope == peg::VariableScope::Global ? ObSetVar::SET_SCOPE_GLOBAL
+        : options.scope == peg::VariableScope::Session ? ObSetVar::SET_SCOPE_SESSION : ObSetVar::SET_SCOPE_NEXT_TRANS;
+    if (options.isolation != peg::TransactionIsolation::Default) {
+      ObVariableSetStmt::VariableSetNode variable;
+      variable.set_scope_ = scope;
+      variable.is_system_variable_ = true;
+      OZ(ob_write_string(*allocator_, OB_SV_TX_ISOLATION, variable.variable_name_));
+      int32_t level = ObTransIsolation::UNKNOWN;
+      switch (options.isolation) {
+        case peg::TransactionIsolation::ReadUncommitted: level = ObTransIsolation::READ_UNCOMMITTED; break;
+        case peg::TransactionIsolation::ReadCommitted: level = ObTransIsolation::READ_COMMITED; break;
+        case peg::TransactionIsolation::RepeatableRead: level = ObTransIsolation::REPEATABLE_READ; break;
+        case peg::TransactionIsolation::Serializable: level = ObTransIsolation::SERIALIZABLE; break;
+        default: break;
       }
+      if (OB_SUCC(ret) && !ObTransIsolation::is_valid(level)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "isolation level is");
+      }
+      OZ(build_isolation_expr(variable.value_expr_, level));
+      OZ(stmt->add_variable_node(variable));
     }
-    bool set_access_mode = false;
-    bool set_isolation_level = false;
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(characteristics_node->children_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid characteristics node", K(characteristics_node->children_));
-      } else {
-        if (NULL != characteristics_node->children_[0]) {
-          if (OB_FAIL(access_mode_resolve(*characteristics_node->children_[0], is_read_only))) {
-          } else {
-            set_access_mode = true;
-          }
-        }
-        if (NULL != characteristics_node->children_[1]) {
-          if (OB_FAIL(isolation_level_resolve(*characteristics_node->children_[1], isolation_level))) {
-          } else {
-            set_isolation_level = true;
-          }
-        }
-      }
-    }
-    if (OB_SUCC(ret) && set_isolation_level) {
-      if (OB_FAIL(build_isolation_expr(isolation_var_node.value_expr_, isolation_level)) ) {
-      } else if (OB_FAIL(stmt->add_variable_node(isolation_var_node))) {
-      }
-    }
-    if (OB_SUCC(ret) && set_access_mode) {
-      if (OB_FAIL(build_access_expr(access_var_node.value_expr_, is_read_only))) {
-      } else if (OB_FAIL(stmt->add_variable_node(access_var_node))) {
-      } else {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(session_info_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("invalid session info", K(ret), K(session_info_));
-      } else {
-      }
+    if (options.access != peg::TransactionAccess::Default) {
+      ObVariableSetStmt::VariableSetNode variable;
+      variable.set_scope_ = scope;
+      variable.is_system_variable_ = true;
+      OZ(ob_write_string(*allocator_, OB_SV_TX_READ_ONLY, variable.variable_name_));
+      OZ(build_access_expr(variable.value_expr_, options.access == peg::TransactionAccess::ReadOnly));
+      OZ(stmt->add_variable_node(variable));
     }
   }
   return ret;
@@ -167,70 +126,5 @@ int ObSetTransactionResolver::build_access_expr(ObRawExpr *&expr, const bool is_
   return ret;
 }
 
-int ObSetTransactionResolver::scope_resolve(const ParseNode &parse_tree, ObSetVar::SetScopeType &scope)
-{
-  int ret = OB_SUCCESS;
-  switch(parse_tree.value_) {
-    case 0:
-      scope = ObSetVar::SET_SCOPE_NEXT_TRANS;
-      break;
-    case 1:
-      scope = ObSetVar::SET_SCOPE_GLOBAL;
-      break;
-    case 2:
-      scope = ObSetVar::SET_SCOPE_SESSION;
-      break;
-    default:
-      scope = ObSetVar::SET_SCOPE_NEXT_TRANS;
-      break;
-  }
-  return ret;
-}
-
-int ObSetTransactionResolver::access_mode_resolve(const ParseNode &parse_tree, bool &is_read_only)
-{
-  int ret = OB_SUCCESS;
-  if (IS_READ_ONLY(parse_tree.value_)) {
-    is_read_only = true;
-  } else if (IS_READ_WRITE(parse_tree.value_)) {
-    is_read_only = false;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid access mode", "value", parse_tree.value_);
-  }
-  return ret;
-}
-
-int ObSetTransactionResolver::isolation_level_resolve(const ParseNode &parse_tree,
-                                                      int32_t &isolation_level)
-{
-  int ret = OB_SUCCESS;
-  switch (parse_tree.value_) {
-    case 0:
-      isolation_level = transaction::ObTransIsolation::READ_UNCOMMITTED;
-      break;
-    case 1:
-      isolation_level = transaction::ObTransIsolation::READ_COMMITED;
-      break;
-    case 2:
-      isolation_level = transaction::ObTransIsolation::REPEATABLE_READ;
-      break;
-    case 3:
-      isolation_level = transaction::ObTransIsolation::SERIALIZABLE;
-      break;
-    default:
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid isolation level", K(parse_tree.value_));
-      break;
-  }
-  if (OB_SUCC(ret)) {
-    if (!transaction::ObTransIsolation::is_valid(isolation_level)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("invalid isolation level, we just supported READ_COMMIT and SERIALIZABLE", K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "isolation level is");
-    }
-  }
-  return ret;
-}
 }
 }

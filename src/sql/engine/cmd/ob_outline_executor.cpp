@@ -221,6 +221,10 @@ int ObOutlineExecutor::get_outline(ObExecContext &ctx, ObDMLStmt *outline_stmt, 
   } else if (OB_ISNULL(ctx.get_expr_factory())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
+    const auto saved_session_type = session_info->get_stmt_type();
+    const auto saved_sql_type = ctx.get_sql_ctx()->stmt_type_;
+    session_info->set_stmt_type(outline_stmt->get_stmt_type());
+    ctx.get_sql_ctx()->stmt_type_ = outline_stmt->get_stmt_type();
     const ObGlobalHint &global_hint = outline_stmt->get_query_ctx()->get_global_hint();
     ObOptimizerContext optctx(session_info,
                               &ctx,
@@ -237,6 +241,8 @@ int ObOutlineExecutor::get_outline(ObExecContext &ctx, ObDMLStmt *outline_stmt, 
     if (OB_FAIL(generate_logical_plan(ctx, optctx, outline_stmt, log_plan))) {
     } else if (OB_FAIL(print_outline(ctx, log_plan, outline))) {
     } else {/*do nothing*/}
+    session_info->set_stmt_type(saved_session_type);
+    ctx.get_sql_ctx()->stmt_type_ = saved_sql_type;
   }
   return ret;
 }

@@ -71,7 +71,7 @@ public:
     sql_proxy_(sql_proxy) {}
   virtual ~ObPLBuilder() {}
 
-  int compile(const ObStmtNodeTree *block,
+  int compile(const sql::ParsedSql &syntax,
               const uint64_t stmt_id,
               ObPLFunction &func,
               ParamStore *params,
@@ -81,6 +81,8 @@ public:
   int compile(const uint64_t id, ObPLFunction &func); //Procedure/Function interface
 
   int analyze_package(const ObString &source, const ObPLBlockNS *parent_ns,
+                      ObPLPackageAST &package_ast, bool is_for_trigger);
+  int analyze_package(const sql::ParsedSql &syntax, const ObPLBlockNS *parent_ns,
                       ObPLPackageAST &package_ast, bool is_for_trigger);
   int generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package);
   int build_package(const share::schema::ObPackageInfo &package_info, const ObPLBlockNS *parent_ns,

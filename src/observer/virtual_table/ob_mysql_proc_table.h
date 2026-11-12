@@ -66,10 +66,7 @@ public:
                                 int64_t &routine_time);
 
 private:
-private:
   DISALLOW_COPY_AND_ASSIGN(ObMySQLProcTable);
-
-  static int extract_create_node_from_routine_info(ObIAllocator &alloc, const ObRoutineInfo &routine_info, const sql::ObExecEnv &exec_env, ParseNode *&create_node);
 };
 }
 }

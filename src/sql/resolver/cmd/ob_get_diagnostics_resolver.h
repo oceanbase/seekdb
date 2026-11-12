@@ -28,7 +28,7 @@ class ObGetDiagnosticsResolver : public ObStmtResolver
 public:
     explicit ObGetDiagnosticsResolver(ObResolverParams &params);
     virtual ~ObGetDiagnosticsResolver();
-    virtual int resolve(const ParseNode &parse_tree);
+    virtual int resolve(const peg::Node &parse_tree);
     int set_diagnostics_type(ObGetDiagnosticsStmt *diagnostics_stmt, const bool &is_current, const bool &is_cond);
 private:
     class ObSqlStrGenerator;
