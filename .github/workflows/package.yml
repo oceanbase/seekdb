@@ -109,17 +109,41 @@ jobs:
         if: runner.os == 'Windows'
         with:
           arch: x64
+      - name: Install Linux build utilities
+        if: matrix.os == 'linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y rpm2cpio cpio make binutils patchelf
+      - name: Set up Conda sysroot
+        id: conda
+        if: matrix.os == 'linux'
+        uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+        with:
+          micromamba-version: ${{ matrix.micromamba }}
+          micromamba-root-path: ${{ github.workspace }}/.ci-cache/micromamba
+          environment-name: sysroot
+          create-args: >-
+            --override-channels -c conda-forge --strict-channel-priority
+            ${{ matrix.conda_spec }}
+          init-shell: none
+          generate-run-shell: false
+          cache-downloads: true
+          cache-downloads-key: package-conda-downloads-v1-${{ matrix.id }}-${{ hashFiles('.github/packaging.json') }}
+          cache-environment: true
+          cache-environment-key: package-conda-env-v1-${{ matrix.id }}-${{ matrix.micromamba }}
+      - name: Validate sysroot and configure Clang
+        if: matrix.os == 'linux'
+        env:
+          CONDA_ENVIRONMENT: ${{ steps.conda.outputs.environment-path }}
+        run: python .github/scripts/package.py sysroot
       - name: Configure cache paths and toolchain identity
         id: keys
         run: python .github/scripts/package.py environment
-      - name: Restore dependency SDK and sysroot
+      - name: Restore dependency SDK
         id: sdk
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             deps/3rd
             deps/android
-            .ci-cache/sysroot
           key: package-sdk-v1-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
           restore-keys: package-sdk-v1-${{ matrix.id }}-
       - name: Restore Rust toolchain
@@ -169,7 +193,6 @@ jobs:
           path: |
             deps/3rd
             deps/android
-            .ci-cache/sysroot
           key: ${{ steps.sdk.outputs.cache-primary-key }}
       - name: Save Rust toolchain
         if: steps.rust.outputs.cache-hit != 'true'

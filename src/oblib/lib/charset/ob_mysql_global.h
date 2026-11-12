@@ -90,11 +90,6 @@ typedef unsigned short ushort;
 #endif
 
 #include <errno.h>
-#if defined(__APPLE__) || defined(__ANDROID__)
-// On macOS/Android, crypt() is declared in unistd.h (already included above)
-#elif defined(__linux__)
-#include <crypt.h>
-#endif
 
 #include <assert.h>
 
