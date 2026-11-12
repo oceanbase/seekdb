@@ -25,6 +25,7 @@
 #include "share/rc/ob_server_runtime.h"
 
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_share_util.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/ob_local_management_service.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
@@ -670,9 +671,15 @@ int ObBootstrap::check_is_already_bootstrap(bool &is_bootstrap)
 int ObBootstrap::init_global_stat()
 {
   int ret = OB_SUCCESS;
+  // Keep bootstrap SQL and its transaction within the DDL timeout budget.
+  // Otherwise global-stat initialization falls back to the short RPC timeout.
+  ObTimeoutCtx ctx;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
   if (OB_FAIL(check_inner_stat())) {
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(
+                         ctx, config::_ob_ddl_timeout()))) {
+  } else if (OB_FAIL(ctx.set_trx_timeout_us(ctx.get_timeout()))) {
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
