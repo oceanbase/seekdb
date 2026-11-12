@@ -225,6 +225,91 @@ fn limits(stack_limit: i64, time_limit: i64) -> Result<(usize, usize)> {
     Ok((compiled, backtracks))
 }
 
+/// Rewrite MySQL/ICU octal escapes `\0ooo`, or reject a bare `\0`.
+///
+/// A leading zero marks an octal character, not a backreference. fancy-regex
+/// parses `\0` as backreference group 0 and rejects it as a generic error
+/// (SQL 1139). ICU requires at least one octal digit after that zero:
+/// `\00` is NUL, `\0377` is U+00FF, and a further digit that would exceed
+/// 0xFF is left in the pattern (`\0400` is U+0020 followed by `0`). A bare
+/// `\0`, including `\08` and `[\0]`, is an invalid escape (SQL 5811), which
+/// is what `no_backslash_func_mysql` records. The result is a `\xHH` literal
+/// so metacharacters such as `\050` stay literals. Escaped backslashes and
+/// `\Q...\E` quotes are left unchanged. Numbered backreferences `\1`..`\9`
+/// are not rewritten.
+fn rewrite_icu_octal_escapes(pattern: &str) -> Result<Cow<'_, str>> {
+    if !pattern.contains("\\0") {
+        return Ok(Cow::Borrowed(pattern));
+    }
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut out = String::with_capacity(pattern.len());
+    let mut index = 0;
+    let mut quoted = false;
+    while index < chars.len() {
+        let ch = chars[index];
+        if quoted {
+            if ch == '\\' && chars.get(index + 1) == Some(&'E') {
+                out.push('\\');
+                out.push('E');
+                index += 2;
+                quoted = false;
+            } else {
+                out.push(ch);
+                index += 1;
+            }
+            continue;
+        }
+        if ch == '\\' {
+            match chars.get(index + 1).copied() {
+                Some('\\') => {
+                    out.push('\\');
+                    out.push('\\');
+                    index += 2;
+                    continue;
+                }
+                Some('Q') => {
+                    out.push('\\');
+                    out.push('Q');
+                    index += 2;
+                    quoted = true;
+                    continue;
+                }
+                Some('0') => {
+                    let mut value: u32 = 0;
+                    let mut cursor = index + 2;
+                    let mut digits = 0;
+                    while digits < 3 && cursor < chars.len() {
+                        let digit = chars[cursor];
+                        if !('0'..='7').contains(&digit) {
+                            break;
+                        }
+                        let next = (value << 3) + u32::from(digit) - u32::from('0');
+                        if next > 0xFF {
+                            break;
+                        }
+                        value = next;
+                        digits += 1;
+                        cursor += 1;
+                    }
+                    if digits == 0 {
+                        return Err(err(
+                            ESCAPE,
+                            "invalid octal escape \\0 in regular expression",
+                        ));
+                    }
+                    out.push_str(&format!("\\x{value:02X}"));
+                    index = cursor;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        out.push(ch);
+        index += 1;
+    }
+    Ok(Cow::Owned(out))
+}
+
 fn validate_capture_conditions(pattern: &str, capture_count: usize) -> Result<()> {
     // fancy-regex validates ordinary backreferences but accepts conditions on
     // nonexistent groups. Inspect its resolved AST instead of scanning group
@@ -253,6 +338,9 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
         return Err(err(ARGUMENT, "unknown regular-expression flags"));
     }
     let (compiled_bytes, backtracks) = limits(stack_limit, time_limit)?;
+    // Rewrite before both compile and condition validation so `\0` is not
+    // parsed as backreference group 0, and so condition checks see the same text.
+    let pattern = rewrite_icu_octal_escapes(&pattern)?;
     let mut builder = RegexBuilder::new(&pattern);
     builder
         .case_insensitive(flags & CASE_INSENSITIVE != 0)
@@ -265,7 +353,7 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
         .delegate_dfa_skip_cache_capacity_check(false)
         .max_prog_size((compiled_bytes / 64).max(1));
     let regex = builder.build().map_err(regex_error)?;
-    validate_capture_conditions(&pattern, regex.captures_len())?;
+    validate_capture_conditions(pattern.as_ref(), regex.captures_len())?;
     Ok(RegexEngine { regex })
 }
 
