@@ -1,5 +1,6 @@
 %global _missing_build_ids_terminate_build 0
 %global _find_debuginfo_opts -g
+%{!?__find_debuginfo:%global __find_debuginfo %(command -v find-debuginfo || echo %{_rpmconfigdir}/find-debuginfo.sh)}
 %global __brp_check_rpaths %{nil}
 %undefine __brp_mangle_shebangs
 %global __requires_exclude ^(/bin/bash|/usr/bin/.*)$
@@ -10,7 +11,7 @@
 %if %{with_debuginfo}
 %define __debug_install_post \
   mv %{buildroot}/usr/bin/obshell %{_builddir}/obshell; \
-  %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}; \
+  %{__find_debuginfo} %{?_find_debuginfo_opts} %{_builddir}; \
   mv %{_builddir}/obshell %{buildroot}/usr/bin/obshell; \
 %{nil}
 %else

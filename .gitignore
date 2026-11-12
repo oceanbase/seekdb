@@ -40,6 +40,8 @@
 .cursor/
 .codegraph/
 /.obdev
+/.ci-cache/
+/dist/
 /.settings/
 BROWSE
 Build (GNU)

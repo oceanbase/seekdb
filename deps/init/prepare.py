@@ -165,6 +165,9 @@ def locked_packages(lock_file, system, architecture):
 
 
 def download(url, archive):
+    if url.startswith("http://mirrors.oceanbase.com/"):
+        url = "https://" + url[len("http://"):]
+    archive.parent.mkdir(parents=True, exist_ok=True)
     descriptor, partial_name = tempfile.mkstemp(
         prefix="." + archive.name + ".", suffix=".download", dir=archive.parent)
     os.close(descriptor)
@@ -401,6 +404,8 @@ def main(arguments):
     targets.add_argument("--ios", action="store_true")
     targets.add_argument("--wasm", action="store_true")
     parser.add_argument("--simulator", action="store_true")
+    parser.add_argument("--linux-profile", choices=("el7", "el8", "el9", "al8"),
+                        help="Linux dependency ABI profile, independently of the build host")
     options = parser.parse_args(arguments)
     if options.simulator and not options.ios:
         parser.error("--simulator requires --ios")
@@ -414,13 +419,21 @@ def main(arguments):
         ).returncode:
             raise ValueError("iOS SDK unavailable; install Xcode and set DEVELOPER_DIR to its Contents/Developer directory")
 
-    profile = host_profile()
     system = platform.system()
     architecture = platform.machine().lower()
     if system == "Darwin":
         architecture = {"aarch64": "arm64", "amd64": "x86_64"}.get(architecture, architecture)
     else:
         architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture)
+    if options.linux_profile:
+        if platform.system() != "Linux":
+            parser.error("--linux-profile requires a Linux build host")
+        arch = {"arm64": "aarch64"}.get(platform.machine().lower(), platform.machine().lower())
+        profile = PROFILES / ("oceanbase.%s.%s.deps" % (options.linux_profile, arch))
+        if not profile.is_file():
+            parser.error("dependency profile is unavailable: " + profile.name)
+    else:
+        profile = host_profile()
     rust_target = None
     if options.android:
         rust_target = "aarch64-linux-android"
