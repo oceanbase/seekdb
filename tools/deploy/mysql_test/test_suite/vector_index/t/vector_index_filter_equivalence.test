@@ -1,0 +1,130 @@
+# Regression: logically equivalent filters must get the same selectivity.
+#
+# The ANN execution strategy is chosen from a single selectivity estimate, so
+# two filters that select exactly the same rows have to be estimated through
+# the same estimator.  An IN list over a column is now folded into the
+# equivalent range, so that
+#
+#   col IN (1, 2, 3, ..., 300)
+#
+# and
+#
+#   col >= 1 AND col <= 300
+#
+# produce the same plan and the same cardinality.
+#
+# See oceanbase/seekdb#1440, #1501 and #1512.
+
+set ob_enable_index_direct_select = 1;
+set ob_query_timeout = 20000000;
+set ob_trx_timeout = 60000000;
+
+--disable_warnings
+drop table if exists t_filter_equivalence;
+--enable_warnings
+
+create table t_filter_equivalence(
+  id bigint not null,
+  embedding vector(3) not null,
+  category int not null,
+  primary key(id),
+  key idx_category(category),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+
+--disable_query_log
+--let $row = 0
+while ($row < 100)
+{
+  eval insert into t_filter_equivalence values ($row, '[$row,0,0]', $row);
+  --inc $row
+}
+--enable_query_log
+--disable_result_log
+analyze table t_filter_equivalence;
+call dbms_stats.set_table_stats('TEST', 'T_FILTER_EQUIVALENCE', numrows=>200000);
+--enable_result_log
+
+# Build an ascending IN list over the category column.
+--let $in_filter = (category in (0))
+--let $value = 1
+while ($value < 32)
+{
+  --let $in_filter = $in_filter, ($value)
+  --inc $value
+}
+
+# The range form of the same predicate.
+--let $range_filter = (category >= 0 and category <= 31)
+
+alter system flush plan cache;
+
+# Both formulations select the same rows and must land on the same plan.
+--disable_query_log
+--disable_result_log
+eval select id from t_filter_equivalence
+where $in_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+eval select id from t_filter_equivalence
+where $range_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+
+# The two formulations have to agree on the plan and on the cardinality.
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_filter_equivalence') > 0
+  and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by length(s.statement), p.plan_id;
+
+# The results themselves have to be identical, not only the plan.
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+eval select count(*) as in_rows from (
+  select id from t_filter_equivalence
+  where $in_filter
+  order by l2_distance(embedding, '[0,0,0]') approximate limit 10
+) t;
+eval select count(*) as range_rows from (
+  select id from t_filter_equivalence
+  where $range_filter
+  order by l2_distance(embedding, '[0,0,0]') approximate limit 10
+) t;
+--enable_result_log
+--enable_query_log
+
+# A descending list is not folded, because the folded range would not select
+# the same rows.  The filter still has to work.
+alter system flush plan cache;
+select count(*) as descending_rows
+from t_filter_equivalence
+where category in (31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,
+                   19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5,
+                   4, 3, 2, 1, 0);
+
+# A list with a duplicate is not folded either, because the folded range would
+# select the same rows but the list would have to keep the duplicate.
+alter system flush plan cache;
+select count(*) as duplicate_rows
+from t_filter_equivalence
+where category in (0, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+
+# A list that skips a value is not folded, because the range between its
+# first and its last value would select more rows than the list.
+alter system flush plan cache;
+select count(*) as sparse_rows
+from t_filter_equivalence
+where category in (0, 5, 10, 15, 20);
+
+# A non ascending list keeps working.
+alter system flush plan cache;
+select count(*) as unordered_rows
+from t_filter_equivalence
+where category in (5, 3, 9, 1, 7);
+
+drop table t_filter_equivalence;
+
+alter system set vector_memory_limit = 0;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_simplify_expr.h"
+#include "sql/rewrite/ob_filter_canonicalizer.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -2262,6 +2263,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   bool push_not_happend = false;
   bool remove_duplicate_happend = false;
   bool pull_similar_happend = false;
+  bool semantic_canonicalize_happend = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (conditions.count() == 0) {
@@ -2271,8 +2273,11 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
                                             conditions,
                                             remove_duplicate_happend))) {
   } else if (OB_FAIL(pull_similar_expr(stmt, conditions, pull_similar_happend))) {
+  } else if (OB_FAIL(semantic_canonicalize_conditions(conditions,
+                                                       semantic_canonicalize_happend))) {
   } else {
-    trans_happened =  push_not_happend | remove_duplicate_happend | pull_similar_happend;
+    trans_happened =  push_not_happend | remove_duplicate_happend | pull_similar_happend
+                    | semantic_canonicalize_happend;
     if (trans_happened) {
       for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
         if (OB_ISNULL(conditions.at(i))) {
@@ -2283,6 +2288,22 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
       OPT_TRACE("   push_not_happend:", push_not_happend);
       OPT_TRACE("   remove_duplicate_happend:", remove_duplicate_happend);
       OPT_TRACE("   pull_similar_happend:", pull_similar_happend);
+      OPT_TRACE("   semantic_canonicalize_happend:", semantic_canonicalize_happend);
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::semantic_canonicalize_conditions(ObIArray<ObRawExpr*> &conditions,
+                                                                bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObFilterCanonicalizer canonicalizer(ctx_->expr_factory_);
+    if (OB_FAIL(canonicalizer.canonicalize(conditions, trans_happened))) {
     }
   }
   return ret;
