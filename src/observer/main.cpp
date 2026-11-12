@@ -93,6 +93,66 @@ extern "C" void win32_trace(const char *msg) {
   DWORD written;
   WriteFile(h, msg, (DWORD)strlen(msg), &written, NULL);
 }
+
+static char *win32_exit_append_hex(char *out, ULONGLONG value)
+{
+  const char digits[] = "0123456789abcdef";
+  *out++ = '0';
+  *out++ = 'x';
+  for (int shift = 60; shift >= 0; shift -= 4) {
+    *out++ = digits[(value >> shift) & 15];
+  }
+  return out;
+}
+
+// CRT exit processing can run after the logger and its allocators are gone.
+// Keep raw addresses on the stack and write directly to the existing stderr.
+static void win32_exit_trace(const char *reason, bool value_known, int value, bool capture_stack)
+{
+  void *frames[32] = {};
+  const USHORT frame_count = capture_stack ? CaptureStackBackTrace(0, 32, frames, nullptr) : 0;
+  FILETIME creation = {}, exit = {}, kernel = {}, user = {}, now = {};
+  const BOOL process_times_known = GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user);
+  const DWORD process_times_error = process_times_known ? ERROR_SUCCESS : GetLastError();
+  GetSystemTimeAsFileTime(&now);
+  // Fixed literals/fields plus at most 32 addresses fit within this buffer.
+  char buffer[1536];
+  char *out = buffer;
+  const auto append = [&out](const char *text) {
+    while (*text != '\0') {
+      *out++ = *text++;
+    }
+  };
+  const auto field = [&out, &append](const char *name, ULONGLONG value) {
+    append(name);
+    out = win32_exit_append_hex(out, value);
+  };
+  append("[SEEK1381-EXIT] reason=");
+  append(reason);
+  field(" pid=", GetCurrentProcessId());
+  field(" tid=", GetCurrentThreadId());
+  field(" birth_known=", process_times_known != FALSE);
+  field(" birth_error=", process_times_error);
+  field(" birth=", (ULONGLONG(creation.dwHighDateTime) << 32) | creation.dwLowDateTime);
+  field(" time=", (ULONGLONG(now.dwHighDateTime) << 32) | now.dwLowDateTime);
+  field(" image_base=", reinterpret_cast<ULONGLONG>(GetModuleHandleW(nullptr)));
+  field(" value_known=", value_known);
+  field(" value_u32=", static_cast<unsigned int>(value));
+  field(" frames=", frame_count);
+  for (USHORT i = 0; i < frame_count; ++i) {
+    append(" ");
+    out = win32_exit_append_hex(out, reinterpret_cast<ULONGLONG>(frames[i]));
+  }
+  append("\r\n");
+  DWORD written = 0;
+  WriteFile(GetStdHandle(STD_ERROR_HANDLE), buffer, static_cast<DWORD>(out - buffer), &written, nullptr);
+}
+
+static void win32_crt_exit_trace()
+{
+  // atexit supplies no status. This does not cover _exit or process termination.
+  win32_exit_trace("atexit", false, 0, true);
+}
 #include <signal.h>
 #pragma init_seg(compiler)
 
@@ -838,6 +898,8 @@ int main(int argc, char *argv[])
 #endif
 #ifdef _WIN32
   ::oceanbase::common::g_ob_log_main_entered = true;
+  const int exit_trace_registration = atexit(win32_crt_exit_trace);
+  win32_exit_trace("atexit_registration", true, exit_trace_registration, false);
 #endif
   int ret = OB_SUCCESS;
 #ifdef _WIN32
@@ -863,6 +925,9 @@ int main(int argc, char *argv[])
       ret = OB_ERR_UNEXPECTED;
     }
   }
+#endif
+#ifdef _WIN32
+  win32_exit_trace("main_return", true, ret, false);
 #endif
   return ret;
 }
