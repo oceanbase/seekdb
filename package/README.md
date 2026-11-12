@@ -44,24 +44,18 @@ package records are checked against their pinned SHA-256 values before use.
 The workflow uses the public upstream Bazel download URLs with their existing
 integrity checks instead of the developer proxy configuration.
 
-## Caches
+## Dependency cache
 
-| Cache | Contents and invalidation |
-| --- | --- |
-| SDK | Extracted `deps/3rd` and Android dependencies; keyed by target, dependency manifests, initializer, and packaging configuration. `init` rechecks the manifest identity of an older same-target SDK snapshot; archives are reused from the separate download cache. |
-| Conda | Downloaded packages and installed Linux sysroot environments; keyed by architecture, glibc baseline, micromamba version, and exact package specs. No Docker images are needed. |
-| Rust | Installed toolchain and rustup shims; keyed by runner OS/architecture, native/Android target, and `rust-toolchain.toml`. |
-| Downloads | SDK archives, Bazel launcher and repository downloads, Cargo registry/Git sources, Homebrew downloads, and timezone data. Completed SDK downloads survive a later initialization failure. |
-| Android NDK | Separate cache for the pinned NDK. |
-| Compilation | Bazel's disk action cache for C++ and Rust; isolated by target, ABI, SDK, Rust/Bazel versions, resolved Conda package identities, and the actual Windows toolset/SDK or Xcode version. |
+The workflow restores and saves one dependency cache containing `deps/3rd`
+and `deps/android`. These directories hold the extracted SDKs and their
+downloaded archives in `pkg/`. The cache key includes the target, dependency
+manifests, and initializer. `init` rechecks the manifest identity when an older
+same-target snapshot is restored, reusing its downloaded archives as needed.
+The initialized SDK is saved before compilation.
 
-The compilation cache restores the latest compatible snapshot, then saves a
-new run-specific key so an immutable cache entry does not stop incremental
-updates. Completed compilation actions are saved after failed builds too.
-The initialized SDK and Rust caches are saved before compilation. Bazel's
-action cache is limited to 2 GiB per target; the entire Bazel output base is
-not archived. Allocate sufficient repository Actions cache storage for the
-selected platform matrix to avoid eviction of frequently used caches.
+Conda, Rust/Cargo, the Android NDK, Bazel downloads, Homebrew, timezone data,
+and compilation outputs are not persisted between workflow runs. Additional
+caches can be evaluated after measuring the actual workflow costs.
 
 For machines outside Actions, `build.py init --linux-profile el7` can select
 the EL7 dependency SDK on a newer Linux host. Set `SEEKDB_SYSROOT` to a complete

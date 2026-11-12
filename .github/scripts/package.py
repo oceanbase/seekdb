@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and package the selected GitHub Actions target using shared caches."""
+"""Build and package the selected GitHub Actions target."""
 
 import hashlib
 import json
@@ -64,15 +64,7 @@ def matrix():
 
 
 def environment():
-    for name in ("cargo", "rustup", "launcher", "downloads", "actions", "homebrew"):
-        (CACHE / name).mkdir(parents=True, exist_ok=True)
-    values = {"CARGO_HOME": CACHE / "cargo", "RUSTUP_HOME": CACHE / "rustup",
-              "HOMEBREW_CACHE": CACHE / "homebrew", "DEP_DOWNLOAD_DIR": CACHE / "sdk-archives"}
-    with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
-        for name, value in values.items():
-            stream.write(name + "=" + value.as_posix() + "\n")
-    with Path(os.environ["GITHUB_PATH"]).open("a", encoding="utf-8") as stream:
-        stream.write((CACHE / "cargo/bin").as_posix() + "\n")
+    CACHE.mkdir(parents=True, exist_ok=True)
     target = os.environ["PACKAGE_OS"]
     arch = os.environ["PACKAGE_ARCH"]
     if target == "linux":
@@ -86,21 +78,7 @@ def environment():
     sdk = hashlib.sha256((ROOT / "deps/init/prepare.py").read_bytes())
     for name in profiles:
         sdk.update((ROOT / "deps/init" / name).read_bytes())
-    sdk.update((ROOT / ".github/packaging.json").read_bytes())
     output("sdk", sdk.hexdigest()[:24])
-    toolchain = hashlib.sha256(sdk.digest())
-    for name in ("rust-toolchain.toml", ".bazelversion", "bazel/binaries.json"):
-        toolchain.update((ROOT / name).read_bytes())
-    if target == "linux":
-        toolchain.update(os.environ["SEEKDB_SYSROOT_ID"].encode())
-    elif target == "windows":
-        for name in ("VCToolsVersion", "WindowsSDKVersion"):
-            if not os.environ.get(name):
-                raise ValueError("Visual Studio developer environment is missing " + name)
-            toolchain.update(os.environ[name].encode())
-    elif target == "macos":
-        toolchain.update(subprocess.check_output(["xcodebuild", "-version"]))
-    output("toolchain", toolchain.hexdigest()[:24])
 
 
 def sysroot():
@@ -117,16 +95,8 @@ def sysroot():
         if not (destination / filename).is_file():
             raise ValueError("incomplete Conda sysroot: " + str(destination / filename))
     sysroot_layout(destination)
-    # Include resolved transitive packages in the compilation cache identity.
-    # Exclude installation paths and timestamps so restored environments match.
-    records = []
-    for path in sorted((prefix / "conda-meta").glob("*.json")):
-        package = json.loads(path.read_text())
-        records.append({key: package.get(key) for key in ("name", "version", "build", "subdir", "sha256", "md5")})
-    identity = hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()
     with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
         stream.write("SEEKDB_SYSROOT=" + destination.as_posix() + "\n")
-        stream.write("SEEKDB_SYSROOT_ID=" + identity + "\n")
     print("Using Conda glibc " + version + " sysroot: " + str(destination))
 
 
@@ -165,10 +135,7 @@ def bazel_arguments():
         raise ValueError("Linux packaging requires a configured Conda sysroot")
     direct = CACHE / "direct-downloads.cfg"
     direct.write_text("allow *\n")
-    return ["--launcher_cache_dir=" + str(CACHE / "launcher"),
-            "--disk_cache=" + str(CACHE / "actions"), "--repository_cache=" + str(CACHE / "downloads"),
-            "--downloader_config=" + str(direct), "--experimental_disk_cache_gc_max_size=2G",
-            "--experimental_disk_cache_gc_idle_delay=0"]
+    return ["--downloader_config=" + str(direct)]
 
 
 def build():
@@ -231,7 +198,7 @@ def system_packages():
 
 def shutdown():
     if (ROOT / "build").is_dir():
-        run([sys.executable, "build.py", "shutdown", "--launcher_cache_dir=" + str(CACHE / "launcher")])
+        run([sys.executable, "build.py", "shutdown"])
 
 
 if __name__ == "__main__":
