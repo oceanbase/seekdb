@@ -71,7 +71,7 @@ int TokenizeContext::init()
 int TokenizeContext::reset_resource()
 {
   handle_size_ = 0;
-  result_list_.reset();
+  result_list_.reuse();
   token_list_.reset();
   return OB_SUCCESS;
 }
@@ -206,7 +206,7 @@ int TokenizeContext::get_next_token(const char *&word,
 int TokenizeContext::compound(ObIKToken &token)
 {
   int ret = OB_SUCCESS;
-  ObList<ObIKToken, ObIAllocator> &list = result_list_;
+  ObFastList<ObIKToken, 32> &list = result_list_;
   if (is_smart_) {
     if (!list.empty()) {
       if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {

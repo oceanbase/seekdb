@@ -22,6 +22,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ik/ob_ik_char_util.h"
 #include "storage/fts/ik/ob_ik_token.h"
+#include "storage/fts/ik/ob_fast_list.h"
 
 namespace oceanbase
 {
@@ -69,7 +70,7 @@ public:
 
   ObFTSortList &token_list() { return token_list_; }
 
-  ObList<ObIKToken, ObIAllocator> &result_list() { return result_list_; }
+  ObFastList<ObIKToken, 32> &result_list() { return result_list_; }
 
   int32_t handle_size() const { return handle_size_; }
 
@@ -88,7 +89,7 @@ private:
   bool is_smart_;
 
   ObFTSortList token_list_;
-  ObList<ObIKToken, ObIAllocator> result_list_;
+  ObFastList<ObIKToken, 32> result_list_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(TokenizeContext);
