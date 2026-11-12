@@ -205,7 +205,7 @@
   "moduleExtensions": {
     "//bazel/sdk_sources:repositories.bzl%sdk_sources": {
       "general": {
-        "bzlTransitiveDigest": "wjCRn4cLyvC/wUfKXaD731rHkDKSdgW0Uk8ATAYtrSo=",
+        "bzlTransitiveDigest": "f/b5FM0+K+W9JjJ3iuS25Nw1l1V/rXbEj1aypkyUk3Y=",
         "usagesDigest": "C88oWWRSwl985DWTNoqa3RJhrmyPEurpg8bTGjwBxHo=",
         "recordedInputs": [
           "FILE:@@//bazel/sdk_sources/dependencies.json dc42c8f57f31d55f6ba4d3be551661e93937662415599b8c3601a2561968eda6"
