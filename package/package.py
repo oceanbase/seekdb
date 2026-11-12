@@ -288,6 +288,10 @@ def main():
         if metadata and options.layout == "linux" and options.component == "server":
             if binary.architecture(payload / "usr/bin/obshell", "linux") != metadata["arch"]:
                 raise ValueError("obshell architecture does not match the seekdb binary")
+            required = binary.glibc_requirement([payload / "usr/bin/obshell"])
+            if binary.version_tuple(required) > binary.version_tuple(metadata["glibc"]):
+                raise ValueError("obshell requires GLIBC_%s, exceeding the binary package baseline %s; "
+                                 "rebuild obshell for the target glibc" % (required, metadata["glibc"]))
         if options.format == "rpm":
             libs = work / "libs"
             stage(libs, options.artifacts.resolve(), options.dependencies.resolve(), "linux",

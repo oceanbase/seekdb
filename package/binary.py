@@ -108,6 +108,23 @@ def linux_libdir():
     raise ValueError("unsupported native ELF $LIB directory")
 
 
+def linux_hwcaps():
+    # Older loaders have no hwcaps directories and do not recognize --help.
+    if version_tuple(os.confstr("CS_GNU_LIBC_VERSION").split()[-1]) < version_tuple("2.33"):
+        return ()
+    # Use the packaging process's trusted loader, never an input ELF's interpreter.
+    headers = subprocess.check_output(["readelf", "-lW", str(Path("/proc/self/exe").resolve())], text=True)
+    interpreter = re.search(r"\[Requesting program interpreter: (.*?)\]", headers)
+    if not interpreter:
+        return ()
+    result = subprocess.run([interpreter.group(1), "--help"], text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    section = result.stdout.partition("Subdirectories of glibc-hwcaps directories, in priority order:")[2]
+    section = section.split("\n\n", 1)[0]
+    return tuple("glibc-hwcaps/" + name for name in re.findall(
+        r"^\s+(\S+) \(supported, searched\)$", section, re.MULTILINE))
+
+
 def linux_libraries(prefix, original, directories, extra_libraries):
     libraries = prefix / "lib/seekdb"
     libraries.mkdir(parents=True)
@@ -122,6 +139,7 @@ def linux_libraries(prefix, original, directories, extra_libraries):
     origins = {}
     executable_arch = architecture(executable, "linux")
     libdir = None
+    subdirectories = linux_hwcaps() + ("",)
 
     def expand(entry, source):
         def replace(match):
@@ -174,7 +192,8 @@ def linux_libraries(prefix, original, directories, extra_libraries):
                 continue
             if Path(name).name != name:
                 raise ValueError("runtime dependency must use a library basename: %s" % name)
-            candidates = [directory / name for directory in search] + cache.get(name, [])
+            candidates = [directory / subdirectory / name for directory in search
+                          for subdirectory in subdirectories] + cache.get(name, [])
             resolved = next((path for path in candidates if matching(path)), None)
             if resolved is None:
                 raise ValueError("unresolved dependency %s imported by %s; supply --runtime-lib-dir" % (name, source))
@@ -430,6 +449,15 @@ def load(source, destination, version):
         windows_binaries(root, metadata["arch"])
     elif metadata["os"] == "macos":
         macos_binaries(root, metadata["arch"], metadata["minimum_os"])
+    else:
+        binaries = [executable] + sorted((root / "lib/seekdb").iterdir())
+        for path in binaries:
+            if architecture(path, "linux") != metadata["arch"]:
+                raise ValueError("Linux runtime architecture mismatch: %s" % path)
+        required = glibc_requirement(binaries)
+        if version_tuple(required) > version_tuple(metadata["glibc"]):
+            raise ValueError("binary package requires GLIBC_%s, exceeding manifest baseline %s" %
+                             (required, metadata["glibc"]))
     for path in ("share/seekdb/admin", "share/seekdb/srs", "share/seekdb/timezone", "etc/seekdb", "libexec/seekdb", "lib/seekdb"):
         if not (root / path).is_dir():
             raise ValueError("missing binary package directory: %s" % path)
