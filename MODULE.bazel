@@ -124,6 +124,8 @@ crate.annotation_select(
     crate = "seekdb-jemalloc-sys",
     repositories = ["external_crates"],
     triples = [target for target in _RUST_PLATFORMS if target not in [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
         "aarch64-apple-ios",
         "aarch64-apple-ios-sim",
         "aarch64-linux-android",
@@ -133,6 +135,17 @@ crate.annotation_select(
     build_script_env = {
         "CFLAGS": "-O2 -fPIC",
         "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=",
+        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_",
+    },
+)
+crate.annotation_select(
+    crate = "seekdb-jemalloc-sys",
+    repositories = ["external_crates"],
+    triples = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"],
+    build_script_env = {
+        "CFLAGS": "-O2 -fPIC",
+        # Keep the selected linker and sysroot for configure's link probes.
+        "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=",
         "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_",
     },
 )
