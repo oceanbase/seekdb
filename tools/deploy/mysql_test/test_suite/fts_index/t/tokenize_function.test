@@ -46,6 +46,18 @@ select tokenize('hello world', 'ngram ');
 
 # Error Test
 
+# NULL options must fail without terminating the server.
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', 'space', NULL);
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', 'space', CAST(NULL AS JSON));
+set @tokenize_options = NULL;
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', 'space', @tokenize_options);
+--error ER_WRONG_ARGUMENTS
+select tokenize('hello world', 'space', 'null');
+
+
 --error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
 select tokenize('hello world', 'space', '[{"output": "all"}]', 'extra');
 
