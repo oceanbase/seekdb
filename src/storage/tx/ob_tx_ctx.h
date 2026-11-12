@@ -588,7 +588,6 @@ private:
 private:
   //0x0078746374726170 means reset partctx
   static const int64_t PART_CTX_MAGIC_NUM = 0x0078746374726170;
-  static const int64_t REPLAY_PRINT_TRACE_THRESHOLD = 10 * 1000; // 10 ms
   static const int64_t REDO_SYNC_TASK_RETRY_INTERVAL_US = 10 * 1000; // 10ms
   static const int64_t END_STMT_SLEEP_US = 10 * 1000; // 10ms
   static const int64_t MAX_END_STMT_RETRY_TIMES = 100;

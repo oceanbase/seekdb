@@ -291,8 +291,9 @@ void ObTxReplayExecutor::finish_replay_(const int retcode)
         ctx_->update_rec_log_ts_for_parallel_replay(log_ts_ns_);
       }
     }
-    if (OB_SUCCESS != retcode) {
-      ctx_->print_trace_log();
+    // OB_EAGAIN is an expected replay-barrier retry, not a diagnostic failure.
+    if (OB_SUCCESS != retcode && OB_EAGAIN != retcode) {
+      ctx_->print_tx_state();
     }
     ls_tx_srv_->revert_tx_ctx(ctx_);
   }
