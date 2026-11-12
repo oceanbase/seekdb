@@ -6,6 +6,13 @@
     <MediaTemplate EmbedCab="yes" />
     <Property Id="ARPURLINFOABOUT" Value="https://www.oceanbase.ai" />
     <Property Id="INSTALL_ROOT" Secure="yes" />
+    <Property Id="SEEKDB_INSTALLED_ROOT">
+      <RegistrySearch Id="FindSeekDBInstallRoot" Root="HKLM"
+                      Key="Software\SeekDB" Name="InstallRoot" Type="raw" />
+    </Property>
+    <SetProperty Id="INSTALL_ROOT" Value="[SEEKDB_INSTALLED_ROOT]"
+                 Before="CostInitialize" Sequence="both"
+                 Condition="Installed AND SEEKDB_INSTALLED_ROOT" />
     <WixVariable Id="WixUILicenseRtf" Value="$(var.License)" />
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALL_ROOT" />
     <StandardDirectory Id="ProgramFiles64Folder">
