@@ -85,6 +85,7 @@ int eval_question_mark_func(const ObExpr &, ObEvalCtx &, Datum &);
 struct NativeExecutionParametersTestPeer {
   static int64_t input_count(const ObPhysicalPlanCtx &p) { return p.param_store_.count(); }
   static int64_t input_bytes(const ObPhysicalPlanCtx &p) { return p.parameter_input_allocator_.used(); }
+  static int reserve_frame(ObPhysicalPlanCtx &p, int64_t count) { return p.reserve_param_frame(count); }
 };
 }
 }
@@ -655,13 +656,13 @@ TEST_F(NativeExecutionParameters, construction_staging_failure_cannot_mutate_liv
 TEST_F(NativeExecutionParameters, small_reservation_keeps_the_full_original_parameter_page)
 {
   ASSERT_NO_FATAL_FAILURE(load({11, 22, 33}));
-  ASSERT_EQ(OB_SUCCESS, plan().reserve_param_frame(1));
+  ASSERT_EQ(OB_SUCCESS, NativeExecutionParametersTestPeer::reserve_frame(plan(), 1));
   ASSERT_EQ(1, plan().get_param_frame_ptrs().count());
   char *handle = plan().get_param_frame_ptrs().at(0);
   EXPECT_EQ(3, ParameterValuePage::from_handle(handle).capacity());
   EXPECT_EQ(1, owner_.calls_for(ParameterValuePage::allocation_bytes(3)));
   owner_.reject_all_ = true;
-  ASSERT_EQ(OB_SUCCESS, plan().reserve_param_frame(3));
+  ASSERT_EQ(OB_SUCCESS, NativeExecutionParametersTestPeer::reserve_frame(plan(), 3));
   EXPECT_EQ(handle, plan().get_param_frame_ptrs().at(0));
   EXPECT_EQ(1, owner_.calls_for(ParameterValuePage::allocation_bytes(3)));
 }
