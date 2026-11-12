@@ -1,0 +1,23 @@
+encoded	decoded
+abc	a b
+encode_null	decode_null
+1	1
+encoded
+a%20b
+abc
+decoded
+a b
+abc
+encoded	decoded	round_trip
+		中文 %
+encoded_collation	decoded_collation
+utf8mb4_general_ci	utf8mb4_general_ci
+encoded_collation	decoded_collation
+utf8mb4_general_ci	utf8mb4_general_ci
+encoded_collation	decoded_collation
+utf8mb4_bin	utf8mb4_bin
+decoded
+ 
+ERROR HY000: Incorrect arguments to URL_DECODE, illegal input: %
+ERROR HY000: Incorrect arguments to URL_DECODE, illegal input: %2
+ERROR HY000: Incorrect arguments to URL_DECODE, illegal input: %GG
