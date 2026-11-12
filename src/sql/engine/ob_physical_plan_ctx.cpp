@@ -1462,6 +1462,18 @@ int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
     const int64_t beyond_pages = ScalarFrameLayout::frame_count(
         std::max(int64_t(0), input_capacity - original_param_cnt_));
     const int64_t pages = original_pages + beyond_pages;
+    if (original_pages == 1 && beyond_pages == 0
+        && param_frame_capacity_ == 0 && param_frame_ptrs_.empty()) {
+      // The directory has inline space for one handle. Publish only after the
+      // page is complete; no temporary directory or generic assign is needed.
+      ParameterValuePage *page_value = nullptr;
+      if (OB_FAIL(ParameterValuePage::allocate(allocator_, original_param_cnt_, page_value))) {
+      } else if (OB_FAIL(param_frame_ptrs_.push_back(reinterpret_cast<char *>(page_value)))) {
+      } else {
+        param_frame_capacity_ = original_param_cnt_;
+      }
+      return ret;
+    }
     ObSEArray<char *, 8> staged;
     if (OB_FAIL(staged.reserve(pages))) {
     } else if (OB_FAIL(param_frame_ptrs_.reserve(pages))) {
