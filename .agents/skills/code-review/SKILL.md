@@ -3,7 +3,7 @@ name: code-review
 description: Review seekdb pull requests and diffs for high-signal correctness, resource-lifetime, concurrency, current-version state-consistency, credential-exposure, workflow-security, performance, and test-evidence defects. Use when reviewing changes to seekdb C++, Rust, build, CI, or test code; report only actionable Blocker or Major findings and exclude persistence-format and upgrade-compatibility analysis.
 ---
 
-# SeekDB Code Review
+# seekdb Code Review
 
 ## Review Goal
 
