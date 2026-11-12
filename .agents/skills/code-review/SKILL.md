@@ -46,8 +46,16 @@ Write review comments in English.
   changes, check equivalent syntax and expression forms, aliases, NULL and
   boundary behavior, and every relevant stage that carries the same semantic.
 - **Rust and networking:** Check transport errors, protocol handling, resource
-  cleanup, and platform-specific behavior for supported Linux and Windows
-  paths. Require focused Rust tests for changed behavior when practical.
+  cleanup, and platform-specific behavior. Require focused Rust tests for
+  changed behavior when practical.
+- **Platform-specific behavior:** For changes that may depend on the platform,
+  establish the affected component's supported targets from current repository
+  build configuration, CI, and documentation; do not assume the same support
+  matrix for every component. Trace relevant OS, architecture, compiler, libc,
+  kernel, build flags, and dependencies through conditional compilation, build
+  selection, packaging, and runtime behavior. Compare the affected paths and
+  check whether tests or CI actually exercise each relevant configuration.
+  A missing CI job alone does not prove a defect.
 - **Security:** Apply the dedicated security review below to product code,
   workflows, build scripts, tests, documentation, and repository instructions.
 - **Performance:** Report material regressions in hot paths, such as repeated
@@ -140,6 +148,15 @@ For every finding:
 4. Propose the smallest viable fix or focused test that proves correctness.
 5. Distinguish demonstrated defects from serious risks that still need
    verification.
+
+For a platform-specific finding, make the PR review comment self-contained:
+identify the affected OS and architecture and any version, toolchain, build
+option, or dependency needed to trigger it; explain the platform-specific code
+path and observable impact, and give the smallest relevant fix or focused test.
+State what was reproduced or verified and what remains inferred or untested.
+Mention unaffected platforms only when supported by evidence; do not generalize
+a failure or a passing test beyond the configuration actually checked. Apply
+the same Blocker/Major threshold and evidence standard as for other findings.
 
 Do not emit Nits, a completed-checklist report, a fixed-format summary, or a
 final approval verdict. Do not approve, request changes, or block the pull
