@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 import platform
 import re
@@ -198,7 +199,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("format", choices=("binary", "stage", "rpm", "deb", "tgz"))
     parser.add_argument("--version", required=True)
-    parser.add_argument("--release", required=True)
+    parser.add_argument("--package-timestamp", "--release", dest="release",
+                        default=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+                        help="UTC package timestamp, YYYYMMDDTHHMMSSZ (default: current UTC time)")
     parser.add_argument("--artifacts", type=Path, default=ROOT / "build/bin",
                         help="Bazel bin directory from a --config=package build on Linux")
     parser.add_argument("--dependencies", type=Path, default=ROOT / "deps/3rd")
@@ -219,6 +222,13 @@ def main():
     parser.add_argument("--build-config", default="package", help="production build configuration recorded in the binary manifest")
     parser.add_argument("--output", type=Path, required=True)
     options = parser.parse_args()
+    if options.format != "stage":
+        try:
+            timestamp = datetime.strptime(options.release, "%Y%m%dT%H%M%SZ")
+            if timestamp.strftime("%Y%m%dT%H%M%SZ") != options.release:
+                raise ValueError("noncanonical timestamp")
+        except ValueError:
+            parser.error("--package-timestamp must be a UTC timestamp in YYYYMMDDTHHMMSSZ format")
     if options.glibc_version and not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", options.glibc_version):
         parser.error("--glibc-version must be a numeric glibc version")
     if options.format == "binary":

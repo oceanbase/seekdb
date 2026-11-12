@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+from datetime import datetime, timezone as datetime_timezone
 import os
 from pathlib import Path
 import re
@@ -37,10 +38,9 @@ def matrix():
             raise ValueError("binary reuse requires a Linux platform and RPM/DEB formats")
     version = os.environ.get("PACKAGE_VERSION") or ("" if binary_run_id else re.search(
         r'^VERSION = "([^"]+)"', (ROOT / "bazel/compile_config.bzl").read_text(), re.MULTILINE).group(1))
-    release = os.environ["PACKAGE_RELEASE"]
-    if (version and not re.fullmatch(r"[0-9A-Za-z.+~_]+", version)) or not re.fullmatch(
-            r"[0-9A-Za-z.+~_]+", release):
-        raise ValueError("invalid version/release")
+    release = datetime.now(datetime_timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    if version and not re.fullmatch(r"[0-9A-Za-z.+~_]+", version):
+        raise ValueError("invalid version")
     if glibc not in ("2.17", "2.28", "both"):
         raise ValueError("unsupported glibc baseline")
     targets = []
@@ -179,7 +179,7 @@ def timezone():
 
 def export():
     arguments = [sys.executable, "package/package.py", "binary", "--version", os.environ["PACKAGE_VERSION"],
-                 "--release", os.environ["PACKAGE_RELEASE"], "--layout", os.environ["PACKAGE_OS"],
+                 "--package-timestamp", os.environ["PACKAGE_RELEASE"], "--layout", os.environ["PACKAGE_OS"],
                  "--source-commit", os.environ["GITHUB_SHA"], "--timezone-file", timezone(),
                  "--build-config", "O2,line_tables_only,package", "--output", ROOT / "dist"]
     if os.environ["PACKAGE_OS"] == "linux":
@@ -209,7 +209,7 @@ def system_packages():
         formats = ("rpm", "deb") if os.environ["PACKAGE_FORMATS"] == "all" else (os.environ["PACKAGE_FORMATS"],)
         for kind in formats:
             run([sys.executable, "package/package.py", kind, "--version", manifest["version"],
-                 "--release", os.environ["PACKAGE_RELEASE"], "--binary-package", bundle,
+                 "--package-timestamp", os.environ["PACKAGE_RELEASE"], "--binary-package", bundle,
                  "--obshell-bin", work / "obshell", "--output", ROOT / "dist"])
     (ROOT / "dist/packaging-info.json").write_text(json.dumps({
         "binary_run_id": os.environ["BINARY_RUN_ID"],
