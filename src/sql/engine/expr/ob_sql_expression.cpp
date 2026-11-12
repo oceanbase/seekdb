@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_sql_expression.h"
-#include "sql/parser/ob_item_type_str.h"
+#include "query/engine/expr/ob_item_type_str.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
 

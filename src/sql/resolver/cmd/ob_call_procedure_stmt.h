@@ -22,7 +22,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "common/object/ob_object.h"
 #include "share/schema/ob_table_schema.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "sql/resolver/cmd/ob_cmd_stmt.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 #include "sql/pl/pl_cache/ob_pl_cache_object.h"

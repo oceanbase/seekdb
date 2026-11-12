@@ -19,7 +19,7 @@
 
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "common/row/ob_row_desc.h"
-#include "sql/parser/parse_node.h"
+#include "sql/syntax.h"
 #include "lib/hash/ob_placement_hashmap.h"
 #include "share/schema/ob_column_schema.h"
 #include "sql/session/ob_system_variable.h"
@@ -224,53 +224,25 @@ private:
   int64_t attr_cnt_;
 };
 
+class ParsedSql;
+
 class ObRawExprUtils
 {
 public:
-  /**
-   * make expression from string
-   *
-   * @param expr_str [in] expression string
-   * @param buf_len [in] expression string length
-   * @param allocator [in] allocator used by parser
-   * @param resolve_ctx [in] expression resolver context
-   * @param expr [out] resolved expression
-   * @param columns [out] columns in the expr
-   * @param sys_vars [out] system variables in the expr
-   * @param sub_query_info [out] subqueries in the expr
-   *
-   * @return
-   */
-  static int make_raw_expr_from_str(const char *expr_str, const int64_t buf_len,
-                                    ObExprResolveContext &resolve_ctx,
-                                    ObRawExpr *&expr,
-                                    common::ObIArray<ObQualifiedName> &columns,
-                                    common::ObIArray<ObVarInfo> &sys_vars,
-                                    common::ObIArray<ObSubQueryInfo> *sub_query_info,
-                                    common::ObIArray<ObAggFunRawExpr*> &aggr_exprs,
-                                    common::ObIArray<ObWinFunRawExpr*> &win_exprs,
-                                    common::ObIArray<ObUDFInfo> &udf_info);
   static int parse_default_expr_from_str(const common::ObString &expr_str,
-                                         ObCharsets4Parser expr_str_cs_type,
                                          common::ObIAllocator &allocator,
-                                         const ParseNode *&node,
-                                         bool is_for_trigger = false);
-  static int parse_expr_list_node_from_str(const common::ObString &expr_str,
-                                           ObCharsets4Parser expr_str_cs_type,
-                                           common::ObIAllocator &allocator,
-                                           const ParseNode *&node,
-                                           const ObSQLMode &sql_mode);
+                                         ParsedSql &owner);
   static int parse_expr_node_from_str(const common::ObString &expr_str,
-                                      ObCharsets4Parser expr_str_cs_type,
                                       common::ObIAllocator &allocator,
-                                      const ParseNode *&node,
+                                      ParsedSql &owner,
                                       const ObSQLMode &sql_mode = 0);
   static int parse_bool_expr_node_from_str(const common::ObString &expr_str,
                                            common::ObIAllocator &allocator,
-                                           const ParseNode *&node);
+                                           ParsedSql &owner);
   static int build_check_constraint_expr(ObRawExprFactory &expr_factory,
                                          const ObSQLSessionInfo &session_info,
-                                         const ParseNode &node,
+                                         const peg::Node &node,
+                                         const ObString &syntax_source,
                                          ObRawExpr *&expr,
                                          common::ObIArray<ObQualifiedName> &columns);
   static int check_deterministic(const ObRawExpr *expr,
@@ -282,7 +254,8 @@ public:
                                           check_status = ObResolverUtils::DISABLE_CHECK);
   static int build_generated_column_expr(ObRawExprFactory &expr_factory,
                                          const ObSQLSessionInfo &session_info,
-                                         const ParseNode &node,
+                                         const peg::Node &node,
+                                         const ObString &syntax_source,
                                          ObRawExpr *&expr,
                                          common::ObIArray<ObQualifiedName> &columns,
                                          const ObTableSchema* new_table_schema,
@@ -327,6 +300,17 @@ public:
                                          const ObResolverUtils::PureFunctionCheckStatus
                                            check_status = ObResolverUtils::DISABLE_CHECK,
                                          ObIArray<share::schema::ObColumnSchemaV2*> *resolved_cols = NULL);
+  static int build_generated_column_expr(const obcall::ObCreateIndexArg *arg,
+                                         const peg::Node &node,
+                                         const common::ObString &syntax_source,
+                                         ObRawExprFactory &expr_factory,
+                                         const ObSQLSessionInfo &session_info,
+                                         const share::schema::ObTableSchema &table_schema,
+                                         ObRawExpr *&expr,
+                                         const ObSchemaChecker *schema_checker = NULL,
+                                         const ObResolverUtils::PureFunctionCheckStatus
+                                           check_status = ObResolverUtils::DISABLE_CHECK,
+                                         ObIArray<share::schema::ObColumnSchemaV2*> *resolved_cols = NULL);
   static int check_generated_column_expr_str(const common::ObString &expr_str,
                                              const ObSQLSessionInfo &session_info,
                                              const share::schema::ObTableSchema &table_schema);
@@ -339,7 +323,8 @@ public:
                                         int64_t local_var_id = OB_INVALID_INDEX_INT64);
   static int build_raw_expr(ObRawExprFactory &expr_factory,
                             const ObSQLSessionInfo &session_info,
-                            const ParseNode &node,
+                            const peg::Node &node,
+                                         const ObString &syntax_source,
                             ObRawExpr *&expr,
                             common::ObIArray<ObQualifiedName> &columns,
                             common::ObIArray<ObVarInfo> &sys_vars,
@@ -357,7 +342,8 @@ public:
                             ObStmt *stmt,
                             const ParamStore *param_list,
                             ExternalParams *external_param_info,
-                            const ParseNode &node,
+                            const peg::Node &node,
+                                         const ObString &syntax_source,
                             ObRawExpr *&expr,
                             common::ObIArray<ObQualifiedName> &columns,
                             common::ObIArray<ObVarInfo> &sys_vars,
@@ -1004,10 +990,6 @@ public:
                             const ObIArray<ObRawExpr*> &exprs,
                             ObRawExpr * &and_expr);
 
-  static int new_parse_node(ParseNode *& node, ObRawExprFactory &expr_factory,
-                            ObItemType type, int num);
-
-
   static int build_pack_expr(ObRawExprFactory &expr_factory,
                              const bool is_ps,
                              const ObSQLSessionInfo *session_info,
@@ -1026,11 +1008,9 @@ public:
 
 
   static int get_real_expr_without_generated_column(ObRawExpr *expr, ObRawExpr *&real_expr);
-  static bool is_new_old_column_ref(const ParseNode *node);
-  static int mock_obj_access_ref_node(common::ObIAllocator &allocator,
-                                      ParseNode *&obj_access_node,
-                                      const ParseNode *col_ref_node,
-                                      const TgTimingEvent tg_timing_event);
+  static bool is_new_old_column_ref(const peg::Node &node);
+  static int resolve_trigger_column_name(const peg::Node &node, const TgTimingEvent timing,
+                                          common::ObIAllocator &allocator, ObQualifiedName &name);
 
   static const ObRawExpr *skip_implicit_cast(const ObRawExpr *e);
   /**

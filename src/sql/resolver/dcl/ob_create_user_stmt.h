@@ -42,11 +42,9 @@ public:
                    const common::ObString &ssl_cipher,
                    const common::ObString &x509_issuer,
                    const common::ObString &x509_subject);
-  void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
   
   bool get_if_not_exists() const { return if_not_exist_; }
   const common::ObStrings &get_users() const { return users_; }
-  const common::ObString &get_masked_sql() const { return masked_sql_; }
   virtual bool cause_implicit_commit() const { return true; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return create_user_arg_; }
   uint64_t get_max_connections_per_hour() { return max_connections_per_hour_; }
@@ -60,7 +58,6 @@ private:
                             //  user2, host2, pass2, need_enc2,
                             //  ...,
                             //  ssl_type, ssl_cipher, x509_issuer, x509_subject)
-  common::ObString masked_sql_;
   bool if_not_exist_;
   obcall::ObCreateUserArg create_user_arg_; // used to return exec_tid_
   uint64_t max_connections_per_hour_;

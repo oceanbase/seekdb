@@ -412,395 +412,26 @@ int ObDMLStmtPrinter::print_values_table(const TableItem &table_item, bool no_pr
   return ret;
 }
 
-int ObDMLStmtPrinter::print_json_return_type(int64_t value, ObDataType data_type)
+int ObDMLStmtPrinter::print_json_return_type(const ObJtColBaseInfo &column)
 {
   int ret = OB_SUCCESS;
-  {
-    if (OB_FAIL(print_mysql_json_return_type(value, data_type))) {
+  const ObDataType &type = column.data_type_;
+  ObSEArray<ObString, 0> members;
+  OZ(ob_sql_type_str(buf_, buf_len_, *pos_, type.get_obj_type(), type.get_length(),
+      type.get_precision(), type.get_scale(), type.get_collation_type(), members,
+      static_cast<uint64_t>(column.geometry_type_)));
+  if (type.is_zero_fill()) { DATA_PRINTF(" ZEROFILL"); }
+  if ((ob_is_string_tc(type.get_obj_type()) || ob_is_text_tc(type.get_obj_type()))
+      && type.get_collation_type() != CS_TYPE_BINARY) {
+    if (type.is_binary_collation()) { DATA_PRINTF(" BINARY"); }
+    if (type.get_charset_type() != CHARSET_INVALID) {
+      DATA_PRINTF(" CHARACTER SET %s", ObCharset::charset_name(type.get_charset_type()));
     }
-  } // end switch
-  return ret;
-}
-
-int ObDMLStmtPrinter::print_binary_charset_collation(int64_t value, ObDataType data_type)
-{
-  INIT_SUCC(ret);
-  if (data_type.is_binary_collation()) {
-    DATA_PRINTF("binary ");
+    if (type.get_collation_type() != CS_TYPE_INVALID) {
+      DATA_PRINTF(" COLLATE %s", ObCharset::collation_name(type.get_collation_type()));
+    }
   }
-  if (CHARSET_INVALID != data_type.get_charset_type()) {
-    DATA_PRINTF("CHARACTER SET %s ", ObCharset::charset_name(data_type.get_charset_type()));
-  }
-  if (CS_TYPE_INVALID != data_type.get_collation_type()) {
-    DATA_PRINTF("COLLATE %s ", ObCharset::collation_name(data_type.get_collation_type()));
-  }
-  return ret;
-}
-
-int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType data_type)
-{
-  int ret = OB_SUCCESS;
-  
-  ParseNode parse_node;
-  parse_node.value_ = value;
-
-  int16_t cast_type = data_type.get_obj_type();
-  const ObLengthSemantics length_semantics = data_type.get_length_semantics();
-  const ObScale scale = data_type.get_scale();
-  
-  switch (cast_type) {
-    case T_CHAR: {
-      int32_t len = parse_node.int32_values_[0];
-      int32_t collation = parse_node.int32_values_[1];
-      if (1 == collation) {
-        DATA_PRINTF("binary(%d)", len);
-      } else {
-        DATA_PRINTF("char(%d) ", len);
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(print_binary_charset_collation(value, data_type))) {
-        }
-      }
-      break;
-    }
-    case T_VARCHAR: {
-      int32_t collation = parse_node.int32_values_[1];
-      int32_t len = parse_node.int32_values_[0];
-      const int32_t DEFAULT_VARCHAR_LEN = 4000;
-      if (1 == collation) {
-        DATA_PRINTF("varbinary(%d) ", len);
-      } else {
-        DATA_PRINTF("varchar(%d) ", len);
-        if (OB_SUCC(ret) && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-        }
-      }
-      break;
-    }
-    case T_BIT: {
-      int32_t len = parse_node.int16_values_[0];
-       DATA_PRINTF("bit(%d) ", len);
-      break;
-    }
-    case T_TINYTEXT: {
-      int16_t collation = parse_node.int32_values_[1];
-      if (1 == collation) {
-        DATA_PRINTF("TINYBLOB ");
-      } else {
-        DATA_PRINTF("TINYTEXT ");
-      }
-      if (OB_SUCC(ret) && !collation && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-      }
-      break;
-    }
-    case T_TEXT: {
-      int16_t collation = parse_node.int32_values_[1];
-      if (1 == collation) {
-        DATA_PRINTF("BLOB ");
-      } else {
-        DATA_PRINTF("TEXT ");
-      }
-      if (OB_SUCC(ret) && !collation && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-      }
-      break;
-    }
-    case T_MEDIUMTEXT: {
-      int16_t collation = parse_node.int32_values_[1];
-      if (1 == collation) {
-        DATA_PRINTF("MEDIUMBLOB ");
-      } else {
-        DATA_PRINTF("MEDIUMTEXT ");
-      }
-      if (OB_SUCC(ret) && !collation && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-      }
-      break;
-    }
-    case T_LONGTEXT: {
-      int16_t collation = parse_node.int32_values_[1];
-      if (1 == collation) {
-        DATA_PRINTF("LONGBLOB ");
-      } else {
-        DATA_PRINTF("LONGTEXT ");
-      }
-      if (OB_SUCC(ret) && !collation && OB_FAIL(print_binary_charset_collation(value, data_type))) {
-      }
-      break;
-    }
-    case T_DATETIME: {
-      int16_t scale = parse_node.int16_values_[1];
-      if (scale >= 0) {
-        DATA_PRINTF("datetime(%d) ", scale);
-      } else {
-        DATA_PRINTF("datetime ");
-      }
-      break;
-    }
-    case T_DATE: {
-      DATA_PRINTF("date ");
-      break;
-    }
-    case T_YEAR: {
-      DATA_PRINTF("year ");
-      break;
-    }
-    case T_TIMESTAMP: {
-      int16_t scale = parse_node.int16_values_[1];
-      if (scale >= 0) {
-        DATA_PRINTF("timestamp(%d) ", scale);
-      } else {
-        DATA_PRINTF("timestamp ");
-      }
-      break;
-    }
-    case T_TIME: {
-      int16_t scale = parse_node.int16_values_[1];
-      if (scale >= 0) {
-        DATA_PRINTF("time(%d) ", scale);
-      } else {
-        DATA_PRINTF("time ");
-      }
-      break;
-    }
-    case T_NUMBER: {  // number, decimal, fixed, numeric
-      int16_t precision = parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX];
-      int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
-      DATA_PRINTF("DECIMAL(%d,%d) ", precision, scale);
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[3]) {
-        DATA_PRINTF("UNSIGNED ");
-      } else {
-        DATA_PRINTF("SIGNED ");
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_TINYINT: {
-      if (parse_node.int16_values_[OB_NODE_CAST_COLL_IDX] == 1) {
-        DATA_PRINTF("BOOL ");
-      } else if (parse_node.int16_values_[OB_NODE_CAST_COLL_IDX] == 2) {
-        DATA_PRINTF("BOOLEAN ");
-      } else {
-        DATA_PRINTF("TINYINT ");
-        if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-          DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-        }
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_SMALLINT: {
-      DATA_PRINTF("SMALLINT ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_MEDIUMINT: {
-      DATA_PRINTF("MEDIUMINT ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_INT32: {
-      DATA_PRINTF("INTEGER ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_INT: {
-      DATA_PRINTF("BIGINT ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_UTINYINT: {
-      DATA_PRINTF("TINYINT ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[3]) {
-        DATA_PRINTF("UNSIGNED ");
-      } else {
-        DATA_PRINTF("SIGNED ");
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_USMALLINT:{
-      DATA_PRINTF("SMALLINT ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[3]) {
-        DATA_PRINTF("UNSIGNED ");
-      } else {
-        DATA_PRINTF("SIGNED ");
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_UMEDIUMINT:{
-      DATA_PRINTF("MEDIUMINT ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[3]) {
-        DATA_PRINTF("UNSIGNED ");
-      } else {
-        DATA_PRINTF("SIGNED ");
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_UINT32: {
-      DATA_PRINTF("INTEGER ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[3]) {
-        DATA_PRINTF("UNSIGNED ");
-      } else {
-        DATA_PRINTF("SIGNED ");
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_UINT64: {
-      DATA_PRINTF("BIGINT ");
-      if (OB_SUCC(ret) && parse_node.int16_values_[0] != -1){
-        DATA_PRINTF("(%d)", parse_node.int16_values_[0]);
-      }
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[3]) {
-        DATA_PRINTF("UNSIGNED ");
-      } else {
-        DATA_PRINTF("SIGNED ");
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_FLOAT: {
-      DATA_PRINTF("FLOAT ");
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[0] <= 0) {
-      } else {
-        DATA_PRINTF("(%d,%d) ", parse_node.int16_values_[0], parse_node.int16_values_[1]);
-      }
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[3]) {
-        DATA_PRINTF("UNSIGNED ");
-      } else {
-        DATA_PRINTF("SIGNED ");
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_DOUBLE: {
-      DATA_PRINTF("DOUBLE ");
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[0] <= 0) {
-      } else {
-        DATA_PRINTF("(%d,%d) ", parse_node.int16_values_[0], parse_node.int16_values_[1]);
-      }
-      if (OB_FAIL(ret)) {
-      } else if (parse_node.int16_values_[3]) {
-        DATA_PRINTF("UNSIGNED ");
-      } else {
-        DATA_PRINTF("SIGNED ");
-      }
-      if (OB_SUCC(ret) && parse_node.int16_values_[2]) {
-        DATA_PRINTF("ZEROFILL ");
-      }
-      break;
-    }
-    case T_JSON: {
-      DATA_PRINTF("json ");
-      break;
-    }
-    case T_GEOMETRY: {
-      ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int32_values_[1]);
-      switch (geo_type) {
-        case ObGeoType::GEOMETRY: {
-          DATA_PRINTF("geometry");
-          break;
-        }
-        case ObGeoType::POINT: {
-          DATA_PRINTF("point");
-          break;
-        }
-        case ObGeoType::LINESTRING: {
-          DATA_PRINTF("linestring");
-          break;
-        }
-        case ObGeoType::POLYGON: {
-          DATA_PRINTF("polygon");
-          break;
-        }
-        case ObGeoType::MULTIPOINT: {
-          DATA_PRINTF("multipoint");
-          break;
-        }
-        case ObGeoType::MULTILINESTRING: {
-          DATA_PRINTF("multilinestring");
-          break;
-        }
-        case ObGeoType::MULTIPOLYGON: {
-          DATA_PRINTF("multipolygon");
-          break;
-        }
-        case ObGeoType::GEOMETRYCOLLECTION: {
-          DATA_PRINTF("geometrycollection");
-          break;
-        }
-        case ObGeoType::GEOTYPEMAX: {
-          ret = OB_ERR_UNEXPECTED;
-          break;
-        }
-        default: {
-          ret = OB_ERR_UNEXPECTED;
-          break;
-        }
-      }
-      break;
-    }
-    default: {
-      ret = OB_ERR_UNEXPECTED;
-      break;
-    }
-  } // end switch
+  DATA_PRINTF(" ");
   return ret;
 }
 
@@ -914,7 +545,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
         DATA_PRINTF(" for ordinality");
       } else if (col_info.col_type_ == static_cast<int32_t>(COL_TYPE_EXISTS)) {
         // to print returning type
-        OZ (print_json_return_type(col_info.res_type_, col_info.data_type_));
+        OZ (print_json_return_type(col_info));
         if (OB_SUCC(ret) && col_info.truncate_) {
           DATA_PRINTF(" truncate");
         }
@@ -942,7 +573,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
         }
       } else if (col_info.col_type_ == static_cast<int32_t>(COL_TYPE_QUERY)) {
         // to print returning type
-        OZ (print_json_return_type(col_info.res_type_, col_info.data_type_));
+        OZ (print_json_return_type(col_info));
         ObObjType cast_type = col_info.data_type_.get_obj_type();
         if (cast_type != ObJsonType){
           DATA_PRINTF(" format json");
@@ -1015,7 +646,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
           DATA_PRINTF(" null on mismatch" );
         }
       } else if (col_info.col_type_ == static_cast<int32_t>(COL_TYPE_VALUE)) {
-        OZ (print_json_return_type(col_info.res_type_, col_info.data_type_));
+        OZ (print_json_return_type(col_info));
         if (col_info.truncate_) {
           DATA_PRINTF(" truncate" );
         }
@@ -1608,18 +1239,13 @@ int ObDMLStmtPrinter::print_temp_table_as_cte()
 int ObDMLStmtPrinter::print_cte_define_title(TableItem* cte_table)
 {
   int ret = OB_SUCCESS;
-  // Recursive CTE must have defined an alias list
-  // Print the table of cte without printing the database name?
-  //DATA_PRINTF(" %.*s)", LEN_AND_PTR(cte_table->table_name_));
-  // cte in mysql when defined and used, does not allow usage like db.cte_name this method, when printing we
-  // Cannot print database name
   ObSelectStmt *sub_select_stmt = NULL;
   if (OB_ISNULL(cte_table) || OB_ISNULL(sub_select_stmt = cte_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     PRINT_TABLE_NAME(print_params_, cte_table);
   }
-  if (OB_SUCC(ret) && OB_NOT_NULL(cte_table->node_) && OB_NOT_NULL(cte_table->node_->children_[1])) {
+  if (OB_SUCC(ret) && cte_table->has_cte_column_aliases_) {
     DATA_PRINTF("(");
     const ObIArray<SelectItem> &sub_select_items = sub_select_stmt->get_select_items();
     // Print column

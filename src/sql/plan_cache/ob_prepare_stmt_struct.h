@@ -186,7 +186,7 @@ public:
                               const common::ObIArray<ObPCParam *> &raw_params);
   int deep_copy_fixed_raw_params(const common::ObIArray<int64_t> &param_idxs,
                                  const common::ObIArray<ObPCParam *> &raw_params);
-  int add_fixed_raw_param(const ObPCParam &node);
+  int add_fixed_raw_param(const ObPCParam &source);
 
   void set_item_and_info_size(int64_t size) { item_and_info_size_ = size; }
   int64_t get_item_and_info_size() { return item_and_info_size_; }

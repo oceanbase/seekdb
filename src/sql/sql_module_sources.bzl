@@ -17,12 +17,10 @@ PREPARE_SOURCES = [
     "src/sql/engine/prepare/ob_deallocate_executor.cpp",
     "src/sql/engine/prepare/ob_execute_executor.cpp",
     "src/sql/engine/prepare/ob_prepare_executor.cpp",
-    "src/sql/resolver/prepare/ob_deallocate_resolver.cpp",
     "src/sql/resolver/prepare/ob_deallocate_stmt.cpp",
-    "src/sql/resolver/prepare/ob_execute_resolver.cpp",
     "src/sql/resolver/prepare/ob_execute_stmt.cpp",
-    "src/sql/resolver/prepare/ob_prepare_resolver.cpp",
     "src/sql/resolver/prepare/ob_prepare_stmt.cpp",
+    "src/sql/resolver/prepare/prepared_command_resolver.cpp",
 ]
 
 def headers_outside(headers, prefixes):

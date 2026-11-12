@@ -1309,7 +1309,7 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
       if (idx >= raw_params.count()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid index", K(i), K(raw_params.count()));
-      } else if (OB_ISNULL(raw_params.at(idx)) || OB_ISNULL(raw_params.at(idx)->node_)) {
+      } else if (OB_ISNULL(raw_params.at(idx)) || OB_ISNULL(raw_params.at(idx)->literal_)) {
         ret = OB_INVALID_ARGUMENT;
       } else {
         int32_t len = (int32_t)PARAM_CTX->param_str_offsets_.at(i) - name_pos;
@@ -1326,52 +1326,24 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
         int64_t copy_str_len = 0;
         const char *copy_str = NULL;
 
-        // 1.
-        // If there is a constant node obtained from lexical analysis with the is_copy_raw_text_ flag, then it is a constant with a prefix, for example
-        // select date'2012-12-12' from dual, column displays as date'2012-12-12',
-        // The raw_text of the constant node obtained from lexical analysis is date'2012-12-12',
-        // So directly copy raw_text after the required normalization.
-        // 2.
-        // If esc_str_flag_ is marked, then the projection column is a constant string, its internal string needs to be escaped,
-        // The str_value of constant nodes is an escaped string, ready to use,
-        // ObResultSet::make_final_field_name handles display trimming for leading escape characters.
-        // Quoted string field names keep their quotes.
-        // For example: select '\'hello' from dual, column name displays 'hello'
-        //                select '\thello' from dual, column name displays hello (removed the leading escape character)
-        //              select 'hello' from dual, column name displays 'hello' (with quotes)
-        //              select '''hello' from dual, column name displays ''hello''
-        // 3.
-        // mysql mode, the following for the following sql:
-        // select 'a' 'abc' from dual
-        // Behavior is a as column name, 'abc' as value, but parameterized sql is select ? from dual
-        // In lexical node two strings are concat, as a whole it is treated as a varchar node, but this node has a T_CONCAT_STRING sub-node, the node's str_val saves the column name
-        // So in this case, directly use the str_val of T_CONCAT_STRING as the column name
-        if (1 == raw_params.at(idx)->node_->is_copy_raw_text_) {
-          copy_str_len = raw_params.at(idx)->node_->text_len_;
-          copy_str = raw_params.at(idx)->node_->raw_text_;
+        // Prefixed literals retain their SQL spelling in column names.
+        // Standalone strings use decoded text; adjacent strings use the first part.
+        if (raw_params.at(idx)->literal_->display_source()) {
+          copy_str_len = raw_params.at(idx)->literal_->source.length();
+          copy_str = raw_params.at(idx)->literal_->source.ptr();
         } else if (PARAM_CTX->esc_str_flag_) {
-          if (1 == raw_params.at(idx)->node_->num_child_) {
-            if (OB_ISNULL(raw_params.at(idx)->node_->children_)
-                || OB_ISNULL(raw_params.at(idx)->node_->children_[0])
-                || T_CONCAT_STRING != raw_params.at(idx)->node_->children_[0]->type_) {
-              ret = OB_INVALID_ARGUMENT;
-            } else {
-              copy_str_len = raw_params.at(idx)->node_->children_[0]->str_len_;
-              copy_str = raw_params.at(idx)->node_->children_[0]->str_value_;
-            }
-          } else {
-            copy_str_len = raw_params.at(idx)->node_->str_len_;
-            copy_str = raw_params.at(idx)->node_->str_value_;
-          }
+          const auto &literal = *raw_params.at(idx)->literal_;
+          copy_str_len = literal.concatenated ? literal.first_part_length : literal.text.length();
+          copy_str = literal.text.ptr();
         } else if (0 == field.paramed_ctx_->paramed_cname_.compare("?") &&
                    1 == PARAM_CTX->param_idxs_.count() &&
-                   T_NULL == raw_params.at(idx)->node_->type_) {
+                   peg::LiteralKind::Null == raw_params.at(idx)->literal_->kind) {
           // MySQL sets the alias of standalone null value("\N","null"...) to "NULL" during projection.
           copy_str_len = strlen("NULL");
           copy_str = "NULL";
         } else {
-          copy_str_len = raw_params.at(idx)->node_->text_len_;
-          copy_str = raw_params.at(idx)->node_->raw_text_;
+          copy_str_len = raw_params.at(idx)->literal_->source.length();
+          copy_str = raw_params.at(idx)->literal_->source.ptr();
         }
 
         if (OB_SUCC(ret)) {

@@ -24,30 +24,25 @@ using namespace common;
 using namespace share::schema;
 namespace sql
 {
-int ObDropPackageResolver::resolve(const ParseNode &parse_tree)
+int ObDropPackageResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
-  const ParseNode *name_node = NULL;
+  const peg::Node &name_node = peg::package_name(parse_tree);
   ObString db_name;
   ObString package_name;
   ObDropPackageStmt *package_stmt = NULL;
-  if (OB_UNLIKELY(parse_tree.type_ != T_PACKAGE_DROP)
-      || OB_ISNULL(parse_tree.children_)
-      || OB_UNLIKELY(parse_tree.num_child_ != DROP_PACKAGE_NODE_CHILD_COUNT)
-      || OB_ISNULL(name_node = parse_tree.children_[0])) {
+  if (parse_tree.kind() != peg::NodeKind::DropPackage) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("parse tree is invalid", "type", get_type_name(parse_tree.type_),
-             K_(parse_tree.children), K_(parse_tree.num_child), K(name_node));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(schema_checker_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *name_node, db_name, package_name))) {
+  } else if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, peg::name_parts(name_node), *allocator_, db_name, package_name))) {
   } else if (OB_ISNULL(package_stmt = create_stmt<ObDropPackageStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("create drop package stmt failed");
   } else {
-    bool is_drop_body = static_cast<bool>(parse_tree.value_);
+    bool is_drop_body = peg::package_drop_body(parse_tree);
     obcall::ObDropPackageArg &package_arg = package_stmt->get_drop_package_arg();
     
     

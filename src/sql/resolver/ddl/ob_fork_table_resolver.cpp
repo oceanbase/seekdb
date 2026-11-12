@@ -19,7 +19,6 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/ob_rpc_struct.h"
-#include "sql/parser/parse_node.h"
 
 namespace oceanbase
 {
@@ -39,16 +38,14 @@ ObForkTableResolver::~ObForkTableResolver()
 {
 }
 
-int ObForkTableResolver::resolve(const ParseNode &parse_tree)
+int ObForkTableResolver::resolve(const peg::Node &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObForkTableStmt *fork_table_stmt = NULL;
 
   if (OB_ISNULL(session_info_) ||
       OB_ISNULL(allocator_) ||
-      T_FORK_TABLE != parse_tree.type_ ||
-      MAX_NODE != parse_tree.num_child_ ||
-      OB_ISNULL(parse_tree.children_)) {
+      peg::NodeKind::ForkTable != parse_tree.kind()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
   } else if (OB_ISNULL(fork_table_stmt = create_stmt<ObForkTableStmt>())) {
@@ -63,17 +60,14 @@ int ObForkTableResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     obcall::ObForkTableArg &fork_table_arg = fork_table_stmt->get_fork_table_arg();
-    ParseNode *dst_table_node = parse_tree.children_[DST_TABLE_NODE];
-    ParseNode *src_table_node = parse_tree.children_[SRC_TABLE_NODE];
+    const auto *dst_table_node = &peg::fork_destination(parse_tree);
+    const auto *src_table_node = &peg::fork_source(parse_tree);
     ObString dst_database_name;
     ObString dst_table_name;
     ObString src_database_name;
     ObString src_table_name;
 
-    if (OB_ISNULL(dst_table_node) || OB_ISNULL(src_table_node)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
-    } else if (OB_FAIL(resolve_table_relation_node(dst_table_node, dst_table_name, dst_database_name))) {
+    if (OB_FAIL(resolve_table_relation_node(dst_table_node, dst_table_name, dst_database_name))) {
     } else if (OB_FAIL(deep_copy_str(dst_database_name, fork_table_arg.dst_database_name_))) {
     } else if (OB_FAIL(deep_copy_str(dst_table_name, fork_table_arg.dst_table_name_))) {
     } else if (OB_FAIL(resolve_table_relation_node(src_table_node, src_table_name, src_database_name))) {

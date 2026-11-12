@@ -19,9 +19,6 @@
 
 #include "lib/string/ob_string.h"
 
-struct _ParseNode;
-typedef struct _ParseNode ParseNode;
-
 namespace oceanbase
 {
 namespace common
@@ -53,14 +50,14 @@ public:
       share::schema::ObTriggerInfo &trigger_info,
       const common::ObString &base_object_database,
       const common::ObString &base_object_name,
-      const ParseNode &parse_node,
+      const common::ObString &trigger_body,
       const common::ObDataTypeCastParams &dtc_params);
   static int build_procedure_source(
       const share::schema::ObTriggerInfo &trigger_info,
       common::ObIAllocator &allocator,
       const common::ObString &base_object_database,
       const common::ObString &base_object_name,
-      const ParseNode &parse_node,
+      const common::ObString &trigger_body,
       const common::ObDataTypeCastParams &dtc_params,
       common::ObString &procedure_source);
   static int replace_table_name_in_body(
@@ -94,7 +91,7 @@ private:
       const share::schema::ObTriggerInfo &trigger_info,
       const common::ObString &base_object_database,
       const common::ObString &base_object_name,
-      const ParseNode &parse_node,
+      const common::ObString &trigger_body,
       const common::ObDataTypeCastParams &dtc_params,
       common::ObString &spec_source,
       common::ObString &body_source,

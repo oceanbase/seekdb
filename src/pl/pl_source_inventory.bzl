@@ -59,12 +59,4 @@ PL_UNITY_GROUPS = [
 ]
 
 PL_STANDALONE_CXX_SOURCES = [
-    "src/pl/parser/ob_pl_parser.cpp",
-]
-
-PL_STANDALONE_C_SOURCES = [
-    "src/pl/parser/pl_non_reserved_keywords_mysql_mode.c",
-    "src/pl/parser/pl_parser_base.c",
-    "src/pl/parser/pl_parser_mysql_mode_lex.c",
-    "src/pl/parser/pl_parser_mysql_mode_tab.c",
 ]
