@@ -94,7 +94,11 @@ int ObLockUserResolver::resolve(const ParseNode &parse_tree)
                 host_name.assign_ptr(user_hostname_node->children_[1]->str_value_,
                                      static_cast<int32_t>(user_hostname_node->children_[1]->str_len_));
               }
-              if (OB_FAIL(check_dcl_on_inner_user(node->type_,
+              if (user_name.empty()) {
+                ret = OB_CANNOT_USER;
+                const ObString operation = ObString::make_string("ALTER USER");
+                LOG_USER_ERROR(OB_CANNOT_USER, operation.length(), operation.ptr(), host_name.length(), host_name.ptr());
+              } else if (OB_FAIL(check_dcl_on_inner_user(node->type_,
                                                   session_info_->get_priv_user_id(),
                                                   user_name,
                                                   host_name))) {
