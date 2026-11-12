@@ -2694,16 +2694,14 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
                   && (dst_type.is_character_type() || dst_type.is_null()))
             || (src_type.is_character_type() && dst_type.is_character_type())))
       {
-      ret = OB_ERR_UNEXPECTED;
-#ifdef DEBUG
-      LOG_ERROR("try to add implicit cast again, check if type deduction is correct",
-                K(ret), K(expr), K(dst_type),
-                K(session->get_current_query_string()));
-#else
-      LOG_WARN("try to add implicit cast again, check if type deduction is correct",
-                K(ret), K(expr), K(dst_type), K(src_type), K(ignore_dup_cast_error),
-                K(session->get_current_query_string()));
-#endif
+    	ObRawExpr *inner = expr.get_param_expr(0);
+      if (OB_NOT_NULL(inner)
+          && inner->get_result_type().get_type() == dst_type.get_type()) {
+        new_expr = inner;
+      } else {
+        new_expr = &expr;
+      }
+      LOG_TRACE("reuse existing implicit cast", K(dst_type), K(src_type));
     } else {
       //setup implicit cast charset convert ignore error
       ObCastMode cm_zf = cm;
