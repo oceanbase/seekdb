@@ -616,9 +616,9 @@ int ObIODeviceLocalFileOp::fallocate(
     if (h == INVALID_HANDLE_VALUE) {
       sys_ret = -1;
     } else {
-      LARGE_INTEGER li;
-      li.QuadPart = offset + len;
-      if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
+      FILE_END_OF_FILE_INFO end_info = {};
+      end_info.EndOfFile.QuadPart = offset + len;
+      if (!SetFileInformationByHandle(h, FileEndOfFileInfo, &end_info, sizeof(end_info))) {
         sys_ret = -1;
       }
     }
