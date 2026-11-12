@@ -16,7 +16,7 @@ log = "0.4"
 mio = { version = "1", features = ["os-poll", "net"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
 
 [lints.clippy]
 # The documented pointer contracts are collected in src/bridge.rs.

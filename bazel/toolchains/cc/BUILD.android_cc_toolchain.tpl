@@ -31,9 +31,9 @@ filegroup(
 )
 cc_toolchain_config(
     name = "config",
-    toolchain_identifier = "seekdb-android-arm64-api28",
+    toolchain_identifier = "android-arm64-api@ANDROID_API_LEVEL@",
     host_system_name = "local",
-    target_system_name = "aarch64-linux-android28",
+    target_system_name = "@ANDROID_TARGET@",
     target_libc = "bionic",
     cpu = "aarch64",
     compiler = "clang",
@@ -45,11 +45,11 @@ cc_toolchain_config(
         "%crosstool_top%/ndk/lib/clang/@CLANG_VERSION@/include",
     ],
     compile_flags = [
-        "--target=aarch64-linux-android28",
+        "--target=@ANDROID_TARGET@",
         "-resource-dir=@REPOSITORY_ROOT@/ndk/lib/clang/@CLANG_VERSION@",
     ],
     cxx_flags = ["-std=c++20", "-stdlib=libc++"],
-    link_flags = ["--target=aarch64-linux-android28", "-fuse-ld=lld", "-Wl,-z,max-page-size=16384"],
+    link_flags = ["--target=@ANDROID_TARGET@", "-fuse-ld=lld", "-Wl,-z,max-page-size=16384"],
     link_libs = ["-lm", "-ldl"],
     opt_compile_flags = ["-O2"],
     dbg_compile_flags = ["-O0", "-g"],
@@ -58,8 +58,8 @@ cc_toolchain_config(
         # Use the API-level wrapper so every invocation, including tools that
         # shell out to $CC without our compile flags (e.g. Cargo build
         # scripts), gets the Android target and NDK sysroot.
-        "gcc": "ndk/bin/aarch64-linux-android28-clang",
-        "cpp": "ndk/bin/aarch64-linux-android28-clang",
+        "gcc": "ndk/bin/@ANDROID_TARGET@-clang",
+        "cpp": "ndk/bin/@ANDROID_TARGET@-clang",
         "ld": "ndk/bin/ld.lld",
         "ar": "ndk/bin/llvm-ar",
         "nm": "ndk/bin/llvm-nm",
@@ -72,7 +72,7 @@ cc_toolchain_config(
 )
 cc_toolchain(
     name = "cc",
-    toolchain_identifier = "seekdb-android-arm64-api28",
+    toolchain_identifier = "android-arm64-api@ANDROID_API_LEVEL@",
     toolchain_config = ":config",
     all_files = ":linker_files",
     compiler_files = ":compiler_files",

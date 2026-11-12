@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "lib/utility/ob_common_utility.h"
+#include <inttypes.h>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -206,7 +207,7 @@ int64_t ObBasicTimeGuard::to_string(char *buf, const int64_t buf_len) const
     MEMCPY(click_infos, click_infos_, sizeof(click_infos));
     lib::ob_sort(click_infos, click_infos + click_count, ClickInfo::compare);
     ret = databuff_printf(buf, buf_len, pos,
-        "owner: %s, click_count: %ld, time dist:[%s=%d",
+        "owner: %s, click_count: %" PRId64 ", time dist:[%s=%d",
         owner_, click_count_, click_infos[0].mod_, click_infos[0].cost_time_);
     for (int i = 1; OB_SUCC(ret) && i < click_count; ++i) {
       ret = databuff_printf(buf, buf_len, pos, ", %s=%d",

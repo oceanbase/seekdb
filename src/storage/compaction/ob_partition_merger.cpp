@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_partition_merger.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tablet_scheduler.h"
@@ -1336,7 +1337,7 @@ int ObPartitionMergeDumper::generate_dump_table_name(const char *dir_name,
     STORAGE_LOG(WARN, "table is null", K(ret));
   } else {
     int64_t pret = snprintf(
-                       file_name, OB_MAX_FILE_NAME_LENGTH, "%s/%s.%s.%ld.%s.%d.%s.%ld.%s.%ld",
+                       file_name, OB_MAX_FILE_NAME_LENGTH, "%s/%s.%s.%" PRId64 ".%s.%d.%s.%" PRId64 ".%s.%" PRId64 "",
                        dir_name,
                        table->is_memtable() ? "dump_memtable" : "dump_sstable",
                        "tablet_id", table->get_key().tablet_id_.id(),

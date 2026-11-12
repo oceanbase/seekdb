@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_priv_sql_service.h"
+#include <inttypes.h>
 
 #include <stddef.h>
 
@@ -323,13 +324,13 @@ int ObPrivSqlService::gen_delete_routine_priv_sql(
 
   ObSqlString sql;
 
-  if (OB_FAIL(sql.append_fmt("SELECT routine_name FROM %s WHERE user_id=%lu AND database_name=",
+  if (OB_FAIL(sql.append_fmt("SELECT routine_name FROM %s WHERE user_id=%" PRIu64 " AND database_name=",
                              OB_ALL_ROUTINE_PRIVILEGE_TNAME,
                              routine_priv_key.user_id_))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(routine_priv_key.db_, sql))) {
   } else if (OB_FAIL(sql.append(" AND CAST(routine_name AS CHAR)="))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(routine_priv_key.routine_, sql))) {
-  } else if (OB_FAIL(sql.append_fmt(" AND routine_type=%ld", routine_priv_key.routine_type_))) {
+  } else if (OB_FAIL(sql.append_fmt(" AND routine_type=%" PRId64 "", routine_priv_key.routine_type_))) {
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       ObString routine_name;
@@ -1140,7 +1141,7 @@ int ObPrivSqlService::grant_revoke_role(
           }
         }
         // gmt_create, gmt_modified
-        if (FAILEDx(sql.append_fmt("(now(6), now(6), %lu, %lu, %lu, %lu)",
+        if (FAILEDx(sql.append_fmt("(now(6), now(6), %" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 ")",
             ObSchemaUtils::get_extract_schema_id(grantee_id),
             ObSchemaUtils::get_extract_schema_id(role_id),
             option,
@@ -1152,7 +1153,7 @@ int ObPrivSqlService::grant_revoke_role(
     }
   } else {
     // revoke role from grantee
-    if (OB_FAIL(sql.append_fmt("DELETE FROM %s WHERE GRANTEE_ID = %lu and ROLE_ID IN (",
+    if (OB_FAIL(sql.append_fmt("DELETE FROM %s WHERE GRANTEE_ID = %" PRIu64 " and ROLE_ID IN (",
         OB_ALL_ROLE_GRANTEE_MAP_TNAME,
         ObSchemaUtils::get_extract_schema_id(grantee_id)))) {
     }
@@ -1162,7 +1163,7 @@ int ObPrivSqlService::grant_revoke_role(
         if (OB_FAIL(sql.append_fmt(", "))) {
         }
       }
-      if (FAILEDx(sql.append_fmt("%lu", ObSchemaUtils::get_extract_schema_id(role_id)))) {
+      if (FAILEDx(sql.append_fmt("%" PRIu64 "", ObSchemaUtils::get_extract_schema_id(role_id)))) {
       }
     }
     if (OB_SUCC(ret)) {
@@ -1184,7 +1185,7 @@ int ObPrivSqlService::grant_revoke_role(
         if (OB_FAIL(sql.append_fmt(", "))) {
         }
       }
-      if (FAILEDx(sql.append_fmt("(now(6), now(6), %lu, %lu, %ld, %ld, %lu, %lu)",
+      if (FAILEDx(sql.append_fmt("(now(6), now(6), %" PRIu64 ", %" PRIu64 ", %" PRId64 ", %" PRId64 ", %" PRIu64 ", %" PRIu64 ")",
           ObSchemaUtils::get_extract_schema_id(grantee_id),
           ObSchemaUtils::get_extract_schema_id(role_id),
           new_schema_version,

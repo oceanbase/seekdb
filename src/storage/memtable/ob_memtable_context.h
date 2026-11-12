@@ -18,6 +18,7 @@
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_CONTEXT_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include <inttypes.h>
 #include "lib/literals/ob_literals.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/list/ob_dlist.h"
@@ -57,7 +58,7 @@ struct RetryInfo
   int64_t to_string(char *buf, const int64_t buf_len) const {
     int64_t pos = 0;
     int64_t retry_cnt = ATOMIC_LOAD(&retry_cnt_);
-    (void) databuff_printf(buf, buf_len, pos, "retry_cnt:%ld, last_retry_ts:%s",
+    (void) databuff_printf(buf, buf_len, pos, "retry_cnt:%" PRId64 ", last_retry_ts:%s",
                            retry_cnt, ObTime2Str::ob_timestamp_str(last_retry_ts_));
     return pos;
   }

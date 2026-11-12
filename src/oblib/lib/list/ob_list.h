@@ -17,6 +17,7 @@
 #ifndef  OCEANBASE_COMMON_LIST_H_
 #define  OCEANBASE_COMMON_LIST_H_
 #include "lib/hash/ob_hashutils.h"
+#include <inttypes.h>
 #include "lib/utility/ob_print_utils.h"
 
 #include <pthread.h>
@@ -506,7 +507,7 @@ public:
       for (int64_t i = 0; i < sz; i++) {
         value_type item;
         if (OB_SUCCESS != (ret = item.deserialize(buf, data_len, tmp_pos))) {
-          _OB_LOG(WARN, "deserialize item fail, idx=%ld ret=%d buf=%p date_len=%ld pos=%ld",
+          _OB_LOG(WARN, "deserialize item fail, idx=%" PRId64 " ret=%d buf=%p date_len=%" PRId64 " pos=%" PRId64 "",
                     i, ret, buf, data_len, tmp_pos);
           break;
         }

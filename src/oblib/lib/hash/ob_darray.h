@@ -18,6 +18,7 @@
 #define OCEANBASE_HASH_OB_DARRAY_H_
 
 #include "lib/allocator/ob_hazard_ref.h"
+#include <inttypes.h>
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/thread_local/ob_tsi_utils.h"
 
@@ -361,7 +362,7 @@ public:
     if (OB_ISNULL(this) || OB_ISNULL(fp)) {
       COMMON_LOG_RET(ERROR, common::OB_INVALID_ARGUMENT, "print error, invalid argument or null this", KP(this), KP(fp));
     } else {
-      fprintf(fp, "%*s%ldL%d: ", indent * 4, "C", slot_idx, level_);
+      fprintf(fp, "%*s%" PRId64 "L%d: ", indent * 4, "C", slot_idx, level_);
       if (level_ != 1) {
         fprintf(fp, "\n");
       }

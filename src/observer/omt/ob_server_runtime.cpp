@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_server_runtime.h"
 #include "observer/ob_server.h"   // T3d
 #include "share/rc/ob_server_runtime.h"
@@ -218,7 +219,7 @@ void ObPxPool::handle(ObLink *task)
 void ObPxPool::set_px_thread_name()
 {
   char buf[32];
-  snprintf(buf, 32, "PX_G%ld", group_id_);
+  snprintf(buf, 32, "PX_G%" PRIu64, group_id_);
   lib::set_thread_name(buf);
 }
 
@@ -315,7 +316,8 @@ ObServerRuntime::ObServerRuntime()
       recv_task_cnt_(0),
       lock_(),
       workers_lock_(common::ObLatchIds::SERVER_RUNTIME_WORKER_LOCK),
-      completion_cnt_(0)
+      completion_cnt_(0),
+      last_rescue_completion_cnt_(0)
 {
 }
 
@@ -647,14 +649,14 @@ int ObServerRuntime::recv_request(ObRequest &req)
 
   if (OB_SUCC(ret)) {
     EVENT_INC(REQUEST_ENQUEUE_COUNT);
-    // Expand from foreground when no idle worker, in case the only
-    // worker is busy and cannot fire the worker-loop expand signal.
-    // Regular requests stay bounded by min_worker_cnt; high-priority
-    // requests jump straight to max_worker_cnt so a fresh worker is
-    // spawned on the spot instead of waiting for the 3s stalled-completion
-    // rescue in timeup(). Spawned workers are reused by subsequent requests
-    // and idle out through the normal 10s keep-alive shrink, so no threads
-    // are permanently reserved.
+    // Expand from foreground when no worker is inside the queue pop. This uses
+    // idle_cnt_, the designed pool signal maintained by pop_with_idle() while a
+    // worker waits for work: zero means the request just enqueued has no waiter,
+    // so a worker is spawned on the spot. Regular requests stay bounded by
+    // min_worker_cnt; high-priority requests (in-process sync callbacks) jump
+    // straight to max_worker_cnt. Spawned workers are reused by subsequent
+    // requests and idle out through the normal 10s keep-alive shrink, so no
+    // threads are permanently reserved.
     if (idle_count() == 0) {
       try_expand_one(is_high_prio ? max_worker_cnt() : min_worker_cnt());
     }
@@ -686,17 +688,22 @@ int ObServerRuntime::timeup()
       if (REACH_TIME_INTERVAL(1 * 1000 * 1000L)) {
         check_worker_count();
       }
-      // Rescue expansion: if request completion stalls for 3s while
-      // queue is non-empty and workers are at min_worker_cnt, workers
-      // may be deadlocked — expand up to max_worker_cnt.
+      // Background rescue: a non-empty queue with no worker inside the queue
+      // pop (idle_cnt_ == 0, the same designed signal the foreground expansion
+      // uses) that also completed nothing for 3s means every worker is blocked,
+      // not merely busy: ordinary slow work still advances completion_cnt_. One
+      // worker per tick is added, bounded by max_worker_cnt, and the foreground
+      // path stops calling this rescue once progress resumes. Unlike the
+      // foreground condition this one does not require the pool to be at
+      // min_worker_cnt, because idle shrink can leave it below the nominal count.
       if (REACH_TIME_INTERVAL(3 * 1000 * 1000L)) {
-        static int64_t last_completion_cnt = 0;
         int64_t completion_cnt = completion_cnt_.load(std::memory_order_relaxed);
-        if (worker_count() >= min_worker_cnt() && queue_size() > 0
-            && completion_cnt == last_completion_cnt) {
+        if (queue_size() > 0
+            && idle_count() == 0
+            && completion_cnt == last_rescue_completion_cnt_) {
           try_expand_one(max_worker_cnt());
         }
-        last_completion_cnt = completion_cnt;
+        last_rescue_completion_cnt_ = completion_cnt;
       }
       handle_retry_req();
     }
@@ -766,7 +773,6 @@ bool ObServerRuntime::do_add_worker()
   }
   return OB_SUCCESS == ret && succ_num == 1;
 }
-
 
 void ObServerRuntime::periodically_check()
 {

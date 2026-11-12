@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_schema2ddl_sql.h"
+#include <inttypes.h>
 #include "lib/utility/ob_smart_var.h"
 
 #include "share/schema/ob_schema_service.h"
@@ -127,7 +128,7 @@ int ObSchema2DDLSql::convert(
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(part_def.append_fmt("partition by key (%s) partitions %ld",
+          if (OB_FAIL(part_def.append_fmt("partition by key (%s) partitions %" PRId64 "",
               partition_key_str.ptr(), table_schema.get_all_part_num()))) {
           }
         }

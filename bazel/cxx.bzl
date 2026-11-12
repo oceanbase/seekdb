@@ -51,6 +51,7 @@ def cxx_bridge(name, src, hdrs = [], deps = [], cfgs = []):
         name = name + "_bridge",
         srcs = [name + ".cc"],
         deps = [":" + name + "_headers"],
+        visibility = ["//rust:__subpackages__"],
     )
 
 def _config_generate_impl(ctx):

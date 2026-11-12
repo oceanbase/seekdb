@@ -23,7 +23,10 @@
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/allocator/ob_allocator.h"
 #include "share/io/ob_io_define.h"
-#include <curl/curl.h>
+#ifndef __EMSCRIPTEN__
+#include <optional>
+#include "rust/http_client.h"
+#endif
 
 
 namespace oceanbase
@@ -254,7 +257,7 @@ private:
   void log_phase_transition(ObEmbeddingTaskPhase from_phase, ObEmbeddingTaskPhase to_phase);
   int reschedule(ObEmbeddingTaskHandler *thread_pool);
   int handle_reschedule_failure(ObEmbeddingTaskHandler *thread_pool, int error_code);
-  bool is_http_sent() const { return curl_request_in_progress_; }
+  bool is_http_sent() const { return http_request_in_progress_; }
   void set_task_id(int64_t task_id) { task_id_ = task_id; }
 
   int parse_embedding_response(const char *response_data, size_t response_size);
@@ -267,44 +270,7 @@ private:
   void reset_retry_state();
   int map_http_error_to_internal_error(int64_t http_error_code) const;
   void try_increase_batch_size();
-  int init_curl_handler(const ObString &model_url, const ObString &user_key, const int64_t http_timeout_us);
-
-  struct HttpResponseData {
-    HttpResponseData(ObIAllocator &allocator) : data(nullptr), size(0), allocator(allocator) {}
-    ~HttpResponseData() { reset(); }
-    void reset()
-    {
-      if (OB_NOT_NULL(data)) {
-        allocator.free(data);
-        data = nullptr;
-        size = 0;
-      }
-    }
-    char *data;
-    size_t size;
-    ObIAllocator &allocator;
-  };
-
-  static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
-  {
-    size_t realsize = size * nmemb;
-    struct HttpResponseData *mem = (struct HttpResponseData *)userp;
-    
-    char *ptr = (char*)mem->allocator.alloc(mem->size + realsize + 1);
-    if (OB_ISNULL(ptr)) {
-      return 0;
-    } else {
-      if (OB_NOT_NULL(mem->data)) {
-        memcpy(ptr, mem->data, mem->size);
-      }
-      memcpy(&(ptr[mem->size]), contents, realsize);
-      mem->data = ptr;
-      mem->size += realsize;
-      mem->data[mem->size] = '\0';
-    }
-    
-    return realsize;
-  }
+  int init_http_client(const ObString &model_url, const ObString &user_key, const int64_t http_timeout_us);
 
 private:
   ObArenaAllocator local_allocator_;
@@ -353,11 +319,11 @@ private:
   char *http_response_data_;
 
   // Async HTTP processing members
-  CURLM *curl_multi_handle_;
-  CURL *curl_easy_handle_;
-  bool curl_request_in_progress_;
-  HttpResponseData *curl_response_data_; // Store response data for async HTTP processing
-  struct curl_slist *curl_headers_; // Store HTTP headers for cleanup
+#ifndef __EMSCRIPTEN__
+  std::optional<rust::Box<oceanbase::http::HttpClient>> http_client_;
+  std::optional<rust::Box<oceanbase::http::HttpBatch>> http_batch_;
+#endif
+  bool http_request_in_progress_;
   
   // HTTP retry related members
   int64_t http_retry_count_;

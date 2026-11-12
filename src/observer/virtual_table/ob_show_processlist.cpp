@@ -16,6 +16,7 @@
 
 #include "observer/virtual_table/ob_show_processlist.h"
 #include "observer/ob_server.h"
+#include "share/schema/ob_schema_getter_guard.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -117,10 +118,14 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
     } else {
       type_is_double = tmp_column_schema->get_meta_type().is_double();
     }
-    if (sess_info->is_shadow()) {
-      // do not show shadow session
+    // Hold the session lock across both the ownership check and row creation.
+    // COM_CHANGE_USER updates the identity and username under this lock.
+    ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
+    if (sess_info->is_shadow()
+        || (!has_process_privilege_
+            && my_session_->get_user_id() != sess_info->get_user_id())) {
+      // Skip shadow sessions and peer sessions hidden by the caller's privilege.
     } else {
-      ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
       const int64_t col_count = output_column_ids_.count();
       ObCharsetType default_charset = ObCharset::get_default_charset();
       ObCollationType default_collation = ObCharset::get_default_collation(default_charset);
@@ -410,6 +415,7 @@ void ObShowProcesslist::FillScanner::reset()
   scanner_ = NULL;
   cur_row_ = NULL;
   my_session_ = NULL;
+  has_process_privilege_ = false;
   trace_id_[0] = '\0';
   output_column_ids_.reset();
 }
@@ -427,6 +433,7 @@ int ObShowProcesslist::FillScanner::init(ObIAllocator *allocator,
                   || NULL == scanner
                   || NULL == cur_row
                   || NULL == session_info
+                  || NULL == schema_guard
                   || NULL == table_schema)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN,
@@ -434,12 +441,34 @@ int ObShowProcesslist::FillScanner::init(ObIAllocator *allocator,
               K(cur_row), K(session_info), K(table_schema));
   } else if (OB_FAIL(output_column_ids_.assign(column_ids))) {
   } else {
-    allocator_ = allocator;
-    scanner_ = scanner;
-    cur_row_ = cur_row;
-    my_session_ = session_info;
-    schema_guard_ = schema_guard;
-    table_schema_ = table_schema;
+    share::schema::ObSessionPrivInfo session_priv;
+    share::schema::ObStmtNeedPrivs required(*allocator);
+    share::schema::ObNeedPriv need_priv;
+    need_priv.priv_level_ = share::schema::OB_PRIV_USER_LEVEL;
+    need_priv.priv_set_ = OB_PRIV_PROCESS;
+    if (OB_FAIL(session_info->get_session_priv_info(session_priv))) {
+    } else if (OB_FAIL(required.need_privs_.init(1))) {
+    } else if (OB_FAIL(required.need_privs_.push_back(need_priv))) {
+    } else {
+      const int priv_ret = schema_guard->check_priv(
+          session_priv, session_info->get_enable_role_array(), required);
+      if (OB_SUCCESS == priv_ret) {
+        has_process_privilege_ = true;
+      } else if (OB_ERR_NO_PRIVILEGE == priv_ret) {
+        has_process_privilege_ = false;
+      } else {
+        ret = priv_ret;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else {
+      allocator_ = allocator;
+      scanner_ = scanner;
+      cur_row_ = cur_row;
+      my_session_ = session_info;
+      schema_guard_ = schema_guard;
+      table_schema_ = table_schema;
+    }
   }
   return ret;
 }

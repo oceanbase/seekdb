@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_object.h"
+#include <inttypes.h>
 #include <string.h>
 #include "common/object/ob_obj_compare.h"
 #include "lib/string/ob_sql_string.h"
@@ -1493,7 +1494,7 @@ int ObObj::apply(const ObObj &mutation)
             break;
           default:
             ret = OB_INVALID_ARGUMENT;
-            _OB_LOG(ERROR, "unsupported ext value [value:%ld]", mutation.get_ext());
+            _OB_LOG(ERROR, "unsupported ext value [value:%" PRId64 "]", mutation.get_ext());
             break;
         }  // end switch
         break;

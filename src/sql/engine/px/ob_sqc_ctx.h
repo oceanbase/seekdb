@@ -40,6 +40,8 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObGITaskReBalancer;
+
 // SQC status
 class ObSqcCtx
 {
@@ -72,15 +74,23 @@ public:
   int64_t get_task_count() const { return tasks_.count(); }
   void reset() 
   {
+    destroy_gi_task_rebalancers();
     for (int i = 0; i < whole_msg_provider_list_.count(); ++i) {
       if (OB_NOT_NULL(whole_msg_provider_list_.at(i))) {
         whole_msg_provider_list_.at(i)->reset();
+        // The execution arena releases provider storage without running
+        // destructors; the provider releases its own OS resources explicitly.
+        whole_msg_provider_list_.at(i)->destroy();
       }
     }
 
   }
 
 public:
+  int create_gi_task_rebalancer(ObExecContext &ctx, int64_t parallelism,
+                               int64_t split_gi_task_cost, int64_t initial_task_count,
+                               int64_t op_id, ObGITaskReBalancer *&rebalancer);
+  void destroy_gi_task_rebalancers();
   // sqc starts by registering all operators that use datahub in the sub-plan here, used for listening to whole messages
   int add_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type, ObPxDatahubDataProvider &provider);
   int get_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type, ObPxDatahubDataProvider *&provider);
@@ -113,6 +123,7 @@ public:
   common::ObSEArray<std::pair<int64_t, int64_t>, 1> init_channel_msg_cnts_; // <op_id, piece_cnt>
   ObJoinFilterCountRowWholeMsgP join_filter_count_row_whole_msg_proc_;
 private:
+  common::ObSEArray<ObGITaskReBalancer *, 1> gi_task_rebalancers_;
   DISALLOW_COPY_AND_ASSIGN(ObSqcCtx);
 };
 

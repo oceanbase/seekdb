@@ -1243,7 +1243,7 @@ inline int obj_print_plain_str<ObHexStringType>(const ObObj &obj, char *buffer,
       if (OB_SUCC(ret) && params.refine_range_max_value_) {                                 \
         int64_t tails = 0;                                                                  \
         while (pos > 0 && (char)(0xff) == buffer[pos-1]) { pos--; tails++; }                \
-        if (tails > 0) { ret = databuff_printf(buffer, length, pos, "<FF><repeat %ld times>", tails); } \
+        if (tails > 0) { ret = databuff_printf(buffer, length, pos, "<FF><repeat %" PRId64 " times>", tails); } \
       }                                                                                     \
     } else {                                                                                \
       uint32_t result_len = 0;                                                              \
@@ -1371,7 +1371,7 @@ DEF_VARCHAR_FUNCS(ObCharType, char, ObString);
       ObEnumSetInnerValue inner_value;                                  \
       if (OB_FAIL(obj.get_enumset_inner_value(inner_value))) {         \
       } else {                                                          \
-        ret = databuff_printf(buffer, length, pos, "%.*s; %ld", inner_value.string_value_.length(),\
+        ret = databuff_printf(buffer, length, pos, "%.*s; %" PRId64 "", inner_value.string_value_.length(),\
                               inner_value.string_value_.ptr(), inner_value.numberic_value_);  \
       }                                                                 \
     }                                                                     \
@@ -1403,7 +1403,7 @@ DEF_VARCHAR_FUNCS(ObCharType, char, ObString);
       ObEnumSetInnerValue inner_value;                                  \
       if (OB_FAIL(obj.get_enumset_inner_value(inner_value))) {         \
       } else {                                                          \
-        ret = databuff_printf(buf, buf_len, pos, "%.*s; %ld", inner_value.string_value_.length(),\
+        ret = databuff_printf(buf, buf_len, pos, "%.*s; %" PRId64 "", inner_value.string_value_.length(),\
                               inner_value.string_value_.ptr(), inner_value.numberic_value_);  \
       }                                                                 \
     }                                                                   \
@@ -1739,7 +1739,7 @@ inline int obj_print_sql<ObJsonType>(const ObObj &obj, char *buffer, int64_t len
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buffer, length, pos))) {
   } else if (str.empty()) { // nothing to print;
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, j_base, parse_flag))) {
   } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "'"))) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "%.*s", 
@@ -1770,7 +1770,7 @@ inline int obj_print_plain_str<ObJsonType>(const ObObj &obj, char *buffer, int64
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buffer, length, pos))) {
   } else if (str.empty()) { // nothing to print;
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, j_base, parse_flag))) {
   } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (params.use_memcpy_) {
     ret = databuff_memcpy(buffer, length, pos, jbuf.length(), jbuf.ptr());
@@ -1795,7 +1795,7 @@ inline int obj_print_json<ObJsonType>(const ObObj &obj, char *buf, int64_t buf_l
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buf, buf_len, pos))) {
   } else if (str.empty()) { // nothing to print;
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, j_base, parse_flag))) {
   } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%.*s",
                                      static_cast<int>(MIN(jbuf.length(), buf_len - pos)),
@@ -1922,7 +1922,7 @@ template <>
       ret = databuff_printf(buffer, length, pos, "'%s'", N_UPPERCASE_CUR_TIMESTAMP);
       break;
     default:
-      _OB_LOG(WARN, "ext %ld should not be print as sql varchar literal", obj.get_ext());
+      _OB_LOG(WARN, "ext %" PRId64 " should not be print as sql varchar literal", obj.get_ext());
       ret = OB_INVALID_ARGUMENT;
       break;
   }
@@ -1949,7 +1949,7 @@ template <>
       ret = databuff_printf(buffer, length, pos, "%s", N_UPPERCASE_CUR_TIMESTAMP);
       break;
     default:
-      _OB_LOG(WARN, "ext %ld should not be print as sql", obj.get_ext());
+      _OB_LOG(WARN, "ext %" PRId64 " should not be print as sql", obj.get_ext());
       ret = OB_INVALID_ARGUMENT;
       break;
   }

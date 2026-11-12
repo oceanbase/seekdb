@@ -12,6 +12,23 @@ Rustup downloads use [RsProxy](https://rsproxy.cn/) by default. Set `RUSTUP_DIST
 
 Existing `CARGO_HOME` and `RUSTUP_HOME` settings are preserved. Without overrides, rustup uses its standard user directories. `build.py` adds the Cargo binary directory to its own `PATH`; to run Cargo directly in another shell, add that directory to your shell's `PATH`.
 
+### Native module tests
+
+Run the XML, compression, SQL network compression, HTTP, and crypto module tests with Bazel:
+
+```bash
+python3 build.py test -j32 \
+  //rust/xml-parser:xml_parser_test \
+  //rust/compression:compression_test \
+  //rust/sql-nio:compression_test \
+  //rust/http-client:http_client_test \
+  //rust/crypto:crypto_test \
+  --@rules_rust//rust/settings:extra_rustc_flags=-Cpanic=unwind \
+  --test_output=errors
+```
+
+The standard Rust test harness requires unwinding. This supported rules_rust setting applies to the test build and its Rust dependencies. Product builds retain `panic=abort` when invoked without the override.
+
 The build script downloads locked Cargo dependencies through the RsProxy sparse registry, overriding the user's crates.io source selection for this step. Downloads reuse the existing Cargo cache (`CARGO_HOME`, or `~/.cargo` by default).
 
 ## Host detection and supported architectures
@@ -65,11 +82,19 @@ brew install zstd lz4 utf8proc thrift re2 brotli
 
 See [Homebrew optimization](homebrew.md) if a mirror is required.
 
+The Rust compression module uses the pure Rust `zlib-rs` implementation. Storage compression and SQL network compression share its native Rust interfaces; C++ consumers use CXX adapters to the same module. This compression backend does not compile C sources or require CMake, Make, or Ninja. Default zlib compression uses level 6. Its compressed streams retain the zlib wire format, but compressed bytes and sizes can differ from the C implementation.
+
+The Rust HTTP module wraps the existing target SDK libcurl through the repository's CXX integration. Rust owns client configuration, batch state, errors, and response buffers. A thin C++ adapter uses the SDK headers for libcurl options, callbacks, and resource management. The module has no `curl`, `curl-sys`, `openssl-sys`, vendored OpenSSL, AWS-LC, bindgen, or CMake dependency. The SDK retains ownership of libcurl's TLS backend, CA defaults, and supported content encodings. Existing SDK preparation and jemalloc have their own build requirements.
+
+The Rust crypto module exposes native Rust digest, HMAC, random-byte, cipher, SQL DES, and certificate-metadata interfaces. C++ consumers use CXX adapters to the same Rust implementation. Internal CXX bindings call the existing SDK OpenSSL; OpenSSL types and headers remain private to the SDK adapter. This module adds no OpenSSL crate or OpenSSL source build.
+
+On Windows, the existing SDK libcurl DLL and its zlib DLL dependency remain in the runtime package. Rust storage and SQL compression use `zlib-rs` independently of that SDK dependency.
+
 ## Windows host packages
 
 Install Python 3 and Visual Studio 2022 Build Tools with the **Desktop development with C++** workload. The project dependency SDK includes LLVM 18.1.8; no separate LLVM installation is needed.
 
-The bundled jemalloc build also requires a POSIX shell, core utilities (including `chmod`), `awk`, `grep`, `sed`, and GNU Make. A full Git for Windows installation provides the shell and most utilities; minimal Git distributions may omit required commands. MSYS2 can supply the build tools with `pacman -S make coreutils gawk grep sed`. Add the required tool directories to the build process's `PATH`, keeping Visual Studio's compiler and linker directories first. These utilities run the build scripts; the library is compiled with clang-cl and the MSVC runtime.
+The bundled jemalloc build also requires a POSIX shell, core utilities (including `chmod`), `awk`, `grep`, `sed`, and GNU Make. A full Git for Windows installation provides the shell and utilities; minimal Git distributions may omit required commands. GNU Make must also be available. MSYS2 can supply these tools with `pacman -S make coreutils gawk grep sed`. Add the required tool directories to the build process's `PATH`, keeping Visual Studio's compiler and linker directories first. These utilities run the build scripts; the library is compiled with clang-cl and the MSVC runtime.
 
 Open **x64 Native Tools Command Prompt for VS 2022** in the repository root, check that the build utilities are available, then initialize the parser tools and dependency SDK:
 
@@ -77,6 +102,9 @@ Open **x64 Native Tools Command Prompt for VS 2022** in the repository root, che
 where sh
 where make
 where chmod
+where awk
+where grep
+where sed
 where lib
 python build.py init
 python build.py build seekdb

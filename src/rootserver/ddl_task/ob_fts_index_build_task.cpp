@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "rootserver/ddl_task/ob_fts_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
@@ -1593,7 +1594,7 @@ int ObFtsIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %" PRId64 ", ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(OB_FAIL(databuff_printf(stat_info_.message_,
@@ -1607,7 +1608,7 @@ int ObFtsIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
       if (OB_FAIL(databuff_printf(stat_info_.message_,
                                   MAX_LONG_OPS_MESSAGE_LENGTH,
                                   pos,
-                                  "STATUS: GENERATE_ROWKEY_DOC_SCHEMA, ROWKEY_DOC_TASK_ID: %ld", rowkey_doc_task_id_))) {
+                                  "STATUS: GENERATE_ROWKEY_DOC_SCHEMA, ROWKEY_DOC_TASK_ID: %" PRId64 "", rowkey_doc_task_id_))) {
       }
       break;
     }
@@ -1616,7 +1617,7 @@ int ObFtsIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
                   MAX_LONG_OPS_MESSAGE_LENGTH,
                   pos,
                   "STATUS: WAIT_ROWKEY_DOC_TABLE_COMPLEMENT, \
-                  DOC_ROWKEY_TASK_ID: %ld, DOMAIN_INDEX_AUX_TASK_ID: %ld, FTS_DOC_WORD_TASK_ID: %ld", \
+                  DOC_ROWKEY_TASK_ID: %" PRId64 ", DOMAIN_INDEX_AUX_TASK_ID: %" PRId64 ", FTS_DOC_WORD_TASK_ID: %" PRId64 "", \
                   doc_rowkey_task_id_, domain_index_aux_task_id_, fts_doc_word_task_id_))) {
       }
       break;

@@ -29,7 +29,7 @@ def observer_third_party_link_files(platform):
     macos = platform == "macos"
     lib64 = "lib" if android or macos else "lib64"
     vsag = "lib" if android else "lib/vsag_lib"
-    files = ["lib/libxml2.a", "lib/liblzma.a"]
+    files = []
     files += [vsag + "/" + name for name in [
         "libcpuinfo.a", "libsimd.a", "libvsag_static.a", "libdiskann.a",
     ]]
@@ -52,16 +52,11 @@ def observer_third_party_link_files(platform):
     ]]
     if android:
         files += ["lib/libspdlog.a"]
-    files += ["lib/libcurl.a", "lib/libssl.a", "lib/libcrypto.a"]
-    # The native macOS SDK retains S2 in lib64.
-    files += [("lib" if android else "lib64") + "/libs2.a"]
+    files += ["lib/libssl.a", "lib/libcrypto.a"]
     files += [lib64 + "/" + name for name in _ABSL_ARCHIVE_NAMES]
     labels += [repository + "//:" + file for file in files]
     labels += [":_roaring_core_link"]
-    files = ["lib/libunwind.a"] if platform == "linux_x86_64" else []
-    files += ["lib/" + name for name in [
-        "libz.a",
-    ]]
+    files = []
     if not macos and not android:
         files += ["lib/libaio.so"]
     return labels + [repository + "//:" + file for file in files]

@@ -1683,7 +1683,10 @@ int ObBoolOpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
       }
       if (OB_FAIL(ret)) {
       } else if (is_duplicate) {
-        if (!equal_ctx.equal_pairs_.empty()) {
+        // Cost-only plans run in a temporary memory context. Do not bind the
+        // statement's auto-free array to that context or retain trial constraints.
+        // The final optimization records the equalities used by its estimators.
+        if (!equal_ctx.equal_pairs_.empty() && !ctx.get_opt_ctx().is_cost_evaluation()) {
           ObQueryCtx *query_ctx = ctx.get_opt_ctx().get_query_ctx();
           if (OB_ISNULL(query_ctx)) {
             ret = OB_ERR_UNEXPECTED;

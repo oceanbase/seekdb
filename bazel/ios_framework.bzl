@@ -23,7 +23,6 @@ def ios_framework():
             "//src/oblib:oblib_io_primitives",
             "//src/oblib:oblib_rpc",
             "//deps/external:jemalloc_headers",
-            "//bazel/third_party:curl_headers",
             "//rust:in_process_headers",
             "//rust:logger_headers",
         ],

@@ -17,6 +17,7 @@
 #ifndef  OCEANBASE_COMMON_FILE_H_
 #define  OCEANBASE_COMMON_FILE_H_
 #include <stdlib.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -452,7 +453,7 @@ ObWaitablePool<T, SIZE>::~ObWaitablePool()
   }
   if (NULL != objs_) {
     if (SIZE != counter) {
-      _OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "still have %ld node not been free, memory=%p will leek", SIZE - counter, objs_);
+      _OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "still have %" PRId64 " node not been free, memory=%p will leek", SIZE - counter, objs_);
     } else {
       ob_free(objs_);
     }

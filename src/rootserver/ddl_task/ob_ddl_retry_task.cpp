@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_ddl_retry_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
@@ -256,7 +257,7 @@ int ObDDLRetryTask::check_schema_change_done()
       if (OB_UNLIKELY(!proxy.is_inited())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(query_string.assign_fmt(
-          " SELECT status FROM %s WHERE task_id = %lu",
+          " SELECT status FROM %s WHERE task_id = %" PRIu64 "",
           OB_ALL_DDL_TASK_STATUS_TNAME, task_id_))) {
       } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_CHECK_SCHEMA_CHANGED_SLOW))) {
       } else if (OB_FAIL(proxy.read(res, query_string.ptr()))) {

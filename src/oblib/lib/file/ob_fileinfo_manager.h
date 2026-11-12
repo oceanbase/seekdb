@@ -17,7 +17,6 @@
 #ifndef  OCEANBASE_UPDATESERVER_FILEINFO_MANAGER_H_
 #define  OCEANBASE_UPDATESERVER_FILEINFO_MANAGER_H_
 #include <sys/types.h>
-#include <dirent.h>
 #ifdef __APPLE__
 #include <sys/mount.h> // sys/vfs.h is not available on macOS, use sys/mount.h instead
 #elif defined(__linux__)

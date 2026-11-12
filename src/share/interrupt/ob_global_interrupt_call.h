@@ -18,6 +18,7 @@
 #define OCEANBASE_COMMON_GLOBAL_INTERRUPT_CALL_H_
 
 #include "share/interrupt/ob_interrupt_message.h"
+#include <inttypes.h>
 #include "lib/ob_errno.h"
 #include "lib/net/ob_addr.h"
 #include "lib/hash/ob_hashmap.h"
@@ -70,7 +71,7 @@ public:
   inline int64_t to_string(char *buf, const int64_t len) const
   {
     int64_t pos = 0;
-    databuff_printf(buf, len, pos, "task(%ld,%ld)", first_, last_);
+    databuff_printf(buf, len, pos, "task(%" PRId64 ",%" PRId64 ")", first_, last_);
     return pos;
   }
 

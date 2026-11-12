@@ -229,7 +229,7 @@ int calc_##tritype##_expr(const ObExpr &expr, ObEvalCtx &ctx,                 \
     if (INVALID_DOUBLE_ARG_CHECK) {                                           \
       res_datum.set_null();                                                   \
     } else {                                                                  \
-      res_datum.set_double(tritype(arg));                                     \
+      res_datum.set_double(oceanbase::math_compat::tritype(arg));                                     \
     }                                                                         \
   } else {                                                                    \
     ret = OB_ERR_UNEXPECTED;                                                  \

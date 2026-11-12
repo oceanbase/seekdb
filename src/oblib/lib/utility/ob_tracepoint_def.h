@@ -130,7 +130,6 @@ GLOBAL_ERRSIM_POINT_DEF(248, EN_SORT_IMPL_TOPN_EAGER_FILTER, "Used to control wh
 GLOBAL_ERRSIM_POINT_DEF(250, EN_TRANS_SHARED_LOCK_CONFLICT, "");
 GLOBAL_ERRSIM_POINT_DEF(251, EN_HASH_JOIN_OPTION, "Cache aware hash join switch (value & 0x2), and  extra bloom filter in hash join switch (value & 0x4).");
 GLOBAL_ERRSIM_POINT_DEF(252, EN_SET_DISABLE_HASH_JOIN_BATCH, "");
-GLOBAL_ERRSIM_POINT_DEF(253, EN_INNER_SQL_CONN_LEAK_CHECK, "");
 GLOBAL_ERRSIM_POINT_DEF(254, EN_ADAPTIVE_GROUP_BY_SMALL_CACHE, "Used to simulate a scenario where hash gby quickly enters the adaptive state");
 
 GLOBAL_ERRSIM_POINT_DEF(266, EN_DISK_ERROR, "Deprecated variable");

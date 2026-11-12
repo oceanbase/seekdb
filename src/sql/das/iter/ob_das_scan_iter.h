@@ -66,6 +66,7 @@ public:
 
   virtual int do_table_scan() override;
   virtual int rescan() override;
+  int reuse_result_for_rescan();
   virtual int advance_scan() override;
   virtual void clear_evaluated_flag() override;
 

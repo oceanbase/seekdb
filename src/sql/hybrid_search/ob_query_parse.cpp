@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 #include <cmath>
 #include "common/json_type/ob_json_parse.h"
+#include <inttypes.h>
 #include "ob_query_parse.h"
 
 namespace oceanbase
@@ -44,13 +45,11 @@ const ObString ObESQueryParser::HIDDEN_COLUMN_VISIBLE_HINT("opt_param('hidden_co
 int ObESQueryParser::parse(const common::ObString &req_str, ObQueryReqFromJson *&query_req)
 {
   int ret = OB_SUCCESS;
-  ObJsonNode *j_node = NULL;
-  const char *syntaxerr = NULL;
+  ObIJsonBase *j_node = NULL;
   ObString fusion_key = "rank";
   ObIJsonBase *fusion_node = NULL;
-  uint64_t err_offset = 0;
-  uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG | ObJsonParser::JSN_UNIQUE_FLAG;
-  if (OB_FAIL(ObJsonParser::parse_json_text(&alloc_, req_str.ptr(), req_str.length(), syntaxerr, &err_offset, j_node, parse_flag))) {
+  uint32_t parse_flag = ObJsonParser::JSN_UNIQUE_FLAG;
+  if (OB_FAIL(ObJsonBaseFactory::get_json_base(&alloc_, req_str, ObJsonInType::JSON_TEXT, j_node, parse_flag))) {
   } else if (OB_FAIL(init_default_params(*j_node))) {
   } else {
     uint64_t count = j_node->element_count();
@@ -935,7 +934,7 @@ int ObESQueryParser::construct_es_expr_options(ObEsQueryInfo &query_info)
   } else if (OB_FAIL(databuff_printf(buf, MATCH_PARAMS_BUF_SIZE, pos, ";boost=%.15g",
                      OB_NOT_NULL(query_info.boost_expr_) ? query_info.boost_expr_->get_numeric_value() : 1.0))) {
   } else if (msm_val > 0 &&
-             OB_FAIL(databuff_printf(buf, MATCH_PARAMS_BUF_SIZE, pos, ";minimum_should_match=%ld", msm_val))) {
+             OB_FAIL(databuff_printf(buf, MATCH_PARAMS_BUF_SIZE, pos, ";minimum_should_match=%" PRId64 "", msm_val))) {
   } else if (OB_FAIL(databuff_printf(buf, MATCH_PARAMS_BUF_SIZE, pos, ";type=%s", score_type_str))) {
   } else if (OB_FALSE_IT(options_str.assign_ptr(buf, pos))) {
   } else if (OB_FAIL(ObReqConstExpr::construct_const_expr(query_info.esql_options_expr_, alloc_, options_str, ObVarcharType))) {
@@ -3183,7 +3182,7 @@ int ObESQueryParser::handle_msm_for_sub_score(ObEsQueryInfo &query_info, ObEsQue
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(buf = static_cast<char *>(alloc_.alloc(OB_MAX_COLUMN_NAME_LENGTH)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(databuff_printf(buf, OB_MAX_COLUMN_NAME_LENGTH, pos, "%.*s%ld",
+  } else if (OB_FAIL(databuff_printf(buf, OB_MAX_COLUMN_NAME_LENGTH, pos, "%.*s%" PRId64 "",
                      FTS_SUB_SCORE_PREFIX.length(), FTS_SUB_SCORE_PREFIX.ptr(), query_req->sub_score_item_seq_++))) {
   } else if (OB_FALSE_IT(sub_score_alias.assign_ptr(buf, pos))) {
   } else if (OB_FALSE_IT(score_expr->set_alias(sub_score_alias))) {
@@ -3356,7 +3355,7 @@ int ObESQueryParser::construct_partition_cols(const ObIArray<ObString> &column_n
     ObString alias_str;
     if (OB_ISNULL(alias_buf = static_cast<char *>(alloc_.alloc(alias_buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(databuff_printf(alias_buf, alias_buf_len, alias_pos, "%.*s%ld",
+    } else if (OB_FAIL(databuff_printf(alias_buf, alias_buf_len, alias_pos, "%.*s%" PRId64 "",
                                        PART_COL_ALIAS_PREFIX.length(), PART_COL_ALIAS_PREFIX.ptr(), i))) {
     } else if (OB_FALSE_IT(alias_str.assign_ptr(alias_buf, alias_pos))) {
     } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(part_col_alias, alloc_, alias_str))) {

@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_RESULT_SET_H
 #define OCEANBASE_SQL_OB_RESULT_SET_H
 #include "share/ob_define.h"
+#include <inttypes.h>
 #include "lib/container/ob_fast_array.h"
 #include "lib/container/ob_array_serialization.h"
 #include "lib/utility/ob_mod_define.h"
@@ -663,19 +664,19 @@ inline int64_t ObResultSet::to_string(char *buf, const int64_t buf_len) const
   common::databuff_printf(buf, buf_len, pos, "stmt_type=%d ", stmt_type_);
   common::databuff_printf(buf, buf_len, pos, "is_with_rows=%c ",
                           this->is_with_rows() ? 'Y' : 'N');
-  common::databuff_printf(buf, buf_len, pos, "affected_rows=%ld ",
+  common::databuff_printf(buf, buf_len, pos, "affected_rows=%" PRId64 " ",
                           affected_rows_);
-  common::databuff_printf(buf, buf_len, pos, "return_rows=%ld ",
+  common::databuff_printf(buf, buf_len, pos, "return_rows=%" PRId64 " ",
                           return_rows_);
-  common::databuff_printf(buf, buf_len, pos, "warning_count=%ld ",
+  common::databuff_printf(buf, buf_len, pos, "warning_count=%" PRId64 " ",
                           warning_count_);
-  common::databuff_printf(buf, buf_len, pos, "field_count=%ld ",
+  common::databuff_printf(buf, buf_len, pos, "field_count=%" PRId64 " ",
                           field_columns_.count());
   common::databuff_printf(buf, buf_len, pos, "message=%s ", message_);
-  common::databuff_printf(buf, buf_len, pos, "stmt_id=%lu ", statement_id_);
+  common::databuff_printf(buf, buf_len, pos, "stmt_id=%" PRIu64 " ", statement_id_);
   common::databuff_printf(buf, buf_len, pos, "stmt_name=%.*s ",
                           statement_name_.length(), statement_name_.ptr());
-  common::databuff_printf(buf, buf_len, pos, "sql_id=%lu ", sql_id_);
+  common::databuff_printf(buf, buf_len, pos, "sql_id=%" PRIu64 " ", sql_id_);
   return pos;
 }
 

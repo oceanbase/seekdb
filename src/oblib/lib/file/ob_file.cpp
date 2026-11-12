@@ -15,6 +15,7 @@
  */
 
 #include "lib/file/ob_file.h"
+#include "lib/utility/ob_platform_io.h"
 #ifdef __APPLE__
 #include <stdlib.h> // For posix_memalign
 #include <fcntl.h> // For O_DIRECT (if not already defined)
@@ -31,6 +32,7 @@ static inline void* memalign(size_t alignment, size_t size) {
 }
 #elif defined(_WIN32)
 #include <windows.h>
+#include <inttypes.h>
 #include <fcntl.h>
 #include <io.h>
 #include <malloc.h>
@@ -52,24 +54,6 @@ static inline int ob_fsync(int fd) {
 }
 static inline int fcntl(int, int, ...) {
   return 0;
-}
-static inline int64_t ob_pwrite(int fd, const void *buf, int64_t count, int64_t offset) {
-  HANDLE h = (HANDLE)_get_osfhandle(fd);
-  OVERLAPPED ov = {};
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
-  ov.OffsetHigh = (DWORD)((uint64_t)offset >> 32);
-  DWORD written = 0;
-  if (!WriteFile(h, buf, (DWORD)count, &written, &ov)) return -1;
-  return (int64_t)written;
-}
-static inline int64_t ob_pread(int fd, void *buf, int64_t count, int64_t offset) {
-  HANDLE h = (HANDLE)_get_osfhandle(fd);
-  OVERLAPPED ov = {};
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
-  ov.OffsetHigh = (DWORD)((uint64_t)offset >> 32);
-  DWORD nread = 0;
-  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) return -1;
-  return (int64_t)nread;
 }
 #endif
 
@@ -103,11 +87,8 @@ int open(const ObString &fname, const T &file, int &fd)
     if (NULL == fname_ptr) {
       _OB_LOG(WARN, "prepare fname string fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_INVALID_ARGUMENT;
-    } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags()
-#ifdef _WIN32
-            | _O_BINARY
-#endif
-            , file.get_open_mode()))) {
+    } else if (-1 == (fd = ob_open_utf8(fname_ptr, file.get_open_flags(),
+                                       file.get_open_mode()))) {
       if (ENOENT == errno) {
         ret = OB_FILE_NOT_EXIST;
       } else if (EEXIST == errno) {
@@ -153,7 +134,7 @@ void IFileReader::revise(int64_t pos)
 #else
     if(0 != ::ftruncate(fd_, pos)) {
 #endif
-       _OB_LOG_RET(WARN, OB_ERR_SYS, "ftruncate fail fd=%d file_pos=%ld errno=%u", fd_, pos, errno);
+       _OB_LOG_RET(WARN, OB_ERR_SYS, "ftruncate fail fd=%d file_pos=%" PRId64 " errno=%u", fd_, pos, errno);
     }
   }
 }
@@ -190,7 +171,7 @@ int BufferFileReader::pread_by_fd(const int fd, void *buf, const int64_t count,
     _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else if (0 > (read_ret = unintr_pread(fd, buf, count, offset))) {
-    _OB_LOG(WARN, "read fail fd=%d count=%ld offset=%ld read_ret=%ld errno=%u",
+    _OB_LOG(WARN, "read fail fd=%d count=%" PRId64 " offset=%" PRId64 " read_ret=%" PRId64 " errno=%u",
               fd, count, offset, read_ret, errno);
     ret = OB_IO_ERROR;
   } else {
@@ -214,7 +195,7 @@ int BufferFileReader::pread_by_fd(const int fd, const int64_t count, const int64
   } else if (0 > count
              || OB_SUCCESS != (ret = file_buf.assign(count))
              || NULL == file_buf.get_buffer()) {
-    _OB_LOG(WARN, "file_buf assign fail count=%ld ret=%d or get_buffer null pointer", count, ret);
+    _OB_LOG(WARN, "file_buf assign fail count=%" PRId64 " ret=%d or get_buffer null pointer", count, ret);
     ret = (OB_SUCCESS == ret) ? OB_INVALID_ARGUMENT : ret;
   } else {
     file_buf.set_base_pos(0);
@@ -275,7 +256,7 @@ int DirectFileReader::pread_by_fd(const int fd, void *buf, const int64_t count,
              && NULL == buffer_
              && NULL == (buffer_ = (char *)memalign(align_size_, buffer_size_))) {
     _OB_LOG(WARN,
-              "prepare buffer fail param_align=%s buffer=%p buf=%p count=%ld offset=%ld align_size=%ld buffer_size=%ld",
+              "prepare buffer fail param_align=%s buffer=%p buf=%p count=%" PRId64 " offset=%" PRId64 " align_size=%" PRId64 " buffer_size=%" PRId64 "",
               STR_BOOL(param_align), buffer_, buf, count, offset, align_size_, buffer_size_);
     ret = OB_ERROR;
   } else {
@@ -286,7 +267,7 @@ int DirectFileReader::pread_by_fd(const int fd, void *buf, const int64_t count,
       read_ret = pread_align(fd, buf, count, offset, buffer_, buffer_size_, align_size_);
     }
     if (0 > read_ret) {
-      _OB_LOG(WARN, "read fail fd=%d count=%ld offset=%ld read_ret=%ld errno=%u",
+      _OB_LOG(WARN, "read fail fd=%d count=%" PRId64 " offset=%" PRId64 " read_ret=%" PRId64 " errno=%u",
                 fd_, count, offset, read_ret, errno);
       ret = OB_IO_ERROR;
     } else {
@@ -313,7 +294,7 @@ int DirectFileReader::pread_by_fd(const int fd, const int64_t count, const int64
   } else if (0 > count
              || OB_SUCCESS != (ret = file_buf.assign(size2read, align_size_))
              || NULL == file_buf.get_buffer()) {
-    _OB_LOG(WARN, "file_buf assign fail count=%ld ret=%d or get_buffer null pointer", count, ret);
+    _OB_LOG(WARN, "file_buf assign fail count=%" PRId64 " ret=%d or get_buffer null pointer", count, ret);
     ret = (OB_SUCCESS == ret) ? OB_INVALID_ARGUMENT : ret;
   } else if (-1 == fd) {
     _OB_LOG(WARN, "file has not been open");
@@ -322,7 +303,7 @@ int DirectFileReader::pread_by_fd(const int fd, const int64_t count, const int64
     int64_t buffer_offset = offset - offset2read;
     int64_t read_ret = 0;
     if (0 > (read_ret = unintr_pread(fd, file_buf.get_buffer(), size2read, offset2read))) {
-      _OB_LOG(WARN, "read fail fd=%d count=%ld offset=%ld read_ret=%ld errno=%u",
+      _OB_LOG(WARN, "read fail fd=%d count=%" PRId64 " offset=%" PRId64 " read_ret=%" PRId64 " errno=%u",
                 fd, count, offset, read_ret, errno);
       ret = OB_IO_ERROR;
     } else {
@@ -441,7 +422,7 @@ int BufferFileAppender::buffer_sync_()
       && 0 != buffer_pos_) {
     int64_t write_ret = 0;
     if (buffer_pos_ != (write_ret = unintr_pwrite(fd_, buffer_, buffer_pos_, file_pos_))) {
-      _OB_LOG(WARN, "write buffer fail fd=%d buffer=%p count=%ld offset=%ld write_ret=%ld errno=%u",
+      _OB_LOG(WARN, "write buffer fail fd=%d buffer=%p count=%" PRId64 " offset=%" PRId64 " write_ret=%" PRId64 " errno=%u",
                 fd_, buffer_, buffer_pos_, file_pos_, write_ret, errno);
       ret = OB_IO_ERROR;
     } else {
@@ -489,7 +470,7 @@ int BufferFileAppender::append(const void *buf, const int64_t count, const bool 
   } else if (0 == count) {
     // do nothing
   } else if (NULL == buf || 0 > count) {
-    _OB_LOG(WARN, "invalid param buf=%p count=%ld", buf, count);
+    _OB_LOG(WARN, "invalid param buf=%p count=%" PRId64 "", buf, count);
     ret = OB_INVALID_ARGUMENT;
   } else {
     if ((buffer_size_ - buffer_pos_) < count) {
@@ -500,7 +481,7 @@ int BufferFileAppender::append(const void *buf, const int64_t count, const bool 
       if ((buffer_size_ - buffer_pos_) < count) {
         int64_t write_ret = 0;
         if (count != (write_ret = unintr_pwrite(fd_, buf, count, file_pos_))) {
-          _OB_LOG(WARN, "write fail fd=%d buffer=%p count=%ld offset=%ld write_ret=%ld errno=%u",
+          _OB_LOG(WARN, "write fail fd=%d buffer=%p count=%" PRId64 " offset=%" PRId64 " write_ret=%" PRId64 " errno=%u",
                     fd_, buf, count, file_pos_, write_ret, errno);
           ret = OB_IO_ERROR;
         } else {
@@ -524,7 +505,7 @@ int BufferFileAppender::prepare_buffer_()
   int ret = OB_SUCCESS;
   if (NULL == buffer_
       && NULL == (buffer_ = (char *)::malloc(buffer_size_))) {
-    _OB_LOG(WARN, "prepare buffer fail buffer_size=%ld", buffer_size_);
+    _OB_LOG(WARN, "prepare buffer fail buffer_size=%" PRId64 "", buffer_size_);
     ret = OB_ERROR;
   }
   return ret;
@@ -618,8 +599,8 @@ int DirectFileAppender::buffer_sync_(bool *need_truncate)
     int64_t write_ret = 0;
     memset(buffer_ + buffer_pos_, 0, size2write - buffer_pos_);
     if (size2write != (write_ret = unintr_pwrite(fd_, buffer_, size2write, offset2write))) {
-      _OB_LOG(WARN, "write buffer fail fd=%d buffer=%p count=%ld offset=%ld write_ret=%ld errno=%u "
-                "file_pos=%ld align_size=%ld buffer_pos=%ld",
+      _OB_LOG(WARN, "write buffer fail fd=%d buffer=%p count=%" PRId64 " offset=%" PRId64 " write_ret=%" PRId64 " errno=%u "
+                "file_pos=%" PRId64 " align_size=%" PRId64 " buffer_pos=%" PRId64 "",
                 fd_, buffer_, size2write, offset2write, write_ret, errno,
                 file_pos_, align_size_, buffer_pos_);
       ret = OB_IO_ERROR;
@@ -655,7 +636,7 @@ int DirectFileAppender::fsync()
 #else
         && 0 != ::ftruncate(fd_, file_pos_)) {
 #endif
-      _OB_LOG(WARN, "ftruncate fail fd=%d file_pos=%ld errno=%u", fd_, file_pos_, errno);
+      _OB_LOG(WARN, "ftruncate fail fd=%d file_pos=%" PRId64 " errno=%u", fd_, file_pos_, errno);
       ret = OB_IO_ERROR;
     }
   }
@@ -691,13 +672,13 @@ int DirectFileAppender::append(const void *buf, const int64_t count, const bool 
   } else if (0 == count) {
     // do nothing
   } else if (NULL == buf || 0 > count) {
-    _OB_LOG(WARN, "invalid param buf=%p count=%ld", buf, count);
+    _OB_LOG(WARN, "invalid param buf=%p count=%" PRId64 "", buf, count);
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (0 == align_warn_
         && 0 != file_pos_ % align_size_) {
       align_warn_++;
-      _OB_LOG(WARN, "file_pos_=%ld do not match align_size=%ld", file_pos_, align_size_);
+      _OB_LOG(WARN, "file_pos_=%" PRId64 " do not match align_size=%" PRId64 "", file_pos_, align_size_);
     }
 
     bool buffer_synced = false;
@@ -718,8 +699,8 @@ int DirectFileAppender::append(const void *buf, const int64_t count, const bool 
                                    buffer_pos_);
         }
         if (count != write_ret) {
-          _OB_LOG(WARN, "write fail fd=%d buffer=%p count=%ld offset=%ld write_ret=%ld errno=%u "
-                    "align_buffer=%p align_size=%ld buffer_pos=%ld",
+          _OB_LOG(WARN, "write fail fd=%d buffer=%p count=%" PRId64 " offset=%" PRId64 " write_ret=%" PRId64 " errno=%u "
+                    "align_buffer=%p align_size=%" PRId64 " buffer_pos=%" PRId64 "",
                     fd_, buf, count, file_pos_, write_ret, errno,
                     buffer_, align_size_, buffer_pos_);
           ret = OB_IO_ERROR;
@@ -732,7 +713,7 @@ int DirectFileAppender::append(const void *buf, const int64_t count, const bool 
 #else
             && 0 != ::ftruncate(fd_, file_pos_)) {
 #endif
-          _OB_LOG(WARN, "ftruncate fail fd=%d file_pos=%ld errno=%u", fd_, file_pos_, errno);
+          _OB_LOG(WARN, "ftruncate fail fd=%d file_pos=%" PRId64 " errno=%u", fd_, file_pos_, errno);
           ret = OB_IO_ERROR;
         }
       } else {
@@ -754,7 +735,7 @@ int DirectFileAppender::prepare_buffer_()
   int ret = OB_SUCCESS;
   if (NULL == buffer_
       && NULL == (buffer_ = (char *)memalign(align_size_, buffer_size_))) {
-    _OB_LOG(WARN, "prepare buffer fail align_size=%ld buffer_size=%ld", align_size_, buffer_size_);
+    _OB_LOG(WARN, "prepare buffer fail align_size=%" PRId64 " buffer_size=%" PRId64 "", align_size_, buffer_size_);
     ret = OB_ERROR;
   } else if (0 != (file_pos_ % align_size_)) {
     int64_t offset2read = lower_align(file_pos_, align_size_);
@@ -762,7 +743,7 @@ int DirectFileAppender::prepare_buffer_()
     int64_t read_ret = 0;
     if (size2read != (read_ret = unintr_pread(fd_, buffer_, align_size_, offset2read))) {
       _OB_LOG(WARN,
-                "read buffer fail fd=%d buffer=%p align_size=%ld offset2read=%ld size2read=%ld read_ret=%ld errno=%u",
+                "read buffer fail fd=%d buffer=%p align_size=%" PRId64 " offset2read=%" PRId64 " size2read=%" PRId64 " read_ret=%" PRId64 " errno=%u",
                 fd_, buffer_, align_size_, offset2read, size2read, read_ret, errno);
       ret = OB_IO_ERROR;
     } else {
@@ -811,7 +792,7 @@ int DirectFileAppender::set_align_size(const int64_t align_size)
 {
   int ret = OB_SUCCESS;
   if (align_size != align_size_) {
-    _OB_LOG(INFO, "change align size from align_size=%ld to new_align_size=%ld",
+    _OB_LOG(INFO, "change align size from align_size=%" PRId64 " to new_align_size=%" PRId64 "",
               align_size_, align_size);
   }
   if (-1 != fd_) {
@@ -838,17 +819,14 @@ int64_t unintr_pwrite(const int fd, const void *buf, const int64_t count, const 
   int64_t write_ret = 0;
   while (length2write > 0) {
     for (int64_t retry = 0; retry < 3;) {
-#ifdef _WIN32
-      write_ret = ob_pwrite(fd, (char *)buf + offset2write, length2write, offset + offset2write);
-#else
-      write_ret = ::pwrite(fd, (char *)buf + offset2write, length2write, offset + offset2write);
-#endif
+      write_ret = ob_pwrite_fd(fd, (char *)buf + offset2write, length2write,
+                               offset + offset2write);
       if (0 >= write_ret) {
         if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
           continue;
         }
         _OB_LOG_RET(ERROR, OB_ERR_SYS,
-                    "pwrite fail ret=%ld errno=%u fd=%d buf=%p size2write=%ld offset2write=%ld retry_num=%ld",
+                    "pwrite fail ret=%" PRId64 " errno=%u fd=%d buf=%p size2write=%" PRId64 " offset2write=%" PRId64 " retry_num=%" PRId64 "",
                     write_ret, errno, fd, (char *)buf + offset2write, length2write, offset + offset2write, retry);
         retry++;
       } else {
@@ -880,7 +858,7 @@ int64_t unintr_write(const int fd, const void *buf, const int64_t count)
           continue;
         }
         _OB_LOG_RET(ERROR, OB_ERR_SYS,
-                  "pwrite fail ret=%ld errno=%u fd=%d buf=%p size2write=%ld offset2write=%ld retry_num=%ld",
+                  "pwrite fail ret=%" PRId64 " errno=%u fd=%d buf=%p size2write=%" PRId64 " offset2write=%" PRId64 " retry_num=%" PRId64 "",
                   write_ret, errno, fd, (char *)buf + offset2write, length2write, offset2write, retry);
         retry++;
       } else {
@@ -906,17 +884,14 @@ int64_t unintr_pread(const int fd, void *buf, const int64_t count, const int64_t
   int64_t read_ret = 0;
   while (length2read > 0) {
     for (int64_t retry = 0; retry < 3;) {
-#ifdef _WIN32
-      read_ret = ob_pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
-#else
-      read_ret = ::pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
-#endif
+      read_ret = ob_pread_fd(fd, (char *)buf + offset2read, length2read,
+                             offset + offset2read);
       if (0 > read_ret) {
         if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
           continue;
         }
         _OB_LOG_RET(ERROR, OB_ERR_SYS,
-                  "pread fail ret=%ld errno=%u fd=%d buf=%p size2read=%ld offset2read=%ld retry_num=%ld",
+                  "pread fail ret=%" PRId64 " errno=%u fd=%d buf=%p size2read=%" PRId64 " offset2read=%" PRId64 " retry_num=%" PRId64 "",
                   read_ret, errno, fd, (char *)buf + offset2read, length2read, offset + offset2read, retry);
         retry++;
       } else {
@@ -1053,21 +1028,10 @@ int64_t get_file_size(const int fd)
 int64_t get_file_size(const char *fname)
 {
   int64_t ret = -1;
-#ifdef _WIN32
-  // MSVCRT's `struct stat::st_size` is 32-bit (_off_t = long); files larger
-  // than 2 GiB get a truncated size. Use _stat64 to report the real size.
-  struct _stat64 st;
-  if (NULL != fname
-      && 0 == _stat64(fname, &st)) {
-    ret = st.st_size;
+  ObPlatformFileStat file_info;
+  if (NULL != fname && 0 == ob_stat_utf8(fname, file_info)) {
+    ret = file_info.size;
   }
-#else
-  struct stat st;
-  if (NULL != fname
-      && 0 == stat(fname, &st)) {
-    ret = st.st_size;
-  }
-#endif
   return ret;
 }
 
@@ -1098,7 +1062,7 @@ int64_t ObFileBuffer::get_base_pos()
 void ObFileBuffer::set_base_pos(const int64_t pos)
 {
   if (pos > buffer_size_) {
-    _OB_LOG_RET(WARN, OB_ERR_UNEXPECTED, "base_pos=%ld will be greater than buffer_size=%ld", pos, buffer_size_);
+    _OB_LOG_RET(WARN, OB_ERR_UNEXPECTED, "base_pos=%" PRId64 " will be greater than buffer_size=%" PRId64 "", pos, buffer_size_);
   }
   base_pos_ = pos;
 }
@@ -1110,7 +1074,7 @@ int ObFileBuffer::assign(const int64_t size, const int64_t align)
       || 0 >= align
       || !is2n(align)
       || 0 != size % align) {
-    _OB_LOG(WARN, "invalid size=%ld or donot match align=%ld", size, align);
+    _OB_LOG(WARN, "invalid size=%" PRId64 " or donot match align=%" PRId64 "", size, align);
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == buffer_
              || buffer_size_ < size
@@ -1127,7 +1091,7 @@ int ObFileBuffer::assign(const int64_t size, const int64_t align)
       buffer_size_ = 0;
     }
     if (NULL == (buffer_ = (char *)memalign(align, alloc_size))) {
-      _OB_LOG(WARN, "memalign fail align=%ld alloc_size=%ld size=%ld errno=%u", align, alloc_size, size,
+      _OB_LOG(WARN, "memalign fail align=%" PRId64 " alloc_size=%" PRId64 " size=%" PRId64 " errno=%u", align, alloc_size, size,
                 errno);
       ret = OB_ERROR;
     } else {
@@ -1143,7 +1107,7 @@ int ObFileBuffer::assign(const int64_t size)
 {
   int ret = OB_SUCCESS;
   if (0 >= size) {
-    _OB_LOG(WARN, "invalid size=%ld", size);
+    _OB_LOG(WARN, "invalid size=%" PRId64 "", size);
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == buffer_
              || buffer_size_ < size
@@ -1159,7 +1123,7 @@ int ObFileBuffer::assign(const int64_t size)
       buffer_size_ = 0;
     }
     if (NULL == (buffer_ = (char *)::malloc(alloc_size))) {
-      _OB_LOG(WARN, "malloc fail alloc_size=%ld size=%ld errno=%u", alloc_size, size, errno);
+      _OB_LOG(WARN, "malloc fail alloc_size=%" PRId64 " size=%" PRId64 " errno=%u", alloc_size, size, errno);
       ret = OB_ERROR;
     } else {
       buffer_size_ = alloc_size;
@@ -1190,7 +1154,7 @@ int ObFileReader::open(const ObString &fname, const bool dio, const int64_t alig
   if (NULL != file_) {
     ret = OB_INIT_TWICE;
   } else if (!is2n(align_size)) {
-    _OB_LOG(WARN, "invalid align_size=%ld", align_size);
+    _OB_LOG(WARN, "invalid align_size=%" PRId64 "", align_size);
     ret = OB_INVALID_ARGUMENT;
   } else {
     using namespace FileComponent;
@@ -1269,7 +1233,7 @@ int ObFileReader::read_record(const int fd,
     int64_t read_size = 0;
     ret = preader->pread_by_fd(fd, size, offset, file_buf, read_size);
     if (size != read_size) {
-      _OB_LOG(WARN, "read_size=%ld do not equal size=%ld", read_size, size);
+      _OB_LOG(WARN, "read_size=%" PRId64 " do not equal size=%" PRId64 "", read_size, size);
       ret = (OB_SUCCESS == ret) ? OB_ERROR : ret;
     }
   }
@@ -1297,7 +1261,7 @@ int ObFileAppender::open(const ObString &fname, const bool dio, const bool is_cr
   if (NULL != file_) {
     ret = OB_INIT_TWICE;
   } else if (!is2n(align_size)) {
-    _OB_LOG(WARN, "invalid align_size=%ld", align_size);
+    _OB_LOG(WARN, "invalid align_size=%" PRId64 "", align_size);
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (dio) {
@@ -1326,7 +1290,7 @@ int ObFileAppender::create(const ObString &fname, const bool dio, const int64_t 
   if (NULL != file_) {
     ret = OB_INIT_TWICE;
   } else if (!is2n(align_size)) {
-    _OB_LOG(WARN, "invalid align_size=%ld", align_size);
+    _OB_LOG(WARN, "invalid align_size=%" PRId64 "", align_size);
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (dio) {
@@ -1422,13 +1386,13 @@ int ObFileAsyncAppender::open(const ObString &fname,
     ret = OB_INIT_TWICE;
   } else if (!dio
              || !is2n(align_size)) {
-    _OB_LOG(WARN, "invalid param dio=%s align_size=%ld", STR_BOOL(dio), align_size);
+    _OB_LOG(WARN, "invalid param dio=%s align_size=%" PRId64 "", STR_BOOL(dio), align_size);
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = FileComponent::open(fname, op, fd_))) {
   } else {
     file_pos_ = get_file_size(fd_);
     if (0 != (file_pos_ % align_size)) {
-      _OB_LOG(WARN, "file_size=%ld do not align, align_size=%ld fd=%d", file_pos_, align_size, fd_);
+      _OB_LOG(WARN, "file_size=%" PRId64 " do not align, align_size=%" PRId64 " fd=%d", file_pos_, align_size, fd_);
       close();
     } else {
       align_size_ = align_size;
@@ -1450,7 +1414,7 @@ int ObFileAsyncAppender::create(const ObString &fname,
     ret = OB_INIT_TWICE;
   } else if (!dio
              || !is2n(align_size)) {
-    _OB_LOG(WARN, "invalid param dio=%s align_size=%ld", STR_BOOL(dio), align_size);
+    _OB_LOG(WARN, "invalid param dio=%s align_size=%" PRId64 "", STR_BOOL(dio), align_size);
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = FileComponent::open(fname, op, fd_))) {
   } else {
@@ -1621,7 +1585,7 @@ void ObFileAsyncAppender::wait()
       pool_.free_obj(iocb);
     } else {
       // Fatal error
-      _OB_LOG_RET(ERROR, OB_ERR_SYS, "iocb return fail iocb=%p res=%ld res2=%ld, will set fd=-1, and the fd will leek",
+      _OB_LOG_RET(ERROR, OB_ERR_SYS, "iocb return fail iocb=%p res=%" PRId64 " res2=%" PRId64 ", will set fd=-1, and the fd will leek",
                 ioe[i].data, ioe[i].res, ioe[i].res2);
       fd_ = -1;
       cur_iocb_ = NULL;

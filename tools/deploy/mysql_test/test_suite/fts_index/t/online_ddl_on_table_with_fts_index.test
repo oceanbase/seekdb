@@ -148,7 +148,7 @@ ALTER TABLE fts_table_3 BLOCK_SIZE=2048;
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 
-ALTER TABLE fts_table_3 COMPRESSION='zstd_1.3.8';
+ALTER TABLE fts_table_3 COMPRESSION='zstd';
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 

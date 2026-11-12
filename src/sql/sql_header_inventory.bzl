@@ -213,6 +213,7 @@ SQL_INTERFACE_CLOSURE_HEADERS = [
     "engine/expr/ob_expr_interval.h",
     "engine/expr/ob_expr_join_filter.h",
     "engine/expr/ob_expr_json_func_helper.h",
+    "engine/expr/ob_expr_json_native_path.h",
     "engine/expr/ob_expr_json_utils.h",
     "engine/expr/ob_expr_multi_mode_func_helper.h",
     "engine/expr/ob_expr_operator.h",

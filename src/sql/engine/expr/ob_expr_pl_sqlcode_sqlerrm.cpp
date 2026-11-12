@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_pl_sqlcode_sqlerrm.h"
+#include <inttypes.h>
 #include "sql/pl/ob_pl.h"
 
 namespace oceanbase
@@ -126,7 +127,7 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
           if (NULL == err_msg) {
             CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
             OZ (databuff_printf(sqlerrm_result, max_buf_size, pos,
-                "%ld: Message error_code not found; product=RDBMS", sqlcode));
+                "%" PRId64 ": Message error_code not found; product=RDBMS", sqlcode));
           } else {
             sqlerrm_result = const_cast<char*>(err_msg);
           }
@@ -141,7 +142,7 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
         // do nothing
       } else if (sqlcode > 0) {
         CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
-        OZ (databuff_printf(sqlerrm_result, 200, pos, "-%ld: non-SQL exception", sqlcode));
+        OZ (databuff_printf(sqlerrm_result, 200, pos, "-%" PRId64 ": non-SQL exception", sqlcode));
       } else if (sqlcode == 0) {
         CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
         OZ (databuff_printf(sqlerrm_result, 200, pos, "normal, successful completion"));
@@ -153,7 +154,7 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
           const char* err_msg = ob_errpkt_str_user_error(sqlcode);
           if (NULL == err_msg) {
             CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
-            OZ (databuff_printf(sqlerrm_result, 200, pos, "%ld: Message error_code not found; product=RDBMS", sqlcode));
+            OZ (databuff_printf(sqlerrm_result, 200, pos, "%" PRId64 ": Message error_code not found; product=RDBMS", sqlcode));
           } else {
             sqlerrm_result = const_cast<char*>(err_msg);
           }

@@ -15,6 +15,7 @@
  */
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "ob_mvcc_trans_ctx.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
@@ -1289,7 +1290,7 @@ int ObTransCallbackMgr::acquire_callback_list(const bool new_epoch)
   } else if (tid == (stat >> 32)) { // same thread nested, no parallel
     ATOMIC_BCAS(&parallel_stat_, stat, stat + 1);
   } else { // has parallel
-    // 
+    //
     ATOMIC_STORE(&parallel_stat_, PARALLEL_STMT);
   }
   int slot = 0;
@@ -1976,12 +1977,12 @@ int64_t ObMvccRowCallback::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
   databuff_printf(buf, buf_len, pos, "[this=%p, ctx=", this);
   databuff_printf(buf, buf_len, pos, ctx_);
-  databuff_printf(buf, buf_len, pos, ", is_link=%d, need_submit_log=%d, value=", 
+  databuff_printf(buf, buf_len, pos, ", is_link=%d, need_submit_log=%d, value=",
       is_link_, need_submit_log_);
   databuff_printf(buf, buf_len, pos, value_);
   databuff_printf(buf, buf_len, pos, ", tnode=(");
   databuff_printf(buf, buf_len, pos, tnode_);
-  databuff_printf(buf, buf_len, pos, "), seq_no=%ld, memtable=%p, scn=", 
+  databuff_printf(buf, buf_len, pos, "), seq_no=%" PRId64 ", memtable=%p, scn=",
       seq_no_.cast_to_int(), memtable_);
   databuff_printf(buf, buf_len, pos, scn_);
   return pos;
@@ -2030,9 +2031,9 @@ void ObTransCallbackMgr::print_statistics(char *buf, const int64_t buf_len, int6
   common::databuff_printf(buf, buf_len, pos,
                           "callback_list:{"
                           "cnt=%d stat:["
-                          "tx_end=%ld, rollback_to=%ld, "
-                          "fast_commit=%ld, remove_memtable=%ld, "
-                          "ext_info_log=%ld] "
+                          "tx_end=%" PRId64 ", rollback_to=%" PRId64 ", "
+                          "fast_commit=%" PRId64 ", remove_memtable=%" PRId64 ", "
+                          "ext_info_log=%" PRId64 "] "
                           "detail:[(log_epoch,length,logged,synced,appended,removed,unlog_removed,branch_removed)|",
                           get_callback_list_count(),
                           get_callback_remove_for_trans_end_count(),
@@ -2052,7 +2053,7 @@ void ObTransCallbackMgr::print_statistics(char *buf, const int64_t buf_len, int6
     if (a || b || c || d || e || f || g) {
       int64_t log_epoch = list->get_log_epoch();
       log_epoch = log_epoch == INT64_MAX ? -1 : log_epoch;
-      common::databuff_printf(buf, buf_len, pos, "%d:(%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld)|", idx, log_epoch, a, b, c, d, e, f, g);
+      common::databuff_printf(buf, buf_len, pos, "%d:(%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 ")|", idx, log_epoch, a, b, c, d, e, f, g);
     }
   }
   common::databuff_printf(buf, buf_len, pos, "]}");

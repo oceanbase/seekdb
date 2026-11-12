@@ -30,6 +30,7 @@
 #include "share/ob_lob_access_utils.h"
 #include "share/lob/ob_lob_text_iter_context.h"
 #include "query/engine/expr/ob_expr_util.h"
+#include "lib/utility/utility.h"
 
 namespace oceanbase
 {
@@ -602,7 +603,7 @@ int ObLobManager::compare(ObLobAccessParam& param_left,
 
 void ObLobManager::transform_lob_id(uint64_t src, uint64_t &dst)
 {
-  dst = htonll(src << 1);
+  dst = ob_htonll(src << 1);
   char *bytes = reinterpret_cast<char*>(&dst);
   bytes[7] |= 0x01;
 }
@@ -2411,19 +2412,14 @@ public:
   int64_t get_lob_diff_serialize_size() const override
   {
     int64_t len = sizeof(common::ObLobDiff)
-        * update_context_.binary_diffs_.count();
-    common::ObJsonDiffHeader json_diff_header;
-    json_diff_header.cnt_ = update_context_.json_diffs_.count();
-    len += json_diff_header.get_serialize_size();
-    for (int64_t i = 0; i < update_context_.json_diffs_.count(); ++i) {
-      len += update_context_.json_diffs_[i].get_serialize_size();
-    }
+        * update_context_.binary_diff_count();
+    len += update_context_.logical_serialize_size();
     return len;
   }
 
   uint32_t get_lob_diff_cnt() const override
   {
-    return static_cast<uint32_t>(update_context_.binary_diffs_.count());
+    return static_cast<uint32_t>(update_context_.binary_diff_count());
   }
 
   int serialize_partial_data(char *buf,
@@ -2450,26 +2446,15 @@ public:
     int64_t data_pos = 0;
 
     for (int64_t i = 0; OB_SUCC(ret) && i < diff_header->diff_cnt_; ++i) {
-      const common::ObJsonBinaryDiff &diff =
-          update_context_.binary_diffs_[i];
+      const common::BinaryDiff diff = update_context_.binary_diff(i);
       common::ObLobDiff *lob_diff =
           new (lob_diffs + i) common::ObLobDiff();
       lob_diff->type_ = common::ObLobDiff::DiffType::WRITE_DIFF;
-      lob_diff->dst_offset_ = diff.dst_offset_;
-      lob_diff->dst_len_ = diff.dst_len_;
+      lob_diff->dst_offset_ = diff.offset;
+      lob_diff->dst_len_ = diff.length;
     }
 
-    common::ObJsonDiffHeader json_diff_header;
-    json_diff_header.cnt_ = update_context_.json_diffs_.count();
-    if (OB_FAIL(json_diff_header.serialize(
-            diff_data_ptr, data_len, data_pos))) {
-    }
-    for (int64_t i = 0;
-         OB_SUCC(ret) && i < update_context_.json_diffs_.count();
-         ++i) {
-      const common::ObJsonDiff &diff = update_context_.json_diffs_[i];
-      if (OB_FAIL(diff.serialize(diff_data_ptr, data_len, data_pos))) {
-      }
+    if (OB_FAIL(update_context_.serialize_logical(diff_data_ptr, data_len, data_pos))) {
     }
     return ret;
   }
@@ -2515,32 +2500,25 @@ public:
   {
     int ret = OB_SUCCESS;
     common::ObLobDiff *lob_diffs = diff_header->get_diff_ptr();
-    char *data_ptr = diff_header->get_inline_data_ptr();
-    if (OB_ISNULL(lob_diffs) || OB_ISNULL(data_ptr)) {
+    if (OB_ISNULL(lob_diffs)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
+      const int64_t diff_offset = reinterpret_cast<char *>(lob_diffs) - buf;
+      if (buf_len < 0 || diff_offset < 0 || diff_offset > buf_len
+          || diff_header->diff_cnt_ > (buf_len - diff_offset) / sizeof(common::ObLobDiff)) {
+        ret = OB_DESERIALIZE_ERROR;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      common::ObSEArray<common::BinaryDiff, 10> physical;
       for (int64_t i = 0; OB_SUCC(ret) && i < diff_header->diff_cnt_; ++i) {
-        common::ObJsonBinaryDiff binary_diff;
-        binary_diff.dst_offset_ = lob_diffs[i].dst_offset_;
-        binary_diff.dst_len_ = lob_diffs[i].dst_len_;
-        if (OB_FAIL(update_context_.binary_diffs_.push_back(binary_diff))) {
-        }
+        ret = physical.push_back(common::BinaryDiff{
+            lob_diffs[i].dst_offset_, lob_diffs[i].dst_len_});
       }
-
+      char *data_ptr = reinterpret_cast<char *>(lob_diffs) + diff_header->diff_cnt_ * sizeof(common::ObLobDiff);
       const int64_t data_len = buf_len - (data_ptr - buf);
-      int64_t data_pos = 0;
-      common::ObJsonDiffHeader json_diff_header;
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(json_diff_header.deserialize(
-                     data_ptr, data_len, data_pos))) {
-      }
-      for (int64_t i = 0;
-           OB_SUCC(ret) && i < json_diff_header.cnt_;
-           ++i) {
-        common::ObJsonDiff json_diff;
-        if (OB_FAIL(json_diff.deserialize(data_ptr, data_len, data_pos))) {
-        } else if (OB_FAIL(update_context_.json_diffs_.push_back(json_diff))) {
-        }
+      } else if (OB_FAIL(update_context_.restore_delta(data_ptr, data_len, physical))) {
       }
     }
     return ret;
@@ -2672,25 +2650,8 @@ int validate_json_lob_delta(const common::ObJsonBinUpdateCtx &update_context)
        ++i) {
     storage::ObLobChunkIndex &chunk_index = partial_data->index_[i];
     const uint64_t chunk_start_offset = chunk_index.offset_;
-    const uint64_t chunk_end_offset =
-        chunk_index.offset_ + chunk_index.byte_len_;
-    bool is_chunk_updated = false;
-    for (int64_t j = 0;
-         !chunk_index.is_add_ && j < update_context.binary_diffs_.count();
-         ++j) {
-      const common::ObJsonBinaryDiff &diff =
-          update_context.binary_diffs_[j];
-      const uint64_t diff_start_offset = diff.dst_offset_;
-      const uint64_t diff_end_offset = diff.dst_offset_ + diff.dst_len_;
-      if ((diff_start_offset >= chunk_start_offset
-           && diff_start_offset < chunk_end_offset)
-          || (diff_end_offset > chunk_start_offset
-              && diff_end_offset <= chunk_end_offset)
-          || (diff_start_offset <= chunk_start_offset
-              && chunk_end_offset <= diff_end_offset)) {
-        is_chunk_updated = true;
-      }
-    }
+    const bool is_chunk_updated = !chunk_index.is_add_
+        && update_context.intersects(chunk_start_offset, chunk_index.byte_len_);
     if (is_chunk_updated
         && !chunk_index.is_add_
         && !(chunk_index.is_modified_ && chunk_index.old_data_idx_ >= 0)) {

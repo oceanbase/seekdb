@@ -82,7 +82,7 @@ def declare_installed_rust(host, version, targets, channel = "stable", wasm_flag
             staticlib_ext = ".a" if wasm else system_to_staticlib_ext(target_info.system, target_info.abi),
             stdlib_linkflags = system_to_stdlib_linkflags(target_info.system, target_info.abi),
             default_edition = "2021",
-            opt_level = {"dbg": "3", "fastbuild": "3", "opt": "3"},
+            opt_level = {"dbg": "3", "fastbuild": "1", "opt": "3"},
             debug_info = {"dbg": "2", "fastbuild": "2", "opt": "2"},
             strip_level = {"dbg": "none", "fastbuild": "none", "opt": "none"},
             extra_rustc_flags = wasm_flags if wasm else ["-Cpanic=abort"],

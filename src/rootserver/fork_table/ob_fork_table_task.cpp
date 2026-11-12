@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "rootserver/fork_table/ob_fork_table_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_ddl_service.h"
@@ -79,7 +80,7 @@ int ObForkTableTask::init(
     const share::ObDDLType &ddl_type,
     const share::schema::ObTableSchema *src_table_schema,
     const share::schema::ObTableSchema *dst_table_schema,
-    const int64_t schema_version,
+    const int64_t source_schema_version,
     const int64_t snapshot_version,
     const obcall::ObForkTableArg &fork_table_arg,
     const int64_t parent_task_id)
@@ -87,10 +88,11 @@ int ObForkTableTask::init(
   int ret = OB_SUCCESS;
   const uint64_t data_format_version = DATA_CURRENT_VERSION;
   if (OB_UNLIKELY(task_id <= 0
-                  || schema_version <= 0
+                  || source_schema_version <= 0
                   || snapshot_version <= 0
                   || nullptr == src_table_schema
-                  || nullptr == dst_table_schema)) {
+                  || nullptr == dst_table_schema
+                  || dst_table_schema->get_schema_version() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
@@ -99,7 +101,7 @@ int ObForkTableTask::init(
     task_type_ = ddl_type;
     
     object_id_ = src_table_schema->get_table_id();
-    schema_version_ = schema_version;
+    schema_version_ = source_schema_version;
     task_id_ = task_id;
     parent_task_id_ = parent_task_id;
     target_object_id_ = dst_table_schema->get_table_id();
@@ -107,7 +109,7 @@ int ObForkTableTask::init(
     execution_id_ = -1;
     task_status_ = ObDDLTaskStatus::PREPARE;
     
-    dst_schema_version_ = schema_version_;
+    dst_schema_version_ = dst_table_schema->get_schema_version();
     snapshot_version_ = snapshot_version;
     data_format_version_ = data_format_version;
     if (OB_FAIL(deep_copy_fork_table_arg(fork_table_arg))) {
@@ -129,6 +131,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
     ret = OB_ERR_SYS;
   } else if (!task_record.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (FALSE_IT(schema_version_ = task_record.schema_version_)) {
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
                                                      task_record.message_.length(),
                                                      pos))) {
@@ -137,7 +140,6 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
     
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
-    schema_version_ = task_record.schema_version_;
     task_id_ = task_record.task_id_;
     parent_task_id_ = task_record.parent_task_id_;
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
@@ -147,7 +149,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
     
-    dst_schema_version_ = schema_version_;
+    dst_schema_version_ = task_record.schema_version_;
 
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
     } else {
@@ -258,6 +260,7 @@ int ObForkTableTask::serialize_params_to_message(char *buf, const int64_t buf_si
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
   } else if (OB_FAIL(serialization::encode_bool(buf, buf_size, pos, is_data_complement_))) {
   } else if (OB_FAIL(fork_table_arg_.serialize(buf, buf_size, pos))) {
+  } else if (OB_FAIL(serialization::encode_i64(buf, buf_size, pos, schema_version_))) {
   }
   return ret;
 }
@@ -265,6 +268,7 @@ int ObForkTableTask::serialize_params_to_message(char *buf, const int64_t buf_si
 int ObForkTableTask::deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos)
 {
   int ret = OB_SUCCESS;
+  int64_t source_schema_version = 0;
   SMART_VAR(obcall::ObForkTableArg, tmp_arg) {
     if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
       ret = OB_INVALID_ARGUMENT;
@@ -272,6 +276,16 @@ int ObForkTableTask::deserialize_params_from_message(const char *buf, const int6
     } else if (OB_FAIL(serialization::decode_bool(buf, buf_size, pos, &is_data_complement_))) {
     } else if (OB_FAIL(tmp_arg.deserialize(buf, buf_size, pos))) {
     } else if (OB_FAIL(deep_copy_fork_table_arg(tmp_arg))) {
+    } else if (pos < buf_size) {
+      if (OB_FAIL(serialization::decode_i64(buf, buf_size, pos, &source_schema_version))) {
+      } else if (OB_UNLIKELY(source_schema_version <= 0)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        schema_version_ = source_schema_version;
+      }
+    }
+    if (OB_SUCC(ret) && OB_UNLIKELY(schema_version_ <= 0)) {
+      ret = OB_INVALID_ARGUMENT;
     }
   }
   return ret;
@@ -282,6 +296,7 @@ int64_t ObForkTableTask::get_serialize_param_size() const
   int64_t len = ObDDLTask::get_serialize_param_size();
   len += serialization::encoded_length_bool(is_data_complement_);
   len += fork_table_arg_.get_serialize_size();
+  len += serialization::encoded_length_i64(schema_version_);
   return len;
 }
 
@@ -547,7 +562,7 @@ int ObForkTableTask::cleanup_impl()
       } else {
         ObSqlString sql_string;
         int64_t affected_rows = 0;
-        if (OB_FAIL(sql_string.assign_fmt(" DELETE FROM %s WHERE task_id=%ld",
+        if (OB_FAIL(sql_string.assign_fmt(" DELETE FROM %s WHERE task_id=%" PRId64 "",
             share::OB_ALL_DDL_TASK_STATUS_TNAME, task_id_))) {
         } else if (OB_FAIL(DDL_SIM(task_id_, TASK_STATUS_OPERATOR_SLOW))) {
         } else if (OB_FAIL(DDL_SIM(task_id_, DELETE_TASK_RECORD_FAILED))) {

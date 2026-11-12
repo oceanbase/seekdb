@@ -286,6 +286,17 @@ def _final_link_impl(ctx):
     if platform.os == "windows" and ctx.attr.shared and ctx.attr.import_library:
         interface_library = ctx.actions.declare_file(ctx.attr.import_library)
         ordered_link_args.append("/IMPLIB:" + interface_library.path)
+    outputs = [output] + ctx.outputs.side_outputs
+    if platform.os == "windows":
+        pdb = ctx.actions.declare_file(output.basename.rsplit(".", 1)[0] + ".pdb", sibling = output)
+        outputs.append(pdb)
+        ordered_link_args.extend([
+            "/DEBUG:FULL",
+            "/PDB:" + pdb.path,
+            "/PDBALTPATH:" + pdb.basename,
+        ])
+    if interface_library:
+        outputs.append(interface_library)
     action_name = (
         CPP_LINK_DYNAMIC_LIBRARY_ACTION_NAME
         if ctx.attr.shared
@@ -331,7 +342,7 @@ def _final_link_impl(ctx):
             direct = link_inputs + extra_inputs,
             transitive = [cc_toolchain.all_files],
         ),
-        outputs = [output] + ctx.outputs.side_outputs + ([interface_library] if interface_library else []),
+        outputs = outputs,
         mnemonic = "SeekdbFinalLink",
         progress_message = (
             "Linking seekdb shared library %{output}"
@@ -341,7 +352,6 @@ def _final_link_impl(ctx):
         use_default_shell_env = True,
     )
 
-    outputs = [output] + ctx.outputs.side_outputs + ([interface_library] if interface_library else [])
     if platform.os == "windows" and (not ctx.attr.shared or ctx.attr.runtime_dlls):
         outputs += _windows_runtime(ctx, dependencies, output)
     return [

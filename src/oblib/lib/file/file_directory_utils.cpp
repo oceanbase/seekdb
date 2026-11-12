@@ -19,26 +19,10 @@
 #include "lib/utility/ob_smart_call.h"
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
+#include "lib/utility/ob_platform_io.h"
 #include "lib/string/ob_sql_string.h"
 
-#include <dirent.h>
-#ifdef _WIN32
-#include <windows.h>
-#include <direct.h>
-#include <fcntl.h>
-#include <io.h>
-#ifndef R_OK
-#define R_OK 4
-#endif
-#ifndef W_OK
-#define W_OK 2
-#endif
-#ifndef O_DIRECTORY
-#define O_DIRECTORY 0
-#endif
-#else
-#include <sys/statvfs.h>
-#endif
+#include <limits.h>
 
 
 namespace oceanbase
@@ -51,18 +35,19 @@ int FileDirectoryUtils::is_exists(const char *file_path, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
-  ob_stat64_t file_info;
+  ObPlatformFileStat file_info;
   if (OB_ISNULL(file_path) || OB_UNLIKELY(strlen(file_path) == 0)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(file_path), K(ret));
   } else {
-    result = (0 == ob_stat64(file_path, &file_info));
+    result = (0 == ob_stat_utf8(file_path, file_info));
   }
 
   return ret;
 }
 
-int FileDirectoryUtils::check_directory_mode(const char *file_path, int mode, bool &result)
+int FileDirectoryUtils::check_directory_mode(const char *file_path,
+                                            ObPathPermission permission, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
@@ -70,7 +55,7 @@ int FileDirectoryUtils::check_directory_mode(const char *file_path, int mode, bo
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(file_path), K(ret));
   } else {
-    if (0 == access(file_path, mode)) {
+    if (0 == ob_access_utf8(file_path, permission)) {
       result = true;
     } else {
       LIB_LOG(WARN, "access file failed", KERRMSG, K(file_path));
@@ -81,12 +66,12 @@ int FileDirectoryUtils::check_directory_mode(const char *file_path, int mode, bo
 //return true if file is accessible
 int FileDirectoryUtils::is_accessible(const char *file_path, bool &result)
 {
-  return check_directory_mode(file_path, R_OK, result);
+  return check_directory_mode(file_path, ObPathPermission::READ, result);
 }
 
 int FileDirectoryUtils::is_writable(const char *file_path, bool &result)
 {
-  return check_directory_mode(file_path, W_OK, result);
+  return check_directory_mode(file_path, ObPathPermission::WRITE, result);
 }
 
 //return ture if dirname is a directory
@@ -94,12 +79,12 @@ int FileDirectoryUtils::is_directory(const char *directory_path, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
-  ob_stat64_t file_info;
+  ObPlatformFileStat file_info;
   if (NULL == directory_path ||  strlen(directory_path) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(directory_path), K(ret));
   } else {
-    result = (0 == ob_stat64(directory_path, &file_info) && S_ISDIR(file_info.st_mode));
+    result = (0 == ob_stat_utf8(directory_path, file_info) && ob_stat_is_dir(file_info.mode));
   }
 
   return ret;
@@ -112,8 +97,8 @@ int FileDirectoryUtils::is_link(const char *link_path, bool &result)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(link_path), K(ret));
   }  else {
-    ob_stat64_t file_info;
-    result = (0 == ob_lstat64(link_path, &file_info) && S_ISLNK(file_info.st_mode));
+    ObPlatformFileStat file_info;
+    result = (0 == ob_stat_utf8(link_path, file_info, false) && ob_stat_is_link(file_info.mode));
   }
   return ret;
 }
@@ -129,11 +114,7 @@ int FileDirectoryUtils::create_directory(const char *directory_path)
   if (NULL == directory_path || strlen(directory_path) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(directory_path), K(ret));
-#ifdef _WIN32
-  } else if (_mkdir(directory_path) != 0) {
-#else
-  } else if (::mkdir(directory_path, mode) != 0) {
-#endif
+  } else if (ob_mkdir_utf8(directory_path, static_cast<int>(mode)) != 0) {
     if (EEXIST == errno) {
       ret = OB_SUCCESS;
     } else {
@@ -151,15 +132,15 @@ int FileDirectoryUtils::create_full_path(const char *fullpath)
 {
 
   int ret = OB_SUCCESS;
-  ob_stat64_t file_info;
+  ObPlatformFileStat file_info;
   int64_t len = 0;
   if (NULL == fullpath || (len = strlen(fullpath)) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(fullpath), K(ret));
   } else {
-    ret = ::ob_stat64(fullpath, &file_info);
+    ret = ob_stat_utf8(fullpath, file_info);
     if (0 == ret) {
-      if (!S_ISDIR(file_info.st_mode)) {
+      if (!ob_stat_is_dir(file_info.mode)) {
         ret = OB_ENTRY_EXIST;
         LIB_LOG(WARN, "file is exists but not a directory.", KCSTRING(fullpath), K(ret));
       } else {
@@ -217,20 +198,20 @@ int FileDirectoryUtils::create_full_path(const char *fullpath)
 int FileDirectoryUtils::delete_file(const char *filename)
 {
   int ret = OB_SUCCESS;
-  ob_stat64_t file_info;
+  ObPlatformFileStat file_info;
   if (NULL == filename || strlen(filename) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(filename), K(ret));
   } else {
-    ret = ::ob_stat64(filename, &file_info);
+    ret = ob_stat_utf8(filename, file_info);
     if (0 != ret) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is not exists.", KCSTRING(filename), K(ret));
-    } else if (S_ISDIR(file_info.st_mode)) {
+    } else if (ob_stat_is_dir(file_info.mode)) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is directory, use delete_directory.",
               KCSTRING(filename), K(ret));
-    } else if (0 != unlink(filename)){
+    } else if (0 != ob_unlink_utf8(filename)) {
       ret = OB_IO_ERROR;
       LIB_LOG(WARN, "unlink file failed.",
               KCSTRING(filename), K(errno), KERRMSG, K(ret));
@@ -251,11 +232,7 @@ int FileDirectoryUtils::delete_directory(const char *dirname)
   } else if (!is_dir) {
     ret = OB_FILE_NOT_EXIST;
     LIB_LOG(WARN, "file path is not a directory.", KCSTRING(dirname), K(ret));
-#ifdef _WIN32
-  } else if (0 != _rmdir(dirname)) {
-#else
-  } else if (0 != rmdir(dirname)) {
-#endif
+  } else if (0 != ob_rmdir_utf8(dirname)) {
     ret = OB_IO_ERROR;
     LIB_LOG(WARN, "rmdir failed.",
             KCSTRING(dirname), K(errno), KERRMSG, K(ret));
@@ -267,20 +244,20 @@ int FileDirectoryUtils::delete_directory(const char *dirname)
 int FileDirectoryUtils::get_file_size(const char *filename, int64_t &size)
 {
   int ret = OB_SUCCESS;
-  ob_stat64_t file_info;
+  ObPlatformFileStat file_info;
   if (NULL == filename || strlen(filename) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(filename), K(ret));
   } else {
-    ret = ::ob_stat64(filename, &file_info);
+    ret = ob_stat_utf8(filename, file_info);
     if (0 != ret) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is not exists.", KCSTRING(filename), K(ret));
-    } else if (S_ISDIR(file_info.st_mode)) {
+    } else if (ob_stat_is_dir(file_info.mode)) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is not a file.", KCSTRING(filename), K(ret));
     } else {
-      size = file_info.st_size;
+      size = file_info.size;
     }
   }
   return ret;
@@ -315,28 +292,30 @@ int FileDirectoryUtils::is_valid_path(const char *path, const bool print_error)
 int FileDirectoryUtils::is_empty_directory(const char *directory_path, bool &result)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
-  struct dirent *entry = NULL;
+  ObPlatformDir *dir = NULL;
+  char entry_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   int64_t num = 0;
+  int read_ret = 0;
   if (NULL == directory_path) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "directory path is NULL, ", K(ret));
-  } else if (NULL == (dir = opendir(directory_path))) {
+  } else if (NULL == (dir = ob_opendir_utf8(directory_path))) {
     ret = OB_ERR_SYS;
     LIB_LOG(WARN, "Fail to open dir, ", K(ret), K(errno), KCSTRING(directory_path));
   } else {
-    while(NULL != (entry = readdir(dir))) {
+    while (1 == (read_ret = ob_readdir_utf8(dir, entry_name, sizeof(entry_name)))) {
       ++num;
     }
-    if (2 == num) {
-      result = true;
+    if (read_ret < 0) {
+      ret = OB_ERR_SYS;
+      LIB_LOG(WARN, "Fail to read dir, ", K(ret), K(errno), KCSTRING(directory_path));
     } else {
-      result = false;
+      result = (2 == num);
     }
   }
 
   if (NULL != dir) {
-    closedir(dir);
+    ob_closedir_utf8(dir);
   }
   return ret;
 }
@@ -348,11 +327,7 @@ int FileDirectoryUtils::open(const char *pathname, int flags, mode_t mode, int &
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(pathname), K(ret));
   } else {
-#ifdef _WIN32
-    fd = ::open(pathname, flags | _O_BINARY, mode);
-#else
-    fd = ::open(pathname, flags, mode);
-#endif
+    fd = ob_open_utf8(pathname, flags, static_cast<int>(mode));
     if (fd < 0) {
       ret = OB_IO_ERROR;
       LIB_LOG(WARN, "Fail to open", K(ret), K(errno), KCSTRING(pathname), K(mode), K(flags));
@@ -384,11 +359,7 @@ int FileDirectoryUtils::symlink(const char *oldpath, const char *newpath)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "path must not null", K(ret), KCSTRING(oldpath), KCSTRING(newpath));
   } else {
-#ifdef _WIN32
-    if (!CreateSymbolicLinkA(newpath, oldpath, 0)) {
-#else
-    if (0 != ::symlink(oldpath, newpath)) {
-#endif
+    if (0 != ob_symlink_utf8(oldpath, newpath)) {
       ret = OB_IO_ERROR;
       LIB_LOG(WARN, "fail to symlink", K(ret), K(errno), KCSTRING(oldpath), KCSTRING(newpath));
     }
@@ -405,7 +376,7 @@ int FileDirectoryUtils::unlink_symlink(const char *link_path)
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(link_path), K(ret));
   } else if (OB_FAIL(is_link(link_path, is_link_file))) {
   } else if (is_link_file) {
-    if (0 != ::unlink(link_path)) {
+    if (0 != ob_unlink_utf8(link_path)) {
       ret = OB_IO_ERROR;
       LIB_LOG(WARN, "fail to unlink", K(ret), K(errno), KERRMSG, KCSTRING(link_path));
     }
@@ -442,38 +413,20 @@ int FileDirectoryUtils::get_disk_space(
   if (OB_ISNULL(path)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid args", K(ret), KP(path));
-#ifdef _WIN32
-  } else {
-    ULARGE_INTEGER free_bytes_available, total_number_of_bytes, total_number_of_free_bytes;
-    if (!GetDiskFreeSpaceExA(path, &free_bytes_available, &total_number_of_bytes, &total_number_of_free_bytes)) {
-      ret = OB_IO_ERROR;
-      LIB_LOG(WARN, "GetDiskFreeSpaceExA fail", K(ret), KCSTRING(path));
-    } else {
-      total_space = static_cast<int64_t>(total_number_of_bytes.QuadPart);
-      free_space = static_cast<int64_t>(free_bytes_available.QuadPart);
-    }
+  } else if (0 != ob_get_disk_space_utf8(path, total_space, free_space)) {
+    ret = OB_IO_ERROR;
+    LIB_LOG(WARN, "get disk space fail", K(ret), K(errno), KERRNOMSG(errno), KCSTRING(path));
   }
-#else
-  } else {
-    struct statvfs svfs;
-    if (OB_FAIL(statvfs(path, &svfs))) {
-      ret = OB_IO_ERROR;
-      LIB_LOG(WARN, "get svfs fail", K(ret), KCSTRING(path), K(errno), KERRNOMSG(errno));
-    } else {
-      total_space =  (svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize;
-      free_space = svfs.f_bavail * svfs.f_bsize;
-    }
-  }
-#endif
   return ret;
 }
 
 int FileDirectoryUtils::delete_directory_rec(const char *path)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
-  struct dirent *entry = nullptr;
-  if (NULL == (dir = opendir(path))) {
+  ObPlatformDir *dir = NULL;
+  char entry_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  int read_ret = 0;
+  if (NULL == (dir = ob_opendir_utf8(path))) {
     if (ENOENT != errno) {
       ret = OB_FILE_NOT_OPENED;
       LIB_LOG(WARN, "fail to open dir", K(ret), K(path), K(errno), KERRMSG);
@@ -483,29 +436,37 @@ int FileDirectoryUtils::delete_directory_rec(const char *path)
     }
   } else {
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
+    while (OB_SUCC(ret)) {
+      read_ret = ob_readdir_utf8(dir, entry_name, sizeof(entry_name));
+      if (1 != read_ret) {
+        break;
+      }
       bool is_dir = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
-      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
+      if (0 == strcmp(entry_name, ".") || 0 == strcmp(entry_name, "..")) {
         // do nothing
-      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry->d_name)) {
+      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry_name)) {
         ret = OB_ERR_UNEXPECTED;
-        LIB_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
+        LIB_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
       } else if (true == is_dir && OB_FAIL(SMART_CALL(delete_directory_rec(current_file_path)))) {
-        LIB_LOG(WARN, "delete directory failed", K(ret), K(entry->d_name), K(path));
+        LIB_LOG(WARN, "delete directory failed", K(ret), K(entry_name), K(path));
         // delete normal file
       } else if (false == is_dir && OB_FAIL(FileDirectoryUtils::delete_file(current_file_path))) {
         LIB_LOG(WARN, "delete_file failed", K(ret), K(current_file_path));
       }
+    }
+    if (OB_SUCC(ret) && read_ret < 0) {
+      ret = OB_ERR_SYS;
+      LIB_LOG(WARN, "fail to read dir", K(ret), K(path), K(errno), KERRMSG);
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(delete_directory(path))) {
   }
   if (NULL != dir) {
-    closedir(dir);
-    dir = nullptr;
+    ob_closedir_utf8(dir);
+    dir = NULL;
   }
   return ret;
 }
@@ -513,28 +474,33 @@ int FileDirectoryUtils::delete_directory_rec(const char *path)
 int FileDirectoryUtils::delete_tmp_file_or_directory_at(const char *path)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
-  struct dirent *entry = nullptr;
-  if (NULL == (dir = opendir(path))) {
+  ObPlatformDir *dir = NULL;
+  char entry_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  int read_ret = 0;
+  if (NULL == (dir = ob_opendir_utf8(path))) {
     ret = OB_ERR_SYS;
     LIB_LOG(WARN, "opendir failed", K(path), K(errno), KERRMSG);
   } else {
-    auto check_is_tmp_file = [](const char* file_name) -> bool {
+    auto check_is_tmp_file = [](const char *file_name) -> bool {
       return NULL != strstr(file_name, ".tmp");
     };
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
+    while (OB_SUCC(ret)) {
+      read_ret = ob_readdir_utf8(dir, entry_name, sizeof(entry_name));
+      if (1 != read_ret) {
+        break;
+      }
       bool is_dir = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
-      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
+      if (0 == strcmp(entry_name, ".") || 0 == strcmp(entry_name, "..")) {
         // do nothing
-      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry->d_name)) {
+      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry_name)) {
         ret = OB_ERR_UNEXPECTED;
-        LIB_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
+        LIB_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
       } else if (true == check_is_tmp_file(current_file_path)) {
         if (true == is_dir && OB_FAIL(delete_directory_rec(current_file_path))) {
-          LIB_LOG(WARN, "delete_directory_rec failed", K(ret), K(entry->d_name), K(path));
+          LIB_LOG(WARN, "delete_directory_rec failed", K(ret), K(entry_name), K(path));
         } else if (false == is_dir && OB_FAIL(FileDirectoryUtils::delete_file(current_file_path))) {
           LIB_LOG(WARN, "delete_file failed", K(ret), K(current_file_path));
         } else {
@@ -544,9 +510,13 @@ int FileDirectoryUtils::delete_tmp_file_or_directory_at(const char *path)
       } else {
       }
     }
+    if (OB_SUCC(ret) && read_ret < 0) {
+      ret = OB_ERR_SYS;
+      LIB_LOG(WARN, "fail to read dir", K(ret), K(path), K(errno), KERRMSG);
+    }
   }
   if (NULL != dir) {
-    closedir(dir);
+    ob_closedir_utf8(dir);
   }
   return ret;
 }
@@ -554,47 +524,20 @@ int FileDirectoryUtils::delete_tmp_file_or_directory_at(const char *path)
 int FileDirectoryUtils::fsync_dir(const char *dir_path)
 {
   int ret = OB_SUCCESS;
-#ifdef _WIN32
-  HANDLE hDir = CreateFileA(dir_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                            NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-  if (hDir == INVALID_HANDLE_VALUE) {
+  if (0 != ob_fsync_dir_utf8(dir_path)) {
     ret = OB_IO_ERROR;
-    LIB_LOG(WARN, "CreateFileA for dir failed", K(ret), K(dir_path), K(GetLastError()));
-  } else {
-    if (!FlushFileBuffers(hDir)) {
-      // FlushFileBuffers on directories may fail on some filesystems; treat as non-fatal
-      LIB_LOG(DEBUG, "FlushFileBuffers for dir returned error (non-fatal)", K(dir_path), K(GetLastError()));
-    }
-    CloseHandle(hDir);
+    LIB_LOG(WARN, "fsync dir failed", K(ret), K(errno), KERRMSG, K(dir_path));
   }
-#else
-  int fd = ::open(dir_path, O_DIRECTORY | O_RDONLY);
-  if (-1 == fd) {
-    ret = OB_IO_ERROR;
-    LIB_LOG(WARN, "::open failed", K(ret), K(dir_path), K(errno));
-  } else if (-1 == ::fsync(fd)) {
-    ret = OB_IO_ERROR;
-    LIB_LOG(WARN, "::fsync failed", K(ret), K(dir_path), K(errno));
-  } else {
-  }
-  if (-1 != fd) {
-    ::close(fd);
-  }
-#endif
   return ret;
 }
 
 int FileDirectoryUtils::to_absolute_path(ObSqlString &dir)
 {
   int ret = OB_SUCCESS;
-  if (!dir.empty() && dir.ptr()[0] != '\0' && dir.ptr()[0] != '/') {
-    char real_path[PATH_MAX] = {0};
-#ifdef _WIN32
-    if (NULL == _fullpath(real_path, dir.ptr(), PATH_MAX)) {
-#else
-    if (NULL == realpath(dir.ptr(), real_path)) {
-#endif
-      LIB_LOG(WARN, "Failed to get absolute path", K(dir), KCSTRING(strerror(errno)));
+  if (!dir.empty() && dir.ptr()[0] != '\0' && !ob_is_absolute_path_utf8(dir.ptr())) {
+    char real_path[4096] = {0};
+    if (0 != ob_absolute_path_utf8(dir.ptr(), real_path, sizeof(real_path))) {
+      LIB_LOG(WARN, "Failed to get absolute path", K(dir), K(errno), KCSTRING(strerror(errno)));
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(dir.assign(real_path))) {
     }

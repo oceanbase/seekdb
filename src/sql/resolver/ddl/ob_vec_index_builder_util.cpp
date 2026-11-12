@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include <inttypes.h>
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -3680,7 +3681,7 @@ int ObVecIndexBuilderUtil::generate_embedded_vec_column(
           MEMSET(vector_type_buf, 0, sizeof(vector_type_buf));
           int64_t type_pos = 0;
           if (OB_FAIL(databuff_printf(vector_type_buf, OB_MAX_DEFAULT_VALUE_LENGTH, type_pos,
-                                     "VECTOR(%ld)", index_param.dim_))) {
+                                     "VECTOR(%" PRId64 ")", index_param.dim_))) {
           } else if (OB_FAIL(ob_write_string(allocator, ObString(type_pos, vector_type_buf), vector_type_str))) {
           } else if (OB_FAIL(extend_type_info.push_back(vector_type_str))) {
           }
@@ -3978,11 +3979,11 @@ int ObVecIndexBuilderUtil::construct_ivf_col_name(
       } else if (OB_ISNULL(col_schema = data_schema.get_column_schema(column_name))) {
         ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
-      } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%ld", col_schema->get_column_id()))) {
+      } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRId64 "", col_schema->get_column_id()))) {
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4003,11 +4004,11 @@ int ObVecIndexBuilderUtil::construct_ivf_col_name(
   } else {
     // Here the cascaded_col_ids represents the vector index column id, when constructing auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < cascaded_col_ids.count(); ++i) {
-      if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%ld", cascaded_col_ids.at  (i)))) {
+      if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRId64 "", cascaded_col_ids.at  (i)))) {
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu",   ObTimeUtility::current_time()))){
+    } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "",   ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4026,7 +4027,7 @@ int ObVecIndexBuilderUtil::construct_vid_col_name(
     MEMSET(col_name_buf, 0, buf_len);
     if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
                                 OB_VEC_VID_COLUMN_NAME))) {
-    } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4063,11 +4064,11 @@ int ObVecIndexBuilderUtil::construct_type_col_name(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(),
                        column_name.ptr());
       } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
-                                         "_%ld",
+                                         "_%" PRId64 "",
                                          col_schema->get_column_id()))) {
       }
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4110,11 +4111,11 @@ int ObVecIndexBuilderUtil::construct_spiv_col_name(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(),
                       column_name.ptr());
       } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
-                                        "_%ld",
+                                        "_%" PRId64 "",
                                         col_schema->get_column_id()))) {
       }
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4150,11 +4151,11 @@ int ObVecIndexBuilderUtil::construct_vector_col_name(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(),
                        column_name.ptr());
       } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
-                                         "_%ld",
+                                         "_%" PRId64 "",
                                          col_schema->get_column_id()))) {
       }
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4191,11 +4192,11 @@ int ObVecIndexBuilderUtil::construct_scn_col_name(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(),
                        column_name.ptr());
       } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
-                                         "_%ld",
+                                         "_%" PRId64 "",
                                          col_schema->get_column_id()))) {
       }
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4232,11 +4233,11 @@ int ObVecIndexBuilderUtil::construct_key_col_name(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(),
                        column_name.ptr());
       } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
-                                         "_%ld",
+                                         "_%" PRId64 "",
                                          col_schema->get_column_id()))) {
       }
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4273,11 +4274,11 @@ int ObVecIndexBuilderUtil::construct_data_col_name(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(),
                        column_name.ptr());
       } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
-                                         "_%ld",
+                                         "_%" PRId64 "",
                                          col_schema->get_column_id()))) {
       }
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4313,11 +4314,11 @@ int ObVecIndexBuilderUtil::construct_chunk_col_name(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(),
                        column_name.ptr());
       } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
-                                         "_%ld",
+                                         "_%" PRId64 "",
                                          col_schema->get_column_id()))) {
       }
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
@@ -4353,11 +4354,11 @@ int ObVecIndexBuilderUtil::construct_embedded_vector_col_name(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(),
                        column_name.ptr());
       } else if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos,
-                                         "_%ld",
+                                         "_%" PRId64 "",
                                          col_schema->get_column_id()))) {
       }
     }
-    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%lu", ObTimeUtility::current_time()))){
+    if (FAILEDx(databuff_printf(col_name_buf, buf_len, name_pos, "_%" PRIu64 "", ObTimeUtility::current_time()))){
     }
   }
   return ret;
