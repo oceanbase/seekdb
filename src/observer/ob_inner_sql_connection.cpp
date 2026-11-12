@@ -307,8 +307,12 @@ Write::Write(const ObString &sql, const int &ret) : ret_(ret)
     outermost_ = value.write_depth == 0;
     if (!add(value.write_depth, 1)) { value.valid = false; entered_ = false; }
     if (entered_ && !outermost_ && !add(value.nested_writes, 1)) { value.valid = false; }
+    if (entered_ && !outermost_ && value.active_write_family == HIST_DELETE) {
+      value.detail.valid = false;
+    }
     if (entered_ && outermost_) {
       family_ = family(sql);
+      value.active_write_family = family_;
       phase_start_us_ = ObTimeUtility::current_time();
       phase_cpu_ = sample_cpu();
       tid_ = phase_cpu_.tid;
@@ -361,6 +365,7 @@ Write::~Write()
         valid = add(value.reported_rows_before_close, rows_) && valid;
       } else { valid = add(value.rows_invalid_calls, 1) && valid; }
       context.valid = context.valid && valid;
+      context.active_write_family = OTHER_WRITE;
     }
   }
 }
@@ -1991,8 +1996,15 @@ bool target_select(const ObString &sql, uint64_t &fingerprint)
   return true;
 }
 }
-Detail::Detail(DetailStage stage, const int *ret) : stage_(stage), ret_(ret)
+bool histogram_delete_active()
 {
+  const RequestState &s = state();
+  return s.active && s.valid && s.write_depth == 1
+      && s.active_write_family == HIST_DELETE && identity_matches(s);
+}
+Detail::Detail(DetailStage stage, const int *ret, bool enabled) : stage_(stage), ret_(ret)
+{
+  if (!enabled) { return; }
   RequestState &s = state();
   if (s.active && !identity_matches(s)) { s.detail.valid = false; }
   if (identity_matches(s)) {

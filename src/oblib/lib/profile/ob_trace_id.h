@@ -328,7 +328,8 @@ struct WriteTotals {
 };
 enum DetailStage { DETAIL_OTHER, SCHEMA_LOAD, TABLE_BASE, TABLE_COLUMN, TABLE_PARTITION,
   TABLE_FOREIGN_KEY, TABLE_CONSTRAINT, TABLE_TRIGGER, READ_CLIENT, READ_QUERY, READ_NEXT,
-  ROW_DECODE, RESULT_CLOSE, RESULT_DESTROY, IO_WAIT, DETAIL_STAGE_COUNT, DETAIL_CURRENT };
+  ROW_DECODE, RESULT_CLOSE, RESULT_DESTROY, IO_WAIT,
+  DML_WRITE_OTHER, DML_CONTEXT_ACQUIRE, DML_EXEC_PREPARE, DML_PRIMARY_ROWS, DML_INDEX_ROWS, DML_INDEX_PREPARE, DML_INDEX_REWIND, DML_WRITE_ALLOWED, DML_DELETE_OTHER, DML_RUNNING_PREPARE, DML_FETCH_ROWS, DML_ROW_ASSIGN, DML_DELETE_BATCH, DML_OLD_ROW_CHECK, DML_LOB_PROCESS, DML_LOB_DELETE, DML_UPDATE_WRAP, DML_CONTEXT_RESET, DML_CONTEXT_REVERT, DML_IGNORE_PATH, DETAIL_STAGE_COUNT, DETAIL_CURRENT };
 enum DetailRegionCode { REGION_OTHER, REGION_ENUMERATE, REGION_OPTIONS, REGION_TABLE,
   REGION_BACKUP, REGION_PARTITION, DETAIL_REGION_COUNT };
 struct DetailTotals {
@@ -366,6 +367,7 @@ struct RequestState {
   uint64_t epoch = 0;
   int64_t diagnostic_start_us = 0;
   int64_t write_depth = 0;
+  WriteFamily active_write_family = OTHER_WRITE;
   int64_t nested_writes = 0;
   int64_t nested_schemas = 0;
   uintptr_t worker = 0;
@@ -436,7 +438,8 @@ private:
 };
 class Detail {
 public:
-  explicit Detail(DetailStage stage, const int *ret = nullptr);
+  explicit Detail(DetailStage stage, const int *ret = nullptr, bool enabled = true);
+  void record_return(int result) { returned_ret_ = result; ret_ = &returned_ret_; }
   Detail(DetailStage stage, const int &ret) : Detail(stage, &ret) {}
   ~Detail();
   void switch_to(DetailStage stage);
@@ -448,7 +451,16 @@ private:
   int64_t depth_ = 0;
   DetailStage previous_ = DETAIL_OTHER, stage_ = DETAIL_OTHER;
   const int *ret_ = nullptr;
+  int returned_ret_ = 0;
 };
+bool histogram_delete_active();
+template<class Operation> int histogram_delete_call(DetailStage stage, Operation &&operation)
+{
+  Detail scope(stage, nullptr, histogram_delete_active());
+  const int result = operation();
+  scope.record_return(result);
+  return result;
+}
 class SelectRequest {
 public:
   SelectRequest(const ObString &sql, uint64_t session_id, const int &ret);

@@ -2303,6 +2303,7 @@ int ObLSTabletService::delete_rows(
     int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_dml_scope(::oceanbase::common::seek1381::DML_DELETE_OTHER, &ret, ::oceanbase::common::seek1381::histogram_delete_active());
   NG_TRACE(S_delete_rows_begin);
   const ObTabletID &data_tablet_id = ctx.tablet_id_;
   ObRowReshape *row_reshape = nullptr;
@@ -2325,7 +2326,7 @@ int ObLSTabletService::delete_rows(
     char *tmp_rows_buf = nullptr;
     int64_t max_tmp_row_cnt = 0;
 
-    if (OB_FAIL(prepare_dml_running_ctx(&column_ids, nullptr, tablet_handle, run_ctx))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_RUNNING_PREPARE, [&]() { return prepare_dml_running_ctx(&column_ids, nullptr, tablet_handle, run_ctx); }))) {
     } else {
       tablet_handle.reset();
       HEAP_VAR(ObRowsInfo, rows_info) {
@@ -2336,7 +2337,7 @@ int ObLSTabletService::delete_rows(
         ObTabletHandle tmp_handle;
         int64_t max_row_cnt = 0;
 
-        while (OB_SUCC(ret) && OB_SUCC(get_next_rows(row_iter, rows, row_count))) {
+        while (OB_SUCC(ret) && OB_SUCC(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_FETCH_ROWS, [&]() { return get_next_rows(row_iter, rows, row_count); }))) {
           // need to be called just after get_next_row to ensure that previous row's LOB memoroy is valid if get_next_row accesses it
           dml_param.lob_allocator_.reuse();
           // Let ObStorageTableGuard refresh retired memtable, should not hold origin tablet handle
@@ -2375,8 +2376,8 @@ int ObLSTabletService::delete_rows(
             for (int64_t i = 0; i < row_count; i++) {
               rows[i].row_flag_.set_flag(ObDmlFlag::DF_DELETE);
             }
-            if (OB_FAIL(rows_info.assign_rows(row_count, rows))) {
-            } else if (OB_FAIL(delete_rows_in_tablet(tmp_handle, run_ctx, tmp_rows, rows_info))) {
+            if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_ROW_ASSIGN, [&]() { return rows_info.assign_rows(row_count, rows); }))) {
+            } else if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_DELETE_BATCH, [&]() { return delete_rows_in_tablet(tmp_handle, run_ctx, tmp_rows, rows_info); }))) {
             } else {
               afct_num += row_count;
             }
@@ -4210,16 +4211,16 @@ int ObLSTabletService::delete_rows_in_tablet(
   ObDatumRow *rows = rows_info.rows_;
   int64_t error_row_idx = 0;
 
-  if (OB_FAIL(check_old_row_legitimacy_wrap(
-      run_ctx.cmp_funcs_, tablet_handle, run_ctx, row_count, rows, error_row_idx))) {
+  if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_OLD_ROW_CHECK, [&]() { return check_old_row_legitimacy_wrap(
+      run_ctx.cmp_funcs_, tablet_handle, run_ctx, row_count, rows, error_row_idx); }))) {
     if (OB_ERR_DEFENSIVE_CHECK == ret) {
       dump_diag_info_for_old_row_loss(run_ctx, rows[error_row_idx]);
     }
     LOG_WARN("check old row legitimacy failed", K(rows_info));
-  } else if (OB_FAIL(process_old_rows_lob_col(tablet_handle, run_ctx, row_count, rows))){
+  } else if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_LOB_PROCESS, [&]() { return process_old_rows_lob_col(tablet_handle, run_ctx, row_count, rows); }))){
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < row_count; i++) {
-      if (OB_FAIL(delete_lob_tablet_rows(tablet_handle, run_ctx, rows[i]))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_LOB_DELETE, [&]() { return delete_lob_tablet_rows(tablet_handle, run_ctx, rows[i]); }))) {
       }
     }
   }
@@ -4232,13 +4233,13 @@ int ObLSTabletService::delete_rows_in_tablet(
   }
   if (OB_SUCC(ret)) {
     ObSEArray<int64_t, 8> update_idx; // update_idx is a dummy param here
-    if (OB_FAIL(update_rows_wrap(tablet_handle,
+    if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_UPDATE_WRAP, [&]() { return update_rows_wrap(tablet_handle,
                                  relative_table,
                                  ctx,
                                  *run_ctx.col_descs_,
                                  update_idx,
                                  tmp_rows,
-                                 rows_info))) {
+                                 rows_info); }))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret && OB_TRANSACTION_SET_VIOLATION != ret) {
       }
     }

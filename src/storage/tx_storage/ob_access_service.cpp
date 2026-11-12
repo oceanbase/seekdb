@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include <new>
+#include "lib/profile/ob_trace_id.h"
 #include "ob_access_service.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/rc/ob_server_runtime.h"
@@ -108,10 +109,11 @@ private:
 void ObStoreCtxGuard::reset()
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_dml_scope(::oceanbase::common::seek1381::DML_CONTEXT_RESET, &ret, ::oceanbase::common::seek1381::histogram_delete_active());
   static const int64_t WARN_TIME_US = 5 * 1000 * 1000;
   if (IS_INIT) {
     if (OB_NOT_NULL(ls_)) {
-      if (ctx_.is_valid() && OB_FAIL(ls_->revert_store_ctx(ctx_))) {
+      if (ctx_.is_valid() && OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_CONTEXT_REVERT, [&]() { return ls_->revert_store_ctx(ctx_); }))) {
       }
       ls_ = nullptr;
     }
@@ -895,6 +897,7 @@ int ObAccessService::delete_rows(
     int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_dml_scope(::oceanbase::common::seek1381::DML_DELETE_OTHER, &ret, ::oceanbase::common::seek1381::histogram_delete_active());
   ObLSTabletService *tablet_service = nullptr;
   // Attention!!! This handle is only used for ObLSTabletService, will be reset inside ObLSTabletService.
   ObTabletHandle tablet_handle;
@@ -906,13 +909,13 @@ int ObAccessService::delete_rows(
       || OB_UNLIKELY(column_ids.count() <= 0)
       || OB_ISNULL(row_iter)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(check_write_allowed_(tablet_id,
+  } else if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_WRITE_ALLOWED, [&]() { return check_write_allowed_(tablet_id,
                                           ObStoreAccessType::MODIFY,
                                           dml_param,
                                           dml_param.timeout_,
                                           tx_desc,
                                           tablet_handle,
-                                          *dml_param.store_ctx_guard_))) {
+                                          *dml_param.store_ctx_guard_); }))) {
   } else if (OB_ISNULL(tablet_service = dml_param.store_ctx_guard_->get_ls()->get_tablet_svr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tablet service should not be null.", K(ret));

@@ -17,6 +17,7 @@
 #ifndef DEV_SRC_SQL_ENGINE_DML_OB_DML_SERVICE_H_
 #define DEV_SRC_SQL_ENGINE_DML_OB_DML_SERVICE_H_
 #include "sql/engine/dml/ob_dml_ctx_define.h"
+#include "lib/profile/ob_trace_id.h"
 #include "share/rc/ob_server_runtime.h"
 #include "data_plane/ob_i_dml_service.h"
 #include "data_plane/ob_i_write_context_service.h"
@@ -347,9 +348,10 @@ template <int N, typename DMLIterator>
 int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_t &affected_rows)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_dml_scope(::oceanbase::common::seek1381::DML_WRITE_OTHER, &ret, ::oceanbase::common::seek1381::histogram_delete_active());
   affected_rows = 0;
   if (ctdef_->is_ignore_) {
-    if (OB_FAIL(write_tablet_with_ignore(iter, affected_rows))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_IGNORE_PATH, [&]() { return write_tablet_with_ignore(iter, affected_rows); }))) {
     }
   } else {
     data_plane::ObIWriteContextService *as =
@@ -361,16 +363,16 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
     (void)ObDMLService::init_dml_write_flag(*ctdef_, *rtdef_, write_flag, use_snapshot_opt_);
     if (OB_ISNULL(as)) {
       ret = common::OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(as->acquire_write_context(rtdef_->timeout_ts_,
+    } else if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_CONTEXT_ACQUIRE, [&]() { return as->acquire_write_context(rtdef_->timeout_ts_,
                                                  *tx_desc_,
                                                  *snapshot_,
                                                  write_branch_id_,
                                                  write_flag,
-                                                 write_context))) {
-    } else if (OB_FAIL(ObDMLService::prepare_dml_execution(
+                                                 write_context); }))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_EXEC_PREPARE, [&]() { return ObDMLService::prepare_dml_execution(
         *ctdef_, *rtdef_, *snapshot_, write_branch_id_, *das_allocator_,
-        write_context, dml_execution_, use_snapshot_opt_))) {
-    } else if (OB_FAIL(write_rows(tablet_id_, *ctdef_, *rtdef_, iter, affected_rows))) {
+        write_context, dml_execution_, use_snapshot_opt_); }))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_PRIMARY_ROWS, [&]() { return write_rows(tablet_id_, *ctdef_, *rtdef_, iter, affected_rows); }))) {
     } else if (related_ctdefs_ != nullptr && !related_ctdefs_->empty()) {
       //write local index
       for (int64_t i = 0; OB_SUCC(ret) && i < related_ctdefs_->count(); ++i) {
@@ -379,16 +381,16 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
         ObTabletID related_tablet_id = related_tablet_ids_->at(i);
         ObFTDocWordInfo *doc_word_info = nullptr == ft_doc_word_infos_ ? nullptr : &(ft_doc_word_infos_->at(i));
         int64_t index_affected_rows = 0;
-        if (OB_FAIL(iter.rewind(related_ctdef, doc_word_info))) {
-        } else if (OB_FAIL(ObDMLService::prepare_dml_execution(
+        if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_INDEX_REWIND, [&]() { return iter.rewind(related_ctdef, doc_word_info); }))) {
+        } else if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_INDEX_PREPARE, [&]() { return ObDMLService::prepare_dml_execution(
                        *related_ctdef, *related_rtdef, *snapshot_,
                        write_branch_id_, *das_allocator_, write_context,
-                       dml_execution_, use_snapshot_opt_))) {
-        } else if (OB_FAIL(write_rows(related_tablet_id,
+                       dml_execution_, use_snapshot_opt_); }))) {
+        } else if (OB_FAIL(::oceanbase::common::seek1381::histogram_delete_call(::oceanbase::common::seek1381::DML_INDEX_ROWS, [&]() { return write_rows(related_tablet_id,
                                       *related_ctdef,
                                       *related_rtdef,
                                       iter,
-                                      index_affected_rows))) {
+                                      index_affected_rows); }))) {
         } else if (OB_FAIL(ObDMLService::check_local_index_affected_rows(affected_rows,
                                                                          index_affected_rows,
                                                                          *ctdef_,
