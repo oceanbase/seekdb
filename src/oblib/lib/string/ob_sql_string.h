@@ -96,6 +96,71 @@ private:
 
   DISALLOW_COPY_AND_ASSIGN(ObSqlString);
 };
+
+/**
+ * @brief Escape the backtick characters inside a SQL identifier.
+ *
+ * A SQL identifier is delimited by backticks, so any backtick contained in the
+ * identifier itself has to be doubled to keep the identifier intact:
+ *
+ *   key`id  ->  key``id
+ *
+ * The helper lives in oblib so that lower modules such as `share` can escape
+ * identifiers without depending on the SQL upper layer.  The SQL layer keeps
+ * its own entry point (ObSQLUtils::generate_new_name_with_escape_character) and
+ * delegates here, so both layers always produce the same escaping.
+ *
+ * @param[in] allocator   allocator used for the escaped copy
+ * @param[in] src         the raw identifier
+ * @param[out] dst         the escaped identifier; when the source contains no
+ *                         backtick it aliases the source and no memory is used
+ * @return OB_SUCCESS on success
+ */
+inline int escape_sql_identifier(common::ObIAllocator &allocator,
+                                 const common::ObString &src,
+                                 common::ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const common::ObString::obstr_size_t src_len = src.length();
+  const char escape_character = '`';
+  char *ptr = NULL;
+
+  if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
+    dst.assign(NULL, 0);
+  } else if (NULL == src.find(escape_character)) {
+    dst = src;
+  } else {
+    common::ObString::obstr_size_t dst_len = src_len;
+    for (int64_t i = 0; i < src_len; ++i) {
+      if (src[i] == escape_character) {
+        ++dst_len;
+      }
+    }
+    if (NULL == (ptr = static_cast<char *>(allocator.alloc(dst_len + 1)))) {
+      dst = NULL;
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("allocate memory failed", K(ret), "size", dst_len);
+    } else {
+      int64_t tmp_dst_pos = 0;
+      for (int64_t i = 0; i < src_len; i++) {
+        if (src[i] == escape_character) {
+          ptr[tmp_dst_pos++] = escape_character;
+          ptr[tmp_dst_pos++] = escape_character;
+        } else {
+          ptr[tmp_dst_pos++] = src[i];
+        }
+      }
+      if (tmp_dst_pos != dst_len) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ptr[dst_len] = '\0';
+        dst.assign_ptr(ptr, dst_len);
+      }
+    }
+  }
+  return ret;
+}
+
 } // end namespace common
 } // end namespace oceanbase
 
