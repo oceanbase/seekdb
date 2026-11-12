@@ -45,6 +45,8 @@ RequestState &state()
   static thread_local RequestState value;
   return value;
 }
+void detail_transition(DetailStage next);
+void emit_details(int64_t diagnostic_start_us, const DetailState &d);
 uint64_t next_epoch()
 {
   static thread_local uint64_t value = 0;
@@ -202,7 +204,7 @@ void emit_totals(int64_t diagnostic_start_us, int64_t family_code, const WriteTo
 }
 }
 Request::Request(int64_t diagnostic_start_us, const int &ret)
-    : previous_(state()), slot_(reinterpret_cast<uintptr_t>(&state())),
+    : previous_((state().active ? (detail_transition(state().detail.stage), state()) : state())), slot_(reinterpret_cast<uintptr_t>(&state())),
       epoch_(next_epoch()), start_(sample_cpu()), ret_(ret)
 {
   if (previous_.active && !add(previous_.nested_schemas, 1)) { previous_.valid = false; }
@@ -216,6 +218,12 @@ Request::Request(int64_t diagnostic_start_us, const int &ret)
   value.cpu_start = start_;
   value.valid = epoch_ != 0 && value.trace.is_valid() && THIS_WORKER.is_th_worker()
       && THIS_WORKER.has_req_flag();
+  logger_start_ = logger::diagnostic_enable(true);
+  value.detail.stamp_us = ObTimeUtility::current_time();
+  value.detail.start_us = value.detail.stamp_us;
+  value.detail.cpu = sample_cpu();
+  value.detail.logger = logger::diagnostic_snapshot();
+  writer_start_ = logger::writer_snapshot();
   state() = value;
 }
 Request::~Request()
@@ -236,7 +244,13 @@ Request::~Request()
   // State is a fixed TLS value, never a pointer to this request's stack.
   // A mismatched thread/epoch is UNKNOWN; do not overwrite another context.
   RequestState completed;
-  if (owns_slot) { completed = state(); state() = previous_; }
+  const auto writer_end = logger::writer_snapshot();
+  if (owns_slot) {
+    detail_transition(DETAIL_OTHER);
+    completed = state();
+    state() = previous_;
+    (void)logger::diagnostic_enable(false);
+  }
   const int64_t nested_writes = owns_slot ? completed.nested_writes : -1;
   const int64_t nested_schemas = owns_slot ? completed.nested_schemas : -1;
   LOG_INFO("seek1381 request cpu", K(diagnostic_start_us), K(result_ret), K(context_valid),
@@ -245,6 +259,41 @@ Request::~Request()
   if (context_valid) {
     for (int64_t i = 0; i < WRITE_FAMILY_COUNT; ++i) {
       if (completed.families[i].calls > 0) { emit_totals(diagnostic_start_us, i, completed.families[i]); }
+    }
+    emit_details(diagnostic_start_us, completed.detail);
+    const bool shared_counters_valid = writer_start_.valid && writer_end.valid
+        && writer_end.calls >= writer_start_.calls && writer_end.full_ns >= writer_start_.full_ns
+        && writer_end.lock_ns >= writer_start_.lock_ns && writer_end.errors >= writer_start_.errors
+        && writer_end.async_calls >= writer_start_.async_calls && writer_end.sync_calls >= writer_start_.sync_calls
+        && writer_end.calls - writer_start_.calls <= INT64_MAX
+        && writer_end.full_ns - writer_start_.full_ns <= INT64_MAX
+        && writer_end.lock_ns - writer_start_.lock_ns <= INT64_MAX
+        && writer_end.errors - writer_start_.errors <= INT64_MAX
+        && writer_end.async_calls - writer_start_.async_calls <= INT64_MAX
+        && writer_end.sync_calls - writer_start_.sync_calls <= INT64_MAX;
+    const int64_t shared_writer_calls = shared_counters_valid ? writer_end.calls - writer_start_.calls : -1;
+    const int64_t shared_writer_full_ns = shared_counters_valid ? writer_end.full_ns - writer_start_.full_ns : -1;
+    const int64_t shared_writer_lock_ns = shared_counters_valid ? writer_end.lock_ns - writer_start_.lock_ns : -1;
+    const int64_t shared_writer_errors = shared_counters_valid ? writer_end.errors - writer_start_.errors : -1;
+    const int64_t shared_async_calls = shared_counters_valid ? writer_end.async_calls - writer_start_.async_calls : -1;
+    const int64_t shared_sync_calls = shared_counters_valid ? writer_end.sync_calls - writer_start_.sync_calls : -1;
+    const uint64_t shared_inflight_start = writer_start_.inflight, shared_inflight_end = writer_end.inflight;
+    LOG_INFO("seek1381 shared logger writer window", K(diagnostic_start_us), K(shared_counters_valid),
+             K(shared_writer_calls), K(shared_writer_full_ns), K(shared_writer_lock_ns),
+             K(shared_writer_errors), K(shared_inflight_start), K(shared_inflight_end));
+    LOG_INFO("seek1381 shared logger writer admission", K(diagnostic_start_us), K(shared_counters_valid),
+             K(shared_async_calls), K(shared_sync_calls));
+  }
+  if (owns_slot) {
+    (void)logger::diagnostic_enable(logger_start_.enabled);
+    if (state().active) {
+      // Nested schema and its diagnostic output are excluded from the parent's exclusive totals.
+      const int64_t now = ObTimeUtility::current_time();
+      if (now < state().detail.stamp_us
+          || !add(state().detail.excluded_nested_us, now - state().detail.stamp_us)) { state().detail.valid = false; }
+      state().detail.stamp_us = now;
+      state().detail.cpu = sample_cpu();
+      state().detail.logger = logger::diagnostic_snapshot();
     }
   }
 }
@@ -1400,8 +1449,9 @@ int ObInnerSQLConnection::execute_read(const ObString &sql,
                                        bool is_user_sql)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::READ_QUERY, ret);
   auto function = [&]() {
-    res.reuse();
+    { ::oceanbase::common::seek1381::Detail seek1381_reuse(::oceanbase::common::seek1381::RESULT_DESTROY); res.reuse(); }
     return execute_read_inner(sql, res, is_user_sql);
   };
   if (OB_FAIL(execute_with_timeout(function))) {
@@ -1820,3 +1870,277 @@ int ObInnerSQLConnectionAccess::register_multi_data_source(
 
 } // end of namespace query
 } // end of namespace oceanbase
+
+namespace oceanbase { namespace common { namespace seek1381 {
+namespace {
+void detail_transition(DetailStage next)
+{
+  RequestState &s = state();
+  DetailState &d = s.detail;
+  if (!identity_matches(s)) { d.valid = false; }
+  const int64_t now = ObTimeUtility::current_time();
+  const CpuSample cpu = sample_cpu();
+  const auto log = logger::diagnostic_snapshot();
+  DetailTotals &t = d.totals[d.region][d.stage];
+  const bool wall_ok = d.stamp_us >= 0 && now >= d.stamp_us;
+  t.wall_valid = t.wall_valid && wall_ok;
+  if (wall_ok && !add(t.wall_us, now - d.stamp_us)) { t.wall_valid = false; }
+  int64_t user = 0, kernel = 0;
+  const bool cpu_ok = cpu_delta(d.cpu, cpu, user, kernel);
+  t.cpu_valid = t.cpu_valid && cpu_ok;
+  if (cpu_ok && (!add(t.user_100ns, user) || !add(t.kernel_100ns, kernel))) { t.cpu_valid = false; }
+  auto delta = [&](uint64_t before, uint64_t after, uint64_t &total) {
+    if (after < before || UINT64_MAX - total < after - before) { d.valid = false; }
+    else { total += after - before; }
+  };
+  if (!log.valid || !d.logger.valid) { d.valid = false; }
+  delta(d.logger.records, log.records, t.logger_records);
+  delta(d.logger.full_ns, log.full_ns, t.logger_full_ns);
+  delta(d.logger.free_ns, log.free_ns, t.logger_free_ns);
+  if (!add(d.transitions, 1)) { d.valid = false; }
+  d.stamp_us = now;
+  d.cpu = cpu;
+  d.logger = log;
+  d.stage = next;
+}
+void emit_details(int64_t diagnostic_start_us, const DetailState &d)
+{
+  const bool detail_valid = d.valid && d.depth == 0;
+  const int64_t transitions = d.transitions;
+  const int64_t detail_start_us = d.start_us, detail_end_us = d.stamp_us;
+  const int64_t excluded_nested_us = d.excluded_nested_us;
+  int64_t exclusive_sum_us = 0;
+  bool sum_valid = detail_valid;
+  for (int region = 0; region < DETAIL_REGION_COUNT; ++region) {
+    for (int i = 0; i < DETAIL_STAGE_COUNT; ++i) {
+      sum_valid = d.totals[region][i].wall_valid && add(exclusive_sum_us, d.totals[region][i].wall_us) && sum_valid;
+    }
+  }
+  const int64_t accounting_error_us = sum_valid && detail_end_us >= detail_start_us
+      ? detail_end_us - detail_start_us - excluded_nested_us - exclusive_sum_us : -1;
+  LOG_INFO("seek1381 detail coverage", K(diagnostic_start_us), K(detail_valid), K(transitions),
+           K(detail_start_us), K(detail_end_us), K(sum_valid), K(excluded_nested_us),
+           K(exclusive_sum_us), K(accounting_error_us));
+  for (int64_t region_code = 0; region_code < DETAIL_REGION_COUNT; ++region_code) {
+   for (int64_t stage_code = 0; stage_code < DETAIL_STAGE_COUNT; ++stage_code) {
+    const DetailTotals &t = d.totals[region_code][stage_code];
+    if (t.calls == 0 && t.wall_us == 0) { continue; }
+    const int64_t calls = t.calls, success = t.success, iter_end = t.iter_end, errors = t.errors;
+    const int first_error = t.first_error;
+    const bool wall_valid = detail_valid && t.wall_valid, cpu_valid = detail_valid && t.cpu_valid;
+    const int64_t exclusive_us = wall_valid ? t.wall_us : -1;
+    const int64_t user_100ns = cpu_valid ? t.user_100ns : -1;
+    const int64_t kernel_100ns = cpu_valid ? t.kernel_100ns : -1;
+    const uint64_t logger_records = t.logger_records, logger_full_ns = t.logger_full_ns;
+    const uint64_t logger_free_ns = t.logger_free_ns;
+    LOG_INFO("seek1381 detail stage", K(diagnostic_start_us), K(region_code), K(stage_code), K(calls), K(success),
+             K(iter_end), K(errors), K(first_error), K(wall_valid), K(cpu_valid),
+             K(exclusive_us), K(user_100ns), K(kernel_100ns),
+             K(logger_records), K(logger_full_ns), K(logger_free_ns));
+   }
+  }
+}
+struct SelectState {
+  bool active = false, valid = true;
+  bool returned_known = false;
+  int returned_ret = 0;
+  uintptr_t worker = 0, request = 0;
+  uint64_t epoch = 0, session_id = 0, fingerprint = 0;
+  int64_t start_us = 0, sequence = 0, kept = 0, dropped = 0;
+  CpuSample cpu;
+  ObCurTraceId::TraceId trace;
+  struct Event { const char *file = nullptr; const char *function = nullptr;
+    int line = 0, result = 0; bool origin = false; int64_t sequence = 0; } events[32];
+  Event first_nonzero, first_4016;
+};
+SelectState &select_state() { static thread_local SelectState value; return value; }
+bool select_matches(const SelectState &s)
+{
+  return s.active && s.epoch != 0 && s.worker == reinterpret_cast<uintptr_t>(&THIS_WORKER)
+      && s.request == reinterpret_cast<uintptr_t>(THIS_WORKER.get_cur_request())
+      && s.trace.equals(*ObCurTraceId::get_trace_id());
+}
+bool target_select(const ObString &sql, uint64_t &fingerprint)
+{
+  // Exact token family of the retained business SELECT; no SQL text or values are emitted.
+  if (sql.ptr() == nullptr || sql.length() <= 0 || sql.length() > 512) { return false; }
+  int64_t pos = 0, begin = 0, length = 0;
+  if (!token(sql, pos, begin, length) || !equals(sql, begin, length, "SELECT")
+      || !token(sql, pos, begin, length) || !equals(sql, begin, length, "1")
+      || !token(sql, pos, begin, length) || !equals(sql, begin, length, "FROM")
+      || !token(sql, pos, begin, length)) { return false; }
+  const char prefix[] = "ddlkitty_";
+  if (length <= 9) { return false; }
+  for (int i = 0; i < 9; ++i) {
+    char c = sql.ptr()[begin + i];
+    if (c >= 'A' && c <= 'Z') { c += 'a' - 'A'; }
+    if (c != prefix[i]) { return false; }
+  }
+  for (int64_t i = 9; i < length; ++i) {
+    const char c = sql.ptr()[begin + i]; if (c < '0' || c > '9') { return false; }
+  }
+  if (!token(sql, pos, begin, length) || !equals(sql, begin, length, "LIMIT")
+      || !token(sql, pos, begin, length) || !equals(sql, begin, length, "1")
+      || !skip(sql, pos)) { return false; }
+  if (pos < sql.length() && sql.ptr()[pos] == ';') { ++pos; }
+  if (!skip(sql, pos) || pos != sql.length()) { return false; }
+  fingerprint = UINT64_C(14695981039346656037);
+  for (int64_t i = 0; i < sql.length(); ++i) {
+    fingerprint = (fingerprint ^ static_cast<unsigned char>(sql.ptr()[i])) * UINT64_C(1099511628211);
+  }
+  return true;
+}
+}
+Detail::Detail(DetailStage stage, const int *ret) : stage_(stage), ret_(ret)
+{
+  RequestState &s = state();
+  if (s.active && !identity_matches(s)) { s.detail.valid = false; }
+  if (identity_matches(s)) {
+    if (s.detail.depth >= 64) { s.detail.valid = false; return; }
+    slot_ = reinterpret_cast<uintptr_t>(&s); epoch_ = s.epoch;
+    previous_ = s.detail.stage;
+    if (stage_ == DETAIL_CURRENT) { stage_ = previous_; }
+    detail_transition(stage_);
+    depth_ = ++s.detail.depth;
+    if (!add(s.detail.totals[s.detail.region][stage_].calls, 1)) { s.detail.valid = false; }
+  }
+}
+void Detail::switch_to(DetailStage stage)
+{
+  RequestState &s = state();
+  if (slot_ != 0 && slot_ == reinterpret_cast<uintptr_t>(&s) && s.active && s.epoch == epoch_) {
+    if (!identity_matches(s) || s.detail.depth != depth_) { s.detail.valid = false; }
+    detail_transition(stage);
+    stage_ = stage;
+    if (!add(s.detail.totals[s.detail.region][stage_].calls, 1)) { s.detail.valid = false; }
+  }
+}
+Detail::~Detail()
+{
+  RequestState &s = state();
+  if (slot_ != 0 && slot_ == reinterpret_cast<uintptr_t>(&s) && s.active && s.epoch == epoch_) {
+    if (!identity_matches(s) || s.detail.depth != depth_) { s.detail.valid = false; }
+    detail_transition(previous_);
+    --s.detail.depth;
+    if (ret_ != nullptr) {
+      DetailTotals &t = s.detail.totals[s.detail.region][stage_];
+      if (*ret_ == 0) { if (!add(t.success, 1)) { s.detail.valid = false; } }
+      else if (*ret_ == OB_ITER_END) { if (!add(t.iter_end, 1)) { s.detail.valid = false; } }
+      else {
+        if (!add(t.errors, 1)) { s.detail.valid = false; }
+        if (t.first_error == 0) { t.first_error = *ret_; }
+      }
+    }
+  }
+}
+void detail_region(DetailRegionCode region)
+{
+  RequestState &s = state();
+  if (s.active) {
+    if (!identity_matches(s)) { s.detail.valid = false; }
+    detail_transition(s.detail.stage);
+    s.detail.region = region;
+  }
+}
+DetailRegion::DetailRegion()
+{
+  RequestState &s = state();
+  if (s.active) { slot_ = reinterpret_cast<uintptr_t>(&s); epoch_ = s.epoch; previous_ = s.detail.region; }
+}
+DetailRegion::~DetailRegion()
+{
+  RequestState &s = state();
+  if (slot_ != 0 && slot_ == reinterpret_cast<uintptr_t>(&s) && s.active && s.epoch == epoch_) {
+    detail_region(previous_);
+  }
+}
+SelectRequest::SelectRequest(const ObString &sql, uint64_t session_id, const int &ret) : ret_(ret)
+{
+  SelectState &s = select_state();
+  uint64_t fingerprint = 0;
+  if (s.active) { s.valid = false; return; } // Fixed TLS; never retain a stack pointer.
+  if (target_select(sql, fingerprint)) {
+    s = SelectState(); s.active = true; s.epoch = epoch_ = next_epoch(); entered_ = true;
+    s.worker = reinterpret_cast<uintptr_t>(&THIS_WORKER);
+    s.request = reinterpret_cast<uintptr_t>(THIS_WORKER.get_cur_request());
+    s.trace = *ObCurTraceId::get_trace_id(); s.cpu = sample_cpu();
+    s.start_us = ObTimeUtility::current_time(); s.fingerprint = fingerprint; s.session_id = session_id;
+    s.valid = s.epoch != 0 && s.trace.is_valid() && THIS_WORKER.is_th_worker() && THIS_WORKER.has_req_flag();
+  }
+}
+int select_result(int result, const char *file, int line, const char *function, bool origin)
+{
+  SelectState &s = select_state();
+  if (s.active && result != 0 && result != OB_ITER_END) {
+    if (!select_matches(s)) { s.valid = false; }
+    if (!add(s.sequence, 1)) { s.valid = false; }
+    SelectState::Event observed;
+    observed.file = file; observed.function = function; observed.line = line;
+    observed.result = result; observed.origin = origin; observed.sequence = s.sequence;
+    if (s.first_nonzero.sequence == 0) { s.first_nonzero = observed; }
+    if (result == OB_ERR_UNEXPECTED && s.first_4016.sequence == 0) { s.first_4016 = observed; }
+    if (s.kept < 32) {
+      SelectState::Event &e = s.events[s.kept++];
+      e = observed;
+    } else if (!add(s.dropped, 1)) { s.valid = false; }
+  }
+  return result;
+}
+int SelectRequest::returned(int result)
+{
+  SelectState &s = select_state();
+  if (entered_ && s.active && s.epoch == epoch_) {
+    if (!select_matches(s)) { s.valid = false; }
+    s.returned_known = true; s.returned_ret = result;
+  }
+  return result;
+}
+int candidate_error_slot(int result)
+{
+  if (result != OB_ERR_UNEXPECTED && result != OB_DESERIALIZE_ERROR) { return 0; }
+  struct Gate { ObCurTraceId::TraceId trace; int count = 0; };
+  static thread_local Gate gate;
+  const auto trace = *ObCurTraceId::get_trace_id();
+  if (!trace.is_valid()) { return 0; }
+  if (!gate.trace.equals(trace)) { gate.trace = trace; gate.count = 0; }
+  return gate.count < 8 ? ++gate.count : 0;
+}
+SelectRequest::~SelectRequest()
+{
+  SelectState &s = select_state();
+  if (entered_ && s.active && s.epoch == epoch_) {
+    const CpuSample end = sample_cpu();
+    const bool context_valid = s.valid && select_matches(s) && s.cpu.valid && end.valid
+        && s.cpu.tid == end.tid && s.cpu.birth == end.birth;
+    const SelectState done = s; s = SelectState(); // Clear before diagnostics can recurse.
+    const int64_t diagnostic_start_us = done.start_us, kept = done.kept, dropped = done.dropped;
+    const uint64_t session_id = done.session_id, fingerprint = done.fingerprint;
+    const uint64_t tid = done.cpu.tid, birth = done.cpu.birth;
+    const int local_ret_at_exit = ret_;
+    const bool returned_known = done.returned_known;
+    const int returned_ret = returned_known ? done.returned_ret : -1;
+    LOG_INFO("seek1381 business select outcome", K(diagnostic_start_us), K(session_id), K(fingerprint),
+             K(tid), K(birth), K(context_valid), K(returned_known), K(returned_ret),
+             K(local_ret_at_exit), K(kept), K(dropped));
+    for (int slot_code = 0; slot_code < 2; ++slot_code) {
+      const SelectState::Event &e = slot_code == 0 ? done.first_nonzero : done.first_4016;
+      const char *source_file = e.file, *source_function = e.function;
+      const int source_line = e.line, observed_ret = e.result;
+      const bool origin_assignment = e.origin;
+      const int64_t sequence = e.sequence;
+      LOG_INFO("seek1381 business select first observed", K(diagnostic_start_us), K(session_id), K(fingerprint),
+               K(slot_code), K(sequence), K(source_file), K(source_line), K(source_function),
+               K(observed_ret), K(origin_assignment));
+    }
+    for (int64_t i = 0; i < done.kept; ++i) {
+      const SelectState::Event &e = done.events[i];
+      const char *source_file = e.file, *source_function = e.function;
+      const int source_line = e.line, observed_ret = e.result;
+      const bool origin_assignment = e.origin;
+      const int64_t sequence = e.sequence;
+      LOG_INFO("seek1381 business select return", K(diagnostic_start_us), K(session_id), K(fingerprint),
+               K(sequence), K(source_file), K(source_line), K(source_function), K(observed_ret), K(origin_assignment));
+    }
+  }
+}
+}}}

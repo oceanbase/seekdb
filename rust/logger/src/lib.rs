@@ -34,7 +34,74 @@ use std::cell::Cell;
 use std::ffi::{c_char, CStr};
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
+static DIAG_WINDOWS: AtomicU64 = AtomicU64::new(0);
+static DIAG_WRITER_CALLS: AtomicU64 = AtomicU64::new(0);
+static DIAG_WRITER_ASYNC: AtomicU64 = AtomicU64::new(0);
+static DIAG_WRITER_SYNC: AtomicU64 = AtomicU64::new(0);
+static DIAG_WRITER_FULL: AtomicU64 = AtomicU64::new(0);
+static DIAG_WRITER_LOCK: AtomicU64 = AtomicU64::new(0);
+static DIAG_WRITER_ERRORS: AtomicU64 = AtomicU64::new(0);
+static DIAG_WRITER_INFLIGHT: AtomicU64 = AtomicU64::new(0);
+static DIAG_WRITER_VALID: AtomicBool = AtomicBool::new(true);
+fn writer_window(enabled: bool) {
+    if enabled { writer_add(&DIAG_WINDOWS, 1); }
+    else if DIAG_WINDOWS.fetch_sub(1, Ordering::Relaxed) == 0 {
+        DIAG_WRITER_VALID.store(false, Ordering::Relaxed);
+    }
+}
+fn writer_add(counter: &AtomicU64, value: u64) {
+    if counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |old| old.checked_add(value)).is_err() {
+        DIAG_WRITER_VALID.store(false, Ordering::Relaxed);
+    }
+}
+pub fn writer_snapshot() -> bridge::ffi::WriterSnapshot {
+    // Independent shared counters: no coherent per-request or per-record snapshot is claimed.
+    bridge::ffi::WriterSnapshot {
+        calls: DIAG_WRITER_CALLS.load(Ordering::Relaxed),
+        async_calls: DIAG_WRITER_ASYNC.load(Ordering::Relaxed),
+        sync_calls: DIAG_WRITER_SYNC.load(Ordering::Relaxed),
+        full_ns: DIAG_WRITER_FULL.load(Ordering::Relaxed),
+        lock_ns: DIAG_WRITER_LOCK.load(Ordering::Relaxed),
+        errors: DIAG_WRITER_ERRORS.load(Ordering::Relaxed),
+        inflight: DIAG_WRITER_INFLIGHT.load(Ordering::Relaxed),
+        valid: DIAG_WRITER_VALID.load(Ordering::Relaxed),
+    }
+}
+struct WriterDiagnostic { start: Option<Instant>, lock_ns: u64, error: bool, asynchronous: bool }
+impl WriterDiagnostic {
+    fn new(asynchronous: bool) -> Self {
+        let start = (DIAG_WINDOWS.load(Ordering::Relaxed) != 0).then(Instant::now);
+        if start.is_some() { writer_add(&DIAG_WRITER_INFLIGHT, 1); }
+        Self { start, lock_ns: 0, error: false, asynchronous }
+    }
+    fn locked(&mut self) {
+        if let Some(start) = self.start {
+            match u64::try_from(start.elapsed().as_nanos()) {
+                Ok(value) => self.lock_ns = value,
+                Err(_) => DIAG_WRITER_VALID.store(false, Ordering::Relaxed),
+            }
+        }
+    }
+}
+impl Drop for WriterDiagnostic {
+    fn drop(&mut self) {
+        if let Some(start) = self.start {
+            writer_add(&DIAG_WRITER_CALLS, 1);
+            writer_add(if self.asynchronous { &DIAG_WRITER_ASYNC } else { &DIAG_WRITER_SYNC }, 1);
+            writer_add(&DIAG_WRITER_LOCK, self.lock_ns);
+            match u64::try_from(start.elapsed().as_nanos()) {
+                Ok(value) => writer_add(&DIAG_WRITER_FULL, value),
+                Err(_) => DIAG_WRITER_VALID.store(false, Ordering::Relaxed),
+            }
+            if self.error { writer_add(&DIAG_WRITER_ERRORS, 1); }
+            if DIAG_WRITER_INFLIGHT.fetch_sub(1, Ordering::Relaxed) == 0 {
+                DIAG_WRITER_VALID.store(false, Ordering::Relaxed);
+            }
+        }
+    }
+}
 
 pub const CAPACITY: usize = 8192;
 const ROUTES: usize = 4;
@@ -63,7 +130,9 @@ struct Router {
 
 impl Router {
     fn write(&self, route: usize, bytes: &[u8], asynchronous: bool) -> spdlog::Result<()> {
+        let mut diagnostic = WriterDiagnostic::new(asynchronous);
         let mut files = self.files.lock().unwrap();
+        diagnostic.locked();
         let Files {
             outputs,
             limits,
@@ -79,6 +148,7 @@ impl Router {
         if asynchronous && result.is_err() {
             files.flush_failed = true;
         }
+        diagnostic.error = result.is_err();
         result.map_err(spdlog::Error::WriteRecord)
     }
 

@@ -326,6 +326,40 @@ struct WriteTotals {
   bool wall_valid = true;
   bool cpu_valid = true;
 };
+enum DetailStage { DETAIL_OTHER, SCHEMA_LOAD, TABLE_BASE, TABLE_COLUMN, TABLE_PARTITION,
+  TABLE_FOREIGN_KEY, TABLE_CONSTRAINT, TABLE_TRIGGER, READ_CLIENT, READ_QUERY, READ_NEXT,
+  ROW_DECODE, RESULT_CLOSE, RESULT_DESTROY, IO_WAIT, DETAIL_STAGE_COUNT, DETAIL_CURRENT };
+enum DetailRegionCode { REGION_OTHER, REGION_ENUMERATE, REGION_OPTIONS, REGION_TABLE,
+  REGION_BACKUP, REGION_PARTITION, DETAIL_REGION_COUNT };
+struct DetailTotals {
+  int64_t calls = 0, success = 0, iter_end = 0, errors = 0;
+  int first_error = 0;
+  int64_t wall_us = 0, user_100ns = 0, kernel_100ns = 0;
+  uint64_t logger_records = 0, logger_full_ns = 0, logger_free_ns = 0;
+  bool wall_valid = true, cpu_valid = true;
+};
+struct DetailState {
+  DetailStage stage = DETAIL_OTHER;
+  DetailRegionCode region = REGION_OTHER;
+  int64_t depth = 0, transitions = 0, stamp_us = 0, start_us = 0, excluded_nested_us = 0;
+  CpuSample cpu;
+  logger::DiagnosticSnapshot logger;
+  bool valid = true;
+  DetailTotals totals[DETAIL_REGION_COUNT][DETAIL_STAGE_COUNT];
+};
+void detail_region(DetailRegionCode region);
+class DetailRegion {
+public:
+  DetailRegion();
+  ~DetailRegion();
+  DetailRegion(const DetailRegion &) = delete;
+  DetailRegion &operator=(const DetailRegion &) = delete;
+private:
+  uintptr_t slot_ = 0;
+  uint64_t epoch_ = 0;
+  DetailRegionCode previous_ = REGION_OTHER;
+};
+
 struct RequestState {
   bool active = false;
   bool valid = true;
@@ -339,6 +373,7 @@ struct RequestState {
   CpuSample cpu_start;
   ObCurTraceId::TraceId trace;
   WriteTotals families[WRITE_FAMILY_COUNT];
+  DetailState detail;
 };
 class Request {
 public:
@@ -352,6 +387,8 @@ private:
   uint64_t epoch_;
   CpuSample start_;
   const int &ret_;
+  logger::DiagnosticSnapshot logger_start_;
+  logger::WriterSnapshot writer_start_;
 };
 class Write {
 public:
@@ -397,6 +434,45 @@ private:
   CpuSample phase_cpu_;
   const int &ret_;
 };
+class Detail {
+public:
+  explicit Detail(DetailStage stage, const int *ret = nullptr);
+  Detail(DetailStage stage, const int &ret) : Detail(stage, &ret) {}
+  ~Detail();
+  void switch_to(DetailStage stage);
+  Detail(const Detail &) = delete;
+  Detail &operator=(const Detail &) = delete;
+private:
+  uintptr_t slot_ = 0;
+  uint64_t epoch_ = 0;
+  int64_t depth_ = 0;
+  DetailStage previous_ = DETAIL_OTHER, stage_ = DETAIL_OTHER;
+  const int *ret_ = nullptr;
+};
+class SelectRequest {
+public:
+  SelectRequest(const ObString &sql, uint64_t session_id, const int &ret);
+  ~SelectRequest();
+  int returned(int result);
+  SelectRequest(const SelectRequest &) = delete;
+  SelectRequest &operator=(const SelectRequest &) = delete;
+private:
+  bool entered_ = false;
+  uint64_t epoch_ = 0;
+  const int &ret_;
+};
+// Returns exactly result. Records before caller OB_FAIL assignment or retry mapping.
+int select_result(int result, const char *file, int line, const char *function,
+                  bool origin = false);
+int candidate_error_slot(int result);
+template<class Operation> int detail_call(DetailStage stage, Operation &&operation) {
+  int result = 0;
+  Detail scope(stage, result);
+  result = operation();
+  return result;
+}
+
+
 }}}
 
 #endif

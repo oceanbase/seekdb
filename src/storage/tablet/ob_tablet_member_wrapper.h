@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TABLET_MEMBER_WRAPPER
 
 #include <type_traits>
+#include "lib/profile/ob_trace_id.h"
 #include "lib/oblog/ob_log.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/meta_mem/ob_storage_meta_cache.h"
@@ -96,15 +97,15 @@ int ObTabletMemberWrapper<T, U>::set_cache_handle(ObStorageMetaHandle &handle)
   const ObStorageMetaValue *value = nullptr;
   if (OB_UNLIKELY(!handle.is_valid())) {
     STORAGE_LOG(WARN, "secondary meta handle is not valid", K(ret), K(handle));
-  } else if (OB_FAIL(handle.get_value(value))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((handle.get_value(value)), __FILE__, __LINE__, __func__))) {
   } else if (OB_ISNULL(value)) {
-    ret = common::OB_ERR_UNEXPECTED;
+    ret = ::oceanbase::common::seek1381::select_result(common::OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     STORAGE_LOG(WARN, "unexpected null secondary meta value", K(ret), K(handle));
-  } else if (OB_FAIL(set_cache_handle(*value))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((set_cache_handle(*value)), __FILE__, __LINE__, __func__))) {
   } else {
     secondary_meta_handle_ = handle;
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 };
 
 template <>
@@ -112,11 +113,11 @@ inline int ObTabletMemberWrapper<ObTabletTableStore>::set_cache_handle(const ObS
 {
   int ret = OB_SUCCESS;
   const ObTabletTableStore *table_store = nullptr;
-  if (OB_FAIL(value.get_table_store(table_store))) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((value.get_table_store(table_store)), __FILE__, __LINE__, __func__))) {
   } else {
     ptr_ = table_store;
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 template <typename T, typename U>

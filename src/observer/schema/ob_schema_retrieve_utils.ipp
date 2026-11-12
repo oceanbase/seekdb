@@ -15,6 +15,7 @@
  */
 
 #include "lib/worker.h"
+#include "lib/profile/ob_trace_id.h"
 #include "share/schema/ob_schema_mgr.h"
 
 
@@ -76,6 +77,7 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(const bool check_deleted,
     ObIArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   uint64_t prev_table_id = common::OB_INVALID_ID;
   ObArenaAllocator tmp_allocator(ObModIds::OB_TEMP_VARIABLES);
   TABLE_SCHEMA table_schema(&tmp_allocator);
@@ -122,6 +124,7 @@ int ObSchemaRetrieveUtils::retrieve_schema(
     ObArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   uint64_t last_table_id = OB_INVALID_ID;
   uint64_t last_schema_id = common::OB_INVALID_ID;
   // store current_schema and last_schema
@@ -170,6 +173,7 @@ int ObSchemaRetrieveUtils::retrieve_column_schema(const bool check_deleted,
     ObArray<ObTableSchema *> &table_schema_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   if (OB_FAIL((retrieve_schema<ObTableSchema, ObColumnSchemaV2>(
                                           check_deleted,
                                           result,
@@ -184,6 +188,7 @@ int ObSchemaRetrieveUtils::retrieve_constraint(const bool check_deleted,
     ObArray<ObTableSchema *> &table_schema_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   if (OB_FAIL((retrieve_schema<ObTableSchema, ObConstraint>(
                                           check_deleted,
                                           result,
@@ -198,6 +203,7 @@ int ObSchemaRetrieveUtils::retrieve_part_info(const bool check_deleted,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   if (OB_FAIL((retrieve_schema<TABLE_SCHEMA, ObPartition>(
                                           check_deleted,
                                           result,
@@ -212,6 +218,7 @@ int ObSchemaRetrieveUtils::retrieve_def_subpart_info(const bool check_deleted,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_subpart_template = true;
   if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(check_deleted,
                                           is_subpart_template,
@@ -227,6 +234,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_info(const bool check_deleted,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_subpart_template = false;
   if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(check_deleted,
                                           is_subpart_template,
@@ -243,6 +251,7 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(const bool check_deleted, T &re
     ObTableSchema *&table_schema)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
 
   table_schema = NULL;
   if (OB_FAIL(result.next())) {
@@ -515,6 +524,7 @@ int ObSchemaRetrieveUtils::retrieve_schema(
                                            TABLE_SCHEMA *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   if (OB_ISNULL(table_schema)) {
     ret = common::OB_ERR_UNEXPECTED;
     SHARE_SCHEMA_LOG(WARN, "table schema is NULL", K(ret), K(table_schema));
@@ -598,6 +608,7 @@ int ObSchemaRetrieveUtils::retrieve_part_info(const bool check_deleted,
                                               TABLE_SCHEMA *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   if (OB_FAIL((retrieve_schema<TABLE_SCHEMA, ObPartition, T>(
                                                              check_deleted,
                                                              result,
@@ -612,6 +623,7 @@ int ObSchemaRetrieveUtils::retrieve_def_subpart_info(const bool check_deleted,
     TABLE_SCHEMA *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_subpart_template = true;
   if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(check_deleted,
                                                         is_subpart_template,
@@ -627,6 +639,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_info(const bool check_deleted,
     TABLE_SCHEMA *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_subpart_template = false;
   if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(check_deleted,
                                                         is_subpart_template,
@@ -643,6 +656,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(const bool check_deleted,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_last_deleted = false;
   ObSubPartition *last_schema = NULL;
   ObSubPartSchemaRetrieveHelper<TABLE_SCHEMA> helper(table_schema_array,
@@ -684,6 +698,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(const bool check_deleted,
     TABLE_SCHEMA *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   if (OB_ISNULL(table_schema)) {
     ret = common::OB_ERR_UNEXPECTED;
     SHARE_SCHEMA_LOG(WARN, "table schema is NULL", K(ret), K(table_schema));
@@ -729,6 +744,7 @@ int ObSchemaRetrieveUtils::retrieve_column_schema(const bool check_deleted,
                                                   ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   if (OB_FAIL((retrieve_schema<ObTableSchema, ObColumnSchemaV2>(
                                                                 check_deleted,
                                                                 result,
@@ -743,6 +759,7 @@ int ObSchemaRetrieveUtils::retrieve_constraint(const bool check_deleted,
                                                ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   if (OB_FAIL((retrieve_schema<ObTableSchema, ObConstraint>(
                                                             check_deleted,
                                                             result,
@@ -756,6 +773,7 @@ int ObSchemaRetrieveUtils::retrieve_constraint_column_info(T &result,
                                                            ObConstraint *&cst)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_deleted = false;
   uint64_t prev_column_id = OB_INVALID_ID;
   uint64_t column_id = OB_INVALID_ID;
@@ -787,6 +805,7 @@ int ObSchemaRetrieveUtils::retrieve_recycle_object(T &result,
     ObIArray<ObRecycleObject> &recycle_objs)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   ObRecycleObject recycle_obj(&allocator);
   while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
@@ -1242,6 +1261,7 @@ int ObSchemaRetrieveUtils::retrieve_role_grantee_map_schema(T &result,
     ObArray<ObUserInfo> &user_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   // <key_id, value_id>:
   // if is_fetch_role
   //   true : <grantee_id, role_id>
@@ -1818,6 +1838,7 @@ int ObSchemaRetrieveUtils::retrieve_system_variable_obj(T &result,
     ObObj &out_var_obj)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   int64_t vtype = 0;
   bool is_deleted = false;
   char *value_buf = NULL;
@@ -1867,6 +1888,7 @@ template<typename T, typename SCHEMA>
 int ObSchemaRetrieveUtils::retrieve_system_variable(T &result, SCHEMA &sys_variable_schema)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   ObArenaAllocator tmp_allocator(ObModIds::OB_TEMP_VARIABLES);
   ObSysVarSchema sysvar_schema(&allocator);
@@ -1978,6 +2000,7 @@ int ObSchemaRetrieveUtils::retrieve_routine_schema(T &result,
     ObIArray<S> &routine_infos)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   S routine_info(&allocator);
   uint64_t pre_routine_id = OB_INVALID_ID;
@@ -2012,6 +2035,7 @@ int ObSchemaRetrieveUtils::retrieve_trigger_list(T &result,
     ObIArray<uint64_t> &trigger_list)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   uint64_t pre_trigger_id = common::OB_INVALID_ID;
   uint64_t trigger_id = common::OB_INVALID_ID;
   bool is_deleted = false;
@@ -2038,6 +2062,7 @@ int ObSchemaRetrieveUtils::retrieve_routine_param_schema(T &result,
     ObIArray<ObRoutineInfo> &routine_infos)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   uint64_t pre_routine_id = OB_INVALID_ID;
   int64_t pre_sequence = OB_INVALID_ID;
   bool is_deleted = false;
@@ -2072,6 +2097,7 @@ int ObSchemaRetrieveUtils::retrieve_db_priv_schema(T &result,
     ObIArray<S> &db_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   ObArenaAllocator tmp_allocator(ObModIds::OB_TEMP_VARIABLES);
   S db_priv(&allocator);
@@ -2106,6 +2132,7 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema_inner(T &result,
     ObIArray<S> &obj_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObRawObjPriv priv_id = OBJ_PRIV_ID_NONE;
   ObRawObjPriv prev_priv_id = OBJ_PRIV_ID_MAX;
   S prev_priv;
@@ -2155,6 +2182,7 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema_inner(T &result,
     ObIArray<S> &sys_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObRawPriv priv_id;
   ObRawPriv prev_priv_id = PRIV_ID_MAX;
   ObSysPrivKey prekey;
@@ -2222,6 +2250,7 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema(T &result,
     ObIArray<S> &sys_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObSEArray<S, 3> tmp_priv_array;
   S prev_priv;
   S it_priv;
@@ -2263,6 +2292,7 @@ int ObSchemaRetrieveUtils::retrieve_table_priv_schema(T &result,
     ObIArray<S> &table_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   ObArenaAllocator tmp_allocator(ObModIds::OB_TEMP_VARIABLES);
   S table_priv(&allocator);
@@ -2297,6 +2327,7 @@ int ObSchemaRetrieveUtils::retrieve_routine_priv_schema(T &result,
     ObIArray<S> &routine_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   ObArenaAllocator tmp_allocator(ObModIds::OB_TEMP_VARIABLES);
   S routine_priv(&allocator);
@@ -2331,6 +2362,7 @@ int ObSchemaRetrieveUtils::retrieve_column_priv_schema(T &result,
     ObIArray<S> &column_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   S column_priv(&allocator);
   ObColumnPrivIdKey pre_column_id_key;
@@ -2362,6 +2394,7 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema(T &result,
     ObIArray<S> &obj_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObSEArray<S, 3> tmp_obj_priv_array;
   S prev_obj_priv;
   S it_obj_priv;
@@ -2417,6 +2450,7 @@ int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(
     ObIArray<S> &obj_mysql_priv_array)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   ObArenaAllocator tmp_allocator(ObModIds::OB_TEMP_VARIABLES);
   S obj_mysql_priv(&allocator);
@@ -2860,6 +2894,7 @@ int ObSchemaRetrieveUtils::retrieve_aux_tables(T &result,
     ObIArray<ObAuxTableMetaInfo> &aux_tables)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
 
   while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
     uint64_t table_id = OB_INVALID_ID;
@@ -2892,6 +2927,7 @@ int ObSchemaRetrieveUtils::retrieve_schema_version(
     T &result, VersionHisVal &version_his_val)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   int &row_idx = version_his_val.valid_cnt_;
   row_idx = 0;
   while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
@@ -2933,6 +2969,7 @@ template<typename T>
 int ObSchemaRetrieveUtils::retrieve_mock_fk_parent_table_schema_column(T &result, ObMockFKParentTableSchema &mock_fk_parent_table)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_deleted = false;
   uint64_t prev_parent_column_id = OB_INVALID_ID;
   uint64_t parent_column_id = OB_INVALID_ID;
@@ -2963,6 +3000,7 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_info(T &result,
     TABLE_SCHEMA &table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   ObForeignKeyInfo foreign_key_info(&allocator);
   uint64_t prev_foreign_key_id = common::OB_INVALID_ID;
@@ -2994,6 +3032,7 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_column_info(T &result,
     ObForeignKeyInfo &foreign_key_info)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_deleted = false;
   int64_t prev_child_column_id = 0; // OB_INVALID_ID;
   int64_t prev_parent_column_id = 0;
@@ -3081,6 +3120,7 @@ int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(T &result,
     ObArray<ObSimpleTableSchemaV2 *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_deleted = false;
   uint64_t prev_foreign_key_id = common::OB_INVALID_ID;
   uint64_t fk_id = common::OB_INVALID_ID;
@@ -3149,6 +3189,7 @@ template<typename T>
 int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(T &result, ObArray<ObSimpleTableSchemaV2 *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   bool is_deleted = false;
   uint64_t prev_table_id = common::OB_INVALID_ID;
   uint64_t prev_constraint_id = common::OB_INVALID_ID;
@@ -3256,6 +3297,7 @@ int ObSchemaRetrieveUtils::retrieve_object_list(T &result,
     ObIArray<uint64_t> &object_list)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   uint64_t pre_object_id = common::OB_INVALID_ID;
   uint64_t object_id = common::OB_INVALID_ID;
   bool is_deleted = false;
@@ -3293,6 +3335,7 @@ int ObSchemaRetrieveUtils::retrieve_table_latest_schema_versions(
     ObIArray<ObTableLatestSchemaVersion> &table_schema_versions)
 {
   int ret = common::OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::ROW_DECODE, ret);
   ObTableLatestSchemaVersion table_schema_version;
 
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {

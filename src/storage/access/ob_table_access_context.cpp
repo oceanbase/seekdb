@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_table_access_context.h"
+#include "lib/profile/ob_trace_id.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 
 namespace oceanbase
@@ -187,7 +188,7 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     ret = OB_ERR_SYS;
     STORAGE_LOG(ERROR, "Unexpected access context reuse scenario",
         K(ret), KP(stmt_allocator_), KP(allocator_), K(scan_param));
-  } else if (OB_FAIL(init_scan_allocator(scan_param))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((init_scan_allocator(scan_param)), __FILE__, __LINE__, __func__))) {
   } else {
     stmt_allocator_ = scan_param.allocator_;
     cached_iter_node_ = cached_iter_node;
@@ -209,25 +210,25 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     scan_resume_point_ = scan_param.scan_resume_point_;
     mds_collector_ = scan_param.mds_collector_;
     row_scan_cnt_ = scan_param.row_scan_cnt_;
-    if(OB_FAIL(build_lob_locator_helper(scan_param, ctx, trans_version_range))) {
+    if(OB_FAIL(::oceanbase::common::seek1381::select_result((build_lob_locator_helper(scan_param, ctx, trans_version_range)), __FILE__, __LINE__, __func__))) {
     } else if (!micro_block_handle_mgr_.is_valid()
-               && OB_FAIL(micro_block_handle_mgr_.init(
+               && OB_FAIL(::oceanbase::common::seek1381::select_result((micro_block_handle_mgr_.init(
                   static_cast<sql::ObStoragePushdownFlag>(scan_param.pd_storage_flag_).is_enable_prefetch_limiting(),
                   table_store_stat_,
                   table_scan_stat_,
-                  query_flag_))) {
+                  query_flag_)), __FILE__, __LINE__, __func__))) {
     } else if (scan_param.sample_info_.is_row_sample()
-        && OB_FAIL(ObRowSampleFilterFactory::build_sample_filter(
+        && OB_FAIL(::oceanbase::common::seek1381::select_result((ObRowSampleFilterFactory::build_sample_filter(
           scan_param.sample_info_,
           sample_filter_,
           scan_param.op_,
           query_flag_.is_reverse_scan(),
-          scan_param.allocator_))) {
+          scan_param.allocator_)), __FILE__, __LINE__, __func__))) {
     } else {
       is_inited_ = true;
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
@@ -258,15 +259,15 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
     // 3. tablet id/ table id here maybe invalid, call update_lob_locator_ctx to fix
     // 4. only init lob locator helper when nessary?
     // exist do not need lob locator
-    if (!for_exist && OB_FAIL(build_lob_locator_helper(ctx, trans_version_range))) {
+    if (!for_exist && OB_FAIL(::oceanbase::common::seek1381::select_result((build_lob_locator_helper(ctx, trans_version_range)), __FILE__, __LINE__, __func__))) {
       STORAGE_LOG(WARN, "Failed to build lob locator helper", K(ret));
     } else if (!micro_block_handle_mgr_.is_valid()
-               && OB_FAIL(micro_block_handle_mgr_.init(enable_limit, table_store_stat_,
-                  table_scan_stat_,query_flag_))) {
+               && OB_FAIL(::oceanbase::common::seek1381::select_result((micro_block_handle_mgr_.init(enable_limit, table_store_stat_,
+                  table_scan_stat_,query_flag_)), __FILE__, __LINE__, __func__))) {
     } else if (OB_NOT_NULL(mvcc_mds_filter) && mvcc_mds_filter->is_valid()) {
       need_release_truncate_part_filter_ = false;
       truncate_part_filter_ = mvcc_mds_filter->truncate_part_filter_;
-      if (OB_FAIL(ctx.init_mds_filter(*mvcc_mds_filter))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((ctx.init_mds_filter(*mvcc_mds_filter)), __FILE__, __LINE__, __func__))) {
       }
     } else {
       ctx.clear_mds_filter();
@@ -275,7 +276,7 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
       is_inited_ = true;
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
@@ -302,11 +303,11 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
     lob_locator_helper_ = nullptr;
     cached_iter_node_ = cached_iter_node;
     if (!micro_block_handle_mgr_.is_valid()
-        && OB_FAIL(micro_block_handle_mgr_.init(enable_limit, table_store_stat_, table_scan_stat_, query_flag_))) {
+        && OB_FAIL(::oceanbase::common::seek1381::select_result((micro_block_handle_mgr_.init(enable_limit, table_store_stat_, table_scan_stat_, query_flag_)), __FILE__, __LINE__, __func__))) {
     } else if (OB_NOT_NULL(mvcc_mds_filter) && mvcc_mds_filter->is_valid()) {
       need_release_truncate_part_filter_ = false;
       truncate_part_filter_ = mvcc_mds_filter->truncate_part_filter_;
-      if (OB_FAIL(ctx.init_mds_filter(*mvcc_mds_filter))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((ctx.init_mds_filter(*mvcc_mds_filter)), __FILE__, __LINE__, __func__))) {
       }
     } else {
       ctx.clear_mds_filter();
@@ -315,7 +316,7 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
       is_inited_ = true;
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableAccessContext::init_for_fork(ObTableAccessContext &other,
@@ -387,14 +388,14 @@ int ObTableAccessContext::init_scan_allocator(ObTableScanParam &scan_param)
       param.set_mem_attr(ObModIds::OB_TABLE_SCAN_ITER,
                         ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
-      if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(scan_mem_, param))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((CURRENT_CONTEXT->CREATE_CONTEXT(scan_mem_, param)), __FILE__, __LINE__, __func__))) {
       }
     }
     if (OB_SUCC(ret)) {
       allocator_ = &scan_mem_->get_arena_allocator();
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 void ObTableAccessContext::reset()

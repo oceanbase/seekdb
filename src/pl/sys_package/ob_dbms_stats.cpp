@@ -202,6 +202,9 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
     phase_us[current_phase] += delta_us;
     phase_start_us = now_us;
     current_phase = next_phase;
+    ::oceanbase::common::seek1381::detail_region(next_phase == ENUMERATE ? ::oceanbase::common::seek1381::REGION_ENUMERATE
+        : next_phase == OPTIONS ? ::oceanbase::common::seek1381::REGION_OPTIONS
+        : next_phase == TABLE_DISPATCH ? ::oceanbase::common::seek1381::REGION_TABLE : ::oceanbase::common::seek1381::REGION_OTHER);
   };
   auto in_phase = [&](DiagnosticPhase phase, auto &&operation) {
     const DiagnosticPhase parent_phase = current_phase;

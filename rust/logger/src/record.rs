@@ -16,6 +16,36 @@
 //! begin/grow and commit/cancel; metadata and context never escape that borrow.
 use crate::policy::{self, with_context, TRACE};
 use std::alloc::{alloc, dealloc, realloc, Layout};
+use std::cell::Cell;
+use crate::bridge::ffi::DiagnosticSnapshot;
+thread_local! {
+    static DIAGNOSTIC: Cell<DiagnosticSnapshot> = const { Cell::new(DiagnosticSnapshot {
+        records: 0, full_ns: 0, free_ns: 0, valid: true, enabled: false,
+    }) };
+}
+pub fn diagnostic_snapshot() -> DiagnosticSnapshot {
+    DIAGNOSTIC.with(Cell::get)
+}
+pub fn diagnostic_enable(enabled: bool) -> DiagnosticSnapshot {
+    DIAGNOSTIC.with(|cell| {
+        let old = cell.get();
+        if old.enabled != enabled { crate::writer_window(enabled); }
+        cell.set(DiagnosticSnapshot { enabled, ..old });
+        old
+    })
+}
+fn diagnostic_record(full: u128, free: u128) {
+    DIAGNOSTIC.with(|cell| {
+        let mut value = cell.get();
+        let values = (value.records.checked_add(1),
+            u64::try_from(full).ok().and_then(|n| value.full_ns.checked_add(n)),
+            u64::try_from(free).ok().and_then(|n| value.free_ns.checked_add(n)));
+        if let (Some(records), Some(full_ns), Some(free_ns)) = values {
+            value.records = records; value.full_ns = full_ns; value.free_ns = free_ns;
+        } else { value.valid = false; }
+        cell.set(value);
+    });
+}
 use std::ffi::{c_char, CStr};
 use std::fmt::{self, Write};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -33,6 +63,7 @@ pub use crate::bridge::ffi::{RecordBuffer as Buffer, RecordMetadata as Metadata}
 #[repr(C, align(16))]
 struct Record {
     started: Instant,
+    diagnostic: bool,
     capacity: usize,
     header: usize,
     route: usize,
@@ -251,6 +282,7 @@ pub unsafe fn begin(meta: *const Metadata, out: *mut Buffer) -> i32 {
     });
     memory.write(Record {
         started: start,
+        diagnostic: diagnostic_snapshot().enabled,
         capacity: BASE_SIZE,
         header: 0,
         route: route(text(meta.module), meta.level, !meta.event.is_null()),
@@ -356,7 +388,15 @@ unsafe fn release(record: *mut Record) {
         ctx.disabled = false;
         ctx.last_cost = elapsed;
     });
-    dealloc(record.cast(), Record::layout((*record).capacity));
+    let started = (*record).started;
+    let diagnostic = (*record).diagnostic;
+    let layout = Record::layout((*record).capacity);
+    let free_start = diagnostic.then(Instant::now);
+    dealloc(record.cast(), layout);
+    if let Some(free_start) = free_start {
+        let free = free_start.elapsed().as_nanos();
+        diagnostic_record(started.elapsed().as_nanos(), free);
+    }
 }
 pub unsafe fn cancel(buffer: *mut Buffer) {
     if !buffer.is_null() && !(*buffer).record.is_null() {

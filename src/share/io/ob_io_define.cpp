@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/profile/ob_trace_id.h"
 #include "share/resource/ob_server_resource_config.h"
 #include "share/ob_force_print_log.h"
 #include "lib/ob_define.h"
@@ -666,7 +667,7 @@ int ObIOResult::wait(int64_t wait_ms)
   } else {
     int64_t begin_ms = ObTimeUtility::current_time();
     while (OB_SUCC(ret) && !is_finished_ && wait_ms > 0) {
-      if (OB_FAIL(cond_.wait(wait_ms))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::IO_WAIT, [&]() { return cond_.wait(wait_ms); }))) {
       } else if (!is_finished_) {
         int64_t duration_ms = ObTimeUtility::current_time() - begin_ms;
         wait_ms -= duration_ms;
@@ -1432,7 +1433,7 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(result_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(result_->ret_code_.io_ret_)) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((result_->ret_code_.io_ret_), __FILE__, __LINE__, __func__))) {
   } else if (result_->is_finished_) {
     // do nothing
   } else if (0 == wait_timeout_ms) {
@@ -1448,7 +1449,7 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
 
     if (real_wait_timeout > 0) {
       int64_t wait_ms = real_wait_timeout;
-      if (OB_FAIL(result_->wait(wait_ms))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((result_->wait(wait_ms)), __FILE__, __LINE__, __func__))) {
         if (OB_TIMEOUT == ret) {
         }
       }
@@ -1461,7 +1462,7 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
     }
   } else {
     int64_t wait_ms = wait_timeout_ms;
-    if (OB_FAIL(result_->wait(wait_ms))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((result_->wait(wait_ms)), __FILE__, __LINE__, __func__))) {
       if (OB_TIMEOUT == ret) {
         const int64_t real_wait_timeout = min(OB_IO_MANAGER.get_io_config().data_storage_io_timeout_ms_, result_->timeout_us_ / 1000L);
         if ((ObTimeUtility::current_time() - result_->time_log_.begin_ts_) / 1000L < real_wait_timeout) {
@@ -1472,7 +1473,7 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ATOMIC_LOAD(&result_->ret_code_.io_ret_))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((ATOMIC_LOAD(&result_->ret_code_.io_ret_)), __FILE__, __LINE__, __func__))) {
     }
   } else if (OB_TIMEOUT == ret || OB_IO_TIMEOUT == ret) {
   }
@@ -1483,7 +1484,7 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
     FLOG_INFO("wait io in DiskCB thread", K(lbt()));
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 void ObIOHandle::estimate()

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_inner_sql_result.h"
+#include "lib/profile/ob_trace_id.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "omt/ob_server_runtime.h"
@@ -100,6 +101,7 @@ int ObInnerSQLResult::init()
 
 ObInnerSQLResult::~ObInnerSQLResult()
 {
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::RESULT_DESTROY);
   close();
   if (result_set_ != nullptr) {
     result_set_->~ObResultSet();
@@ -156,6 +158,7 @@ int ObInnerSQLResult::open()
 int ObInnerSQLResult::close()
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::RESULT_CLOSE, ret);
   // close can be executed too if result set not open.
   if (opened_) {
     // opened=true imply is_inited=true
@@ -170,6 +173,7 @@ int ObInnerSQLResult::close()
 int ObInnerSQLResult::force_close()
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::RESULT_CLOSE, ret);
   if (OB_FAIL(inner_close())) {
   }
   column_map_.clear();
@@ -199,6 +203,7 @@ int ObInnerSQLResult::inner_close()
 int ObInnerSQLResult::next()
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::READ_NEXT, ret);
   ObInnerSqlWaitGuard guard(is_inner_session(), &session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
   if (!opened_) {

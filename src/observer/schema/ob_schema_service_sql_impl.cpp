@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "rust/config.h"
+#include "lib/profile/ob_trace_id.h"
 #include "ob_schema_service_sql_impl.h"
 #include <inttypes.h>
 #include "share/ob_global_stat_proxy.h"
@@ -4045,6 +4046,7 @@ int ObSchemaServiceSQLImpl::get_table_schema(
     ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::SCHEMA_LOAD, ret);
 
   if (is_core_table(table_id)) {
     if (OB_FAIL(get_core_table_schema(
@@ -4112,9 +4114,10 @@ int ObSchemaServiceSQLImpl::fetch_table_info(
     ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::TABLE_BASE, ret);
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   const char *table_name = NULL;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
@@ -4128,14 +4131,16 @@ int ObSchemaServiceSQLImpl::fetch_table_info(
                                     schema_version))) {
   } else {
     const bool check_deleted = true;
+    ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-      if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_table_schema(check_deleted, *result, allocator, table_schema))) {
       }
+      seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
     }
   }
 
@@ -4149,11 +4154,13 @@ int ObSchemaServiceSQLImpl::fetch_column_info(const ObRefreshSchemaStatus &schem
                                               ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::TABLE_COLUMN, ret);
+  ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_HISTORY_SQL, OB_ALL_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " and schema_version <= %" PRId64
@@ -4163,12 +4170,13 @@ int ObSchemaServiceSQLImpl::fetch_column_info(const ObRefreshSchemaStatus &schem
     } else {
       const bool check_deleted = true;
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-      if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_column_schema(check_deleted, *result, table_schema))) {
       }
     }
+    seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
   }
   return ret;
 }
@@ -4181,12 +4189,14 @@ int ObSchemaServiceSQLImpl::fetch_constraint_info(
     ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::TABLE_CONSTRAINT, ret);
   if (OB_SUCC(ret)) {
+    ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
       ObSqlString sql;
       const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-      
+
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_HISTORY_SQL, OB_ALL_CONSTRAINT_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
       } else if (OB_FAIL(sql.append_fmt(" AND table_id = %" PRIu64 " and schema_version <= %" PRId64
@@ -4196,12 +4206,13 @@ int ObSchemaServiceSQLImpl::fetch_constraint_info(
       } else {
         const bool check_deleted = true;
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-        if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_constraint(check_deleted, *result, table_schema))) {
         }
       }
+      seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
     }
   }
   for (ObTableSchema::constraint_iterator iter =
@@ -4223,11 +4234,12 @@ int ObSchemaServiceSQLImpl::fetch_constraint_column_info(const ObRefreshSchemaSt
                                                          ObConstraint *&cst)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
 
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_COLUMN_HISTORY_SQL, OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
@@ -4237,11 +4249,12 @@ int ObSchemaServiceSQLImpl::fetch_constraint_column_info(const ObRefreshSchemaSt
                                       table_id,
                                       cst->get_constraint_id(),
                                       schema_version))) {
-    } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_constraint_column_info(*result, cst))) {
     }
+    seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
   }
 
   return ret;
@@ -4255,6 +4268,7 @@ int ObSchemaServiceSQLImpl::fetch_partition_info(
     ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::TABLE_PARTITION, ret);
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(fetch_part_info(schema_status, table_id,
@@ -4325,7 +4339,7 @@ int ObSchemaServiceSQLImpl::fetch_part_info(
   ObMySQLResult *result = NULL;
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (schema->get_truncate_version() > schema_version) {
@@ -4333,6 +4347,7 @@ int ObSchemaServiceSQLImpl::fetch_part_info(
   } else if (PARTITION_LEVEL_ZERO == schema->get_part_level()) {
     // skip
   } else {
+    ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       //fetch part info
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_PART_HISTORY_SQL, OB_ALL_PART_HISTORY_TNAME,
@@ -4345,13 +4360,14 @@ int ObSchemaServiceSQLImpl::fetch_part_info(
       } else {
         const bool check_deleted = true;
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-        if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(
             check_deleted, *result, schema))) {
         }
       }
+      seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
     }
   }
   return ret;
@@ -4369,7 +4385,7 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
   ObMySQLResult *result = NULL;
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-  
+
   if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (schema->get_truncate_version() > schema_version) {
@@ -4377,6 +4393,7 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
   } else if (PARTITION_LEVEL_TWO != schema->get_part_level()) {
     // skip
   } else if (schema->has_sub_part_template_def()) {
+    ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sql.reuse();
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_DEF_SUBPART_HISTORY_SQL, OB_ALL_DEF_SUB_PART_HISTORY_TNAME,
@@ -4388,16 +4405,18 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
       } else {
         const bool check_deleted = true;
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-        if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_def_subpart_info(check_deleted, *result, schema))) {
         } else { }//do nothing
       }
+      seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
     }
   }
 
   if (OB_SUCC(ret)) {
+    ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sql.reuse();
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_SUB_PART_HISTORY_SQL, OB_ALL_SUB_PART_HISTORY_TNAME,
@@ -4410,12 +4429,13 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
       } else {
         const bool check_deleted = true;
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-        if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_subpart_info(check_deleted, *result, schema))) {
         } else { }//do nothing
       }
+      seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
     }
   }
   return ret;
@@ -4725,13 +4745,15 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_info(
     TABLE_SCHEMA &table_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::TABLE_FOREIGN_KEY, ret);
   bool has_error = false;
   ObMySQLResult *result = NULL;
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-  
+
   if (OB_SUCC(ret)) {
+    ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_FOREIGN_KEY_HISTORY_SQL, OB_ALL_FOREIGN_KEY_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
@@ -4740,11 +4762,12 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_info(
                                         table_id))) {
       } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64, schema_version))) {
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY foreign_key_id desc, schema_version desc"))) {
-      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+      } else if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_foreign_key_info(*result, table_schema))) {
       }
+      seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
     }
   }
   if (OB_SUCC(ret) && !has_error) {
@@ -4765,22 +4788,24 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_column_info(
     ObForeignKeyInfo &foreign_key_info)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
-    
+
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_FOREIGN_KEY_COLUMN_HISTORY_SQL, OB_ALL_FOREIGN_KEY_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
     } else if (OB_FAIL(sql.append_fmt(" AND foreign_key_id = %" PRIu64 " AND schema_version <= %" PRId64 " ORDER BY position ASC, schema_version DESC",
                foreign_key_info.foreign_key_id_,
                schema_version))) {
-    } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_foreign_key_column_info(*result, foreign_key_info))) {
     }
+    seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
   }
   return ret;
 }
@@ -4826,11 +4851,13 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
                                                T &schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::Detail seek1381_detail(::oceanbase::common::seek1381::TABLE_TRIGGER, ret);
   ObMySQLResult *result = NULL;
   ObSqlString sql;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-  
+
+  ::oceanbase::common::seek1381::Detail seek1381_result_lifetime(::oceanbase::common::seek1381::DETAIL_CURRENT);
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_TRIGGER_ID_HISTORY_SQL, OB_ALL_TRIGGER_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
@@ -4838,7 +4865,7 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
                                       table_id))) {
     } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %" PRId64, schema_version))) {
     } else if (OB_FAIL(sql.append_fmt(" ORDER BY trigger_id desc, schema_version desc"))) {
-    } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::detail_call(::oceanbase::common::seek1381::READ_CLIENT, [&]() { return sql_client_retry_weak.read(res, sql.ptr()); }))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_trigger_list(*result,
@@ -4846,6 +4873,7 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
     } else {
       LOG_DEBUG("TRIGGER", K(schema.get_trigger_list()));
     }
+    seek1381_result_lifetime.switch_to(::oceanbase::common::seek1381::RESULT_DESTROY);
   }
   return ret;
 }

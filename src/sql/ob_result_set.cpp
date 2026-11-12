@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_result_set.h"
+#include "lib/profile/ob_trace_id.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
@@ -132,7 +133,7 @@ OB_INLINE int ObResultSet::open_plan()
   //ObLimit *limit_opt = NULL;
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   if (OB_ISNULL(physical_plan_)) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     LOG_ERROR("invalid physical plan", K(physical_plan_));
   } else {
     has_top_limit_ = physical_plan_->has_top_limit();
@@ -161,7 +162,7 @@ OB_INLINE int ObResultSet::open_plan()
     }
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObResultSet::open()
@@ -170,8 +171,8 @@ int ObResultSet::open()
   my_session_.set_process_query_time(ObClockGenerator::getClock());
   LinkExecCtxGuard link_guard(my_session_, get_exec_context());
   ObTraceSpanGuard open_span(&my_session_, TRACE_OPEN);
-  if (OB_FAIL(execute())) {
-  } else if (OB_FAIL(open_result())) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((execute()), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((open_result()), __FILE__, __LINE__, __func__))) {
   }
 
   if (OB_SUCC(ret)) {
@@ -180,14 +181,14 @@ int ObResultSet::open()
       // cmd not set
     } else if (ret != OB_NOT_INIT &&
         OB_ISNULL(physical_plan_)) {
-    } else if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
       physical_plan_->set_is_last_exec_succ(false);
     } else {
       physical_plan_->set_is_last_exec_succ(true);
     }
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObResultSet::execute()
@@ -217,16 +218,16 @@ int ObResultSet::open_result()
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   if (NULL != physical_plan_) {
     if (OB_ISNULL(exec_result_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(exec_result_->open(get_exec_context()))) {
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((exec_result_->open(get_exec_context())), __FILE__, __LINE__, __func__))) {
       if (OB_TRANSACTION_SET_VIOLATION != ret && OB_TRY_LOCK_ROW_CONFLICT != ret) {
         SQL_LOG(WARN, "fail open main query", K(ret));
       }
-    } else if (OB_FAIL(drive_dml_query())) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((drive_dml_query()), __FILE__, __LINE__, __func__))) {
     }
   }
   if (OB_SUCC(ret)) {
-    if (!is_inner_result_set_ && OB_FAIL(set_mysql_info())) {
+    if (!is_inner_result_set_ && OB_FAIL(::oceanbase::common::seek1381::select_result((set_mysql_info()), __FILE__, __LINE__, __func__))) {
       SQL_LOG(WARN, "fail to get mysql info", K(ret));
     } else if (NULL != get_exec_context().get_physical_plan_ctx()) {
       SQL_LOG(DEBUG, "get affected row", K(get_stmt_type()),
@@ -239,7 +240,7 @@ int ObResultSet::open_result()
     }
   }
   set_errcode(ret);
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 /* on_cmd_execute - prepare before start execute cmd
@@ -447,19 +448,19 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
   ctx.reset_op_env();
   exec_result_ = &(ctx.get_sql_exec_ctx().get_execute_result());
   if (stmt::T_PREPARE != stmt_type_) {
-    if (OB_FAIL(ctx.init_phy_op(physical_plan_->get_phy_operator_size()))) {
-    } else if (OB_FAIL(ctx.init_expr_op(physical_plan_->get_expr_operator_size()))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((ctx.init_phy_op(physical_plan_->get_phy_operator_size())), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((ctx.init_expr_op(physical_plan_->get_expr_operator_size())), __FILE__, __LINE__, __func__))) {
     }
   }
 
   if (OB_SUCC(ret) && my_session_.get_ddl_info().is_ddl() && stmt::T_INSERT == get_stmt_type()) {
-    if (OB_FAIL(clear_ddl_checksum(physical_plan_))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((clear_ddl_checksum(physical_plan_)), __FILE__, __LINE__, __func__))) {
     }
   }
 
 
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(start_stmt())) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((start_stmt()), __FILE__, __LINE__, __func__))) {
   } else {
     /* Set exec_result_ to the executor's runtime environment for returning data */
     /* execute plan,
@@ -469,16 +470,16 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
     // Admit PX here after open-phase work, just before execute_plan,
     // so it is never held idle across pre-execution. Guard makes it idempotent across the open_plan
     // transaction_set_violation retry; no-ops for non-PX / dop==1 / EXPLAIN.
-    if OB_FAIL(ret) {
+    if OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__)) {
     } else if (!ctx.get_admission_acquired()
-               && OB_FAIL(ObPxAdmission::enter_query_admission(my_session_, ctx,
-                                                               get_stmt_type(), *physical_plan_))) {
-    } else if (OB_FAIL(executor_.init(physical_plan_))) {
-    } else if (OB_FAIL(executor_.execute_plan(ctx))) {
+               && OB_FAIL(::oceanbase::common::seek1381::select_result((ObPxAdmission::enter_query_admission(my_session_, ctx,
+                                                               get_stmt_type(), *physical_plan_)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((executor_.init(physical_plan_)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((executor_.execute_plan(ctx)), __FILE__, __LINE__, __func__))) {
     }
   }
   NG_TRACE(do_open_plan_end);
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObResultSet::set_mysql_info()

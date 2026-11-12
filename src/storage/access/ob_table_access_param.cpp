@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_table_access_param.h"
+#include "lib/profile/ob_trace_id.h"
 #include "storage/ob_relative_table.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/ob_table_dml_param.h"
@@ -238,7 +239,7 @@ int ObTableAccessParam::init(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(nullptr == rowkey_read_info && nullptr == tablet_handle)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_NOT_NULL(tablet_handle) && OB_FAIL(check_valid_before_query_init(*scan_param.table_param_, *tablet_handle))) {
+  } else if (OB_NOT_NULL(tablet_handle) && OB_FAIL(::oceanbase::common::seek1381::select_result((check_valid_before_query_init(*scan_param.table_param_, *tablet_handle)), __FILE__, __LINE__, __func__))) {
   } else {
     const share::schema::ObTableParam &table_param = *scan_param.table_param_;
     iter_param_.table_id_ = table_param.get_table_id();
@@ -304,14 +305,14 @@ int ObTableAccessParam::init(
       iter_param_.set_use_stmt_iter_pool();
     }
 
-    if (OB_FAIL(iter_param_.refresh_lob_column_out_status())) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((iter_param_.refresh_lob_column_out_status()), __FILE__, __LINE__, __func__))) {
     } else {
       iter_param_.need_update_tablet_param_ = &scan_param.need_update_tablet_param_;
       is_inited_ = true;
     }
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableAccessParam::check_valid_before_query_init(

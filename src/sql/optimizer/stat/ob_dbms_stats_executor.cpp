@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
+#include "lib/profile/ob_trace_id.h"
 #include "sql/optimizer/stat/ob_incremental_stat_estimator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
@@ -52,6 +53,7 @@ int ObDbmsStatsExecutor::gather_table_stats(ObExecContext &ctx,
                                             bool *need_refresh_schema)
 {
   int ret = OB_SUCCESS;
+  ::oceanbase::common::seek1381::DetailRegion seek1381_region;
   const int64_t diagnostic_start_us = ObTimeUtility::current_time();
   enum DiagnosticPhase { TRANS_START, BACKUP, PREPARE, PARTITION_GATHER, RECOVERY, TRANS_END, CLEANUP_SCOPE, OTHER, PHASE_COUNT };
   int64_t phase_us[PHASE_COUNT] = {};
@@ -68,6 +70,8 @@ int ObDbmsStatsExecutor::gather_table_stats(ObExecContext &ctx,
     phase_us[current_phase] += delta_us;
     phase_start_us = now_us;
     current_phase = next_phase;
+    ::oceanbase::common::seek1381::detail_region(next_phase == BACKUP ? ::oceanbase::common::seek1381::REGION_BACKUP
+        : next_phase == PARTITION_GATHER ? ::oceanbase::common::seek1381::REGION_PARTITION : ::oceanbase::common::seek1381::REGION_TABLE);
   };
   auto in_phase = [&](DiagnosticPhase phase, auto &&operation) {
     const DiagnosticPhase parent_phase = current_phase;

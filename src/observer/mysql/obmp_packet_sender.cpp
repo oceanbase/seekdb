@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "rust/config.h"
+#include "lib/profile/ob_trace_id.h"
 #include "query/protocol/ob_mysql_packet_sender.h"
 #include "rust/sql_nio.h"
 #include "observer/mysql/ob_mysql_result_set.h"
@@ -530,6 +531,7 @@ int ObMPPacketSender::send_error_packet(int err,
                                         void *extra_err_info /* = NULL */)
 {
   int ret = OB_SUCCESS;
+  (void)::oceanbase::common::seek1381::select_result(err, __FILE__, __LINE__, __func__);
   sql::ObSQLSessionInfo *session = NULL;
   BACKTRACE(ERROR, (OB_SUCCESS == err), "BUG send error packet but err code is 0");
   {

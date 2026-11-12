@@ -18,6 +18,7 @@
 #define PRINT_TS(x) (ObPrintTableStore(x))
 
 #include "ob_tablet_table_store.h"
+#include "lib/profile/ob_trace_id.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
@@ -108,31 +109,36 @@ int ObTabletTableStore::deserialize(
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(data_len < 0 || data_len < pos)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &version_))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((serialization::decode_i64(buf, data_len, pos, &version_)), __FILE__, __LINE__, __func__))) {
   } else if (OB_UNLIKELY(version_ != TABLE_STORE_VERSION)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &serialized_length))) {
-  } else if (pos - start_pos < serialized_length && OB_FAIL(major_tables_.deserialize(allocator, buf, data_len, pos))) {
-  } else if (pos - start_pos < serialized_length && OB_FAIL(minor_tables_.deserialize(allocator, buf, data_len, pos))) {
-  } else if (pos - start_pos < serialized_length && OB_FAIL(ddl_sstables_.deserialize(allocator, buf, data_len, pos))) {
-  } else if (pos - start_pos < serialized_length && OB_FAIL(meta_major_tables_.deserialize(allocator, buf, data_len, pos))) {
-  } else if (pos - start_pos < serialized_length && OB_FAIL(mds_sstables_.deserialize(allocator, buf, data_len, pos))) {
-  } else if (OB_FAIL(build_memtable_array(tablet))) {
-  } else if (OB_FAIL(pull_ddl_memtables(allocator, tablet))) {
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((serialization::decode_i64(buf, data_len, pos, &serialized_length)), __FILE__, __LINE__, __func__))) {
+  } else if (pos - start_pos < serialized_length && OB_FAIL(::oceanbase::common::seek1381::select_result((major_tables_.deserialize(allocator, buf, data_len, pos)), __FILE__, __LINE__, __func__))) {
+  } else if (pos - start_pos < serialized_length && OB_FAIL(::oceanbase::common::seek1381::select_result((minor_tables_.deserialize(allocator, buf, data_len, pos)), __FILE__, __LINE__, __func__))) {
+  } else if (pos - start_pos < serialized_length && OB_FAIL(::oceanbase::common::seek1381::select_result((ddl_sstables_.deserialize(allocator, buf, data_len, pos)), __FILE__, __LINE__, __func__))) {
+  } else if (pos - start_pos < serialized_length && OB_FAIL(::oceanbase::common::seek1381::select_result((meta_major_tables_.deserialize(allocator, buf, data_len, pos)), __FILE__, __LINE__, __func__))) {
+  } else if (pos - start_pos < serialized_length && OB_FAIL(::oceanbase::common::seek1381::select_result((mds_sstables_.deserialize(allocator, buf, data_len, pos)), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((build_memtable_array(tablet)), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((pull_ddl_memtables(allocator, tablet)), __FILE__, __LINE__, __func__))) {
   } else if (pos - start_pos < serialized_length) {
     pos = start_pos + serialized_length;
   }
   if (OB_SUCC(ret)) {
     version_ = TABLE_STORE_VERSION;
     is_inited_ = true;
-    if (OB_FAIL(check_ready_for_read(tablet))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((check_ready_for_read(tablet)), __FILE__, __LINE__, __func__))) {
     }
     if (!memtables_.empty()) {
       FLOG_INFO("succeed to deserialize table store", K(tablet_id),
           K(major_tables_), K(minor_tables_), K(meta_major_tables_), K(mds_sstables_), K(memtables_), K(PRINT_TS(*this)));
     }
   }
-  return ret;
+  const int candidate_slot = ::oceanbase::common::seek1381::candidate_error_slot(ret);
+  if (candidate_slot > 0) {
+    LOG_INFO("seek1381 table store error candidate", K(candidate_slot), K(ret), K(tablet_id), K_(version),
+             K(TABLE_STORE_VERSION), K(data_len), K(pos));
+  }
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int64_t ObTabletTableStore::get_serialize_size() const
@@ -551,31 +557,31 @@ int ObTabletTableStore::calculate_read_tables(
     // do nothing
   } else if (!meta_major_tables_.empty() && meta_major_tables_.at(0)->get_snapshot_version() < snapshot_version) {
     base_table = meta_major_tables_.at(0);
-    if (OB_FAIL(iterator.add_table(meta_major_tables_.at(0)))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((iterator.add_table(meta_major_tables_.at(0))), __FILE__, __LINE__, __func__))) {
     }
-  } else if (OB_FAIL(check_major_sstable_empty(tablet.get_tablet_meta().ddl_commit_scn_, tablet, is_major_empty))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((check_major_sstable_empty(tablet.get_tablet_meta().ddl_commit_scn_, tablet, is_major_empty)), __FILE__, __LINE__, __func__))) {
   } else if (is_major_empty) {
     LOG_INFO("no base tables in table store, no ready for reading", K(ret), K(snapshot_version), K(*this));
   } else if (!major_tables_.empty()) {
     for (int64_t i = major_tables_.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
       if (major_tables_[i]->get_snapshot_version() <= snapshot_version) {
         base_table = major_tables_[i];
-        if (OB_FAIL(iterator.add_table(major_tables_[i]))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((iterator.add_table(major_tables_[i])), __FILE__, __LINE__, __func__))) {
         }
         break;
       }
     }
-  } else if (OB_FAIL(calculate_ddl_read_tables(snapshot_version, tablet, iterator, base_table))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((calculate_ddl_read_tables(snapshot_version, tablet, iterator, base_table)), __FILE__, __LINE__, __func__))) {
   }
   
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
   } else if (OB_NOT_NULL(base_table)) {
     // TODO@wenqu: better abstract to calculate read tables in ddl path
     SCN last_scn = base_table->is_major_sstable() || base_table->is_ddl_type_sstable() ? SCN::max_scn() : base_table->get_end_scn();
     for (int64_t i = 0; OB_SUCC(ret) && i < minor_tables_.count(); ++i) {
       if (((base_table->is_major_sstable() || base_table->is_ddl_type_sstable()) && minor_tables_[i]->get_upper_trans_version() >= base_table->get_data_version())
           || minor_tables_[i]->get_end_scn() >= last_scn) {
-        if (OB_FAIL(iterator.add_tables(minor_tables_, i, minor_tables_.count() - i))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((iterator.add_tables(minor_tables_, i, minor_tables_.count() - i)), __FILE__, __LINE__, __func__))) {
         }
         break;
       }
@@ -589,10 +595,10 @@ int ObTabletTableStore::calculate_read_tables(
     }
   } else { // base table is null
     if (skip_major || (allow_no_ready_read && is_major_empty)) {
-      if (!minor_tables_.empty() && OB_FAIL(iterator.add_tables(
-              minor_tables_, 0, minor_tables_.count()))) {
+      if (!minor_tables_.empty() && OB_FAIL(::oceanbase::common::seek1381::select_result((iterator.add_tables(
+              minor_tables_, 0, minor_tables_.count())), __FILE__, __LINE__, __func__))) {
       } else {
-        if (OB_FAIL(calculate_read_memtables(tablet, iterator))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((calculate_read_memtables(tablet, iterator)), __FILE__, __LINE__, __func__))) {
         }
       }
     } else if (is_major_empty) {
@@ -605,7 +611,7 @@ int ObTabletTableStore::calculate_read_tables(
             K(ret), K(snapshot_version), K(allow_no_ready_read), K(PRINT_TS(*this)));
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTabletTableStore::calculate_read_memtables(
@@ -637,39 +643,39 @@ int ObTabletTableStore::get_table(
   ObSSTableWrapper sstable_wrapper;
 
   if (OB_UNLIKELY(!is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
   } else if (!table_key.is_memtable()) {
-    if (OB_FAIL(get_sstable(table_key, sstable_wrapper))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_sstable(table_key, sstable_wrapper)), __FILE__, __LINE__, __func__))) {
     } else {
       table = sstable_wrapper.get_sstable();
     }
-  } else if (OB_FAIL(get_memtable(table_key, table))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_memtable(table_key, table)), __FILE__, __LINE__, __func__))) {
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
   } else if (OB_ISNULL(table)) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
   } else if (table->is_memtable()) {
     ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
-    if (OB_FAIL(handle.set_table(table, t3m, table->get_key().table_type_))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((handle.set_table(table, t3m, table->get_key().table_type_)), __FILE__, __LINE__, __func__))) {
     }
   } else if (static_cast<ObSSTable *>(table)->is_loaded()) {
     if (!table_store_handle.is_valid()) {
       // table store object on tablet meta memory
-      if (OB_FAIL(handle.set_sstable_with_tablet(table))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((handle.set_sstable_with_tablet(table)), __FILE__, __LINE__, __func__))) {
       }
-    } else if (OB_FAIL(handle.set_sstable(table, table_store_handle))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((handle.set_sstable(table, table_store_handle)), __FILE__, __LINE__, __func__))) {
     }
   } else {
     ObStorageMetaHandle sst_handle;
     ObSSTable *sstable = nullptr;
-    if (OB_FAIL(ObCacheSSTableHelper::load_sstable(
-        static_cast<ObSSTable *>(table)->get_addr(), sst_handle))) {
-    } else if (OB_FAIL(sst_handle.get_sstable(sstable))) {
-    } else if (OB_FAIL(handle.set_sstable(sstable, sst_handle))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((ObCacheSSTableHelper::load_sstable(
+        static_cast<ObSSTable *>(table)->get_addr(), sst_handle)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((sst_handle.get_sstable(sstable)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((handle.set_sstable(sstable, sst_handle)), __FILE__, __LINE__, __func__))) {
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTabletTableStore::get_sstable(const ObITable::TableKey &table_key, ObSSTableWrapper &wrapper) const
@@ -745,30 +751,30 @@ int ObTabletTableStore::get_read_tables(
   common::SpinRLockGuard guard(memtables_lock_);
   if (OB_UNLIKELY(snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(check_ready_for_read(tablet))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((check_ready_for_read(tablet)), __FILE__, __LINE__, __func__))) {
   } else if (is_ready_for_read_) {
     // do nothing
-  } else if (OB_FAIL(check_major_sstable_empty(tablet.get_tablet_meta().ddl_commit_scn_, tablet, is_major_empty))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((check_major_sstable_empty(tablet.get_tablet_meta().ddl_commit_scn_, tablet, is_major_empty)), __FILE__, __LINE__, __func__))) {
   } else if (!is_major_empty) {
     is_ready_for_read_ = true;
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
   } else if (OB_UNLIKELY(!is_ready_for_read_ && minor_tables_.empty() && allow_no_ready_read)) {
     if (memtables_.empty()) {
       LOG_INFO("no table in table store, cannot read", K(ret), K(*this));
-    } else if (OB_FAIL(iterator.add_tables(memtables_))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((iterator.add_tables(memtables_)), __FILE__, __LINE__, __func__))) {
     }
   } else if (OB_UNLIKELY(!allow_no_ready_read && !is_ready_for_read_)) {
     ret = OB_REPLICA_NOT_READABLE;
     LOG_WARN("table store not ready for read", K(ret), K(allow_no_ready_read), K(PRINT_TS(*this)));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_SYS;
-  } else if (OB_FAIL(calculate_read_tables(snapshot_version, tablet, iterator, allow_no_ready_read, skip_major))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((calculate_read_tables(snapshot_version, tablet, iterator, allow_no_ready_read, skip_major)), __FILE__, __LINE__, __func__))) {
   }
   if (FAILEDx(iterator.set_retire_check())) {
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTabletTableStore::get_read_major_sstable(

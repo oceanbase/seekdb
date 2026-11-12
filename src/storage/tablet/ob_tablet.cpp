@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "rust/config.h"
+#include "lib/profile/ob_trace_id.h"
 #include "ob_tablet.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -650,7 +651,7 @@ int ObTablet::fetch_table_store(ObTabletMemberWrapper<ObTabletTableStore> &wrapp
   } else if (table_store_addr_.is_memory_object()
              || table_store_addr_.is_none_object()) {
     if (OB_ISNULL(table_store_addr_.get_ptr())) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     } else {
       wrapper.set_member(table_store_addr_.get_ptr());
     }
@@ -662,7 +663,7 @@ int ObTablet::fetch_table_store(ObTabletMemberWrapper<ObTabletTableStore> &wrapp
     } else if (CLICK_FAIL(wrapper.set_cache_handle(handle))) {
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTablet::load_storage_schema(common::ObIAllocator &allocator, ObStorageSchema *&storage_schema) const
@@ -2681,13 +2682,13 @@ int ObTablet::get_read_tables(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(allow_to_read_())) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((allow_to_read_()), __FILE__, __LINE__, __func__))) {
   } else if (OB_UNLIKELY(!iter.is_valid() || iter.get_tablet() != this)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(auto_get_read_tables(snapshot_version, iter, allow_no_ready_read))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((auto_get_read_tables(snapshot_version, iter, allow_no_ready_read)), __FILE__, __LINE__, __func__))) {
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTablet::auto_get_read_tables(
@@ -5361,7 +5362,7 @@ int ObTablet::check_snapshot_readable_with_cache(
     {
       SpinRLockGuard guard(mds_cache_lock_);
       if (ddl_data_cache_.is_valid()) {
-        if (OB_FAIL(check_snapshot_readable(ddl_data_cache_, snapshot_version, schema_version))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((check_snapshot_readable(ddl_data_cache_, snapshot_version, schema_version)), __FILE__, __LINE__, __func__))) {
         }
         r_valid = true;
       }
@@ -5370,7 +5371,7 @@ int ObTablet::check_snapshot_readable_with_cache(
     if (OB_SUCC(ret) && !r_valid) {
       SpinWLockGuard guard(mds_cache_lock_);
       if (ddl_data_cache_.is_valid()) {
-        if (OB_FAIL(check_snapshot_readable(ddl_data_cache_, snapshot_version, schema_version))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((check_snapshot_readable(ddl_data_cache_, snapshot_version, schema_version)), __FILE__, __LINE__, __func__))) {
         }
       } else {
         ObTabletBindingMdsUserData tmp_ddl_data;
@@ -5379,7 +5380,7 @@ int ObTablet::check_snapshot_readable_with_cache(
         mds::MdsWriter unused_writer;
         mds::TwoPhaseCommitState trans_stat;
         share::SCN unused_trans_version;
-        if (OB_FAIL(ObITabletMdsInterface::get_latest_ddl_data(tmp_ddl_data, unused_writer, trans_stat, unused_trans_version))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((ObITabletMdsInterface::get_latest_ddl_data(tmp_ddl_data, unused_writer, trans_stat, unused_trans_version)), __FILE__, __LINE__, __func__))) {
           if (OB_EMPTY_RESULT == ret) {
             trans_stat = mds::TwoPhaseCommitState::ON_COMMIT;
             tmp_ddl_data.set_default_value(); // use default value
@@ -5388,10 +5389,10 @@ int ObTablet::check_snapshot_readable_with_cache(
           }
         }
 
-        if (OB_FAIL(ret)) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
         } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_stat) {
           // already get valid tmp_ddl_data
-        } else if (OB_FAIL(get_ddl_data(tmp_ddl_data))) {
+        } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_ddl_data(tmp_ddl_data)), __FILE__, __LINE__, __func__))) {
         }
 
         if (OB_SUCC(ret)) {
@@ -5405,10 +5406,10 @@ int ObTablet::check_snapshot_readable_with_cache(
             candidate_cache = &tmp_ddl_data_cache;
           }
 
-          if (OB_FAIL(ret)) {
+          if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
           } else {
             OB_ASSERT(candidate_cache != nullptr);
-            if (OB_FAIL(check_snapshot_readable(*candidate_cache, snapshot_version, schema_version))) {
+            if (OB_FAIL(::oceanbase::common::seek1381::select_result((check_snapshot_readable(*candidate_cache, snapshot_version, schema_version)), __FILE__, __LINE__, __func__))) {
             }
           }
         }
@@ -5416,7 +5417,7 @@ int ObTablet::check_snapshot_readable_with_cache(
     }
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTablet::check_snapshot_readable(const ObDDLInfoCache& ddl_info_cache, const int64_t snapshot_version, const int64_t schema_version)

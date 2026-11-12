@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "data_plane/access/ob_table_scan_access.h"
+#include "lib/profile/ob_trace_id.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_sample_iter_helper.h"
@@ -131,12 +132,12 @@ int ObTableScanIterator::prepare_table_param(const ObTabletHandle &tablet_handle
       || OB_ISNULL(tablet)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), KP(scan_param_), K(tablet_handle));
-  } else if (OB_FAIL(main_table_param_.init(*scan_param_, &tablet_handle))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((main_table_param_.init(*scan_param_, &tablet_handle)), __FILE__, __LINE__, __func__))) {
   } else if (nullptr != cached_iter_node_) {
     main_table_param_.set_use_global_iter_pool();
     main_table_param_.iter_param_.set_use_stmt_iter_pool();
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 bool ObTableScanIterator::can_use_global_iter_pool(const ObQRIterType iter_type) const
@@ -164,17 +165,17 @@ int ObTableScanIterator::prepare_cached_iter_node()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr != cached_iter_node_)) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     STORAGE_LOG(WARN, "Unexpected not null cached iter node", K(ret), KP(cached_iter_node_));
   } else if (can_use_global_iter_pool(current_iter_type_)) {
     ObGlobalIteratorPool *iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
-    if (OB_FAIL(iter_pool->get(current_iter_type_, cached_iter_node_))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((iter_pool->get(current_iter_type_, cached_iter_node_)), __FILE__, __LINE__, __func__))) {
     } else if (nullptr != cached_iter_node_) {
       main_table_param_.set_use_global_iter_pool();
       main_table_param_.iter_param_.set_use_stmt_iter_pool();
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 void ObTableScanIterator::try_release_cached_iter_node(const ObQRIterType rescan_iter_type)
@@ -212,12 +213,12 @@ int ObTableScanIterator::prepare_table_context()
     trans_version_range.base_version_ = 0;
     trans_version_range.snapshot_version_ = ctx_guard_.get_store_ctx().mvcc_acc_ctx_.get_snapshot_version().get_val_for_tx();
     if (OB_UNLIKELY(!trans_version_range.is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
       STORAGE_LOG(WARN, "trans version range is not valid", K(ret), K(trans_version_range));
-    } else if (OB_FAIL(main_table_ctx_.init(*scan_param_, ctx_guard_.get_store_ctx(), trans_version_range, cached_iter_node_))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((main_table_ctx_.init(*scan_param_, ctx_guard_.get_store_ctx(), trans_version_range, cached_iter_node_)), __FILE__, __LINE__, __func__))) {
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 template<typename T>
@@ -316,21 +317,21 @@ int ObTableScanIterator::init(ObTableScanParam &scan_param, const ObTabletHandle
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init table scan iter", K(ret), K(store_ctx), K(scan_param),
         K(tablet_handle));
-  } else if (OB_FAIL(table_scan_range_.init(scan_param))) {
-  } else if (OB_FAIL(table_scan_range_.get_query_iter_type(current_iter_type_))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((table_scan_range_.init(scan_param)), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((table_scan_range_.get_query_iter_type(current_iter_type_)), __FILE__, __LINE__, __func__))) {
   } else {
     scan_param_ = &scan_param;
-    if (OB_FAIL(get_table_param_.tablet_iter_.set_tablet_handle(tablet_handle))) {
-    } else if (OB_FAIL(prepare_table_param(tablet_handle))) {
-    } else if (OB_FAIL(prepare_cached_iter_node())) {
-    } else if (OB_FAIL(prepare_table_context())) {
-    } else if (OB_FAIL(open_iter())) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_table_param_.tablet_iter_.set_tablet_handle(tablet_handle)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_table_param(tablet_handle)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_cached_iter_node()), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_table_context()), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((open_iter()), __FILE__, __LINE__, __func__))) {
     } else {
       is_inited_ = true;
     }
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableScanIterator::switch_param(ObTableScanParam &scan_param, const ObTabletHandle &tablet_handle)
@@ -347,21 +348,21 @@ int ObTableScanIterator::switch_param(ObTableScanParam &scan_param, const ObTabl
           || OB_UNLIKELY(!tablet_handle.is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument, ", K(ret), K(store_ctx), K(scan_param), K(tablet_handle));
-  } else if (OB_FAIL(table_scan_range_.init(scan_param))) {
-  } else if (OB_FAIL(table_scan_range_.get_query_iter_type(rescan_iter_type))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((table_scan_range_.init(scan_param)), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((table_scan_range_.get_query_iter_type(rescan_iter_type)), __FILE__, __LINE__, __func__))) {
   } else {
     scan_param_ = &scan_param;
-    if (OB_FAIL(get_table_param_.tablet_iter_.set_tablet_handle(tablet_handle))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_table_param_.tablet_iter_.set_tablet_handle(tablet_handle)), __FILE__, __LINE__, __func__))) {
     } else if (FALSE_IT(try_release_cached_iter_node(rescan_iter_type))) {
-    } else if (OB_FAIL(prepare_table_param(tablet_handle))) {
-    } else if (OB_FAIL(prepare_table_context())) {
-    } else if (OB_FAIL(switch_param_for_iter())) {
-    } else if (OB_FAIL(open_iter())) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_table_param(tablet_handle)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_table_context()), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((switch_param_for_iter()), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((open_iter()), __FILE__, __LINE__, __func__))) {
     } else {
       is_inited_ = true;
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableScanIterator::rescan_for_iter()
@@ -415,14 +416,14 @@ int ObTableScanIterator::init_scan_iter(T *&iter)
   ObQueryRowIterator *cached_iter = nullptr == cached_iter_node_ ? nullptr : cached_iter_node_->get_iter();
   if (OB_NOT_NULL(cached_iter)) {
     if (OB_UNLIKELY(cached_iter->get_type() != current_iter_type_)) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
       STORAGE_LOG(WARN, "Unexpected cached iter type", K(ret), K(cached_iter->get_type()), K(current_iter_type_));
     } else {
       iter = static_cast<T*>(cached_iter);
       cached_iter_ = reinterpret_cast<ObQueryRowIterator**>(&iter);
     }
   }
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
   } else if (nullptr == iter) {
     void *buf = nullptr;
     if (OB_ISNULL(buf = main_table_ctx_.get_long_life_allocator()->alloc(sizeof(T)))) {
@@ -430,13 +431,13 @@ int ObTableScanIterator::init_scan_iter(T *&iter)
       STORAGE_LOG(WARN, "Fail to allocate memory", K(ret));
     } else {
       iter = new (buf) T();
-      if (OB_FAIL(iter->init(main_table_param_, main_table_ctx_, get_table_param_))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((iter->init(main_table_param_, main_table_ctx_, get_table_param_)), __FILE__, __LINE__, __func__))) {
       } else if (!scan_param_->sample_info_.is_no_sample()
           && SampleInfo::SAMPLE_INCR_DATA == scan_param_->sample_info_.scope_) {
         iter->disable_fill_default();
         iter->disable_output_row_with_nop();
       }
-      if (OB_FAIL(ret)) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
         iter->~T();
         main_table_ctx_.get_long_life_allocator()->free(iter);
         iter = nullptr;
@@ -445,9 +446,9 @@ int ObTableScanIterator::init_scan_iter(T *&iter)
         cached_iter_ = reinterpret_cast<ObQueryRowIterator**>(&iter);
       }
     }
-  } else if (OB_FAIL(iter->switch_table(main_table_param_, main_table_ctx_, get_table_param_))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((iter->switch_table(main_table_param_, main_table_ctx_, get_table_param_)), __FILE__, __LINE__, __func__))) {
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 
@@ -470,7 +471,7 @@ int ObTableScanIterator::open_iter()
   int ret = OB_SUCCESS;
   void *buf = NULL;
   if (OB_UNLIKELY(!table_scan_range_.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     STORAGE_LOG(WARN, "Unexpected error for invalid table scan range", K(ret), K(table_scan_range_));
   } else if (table_scan_range_.is_empty()) {
     //ret = OB_ITER_END;
@@ -478,13 +479,13 @@ int ObTableScanIterator::open_iter()
     get_table_param_.frozen_version_ = scan_param_->frozen_version_;
     get_table_param_.sample_info_ = scan_param_->sample_info_;
     if (table_scan_range_.is_get()) {
-      if (OB_FAIL(init_and_open_get_merge_iter_())) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((init_and_open_get_merge_iter_()), __FILE__, __LINE__, __func__))) {
       }
     } else if (table_scan_range_.is_scan()) {
-      if (OB_FAIL(init_and_open_scan_merge_iter_())) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((init_and_open_scan_merge_iter_()), __FILE__, __LINE__, __func__))) {
       }
     } else {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
       STORAGE_LOG(ERROR, "invalid table scan range", KR(ret), K(table_scan_range_));
     }
 
@@ -493,7 +494,7 @@ int ObTableScanIterator::open_iter()
     }
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableScanIterator::init_and_open_get_merge_iter_()
@@ -507,7 +508,7 @@ int ObTableScanIterator::init_and_open_get_merge_iter_()
   } else {
     INIT_AND_OPEN_ITER(get_merge_, table_scan_range_.get_rowkeys(), false);
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableScanIterator::sort_sample_ranges()
@@ -537,20 +538,20 @@ int ObTableScanIterator::init_and_open_scan_merge_iter_()
       bool need_scan_multiple_range = false;
       STORAGE_LOG(INFO, "start init sample iterator", K(scan_param_->sample_info_));
       ObGetSampleIterHelper sample_iter_helper(table_scan_range_, main_table_ctx_, *scan_param_, get_table_param_);
-      if (OB_FAIL(sample_iter_helper.check_scan_range_count(need_scan_multiple_range, sample_ranges_))) {
-      } else if (OB_FAIL(sort_sample_ranges())) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((sample_iter_helper.check_scan_range_count(need_scan_multiple_range, sample_ranges_)), __FILE__, __LINE__, __func__))) {
+      } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((sort_sample_ranges()), __FILE__, __LINE__, __func__))) {
       } else if (need_scan_multiple_range) {
         // this branch means the sample is row(memtable row) sample
         if (!scan_param_->sample_info_.is_row_sample()) {
           main_table_param_.iter_param_.disable_blockscan();
         }
         INIT_AND_OPEN_ITER(multi_scan_merge_, sample_ranges_, false);
-        if (OB_FAIL(ret)) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
         } else if (scan_param_->sample_info_.is_row_sample()) {
           // Row Sample and Hybrid Sample are scan, do not need extra iterator.
         } else {
-          if (OB_FAIL(
-                  sample_iter_helper.get_sample_iter(memtable_row_sample_iterator_, main_iter_, multi_scan_merge_))) {
+          if (OB_FAIL(::oceanbase::common::seek1381::select_result((
+                  sample_iter_helper.get_sample_iter(memtable_row_sample_iterator_, main_iter_, multi_scan_merge_)), __FILE__, __LINE__, __func__))) {
           } else {
             STORAGE_LOG(
                 INFO, "finish init memtable row sample iter", KP(memtable_row_sample_iterator_), KP(main_iter_));
@@ -559,22 +560,22 @@ int ObTableScanIterator::init_and_open_scan_merge_iter_()
       } else if (scan_param_->sample_info_.is_block_sample()) {
         // this branch means the sample is block sample
         // TODO : @yuanzhe block sample uses a different initialization logic and different open interface
-        if (nullptr == scan_merge_ && OB_FAIL(init_scan_iter(scan_merge_))) {
+        if (nullptr == scan_merge_ && OB_FAIL(::oceanbase::common::seek1381::select_result((init_scan_iter(scan_merge_)), __FILE__, __LINE__, __func__))) {
           STORAGE_LOG(WARN, "Failed to init scanmerge", K(ret));
-        } else if (OB_FAIL(sample_iter_helper.get_sample_iter(block_sample_iterator_, main_iter_, scan_merge_))) {
+        } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((sample_iter_helper.get_sample_iter(block_sample_iterator_, main_iter_, scan_merge_)), __FILE__, __LINE__, __func__))) {
         } else {
           STORAGE_LOG(INFO, "finish init block row sample iter", KP(block_sample_iterator_), KP(main_iter_));
         }
       } else if (scan_param_->sample_info_.is_ddl_block_sample()) {
         // this branch means the sample is ddl block sample
-        if (nullptr == scan_merge_ && OB_FAIL(init_scan_iter(scan_merge_))) {
+        if (nullptr == scan_merge_ && OB_FAIL(::oceanbase::common::seek1381::select_result((init_scan_iter(scan_merge_)), __FILE__, __LINE__, __func__))) {
           STORAGE_LOG(WARN, "Failed to init scanmerge", K(ret));
-        } else if (OB_FAIL(sample_iter_helper.get_sample_iter(ddl_block_sample_iterator_, main_iter_, scan_merge_))) {
+        } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((sample_iter_helper.get_sample_iter(ddl_block_sample_iterator_, main_iter_, scan_merge_)), __FILE__, __LINE__, __func__))) {
         } else {
           STORAGE_LOG(INFO, "finish init ddl block block sample iter", KP(ddl_block_sample_iterator_), KP(main_iter_));
         }
       } else {
-        ret = OB_ERR_UNEXPECTED;
+        ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
       }
     } else {
       INIT_AND_OPEN_ITER(scan_merge_, table_scan_range_.get_ranges().at(0), false);
@@ -583,7 +584,7 @@ int ObTableScanIterator::init_and_open_scan_merge_iter_()
     INIT_AND_OPEN_ITER(multi_scan_merge_, table_scan_range_.get_ranges(), false);
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 #undef INIT_AND_OPEN_ITER
@@ -607,7 +608,7 @@ int ObTableScanIterator::get_next_row(blocksstable::ObDatumRow *&row)
       scan_param_->op_->clear_datum_eval_flag();
       scan_param_->op_->reset_trans_info_datum();
     }
-    if (OB_FAIL(main_iter_->get_next_row(row))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((main_iter_->get_next_row(row)), __FILE__, __LINE__, __func__))) {
       if (OB_ITER_END != ret) {
         STORAGE_LOG(WARN, "Fail to get next row, ", K(ret), KPC_(scan_param), K_(main_table_param),
             KP(single_merge_), KP(get_merge_), KP(scan_merge_), KP(multi_scan_merge_), KPC(cached_iter_node_));
@@ -620,7 +621,7 @@ int ObTableScanIterator::get_next_row(blocksstable::ObDatumRow *&row)
       ret = tmp_ret;
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableScanIterator::get_next_rows(int64_t &count, int64_t capacity)
@@ -638,7 +639,7 @@ int ObTableScanIterator::get_next_rows(int64_t &count, int64_t capacity)
       scan_param_->op_->reset_trans_info_datum();
     }
 
-    if (OB_FAIL(main_iter_->get_next_rows(count, capacity))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((main_iter_->get_next_rows(count, capacity)), __FILE__, __LINE__, __func__))) {
       if (OB_ITER_END != ret) {
         STORAGE_LOG(WARN, "Fail to get next row, ", K(ret), K(*scan_param_), K_(main_table_param),
             KP(single_merge_), KP(get_merge_), KP(scan_merge_), KP(multi_scan_merge_), KPC(cached_iter_node_));
@@ -651,7 +652,7 @@ int ObTableScanIterator::get_next_rows(int64_t &count, int64_t capacity)
       ret = tmp_ret;
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableScanIterator::check_txn_status_if_read_uncommitted_()

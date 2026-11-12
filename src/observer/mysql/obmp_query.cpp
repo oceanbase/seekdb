@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "rust/config.h"
+#include "lib/profile/ob_trace_id.h"
 #include "observer/ob_server_runtime_access.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_query.h"
@@ -348,6 +349,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
 {
   int ret = OB_SUCCESS;
   sql::OTraceGuard trace(session, multi_stmt_item.get_sql());
+  ::oceanbase::common::seek1381::SelectRequest seek1381_select(multi_stmt_item.get_sql(), session.get_server_sid(), ret);
   sql::ObTraceSpanGuard query_span(&session, sql::TRACE_COM_QUERY_PROCESS);
   sql::ObTraceSpanGuard stmt_span(&session, sql::TRACE_MPQUERY_SINGLE_STMT);
   ObReqTimeGuard req_timeinfo_guard;
@@ -359,7 +361,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
   // Implement the timeout function for excessively long execution intervals of statements within a transaction.
   session.set_curr_trans_last_stmt_end_time(0);
   //============================ Pay attention to the lifecycle of these variables ================================
-  if (OB_FAIL(init_process_var(ctx_, multi_stmt_item, session))) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((init_process_var(ctx_, multi_stmt_item, session)), __FILE__, __LINE__, __func__))) {
   } else {
     //set session log_level.Must use ObThreadLogLevelUtils::clear() in pair
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
@@ -375,8 +377,8 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
 
     // Clients may publish a newer schema version through @@last_schema_version;
     // observer refreshes when its local version is older.
-    if (!do_trans_ctrl_opt && OB_FAIL(check_and_refresh_schema(&session))) {
-    } else if (!do_trans_ctrl_opt && OB_FAIL(session.update_timezone_info())) {
+    if (!do_trans_ctrl_opt && OB_FAIL(::oceanbase::common::seek1381::select_result((check_and_refresh_schema(&session)), __FILE__, __LINE__, __func__))) {
+    } else if (!do_trans_ctrl_opt && OB_FAIL(::oceanbase::common::seek1381::select_result((session.update_timezone_info()), __FILE__, __LINE__, __func__))) {
     } else {
       need_response_error = false;
       //Each execution of different SQL requires an update
@@ -451,7 +453,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
   }
   ctx_.plan_key_.reset();
   ctx_.reset();
-  return ret;
+  return seek1381_select.returned(::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__));
 }
 
 OB_NOINLINE int ObMPQuery::process_with_tmp_context(ObSQLSessionInfo &session,
@@ -799,12 +801,12 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
   ObIAllocator &allocator = CURRENT_CONTEXT->get_arena_allocator();
   SMART_VAR(ObMySQLResultSet, result, session, allocator,
             ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
-    if (OB_FAIL(get_schema_info_(&cached_schema_info,
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_schema_info_(&cached_schema_info,
                                  schema_guard,
-                                 database_schema_version))) {
-    } else if (OB_FAIL(session.update_query_sensitive_system_variable(*schema_guard))) {
+                                 database_schema_version)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((session.update_query_sensitive_system_variable(*schema_guard)), __FILE__, __LINE__, __func__))) {
     } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
       LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
     } else {
       session.set_current_execution_id(::oceanbase::observer::get_observer_sql_engine()->get_execution_id());
@@ -833,12 +835,12 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       ctx_.retry_times_ = retry_ctrl_.get_retry_times();
       //storage::ObPartitionService* ps = static_cast<storage::ObPartitionService *> (GCTX.par_ser_);
       //bool is_read_only = false;
-      if (OB_FAIL(ret)) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
         // do nothing
       } else if (OB_ISNULL(ctx_.schema_guard_)) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(set_session_active(sql, session, single_process_timestamp_))) {
-      } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_query(sql, ctx_, result))) {
+      } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((set_session_active(sql, session, single_process_timestamp_)), __FILE__, __LINE__, __func__))) {
+      } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((::oceanbase::observer::get_observer_sql_engine()->stmt_query(sql, ctx_, result)), __FILE__, __LINE__, __func__))) {
         exec_start_timestamp_ = ObTimeUtility::current_time();
         if (!THIS_WORKER.need_retry()) {
           int cli_ret = OB_SUCCESS;
@@ -872,14 +874,14 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
         }
 
         //response_result
-        if (OB_FAIL(ret)) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
         //TODO shengle, confirm whether 4.0 is required
         //} else if (OB_FAIL(fill_feedback_session_info(*result, session))) {
           //need_response_error = true;
           //LOG_WARN("failed to fill session info", K(ret));
-        } else if (OB_FAIL(response_result(result,
+        } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((response_result(result,
                                            force_sync_resp,
-                                           async_resp_used))) {
+                                           async_resp_used)), __FILE__, __LINE__, __func__))) {
           ObPhysicalPlanCtx *plan_ctx = result.get_exec_context().get_physical_plan_ctx();
           if (OB_ISNULL(plan_ctx)) {
             // ignore ret
@@ -928,7 +930,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
           session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
         }
 
-        if (OB_FAIL(ret) && !async_resp_used && need_response_error && is_conn_valid() && !THIS_WORKER.need_retry() &&
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__)) && !async_resp_used && need_response_error && is_conn_valid() && !THIS_WORKER.need_retry() &&
               !ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
           // When need_retry=false, a packet may have been sent to the client, or no packets may have been sent at all.
           // However, it can be determined: this request has errored, and is not yet complete. If it has not already been handed over to asynchronous EndTrans for finalization,
@@ -1004,7 +1006,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
     bool is_need_retry = THIS_THWORKER.need_retry() ||
         RETRY_TYPE_NONE != retry_ctrl_.get_retry_type();
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObMPQuery::store_params_value_to_str(ObIAllocator &allocator,
@@ -1184,9 +1186,9 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
       ObAsyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);
       // NOTE: sql_end_cb must be initialized before drv.response_result()
       ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();
-      if (OB_FAIL(sql_end_cb.init(packet_sender_, &session))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((sql_end_cb.init(packet_sender_, &session)), __FILE__, __LINE__, __func__))) {
       } else if (FALSE_IT(callback_armed = true)) {
-      } else if (OB_FAIL(drv.response_result(result))) {
+      } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((drv.response_result(result)), __FILE__, __LINE__, __func__))) {
       }
       async_resp_used = result.is_async_end_trans_submitted();
     } else {
@@ -1200,10 +1202,10 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
   if (need_trans_cb) {                                                         \
     ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();            \
     ObAsyncCmdDriver drv(gctx_, ctx_, session, retry_ctrl_, packet_sender_);   \
-    if (OB_FAIL(sql_end_cb.init(packet_sender_, &session))) {                  \
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((sql_end_cb.init(packet_sender_, &session)), __FILE__, __LINE__, __func__))) {                  \
       LOG_WARN("failed to init sql end callback", K(ret));                     \
     } else if (FALSE_IT(callback_armed = true)) {                              \
-    } else if (OB_FAIL(drv.response_result(result))) {                         \
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((drv.response_result(result)), __FILE__, __LINE__, __func__))) {                         \
       LOG_WARN("fail response async result", K(ret));                          \
     }                                                                          \
     async_resp_used = result.is_async_end_trans_submitted();                   \
@@ -1233,7 +1235,7 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
     }
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObMPQuery::deserialize_com_field_list()

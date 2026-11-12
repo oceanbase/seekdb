@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_object_reader_writer.h"
+#include "lib/profile/ob_trace_id.h"
 #include "src/storage/ob_storage_struct.h"
 
 namespace oceanbase
@@ -399,6 +400,10 @@ int ObObjectReadHandle::verify_checksum(
     header_size = pos;
     buf_len = header.data_size_;
   }
+  const int candidate_slot = ::oceanbase::common::seek1381::candidate_error_slot(ret);
+  if (candidate_slot > 0) {
+    LOG_INFO("seek1381 object header error candidate", K(candidate_slot), K(ret), K(data_size), K(pos), K(header));
+  }
   return ret;
 }
 
@@ -599,6 +604,10 @@ int ObObjectIOCallback::inner_process(const char *data_buffer, const int64_t siz
   if (OB_FAIL(ret) && NULL != io_allocator_ && NULL != data_buf_) {
     io_allocator_->free(data_buf_);
     data_buf_ = NULL;
+  }
+  const int candidate_slot = ::oceanbase::common::seek1381::candidate_error_slot(ret);
+  if (candidate_slot > 0) {
+    LOG_INFO("seek1381 object callback error candidate", K(candidate_slot), K(ret), K_(addr), K(size));
   }
   return ret;
 }

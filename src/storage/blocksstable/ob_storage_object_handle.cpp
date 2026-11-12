@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "rust/config.h"
+#include "lib/profile/ob_trace_id.h"
 #include "ob_storage_object_handle.h"
 #include "storage/blocksstable/ob_block_manager.h"
 #include "share/ob_io_device_helper.h"
@@ -205,13 +206,13 @@ int ObStorageObjectHandle::wait()
   int ret = OB_SUCCESS;
   if (io_handle_.is_empty()) {
     // do nothing
-  } else if (OB_FAIL(io_handle_.wait())) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((io_handle_.wait()), __FILE__, __LINE__, __func__))) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = report_bad_block())) {
     }
     io_handle_.reset();
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObStorageObjectHandle::get_io_time_us(int64_t &io_time_us) const

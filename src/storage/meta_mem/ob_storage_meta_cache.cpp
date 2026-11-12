@@ -18,6 +18,7 @@
 
 
 #include "rust/config.h"
+#include "lib/profile/ob_trace_id.h"
 #include "ob_storage_meta_cache.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
@@ -191,7 +192,7 @@ int ObStorageMetaValue::get_table_store(const ObTabletTableStore *&store) const
   } else {
     store = static_cast<ObTabletTableStore *>(obj_);
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObStorageMetaValue::process_sstable(
@@ -341,11 +342,11 @@ ObStorageMetaHandle::~ObStorageMetaHandle()
 int ObStorageMetaHandle::get_value(const ObStorageMetaValue *&value)
 {
   int ret = OB_SUCCESS;
-  if (!io_handle_.is_empty() && OB_FAIL(wait())) { /*wait if not hit cache*/
+  if (!io_handle_.is_empty() && OB_FAIL(::oceanbase::common::seek1381::select_result((wait()), __FILE__, __LINE__, __func__))) { /*wait if not hit cache*/
   } else {
     value = cache_handle_.get_cache_value()->value_;
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObStorageMetaHandle::get_sstable(blocksstable::ObSSTable *&sstable)

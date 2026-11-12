@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "rust/config.h"
+#include "lib/profile/ob_trace_id.h"
 #include "ob_multiple_merge.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_aggregated_store.h"
@@ -117,19 +118,19 @@ int ObMultipleMerge::init(
     STORAGE_LOG(WARN, "Invalid argument", K(ret), K(param), K(context), K(get_table_param));
   } else if (OB_ISNULL(long_life_allocator_ = context.get_long_life_allocator())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(cur_row_.init(*long_life_allocator_, param.get_max_out_col_cnt()))) {
-  } else if (OB_FAIL(unprojected_row_.init(*long_life_allocator_, param.get_out_col_cnt()))) {
-  } else if (OB_FAIL(nop_pos_.init(*long_life_allocator_, param.get_max_out_col_cnt()))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((cur_row_.init(*long_life_allocator_, param.get_max_out_col_cnt())), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((unprojected_row_.init(*long_life_allocator_, param.get_out_col_cnt())), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((nop_pos_.init(*long_life_allocator_, param.get_max_out_col_cnt())), __FILE__, __LINE__, __func__))) {
   } else if (NULL != param.get_op() && (NULL == param.output_exprs_ || NULL == param.row2exprs_projector_
-              || OB_FAIL(param.row2exprs_projector_->init(
+              || OB_FAIL(::oceanbase::common::seek1381::select_result((param.row2exprs_projector_->init(
                       *param.output_exprs_,
                       *param.get_op(),
-                      *param.iter_param_.out_cols_project_)))) {
+                      *param.iter_param_.out_cols_project_)), __FILE__, __LINE__, __func__)))) {
     if (OB_SUCCESS == ret) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     } else {
     }
-  } else if (OB_FAIL(init_lob_reader(param.iter_param_, context))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((init_lob_reader(param.iter_param_, context)), __FILE__, __LINE__, __func__))) {
   }
   if (OB_SUCC(ret)) {
     need_padding_ = is_pad_char_to_full_length(context.sql_mode_);
@@ -151,31 +152,31 @@ int ObMultipleMerge::init(
     const ObITableReadInfo *read_info = access_param_->iter_param_.get_read_info();
     const int64_t batch_size = access_param_->iter_param_.vectorized_enabled_ ? access_param_->get_op()->get_batch_size() : 1;
     for (int64_t i = 0; OB_SUCC(ret) && i < param.iter_param_.out_cols_project_->count(); i++) {
-      if (OB_FAIL(out_project_cols_.push_back(read_info->get_columns_desc().at(param.iter_param_.out_cols_project_->at(i))))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((out_project_cols_.push_back(read_info->get_columns_desc().at(param.iter_param_.out_cols_project_->at(i)))), __FILE__, __LINE__, __func__))) {
       } else if (out_project_cols_.at(i).col_type_.is_lob_storage()) {
         out_project_cols_.at(i).col_type_.set_has_lob_header();
       }
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(prepare_read_tables())) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_read_tables()), __FILE__, __LINE__, __func__))) {
     } else if (OB_ISNULL(skip_bit_ = to_bit_vector(long_life_allocator_->alloc(ObBitVector::memory_size(batch_size))))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_UNLIKELY(access_param_->iter_param_.need_truncate_filter()) &&
-               OB_FAIL(prepare_truncate_filter())) {
-    } else if (OB_FAIL(alloc_row_store(context, param))) {
+               OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_truncate_filter()), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((alloc_row_store(context, param)), __FILE__, __LINE__, __func__))) {
     } else if (param.iter_param_.is_use_stmt_iter_pool() &&
-        OB_FAIL(access_ctx_->alloc_iter_pool())) {
+        OB_FAIL(::oceanbase::common::seek1381::select_result((access_ctx_->alloc_iter_pool()), __FILE__, __LINE__, __func__))) {
     } else if (FALSE_IT(stmt_iter_pool_ = access_ctx_->get_stmt_iter_pool())) {
     } else {
       skip_bit_->init(batch_size);
       access_ctx_->block_row_store_ = block_row_store_;
-      if (OB_FAIL(build_extra_access_ctx())) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((build_extra_access_ctx()), __FILE__, __LINE__, __func__))) {
       } else {
         inited_ = true;
       }
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObMultipleMerge::build_extra_access_ctx()
@@ -481,9 +482,9 @@ int ObMultipleMerge::get_next_row(ObDatumRow *&row)
     while (OB_SUCC(ret)) {
       if (access_ctx_->is_limit_end()) {
         ret = OB_ITER_END;
-      } else if (OB_FAIL(refresh_table_on_demand())) {
+      } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((refresh_table_on_demand()), __FILE__, __LINE__, __func__))) {
       } else {
-        if (OB_FAIL(inner_get_next_row(unprojected_row_))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((inner_get_next_row(unprojected_row_)), __FILE__, __LINE__, __func__))) {
           if (OB_PUSHDOWN_STATUS_CHANGED == ret) {
             ret = OB_SUCCESS;
             scan_state_ = ScanState::BATCH;
@@ -492,27 +493,27 @@ int ObMultipleMerge::get_next_row(ObDatumRow *&row)
             STORAGE_LOG(WARN, "Fail to inner get next row, ", K(ret), KP(this));
           }
         } else if (need_handle_lob_columns(unprojected_row_)) {
-          if (OB_FAIL(handle_lob_before_fuse_row())) {
+          if (OB_FAIL(::oceanbase::common::seek1381::select_result((handle_lob_before_fuse_row()), __FILE__, __LINE__, __func__))) {
           }
         }
         if (OB_SUCC(ret)) {
           is_unprojected_row_valid_ = true;
           scan_state_ = ScanState::SINGLE_ROW;
           // `unprojected_row_` is used to generate range in pause
-          if (OB_FAIL(pause(do_pause))) {
+          if (OB_FAIL(::oceanbase::common::seek1381::select_result((pause(do_pause)), __FILE__, __LINE__, __func__))) {
           } else if (do_pause) {
             ret = OB_ITER_END;
           }
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(fill_group_idx_if_need(unprojected_row_))) {
-        } else if (OB_FAIL(process_fuse_row(not_using_static_engine, unprojected_row_, row))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((fill_group_idx_if_need(unprojected_row_)), __FILE__, __LINE__, __func__))) {
+        } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((process_fuse_row(not_using_static_engine, unprojected_row_, row)), __FILE__, __LINE__, __func__))) {
         } else if (OB_NOT_NULL(access_param_->get_op()) &&
-            OB_FAIL(access_param_->get_op()->write_trans_info_datum(unprojected_row_))) {
+            OB_FAIL(::oceanbase::common::seek1381::select_result((access_param_->get_op()->write_trans_info_datum(unprojected_row_)), __FILE__, __LINE__, __func__))) {
         } else if (nullptr != row) {
           if (OB_UNLIKELY(nullptr != group_by_cell_)) {
-            if (OB_FAIL(group_by_cell_->copy_single_output_row(access_param_->get_op()->get_eval_ctx()))) {
+            if (OB_FAIL(::oceanbase::common::seek1381::select_result((group_by_cell_->copy_single_output_row(access_param_->get_op()->get_eval_ctx())), __FILE__, __LINE__, __func__))) {
             }
           }
           break;
@@ -532,7 +533,7 @@ int ObMultipleMerge::get_next_row(ObDatumRow *&row)
   }
   if (OB_SUCC(ret)) {
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObMultipleMerge::get_next_rows(int64_t &count, int64_t capacity)
@@ -544,7 +545,7 @@ int ObMultipleMerge::get_next_rows(int64_t &count, int64_t capacity)
   count = 0;
   if (access_param_->iter_param_.enable_pd_aggregate()) {
     ObDatumRow *row = nullptr;
-    if (OB_FAIL(get_next_aggregate_row(row))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_next_aggregate_row(row)), __FILE__, __LINE__, __func__))) {
       if (OB_ITER_END != ret) {
       }
     } else {
@@ -555,10 +556,10 @@ int ObMultipleMerge::get_next_rows(int64_t &count, int64_t capacity)
     sql::ObEvalCtx *eval_ctx = nullptr;
     const int64_t size = min(capacity, access_param_->get_op()->get_batch_size());
     if (OB_ISNULL(access_param_->get_op())) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     } else if (FALSE_IT(eval_ctx = &access_param_->get_op()->get_eval_ctx())) {
     } else if (FALSE_IT(eval_ctx->reuse(size))) {
-    } else if (OB_FAIL(get_next_row(row))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_next_row(row)), __FILE__, __LINE__, __func__))) {
       if (OB_ITER_END != ret) {
       }
     } else {
@@ -570,7 +571,7 @@ int ObMultipleMerge::get_next_rows(int64_t &count, int64_t capacity)
   if (OB_NOT_NULL(access_param_->get_op())) {
     access_param_->get_op()->clear_evaluated_flag();
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 /*
@@ -589,8 +590,8 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
                          || !access_param_->get_op()->is_vectorized()
                          || !access_param_->iter_param_.vectorized_enabled_
                          || nullptr == block_row_store_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(refresh_table_on_demand())) {
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((refresh_table_on_demand()), __FILE__, __LINE__, __func__))) {
   } else {
     ObVectorStore *vector_store = reinterpret_cast<ObVectorStore *>(block_row_store_);
     int64_t batch_size = min(capacity, access_param_->get_op()->get_batch_size());
@@ -617,15 +618,15 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
         switch (scan_state_) {
           case ScanState::BATCH: {
             bool can_batch = false;
-            if (OB_FAIL(can_batch_scan(can_batch))) {
+            if (OB_FAIL(::oceanbase::common::seek1381::select_result((can_batch_scan(can_batch)), __FILE__, __LINE__, __func__))) {
             } else if (!can_batch) {
               scan_state_ = ScanState::SINGLE_ROW;
               break;
             // `can_batch` must be true
-            } else if (OB_FAIL(pause(do_pause))) {
+            } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((pause(do_pause)), __FILE__, __LINE__, __func__))) {
             } else if (OB_UNLIKELY(do_pause)) {
               ret = OB_ITER_END;
-            } else if (OB_FAIL(inner_get_next_rows())) {
+            } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((inner_get_next_rows()), __FILE__, __LINE__, __func__))) {
               if (OB_UNLIKELY(OB_PUSHDOWN_STATUS_CHANGED != ret && OB_ITER_END != ret)) {
               } else {
                 ret = OB_SUCCESS;
@@ -635,7 +636,7 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
             break;
           }
           case ScanState::SINGLE_ROW: {
-            if (OB_FAIL(inner_get_next_row(unprojected_row_))) {
+            if (OB_FAIL(::oceanbase::common::seek1381::select_result((inner_get_next_row(unprojected_row_)), __FILE__, __LINE__, __func__))) {
               if (OB_UNLIKELY(OB_PUSHDOWN_STATUS_CHANGED != ret && OB_ITER_END != ret)) {
               } else if (OB_PUSHDOWN_STATUS_CHANGED == ret) {
                 ret = OB_SUCCESS;
@@ -644,24 +645,24 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
                 break;
               }
             // `unprojected_row_` is used to generate range in pause
-            } else if (OB_FAIL(pause(do_pause))) {
+            } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((pause(do_pause)), __FILE__, __LINE__, __func__))) {
             } else if (OB_UNLIKELY(do_pause)) {
               ret = OB_ITER_END;
             } else {
               is_unprojected_row_valid_ = true;
             }
 
-            if (OB_FAIL(ret)) {
-            } else if (need_handle_lob_columns(unprojected_row_) && OB_FAIL(handle_lob_before_fuse_row())) {
+            if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
+            } else if (need_handle_lob_columns(unprojected_row_) && OB_FAIL(::oceanbase::common::seek1381::select_result((handle_lob_before_fuse_row()), __FILE__, __LINE__, __func__))) {
             } else {
               // back to normal path
               ObDatumRow *out_row = nullptr;
-              if (OB_FAIL(fill_group_idx_if_need(unprojected_row_))) {
-              } else if (OB_FAIL(process_fuse_row(nullptr == access_param_->output_exprs_, unprojected_row_, out_row))) {
+              if (OB_FAIL(::oceanbase::common::seek1381::select_result((fill_group_idx_if_need(unprojected_row_)), __FILE__, __LINE__, __func__))) {
+              } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((process_fuse_row(nullptr == access_param_->output_exprs_, unprojected_row_, out_row)), __FILE__, __LINE__, __func__))) {
               } else if (nullptr != out_row) {
-                if (OB_FAIL(access_param_->get_op()->deep_copy(access_param_->output_exprs_, vector_store->get_row_count()))) {
-                } else if (OB_FAIL(access_param_->get_op()->write_trans_info_datum(unprojected_row_))) {
-                } else if (OB_FAIL(vector_store->fill_row(unprojected_row_))) {
+                if (OB_FAIL(::oceanbase::common::seek1381::select_result((access_param_->get_op()->deep_copy(access_param_->output_exprs_, vector_store->get_row_count())), __FILE__, __LINE__, __func__))) {
+                } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((access_param_->get_op()->write_trans_info_datum(unprojected_row_)), __FILE__, __LINE__, __func__))) {
+                } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((vector_store->fill_row(unprojected_row_)), __FILE__, __LINE__, __func__))) {
                 }
               }
             }
@@ -687,7 +688,7 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
     scan_state_ = ScanState::NONE;
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 // This function only returns one aggregated row to upper layer, i.e.
@@ -1077,12 +1078,12 @@ int ObMultipleMerge::open()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "The ObMultipleMerge has not been inited, ", K(ret));
   } else if (OB_UNLIKELY(nullptr == access_param_ || nullptr == access_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(cur_row_.reserve(access_param_->get_max_out_col_cnt()))) {
-  } else if (OB_FAIL(nop_pos_.init(*long_life_allocator_, access_param_->get_max_out_col_cnt()))) {
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((cur_row_.reserve(access_param_->get_max_out_col_cnt())), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((nop_pos_.init(*long_life_allocator_, access_param_->get_max_out_col_cnt())), __FILE__, __LINE__, __func__))) {
   } else if (FALSE_IT(set_base_version())) {
   } else if (access_param_->iter_param_.is_use_stmt_iter_pool()) {
-    if (OB_FAIL(access_ctx_->alloc_iter_pool())) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((access_ctx_->alloc_iter_pool()), __FILE__, __LINE__, __func__))) {
     } else {
       stmt_iter_pool_ = access_ctx_->get_stmt_iter_pool();
     }
@@ -1090,14 +1091,14 @@ int ObMultipleMerge::open()
   if (OB_SUCC(ret)) {
     access_ctx_->block_row_store_ = block_row_store_;
     ObMultipleMerge::reuse();
-    if (nullptr != block_row_store_ && OB_FAIL(block_row_store_->open(access_param_->iter_param_))) {
+    if (nullptr != block_row_store_ && OB_FAIL(::oceanbase::common::seek1381::select_result((block_row_store_->open(access_param_->iter_param_)), __FILE__, __LINE__, __func__))) {
     } else if (nullptr != stmt_iter_pool_ && 0 != iters_.count()) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     } else {
       scan_cnt_ = 0;
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObMultipleMerge::alloc_row_store(ObTableAccessContext &context, const ObTableAccessParam &param)
@@ -1323,37 +1324,37 @@ int ObMultipleMerge::prepare_read_tables(bool refresh)
   } else if (is_mds_query) {
     ObTableStoreIterator *table_store_iter = get_table_param_->tablet_iter_.table_iter();
     table_store_iter->reset();
-    if (OB_FAIL(prepare_mds_tables(refresh))) {
-    } else if (OB_FAIL(prepare_tables_from_iterator(*table_store_iter, &get_table_param_->sample_info_))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_mds_tables(refresh)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_tables_from_iterator(*table_store_iter, &get_table_param_->sample_info_)), __FILE__, __LINE__, __func__))) {
     }
   } else if (!refresh && get_table_param_->tablet_iter_.table_iter()->is_valid()) {
-    if (OB_FAIL(prepare_tables_from_iterator(
-        *get_table_param_->tablet_iter_.table_iter()))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_tables_from_iterator(
+        *get_table_param_->tablet_iter_.table_iter())), __FILE__, __LINE__, __func__))) {
     }
   } else if (FALSE_IT(get_table_param_->tablet_iter_.table_iter()->reset())) {
   } else {
     if (OB_UNLIKELY(get_table_param_->frozen_version_ != -1)) {
       if (!get_table_param_->sample_info_.is_no_sample()) {
         ret = OB_NOT_SUPPORTED;
-      } else if (OB_FAIL(get_table_param_->tablet_iter_.refresh_read_tables_from_tablet(
+      } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_table_param_->tablet_iter_.refresh_read_tables_from_tablet(
           get_table_param_->frozen_version_,
           false/*allow_not_ready*/,
-          true/*major_sstable_only*/))) {
+          true/*major_sstable_only*/)), __FILE__, __LINE__, __func__))) {
       }
-    } else if (OB_FAIL(get_table_param_->tablet_iter_.refresh_read_tables_from_tablet(
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_table_param_->tablet_iter_.refresh_read_tables_from_tablet(
         generate_read_tables_version(),
         false/*allow_not_ready*/,
-        false/*major_sstable_only*/))) {
+        false/*major_sstable_only*/)), __FILE__, __LINE__, __func__))) {
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(prepare_tables_from_iterator(
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((prepare_tables_from_iterator(
           *get_table_param_->tablet_iter_.table_iter(),
-          &get_table_param_->sample_info_))) {
+          &get_table_param_->sample_info_)), __FILE__, __LINE__, __func__))) {
       }
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObMultipleMerge::prepare_mds_tables(bool refresh)
@@ -1391,15 +1392,15 @@ int ObMultipleMerge::prepare_tables_from_iterator(
   while (OB_SUCC(ret)) {
     ObITable *table_ptr = nullptr;
     bool need_table = true;
-    if (OB_FAIL(table_iter.get_next(table_ptr))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((table_iter.get_next(table_ptr)), __FILE__, __LINE__, __func__))) {
       if (OB_ITER_END != ret) {
       }
     } else if (OB_ISNULL(table_ptr)) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     } else if (FALSE_IT(major_table_version_ = table_ptr->is_major_sstable() ? table_ptr->get_snapshot_version() :
                                                                                major_table_version_)) {
     } else if (OB_UNLIKELY(table_ptr->is_major_sstable() && major_table_version_ <= 0)) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     } else if (nullptr != sample_info && !sample_info->is_no_sample()) {
       need_table = false;
       if (SampleInfo::SAMPLE_ALL_DATA == sample_info->scope_) {
@@ -1422,7 +1423,7 @@ int ObMultipleMerge::prepare_tables_from_iterator(
           TabletMemtableFreezeState::FORCE_RELEASED == (static_cast<ObITabletMemtable *>(table_ptr))->get_freeze_state() ||
           TabletMemtableFreezeState::RELEASED == (static_cast<ObITabletMemtable *>(table_ptr))->get_freeze_state();
       }
-      if (OB_FAIL(tables_.push_back(table_ptr))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((tables_.push_back(table_ptr)), __FILE__, __LINE__, __func__))) {
       }
     }
   } // end while
@@ -1431,7 +1432,7 @@ int ObMultipleMerge::prepare_tables_from_iterator(
   }
   if (OB_SUCC(ret)) {
     if (tables_.count() > common::MAX_TABLE_CNT_IN_STORAGE) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     }
   }
   if (OB_SUCC(ret) && memtable_cnt == tables_.count()) {
@@ -1445,7 +1446,7 @@ int ObMultipleMerge::prepare_tables_from_iterator(
   }
   #endif
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 #ifdef ERRSIM
@@ -1511,7 +1512,7 @@ int ObMultipleMerge::refresh_tablet_iter()
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
   if (OB_UNLIKELY(!get_table_param_->tablet_iter_.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
   } else {
     // reset first, in case get_read_tables fail and rowkey_read_info_ become dangling
     access_param_->iter_param_.rowkey_read_info_ = nullptr;
@@ -1520,21 +1521,21 @@ int ObMultipleMerge::refresh_tablet_iter()
     const int64_t snapshot_version = generate_read_tables_version();
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
-    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
-    } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_read_tables(
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls)), __FILE__, __LINE__, __func__))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((tenant_ls->get_tablet_svr()->get_read_tables(
         tablet_id,
         remain_timeout,
         snapshot_version,
         snapshot_version,
         get_table_param_->tablet_iter_,
-        false/*allow_not_ready*/))) {
+        false/*allow_not_ready*/)), __FILE__, __LINE__, __func__))) {
     } else {
       get_table_param_->refreshed_merge_ = this;
       access_param_->iter_param_.rowkey_read_info_ =
         &(get_table_param_->tablet_iter_.get_tablet_handle().get_obj()->get_rowkey_read_info());
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObMultipleMerge::init_lob_reader(

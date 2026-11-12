@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "rust/config.h"
+#include "lib/profile/ob_trace_id.h"
 #include "ob_ls_tablet_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1157,10 +1158,10 @@ int ObLSTabletService::inner_table_scan(
   if (OB_UNLIKELY(!tablet_handle.is_valid()) || OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (is_bounded_staleness_read
-      && OB_FAIL(tablet_handle.get_obj()->get_max_schema_version(data_max_schema_version))) {
+      && OB_FAIL(::oceanbase::common::seek1381::select_result((tablet_handle.get_obj()->get_max_schema_version(data_max_schema_version)), __FILE__, __LINE__, __func__))) {
   } else if (is_bounded_staleness_read
-      && OB_FAIL(tablet_handle.get_obj()->check_schema_version_for_bounded_staleness_read(
-          param.schema_version_, data_max_schema_version, param.index_id_))) {
+      && OB_FAIL(::oceanbase::common::seek1381::select_result((tablet_handle.get_obj()->check_schema_version_for_bounded_staleness_read(
+          param.schema_version_, data_max_schema_version, param.index_id_)), __FILE__, __LINE__, __func__))) {
     //check schema_version with ref_table_id, because schema_version of scan_param is from ref table
     //need to get store ctx of PG, cur_key_ saves the real partition
   } else if (param.fb_snapshot_.is_min()) {
@@ -1171,18 +1172,18 @@ int ObLSTabletService::inner_table_scan(
     const int64_t timeout = param.timeout_ - current_time;
     if (OB_UNLIKELY(timeout <= 0)) {
       ret = OB_TIMEOUT;
-    } else if (OB_FAIL(tablet_handle.get_obj()->check_snapshot_readable_with_cache(snapshot_version, param.schema_version_, timeout))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((tablet_handle.get_obj()->check_snapshot_readable_with_cache(snapshot_version, param.schema_version_, timeout)), __FILE__, __LINE__, __func__))) {
     } else if (param.need_switch_param_) {
-      if (OB_FAIL(iter.switch_param(param, tablet_handle))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((iter.switch_param(param, tablet_handle)), __FILE__, __LINE__, __func__))) {
       }
-    } else if (OB_FAIL(iter.init(param, tablet_handle))) {
+    } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((iter.init(param, tablet_handle)), __FILE__, __LINE__, __func__))) {
     }
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((ret), __FILE__, __LINE__, __func__))) {
   }
 
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObLSTabletService::has_tablet(

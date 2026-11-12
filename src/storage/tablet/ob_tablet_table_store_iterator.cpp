@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_table_store_iterator.h"
+#include "lib/profile/ob_trace_id.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_table_store.h"
 
@@ -99,12 +100,12 @@ int ObTableStoreIterator::get_next(ObITable *&table)
 {
   int ret = OB_SUCCESS;
   table = nullptr;
-  if (OB_FAIL(inner_move_idx_to_next())) {
-  } else if (OB_FAIL(get_ith_table(pos_, table))) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((inner_move_idx_to_next()), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_ith_table(pos_, table)), __FILE__, __LINE__, __func__))) {
   } else {
     pos_ += step_;
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
@@ -112,30 +113,30 @@ int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
   int ret = OB_SUCCESS;
   table_handle.reset();
   ObITable *table = nullptr;
-  if (OB_FAIL(inner_move_idx_to_next())) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((inner_move_idx_to_next()), __FILE__, __LINE__, __func__))) {
   } else {
-    if (OB_FAIL(get_ith_table(pos_, table))) {
+    if (OB_FAIL(::oceanbase::common::seek1381::select_result((get_ith_table(pos_, table)), __FILE__, __LINE__, __func__))) {
     } else if (table->is_memtable() || table->is_ddl_mem_sstable()) {
       ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
-      if (OB_FAIL(table_handle.set_table(table, t3m, table->get_key().table_type_))) {
+      if (OB_FAIL(::oceanbase::common::seek1381::select_result((table_handle.set_table(table, t3m, table->get_key().table_type_)), __FILE__, __LINE__, __func__))) {
       }
     } else if (table->is_sstable()) {
       const int64_t hdl_idx = table_ptr_array_.at(pos_).hdl_idx_;
       const ObStorageMetaHandle &meta_handle = hdl_idx >= 0 ? sstable_handle_array_.at(hdl_idx) : table_store_handle_;
       if (!meta_handle.is_valid()) {
         // table lifetime guaranteed by tablet handle
-        if (OB_FAIL(table_handle.set_sstable_with_tablet(table))) {
+        if (OB_FAIL(::oceanbase::common::seek1381::select_result((table_handle.set_sstable_with_tablet(table)), __FILE__, __LINE__, __func__))) {
         }
-      } else if (OB_FAIL(table_handle.set_sstable(table, meta_handle))) {
+      } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((table_handle.set_sstable(table, meta_handle)), __FILE__, __LINE__, __func__))) {
       }
     } else {
-      ret = OB_ERR_UNEXPECTED;
+      ret = ::oceanbase::common::seek1381::select_result(OB_ERR_UNEXPECTED, __FILE__, __LINE__, __func__, true);
     }
     if (OB_SUCC(ret)) {
       pos_ += step_;
     }
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableStoreIterator::get_boundary_table(const bool is_last, ObITable *&table)
@@ -179,7 +180,7 @@ int ObTableStoreIterator::set_handle(const ObStorageMetaHandle &table_store_hand
   } else {
     table_store_handle_ = table_store_handle;
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableStoreIterator::add_table(ObITable *table)
@@ -210,14 +211,14 @@ int ObTableStoreIterator::get_table_ptr_with_meta_handle(
   ObStorageMetaHandle sstable_meta_hdl;
   ObSSTable *sstable = nullptr;
 
-  if (OB_FAIL(ObCacheSSTableHelper::load_sstable(table->get_addr(), sstable_meta_hdl))) {
-  } else if (OB_FAIL(sstable_handle_array_.push_back(sstable_meta_hdl))) {
-  } else if (OB_FAIL(sstable_meta_hdl.get_sstable(sstable))) {
+  if (OB_FAIL(::oceanbase::common::seek1381::select_result((ObCacheSSTableHelper::load_sstable(table->get_addr(), sstable_meta_hdl)), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((sstable_handle_array_.push_back(sstable_meta_hdl)), __FILE__, __LINE__, __func__))) {
+  } else if (OB_FAIL(::oceanbase::common::seek1381::select_result((sstable_meta_hdl.get_sstable(sstable)), __FILE__, __LINE__, __func__))) {
   } else {
     table_ptr.table_ = sstable;
     table_ptr.hdl_idx_ = sstable_handle_array_.count() - 1;
   }
-  return ret;
+  return ::oceanbase::common::seek1381::select_result(ret, __FILE__, __LINE__, __func__);
 }
 
 int ObTableStoreIterator::inner_move_idx_to_next()

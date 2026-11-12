@@ -21,11 +21,24 @@ use crate::policy::{
     map_set, parse_level, parse_settings, register_module, set_instance_level, set_trace_id,
     trace_field, trace_id, trace_seed, trace_sequence, MapHandle as LevelMap,
 };
-use crate::record::{begin, cancel, commit, grow, trace_flush};
-use crate::{check_files, file_limit, flush, set_file, set_new_file_info, shutdown, start};
+use crate::record::{begin, cancel, commit, grow, trace_flush, diagnostic_snapshot, diagnostic_enable};
+use crate::{check_files, file_limit, flush, set_file, set_new_file_info, shutdown, start, writer_snapshot};
 
 #[cxx::bridge(namespace = "oceanbase::logger")]
 pub mod ffi {
+    #[derive(Clone, Copy, Default)]
+    struct WriterSnapshot {
+        calls: u64, async_calls: u64, sync_calls: u64,
+        full_ns: u64, lock_ns: u64, errors: u64, inflight: u64, valid: bool,
+    }
+    #[derive(Clone, Copy, Default)]
+    struct DiagnosticSnapshot {
+        records: u64,
+        full_ns: u64,
+        free_ns: u64,
+        valid: bool,
+        enabled: bool,
+    }
     #[derive(Clone, Copy)]
     struct RecordMetadata {
         module: *const c_char,
@@ -74,6 +87,9 @@ pub mod ffi {
 
     extern "Rust" {
         type LevelMap;
+        fn diagnostic_snapshot() -> DiagnosticSnapshot;
+        fn diagnostic_enable(enabled: bool) -> DiagnosticSnapshot;
+        fn writer_snapshot() -> WriterSnapshot;
         fn flush() -> i32;
         fn shutdown() -> i32;
         unsafe fn set_new_file_info(info: *const c_char) -> i32;
