@@ -440,7 +440,7 @@ int LockForReadFunctor::check_clog_disk_full_()
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "log service is null", KR(ret));
   } else if (OB_FAIL(logservice::check_clog_disk_full_or_hang(
-      *log_service, clog_is_full, clog_is_hang))) {
+      *log_service, logservice::ClogDiskCheckOrigin::READ_LOCK, clog_is_full, clog_is_hang))) {
   } else if (clog_is_full) {
     ret = OB_LOG_OUTOF_DISK_SPACE;
     TRANS_LOG(ERROR, "disk full error", K(ret), KPC(this));
