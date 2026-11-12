@@ -295,4 +295,108 @@ extern "C" {
 } /* extern "C" */
 
 
+
+// Scoped SEEK-1381 diagnostics; no logging or storage definitions in this header.
+namespace oceanbase { namespace common { class ObString; namespace seek1381 {
+enum WritePhase { OTHER, QUERY, CLOSE, CLEANUP, WRITE_PHASE_COUNT };
+enum WriteFamily { HIST_DELETE, HIST_WRITE, HISTORY_WRITE, TABLE_WRITE, COLUMN_WRITE, OTHER_WRITE, WRITE_FAMILY_COUNT };
+struct CpuSample {
+  uint64_t tid = 0;
+  uint64_t birth = 0;
+  uint64_t user = 0;
+  uint64_t kernel = 0;
+  bool valid = false;
+};
+struct WriteTotals {
+  int64_t calls = 0;
+  int64_t query_calls = 0;
+  int64_t close_calls = 0;
+  int64_t query_errors = 0;
+  int64_t close_errors = 0;
+  int64_t final_errors = 0;
+  int first_query_error = 0;
+  int first_close_error = 0;
+  int first_final_error = 0;
+  int64_t rows_valid_calls = 0;
+  int64_t rows_invalid_calls = 0;
+  int64_t reported_rows_before_close = 0;
+  int64_t wall[WRITE_PHASE_COUNT] = {};
+  int64_t user[WRITE_PHASE_COUNT] = {};
+  int64_t kernel[WRITE_PHASE_COUNT] = {};
+  bool wall_valid = true;
+  bool cpu_valid = true;
+};
+struct RequestState {
+  bool active = false;
+  bool valid = true;
+  uint64_t epoch = 0;
+  int64_t diagnostic_start_us = 0;
+  int64_t write_depth = 0;
+  int64_t nested_writes = 0;
+  int64_t nested_schemas = 0;
+  uintptr_t worker = 0;
+  uintptr_t request = 0;
+  CpuSample cpu_start;
+  ObCurTraceId::TraceId trace;
+  WriteTotals families[WRITE_FAMILY_COUNT];
+};
+class Request {
+public:
+  Request(int64_t diagnostic_start_us, const int &ret);
+  ~Request();
+  Request(const Request &) = delete;
+  Request &operator=(const Request &) = delete;
+private:
+  RequestState previous_;
+  uintptr_t slot_;
+  uint64_t epoch_;
+  CpuSample start_;
+  const int &ret_;
+};
+class Write {
+public:
+  Write(const ObString &sql, const int &ret);
+  ~Write();
+  Write(const Write &) = delete;
+  Write &operator=(const Write &) = delete;
+  template<class Operation> int query(Operation &&operation) {
+    transition(QUERY);
+    query_called_ = true;
+    const int result = operation();
+    query_ret_ = result;
+    transition(OTHER);
+    return result;
+  }
+  template<class Operation> int close(Operation &&operation) {
+    transition(CLOSE);
+    close_called_ = true;
+    const int result = operation();
+    close_ret_ = result;
+    transition(OTHER);
+    return result;
+  }
+  void record_rows(int64_t rows) { rows_ = rows; rows_known_ = true; }
+  void cleanup() { transition(CLEANUP); }
+private:
+  bool owns_context() const;
+  void transition(WritePhase next);
+  uint64_t epoch_ = 0;
+  uintptr_t slot_ = 0;
+  uint64_t tid_ = 0;
+  WriteFamily family_ = OTHER_WRITE;
+  WritePhase phase_ = OTHER;
+  bool entered_ = false;
+  bool outermost_ = false;
+  bool query_called_ = false;
+  bool close_called_ = false;
+  bool rows_known_ = false;
+  int query_ret_ = 0;
+  int close_ret_ = 0;
+  int64_t rows_ = 0;
+  int64_t phase_start_us_ = 0;
+  CpuSample phase_cpu_;
+  const int &ret_;
+};
+}}}
+
 #endif

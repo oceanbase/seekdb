@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "pl/sys_package/ob_dbms_stats.h"
+#include "lib/profile/ob_trace_id.h"
 #include "share/ob_share_util.h"
 #include "share/ob_ex_rpc.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
@@ -186,6 +187,7 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
 {
   int ret = OB_SUCCESS;
   const int64_t diagnostic_start_us = ObTimeUtility::current_time();
+  seek1381::Request diagnostic_request(diagnostic_start_us, ret);
   enum DiagnosticPhase { PREFLIGHT, ENUMERATE, OPTIONS, TABLE_DISPATCH, POST_GATHER, CLEANUP_SCOPE, OTHER, PHASE_COUNT };
   int64_t phase_us[PHASE_COUNT] = {};
   int64_t phase_calls[PHASE_COUNT] = {};

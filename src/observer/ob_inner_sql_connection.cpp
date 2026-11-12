@@ -32,7 +32,290 @@
 #include "share/ob_structured_event_logger.h"
 #include "observer/mysql/obmp_base.h"
 #include "ob_inner_sql_read_context.h"
+#include "lib/profile/ob_trace_id.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
+
+namespace oceanbase { namespace common { namespace seek1381 {
+namespace {
+RequestState &state()
+{
+  static thread_local RequestState value;
+  return value;
+}
+uint64_t next_epoch()
+{
+  static thread_local uint64_t value = 0;
+  return ++value; // Unsigned wrap produces zero, which is rejected below.
+}
+CpuSample sample_cpu()
+{
+  CpuSample value;
+#ifdef _WIN32
+  FILETIME birth, exit, kernel, user;
+  value.tid = GetCurrentThreadId();
+  if (GetThreadTimes(GetCurrentThread(), &birth, &exit, &kernel, &user)) {
+    auto ticks = [](const FILETIME &time) {
+      return (static_cast<uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+    };
+    value.birth = ticks(birth);
+    value.user = ticks(user);
+    value.kernel = ticks(kernel);
+    value.valid = value.tid != 0 && value.birth != 0;
+  }
+#endif
+  return value;
+}
+bool add(int64_t &total, int64_t value)
+{
+  if (value < 0 || total < 0 || total > INT64_MAX - value) { return false; }
+  total += value;
+  return true;
+}
+bool cpu_delta(const CpuSample &before, const CpuSample &after, int64_t &user, int64_t &kernel)
+{
+  if (!before.valid || !after.valid || before.tid != after.tid || before.birth != after.birth
+      || after.user < before.user || after.kernel < before.kernel
+      || after.user - before.user > static_cast<uint64_t>(INT64_MAX)
+      || after.kernel - before.kernel > static_cast<uint64_t>(INT64_MAX)) { return false; }
+  user = static_cast<int64_t>(after.user - before.user);
+  kernel = static_cast<int64_t>(after.kernel - before.kernel);
+  return true;
+}
+bool identity_matches(const RequestState &value)
+{
+  return value.active && value.epoch != 0
+      && value.worker == reinterpret_cast<uintptr_t>(&THIS_WORKER)
+      && value.request == reinterpret_cast<uintptr_t>(THIS_WORKER.get_cur_request())
+      && value.trace.equals(*ObCurTraceId::get_trace_id());
+}
+bool space(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+bool ident(char c)
+{
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+      || (c >= '0' && c <= '9') || c == '_';
+}
+bool skip(const ObString &sql, int64_t &pos)
+{
+  while (pos < sql.length()) {
+    if (space(sql.ptr()[pos])) { ++pos; }
+    else if (pos + 1 < sql.length() && sql.ptr()[pos] == '/' && sql.ptr()[pos + 1] == '*') {
+      pos += 2;
+      while (pos + 1 < sql.length() && !(sql.ptr()[pos] == '*' && sql.ptr()[pos + 1] == '/')) { ++pos; }
+      if (pos + 1 >= sql.length()) { return false; }
+      pos += 2;
+    } else { break; }
+  }
+  return true;
+}
+bool token(const ObString &sql, int64_t &pos, int64_t &begin, int64_t &length)
+{
+  if (!skip(sql, pos) || pos >= sql.length()) { return false; }
+  const bool quoted = sql.ptr()[pos] == '`';
+  if (quoted) { ++pos; }
+  begin = pos;
+  while (pos < sql.length() && ident(sql.ptr()[pos])) { ++pos; }
+  length = pos - begin;
+  if (quoted) {
+    if (pos >= sql.length() || sql.ptr()[pos] != '`') { return false; }
+    ++pos;
+  }
+  return length > 0;
+}
+bool equals(const ObString &sql, int64_t begin, int64_t length, const char *word)
+{
+  int64_t i = 0;
+  for (; i < length && word[i] != '\0'; ++i) {
+    char a = sql.ptr()[begin + i], b = word[i];
+    if (a >= 'a' && a <= 'z') { a -= 'a' - 'A'; }
+    if (b >= 'a' && b <= 'z') { b -= 'a' - 'A'; }
+    if (a != b) { return false; }
+  }
+  return i == length && word[i] == '\0';
+}
+WriteFamily family_prefix(const ObString &sql)
+{
+  if (sql.ptr() == nullptr || sql.length() <= 0) { return OTHER_WRITE; }
+  int64_t pos = 0, begin = 0, length = 0;
+  if (!token(sql, pos, begin, length)) { return OTHER_WRITE; }
+  const bool deletion = equals(sql, begin, length, "DELETE");
+  const bool insertion = equals(sql, begin, length, "INSERT") || equals(sql, begin, length, "REPLACE");
+  const bool update = equals(sql, begin, length, "UPDATE");
+  if (!deletion && !insertion && !update) { return OTHER_WRITE; }
+  if (!update) {
+    if (!token(sql, pos, begin, length)
+        || !equals(sql, begin, length, deletion ? "FROM" : "INTO")) { return OTHER_WRITE; }
+  }
+  if (!token(sql, pos, begin, length)) { return OTHER_WRITE; }
+  if (!skip(sql, pos)) { return OTHER_WRITE; }
+  if (pos < sql.length() && sql.ptr()[pos] == '.') {
+    ++pos;
+    if (!token(sql, pos, begin, length)) { return OTHER_WRITE; }
+  }
+  if (equals(sql, begin, length, "__all_histogram_stat")) { return deletion ? HIST_DELETE : HIST_WRITE; }
+  if (equals(sql, begin, length, "__all_histogram_stat_history")
+      || equals(sql, begin, length, "__all_table_stat_history")
+      || equals(sql, begin, length, "__all_column_stat_history")) { return HISTORY_WRITE; }
+  if (equals(sql, begin, length, "__all_table_stat")) { return TABLE_WRITE; }
+  if (equals(sql, begin, length, "__all_column_stat")) { return COLUMN_WRITE; }
+  return OTHER_WRITE;
+}
+WriteFamily family(const ObString &sql)
+{
+  if (sql.ptr() == nullptr || sql.length() <= 0) { return OTHER_WRITE; }
+  // Classification reads a fixed prefix only, never the full SQL or values.
+  const ObString prefix(static_cast<int32_t>(sql.length() > 512 ? 512 : sql.length()), sql.ptr());
+  return family_prefix(prefix);
+}
+void emit_totals(int64_t diagnostic_start_us, int64_t family_code, const WriteTotals &value)
+{
+  const int64_t calls = value.calls, query_calls = value.query_calls, close_calls = value.close_calls;
+  const int64_t query_errors = value.query_errors, close_errors = value.close_errors, final_errors = value.final_errors;
+  const int64_t rows_valid_calls = value.rows_valid_calls, rows_invalid_calls = value.rows_invalid_calls;
+  const int64_t reported_rows_before_close = value.reported_rows_before_close;
+  const int first_query_error = value.first_query_error, first_close_error = value.first_close_error;
+  const int first_final_error = value.first_final_error;
+  LOG_INFO("seek1381 write counts", K(diagnostic_start_us), K(family_code), K(calls),
+           K(query_calls), K(close_calls), K(query_errors), K(close_errors), K(final_errors),
+           K(rows_valid_calls), K(rows_invalid_calls), K(reported_rows_before_close),
+           K(first_query_error), K(first_close_error), K(first_final_error));
+  const bool wall_valid = value.wall_valid, cpu_valid = value.cpu_valid;
+  const int64_t other_us = wall_valid ? value.wall[OTHER] : -1;
+  const int64_t query_us = wall_valid ? value.wall[QUERY] : -1;
+  const int64_t close_us = wall_valid ? value.wall[CLOSE] : -1;
+  const int64_t cleanup_scope_us = wall_valid ? value.wall[CLEANUP] : -1;
+  LOG_INFO("seek1381 write wall", K(diagnostic_start_us), K(family_code), K(wall_valid),
+           K(other_us), K(query_us), K(close_us), K(cleanup_scope_us));
+  const int64_t other_user_100ns = cpu_valid ? value.user[OTHER] : -1;
+  const int64_t query_user_100ns = cpu_valid ? value.user[QUERY] : -1;
+  const int64_t close_user_100ns = cpu_valid ? value.user[CLOSE] : -1;
+  const int64_t cleanup_user_100ns = cpu_valid ? value.user[CLEANUP] : -1;
+  const int64_t other_kernel_100ns = cpu_valid ? value.kernel[OTHER] : -1;
+  const int64_t query_kernel_100ns = cpu_valid ? value.kernel[QUERY] : -1;
+  const int64_t close_kernel_100ns = cpu_valid ? value.kernel[CLOSE] : -1;
+  const int64_t cleanup_kernel_100ns = cpu_valid ? value.kernel[CLEANUP] : -1;
+  LOG_INFO("seek1381 write cpu", K(diagnostic_start_us), K(family_code), K(cpu_valid),
+           K(other_user_100ns), K(query_user_100ns), K(close_user_100ns), K(cleanup_user_100ns),
+           K(other_kernel_100ns), K(query_kernel_100ns), K(close_kernel_100ns), K(cleanup_kernel_100ns));
+}
+}
+Request::Request(int64_t diagnostic_start_us, const int &ret)
+    : previous_(state()), slot_(reinterpret_cast<uintptr_t>(&state())),
+      epoch_(next_epoch()), start_(sample_cpu()), ret_(ret)
+{
+  if (previous_.active && !add(previous_.nested_schemas, 1)) { previous_.valid = false; }
+  RequestState value;
+  value.active = true;
+  value.epoch = epoch_;
+  value.diagnostic_start_us = diagnostic_start_us;
+  value.worker = reinterpret_cast<uintptr_t>(&THIS_WORKER);
+  value.request = reinterpret_cast<uintptr_t>(THIS_WORKER.get_cur_request());
+  value.trace = *ObCurTraceId::get_trace_id();
+  value.cpu_start = start_;
+  value.valid = epoch_ != 0 && value.trace.is_valid() && THIS_WORKER.is_th_worker()
+      && THIS_WORKER.has_req_flag();
+  state() = value;
+}
+Request::~Request()
+{
+  const CpuSample end = sample_cpu();
+  const int64_t end_us = ObTimeUtility::current_time();
+  const bool owns_slot = slot_ == reinterpret_cast<uintptr_t>(&state())
+      && state().active && state().epoch == epoch_;
+  const bool context_valid = owns_slot && identity_matches(state())
+      && state().valid && state().write_depth == 0;
+  int64_t user_cpu_100ns = -1, kernel_cpu_100ns = -1;
+  const bool cpu_valid = context_valid && cpu_delta(start_, end, user_cpu_100ns, kernel_cpu_100ns);
+  const int64_t diagnostic_start_us = owns_slot ? state().diagnostic_start_us : -1;
+  const int64_t wall_us = diagnostic_start_us >= 0 && end_us >= diagnostic_start_us
+      ? end_us - diagnostic_start_us : -1;
+  const uint64_t start_tid = start_.tid, end_tid = end.tid, start_birth = start_.birth, end_birth = end.birth;
+  const int result_ret = ret_;
+  // State is a fixed TLS value, never a pointer to this request's stack.
+  // A mismatched thread/epoch is UNKNOWN; do not overwrite another context.
+  RequestState completed;
+  if (owns_slot) { completed = state(); state() = previous_; }
+  const int64_t nested_writes = owns_slot ? completed.nested_writes : -1;
+  const int64_t nested_schemas = owns_slot ? completed.nested_schemas : -1;
+  LOG_INFO("seek1381 request cpu", K(diagnostic_start_us), K(result_ret), K(context_valid),
+           K(cpu_valid), K(wall_us), K(start_tid), K(end_tid), K(start_birth), K(end_birth),
+           K(user_cpu_100ns), K(kernel_cpu_100ns), K(nested_writes), K(nested_schemas));
+  if (context_valid) {
+    for (int64_t i = 0; i < WRITE_FAMILY_COUNT; ++i) {
+      if (completed.families[i].calls > 0) { emit_totals(diagnostic_start_us, i, completed.families[i]); }
+    }
+  }
+}
+Write::Write(const ObString &sql, const int &ret) : ret_(ret)
+{
+  RequestState &value = state();
+  if (identity_matches(value)) {
+    slot_ = reinterpret_cast<uintptr_t>(&value);
+    epoch_ = value.epoch;
+    entered_ = true;
+    outermost_ = value.write_depth == 0;
+    if (!add(value.write_depth, 1)) { value.valid = false; entered_ = false; }
+    if (entered_ && !outermost_ && !add(value.nested_writes, 1)) { value.valid = false; }
+    if (entered_ && outermost_) {
+      family_ = family(sql);
+      phase_start_us_ = ObTimeUtility::current_time();
+      phase_cpu_ = sample_cpu();
+      tid_ = phase_cpu_.tid;
+    }
+  }
+}
+bool Write::owns_context() const
+{
+  return entered_ && slot_ == reinterpret_cast<uintptr_t>(&state())
+      && identity_matches(state()) && state().epoch == epoch_;
+}
+void Write::transition(WritePhase next)
+{
+  if (outermost_ && owns_context()) {
+    const int64_t now = ObTimeUtility::current_time();
+    const CpuSample cpu = sample_cpu();
+    WriteTotals &value = state().families[family_];
+    const bool wall_ok = now >= 0 && phase_start_us_ >= 0 && now >= phase_start_us_;
+    value.wall_valid = value.wall_valid && wall_ok;
+    if (wall_ok && !add(value.wall[phase_], now - phase_start_us_)) { value.wall_valid = false; }
+    int64_t user = 0, kernel = 0;
+    const bool valid_cpu = cpu_delta(phase_cpu_, cpu, user, kernel) && cpu.tid == tid_;
+    value.cpu_valid = value.cpu_valid && valid_cpu;
+    if (valid_cpu && (!add(value.user[phase_], user) || !add(value.kernel[phase_], kernel))) { value.cpu_valid = false; }
+    phase_start_us_ = now;
+    phase_cpu_ = cpu;
+    phase_ = next;
+  }
+}
+Write::~Write()
+{
+  transition(CLEANUP);
+  if (owns_context()) {
+    RequestState &context = state();
+    if (context.write_depth <= 0) { context.valid = false; }
+    else { --context.write_depth; }
+    if (outermost_) {
+      WriteTotals &value = context.families[family_];
+      bool valid = add(value.calls, 1);
+      if (query_called_) { valid = add(value.query_calls, 1) && valid; }
+      if (close_called_) { valid = add(value.close_calls, 1) && valid; }
+      if (query_called_ && query_ret_ != 0) { valid = add(value.query_errors, 1) && valid; }
+      if (close_called_ && close_ret_ != 0) { valid = add(value.close_errors, 1) && valid; }
+      if (ret_ != 0) { valid = add(value.final_errors, 1) && valid; }
+      if (query_called_ && query_ret_ != 0 && value.first_query_error == 0) { value.first_query_error = query_ret_; }
+      if (close_called_ && close_ret_ != 0 && value.first_close_error == 0) { value.first_close_error = close_ret_; }
+      if (ret_ != 0 && value.first_final_error == 0) { value.first_final_error = ret_; }
+      if (rows_known_ && rows_ >= 0) {
+        valid = add(value.rows_valid_calls, 1) && valid;
+        valid = add(value.reported_rows_before_close, rows_) && valid;
+      } else { valid = add(value.rows_invalid_calls, 1) && valid; }
+      context.valid = context.valid && valid;
+    }
+  }
+}
+}}}
 
 namespace oceanbase
 {
@@ -1073,6 +1356,7 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     int64_t &affected_rows, bool is_user_sql)
 {
   int ret = OB_SUCCESS;
+  seek1381::Write diagnostic_write(sql, ret);
   ObSqlQueryExecutor executor(sql);
   SMART_VAR(ObInnerSQLResult, res, get_session(),
             ob_sql_->get_plan_cache_access_service(), is_inner_session()) {
@@ -1088,9 +1372,9 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     if (OB_FAIL(ret)) {
     } else {
       res.result_set().set_user_sql(is_user_sql);
-      if (OB_FAIL(query(executor, res))) {
+      if (OB_FAIL(diagnostic_write.query([&]() { return query(executor, res); }))) {
       } else if (FALSE_IT(affected_rows = res.result_set().get_affected_rows())) {
-      } else if (OB_FAIL(res.close())) {
+      } else if (OB_FAIL(diagnostic_write.close([&]() { diagnostic_write.record_rows(affected_rows); return res.close(); }))) {
       }
       if (get_session().get_ddl_info().is_ddl()) {
         SERVER_EVENT_ADD(
@@ -1105,6 +1389,7 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
 #ifndef NDEBUG
     LOG_INFO("execute write sql", K(ret), K(affected_rows), K(sql), K(get_session().get_server_sid()));
 #endif
+    diagnostic_write.cleanup();
   }
 
   return ret;
