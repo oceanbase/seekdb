@@ -282,7 +282,7 @@ END_P SET_VAR DELIMITER
         DIRECTORY DISABLE DISALLOW DISCARD DISK DO DOT DUMP DUMPFILE DUPLICATE
         DYNAMIC DISCONNECT DEMAND
 
-        EFFECTIVE EMPTY ENABLE END ENDPOINT ENFORCED ENGINE_ ENGINES ENUM ENTITY
+        EFFECTIVE EMPTY ENABLE ENABLE_MACRO_BLOCK_BLOOM_FILTER END ENDPOINT ENFORCED ENGINE_ ENGINES ENUM ENTITY
         ERROR_CODE ERROR_P ERRORS ESCAPE EXCHANGE EXCLUDING EXECUTE EXPANSION EXPORT OUTLINE
         EXTENDED EXCLUSIVE EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN
 
@@ -336,7 +336,7 @@ END_P SET_VAR DELIMITER
         RECOVER REDUNDANT REFRESH RELAY RELAYLOG RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMOVE
         REPEATABLE RESET RESPECT RESTART RESTORE RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE
         REWRITE ROLLBACK ROLLUP ROUTINE ROW ROWID ROW_COUNT ROW_FORMAT ROWS RTREE
-        RUN RECYCLEBIN REPLICATION ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS
+        RUN RECYCLEBIN REPLICA_NUM REPLICATION ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS
         RANK READ_ONLY RECOVERY REJECT ROLE
 
         SAMPLE SAVEPOINT SCALARS SCHEMA_NAME SCN SCOPE SCORE SECOND SECURITY SEED
@@ -357,7 +357,7 @@ END_P SET_VAR DELIMITER
         TIME_ZONE_INFO TOP_K_FRE_HIST TRIM_SPACE TABLETS TIME_UNIT TIME_ZONE
 
         UNCOMMITTED UNCONDITIONAL UNDEFINED UNNEST UNICODE UNLOCKED UNTIL UPGRADE
-        UNUSUAL UNKNOWN USE_FRM USER UNBOUNDED UNLIMITED USER_SPECIFIED
+        UNUSUAL UNKNOWN USE_BLOOM_FILTER USE_FRM USER UNBOUNDED UNLIMITED USER_SPECIFIED
 
         VALID VALUE VARIANCE VARIABLES VERBOSE VERIFY VIEW VISIBLE VALIDATE VAR_POP
         VAR_SAMP VALIDATION VECTOR VECTOR_DISTANCE MICRO_INDEX_CLUSTERED VECTOR_SIMILARITY
@@ -379,6 +379,7 @@ END_P SET_VAR DELIMITER
 %type <node> index_or_heap
 %type <node> create_database_stmt drop_database_stmt alter_database_stmt use_database_stmt
 %type <node> opt_database_name database_option database_option_list opt_database_option_list database_factor databases_expr opt_databases
+%type <node> legacy_single_replica_option
 %type <node> cur_timestamp_func cur_time_func cur_date_func now_synonyms_func utc_timestamp_func utc_time_func utc_date_func sys_interval_func sysdate_func cur_user_func
 %type <node> opt_range_partition_info opt_partition_option partition_option hash_partition_option key_partition_option opt_use_partition use_partition range_partition_option subpartition_option opt_range_partition_list opt_range_subpartition_list range_partition_list range_subpartition_list range_partition_element range_subpartition_element range_partition_expr range_expr_list range_expr sample_clause opt_block seed sample_percent opt_sample_scope modify_partition_info opt_partition_range_or_list use_snapshot partition_options partition_num opt_subpartition_range_or_list
 %type <node> subpartition_template_option subpartition_individual_option opt_hash_partition_list hash_partition_list hash_partition_element opt_hash_subpartition_list hash_subpartition_list hash_subpartition_element opt_subpartition_list opt_engine_option
@@ -3998,7 +3999,13 @@ database_option
 }
 | database_option_list  database_option
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $2);
+  if (NULL == $1) {
+    $$ = $2;
+  } else if (NULL == $2) {
+    $$ = $1;
+  } else {
+    malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $2);
+  }
 }
 ;
 
@@ -4054,6 +4061,23 @@ opt_default_mark charset_key opt_equal_mark charset_name
 | read_only_or_write
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_READ_ONLY, 1, $1);
+}
+| legacy_single_replica_option
+{
+  $$ = $1;
+}
+;
+
+/* Older SHOW CREATE output includes this option for single-node databases and tables. */
+legacy_single_replica_option:
+REPLICA_NUM opt_equal_mark INTNUM
+{
+  (void)($2);
+  if ($3->value_ != 1) {
+    yyerror(&@3, result, "SeekDB supports only REPLICA_NUM = 1");
+    YYERROR;
+  }
+  $$ = NULL;
 }
 ;
 
@@ -6438,6 +6462,28 @@ TABLE_MODE opt_equal_mark STRING_VALUE
 {
   (void)($2) ;
   malloc_non_terminal_node($$, result->malloc_pool_, T_ENGINE, 1, $3);
+}
+| legacy_single_replica_option
+{
+  $$ = $1;
+}
+| USE_BLOOM_FILTER opt_equal_mark BOOL_VALUE
+{
+  (void)($2);
+  if ($3->value_ != 0) {
+    yyerror(&@3, result, "SeekDB supports only USE_BLOOM_FILTER = FALSE");
+    YYERROR;
+  }
+  $$ = NULL;
+}
+| ENABLE_MACRO_BLOCK_BLOOM_FILTER opt_equal_mark BOOL_VALUE
+{
+  (void)($2);
+  if ($3->value_ != 0) {
+    yyerror(&@3, result, "SeekDB supports only ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE");
+    YYERROR;
+  }
+  $$ = NULL;
 }
 | TABLET_SIZE opt_equal_mark INTNUM
 {
@@ -17615,6 +17661,7 @@ ACCOUNT
 |       END
 |       ENDPOINT
 |       ENFORCED
+|       ENABLE_MACRO_BLOCK_BLOOM_FILTER
 |       ENGINE_
 |       ENGINES
 |       ENUM
@@ -17909,6 +17956,7 @@ ACCOUNT
 |       RELAY_THREAD
 |       REMOVE
 |       REPEATABLE
+|       REPLICA_NUM
 |       REPLICATION
 |       RESET
 |       RESPECT
@@ -18074,6 +18122,7 @@ ACCOUNT
 |       UNTIL
 |       UNUSUAL
 |       UPGRADE
+|       USE_BLOOM_FILTER
 |       USE_FRM
 |       USER
 |       USER_SPECIFIED
