@@ -11,7 +11,7 @@ contains the workflow, then choose:
 | Version | Empty uses `VERSION` from `bazel/compile_config.bzl` |
 | Release | Package release, default 1 |
 | Formats | Binary archive only, RPM, DEB, or both system formats |
-| Jobs | 0 selects one job on macOS and two elsewhere; 1..64 overrides this |
+| Jobs | 0 selects one job on macOS and two elsewhere; other values are passed to Bazel |
 
 The workflow builds O2 with line tables and the package runtime configuration.
 Each target compiles seekdb once. Download the `binary-*` artifacts for portable
