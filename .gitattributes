@@ -1,6 +1,11 @@
 .gitattributes export-ignore
 .gitignore export-ignore
 
+# Keep dependency lockfile inputs byte-identical across build hosts.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 # All OceanBase code is auto-formatted using clang-format.
 *.c filter=codeformat
 *.cc filter=codeformat
