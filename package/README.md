@@ -18,7 +18,8 @@ Each target compiles seekdb once. Download the `binary-*` artifacts for portable
 archives and checksums. Linux `system-packages-*` artifacts contain RPM/DEB
 packages made from those archives and the SDK's obshell, without another SDK
 initialization or engine build. Other targets produce portable archives.
-Artifacts are retained for 14 days; the workflow does not publish a release.
+Artifacts use the repository's default retention period; the workflow does
+not publish a release.
 When building both glibc variants, keep their system-package artifact directories
 separate: native RPM/DEB filenames do not include the glibc variant.
 
