@@ -77,6 +77,48 @@ run_build_libseekdb() {
   done
 }
 
+# Find a stripper that understands ELF. `-g` is unconditional in the Bazel
+# copts, so an unstripped libseekdb.so is mostly DWARF (about 1.2 GiB on
+# linux-x64, 1.6 GiB on android-arm64-v8a) and must not reach the zip.
+find_elf_stripper() {
+  local candidate
+  if command -v llvm-strip >/dev/null 2>&1; then
+    command -v llvm-strip
+    return 0
+  fi
+  # The Android NDK ships llvm-strip for the host. Apple silicon runners still
+  # use the darwin-x86_64 prebuilt, so glob the directory instead of assuming.
+  if [[ -n "${ANDROID_NDK_HOME:-}" ]]; then
+    candidate="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" -maxdepth 3 -name llvm-strip 2>/dev/null | head -n 1)"
+    if [[ -n "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+  # GNU strip from binutils handles ELF on Linux; Xcode's strip only does Mach-O.
+  if [[ "$UNAME_S" == "Linux" ]] && command -v strip >/dev/null 2>&1; then
+    command -v strip
+    return 0
+  fi
+  return 1
+}
+
+is_elf_file() {
+  [[ "$(od -An -tx1 -N4 "$1" 2>/dev/null | tr -d ' \n')" == "7f454c46" ]]
+}
+
+# --strip-unneeded drops DWARF and the static symbol table but keeps every
+# exported symbol in .dynsym, which is the only thing a consumer can resolve
+# (the link uses a version script / export list anyway).
+strip_packed_elf() {
+  local file="$1" stripper="$2" before after
+  is_elf_file "$file" || return 0
+  before="$(wc -c <"$file")"
+  "$stripper" --strip-unneeded "$file" || die "strip failed: $file"
+  after="$(wc -c <"$file")"
+  echo "[BUILD] Stripped $(basename "$file"): $((before / 1048576)) MiB -> $((after / 1048576)) MiB"
+}
+
 # List dependency paths from a dylib (one per line, trimmed). Skips first line (the dylib itself).
 get_dylib_deps() {
   local dylib="$1"
@@ -272,6 +314,27 @@ if [[ -d "$DEPS_DIR" ]]; then
     [[ -f "$f" ]] || continue
     cp "$f" "$PACK_DIR/libs/"
   done
+fi
+
+# Strip only the packed copy: the build tree keeps the unstripped library for
+# debugging, and macOS dylibs are excluded because stripping them would
+# invalidate the signature applied above.
+if [[ "$BUILD_TYPE" == "debug" ]]; then
+  echo "[BUILD] BUILD_TYPE=debug: keeping debug info in $ZIP_NAME"
+elif ELF_STRIPPER="$(find_elf_stripper)"; then
+  echo "[BUILD] Stripping debug info with $ELF_STRIPPER"
+  for f in "$PACK_DIR"/*.so "$PACK_DIR"/libs/*.so; do
+    [[ -f "$f" ]] || continue
+    strip_packed_elf "$f" "$ELF_STRIPPER"
+  done
+elif is_elf_file "$PACK_DIR/$MAIN_LIB_NAME"; then
+  # An unstripped ELF is ~1.2 GiB (linux-x64) / ~1.6 GiB (android-arm64-v8a)
+  # and compresses to a ~280-340 MiB zip. Refuse to ship that instead of
+  # falling back to a warning nobody reads.
+  die "no ELF stripper found (llvm-strip or GNU strip); refusing to pack unstripped $MAIN_LIB_NAME.
+       Install LLVM (brew install llvm) or set ANDROID_NDK_HOME to an NDK checkout that ships llvm-strip."
+else
+  echo "[BUILD] $(basename "$MAIN_LIB") is not ELF (Mach-O/PE); nothing to strip."
 fi
 
 (cd "$PACK_DIR" && zip -r "$OUTPUT_ZIP" . -x "*.DS_Store")

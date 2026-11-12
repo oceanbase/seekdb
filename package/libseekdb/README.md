@@ -17,6 +17,20 @@ cd package\libseekdb
 
 Output: `libseekdb-<os>-<arch>.zip` is created in this directory. Arch is `x64` (for x86_64) or `arm64`, e.g. `libseekdb-linux-x64.zip`, `libseekdb-linux-arm64.zip`, `libseekdb-darwin-arm64.zip`, `libseekdb-windows-x64.zip`.
 
+### Release zips are stripped
+
+The Bazel link keeps DWARF debug info (`-g`), so the ELF library is about 1.2 GiB on linux-x64 and 1.6 GiB on android-arm64-v8a. `libseekdb-build.sh` runs `llvm-strip --strip-unneeded` (or GNU `strip`) on the **packed copy** only, which drops DWARF and the static symbol table while keeping every exported symbol in `.dynsym`. The unstripped library stays in `build_release/` for debugging.
+
+Typical sizes (release build, before and after stripping):
+
+| Artifact | Unstripped `.so` | Stripped `.so` | Zip |
+| --- | --- | --- | --- |
+| linux-x64 | 1157 MiB | 158 MiB | ~53 MiB |
+| linux-arm64 | 1251 MiB | 139 MiB | ~47 MiB |
+| android-arm64-v8a | 1557 MiB | 136 MiB | ~46 MiB |
+
+`BUILD_TYPE=debug` skips the strip step on purpose. For a release ELF pack the script **fails** when no ELF stripper is found, so an unstripped library cannot be published by accident; install LLVM (`brew install llvm`) or set `ANDROID_NDK_HOME` to an NDK that ships `llvm-strip`.
+
 ### Reference build environments (CI)
 
 The supported systems and environments are defined by the GitHub Actions workflow [`.github/workflows/build-libseekdb.yml`](../../.github/workflows/build-libseekdb.yml). The workflow builds on push/PR and optionally uploads zips to S3 when **DESTINATION_TARGET_PATH** (e.g. `s3://bucket/libseekdb/<sha>`) or **AWS_S3_BUCKET** and AWS credentials are configured.
