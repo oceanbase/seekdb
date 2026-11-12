@@ -26,6 +26,10 @@ using namespace oceanbase::sql;
 
 namespace
 {
+// Above this limit the pairwise deduplication is replaced by the linear time
+// path in ObTransformSimplifyExpr::do_remove_identical_exprs().
+const int64_t MAX_QUADRATIC_DEDUP_COUNT = 100;
+
 int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
 {
   int ret = OB_SUCCESS;
@@ -2618,8 +2622,8 @@ int ObTransformSimplifyExpr::remove_duplicate_exprs(ObQueryCtx* query_ctx,
     //select * from t1 where c1 > 1 and c1 > 1
     //like above stmt, and expr in level 0 is process here
     ObSEArray<ObRawExpr *, 4> param_conds;
-    if (param_count <= 1 || param_count > 100) {
-      /* use too much resource and need add lots of constraints */
+    if (param_count <= 1) {
+      /* do nothing */
     } else if (OB_FAIL(param_conds.assign(conditions))) {
     } else if (OB_FAIL(do_remove_duplicate_exprs(*query_ctx, param_conds))) {
     } else if (param_conds.count() == conditions.count()) {
@@ -2662,9 +2666,7 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
     } else if (expr->get_expr_type() == T_OP_OR || expr->get_expr_type() == T_OP_AND) {
       ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
       ObSEArray<ObRawExpr *, 4> param_conds;
-      if (op_expr->get_param_count() > 100) {
-        /* use too much resource and need add lots of constraints */
-      } else if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
+      if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
       } else if (OB_FAIL(do_remove_duplicate_exprs(query_ctx, param_conds))) {
       } else if (param_conds.count() == op_expr->get_param_count()) {
         //do nothing
@@ -2694,6 +2696,11 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
   const int64_t param_count = exprs.count();
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (param_count > MAX_QUADRATIC_DEDUP_COUNT) {
+    bool large_trans_happened = false;
+    if (OB_FAIL(do_remove_identical_exprs(exprs, large_trans_happened))) {
+      LOG_WARN("failed to remove identical exprs", K(ret), K(param_count));
+    }
   } else {
     ObQuestionmarkEqualCtx cmp_ctx(false);
     for (int64_t i = param_count - 1; OB_SUCC(ret) && i >= 1; i--) {
@@ -2715,6 +2722,77 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
         } else if (!cmp_ctx.equal_pairs_.empty()) {
           cmp_ctx.equal_pairs_.reset();
         }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::do_remove_identical_exprs(ObIArray<ObRawExpr*> &exprs,
+                                                       bool &trans_happened)
+{
+  /*
+   * Linear time duplicate elimination for long conjunction / disjunction lists.
+   *
+   * The pairwise path above is bounded by MAX_QUADRATIC_DEDUP_COUNT because it
+   * compares every pair and collects equal parameter constraints. Generated
+   * filters, however, can repeat the same predicate hundreds of times, e.g.
+   * "c1 = 1 OR age > 1000 OR age > 1000 ..." assembled by a query builder.
+   * Every redundant term is evaluated for each candidate row of a vector index
+   * scan, so such a filter is worth several times the canonical form.
+   *
+   * Expressions carrying dynamic parameters are kept untouched, because
+   * removing them would require recording parameter equalities. Identical
+   * expressions without dynamic parameters need no bookkeeping, so they are
+   * located through their hash value and confirmed with same_as().
+   */
+  int ret = OB_SUCCESS;
+  hash::ObHashMap<uint64_t, ObRawExpr *> expr_map;
+  trans_happened = false;
+  if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null context", K(ret));
+  } else if (OB_FAIL(expr_map.create(exprs.count(), ObModIds::OB_SQL_COMPILE))) {
+    LOG_WARN("failed to create expr map", K(ret), K(exprs.count()));
+  } else {
+    int64_t i = 0;
+    while (OB_SUCC(ret) && i < exprs.count()) {
+      ObRawExpr *expr = exprs.at(i);
+      ObRawExpr *prev_expr = NULL;
+      uint64_t hash_val = 0;
+      int tmp_ret = OB_SUCCESS;
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null expr", K(ret));
+      } else if (expr->has_flag(CNT_DYNAMIC_PARAM)) {
+        ++i;
+      } else if (OB_FAIL(expr->calc_hash())) {
+        LOG_WARN("failed to calculate expr hash", K(ret));
+      } else if (FALSE_IT(hash_val = expr->get_expr_hash())) {
+      } else if (OB_SUCCESS == (tmp_ret = expr_map.get_refactored(hash_val, prev_expr))) {
+        if (OB_ISNULL(prev_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null expr in map", K(ret));
+        } else {
+          ObQuestionmarkEqualCtx cmp_ctx(false);
+          if (!prev_expr->same_as(*expr, &cmp_ctx)) {
+            ++i;
+          } else if (!cmp_ctx.equal_pairs_.empty()
+                     && OB_FAIL(append(ctx_->equal_param_constraints_, cmp_ctx.equal_pairs_))) {
+            LOG_WARN("failed to append equal param constraints", K(ret));
+          } else if (OB_FAIL(exprs.remove(i))) {
+            LOG_WARN("failed to remove duplicate expr", K(ret));
+          } else {
+            trans_happened = true;
+          }
+        }
+      } else if (OB_HASH_NOT_EXIST != tmp_ret) {
+        ret = tmp_ret;
+        LOG_WARN("failed to get expr from map", K(ret));
+      } else if (OB_FAIL(expr_map.set_refactored(hash_val, expr))) {
+        LOG_WARN("failed to add expr to map", K(ret));
+      } else {
+        ++i;
       }
     }
   }
