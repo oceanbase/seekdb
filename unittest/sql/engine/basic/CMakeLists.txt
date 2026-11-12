@@ -21,3 +21,17 @@ if(EXISTS "${FILE_SQL_SRC}/file_sql_csv.cpp")
   add_test(NAME file_sql_csv COMMAND test_file_sql_csv
     "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/basic.csv")
 endif()
+if(EXISTS "${FILE_SQL_SRC}/file_sql_jsonl.cpp")
+  add_library(file_sql_jsonl "${FILE_SQL_SRC}/file_sql_jsonl.cpp")
+  add_library(file_sql_parquet "${FILE_SQL_SRC}/file_sql_parquet.cpp")
+  target_include_directories(file_sql_jsonl PUBLIC "${FILE_SQL_SRC}")
+  target_include_directories(file_sql_parquet PUBLIC "${FILE_SQL_SRC}")
+  target_link_libraries(file_sql_jsonl PUBLIC file_sql_types)
+  target_link_libraries(file_sql_parquet PUBLIC file_sql_types)
+  target_compile_options(file_sql_jsonl PRIVATE -Wall -Wextra -Werror -fno-exceptions)
+  add_executable(test_file_sql_jsonl_parquet test_file_sql_jsonl_parquet.cpp)
+  target_link_libraries(test_file_sql_jsonl_parquet PRIVATE file_sql_jsonl file_sql_parquet)
+  add_test(NAME file_sql_jsonl_parquet COMMAND test_file_sql_jsonl_parquet
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/basic.jsonl"
+    "${SEEKDB_ROOT}/tools/deploy/mysql_test/test_suite/file_sql/data/simple.parquet.b64")
+endif()

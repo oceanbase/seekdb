@@ -64,6 +64,9 @@ struct ScalarValue
 };
 FileStatus convert_scalar(const TextCell &cell, ScalarType type, ScalarValue &value);
 
+// A typed row, ready to be handed to the SQL scan adapter.
+using ScalarRow = std::vector<ScalarValue>;
+
 // No rows are retained: memory is proportional to the number of columns.
 class SchemaInference
 {

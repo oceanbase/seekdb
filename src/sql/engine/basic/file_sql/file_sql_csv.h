@@ -60,8 +60,6 @@ private:
   FileStatus failure_;
 };
 
-using ScalarRow = std::vector<ScalarValue>;
-
 // First pass retains only column state, second pass produces bounded batches.
 // Do not execute filters/aggregations here: the native seekdb operator owns them.
 class CsvTableScan
