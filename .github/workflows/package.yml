@@ -125,16 +125,14 @@ jobs:
             ${{ matrix.conda_spec }}
           init-shell: none
           generate-run-shell: false
-          cache-downloads: true
-          cache-downloads-key: package-conda-downloads-v1-${{ matrix.id }}-${{ hashFiles('.github/packaging.json') }}
-          cache-environment: true
-          cache-environment-key: package-conda-env-v1-${{ matrix.id }}-${{ matrix.micromamba }}
+          cache-downloads: false
+          cache-environment: false
       - name: Validate sysroot and configure Clang
         if: matrix.os == 'linux'
         env:
           CONDA_ENVIRONMENT: ${{ steps.conda.outputs.environment-path }}
         run: python .github/scripts/package.py sysroot
-      - name: Configure cache paths and toolchain identity
+      - name: Configure dependency cache key
         id: keys
         run: python .github/scripts/package.py environment
       - name: Restore dependency SDK
@@ -146,44 +144,6 @@ jobs:
             deps/android
           key: package-sdk-v1-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
           restore-keys: package-sdk-v1-${{ matrix.id }}-
-      - name: Restore Rust toolchain
-        id: rust
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            .ci-cache/rustup
-            .ci-cache/cargo/bin
-          key: package-rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-${{ hashFiles('rust-toolchain.toml') }}
-      - name: Restore dependency downloads
-        id: downloads
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            .ci-cache/launcher
-            .ci-cache/downloads
-            .ci-cache/sdk-archives
-            .ci-cache/cargo/registry
-            .ci-cache/cargo/git
-            .ci-cache/homebrew
-            .ci-cache/timezone_V1.log
-          key: package-downloads-v1-${{ matrix.id }}-${{ steps.keys.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            package-downloads-v1-${{ matrix.id }}-${{ steps.keys.outputs.toolchain }}-
-            package-downloads-v1-${{ matrix.id }}-
-      - name: Restore Android NDK
-        if: matrix.os == 'android'
-        id: ndk
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .ci-cache/android-sdk/ndk
-          key: package-ndk-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/packaging.json') }}
-      - name: Restore Bazel C++ and Rust action cache
-        id: actions
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .ci-cache/actions
-          key: package-actions-v1-${{ matrix.id }}-${{ steps.keys.outputs.toolchain }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: package-actions-v1-${{ matrix.id }}-${{ steps.keys.outputs.toolchain }}-
       - name: Initialize dependencies
         run: python .github/scripts/package.py initialize
       - name: Save initialized SDK
@@ -194,20 +154,6 @@ jobs:
             deps/3rd
             deps/android
           key: ${{ steps.sdk.outputs.cache-primary-key }}
-      - name: Save Rust toolchain
-        if: steps.rust.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            .ci-cache/rustup
-            .ci-cache/cargo/bin
-          key: ${{ steps.rust.outputs.cache-primary-key }}
-      - name: Save Android NDK
-        if: matrix.os == 'android' && steps.ndk.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .ci-cache/android-sdk/ndk
-          key: ${{ steps.ndk.outputs.cache-primary-key }}
       - name: Compile seekdb once
         id: build
         run: python .github/scripts/package.py build
@@ -221,28 +167,9 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-      - name: Stop Bazel before saving caches
+      - name: Stop Bazel
         if: always() && steps.build.outcome != 'skipped'
         run: python .github/scripts/package.py shutdown
-      - name: Save downloaded dependencies
-        if: always() && !cancelled() && steps.downloads.outcome == 'success'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            .ci-cache/launcher
-            .ci-cache/downloads
-            .ci-cache/sdk-archives
-            .ci-cache/cargo/registry
-            .ci-cache/cargo/git
-            .ci-cache/homebrew
-            .ci-cache/timezone_V1.log
-          key: ${{ steps.downloads.outputs.cache-primary-key }}
-      - name: Save completed compilation actions even after a failed build
-        if: always() && !cancelled() && steps.build.outcome != 'skipped'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .ci-cache/actions
-          key: ${{ steps.actions.outputs.cache-primary-key }}
 
   system-packages:
     name: rpm-deb-${{ matrix.id }}
