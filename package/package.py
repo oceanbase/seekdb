@@ -20,6 +20,17 @@ ROOT = Path(__file__).resolve().parents[1]
 SYSPACK = Path("src/share/inner_table/sys_package/bazel_generated/syspack_release")
 LIFECYCLE = {"preinst": "pre_install", "postinst": "post_install",
              "prerm": "pre_uninstall", "postrm": "post_uninstall"}
+DISTRIBUTIONS = {
+    "el7": {"format": "rpm", "glibc": "2.17"},
+    "el8": {"format": "rpm", "glibc": "2.28"},
+    "debian12": {"format": "deb", "glibc": "2.36"},
+    "ubuntu22.04": {"format": "deb", "glibc": "2.35"},
+}
+
+
+def package_release(release, distribution):
+    separator = "." if DISTRIBUTIONS[distribution]["format"] == "rpm" else "+"
+    return release + separator + distribution
 
 
 def copy(source, destination, executable=False):
@@ -133,7 +144,8 @@ def stage(destination, artifacts, dependencies, layout, version, release, compon
         normalize_permissions(destination)
 
 
-def deb(payload, output, version, release, architecture=None):
+def deb(payload, output, version, release, distribution, architecture=None):
+    release = package_release(release, distribution)
     architecture = architecture or subprocess.check_output(["dpkg", "--print-architecture"], text=True).strip()
     multiarch = {"amd64": "x86_64-linux-gnu", "arm64": "aarch64-linux-gnu"}[architecture]
     # Both supported architectures have 64-bit time_t. Let the private SONAME
@@ -153,7 +165,7 @@ def deb(payload, output, version, release, architecture=None):
     subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(payload), str(target)], check=True)
 
 
-def rpm(payload, work, output, version, release, dependencies, architecture=None):
+def rpm(payload, work, output, version, release, dependencies, distribution, architecture=None):
     for directory in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
         (work / directory).mkdir()
     strip = symbols.tool("strip", "linux")
@@ -169,7 +181,8 @@ def rpm(payload, work, output, version, release, dependencies, architecture=None
         content = content.replace("@" + name + "@", value)
     spec.write_text(content)
     target = ["--target", architecture] if architecture else []
-    subprocess.run(["rpmbuild", "-bb", *target, "--define", "_topdir " + str(work), str(spec)], check=True)
+    subprocess.run(["rpmbuild", "-bb", *target, "--define", "_topdir " + str(work),
+                    "--define", "dist ." + distribution, str(spec)], check=True)
     for package in (work / "RPMS").rglob("*.rpm"):
         copy(package, output / package.name)
 
@@ -201,6 +214,8 @@ def main():
     parser.add_argument("--layout", choices=("linux", "macos", "windows", "android"),
                         help="target layout; inferred from --binary-package, otherwise Linux (native OS for binary)")
     parser.add_argument("--component", choices=("server", "libs"), default="server")
+    parser.add_argument("--distribution", choices=DISTRIBUTIONS,
+                        help="required target for RPM (el7/el8) or DEB (debian12/ubuntu22.04)")
     inputs = parser.add_mutually_exclusive_group()
     inputs.add_argument("--binary-package", type=Path, help="verified seekdb-binary directory or tar archive; never builds sources")
     inputs.add_argument("--seekdb-bin", type=Path, help="existing native executable; resources still come from --artifacts")
@@ -214,6 +229,11 @@ def main():
     parser.add_argument("--build-config", default="package", help="production build configuration recorded in the binary manifest")
     parser.add_argument("--output", type=Path, required=True)
     options = parser.parse_args()
+    if options.format in ("rpm", "deb"):
+        if not options.distribution or DISTRIBUTIONS[options.distribution]["format"] != options.format:
+            parser.error("%s requires a matching --distribution" % options.format.upper())
+    elif options.distribution:
+        parser.error("--distribution supports RPM and DEB only")
     if options.format != "stage":
         try:
             timestamp = datetime.strptime(options.release, "%Y%m%dT%H%M%SZ")
@@ -301,9 +321,16 @@ def main():
                 binary.write(binary_package, output, options.version, options.release, options.source_commit, metadata,
                              built_at=built_at, debug_info=related)
                 return
+        release = options.release
+        if options.distribution:
+            baseline = DISTRIBUTIONS[options.distribution]["glibc"]
+            if metadata and binary.version_tuple(metadata["glibc"]) > binary.version_tuple(baseline):
+                raise ValueError("binary glibc baseline %s exceeds %s's glibc %s" %
+                                 (metadata["glibc"], options.distribution, baseline))
+            release = package_release(release, options.distribution)
         payload = output if options.format == "stage" else work / "server"
         stage(payload, options.artifacts.resolve(), options.dependencies.resolve(), options.layout,
-              options.version, options.release, options.component, options.timezone_file,
+              options.version, release, options.component, options.timezone_file,
               binary_package=binary_package, obshell_bin=options.obshell_bin)
         if metadata and options.layout == "linux" and options.component == "server":
             if binary.architecture(payload / "usr/bin/obshell", "linux") != metadata["arch"]:
@@ -320,13 +347,18 @@ def main():
                 shutil.copytree(binary_package / "lib/seekdb", libraries, dirs_exist_ok=True,
                                 ignore=shutil.ignore_patterns("libaio.so", "libaio.so.*"))
             normalize_permissions(payload)
+            import binary
+            required = binary.glibc_requirement([path for path, kind in symbols.native_files(payload) if kind == "elf"])
+            if binary.version_tuple(required) > binary.version_tuple(baseline):
+                raise ValueError("payload requires GLIBC_%s, exceeding %s's glibc %s" %
+                                 (required, options.distribution, baseline))
         symbols.strip_tree(payload, options.layout)
         if options.format == "rpm":
             rpm(payload, work, output, options.version, options.release, options.dependencies.resolve(),
-                metadata["arch"] if metadata else None)
+                options.distribution, metadata["arch"] if metadata else None)
         elif options.format == "deb":
             deb(payload, output, options.version, options.release,
-                {"x86_64": "amd64", "aarch64": "arm64"}[metadata["arch"]] if metadata else None)
+                options.distribution, {"x86_64": "amd64", "aarch64": "arm64"}[metadata["arch"]] if metadata else None)
         elif options.format == "tgz":
             tgz(payload, output, options.version, options.release, options.component, options.layout,
                 metadata["arch"] if metadata else None)

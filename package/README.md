@@ -17,9 +17,10 @@ The workflow builds O2 with line tables and the package runtime configuration,
 then separates debug symbols before exporting the runtime files.
 Each target compiles seekdb once. Download the `binary-*` artifacts for stripped
 portable archives and checksums, and `debug-info-*` for their separate symbols.
-Linux `system-packages-*` artifacts contain RPM/DEB
-packages made from those archives and the SDK's obshell, without another SDK
-initialization or engine build. Other targets produce portable archives.
+Linux `system-packages-<distribution>-<arch>` artifacts each contain one RPM or
+DEB, its checksum, and `packaging-info.json`. These packages reuse the binary
+archives and the SDK's obshell without another SDK initialization or engine
+build. Other targets produce portable archives.
 Select `ios` to build device and simulator frameworks in parallel, or select
 `ios-arm64` / `ios-simulator-arm64` individually. `all` includes both iOS variants.
 The `binary-ios*` artifacts contain verified `SeekDB.framework` ZIPs. When both
@@ -29,8 +30,22 @@ Framework packages include a Clang module map; the workflow type-checks a Swift
 import for each SDK before publishing the archives.
 Artifacts use the repository's default retention period; the workflow does
 not publish a release.
-When building both glibc variants, keep their system-package artifact directories
-separate: native RPM/DEB filenames do not include the glibc variant.
+System packaging selects the following target distributions:
+
+| Distribution | Format | Binary input | Version revision suffix |
+| --- | --- | --- | --- |
+| EL7 | RPM | Selected glibc 2.17 binary | `.el7` |
+| EL8 | RPM | Selected glibc 2.28 binary | `.el8` |
+| Debian 12 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+debian12` |
+| Ubuntu 22.04 | DEB | Selected glibc 2.28 binary, otherwise 2.17 | `+ubuntu22.04` |
+
+Each selected architecture produces an EL7 RPM for glibc 2.17 and/or an EL8 RPM
+for glibc 2.28, plus both DEB targets when requested. With both glibc variants,
+DEB uses only the 2.28 input so a distribution/architecture never receives two
+different packages with the same version. For example,
+`system-packages-debian12-x86_64` contains the Debian 12 amd64 package, while
+`system-packages-el7-aarch64` contains the EL7 aarch64 package. Binary/debug
+artifact names keep their original architecture and glibc identifiers.
 
 To repackage an existing binary, enter its original workflow run ID in
 **Binary run ID**, select a Linux platform and matching glibc baseline, and
@@ -44,16 +59,19 @@ timestamp automatically. The original run must still retain every selected artif
 
 Repackaging verifies the source run's commit, manifest/checksums, architecture,
 and glibc baseline. Missing, expired, or mismatched artifacts fail the job.
-System-package artifacts include `packaging-info.json`, which records the binary
-run/commit/build time separately from the packaging commit and package timestamp.
+System-package artifacts include `packaging-info.json`, which records the target
+distribution, format, full package version, and binary run/commit/build time
+separately from the packaging commit and package timestamp.
 
 RPM and DEB replace the numeric release counter with a seconds-resolution UTC
 timestamp (`YYYYMMDDTHHMMSSZ`). The workflow generates it once for all native
 packages in the run. For example:
 
 ```text
-seekdb-1.4.0.0-20261112T100530Z.x86_64.rpm
-seekdb_1.4.0.0-20261112T100530Z_amd64.deb
+seekdb-1.4.0.0-20261112T100530Z.el7.x86_64.rpm
+seekdb-1.4.0.0-20261112T100530Z.el8.x86_64.rpm
+seekdb_1.4.0.0-20261112T100530Z+debian12_amd64.deb
+seekdb_1.4.0.0-20261112T100530Z+ubuntu22.04_amd64.deb
 seekdb-binary-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
 seekdb-debug-info-1.4.0.0-linux-x86_64-glibc2.17-20261112T100530Z-sdb0123456789ab.tar.gz
 seekdb-framework-1.4.0.0-ios18.0-arm64-20261112T100530Z-sdb0123456789ab.zip
@@ -67,15 +85,36 @@ also generate a UTC package timestamp by default; `--package-timestamp` can supp
 one explicitly. The wrappers no longer require a positional release; an old
 fourth positional release is accepted and ignored.
 
+Local RPM/DEB commands require `--distribution`: RPM accepts `el7` or `el8`,
+and DEB accepts `debian12` or `ubuntu22.04`. The distribution is part of both
+the filename and RPM Release / DEB Version metadata. For example:
+
+```bash
+python3 package/package.py rpm --version 1.4.0.0 --distribution el7 \
+  --binary-package /path/to/seekdb-binary.tar.gz --obshell-bin /path/to/obshell --output dist
+python3 package/package.py deb --version 1.4.0.0 --distribution debian12 \
+  --binary-package /path/to/seekdb-binary.tar.gz --obshell-bin /path/to/obshell --output dist
+```
+
+The RPM/DEB shell wrappers accept the same option and reject missing or mismatched
+distributions before initializing dependencies or building. RPM source builds
+also select the matching EL7/EL8 SDK. Packaging checks the input binary's declared
+glibc baseline and the actual GLIBC requirements of all staged ELF files,
+including obshell, against the target distribution. EL7, EL8, Debian 12, and
+Ubuntu 22.04 use glibc limits 2.17, 2.28, 2.36, and 2.35 respectively. The label
+identifies the packaging target; it does not replace runtime certification on
+that distribution.
+
 The RPM retains the previous release's explicit dependencies on `libaio` and
 `systemd`, with ELF ABI requirements generated by RPM. It uses the distribution's
 `libaio` instead of bundling it or producing a `seekdb-libs` RPM. Install the local
-RPM with `dnf install ./seekdb-<version>-<timestamp>.<arch>.rpm` (or `yum install`)
+RPM with `dnf install ./seekdb-<version>-<timestamp>.el8.<arch>.rpm` (or `yum install` for EL7)
 to download missing dependencies from the configured distribution repositories.
 The DEB retains `libaio1 | libaio1t64, systemd` from the released Ubuntu 22.04
 and Debian 12 packages. It also uses system libaio, with a private compatibility
 link for the `libaio1t64` SONAME on amd64/arm64. Install it using
-`apt install ./seekdb_<version>-<timestamp>_<arch>.deb` to fetch missing dependencies.
+`apt install ./seekdb_<version>-<timestamp>+debian12_<arch>.deb` (or the
+`+ubuntu22.04` variant) to fetch missing dependencies.
 Portable binary archives still include their runtime libraries.
 
 ## Debug symbols

@@ -253,7 +253,7 @@ jobs:
           compression-level: 0
 
   system-packages:
-    name: rpm-deb-${{ matrix.id }}
+    name: package-${{ matrix.id }}
     needs: [prepare, binary]
     if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.has_linux == 'true' && inputs.formats != 'binary'
     runs-on: ${{ matrix.runner }}
@@ -264,7 +264,8 @@ jobs:
     env:
       PACKAGE_VERSION: ${{ needs.prepare.outputs.version }}
       PACKAGE_RELEASE: ${{ needs.prepare.outputs.release }}
-      PACKAGE_FORMATS: ${{ inputs.formats }}
+      PACKAGE_FORMAT: ${{ matrix.format }}
+      PACKAGE_DISTRIBUTION: ${{ matrix.distribution }}
       PACKAGE_ARCH: ${{ matrix.arch }}
       PACKAGE_GLIBC: ${{ matrix.glibc }}
       BINARY_RUN_ID: ${{ needs.prepare.outputs.binary_run_id || github.run_id }}
@@ -275,7 +276,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: binary-${{ matrix.id }}
+          name: binary-${{ matrix.binary_id }}
           run-id: ${{ env.BINARY_RUN_ID }}
           github-token: ${{ github.token }}
           path: input

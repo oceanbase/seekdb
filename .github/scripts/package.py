@@ -16,6 +16,9 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / ".ci-cache"
 CONFIG = json.loads((ROOT / ".github/packaging.json").read_text())
+sys.path.insert(0, str(ROOT / "package"))
+import binary
+import package as native
 
 
 def run(arguments, **kwargs):
@@ -67,8 +70,26 @@ def matrix():
         raise ValueError("unsupported package platform: " + selected)
     output("matrix", json.dumps({"include": targets}, separators=(",", ":")))
     linux = [target for target in targets if target["os"] == "linux"]
+    packages = []
+    formats = ("rpm", "deb") if os.environ["PACKAGE_FORMATS"] == "all" else (os.environ["PACKAGE_FORMATS"],)
+    for arch in dict.fromkeys(target["arch"] for target in linux):
+        for distribution, requirements in native.DISTRIBUTIONS.items():
+            if requirements["format"] not in formats:
+                continue
+            candidates = [target for target in linux if target["arch"] == arch and
+                          binary.version_tuple(target["glibc"]) <= binary.version_tuple(requirements["glibc"])]
+            if requirements["format"] == "rpm":
+                candidates = [target for target in candidates if target["glibc"] == requirements["glibc"]]
+            if not candidates:
+                continue
+            # Produce one package per distribution/arch. For DEB, prefer the
+            # newer selected baseline rather than publishing duplicate versions.
+            binary_target = max(candidates, key=lambda target: binary.version_tuple(target["glibc"]))
+            packages.append(dict(binary_target, id=distribution + "-" + arch, binary_id=binary_target["id"],
+                                 distribution=distribution, format=requirements["format"]))
     # An unused placeholder keeps the job matrix valid when this job is skipped.
-    output("linux_matrix", json.dumps({"include": linux or [targets[0]]}, separators=(",", ":")))
+    output("linux_matrix", json.dumps({"include": packages or [dict(targets[0], binary_id=targets[0]["id"],
+            distribution="", format="")]}, separators=(",", ":")))
     output("has_linux", str(bool(linux)).lower())
     output("has_ios_pair", str(sum(target["os"] == "ios" for target in targets) == 2).lower())
     output("version", version)
@@ -265,11 +286,11 @@ def system_packages():
                 "linux", os.environ["PACKAGE_ARCH"], os.environ["PACKAGE_GLIBC"]):
             raise ValueError("binary distribution does not match the selected Linux architecture/glibc")
         run(["tar", "-xzf", ROOT / "input/obshell.tar.gz", "-C", work, "--", "obshell"])
-        formats = ("rpm", "deb") if os.environ["PACKAGE_FORMATS"] == "all" else (os.environ["PACKAGE_FORMATS"],)
-        for kind in formats:
-            run([sys.executable, "package/package.py", kind, "--version", manifest["version"],
-                 "--package-timestamp", os.environ["PACKAGE_RELEASE"], "--binary-package", bundle,
-                 "--obshell-bin", work / "obshell", "--output", ROOT / "dist"])
+        distribution = os.environ["PACKAGE_DISTRIBUTION"]
+        kind = os.environ["PACKAGE_FORMAT"]
+        run([sys.executable, "package/package.py", kind, "--version", manifest["version"],
+             "--package-timestamp", os.environ["PACKAGE_RELEASE"], "--distribution", distribution,
+             "--binary-package", bundle, "--obshell-bin", work / "obshell", "--output", ROOT / "dist"])
     (ROOT / "dist/packaging-info.json").write_text(json.dumps({
         "binary_run_id": os.environ["BINARY_RUN_ID"],
         "binary_source_commit": manifest["source_commit"],
@@ -277,6 +298,9 @@ def system_packages():
         "packaging_commit": os.environ["GITHUB_SHA"],
         "version": manifest["version"],
         "release": os.environ["PACKAGE_RELEASE"],
+        "distribution": distribution,
+        "format": kind,
+        "package_version": manifest["version"] + "-" + native.package_release(os.environ["PACKAGE_RELEASE"], distribution),
         "platform": target,
     }, indent=2) + "\n")
     for artifact in (ROOT / "dist").iterdir():
