@@ -163,7 +163,7 @@ jobs:
           path: |
             deps/3rd
             deps/android
-            deps/ios
+            ${{ matrix.os == 'ios' && 'deps/ios' || '' }}
           key: package-sdk-v1-${{ matrix.id }}-${{ steps.keys.outputs.sdk }}
           # iOS base libraries must match the selected Xcode/SDK exactly.
           restore-keys: ${{ matrix.os != 'ios' && format('package-sdk-v1-{0}-', matrix.id) || '' }}
@@ -188,7 +188,7 @@ jobs:
           path: |
             deps/3rd
             deps/android
-            deps/ios
+            ${{ matrix.os == 'ios' && 'deps/ios' || '' }}
           key: ${{ steps.sdk.outputs.cache-primary-key }}
       - name: Compile seekdb once
         id: build
