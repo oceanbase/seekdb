@@ -1,0 +1,30 @@
+DROP TABLE IF EXISTS sq_cmp_empty_aggregate;
+CREATE TABLE sq_cmp_empty_aggregate(a INT);
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+IN (SELECT VAR_SAMP(1) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+cmp
+NULL
+INSERT INTO sq_cmp_empty_aggregate VALUES (1), (2), (NULL);
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+IN (SELECT VAR_SAMP(1) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+cmp
+NULL
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+NOT IN (SELECT SUM(a) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+cmp
+NULL
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+<=> (SELECT VAR_SAMP(1) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+cmp
+0
+SELECT (SELECT a, a + 1 FROM sq_cmp_empty_aggregate ORDER BY a LIMIT 1)
+IN (SELECT SUM(a), COUNT(*) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+cmp
+NULL
+TRUNCATE TABLE sq_cmp_empty_aggregate;
+INSERT INTO sq_cmp_empty_aggregate VALUES (1), (1), (NULL);
+SELECT (SELECT STDDEV(a) FROM sq_cmp_empty_aggregate)
+IN (SELECT COUNT(*) FROM sq_cmp_empty_aggregate WHERE FALSE) AS cmp;
+cmp
+1
+DROP TABLE sq_cmp_empty_aggregate;
