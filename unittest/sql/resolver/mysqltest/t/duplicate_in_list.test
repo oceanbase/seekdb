@@ -1,0 +1,102 @@
+# Regression for #1512: duplicate integers must not make a small IN set a values subquery.
+--disable_warnings
+DROP TABLE IF EXISTS inlist_distinct;
+DROP TABLE IF EXISTS inlist_distinct_ann;
+DROP TABLE IF EXISTS inlist_distinct_varchar;
+--enable_warnings
+
+CREATE TABLE inlist_distinct (id INT PRIMARY KEY, category BIGINT);
+INSERT INTO inlist_distinct VALUES
+  (0,NULL),(1,1),(2,2),(3,3),(4,4),(5,5),(6,6),
+  (7,-1),(8,-9223372036854775808),(9,9223372036854775807);
+
+--echo # Fewer distinct integers than the rewrite threshold: retain a scalar IN.
+--replace_regex /rowset=[0-9]+/rowset=ROWS/ /, $/,/
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (1,2,3,1,2,3,1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category NOT IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY id;
+
+--echo # Preserve NULL and signed integer boundary semantics.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (1,2,NULL,1,2,NULL,1,2,NULL) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category NOT IN (1,2,NULL,1,2,NULL,1,2,NULL) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (NULL,NULL,NULL,NULL,NULL) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN
+    (-9223372036854775808,9223372036854775807,-1,
+     -9223372036854775808,9223372036854775807,-1) ORDER BY id;
+
+--echo # Four distinct values still reach the threshold, including a distinct NULL.
+--replace_regex /rowset=[0-9]+/rowset=ROWS/ /, $/,/
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (1,2,3,4,1,2,3,4);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (1,2,3,NULL,1,2,3,NULL) ORDER BY id;
+
+--echo # Type coercion, unsigned values and row-valued IN keep their original paths.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN ('1','2','3','1','2','3') ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (1.0,2.0,3.0,1.0,2.0,3.0) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN
+    (18446744073709551615,18446744073709551615,
+     18446744073709551615,18446744073709551615) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE (id,category) IN ((1,1),(2,2),(1,1),(2,2)) ORDER BY id;
+
+--echo # Integer constants preserve comparison coercion for a string left operand.
+CREATE TABLE inlist_distinct_varchar (id INT PRIMARY KEY, category VARCHAR(20));
+INSERT INTO inlist_distinct_varchar VALUES (1,'01'),(2,'1'),(3,'2'),(4,'3'),(5,'4'),(6,NULL);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct_varchar WHERE category IN (1,2,3,1,2,3,1,2,3) ORDER BY id;
+DROP TABLE inlist_distinct_varchar;
+
+--echo # Same text-protocol statement shape with different equality patterns.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (1,2,3,1,2,3,1,2,3,1,2,3) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (4,5,6,7,8,9,10,11,12,13,14,15) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id
+  FROM inlist_distinct WHERE category IN (2,2,2,2,2,2,2,2,2,2,2,2) ORDER BY id;
+
+--echo # Prepared statements retain every bind position across executions.
+PREPARE inlist_ps FROM 'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 4) */ id FROM inlist_distinct WHERE category IN (?,?,?,?,?,?) ORDER BY id';
+SET @a=1, @b=2, @c=3, @d=1, @e=2, @f=3;
+EXECUTE inlist_ps USING @a,@b,@c,@d,@e,@f;
+SET @a=4, @b=5, @c=6, @d=7, @e=8, @f=9;
+EXECUTE inlist_ps USING @a,@b,@c,@d,@e,@f;
+DEALLOCATE PREPARE inlist_ps;
+
+--echo # ANN retains its scalar filter instead of adding a values-table subplan.
+CREATE TABLE inlist_distinct_ann (
+  id INT PRIMARY KEY,
+  category INT,
+  embedding VECTOR(3),
+  VECTOR INDEX ann_idx(embedding)
+    WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate)
+) ORGANIZATION HEAP;
+INSERT INTO inlist_distinct_ann VALUES
+  (1,1,'[0,0,0]'),(2,2,'[1,0,0]'),(3,3,'[2,0,0]'),
+  (4,4,'[3,0,0]'),(5,NULL,'[4,0,0]');
+--replace_regex /rowset=[0-9]+/rowset=ROWS/ /__type_[0-9]+_[0-9]+/__type_VECTOR/ /, $/,/
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) INDEX(inlist_distinct_ann ann_idx) */ id
+  FROM inlist_distinct_ann WHERE category IN (1,2,3,1,2,3,1,2,3)
+  ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 3;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) INDEX(inlist_distinct_ann ann_idx) */ id
+  FROM inlist_distinct_ann WHERE category IN (1,2,3,1,2,3,1,2,3)
+  ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 3;
+
+--echo # Original 3072-element shape at the default rewrite threshold.
+--disable_query_log
+let $long_in = `SELECT CONCAT(REPEAT('1,2,3,',1023),'1,2,3')`;
+eval SELECT /*+ INDEX(inlist_distinct_ann ann_idx) */ id FROM inlist_distinct_ann WHERE category IN ($long_in) ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 3;
+--enable_query_log
+
+DROP TABLE inlist_distinct_ann;
+DROP TABLE inlist_distinct;
