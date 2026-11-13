@@ -166,6 +166,9 @@ public:
     static ObOptStatManager instance_;
     return instance_;
   }
+  // Reserve one version for all rows of a history snapshot. Reservations are
+  // process-lifetime and are not reused after transaction rollback.
+  int reserve_history_saving_time(const int64_t wall_time, int64_t &saving_time);
   bool is_inited() const { return inited_; }
   ObOptStatSqlService &get_stat_sql_service()
   {
@@ -211,6 +214,7 @@ protected:
   bool inited_;
   ObOptStatService stat_service_;
   int64_t last_schema_version_;
+  int64_t last_history_saving_time_;
 };
 
 template <typename T>

@@ -19,6 +19,7 @@
 #include <inttypes.h>
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_opt_stat_service.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 
 namespace oceanbase {
@@ -191,6 +192,9 @@ int ObDbmsStatsHistoryManager::backup_opt_stats(ObExecContext &ctx,
   } else if (OB_FAIL(get_stats_history_retention(ctx, retention_val))) {
   } else if (retention_val == 0) {
     /*do nothing*/
+  } else if (OB_FAIL(ObOptStatManager::get_instance().reserve_history_saving_time(saving_time, saving_time))) {
+    // Concurrent backups may observe the same wall-clock microsecond. Keep
+    // table, column and histogram rows on one reserved version without retry.
   } else if (OB_FAIL(ObDbmsStatsUtils::get_part_ids_and_column_ids(param, part_ids, column_ids, is_backup_for_gather))) {
   } else if (OB_FAIL(backup_table_stats(ctx, trans, param, saving_time, part_ids))) {
   } else if (OB_FAIL(backup_column_stats(ctx, trans, param, saving_time, part_ids, column_ids))) {

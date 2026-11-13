@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "lib/atomic/ob_atomic.h"
+#include <algorithm>
 #include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/plan_cache/ob_plan_cache.h"
@@ -32,7 +34,8 @@ namespace  common
 ObOptStatManager::ObOptStatManager()
   : inited_(false),
     stat_service_(),
-    last_schema_version_(-1)
+    last_schema_version_(-1),
+    last_history_saving_time_(0)
 {
 }
 
@@ -66,6 +69,25 @@ int ObOptStatManager::refresh_on_schema_change(int64_t schema_version)
   return ret;
 }
 #endif
+
+int ObOptStatManager::reserve_history_saving_time(const int64_t wall_time, int64_t &saving_time)
+{
+  int ret = OB_SUCCESS;
+  int64_t previous = ATOMIC_LOAD(&last_history_saving_time_);
+  while (OB_SUCC(ret)) {
+    if (INT64_MAX == previous) {
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      const int64_t next = std::max(wall_time, previous + 1);
+      if (ATOMIC_BCAS(&last_history_saving_time_, previous, next)) {
+        saving_time = next;
+        break;
+      }
+      previous = ATOMIC_LOAD(&last_history_saving_time_);
+    }
+  }
+  return ret;
+}
 
 int ObOptStatManager::init(ObMySQLProxy *proxy)
 {
