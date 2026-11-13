@@ -1404,27 +1404,6 @@ id	field	type	length	precision	nullable
 32	spare5	5	0	20	1
 33	spare6	5	0	20	1
 34	flags	5	0	20	0
-table oceanbase.__all_job column_count 18 table_id 1062
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1062 order by column_id;
-id	field	type	length	precision	nullable
-16	gmt_create	18	0	25	1
-17	gmt_modified	18	0	25	1
-18	job	5	0	20	0
-19	lowner	22	128	-1	0
-20	powner	22	128	-1	0
-21	cowner	22	128	-1	0
-22	last_date	18	0	25	1
-23	this_date	18	0	25	1
-24	next_date	18	0	25	0
-25	total	5	0	20	1
-26	interval#	22	200	-1	0
-27	failures	5	0	20	1
-28	flag	5	0	20	0
-29	what	22	4000	-1	1
-30	nlsenv	22	4000	-1	1
-31	charenv	22	4000	-1	1
-32	scheduler_flags	5	0	20	1
-33	exec_env	22	2048	-1	1
 table oceanbase.__all_monitor_modified column_count 11 table_id 1066
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1066 order by column_id;
 id	field	type	length	precision	nullable

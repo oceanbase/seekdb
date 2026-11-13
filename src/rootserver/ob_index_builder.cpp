@@ -1631,7 +1631,7 @@ int ObIndexBuilder::generate_schema(
   if (OB_SUCC(ret)) {
     schema.set_micro_index_clustered(data_schema.get_micro_index_clustered());
   }
-  if (OB_SUCC(ret) && OB_FAIL(ObDDLService::set_dbms_job_exec_env(arg, schema))) {
+  if (OB_SUCC(ret) && OB_FAIL(ObDDLService::set_vec_index_exec_env(arg, schema))) {
   }
   return ret;
 }

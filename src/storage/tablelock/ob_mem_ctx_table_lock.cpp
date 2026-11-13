@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "ob_mem_ctx_table_lock.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/ob_server_struct.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tx/ob_trans_ctx_mgr_v4.h"
 
@@ -29,6 +31,18 @@ namespace transaction
 {
 namespace tablelock
 {
+
+void notify_internal_table_change_on_commit(
+    const ObTableLockOp &lock_op, const SCN &commit_version)
+{
+  if (IN_TRANS_DML_LOCK == lock_op.op_type_
+      && lock_op.lock_id_.is_tablet_lock()
+      && is_inner_table(lock_op.lock_id_.obj_id_)
+      && OB_NOT_NULL(GCTX.internal_table_change_notifier_)) {
+    GCTX.internal_table_change_notifier_->notify_table_changed(
+        lock_op.lock_id_.obj_id_, commit_version);
+  }
+}
 
 int ObMemCtxLockOpLinkNode::init(const ObTableLockOp &op_info)
 {
@@ -182,6 +196,8 @@ int ObLockMemCtx::commit_table_lock_(const SCN &commit_version, const SCN &commi
       case IN_TRANS_COMMON_LOCK: {
         // remove the lock op.
         memtable->remove_lock_record(curr->lock_op_);
+        // Fast commit may have checkpointed and removed the callback already.
+        notify_internal_table_change_on_commit(curr->lock_op_, commit_version);
         break;
       }
       case OUT_TRANS_LOCK:

@@ -41,6 +41,9 @@ namespace tablelock
 {
 class ObLockMemtable;
 
+void notify_internal_table_change_on_commit(
+    const ObTableLockOp &lock_op, const share::SCN &commit_version);
+
 class ObMemCtxLockOpLinkNode : public common::ObDLinkBase<ObMemCtxLockOpLinkNode>
 {
 public:

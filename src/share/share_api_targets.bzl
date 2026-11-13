@@ -25,6 +25,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             ":cluster_topology",
             ":config",
             ":core_types",
+            ":internal_table_change_notifier",
             ":scn_interface",
             ":local_storage_interface",
             ":local_table_schema",
@@ -163,6 +164,16 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             ":config",
             ":error_codes",
             "//src/oblib:oblib_foundation",
+        ],
+    ),
+    "internal_table_change_notifier": struct(
+        hdrs = [
+            "ob_internal_table_change_notifier.h",
+            "ob_internal_table_change_version.h",
+        ],
+        deps = [
+            ":scn_interface",
+            "//src/oblib:oblib_base",
         ],
     ),
     "compaction_runtime": struct(

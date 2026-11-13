@@ -17,8 +17,9 @@
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_FREEZE_INFO_DETECTOR_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_FREEZE_INFO_DETECTOR_
 
-#include "lib/task/ob_timer.h"
 #include "common/ob_role.h"
+#include "lib/task/ob_timer.h"
+#include "share/ob_internal_table_change_notifier.h"
 
 namespace oceanbase
 {
@@ -90,6 +91,7 @@ private:
   ObThreadIdling *major_scheduler_idling_;
   int64_t last_schedule_ts_;
   bool need_immediate_run_;
+  share::InternalTableChangeWatcher table_change_watcher_;
   common::ObTimer timer_;
 
 private:
