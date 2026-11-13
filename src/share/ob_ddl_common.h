@@ -625,6 +625,9 @@ public:
       const bool with_alias_name,
       const bool with_comma,
       ObSqlString &sql_string);
+  static int append_escaped_identifier(
+      ObSqlString &sql_string,
+      const common::ObString &src);
   static int reshape_ddl_column_obj(
       common::ObDatum &datum,
       const ObObjMeta &obj_meta);
