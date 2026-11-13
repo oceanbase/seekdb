@@ -28,15 +28,14 @@ def observer_third_party_link_files(platform):
     repository = "@third_party_android" if android else "@third_party_native"
     macos = platform == "macos"
     lib64 = "lib" if android or macos else "lib64"
-    vsag = "lib" if android else "lib/vsag_lib"
+    vsag = "lib"
     files = []
     files += [vsag + "/" + name for name in [
         "libcpuinfo.a", "libsimd.a", "libvsag_static.a", "libdiskann.a",
     ]]
     if macos:
         files += [vsag + "/" + name for name in [
-            "libio.a", "libgfortran_static.a", "libquadmath_static.a",
-            "libgcc.a", "libomp_static.a", "libopenblas.a",
+            "libio.a", "libomp_static.a", "libopenblas.a",
         ]]
     else:
         files += [vsag + "/libopenblas.a"]

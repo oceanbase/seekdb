@@ -109,7 +109,10 @@ def locked_packages(lock_file, system, architecture):
     platforms = lock.get("platforms", {})
     if not isinstance(platforms, dict):
         raise ValueError("Invalid dependency lock platforms: " + str(lock_file))
-    platform_name = {"Darwin": "macos", "Windows": "windows"}.get(system, system.lower())
+    platform_name = {
+        "Darwin": "macos", "Windows": "windows",
+        "iOSDevice": "ios", "iOSSimulator": "ios",
+    }.get(system, system.lower())
     prefix = "%s-%s" % (platform_name, architecture)
     pattern = None
     version = None
@@ -127,8 +130,13 @@ def locked_packages(lock_file, system, architecture):
     elif system == "Android":
         version = 26
         pattern = re.escape(prefix) + r"-v8a-api(\d+)"
+    elif system in ("iOSDevice", "iOSSimulator"):
+        version = 18
+        variant = "device" if system == "iOSDevice" else "simulator"
+        pattern = re.escape(prefix) + "-" + variant + r"-min(\d+)"
 
-    target = prefix + "-md" if system == "Windows" else prefix
+    target = (prefix + "-md" if system == "Windows" else
+              "wasm32-emscripten" if system == "Wasm" else prefix)
     if pattern:
         candidates = []
         for name in platforms:
@@ -423,6 +431,8 @@ def main(arguments):
                    system, architecture)
     if options.wasm:
         subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
+        install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/wasm", cache_directory,
+                       "Wasm", "wasm32")
     if options.android:
         install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android", None)
         install_locked(ROOT / "deps.lock.json", ROOT / "deps/prebuilt/android", cache_directory,
@@ -431,6 +441,9 @@ def main(arguments):
         subprocess.run([
             sys.executable, str(PROFILES / "ios/build.py"), "--reuse", "--jobs", str(os.cpu_count() or 1),
         ] + (["--simulator"] if options.simulator else []), cwd=ROOT, check=True)
+        install_locked(ROOT / "deps.lock.json",
+                       ROOT / "deps/prebuilt" / ("ios_simulator" if options.simulator else "ios"),
+                       cache_directory, "iOSSimulator" if options.simulator else "iOSDevice", "arm64")
         subprocess.run([
             sys.executable, str(ROOT / "build.py"), "build",
             "--config=" + ("ios-simulator" if options.simulator else "ios"),

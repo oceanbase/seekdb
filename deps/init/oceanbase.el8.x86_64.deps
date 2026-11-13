@@ -16,7 +16,6 @@ devdeps-openssl-static-1.1.1u-22023100710.el8.x86_64.rpm
 devdeps-boost-1.74.0-22022110914.el8.x86_64.rpm
 devdeps-abseil-cpp-20211102.0-82026020911.el8.x86_64.rpm
 devdeps-roaringbitmap-croaring-3.0.0-42024042816.el8.x86_64.rpm
-devdeps-vsag-abiv1-1.1.0-1752026041310.el8.x86_64.rpm
 
 [tools]
 obdevtools-bison-2.4.1-12022100413.el8.x86_64.rpm

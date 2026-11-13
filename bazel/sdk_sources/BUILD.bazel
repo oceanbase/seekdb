@@ -40,28 +40,21 @@ sdk_archives(
     }),
     deps = ["@sdk_roaring//:library"] + select({
         "@platforms//os:emscripten": [
-            "@sdk_vsag_wasm//:library",
+            "@third_party_wasm//:vsag_sdk",
+        ],
+        "//bazel:ios_simulator": [
+            "@third_party_ios_simulator//:vsag_sdk",
         ],
         "//conditions:default": [
-            "@sdk_vsag_ios//:library",
+            "@third_party_ios//:vsag_sdk",
         ],
     }),
 )
 
 _IOS_SOURCE_REPOSITORIES = [
     "@sdk_abseil",
-    "@sdk_antlr4",
     "@sdk_boost",
-    "@sdk_cpuinfo",
-    "@sdk_fmt",
-    "@sdk_lapack",
-    "@sdk_nlohmann_json",
-    "@sdk_openmp",
     "@sdk_roaring",
-    "@sdk_robin_map",
-    "@sdk_spdlog",
-    "@sdk_thread_pool",
-    "@sdk_vsag_ios",
 ]
 
 filegroup(

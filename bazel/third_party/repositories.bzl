@@ -86,6 +86,12 @@ def _third_party_headers_repository_impl(repository_ctx):
     locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/native"
     if platform == "android":
         locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/android"
+    elif platform == "iphoneos":
+        locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/ios"
+    elif platform == "iphonesimulator":
+        locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/ios_simulator"
+    elif platform == "wasm":
+        locked_sdk = str(repository_ctx.workspace_root) + "/deps/prebuilt/wasm"
     source_headers = [
         "absl", "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
         "omp.h", "ompx.h", "omp-tools.h", "ompt.h", "lapack.h", "lapacke.h",
@@ -97,6 +103,11 @@ def _third_party_headers_repository_impl(repository_ctx):
             fail("Missing iOS dependencies; run ./build.py init --ios" + (" --simulator" if ios_sdk == "iphonesimulator" else ""))
         target_headers = repository_ctx.path(prefix + "/include")
         target_names = [child.basename for child in target_headers.readdir()]
+        locked_headers = locked_sdk + "/include"
+        if repository_ctx.path(locked_headers).exists:
+            for child in repository_ctx.path(locked_headers).readdir():
+                repository_ctx.symlink(child, "include/" + child.basename)
+                target_names.append(child.basename)
         for child in repository_ctx.path(headers).readdir():
             if child.basename not in target_names and child.basename not in source_headers + ["boost"]:
                 repository_ctx.symlink(child, "include/" + child.basename)
@@ -108,6 +119,10 @@ def _third_party_headers_repository_impl(repository_ctx):
         libraries = prefix + "/lib"
         libraries64 = libraries
     elif platform == "wasm":
+        locked_headers = locked_sdk + "/include"
+        if repository_ctx.path(locked_headers).exists:
+            for child in repository_ctx.path(locked_headers).readdir():
+                repository_ctx.symlink(child, "include/" + child.basename)
         for child in repository_ctx.path(headers).readdir():
             if child.basename not in source_headers:
                 repository_ctx.symlink(child, "include/" + child.basename)
@@ -119,10 +134,13 @@ def _third_party_headers_repository_impl(repository_ctx):
             repository_ctx.symlink(headers, "include")
     repository_ctx.symlink(sdk + "/devtools", "devtools")
     locked_libraries = locked_sdk + "/lib"
-    if not ios_sdk and platform != "wasm" and repository_ctx.path(locked_libraries).exists:
+    if repository_ctx.path(locked_libraries).exists:
         _link_directory_contents(repository_ctx, [locked_libraries, libraries], "lib")
     else:
         repository_ctx.symlink(libraries, "lib")
+    if ios_sdk:
+        repository_ctx.symlink(locked_sdk + "/manifest.json", "locked_manifest.json")
+        repository_ctx.symlink(locked_sdk + "/share/licenses", "locked_licenses")
     repository_ctx.symlink(libraries64, "lib64")
     repository_ctx.file("BUILD.bazel", '''load("@seekdb//bazel/third_party:targets.bzl", "sdk_targets")
 package(default_visibility = ["//visibility:public"])
