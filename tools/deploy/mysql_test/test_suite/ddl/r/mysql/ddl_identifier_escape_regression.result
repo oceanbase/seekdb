@@ -1,0 +1,52 @@
+# Ordinary names retain the existing DDL behavior.
+USE test;
+DROP TABLE IF EXISTS ddl_identifier_plain, ddl_identifier_escaped;
+CREATE TABLE ddl_identifier_plain (id INT PRIMARY KEY, value_col ENUM('one','two'));
+INSERT INTO ddl_identifier_plain VALUES (1,'one'),(2,'two');
+CREATE UNIQUE INDEX plain_value_u ON ddl_identifier_plain(value_col);
+SELECT id, value_col FROM ddl_identifier_plain ORDER BY id;
+id	value_col
+1	one
+2	two
+# Shared DDL must escape every embedded backtick, including ENUM/SET casts.
+CREATE TABLE ddl_identifier_escaped (
+id INT PRIMARY KEY,
+`e``num` ENUM('one','two'),
+`s``et` SET('one','two'),
+```leading` INT,
+`trailing``` INT,
+`two````ticks` INT,
+`列``名` VARCHAR(20)
+);
+INSERT INTO ddl_identifier_escaped VALUES
+(1,'one','one',11,21,31,'first'),
+(2,'two','two',12,22,32,'second'),
+(3,NULL,NULL,NULL,NULL,NULL,NULL),
+(4,NULL,NULL,NULL,NULL,NULL,NULL);
+CREATE UNIQUE INDEX escaped_enum_u ON ddl_identifier_escaped(`e``num`);
+CREATE UNIQUE INDEX escaped_set_u ON ddl_identifier_escaped(`s``et`);
+CREATE UNIQUE INDEX escaped_leading_u ON ddl_identifier_escaped(```leading`);
+CREATE UNIQUE INDEX escaped_trailing_u ON ddl_identifier_escaped(`trailing```);
+CREATE UNIQUE INDEX escaped_consecutive_u ON ddl_identifier_escaped(`two````ticks`);
+CREATE UNIQUE INDEX escaped_unicode_u ON ddl_identifier_escaped(`列``名`);
+SELECT id, `e``num`, `s``et`, ```leading`, `trailing```, `two````ticks`, `列``名`
+  FROM ddl_identifier_escaped ORDER BY id;
+id	e`num	s`et	`leading	trailing`	two``ticks	列`名
+1	one	one	11	21	31	first
+2	two	two	12	22	32	second
+3	NULL	NULL	NULL	NULL	NULL	NULL
+4	NULL	NULL	NULL	NULL	NULL	NULL
+SELECT /*+ INDEX(ddl_identifier_escaped escaped_enum_u) */ id, `e``num`
+  FROM ddl_identifier_escaped WHERE `e``num` IS NOT NULL ORDER BY id;
+id	e`num
+1	one
+2	two
+SELECT /*+ INDEX(ddl_identifier_escaped escaped_set_u) */ id, `s``et`
+  FROM ddl_identifier_escaped WHERE `s``et` IS NOT NULL ORDER BY id;
+id	s`et
+1	one
+2	two
+SELECT COUNT(*) AS nullable_rows FROM ddl_identifier_escaped WHERE `e``num` IS NULL;
+nullable_rows
+2
+DROP TABLE ddl_identifier_plain, ddl_identifier_escaped;
