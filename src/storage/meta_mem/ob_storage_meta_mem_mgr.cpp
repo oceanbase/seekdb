@@ -83,8 +83,13 @@ void ObStorageMetaMemMgr::TabletGCTask::runTimerTask()
   ObDIActionGuard ag("TabletGCTask");
   int ret = OB_SUCCESS;
   bool all_tablet_cleaned = false;
-  if (OB_FAIL(t3m_->gc_tablets_in_queue(all_tablet_cleaned))) {
-  }
+  const int64_t deadline = ObTimeUtility::current_monotonic_raw_time() + TABLE_GC_INTERVAL_US / 10;
+  // Drain queued batches while leaving time for the other tasks on the shared timer.
+  do {
+    if (OB_FAIL(t3m_->gc_tablets_in_queue(all_tablet_cleaned))) {
+      break;
+    }
+  } while (!all_tablet_cleaned && ObTimeUtility::current_monotonic_raw_time() < deadline);
 }
 
 void ObStorageMetaMemMgr::TableGCTask::runTimerTask()
